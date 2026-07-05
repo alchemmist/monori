@@ -17,8 +17,7 @@ OUT = pathlib.Path(__file__).parent / "out"
 EPOCH = datetime(1899, 12, 30)
 
 YEARS = list(range(2020, 2028))
-BLOCK_STARTS = [8, 24, 40, 56, 72, 88, 104]  # 0-indexed group summary rows
-BLOCK_LEN = 16
+GROUP_MARK = "▼▲"  # group names start with one of these
 
 
 def load(name):
@@ -101,13 +100,21 @@ def build_year(year, vals):
         "income_by_month": [cell(vals, 2, 5 + 4 * m + 1, 0) for m in range(12)],
         "available_by_month": [cell(vals, 4, 5 + 4 * m + 1, 0) for m in range(12)],
     }
-    for start in BLOCK_STARTS:
-        first_cat = start + 1
+    # Blocks are detected dynamically: the first category row of each block has
+    # the group index in column A; the block runs until the next group summary
+    # row (whose C holds the group name) or the end of the sheet.
+    first_rows = []
+    for ri in range(8, len(vals)):
+        a = cell(vals, ri, 0)
+        if isinstance(a, (int, float)) and a == int(a) and 1 <= a <= 9:
+            first_rows.append(ri)
+    for bi, first_cat in enumerate(first_rows):
         gname = cell(vals, first_cat, 1)
+        end = first_rows[bi + 1] - 1 if bi + 1 < len(first_rows) else len(vals)
         block_rows = []
-        for ri in range(first_cat, start + BLOCK_LEN):
+        for ri in range(first_cat, end):
             cname = cell(vals, ri, 2)
-            if cname is None or str(cname).startswith("#"):
+            if cname is None or str(cname).startswith("#") or str(cname)[0] in GROUP_MARK:
                 continue
             months = []
             for m in range(1, 13):
