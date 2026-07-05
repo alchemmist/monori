@@ -1,0 +1,227 @@
+.budget-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.budget-hero {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.hero-card {
+  padding: 14px 18px;
+  min-width: 150px;
+}
+.hero-card__label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.7px;
+  text-transform: uppercase;
+  color: var(--m-text-faint);
+  margin-bottom: 4px;
+}
+.hero-card__value {
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.2;
+  transition: color 0.2s ease;
+}
+.hero-card__hint {
+  font-size: 12px;
+  color: var(--m-text-dim);
+  margin-top: 2px;
+}
+
+.budget-grid {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  overflow: hidden;
+}
+
+.budget-grid th {
+  text-align: right;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.7px;
+  text-transform: uppercase;
+  color: var(--m-text-faint);
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--m-border);
+  background: var(--m-surface);
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+.budget-grid th:first-child {
+  text-align: left;
+}
+
+.budget-grid td {
+  padding: 0 14px;
+  height: 38px;
+  text-align: right;
+  border-bottom: 1px solid var(--m-border-soft);
+  white-space: nowrap;
+}
+.budget-grid td:first-child {
+  text-align: left;
+  width: 40%;
+}
+
+.budget-grid tr:last-child td {
+  border-bottom: none;
+}
+
+.group-row td {
+  background: var(--m-surface-raised);
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+  user-select: none;
+}
+.group-row__chevron {
+  display: inline-block;
+  transition: transform 0.18s ease;
+  margin-right: 8px;
+  color: var(--m-text-faint);
+}
+.group-row__chevron_collapsed {
+  transform: rotate(-90deg);
+}
+.group-row__count {
+  color: var(--m-text-faint);
+  font-weight: 400;
+  margin-left: 8px;
+  font-size: 12px;
+}
+
+.cat-row {
+  position: relative;
+  transition: background 0.12s ease;
+}
+.cat-row:hover {
+  background: var(--m-surface-hover);
+}
+.cat-row__name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.cat-row__menu {
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.cat-row:hover .cat-row__menu {
+  opacity: 1;
+}
+
+.cat-progress {
+  flex: 1;
+  max-width: 160px;
+  height: 4px;
+  background: var(--m-border-soft);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-left: 12px;
+}
+.cat-progress__fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.35s cubic-bezier(0.4, 0, 0.2, 1), background 0.2s ease;
+}
+
+.money {
+  font-variant-numeric: tabular-nums;
+  transition: color 0.2s ease;
+}
+.money_pos {
+  color: var(--m-income);
+}
+.money_neg {
+  color: var(--m-expense);
+}
+.money_zero {
+  color: var(--m-text-faint);
+}
+
+.balance-pill {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  font-size: 13px;
+  transition: background 0.25s ease, color 0.25s ease;
+}
+.balance-pill_pos {
+  background: var(--m-income-soft);
+  color: var(--m-income);
+}
+.balance-pill_neg {
+  background: var(--m-expense-soft);
+  color: var(--m-expense);
+}
+.balance-pill_zero {
+  background: transparent;
+  color: var(--m-text-faint);
+}
+
+.budget-cell {
+  cursor: pointer;
+  border-radius: 6px;
+  padding: 4px 8px;
+  margin: -4px -8px;
+  display: inline-block;
+  min-width: 72px;
+  transition: background 0.12s ease, box-shadow 0.12s ease;
+}
+.budget-cell:hover {
+  background: var(--m-accent-soft);
+  box-shadow: inset 0 0 0 1px var(--m-accent);
+}
+.budget-cell__input {
+  width: 96px;
+  background: var(--m-bg);
+  border: 1px solid var(--m-accent);
+  border-radius: 6px;
+  color: var(--m-text);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  padding: 3px 7px;
+  outline: none;
+  box-shadow: 0 0 0 3px var(--m-accent-soft);
+}
+
+/* year matrix mode */
+.matrix-wrap {
+  overflow-x: auto;
+}
+.matrix .budget-grid td,
+.matrix .budget-grid th {
+  padding: 0 10px;
+}
+.matrix .budget-grid td:first-child {
+  width: auto;
+  min-width: 180px;
+  position: sticky;
+  left: 0;
+  background: var(--m-surface);
+  z-index: 1;
+}
+.matrix .budget-grid tr:hover td:first-child {
+  background: var(--m-surface-hover);
+}
+.matrix .budget-grid th:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 3;
+}
+.matrix .budget-cell {
+  min-width: 56px;
+}

@@ -1,122 +1,83 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import heroImg from './assets/hero.png'
-import './App.css'
+import { useEffect, useMemo, useState } from "react";
+import { Loader, useToaster } from "@gravity-ui/uikit";
+import { ChartColumn, ListUl, LayoutHeaderCellsLarge } from "@gravity-ui/icons";
+import { useStore } from "./store.js";
+import { computeRange } from "./engine/budget.js";
+import BudgetPage from "./pages/BudgetPage.jsx";
+import DashboardPage from "./pages/DashboardPage.jsx";
+import TransactionsPage from "./pages/TransactionsPage.jsx";
 
-function App() {
-  const [count, setCount] = useState(0)
+const NAV = [
+  { id: "budget", title: "Budget", icon: LayoutHeaderCellsLarge },
+  { id: "dashboard", title: "Dashboard", icon: ChartColumn },
+  { id: "transactions", title: "Transactions", icon: ListUl },
+];
+
+const FIRST_YEAR = 2020;
+
+export default function App() {
+  const { snapshot, loading, error, load, toast } = useStore();
+  const [page, setPage] = useState("budget");
+  const toaster = useToaster();
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  useEffect(() => {
+    if (toast) toaster.add({ name: String(Date.now()), autoHiding: 5000, ...toast });
+  }, [toast, toaster]);
+
+  const lastYear = useMemo(() => {
+    if (!snapshot) return new Date().getFullYear();
+    const maxTx = snapshot.transactions.reduce((m, t) => Math.max(m, +t.date.slice(0, 4)), FIRST_YEAR);
+    const maxBudget = snapshot.budgets.reduce((m, b) => Math.max(m, b.year), FIRST_YEAR);
+    return Math.max(maxTx, maxBudget, new Date().getFullYear()) + 1;
+  }, [snapshot]);
+
+  const results = useMemo(
+    () => (snapshot ? computeRange(snapshot, FIRST_YEAR, lastYear) : null),
+    [snapshot, lastYear]
+  );
+
+  if (loading) {
+    return (
+      <div style={{ display: "grid", placeItems: "center", height: "100vh" }}>
+        <Loader size="l" />
+      </div>
+    );
+  }
+  if (error) {
+    return (
+      <div style={{ display: "grid", placeItems: "center", height: "100vh", color: "var(--m-expense)" }}>
+        Failed to load data: {error}
+      </div>
+    );
+  }
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
+    <div className="layout">
+      <nav className="sidebar">
+        <div className="sidebar__logo">
+          mono<span>ri</span>
         </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.jsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
-
-      <div className="ticks"></div>
-
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
-  )
+        {NAV.map(({ id, title, icon: Icon }) => (
+          <button
+            key={id}
+            className={`sidebar__item ${page === id ? "sidebar__item_active" : ""}`}
+            onClick={() => setPage(id)}
+          >
+            <Icon width={16} height={16} />
+            {title}
+          </button>
+        ))}
+        <div className="sidebar__footer">monori · personal budget</div>
+      </nav>
+      <main className="content">
+        {page === "budget" && <BudgetPage results={results} firstYear={FIRST_YEAR} lastYear={lastYear} />}
+        {page === "dashboard" && <DashboardPage results={results} firstYear={FIRST_YEAR} lastYear={lastYear} />}
+        {page === "transactions" && <TransactionsPage />}
+      </main>
+    </div>
+  );
 }
-
-export default App

@@ -1,0 +1,72 @@
+@import "@fontsource-variable/inter";
+
+:root,
+.g-root {
+  --m-bg: #0e1014;
+  --m-surface: #171a21;
+  --m-surface-hover: #1d212a;
+  --m-surface-raised: #20252f;
+  --m-border: #262b35;
+  --m-border-soft: #1f242d;
+  --m-text: #e8ebf0;
+  --m-text-dim: #8a93a3;
+  --m-text-faint: #5c6474;
+  --m-accent: #8fb4ff;
+  --m-income: #4ade80;
+  --m-expense: #f87171;
+  --m-warning: #fbbf24;
+  --m-income-soft: rgba(74, 222, 128, 0.12);
+  --m-expense-soft: rgba(248, 113, 113, 0.12);
+  --m-accent-soft: rgba(143, 180, 255, 0.12);
+
+  --m-radius: 12px;
+  --m-radius-sm: 8px;
+  --m-shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.25);
+}
+
+/* Gravity dark theme tune-up: match our background scale */
+.g-root.g-root_theme_dark {
+  --g-color-base-background: var(--m-bg);
+  --g-font-family-sans: "Inter Variable", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI",
+    Roboto, sans-serif;
+}
+
+html,
+body {
+  margin: 0;
+  background: var(--m-bg);
+  color: var(--m-text);
+  font-family: "Inter Variable", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    sans-serif;
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+.num {
+  font-variant-numeric: tabular-nums;
+}
+
+::selection {
+  background: var(--m-accent-soft);
+}
+
+/* thin scrollbars everywhere */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--m-border) transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--m-border);
+  border-radius: 4px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
