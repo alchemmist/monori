@@ -101,7 +101,10 @@ export default function DashboardPage({ results, firstYear, lastYear }) {
           type: "line", name: "Savings rate %", color: C.accent, yAxis: 1, lineWidth: 2,
           data: rows.map(([k, v]) => ({
             x: k,
-            y: v.income > 0 ? Math.round(((v.income - v.expense) / v.income) * 100) : 0,
+            // clamped so a couple of no-income months don't stretch the axis
+            y: v.income > 0
+              ? Math.max(-100, Math.min(100, Math.round(((v.income - v.expense) / v.income) * 100)))
+              : null,
           })),
         },
       ] },

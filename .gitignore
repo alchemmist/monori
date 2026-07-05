@@ -1,3 +1,8 @@
 pass.txt
 migration/raw/
 migration/out/
+server/static/
+server/data/
+web/node_modules/
+web/dist/
+server/.venv/

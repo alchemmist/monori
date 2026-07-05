@@ -24,9 +24,18 @@
   --m-shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.25);
 }
 
-/* Gravity dark theme tune-up: match our background scale */
+/* Gravity dark theme tune-up: our background scale + brand color */
 .g-root.g-root_theme_dark {
   --g-color-base-background: var(--m-bg);
+  --g-color-base-brand: #5c8dff;
+  --g-color-base-brand-hover: #729cff;
+  --g-color-base-selection: rgba(143, 180, 255, 0.18);
+  --g-color-base-selection-hover: rgba(143, 180, 255, 0.28);
+  --g-color-line-brand: #5c8dff;
+  --g-color-text-brand: #8fb4ff;
+  --g-color-text-brand-heavy: #a9c4ff;
+  --g-color-text-link: #8fb4ff;
+  --g-color-text-link-hover: #a9c4ff;
   --g-font-family-sans: "Inter Variable", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI",
     Roboto, sans-serif;
 }
