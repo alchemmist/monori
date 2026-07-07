@@ -86,8 +86,8 @@ export default function TransactionsPage() {
         {filtered.length} transactions
       </div>
 
-      <div className="card" style={{ overflow: "hidden" }}>
-        <table className="budget-grid">
+      <div className="card tx-table">
+        <table className="budget-grid tx-grid">
           <thead>
             <tr>
               <th style={{ textAlign: "left", width: 90 }}>Date</th>
