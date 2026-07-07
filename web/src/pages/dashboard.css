@@ -18,7 +18,7 @@
   white-space: nowrap;
 }
 .kpi__value {
-  font-size: 21px;
+  font-size: 20px;
   font-weight: 700;
   line-height: 1.15;
   font-variant-numeric: tabular-nums;
@@ -28,6 +28,21 @@
   color: var(--m-text-dim);
   margin-top: 3px;
   font-variant-numeric: tabular-nums;
+}
+
+/* Analytics rendered as a section below the dashboard charts */
+.dash-section {
+  margin-top: 34px;
+  padding-top: 26px;
+  border-top: 1px solid var(--m-border);
+}
+.section-title {
+  font-size: 18px;
+  font-weight: 700;
+  margin: 0 0 16px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
 }
 
 .charts-grid {
@@ -53,6 +68,18 @@
   font-size: 14px;
   font-weight: 600;
 }
+.chart-card__hint {
+  font-weight: 400;
+  color: var(--m-text-faint);
+}
+.preset-row {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.chart-card_wide {
+  padding-bottom: 14px;
+}
 .chart-card__body {
   height: 280px;
 }
@@ -63,5 +90,38 @@
 @media (max-width: 1100px) {
   .charts-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .kpi-row {
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+    gap: 8px;
+  }
+  .kpi {
+    padding: 11px 12px;
+  }
+  .kpi__value {
+    font-size: 18px;
+  }
+  .charts-grid {
+    gap: 10px;
+  }
+  .chart-card {
+    padding: 12px 12px 6px;
+  }
+  .chart-card__body {
+    height: 240px;
+  }
+  .chart-card__body_tall {
+    height: 260px;
+  }
+  .chart-card__head {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .dash-section {
+    margin-top: 24px;
+    padding-top: 18px;
   }
 }

@@ -1,0 +1,62 @@
+.timenav {
+  width: 100%;
+  margin-top: 6px;
+  user-select: none;
+}
+
+.timenav__svg {
+  display: block;
+  border: 1px solid var(--m-border);
+  border-radius: var(--m-radius-sm);
+  background: var(--m-bg);
+  cursor: crosshair;
+  touch-action: none;
+  box-sizing: border-box;
+}
+
+.timenav__area {
+  fill: var(--m-text-faint);
+  fill-opacity: 0.28;
+  stroke: var(--m-text-dim);
+  stroke-opacity: 0.7;
+  stroke-width: 1;
+  pointer-events: none;
+}
+
+.timenav__tick {
+  stroke: var(--m-border);
+  stroke-width: 1;
+  pointer-events: none;
+}
+
+.timenav__year {
+  font-size: 9px;
+  letter-spacing: 0.5px;
+  fill: var(--m-text-faint);
+  pointer-events: none;
+}
+
+.timenav__dim {
+  fill: var(--m-bg);
+  fill-opacity: 0.62;
+  pointer-events: none;
+}
+
+.timenav__window {
+  fill: var(--m-accent);
+  fill-opacity: 0.05;
+  stroke: var(--m-accent);
+  stroke-opacity: 0.35;
+  stroke-width: 1;
+  cursor: grab;
+}
+.timenav__window:active {
+  cursor: grabbing;
+}
+
+.timenav__handle {
+  cursor: ew-resize;
+}
+.timenav__grip {
+  fill: var(--m-accent);
+}

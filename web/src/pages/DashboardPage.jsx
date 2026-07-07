@@ -1,27 +1,21 @@
 import { useMemo, useState } from "react";
 import { ChartBoundary } from "../components/ChartCard.jsx";
-import { Select } from "@gravity-ui/uikit";
+import TimeNavigator from "../components/TimeNavigator.jsx";
+import { Button, Select } from "@gravity-ui/uikit";
 import { useStore } from "../store.js";
 import { rub, moneyCompact, MONTHS_SHORT } from "../format.js";
 import "./dashboard.css";
 
-const C = {
-  income: "#4ade80",
-  expense: "#f87171",
-  accent: "#8fb4ff",
-  amber: "#fbbf24",
-  palette: [
-    "#8fb4ff", "#4ade80", "#f87171", "#fbbf24", "#c084fc", "#38bdf8",
-    "#fb923c", "#a3e635", "#f472b6", "#2dd4bf", "#facc15", "#94a3b8",
-  ],
-};
+const PRESETS = [
+  { id: "6m", label: "6m", months: 6 },
+  { id: "1y", label: "1y", months: 12 },
+  { id: "3y", label: "3y", months: 36 },
+  { id: "5y", label: "5y", months: 60 },
+  { id: "ytd", label: "YTD" },
+  { id: "all", label: "All" },
+];
 
-const axisCommon = {
-  labels: { style: { fontSize: "11px", fontColor: "var(--m-text-dim)" } },
-  lineColor: "var(--m-border)",
-  gridColor: "var(--m-border-soft)",
-  ticksColor: "var(--m-border)",
-};
+import { C, axisCommon } from "./chartTheme.js";
 
 /** Analytics count "To be Budgeted" as real inflow (it holds actual money
  * injections). Internal transfers are uncategorized and thus excluded. */
@@ -29,8 +23,11 @@ export default function DashboardPage({ results, firstYear, lastYear }) {
   const { snapshot } = useStore();
   const now = new Date();
   const [donutYear, setDonutYear] = useState(String(now.getFullYear()));
-  const [drillCat, setDrillCat] = useState("");
+  const [drillCat, setDrillCat] = useState(
+    () => String(snapshot.categories.find((c) => c.name === "Groceries")?.id ?? "")
+  );
   const [drillYear, setDrillYear] = useState(String(now.getFullYear()));
+  const [stackYear, setStackYear] = useState(String(now.getFullYear()));
 
   const excludedIds = useMemo(() => new Set(), []);
   const incomeGroupIds = useMemo(
@@ -62,6 +59,25 @@ export default function DashboardPage({ results, firstYear, lastYear }) {
   const closed = monthly.filter(([k]) => k < nowKey); // full months only
   const last12 = closed.slice(-12);
 
+  // Time window over `closed` for the trend chart: [loIdx, hiIdx] inclusive.
+  const [trendRange, setTrendRange] = useState(null); // null = default 3y
+  const presetRange = (id) => {
+    const n = closed.length;
+    if (n === 0) return [0, 0];
+    if (id === "all") return [0, n - 1];
+    if (id === "ytd") {
+      const i = closed.findIndex(([k]) => k.startsWith(String(now.getFullYear())));
+      return [i === -1 ? Math.max(0, n - 1) : i, n - 1];
+    }
+    const m = PRESETS.find((p) => p.id === id).months;
+    return [Math.max(0, n - m), n - 1];
+  };
+  const [trendLo, trendHi] = trendRange ?? presetRange("3y");
+  const activePreset = PRESETS.find((p) => {
+    const [a, b] = presetRange(p.id);
+    return a === trendLo && b === trendHi;
+  })?.id;
+
   const kpis = useMemo(() => {
     const ytd = monthly.filter(([k]) => k.startsWith(String(now.getFullYear())));
     const netYtd = ytd.reduce((s, [, v]) => s + v.income - v.expense, 0);
@@ -75,12 +91,16 @@ export default function DashboardPage({ results, firstYear, lastYear }) {
     const forecast = dailyRate * daysInMonth;
     const prevKey = `${now.getFullYear() - (now.getMonth() === 0 ? 1 : 0)}-${String(now.getMonth() === 0 ? 12 : now.getMonth()).padStart(2, "0")}`;
     const prev = monthly.find(([k]) => k === prevKey)?.[1] ?? { income: 0, expense: 0 };
-    return { netYtd, savingsRate, exp12avg: exp12 / Math.max(last12.length, 1), cur, dailyRate, forecast, prev };
+    const saved12 = inc12 - exp12;
+    const totalNet = monthly.reduce((s, [, v]) => s + v.income - v.expense, 0);
+    const exp12avg = exp12 / Math.max(last12.length, 1);
+    const runway = exp12avg > 0 ? totalNet / exp12avg : null;
+    return { netYtd, savingsRate, exp12avg, cur, dailyRate, forecast, prev, saved12, runway };
   }, [monthly, last12, nowKey, now]);
 
-  // Chart 1: income/expense bars + savings rate line, last 36 closed months
+  // Chart 1: income/expense bars + savings rate line over the selected window
   const trendData = useMemo(() => {
-    const rows = closed.slice(-36);
+    const rows = closed.slice(trendLo, trendHi + 1);
     return {
       xAxis: { type: "category", categories: rows.map(([k]) => k), ...axisCommon },
       yAxis: [
@@ -98,20 +118,31 @@ export default function DashboardPage({ results, firstYear, lastYear }) {
           data: rows.map(([k, v]) => ({ x: k, y: v.expense / 100 })),
         },
         {
-          type: "line", name: "Savings rate %", color: C.accent, yAxis: 1, lineWidth: 2,
-          data: rows.map(([k, v]) => ({
-            x: k,
-            // clamped so a couple of no-income months don't stretch the axis
-            y: v.income > 0
-              ? Math.max(-100, Math.min(100, Math.round(((v.income - v.expense) / v.income) * 100)))
-              : null,
-          })),
+          type: "line", name: "Savings rate %", color: C.accent, yAxis: 1, lineWidth: 1.5,
+          // 1-2-1 weighted moving average: the lib draws straight polylines only,
+          // smoothing the data is what keeps this line from looking like a saw
+          data: rows.map(([k], i) => {
+            const rate = (j) => {
+              const v = rows[Math.max(0, Math.min(rows.length - 1, j))][1];
+              return v.income > 0
+                ? Math.max(-100, Math.min(100, ((v.income - v.expense) / v.income) * 100))
+                : null;
+            };
+            const [a, b, c] = [rate(i - 1), rate(i), rate(i + 1)];
+            if (b == null) return { x: k, y: null };
+            const parts = [[a, 1], [b, 2], [c, 1]].filter(([v]) => v != null);
+            const w = parts.reduce((s, [, ww]) => s + ww, 0);
+            return { x: k, y: Math.round(parts.reduce((s, [v, ww]) => s + v * ww, 0) / w) };
+          }),
         },
       ] },
-      chart: { margin: { top: 10, right: 10, bottom: 0, left: 10 } },
+      chart: {
+        margin: { top: 10, right: 10, bottom: 0, left: 10 },
+        zoom: { enabled: true, type: "x" },
+      },
       tooltip: { enabled: true },
     };
-  }, [closed]);
+  }, [closed, trendLo, trendHi]);
 
   // Chart 2: donut by category for a year
   const donutData = useMemo(() => {
@@ -191,16 +222,17 @@ export default function DashboardPage({ results, firstYear, lastYear }) {
           data: pts,
         },
       ] },
+      chart: { zoom: { enabled: true, type: "x" } },
       tooltip: { enabled: true },
     };
   }, [monthly]);
 
-  // Chart 5: expense structure by group, stacked, selected donut year
+  // Chart 5: expense structure by group, stacked, its own year selector
   const groupStackData = useMemo(() => {
     const expenseGroups = snapshot.groups.filter((g) => g.kind === "expense");
     const perGroup = new Map(expenseGroups.map((g) => [g.id, Array(12).fill(0)]));
     for (const t of snapshot.transactions) {
-      if (!t.date.startsWith(donutYear) || t.categoryId == null || t.amount >= 0) continue;
+      if (!t.date.startsWith(stackYear) || t.categoryId == null || t.amount >= 0) continue;
       const cat = catById.get(t.categoryId);
       if (!cat || !perGroup.has(cat.groupId) || excludedIds.has(t.categoryId)) continue;
       perGroup.get(cat.groupId)[+t.date.slice(5, 7) - 1] -= t.amount;
@@ -218,7 +250,7 @@ export default function DashboardPage({ results, firstYear, lastYear }) {
       })) },
       tooltip: { enabled: true },
     };
-  }, [snapshot.transactions, snapshot.groups, donutYear, catById, excludedIds]);
+  }, [snapshot.transactions, snapshot.groups, stackYear, catById, excludedIds]);
 
   const years = [];
   for (let y = firstYear; y <= Math.min(lastYear, now.getFullYear()); y++) years.push(String(y));
@@ -242,16 +274,42 @@ export default function DashboardPage({ results, firstYear, lastYear }) {
         <Kpi label="Daily rate" value={`${rub(kpis.dailyRate)} ₽`} sub="this month, per day" />
         <Kpi label="Month forecast" value={`${rub(kpis.forecast)} ₽`}
           color={kpis.forecast > kpis.exp12avg ? "var(--m-warning)" : "var(--m-income)"} sub="at current pace" />
+        <Kpi label="Saved" value={`${rub(kpis.saved12)} ₽`}
+          color={kpis.saved12 >= 0 ? "var(--m-income)" : "var(--m-expense)"} sub="last 12 months" />
+        <Kpi label="Runway" value={kpis.runway != null ? `${kpis.runway.toFixed(1)} mo` : "—"}
+          color={kpis.runway != null && kpis.runway < 3 ? "var(--m-warning)" : undefined}
+          sub="all-time net ÷ avg monthly spend" />
       </div>
 
       <div className="charts-grid">
         <div className="card chart-card chart-card_wide">
           <div className="chart-card__head">
-            <div className="chart-card__title">Income vs expenses · last 36 months</div>
+            <div className="chart-card__title">
+              Income vs expenses · {fmtMonthKey(closed[trendLo]?.[0])} — {fmtMonthKey(closed[trendHi]?.[0])}
+              <span className="chart-card__hint"> · {trendHi - trendLo + 1} months · drag to zoom</span>
+            </div>
+            <div className="preset-row">
+              {PRESETS.map((p) => (
+                <Button
+                  key={p.id}
+                  size="s"
+                  view={activePreset === p.id ? "normal" : "flat-secondary"}
+                  selected={activePreset === p.id}
+                  onClick={() => setTrendRange(presetRange(p.id))}
+                >
+                  {p.label}
+                </Button>
+              ))}
+            </div>
           </div>
           <div className="chart-card__body chart-card__body_tall">
             <ChartBoundary data={trendData} />
           </div>
+          <TimeNavigator
+            items={closed.map(([k, v]) => ({ key: k, value: v.expense }))}
+            range={[trendLo, trendHi]}
+            onChange={setTrendRange}
+          />
         </div>
 
         <div className="card chart-card">
@@ -300,6 +358,8 @@ export default function DashboardPage({ results, firstYear, lastYear }) {
         <div className="card chart-card">
           <div className="chart-card__head">
             <div className="chart-card__title">Expense structure by group</div>
+            <Select size="s" value={[stackYear]} onUpdate={(v) => setStackYear(v[0])}
+              options={years.map((y) => ({ value: y, content: y }))} />
           </div>
           <div className="chart-card__body">
             <ChartBoundary data={groupStackData} />
@@ -308,6 +368,11 @@ export default function DashboardPage({ results, firstYear, lastYear }) {
       </div>
     </div>
   );
+}
+
+function fmtMonthKey(key) {
+  if (!key) return "";
+  return `${MONTHS_SHORT[+key.slice(5, 7) - 1]} ${key.slice(0, 4)}`;
 }
 
 function Kpi({ label, value, sub, color }) {
