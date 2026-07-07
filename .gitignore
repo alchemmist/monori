@@ -6,3 +6,6 @@ server/data/
 web/node_modules/
 web/dist/
 server/.venv/
+__pycache__/
+*.pyc
+.pytest_cache/

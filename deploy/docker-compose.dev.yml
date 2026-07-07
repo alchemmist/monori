@@ -1,0 +1,39 @@
+# Dev stack: hot-reload API + vite, sources bind-mounted from the repo.
+# node_modules and the python venv live in named volumes — host binaries
+# (macOS) are incompatible with the linux containers.
+services:
+  api:
+    image: ghcr.io/astral-sh/uv:python3.12-bookworm-slim
+    working_dir: /app
+    command: uv run uvicorn app.main:app --host 0.0.0.0 --port 8077 --reload
+    environment:
+      UV_PROJECT_ENVIRONMENT: /opt/venv
+      UV_LINK_MODE: copy
+      # inotify events don't cross the podman-machine/virtiofs boundary on macOS
+      WATCHFILES_FORCE_POLLING: "true"
+    volumes:
+      - ../server:/app
+      - api-venv:/opt/venv
+      - uv-cache:/root/.cache/uv
+    ports:
+      - "8077:8077"
+
+  web:
+    image: node:22-alpine
+    working_dir: /app
+    command: sh -c "npm install --no-audit --no-fund && npm run dev -- --host 0.0.0.0"
+    environment:
+      MONORI_API: http://api:8077
+      VITE_FORCE_POLLING: "1"
+    volumes:
+      - ../web:/app
+      - web-modules:/app/node_modules
+    ports:
+      - "5173:5173"
+    depends_on:
+      - api
+
+volumes:
+  api-venv:
+  uv-cache:
+  web-modules:
