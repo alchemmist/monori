@@ -11,7 +11,7 @@ const toaster = new Toaster();
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
-    <ThemeProvider theme="dark">
+    <ThemeProvider theme="light">
       <ToasterProvider toaster={toaster}>
         <App />
         <ToasterComponent />

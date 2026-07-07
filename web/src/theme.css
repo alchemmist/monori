@@ -1,43 +1,30 @@
 @import "@fontsource-variable/inter";
 
+/*
+ * No custom theme — every semantic token below is just an alias onto Gravity
+ * UI's default dark palette, so the whole app inherits the stock Gravity look.
+ */
 :root,
 .g-root {
-  --m-bg: #0e1014;
-  --m-surface: #171a21;
-  --m-surface-hover: #1d212a;
-  --m-surface-raised: #20252f;
-  --m-border: #262b35;
-  --m-border-soft: #1f242d;
-  --m-text: #e8ebf0;
-  --m-text-dim: #8a93a3;
-  --m-text-faint: #5c6474;
-  --m-accent: #8fb4ff;
-  --m-income: #4ade80;
-  --m-expense: #f87171;
-  --m-warning: #fbbf24;
-  --m-income-soft: rgba(74, 222, 128, 0.12);
-  --m-expense-soft: rgba(248, 113, 113, 0.12);
-  --m-accent-soft: rgba(143, 180, 255, 0.12);
+  --m-bg: var(--g-color-base-background);
+  --m-surface: var(--g-color-base-float);
+  --m-surface-hover: var(--g-color-base-generic-hover);
+  --m-surface-raised: var(--g-color-base-generic);
+  --m-border: var(--g-color-line-generic);
+  --m-border-soft: var(--g-color-line-generic-solid);
+  --m-text: var(--g-color-text-primary);
+  --m-text-dim: var(--g-color-text-secondary);
+  --m-text-faint: var(--g-color-text-hint);
+  --m-accent: var(--g-color-text-brand);
+  --m-income: var(--g-color-text-positive);
+  --m-expense: var(--g-color-text-danger);
+  --m-warning: var(--g-color-text-warning);
+  --m-income-soft: var(--g-color-base-positive-light);
+  --m-expense-soft: var(--g-color-base-danger-light);
+  --m-accent-soft: var(--g-color-base-selection);
 
-  --m-radius: 12px;
-  --m-radius-sm: 8px;
-  --m-shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.25);
-}
-
-/* Gravity dark theme tune-up: our background scale + brand color */
-.g-root.g-root_theme_dark {
-  --g-color-base-background: var(--m-bg);
-  --g-color-base-brand: #5c8dff;
-  --g-color-base-brand-hover: #729cff;
-  --g-color-base-selection: rgba(143, 180, 255, 0.18);
-  --g-color-base-selection-hover: rgba(143, 180, 255, 0.28);
-  --g-color-line-brand: #5c8dff;
-  --g-color-text-brand: #8fb4ff;
-  --g-color-text-brand-heavy: #a9c4ff;
-  --g-color-text-link: #8fb4ff;
-  --g-color-text-link-hover: #a9c4ff;
-  --g-font-family-sans: "Inter Variable", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI",
-    Roboto, sans-serif;
+  --m-radius: var(--g-border-radius-l);
+  --m-radius-sm: var(--g-border-radius-m);
 }
 
 html,
@@ -45,8 +32,7 @@ body {
   margin: 0;
   background: var(--m-bg);
   color: var(--m-text);
-  font-family: "Inter Variable", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-    sans-serif;
+  font-family: var(--g-font-family-sans);
   font-size: 14px;
   -webkit-font-smoothing: antialiased;
 }
@@ -59,23 +45,11 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-::selection {
-  background: var(--m-accent-soft);
-}
-
-/* thin scrollbars everywhere */
-* {
-  scrollbar-width: thin;
-  scrollbar-color: var(--m-border) transparent;
-}
-*::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-*::-webkit-scrollbar-thumb {
-  background: var(--m-border);
-  border-radius: 4px;
-}
-*::-webkit-scrollbar-track {
-  background: transparent;
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }

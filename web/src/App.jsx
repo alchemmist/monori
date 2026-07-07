@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { Loader, useToaster } from "@gravity-ui/uikit";
-import { ChartColumn, ListUl, LayoutHeaderCellsLarge } from "@gravity-ui/icons";
+import { Bars, ChartColumn, ListUl, LayoutHeaderCellsLarge } from "@gravity-ui/icons";
 import { useStore } from "./store.js";
 import { computeRange } from "./engine/budget.js";
 import BudgetPage from "./pages/BudgetPage.jsx";
 import DashboardPage from "./pages/DashboardPage.jsx";
+import AnalyticsPage from "./pages/AnalyticsPage.jsx";
 import TransactionsPage from "./pages/TransactionsPage.jsx";
 
 const NAV = [
@@ -18,7 +19,15 @@ const FIRST_YEAR = 2020;
 export default function App() {
   const { snapshot, loading, error, load, toast } = useStore();
   const [page, setPage] = useState("budget");
+  const [collapsed, setCollapsed] = useState(() => localStorage.getItem("sidebar_collapsed") === "1");
   const toaster = useToaster();
+
+  const toggleSidebar = () =>
+    setCollapsed((c) => {
+      const next = !c;
+      localStorage.setItem("sidebar_collapsed", next ? "1" : "0");
+      return next;
+    });
 
   useEffect(() => {
     load();
@@ -57,25 +66,41 @@ export default function App() {
 
   return (
     <div className="layout">
-      <nav className="sidebar">
-        <div className="sidebar__logo">
-          mono<span>ri</span>
+      <nav className={`sidebar ${collapsed ? "sidebar_collapsed" : ""}`}>
+        <div className="sidebar__head">
+          <div className="sidebar__logo">
+            mono<span>ri</span>
+          </div>
+          <button
+            className="sidebar__toggle"
+            onClick={toggleSidebar}
+            title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          >
+            <Bars width={16} height={16} />
+          </button>
         </div>
         {NAV.map(({ id, title, icon: Icon }) => (
           <button
             key={id}
             className={`sidebar__item ${page === id ? "sidebar__item_active" : ""}`}
             onClick={() => setPage(id)}
+            title={collapsed ? title : undefined}
           >
             <Icon width={16} height={16} />
-            {title}
+            <span className="sidebar__label">{title}</span>
           </button>
         ))}
         <div className="sidebar__footer">monori · personal budget</div>
       </nav>
       <main className="content">
         {page === "budget" && <BudgetPage results={results} firstYear={FIRST_YEAR} lastYear={lastYear} />}
-        {page === "dashboard" && <DashboardPage results={results} firstYear={FIRST_YEAR} lastYear={lastYear} />}
+        {page === "dashboard" && (
+          <>
+            <DashboardPage results={results} firstYear={FIRST_YEAR} lastYear={lastYear} />
+            <AnalyticsPage results={results} firstYear={FIRST_YEAR} lastYear={lastYear} />
+          </>
+        )}
         {page === "transactions" && <TransactionsPage />}
       </main>
     </div>
