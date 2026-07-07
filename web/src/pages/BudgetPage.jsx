@@ -6,14 +6,23 @@ import { MONTHS_SHORT, MONTHS, rub } from "../format.js";
 import BudgetCell from "../components/BudgetCell.jsx";
 import { Money, BalancePill } from "../components/Money.jsx";
 import { CategoryEditDialog, CategoryDeleteDialog } from "../components/CategoryDialogs.jsx";
+import YearGrid from "../components/YearGrid.jsx";
+import "../components/yeargrid.css";
 import "./budget.css";
+
+const YEAR_DENSITY = {
+  full: ["budgeted", "activity", "balance"],
+  plan: ["budgeted"],
+  actual: ["activity", "balance"],
+};
 
 export default function BudgetPage({ results, firstYear, lastYear }) {
   const { snapshot, setBudget } = useStore();
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth()); // 0-based
-  const [mode, setMode] = useState("month");
+  const [mode, setMode] = useState("year");
+  const [density, setDensity] = useState("full");
   const [collapsed, setCollapsed] = useState({});
   const [dialog, setDialog] = useState(null); // {type: 'edit'|'delete'|'new', category}
 
@@ -68,21 +77,35 @@ export default function BudgetPage({ results, firstYear, lastYear }) {
           size="m"
         />
         {mode === "month" && (
-          <SegmentedRadioGroup
-            size="m"
-            value={String(month)}
-            onUpdate={(v) => setMonth(+v)}
-            options={MONTHS_SHORT.map((m, i) => ({ value: String(i), content: m }))}
-          />
+          <div className="toolbar-scroll">
+            <SegmentedRadioGroup
+              size="m"
+              value={String(month)}
+              onUpdate={(v) => setMonth(+v)}
+              options={MONTHS_SHORT.map((m, i) => ({ value: String(i), content: m }))}
+            />
+          </div>
         )}
         <div style={{ flex: 1 }} />
+        {mode === "year" && (
+          <SegmentedRadioGroup
+            size="m"
+            value={density}
+            onUpdate={setDensity}
+            options={[
+              { value: "full", content: "Full" },
+              { value: "plan", content: "Plan" },
+              { value: "actual", content: "Actual" },
+            ]}
+          />
+        )}
         <SegmentedRadioGroup
           size="m"
           value={mode}
           onUpdate={setMode}
           options={[
             { value: "month", content: "Month" },
-            { value: "matrix", content: "Year matrix" },
+            { value: "year", content: "Year" },
           ]}
         />
       </div>
@@ -233,48 +256,20 @@ export default function BudgetPage({ results, firstYear, lastYear }) {
         </>
       )}
 
-      {mode === "matrix" && (
-        <div className="card matrix-wrap matrix">
-          <table className="budget-grid">
-            <thead>
-              <tr>
-                <th>Category</th>
-                {MONTHS_SHORT.map((m) => (
-                  <th key={m}>{m}</th>
-                ))}
-                <th>Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              {groups.map((g) => {
-                const cats = catsByGroup.get(g.id) ?? [];
-                return [
-                  <tr key={`g${g.id}`} className="group-row">
-                    <td colSpan={14}>{g.name}</td>
-                  </tr>,
-                  cats.map((c) => {
-                    const months = res.byCategory.get(c.id) ?? [];
-                    const total = months.reduce((s, m) => s + m.budgeted, 0);
-                    return (
-                      <tr key={c.id} className="cat-row">
-                        <td>{c.name}</td>
-                        {MONTHS_SHORT.map((_, i) => (
-                          <td key={i}>
-                            <BudgetCell
-                              value={months[i]?.budgeted ?? 0}
-                              onChange={(v) => setBudget(c.id, year, i + 1, v)}
-                            />
-                          </td>
-                        ))}
-                        <td><Money value={total} /></td>
-                      </tr>
-                    );
-                  }),
-                ];
-              })}
-            </tbody>
-          </table>
-        </div>
+      {mode === "year" && (
+        <YearGrid
+          res={res}
+          groups={groups}
+          catsByGroup={catsByGroup}
+          year={year}
+          currentMonth={year === now.getFullYear() ? now.getMonth() : -1}
+          cols={YEAR_DENSITY[density]}
+          collapsed={collapsed}
+          setCollapsed={setCollapsed}
+          setBudget={setBudget}
+          onAddCategory={(groupId) => setDialog({ type: "edit", category: { groupId } })}
+          onCategoryMenu={catMenu}
+        />
       )}
 
       {dialog?.type === "edit" && (

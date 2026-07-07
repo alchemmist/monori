@@ -6,8 +6,23 @@
   margin-bottom: 16px;
 }
 
+@media (max-width: 760px) {
+  .budget-toolbar {
+    gap: 8px;
+  }
+  .hero-card {
+    flex: 1 1 calc(50% - 6px);
+    min-width: 0;
+    padding: 12px 14px;
+  }
+  .hero-card__value {
+    font-size: 19px;
+  }
+}
+
 .budget-hero {
   display: flex;
+  flex-wrap: wrap;
   gap: 12px;
   margin-bottom: 16px;
 }
@@ -77,6 +92,23 @@
   border-bottom: none;
 }
 
+/* transactions reuse the grid, but their first column is a date, not a 40%-wide name */
+.tx-grid td:first-child {
+  width: 90px;
+}
+
+.tx-table {
+  overflow: hidden;
+}
+@media (max-width: 760px) {
+  .tx-table {
+    overflow-x: auto;
+  }
+  .tx-table .budget-grid {
+    min-width: 620px;
+  }
+}
+
 .group-row td {
   background: var(--m-surface-raised);
   font-weight: 600;
@@ -123,15 +155,15 @@
 .cat-progress {
   flex: 1;
   max-width: 160px;
-  height: 4px;
-  background: var(--m-border-soft);
-  border-radius: 2px;
+  height: 3px;
+  background: var(--m-border);
   overflow: hidden;
   margin-left: 12px;
 }
 .cat-progress__fill {
+  /* spans are inline by default and would ignore width — the original bug */
+  display: block;
   height: 100%;
-  border-radius: 2px;
   transition: width 0.35s cubic-bezier(0.4, 0, 0.2, 1), background 0.2s ease;
 }
 
@@ -151,8 +183,8 @@
 
 .balance-pill {
   display: inline-block;
-  padding: 3px 10px;
-  border-radius: 999px;
+  padding: 2px 8px;
+  border-radius: var(--m-radius-sm);
   font-variant-numeric: tabular-nums;
   font-weight: 600;
   font-size: 13px;
@@ -173,7 +205,7 @@
 
 .budget-cell {
   cursor: pointer;
-  border-radius: 6px;
+  border-radius: var(--m-radius-sm);
   padding: 4px 8px;
   margin: -4px -8px;
   display: inline-block;
@@ -188,7 +220,7 @@
   width: 96px;
   background: var(--m-bg);
   border: 1px solid var(--m-accent);
-  border-radius: 6px;
+  border-radius: var(--m-radius-sm);
   color: var(--m-text);
   font: inherit;
   font-variant-numeric: tabular-nums;
@@ -198,30 +230,14 @@
   box-shadow: 0 0 0 3px var(--m-accent-soft);
 }
 
-/* year matrix mode */
-.matrix-wrap {
-  overflow-x: auto;
-}
-.matrix .budget-grid td,
-.matrix .budget-grid th {
-  padding: 0 10px;
-}
-.matrix .budget-grid td:first-child {
-  width: auto;
-  min-width: 180px;
-  position: sticky;
-  left: 0;
-  background: var(--m-surface);
-  z-index: 1;
-}
-.matrix .budget-grid tr:hover td:first-child {
-  background: var(--m-surface-hover);
-}
-.matrix .budget-grid th:first-child {
-  position: sticky;
-  left: 0;
-  z-index: 3;
-}
-.matrix .budget-cell {
-  min-width: 56px;
+/* placed last so it wins over the base .budget-hero / .hero-card rules above */
+@media (max-width: 760px) {
+  .budget-hero {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .budget-hero .hero-card {
+    min-width: 0;
+  }
 }

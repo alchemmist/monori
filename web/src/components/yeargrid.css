@@ -1,0 +1,246 @@
+/* Year grid — a wide spreadsheet with the Category column frozen on the left.
+   The table takes its full natural height and the PAGE scrolls vertically; the
+   grid only scrolls horizontally. The header is kept visible on vertical scroll
+   by floating <thead> via JS (see YearGrid.jsx) — no internal vertical scroll. */
+
+.year-grid-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--m-border);
+  border-radius: var(--m-radius);
+}
+
+.year-grid {
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+/* ---- header (floated by JS to stay at the viewport top) ---- */
+.year-grid thead {
+  position: relative;
+  z-index: 4;
+  will-change: transform;
+}
+.year-grid thead th {
+  background: var(--m-surface);
+  color: var(--m-text-faint);
+  font-weight: 600;
+  font-size: 10px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+.yg-month {
+  height: 27px;
+  box-sizing: border-box;
+  text-align: center;
+  padding: 6px 4px 5px;
+  border-bottom: 1px solid var(--m-border-soft);
+  border-left: 1px solid var(--m-border);
+  color: var(--m-text-dim);
+}
+.yg-metric {
+  text-align: right;
+  padding: 3px 8px 5px;
+  font-size: 9px;
+  border-bottom: 1px solid var(--m-border);
+}
+.yg-metric_first {
+  border-left: 1px solid var(--m-border);
+}
+.yg-month_now,
+.yg-metric_now {
+  color: var(--m-accent);
+  background-color: var(--m-surface);
+  background-image: linear-gradient(
+    color-mix(in srgb, var(--m-accent) 16%, transparent),
+    color-mix(in srgb, var(--m-accent) 16%, transparent)
+  );
+}
+.yg-month_now {
+  font-weight: 800;
+  color: var(--m-accent);
+  box-shadow: inset 0 -2px 0 var(--m-accent);
+}
+.yg-metric_now {
+  font-weight: 700;
+}
+
+/* ---- frozen left column: header corner + every first cell ---- */
+.yg-corner,
+.yg-name {
+  position: sticky;
+  left: 0;
+  background: var(--m-surface);
+  text-align: left;
+  min-width: 210px;
+  max-width: 210px;
+  box-shadow: 1px 0 0 var(--m-border);
+}
+.yg-corner {
+  z-index: 6; /* above the floating header row and the frozen column */
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--m-border);
+}
+.yg-name {
+  z-index: 3;
+  padding: 0 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Total / Avg header at the far right */
+.yg-total-head {
+  text-align: right;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--m-border);
+  border-left: 1px solid var(--m-border);
+}
+
+/* ---- body cells ---- */
+.year-grid tbody td {
+  height: 30px;
+  padding: 0 8px;
+  text-align: right;
+  border-bottom: 1px solid var(--m-border-soft);
+}
+.year-grid tbody td.yg-name {
+  text-align: left;
+}
+.yg-cell_first {
+  border-left: 1px solid var(--m-border);
+}
+.yg-cell_now {
+  background: color-mix(in srgb, var(--m-accent) 7%, transparent);
+}
+.yg-total {
+  border-left: 1px solid var(--m-border);
+}
+
+.yg-num {
+  font-variant-numeric: tabular-nums;
+  color: var(--m-text);
+}
+.yg-num_pos { color: var(--m-income); }
+.yg-num_neg { color: var(--m-expense); }
+.yg-num_zero { color: var(--m-text-faint); }
+.yg-num_dim { color: var(--m-text-dim); }
+
+/* ---- summary band (income / budgeted / available), set apart from the grid ---- */
+.yg-summary td {
+  height: 26px;
+  background: color-mix(in srgb, var(--m-accent) 6%, var(--m-surface));
+  border-bottom: 1px solid var(--m-border-soft);
+}
+.yg-summary .yg-summary__label {
+  z-index: 3;
+  background: color-mix(in srgb, var(--m-accent) 6%, var(--m-surface));
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--m-text-dim);
+}
+.yg-summary__cell {
+  text-align: center;
+  border-left: 1px solid var(--m-border);
+}
+.yg-summary__tail {
+  border-left: 1px solid var(--m-border);
+}
+/* the whole band ends with a firm double-weight divider */
+.yg-summary_strong td {
+  border-bottom: 2px solid var(--m-border);
+  box-shadow: inset 0 -3px 0 -2px var(--m-accent);
+}
+.yg-summary_strong .yg-summary__label,
+.yg-summary_strong .yg-num {
+  font-weight: 700;
+}
+
+/* ---- group + category rows ---- */
+.yg-group td {
+  height: 30px;
+  background: var(--m-surface-raised);
+  font-weight: 600;
+  border-bottom: 1px solid var(--m-border);
+  cursor: pointer;
+  user-select: none;
+}
+.yg-group .yg-name {
+  background-color: var(--m-surface);
+  background-image: linear-gradient(var(--m-surface-raised), var(--m-surface-raised));
+}
+.yg-chevron {
+  display: inline-block;
+  margin-right: 6px;
+  color: var(--m-text-faint);
+  transition: transform 0.18s ease;
+  vertical-align: -2px;
+}
+.yg-chevron_collapsed {
+  transform: rotate(-90deg);
+}
+.yg-count {
+  color: var(--m-text-faint);
+  font-weight: 400;
+  margin-left: 8px;
+  font-size: 11px;
+}
+.yg-add {
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
+.yg-row:hover td {
+  background: color-mix(in srgb, var(--m-text) 3%, transparent);
+}
+.yg-row:hover .yg-name {
+  background-color: var(--m-surface);
+  background-image: linear-gradient(
+    color-mix(in srgb, var(--m-text) 3%, transparent),
+    color-mix(in srgb, var(--m-text) 3%, transparent)
+  );
+}
+.yg-name_cat {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  height: 30px;
+}
+.yg-cat-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.yg-row-menu {
+  opacity: 0;
+  transition: opacity 0.12s ease;
+  flex-shrink: 0;
+}
+.yg-row:hover .yg-row-menu {
+  opacity: 1;
+}
+
+/* budget cell fits the tighter grid */
+.year-grid .budget-cell {
+  min-width: 0;
+  margin: 0;
+  padding: 2px 4px;
+}
+.year-grid .budget-cell__input {
+  width: 64px;
+}
+
+/* narrower frozen column on phones so more data stays visible */
+@media (max-width: 760px) {
+  .yg-corner,
+  .yg-name {
+    min-width: 128px;
+    max-width: 128px;
+  }
+  .year-grid {
+    font-size: 11px;
+  }
+  .year-grid tbody td {
+    padding: 0 6px;
+  }
+}
