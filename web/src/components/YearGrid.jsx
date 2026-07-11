@@ -22,6 +22,7 @@ const METRICS = {
  */
 export default function YearGrid({
   res,
+  prevRes,
   groups,
   catsByGroup,
   year,
@@ -88,21 +89,42 @@ export default function YearGrid({
     <div className="year-grid-wrap" ref={wrapRef}>
       <table className="year-grid">
         <thead ref={theadRef}>
-          <tr>
-            <th className="yg-corner" rowSpan={2}>Category</th>
-            {MONTHS_SHORT.map((m, i) => (
-              <th
-                key={m}
-                className={`yg-month ${i === currentMonth ? "yg-month_now" : ""}`}
-                colSpan={span}
-              >
-                {m}
-              </th>
-            ))}
-            <th className="yg-total-head" rowSpan={2}>Total</th>
-            <th className="yg-total-head" rowSpan={2}>Avg</th>
+          {/* header band: the year, then the colored Available-to-budget hero per month */}
+          <tr className="yg-band">
+            <th className="yg-corner yg-corner_year">
+              <div className="yg-year">{year}</div>
+              <div className="yg-year__cap">Available to budget</div>
+            </th>
+            {MONTHS_SHORT.map((m, i) => {
+              const a = res.available[i];
+              const cls = a > 0 ? "yg-num_pos" : a < 0 ? "yg-num_neg" : "yg-num_zero";
+              // the pieces that sum to Available: carry-in + last month's overspend
+              // + this month's income − this month's budgeted
+              const prevName = i > 0 ? MONTHS_SHORT[i - 1] : "Dec";
+              const prevAvail = i > 0 ? res.available[i - 1] : prevRes ? prevRes.available[11] : 0;
+              const prevOver = i > 0 ? res.overspent[i - 1] : prevRes ? prevRes.overspent[11] : 0;
+              return (
+                <th
+                  key={m}
+                  className={`yg-msum ${i === currentMonth ? "yg-msum_now" : ""}`}
+                  colSpan={span}
+                >
+                  <div className="yg-msum__mon">{m} {year}</div>
+                  <div className={`yg-msum__av ${cls}`}>{rub(a)} ₽</div>
+                  <div className="yg-msum__break">
+                    <BreakLine value={prevAvail} label={`Not budgeted in ${prevName}`} />
+                    <BreakLine value={prevOver} label={`Overspent in ${prevName}`} />
+                    <BreakLine value={res.income[i]} label={`Income for ${m}`} />
+                    <BreakLine value={-res.budgetedTotal[i]} label={`Budgeted in ${m}`} />
+                  </div>
+                </th>
+              );
+            })}
+            <th className="yg-band__tail" colSpan={2} />
           </tr>
-          <tr>
+          {/* column labels */}
+          <tr className="yg-colhead">
+            <th className="yg-corner yg-corner_cat">Category</th>
             {MONTHS_SHORT.map((m, i) =>
               cols.map((metric, j) => (
                 <th
@@ -115,17 +137,12 @@ export default function YearGrid({
                 </th>
               ))
             )}
+            <th className="yg-total-head">Total</th>
+            <th className="yg-total-head">Avg</th>
           </tr>
         </thead>
 
         <tbody>
-          <SummaryRow label="Income" values={res.income} span={span} tone="pos"
-            currentMonth={currentMonth} />
-          <SummaryRow label="Budgeted" values={res.budgetedTotal} span={span} tone="dim"
-            currentMonth={currentMonth} />
-          <SummaryRow label="Available to budget" values={res.available} span={span} tone="signed"
-            currentMonth={currentMonth} strong />
-
           {groups.map((g) => {
             const cats = catsByGroup.get(g.id) ?? [];
             const isCollapsed = collapsed[g.id];
@@ -218,22 +235,12 @@ export default function YearGrid({
   );
 }
 
-function SummaryRow({ label, values, span, tone, currentMonth, strong }) {
-  const toneClass = (v) => {
-    if (tone === "pos") return v > 0 ? "yg-num_pos" : "yg-num_zero";
-    if (tone === "dim") return "yg-num_dim";
-    return v > 0 ? "yg-num_pos" : v < 0 ? "yg-num_neg" : "yg-num_zero"; // signed
-  };
+function BreakLine({ value, label }) {
   return (
-    <tr className={`yg-summary ${strong ? "yg-summary_strong" : ""}`}>
-      <td className="yg-name yg-summary__label">{label}</td>
-      {values.map((v, m) => (
-        <td key={m} colSpan={span}
-          className={`yg-summary__cell ${m === currentMonth ? "yg-cell_now" : ""}`}>
-          <span className={`yg-num ${toneClass(v)}`}>{rub(v)}</span>
-        </td>
-      ))}
-      <td className="yg-summary__tail" colSpan={2} />
-    </tr>
+    <div className="yg-break__line">
+      <span className={`yg-break__val ${value < 0 ? "yg-num_neg" : ""}`}>{rub(value)}</span>
+      <span className="yg-break__lbl">{label}</span>
+    </div>
   );
 }
+

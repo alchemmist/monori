@@ -259,6 +259,7 @@ export default function BudgetPage({ results, firstYear, lastYear }) {
       {mode === "year" && (
         <YearGrid
           res={res}
+          prevRes={results.get(year - 1) ?? null}
           groups={groups}
           catsByGroup={catsByGroup}
           year={year}
