@@ -1,20 +1,20 @@
-// Gravity Charts' stock qualitative palette (DEFAULT_PALETTE), not re-exported
-// from the package root, so mirrored here verbatim.
-const DEFAULT_PALETTE = [
-  "#4DA2F1", "#FF3D64", "#8AD554", "#FFC636", "#FFB9DD", "#84D1EE", "#FF91A1",
-  "#54A520", "#DB9100", "#BA74B3", "#1F68A9", "#ED65A9", "#0FA08D", "#FF7E00",
-  "#E8B0A4", "#52A6C5", "#BE2443", "#70C1AF", "#FFB46C", "#DCA3D7",
+// monori "Mono" categorical palette — an Observable-10 style qualitative set,
+// orange-led so the brand accent leads the series, then distinct hues that stay
+// legible against the near-monochrome UI in both light and dark themes.
+const CATEGORY_PALETTE = [
+  "#ef5a17", "#4269d0", "#3ca951", "#a463f2", "#ff8ab7", "#6cc5b0",
+  "#efb118", "#9c6b4e", "#97bbf5", "#ff725c", "#6b4fbb", "#9498a0",
 ];
 
-/** Chart tokens straight from Gravity's defaults — no custom palette.
- * income/expense/accent map to Gravity's semantic dark-theme colors so the
- * data keeps its green/red/brand meaning; everything else is DEFAULT_PALETTE. */
+/** Chart tokens. income/expense/accent map to the theme's semantic tokens so
+ * the data keeps its green/red/brand meaning across light & dark; every other
+ * series color comes from the qualitative CATEGORY_PALETTE. */
 export const C = {
   income: "var(--g-color-text-positive)",
   expense: "var(--g-color-text-danger)",
   accent: "var(--g-color-text-brand)",
   amber: "var(--g-color-text-warning)",
-  palette: DEFAULT_PALETTE,
+  palette: CATEGORY_PALETTE,
 };
 
 export const axisCommon = {
