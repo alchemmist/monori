@@ -50,12 +50,19 @@ export default function AnalyticsPage({ results, firstYear, lastYear }) {
       legend: legendCommon,
       series: { data: [
         {
-          type: "bar-x", name: "Budgeted", color: C.accent, opacity: 0.45,
+          // the plan sits behind as a neutral target
+          type: "bar-x", name: "Budgeted", color: "var(--g-color-text-hint)", opacity: 0.5,
           data: MONTHS_SHORT.map((_, m) => ({ x: m, y: Math.round(res.budgetedTotal[m] / 100) })),
         },
         {
-          type: "bar-x", name: "Spent", color: C.expense,
-          data: actual.map((v, m) => ({ x: m, y: Math.round(v / 100) })),
+          // actual in the brand accent, flipping to expense-red only when it
+          // overshoots that month's budget
+          type: "bar-x", name: "Spent", color: C.accent,
+          data: actual.map((v, m) => ({
+            x: m,
+            y: Math.round(v / 100),
+            color: v > res.budgetedTotal[m] ? C.expense : C.accent,
+          })),
         },
       ] },
       chart: { margin: { top: 10, right: 10, bottom: 0, left: 10 } },
