@@ -112,7 +112,7 @@ export default function App({ theme, onToggleTheme }) {
         ))}
 
         <div className="sidebar__gap" />
-        {SOON.map(({ title, icon: Icon, issue }) => (
+        {SOON.map(({ title, icon: Icon }) => (
           <div
             key={title}
             className="sidebar__item sidebar__item_soon"
