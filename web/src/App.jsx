@@ -68,8 +68,8 @@ export default function App() {
     <div className="layout">
       <nav className={`sidebar ${collapsed ? "sidebar_collapsed" : ""}`}>
         <div className="sidebar__head">
-          <div className="sidebar__logo">
-            mono<span>ri</span>
+          <div className="sidebar__logo" title="monori">
+            もの<span>り</span>
           </div>
           <button
             className="sidebar__toggle"
