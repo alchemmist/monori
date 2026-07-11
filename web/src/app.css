@@ -1,3 +1,12 @@
+@font-face {
+  font-family: "M PLUS Rounded 1c";
+  font-style: normal;
+  font-weight: 800;
+  font-display: swap;
+  src: url("./assets/fonts/mplus-rounded-1c-800-monori.woff2") format("woff2");
+  unicode-range: U+306E, U+3082, U+308A;
+}
+
 .layout {
   display: flex;
   min-height: 100vh;
@@ -34,9 +43,11 @@
   padding: 4px 0 18px;
 }
 .sidebar__logo {
-  font-size: 17px;
-  font-weight: 700;
-  letter-spacing: 0.4px;
+  font-family: "M PLUS Rounded 1c", -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 23px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  line-height: 1;
   color: var(--m-text);
   white-space: nowrap;
 }
