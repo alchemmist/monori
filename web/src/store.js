@@ -1,5 +1,14 @@
 import { create } from "zustand";
 import { api } from "./api.js";
+import { demoSnapshot } from "./demo/demoData.js";
+
+/** The public /demo page runs entirely on the bundled sample dataset: no auth,
+ * no backend calls. Mutations still work but stay local (nothing is persisted). */
+export const isDemo = () => {
+  if (typeof window === "undefined") return false;
+  const p = window.location.pathname.replace(/\/+$/, "");
+  return p === "/demo" || p.startsWith("/demo/");
+};
 
 export const useStore = create((set, get) => ({
   snapshot: null,
@@ -8,6 +17,10 @@ export const useStore = create((set, get) => ({
   toast: null,
 
   async load() {
+    if (isDemo()) {
+      set({ snapshot: structuredClone(demoSnapshot), loading: false, error: null });
+      return;
+    }
     try {
       const snapshot = await api.snapshot();
       set({ snapshot, loading: false, error: null });
@@ -28,6 +41,7 @@ export const useStore = create((set, get) => ({
     );
     if (amount !== 0) budgets.push({ categoryId, year, month, amount });
     set({ snapshot: { ...snapshot, budgets } });
+    if (isDemo()) return;
     api.putBudget({ categoryId, year, month, amount }).catch((e) =>
       set({ toast: { title: "Failed to save budget", theme: "danger", content: String(e) } })
     );
@@ -39,14 +53,17 @@ export const useStore = create((set, get) => ({
       t.id === txId ? { ...t, categoryId } : t
     );
     set({ snapshot: { ...snapshot, transactions } });
+    if (isDemo()) return;
     api.patchTx(txId, { categoryId: categoryId ?? 0 }).catch((e) =>
       set({ toast: { title: "Failed to update transaction", theme: "danger", content: String(e) } })
     );
   },
 
   async createCategory(body) {
-    const { id } = await api.createCategory(body);
     const { snapshot } = get();
+    const id = isDemo()
+      ? Math.max(0, ...snapshot.categories.map((c) => c.id)) + 1
+      : (await api.createCategory(body)).id;
     const categories = [
       ...snapshot.categories,
       { id, groupId: body.groupId, name: body.name, keywords: body.keywords ?? "", sort: 1e9, archived: false },
@@ -56,7 +73,7 @@ export const useStore = create((set, get) => ({
   },
 
   async patchCategory(id, patch) {
-    await api.patchCategory(id, patch);
+    if (!isDemo()) await api.patchCategory(id, patch);
     const { snapshot } = get();
     const categories = snapshot.categories.map((c) =>
       c.id === id
@@ -72,7 +89,7 @@ export const useStore = create((set, get) => ({
   },
 
   async deleteCategory(id, reassignTo) {
-    await api.deleteCategory(id, reassignTo);
+    if (!isDemo()) await api.deleteCategory(id, reassignTo);
     const { snapshot } = get();
     set({
       snapshot: {
@@ -87,6 +104,7 @@ export const useStore = create((set, get) => ({
   },
 
   async commitImport(rows) {
+    if (isDemo()) return { imported: 0, skipped: 0, demo: true };
     const res = await api.importCommit(rows);
     await get().load();
     return res;

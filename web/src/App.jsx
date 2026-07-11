@@ -15,7 +15,7 @@ import {
   ClockArrowRotateLeft,
   SlidersVertical,
 } from "@gravity-ui/icons";
-import { useStore } from "./store.js";
+import { useStore, isDemo } from "./store.js";
 import { computeRange } from "./engine/budget.js";
 import BudgetPage from "./pages/BudgetPage.jsx";
 import DashboardPage from "./pages/DashboardPage.jsx";
@@ -144,6 +144,20 @@ export default function App({ theme, onToggleTheme }) {
         </div>
       </nav>
       <main className="content">
+        {isDemo() && (
+          <div className="demo-banner">
+            <span className="demo-banner__badge">Demo</span>
+            <span>Sample data — changes aren’t saved.</span>
+            <a
+              className="demo-banner__link"
+              href="https://github.com/alchemmist/monori"
+              target="_blank"
+              rel="noreferrer"
+            >
+              View on GitHub →
+            </a>
+          </div>
+        )}
         {page === "budget" && <BudgetPage results={results} firstYear={FIRST_YEAR} lastYear={lastYear} />}
         {page === "dashboard" && (
           <>
