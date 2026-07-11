@@ -2,6 +2,8 @@ import json
 import pathlib
 import sys
 
+import pytest
+
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 from app.importer import build_rules, categorize, parse_date, parse_amount_kop, parse_statement
 
@@ -63,6 +65,8 @@ def test_categorizer_agreement_with_sheet_history():
     """Port fidelity check: recategorize all historical transactions and compare
     with the sheet's own FIND_CATEGORIES output (auto_category column)."""
     out = pathlib.Path(__file__).resolve().parent.parent.parent / "migration" / "out"
+    if not (out / "transactions.json").exists():
+        pytest.skip("migration/out fixtures not present (private Google Sheet data)")
     txs = json.loads((out / "transactions.json").read_text())
     cats_raw = json.loads((out / "categories.json").read_text())
     groups = {}
