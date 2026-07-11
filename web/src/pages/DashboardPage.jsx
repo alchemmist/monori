@@ -28,6 +28,7 @@ export default function DashboardPage({ results, firstYear, lastYear }) {
   );
   const [drillYear, setDrillYear] = useState(String(now.getFullYear()));
   const [stackYear, setStackYear] = useState(String(now.getFullYear()));
+  const [catStackYear, setCatStackYear] = useState(String(now.getFullYear()));
 
   const excludedIds = useMemo(() => new Set(), []);
   const incomeGroupIds = useMemo(
@@ -252,6 +253,50 @@ export default function DashboardPage({ results, firstYear, lastYear }) {
     };
   }, [snapshot.transactions, snapshot.groups, stackYear, catById, excludedIds]);
 
+  // Spending by category, stacked by month — same top-N categories (and thus
+  // colors) as the donut, so the two views line up.
+  const catStackData = useMemo(() => {
+    const perCat = new Map(); // name -> Array(12) monthly outflow totals
+    for (const t of snapshot.transactions) {
+      if (!t.date.startsWith(catStackYear) || t.categoryId == null || t.amount >= 0) continue;
+      const cat = catById.get(t.categoryId);
+      if (!cat || incomeGroupIds.has(cat.groupId) || excludedIds.has(t.categoryId)) continue;
+      let arr = perCat.get(cat.name);
+      if (!arr) perCat.set(cat.name, (arr = Array(12).fill(0)));
+      arr[+t.date.slice(5, 7) - 1] -= t.amount;
+    }
+    const rows = [...perCat.entries()]
+      .map(([name, arr]) => ({ name, arr, total: arr.reduce((s, v) => s + v, 0) }))
+      .sort((a, b) => b.total - a.total);
+    const top = rows.slice(0, 11);
+    const rest = rows.slice(11);
+    const series = top.map((r, i) => ({
+      type: "bar-x",
+      stacking: "normal",
+      name: r.name,
+      color: C.palette[i % C.palette.length],
+      data: r.arr.map((v, m) => ({ x: m, y: Math.round(v / 100) })),
+    }));
+    if (rest.length) {
+      const other = Array(12).fill(0);
+      for (const r of rest) r.arr.forEach((v, m) => (other[m] += v));
+      series.push({
+        type: "bar-x",
+        stacking: "normal",
+        name: "Other",
+        color: C.palette[11 % C.palette.length],
+        data: other.map((v, m) => ({ x: m, y: Math.round(v / 100) })),
+      });
+    }
+    return {
+      xAxis: { type: "category", categories: MONTHS_SHORT, ...axisCommon },
+      yAxis: [{ labels: axisCommon.labels, ...axisCommon }],
+      legend: { enabled: true, itemStyle: { fontColor: "var(--m-text-dim)", fontSize: "12px" } },
+      series: { data: series },
+      tooltip: { enabled: true },
+    };
+  }, [snapshot.transactions, catStackYear, catById, incomeGroupIds, excludedIds]);
+
   const years = [];
   for (let y = firstYear; y <= Math.min(lastYear, now.getFullYear()); y++) years.push(String(y));
 
@@ -343,6 +388,17 @@ export default function DashboardPage({ results, firstYear, lastYear }) {
                 Pick a category to see its monthly spending
               </div>
             )}
+          </div>
+        </div>
+
+        <div className="card chart-card chart-card_wide">
+          <div className="chart-card__head">
+            <div className="chart-card__title">Spending by category · by month</div>
+            <Select size="s" value={[catStackYear]} onUpdate={(v) => setCatStackYear(v[0])}
+              options={years.map((y) => ({ value: y, content: y }))} />
+          </div>
+          <div className="chart-card__body">
+            <ChartBoundary data={catStackData} />
           </div>
         </div>
 
