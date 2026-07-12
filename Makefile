@@ -6,7 +6,7 @@ WEBBIN := web/node_modules/.bin
 .PHONY: dev down api web build \
         fmt fmt-check \
         lint lint-web lint-css lint-html lint-server lint-yaml lint-md lint-actions lint-docker lint-shell spell \
-        typecheck analyze audit \
+        typecheck analyze audit audit-deps audit-secrets \
         test t-fast t-medium t-slow coverage mutation \
         check help
 
@@ -84,8 +84,12 @@ analyze:
 		semgrep --error --quiet --config p/python --config p/javascript .; \
 	else echo "semgrep not installed — skipped locally (CI installs it)"; fi
 
-audit:
+audit: audit-deps audit-secrets
+
+audit-deps:
 	cd web && npm audit --audit-level=high
+
+audit-secrets:
 	@if command -v gitleaks >/dev/null 2>&1; then gitleaks detect --no-banner --redact; \
 	else echo "gitleaks not installed — skipped locally (CI installs it)"; fi
 
