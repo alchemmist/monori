@@ -6,5 +6,12 @@
     "MD041": false,
   },
   "globs": ["**/*.md"],
-  "ignores": ["web/node_modules", "web/dist", "migration", "**/CHANGELOG.md"],
+  "ignores": [
+    "**/node_modules",
+    "**/.venv",
+    "web/dist",
+    "server/static",
+    "migration",
+    "**/CHANGELOG.md",
+  ],
 }
