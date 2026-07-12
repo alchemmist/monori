@@ -102,8 +102,8 @@ coverage:
 	bash scripts/coverage-tree.sh
 
 mutation:
-	$(WEBBIN)/stryker run
-	cd server && mutmut run
+	cd web && npx stryker run
+	cd server && uv run mutmut run
 
 check: fmt-check lint typecheck analyze test
 
