@@ -10,8 +10,8 @@ WEBBIN := web/node_modules/.bin
         test t-fast t-medium t-slow coverage mutation \
         check help
 
-dev:
-	$(COMPOSE) -f deploy/docker-compose.dev.yml up
+up:
+	$(COMPOSE) -f deploy/docker-compose.dev.yml up --build
 
 down:
 	$(COMPOSE) -f deploy/docker-compose.dev.yml down
@@ -56,19 +56,14 @@ lint-md:
 	$(WEBBIN)/markdownlint-cli2
 
 lint-actions:
-	@if command -v actionlint >/dev/null 2>&1; then actionlint; \
-	else echo "actionlint not installed — skipped locally (CI installs it)"; fi
+	actionlint
 
 lint-docker:
-	@if command -v hadolint >/dev/null 2>&1; then hadolint deploy/Dockerfile; \
-	else echo "hadolint not installed — skipped locally (CI installs it)"; fi
+	hadolint deploy/Dockerfile
 
 lint-shell:
-	@if command -v shellcheck >/dev/null 2>&1; then \
-		files=$$(git ls-files '*.sh'); [ -z "$$files" ] || shellcheck $$files; \
-	else echo "shellcheck not installed — skipped locally (CI installs it)"; fi
-	@if command -v shfmt >/dev/null 2>&1; then \
-		files=$$(git ls-files '*.sh'); [ -z "$$files" ] || shfmt -d $$files; fi
+	@files=$$(git ls-files '*.sh'); [ -z "$$files" ] || shellcheck $$files
+	@files=$$(git ls-files '*.sh'); [ -z "$$files" ] || shfmt -d $$files
 
 spell:
 	uvx codespell web/src server/app server/tests \
