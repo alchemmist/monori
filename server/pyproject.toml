@@ -30,6 +30,9 @@ markers = [
 [tool.coverage.run]
 source = ["app"]
 
+[tool.coverage.report]
+fail_under = 80
+
 [tool.ruff]
 target-version = "py312"
 line-length = 100
