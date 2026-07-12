@@ -78,7 +78,7 @@ analyze:
 	uvx semgrep --error --quiet --config p/python --config p/javascript \
 		--exclude-rule python.lang.security.insecure-hash-algorithms.insecure-hash-algorithm-sha1 .
 
-audit: audit-deps audit-deps-py
+audit: audit-deps audit-deps-py audit-secrets
 
 audit-deps:
 	cd web && npm audit --audit-level=high
