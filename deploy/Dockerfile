@@ -9,7 +9,7 @@ RUN npm run build
 # Stage 2: python server
 FROM python:3.12-slim
 WORKDIR /app
-RUN pip install --no-cache-dir fastapi "uvicorn[standard]"
+RUN pip install --no-cache-dir "fastapi>=0.115" "uvicorn[standard]>=0.30"
 COPY server/app ./app
 COPY --from=web /build/dist ./static
 ENV MONORI_DB=/app/data/monori.db
