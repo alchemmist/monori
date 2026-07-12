@@ -77,7 +77,9 @@ export default function ImportDialog({ onClose }) {
                 <tbody>
                   {preview.rows.map((r, i) => (
                     <tr key={i} style={{ opacity: r.duplicate ? 0.4 : 1 }}>
-                      <td style={{ textAlign: "left" }} className="num">{fmtDate(r.date)}</td>
+                      <td style={{ textAlign: "left" }} className="num">
+                        {fmtDate(r.date)}
+                      </td>
                       <td style={{ textAlign: "left" }}>{r.description}</td>
                       <td>
                         <span className={`money num ${r.amount > 0 ? "money_pos" : ""}`}>

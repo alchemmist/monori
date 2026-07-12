@@ -45,7 +45,9 @@ const FIRST_YEAR = 2020;
 export default function App({ theme, onToggleTheme }) {
   const { snapshot, loading, error, load, toast } = useStore();
   const [page, setPage] = useState("budget");
-  const [collapsed, setCollapsed] = useState(() => localStorage.getItem("sidebar_collapsed") === "1");
+  const [collapsed, setCollapsed] = useState(
+    () => localStorage.getItem("sidebar_collapsed") === "1",
+  );
   const toaster = useToaster();
 
   const toggleSidebar = () =>
@@ -65,14 +67,17 @@ export default function App({ theme, onToggleTheme }) {
 
   const lastYear = useMemo(() => {
     if (!snapshot) return new Date().getFullYear();
-    const maxTx = snapshot.transactions.reduce((m, t) => Math.max(m, +t.date.slice(0, 4)), FIRST_YEAR);
+    const maxTx = snapshot.transactions.reduce(
+      (m, t) => Math.max(m, +t.date.slice(0, 4)),
+      FIRST_YEAR,
+    );
     const maxBudget = snapshot.budgets.reduce((m, b) => Math.max(m, b.year), FIRST_YEAR);
     return Math.max(maxTx, maxBudget, new Date().getFullYear()) + 1;
   }, [snapshot]);
 
   const results = useMemo(
     () => (snapshot ? computeRange(snapshot, FIRST_YEAR, lastYear) : null),
-    [snapshot, lastYear]
+    [snapshot, lastYear],
   );
 
   if (loading) {
@@ -84,7 +89,14 @@ export default function App({ theme, onToggleTheme }) {
   }
   if (error) {
     return (
-      <div style={{ display: "grid", placeItems: "center", height: "100vh", color: "var(--m-expense)" }}>
+      <div
+        style={{
+          display: "grid",
+          placeItems: "center",
+          height: "100vh",
+          color: "var(--m-expense)",
+        }}
+      >
         Failed to load data: {error}
       </div>
     );
@@ -96,7 +108,9 @@ export default function App({ theme, onToggleTheme }) {
         <div className="sidebar__head">
           <div className="sidebar__logo" title="monori">
             <span className="sidebar__logo-mark">も</span>
-            <span className="sidebar__logo-tail">の<span>り</span></span>
+            <span className="sidebar__logo-tail">
+              の<span>り</span>
+            </span>
           </div>
         </div>
         {NAV.map(({ id, title, icon: Icon }) => (
@@ -139,7 +153,11 @@ export default function App({ theme, onToggleTheme }) {
             title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
             aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
           >
-            {collapsed ? <ChevronRight width={16} height={16} /> : <ChevronLeft width={16} height={16} />}
+            {collapsed ? (
+              <ChevronRight width={16} height={16} />
+            ) : (
+              <ChevronLeft width={16} height={16} />
+            )}
           </button>
         </div>
       </nav>
@@ -158,10 +176,12 @@ export default function App({ theme, onToggleTheme }) {
             </a>
           </div>
         )}
-        {page === "budget" && <BudgetPage results={results} firstYear={FIRST_YEAR} lastYear={lastYear} />}
+        {page === "budget" && (
+          <BudgetPage results={results} firstYear={FIRST_YEAR} lastYear={lastYear} />
+        )}
         {page === "dashboard" && (
           <>
-            <DashboardPage results={results} firstYear={FIRST_YEAR} lastYear={lastYear} />
+            <DashboardPage firstYear={FIRST_YEAR} lastYear={lastYear} />
             <AnalyticsPage results={results} firstYear={FIRST_YEAR} lastYear={lastYear} />
           </>
         )}

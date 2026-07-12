@@ -6,15 +6,17 @@
   margin-bottom: 16px;
 }
 
-@media (max-width: 760px) {
+@media (width <= 760px) {
   .budget-toolbar {
     gap: 8px;
   }
+
   .hero-card {
     flex: 1 1 calc(50% - 6px);
     min-width: 0;
     padding: 12px 14px;
   }
+
   .hero-card__value {
     font-size: 19px;
   }
@@ -31,6 +33,7 @@
   padding: 14px 18px;
   min-width: 150px;
 }
+
 .hero-card__label {
   font-size: 11px;
   font-weight: 600;
@@ -39,12 +42,14 @@
   color: var(--m-text-faint);
   margin-bottom: 4px;
 }
+
 .hero-card__value {
   font-size: 22px;
   font-weight: 700;
   line-height: 1.2;
   transition: color 0.2s ease;
 }
+
 .hero-card__hint {
   font-size: 12px;
   color: var(--m-text-dim);
@@ -72,6 +77,7 @@
   top: 0;
   z-index: 2;
 }
+
 .budget-grid th:first-child {
   text-align: left;
 }
@@ -83,6 +89,7 @@
   border-bottom: 1px solid var(--m-border-soft);
   white-space: nowrap;
 }
+
 .budget-grid td:first-child {
   text-align: left;
   width: 40%;
@@ -100,10 +107,12 @@
 .tx-table {
   overflow: hidden;
 }
-@media (max-width: 760px) {
+
+@media (width <= 760px) {
   .tx-table {
     overflow-x: auto;
   }
+
   .tx-table .budget-grid {
     min-width: 620px;
   }
@@ -116,15 +125,18 @@
   cursor: pointer;
   user-select: none;
 }
+
 .group-row__chevron {
   display: inline-block;
   transition: transform 0.18s ease;
   margin-right: 8px;
   color: var(--m-text-faint);
 }
+
 .group-row__chevron_collapsed {
   transform: rotate(-90deg);
 }
+
 .group-row__count {
   color: var(--m-text-faint);
   font-weight: 400;
@@ -136,18 +148,22 @@
   position: relative;
   transition: background 0.12s ease;
 }
+
 .cat-row:hover {
   background: var(--m-surface-hover);
 }
+
 .cat-row__name {
   display: flex;
   align-items: center;
   gap: 8px;
 }
+
 .cat-row__menu {
   opacity: 0;
   transition: opacity 0.12s ease;
 }
+
 .cat-row:hover .cat-row__menu {
   opacity: 1;
 }
@@ -160,23 +176,29 @@
   overflow: hidden;
   margin-left: 12px;
 }
+
 .cat-progress__fill {
   /* spans are inline by default and would ignore width — the original bug */
   display: block;
   height: 100%;
-  transition: width 0.35s cubic-bezier(0.4, 0, 0.2, 1), background 0.2s ease;
+  transition:
+    width 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+    background 0.2s ease;
 }
 
 .money {
   font-variant-numeric: tabular-nums;
   transition: color 0.2s ease;
 }
+
 .money_pos {
   color: var(--m-income);
 }
+
 .money_neg {
   color: var(--m-expense);
 }
+
 .money_zero {
   color: var(--m-text-faint);
 }
@@ -188,16 +210,21 @@
   font-variant-numeric: tabular-nums;
   font-weight: 600;
   font-size: 13px;
-  transition: background 0.25s ease, color 0.25s ease;
+  transition:
+    background 0.25s ease,
+    color 0.25s ease;
 }
+
 .balance-pill_pos {
   background: var(--m-income-soft);
   color: var(--m-income);
 }
+
 .balance-pill_neg {
   background: var(--m-expense-soft);
   color: var(--m-expense);
 }
+
 .balance-pill_zero {
   background: transparent;
   color: var(--m-text-faint);
@@ -210,12 +237,16 @@
   margin: -4px -8px;
   display: inline-block;
   min-width: 72px;
-  transition: background 0.12s ease, box-shadow 0.12s ease;
+  transition:
+    background 0.12s ease,
+    box-shadow 0.12s ease;
 }
+
 .budget-cell:hover {
   background: var(--m-accent-soft);
   box-shadow: inset 0 0 0 1px var(--m-accent);
 }
+
 .budget-cell__input {
   width: 96px;
   background: var(--m-bg);
@@ -231,12 +262,13 @@
 }
 
 /* placed last so it wins over the base .budget-hero / .hero-card rules above */
-@media (max-width: 760px) {
+@media (width <= 760px) {
   .budget-hero {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 8px;
   }
+
   .budget-hero .hero-card {
     min-width: 0;
   }

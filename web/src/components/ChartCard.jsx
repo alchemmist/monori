@@ -16,7 +16,14 @@ class ChartBoundary extends Component {
   render() {
     if (this.state.error) {
       return (
-        <div style={{ display: "grid", placeItems: "center", height: "100%", color: "var(--m-text-faint)" }}>
+        <div
+          style={{
+            display: "grid",
+            placeItems: "center",
+            height: "100%",
+            color: "var(--m-text-faint)",
+          }}
+        >
           No data for this chart
         </div>
       );

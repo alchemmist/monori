@@ -2,8 +2,18 @@
 // orange-led so the brand accent leads the series, then distinct hues that stay
 // legible against the near-monochrome UI in both light and dark themes.
 const CATEGORY_PALETTE = [
-  "#ef5a17", "#4269d0", "#3ca951", "#a463f2", "#ff8ab7", "#6cc5b0",
-  "#efb118", "#9c6b4e", "#97bbf5", "#ff725c", "#6b4fbb", "#9498a0",
+  "#ef5a17",
+  "#4269d0",
+  "#3ca951",
+  "#a463f2",
+  "#ff8ab7",
+  "#6cc5b0",
+  "#efb118",
+  "#9c6b4e",
+  "#97bbf5",
+  "#ff725c",
+  "#6b4fbb",
+  "#9498a0",
 ];
 
 /** Chart tokens. income/expense/accent map to the theme's semantic tokens so

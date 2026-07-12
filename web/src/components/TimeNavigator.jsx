@@ -37,7 +37,8 @@ export default function TimeNavigator({ items, range, onChange }) {
     if (!n || !width) return "";
     const max = Math.max(...items.map((d) => d.value), 1);
     const pad = 5;
-    const top = pad, bottom = H - pad;
+    const top = pad,
+      bottom = H - pad;
     const pt = (i) => {
       const j = Math.max(0, Math.min(n - 1, i));
       return [(j + 0.5) * cellW, bottom - (items[j].value / max) * (bottom - top)];
@@ -46,7 +47,10 @@ export default function TimeNavigator({ items, range, onChange }) {
     const [x0, y0] = pt(0);
     let d = `M ${x0} ${H} L ${x0} ${y0}`;
     for (let i = 0; i < n - 1; i++) {
-      const [xa, ya] = pt(i - 1), [xb, yb] = pt(i), [xc, yc] = pt(i + 1), [xd, yd] = pt(i + 2);
+      const [xa, ya] = pt(i - 1),
+        [xb, yb] = pt(i),
+        [xc, yc] = pt(i + 1),
+        [xd, yd] = pt(i + 2);
       d += ` C ${xb + (xc - xa) / 6} ${cy(yb + (yc - ya) / 6)},`;
       d += ` ${xc - (xd - xb) / 6} ${cy(yc - (yd - yb) / 6)}, ${xc} ${yc}`;
     }
