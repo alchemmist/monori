@@ -13,9 +13,21 @@ import re
 from datetime import datetime
 
 COLUMNS = [
-    "op_date", "pay_date", "card", "status", "op_amount", "op_currency",
-    "amount", "currency", "cashback", "bank_category", "mcc", "description",
-    "bonuses", "rounding", "rounded_total",
+    "op_date",
+    "pay_date",
+    "card",
+    "status",
+    "op_amount",
+    "op_currency",
+    "amount",
+    "currency",
+    "cashback",
+    "bank_category",
+    "mcc",
+    "description",
+    "bonuses",
+    "rounding",
+    "rounded_total",
 ]
 
 DATE_RE = re.compile(r"^(\d{2})\.(\d{2})\.(\d{4})(?:\s+(\d{2}):(\d{2})(?::(\d{2}))?)?$")
@@ -42,7 +54,9 @@ def parse_amount_kop(raw):
 
 
 def tx_hash(date_iso, amount_kop, description):
-    return hashlib.sha1(f"{date_iso}|{amount_kop}|{description}".encode()).hexdigest()
+    return hashlib.sha1(
+        f"{date_iso}|{amount_kop}|{description}".encode(), usedforsecurity=False
+    ).hexdigest()
 
 
 def parse_statement(text):
@@ -55,9 +69,11 @@ def parse_statement(text):
         delim = "\t" if "\t" in line else ";"
         parts = [p.strip().strip('"') for p in line.split(delim)]
         if len(parts) < 12:
-            errors.append({"line": ln, "error": f"expected >=12 columns, got {len(parts)}", "raw": line[:200]})
+            errors.append(
+                {"line": ln, "error": f"expected >=12 columns, got {len(parts)}", "raw": line[:200]}
+            )
             continue
-        rec = dict(zip(COLUMNS, parts + [""] * (len(COLUMNS) - len(parts))))
+        rec = dict(zip(COLUMNS, parts + [""] * (len(COLUMNS) - len(parts)), strict=False))
         date = parse_date(rec["op_date"])
         amount = parse_amount_kop(rec["amount"])
         if date is None or amount is None:
@@ -82,7 +98,7 @@ def parse_statement(text):
 def build_rules(categories, groups):
     """categories: iterable of dicts with name/keywords/group_id;
     groups: id -> kind ('income'|'expense'). Returns {'IN': [...], 'OUT': [...]}."""
-    rules = {"IN": [], "OUT": []}
+    rules: dict[str, list] = {"IN": [], "OUT": []}
     for c in categories:
         keywords = [k.strip().lower() for k in str(c["keywords"] or "").split("|") if k.strip()]
         if not keywords:

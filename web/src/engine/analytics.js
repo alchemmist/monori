@@ -127,7 +127,8 @@ export function txStats(snapshot, year) {
     if (!cat || incomeIds.has(cat.groupId)) continue;
     const v = -t.amount;
     amounts.push(v);
-    if (!largest || v > largest.amount) largest = { amount: v, description: t.description, date: t.date };
+    if (!largest || v > largest.amount)
+      largest = { amount: v, description: t.description, date: t.date };
   }
   amounts.sort((a, b) => a - b);
   const median = amounts.length ? amounts[Math.floor(amounts.length / 2)] : 0;
@@ -144,14 +145,17 @@ export function txStats(snapshot, year) {
 export function disciplineMatrix(yearResult, categories, groups, { upToMonth = 11 } = {}) {
   const incomeIds = incomeGroupIdSet(groups);
   const rows = [];
-  let hits = 0, active = 0, totalOverrun = 0;
+  let hits = 0,
+    active = 0,
+    totalOverrun = 0;
   let worst = null;
   for (const c of categories) {
     if (incomeIds.has(c.groupId)) continue;
     const months = yearResult.byCategory.get(c.id);
     if (!months) continue;
     const cells = [];
-    let any = false, catOverrun = 0;
+    let any = false,
+      catOverrun = 0;
     for (let m = 0; m < 12; m++) {
       const budgeted = months[m].budgeted;
       const spent = -months[m].outflows;

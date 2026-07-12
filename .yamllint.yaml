@@ -1,0 +1,15 @@
+extends: default
+
+rules:
+  line-length: disable
+  document-start: disable
+  comments:
+    min-spaces-from-content: 1
+  truthy:
+    allowed-values: ["true", "false", "on", "off"]
+    check-keys: false
+
+ignore: |
+  web/node_modules/
+  web/dist/
+  server/.venv/

@@ -1,10 +1,12 @@
 """SQLite access layer. All money amounts are stored as integer kopecks."""
 
 import os
-import sqlite3
 import pathlib
+import sqlite3
 
-DB_PATH = os.environ.get("MONORI_DB", str(pathlib.Path(__file__).resolve().parent.parent / "data" / "monori.db"))
+DB_PATH = os.environ.get(
+    "MONORI_DB", str(pathlib.Path(__file__).resolve().parent.parent / "data" / "monori.db")
+)
 
 SCHEMA = """
 PRAGMA journal_mode=WAL;

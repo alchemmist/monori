@@ -50,6 +50,7 @@
   stroke-width: 1;
   cursor: grab;
 }
+
 .timenav__window:active {
   cursor: grabbing;
 }
@@ -57,6 +58,7 @@
 .timenav__handle {
   cursor: ew-resize;
 }
+
 .timenav__grip {
   fill: var(--m-accent);
 }

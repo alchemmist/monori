@@ -21,12 +21,42 @@ const snapshot = {
     { id: 21, groupId: 2, name: "Fun" },
   ],
   transactions: [
-    { id: 1, date: "2024-01-10", amount: 100_000_00, categoryId: 10, description: "SALARY OOO ROGA" },
-    { id: 2, date: "2024-01-15", amount: -20_000_00, categoryId: 20, description: "PYATEROCHKA 1234 MOSCOW" },
-    { id: 3, date: "2024-01-20", amount: -5_000_00, categoryId: 21, description: "STEAM PURCHASE 42" },
+    {
+      id: 1,
+      date: "2024-01-10",
+      amount: 100_000_00,
+      categoryId: 10,
+      description: "SALARY OOO ROGA",
+    },
+    {
+      id: 2,
+      date: "2024-01-15",
+      amount: -20_000_00,
+      categoryId: 20,
+      description: "PYATEROCHKA 1234 MOSCOW",
+    },
+    {
+      id: 3,
+      date: "2024-01-20",
+      amount: -5_000_00,
+      categoryId: 21,
+      description: "STEAM PURCHASE 42",
+    },
     // Saturday 2024-02-03
-    { id: 4, date: "2024-02-03", amount: -10_000_00, categoryId: 20, description: "PYATEROCHKA 99 MOSCOW" },
-    { id: 5, date: "2024-02-05", amount: -1_000_00, categoryId: null, description: "transfer, uncategorized" },
+    {
+      id: 4,
+      date: "2024-02-03",
+      amount: -10_000_00,
+      categoryId: 20,
+      description: "PYATEROCHKA 99 MOSCOW",
+    },
+    {
+      id: 5,
+      date: "2024-02-05",
+      amount: -1_000_00,
+      categoryId: null,
+      description: "transfer, uncategorized",
+    },
   ],
   budgets: [
     { categoryId: 20, year: 2024, month: 1, amount: 25_000_00 },

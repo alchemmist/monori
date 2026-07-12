@@ -7,6 +7,8 @@ import pytest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
+pytestmark = pytest.mark.integration
+
 
 @pytest.fixture()
 def client(monkeypatch):
@@ -17,13 +19,18 @@ def client(monkeypatch):
 
     monkeypatch.setattr(dbmod, "DB_PATH", db_path)
     from fastapi.testclient import TestClient
+
     from app.main import app as fastapi_app
 
     c = dbmod.connect(db_path)
     c.execute("INSERT INTO category_groups (id, name, sort, kind) VALUES (1,'Fixed',1,'expense')")
     c.execute("INSERT INTO category_groups (id, name, sort, kind) VALUES (2,'Inflow',2,'income')")
-    c.execute("INSERT INTO categories (id, group_id, name, keywords, sort) VALUES (1,1,'Groceries','Пятёрочка',1)")
-    c.execute("INSERT INTO categories (id, group_id, name, keywords, sort) VALUES (2,1,'Taxi','Taxi',2)")
+    c.execute(
+        "INSERT INTO categories (id, group_id, name, keywords, sort) VALUES (1,1,'Groceries','Пятёрочка',1)"  # noqa: E501
+    )
+    c.execute(
+        "INSERT INTO categories (id, group_id, name, keywords, sort) VALUES (2,1,'Taxi','Taxi',2)"
+    )
     from app.importer import tx_hash
 
     c.execute(
@@ -46,7 +53,9 @@ def test_snapshot(client):
 
 
 def test_budget_upsert_and_delete(client):
-    r = client.put("/api/budgets", json={"categoryId": 1, "year": 2026, "month": 2, "amount": 70000})
+    r = client.put(
+        "/api/budgets", json={"categoryId": 1, "year": 2026, "month": 2, "amount": 70000}
+    )
     assert r.status_code == 200
     assert len(client.get("/api/snapshot").json()["budgets"]) == 2
     client.put("/api/budgets", json={"categoryId": 1, "year": 2026, "month": 2, "amount": 0})

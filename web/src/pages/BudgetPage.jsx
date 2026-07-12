@@ -29,7 +29,7 @@ export default function BudgetPage({ results, firstYear, lastYear }) {
   const res = results.get(year);
   const groups = useMemo(
     () => snapshot.groups.filter((g) => g.kind === "expense"),
-    [snapshot.groups]
+    [snapshot.groups],
   );
   const catsByGroup = useMemo(() => {
     const m = new Map(groups.map((g) => [g.id, []]));
@@ -126,7 +126,9 @@ export default function BudgetPage({ results, firstYear, lastYear }) {
             <div className="card hero-card">
               <div className="hero-card__label">Income</div>
               <div className="hero-card__value num">{rub(income)} ₽</div>
-              <div className="hero-card__hint">{MONTHS[month]} {year}</div>
+              <div className="hero-card__hint">
+                {MONTHS[month]} {year}
+              </div>
             </div>
             <div className="card hero-card">
               <div className="hero-card__label">Budgeted</div>
@@ -160,7 +162,9 @@ export default function BudgetPage({ results, firstYear, lastYear }) {
                 {groups.map((g) => {
                   const cats = catsByGroup.get(g.id) ?? [];
                   const isCollapsed = collapsed[g.id];
-                  let gb = 0, go = 0, gbal = 0;
+                  let gb = 0,
+                    go = 0,
+                    gbal = 0;
                   for (const c of cats) {
                     const m = res.byCategory.get(c.id)?.[month];
                     if (!m) continue;
@@ -194,9 +198,15 @@ export default function BudgetPage({ results, firstYear, lastYear }) {
                           <Plus width={12} height={12} />
                         </Button>
                       </td>
-                      <td><Money value={gb} /></td>
-                      <td><Money value={go} signColor /></td>
-                      <td><Money value={gbal} /></td>
+                      <td>
+                        <Money value={gb} />
+                      </td>
+                      <td>
+                        <Money value={go} signColor />
+                      </td>
+                      <td>
+                        <Money value={gbal} />
+                      </td>
                       <td />
                     </tr>,
                     !isCollapsed &&
@@ -207,7 +217,11 @@ export default function BudgetPage({ results, firstYear, lastYear }) {
                           balance: 0,
                         };
                         const spentRatio =
-                          m.budgeted > 0 ? Math.min(1, -m.outflows / m.budgeted) : m.outflows < 0 ? 1 : 0;
+                          m.budgeted > 0
+                            ? Math.min(1, -m.outflows / m.budgeted)
+                            : m.outflows < 0
+                              ? 1
+                              : 0;
                         return (
                           <tr key={c.id} className="cat-row">
                             <td>
@@ -231,8 +245,12 @@ export default function BudgetPage({ results, firstYear, lastYear }) {
                                 onChange={(v) => setBudget(c.id, year, month + 1, v)}
                               />
                             </td>
-                            <td><Money value={m.outflows} signColor /></td>
-                            <td><BalancePill value={m.balance} /></td>
+                            <td>
+                              <Money value={m.outflows} signColor />
+                            </td>
+                            <td>
+                              <BalancePill value={m.balance} />
+                            </td>
                             <td>
                               <span className="cat-row__menu" onClick={(e) => e.stopPropagation()}>
                                 <DropdownMenu
