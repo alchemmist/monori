@@ -11,9 +11,22 @@ permissions:
   contents: read
 
 jobs:
-  quality:
-    name: Quality gate (fmt · lint · types · analyze)
+  check:
+    name: ${{ matrix.target }}
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - fmt-check
+          - lint
+          - typecheck
+          - analyze
+          - t-fast
+          - t-medium
+          - t-slow
+          - build
+          - audit-deps
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -39,6 +52,7 @@ jobs:
         working-directory: server
 
       - name: Install external linters
+        if: matrix.target == 'lint'
         run: |
           set -e
           sudo apt-get update
@@ -47,53 +61,11 @@ jobs:
           sudo curl -sSfL https://github.com/hadolint/hadolint/releases/latest/download/hadolint-Linux-x86_64 -o /usr/local/bin/hadolint
           sudo chmod +x /usr/local/bin/hadolint
 
-      - name: Format check
-        run: make fmt-check
+      - name: Run ${{ matrix.target }}
+        run: make ${{ matrix.target }}
 
-      - name: Lint
-        run: make lint
-
-      - name: Typecheck
-        run: make typecheck
-
-      - name: Analyze
-        run: make analyze
-
-  test:
-    name: Tests (trophy) and build
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: web/package-lock.json
-
-      - name: Setup uv
-        uses: astral-sh/setup-uv@v5
-        with:
-          enable-cache: true
-
-      - name: Install web deps
-        run: npm ci
-        working-directory: web
-
-      - name: Install server deps
-        run: uv sync
-        working-directory: server
-
-      - name: Test
-        run: make test
-
-      - name: Build
-        run: make build
-
-  audit:
-    name: Security audit
+  secrets:
+    name: secrets
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -101,22 +73,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: web/package-lock.json
-
-      - name: Install web deps
-        run: npm ci
-        working-directory: web
-
       - name: Scan for secrets
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Dependency audit
-        run: npm audit --audit-level=high
-        working-directory: web
