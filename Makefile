@@ -8,7 +8,7 @@ WEBBIN := web/node_modules/.bin
         lint lint-web lint-css lint-html lint-server lint-yaml lint-md lint-actions lint-docker lint-shell spell \
         typecheck analyze audit audit-deps audit-deps-py audit-secrets \
         test t-fast t-medium t-slow coverage mutation \
-        check help
+        check
 
 up:
 	$(COMPOSE) -f deploy/docker-compose.dev.yml up --build
@@ -109,11 +109,3 @@ mutation:
 	cd server && uv run mutmut run
 
 check: fmt-check lint typecheck analyze test
-
-help:
-	@echo "run:      dev down api web build"
-	@echo "format:   fmt fmt-check"
-	@echo "lint:     lint (web css html server yaml md actions docker shell spell)"
-	@echo "static:   typecheck analyze audit"
-	@echo "test:     test t-fast t-medium t-slow coverage mutation"
-	@echo "gate:     check"
