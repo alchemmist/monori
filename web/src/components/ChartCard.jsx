@@ -3,14 +3,17 @@ import { Chart } from "@gravity-ui/charts";
 
 /** A chart that can never take the page down with it. */
 class ChartBoundary extends Component {
-  state = { error: null };
+  state = { error: null, prevData: undefined };
 
   static getDerivedStateFromError(error) {
     return { error };
   }
 
-  componentDidUpdate(prev) {
-    if (prev.data !== this.props.data && this.state.error) this.setState({ error: null });
+  static getDerivedStateFromProps(props, state) {
+    if (props.data !== state.prevData) {
+      return { error: null, prevData: props.data };
+    }
+    return null;
   }
 
   render() {

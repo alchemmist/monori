@@ -21,7 +21,7 @@ const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 /** Annual report: planning discipline, year-over-year shape, spending patterns. */
 export default function AnalyticsPage({ results, firstYear, lastYear }) {
   const { snapshot } = useStore();
-  const now = new Date();
+  const now = useMemo(() => new Date(), []);
   const [year, setYear] = useState(String(now.getFullYear()));
 
   const years = [];

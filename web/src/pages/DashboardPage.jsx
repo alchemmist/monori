@@ -21,7 +21,7 @@ import { C, axisCommon } from "./chartTheme.js";
  * injections). Internal transfers are uncategorized and thus excluded. */
 export default function DashboardPage({ firstYear, lastYear }) {
   const { snapshot } = useStore();
-  const now = new Date();
+  const now = useMemo(() => new Date(), []);
   const [donutYear, setDonutYear] = useState(String(now.getFullYear()));
   const [drillCat, setDrillCat] = useState(() =>
     String(snapshot.categories.find((c) => c.name === "Groceries")?.id ?? ""),
