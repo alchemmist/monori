@@ -82,7 +82,7 @@ analyze:
 	cd server && uv run bandit -c pyproject.toml -q -r app
 	@if command -v semgrep >/dev/null 2>&1; then \
 		semgrep --error --quiet --config p/python --config p/javascript .; \
-	else echo "semgrep not installed — skipped locally (CI installs it)"; fi
+	else echo "semgrep not wired yet — deferred, see #42 rollout"; fi
 
 audit: audit-deps audit-secrets
 
