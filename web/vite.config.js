@@ -10,4 +10,14 @@ export default defineConfig({
     },
     watch: process.env.VITE_FORCE_POLLING ? { usePolling: true, interval: 500 } : undefined,
   },
+  test: {
+    coverage: {
+      provider: "v8",
+      all: true,
+      include: ["src/**/*.{js,jsx}"],
+      exclude: ["src/**/*.test.{js,jsx}", "src/main.jsx"],
+      reporter: ["text", "json-summary"],
+      reportsDirectory: "./coverage",
+    },
+  },
 });

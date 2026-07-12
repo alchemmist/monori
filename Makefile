@@ -99,8 +99,7 @@ t-slow:
 	@echo "e2e (Playwright) not implemented yet — see #42 rollout phase 6"
 
 coverage:
-	cd web && npx vitest run --coverage
-	cd server && uv run pytest -q --cov
+	bash scripts/coverage-tree.sh
 
 mutation:
 	$(WEBBIN)/stryker run
