@@ -30,7 +30,9 @@ def kop(rubles):
 
 
 def tx_hash(date, amount_kop, description):
-    return hashlib.sha1(f"{date}|{amount_kop}|{description}".encode()).hexdigest()
+    return hashlib.sha1(
+        f"{date}|{amount_kop}|{description}".encode(), usedforsecurity=False
+    ).hexdigest()
 
 
 def main(db_path=None):

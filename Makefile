@@ -6,7 +6,7 @@ WEBBIN := web/node_modules/.bin
 .PHONY: dev down api web build \
         fmt fmt-check \
         lint lint-web lint-css lint-html lint-server lint-yaml lint-md lint-actions lint-docker lint-shell spell \
-        typecheck analyze audit audit-deps audit-secrets \
+        typecheck analyze audit audit-deps audit-deps-py audit-secrets \
         test t-fast t-medium t-slow coverage mutation \
         check help
 
@@ -78,10 +78,13 @@ analyze:
 	semgrep --error --quiet --config p/python --config p/javascript \
 		--exclude-rule python.lang.security.insecure-hash-algorithms.insecure-hash-algorithm-sha1 .
 
-audit: audit-deps audit-secrets
+audit: audit-deps audit-deps-py audit-secrets
 
 audit-deps:
 	cd web && npm audit --audit-level=high
+
+audit-deps-py:
+	cd server && uv export --no-dev --no-hashes --format requirements-txt | uv run pip-audit -r /dev/stdin
 
 audit-secrets:
 	gitleaks detect --no-banner --redact
