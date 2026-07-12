@@ -18,6 +18,7 @@ dev = [
     "bandit>=1.8",
     "httpx2>=2.5.0",
     "mutmut>=3.6.0",
+    "pip-audit>=2.10.1",
 ]
 
 [tool.pytest.ini_options]

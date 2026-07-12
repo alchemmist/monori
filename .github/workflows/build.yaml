@@ -27,6 +27,7 @@ jobs:
           - t-slow
           - build
           - audit-deps
+          - audit-deps-py
     steps:
       - name: Checkout
         uses: actions/checkout@v4
