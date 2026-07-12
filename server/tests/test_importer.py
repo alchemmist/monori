@@ -5,7 +5,7 @@ import sys
 import pytest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
-from app.importer import build_rules, categorize, parse_date, parse_amount_kop, parse_statement
+from app.importer import build_rules, categorize, parse_amount_kop, parse_date, parse_statement
 
 SAMPLE_TSV = (
     "03.07.2026 19:48:24\t03.07.2026\t*2947\tOK\t-450,00\tRUB\t-450,00\tRUB\t\t"

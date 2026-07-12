@@ -21,7 +21,11 @@ export function CategoryEditDialog({ category, groups, onClose }) {
       }
       onClose();
     } catch (e) {
-      notify({ title: isNew ? "Failed to create category" : "Failed to update category", theme: "danger", content: String(e) });
+      notify({
+        title: isNew ? "Failed to create category" : "Failed to update category",
+        theme: "danger",
+        content: String(e),
+      });
     } finally {
       setBusy(false);
     }

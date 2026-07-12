@@ -24,10 +24,10 @@
   top: 0;
   height: 100vh;
   box-sizing: border-box;
-  overflow-x: hidden;
-  overflow-y: auto;
+  overflow: hidden auto;
   transition: width 0.18s ease;
 }
+
 .sidebar_collapsed {
   width: 60px;
 }
@@ -38,8 +38,13 @@
   gap: 8px;
   padding: 4px 10px 18px;
 }
+
 .sidebar__logo {
-  font-family: "M PLUS Rounded 1c", -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family:
+    "M PLUS Rounded 1c",
+    -apple-system,
+    BlinkMacSystemFont,
+    sans-serif;
   font-size: 23px;
   font-weight: 800;
   letter-spacing: 1px;
@@ -48,13 +53,16 @@
   white-space: nowrap;
   transition: opacity 0.14s ease;
 }
+
 /* only り carries the accent */
 .sidebar__logo-tail > span {
   color: var(--m-accent);
 }
+
 .sidebar__logo-tail {
   transition: opacity 0.14s ease;
 }
+
 /* collapsed: keep the first glyph も, fade out the rest (kept in flow so the
    header height never shifts, and も lands on the same x as the nav icons) */
 .sidebar_collapsed .sidebar__logo-tail {
@@ -72,8 +80,11 @@
   background: none;
   color: var(--m-text-dim);
   cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
 }
+
 .sidebar__toggle:hover {
   background: var(--m-surface-hover);
   color: var(--m-text);
@@ -83,6 +94,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
+
   /* icon left edge = sidebar padding (12) + item padding (10) = 22px, which is
      also the centered position inside the 60px collapsed rail — so the icon
      never moves horizontally when collapsing/expanding */
@@ -95,20 +107,26 @@
   font: inherit;
   text-align: left;
   white-space: nowrap;
-  transition: background 0.15s ease, color 0.15s ease;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
 }
+
 .sidebar__item > svg {
   flex-shrink: 0;
 }
+
 .sidebar__item:hover {
   background: var(--m-surface-hover);
   color: var(--m-text);
 }
+
 .sidebar__item_active {
   background: var(--m-surface-raised);
   color: var(--m-text);
   font-weight: 600;
 }
+
 .sidebar__item_active > svg {
   color: var(--m-accent);
 }
@@ -116,6 +134,7 @@
 .sidebar__label {
   transition: opacity 0.14s ease;
 }
+
 .sidebar_collapsed .sidebar__label {
   opacity: 0;
 }
@@ -131,13 +150,16 @@
   color: var(--m-text-faint);
   cursor: default;
 }
+
 .sidebar__item_soon:hover {
   background: none;
   color: var(--m-text-faint);
 }
+
 .sidebar__item_soon svg {
   opacity: 0.6;
 }
+
 .sidebar__badge {
   margin-left: auto;
   font-size: 10px;
@@ -147,6 +169,7 @@
   padding: 1px 6px;
   border-radius: var(--m-radius-sm);
 }
+
 .sidebar_collapsed .sidebar__badge {
   display: none;
 }
@@ -159,19 +182,23 @@
   gap: 2px;
   padding-top: 8px;
 }
+
 /* DropdownMenu wraps its switcher in a div — stretch it so the Settings button
    fills the rail and centers its icon like every other item */
 .sidebar__bottom .g-dropdown-menu__switcher-wrapper {
   display: flex;
 }
+
 .sidebar__bottom .g-dropdown-menu__switcher-wrapper > .sidebar__item {
   flex: 1;
 }
+
 .sidebar__collapse {
   display: flex;
   align-items: center;
   justify-content: center;
   height: 22px;
+
   /* full-bleed to the sidebar edges and flush against the very bottom */
   margin: 4px -12px 0;
   border: none;
@@ -179,12 +206,16 @@
   background: none;
   color: var(--m-text-faint);
   cursor: pointer;
-  transition: color 0.15s ease, background 0.15s ease;
+  transition:
+    color 0.15s ease,
+    background 0.15s ease;
 }
+
 .sidebar__collapse svg {
   width: 13px;
   height: 13px;
 }
+
 .sidebar__collapse:hover {
   color: var(--m-text);
   background: var(--m-surface-hover);
@@ -227,6 +258,7 @@
   color: var(--m-text-dim);
   font-size: 13px;
 }
+
 .demo-banner__badge {
   font-size: 11px;
   font-weight: 700;
@@ -237,6 +269,7 @@
   padding: 2px 8px;
   border-radius: var(--m-radius-sm);
 }
+
 .demo-banner__link {
   margin-left: auto;
   color: var(--m-accent);
@@ -244,6 +277,7 @@
   text-decoration: none;
   white-space: nowrap;
 }
+
 .demo-banner__link:hover {
   text-decoration: underline;
 }
@@ -257,9 +291,11 @@
   padding: 18px 20px;
   max-width: 460px;
 }
+
 .settings-row__title {
   font-weight: 600;
 }
+
 .settings-row__hint {
   color: var(--m-text-dim);
   font-size: 13px;
@@ -269,11 +305,13 @@
 .fade-in {
   animation: fadeIn 0.25s ease;
 }
+
 @keyframes fadeIn {
   from {
     opacity: 0;
     transform: translateY(4px);
   }
+
   to {
     opacity: 1;
     transform: none;
@@ -286,12 +324,13 @@
   overflow-x: auto;
   scrollbar-width: none;
 }
+
 .toolbar-scroll::-webkit-scrollbar {
   display: none;
 }
 
 /* ---------- mobile: sidebar becomes a bottom tab bar ---------- */
-@media (max-width: 760px) {
+@media (width <= 760px) {
   .layout {
     flex-direction: column;
   }
@@ -299,10 +338,7 @@
   .sidebar,
   .sidebar_collapsed {
     position: fixed;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    top: auto;
+    inset: auto 0 0;
     width: 100%;
     height: auto;
     flex-direction: row;
@@ -314,6 +350,7 @@
     justify-content: space-around;
     z-index: 50;
   }
+
   .sidebar__head,
   .sidebar__footer,
   .sidebar__gap,
@@ -321,6 +358,7 @@
   .sidebar__bottom {
     display: none;
   }
+
   .sidebar__item,
   .sidebar_collapsed .sidebar__item {
     flex: 1;
@@ -331,10 +369,12 @@
     padding: 6px 2px;
     border-radius: var(--m-radius-sm);
   }
+
   .sidebar__item_active {
     background: transparent;
     color: var(--m-accent);
   }
+
   .sidebar__label,
   .sidebar_collapsed .sidebar__label {
     display: block;
@@ -346,6 +386,7 @@
     --pad-b: calc(72px + env(safe-area-inset-bottom, 0px));
     padding: 14px var(--pad-x) var(--pad-b);
   }
+
   .page-title {
     font-size: 18px;
     gap: 10px;

@@ -18,7 +18,7 @@ export default function TransactionsPage() {
 
   const catOptions = useMemo(
     () => snapshot.categories.map((c) => ({ value: String(c.id), content: c.name })),
-    [snapshot.categories]
+    [snapshot.categories],
   );
 
   const years = useMemo(() => {
@@ -34,8 +34,7 @@ export default function TransactionsPage() {
     else if (catFilter !== "all") rows = rows.filter((t) => t.categoryId === +catFilter);
     if (q)
       rows = rows.filter(
-        (t) =>
-          t.description.toLowerCase().includes(q) || t.bankCategory.toLowerCase().includes(q)
+        (t) => t.description.toLowerCase().includes(q) || t.bankCategory.toLowerCase().includes(q),
       );
     return [...rows].reverse(); // newest first
   }, [snapshot.transactions, query, catFilter, yearFilter]);
@@ -74,7 +73,10 @@ export default function TransactionsPage() {
         <Select
           value={[yearFilter]}
           onUpdate={resetPage((v) => setYearFilter(v[0]))}
-          options={[{ value: "all", content: "All years" }, ...years.map((y) => ({ value: y, content: y }))]}
+          options={[
+            { value: "all", content: "All years" },
+            ...years.map((y) => ({ value: y, content: y })),
+          ]}
         />
         <div style={{ flex: 1 }} />
         <Button view="action" size="m" onClick={() => setImporting(true)}>
@@ -103,7 +105,14 @@ export default function TransactionsPage() {
                 <td style={{ textAlign: "left" }} className="num">
                   {fmtDate(t.date)}
                 </td>
-                <td style={{ textAlign: "left", maxWidth: 380, overflow: "hidden", textOverflow: "ellipsis" }}>
+                <td
+                  style={{
+                    textAlign: "left",
+                    maxWidth: 380,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                  }}
+                >
                   {t.description}
                   {t.source === "adjustment" && (
                     <Label size="xs" theme="warning" style={{ marginLeft: 8 }}>
@@ -113,7 +122,9 @@ export default function TransactionsPage() {
                 </td>
                 <td style={{ textAlign: "left", color: "var(--m-text-dim)" }}>{t.bankCategory}</td>
                 <td>
-                  <span className={`money num ${t.amount > 0 ? "money_pos" : ""}`}>{money(t.amount)}</span>
+                  <span className={`money num ${t.amount > 0 ? "money_pos" : ""}`}>
+                    {money(t.amount)}
+                  </span>
                 </td>
                 <td style={{ textAlign: "left" }}>
                   <Select
@@ -130,7 +141,10 @@ export default function TransactionsPage() {
             ))}
             {pageRows.length === 0 && (
               <tr>
-                <td colSpan={5} style={{ textAlign: "center", color: "var(--m-text-faint)", height: 80 }}>
+                <td
+                  colSpan={5}
+                  style={{ textAlign: "center", color: "var(--m-text-faint)", height: 80 }}
+                >
                   Nothing found
                 </td>
               </tr>

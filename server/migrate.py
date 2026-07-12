@@ -30,7 +30,9 @@ def kop(rubles):
 
 
 def tx_hash(date, amount_kop, description):
-    return hashlib.sha1(f"{date}|{amount_kop}|{description}".encode()).hexdigest()
+    return hashlib.sha1(
+        f"{date}|{amount_kop}|{description}".encode(), usedforsecurity=False
+    ).hexdigest()
 
 
 def main(db_path=None):
@@ -40,8 +42,10 @@ def main(db_path=None):
 
     conn = connect(db_path)
     cur = conn.cursor()
-    counts = {t: cur.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]
-              for t in ("category_groups", "categories", "transactions", "budgets")}
+    counts = {
+        t: cur.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]
+        for t in ("category_groups", "categories", "transactions", "budgets")
+    }
     if any(counts.values()):
         print(f"database is not empty ({counts}), refusing to migrate", file=sys.stderr)
         sys.exit(1)

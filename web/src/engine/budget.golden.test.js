@@ -19,11 +19,17 @@ const hasFixtures =
   existsSync(path.join(OUT, "snapshot.json")) && existsSync(path.join(OUT, "reference.json"));
 const describeGolden = hasFixtures ? describe : describe.skip;
 
-const snapshot = hasFixtures ? JSON.parse(readFileSync(path.join(OUT, "snapshot.json"), "utf8")) : null;
-const reference = hasFixtures ? JSON.parse(readFileSync(path.join(OUT, "reference.json"), "utf8")) : {};
+const snapshot = hasFixtures
+  ? JSON.parse(readFileSync(path.join(OUT, "snapshot.json"), "utf8"))
+  : null;
+const reference = hasFixtures
+  ? JSON.parse(readFileSync(path.join(OUT, "reference.json"), "utf8"))
+  : {};
 
 const kop = (rub) => Math.round(rub * 100);
-const catIdByName = hasFixtures ? new Map(snapshot.categories.map((c) => [c.name, c.id])) : new Map();
+const catIdByName = hasFixtures
+  ? new Map(snapshot.categories.map((c) => [c.name, c.id]))
+  : new Map();
 const results = hasFixtures ? computeRange(snapshot, 2020, 2027) : new Map();
 
 // Known legacy divergence, verified by hand against the sheet formulas:
@@ -62,7 +68,9 @@ describeGolden("engine reproduces the spreadsheet", () => {
             }
             const got = months[i][field];
             if (expected !== got) {
-              mismatches.push(`${row.category} ${year}-${i + 1} ${field}: sheet ${expected} engine ${got}`);
+              mismatches.push(
+                `${row.category} ${year}-${i + 1} ${field}: sheet ${expected} engine ${got}`,
+              );
             }
           }
         });

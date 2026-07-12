@@ -22,25 +22,42 @@ def conn():
 def snapshot(c):
     cur = c.cursor()
     return {
-        "groups": [dict(r) for r in cur.execute("SELECT id, name, sort, kind FROM category_groups ORDER BY sort")],
+        "groups": [
+            dict(r)
+            for r in cur.execute("SELECT id, name, sort, kind FROM category_groups ORDER BY sort")
+        ],
         "categories": [
             {
-                "id": r["id"], "groupId": r["group_id"], "name": r["name"],
-                "keywords": r["keywords"], "sort": r["sort"], "archived": bool(r["archived"]),
+                "id": r["id"],
+                "groupId": r["group_id"],
+                "name": r["name"],
+                "keywords": r["keywords"],
+                "sort": r["sort"],
+                "archived": bool(r["archived"]),
             }
             for r in cur.execute("SELECT * FROM categories ORDER BY sort")
         ],
         "transactions": [
             {
-                "id": r["id"], "date": r["date"], "amount": r["amount"],
-                "description": r["description"], "bankCategory": r["bank_category"],
-                "mcc": r["mcc"], "categoryId": r["category_id"], "comment": r["comment"],
+                "id": r["id"],
+                "date": r["date"],
+                "amount": r["amount"],
+                "description": r["description"],
+                "bankCategory": r["bank_category"],
+                "mcc": r["mcc"],
+                "categoryId": r["category_id"],
+                "comment": r["comment"],
                 "source": r["source"],
             }
             for r in cur.execute("SELECT * FROM transactions ORDER BY date")
         ],
         "budgets": [
-            {"categoryId": r["category_id"], "year": r["year"], "month": r["month"], "amount": r["amount"]}
+            {
+                "categoryId": r["category_id"],
+                "year": r["year"],
+                "month": r["month"],
+                "amount": r["amount"],
+            }
             for r in cur.execute("SELECT * FROM budgets")
         ],
     }
@@ -97,7 +114,10 @@ def patch_tx(tx_id: int, patch: TxPatch):
             raise HTTPException(404, "transaction not found")
         if patch.categoryId is not None:
             target = None if patch.categoryId == 0 else patch.categoryId
-            if target is not None and not c.execute("SELECT id FROM categories WHERE id=?", (target,)).fetchone():
+            if (
+                target is not None
+                and not c.execute("SELECT id FROM categories WHERE id=?", (target,)).fetchone()
+            ):
                 raise HTTPException(400, "unknown category")
             c.execute("UPDATE transactions SET category_id=? WHERE id=?", (target, tx_id))
         if patch.comment is not None:
@@ -159,12 +179,16 @@ def patch_category(cat_id: int, patch: CategoryPatch):
         if not c.execute("SELECT id FROM categories WHERE id=?", (cat_id,)).fetchone():
             raise HTTPException(404, "category not found")
         if patch.name is not None:
-            dup = c.execute("SELECT id FROM categories WHERE name=? AND id<>?", (patch.name, cat_id)).fetchone()
+            dup = c.execute(
+                "SELECT id FROM categories WHERE name=? AND id<>?", (patch.name, cat_id)
+            ).fetchone()
             if dup:
                 raise HTTPException(409, "category with this name already exists")
             c.execute("UPDATE categories SET name=? WHERE id=?", (patch.name, cat_id))
         if patch.groupId is not None:
-            if not c.execute("SELECT id FROM category_groups WHERE id=?", (patch.groupId,)).fetchone():
+            if not c.execute(
+                "SELECT id FROM category_groups WHERE id=?", (patch.groupId,)
+            ).fetchone():
                 raise HTTPException(400, "unknown group")
             c.execute("UPDATE categories SET group_id=? WHERE id=?", (patch.groupId, cat_id))
         if patch.keywords is not None:
@@ -187,7 +211,9 @@ def delete_category(cat_id: int, reassignTo: int | None = None):
         if reassignTo is not None:
             if not c.execute("SELECT id FROM categories WHERE id=?", (reassignTo,)).fetchone():
                 raise HTTPException(400, "unknown reassign target")
-            c.execute("UPDATE transactions SET category_id=? WHERE category_id=?", (reassignTo, cat_id))
+            c.execute(
+                "UPDATE transactions SET category_id=? WHERE category_id=?", (reassignTo, cat_id)
+            )
         c.execute("DELETE FROM categories WHERE id=?", (cat_id,))
         c.commit()
         return {"ok": True}
@@ -205,12 +231,15 @@ def import_preview(body: ImportBody):
     try:
         rows, errors = parse_statement(body.text)
         groups = {r["id"]: r["kind"] for r in c.execute("SELECT id, kind FROM category_groups")}
-        cats = [dict(r) for r in c.execute("SELECT id, name, keywords, group_id FROM categories ORDER BY sort")]
+        cats = [
+            dict(r)
+            for r in c.execute("SELECT id, name, keywords, group_id FROM categories ORDER BY sort")
+        ]
         rules = build_rules(cats, groups)
         existing = {}
         for r in c.execute("SELECT hash, COUNT(*) n FROM transactions GROUP BY hash"):
             existing[r["hash"]] = r["n"]
-        seen_in_batch = {}
+        seen_in_batch: dict = {}
         for row in rows:
             row["categoryId"] = categorize(row["description"], row["amount"], rules)
             n_batch = seen_in_batch.get(row["hash"], 0)

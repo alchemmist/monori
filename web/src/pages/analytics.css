@@ -19,10 +19,12 @@
   overflow-x: auto;
   padding-bottom: 12px;
 }
+
 .disc-grid {
   border-collapse: collapse;
   width: 100%;
 }
+
 .disc-grid th {
   font-size: 10px;
   font-weight: 500;
@@ -31,6 +33,7 @@
   padding: 4px 2px;
   text-align: center;
 }
+
 .disc-grid__name {
   font-size: 12px;
   color: var(--m-text-dim);
@@ -40,24 +43,30 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
 .disc-grid td {
   padding: 2px;
 }
+
 .disc-cell {
   height: 16px;
   min-width: 28px;
   border-radius: 2px;
   background: var(--m-surface-hover);
 }
+
 .disc-cell_ok {
   background: color-mix(in srgb, var(--m-income) 42%, transparent);
 }
+
 .disc-cell_warn {
   background: color-mix(in srgb, var(--m-warning) 55%, transparent);
 }
+
 .disc-cell_over {
   background: color-mix(in srgb, var(--m-expense) 62%, transparent);
 }
+
 .disc-cell_nobudget {
   background: repeating-linear-gradient(
     45deg,
@@ -76,26 +85,32 @@
   align-items: center;
   flex-wrap: wrap;
 }
+
 .disc-legend span {
   display: inline-flex;
   align-items: center;
   gap: 5px;
 }
+
 .disc-swatch {
   display: inline-block;
   width: 10px;
   height: 10px;
   border-radius: 2px;
 }
+
 .disc-swatch_ok {
   background: color-mix(in srgb, var(--m-income) 45%, transparent);
 }
+
 .disc-swatch_warn {
   background: color-mix(in srgb, var(--m-warning) 58%, transparent);
 }
+
 .disc-swatch_over {
   background: color-mix(in srgb, var(--m-expense) 65%, transparent);
 }
+
 .disc-swatch_nobudget {
   background: repeating-linear-gradient(
     45deg,
@@ -112,12 +127,14 @@
   border-collapse: collapse;
   table-layout: fixed;
 }
+
 .report-table th,
 .report-table td {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
 .report-table th {
   font-size: 11px;
   font-weight: 600;
@@ -128,25 +145,31 @@
   padding: 8px 10px;
   border-bottom: 1px solid var(--m-border);
 }
+
 .report-table th:first-child {
   text-align: left;
 }
+
 .report-table td {
   padding: 7px 10px;
   text-align: right;
   border-bottom: 1px solid var(--m-border-soft);
   font-size: 13px;
 }
+
 .report-table td:first-child {
   text-align: left;
   color: var(--m-text-dim);
 }
+
 .report-table tr:last-child td {
   border-bottom: none;
 }
+
 .report-table__row_current td {
   background: var(--m-surface-hover);
 }
+
 .report-table__row_current td:first-child {
   box-shadow: inset 2px 0 0 var(--m-accent);
   color: var(--m-text);
@@ -157,6 +180,7 @@
   display: flex;
   flex-direction: column;
 }
+
 .stat-list__row {
   display: flex;
   justify-content: space-between;
@@ -167,16 +191,20 @@
   font-size: 13px;
   color: var(--m-text-dim);
 }
+
 .stat-list__row .num {
   color: var(--m-text);
   font-size: 14px;
 }
+
 .stat-list__row:last-child {
   border-bottom: none;
 }
+
 .stat-list__row_tall {
   align-items: flex-start;
 }
+
 .stat-list__hint {
   font-size: 11px;
   color: var(--m-text-faint);
@@ -184,7 +212,7 @@
   max-width: 260px;
 }
 
-@media (max-width: 760px) {
+@media (width <= 760px) {
   /* keep the yearly report inside its card — hide the two least-critical
      columns (Rate, Avg/mo) so it fits without a page-wide scrollbar */
   .report-table th:nth-child(5),
@@ -193,6 +221,7 @@
   .report-table td:nth-child(6) {
     display: none;
   }
+
   .report-table th,
   .report-table td {
     padding: 7px 6px;
