@@ -85,6 +85,10 @@ jobs:
           tar -xzf "${tarball}" actionlint
           sudo install -m 0755 actionlint /usr/local/bin/actionlint
 
+      - name: Install semgrep
+        if: matrix.target == 'analyze'
+        run: pipx install semgrep
+
       - name: Run ${{ matrix.target }}
         run: make ${{ matrix.target }}
 
