@@ -48,23 +48,30 @@ export default function AnalyticsPage({ results, firstYear, lastYear }) {
       xAxis: { type: "category", categories: MONTHS_SHORT, ...axisCommon },
       yAxis: [{ labels: axisCommon.labels, ...axisCommon }],
       legend: legendCommon,
-      series: { data: [
-        {
-          // the plan sits behind as a neutral target
-          type: "bar-x", name: "Budgeted", color: "var(--g-color-text-hint)", opacity: 0.5,
-          data: MONTHS_SHORT.map((_, m) => ({ x: m, y: Math.round(res.budgetedTotal[m] / 100) })),
-        },
-        {
-          // actual in the brand accent, flipping to expense-red only when it
-          // overshoots that month's budget
-          type: "bar-x", name: "Spent", color: C.accent,
-          data: actual.map((v, m) => ({
-            x: m,
-            y: Math.round(v / 100),
-            color: v > res.budgetedTotal[m] ? C.expense : C.accent,
-          })),
-        },
-      ] },
+      series: {
+        data: [
+          {
+            // the plan sits behind as a neutral target
+            type: "bar-x",
+            name: "Budgeted",
+            color: "var(--g-color-text-hint)",
+            opacity: 0.5,
+            data: MONTHS_SHORT.map((_, m) => ({ x: m, y: Math.round(res.budgetedTotal[m] / 100) })),
+          },
+          {
+            // actual in the brand accent, flipping to expense-red only when it
+            // overshoots that month's budget
+            type: "bar-x",
+            name: "Spent",
+            color: C.accent,
+            data: actual.map((v, m) => ({
+              x: m,
+              y: Math.round(v / 100),
+              color: v > res.budgetedTotal[m] ? C.expense : C.accent,
+            })),
+          },
+        ],
+      },
       chart: { margin: { top: 10, right: 10, bottom: 0, left: 10 } },
       tooltip: { enabled: true },
     };
@@ -78,16 +85,18 @@ export default function AnalyticsPage({ results, firstYear, lastYear }) {
       xAxis: { type: "category", categories: MONTHS_SHORT, ...axisCommon },
       yAxis: [{ labels: axisCommon.labels, ...axisCommon }],
       legend: legendCommon,
-      series: { data: yrs.map((y, i) => ({
-        type: "line",
-        name: String(y),
-        color: dims[i + (3 - yrs.length)],
-        lineWidth: y === +year ? 2 : 1.5,
-        data: MONTHS_SHORT.map((_, m) => {
-          const v = monthly.find(([k]) => k === `${y}-${String(m + 1).padStart(2, "0")}`);
-          return { x: m, y: v ? Math.round(v[1].expense / 100) : null };
-        }),
-      })) },
+      series: {
+        data: yrs.map((y, i) => ({
+          type: "line",
+          name: String(y),
+          color: dims[i + (3 - yrs.length)],
+          lineWidth: y === +year ? 2 : 1.5,
+          data: MONTHS_SHORT.map((_, m) => {
+            const v = monthly.find(([k]) => k === `${y}-${String(m + 1).padStart(2, "0")}`);
+            return { x: m, y: v ? Math.round(v[1].expense / 100) : null };
+          }),
+        })),
+      },
       chart: { margin: { top: 10, right: 10, bottom: 0, left: 10 } },
       tooltip: { enabled: true },
     };
@@ -100,14 +109,19 @@ export default function AnalyticsPage({ results, firstYear, lastYear }) {
       xAxis: { type: "category", categories: WEEKDAYS, ...axisCommon },
       yAxis: [{ labels: axisCommon.labels, ...axisCommon }],
       legend: { enabled: false },
-      series: { data: [{
-        type: "bar-x", name: "Share of spending",
-        data: sums.map((v, i) => ({
-          x: i,
-          y: Math.round((v / total) * 100),
-          color: i >= 5 ? C.accent : C.palette[0],
-        })),
-      }] },
+      series: {
+        data: [
+          {
+            type: "bar-x",
+            name: "Share of spending",
+            data: sums.map((v, i) => ({
+              x: i,
+              y: Math.round((v / total) * 100),
+              color: i >= 5 ? C.accent : C.palette[0],
+            })),
+          },
+        ],
+      },
       tooltip: { enabled: true },
     };
   }, [snapshot, year]);
@@ -125,34 +139,59 @@ export default function AnalyticsPage({ results, firstYear, lastYear }) {
       },
       yAxis: [{ labels: axisCommon.labels, ...axisCommon }],
       legend: { enabled: false },
-      series: { data: [{
-        type: "bar-x", name: "Spent", color: C.palette[0],
-        data: sums.map((v, i) => ({ x: i, y: Math.round(v / 100) })),
-      }] },
+      series: {
+        data: [
+          {
+            type: "bar-x",
+            name: "Spent",
+            color: C.palette[0],
+            data: sums.map((v, i) => ({ x: i, y: Math.round(v / 100) })),
+          },
+        ],
+      },
       tooltip: { enabled: true },
     };
   }, [snapshot, year]);
 
   const merchants = useMemo(() => topMerchants(snapshot, year, 10), [snapshot, year]);
-  const merchantsData = useMemo(() => ({
-    xAxis: { type: "linear", labels: axisCommon.labels, lineColor: axisCommon.lineColor,
-      gridColor: axisCommon.gridColor, ticksColor: axisCommon.ticksColor },
-    yAxis: [{
-      type: "category",
-      categories: [...merchants.map((m) => m.name)].reverse(),
-      labels: { style: { fontSize: "11px", fontColor: "var(--m-text)" } },
-      lineColor: axisCommon.lineColor,
-      gridColor: "transparent",
-      ticksColor: axisCommon.ticksColor,
-    }],
-    legend: { enabled: false },
-    series: { data: [{
-      type: "bar-y", name: "Spent", color: C.accent,
-      data: merchants.map((m, i) => ({ y: merchants.length - 1 - i, x: Math.round(m.total / 100) })),
-    }] },
-    chart: { margin: { top: 6, right: 12, bottom: 0, left: 6 } },
-    tooltip: { enabled: true },
-  }), [merchants]);
+  const merchantsData = useMemo(
+    () => ({
+      xAxis: {
+        type: "linear",
+        labels: axisCommon.labels,
+        lineColor: axisCommon.lineColor,
+        gridColor: axisCommon.gridColor,
+        ticksColor: axisCommon.ticksColor,
+      },
+      yAxis: [
+        {
+          type: "category",
+          categories: [...merchants.map((m) => m.name)].reverse(),
+          labels: { style: { fontSize: "11px", fontColor: "var(--m-text)" } },
+          lineColor: axisCommon.lineColor,
+          gridColor: "transparent",
+          ticksColor: axisCommon.ticksColor,
+        },
+      ],
+      legend: { enabled: false },
+      series: {
+        data: [
+          {
+            type: "bar-y",
+            name: "Spent",
+            color: C.accent,
+            data: merchants.map((m, i) => ({
+              y: merchants.length - 1 - i,
+              x: Math.round(m.total / 100),
+            })),
+          },
+        ],
+      },
+      chart: { margin: { top: 6, right: 12, bottom: 0, left: 6 } },
+      tooltip: { enabled: true },
+    }),
+    [merchants],
+  );
 
   const stats = useMemo(() => txStats(snapshot, year), [snapshot, year]);
 
@@ -160,25 +199,47 @@ export default function AnalyticsPage({ results, firstYear, lastYear }) {
     <div className="fade-in dash-section">
       <h2 className="section-title">
         Yearly analytics
-        <Select size="m" value={[year]} onUpdate={(v) => setYear(v[0])}
-          options={years.map((y) => ({ value: y, content: y }))} />
+        <Select
+          size="m"
+          value={[year]}
+          onUpdate={(v) => setYear(v[0])}
+          options={years.map((y) => ({ value: y, content: y }))}
+        />
       </h2>
 
       <div className="kpi-row">
         <Kpi label="Income" value={`${rub(thisYear?.income ?? 0)} ₽`} sub={year} />
         <Kpi label="Expenses" value={`${rub(thisYear?.expense ?? 0)} ₽`} sub={year} />
-        <Kpi label="Net saved" value={`${rub(thisYear?.net ?? 0)} ₽`}
-          color={(thisYear?.net ?? 0) >= 0 ? "var(--m-income)" : "var(--m-expense)"} sub={year} />
-        <Kpi label="Savings rate"
+        <Kpi
+          label="Net saved"
+          value={`${rub(thisYear?.net ?? 0)} ₽`}
+          color={(thisYear?.net ?? 0) >= 0 ? "var(--m-income)" : "var(--m-expense)"}
+          sub={year}
+        />
+        <Kpi
+          label="Savings rate"
           value={thisYear?.savingsRate != null ? `${thisYear.savingsRate.toFixed(0)}%` : "—"}
-          color={(thisYear?.savingsRate ?? 0) >= 0 ? "var(--m-income)" : "var(--m-expense)"} sub={year} />
-        <Kpi label="Budget hit rate"
+          color={(thisYear?.savingsRate ?? 0) >= 0 ? "var(--m-income)" : "var(--m-expense)"}
+          sub={year}
+        />
+        <Kpi
+          label="Budget hit rate"
           value={discipline.hitRate != null ? `${discipline.hitRate.toFixed(0)}%` : "—"}
-          color={discipline.hitRate >= 80 ? "var(--m-income)" : discipline.hitRate >= 60 ? "var(--m-warning)" : "var(--m-expense)"}
-          sub="category-months within budget" />
-        <Kpi label="Over budget" value={`${rub(discipline.totalOverrun)} ₽`}
+          color={
+            discipline.hitRate >= 80
+              ? "var(--m-income)"
+              : discipline.hitRate >= 60
+                ? "var(--m-warning)"
+                : "var(--m-expense)"
+          }
+          sub="category-months within budget"
+        />
+        <Kpi
+          label="Over budget"
+          value={`${rub(discipline.totalOverrun)} ₽`}
           color={discipline.totalOverrun > 0 ? "var(--m-expense)" : "var(--m-text-faint)"}
-          sub={discipline.worst ? `worst: ${discipline.worst.category.name}` : "no overruns"} />
+          sub={discipline.worst ? `worst: ${discipline.worst.category.name}` : "no overruns"}
+        />
       </div>
 
       <div className="charts-grid">
@@ -198,10 +259,18 @@ export default function AnalyticsPage({ results, firstYear, lastYear }) {
               <span className="chart-card__hint"> · spent vs budgeted, per envelope</span>
             </div>
             <div className="disc-legend">
-              <span><i className="disc-swatch disc-swatch_ok" /> ≤ 100%</span>
-              <span><i className="disc-swatch disc-swatch_warn" /> 100–120%</span>
-              <span><i className="disc-swatch disc-swatch_over" /> &gt; 120%</span>
-              <span><i className="disc-swatch disc-swatch_nobudget" /> unbudgeted spend</span>
+              <span>
+                <i className="disc-swatch disc-swatch_ok" /> ≤ 100%
+              </span>
+              <span>
+                <i className="disc-swatch disc-swatch_warn" /> 100–120%
+              </span>
+              <span>
+                <i className="disc-swatch disc-swatch_over" /> &gt; 120%
+              </span>
+              <span>
+                <i className="disc-swatch disc-swatch_nobudget" /> unbudgeted spend
+              </span>
             </div>
           </div>
           <DisciplineGrid rows={discipline.rows} year={year} />
@@ -223,7 +292,14 @@ export default function AnalyticsPage({ results, firstYear, lastYear }) {
           <div className="chart-card__body chart-card__body_auto">
             <table className="report-table">
               <thead>
-                <tr><th>Year</th><th>Income</th><th>Expenses</th><th>Net</th><th>Rate</th><th>Avg/mo</th></tr>
+                <tr>
+                  <th>Year</th>
+                  <th>Income</th>
+                  <th>Expenses</th>
+                  <th>Net</th>
+                  <th>Rate</th>
+                  <th>Avg/mo</th>
+                </tr>
               </thead>
               <tbody>
                 {perYear.map((r) => (
@@ -231,10 +307,15 @@ export default function AnalyticsPage({ results, firstYear, lastYear }) {
                     <td>{r.year}</td>
                     <td className="num">{rub(r.income)}</td>
                     <td className="num">{rub(r.expense)}</td>
-                    <td className="num" style={{ color: r.net >= 0 ? "var(--m-income)" : "var(--m-expense)" }}>
+                    <td
+                      className="num"
+                      style={{ color: r.net >= 0 ? "var(--m-income)" : "var(--m-expense)" }}
+                    >
                       {rub(r.net)}
                     </td>
-                    <td className="num">{r.savingsRate != null ? `${r.savingsRate.toFixed(0)}%` : "—"}</td>
+                    <td className="num">
+                      {r.savingsRate != null ? `${r.savingsRate.toFixed(0)}%` : "—"}
+                    </td>
                     <td className="num">{rub(r.avgExpense)}</td>
                   </tr>
                 ))}
@@ -335,7 +416,10 @@ function DisciplineGrid({ rows, year }) {
               <td className="disc-grid__name">{category.name}</td>
               {cells.map((cell, m) => (
                 <td key={m}>
-                  <div className={`disc-cell ${discClass(cell)}`} title={discTitle(category, cell, m)} />
+                  <div
+                    className={`disc-cell ${discClass(cell)}`}
+                    title={discTitle(category, cell, m)}
+                  />
                 </td>
               ))}
             </tr>
@@ -364,7 +448,9 @@ function Kpi({ label, value, sub, color }) {
   return (
     <div className="card kpi">
       <div className="kpi__label">{label}</div>
-      <div className="kpi__value" style={color ? { color } : undefined}>{value}</div>
+      <div className="kpi__value" style={color ? { color } : undefined}>
+        {value}
+      </div>
       {sub && <div className="kpi__sub">{sub}</div>}
     </div>
   );

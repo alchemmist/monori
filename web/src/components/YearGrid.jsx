@@ -69,9 +69,11 @@ export default function YearGrid({
 
   const metricCell = (metric, { budgeted, outflows, balance }, onEdit) => {
     if (metric === "budgeted") {
-      return onEdit
-        ? <BudgetCell value={budgeted} onChange={onEdit} />
-        : <span className="yg-num">{rub(budgeted)}</span>;
+      return onEdit ? (
+        <BudgetCell value={budgeted} onChange={onEdit} />
+      ) : (
+        <span className="yg-num">{rub(budgeted)}</span>
+      );
     }
     if (metric === "activity") {
       return (
@@ -109,7 +111,9 @@ export default function YearGrid({
                   className={`yg-msum ${i === currentMonth ? "yg-msum_now" : ""}`}
                   colSpan={span}
                 >
-                  <div className="yg-msum__mon">{m} {year}</div>
+                  <div className="yg-msum__mon">
+                    {m} {year}
+                  </div>
                   <div className={`yg-msum__av ${cls}`}>{rub(a)} ₽</div>
                   <div className="yg-msum__break">
                     <BreakLine value={prevAvail} label={`Not budgeted in ${prevName}`} />
@@ -135,7 +139,7 @@ export default function YearGrid({
                 >
                   {METRICS[metric].label}
                 </th>
-              ))
+              )),
             )}
             <th className="yg-total-head">Total</th>
             <th className="yg-total-head">Avg</th>
@@ -148,7 +152,11 @@ export default function YearGrid({
             const isCollapsed = collapsed[g.id];
 
             // per-month group subtotals + year total of outflows
-            const sub = Array.from({ length: 12 }, () => ({ budgeted: 0, outflows: 0, balance: 0 }));
+            const sub = Array.from({ length: 12 }, () => ({
+              budgeted: 0,
+              outflows: 0,
+              balance: 0,
+            }));
             let groupYearSpent = 0;
             for (const c of cats) {
               const months = res.byCategory.get(c.id);
@@ -162,26 +170,38 @@ export default function YearGrid({
             }
 
             const rows = [
-              <tr key={`g${g.id}`} className="yg-group"
-                onClick={() => setCollapsed({ ...collapsed, [g.id]: !isCollapsed })}>
+              <tr
+                key={`g${g.id}`}
+                className="yg-group"
+                onClick={() => setCollapsed({ ...collapsed, [g.id]: !isCollapsed })}
+              >
                 <td className="yg-name">
                   <span className={`yg-chevron ${isCollapsed ? "yg-chevron_collapsed" : ""}`}>
                     <ChevronDown width={13} height={13} />
                   </span>
                   {g.name}
                   <span className="yg-count">{cats.length}</span>
-                  <Button size="xs" view="flat-secondary" className="yg-add"
-                    onClick={(e) => { e.stopPropagation(); onAddCategory(g.id); }}>
+                  <Button
+                    size="xs"
+                    view="flat-secondary"
+                    className="yg-add"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onAddCategory(g.id);
+                    }}
+                  >
                     <Plus width={12} height={12} />
                   </Button>
                 </td>
                 {sub.map((s, m) =>
                   cols.map((metric, j) => (
-                    <td key={`${m}-${metric}`}
-                      className={`${j === 0 ? "yg-cell_first" : ""} ${m === currentMonth ? "yg-cell_now" : ""}`}>
+                    <td
+                      key={`${m}-${metric}`}
+                      className={`${j === 0 ? "yg-cell_first" : ""} ${m === currentMonth ? "yg-cell_now" : ""}`}
+                    >
                       {metricCell(metric, s)}
                     </td>
-                  ))
+                  )),
                 )}
                 <td className="yg-total yg-num_neg">{rub(groupYearSpent)}</td>
                 <td className="yg-total yg-num_dim">{rub(Math.round(groupYearSpent / 12))}</td>
@@ -211,19 +231,23 @@ export default function YearGrid({
                     </td>
                     {months.map((mm, m) =>
                       cols.map((metric, j) => (
-                        <td key={`${m}-${metric}`}
-                          className={`${j === 0 ? "yg-cell_first" : ""} ${m === currentMonth ? "yg-cell_now" : ""}`}>
+                        <td
+                          key={`${m}-${metric}`}
+                          className={`${j === 0 ? "yg-cell_first" : ""} ${m === currentMonth ? "yg-cell_now" : ""}`}
+                        >
                           {metricCell(
                             metric,
                             mm,
-                            metric === "budgeted" ? (v) => setBudget(c.id, year, m + 1, v) : undefined
+                            metric === "budgeted"
+                              ? (v) => setBudget(c.id, year, m + 1, v)
+                              : undefined,
                           )}
                         </td>
-                      ))
+                      )),
                     )}
                     <td className="yg-total yg-num_neg">{rub(yearSpent)}</td>
                     <td className="yg-total yg-num_dim">{rub(Math.round(yearSpent / 12))}</td>
-                  </tr>
+                  </tr>,
                 );
               }
             }
@@ -243,4 +267,3 @@ function BreakLine({ value, label }) {
     </div>
   );
 }
-
