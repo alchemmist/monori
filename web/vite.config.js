@@ -18,6 +18,9 @@ export default defineConfig({
       exclude: ["src/**/*.test.{js,jsx}", "src/main.jsx"],
       reporter: ["text", "json-summary"],
       reportsDirectory: "./coverage",
+      thresholds: {
+        "src/engine/**": { lines: 80, statements: 80 },
+      },
     },
   },
 });

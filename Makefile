@@ -75,7 +75,7 @@ typecheck:
 
 analyze:
 	cd server && uv run bandit -c pyproject.toml -q -r app
-	semgrep --error --quiet --config p/python --config p/javascript \
+	uvx semgrep --error --quiet --config p/python --config p/javascript \
 		--exclude-rule python.lang.security.insecure-hash-algorithms.insecure-hash-algorithm-sha1 .
 
 audit: audit-deps audit-deps-py audit-secrets
