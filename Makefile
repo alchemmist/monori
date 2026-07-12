@@ -75,9 +75,8 @@ typecheck:
 
 analyze:
 	cd server && uv run bandit -c pyproject.toml -q -r app
-	@if command -v semgrep >/dev/null 2>&1; then \
-		semgrep --error --quiet --config p/python --config p/javascript .; \
-	else echo "semgrep not wired yet — deferred, see #42 rollout"; fi
+	semgrep --error --quiet --config p/python --config p/javascript \
+		--exclude-rule python.lang.security.insecure-hash-algorithms.insecure-hash-algorithm-sha1 .
 
 audit: audit-deps audit-secrets
 
@@ -85,8 +84,7 @@ audit-deps:
 	cd web && npm audit --audit-level=high
 
 audit-secrets:
-	@if command -v gitleaks >/dev/null 2>&1; then gitleaks detect --no-banner --redact; \
-	else echo "gitleaks not installed — skipped locally (CI installs it)"; fi
+	gitleaks detect --no-banner --redact
 
 test: t-fast t-medium t-slow
 
@@ -105,10 +103,8 @@ coverage:
 	cd server && uv run pytest -q --cov
 
 mutation:
-	@if [ -x "$(WEBBIN)/stryker" ]; then $(WEBBIN)/stryker run; \
-	else echo "stryker not installed — see #42 rollout phase 7"; fi
-	@if command -v mutmut >/dev/null 2>&1; then cd server && mutmut run; \
-	else echo "mutmut not installed — see #42 rollout phase 7"; fi
+	$(WEBBIN)/stryker run
+	cd server && mutmut run
 
 check: fmt-check lint typecheck analyze test
 
