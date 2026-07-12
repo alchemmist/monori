@@ -31,14 +31,14 @@ def main(db_path=None):
 
     budgets = {}
     for r in cur.execute(
-        "SELECT b.year, b.month, c.name, b.amount FROM budgets b JOIN categories c ON c.id = b.category_id"
+        "SELECT b.year, b.month, c.name, b.amount FROM budgets b JOIN categories c ON c.id = b.category_id"  # noqa: E501
     ):
         budgets[(r[0], r[1], r[2])] = r[3]
 
     income_cats = {
         r[0]
         for r in cur.execute(
-            "SELECT c.name FROM categories c JOIN category_groups g ON g.id = c.group_id WHERE g.kind='income'"
+            "SELECT c.name FROM categories c JOIN category_groups g ON g.id = c.group_id WHERE g.kind='income'"  # noqa: E501
         )
     }
     income = defaultdict(int)
@@ -55,11 +55,15 @@ def main(db_path=None):
                 exp_out = round(mm["outflows"] * 100)
                 got_out = outflows.get((y, mi, row["category"]), 0)
                 if exp_out != got_out:
-                    errors.append(f"outflow {y}-{mi:02d} {row['category']}: sheet {exp_out} db {got_out}")
+                    errors.append(
+                        f"outflow {y}-{mi:02d} {row['category']}: sheet {exp_out} db {got_out}"
+                    )
                 exp_b = round(mm["budgeted"] * 100)
                 got_b = budgets.get((y, mi, row["category"]), 0)
                 if exp_b != got_b:
-                    errors.append(f"budget {y}-{mi:02d} {row['category']}: sheet {exp_b} db {got_b}")
+                    errors.append(
+                        f"budget {y}-{mi:02d} {row['category']}: sheet {exp_b} db {got_b}"
+                    )
                 checked += 2
         for mi in range(1, 13):
             exp = yr["totals"]["income_by_month"][mi - 1]

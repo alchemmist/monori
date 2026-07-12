@@ -1,0 +1,12 @@
+web/node_modules/
+web/dist/
+web/package-lock.json
+server/static/
+server/data/
+server/.venv/
+server/uv.lock
+migration/
+docs/
+**/*.woff2
+**/*.png
+**/*.svg

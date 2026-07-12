@@ -1,7 +1,4 @@
-name: Build
-
-# Verifies the app builds and tests pass before changes land on main and the
-# server pulls them. A failure here blocks the merge (and flags a bad main).
+name: CI
 
 on:
   pull_request:
@@ -14,12 +11,9 @@ permissions:
   contents: read
 
 jobs:
-  web:
-    name: Web (lint · test · build)
+  quality:
+    name: Quality gate (fmt · lint · types · analyze)
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: web
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -31,35 +25,98 @@ jobs:
           cache: npm
           cache-dependency-path: web/package-lock.json
 
-      - name: Install
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install web deps
         run: npm ci
+        working-directory: web
+
+      - name: Install server deps
+        run: uv sync
+        working-directory: server
+
+      - name: Install external linters
+        run: |
+          set -e
+          sudo apt-get update
+          sudo apt-get install -y shellcheck
+          curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash | bash -s -- latest /usr/local/bin
+          sudo curl -sSfL https://github.com/hadolint/hadolint/releases/latest/download/hadolint-Linux-x86_64 -o /usr/local/bin/hadolint
+          sudo chmod +x /usr/local/bin/hadolint
+
+      - name: Format check
+        run: make fmt-check
 
       - name: Lint
-        run: npm run lint
+        run: make lint
 
-      - name: Test (engine golden tests)
-        run: npx vitest run
+      - name: Typecheck
+        run: make typecheck
 
-      - name: Build
-        run: npm run build
+      - name: Analyze
+        run: make analyze
 
-  server:
-    name: Server (pytest)
+  test:
+    name: Tests (trophy) and build
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: server
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
 
       - name: Setup uv
         uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
 
-      - name: Install
+      - name: Install web deps
+        run: npm ci
+        working-directory: web
+
+      - name: Install server deps
         run: uv sync
+        working-directory: server
 
       - name: Test
-        run: uv run pytest
+        run: make test
+
+      - name: Build
+        run: make build
+
+  audit:
+    name: Security audit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install web deps
+        run: npm ci
+        working-directory: web
+
+      - name: Scan for secrets
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Dependency audit
+        run: npm audit --audit-level=high
+        working-directory: web

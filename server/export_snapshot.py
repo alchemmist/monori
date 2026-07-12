@@ -13,7 +13,10 @@ from app.db import connect
 
 def build_snapshot(conn):
     cur = conn.cursor()
-    groups = [dict(r) for r in cur.execute("SELECT id, name, sort, kind FROM category_groups ORDER BY sort")]
+    groups = [
+        dict(r)
+        for r in cur.execute("SELECT id, name, sort, kind FROM category_groups ORDER BY sort")
+    ]
     categories = [
         {
             "id": r["id"],
@@ -40,10 +43,20 @@ def build_snapshot(conn):
         for r in cur.execute("SELECT * FROM transactions ORDER BY date")
     ]
     budgets = [
-        {"categoryId": r["category_id"], "year": r["year"], "month": r["month"], "amount": r["amount"]}
+        {
+            "categoryId": r["category_id"],
+            "year": r["year"],
+            "month": r["month"],
+            "amount": r["amount"],
+        }
         for r in cur.execute("SELECT * FROM budgets")
     ]
-    return {"groups": groups, "categories": categories, "transactions": transactions, "budgets": budgets}
+    return {
+        "groups": groups,
+        "categories": categories,
+        "transactions": transactions,
+        "budgets": budgets,
+    }
 
 
 if __name__ == "__main__":
