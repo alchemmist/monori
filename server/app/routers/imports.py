@@ -59,12 +59,14 @@ def import_commit(body: CommitBody):
         existing = {}
         for r in c.execute("SELECT hash, COUNT(*) n FROM transactions GROUP BY hash"):
             existing[r["hash"]] = r["n"]
+        seen_in_batch: dict = {}
         inserted = skipped = 0
         for r in body.rows:
             h = tx_hash(r.date, r.amount, r.description)
-            if existing.get(h, 0) > 0:
+            n_batch = seen_in_batch.get(h, 0)
+            seen_in_batch[h] = n_batch + 1
+            if n_batch < existing.get(h, 0):
                 skipped += 1
-                existing[h] -= 1
                 continue
             c.execute(
                 """INSERT INTO transactions
@@ -72,7 +74,6 @@ def import_commit(body: CommitBody):
                    VALUES (?, ?, ?, ?, ?, ?, ?, 'import')""",
                 (r.date, r.amount, r.description, r.bank_category, r.mcc, r.categoryId, h),
             )
-            existing[h] = existing.get(h, 0) + 1
             inserted += 1
         c.commit()
         return {"inserted": inserted, "skipped": skipped}

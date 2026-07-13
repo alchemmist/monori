@@ -82,10 +82,13 @@ def delete_group(group_id: int):
     try:
         if not c.execute("SELECT id FROM category_groups WHERE id=?", (group_id,)).fetchone():
             raise HTTPException(404, "group not found")
-        n = c.execute("SELECT COUNT(*) FROM categories WHERE group_id=?", (group_id,)).fetchone()[0]
-        if n:
+        cur = c.execute(
+            "DELETE FROM category_groups WHERE id=?"
+            " AND NOT EXISTS (SELECT 1 FROM categories WHERE group_id=?)",
+            (group_id, group_id),
+        )
+        if cur.rowcount == 0:
             raise HTTPException(409, "group still has categories; move or delete them first")
-        c.execute("DELETE FROM category_groups WHERE id=?", (group_id,))
         c.commit()
         return {"ok": True}
     finally:

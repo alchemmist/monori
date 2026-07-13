@@ -14,19 +14,39 @@ def test_import_preview_categorizes_and_flags_errors(api, client):
     assert len(prev["errors"]) == 1
 
 
-def test_import_commit_dedup_within_batch_and_vs_db(api, client):
+def test_import_commit_double_submit_is_idempotent(api, client):
     rows = api.preview(api.statement)
-
-    within = client.post("/api/import/commit", json={"rows": [rows[0], rows[0]]}).json()
-    assert within == {"inserted": 1, "skipped": 1}
-    assert client.get("/api/transactions").json()["total"] == 1
-
-    both = client.post("/api/import/commit", json={"rows": rows}).json()
-    assert both == {"inserted": 1, "skipped": 1}
-    assert client.get("/api/transactions").json()["total"] == 2
-
+    first = client.post("/api/import/commit", json={"rows": rows}).json()
+    assert first == {"inserted": 2, "skipped": 0}
     resubmit = client.post("/api/import/commit", json={"rows": rows}).json()
     assert resubmit == {"inserted": 0, "skipped": 2}
+    assert client.get("/api/transactions").json()["total"] == 2
+
+
+def test_import_commit_skips_only_the_first_n_already_stored(api, client):
+    """Skip as many identical rows as already exist in the DB, insert the rest —
+    a fresh statement's own repeats are legitimate, only re-imports are skipped."""
+    r0 = api.preview(api.statement)[0]
+
+    # fresh DB: three identical rows are all genuinely new
+    assert client.post("/api/import/commit", json={"rows": [r0, r0, r0]}).json() == {
+        "inserted": 3,
+        "skipped": 0,
+    }
+    assert client.get("/api/transactions").json()["total"] == 3
+
+    # DB now holds 3; the same three are all skipped
+    assert client.post("/api/import/commit", json={"rows": [r0, r0, r0]}).json() == {
+        "inserted": 0,
+        "skipped": 3,
+    }
+
+    # DB holds 3; five identical -> two beyond the stored three are inserted
+    assert client.post("/api/import/commit", json={"rows": [r0] * 5}).json() == {
+        "inserted": 2,
+        "skipped": 3,
+    }
+    assert client.get("/api/transactions").json()["total"] == 5
 
 
 def test_import_commit_keeps_category(api, client):

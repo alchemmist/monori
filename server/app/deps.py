@@ -48,13 +48,29 @@ def snapshot(c):
     return {
         "groups": [
             serialize_group(r)
-            for r in cur.execute("SELECT id, name, sort, kind FROM category_groups ORDER BY sort")
+            for r in cur.execute(
+                "SELECT id, name, sort, kind FROM category_groups ORDER BY sort, id"
+            )
         ],
         "categories": [
-            serialize_category(r) for r in cur.execute("SELECT * FROM categories ORDER BY sort")
+            serialize_category(r)
+            for r in cur.execute(
+                "SELECT id, group_id, name, keywords, sort, archived FROM categories"
+                " ORDER BY sort, id"
+            )
         ],
         "transactions": [
-            serialize_tx(r) for r in cur.execute("SELECT * FROM transactions ORDER BY date")
+            serialize_tx(r)
+            for r in cur.execute(
+                "SELECT id, date, amount, description, bank_category, mcc, category_id,"
+                " comment, source FROM transactions ORDER BY date, id"
+            )
         ],
-        "budgets": [serialize_budget(r) for r in cur.execute("SELECT * FROM budgets")],
+        "budgets": [
+            serialize_budget(r)
+            for r in cur.execute(
+                "SELECT category_id, year, month, amount FROM budgets"
+                " ORDER BY year, month, category_id"
+            )
+        ],
     }
