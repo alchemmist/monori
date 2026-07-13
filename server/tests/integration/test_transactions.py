@@ -76,6 +76,14 @@ def test_transaction_list_filters_combined_and_pagination(api, client):
     assert client.get("/api/transactions?limit=99999").status_code == 422
 
 
+def test_transaction_to_filter_covers_the_whole_boundary_day(api, client):
+    api.tx("2026-02-28T23:59:59", -100)  # late on the boundary day
+    api.tx("2026-03-01T00:00:00", -200)  # next day
+    assert client.get("/api/transactions?to=2026-02-28").json()["total"] == 1
+    assert client.get("/api/transactions?from=2026-02-28&to=2026-02-28").json()["total"] == 1
+    assert client.get("/api/transactions?from=2026-03-01").json()["total"] == 1
+
+
 def test_transaction_bulk_actions(api, client):
     g = api.group("Expenses")
     food = api.category("Food", g)

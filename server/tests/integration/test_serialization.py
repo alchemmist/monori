@@ -44,3 +44,12 @@ def test_snapshot_serialization_contract(api, client):
         }
     ]
     assert snap["budgets"] == [{"categoryId": cat, "year": 2026, "month": 3, "amount": 5000}]
+
+
+def test_snapshot_ordering_is_deterministic(api):
+    """Rows sharing a sort key fall back to id, so the order is stable."""
+    a = api.tx("2026-01-01T00:00:00", -1)
+    b = api.tx("2026-01-01T00:00:00", -2)  # same timestamp as a
+    c = api.tx("2026-01-01T00:00:00", -3)
+    ids = [t["id"] for t in api.snapshot()["transactions"]]
+    assert ids == [a, b, c]

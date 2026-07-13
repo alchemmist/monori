@@ -8,20 +8,20 @@ router = APIRouter(prefix="/api/transactions", tags=["transactions"])
 
 _COUNT_TX = (
     "SELECT COUNT(*) FROM transactions"
-    " WHERE (:from IS NULL OR date >= :from)"
-    " AND (:to IS NULL OR date <= :to)"
+    " WHERE (:from IS NULL OR date(date) >= date(:from))"
+    " AND (:to IS NULL OR date(date) <= date(:to))"
     " AND (:uncat = 0 OR category_id IS NULL)"
     " AND (:uncat = 1 OR :cat IS NULL OR category_id = :cat)"
     " AND (:q IS NULL OR LOWER(description) LIKE :q)"
 )
 _LIST_TX = (
     "SELECT * FROM transactions"
-    " WHERE (:from IS NULL OR date >= :from)"
-    " AND (:to IS NULL OR date <= :to)"
+    " WHERE (:from IS NULL OR date(date) >= date(:from))"
+    " AND (:to IS NULL OR date(date) <= date(:to))"
     " AND (:uncat = 0 OR category_id IS NULL)"
     " AND (:uncat = 1 OR :cat IS NULL OR category_id = :cat)"
     " AND (:q IS NULL OR LOWER(description) LIKE :q)"
-    " ORDER BY date DESC LIMIT :limit OFFSET :offset"
+    " ORDER BY date DESC, id DESC LIMIT :limit OFFSET :offset"
 )
 
 
