@@ -1,0 +1,76 @@
+from . import db as dbmod
+
+
+def conn():
+    return dbmod.connect()
+
+
+def serialize_group(r):
+    return {"id": r["id"], "name": r["name"], "sort": r["sort"], "kind": r["kind"]}
+
+
+def serialize_category(r):
+    return {
+        "id": r["id"],
+        "groupId": r["group_id"],
+        "name": r["name"],
+        "keywords": r["keywords"],
+        "sort": r["sort"],
+        "archived": bool(r["archived"]),
+    }
+
+
+def serialize_tx(r):
+    return {
+        "id": r["id"],
+        "date": r["date"],
+        "amount": r["amount"],
+        "description": r["description"],
+        "bankCategory": r["bank_category"],
+        "mcc": r["mcc"],
+        "categoryId": r["category_id"],
+        "comment": r["comment"],
+        "source": r["source"],
+    }
+
+
+def serialize_budget(r):
+    return {
+        "categoryId": r["category_id"],
+        "year": r["year"],
+        "month": r["month"],
+        "amount": r["amount"],
+    }
+
+
+def snapshot(c):
+    cur = c.cursor()
+    return {
+        "groups": [
+            serialize_group(r)
+            for r in cur.execute(
+                "SELECT id, name, sort, kind FROM category_groups ORDER BY sort, id"
+            )
+        ],
+        "categories": [
+            serialize_category(r)
+            for r in cur.execute(
+                "SELECT id, group_id, name, keywords, sort, archived FROM categories"
+                " ORDER BY sort, id"
+            )
+        ],
+        "transactions": [
+            serialize_tx(r)
+            for r in cur.execute(
+                "SELECT id, date, amount, description, bank_category, mcc, category_id,"
+                " comment, source FROM transactions ORDER BY date, id"
+            )
+        ],
+        "budgets": [
+            serialize_budget(r)
+            for r in cur.execute(
+                "SELECT category_id, year, month, amount FROM budgets"
+                " ORDER BY year, month, category_id"
+            )
+        ],
+    }

@@ -4,7 +4,7 @@ import sys
 
 import pytest
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
 from app.importer import build_rules, categorize, parse_amount_kop, parse_date, parse_statement
 
 SAMPLE_TSV = (
@@ -64,7 +64,7 @@ def test_categorize_first_rule_wins_and_sign_split():
 def test_categorizer_agreement_with_sheet_history():
     """Port fidelity check: recategorize all historical transactions and compare
     with the sheet's own FIND_CATEGORIES output (auto_category column)."""
-    out = pathlib.Path(__file__).resolve().parent.parent.parent / "migration" / "out"
+    out = pathlib.Path(__file__).resolve().parents[3] / "migration" / "out"
     if not (out / "transactions.json").exists():
         pytest.skip("migration/out fixtures not present (private Google Sheet data)")
     txs = json.loads((out / "transactions.json").read_text())
@@ -81,11 +81,6 @@ def test_categorizer_agreement_with_sheet_history():
     name_by_id = {c["id"]: c["name"] for c in cats}
     rules = build_rules(cats, groups)
 
-    # Known stale cell in the sheet: a +150 RUB refund ("Яндекс Расписания",
-    # 2025-05-31) shows auto-category "Transport", but the current
-    # FIND_CATEGORIES splits rules by amount sign, so a positive amount can
-    # never match the expense rule. The sheet value is a frozen leftover; the
-    # port's answer (uncategorized) is what the algorithm actually returns.
     known_stale = {("2025-05-31T23:18:27", "Яндекс Расписания")}
 
     mismatches = []
