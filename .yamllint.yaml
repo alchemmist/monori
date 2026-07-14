@@ -10,6 +10,6 @@ rules:
     check-keys: false
 
 ignore: |
-  web/node_modules/
-  web/dist/
+  **/node_modules/
+  **/dist/
   server/.venv/

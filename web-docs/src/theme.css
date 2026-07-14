@@ -1,0 +1,125 @@
+@import url("@fontsource-variable/inter");
+
+/*
+ * monori "Mono" design system — near-monochrome neutrals with a single sharp
+ * orange accent, sharp corners, large tabular numbers. Semantic --m-* tokens
+ * drive the app's own CSS; a handful of Gravity --g-* vars are overridden so
+ * stock Gravity widgets (Button, Select, SegmentedRadioGroup) adopt the accent.
+ * Light is the default; dark is the toggled variant.
+ */
+
+/* ---------- shared, theme-independent ---------- */
+:root,
+.g-root {
+  --m-radius: 6px;
+  --m-radius-sm: 5px;
+  --m-accent: #ef5a17;
+  --m-accent-contrast: #fff;
+  --m-title-weight: 800;
+  --m-num-weight: 800;
+}
+
+/* ---------- LIGHT (default) ---------- */
+:root,
+.g-root,
+.g-root_theme_light {
+  --m-bg: #fff;
+  --m-surface: #fff;
+  --m-surface-hover: #f7f7f6;
+  --m-surface-raised: #f5f5f4;
+  --m-border: #e7e6e3;
+  --m-border-soft: #efefed;
+  --m-text: #0a0a0a;
+  --m-text-dim: #5c5c58;
+  --m-text-faint: #a3a29d;
+  --m-accent: #ef5a17;
+  --m-accent-soft: #ffe6d9;
+  --m-income: #15803d;
+  --m-expense: #dc2626;
+  --m-warning: #b45309;
+  --m-income-soft: #e4f3e9;
+  --m-expense-soft: #fbe3e3;
+
+  /* Gravity widget alignment */
+  --g-color-base-brand: #ef5a17;
+  --g-color-base-brand-hover: #d94e10;
+  --g-color-line-brand: #ef5a17;
+  --g-color-text-brand: #d94e10;
+  --g-color-text-brand-heavy: #c2450d;
+  --g-color-text-link: #d94e10;
+  --g-color-text-link-hover: #c2450d;
+  --g-color-text-brand-contrast: #fff;
+  --g-color-base-selection: #ffe6d9;
+  --g-color-base-selection-hover: #ffd9c5;
+}
+
+/* ---------- DARK ---------- */
+.g-root_theme_dark {
+  --m-bg: #0a0a0a;
+  --m-surface: #0f0f0f;
+  --m-surface-hover: #1a1a19;
+  --m-surface-raised: #171716;
+  --m-border: #262624;
+  --m-border-soft: #1e1e1c;
+  --m-text: #fafafa;
+  --m-text-dim: #a3a29d;
+  --m-text-faint: #6b6a65;
+  --m-accent: #ff7a3c;
+  --m-accent-contrast: #1a0d05;
+  --m-accent-soft: #3a1e10;
+  --m-income: #4ade80;
+  --m-expense: #f87171;
+  --m-warning: #fbbf24;
+  --m-income-soft: #16281c;
+  --m-expense-soft: #331919;
+
+  --g-color-base-brand: #ff7a3c;
+  --g-color-base-brand-hover: #ff8f5a;
+  --g-color-line-brand: #ff7a3c;
+  --g-color-text-brand: #ff8f5a;
+  --g-color-text-brand-heavy: #ffa877;
+  --g-color-text-link: #ff8f5a;
+  --g-color-text-link-hover: #ffa877;
+  --g-color-text-brand-contrast: #0a0a0a;
+  --g-color-base-selection: #3a1e10;
+  --g-color-base-selection-hover: #4a2614;
+}
+
+html,
+body {
+  margin: 0;
+  background: var(--m-bg);
+  color: var(--m-text);
+  font-family: var(--g-font-family-sans);
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+.num {
+  font-variant-numeric: tabular-nums;
+}
+
+/* hide scrollbars everywhere (scrolling still works, the bar is just invisible) */
+* {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* legacy Edge/IE */
+}
+
+*::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none; /* Chromium / WebKit */
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
