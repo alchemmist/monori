@@ -10,7 +10,7 @@ appropriately per chart, and income is excluded from expense analysis.
 
 A row of headline numbers:
 
-- **Net year to date** — income minus expense so far this year.
+- **Net year-to-date** — income minus expense so far this year.
 - **Savings rate** — the share of income kept, colored by sign.
 - **Avg monthly spend** — mean expense over the last 12 months.
 - **Spent this month**, **Daily rate** (per-day pace this month), and a
