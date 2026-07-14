@@ -33,7 +33,8 @@ function SidebarNav({ onNavigate }) {
 
 export default function Shell({ theme, onToggleTheme }) {
   const { pathname } = useLocation();
-  const isDoc = pathname !== "/" && pathname !== "";
+  const LANDING = new Set(["/", "", "/v1", "/v2", "/v3"]);
+  const isDoc = !LANDING.has(pathname);
   const [menuOpen, setMenuOpen] = useState(false);
 
   return (
