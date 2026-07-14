@@ -4,7 +4,7 @@ import { Plus, ArrowUp, ArrowDown } from "@gravity-ui/icons";
 import { useStore, isDemo } from "../store.js";
 import { api } from "../api.js";
 import { accountBalances } from "../engine/analytics.js";
-import { accountIcon } from "../components/accountIcons.js";
+import AccountBadge from "../components/AccountBadge.jsx";
 import { money } from "../format.js";
 import {
   AccountEditDialog,
@@ -55,12 +55,9 @@ export default function AccountsPage() {
 
       <div className="card account-list">
         {accounts.map((a, i) => {
-          const Icon = accountIcon(a.icon);
           return (
             <div key={a.id} className="account-row">
-              <span className="account-row__icon">
-                <Icon width={18} height={18} />
-              </span>
+              <AccountBadge account={a} size={32} />
               <div className="account-row__main">
                 <span className="account-row__name">{a.name}</span>
                 <Label size="xs" theme="unknown">

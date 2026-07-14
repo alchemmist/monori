@@ -4,7 +4,7 @@ import TimeNavigator from "../components/TimeNavigator.jsx";
 import { Button, Select } from "@gravity-ui/uikit";
 import { useStore } from "../store.js";
 import { accountBalances } from "../engine/analytics.js";
-import { accountIcon } from "../components/accountIcons.js";
+import AccountBadge from "../components/AccountBadge.jsx";
 import { rub, money, MONTHS_SHORT } from "../format.js";
 import "./dashboard.css";
 
@@ -369,11 +369,10 @@ export default function DashboardPage({ firstYear, lastYear }) {
       {accounts.length > 0 && (
         <div className="balance-row">
           {accounts.map((a) => {
-            const Icon = accountIcon(a.icon);
             return (
               <div key={a.id} className="card balance-card">
                 <div className="balance-card__name">
-                  <Icon width={14} height={14} /> {a.name}
+                  <AccountBadge account={a} size={20} /> {a.name}
                 </div>
                 <div
                   className="balance-card__value num"

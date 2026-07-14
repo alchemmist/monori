@@ -1,8 +1,10 @@
-import { useState } from "react";
-import { Dialog, TextInput, Select, Text } from "@gravity-ui/uikit";
+import { useRef, useState } from "react";
+import { Button, Dialog, TextInput, Select, Text } from "@gravity-ui/uikit";
+import { TrashBin } from "@gravity-ui/icons";
 import { useStore } from "../store.js";
 import { parseRub, money } from "../format.js";
-import { ACCOUNT_ICONS } from "./accountIcons.js";
+import { ACCOUNT_ICONS, ACCOUNT_COLORS, DEFAULT_ACCOUNT_COLOR } from "./accountIcons.js";
+import AccountBadge from "./AccountBadge.jsx";
 
 const ACCOUNT_TYPES = [
   { value: "card", content: "Card" },
@@ -11,17 +13,53 @@ const ACCOUNT_TYPES = [
   { value: "other", content: "Other" },
 ];
 
+/** Downscale a picked image to a small square-ish PNG data URL so the snapshot
+ * stays lean — the badge only ever renders it at ~30px. */
+function fileToIconDataUrl(file, max = 128) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const scale = Math.min(1, max / Math.max(img.width, img.height));
+      const w = Math.max(1, Math.round(img.width * scale));
+      const h = Math.max(1, Math.round(img.height * scale));
+      const canvas = document.createElement("canvas");
+      canvas.width = w;
+      canvas.height = h;
+      canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+      resolve(canvas.toDataURL("image/png"));
+    };
+    img.onerror = reject;
+    img.src = url;
+  });
+}
+
 export function AccountEditDialog({ account, onClose }) {
   const { createAccount, patchAccount, notify } = useStore();
   const isNew = !account.id;
   const [name, setName] = useState(account.name ?? "");
   const [type, setType] = useState(account.type ?? "other");
   const [icon, setIcon] = useState(account.icon ?? "wallet");
+  const [color, setColor] = useState(account.color ?? DEFAULT_ACCOUNT_COLOR);
+  const [image, setImage] = useState(account.iconImage ?? "");
   const [currency, setCurrency] = useState(account.currency ?? "RUB");
   const [opening, setOpening] = useState(
     account.openingBalance ? String(account.openingBalance / 100) : "",
   );
   const [busy, setBusy] = useState(false);
+  const fileRef = useRef(null);
+
+  const onPickImage = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    try {
+      setImage(await fileToIconDataUrl(file));
+    } catch {
+      notify({ title: "Could not read that image", theme: "danger" });
+    }
+  };
 
   const apply = async () => {
     if (!name.trim()) return;
@@ -36,6 +74,8 @@ export function AccountEditDialog({ account, onClose }) {
         name: name.trim(),
         type,
         icon,
+        color,
+        iconImage: image,
         currency: currency.trim() || "RUB",
         openingBalance,
       };
@@ -67,23 +107,62 @@ export function AccountEditDialog({ account, onClose }) {
             width="max"
           />
           <div>
-            <Text color="secondary" variant="caption-2">
-              Icon
-            </Text>
-            <div className="icon-picker">
-              {ACCOUNT_ICONS.map(({ name: iconName, Icon }) => (
-                <button
-                  key={iconName}
-                  type="button"
-                  className={`icon-picker__item ${icon === iconName ? "icon-picker__item_active" : ""}`}
-                  onClick={() => setIcon(iconName)}
-                  aria-label={iconName}
-                  aria-pressed={icon === iconName}
-                >
-                  <Icon width={18} height={18} />
-                </button>
-              ))}
+            <div className="appearance-head">
+              <Text color="secondary" variant="caption-2">
+                Appearance
+              </Text>
+              <AccountBadge account={{ icon, color, iconImage: image }} size={34} />
             </div>
+
+            {image ? (
+              <div className="appearance-custom">
+                <Text color="secondary" variant="caption-2">
+                  Using a custom image. Icon and color don't apply.
+                </Text>
+                <Button
+                  view="flat"
+                  size="s"
+                  onClick={() => setImage("")}
+                  title="Remove custom image"
+                >
+                  <TrashBin width={14} height={14} /> Remove
+                </Button>
+              </div>
+            ) : (
+              <>
+                <div className="icon-picker">
+                  {ACCOUNT_ICONS.map(({ name: iconName, Icon }) => (
+                    <button
+                      key={iconName}
+                      type="button"
+                      className={`icon-picker__item ${icon === iconName ? "icon-picker__item_active" : ""}`}
+                      onClick={() => setIcon(iconName)}
+                      aria-label={iconName}
+                      aria-pressed={icon === iconName}
+                    >
+                      <Icon width={18} height={18} />
+                    </button>
+                  ))}
+                </div>
+                <div className="color-picker">
+                  {ACCOUNT_COLORS.map((c) => (
+                    <button
+                      key={c}
+                      type="button"
+                      className={`color-picker__item ${color === c ? "color-picker__item_active" : ""}`}
+                      style={{ "--swatch": c }}
+                      onClick={() => setColor(c)}
+                      aria-label={c}
+                      aria-pressed={color === c}
+                    />
+                  ))}
+                </div>
+                <Button view="normal" size="s" onClick={() => fileRef.current?.click()}>
+                  Upload custom image…
+                </Button>
+              </>
+            )}
+            <input ref={fileRef} type="file" accept="image/*" hidden onChange={onPickImage} />
           </div>
           <TextInput label="Currency" value={currency} onUpdate={setCurrency} />
           <TextInput

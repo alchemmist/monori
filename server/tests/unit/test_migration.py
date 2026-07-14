@@ -63,6 +63,8 @@ def test_migration_backfills_existing_transactions(tmp_path):
             "icon"
         ]
         assert icon == "wallet"
+        acct_cols = {r["name"] for r in conn.execute("PRAGMA table_info(accounts)")}
+        assert {"color", "icon_image"} <= acct_cols
 
         assert conn.execute("PRAGMA user_version").fetchone()[0] == len(MIGRATIONS)
     finally:
