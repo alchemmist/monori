@@ -152,6 +152,18 @@ a {
   height: calc(100vh - var(--top-h));
   overflow-y: auto;
   padding: 28px 8px 40px 0;
+  scrollbar-width: thin;
+  scrollbar-color: var(--m-border) transparent;
+}
+
+.docs-side::-webkit-scrollbar {
+  display: block;
+  width: 6px;
+}
+
+.docs-side::-webkit-scrollbar-thumb {
+  background: var(--m-border);
+  border-radius: 100px;
 }
 
 .docs-side__group {

@@ -8,7 +8,7 @@ file.
 | Variable | Default | Purpose |
 | ---------- | --------- | --------- |
 | `MONORI_DB` | `server/data/monori.db` | Absolute path to the SQLite database file. Its parent directory is created on startup. In Docker this is set to `/app/data/monori.db`. |
-| `MONORI_API_TOKEN` | *(unset)* | Optional bearer token. When set, every API route requires `Authorization: Bearer <token>`. When unset, the API is open. |
+| `MONORI_API_TOKEN` | *(unset)* | Optional bearer token. When set, every `/api` data route (and `/api/snapshot`) requires `Authorization: Bearer <token>`; the docs site and OpenAPI endpoints (`/docs`, `/api-docs`, `/api-redoc`, `/openapi.json`) stay public. When unset, the API is open. |
 | `API_PORT` | `8077` | Dev only — the port the local API runs on and the web dev server proxies to. Set via the `make` variable of the same name. |
 
 The production container also sets `MONORI_DB=/app/data/monori.db` in the
@@ -31,8 +31,10 @@ safe, the `-wal` file if present).
 ## API authentication
 
 Setting `MONORI_API_TOKEN` turns on a constant-time bearer-token check on every
-route, including `GET /api/snapshot`. Requests without a matching
-`Authorization: Bearer <token>` header get `401`.
+`/api` data route, including `GET /api/snapshot`. Requests without a matching
+`Authorization: Bearer <token>` header get `401`. The docs site (`/docs`) and the
+OpenAPI endpoints (`/api-docs`, `/api-redoc`, `/openapi.json`) are intentionally
+left public so the documentation is always reachable.
 
 ```bash
 docker run -e MONORI_API_TOKEN=$(openssl rand -hex 32) ...
