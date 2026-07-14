@@ -1,4 +1,4 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from ..deps import conn
@@ -21,6 +21,7 @@ class CommitRow(BaseModel):
 
 
 class CommitBody(BaseModel):
+    accountId: int
     rows: list[CommitRow]
 
 
@@ -56,6 +57,8 @@ def import_commit(body: CommitBody):
     are skipped, so a double-submit can't create duplicates."""
     c = conn()
     try:
+        if not c.execute("SELECT id FROM accounts WHERE id=?", (body.accountId,)).fetchone():
+            raise HTTPException(400, "unknown account")
         existing = {}
         for r in c.execute("SELECT hash, COUNT(*) n FROM transactions GROUP BY hash"):
             existing[r["hash"]] = r["n"]
@@ -70,9 +73,19 @@ def import_commit(body: CommitBody):
                 continue
             c.execute(
                 """INSERT INTO transactions
-                   (date, amount, description, bank_category, mcc, category_id, hash, source)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, 'import')""",
-                (r.date, r.amount, r.description, r.bank_category, r.mcc, r.categoryId, h),
+                   (date, amount, description, bank_category, mcc, category_id, account_id,
+                    hash, source)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'import')""",
+                (
+                    r.date,
+                    r.amount,
+                    r.description,
+                    r.bank_category,
+                    r.mcc,
+                    r.categoryId,
+                    body.accountId,
+                    h,
+                ),
             )
             inserted += 1
         c.commit()
