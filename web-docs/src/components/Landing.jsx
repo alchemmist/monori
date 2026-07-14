@@ -8,12 +8,14 @@ import {
   ChartColumn,
   CircleRuble,
   ArrowRight,
+  Sparkles,
   LogoGithub,
   LogoDocker,
 } from "@gravity-ui/icons";
 import Wordmark from "./Wordmark.jsx";
 
 const GITHUB_URL = "https://github.com/alchemmist/monori";
+const DEMO_URL = "/demo";
 
 const FEATURES = [
   {
@@ -84,9 +86,6 @@ function HeroVisual() {
           </div>
         ))}
       </div>
-      <div className="hero-snippet num">
-        <span className="hero-snippet__c">$</span> curl -s localhost:8000/api/snapshot
-      </div>
     </div>
   );
 }
@@ -106,12 +105,13 @@ export default function Landing() {
             full-year grid, dashboards, and a REST API.
           </p>
           <div className="hero__cta">
-            <Link className="btn btn_primary" to="/getting-started">
+            <a className="btn btn_primary" href={DEMO_URL}>
+              <Icon data={Sparkles} size={16} />
+              Try the live demo
+            </a>
+            <Link className="btn btn_ghost" to="/getting-started">
               Get started
               <Icon data={ArrowRight} size={16} />
-            </Link>
-            <Link className="btn btn_ghost" to="/api">
-              REST API
             </Link>
             <a className="btn btn_text" href={GITHUB_URL} target="_blank" rel="noreferrer">
               <Icon data={LogoGithub} size={16} />

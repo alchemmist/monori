@@ -608,25 +608,6 @@ a {
   background: var(--m-expense);
 }
 
-.hero-snippet {
-  position: absolute;
-  right: -8px;
-  bottom: -22px;
-  font-size: 12.5px;
-  background: var(--m-text);
-  color: var(--m-bg);
-  padding: 9px 14px;
-  border-radius: var(--m-radius);
-  box-shadow: 0 14px 30px -14px rgb(0 0 0 / 45%);
-  white-space: nowrap;
-}
-
-.hero-snippet__c {
-  color: var(--m-accent);
-  font-weight: 700;
-  margin-right: 6px;
-}
-
 /* features */
 .features {
   display: grid;
