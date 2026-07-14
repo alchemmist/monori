@@ -18,7 +18,7 @@ export default function Root() {
 
   return (
     <ThemeProvider theme={theme}>
-      <BrowserRouter basename="/docs">
+      <BrowserRouter basename={import.meta.env.BASE_URL.replace(/\/$/, "")}>
         <App theme={theme} onToggleTheme={toggleTheme} />
       </BrowserRouter>
     </ThemeProvider>
