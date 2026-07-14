@@ -2,7 +2,11 @@
 
 Everything monori knows lives in one SQLite file (`MONORI_DB`, default
 `server/data/monori.db`). The schema is created on first connection and runs in
-WAL mode with foreign keys enabled. Four tables hold the whole budget.
+WAL mode with foreign keys enabled. Five tables hold the whole budget.
+
+Schema changes to existing databases are applied by small ordered migrations
+tracked with SQLite's `PRAGMA user_version`; connecting to an older database
+upgrades it in place (see the accounts migration below).
 
 ## Money
 
@@ -24,6 +28,26 @@ Top-level buckets that give categories their income/expense meaning.
 | `name` | TEXT | unique |
 | `sort` | INTEGER | display order |
 | `kind` | TEXT | `income` or `expense` (checked) |
+
+### `accounts`
+
+Where money physically sits: bank cards, cash, savings. Every transaction
+belongs to exactly one account.
+
+| Column | Type | Notes |
+| -------- | ------ | ------- |
+| `id` | INTEGER PK | |
+| `name` | TEXT | unique |
+| `type` | TEXT | `card` / `cash` / `savings` / `other`; default `other` |
+| `currency` | TEXT | ISO code, default `RUB`. A label only — monori is single-currency for now (see issue #29) |
+| `sort` | INTEGER | display order; default `0` |
+| `archived` | INTEGER | `0`/`1`; default `0` |
+| `opening_balance` | INTEGER | kopecks; default `0` |
+| `opening_date` | TEXT | ISO date, nullable |
+
+An account's **running balance** is `opening_balance` plus the sum of its
+transactions. Reconcile compares this to your real bank balance and posts an
+adjustment for any difference.
 
 ### `categories`
 
@@ -51,11 +75,18 @@ The ledger.
 | `bank_category` | TEXT | the bank's own label; default `''` |
 | `mcc` | TEXT | merchant category code; default `''` |
 | `category_id` | INTEGER | → `categories(id)`, `ON DELETE SET NULL` |
+| `account_id` | INTEGER | → `accounts(id)`, NOT NULL |
+| `transfer_id` | TEXT | links the two legs of a transfer; `NULL` for normal rows |
 | `comment` | TEXT | default `''` |
 | `hash` | TEXT | `sha1(date \| amount \| description)`, for dedup |
-| `source` | TEXT | `import` or `manual`; default `import` |
+| `source` | TEXT | `import` / `manual` / `transfer` / `adjustment` / `sheets`; default `import` |
 
-Indexes: `date`, `hash`, `category_id`.
+Indexes: `date`, `hash`, `category_id`, `account_id`.
+
+A **transfer** between your own accounts is two linked rows sharing a
+`transfer_id`: a negative leg on the source account and a positive leg on the
+destination. Both are uncategorized, so a transfer never counts as income or
+expense in analytics — this is enforced by construction, not by convention.
 
 ### `budgets`
 
@@ -77,8 +108,20 @@ category-month. A cell with amount `0` is deleted rather than stored.
   become uncategorized) and cascade-deletes its budgets. The API also lets you
   reassign transactions to another category first (`?reassignTo=`).
 - Deleting a **group** is refused while it still has categories.
+- Deleting an **account** reassigns its transactions to another account
+  (`?reassignTo=`). Since every transaction must belong to an account, deleting a
+  non-empty account without a target is refused, and the last remaining account
+  cannot be deleted.
 - These rules mean a delete never silently loses transactions — they are kept,
   just uncategorized or moved.
+
+## Accounts migration
+
+Databases created before accounts existed are upgraded on first connection: a
+default **T-Bank** account is created and every existing transaction is
+backfilled onto it, so current data behaves exactly as before. The migration
+rebuilds the `transactions` table to add the NOT NULL `account_id`, then records
+itself via `PRAGMA user_version` so it runs only once.
 
 ## Dedup hashing
 

@@ -6,7 +6,8 @@ from ..importer import tx_hash
 
 router = APIRouter(prefix="/api/transactions", tags=["transactions"])
 
-_WHERE_TX = (
+_COUNT_TX = (
+    "SELECT COUNT(*) FROM transactions"
     " WHERE (:from IS NULL OR date(date) >= date(:from))"
     " AND (:to IS NULL OR date(date) <= date(:to))"
     " AND (:uncat = 0 OR category_id IS NULL)"
@@ -14,11 +15,15 @@ _WHERE_TX = (
     " AND (:acct IS NULL OR account_id = :acct)"
     " AND (:q IS NULL OR LOWER(description) LIKE :q)"
 )
-_COUNT_TX = "SELECT COUNT(*) FROM transactions" + _WHERE_TX
 _LIST_TX = (
     "SELECT * FROM transactions"
-    + _WHERE_TX
-    + " ORDER BY date DESC, id DESC LIMIT :limit OFFSET :offset"
+    " WHERE (:from IS NULL OR date(date) >= date(:from))"
+    " AND (:to IS NULL OR date(date) <= date(:to))"
+    " AND (:uncat = 0 OR category_id IS NULL)"
+    " AND (:uncat = 1 OR :cat IS NULL OR category_id = :cat)"
+    " AND (:acct IS NULL OR account_id = :acct)"
+    " AND (:q IS NULL OR LOWER(description) LIKE :q)"
+    " ORDER BY date DESC, id DESC LIMIT :limit OFFSET :offset"
 )
 
 

@@ -13,6 +13,7 @@ end, so there is no floating-point rounding anywhere.
 - [Configuration](configuration.md) — environment variables and the database file.
 - [Budgeting](budgeting.md) — the envelope model, how the math works, using the grid.
 - [Transactions](transactions.md) — the ledger, filters, categorization, manual edits.
+- [Accounts & transfers](accounts.md) — multiple accounts, transfers, reconcile.
 - [Importing statements](importing.md) — the statement format, auto-categorization, dedup.
 - [Dashboard & analytics](dashboard-analytics.md) — charts and the annual report.
 - [REST API](api.md) — every endpoint, request and response shapes, auth.
