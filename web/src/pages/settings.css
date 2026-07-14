@@ -1,0 +1,51 @@
+.settings-section {
+  margin-top: 28px;
+  max-width: 560px;
+}
+
+.settings-section__head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.account-list {
+  overflow: hidden;
+}
+
+.account-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--m-border-soft);
+}
+
+.account-row:last-child {
+  border-bottom: none;
+}
+
+.account-row__main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.account-row__name {
+  font-weight: 600;
+}
+
+.account-row__balance {
+  color: var(--m-text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.account-row__actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}

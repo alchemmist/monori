@@ -3,7 +3,8 @@ import { ChartBoundary } from "../components/ChartCard.jsx";
 import TimeNavigator from "../components/TimeNavigator.jsx";
 import { Button, Select } from "@gravity-ui/uikit";
 import { useStore } from "../store.js";
-import { rub, MONTHS_SHORT } from "../format.js";
+import { accountBalances } from "../engine/analytics.js";
+import { rub, money, MONTHS_SHORT } from "../format.js";
 import "./dashboard.css";
 
 const PRESETS = [
@@ -29,6 +30,17 @@ export default function DashboardPage({ firstYear, lastYear }) {
   const [drillYear, setDrillYear] = useState(String(now.getFullYear()));
   const [stackYear, setStackYear] = useState(String(now.getFullYear()));
   const [catStackYear, setCatStackYear] = useState(String(now.getFullYear()));
+  const [acctFilter, setAcctFilter] = useState("all");
+
+  const accounts = snapshot.accounts ?? [];
+  const balances = useMemo(() => accountBalances(snapshot), [snapshot]);
+  const txns = useMemo(
+    () =>
+      acctFilter === "all"
+        ? snapshot.transactions
+        : snapshot.transactions.filter((t) => t.accountId === +acctFilter),
+    [snapshot.transactions, acctFilter],
+  );
 
   const excludedIds = useMemo(() => new Set(), []);
   const incomeGroupIds = useMemo(
@@ -43,7 +55,7 @@ export default function DashboardPage({ firstYear, lastYear }) {
   // Monthly series over full history: real income / expenses (kopecks, positive numbers)
   const monthly = useMemo(() => {
     const map = new Map(); // 'y-m' -> {income, expense}
-    for (const t of snapshot.transactions) {
+    for (const t of txns) {
       if (t.categoryId == null || excludedIds.has(t.categoryId)) continue;
       const cat = catById.get(t.categoryId);
       if (!cat) continue;
@@ -54,7 +66,7 @@ export default function DashboardPage({ firstYear, lastYear }) {
       else e.expense += -t.amount;
     }
     return [...map.entries()].sort(([a], [b]) => a.localeCompare(b));
-  }, [snapshot.transactions, excludedIds, incomeGroupIds, catById]);
+  }, [txns, excludedIds, incomeGroupIds, catById]);
 
   const nowKey = now.toISOString().slice(0, 7);
   const closed = monthly.filter(([k]) => k < nowKey); // full months only
@@ -167,7 +179,7 @@ export default function DashboardPage({ firstYear, lastYear }) {
   // Chart 2: donut by category for a year
   const donutData = useMemo(() => {
     const sums = new Map();
-    for (const t of snapshot.transactions) {
+    for (const t of txns) {
       if (!t.date.startsWith(donutYear) || t.categoryId == null) continue;
       const cat = catById.get(t.categoryId);
       if (!cat || incomeGroupIds.has(cat.groupId) || excludedIds.has(t.categoryId)) continue;
@@ -198,14 +210,14 @@ export default function DashboardPage({ firstYear, lastYear }) {
       },
       tooltip: { enabled: true },
     };
-  }, [snapshot.transactions, donutYear, catById, incomeGroupIds, excludedIds]);
+  }, [txns, donutYear, catById, incomeGroupIds, excludedIds]);
 
   // Chart 3: selected category by month for a year
   const drillData = useMemo(() => {
     const catId = drillCat ? +drillCat : null;
     const sums = Array(12).fill(0);
     if (catId != null) {
-      for (const t of snapshot.transactions) {
+      for (const t of txns) {
         if (t.categoryId !== catId || !t.date.startsWith(drillYear)) continue;
         sums[+t.date.slice(5, 7) - 1] += Math.abs(t.amount);
       }
@@ -226,7 +238,7 @@ export default function DashboardPage({ firstYear, lastYear }) {
       },
       tooltip: { enabled: true },
     };
-  }, [snapshot.transactions, drillCat, drillYear, catById]);
+  }, [txns, drillCat, drillYear, catById]);
 
   // Chart 4: cumulative net over all history
   const cumulativeData = useMemo(() => {
@@ -260,7 +272,7 @@ export default function DashboardPage({ firstYear, lastYear }) {
   const groupStackData = useMemo(() => {
     const expenseGroups = snapshot.groups.filter((g) => g.kind === "expense");
     const perGroup = new Map(expenseGroups.map((g) => [g.id, Array(12).fill(0)]));
-    for (const t of snapshot.transactions) {
+    for (const t of txns) {
       if (!t.date.startsWith(stackYear) || t.categoryId == null || t.amount >= 0) continue;
       const cat = catById.get(t.categoryId);
       if (!cat || !perGroup.has(cat.groupId) || excludedIds.has(t.categoryId)) continue;
@@ -281,13 +293,13 @@ export default function DashboardPage({ firstYear, lastYear }) {
       },
       tooltip: { enabled: true },
     };
-  }, [snapshot.transactions, snapshot.groups, stackYear, catById, excludedIds]);
+  }, [txns, snapshot.groups, stackYear, catById, excludedIds]);
 
   // Spending by category, stacked by month — same top-N categories (and thus
   // colors) as the donut, so the two views line up.
   const catStackData = useMemo(() => {
     const perCat = new Map(); // name -> Array(12) monthly outflow totals
-    for (const t of snapshot.transactions) {
+    for (const t of txns) {
       if (!t.date.startsWith(catStackYear) || t.categoryId == null || t.amount >= 0) continue;
       const cat = catById.get(t.categoryId);
       if (!cat || incomeGroupIds.has(cat.groupId) || excludedIds.has(t.categoryId)) continue;
@@ -325,7 +337,7 @@ export default function DashboardPage({ firstYear, lastYear }) {
       series: { data: series },
       tooltip: { enabled: true },
     };
-  }, [snapshot.transactions, catStackYear, catById, incomeGroupIds, excludedIds]);
+  }, [txns, catStackYear, catById, incomeGroupIds, excludedIds]);
 
   const years = [];
   for (let y = firstYear; y <= Math.min(lastYear, now.getFullYear()); y++) years.push(String(y));
@@ -336,7 +348,40 @@ export default function DashboardPage({ firstYear, lastYear }) {
 
   return (
     <div className="fade-in">
-      <h1 className="page-title">Dashboard</h1>
+      <div className="dash-head">
+        <h1 className="page-title" style={{ margin: 0 }}>
+          Dashboard
+        </h1>
+        {accounts.length > 1 && (
+          <Select
+            size="m"
+            value={[acctFilter]}
+            onUpdate={(v) => setAcctFilter(v[0])}
+            options={[
+              { value: "all", content: "All accounts" },
+              ...accounts.map((a) => ({ value: String(a.id), content: a.name })),
+            ]}
+          />
+        )}
+      </div>
+
+      {accounts.length > 0 && (
+        <div className="balance-row">
+          {accounts.map((a) => (
+            <div key={a.id} className="card balance-card">
+              <div className="balance-card__name">{a.name}</div>
+              <div
+                className="balance-card__value num"
+                style={{
+                  color: (balances.get(a.id) ?? 0) < 0 ? "var(--m-expense)" : undefined,
+                }}
+              >
+                {money(balances.get(a.id) ?? 0)}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       <div className="kpi-row">
         <Kpi

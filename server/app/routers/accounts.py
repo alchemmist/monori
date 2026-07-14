@@ -1,7 +1,10 @@
+from datetime import UTC, datetime
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from ..deps import conn, serialize_account
+from ..importer import tx_hash
 
 router = APIRouter(prefix="/api/accounts", tags=["accounts"])
 
@@ -27,6 +30,10 @@ class AccountPatch(BaseModel):
 
 class Reorder(BaseModel):
     ids: list[int]
+
+
+class ReconcileBody(BaseModel):
+    actualBalance: int
 
 
 @router.get("")
@@ -139,6 +146,35 @@ def delete_account(account_id: int, reassignTo: int | None = None):
         c.execute("DELETE FROM accounts WHERE id=?", (account_id,))
         c.commit()
         return {"ok": True}
+    finally:
+        c.close()
+
+
+@router.post("/{account_id}/reconcile")
+def reconcile_account(account_id: int, body: ReconcileBody):
+    """Bring an account's computed balance to the real bank balance by posting a
+    single adjustment transaction for the difference. Returns the delta applied."""
+    c = conn()
+    try:
+        acc = c.execute("SELECT opening_balance FROM accounts WHERE id=?", (account_id,)).fetchone()
+        if not acc:
+            raise HTTPException(404, "account not found")
+        total = c.execute(
+            "SELECT COALESCE(SUM(amount),0) FROM transactions WHERE account_id=?", (account_id,)
+        ).fetchone()[0]
+        current = acc["opening_balance"] + total
+        delta = body.actualBalance - current
+        if delta != 0:
+            date = datetime.now(UTC).isoformat()
+            desc = "Reconcile adjustment"
+            c.execute(
+                """INSERT INTO transactions
+                   (date, amount, description, account_id, hash, source)
+                   VALUES (?, ?, ?, ?, ?, 'adjustment')""",
+                (date, delta, desc, account_id, tx_hash(date, delta, desc)),
+            )
+            c.commit()
+        return {"delta": delta}
     finally:
         c.close()
 
