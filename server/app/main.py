@@ -8,7 +8,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .auth import require_token
 from .deps import conn, snapshot
-from .routers import budgets, categories, groups, imports, transactions
+from .routers import accounts, budgets, categories, groups, imports, transactions, transfers
 
 app = FastAPI(title="monori", docs_url="/api-docs", redoc_url="/api-redoc")
 
@@ -29,9 +29,11 @@ def _serve_spa(base: pathlib.Path, path: str):
 
 
 for _router in (
+    accounts.router,
     groups.router,
     categories.router,
     transactions.router,
+    transfers.router,
     budgets.router,
     imports.router,
 ):
