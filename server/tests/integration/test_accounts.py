@@ -28,6 +28,31 @@ def test_account_crud_and_uniqueness(api, client):
     assert row["name"] == "Wallet" and row["archived"] is True
 
 
+def test_account_color_and_custom_image(api, client):
+    acc = api.account("Broker", color="#2f6feb")
+    assert api.acct(acc)["color"] == "#2f6feb"
+
+    bad = client.patch(f"/api/accounts/{acc}", json={"color": "blue"})
+    assert bad.status_code == 400
+
+    img = "data:image/png;base64,iVBORw0KGgo="
+    client.patch(f"/api/accounts/{acc}", json={"iconImage": img})
+    assert api.acct(acc)["iconImage"] == img
+
+    # empty string clears the custom image back to the glyph
+    client.patch(f"/api/accounts/{acc}", json={"iconImage": ""})
+    assert api.acct(acc)["iconImage"] is None
+
+    too_big = client.patch(
+        f"/api/accounts/{acc}",
+        json={"iconImage": "data:image/png;base64," + "A" * 300001},
+    )
+    assert too_big.status_code == 400
+
+    not_image = client.patch(f"/api/accounts/{acc}", json={"iconImage": "data:text/plain,hi"})
+    assert not_image.status_code == 400
+
+
 def test_reorder_accounts(api, client):
     a = api.account("A")
     b = api.account("B")

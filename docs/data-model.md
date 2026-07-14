@@ -40,6 +40,8 @@ belongs to exactly one account.
 | `name` | TEXT | unique |
 | `type` | TEXT | `card` / `cash` / `savings` / `other`; default `other` |
 | `icon` | TEXT | display glyph name (e.g. `wallet`, `card`, `ruble`); default `wallet` |
+| `color` | TEXT | `#rrggbb` tint for the glyph and its tile; default `#5b6472` |
+| `icon_image` | TEXT | optional custom icon as an image data URL; when set it overrides `icon`/`color` |
 | `currency` | TEXT | ISO code, default `RUB`. A label only — monori is single-currency for now (see issue #29) |
 | `sort` | INTEGER | display order; default `0` |
 | `archived` | INTEGER | `0`/`1`; default `0` |

@@ -123,7 +123,16 @@ def _migrate_account_icon(conn):
         conn.execute("ALTER TABLE accounts ADD COLUMN icon TEXT NOT NULL DEFAULT 'wallet'")
 
 
-MIGRATIONS = [_migrate_accounts, _migrate_account_icon]
+def _migrate_account_color_image(conn):
+    """Accounts gain a display color (hex, applied to the glyph and its tile) and
+    an optional custom icon image (a data URL that overrides the glyph)."""
+    if not _has_column(conn, "accounts", "color"):
+        conn.execute("ALTER TABLE accounts ADD COLUMN color TEXT NOT NULL DEFAULT '#5b6472'")
+    if not _has_column(conn, "accounts", "icon_image"):
+        conn.execute("ALTER TABLE accounts ADD COLUMN icon_image TEXT")
+
+
+MIGRATIONS = [_migrate_accounts, _migrate_account_icon, _migrate_account_color_image]
 
 
 def _run_migrations(conn):

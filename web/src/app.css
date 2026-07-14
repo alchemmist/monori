@@ -246,6 +246,28 @@
   border-radius: var(--m-radius);
 }
 
+/* account visual token — a colored glyph tile or a custom image */
+.acct-badge {
+  display: inline-grid;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: var(--m-radius-sm);
+  overflow: hidden;
+  flex-shrink: 0;
+  vertical-align: middle;
+}
+
+.acct-badge_image {
+  border-color: var(--m-border);
+  background: var(--m-surface-raised);
+}
+
+.acct-badge img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
 /* /demo mode banner */
 .demo-banner {
   display: flex;

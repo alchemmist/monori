@@ -1,3 +1,4 @@
+import re
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, HTTPException
@@ -9,12 +10,17 @@ from ..importer import tx_hash
 router = APIRouter(prefix="/api/accounts", tags=["accounts"])
 
 TYPES = ("card", "cash", "savings", "other")
+HEX_COLOR = re.compile(r"^#[0-9a-fA-F]{6}$")
+# a custom icon is a small downscaled image sent as a data URL; cap the payload
+MAX_ICON_IMAGE = 300_000
 
 
 class AccountBody(BaseModel):
     name: str = Field(min_length=1, max_length=80)
     type: str = "other"
     icon: str = Field(default="wallet", min_length=1, max_length=32)
+    color: str = "#5b6472"
+    iconImage: str | None = None
     currency: str = Field(default="RUB", min_length=1, max_length=8)
     openingBalance: int = 0
     openingDate: str | None = None
@@ -24,10 +30,27 @@ class AccountPatch(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=80)
     type: str | None = None
     icon: str | None = Field(default=None, min_length=1, max_length=32)
+    color: str | None = None
+    # None = leave as is, "" = clear the custom image, otherwise a new data URL
+    iconImage: str | None = None
     currency: str | None = Field(default=None, min_length=1, max_length=8)
     openingBalance: int | None = None
     openingDate: str | None = None
     archived: bool | None = None
+
+
+def _validate_color(color):
+    if not HEX_COLOR.match(color):
+        raise HTTPException(400, "color must be a #rrggbb hex string")
+
+
+def _validate_icon_image(image):
+    """A custom icon is optional; when present it must be an image data URL and
+    stay within the size cap so the snapshot doesn't bloat."""
+    if not image:
+        return
+    if len(image) > MAX_ICON_IMAGE or not image.startswith("data:image/"):
+        raise HTTPException(400, "icon image must be a data URL image under the size limit")
 
 
 class Reorder(BaseModel):
@@ -45,8 +68,8 @@ def list_accounts():
         return [
             serialize_account(r)
             for r in c.execute(
-                "SELECT id, name, type, icon, currency, sort, archived, opening_balance,"
-                " opening_date FROM accounts ORDER BY sort, id"
+                "SELECT id, name, type, icon, color, icon_image, currency, sort, archived,"
+                " opening_balance, opening_date FROM accounts ORDER BY sort, id"
             )
         ]
     finally:
@@ -57,6 +80,8 @@ def list_accounts():
 def create_account(body: AccountBody):
     if body.type not in TYPES:
         raise HTTPException(400, "type must be one of card, cash, savings, other")
+    _validate_color(body.color)
+    _validate_icon_image(body.iconImage)
     c = conn()
     try:
         if c.execute("SELECT id FROM accounts WHERE name=?", (body.name,)).fetchone():
@@ -64,12 +89,15 @@ def create_account(body: AccountBody):
         max_sort = c.execute("SELECT COALESCE(MAX(sort),0) FROM accounts").fetchone()[0]
         cur = c.execute(
             """INSERT INTO accounts
-               (name, type, icon, currency, opening_balance, opening_date, sort)
-               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+               (name, type, icon, color, icon_image, currency, opening_balance,
+                opening_date, sort)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 body.name,
                 body.type,
                 body.icon,
+                body.color,
+                body.iconImage or None,
                 body.currency,
                 body.openingBalance,
                 body.openingDate,
@@ -101,6 +129,15 @@ def patch_account(account_id: int, patch: AccountPatch):
             c.execute("UPDATE accounts SET type=? WHERE id=?", (patch.type, account_id))
         if patch.icon is not None:
             c.execute("UPDATE accounts SET icon=? WHERE id=?", (patch.icon, account_id))
+        if patch.color is not None:
+            _validate_color(patch.color)
+            c.execute("UPDATE accounts SET color=? WHERE id=?", (patch.color, account_id))
+        if patch.iconImage is not None:
+            _validate_icon_image(patch.iconImage)
+            c.execute(
+                "UPDATE accounts SET icon_image=? WHERE id=?",
+                (patch.iconImage or None, account_id),
+            )
         if patch.currency is not None:
             c.execute("UPDATE accounts SET currency=? WHERE id=?", (patch.currency, account_id))
         if patch.openingBalance is not None:
