@@ -101,9 +101,9 @@ export default function Landing() {
             Your budget, <span className="accent">to the last kopeck.</span>
           </h1>
           <p className="hero__lede">
-            <Wordmark size={19} /> is an envelope-budgeting app you run yourself — the YNAB-style
-            workflow of a spreadsheet, rebuilt as a fast web app. Integer-kopeck money,
-            bank-statement import, a full-year grid, dashboards, and a REST API.
+            monori is an envelope-budgeting app you run yourself — the YNAB-style workflow of a
+            spreadsheet, rebuilt as a fast web app. Integer-kopeck money, bank-statement import, a
+            full-year grid, dashboards, and a REST API.
           </p>
           <div className="hero__cta">
             <Link className="btn btn_primary" to="/getting-started">

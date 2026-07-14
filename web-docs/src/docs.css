@@ -516,10 +516,6 @@ a {
   max-width: 34em;
 }
 
-.hero__lede .wordmark {
-  letter-spacing: 0.5px;
-}
-
 .hero__cta {
   display: flex;
   align-items: center;
