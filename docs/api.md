@@ -15,10 +15,14 @@ is called out again in the [Import](#import) section.
 Auth is optional and controlled by the `MONORI_API_TOKEN` environment variable
 (see [Configuration](configuration.md)):
 
-- **Unset** — every route is open.
-- **Set** — every route, including `GET /api/snapshot`, requires
+- **Unset** — the API is open.
+- **Set** — every `/api` route, including `GET /api/snapshot`, requires
   `Authorization: Bearer <token>`. A missing or wrong token gets `401`. The
   comparison is constant-time.
+
+The documentation endpoints stay public regardless of the token: this docs site
+at `/docs`, plus the OpenAPI helpers `/api-docs`, `/api-redoc`, and
+`/openapi.json`.
 
 ```bash
 curl -H "Authorization: Bearer $MONORI_API_TOKEN" http://localhost:8000/api/snapshot

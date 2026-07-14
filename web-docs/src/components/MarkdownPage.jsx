@@ -1,7 +1,8 @@
 import { useEffect } from "react";
-import { useParams, Link, useNavigate } from "react-router-dom";
+import { useParams, Link, useNavigate, useLocation } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import rehypeSlug from "rehype-slug";
 import { Icon } from "@gravity-ui/uikit";
 import { ArrowLeft, ArrowRight } from "@gravity-ui/icons";
 import { sectionBySlug, neighbors } from "../content.js";
@@ -38,11 +39,19 @@ const COMPONENTS = {
 export default function MarkdownPage() {
   const { slug } = useParams();
   const navigate = useNavigate();
+  const { hash } = useLocation();
   const section = sectionBySlug(slug);
 
   useEffect(() => {
+    if (hash) {
+      const el = document.getElementById(decodeURIComponent(hash.slice(1)));
+      if (el) {
+        el.scrollIntoView();
+        return;
+      }
+    }
     window.scrollTo(0, 0);
-  }, [slug]);
+  }, [slug, hash]);
 
   if (!section) {
     return (
@@ -64,7 +73,11 @@ export default function MarkdownPage() {
   return (
     <>
       <article className="md fade-in" key={slug}>
-        <ReactMarkdown remarkPlugins={[remarkGfm]} components={COMPONENTS}>
+        <ReactMarkdown
+          remarkPlugins={[remarkGfm]}
+          rehypePlugins={[rehypeSlug]}
+          components={COMPONENTS}
+        >
           {section.body}
         </ReactMarkdown>
       </article>

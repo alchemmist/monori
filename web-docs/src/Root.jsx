@@ -3,12 +3,28 @@ import { ThemeProvider } from "@gravity-ui/uikit";
 import { BrowserRouter } from "react-router-dom";
 import App from "./App.jsx";
 
+function readTheme() {
+  try {
+    return localStorage.getItem("docs_theme") || "light";
+  } catch {
+    return "light";
+  }
+}
+
+function storeTheme(value) {
+  try {
+    localStorage.setItem("docs_theme", value);
+  } catch {
+    /* storage unavailable (private mode, sandboxed) — theme just won't persist */
+  }
+}
+
 export default function Root() {
-  const [theme, setTheme] = useState(() => localStorage.getItem("docs_theme") || "light");
+  const [theme, setTheme] = useState(readTheme);
   const toggleTheme = () =>
     setTheme((t) => {
       const next = t === "light" ? "dark" : "light";
-      localStorage.setItem("docs_theme", next);
+      storeTheme(next);
       return next;
     });
 
