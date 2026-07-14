@@ -21,6 +21,29 @@ const rand = rng(20260711);
 const pick = (arr) => arr[Math.floor(rand() * arr.length)];
 const between = (a, b) => a + rand() * (b - a);
 
+const ACCOUNTS = [
+  {
+    id: 1,
+    name: "T-Bank",
+    type: "card",
+    currency: "RUB",
+    sort: 1,
+    archived: false,
+    openingBalance: R(45000),
+    openingDate: "2025-01-01",
+  },
+  {
+    id: 2,
+    name: "Cash",
+    type: "cash",
+    currency: "RUB",
+    sort: 2,
+    archived: false,
+    openingBalance: R(8000),
+    openingDate: "2025-01-01",
+  },
+];
+
 const GROUPS = [
   { id: 1, name: "Income", kind: "income" },
   { id: 2, name: "Fixed expenses", kind: "expense" },
@@ -156,6 +179,8 @@ function build() {
       description: "Acme Corp payroll",
       bankCategory: "Salary",
       categoryId: catId.get("Salary"),
+      accountId: 1,
+      transferId: null,
       comment: "",
     });
     if (rand() < 0.4) {
@@ -166,16 +191,50 @@ function build() {
         description: "Client invoice",
         bankCategory: "Transfer",
         categoryId: catId.get("Freelance"),
+        accountId: 1,
+        transferId: null,
         comment: "",
       });
     }
 
-    // expenses per category
+    // monthly cash withdrawal, represented as a transfer T-Bank -> Cash
+    const withdrawal = R(Math.round(between(6000, 12000)));
+    const transferId = `demo-tr-${y}-${m}`;
+    transactions.push({
+      id: tid++,
+      date: `${y}-${day2(m)}-03`,
+      amount: -withdrawal,
+      description: "Transfer",
+      bankCategory: "",
+      mcc: "",
+      categoryId: null,
+      accountId: 1,
+      transferId,
+      comment: "Cash withdrawal",
+      source: "transfer",
+    });
+    transactions.push({
+      id: tid++,
+      date: `${y}-${day2(m)}-03`,
+      amount: withdrawal,
+      description: "Transfer",
+      bankCategory: "",
+      mcc: "",
+      categoryId: null,
+      accountId: 2,
+      transferId,
+      comment: "Cash withdrawal",
+      source: "transfer",
+    });
+
+    // expenses per category; groceries, cafes and transport partly paid in cash
+    const cashCats = new Set(["Groceries", "Cafes & restaurants", "Transport"]);
     for (const [groupId, name, , , perMonth, [lo, hi], merchants] of CATS) {
       if (groupId === 1 || !perMonth) continue;
       const n = Math.max(1, Math.round(perMonth * between(0.7, 1.15)));
       for (let k = 0; k < n; k++) {
         const rub = Math.round(between(lo, hi));
+        const accountId = cashCats.has(name) && rand() < 0.35 ? 2 : 1;
         transactions.push({
           id: tid++,
           date: `${y}-${day2(m)}-${day2(1 + Math.floor(rand() * 27))}`,
@@ -183,6 +242,8 @@ function build() {
           description: pick(merchants),
           bankCategory: name,
           categoryId: catId.get(name),
+          accountId,
+          transferId: null,
           comment: "",
         });
       }
@@ -191,7 +252,7 @@ function build() {
 
   transactions.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : b.id - a.id));
 
-  return { groups: GROUPS, categories, budgets, transactions };
+  return { accounts: ACCOUNTS, groups: GROUPS, categories, budgets, transactions };
 }
 
 export const demoSnapshot = build();

@@ -73,6 +73,22 @@ def test_transactions_filter_by_account(api, client):
     assert only_cash["total"] == 1 and only_cash["rows"][0]["accountId"] == cash
 
 
+def test_reconcile_posts_adjustment_for_the_delta(api, client):
+    acc = api.account("Cash", openingBalance=10000)
+    api.tx("2026-03-01T10:00:00", -2500, accountId=acc)  # computed balance now 7500
+
+    r = client.post(f"/api/accounts/{acc}/reconcile", json={"actualBalance": 9000})
+    assert r.status_code == 200 and r.json()["delta"] == 1500
+
+    rows = [t for t in api.snapshot()["transactions"] if t["accountId"] == acc]
+    adjustment = next(t for t in rows if t["source"] == "adjustment")
+    assert adjustment["amount"] == 1500
+
+    # already reconciled -> no further adjustment
+    again = client.post(f"/api/accounts/{acc}/reconcile", json={"actualBalance": 9000})
+    assert again.json()["delta"] == 0
+
+
 def test_import_targets_account(api, client):
     cash = api.account("Cash")
     rows = api.preview(api.statement)
