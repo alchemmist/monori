@@ -165,7 +165,7 @@ def reconcile_account(account_id: int, body: ReconcileBody):
         current = acc["opening_balance"] + total
         delta = body.actualBalance - current
         if delta != 0:
-            date = datetime.now(UTC).isoformat()
+            date = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S")
             desc = "Reconcile adjustment"
             c.execute(
                 """INSERT INTO transactions

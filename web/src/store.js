@@ -138,7 +138,7 @@ export const useStore = create((set, get) => ({
         const nextId = Math.max(0, ...snapshot.transactions.map((t) => t.id)) + 1;
         const tx = {
           id: nextId,
-          date: new Date().toISOString(),
+          date: new Date().toISOString().slice(0, 19),
           amount: delta,
           description: "Reconcile adjustment",
           bankCategory: "",

@@ -20,6 +20,7 @@ export default function TransactionsPage() {
   const [transferring, setTransferring] = useState(false);
 
   const accounts = useMemo(() => snapshot.accounts ?? [], [snapshot.accounts]);
+  const activeAccounts = useMemo(() => accounts.filter((a) => !a.archived), [accounts]);
   const acctName = useMemo(() => new Map(accounts.map((a) => [a.id, a.name])), [accounts]);
   const acctOptions = useMemo(
     () => accounts.map((a) => ({ value: String(a.id), content: a.name })),
@@ -89,7 +90,7 @@ export default function TransactionsPage() {
             ...years.map((y) => ({ value: y, content: y })),
           ]}
         />
-        {accounts.length > 1 && (
+        {activeAccounts.length > 1 && (
           <Select
             value={[acctFilter]}
             onUpdate={resetPage((v) => setAcctFilter(v[0]))}
@@ -101,7 +102,7 @@ export default function TransactionsPage() {
           view="outlined"
           size="m"
           onClick={() => setTransferring(true)}
-          disabled={accounts.length < 2}
+          disabled={activeAccounts.length < 2}
         >
           <ArrowRightArrowLeft width={14} height={14} /> Transfer
         </Button>
