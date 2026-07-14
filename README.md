@@ -4,6 +4,18 @@ monori is a self-hosted, single-user **envelope budgeting** app — the YNAB-sty
 
 ![monori dashboard](docs/screenshot.png)
 
+## Documentation
+
+Full docs live in [`docs/`](docs/README.md):
+
+- [Getting started](docs/getting-started.md) — run locally or deploy with Docker.
+- [Configuration](docs/configuration.md) — environment variables and the database.
+- [Budgeting](docs/budgeting.md) — the envelope model and the budget grid.
+- [Transactions](docs/transactions.md) and [Importing statements](docs/importing.md).
+- [Dashboard & analytics](docs/dashboard-analytics.md).
+- [REST API](docs/api.md) and [Data model](docs/data-model.md).
+- [Development](docs/development.md) — the stack, the `make` targets, testing.
+
 
 
 

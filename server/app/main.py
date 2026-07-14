@@ -10,9 +10,23 @@ from .auth import require_token
 from .deps import conn, snapshot
 from .routers import budgets, categories, groups, imports, transactions
 
-app = FastAPI(title="monori")
+app = FastAPI(title="monori", docs_url="/api-docs", redoc_url="/api-redoc")
 
 STATIC_DIR = pathlib.Path(__file__).resolve().parent.parent / "static"
+DOCS_DIR = pathlib.Path(__file__).resolve().parent.parent / "docs-static"
+
+
+def _serve_spa(base: pathlib.Path, path: str):
+    """Serve a file from ``base`` if the request maps to one inside it, else the
+    SPA index. The containment check blocks path traversal (absolute paths or
+    ``..`` escaping ``base``)."""
+    root = base.resolve()
+    if path:
+        target = (root / path.lstrip("/")).resolve()
+        if target.is_file() and target.is_relative_to(root):
+            return FileResponse(target)
+    return FileResponse(root / "index.html")
+
 
 for _router in (
     groups.router,
@@ -33,12 +47,18 @@ def get_snapshot():
         c.close()
 
 
+if DOCS_DIR.is_dir():
+    app.mount("/docs/assets", StaticFiles(directory=DOCS_DIR / "assets"), name="docs-assets")
+
+    @app.get("/docs")
+    @app.get("/docs/{path:path}")
+    def docs_site(path: str = ""):
+        return _serve_spa(DOCS_DIR, path)
+
+
 if STATIC_DIR.is_dir():
     app.mount("/assets", StaticFiles(directory=STATIC_DIR / "assets"), name="assets")
 
     @app.get("/{path:path}")
     def spa(path: str):
-        target = STATIC_DIR / path
-        if path and target.is_file():
-            return FileResponse(target)
-        return FileResponse(STATIC_DIR / "index.html")
+        return _serve_spa(STATIC_DIR, path)
