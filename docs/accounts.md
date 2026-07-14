@@ -18,7 +18,9 @@ Accounts live on the **Accounts** page in the sidebar. Each one has:
 - an **icon and color** — a glyph from a small set plus a color; the glyph and
   its tile take the color (a saturated glyph over a translucent tint). Or **upload
   a custom image** (e.g. a bank logo), which replaces the glyph and color
-  entirely. Uploaded images are downscaled and stored inline with the account,
+  entirely. An image you've already added to one account can be reused on another
+  straight from the picker. Uploaded images are downscaled and stored inline with
+  the account,
 - a **currency** — a label only for now; monori is single-currency and does no
   conversion (full multi-currency is tracked in issue #29),
 - an **opening balance** — what the account held before the first recorded

@@ -258,8 +258,7 @@
 }
 
 .acct-badge_image {
-  border-color: var(--m-border);
-  background: var(--m-surface-raised);
+  border: none;
 }
 
 .acct-badge img {

@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Button, Dialog, TextInput, Select, Text } from "@gravity-ui/uikit";
 import { TrashBin } from "@gravity-ui/icons";
 import { useStore } from "../store.js";
@@ -36,8 +36,22 @@ function fileToIconDataUrl(file, max = 128) {
 }
 
 export function AccountEditDialog({ account, onClose }) {
-  const { createAccount, patchAccount, notify } = useStore();
+  const { snapshot, createAccount, patchAccount, notify } = useStore();
   const isNew = !account.id;
+
+  // images already used by other accounts, so a logo can be reused without re-uploading
+  const savedImages = useMemo(() => {
+    const seen = new Set();
+    const out = [];
+    for (const a of snapshot.accounts ?? []) {
+      if (a.iconImage && !seen.has(a.iconImage)) {
+        seen.add(a.iconImage);
+        out.push(a.iconImage);
+      }
+    }
+    return out;
+  }, [snapshot.accounts]);
+
   const [name, setName] = useState(account.name ?? "");
   const [type, setType] = useState(account.type ?? "other");
   const [icon, setIcon] = useState(account.icon ?? "wallet");
@@ -157,9 +171,22 @@ export function AccountEditDialog({ account, onClose }) {
                     />
                   ))}
                 </div>
-                <Button view="normal" size="s" onClick={() => fileRef.current?.click()}>
-                  Upload custom image…
-                </Button>
+                <div className="image-reuse">
+                  <Button view="normal" size="s" onClick={() => fileRef.current?.click()}>
+                    Upload custom image…
+                  </Button>
+                  {savedImages.map((img) => (
+                    <button
+                      key={img}
+                      type="button"
+                      className="image-reuse__item"
+                      onClick={() => setImage(img)}
+                      title="Reuse this image"
+                    >
+                      <img src={img} alt="" />
+                    </button>
+                  ))}
+                </div>
               </>
             )}
             <input ref={fileRef} type="file" accept="image/*" hidden onChange={onPickImage} />
