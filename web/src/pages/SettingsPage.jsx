@@ -121,7 +121,16 @@ export default function SettingsPage({ theme, onToggleTheme }) {
                     {
                       text: a.archived ? "Unarchive" : "Archive",
                       action: () =>
-                        useStore.getState().patchAccount(a.id, { archived: !a.archived }),
+                        useStore
+                          .getState()
+                          .patchAccount(a.id, { archived: !a.archived })
+                          .catch((e) =>
+                            notify({
+                              title: "Failed to update account",
+                              theme: "danger",
+                              content: String(e),
+                            }),
+                          ),
                     },
                     {
                       text: "Delete",
