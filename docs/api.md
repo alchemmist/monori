@@ -5,7 +5,10 @@ it — everything the UI does, and more (manual transaction editing, bulk
 operations), is available over HTTP.
 
 All money is **integer kopecks** in both directions. All request and response
-bodies are JSON. Field names are `camelCase`.
+bodies are JSON. Field names are `camelCase` — with one deliberate exception: the
+import endpoints (`/api/import/preview` and `/api/import/commit`) use snake_case
+`bank_category` in their row objects, matching the parsed statement shape. This
+is called out again in the [Import](#import) section.
 
 ## Authentication
 
@@ -122,10 +125,13 @@ cleared first, so it becomes an exact copy of the source (anything else is a
 
 ## Import
 
+> The import row objects use snake_case `bank_category` (not `bankCategory`),
+> unlike the rest of the API — they mirror the parsed statement shape.
+
 ### `POST /api/import/preview`
 
 Body `{text}` — the raw statement paste. Parses it, auto-categorizes each row,
-and flags duplicates against the database and within the batch.
+and flags rows already covered by the database as duplicates.
 
 ```json
 {
@@ -142,7 +148,8 @@ and flags duplicates against the database and within the batch.
 
 Body `{rows: [...]}` where each row is `{date, amount, description?,
 bank_category?, mcc?, categoryId?}`. The server recomputes each hash (never
-trusting the client) and inserts only genuinely new rows with `source: "import"`.
+trusting the client) and skips only as many occurrences of a hash as the database
+already holds, inserting the rest with `source: "import"`.
 
 ```json
 { "inserted": 42, "skipped": 3 }

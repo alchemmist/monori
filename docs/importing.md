@@ -54,17 +54,26 @@ Every transaction has a content hash — `sha1(date | amount | description)`. A 
 counts as a duplicate of another only when all three match. Dedup happens at two
 levels:
 
-- **Preview** flags rows that already exist in the database, or that repeat
-  within the pasted batch, so you can see what would be skipped.
+- **Preview** flags each row that is already covered by the database, so you can
+  see what would be skipped before committing.
 - **Commit** re-checks on the server and never trusts the hash sent by the
-  client. It counts how many copies of each hash the database already holds and
-  how many appear in the batch, and inserts only the genuinely new ones. Re-importing
-  an overlapping statement is therefore safe and idempotent — the same paste
-  twice inserts nothing the second time.
+  client.
 
-Because dedup is by exact content, two truly identical transactions on the same
-day for the same amount and description will be treated as one. That is rare with
-real statements but worth knowing.
+The rule is count-based, not "collapse everything identical". For each hash, the
+server knows how many copies the database already holds; on commit it skips that
+many occurrences from the batch and inserts the rest. So if the database has one
+`COFFEE −450` on a date and your paste has three, the first is skipped as a
+duplicate and the other two are inserted.
+
+The important consequence is that **re-importing an overlapping statement is safe
+and idempotent** — committing the same paste twice inserts nothing the second
+time, because by then the database already holds every one of those rows.
+
+Note the flip side: genuinely repeated transactions **within a single fresh
+paste** are all kept. If a statement legitimately lists two identical operations
+(same date, amount, and description) and neither is in the database yet, both are
+imported — the importer does not collapse them, since a bank statement can and
+does contain true duplicates.
 
 ## The preview → commit flow
 
