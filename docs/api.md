@@ -160,5 +160,6 @@ is idempotent. See [Importing statements](importing.md) for the dedup rules.
 
 ## Interactive docs
 
-Because the backend is FastAPI, the live OpenAPI docs are always available at
-`/docs` (Swagger UI) and `/redoc` on a running instance.
+Because the backend is FastAPI, live OpenAPI docs ship with every instance:
+Swagger UI at `/api-docs`, ReDoc at `/api-redoc`, and the raw schema at
+`/openapi.json`. (The `/docs` path serves this documentation site instead.)

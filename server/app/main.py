@@ -10,9 +10,10 @@ from .auth import require_token
 from .deps import conn, snapshot
 from .routers import budgets, categories, groups, imports, transactions
 
-app = FastAPI(title="monori")
+app = FastAPI(title="monori", docs_url="/api-docs", redoc_url="/api-redoc")
 
 STATIC_DIR = pathlib.Path(__file__).resolve().parent.parent / "static"
+DOCS_DIR = pathlib.Path(__file__).resolve().parent.parent / "docs-static"
 
 for _router in (
     groups.router,
@@ -31,6 +32,18 @@ def get_snapshot():
         return snapshot(c)
     finally:
         c.close()
+
+
+if DOCS_DIR.is_dir():
+    app.mount("/docs/assets", StaticFiles(directory=DOCS_DIR / "assets"), name="docs-assets")
+
+    @app.get("/docs")
+    @app.get("/docs/{path:path}")
+    def docs_site(path: str = ""):
+        target = DOCS_DIR / path
+        if path and target.is_file():
+            return FileResponse(target)
+        return FileResponse(DOCS_DIR / "index.html")
 
 
 if STATIC_DIR.is_dir():
