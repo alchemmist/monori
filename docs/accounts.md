@@ -15,6 +15,8 @@ Accounts live on the **Accounts** page in the sidebar. Each one has:
 
 - a **name** (unique),
 - a **type** — `card`, `cash`, `savings`, or `other`,
+- an **icon** — a glyph picked from a small set, shown next to the account
+  everywhere it appears,
 - a **currency** — a label only for now; monori is single-currency and does no
   conversion (full multi-currency is tracked in issue #29),
 - an **opening balance** — what the account held before the first recorded

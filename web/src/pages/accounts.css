@@ -15,6 +15,17 @@
   border-bottom: none;
 }
 
+.account-row__icon {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--m-radius-sm);
+  background: var(--m-surface-raised);
+  color: var(--m-text-dim);
+  flex-shrink: 0;
+}
+
 .account-row__main {
   display: flex;
   align-items: center;
@@ -36,4 +47,37 @@
   display: flex;
   align-items: center;
   gap: 2px;
+}
+
+.icon-picker {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.icon-picker__item {
+  display: grid;
+  place-items: center;
+  height: 34px;
+  border: 1px solid var(--m-border);
+  border-radius: var(--m-radius-sm);
+  background: var(--m-surface);
+  color: var(--m-text-dim);
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    color 0.15s ease,
+    background 0.15s ease;
+}
+
+.icon-picker__item:hover {
+  color: var(--m-text);
+  background: var(--m-surface-hover);
+}
+
+.icon-picker__item_active {
+  border-color: var(--m-accent);
+  color: var(--m-accent);
+  background: var(--m-accent-soft);
 }

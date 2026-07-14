@@ -21,11 +21,22 @@ export default function TransactionsPage() {
 
   const accounts = useMemo(() => snapshot.accounts ?? [], [snapshot.accounts]);
   const activeAccounts = useMemo(() => accounts.filter((a) => !a.archived), [accounts]);
+  const acctById = useMemo(() => new Map(accounts.map((a) => [a.id, a])), [accounts]);
   const acctName = useMemo(() => new Map(accounts.map((a) => [a.id, a.name])), [accounts]);
   const acctOptions = useMemo(
-    () => accounts.map((a) => ({ value: String(a.id), content: a.name })),
-    [accounts],
+    () => activeAccounts.map((a) => ({ value: String(a.id), content: a.name })),
+    [activeAccounts],
   );
+
+  // Options for moving a row: active accounts plus this row's own account when it
+  // is archived, so the current value still renders and you can leave it there.
+  const acctOptionsFor = (t) => {
+    const cur = acctById.get(t.accountId);
+    if (cur && cur.archived) {
+      return [{ value: String(cur.id), content: cur.name }, ...acctOptions];
+    }
+    return acctOptions;
+  };
 
   const catOptions = useMemo(
     () => snapshot.categories.map((c) => ({ value: String(c.id), content: c.name })),
@@ -170,7 +181,7 @@ export default function TransactionsPage() {
                       view="clear"
                       value={t.accountId != null ? [String(t.accountId)] : []}
                       onUpdate={(v) => v[0] && setTxAccount(t.id, +v[0])}
-                      options={acctOptions}
+                      options={acctOptionsFor(t)}
                     />
                   )}
                 </td>
