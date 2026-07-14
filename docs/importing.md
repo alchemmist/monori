@@ -77,11 +77,16 @@ does contain true duplicates.
 
 ## The preview → commit flow
 
-1. Open **Import statement** on the Transactions page and paste the text.
+1. Open **Import statement** on the Transactions page, pick the **account** to
+   import into (the last one you used is remembered), and paste the text.
 2. **Preview** shows the parsed rows with their auto-assigned category, marks
    duplicates, and lists any parse errors.
-3. **Commit** inserts the fresh rows and reports how many were inserted and how
-   many skipped.
+3. **Commit** inserts the fresh rows onto the chosen account and reports how many
+   were inserted and how many skipped.
+
+An import run targets a single account. To load a second card or a cash export,
+run the importer again with that account selected. Statement parsing itself is
+still T-Bank-shaped; pluggable per-bank parsers are planned in issue #1.
 
 Per-batch import logging with rollback and rule re-runs is planned in issue #22;
 a richer multi-field rules engine (priorities, multiple actions, dry-run) in

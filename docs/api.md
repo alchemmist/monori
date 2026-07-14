@@ -43,6 +43,10 @@ Returns the entire state in one call — the frontend loads this on startup.
 
 ```json
 {
+  "accounts": [
+    { "id": 1, "name": "T-Bank", "type": "card", "currency": "RUB", "sort": 1,
+      "archived": false, "openingBalance": 0, "openingDate": null }
+  ],
   "groups": [{ "id": 1, "name": "Bills", "sort": 1, "kind": "expense" }],
   "categories": [
     { "id": 1, "groupId": 1, "name": "Rent", "keywords": "rent|landlord",
@@ -51,11 +55,39 @@ Returns the entire state in one call — the frontend loads this on startup.
   "transactions": [
     { "id": 1, "date": "2026-01-05T00:00:00", "amount": -150000,
       "description": "LANDLORD", "bankCategory": "Housing", "mcc": "6513",
-      "categoryId": 1, "comment": "", "source": "import" }
+      "categoryId": 1, "accountId": 1, "transferId": null, "comment": "",
+      "source": "import" }
   ],
   "budgets": [{ "categoryId": 1, "year": 2026, "month": 1, "amount": 150000 }]
 }
 ```
+
+## Accounts
+
+Where transactions live: cards, cash, savings. `type` is one of `card`, `cash`,
+`savings`, `other`. `currency` is a label only (monori is single-currency for
+now). An account's balance is `openingBalance` plus the sum of its transactions.
+
+| Method | Path | Body | Notes |
+| -------- | ------ | ------ | ------- |
+| GET | `/api/accounts` | — | List, ordered by `sort`. |
+| POST | `/api/accounts` | `{name, type?, currency?, openingBalance?, openingDate?}` | `409` duplicate name, `400` bad type. |
+| PATCH | `/api/accounts/{id}` | `{name?, type?, currency?, openingBalance?, openingDate?, archived?}` | Partial update. |
+| DELETE | `/api/accounts/{id}` | — | Query `?reassignTo=<id>` moves its transactions first. A non-empty account without a target, or the last account, gives `400`. |
+| POST | `/api/accounts/reorder` | `{ids: [...]}` | Must list every account exactly once. |
+| POST | `/api/accounts/{id}/reconcile` | `{actualBalance}` | Posts an `adjustment` transaction for `actualBalance − computed balance`. Returns `{delta}` (`0` when already matching). |
+
+## Transfers
+
+A transfer moves money between two of your own accounts as two linked
+transactions (a negative leg on the source, a positive leg on the destination)
+sharing a `transferId`. Both legs are uncategorized, so transfers never count as
+income or expense.
+
+| Method | Path | Body | Notes |
+| -------- | ------ | ------ | ------- |
+| POST | `/api/transfers` | `{fromAccountId, toAccountId, amount, date, comment?}` | `amount` must be positive; the two accounts must differ. Returns `{transferId}`. |
+| DELETE | `/api/transfers/{transferId}` | — | Deletes both legs; `404` if none. |
 
 ## Groups
 
@@ -92,6 +124,7 @@ Query parameters (all optional):
 | ------- | --------- |
 | `from`, `to` | Inclusive date bounds; compared at day granularity, so `to=2026-01-31` includes that day's timestamps. |
 | `categoryId` | Restrict to one category. |
+| `accountId` | Restrict to one account. |
 | `uncategorized` | `true` returns only rows with no category (overrides `categoryId`). |
 | `q` | Case-insensitive substring match on the description. |
 | `limit` | 1–1000, default 100. |
@@ -104,8 +137,8 @@ newest-first (`date DESC, id DESC`).
 
 | Method | Path | Body | Notes |
 | -------- | ------ | ------ | ------- |
-| POST | `/api/transactions` | `{date, amount, description?, bankCategory?, mcc?, categoryId?, comment?}` | Creates with `source: "manual"`; hash computed server-side. `categoryId` of `0`/`null` means uncategorized; a non-existent id gives `400`. |
-| PATCH | `/api/transactions/{id}` | any subset of the create fields | Recomputes the dedup hash from the resulting date/amount/description. |
+| POST | `/api/transactions` | `{date, amount, accountId, description?, bankCategory?, mcc?, categoryId?, comment?}` | Creates with `source: "manual"`; hash computed server-side. `accountId` is required and must exist. `categoryId` of `0`/`null` means uncategorized; a non-existent id gives `400`. |
+| PATCH | `/api/transactions/{id}` | any subset of the create fields (`accountId` moves the row to another account) | Recomputes the dedup hash from the resulting date/amount/description. |
 | DELETE | `/api/transactions/{id}` | — | `404` if missing. |
 | POST | `/api/transactions/bulk` | `{action, ids, categoryId?}` | `action` is `categorize`, `move`, or `delete`. Returns `{affected}`. |
 
@@ -150,8 +183,9 @@ and flags rows already covered by the database as duplicates.
 
 ### `POST /api/import/commit`
 
-Body `{rows: [...]}` where each row is `{date, amount, description?,
-bank_category?, mcc?, categoryId?}`. The server recomputes each hash (never
+Body `{accountId, rows: [...]}` where each row is `{date, amount, description?,
+bank_category?, mcc?, categoryId?}`. `accountId` targets the whole batch — every
+imported row lands on that account. The server recomputes each hash (never
 trusting the client) and skips only as many occurrences of a hash as the database
 already holds, inserting the rest with `source: "import"`.
 
