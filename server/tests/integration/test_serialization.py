@@ -24,6 +24,7 @@ def test_snapshot_serialization_contract(api, client):
             "id": 1,
             "name": "T-Bank",
             "type": "card",
+            "icon": "wallet",
             "currency": "RUB",
             "sort": 1,
             "archived": False,

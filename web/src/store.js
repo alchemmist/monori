@@ -88,6 +88,7 @@ export const useStore = create((set, get) => ({
         id,
         name: body.name,
         type: body.type ?? "other",
+        icon: body.icon ?? "wallet",
         currency: body.currency ?? "RUB",
         sort: 1e9,
         archived: false,

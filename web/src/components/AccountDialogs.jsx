@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Dialog, TextInput, Select, Text } from "@gravity-ui/uikit";
 import { useStore } from "../store.js";
 import { parseRub, money } from "../format.js";
+import { ACCOUNT_ICONS } from "./accountIcons.js";
 
 const ACCOUNT_TYPES = [
   { value: "card", content: "Card" },
@@ -15,6 +16,7 @@ export function AccountEditDialog({ account, onClose }) {
   const isNew = !account.id;
   const [name, setName] = useState(account.name ?? "");
   const [type, setType] = useState(account.type ?? "other");
+  const [icon, setIcon] = useState(account.icon ?? "wallet");
   const [currency, setCurrency] = useState(account.currency ?? "RUB");
   const [opening, setOpening] = useState(
     account.openingBalance ? String(account.openingBalance / 100) : "",
@@ -33,6 +35,7 @@ export function AccountEditDialog({ account, onClose }) {
       const body = {
         name: name.trim(),
         type,
+        icon,
         currency: currency.trim() || "RUB",
         openingBalance,
       };
@@ -63,6 +66,25 @@ export function AccountEditDialog({ account, onClose }) {
             options={ACCOUNT_TYPES}
             width="max"
           />
+          <div>
+            <Text color="secondary" variant="caption-2">
+              Icon
+            </Text>
+            <div className="icon-picker">
+              {ACCOUNT_ICONS.map(({ name: iconName, Icon }) => (
+                <button
+                  key={iconName}
+                  type="button"
+                  className={`icon-picker__item ${icon === iconName ? "icon-picker__item_active" : ""}`}
+                  onClick={() => setIcon(iconName)}
+                  aria-label={iconName}
+                  aria-pressed={icon === iconName}
+                >
+                  <Icon width={18} height={18} />
+                </button>
+              ))}
+            </div>
+          </div>
           <TextInput label="Currency" value={currency} onUpdate={setCurrency} />
           <TextInput
             label="Opening balance"

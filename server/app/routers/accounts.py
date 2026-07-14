@@ -14,6 +14,7 @@ TYPES = ("card", "cash", "savings", "other")
 class AccountBody(BaseModel):
     name: str = Field(min_length=1, max_length=80)
     type: str = "other"
+    icon: str = Field(default="wallet", min_length=1, max_length=32)
     currency: str = Field(default="RUB", min_length=1, max_length=8)
     openingBalance: int = 0
     openingDate: str | None = None
@@ -22,6 +23,7 @@ class AccountBody(BaseModel):
 class AccountPatch(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=80)
     type: str | None = None
+    icon: str | None = Field(default=None, min_length=1, max_length=32)
     currency: str | None = Field(default=None, min_length=1, max_length=8)
     openingBalance: int | None = None
     openingDate: str | None = None
@@ -43,7 +45,7 @@ def list_accounts():
         return [
             serialize_account(r)
             for r in c.execute(
-                "SELECT id, name, type, currency, sort, archived, opening_balance,"
+                "SELECT id, name, type, icon, currency, sort, archived, opening_balance,"
                 " opening_date FROM accounts ORDER BY sort, id"
             )
         ]
@@ -62,11 +64,12 @@ def create_account(body: AccountBody):
         max_sort = c.execute("SELECT COALESCE(MAX(sort),0) FROM accounts").fetchone()[0]
         cur = c.execute(
             """INSERT INTO accounts
-               (name, type, currency, opening_balance, opening_date, sort)
-               VALUES (?, ?, ?, ?, ?, ?)""",
+               (name, type, icon, currency, opening_balance, opening_date, sort)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
             (
                 body.name,
                 body.type,
+                body.icon,
                 body.currency,
                 body.openingBalance,
                 body.openingDate,
@@ -96,6 +99,8 @@ def patch_account(account_id: int, patch: AccountPatch):
             if patch.type not in TYPES:
                 raise HTTPException(400, "type must be one of card, cash, savings, other")
             c.execute("UPDATE accounts SET type=? WHERE id=?", (patch.type, account_id))
+        if patch.icon is not None:
+            c.execute("UPDATE accounts SET icon=? WHERE id=?", (patch.icon, account_id))
         if patch.currency is not None:
             c.execute("UPDATE accounts SET currency=? WHERE id=?", (patch.currency, account_id))
         if patch.openingBalance is not None:

@@ -1,7 +1,7 @@
 import os
 import sqlite3
 
-from app.db import connect
+from app.db import MIGRATIONS, connect
 
 OLD_SCHEMA = """
 CREATE TABLE category_groups (
@@ -58,7 +58,13 @@ def test_migration_backfills_existing_transactions(tmp_path):
         cols = {r["name"]: r for r in conn.execute("PRAGMA table_info(transactions)")}
         assert cols["account_id"]["notnull"] == 1
 
-        assert conn.execute("PRAGMA user_version").fetchone()[0] == 1
+        assert accounts[0]["name"] == "T-Bank"
+        icon = conn.execute("SELECT icon FROM accounts WHERE id=?", (default_id,)).fetchone()[
+            "icon"
+        ]
+        assert icon == "wallet"
+
+        assert conn.execute("PRAGMA user_version").fetchone()[0] == len(MIGRATIONS)
     finally:
         conn.close()
 

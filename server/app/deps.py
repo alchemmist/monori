@@ -25,6 +25,7 @@ def serialize_account(r):
         "id": r["id"],
         "name": r["name"],
         "type": r["type"],
+        "icon": r["icon"],
         "currency": r["currency"],
         "sort": r["sort"],
         "archived": bool(r["archived"]),
@@ -64,7 +65,7 @@ def snapshot(c):
         "accounts": [
             serialize_account(r)
             for r in cur.execute(
-                "SELECT id, name, type, currency, sort, archived, opening_balance,"
+                "SELECT id, name, type, icon, currency, sort, archived, opening_balance,"
                 " opening_date FROM accounts ORDER BY sort, id"
             )
         ],

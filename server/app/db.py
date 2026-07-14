@@ -116,7 +116,14 @@ def _migrate_accounts(conn):
         """)
 
 
-MIGRATIONS = [_migrate_accounts]
+def _migrate_account_icon(conn):
+    """Give accounts a display icon (a short glyph name; the frontend maps it to
+    an icon). Existing accounts default to the wallet glyph."""
+    if not _has_column(conn, "accounts", "icon"):
+        conn.execute("ALTER TABLE accounts ADD COLUMN icon TEXT NOT NULL DEFAULT 'wallet'")
+
+
+MIGRATIONS = [_migrate_accounts, _migrate_account_icon]
 
 
 def _run_migrations(conn):

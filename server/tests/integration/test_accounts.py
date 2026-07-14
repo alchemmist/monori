@@ -10,9 +10,12 @@ def test_default_account_exists(api):
 
 
 def test_account_crud_and_uniqueness(api, client):
-    cash = api.account("Cash", type="cash", openingBalance=5000)
+    cash = api.account("Cash", type="cash", icon="ruble", openingBalance=5000)
     row = api.acct(cash)
-    assert row["type"] == "cash" and row["openingBalance"] == 5000
+    assert row["type"] == "cash" and row["openingBalance"] == 5000 and row["icon"] == "ruble"
+
+    client.patch(f"/api/accounts/{cash}", json={"icon": "sack"})
+    assert api.acct(cash)["icon"] == "sack"
 
     dup = client.post("/api/accounts", json={"name": "Cash"})
     assert dup.status_code == 409

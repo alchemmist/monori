@@ -44,8 +44,9 @@ Returns the entire state in one call — the frontend loads this on startup.
 ```json
 {
   "accounts": [
-    { "id": 1, "name": "T-Bank", "type": "card", "currency": "RUB", "sort": 1,
-      "archived": false, "openingBalance": 0, "openingDate": null }
+    { "id": 1, "name": "T-Bank", "type": "card", "icon": "wallet",
+      "currency": "RUB", "sort": 1, "archived": false, "openingBalance": 0,
+      "openingDate": null }
   ],
   "groups": [{ "id": 1, "name": "Bills", "sort": 1, "kind": "expense" }],
   "categories": [
@@ -71,8 +72,8 @@ now). An account's balance is `openingBalance` plus the sum of its transactions.
 | Method | Path | Body | Notes |
 | -------- | ------ | ------ | ------- |
 | GET | `/api/accounts` | — | List, ordered by `sort`. |
-| POST | `/api/accounts` | `{name, type?, currency?, openingBalance?, openingDate?}` | `409` duplicate name, `400` bad type. |
-| PATCH | `/api/accounts/{id}` | `{name?, type?, currency?, openingBalance?, openingDate?, archived?}` | Partial update. |
+| POST | `/api/accounts` | `{name, type?, icon?, currency?, openingBalance?, openingDate?}` | `409` duplicate name, `400` bad type. `icon` is a glyph name (default `wallet`). |
+| PATCH | `/api/accounts/{id}` | `{name?, type?, icon?, currency?, openingBalance?, openingDate?, archived?}` | Partial update. |
 | DELETE | `/api/accounts/{id}` | — | Query `?reassignTo=<id>` moves its transactions first. A non-empty account without a target, or the last account, gives `400`. |
 | POST | `/api/accounts/reorder` | `{ids: [...]}` | Must list every account exactly once. |
 | POST | `/api/accounts/{id}/reconcile` | `{actualBalance}` | Posts an `adjustment` transaction for `actualBalance − computed balance`. Returns `{delta}` (`0` when already matching). |

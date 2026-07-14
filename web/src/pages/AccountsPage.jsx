@@ -4,6 +4,7 @@ import { Plus, ArrowUp, ArrowDown } from "@gravity-ui/icons";
 import { useStore, isDemo } from "../store.js";
 import { api } from "../api.js";
 import { accountBalances } from "../engine/analytics.js";
+import { accountIcon } from "../components/accountIcons.js";
 import { money } from "../format.js";
 import {
   AccountEditDialog,
@@ -53,71 +54,77 @@ export default function AccountsPage() {
       </div>
 
       <div className="card account-list">
-        {accounts.map((a, i) => (
-          <div key={a.id} className="account-row">
-            <div className="account-row__main">
-              <span className="account-row__name">{a.name}</span>
-              <Label size="xs" theme="unknown">
-                {TYPE_LABEL[a.type] ?? a.type}
-              </Label>
-              {a.archived && (
-                <Label size="xs" theme="warning">
-                  archived
+        {accounts.map((a, i) => {
+          const Icon = accountIcon(a.icon);
+          return (
+            <div key={a.id} className="account-row">
+              <span className="account-row__icon">
+                <Icon width={18} height={18} />
+              </span>
+              <div className="account-row__main">
+                <span className="account-row__name">{a.name}</span>
+                <Label size="xs" theme="unknown">
+                  {TYPE_LABEL[a.type] ?? a.type}
                 </Label>
-              )}
+                {a.archived && (
+                  <Label size="xs" theme="warning">
+                    archived
+                  </Label>
+                )}
+              </div>
+              <span className="account-row__balance num">{money(balances.get(a.id) ?? 0)}</span>
+              <div className="account-row__actions">
+                <Button
+                  view="flat"
+                  size="s"
+                  disabled={i === 0}
+                  onClick={() => reorder(a.id, -1)}
+                  aria-label="Move up"
+                >
+                  <ArrowUp width={14} height={14} />
+                </Button>
+                <Button
+                  view="flat"
+                  size="s"
+                  disabled={i === accounts.length - 1}
+                  onClick={() => reorder(a.id, 1)}
+                  aria-label="Move down"
+                >
+                  <ArrowDown width={14} height={14} />
+                </Button>
+                <DropdownMenu
+                  size="s"
+                  items={[
+                    { text: "Edit", action: () => setDialog({ type: "edit", account: a }) },
+                    {
+                      text: "Reconcile",
+                      action: () => setDialog({ type: "reconcile", account: a }),
+                    },
+                    {
+                      text: a.archived ? "Unarchive" : "Archive",
+                      action: () =>
+                        useStore
+                          .getState()
+                          .patchAccount(a.id, { archived: !a.archived })
+                          .catch((e) =>
+                            notify({
+                              title: "Failed to update account",
+                              theme: "danger",
+                              content: String(e),
+                            }),
+                          ),
+                    },
+                    {
+                      text: "Delete",
+                      theme: "danger",
+                      action: () => setDialog({ type: "delete", account: a }),
+                    },
+                  ]}
+                />
+              </div>
             </div>
-            <span className="account-row__balance num">{money(balances.get(a.id) ?? 0)}</span>
-            <div className="account-row__actions">
-              <Button
-                view="flat"
-                size="s"
-                disabled={i === 0}
-                onClick={() => reorder(a.id, -1)}
-                aria-label="Move up"
-              >
-                <ArrowUp width={14} height={14} />
-              </Button>
-              <Button
-                view="flat"
-                size="s"
-                disabled={i === accounts.length - 1}
-                onClick={() => reorder(a.id, 1)}
-                aria-label="Move down"
-              >
-                <ArrowDown width={14} height={14} />
-              </Button>
-              <DropdownMenu
-                size="s"
-                items={[
-                  { text: "Edit", action: () => setDialog({ type: "edit", account: a }) },
-                  {
-                    text: "Reconcile",
-                    action: () => setDialog({ type: "reconcile", account: a }),
-                  },
-                  {
-                    text: a.archived ? "Unarchive" : "Archive",
-                    action: () =>
-                      useStore
-                        .getState()
-                        .patchAccount(a.id, { archived: !a.archived })
-                        .catch((e) =>
-                          notify({
-                            title: "Failed to update account",
-                            theme: "danger",
-                            content: String(e),
-                          }),
-                        ),
-                  },
-                  {
-                    text: "Delete",
-                    theme: "danger",
-                    action: () => setDialog({ type: "delete", account: a }),
-                  },
-                ]}
-              />
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {dialog?.type === "edit" && (
