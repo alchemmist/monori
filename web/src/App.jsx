@@ -14,6 +14,7 @@ import {
   ChartPie,
   ClockArrowRotateLeft,
   SlidersVertical,
+  Book,
 } from "@gravity-ui/icons";
 import { useStore, isDemo } from "./store.js";
 import { computeRange } from "./engine/budget.js";
@@ -139,6 +140,16 @@ export default function App({ theme, onToggleTheme }) {
         ))}
 
         <div className="sidebar__bottom">
+          <a
+            className="sidebar__item"
+            href="/docs"
+            target="_blank"
+            rel="noreferrer"
+            title={collapsed ? "Docs" : undefined}
+          >
+            <Book width={16} height={16} />
+            <span className="sidebar__label">Docs</span>
+          </a>
           <button
             className={`sidebar__item ${page === "settings" ? "sidebar__item_active" : ""}`}
             onClick={() => setPage("settings")}
