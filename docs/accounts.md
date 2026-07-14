@@ -11,7 +11,7 @@ are moved onto it, so everything behaves exactly as before.
 
 ## Managing accounts
 
-Accounts live under **Settings → Accounts**. Each one has:
+Accounts live on the **Accounts** page in the sidebar. Each one has:
 
 - a **name** (unique),
 - a **type** — `card`, `cash`, `savings`, or `other`,
@@ -47,8 +47,8 @@ remembering to exclude it. Deleting a transfer removes both legs together.
 
 ## Reconcile
 
-**Reconcile** checks monori against reality. Open it from an account's menu in
-Settings, enter the account's **actual bank balance**, and monori posts a single
+**Reconcile** checks monori against reality. Open it from an account's menu on
+the Accounts page, enter the account's **actual bank balance**, and monori posts a single
 `adjustment` transaction for the difference so the computed balance matches your
 bank. If the two already agree, nothing is posted.
 

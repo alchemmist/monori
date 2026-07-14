@@ -1,18 +1,6 @@
-.settings-section {
-  margin-top: 28px;
-  max-width: 560px;
-}
-
-.settings-section__head {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 12px;
-}
-
 .account-list {
   overflow: hidden;
+  max-width: 560px;
 }
 
 .account-row {
