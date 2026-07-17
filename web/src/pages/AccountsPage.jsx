@@ -1,6 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button, DropdownMenu, Label } from "@gravity-ui/uikit";
-import { Plus, ArrowUp, ArrowDown } from "@gravity-ui/icons";
+import { Plus, Grip } from "@gravity-ui/icons";
 import { useStore, isDemo } from "../store.js";
 import { api } from "../api.js";
 import { accountBalances } from "../engine/analytics.js";
@@ -27,18 +27,75 @@ export default function AccountsPage() {
     return m;
   }, [snapshot.transactions]);
 
-  const reorder = async (id, dir) => {
-    const ids = accounts.map((a) => a.id);
-    const i = ids.indexOf(id);
-    const j = i + dir;
-    if (j < 0 || j >= ids.length) return;
-    [ids[i], ids[j]] = [ids[j], ids[i]];
+  const commitOrder = (ids) => {
     const reordered = ids.map((x) => accounts.find((a) => a.id === x));
     useStore.setState({ snapshot: { ...snapshot, accounts: reordered } });
     if (isDemo()) return;
     api
       .reorderAccounts(ids)
       .catch((e) => notify({ title: "Failed to reorder", theme: "danger", content: String(e) }));
+  };
+
+  const [drag, setDrag] = useState(null);
+  const dragRef = useRef(null);
+  const accountsRef = useRef(accounts);
+  accountsRef.current = accounts;
+  const commitRef = useRef(commitOrder);
+  commitRef.current = commitOrder;
+  const dragging = drag !== null;
+
+  const startDrag = (e, fromIndex) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    const rowH = e.currentTarget.closest(".account-row").getBoundingClientRect().height;
+    const st = { fromIndex, targetIndex: fromIndex, startY: e.clientY, dy: 0, rowH };
+    dragRef.current = st;
+    setDrag(st);
+    document.body.style.userSelect = "none";
+  };
+
+  useEffect(() => {
+    if (!dragging) return;
+    const onMove = (e) => {
+      const st = dragRef.current;
+      const dy = e.clientY - st.startY;
+      const n = accountsRef.current.length;
+      const targetIndex = Math.max(0, Math.min(n - 1, st.fromIndex + Math.round(dy / st.rowH)));
+      dragRef.current = { ...st, dy, targetIndex };
+      setDrag(dragRef.current);
+    };
+    const onUp = () => {
+      const st = dragRef.current;
+      document.body.style.userSelect = "";
+      dragRef.current = null;
+      setDrag(null);
+      if (st.targetIndex !== st.fromIndex) {
+        const ids = accountsRef.current.map((a) => a.id);
+        const [moved] = ids.splice(st.fromIndex, 1);
+        ids.splice(st.targetIndex, 0, moved);
+        commitRef.current(ids);
+      }
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+  }, [dragging]);
+
+  const rowStyle = (i) => {
+    if (!drag) return undefined;
+    const { fromIndex, targetIndex, dy, rowH } = drag;
+    if (i === fromIndex) {
+      const n = accounts.length;
+      const clamped = Math.max(-fromIndex * rowH, Math.min((n - 1 - fromIndex) * rowH, dy));
+      return { transform: `translateY(${clamped}px)`, transition: "none", zIndex: 2 };
+    }
+    let shift = 0;
+    if (fromIndex < targetIndex && i > fromIndex && i <= targetIndex) shift = -1;
+    else if (fromIndex > targetIndex && i >= targetIndex && i < fromIndex) shift = 1;
+    return { transform: `translateY(${shift * rowH}px)` };
   };
 
   return (
@@ -55,8 +112,21 @@ export default function AccountsPage() {
 
       <div className="card account-list">
         {accounts.map((a, i) => {
+          const isDragged = drag?.fromIndex === i;
           return (
-            <div key={a.id} className="account-row">
+            <div
+              key={a.id}
+              className={`account-row account-row_draggable${isDragged ? " account-row_dragging" : ""}`}
+              style={rowStyle(i)}
+            >
+              <button
+                type="button"
+                className="account-row__grip"
+                onPointerDown={(e) => startDrag(e, i)}
+                aria-label="Drag to reorder"
+              >
+                <Grip width={16} height={16} />
+              </button>
               <AccountBadge account={a} size={32} />
               <div className="account-row__main">
                 <span className="account-row__name">{a.name}</span>
@@ -71,24 +141,6 @@ export default function AccountsPage() {
               </div>
               <span className="account-row__balance num">{money(balances.get(a.id) ?? 0)}</span>
               <div className="account-row__actions">
-                <Button
-                  view="flat"
-                  size="s"
-                  disabled={i === 0}
-                  onClick={() => reorder(a.id, -1)}
-                  aria-label="Move up"
-                >
-                  <ArrowUp width={14} height={14} />
-                </Button>
-                <Button
-                  view="flat"
-                  size="s"
-                  disabled={i === accounts.length - 1}
-                  onClick={() => reorder(a.id, 1)}
-                  aria-label="Move down"
-                >
-                  <ArrowDown width={14} height={14} />
-                </Button>
                 <DropdownMenu
                   size="s"
                   items={[
