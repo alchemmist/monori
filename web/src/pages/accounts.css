@@ -10,7 +10,6 @@
   padding: 12px 16px;
   border-bottom: 1px solid var(--m-border-soft);
   background: var(--m-surface);
-  transition: transform 0.18s cubic-bezier(0.2, 0, 0, 1);
 }
 
 .account-row:last-child {
