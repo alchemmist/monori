@@ -9,10 +9,40 @@
   gap: 14px;
   padding: 12px 16px;
   border-bottom: 1px solid var(--m-border-soft);
+  background: var(--m-surface);
+  transition: transform 0.18s cubic-bezier(0.2, 0, 0, 1);
 }
 
 .account-row:last-child {
   border-bottom: none;
+}
+
+.account-row_dragging {
+  position: relative;
+  border-radius: var(--m-radius-sm);
+  border-bottom-color: transparent;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 18%);
+}
+
+.account-row__grip {
+  display: grid;
+  place-items: center;
+  padding: 0;
+  margin: -4px -8px -4px -2px;
+  border: none;
+  background: none;
+  color: var(--m-text-faint);
+  cursor: grab;
+  touch-action: none;
+  transition: color 0.15s ease;
+}
+
+.account-row__grip:hover {
+  color: var(--m-text-dim);
+}
+
+.account-row_dragging .account-row__grip {
+  cursor: grabbing;
 }
 
 .account-row__main {

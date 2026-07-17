@@ -115,10 +115,16 @@ export default function TransactionsPage() {
           onClick={() => setTransferring(true)}
           disabled={activeAccounts.length < 2}
         >
-          <ArrowRightArrowLeft width={14} height={14} /> Transfer
+          <Button.Icon>
+            <ArrowRightArrowLeft width={14} height={14} />
+          </Button.Icon>
+          Transfer
         </Button>
         <Button view="action" size="m" onClick={() => setImporting(true)}>
-          <ArrowDownToLine width={14} height={14} /> Import statement
+          <Button.Icon>
+            <ArrowDownToLine width={14} height={14} />
+          </Button.Icon>
+          Import statement
         </Button>
       </div>
 
