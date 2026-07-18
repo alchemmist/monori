@@ -18,9 +18,10 @@ services:
             # dev-only default key so bank sync works out of the box; override in
             # your shell (export MONORI_ENCRYPTION_KEY=...) for anything real.
             MONORI_ENCRYPTION_KEY: ${MONORI_ENCRYPTION_KEY:-ryeuklP0LIycgqWaGEA6UkYsP3yEhLWVtvBVipWI-Q0=}
-            # on a failed sync, dump a screenshot + HTML to server/data/ so the
-            # T-Bank selectors can be tuned against the real page
-            MONORI_CONNECTOR_DEBUG: "1"
+            # set to 1 to dump a screenshot + HTML of each login/export step to
+            # server/data/ when tuning selectors (off by default — it writes
+            # cabinet pages with personal data on every sync)
+            MONORI_CONNECTOR_DEBUG: ${MONORI_CONNECTOR_DEBUG:-}
         volumes:
             - ../server:/app
             - uv-cache:/root/.cache/uv
