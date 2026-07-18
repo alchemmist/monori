@@ -25,19 +25,25 @@ def load_rules(c):
     return build_rules(cats, groups)
 
 
-def existing_hash_counts(c):
+def existing_hash_counts(c, account_id):
+    """Hash → count of matching transactions on ``account_id``. Dedup is scoped
+    per account so the same date/amount/description legitimately occurring on two
+    different accounts is not collapsed away."""
     return {
         r["hash"]: r["n"]
-        for r in c.execute("SELECT hash, COUNT(*) n FROM transactions GROUP BY hash")
+        for r in c.execute(
+            "SELECT hash, COUNT(*) n FROM transactions WHERE account_id=? GROUP BY hash",
+            (account_id,),
+        )
     }
 
 
 def commit_rows(c, account_id, rows, source, batch_id=None):
     """Insert ``rows`` (dicts with date/amount/description/bank_category/mcc and
     an optional category_id) onto ``account_id``, skipping any whose hash is
-    already present in the DB or repeats within this batch. Does not commit — the
-    caller owns the transaction. Returns ``(inserted, skipped)``."""
-    existing = existing_hash_counts(c)
+    already present on that account or repeats within this batch. Does not commit
+    — the caller owns the transaction. Returns ``(inserted, skipped)``."""
+    existing = existing_hash_counts(c, account_id)
     seen: dict = {}
     inserted = skipped = 0
     for r in rows:

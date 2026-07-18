@@ -6,6 +6,7 @@ connector in ``PENDING`` (in-process; fine for a single-user self-hosted app)
 until the user posts the code to ``/sms``.
 """
 
+import contextlib
 import pathlib
 import secrets
 from datetime import datetime
@@ -34,6 +35,16 @@ def _profile_dir(cid):
     """A stable per-connection directory for the connector's browser profile, so
     it stays logged in across syncs. Lives next to the database file."""
     return str(pathlib.Path(dbmod.DB_PATH).parent / "connectors" / str(cid))
+
+
+def _close_pending(cid):
+    """Drop and close any connector parked mid-login for this connection, so its
+    browser/worker never leaks when the attempt is replaced, cancelled or the
+    connection is deleted."""
+    old = PENDING.pop(cid, None)
+    if old is not None:
+        with contextlib.suppress(Exception):
+            old.close()
 
 
 class Credentials(BaseModel):
@@ -158,10 +169,29 @@ def delete_connection(cid: int):
     c = conn()
     try:
         _load(c, cid)
-        PENDING.pop(cid, None)
+        _close_pending(cid)
         c.execute("DELETE FROM bank_connections WHERE id=?", (cid,))
         c.commit()
         return {"deleted": cid}
+    finally:
+        c.close()
+
+
+@router.post("/{cid}/cancel")
+def cancel_sync(cid: int):
+    """Abandon a login waiting for its OTP: close the parked connector and drop
+    the connection out of the awaiting_sms state."""
+    c = conn()
+    try:
+        _load(c, cid)
+        _close_pending(cid)
+        c.execute(
+            "UPDATE bank_connections SET status='disconnected', updated_at=?"
+            " WHERE id=? AND status='awaiting_sms'",
+            (_now(), cid),
+        )
+        c.commit()
+        return {"cancelled": cid}
     finally:
         c.close()
 
@@ -183,6 +213,8 @@ def sync_connection(cid: int):
             )
             c.commit()
         session = crypto.decrypt(row["session_encrypted"])
+        # a re-triggered sync replaces any earlier attempt still parked on its OTP
+        _close_pending(cid)
         cls = connectors.get_connector_class(row["bank"], row["kind"])
         connector = cls(creds, session, profile_dir=_profile_dir(cid))
         try:

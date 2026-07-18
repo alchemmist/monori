@@ -287,4 +287,10 @@ export const useStore = create((set, get) => ({
         await get().load();
         return res;
     },
+
+    async cancelConnectionSync(id) {
+        if (isDemo()) return;
+        await api.cancelConnectionSync(id);
+        await get().load();
+    },
 }));

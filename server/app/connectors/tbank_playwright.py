@@ -88,6 +88,13 @@ class TBankPlaywrightConnector(Connector):
         self._to_worker.put(("sms", code))
         return self._await_worker()
 
+    def close(self):
+        # unblock a worker parked on the OTP prompt; it aborts the login, which
+        # closes the browser as its `with` blocks unwind, then the thread exits
+        if self._worker is not None and self._worker.is_alive():
+            self._to_worker.put(("cancel", None))
+            self._worker.join(timeout=10)
+
     def _await_worker(self):
         kind, payload = self._from_worker.get()
         if kind == "sms_required":
@@ -119,7 +126,10 @@ class TBankPlaywrightConnector(Connector):
             )
             return
         user_data_dir = self.profile_dir or tempfile.mkdtemp()
-        pathlib.Path(user_data_dir).mkdir(parents=True, exist_ok=True)
+        # the profile holds live session cookies; keep it owner-only on disk
+        pathlib.Path(user_data_dir).mkdir(parents=True, exist_ok=True, mode=0o700)
+        with contextlib.suppress(OSError):
+            os.chmod(user_data_dir, 0o700)
         try:
             with sync_playwright() as p:
                 context = p.chromium.launch_persistent_context(

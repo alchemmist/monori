@@ -28,7 +28,7 @@ export default function ImportDialog({ onClose }) {
     const runPreview = async () => {
         setBusy(true);
         try {
-            setPreview(await api.importPreview(text));
+            setPreview(await api.importPreview(text, +account));
         } catch (e) {
             notify({ title: "Preview failed", theme: "danger", content: String(e) });
         } finally {

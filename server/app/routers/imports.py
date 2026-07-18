@@ -10,6 +10,7 @@ router = APIRouter(prefix="/api/import", tags=["import"])
 
 class ImportBody(BaseModel):
     text: str
+    accountId: int | None = None
 
 
 class CommitRow(BaseModel):
@@ -32,7 +33,7 @@ def import_preview(body: ImportBody):
     try:
         rows, errors = parse_statement(body.text)
         rules = load_rules(c)
-        existing = existing_hash_counts(c)
+        existing = existing_hash_counts(c, body.accountId)
         seen_in_batch: dict = {}
         for row in rows:
             row["categoryId"] = categorize(row["description"], row["amount"], rules)

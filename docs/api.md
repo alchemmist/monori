@@ -200,10 +200,11 @@ is idempotent. See [Importing statements](importing.md) for the dedup rules.
 ## Connections
 
 Bank connections tie an account to a connector that can sync transactions on
-demand. All routes require `MONORI_ENCRYPTION_KEY` to be set (credentials and the
-cached session are stored encrypted); without it they return `400`. Connections
-also appear in the snapshot as `connections[]`, never carrying any secret
-material. See [Configuration → Bank sync connectors](configuration.md#bank-sync-connectors).
+demand. The routes that handle secrets — create, update, sync and SMS — require
+`MONORI_ENCRYPTION_KEY` to be set (credentials and the cached session are stored
+encrypted) and return `400` without it; delete and cancel do not need the key.
+Connections also appear in the snapshot as `connections[]`, never carrying any
+secret material. See [Configuration → Bank sync connectors](configuration.md#bank-sync-connectors).
 
 ### `POST /api/connections`
 
@@ -235,6 +236,12 @@ committed as a batch (`source: "sync"`) and the response summarizes the run:
 Body `{code}` — supplies the OTP for a sync that returned `awaiting_sms`,
 continuing the same login and returning the same summary as `/sync`. Returns
 `409` if no login is awaiting a code.
+
+### `POST /api/connections/{id}/cancel`
+
+Abandons a login parked at the OTP step: closes the connector (releasing its
+browser session) and drops the connection out of `awaiting_sms`. Called when the
+user closes the dialog mid-verification.
 
 ## Interactive docs
 
