@@ -8,6 +8,18 @@ export function incomeGroupIdSet(groups) {
   return new Set(groups.filter((g) => g.kind === "income").map((g) => g.id));
 }
 
+/** Running balance per account = opening balance + sum of its transactions
+ * (transfers included: a transfer's two legs move money between accounts).
+ * Returns Map(accountId -> kopecks). */
+export function accountBalances(snapshot) {
+  const balances = new Map((snapshot.accounts ?? []).map((a) => [a.id, a.openingBalance ?? 0]));
+  for (const t of snapshot.transactions) {
+    if (!balances.has(t.accountId)) continue;
+    balances.set(t.accountId, balances.get(t.accountId) + t.amount);
+  }
+  return balances;
+}
+
 /** Categorized transactions only, split into income/expense by group kind.
  * Returns sorted [key, {income, expense}] where key = 'YYYY-MM'. */
 export function monthlySeries(snapshot) {
@@ -15,6 +27,7 @@ export function monthlySeries(snapshot) {
   const catById = new Map(snapshot.categories.map((c) => [c.id, c]));
   const map = new Map();
   for (const t of snapshot.transactions) {
+    if (t.transferId != null) continue; // transfers never count as income/expense
     if (t.categoryId == null) continue;
     const cat = catById.get(t.categoryId);
     if (!cat) continue;

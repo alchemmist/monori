@@ -11,13 +11,14 @@ Every amount is an integer in kopecks/cents, so nothing rounds.
 
 The **Transactions** page lists the ledger newest-first, 100 rows per page. It
 shows the date (`dd.mm.yyyy`), the description, the bank's own category label, the
-signed amount, and the assigned category.
+signed amount, the account, and the assigned category.
 
 ### Filters
 
 - **Search** — matches the description or the bank category, case-insensitive.
 - **Category** — a specific category, or *uncategorized* to find rows that still
   need a home.
+- **Account** — narrow to one account (shown once you have more than one).
 - **Year** — narrow to a single year.
 
 Filtering happens live over the loaded snapshot; changing a filter resets you to
@@ -27,7 +28,16 @@ the first page.
 
 Each row has an inline category dropdown — pick a category to assign or reassign
 the transaction. This is the main day-to-day task after an import: sweep the
-uncategorized rows into envelopes so the budget reflects reality.
+uncategorized rows into envelopes so the budget reflects reality. The account
+column has a matching dropdown to move a row to a different account.
+
+### Transfers
+
+The **Transfer** button moves money between two of your own accounts. It records
+two linked rows — money out of one account, the same amount into the other —
+tagged with a **transfer** badge. Transfers are uncategorized on purpose, so they
+never show up as income or expense in the budget or on the dashboard. See
+[Accounts](accounts.md).
 
 ### Importing
 

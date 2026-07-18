@@ -19,6 +19,21 @@ def test_snapshot_serialization_contract(api, client):
     )
     client.put("/api/budgets", json={"categoryId": cat, "year": 2026, "month": 3, "amount": 5000})
     snap = api.snapshot()
+    assert snap["accounts"] == [
+        {
+            "id": 1,
+            "name": "T-Bank",
+            "type": "card",
+            "icon": "wallet",
+            "color": "#5b6472",
+            "iconImage": None,
+            "currency": "RUB",
+            "sort": 1,
+            "archived": False,
+            "openingBalance": 0,
+            "openingDate": None,
+        }
+    ]
     assert snap["groups"] == [{"id": g, "name": "Expenses", "sort": 1, "kind": "expense"}]
     assert snap["categories"] == [
         {
@@ -39,6 +54,8 @@ def test_snapshot_serialization_contract(api, client):
             "bankCategory": "Super",
             "mcc": "5411",
             "categoryId": cat,
+            "accountId": 1,
+            "transferId": None,
             "comment": "note",
             "source": "manual",
         }
