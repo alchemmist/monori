@@ -64,7 +64,11 @@ export default function ImportDialog({ onClose }) {
                     <Text color="secondary">Import into</Text>
                     <Select
                         value={account ? [account] : []}
-                        onUpdate={(v) => setAccount(v[0])}
+                        onUpdate={(v) => {
+                            setAccount(v[0]);
+                            // duplicate flags are account-specific — force a re-preview
+                            setPreview(null);
+                        }}
                         options={accounts.map((a) => ({ value: String(a.id), content: a.name }))}
                         width={200}
                     />
