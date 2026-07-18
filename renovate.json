@@ -1,26 +1,26 @@
 {
-  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": ["config:recommended", ":dependencyDashboard", ":semanticCommitsDisabled"],
-  "labels": ["dependencies"],
-  "schedule": ["before 6am on monday"],
-  "prConcurrentLimit": 8,
-  "lockFileMaintenance": {
-    "enabled": true,
-    "schedule": ["before 6am on monday"]
-  },
-  "packageRules": [
-    {
-      "matchManagers": ["github-actions"],
-      "groupName": "github actions"
+    "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+    "extends": ["config:recommended", ":dependencyDashboard", ":semanticCommitsDisabled"],
+    "labels": ["dependencies"],
+    "schedule": ["before 6am on monday"],
+    "prConcurrentLimit": 8,
+    "lockFileMaintenance": {
+        "enabled": true,
+        "schedule": ["before 6am on monday"]
     },
-    {
-      "matchFileNames": ["deploy/Dockerfile", "deploy/**/*.yml"],
-      "groupName": "docker"
-    },
-    {
-      "matchDepTypes": ["devDependencies", "dev", "dependency-groups"],
-      "matchUpdateTypes": ["minor", "patch"],
-      "groupName": "dev dependencies (non-major)"
-    }
-  ]
+    "packageRules": [
+        {
+            "matchManagers": ["github-actions"],
+            "groupName": "github actions"
+        },
+        {
+            "matchFileNames": ["deploy/Dockerfile", "deploy/**/*.yml"],
+            "groupName": "docker"
+        },
+        {
+            "matchDepTypes": ["devDependencies", "dev", "dependency-groups"],
+            "matchUpdateTypes": ["minor", "patch"],
+            "groupName": "dev dependencies (non-major)"
+        }
+    ]
 }
