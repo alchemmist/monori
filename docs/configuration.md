@@ -69,11 +69,20 @@ Enabling connectors takes two things:
    playwright install chromium
    ```
 
-The T-Bank connector logs in **as you** (phone, password, and the SMS code the
-bank sends) to download your operations export. This is automated access to your
-own account and is a grey area under the bank's terms of service — use it on your
-own account at your own risk. Because it holds real access to financial data,
-keep the instance off the open internet and set `MONORI_API_TOKEN`.
+The T-Bank connector logs in **as you** (phone, then the SMS code the bank sends)
+to download your operations export. To avoid an SMS on every sync it keeps a
+**persistent browser profile** in `connectors/<id>/` next to the database, and on
+the bank's "create a code" screen it sets a quick-login code it remembers
+(encrypted) in the connection. So only the first sync needs an SMS; later syncs
+reuse the profile, falling back to the code when the session expires. That
+profile directory holds live session cookies — it is as sensitive as the
+database file itself, so back it up and protect it the same way.
+
+This is automated access to your own account and is a grey area under the bank's
+terms of service — use it on your own account at your own risk. Because it holds
+real access to financial data, keep the instance off the open internet and set
+`MONORI_API_TOKEN`. Set `MONORI_CONNECTOR_DEBUG=1` to dump a screenshot + HTML at
+each login step (into the database directory) when tuning it.
 
 The connector interface is pluggable — additional banks/mechanisms register
 themselves the same way, one at a time.
