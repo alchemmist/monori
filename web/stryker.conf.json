@@ -4,5 +4,6 @@
   "coverageAnalysis": "perTest",
   "mutate": ["src/engine/**/*.js", "!src/engine/**/*.test.js"],
   "reporters": ["clear-text", "progress"],
-  "concurrency": 4
+  "concurrency": 4,
+  "thresholds": { "high": 90, "low": 85, "break": 85 }
 }

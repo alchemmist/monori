@@ -1,5 +1,6 @@
 API_PORT ?= 8077
 COMPOSE ?= $(shell command -v docker >/dev/null 2>&1 && echo "docker compose" || echo "podman compose")
+MUTATION_THRESHOLD ?= 85
 
 WEBBIN := web/node_modules/.bin
 
@@ -114,7 +115,11 @@ coverage:
 	bash scripts/coverage-tree.sh
 
 mutation:
-	cd web && npx stryker run
-	cd server && uv run mutmut run
+	@thr=$(MUTATION_THRESHOLD); \
+	( cd web && npx stryker run ); web=$$?; \
+	( cd server && { uv run mutmut run || true; } && uv run mutmut export-cicd-stats ); \
+	python3 scripts/mutation-gate.py server/mutants/mutmut-cicd-stats.json $$thr; srv=$$?; \
+	echo "── mutation gates (threshold $$thr%): stryker exit=$$web, mutmut gate exit=$$srv ──"; \
+	[ $$web -eq 0 ] && [ $$srv -eq 0 ]
 
 check: fmt-check lint typecheck analyze test
