@@ -44,16 +44,21 @@ class TBankPlaywrightConnector(Connector):
 
     URL_LOGIN = "https://www.tbank.ru/login/"
     URL_LOGGED_IN_MARKER = "**/mybank/**"
+    URL_OPERATIONS = "https://www.tbank.ru/mybank/operations/"
 
     SEL_PHONE = "input[name='phone'], input[type='tel']"
     SEL_PHONE_SUBMIT = "button[type='submit']"
     SEL_SMS = "input[name='otp'], input[autocomplete='one-time-code']"
     SEL_SMS_SUBMIT = "button[type='submit']"
-    SEL_PASSWORD = "input[name='password'], input[type='password']"
+    SEL_PASSWORD = "input[name='password']"
     SEL_PASSWORD_SUBMIT = "button[type='submit']"
     SEL_EXPORT_TRIGGER = "[data-qa-type='export'], a[href*='export']"
 
-    LOGIN_TIMEOUT_MS = 120_000
+    # T-Bank ID drops interstitials after the OTP ("set a quick-login code",
+    # "install the app"); clicking one of these skips them.
+    SKIP_LABELS = ("Не сейчас", "Пропустить", "Позже", "Закрыть")
+
+    LOGIN_TIMEOUT_MS = 45_000
 
     def __init__(self, credentials, session=None):
         super().__init__(credentials, session)
@@ -124,32 +129,58 @@ class TBankPlaywrightConnector(Connector):
         return os.environ.get("MONORI_CONNECTOR_HEADED") not in ("1", "true")
 
     @staticmethod
-    def _save_debug(page):
-        """When MONORI_CONNECTOR_DEBUG is set, dump a screenshot and the page HTML
-        so headless selector failures can be diagnosed from the host."""
-        if not os.environ.get("MONORI_CONNECTOR_DEBUG"):
+    def _debug_on():
+        return bool(os.environ.get("MONORI_CONNECTOR_DEBUG"))
+
+    @classmethod
+    def _shot(cls, page, name):
+        """Save a screenshot + HTML for one step, so the real login flow can be
+        followed and selectors tuned from the host (MONORI_CONNECTOR_DEBUG)."""
+        if not cls._debug_on():
             return
         out = pathlib.Path("data")
         try:
             out.mkdir(parents=True, exist_ok=True)
-            page.screenshot(path=str(out / "tbank-debug.png"), full_page=True)
-            (out / "tbank-debug.html").write_text(page.content(), encoding="utf-8")
+            page.screenshot(path=str(out / f"tbank-{name}.png"), full_page=True)
+            (out / f"tbank-{name}.html").write_text(
+                f"<!-- url: {page.url} -->\n{page.content()}", encoding="utf-8"
+            )
         except Exception:  # noqa: BLE001 - debugging aid must never mask the real error
             pass
 
+    def _save_debug(self, page):
+        self._shot(page, "error")
+
+    def _dismiss_interstitials(self, page):
+        """Skip post-OTP screens (set-a-code, install-the-app) by clicking a
+        'not now' style button when one is present."""
+        for label in self.SKIP_LABELS:
+            try:
+                page.locator(f"text={label}").first.click(timeout=3_000)
+                page.wait_for_timeout(1_000)
+            except Exception:  # noqa: BLE001 - the label just isn't on this screen
+                pass
+
     def _ensure_logged_in(self, page):
         page.goto(self.URL_LOGIN, wait_until="domcontentloaded")
+        self._shot(page, "01-login")
         if self._looks_logged_in(page):
             return
         page.fill(self.SEL_PHONE, self.credentials["phone"])
         page.click(self.SEL_PHONE_SUBMIT)
-        code = self._ask_sms()
-        page.fill(self.SEL_SMS, code)
-        page.click(self.SEL_SMS_SUBMIT)
+        self._shot(page, "02-after-phone")
         if page.query_selector(self.SEL_PASSWORD):
             page.fill(self.SEL_PASSWORD, self.credentials["password"])
             page.click(self.SEL_PASSWORD_SUBMIT)
+            self._shot(page, "03-after-password")
+        code = self._ask_sms()
+        page.fill(self.SEL_SMS, code)
+        page.click(self.SEL_SMS_SUBMIT)
+        self._shot(page, "04-after-sms")
+        self._dismiss_interstitials(page)
+        self._shot(page, "05-after-dismiss")
         page.wait_for_url(self.URL_LOGGED_IN_MARKER, timeout=self.LOGIN_TIMEOUT_MS)
+        self._shot(page, "06-logged-in")
 
     def _looks_logged_in(self, page):
         try:
@@ -159,6 +190,9 @@ class TBankPlaywrightConnector(Connector):
             return False
 
     def _download_and_parse(self, page, since):
+        page.goto(self.URL_OPERATIONS, wait_until="domcontentloaded")
+        page.wait_for_timeout(2_000)
+        self._shot(page, "07-operations")
         with page.expect_download(timeout=self.LOGIN_TIMEOUT_MS) as dl:
             page.click(self.SEL_EXPORT_TRIGGER)
         download = dl.value
