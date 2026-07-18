@@ -116,8 +116,8 @@ coverage:
 
 mutation:
 	@thr=$(MUTATION_THRESHOLD); \
-	( cd web && npx stryker run ); web=$$?; \
-	( cd server && { uv run mutmut run || true; } && uv run mutmut export-cicd-stats ); \
+	( cd web && MUTATION_THRESHOLD=$$thr npx stryker run ); web=$$?; \
+	( cd server && { uv run mutmut run || true; } && mkdir -p mutants && uv run mutmut export-cicd-stats ); \
 	python3 scripts/mutation-gate.py server/mutants/mutmut-cicd-stats.json $$thr; srv=$$?; \
 	echo "── mutation gates (threshold $$thr%): stryker exit=$$web, mutmut gate exit=$$srv ──"; \
 	[ $$web -eq 0 ] && [ $$srv -eq 0 ]
