@@ -19,5 +19,6 @@ coverage.json
 htmlcov/
 coverage/
 .stryker-tmp/
+reports/
 .mutmut-cache
 mutants/
