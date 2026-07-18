@@ -25,10 +25,14 @@ Requires the optional dependency: ``pip install 'monori-server[connectors]'``
 followed by ``playwright install chromium``.
 """
 
+import base64
 import contextlib
+import io
 import os
 import pathlib
 import queue
+import shutil
+import tarfile
 import tempfile
 import threading
 
@@ -71,8 +75,8 @@ class TBankPlaywrightConnector(Connector):
 
     LOGIN_TIMEOUT_MS = 45_000
 
-    def __init__(self, credentials, session=None, profile_dir=None):
-        super().__init__(credentials, session, profile_dir)
+    def __init__(self, credentials, session=None):
+        super().__init__(credentials, session)
         self._worker = None
         self._to_worker: queue.Queue = queue.Queue()
         self._from_worker: queue.Queue = queue.Queue()
@@ -125,18 +129,21 @@ class TBankPlaywrightConnector(Connector):
                 )
             )
             return
-        user_data_dir = self.profile_dir or tempfile.mkdtemp()
-        # the profile holds live session cookies; keep it owner-only on disk
-        pathlib.Path(user_data_dir).mkdir(parents=True, exist_ok=True, mode=0o700)
-        with contextlib.suppress(OSError):
-            os.chmod(user_data_dir, 0o700)
+        # The reusable authenticated state (cookies, trusted-device identity)
+        # lives only inside the encrypted session blob. Restore it into an
+        # owner-only temp dir for the run, then re-archive and hand it back
+        # encrypted; the plaintext profile never outlives the sync.
+        work_dir = tempfile.mkdtemp(prefix="tbank-profile-")
+        os.chmod(work_dir, 0o700)
         try:
+            self._restore_profile(work_dir)
             with sync_playwright() as p:
                 context = p.chromium.launch_persistent_context(
-                    user_data_dir,
+                    work_dir,
                     headless=self._headless(),
                     user_agent=USER_AGENT,
                     accept_downloads=True,
+                    args=["--disk-cache-size=1"],
                 )
                 page = context.pages[0] if context.pages else context.new_page()
                 try:
@@ -147,9 +154,48 @@ class TBankPlaywrightConnector(Connector):
                     raise
                 finally:
                     context.close()
-                self._from_worker.put(("result", SyncResult(rows, session={"established": True})))
+                session = {"profile": self._archive_profile(work_dir)}
+                self._from_worker.put(("result", SyncResult(rows, session=session)))
         except Exception as e:  # noqa: BLE001 - surfaced to the user as a sync error
             self._from_worker.put(("error", str(e)))
+        finally:
+            shutil.rmtree(work_dir, ignore_errors=True)
+
+    def _restore_profile(self, work_dir):
+        blob = self.session.get("profile") if self.session else None
+        if not blob:
+            return
+        with contextlib.suppress(Exception):
+            raw = base64.b64decode(blob)
+            with tarfile.open(fileobj=io.BytesIO(raw), mode="r:gz") as tar:
+                tar.extractall(work_dir, filter="data")
+
+    def _archive_profile(self, work_dir):
+        self._prune_cache(work_dir)
+        buf = io.BytesIO()
+        with tarfile.open(fileobj=buf, mode="w:gz") as tar:
+            tar.add(work_dir, arcname=".")
+        return base64.b64encode(buf.getvalue()).decode()
+
+    @staticmethod
+    def _prune_cache(work_dir):
+        """Drop Chromium cache dirs before archiving so the encrypted session
+        blob stays small — only cookies/localStorage/IndexedDB matter."""
+        junk = {
+            "Cache",
+            "Code Cache",
+            "GPUCache",
+            "GrShaderCache",
+            "ShaderCache",
+            "DawnCache",
+            "DawnGraphiteCache",
+            "component_crx_cache",
+        }
+        for root, dirs, _files in os.walk(work_dir):
+            for d in list(dirs):
+                if d in junk:
+                    shutil.rmtree(os.path.join(root, d), ignore_errors=True)
+                    dirs.remove(d)
 
     @staticmethod
     def _headless():

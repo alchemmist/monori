@@ -119,7 +119,7 @@ encrypted with `MONORI_ENCRYPTION_KEY` and are never serialized.
 | `kind` | TEXT | connector mechanism, e.g. `playwright` |
 | `status` | TEXT | `disconnected` / `connected` / `awaiting_sms` / `error` |
 | `credentials_encrypted` | BLOB | Fernet-encrypted `{phone, password}`, nullable |
-| `session_encrypted` | BLOB | Fernet-encrypted cached session, nullable |
+| `session_encrypted` | BLOB | Fernet-encrypted browser session (profile archive), nullable |
 | `last_sync` | TEXT | ISO datetime of the last successful sync, nullable |
 | `last_error` | TEXT | last sync error message, nullable |
 | `created_at` / `updated_at` | TEXT | ISO datetimes |
