@@ -13,8 +13,15 @@ def test_transaction_create_variants(api, client):
     uncat = api.tx("2026-02-04T10:00:00", -1, categoryId=0)
     assert api.tx_by(uncat)["categoryId"] is None
 
-    bad = client.post("/api/transactions", json={"date": "x", "amount": 1, "categoryId": 999})
+    acct = api.default_account()
+    bad = client.post(
+        "/api/transactions",
+        json={"date": "x", "amount": 1, "accountId": acct, "categoryId": 999},
+    )
     assert bad.status_code == 400 and "category" in bad.json()["detail"].lower()
+
+    bad_acct = client.post("/api/transactions", json={"date": "x", "amount": 1, "accountId": 999})
+    assert bad_acct.status_code == 400 and "account" in bad_acct.json()["detail"].lower()
 
 
 def test_transaction_partial_patch_preserves_other_fields(api, client):

@@ -12,6 +12,7 @@ _COUNT_TX = (
     " AND (:to IS NULL OR date(date) <= date(:to))"
     " AND (:uncat = 0 OR category_id IS NULL)"
     " AND (:uncat = 1 OR :cat IS NULL OR category_id = :cat)"
+    " AND (:acct IS NULL OR account_id = :acct)"
     " AND (:q IS NULL OR LOWER(description) LIKE :q)"
 )
 _LIST_TX = (
@@ -20,6 +21,7 @@ _LIST_TX = (
     " AND (:to IS NULL OR date(date) <= date(:to))"
     " AND (:uncat = 0 OR category_id IS NULL)"
     " AND (:uncat = 1 OR :cat IS NULL OR category_id = :cat)"
+    " AND (:acct IS NULL OR account_id = :acct)"
     " AND (:q IS NULL OR LOWER(description) LIKE :q)"
     " ORDER BY date DESC, id DESC LIMIT :limit OFFSET :offset"
 )
@@ -28,6 +30,7 @@ _LIST_TX = (
 class TxCreate(BaseModel):
     date: str
     amount: int
+    accountId: int
     description: str = ""
     bankCategory: str = ""
     mcc: str = ""
@@ -38,6 +41,7 @@ class TxCreate(BaseModel):
 class TxPatch(BaseModel):
     date: str | None = None
     amount: int | None = None
+    accountId: int | None = None
     description: str | None = None
     bankCategory: str | None = None
     mcc: str | None = None
@@ -60,11 +64,18 @@ def _resolve_category(c, category_id):
     return category_id
 
 
+def _resolve_account(c, account_id):
+    if not c.execute("SELECT id FROM accounts WHERE id=?", (account_id,)).fetchone():
+        raise HTTPException(400, "unknown account")
+    return account_id
+
+
 @router.get("")
 def list_transactions(
     from_: str | None = Query(default=None, alias="from"),
     to: str | None = None,
     categoryId: int | None = None,
+    accountId: int | None = None,
     uncategorized: bool = False,
     q: str | None = None,
     limit: int = Query(default=100, ge=1, le=1000),
@@ -75,6 +86,7 @@ def list_transactions(
         "to": to,
         "uncat": 1 if uncategorized else 0,
         "cat": categoryId,
+        "acct": accountId,
         "q": f"%{q.lower()}%" if q else None,
         "limit": limit,
         "offset": offset,
@@ -93,10 +105,12 @@ def create_transaction(body: TxCreate):
     c = conn()
     try:
         category = _resolve_category(c, body.categoryId)
+        account = _resolve_account(c, body.accountId)
         cur = c.execute(
             """INSERT INTO transactions
-               (date, amount, description, bank_category, mcc, category_id, comment, hash, source)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'manual')""",
+               (date, amount, description, bank_category, mcc, category_id, account_id,
+                comment, hash, source)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'manual')""",
             (
                 body.date,
                 body.amount,
@@ -104,6 +118,7 @@ def create_transaction(body: TxCreate):
                 body.bankCategory,
                 body.mcc,
                 category,
+                account,
                 body.comment,
                 tx_hash(body.date, body.amount, body.description),
             ),
@@ -132,10 +147,13 @@ def patch_transaction(tx_id: int, patch: TxPatch):
         category = row["category_id"]
         if patch.categoryId is not None:
             category = _resolve_category(c, patch.categoryId)
+        account = row["account_id"]
+        if patch.accountId is not None:
+            account = _resolve_account(c, patch.accountId)
         c.execute(
             """UPDATE transactions
                SET date=?, amount=?, description=?, bank_category=?, mcc=?, category_id=?,
-                   comment=?, hash=?
+                   account_id=?, comment=?, hash=?
                WHERE id=?""",
             (
                 date,
@@ -144,6 +162,7 @@ def patch_transaction(tx_id: int, patch: TxPatch):
                 bank_category,
                 mcc,
                 category,
+                account,
                 comment,
                 tx_hash(date, amount, description),
                 tx_id,

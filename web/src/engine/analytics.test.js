@@ -7,6 +7,7 @@ import {
   weekdayProfile,
   txStats,
   disciplineMatrix,
+  accountBalances,
 } from "./analytics.js";
 import { computeRange } from "./budget.js";
 
@@ -135,5 +136,60 @@ describe("disciplineMatrix", () => {
     expect(d.hitRate).toBeCloseTo(33.33, 1);
     expect(d.totalOverrun).toBe(5_000_00 + 1_000_00);
     expect(d.worst.category.id).toBe(20);
+  });
+});
+
+describe("accountBalances", () => {
+  it("sums opening balance and all transactions per account, transfers included", () => {
+    const snap = {
+      accounts: [
+        { id: 1, name: "Card", openingBalance: 10_000_00 },
+        { id: 2, name: "Cash", openingBalance: 0 },
+      ],
+      groups: [],
+      categories: [],
+      transactions: [
+        { id: 1, date: "2024-01-01", amount: -3_000_00, accountId: 1, categoryId: null },
+        {
+          id: 2,
+          date: "2024-01-02",
+          amount: -2_000_00,
+          accountId: 1,
+          transferId: "t1",
+          categoryId: null,
+        },
+        {
+          id: 3,
+          date: "2024-01-02",
+          amount: 2_000_00,
+          accountId: 2,
+          transferId: "t1",
+          categoryId: null,
+        },
+      ],
+    };
+    const b = accountBalances(snap);
+    expect(b.get(1)).toBe(10_000_00 - 3_000_00 - 2_000_00);
+    expect(b.get(2)).toBe(2_000_00);
+  });
+
+  it("treats a missing accounts list as empty", () => {
+    expect(accountBalances({ transactions: [] }).size).toBe(0);
+  });
+});
+
+describe("transfers are excluded from income/expense", () => {
+  it("monthlySeries ignores rows with a transferId", () => {
+    const snap = {
+      groups: [{ id: 1, name: "Daily", kind: "expense" }],
+      categories: [{ id: 20, groupId: 1, name: "Groceries" }],
+      transactions: [
+        { id: 1, date: "2024-01-05", amount: -5_000_00, categoryId: 20, transferId: null },
+        // a categorized-looking transfer leg must not count as expense
+        { id: 2, date: "2024-01-06", amount: -9_000_00, categoryId: 20, transferId: "t1" },
+      ],
+    };
+    const series = monthlySeries(snap);
+    expect(series).toEqual([["2024-01", { income: 0, expense: 5_000_00 }]]);
   });
 });

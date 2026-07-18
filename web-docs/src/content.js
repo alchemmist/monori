@@ -18,6 +18,7 @@ export const NAV = [
     items: [
       { slug: "budgeting", title: "Budgeting", body: md("budgeting") },
       { slug: "transactions", title: "Transactions", body: md("transactions") },
+      { slug: "accounts", title: "Accounts & transfers", body: md("accounts") },
       { slug: "importing", title: "Importing statements", body: md("importing") },
       {
         slug: "dashboard-analytics",

@@ -42,6 +42,7 @@ def main(db_path=None):
 
     conn = connect(db_path)
     cur = conn.cursor()
+    account_id = cur.execute("SELECT MIN(id) FROM accounts").fetchone()[0]
     counts = {
         t: cur.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]
         for t in ("category_groups", "categories", "transactions", "budgets")
@@ -71,8 +72,9 @@ def main(db_path=None):
         amount = kop(t["amount"])
         cur.execute(
             """INSERT INTO transactions
-               (date, amount, description, bank_category, mcc, category_id, comment, hash, source)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'sheets')""",
+               (date, amount, description, bank_category, mcc, category_id, account_id,
+                comment, hash, source)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'sheets')""",
             (
                 t["date"],
                 amount,
@@ -80,6 +82,7 @@ def main(db_path=None):
                 str(t["bank_category"]),
                 str(t["mcc"]),
                 cat_ids.get(t["category"]),
+                account_id,
                 str(t["comment"]),
                 tx_hash(t["date"], amount, str(t["description"])),
             ),
@@ -91,9 +94,9 @@ def main(db_path=None):
         desc = "Manual adjustment carried over from sheet formula"
         cur.execute(
             """INSERT INTO transactions
-               (date, amount, description, category_id, hash, source)
-               VALUES (?, ?, ?, ?, ?, 'adjustment')""",
-            (date, amount, desc, cat_ids[cat], tx_hash(date, amount, desc)),
+               (date, amount, description, category_id, account_id, hash, source)
+               VALUES (?, ?, ?, ?, ?, ?, 'adjustment')""",
+            (date, amount, desc, cat_ids[cat], account_id, tx_hash(date, amount, desc)),
         )
 
     for b in budgets:

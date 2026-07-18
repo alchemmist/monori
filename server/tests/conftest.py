@@ -52,16 +52,42 @@ class Api:
         assert r.status_code == 200, r.text
         return r.json()["id"]
 
+    def account(self, name, **kw):
+        r = self.client.post("/api/accounts", json={"name": name, **kw})
+        assert r.status_code == 200, r.text
+        return r.json()["id"]
+
+    def default_account(self):
+        return self.snapshot()["accounts"][0]["id"]
+
     def tx(self, date, amount, **kw):
+        kw.setdefault("accountId", self.default_account())
         r = self.client.post("/api/transactions", json={"date": date, "amount": amount, **kw})
         assert r.status_code == 200, r.text
         return r.json()["id"]
+
+    def transfer(self, from_account, to_account, amount, date="2026-01-10T12:00:00", **kw):
+        r = self.client.post(
+            "/api/transfers",
+            json={
+                "fromAccountId": from_account,
+                "toAccountId": to_account,
+                "amount": amount,
+                "date": date,
+                **kw,
+            },
+        )
+        assert r.status_code == 200, r.text
+        return r.json()["transferId"]
 
     def snapshot(self):
         return self.client.get("/api/snapshot").json()
 
     def cat(self, cat_id):
         return next(c for c in self.snapshot()["categories"] if c["id"] == cat_id)
+
+    def acct(self, account_id):
+        return next(a for a in self.snapshot()["accounts"] if a["id"] == account_id)
 
     def tx_by(self, tx_id):
         return next(t for t in self.snapshot()["transactions"] if t["id"] == tx_id)
