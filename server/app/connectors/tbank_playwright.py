@@ -59,7 +59,11 @@ class TBankPlaywrightConnector(Connector):
     SEL_SMS_SUBMIT = "button[type='submit']"
     # the 4-box code widget on both the "create a code" and "enter code" screens
     SEL_CODE = "input[autocomplete='one-time-code'], input[inputmode='numeric']"
-    SEL_EXPORT_TRIGGER = "[data-qa-type='export'], a[href*='export']"
+    # the operations page: a period switcher and an export dropdown whose format
+    # items (CSV/Excel/PDF) only render once the dropdown is opened
+    SEL_PERIOD_YEAR = "[data-qa-type='period-tab-Год']"
+    SEL_EXPORT_TRIGGER = "[data-qa-type='molecule-export-dropdown-operations-button']"
+    EXPORT_FORMAT_LABELS = ("CSV", "Выгрузить в CSV", "CSV-файл", "Excel")
 
     TEXT_SET_CODE = "Придумайте код"
     TEXT_ENTER_CODE = "Введите код"
@@ -242,13 +246,32 @@ class TBankPlaywrightConnector(Connector):
 
     def _download_and_parse(self, page, since):
         page.goto(self.URL_OPERATIONS, wait_until="domcontentloaded")
-        page.wait_for_timeout(2_000)
+        page.wait_for_timeout(2_500)
+        # widen the shown range to a year so a sync pulls more than the default
+        with contextlib.suppress(Exception):
+            page.locator(self.SEL_PERIOD_YEAR).first.click(timeout=3_000)
+            page.wait_for_timeout(1_500)
         self._shot(page, "08-operations")
+
+        # open the export dropdown, then pick a CSV format inside it
+        page.locator(self.SEL_EXPORT_TRIGGER).first.click(timeout=self.LOGIN_TIMEOUT_MS)
+        page.wait_for_timeout(1_000)
+        self._shot(page, "09-export-menu")
         with page.expect_download(timeout=self.LOGIN_TIMEOUT_MS) as dl:
-            page.click(self.SEL_EXPORT_TRIGGER)
+            if not self._click_export_format(page):
+                raise ConnectorError("could not find a CSV export option in the dropdown")
         download = dl.value
+
         with tempfile.NamedTemporaryFile(suffix=".csv") as tmp:
             download.save_as(tmp.name)
             text = pathlib.Path(tmp.name).read_text(encoding="utf-8", errors="replace")
         rows, _ = parse_statement(text)
         return rows
+
+    def _click_export_format(self, page):
+        for label in self.EXPORT_FORMAT_LABELS:
+            # try the next candidate label if this one isn't in the dropdown
+            with contextlib.suppress(Exception):
+                page.get_by_text(label, exact=False).first.click(timeout=2_500)
+                return True
+        return False
