@@ -1,7 +1,13 @@
 import os
 import sqlite3
 
-from app.db import MIGRATIONS, connect
+from app.db import (
+    MIGRATIONS,
+    _migrate_account_color_image,
+    _migrate_account_icon,
+    _migrate_accounts,
+    connect,
+)
 
 OLD_SCHEMA = """
 CREATE TABLE category_groups (
@@ -90,5 +96,90 @@ def test_fresh_db_has_accounts_and_account_id(tmp_path):
         assert conn.execute("SELECT COUNT(*) FROM accounts").fetchone()[0] == 1
         cols = {r["name"] for r in conn.execute("PRAGMA table_info(transactions)")}
         assert {"account_id", "transfer_id"} <= cols
+    finally:
+        conn.close()
+
+
+def test_default_account_fields(tmp_path):
+    db_path = os.path.join(tmp_path, "old.db")
+    _make_old_db(db_path)
+    conn = connect(db_path)
+    try:
+        a = conn.execute(
+            "SELECT name, type, currency, sort, icon, color, icon_image FROM accounts"
+        ).fetchone()
+        # the default account and the icon/color columns' DEFAULT clauses
+        assert a["name"] == "T-Bank"
+        assert a["type"] == "card"
+        assert a["currency"] == "RUB"
+        assert a["sort"] == 1
+        assert a["icon"] == "wallet"
+        assert a["color"] == "#5b6472"
+        assert a["icon_image"] is None
+    finally:
+        conn.close()
+
+
+def test_new_account_gets_column_defaults(tmp_path):
+    db_path = os.path.join(tmp_path, "fresh.db")
+    conn = connect(db_path)
+    try:
+        conn.execute("INSERT INTO accounts (name) VALUES ('Extra')")
+        a = conn.execute(
+            "SELECT type, currency, sort, archived, opening_balance, icon, color, icon_image"
+            " FROM accounts WHERE name='Extra'"
+        ).fetchone()
+        assert a["type"] == "other"
+        assert a["currency"] == "RUB"
+        assert a["sort"] == 0
+        assert a["archived"] == 0
+        assert a["opening_balance"] == 0
+        assert a["icon"] == "wallet"
+        assert a["color"] == "#5b6472"
+        assert a["icon_image"] is None
+    finally:
+        conn.close()
+
+
+def test_column_migrations_are_idempotent_when_reapplied(tmp_path):
+    # Re-running a column migration must be a no-op: the `_has_column` guards
+    # protect the ALTERs. A guard that checks the wrong table/column would try to
+    # add an existing column and raise "duplicate column name".
+    db_path = os.path.join(tmp_path, "fresh.db")
+    conn = connect(db_path)
+    try:
+        _migrate_account_icon(conn)
+        _migrate_account_color_image(conn)
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(accounts)")}
+        assert {"icon", "color", "icon_image"} <= cols
+    finally:
+        conn.close()
+
+
+def test_reapplying_accounts_migration_keeps_single_default(tmp_path):
+    # Re-running the accounts migration must not insert a second T-Bank nor
+    # rebuild away the account_id column.
+    db_path = os.path.join(tmp_path, "old.db")
+    _make_old_db(db_path)
+    conn = connect(db_path)
+    try:
+        _migrate_accounts(conn)
+        assert conn.execute("SELECT COUNT(*) FROM accounts").fetchone()[0] == 1
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(transactions)")}
+        assert "account_id" in cols
+    finally:
+        conn.close()
+
+
+def test_run_migrations_marks_version_and_skips_when_current(tmp_path):
+    db_path = os.path.join(tmp_path, "old.db")
+    _make_old_db(db_path)
+    conn = connect(db_path)
+    try:
+        assert conn.execute("PRAGMA user_version").fetchone()[0] == len(MIGRATIONS)
+        # a second connect on the same file is a no-op and leaves the version pinned
+        conn.close()
+        conn = connect(db_path)
+        assert conn.execute("PRAGMA user_version").fetchone()[0] == len(MIGRATIONS)
     finally:
         conn.close()
