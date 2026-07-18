@@ -2,15 +2,15 @@
 # the SQLite database in ./data. See the security note in the README before
 # exposing this beyond localhost.
 services:
-  monori:
-    build:
-      context: ..
-      dockerfile: deploy/Dockerfile
-    container_name: monori
-    restart: unless-stopped
-    ports:
-      - "8000:8000"
-    volumes:
-      - ./data:/app/data
-    environment:
-      MONORI_DB: /app/data/monori.db
+    monori:
+        build:
+            context: ..
+            dockerfile: deploy/Dockerfile
+        container_name: monori
+        restart: unless-stopped
+        ports:
+            - "8000:8000"
+        volumes:
+            - ./data:/app/data
+        environment:
+            MONORI_DB: /app/data/monori.db

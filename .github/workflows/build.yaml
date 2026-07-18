@@ -1,115 +1,115 @@
 name: CI
 
 on:
-  pull_request:
-    branches: [main]
-  push:
-    branches: [main]
-  workflow_dispatch:
+    pull_request:
+        branches: [main]
+    push:
+        branches: [main]
+    workflow_dispatch:
 
 permissions:
-  contents: read
+    contents: read
 
 jobs:
-  check:
-    name: ${{ matrix.target }}
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        target:
-          - fmt-check
-          - lint
-          - typecheck
-          - analyze
-          - t-fast
-          - t-medium
-          - t-slow
-          - build
-          - coverage
-          - mutation
-          - audit-deps
-          - audit-deps-py
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          persist-credentials: false
+    check:
+        name: ${{ matrix.target }}
+        runs-on: ubuntu-latest
+        strategy:
+            fail-fast: false
+            matrix:
+                target:
+                    - fmt-check
+                    - lint
+                    - typecheck
+                    - analyze
+                    - t-fast
+                    - t-medium
+                    - t-slow
+                    - build
+                    - coverage
+                    - mutation
+                    - audit-deps
+                    - audit-deps-py
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+              with:
+                  persist-credentials: false
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: |
-            web/package-lock.json
-            web-docs/package-lock.json
+            - name: Setup Node
+              uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+                  cache: npm
+                  cache-dependency-path: |
+                      web/package-lock.json
+                      web-docs/package-lock.json
 
-      - name: Setup uv
-        uses: astral-sh/setup-uv@v5
-        with:
-          enable-cache: true
+            - name: Setup uv
+              uses: astral-sh/setup-uv@v5
+              with:
+                  enable-cache: true
 
-      - name: Install web deps
-        run: npm ci
-        working-directory: web
+            - name: Install web deps
+              run: npm ci
+              working-directory: web
 
-      - name: Install docs deps
-        if: matrix.target == 'build' || matrix.target == 'lint'
-        run: npm ci
-        working-directory: web-docs
+            - name: Install docs deps
+              if: matrix.target == 'build' || matrix.target == 'lint'
+              run: npm ci
+              working-directory: web-docs
 
-      - name: Install server deps
-        run: uv sync
-        working-directory: server
+            - name: Install server deps
+              run: uv sync
+              working-directory: server
 
-      - name: Install external linters
-        if: matrix.target == 'lint'
-        env:
-          HADOLINT_VERSION: "2.12.0"
-          HADOLINT_SHA256: "56de6d5e5ec427e17b74fa48d51271c7fc0d61244bf5c90e828aab8362d55010"
-          ACTIONLINT_VERSION: "1.7.7"
-          SHFMT_VERSION: "3.10.0"
-        run: |
-          set -euo pipefail
-          sudo apt-get update
-          sudo apt-get install -y shellcheck
+            - name: Install external linters
+              if: matrix.target == 'lint'
+              env:
+                  HADOLINT_VERSION: "2.12.0"
+                  HADOLINT_SHA256: "56de6d5e5ec427e17b74fa48d51271c7fc0d61244bf5c90e828aab8362d55010"
+                  ACTIONLINT_VERSION: "1.7.7"
+                  SHFMT_VERSION: "3.10.0"
+              run: |
+                  set -euo pipefail
+                  sudo apt-get update
+                  sudo apt-get install -y shellcheck
 
-          shfmt_bin="shfmt_v${SHFMT_VERSION}_linux_amd64"
-          curl -sSfL "https://github.com/mvdan/sh/releases/download/v${SHFMT_VERSION}/${shfmt_bin}" -o "${shfmt_bin}"
-          curl -sSfL "https://github.com/mvdan/sh/releases/download/v${SHFMT_VERSION}/sha256sums.txt" -o shfmt_sha256sums.txt
-          grep " ${shfmt_bin}\$" shfmt_sha256sums.txt | sha256sum -c -
-          sudo install -m 0755 "${shfmt_bin}" /usr/local/bin/shfmt
+                  shfmt_bin="shfmt_v${SHFMT_VERSION}_linux_amd64"
+                  curl -sSfL "https://github.com/mvdan/sh/releases/download/v${SHFMT_VERSION}/${shfmt_bin}" -o "${shfmt_bin}"
+                  curl -sSfL "https://github.com/mvdan/sh/releases/download/v${SHFMT_VERSION}/sha256sums.txt" -o shfmt_sha256sums.txt
+                  grep " ${shfmt_bin}\$" shfmt_sha256sums.txt | sha256sum -c -
+                  sudo install -m 0755 "${shfmt_bin}" /usr/local/bin/shfmt
 
-          curl -sSfL "https://github.com/hadolint/hadolint/releases/download/v${HADOLINT_VERSION}/hadolint-Linux-x86_64" -o hadolint
-          echo "${HADOLINT_SHA256}  hadolint" | sha256sum -c -
-          sudo install -m 0755 hadolint /usr/local/bin/hadolint
+                  curl -sSfL "https://github.com/hadolint/hadolint/releases/download/v${HADOLINT_VERSION}/hadolint-Linux-x86_64" -o hadolint
+                  echo "${HADOLINT_SHA256}  hadolint" | sha256sum -c -
+                  sudo install -m 0755 hadolint /usr/local/bin/hadolint
 
-          tarball="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
-          curl -sSfL "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/${tarball}" -o "${tarball}"
-          curl -sSfL "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_checksums.txt" -o actionlint_checksums.txt
-          grep " ${tarball}\$" actionlint_checksums.txt | sha256sum -c -
-          tar -xzf "${tarball}" actionlint
-          sudo install -m 0755 actionlint /usr/local/bin/actionlint
+                  tarball="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+                  curl -sSfL "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/${tarball}" -o "${tarball}"
+                  curl -sSfL "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_checksums.txt" -o actionlint_checksums.txt
+                  grep " ${tarball}\$" actionlint_checksums.txt | sha256sum -c -
+                  tar -xzf "${tarball}" actionlint
+                  sudo install -m 0755 actionlint /usr/local/bin/actionlint
 
-      - name: Install semgrep
-        if: matrix.target == 'analyze'
-        run: pipx install semgrep
+            - name: Install semgrep
+              if: matrix.target == 'analyze'
+              run: pipx install semgrep
 
-      - name: Run ${{ matrix.target }}
-        run: make ${{ matrix.target }}
+            - name: Run ${{ matrix.target }}
+              run: make ${{ matrix.target }}
 
-  secrets:
-    name: secrets
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          persist-credentials: false
+    secrets:
+        name: secrets
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0
+                  persist-credentials: false
 
-      - name: Scan for secrets
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+            - name: Scan for secrets
+              uses: gitleaks/gitleaks-action@v2
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

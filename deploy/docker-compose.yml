@@ -1,15 +1,15 @@
 services:
-  monori:
-    build:
-      context: ..
-      dockerfile: deploy/Dockerfile
-    container_name: monori
-    restart: unless-stopped
-    volumes:
-      - ./data:/app/data
-    networks:
-      - personal-site_default
+    monori:
+        build:
+            context: ..
+            dockerfile: deploy/Dockerfile
+        container_name: monori
+        restart: unless-stopped
+        volumes:
+            - ./data:/app/data
+        networks:
+            - personal-site_default
 
 networks:
-  personal-site_default:
-    external: true
+    personal-site_default:
+        external: true

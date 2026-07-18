@@ -7,7 +7,7 @@ import "./docs.css";
 import Root from "./Root.jsx";
 
 ReactDOM.createRoot(document.getElementById("root")).render(
-  <React.StrictMode>
-    <Root />
-  </React.StrictMode>,
+    <React.StrictMode>
+        <Root />
+    </React.StrictMode>,
 );
