@@ -1,17 +1,17 @@
 {
-  "config": {
-    "default": true,
-    "MD013": false,
-    "MD033": false,
-    "MD041": false,
-  },
-  "globs": ["**/*.md"],
-  "ignores": [
-    "**/node_modules",
-    "**/.venv",
-    "web/dist",
-    "server/static",
-    "migration",
-    "**/CHANGELOG.md",
-  ],
+    "config": {
+        "default": true,
+        "MD013": false,
+        "MD033": false,
+        "MD041": false,
+    },
+    "globs": ["**/*.md"],
+    "ignores": [
+        "**/node_modules",
+        "**/.venv",
+        "web/dist",
+        "server/static",
+        "migration",
+        "**/CHANGELOG.md",
+    ],
 }

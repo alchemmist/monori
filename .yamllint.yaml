@@ -1,15 +1,15 @@
 extends: default
 
 rules:
-  line-length: disable
-  document-start: disable
-  comments:
-    min-spaces-from-content: 1
-  truthy:
-    allowed-values: ["true", "false", "on", "off"]
-    check-keys: false
+    line-length: disable
+    document-start: disable
+    comments:
+        min-spaces-from-content: 1
+    truthy:
+        allowed-values: ["true", "false", "on", "off"]
+        check-keys: false
 
 ignore: |
-  **/node_modules/
-  **/dist/
-  server/.venv/
+    **/node_modules/
+    **/dist/
+    server/.venv/
