@@ -61,11 +61,12 @@ def test_two_phase_sync_then_incremental_dedup(api, client, keyed):
     assert r.json()["status"] == "awaiting_sms"
     assert api.snapshot()["connections"][0]["status"] == "awaiting_sms"
 
-    # a wrong code fails and clears the pending login
-    client.post(f"/api/connections/{cid}/sync")
+    # a wrong code resumes the same pending login, fails, and clears it
     r = client.post(f"/api/connections/{cid}/sms", json={"code": "9999"})
     assert r.status_code == 502
     assert api.snapshot()["connections"][0]["status"] == "error"
+    # the pending login is now gone: a second code submission conflicts
+    assert client.post(f"/api/connections/{cid}/sms", json={"code": "0000"}).status_code == 409
 
     # a fresh attempt with the right code lands the rows as a sync batch
     client.post(f"/api/connections/{cid}/sync")
@@ -95,6 +96,26 @@ def test_sms_without_pending_login_conflicts(api, client, keyed):
     cid = _connect(client, api.default_account()).json()["id"]
     r = client.post(f"/api/connections/{cid}/sms", json={"code": "0000"})
     assert r.status_code == 409
+
+
+def test_cancel_clears_pending_login(api, client, keyed):
+    cid = _connect(client, api.default_account()).json()["id"]
+    assert client.post(f"/api/connections/{cid}/sync").json()["status"] == "awaiting_sms"
+    assert client.post(f"/api/connections/{cid}/cancel").status_code == 200
+    assert api.snapshot()["connections"][0]["status"] == "disconnected"
+    # nothing is parked anymore
+    assert client.post(f"/api/connections/{cid}/sms", json={"code": "0000"}).status_code == 409
+
+
+def test_resync_replaces_pending_login(api, client, keyed):
+    cid = _connect(client, api.default_account()).json()["id"]
+    assert client.post(f"/api/connections/{cid}/sync").json()["status"] == "awaiting_sms"
+    # a second sync closes the first pending login and parks a fresh one, which
+    # the correct code then completes
+    assert client.post(f"/api/connections/{cid}/sync").json()["status"] == "awaiting_sms"
+    assert client.post(f"/api/connections/{cid}/sms", json={"code": "0000"}).json()["status"] == (
+        "connected"
+    )
 
 
 def test_delete_connection(api, client, keyed):

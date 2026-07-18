@@ -48,6 +48,11 @@ class Connector:
         """Continue a login that raised :class:`SmsRequired`, using the OTP code."""
         raise NotImplementedError
 
+    def close(self):
+        """Release any live resources (browser, session, worker thread). Called
+        when a pending login is replaced, cancelled or deleted. Safe to call more
+        than once and on a connector that never started."""
+
 
 REGISTRY: dict[tuple[str, str], type[Connector]] = {}
 

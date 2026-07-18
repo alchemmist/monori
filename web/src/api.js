@@ -79,11 +79,11 @@ export const api = {
         fetch(`/api/categories/${id}${reassignTo ? `?reassignTo=${reassignTo}` : ""}`, {
             method: "DELETE",
         }).then(json),
-    importPreview: (text) =>
+    importPreview: (text, accountId) =>
         fetch("/api/import/preview", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ text }),
+            body: JSON.stringify({ text, accountId }),
         }).then(json),
     importCommit: (rows, accountId) =>
         fetch("/api/import/commit", {
@@ -105,4 +105,6 @@ export const api = {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ code }),
         }).then(json),
+    cancelConnectionSync: (id) =>
+        fetch(`/api/connections/${id}/cancel`, { method: "POST" }).then(json),
 };

@@ -13,8 +13,14 @@ const STATUS_THEME = {
 };
 
 export default function ConnectionDialog({ account, connection, onClose }) {
-    const { createConnection, syncConnection, submitConnectionSms, deleteConnection, notify } =
-        useStore();
+    const {
+        createConnection,
+        syncConnection,
+        submitConnectionSms,
+        cancelConnectionSync,
+        deleteConnection,
+        notify,
+    } = useStore();
     const [step, setStep] = useState(connection ? "ready" : "credentials");
     const [phone, setPhone] = useState("");
     const [password, setPassword] = useState("");
@@ -92,7 +98,16 @@ export default function ConnectionDialog({ account, connection, onClose }) {
         }
     };
 
-    let footer = { apply: "Close", onApply: onClose, applyProps: {} };
+    // closing mid-OTP abandons the parked login on the server so its browser
+    // session doesn't leak
+    const handleClose = () => {
+        if (step === "sms" && connId.current) {
+            cancelConnectionSync(connId.current).catch(() => {});
+        }
+        onClose();
+    };
+
+    let footer = { apply: "Close", onApply: handleClose, applyProps: {} };
     let body = null;
 
     if (step === "credentials") {
@@ -102,7 +117,7 @@ export default function ConnectionDialog({ account, connection, onClose }) {
                     Connects to {BANK.label} in a headless browser and pulls your operations.
                     Automated access to your own account is a grey area under the bank's terms — use
                     it at your own risk. Your phone and password are stored encrypted on this server
-                    and never leave it.
+                    and used only by it to log in to the bank as you.
                 </Text>
                 <TextInput label="Phone" value={phone} onUpdate={setPhone} autoFocus />
                 <TextInput
@@ -192,7 +207,7 @@ export default function ConnectionDialog({ account, connection, onClose }) {
     }
 
     return (
-        <Dialog open onClose={onClose} size="s">
+        <Dialog open onClose={handleClose} size="s">
             <Dialog.Header caption={`Bank sync — ${account.name}`} />
             <Dialog.Body>
                 <div style={{ display: "flex", flexDirection: "column", gap: 12, paddingTop: 4 }}>
@@ -203,7 +218,7 @@ export default function ConnectionDialog({ account, connection, onClose }) {
                 textButtonApply={footer.apply}
                 textButtonCancel="Cancel"
                 onClickButtonApply={footer.onApply}
-                onClickButtonCancel={onClose}
+                onClickButtonCancel={handleClose}
                 propsButtonApply={footer.applyProps}
             />
         </Dialog>
