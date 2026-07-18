@@ -9,6 +9,7 @@ file.
 | ---------- | --------- | --------- |
 | `MONORI_DB` | `server/data/monori.db` | Absolute path to the SQLite database file. Its parent directory is created on startup. In Docker this is set to `/app/data/monori.db`. |
 | `MONORI_API_TOKEN` | *(unset)* | Optional bearer token. When set, every `/api` data route (and `/api/snapshot`) requires `Authorization: Bearer <token>`; the docs site and OpenAPI endpoints (`/docs`, `/api-docs`, `/api-redoc`, `/openapi.json`) stay public. When unset, the API is open. |
+| `MONORI_ENCRYPTION_KEY` | *(unset)* | Required only for **bank sync connectors** (see below). A urlsafe base64 32-byte Fernet key used to encrypt stored bank credentials and cached sessions at rest. When unset, connections cannot be created and the feature is disabled. Generate one with `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`. |
 | `API_PORT` | `8077` | Dev only — the port the local API runs on and the web dev server proxies to. Set via the `make` variable of the same name. |
 
 The production container also sets `MONORI_DB=/app/data/monori.db` in the
@@ -45,3 +46,34 @@ token for same-origin browsing when the token is unset. If you enable the token,
 the browser app expects to reach the API through a proxy that injects the header,
 or with the token left unset behind a network boundary that provides auth
 instead. See [the API reference](api.md#authentication) for details.
+
+## Bank sync connectors
+
+Beyond the manual statement paste, an account can be connected to a **bank
+connector** that pulls transactions on demand ("Sync now" on the Accounts page).
+There is no background scheduler — syncs run only when you trigger them. Fetched
+rows go through the exact same pipeline as manual import (hash-based dedup +
+keyword categorization), so re-syncing never double-counts.
+
+Enabling connectors takes two things:
+
+1. **An encryption key.** Set `MONORI_ENCRYPTION_KEY` (see the table above). Bank
+   credentials and the cached session are stored encrypted at rest with it; a
+   connection can never be created without it.
+2. **The connector's runtime.** The bundled T-Bank connector drives the real web
+   cabinet with a headless browser, so it needs the optional `connectors` extra
+   and a browser:
+
+   ```bash
+   pip install 'monori-server[connectors]'
+   playwright install chromium
+   ```
+
+The T-Bank connector logs in **as you** (phone, password, and the SMS code the
+bank sends) to download your operations export. This is automated access to your
+own account and is a grey area under the bank's terms of service — use it on your
+own account at your own risk. Because it holds real access to financial data,
+keep the instance off the open internet and set `MONORI_API_TOKEN`.
+
+The connector interface is pluggable — additional banks/mechanisms register
+themselves the same way, one at a time.

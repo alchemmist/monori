@@ -82,7 +82,8 @@ The ledger.
 | `transfer_id` | TEXT | links the two legs of a transfer; `NULL` for normal rows |
 | `comment` | TEXT | default `''` |
 | `hash` | TEXT | `sha1(date \| amount \| description)`, for dedup |
-| `source` | TEXT | `import` / `manual` / `transfer` / `adjustment` / `sheets`; default `import` |
+| `source` | TEXT | `import` / `manual` / `transfer` / `adjustment` / `sync` / `sheets`; default `import` |
+| `batch_id` | INTEGER | → `import_batches(id)`, `ON DELETE SET NULL`; the batch that inserted the row (paste or sync), nullable |
 
 Indexes: `date`, `hash`, `category_id`, `account_id`.
 
@@ -104,6 +105,38 @@ One assigned amount per category per month.
 
 Primary key is `(category_id, year, month)`, so there is at most one cell per
 category-month. A cell with amount `0` is deleted rather than stored.
+
+### `bank_connections`
+
+Ties an account to a bank connector for on-demand sync. Secrets are stored
+encrypted with `MONORI_ENCRYPTION_KEY` and are never serialized.
+
+| Column | Type | Notes |
+| -------- | ------ | ------- |
+| `id` | INTEGER PK | |
+| `account_id` | INTEGER | → `accounts(id)`, `ON DELETE CASCADE` |
+| `bank` | TEXT | connector bank, e.g. `tbank` |
+| `kind` | TEXT | connector mechanism, e.g. `playwright` |
+| `status` | TEXT | `disconnected` / `connected` / `awaiting_sms` / `error` |
+| `credentials_encrypted` | BLOB | Fernet-encrypted `{phone, password}`, nullable |
+| `session_encrypted` | BLOB | Fernet-encrypted cached session, nullable |
+| `last_sync` | TEXT | ISO datetime of the last successful sync, nullable |
+| `last_error` | TEXT | last sync error message, nullable |
+| `created_at` / `updated_at` | TEXT | ISO datetimes |
+
+### `import_batches`
+
+One row per import run (manual paste or connector sync), so a batch can be
+inspected and — planned in issue #22 — rolled back.
+
+| Column | Type | Notes |
+| -------- | ------ | ------- |
+| `id` | INTEGER PK | |
+| `account_id` | INTEGER | → `accounts(id)`, `ON DELETE CASCADE` |
+| `connection_id` | INTEGER | → `bank_connections(id)`, `ON DELETE SET NULL`; `NULL` for pastes |
+| `source` | TEXT | `sync` (paste imports currently leave `batch_id` `NULL`) |
+| `inserted` / `skipped` | INTEGER | counts for the run |
+| `created_at` | TEXT | ISO datetime |
 
 ## Referential behavior
 
