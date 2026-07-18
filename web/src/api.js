@@ -1,5 +1,14 @@
-const json = (r) => {
-    if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+const json = async (r) => {
+    if (!r.ok) {
+        let detail = `${r.status} ${r.statusText}`;
+        try {
+            const body = await r.json();
+            if (body?.detail) detail = body.detail;
+        } catch {
+            detail = `${r.status} ${r.statusText}`;
+        }
+        throw new Error(detail);
+    }
     return r.json();
 };
 
@@ -81,5 +90,19 @@ export const api = {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ accountId, rows }),
+        }).then(json),
+    createConnection: (body) =>
+        fetch("/api/connections", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+        }).then(json),
+    deleteConnection: (id) => fetch(`/api/connections/${id}`, { method: "DELETE" }).then(json),
+    syncConnection: (id) => fetch(`/api/connections/${id}/sync`, { method: "POST" }).then(json),
+    submitConnectionSms: (id, code) =>
+        fetch(`/api/connections/${id}/sms`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ code }),
         }).then(json),
 };

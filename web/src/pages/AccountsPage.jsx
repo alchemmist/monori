@@ -11,6 +11,7 @@ import {
     AccountDeleteDialog,
     AccountReconcileDialog,
 } from "../components/AccountDialogs.jsx";
+import ConnectionDialog from "../components/ConnectionDialog.jsx";
 import "./accounts.css";
 
 const TYPE_LABEL = { card: "Card", cash: "Cash", savings: "Savings", other: "Other" };
@@ -20,6 +21,11 @@ export default function AccountsPage() {
     const [dialog, setDialog] = useState(null);
 
     const accounts = snapshot.accounts ?? [];
+    const connByAccount = useMemo(() => {
+        const m = new Map();
+        for (const c of snapshot.connections ?? []) m.set(c.accountId, c);
+        return m;
+    }, [snapshot.connections]);
     const balances = useMemo(() => accountBalances(snapshot), [snapshot]);
     const txCounts = useMemo(() => {
         const m = new Map();
@@ -148,6 +154,22 @@ export default function AccountsPage() {
                                         archived
                                     </Label>
                                 )}
+                                {connByAccount.has(a.id) && (
+                                    <Label
+                                        size="xs"
+                                        theme={
+                                            connByAccount.get(a.id).status === "error"
+                                                ? "danger"
+                                                : connByAccount.get(a.id).status === "connected"
+                                                  ? "success"
+                                                  : "info"
+                                        }
+                                    >
+                                        {connByAccount.get(a.id).status === "connected"
+                                            ? "synced"
+                                            : connByAccount.get(a.id).status}
+                                    </Label>
+                                )}
                             </div>
                             <span className="account-row__balance num">
                                 {money(balances.get(a.id) ?? 0)}
@@ -164,6 +186,13 @@ export default function AccountsPage() {
                                             text: "Reconcile",
                                             action: () =>
                                                 setDialog({ type: "reconcile", account: a }),
+                                        },
+                                        {
+                                            text: connByAccount.has(a.id)
+                                                ? "Bank sync"
+                                                : "Connect bank",
+                                            action: () =>
+                                                setDialog({ type: "connection", account: a }),
                                         },
                                         {
                                             text: a.archived ? "Unarchive" : "Archive",
@@ -207,6 +236,13 @@ export default function AccountsPage() {
                 <AccountReconcileDialog
                     account={dialog.account}
                     balance={balances.get(dialog.account.id) ?? 0}
+                    onClose={() => setDialog(null)}
+                />
+            )}
+            {dialog?.type === "connection" && (
+                <ConnectionDialog
+                    account={dialog.account}
+                    connection={connByAccount.get(dialog.account.id) ?? null}
                     onClose={() => setDialog(null)}
                 />
             )}
