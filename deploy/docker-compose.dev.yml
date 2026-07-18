@@ -5,16 +5,29 @@ services:
     api:
         image: ghcr.io/astral-sh/uv:python3.12-bookworm-slim
         working_dir: /app
-        command: uv run uvicorn app.main:app --host 0.0.0.0 --port 8077 --reload
+        # Install the bank-sync connector extra + Chromium (cached in the
+        # pw-browsers volume), then run the hot-reload server.
+        command: >
+            sh -c "uv sync --extra connectors &&
+                   (uv run playwright install --with-deps chromium || true) &&
+                   uv run uvicorn app.main:app --host 0.0.0.0 --port 8077 --reload"
         environment:
             UV_PROJECT_ENVIRONMENT: /opt/venv
             UV_LINK_MODE: copy
             # inotify events don't cross the podman-machine/virtiofs boundary on macOS
             WATCHFILES_FORCE_POLLING: "true"
+            PLAYWRIGHT_BROWSERS_PATH: /opt/pw-browsers
+            # dev-only default key so bank sync works out of the box; override in
+            # your shell (export MONORI_ENCRYPTION_KEY=...) for anything real.
+            MONORI_ENCRYPTION_KEY: ${MONORI_ENCRYPTION_KEY:-ryeuklP0LIycgqWaGEA6UkYsP3yEhLWVtvBVipWI-Q0=}
+            # on a failed sync, dump a screenshot + HTML to server/data/ so the
+            # T-Bank selectors can be tuned against the real page
+            MONORI_CONNECTOR_DEBUG: "1"
         volumes:
             - ../server:/app
             - api-venv:/opt/venv
             - uv-cache:/root/.cache/uv
+            - pw-browsers:/opt/pw-browsers
         ports:
             - "8077:8077"
 
@@ -37,3 +50,4 @@ volumes:
     api-venv:
     uv-cache:
     web-modules:
+    pw-browsers:

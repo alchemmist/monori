@@ -22,6 +22,7 @@ Requires the optional dependency: ``pip install 'monori-server[connectors]'``
 followed by ``playwright install chromium``.
 """
 
+import os
 import pathlib
 import queue
 import tempfile
@@ -103,18 +104,38 @@ class TBankPlaywrightConnector(Connector):
             return
         try:
             with sync_playwright() as p:
-                browser = p.chromium.launch(headless=True)
+                browser = p.chromium.launch(headless=self._headless())
                 storage = self.session.get("storage_state") if self.session else None
                 context = browser.new_context(storage_state=storage, user_agent=USER_AGENT)
                 page = context.new_page()
-                self._ensure_logged_in(page)
-                rows = self._download_and_parse(page, since)
+                try:
+                    self._ensure_logged_in(page)
+                    rows = self._download_and_parse(page, since)
+                except Exception:
+                    self._save_debug(page)
+                    raise
                 new_session = {"storage_state": context.storage_state()}
                 self._from_worker.put(("result", SyncResult(rows, session=new_session)))
-        except SmsRequired:
-            raise
         except Exception as e:  # noqa: BLE001 - surfaced to the user as a sync error
             self._from_worker.put(("error", str(e)))
+
+    @staticmethod
+    def _headless():
+        return os.environ.get("MONORI_CONNECTOR_HEADED") not in ("1", "true")
+
+    @staticmethod
+    def _save_debug(page):
+        """When MONORI_CONNECTOR_DEBUG is set, dump a screenshot and the page HTML
+        so headless selector failures can be diagnosed from the host."""
+        if not os.environ.get("MONORI_CONNECTOR_DEBUG"):
+            return
+        out = pathlib.Path("data")
+        try:
+            out.mkdir(parents=True, exist_ok=True)
+            page.screenshot(path=str(out / "tbank-debug.png"), full_page=True)
+            (out / "tbank-debug.html").write_text(page.content(), encoding="utf-8")
+        except Exception:  # noqa: BLE001 - debugging aid must never mask the real error
+            pass
 
     def _ensure_logged_in(self, page):
         page.goto(self.URL_LOGIN, wait_until="domcontentloaded")
