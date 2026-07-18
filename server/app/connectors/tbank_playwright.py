@@ -4,24 +4,28 @@ This logs into ``www.tbank.ru`` **as you**, downloads the operations export, and
 feeds it through the same statement parser as the manual paste import. It talks
 to no undocumented JSON API — it clicks the same buttons a person clicks.
 
+To avoid an SMS on every sync it uses a **persistent browser profile** (a
+directory kept next to the database): cookies and the "this browser is trusted"
+device identity survive between syncs, so as long as the session stays valid no
+login is needed at all. When the session does expire, the connector logs in with
+a **quick-login code** it set on the bank's "create a code" screen right after
+the first OTP and remembered (encrypted) in the connection's credentials — only
+a brand-new device needs a fresh phone + SMS.
+
 Reality notes (read before relying on it):
 
 * This is automated access to your own account. It is a grey area against the
   bank's terms of service; use it on your own account at your own risk.
-* The bank requires an OTP on login. The flow pauses at the SMS step and raises
-  :class:`SmsRequired`; the router collects the code and calls
-  :meth:`resume_sync`. The live browser is kept on a dedicated worker thread for
-  the connector's lifetime because Playwright objects are thread-affine.
-* The session (browser storage state) is cached encrypted, so later syncs skip
-  the OTP until it expires.
-* **The selectors below are best-effort placeholders.** The live cabinet's
-  markup is not something this code can verify; expect to adjust
-  ``SEL_*``/``URL_*`` against the real site the first time you run it.
+* **The selectors/URLs below are best-effort.** The live cabinet's markup is not
+  something this code can verify; expect to adjust ``SEL_*``/``URL_*`` against
+  the real site. Set ``MONORI_CONNECTOR_DEBUG=1`` to dump a screenshot + HTML at
+  every step (``tbank-01-open.png`` …) so the flow can be followed and tuned.
 
 Requires the optional dependency: ``pip install 'monori-server[connectors]'``
 followed by ``playwright install chromium``.
 """
 
+import contextlib
 import os
 import pathlib
 import queue
@@ -43,25 +47,28 @@ class TBankPlaywrightConnector(Connector):
     kind = "playwright"
 
     URL_LOGIN = "https://www.tbank.ru/login/"
-    URL_LOGGED_IN_MARKER = "**/mybank/**"
+    URL_HOME = "https://www.tbank.ru/mybank/"
     URL_OPERATIONS = "https://www.tbank.ru/mybank/operations/"
+    URL_LOGGED_IN_MARKER = "**/mybank/**"
 
     SEL_PHONE = "input[name='phone'], input[type='tel']"
     SEL_PHONE_SUBMIT = "button[type='submit']"
-    SEL_SMS = "input[name='otp'], input[autocomplete='one-time-code']"
-    SEL_SMS_SUBMIT = "button[type='submit']"
     SEL_PASSWORD = "input[name='password']"
     SEL_PASSWORD_SUBMIT = "button[type='submit']"
+    SEL_SMS = "input[name='otp'], input[autocomplete='one-time-code']"
+    SEL_SMS_SUBMIT = "button[type='submit']"
+    # the 4-box code widget on both the "create a code" and "enter code" screens
+    SEL_CODE = "input[autocomplete='one-time-code'], input[inputmode='numeric']"
     SEL_EXPORT_TRIGGER = "[data-qa-type='export'], a[href*='export']"
 
-    # T-Bank ID drops interstitials after the OTP ("set a quick-login code",
-    # "install the app"); clicking one of these skips them.
-    SKIP_LABELS = ("Не сейчас", "Пропустить", "Позже", "Закрыть")
+    TEXT_SET_CODE = "Придумайте код"
+    TEXT_ENTER_CODE = "Введите код"
+    TEXT_SET_CODE_SUBMIT = "Установить"
 
     LOGIN_TIMEOUT_MS = 45_000
 
-    def __init__(self, credentials, session=None):
-        super().__init__(credentials, session)
+    def __init__(self, credentials, session=None, profile_dir=None):
+        super().__init__(credentials, session, profile_dir)
         self._worker = None
         self._to_worker: queue.Queue = queue.Queue()
         self._from_worker: queue.Queue = queue.Queue()
@@ -107,20 +114,26 @@ class TBankPlaywrightConnector(Connector):
                 )
             )
             return
+        user_data_dir = self.profile_dir or tempfile.mkdtemp()
+        pathlib.Path(user_data_dir).mkdir(parents=True, exist_ok=True)
         try:
             with sync_playwright() as p:
-                browser = p.chromium.launch(headless=self._headless())
-                storage = self.session.get("storage_state") if self.session else None
-                context = browser.new_context(storage_state=storage, user_agent=USER_AGENT)
-                page = context.new_page()
+                context = p.chromium.launch_persistent_context(
+                    user_data_dir,
+                    headless=self._headless(),
+                    user_agent=USER_AGENT,
+                    accept_downloads=True,
+                )
+                page = context.pages[0] if context.pages else context.new_page()
                 try:
                     self._ensure_logged_in(page)
                     rows = self._download_and_parse(page, since)
                 except Exception:
                     self._save_debug(page)
                     raise
-                new_session = {"storage_state": context.storage_state()}
-                self._from_worker.put(("result", SyncResult(rows, session=new_session)))
+                finally:
+                    context.close()
+                self._from_worker.put(("result", SyncResult(rows, session={"established": True})))
         except Exception as e:  # noqa: BLE001 - surfaced to the user as a sync error
             self._from_worker.put(("error", str(e)))
 
@@ -134,65 +147,103 @@ class TBankPlaywrightConnector(Connector):
 
     @classmethod
     def _shot(cls, page, name):
-        """Save a screenshot + HTML for one step, so the real login flow can be
-        followed and selectors tuned from the host (MONORI_CONNECTOR_DEBUG)."""
         if not cls._debug_on():
             return
         out = pathlib.Path("data")
-        try:
+        # a debugging aid must never mask the real error
+        with contextlib.suppress(Exception):
             out.mkdir(parents=True, exist_ok=True)
             page.screenshot(path=str(out / f"tbank-{name}.png"), full_page=True)
             (out / f"tbank-{name}.html").write_text(
                 f"<!-- url: {page.url} -->\n{page.content()}", encoding="utf-8"
             )
-        except Exception:  # noqa: BLE001 - debugging aid must never mask the real error
-            pass
 
     def _save_debug(self, page):
         self._shot(page, "error")
 
+    @staticmethod
+    def _has_text(page, text):
+        try:
+            return page.get_by_text(text, exact=False).count() > 0
+        except Exception:  # noqa: BLE001 - treat a query failure as "not present"
+            return False
+
+    def _is_logged_in(self, page):
+        return (
+            "/mybank" in page.url
+            and not self._has_text(page, self.TEXT_ENTER_CODE)
+            and not self._has_text(page, self.TEXT_SET_CODE)
+            and page.query_selector(self.SEL_PHONE) is None
+        )
+
+    def _type_code(self, page, code):
+        """Enter the 4-digit quick-login code into the code widget."""
+        # some widgets grab keystrokes without a focusable box
+        with contextlib.suppress(Exception):
+            page.locator(self.SEL_CODE).first.click(timeout=5_000)
+        page.keyboard.type(code)
+        page.wait_for_timeout(1_000)
+
     def _dismiss_interstitials(self, page):
-        """Skip post-OTP screens (set-a-code, install-the-app) by clicking a
-        'not now' style button when one is present."""
-        for label in self.SKIP_LABELS:
-            try:
+        for label in ("Не сейчас", "Пропустить", "Позже", "Закрыть"):
+            # the label just isn't on this screen
+            with contextlib.suppress(Exception):
                 page.locator(f"text={label}").first.click(timeout=3_000)
                 page.wait_for_timeout(1_000)
-            except Exception:  # noqa: BLE001 - the label just isn't on this screen
-                pass
 
     def _ensure_logged_in(self, page):
-        page.goto(self.URL_LOGIN, wait_until="domcontentloaded")
-        self._shot(page, "01-login")
-        if self._looks_logged_in(page):
+        page.goto(self.URL_HOME, wait_until="domcontentloaded")
+        page.wait_for_timeout(1_500)
+        self._shot(page, "01-open")
+        if self._is_logged_in(page):
             return
+
+        # Known device, expired session: quick-login with the stored code.
+        code = self.credentials.get("code")
+        if code and self._has_text(page, self.TEXT_ENTER_CODE):
+            self._type_code(page, code)
+            self._shot(page, "02-quicklogin")
+            if self._is_logged_in(page):
+                return
+
+        # Full login on a fresh device.
+        page.goto(self.URL_LOGIN, wait_until="domcontentloaded")
+        self._shot(page, "03-login")
         page.fill(self.SEL_PHONE, self.credentials["phone"])
         page.click(self.SEL_PHONE_SUBMIT)
-        self._shot(page, "02-after-phone")
+        page.wait_for_timeout(1_500)
         if page.query_selector(self.SEL_PASSWORD):
             page.fill(self.SEL_PASSWORD, self.credentials["password"])
             page.click(self.SEL_PASSWORD_SUBMIT)
-            self._shot(page, "03-after-password")
-        code = self._ask_sms()
-        page.fill(self.SEL_SMS, code)
+            self._shot(page, "04-after-password")
+        otp = self._ask_sms()
+        page.fill(self.SEL_SMS, otp)
         page.click(self.SEL_SMS_SUBMIT)
-        self._shot(page, "04-after-sms")
-        self._dismiss_interstitials(page)
-        self._shot(page, "05-after-dismiss")
-        page.wait_for_url(self.URL_LOGGED_IN_MARKER, timeout=self.LOGIN_TIMEOUT_MS)
-        self._shot(page, "06-logged-in")
+        page.wait_for_timeout(2_000)
+        self._shot(page, "05-after-sms")
 
-    def _looks_logged_in(self, page):
-        try:
-            page.wait_for_url(self.URL_LOGGED_IN_MARKER, timeout=5_000)
-            return True
-        except Exception:  # noqa: BLE001 - a timeout just means we must log in
-            return False
+        # Right after the OTP the bank offers to set a quick-login code — set ours
+        # (and remember it) so future syncs skip the SMS, instead of skipping it.
+        if code and self._has_text(page, self.TEXT_SET_CODE):
+            self._type_code(page, code)
+            # layout varies; screenshots show what happened
+            with contextlib.suppress(Exception):
+                page.locator(f"text={self.TEXT_SET_CODE_SUBMIT}").first.click(timeout=3_000)
+                page.wait_for_timeout(1_000)
+                # some flows confirm the code by entering it a second time
+                if self._has_text(page, self.TEXT_SET_CODE):
+                    self._type_code(page, code)
+            self._shot(page, "06-set-code")
+        else:
+            self._dismiss_interstitials(page)
+
+        page.wait_for_url(self.URL_LOGGED_IN_MARKER, timeout=self.LOGIN_TIMEOUT_MS)
+        self._shot(page, "07-logged-in")
 
     def _download_and_parse(self, page, since):
         page.goto(self.URL_OPERATIONS, wait_until="domcontentloaded")
         page.wait_for_timeout(2_000)
-        self._shot(page, "07-operations")
+        self._shot(page, "08-operations")
         with page.expect_download(timeout=self.LOGIN_TIMEOUT_MS) as dl:
             page.click(self.SEL_EXPORT_TRIGGER)
         download = dl.value

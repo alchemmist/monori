@@ -6,12 +6,15 @@ connector in ``PENDING`` (in-process; fine for a single-user self-hosted app)
 until the user posts the code to ``/sms``.
 """
 
+import pathlib
+import secrets
 from datetime import datetime
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from .. import crypto
+from .. import db as dbmod
 from ..connectors import base as connectors
 from ..connectors.base import ConnectorError, SmsRequired
 from ..deps import conn, serialize_connection
@@ -25,6 +28,12 @@ PENDING: dict[int, connectors.Connector] = {}
 
 def _now():
     return datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+
+
+def _profile_dir(cid):
+    """A stable per-connection directory for the connector's browser profile, so
+    it stays logged in across syncs. Lives next to the database file."""
+    return str(pathlib.Path(dbmod.DB_PATH).parent / "connectors" / str(cid))
 
 
 class Credentials(BaseModel):
@@ -109,7 +118,11 @@ def create_connection(body: ConnectionBody):
             connectors.get_connector_class(body.bank, body.kind)
         except ConnectorError as e:
             raise HTTPException(400, str(e)) from e
-        creds = crypto.encrypt(body.credentials.model_dump())
+        creds_dict = body.credentials.model_dump()
+        # a quick-login code we set on the bank's "create a code" screen after the
+        # first OTP, then reuse to log in on later syncs without another SMS
+        creds_dict["code"] = f"{secrets.randbelow(10000):04d}"
+        creds = crypto.encrypt(creds_dict)
         cur = c.execute(
             "INSERT INTO bank_connections (account_id, bank, kind, credentials_encrypted,"
             " created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
@@ -127,10 +140,12 @@ def update_credentials(cid: int, credentials: Credentials):
     c = conn()
     try:
         _load(c, cid)
+        creds_dict = credentials.model_dump()
+        creds_dict["code"] = f"{secrets.randbelow(10000):04d}"
         c.execute(
             "UPDATE bank_connections SET credentials_encrypted=?, session_encrypted=NULL,"
             " status='disconnected', updated_at=? WHERE id=?",
-            (crypto.encrypt(credentials.model_dump()), _now(), cid),
+            (crypto.encrypt(creds_dict), _now(), cid),
         )
         c.commit()
         return serialize_connection(_load(c, cid))
@@ -160,9 +175,16 @@ def sync_connection(cid: int):
         creds = crypto.decrypt(row["credentials_encrypted"])
         if not creds:
             raise HTTPException(400, "connection has no credentials")
+        if not creds.get("code"):
+            creds["code"] = f"{secrets.randbelow(10000):04d}"
+            c.execute(
+                "UPDATE bank_connections SET credentials_encrypted=? WHERE id=?",
+                (crypto.encrypt(creds), cid),
+            )
+            c.commit()
         session = crypto.decrypt(row["session_encrypted"])
         cls = connectors.get_connector_class(row["bank"], row["kind"])
-        connector = cls(creds, session)
+        connector = cls(creds, session, profile_dir=_profile_dir(cid))
         try:
             return _finish(c, row, connector.sync(row["last_sync"]))
         except SmsRequired:
