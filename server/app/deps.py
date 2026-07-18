@@ -52,6 +52,22 @@ def serialize_tx(r):
     }
 
 
+def serialize_connection(r):
+    """A bank connection, without any secret material (credentials/session)."""
+    return {
+        "id": r["id"],
+        "accountId": r["account_id"],
+        "bank": r["bank"],
+        "kind": r["kind"],
+        "status": r["status"],
+        "lastSync": r["last_sync"],
+        "lastError": r["last_error"],
+        "hasCredentials": r["credentials_encrypted"] is not None,
+        "createdAt": r["created_at"],
+        "updatedAt": r["updated_at"],
+    }
+
+
 def serialize_budget(r):
     return {
         "categoryId": r["category_id"],
@@ -96,6 +112,14 @@ def snapshot(c):
             for r in cur.execute(
                 "SELECT category_id, year, month, amount FROM budgets"
                 " ORDER BY year, month, category_id"
+            )
+        ],
+        "connections": [
+            serialize_connection(r)
+            for r in cur.execute(
+                "SELECT id, account_id, bank, kind, status, last_sync, last_error,"
+                " credentials_encrypted, created_at, updated_at FROM bank_connections"
+                " ORDER BY id"
             )
         ],
     }
