@@ -31,12 +31,11 @@ class Connector:
     #: connectors meant only for tests/demos are hidden from the bank picker
     hidden = False
 
-    def __init__(self, credentials, session=None, profile_dir=None):
+    def __init__(self, credentials, session=None):
         self.credentials = credentials or {}
+        #: opaque per-connector state cached (encrypted) between syncs, e.g. a
+        #: browser session; None on the first sync
         self.session = session
-        #: a stable on-disk directory a connector may use to persist a browser
-        #: profile (cookies, device identity) across syncs, so it stays logged in
-        self.profile_dir = profile_dir
 
     def sync(self, since=None):
         """Pull transactions changed since ``since`` (ISO date string or None for

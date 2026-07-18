@@ -70,13 +70,13 @@ Enabling connectors takes two things:
    ```
 
 The T-Bank connector logs in **as you** (phone, then the SMS code the bank sends)
-to download your operations export. To avoid an SMS on every sync it keeps a
-**persistent browser profile** in `connectors/<id>/` next to the database, and on
-the bank's "create a code" screen it sets a quick-login code it remembers
-(encrypted) in the connection. So only the first sync needs an SMS; later syncs
-reuse the profile, falling back to the code when the session expires. That
-profile directory holds live session cookies — it is as sensitive as the
-database file itself, so back it up and protect it the same way.
+to download your operations export. To avoid an SMS on every sync it keeps the
+authenticated **browser session** (cookies, trusted-device identity) and, from
+the bank's "create a code" screen, a quick-login code — both stored **encrypted**
+in the connection with the same key. So only the first sync needs an SMS; later
+syncs restore the session, falling back to the code when it expires. During a
+sync the profile is unpacked into an owner-only temporary directory and removed
+right after, so the reusable banking state never sits in plaintext on disk.
 
 This is automated access to your own account and is a grey area under the bank's
 terms of service — use it on your own account at your own risk. Because it holds

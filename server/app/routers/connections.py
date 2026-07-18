@@ -7,7 +7,6 @@ until the user posts the code to ``/sms``.
 """
 
 import contextlib
-import pathlib
 import secrets
 from datetime import datetime
 
@@ -15,7 +14,6 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from .. import crypto
-from .. import db as dbmod
 from ..connectors import base as connectors
 from ..connectors.base import ConnectorError, SmsRequired
 from ..deps import conn, serialize_connection
@@ -29,12 +27,6 @@ PENDING: dict[int, connectors.Connector] = {}
 
 def _now():
     return datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
-
-
-def _profile_dir(cid):
-    """A stable per-connection directory for the connector's browser profile, so
-    it stays logged in across syncs. Lives next to the database file."""
-    return str(pathlib.Path(dbmod.DB_PATH).parent / "connectors" / str(cid))
 
 
 def _close_pending(cid):
@@ -216,7 +208,7 @@ def sync_connection(cid: int):
         # a re-triggered sync replaces any earlier attempt still parked on its OTP
         _close_pending(cid)
         cls = connectors.get_connector_class(row["bank"], row["kind"])
-        connector = cls(creds, session, profile_dir=_profile_dir(cid))
+        connector = cls(creds, session)
         try:
             return _finish(c, row, connector.sync(row["last_sync"]))
         except SmsRequired:
