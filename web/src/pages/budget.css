@@ -106,6 +106,9 @@
 
 .tx-table {
   overflow: hidden;
+  margin-inline: calc(-1 * var(--pad-x));
+  border-inline: none;
+  border-radius: 0;
 }
 
 @media (width <= 760px) {
