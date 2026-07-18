@@ -133,8 +133,8 @@ class TBankPlaywrightConnector(Connector):
         # lives only inside the encrypted session blob. Restore it into an
         # owner-only temp dir for the run, then re-archive and hand it back
         # encrypted; the plaintext profile never outlives the sync.
+        # mkdtemp already creates the directory owner-only (0700)
         work_dir = tempfile.mkdtemp(prefix="tbank-profile-")
-        os.chmod(work_dir, 0o700)
         try:
             self._restore_profile(work_dir)
             with sync_playwright() as p:

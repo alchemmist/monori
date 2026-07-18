@@ -54,6 +54,11 @@ def test_connection_appears_in_snapshot_without_secrets(api, client, keyed):
 
 def test_two_phase_sync_then_incremental_dedup(api, client, keyed):
     acct = api.default_account()
+    # categories so the synced rows get auto-categorized in _finish
+    inc = api.group("Income", kind="income")
+    exp = api.group("Spending", kind="expense")
+    salary_cat = api.category("Salary", inc, keywords="salary")
+    food_cat = api.category("Food", exp, keywords="lenta")
     cid = _connect(client, acct).json()["id"]
 
     # first sync stops at the OTP step
@@ -76,11 +81,17 @@ def test_two_phase_sync_then_incremental_dedup(api, client, keyed):
     assert body["inserted"] == 2
     assert body["skipped"] == 0
     assert body["dateFrom"] == "2026-02-01T09:00:00"
+    assert body["dateTo"] == "2026-02-02T12:30:00"
+    assert body["batchId"] is not None
 
     snap = api.snapshot()
     synced = [t for t in snap["transactions"] if t["source"] == "sync"]
     assert len(synced) == 2
     assert all(t["accountId"] == acct for t in synced)
+    # the sync ran the rows through categorization
+    by_desc = {t["description"]: t for t in synced}
+    assert by_desc["Lenta"]["categoryId"] == food_cat
+    assert by_desc["Salary"]["categoryId"] == salary_cat
     assert snap["connections"][0]["status"] == "connected"
     assert snap["connections"][0]["lastSync"] is not None
 
