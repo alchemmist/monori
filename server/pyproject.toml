@@ -6,6 +6,12 @@ requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.30",
+    "cryptography>=44",
+]
+
+[project.optional-dependencies]
+connectors = [
+    "playwright>=1.40",
 ]
 
 [dependency-groups]
@@ -49,5 +55,13 @@ warn_redundant_casts = true
 warn_unused_ignores = true
 no_implicit_optional = true
 
+[[tool.mypy.overrides]]
+module = ["playwright.*"]
+ignore_missing_imports = true
+
 [tool.bandit]
 exclude_dirs = ["tests"]
+# B105 flags string literals whose variable name looks password-like. It only
+# false-positives here (CSS selectors, a fake session marker); real credentials
+# are user-supplied and encrypted, never hardcoded.
+skips = ["B105"]
