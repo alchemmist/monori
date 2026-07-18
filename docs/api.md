@@ -197,6 +197,45 @@ already holds, inserting the rest with `source: "import"`.
 Committing the same batch twice inserts nothing the second time — the operation
 is idempotent. See [Importing statements](importing.md) for the dedup rules.
 
+## Connections
+
+Bank connections tie an account to a connector that can sync transactions on
+demand. All routes require `MONORI_ENCRYPTION_KEY` to be set (credentials and the
+cached session are stored encrypted); without it they return `400`. Connections
+also appear in the snapshot as `connections[]`, never carrying any secret
+material. See [Configuration → Bank sync connectors](configuration.md#bank-sync-connectors).
+
+### `POST /api/connections`
+
+Body `{accountId, bank, kind, credentials: {phone, password}}`. Creates a
+connection in the `disconnected` state and returns it (without secrets).
+
+### `PATCH /api/connections/{id}`
+
+Body `{phone, password}` — replaces the stored credentials and clears the cached
+session.
+
+### `DELETE /api/connections/{id}`
+
+Removes the connection. Returns `{deleted: id}`.
+
+### `POST /api/connections/{id}/sync`
+
+Runs a sync now. If login needs an OTP the response is `{"status":
+"awaiting_sms"}` and the connection moves to `awaiting_sms`; otherwise rows are
+committed as a batch (`source: "sync"`) and the response summarizes the run:
+
+```json
+{ "status": "connected", "inserted": 12, "skipped": 3, "batchId": 8,
+  "dateFrom": "2026-02-01T09:00:00", "dateTo": "2026-02-14T18:20:00" }
+```
+
+### `POST /api/connections/{id}/sms`
+
+Body `{code}` — supplies the OTP for a sync that returned `awaiting_sms`,
+continuing the same login and returning the same summary as `/sync`. Returns
+`409` if no login is awaiting a code.
+
 ## Interactive docs
 
 Because the backend is FastAPI, live OpenAPI docs ship with every instance:
