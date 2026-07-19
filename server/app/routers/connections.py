@@ -230,13 +230,13 @@ def sync_connection(cid: int, user: Annotated[dict, Depends(current_user)]):
                 cid, row["bank"], row["kind"], creds, session, row["last_sync"]
             )
             return _finish(c, row, result, uid)
-        except SmsRequired:
+        except SmsRequired as e:
             c.execute(
                 "UPDATE bank_connections SET status='awaiting_sms', updated_at=? WHERE id=?",
                 (_now(), cid),
             )
             c.commit()
-            return {"status": "awaiting_sms"}
+            return {"status": "awaiting_sms", "message": str(e)}
         except ConnectorError as e:
             _mark_error(c, cid, str(e))
             raise HTTPException(502, str(e)) from e
@@ -255,6 +255,8 @@ def submit_sms(cid: int, body: SmsBody, user: Annotated[dict, Depends(current_us
             return _finish(c, row, get_runner().resume(cid, body.code), uid)
         except NoPendingLogin as e:
             raise HTTPException(409, "no login awaiting a code") from e
+        except SmsRequired as e:
+            return {"status": "awaiting_sms", "message": str(e)}
         except ConnectorError as e:
             _mark_error(c, cid, str(e))
             raise HTTPException(502, str(e)) from e

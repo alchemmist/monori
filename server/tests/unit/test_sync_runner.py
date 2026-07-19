@@ -151,6 +151,28 @@ class RecordingConnector:
         pass
 
 
+class RetryOtpConnector:
+    bank = "retryotp"
+    kind = "retryotp"
+    hidden = True
+    closed = 0
+
+    def __init__(self, credentials, session=None):
+        self.credentials = credentials
+        self.session = session
+
+    def sync(self, since=None):
+        raise SmsRequired("code sent")
+
+    def resume_sync(self, code):
+        if code != "4242":
+            raise SmsRequired("the bank rejected the code — check it and try again")
+        return SyncResult([], session=None)
+
+    def close(self):
+        type(self).closed += 1
+
+
 class FailingCloseConnector(ClosableConnector):
     bank = "failclose"
     kind = "failclose"
@@ -198,6 +220,19 @@ def test_failing_close_never_masks_the_flow(runner, monkeypatch):
     with pytest.raises(ConnectorError, match="bad code"):
         runner.resume(2, "0000")
     assert FailingCloseConnector.closed == 2
+
+
+def test_rejected_code_keeps_login_alive(runner, monkeypatch):
+    monkeypatch.setitem(base.REGISTRY, ("retryotp", "retryotp"), RetryOtpConnector)
+    RetryOtpConnector.closed = 0
+    with pytest.raises(SmsRequired):
+        runner.start(1, "retryotp", "retryotp", CREDS, None, None)
+    with pytest.raises(SmsRequired) as ei:
+        runner.resume(1, "0000")
+    assert str(ei.value) == "the bank rejected the code — check it and try again"
+    assert RetryOtpConnector.closed == 0
+    result = runner.resume(1, "4242")
+    assert result.rows == []
 
 
 def test_remote_error_messages_are_exact():
