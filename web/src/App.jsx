@@ -74,6 +74,12 @@ export default function App({ theme, onToggleTheme }) {
         if (toast) toaster.add({ name: String(Date.now()), autoHiding: 5000, ...toast });
     }, [toast, toaster]);
 
+    useEffect(() => {
+        if (!isDemo() && user && window.location.pathname === "/login") {
+            window.history.replaceState(null, "", "/");
+        }
+    }, [user]);
+
     const lastYear = useMemo(() => {
         if (!snapshot) return new Date().getFullYear();
         const maxTx = snapshot.transactions.reduce(
@@ -97,7 +103,11 @@ export default function App({ theme, onToggleTheme }) {
         );
     }
     if (!isDemo() && !user) {
-        return <LoginPage />;
+        if (window.location.pathname === "/login") {
+            return <LoginPage />;
+        }
+        window.location.replace("/welcome");
+        return null;
     }
     if (loading) {
         return (

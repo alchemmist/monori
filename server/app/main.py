@@ -4,7 +4,7 @@ import pathlib
 from typing import Annotated
 
 from fastapi import Depends, FastAPI
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from .auth import current_user
@@ -71,6 +71,10 @@ if DOCS_DIR.is_dir():
     @app.get("/docs/{path:path}")
     def docs_site(path: str = ""):
         return _serve_spa(DOCS_DIR, path)
+
+    @app.get("/welcome")
+    def welcome():
+        return RedirectResponse("/docs/welcome")
 
 
 if STATIC_DIR.is_dir():

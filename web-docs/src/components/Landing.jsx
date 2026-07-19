@@ -40,7 +40,7 @@ const FEATURES = [
     {
         icon: CurlyBrackets,
         title: "Full REST API",
-        text: "Every action the UI takes is an HTTP call. Groups, categories, transactions, budgets, import — with optional bearer-token auth.",
+        text: "Every action the UI takes is an HTTP call. Groups, categories, transactions, budgets, import — behind per-user JWT auth.",
         to: "/api",
     },
     {
@@ -100,7 +100,7 @@ export default function Landing() {
         <div className="landing">
             <section className="hero">
                 <div className="hero__copy">
-                    <span className="hero__eyebrow">Self-hosted · single-user · open source</span>
+                    <span className="hero__eyebrow">Self-hosted · multi-user · open source</span>
                     <h1 className="hero__title">
                         Your budget, <span className="accent">to the last kopeck.</span>
                     </h1>
@@ -110,7 +110,11 @@ export default function Landing() {
                         bank-statement import, a full-year grid, dashboards, and a REST API.
                     </p>
                     <div className="hero__cta">
-                        <a className="btn btn_primary" href={DEMO_URL}>
+                        <a className="btn btn_primary" href="/login">
+                            Sign in
+                            <Icon data={ArrowRight} size={16} />
+                        </a>
+                        <a className="btn btn_ghost" href={DEMO_URL}>
                             <Icon data={Sparkles} size={16} />
                             Try the live demo
                         </a>

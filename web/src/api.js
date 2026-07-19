@@ -14,7 +14,7 @@ const json = async (r) => {
             localStorage.getItem("monori_token")
         ) {
             localStorage.removeItem("monori_token");
-            window.location.reload();
+            window.location.replace("/login");
         }
         let detail = `${r.status} ${r.statusText}`;
         try {
