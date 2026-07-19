@@ -1,16 +1,20 @@
 name: Deploy
 
-# Rolls out a release on every push to main: SSH into the server, pull the new
-# commit and rebuild the container from deploy/docker-compose.yml.
+# Rolls out a release after the CI workflow succeeds on main: SSH into the
+# server, check out the exact commit that passed and rebuild the container
+# from deploy/docker-compose.yml.
 
 on:
-    push:
+    workflow_run:
+        workflows: [CI]
+        types: [completed]
         branches: [main]
 
 jobs:
     deploy:
         name: Deploy over SSH
         runs-on: ubuntu-latest
+        if: github.event.workflow_run.conclusion == 'success'
         steps:
             - name: Pull and rebuild
               uses: appleboy/ssh-action@v1
@@ -21,6 +25,7 @@ jobs:
                   script: |
                       set -e
                       cd ${{ secrets.SSH_PROJECT_PATH }}
-                      git pull origin main --rebase
+                      git fetch origin main
+                      git checkout --detach ${{ github.event.workflow_run.head_sha }}
                       cd deploy
                       docker compose up --build -d
