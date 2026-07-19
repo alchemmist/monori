@@ -62,10 +62,26 @@ def test_me_requires_and_accepts_token(client):
     token = _login(client).json()["access_token"]
 
     assert client.get("/api/auth/me").status_code == 401
-    assert (
-        client.get("/api/auth/me", headers={"Authorization": "Bearer garbage"}).status_code == 401
-    )
+    bad = client.get("/api/auth/me", headers={"Authorization": "Bearer garbage"})
+    assert bad.status_code == 401
+    assert bad.json()["detail"] == "invalid or expired token"
 
     r = client.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"})
     assert r.status_code == 200
     assert r.json()["email"] == "user@example.com"
+
+
+def test_me_rejects_token_of_deleted_user(client):
+    _register(client)
+    token = _login(client).json()["access_token"]
+
+    import app.db as dbmod
+
+    c = dbmod.connect()
+    c.execute("DELETE FROM users")
+    c.commit()
+    c.close()
+
+    r = client.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"})
+    assert r.status_code == 401
+    assert r.json()["detail"] == "unknown user"

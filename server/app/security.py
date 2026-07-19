@@ -39,17 +39,39 @@ def _secret_path():
     return pathlib.Path(dbmod.DB_PATH).parent / ".auth_secret"
 
 
+_secret_cache: dict[str, str] = {}
+
+
 def auth_secret():
     env = os.environ.get("MONORI_AUTH_SECRET")
     if env:
         return env
     path = _secret_path()
+    key = str(path)
+    cached = _secret_cache.get(key)
+    if cached:
+        return cached
+    value = _load_or_create_secret(path)
+    _secret_cache[key] = value
+    return value
+
+
+def _load_or_create_secret(path):
     if path.exists():
-        return path.read_text().strip()
-    value = secrets.token_hex(32)
+        existing = path.read_text().strip()
+        if existing:
+            # self-heal a mis-permissioned secret: it must stay owner-only
+            if path.stat().st_mode & 0o077:
+                path.chmod(0o600)
+            return existing
+        path.unlink()
     path.parent.mkdir(parents=True, exist_ok=True)
-    # write owner-only so the signing key isn't world-readable
-    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    value = secrets.token_hex(32)
+    try:
+        # exclusive create so concurrent workers can't overwrite each other
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    except FileExistsError:
+        return path.read_text().strip()
     with os.fdopen(fd, "w") as f:
         f.write(value)
     return value
