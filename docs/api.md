@@ -12,37 +12,33 @@ is called out again in the [Import](#import) section.
 
 ## Authentication
 
-Auth is optional and controlled by the `MONORI_API_TOKEN` environment variable
-(see [Configuration](configuration.md)):
-
-- **Unset** — the API is open.
-- **Set** — every `/api` route, including `GET /api/snapshot`, requires
-  `Authorization: Bearer <token>`. A missing or wrong token gets `401`. The
-  comparison is constant-time.
-
-The documentation endpoints stay public regardless of the token: this docs site
-at `/docs`, plus the OpenAPI helpers `/api-docs`, `/api-redoc`, and
-`/openapi.json`.
-
-```bash
-curl -H "Authorization: Bearer $MONORI_API_TOKEN" http://localhost:8000/api/snapshot
-```
-
-### In-app users (skeleton)
-
-Issue #34 adds real accounts that sign in to monori itself. This first cut ships
-the endpoints below; the `current_user` dependency they expose is not yet wired
-onto the data routes (per-user data ownership is a later phase), so it runs
-alongside the `MONORI_API_TOKEN` guard for now.
+monori is multi-user: people register, sign in, and each sees only their own
+budget. Every data route requires a bearer JWT; only the auth endpoints, this
+docs site, and the OpenAPI helpers (`/api-docs`, `/api-redoc`, `/openapi.json`)
+are public.
 
 - **`POST /api/auth/register`** — body `{email, password}` (password ≥ 8 chars).
   Creates a user (Argon2-hashed password) and returns `{id, email, createdAt}`.
   `409` if the email is already registered, `400` on a bad email/short password.
+  A new user starts with a default **Cash** account. The **first** user to
+  register also claims any data that predates multi-user (see
+  [Data model](data-model.md)).
 - **`POST /api/auth/token`** — OAuth2 password grant (form-encoded `username` =
   email, `password`). Returns `{access_token, token_type: "bearer"}` — a JWT
   valid for 7 days — or `401`.
 - **`GET /api/auth/me`** — with `Authorization: Bearer <access_token>`, returns
   the current user; `401` if the token is missing, malformed, or expired.
+
+```bash
+TOKEN=$(curl -s -X POST http://localhost:8000/api/auth/token \
+  -d 'username=you@example.com&password=...' | jq -r .access_token)
+curl -H "Authorization: Bearer $TOKEN" http://localhost:8000/api/snapshot
+```
+
+All routes below are scoped to the authenticated user: they see and mutate only
+that user's accounts, groups, categories, transactions, budgets, and
+connections. A row that belongs to someone else answers `404`. The legacy
+`MONORI_API_TOKEN` instance-wide guard is retired.
 
 ## Conventions
 

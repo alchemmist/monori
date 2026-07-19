@@ -9,12 +9,32 @@ from app.ingest import categorize_rows, commit_rows, existing_hash_counts, load_
 
 
 def _db(tmp_path):
-    return dbmod.connect(str(tmp_path / "t.db"))
+    c = dbmod.connect(str(tmp_path / "t.db"))
+    c.execute("INSERT INTO users (email, password_hash, created_at) VALUES ('u@e.co', 'h', 't')")
+    uid = c.execute("SELECT id FROM users").fetchone()[0]
+    c.execute(
+        "INSERT INTO accounts (user_id, name, type, currency, sort)"
+        " VALUES (?, 'T-Bank', 'card', 'RUB', 1)",
+        (uid,),
+    )
+    c.commit()
+    return c
+
+
+def _uid(c):
+    return c.execute("SELECT id FROM users").fetchone()[0]
 
 
 def _seed_categories(c):
-    c.execute("INSERT INTO category_groups (name, sort, kind) VALUES ('Inc', 1, 'income')")
-    c.execute("INSERT INTO category_groups (name, sort, kind) VALUES ('Exp', 2, 'expense')")
+    uid = _uid(c)
+    c.execute(
+        "INSERT INTO category_groups (user_id, name, sort, kind) VALUES (?, 'Inc', 1, 'income')",
+        (uid,),
+    )
+    c.execute(
+        "INSERT INTO category_groups (user_id, name, sort, kind) VALUES (?, 'Exp', 2, 'expense')",
+        (uid,),
+    )
     inc = c.execute("SELECT id FROM category_groups WHERE kind='income'").fetchone()[0]
     exp = c.execute("SELECT id FROM category_groups WHERE kind='expense'").fetchone()[0]
     cat_sql = "INSERT INTO categories (group_id, name, keywords, sort) VALUES (?, ?, ?, ?)"
@@ -134,7 +154,10 @@ def test_commit_rows_partial_skip_against_existing(tmp_path):
 def test_snapshot_full_shape(tmp_path):
     c = _db(tmp_path)
     acct = c.execute("SELECT MIN(id) FROM accounts").fetchone()[0]
-    c.execute("INSERT INTO category_groups (name, sort, kind) VALUES ('Bills', 1, 'expense')")
+    c.execute(
+        "INSERT INTO category_groups (user_id, name, sort, kind) VALUES (?, 'Bills', 1, 'expense')",
+        (_uid(c),),
+    )
     gid = c.execute("SELECT id FROM category_groups").fetchone()[0]
     c.execute(
         "INSERT INTO categories (group_id, name, keywords, sort) VALUES (?, 'Rent', 'rent', 1)",
@@ -150,7 +173,7 @@ def test_snapshot_full_shape(tmp_path):
         "INSERT INTO budgets (category_id, year, month, amount) VALUES (?, 2026, 1, 5000)", (cid,)
     )
     c.commit()
-    snap = snapshot(c)
+    snap = snapshot(c, _uid(c))
     assert [a["name"] for a in snap["accounts"]] == ["T-Bank"]
     assert [g["name"] for g in snap["groups"]] == ["Bills"]
     assert snap["categories"][0]["name"] == "Rent"
@@ -170,7 +193,7 @@ def test_snapshot_includes_connections_without_secrets(tmp_path):
         (acct, b"cipher"),
     )
     c.commit()
-    conns = snapshot(c)["connections"]
+    conns = snapshot(c, _uid(c))["connections"]
     assert len(conns) == 1
     assert conns[0]["bank"] == "tbank"
     assert conns[0]["status"] == "connected"

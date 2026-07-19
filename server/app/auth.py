@@ -1,23 +1,11 @@
-import os
-import secrets
 from typing import Annotated
 
 import jwt
-from fastapi import Depends, Header, HTTPException
+from fastapi import Depends, HTTPException
 from fastapi.security import OAuth2PasswordBearer
 
 from .deps import conn, serialize_user
 from .security import decode_access_token
-
-
-def require_token(authorization: str | None = Header(default=None)):
-    token = os.environ.get("MONORI_API_TOKEN")
-    if not token:
-        return
-    expected = f"Bearer {token}"
-    if not authorization or not secrets.compare_digest(authorization, expected):
-        raise HTTPException(401, "invalid or missing API token")
-
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/auth/token", auto_error=True)
 

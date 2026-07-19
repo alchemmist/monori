@@ -8,23 +8,28 @@ PRAGMA journal_mode=WAL;
 
 CREATE TABLE IF NOT EXISTS category_groups (
   id INTEGER PRIMARY KEY,
-  name TEXT NOT NULL UNIQUE,
+  user_id INTEGER REFERENCES users(id),
+  name TEXT NOT NULL,
   sort INTEGER NOT NULL,
-  kind TEXT NOT NULL CHECK (kind IN ('income', 'expense'))
+  kind TEXT NOT NULL CHECK (kind IN ('income', 'expense')),
+  UNIQUE (user_id, name)
 );
+CREATE INDEX IF NOT EXISTS idx_groups_user ON category_groups(user_id);
 
 CREATE TABLE IF NOT EXISTS categories (
   id INTEGER PRIMARY KEY,
   group_id INTEGER NOT NULL REFERENCES category_groups(id),
-  name TEXT NOT NULL UNIQUE,
+  name TEXT NOT NULL,
   keywords TEXT NOT NULL DEFAULT '',
   sort INTEGER NOT NULL DEFAULT 0,
   archived INTEGER NOT NULL DEFAULT 0
 );
+CREATE INDEX IF NOT EXISTS idx_categories_group ON categories(group_id);
 
 CREATE TABLE IF NOT EXISTS accounts (
   id INTEGER PRIMARY KEY,
-  name TEXT NOT NULL UNIQUE,
+  user_id INTEGER REFERENCES users(id),
+  name TEXT NOT NULL,
   type TEXT NOT NULL DEFAULT 'other' CHECK (type IN ('card','cash','savings','other')),
   currency TEXT NOT NULL DEFAULT 'RUB',
   sort INTEGER NOT NULL DEFAULT 0,
@@ -33,8 +38,10 @@ CREATE TABLE IF NOT EXISTS accounts (
   opening_date TEXT,
   icon TEXT NOT NULL DEFAULT 'wallet',
   color TEXT NOT NULL DEFAULT '#5b6472',
-  icon_image TEXT
+  icon_image TEXT,
+  UNIQUE (user_id, name)
 );
+CREATE INDEX IF NOT EXISTS idx_accounts_user ON accounts(user_id);
 
 CREATE TABLE IF NOT EXISTS bank_connections (
   id INTEGER PRIMARY KEY,

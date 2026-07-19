@@ -1,5 +1,21 @@
+const tokenHeader = () => {
+    const token = localStorage.getItem("monori_token");
+    return token ? { Authorization: `Bearer ${token}` } : {};
+};
+
+const apiFetch = (url, opts = {}) =>
+    fetch(url, { ...opts, headers: { ...tokenHeader(), ...(opts.headers || {}) } });
+
 const json = async (r) => {
     if (!r.ok) {
+        if (
+            r.status === 401 &&
+            !r.url.includes("/api/auth/") &&
+            localStorage.getItem("monori_token")
+        ) {
+            localStorage.removeItem("monori_token");
+            window.location.reload();
+        }
         let detail = `${r.status} ${r.statusText}`;
         try {
             const body = await r.json();
@@ -13,102 +29,102 @@ const json = async (r) => {
 };
 
 export const api = {
-    snapshot: () => fetch("/api/snapshot").then(json),
+    snapshot: () => apiFetch("/api/snapshot").then(json),
     putBudget: (cell) =>
-        fetch("/api/budgets", {
+        apiFetch("/api/budgets", {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(cell),
         }).then(json),
     patchTx: (id, patch) =>
-        fetch(`/api/transactions/${id}`, {
+        apiFetch(`/api/transactions/${id}`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(patch),
         }).then(json),
-    deleteTx: (id) => fetch(`/api/transactions/${id}`, { method: "DELETE" }).then(json),
+    deleteTx: (id) => apiFetch(`/api/transactions/${id}`, { method: "DELETE" }).then(json),
     createAccount: (body) =>
-        fetch("/api/accounts", {
+        apiFetch("/api/accounts", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(body),
         }).then(json),
     patchAccount: (id, patch) =>
-        fetch(`/api/accounts/${id}`, {
+        apiFetch(`/api/accounts/${id}`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(patch),
         }).then(json),
     deleteAccount: (id, reassignTo) =>
-        fetch(`/api/accounts/${id}${reassignTo ? `?reassignTo=${reassignTo}` : ""}`, {
+        apiFetch(`/api/accounts/${id}${reassignTo ? `?reassignTo=${reassignTo}` : ""}`, {
             method: "DELETE",
         }).then(json),
     reorderAccounts: (ids) =>
-        fetch("/api/accounts/reorder", {
+        apiFetch("/api/accounts/reorder", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ ids }),
         }).then(json),
     reconcileAccount: (id, actualBalance) =>
-        fetch(`/api/accounts/${id}/reconcile`, {
+        apiFetch(`/api/accounts/${id}/reconcile`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ actualBalance }),
         }).then(json),
     createTransfer: (body) =>
-        fetch("/api/transfers", {
+        apiFetch("/api/transfers", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(body),
         }).then(json),
     deleteTransfer: (transferId) =>
-        fetch(`/api/transfers/${transferId}`, { method: "DELETE" }).then(json),
+        apiFetch(`/api/transfers/${transferId}`, { method: "DELETE" }).then(json),
     createCategory: (body) =>
-        fetch("/api/categories", {
+        apiFetch("/api/categories", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(body),
         }).then(json),
     patchCategory: (id, patch) =>
-        fetch(`/api/categories/${id}`, {
+        apiFetch(`/api/categories/${id}`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(patch),
         }).then(json),
     deleteCategory: (id, reassignTo) =>
-        fetch(`/api/categories/${id}${reassignTo ? `?reassignTo=${reassignTo}` : ""}`, {
+        apiFetch(`/api/categories/${id}${reassignTo ? `?reassignTo=${reassignTo}` : ""}`, {
             method: "DELETE",
         }).then(json),
     importPreview: (text, accountId) =>
-        fetch("/api/import/preview", {
+        apiFetch("/api/import/preview", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ text, accountId }),
         }).then(json),
     importCommit: (rows, accountId) =>
-        fetch("/api/import/commit", {
+        apiFetch("/api/import/commit", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ accountId, rows }),
         }).then(json),
     createConnection: (body) =>
-        fetch("/api/connections", {
+        apiFetch("/api/connections", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(body),
         }).then(json),
-    deleteConnection: (id) => fetch(`/api/connections/${id}`, { method: "DELETE" }).then(json),
-    syncConnection: (id) => fetch(`/api/connections/${id}/sync`, { method: "POST" }).then(json),
+    deleteConnection: (id) => apiFetch(`/api/connections/${id}`, { method: "DELETE" }).then(json),
+    syncConnection: (id) => apiFetch(`/api/connections/${id}/sync`, { method: "POST" }).then(json),
     submitConnectionSms: (id, code) =>
-        fetch(`/api/connections/${id}/sms`, {
+        apiFetch(`/api/connections/${id}/sms`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ code }),
         }).then(json),
     cancelConnectionSync: (id) =>
-        fetch(`/api/connections/${id}/cancel`, { method: "POST" }).then(json),
+        apiFetch(`/api/connections/${id}/cancel`, { method: "POST" }).then(json),
     authRegister: (email, password) =>
-        fetch("/api/auth/register", {
+        apiFetch("/api/auth/register", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ email, password }),
@@ -118,12 +134,12 @@ export const api = {
         const form = new URLSearchParams();
         form.set("username", email);
         form.set("password", password);
-        return fetch("/api/auth/token", {
+        return apiFetch("/api/auth/token", {
             method: "POST",
             headers: { "Content-Type": "application/x-www-form-urlencoded" },
             body: form,
         }).then(json);
     },
     authMe: (token) =>
-        fetch("/api/auth/me", { headers: { Authorization: `Bearer ${token}` } }).then(json),
+        apiFetch("/api/auth/me", { headers: { Authorization: `Bearer ${token}` } }).then(json),
 };

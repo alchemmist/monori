@@ -30,7 +30,8 @@ Top-level buckets that give categories their income/expense meaning.
 | Column | Type | Notes |
 | -------- | ------ | ------- |
 | `id` | INTEGER PK | |
-| `name` | TEXT | unique |
+| `user_id` | INTEGER | → `users(id)`; owner. `NULL` only for unclaimed pre-multi-user rows |
+| `name` | TEXT | unique per user |
 | `sort` | INTEGER | display order |
 | `kind` | TEXT | `income` or `expense` (checked) |
 
@@ -42,7 +43,8 @@ belongs to exactly one account.
 | Column | Type | Notes |
 | -------- | ------ | ------- |
 | `id` | INTEGER PK | |
-| `name` | TEXT | unique |
+| `user_id` | INTEGER | → `users(id)`; owner. `NULL` only for unclaimed pre-multi-user rows |
+| `name` | TEXT | unique per user |
 | `type` | TEXT | `card` / `cash` / `savings` / `other`; default `other` |
 | `icon` | TEXT | display glyph name (e.g. `wallet`, `card`, `ruble`); default `wallet` |
 | `color` | TEXT | `#rrggbb` tint for the glyph and its tile; default `#5b6472` |
@@ -65,7 +67,7 @@ The envelopes.
 | -------- | ------ | ------- |
 | `id` | INTEGER PK | |
 | `group_id` | INTEGER | → `category_groups(id)` |
-| `name` | TEXT | unique |
+| `name` | TEXT | unique per user (enforced in the API) |
 | `keywords` | TEXT | pipe-separated, for import auto-categorization; default `''` |
 | `sort` | INTEGER | display order; default `0` |
 | `archived` | INTEGER | `0`/`1`; default `0` |
@@ -145,9 +147,13 @@ inspected and — planned in issue #22 — rolled back.
 
 ### `users`
 
-In-app accounts that sign in to monori itself (issue #34). Passwords are stored
-only as Argon2 hashes. Per-user data ownership (a `user_id` on the other tables)
-is a later phase — this table only authenticates.
+In-app accounts that sign in to monori (issue #34). Passwords are stored only as
+Argon2 hashes. Ownership hangs off two roots: `accounts.user_id` and
+`category_groups.user_id`. Everything else is scoped through them — categories
+via their group, transactions via their account, budgets via their category,
+connections and import batches via their account. Rows that predate multi-user
+have `user_id NULL` and are claimed by the first user who registers; every new
+user starts with a default **Cash** account.
 
 | Column | Type | Notes |
 | -------- | ------ | ------- |
