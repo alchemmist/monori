@@ -7,6 +7,7 @@ a ``current_user`` dependency other routes can adopt.
 """
 
 import re
+import sqlite3
 from datetime import UTC, datetime
 from typing import Annotated
 
@@ -42,14 +43,15 @@ def register(body: RegisterBody):
         raise HTTPException(400, f"password must be at least {MIN_PASSWORD_LEN} characters")
     c = conn()
     try:
-        if c.execute("SELECT id FROM users WHERE email=?", (email,)).fetchone():
-            raise HTTPException(409, "email already registered")
         now = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S")
-        cur = c.execute(
-            "INSERT INTO users (email, password_hash, created_at) VALUES (?, ?, ?)",
-            (email, hash_password(body.password), now),
-        )
-        c.commit()
+        try:
+            cur = c.execute(
+                "INSERT INTO users (email, password_hash, created_at) VALUES (?, ?, ?)",
+                (email, hash_password(body.password), now),
+            )
+            c.commit()
+        except sqlite3.IntegrityError:
+            raise HTTPException(409, "email already registered") from None
         row = c.execute(
             "SELECT id, email, created_at FROM users WHERE id=?", (cur.lastrowid,)
         ).fetchone()
