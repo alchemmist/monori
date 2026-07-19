@@ -1,0 +1,6 @@
+# Lockfiles are generated and must stay in the repo (npm ci / reproducible
+# builds need them), but GitHub should treat them as generated: collapse them in
+# pull-request diffs and exclude them from language stats.
+web/package-lock.json linguist-generated=true -diff
+web-docs/package-lock.json linguist-generated=true -diff
+server/uv.lock linguist-generated=true -diff

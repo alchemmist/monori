@@ -6,6 +6,7 @@ from app.deps import (
     serialize_account,
     serialize_budget,
     serialize_category,
+    serialize_connection,
     serialize_group,
     serialize_tx,
 )
@@ -127,3 +128,49 @@ def test_serialize_budget():
         "month": 1,
         "amount": 150000,
     }
+
+
+def test_serialize_connection():
+    row = {
+        "id": 8,
+        "account_id": 2,
+        "bank": "tbank",
+        "kind": "playwright",
+        "status": "connected",
+        "last_sync": "2026-02-01T09:00:00",
+        "last_error": None,
+        "credentials_encrypted": b"cipher",
+        "created_at": "2026-01-01T00:00:00",
+        "updated_at": "2026-01-02T00:00:00",
+    }
+    assert serialize_connection(row) == {
+        "id": 8,
+        "accountId": 2,
+        "bank": "tbank",
+        "kind": "playwright",
+        "status": "connected",
+        "lastSync": "2026-02-01T09:00:00",
+        "lastError": None,
+        "hasCredentials": True,
+        "createdAt": "2026-01-01T00:00:00",
+        "updatedAt": "2026-01-02T00:00:00",
+    }
+
+
+def test_serialize_connection_without_credentials_and_with_error():
+    row = {
+        "id": 8,
+        "account_id": 2,
+        "bank": "tbank",
+        "kind": "playwright",
+        "status": "error",
+        "last_sync": None,
+        "last_error": "login rejected",
+        "credentials_encrypted": None,
+        "created_at": "2026-01-01T00:00:00",
+        "updated_at": "2026-01-02T00:00:00",
+    }
+    out = serialize_connection(row)
+    assert out["hasCredentials"] is False
+    assert out["lastError"] == "login rejected"
+    assert out["lastSync"] is None

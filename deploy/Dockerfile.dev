@@ -1,0 +1,20 @@
+# Dev image for the API: bakes the Python deps (incl. the bank-sync connector
+# extra), Chromium, and its system libraries into cached build layers so
+# `make up` doesn't reinstall them on every start. Source is still bind-mounted
+# and the server runs with --reload for hot iteration.
+FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim
+
+WORKDIR /app
+ENV UV_PROJECT_ENVIRONMENT=/opt/venv \
+    UV_LINK_MODE=copy \
+    PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers
+
+# Dependencies + Chromium and its OS libraries, in one cached layer keyed by
+# pyproject/uv.lock — not reinstalled on every container start.
+COPY server/pyproject.toml server/uv.lock ./
+RUN uv sync --extra connectors --no-install-project \
+    && uv run playwright install --with-deps chromium
+
+# --no-sync: run against the baked venv as-is (keeps the connectors extra; the
+# app package is imported straight from the bind-mounted source, not installed)
+CMD ["uv", "run", "--no-sync", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8077", "--reload"]

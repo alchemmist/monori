@@ -88,6 +88,16 @@ An import run targets a single account. To load a second card or a cash export,
 run the importer again with that account selected. Statement parsing itself is
 still T-Bank-shaped; pluggable per-bank parsers are planned in issue #1.
 
+## Automatic sync
+
+Instead of pasting, an account can be connected to a **bank connector** and
+synced on demand from the Accounts page ("Connect bank" → "Sync now"). A sync
+fetches your operations, runs them through this exact same pipeline (hash-based
+dedup + keyword categorization), and lands them as an import batch, so re-syncing
+never double-counts. There is no background scheduler — syncs run only when you
+press the button. Setup and the important security/terms caveats are documented
+in [Configuration → Bank sync connectors](configuration.md#bank-sync-connectors).
+
 Per-batch import logging with rollback and rule re-runs is planned in issue #22;
 a richer multi-field rules engine (priorities, multiple actions, dry-run) in
 issue #21.

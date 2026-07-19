@@ -92,8 +92,9 @@ class Api:
     def tx_by(self, tx_id):
         return next(t for t in self.snapshot()["transactions"] if t["id"] == tx_id)
 
-    def preview(self, text):
-        return self.client.post("/api/import/preview", json={"text": text}).json()["rows"]
+    def preview(self, text, account_id=None):
+        body = {"text": text, "accountId": account_id or self.default_account()}
+        return self.client.post("/api/import/preview", json=body).json()["rows"]
 
 
 @pytest.fixture()

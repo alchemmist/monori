@@ -132,7 +132,53 @@ def _migrate_account_color_image(conn):
         conn.execute("ALTER TABLE accounts ADD COLUMN icon_image TEXT")
 
 
-MIGRATIONS = [_migrate_accounts, _migrate_account_icon, _migrate_account_color_image]
+def _migrate_bank_connections(conn):
+    """Introduce automated import: a bank connection ties an account to a
+    connector (e.g. the T-Bank Playwright connector) and stores its encrypted
+    credentials and cached session. Each sync lands as an import_batch so it can
+    be inspected and rolled back, and every synced transaction points back at
+    its batch."""
+    conn.executescript("""
+    CREATE TABLE IF NOT EXISTS bank_connections (
+      id INTEGER PRIMARY KEY,
+      account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+      bank TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'disconnected'
+        CHECK (status IN ('disconnected','connected','awaiting_sms','error')),
+      credentials_encrypted BLOB,
+      session_encrypted BLOB,
+      last_sync TEXT,
+      last_error TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_conn_account ON bank_connections(account_id);
+
+    CREATE TABLE IF NOT EXISTS import_batches (
+      id INTEGER PRIMARY KEY,
+      account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+      connection_id INTEGER REFERENCES bank_connections(id) ON DELETE SET NULL,
+      source TEXT NOT NULL,
+      inserted INTEGER NOT NULL DEFAULT 0,
+      skipped INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_batch_account ON import_batches(account_id);
+    """)
+    if not _has_column(conn, "transactions", "batch_id"):
+        conn.execute(
+            "ALTER TABLE transactions ADD COLUMN batch_id INTEGER"
+            " REFERENCES import_batches(id) ON DELETE SET NULL"
+        )
+
+
+MIGRATIONS = [
+    _migrate_accounts,
+    _migrate_account_icon,
+    _migrate_account_color_image,
+    _migrate_bank_connections,
+]
 
 
 def _run_migrations(conn):

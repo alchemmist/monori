@@ -1,19 +1,32 @@
 # Dev stack: hot-reload API + vite, sources bind-mounted from the repo.
-# node_modules and the python venv live in named volumes — host binaries
-# (macOS) are incompatible with the linux containers.
+# The API image bakes its Python deps, Chromium and system libraries at build
+# time (see Dockerfile.dev) so they are cached, not reinstalled on every start.
+# web's node_modules still lives in a named volume (host binaries are
+# incompatible with the linux container).
 services:
     api:
-        image: ghcr.io/astral-sh/uv:python3.12-bookworm-slim
+        build:
+            context: ..
+            dockerfile: deploy/Dockerfile.dev
         working_dir: /app
-        command: uv run uvicorn app.main:app --host 0.0.0.0 --port 8077 --reload
         environment:
             UV_PROJECT_ENVIRONMENT: /opt/venv
             UV_LINK_MODE: copy
             # inotify events don't cross the podman-machine/virtiofs boundary on macOS
             WATCHFILES_FORCE_POLLING: "true"
+            PLAYWRIGHT_BROWSERS_PATH: /opt/pw-browsers
+            # supply your own key to enable bank sync — it encrypts real bank
+            # credentials, so no shared/default is shipped. Generate one with:
+            #   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+            # then `export MONORI_ENCRYPTION_KEY=...` before `make up`. Unset ->
+            # the feature stays disabled, the rest of the app runs normally.
+            MONORI_ENCRYPTION_KEY: ${MONORI_ENCRYPTION_KEY:-}
+            # set to 1 to dump a screenshot + HTML of each login/export step to
+            # server/data/ when tuning selectors (off by default — it writes
+            # cabinet pages with personal data on every sync)
+            MONORI_CONNECTOR_DEBUG: ${MONORI_CONNECTOR_DEBUG:-}
         volumes:
             - ../server:/app
-            - api-venv:/opt/venv
             - uv-cache:/root/.cache/uv
         ports:
             - "8077:8077"
@@ -34,6 +47,5 @@ services:
             - api
 
 volumes:
-    api-venv:
     uv-cache:
     web-modules:
