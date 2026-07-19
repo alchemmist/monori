@@ -9,6 +9,7 @@ web/dist/
 web-docs/node_modules/
 web-docs/dist/
 server/.venv/
+server/uv.lock
 __pycache__/
 *.pyc
 .pytest_cache/
