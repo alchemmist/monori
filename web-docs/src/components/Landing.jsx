@@ -1,96 +1,45 @@
 import { Link } from "react-router-dom";
 import { Icon } from "@gravity-ui/uikit";
 import {
-    Envelope,
     ArrowDownToLine,
-    CurlyBrackets,
     ShieldKeyhole,
-    ChartColumn,
-    CircleRuble,
     ArrowRight,
     Sparkles,
     LogoGithub,
     LogoDocker,
+    Persons,
+    Copy,
 } from "@gravity-ui/icons";
 import Wordmark from "./Wordmark.jsx";
 import Meadow from "./Meadow.jsx";
+import EnvelopeHero from "./EnvelopeHero.jsx";
+import GlyphFlower from "./GlyphFlower.jsx";
 
 const GITHUB_URL = "https://github.com/alchemmist/monori";
 const DEMO_URL = "/demo";
 
-const FEATURES = [
-    {
-        icon: Envelope,
-        title: "Envelope budgeting",
-        text: "Hand money to categories, spend them down, roll the rest forward. The exact YNAB-style math of the spreadsheet it grew from.",
-        to: "/docs/budgeting",
-    },
-    {
-        icon: ArrowDownToLine,
-        title: "Bank-statement import",
-        text: "Paste a statement and it parses, auto-categorizes from your keywords, and de-duplicates — preview before anything is written.",
-        to: "/docs/importing",
-    },
-    {
-        icon: ChartColumn,
-        title: "Dashboard & analytics",
-        text: "KPIs, trends, plan-vs-fact, budget discipline, spending patterns and top merchants — derived live from your ledger.",
-        to: "/docs/dashboard-analytics",
-    },
-    {
-        icon: CurlyBrackets,
-        title: "Full REST API",
-        text: "Every action the UI takes is an HTTP call. Groups, categories, transactions, budgets, import — behind per-user JWT auth.",
-        to: "/docs/api",
-    },
-    {
-        icon: CircleRuble,
-        title: "Integer-kopeck money",
-        text: "Every amount is a whole number of kopecks end to end. No floating point, no rounding drift — totals always reconcile.",
-        to: "/docs/data-model",
-    },
-    {
-        icon: ShieldKeyhole,
-        title: "Self-hosted & private",
-        text: "One container, one SQLite file. Your data never leaves your server. Back it up by copying a single file.",
-        to: "/docs/configuration",
-    },
-];
+const SPARK_POINTS = "0,26 8,22 16,24 24,17 32,19 40,12 48,15 56,9 64,12 72,6 80,9 88,3 100,5";
 
-function HeroVisual() {
-    const rows = [
-        { name: "Groceries", budget: "12 000", act: "−8 450", bal: "3 550", pct: 70, over: false },
-        { name: "Transport", budget: "4 000", act: "−4 380", bal: "−380", pct: 100, over: true },
-        { name: "Eating out", budget: "6 000", act: "−2 110", bal: "3 890", pct: 35, over: false },
-    ];
+function Sparkline() {
     return (
-        <div className="hero-visual" aria-hidden="true">
-            <div className="hero-card">
-                <div className="hero-card__head">
-                    <span>Budget · July</span>
-                    <span className="hero-card__tbb num">to&nbsp;budget 18 200 ₽</span>
-                </div>
-                {rows.map((r) => (
-                    <div className="hero-row" key={r.name}>
-                        <div className="hero-row__top">
-                            <span className="hero-row__name">{r.name}</span>
-                            <span className="num hero-row__budget">{r.budget}</span>
-                            <span className={`num hero-row__act ${r.over ? "is-over" : ""}`}>
-                                {r.act}
-                            </span>
-                            <span className={`num hero-row__bal ${r.over ? "is-neg" : ""}`}>
-                                {r.bal}
-                            </span>
-                        </div>
-                        <div className="hero-row__bar">
-                            <span
-                                className={`hero-row__fill ${r.over ? "is-over" : ""}`}
-                                style={{ width: `${r.pct}%` }}
-                            />
-                        </div>
-                    </div>
-                ))}
-            </div>
+        <svg
+            className="bento__spark"
+            viewBox="0 0 100 30"
+            preserveAspectRatio="none"
+            aria-hidden="true"
+        >
+            <polygon points={`0,30 ${SPARK_POINTS} 100,30`} className="bento__spark-fill" />
+            <polyline points={SPARK_POINTS} className="bento__spark-line" />
+        </svg>
+    );
+}
+
+function MiniRows() {
+    return (
+        <div className="bento__rows" aria-hidden="true">
+            <i style={{ "--w": "70%" }} />
+            <i className="is-over" style={{ "--w": "100%" }} />
+            <i style={{ "--w": "35%" }} />
         </div>
     );
 }
@@ -133,22 +82,83 @@ export default function Landing() {
                         </a>
                     </div>
                 </div>
-                <HeroVisual />
+                <EnvelopeHero />
             </section>
 
-            <section className="features">
-                {FEATURES.map((f) => (
-                    <Link className="feature" to={f.to} key={f.title}>
-                        <span className="feature__icon">
-                            <Icon data={f.icon} size={20} />
-                        </span>
-                        <h3 className="feature__title">{f.title}</h3>
-                        <p className="feature__text">{f.text}</p>
-                        <span className="feature__more">
-                            Learn more <Icon data={ArrowRight} size={13} />
-                        </span>
-                    </Link>
-                ))}
+            <section className="bento">
+                <Link className="bento__tile bento__tile_wide" to="/docs/budgeting">
+                    <h3 className="bento__title">Envelope budgeting</h3>
+                    <p className="bento__text">
+                        Hand money to categories, spend them down, roll the rest forward — the exact
+                        YNAB-style math of the spreadsheet it grew from.
+                    </p>
+                    <MiniRows />
+                </Link>
+                <Link className="bento__tile bento__tile_orange" to="/docs/data-model">
+                    <h3 className="bento__title">Integer kopecks</h3>
+                    <b className="bento__big num">0.00 drift</b>
+                    <p className="bento__text">No floats. Totals always reconcile.</p>
+                </Link>
+                <Link className="bento__tile" to="/docs/importing">
+                    <span className="bento__icon">
+                        <Icon data={ArrowDownToLine} size={18} />
+                    </span>
+                    <h3 className="bento__title">Statement import</h3>
+                    <p className="bento__text">
+                        Paste, auto-categorize from your keywords, de-duplicate — preview first.
+                    </p>
+                </Link>
+                <Link className="bento__tile bento__tile_wide" to="/docs/dashboard-analytics">
+                    <h3 className="bento__title">Dashboard &amp; analytics</h3>
+                    <p className="bento__text">
+                        KPIs, trends, plan-vs-fact, spending patterns — derived live from your
+                        ledger.
+                    </p>
+                    <Sparkline />
+                </Link>
+                <Link className="bento__tile" to="/docs/configuration">
+                    <span className="bento__icon">
+                        <Icon data={ShieldKeyhole} size={18} />
+                    </span>
+                    <h3 className="bento__title">Self-hosted &amp; private</h3>
+                    <p className="bento__text">
+                        One container on your server. Your data never leaves it.
+                    </p>
+                </Link>
+                <Link className="bento__tile" to="/docs/api">
+                    <span className="bento__icon">
+                        <Icon data={Persons} size={18} />
+                    </span>
+                    <h3 className="bento__title">Multi-user</h3>
+                    <p className="bento__text">
+                        Per-user accounts and budgets behind JWT auth — one instance, whole family.
+                    </p>
+                </Link>
+                <Link className="bento__tile bento__tile_wide bento__tile_dark" to="/docs/api">
+                    <h3 className="bento__title">Full REST API</h3>
+                    <pre className="bento__code">
+                        <span className="cmt"># everything the UI does is an HTTP call</span>
+                        {"\n"}
+                        <span className="acc">GET</span> /api/snapshot{"\n"}
+                        <span className="acc">POST</span> /api/transactions
+                    </pre>
+                </Link>
+                <Link className="bento__tile" to="/docs/configuration">
+                    <span className="bento__icon">
+                        <Icon data={Copy} size={18} />
+                    </span>
+                    <h3 className="bento__title">One-file backup</h3>
+                    <p className="bento__text">
+                        The whole ledger is a single SQLite file — <code>cp</code> is a backup.
+                    </p>
+                </Link>
+                <a className="bento__tile" href={GITHUB_URL} target="_blank" rel="noreferrer">
+                    <span className="bento__icon">
+                        <Icon data={LogoGithub} size={18} />
+                    </span>
+                    <h3 className="bento__title">Open source</h3>
+                    <p className="bento__text">MIT-licensed, built in the open on GitHub.</p>
+                </a>
             </section>
 
             <section className="model">
@@ -171,6 +181,27 @@ available(m)     = available(m-1) + overspent(m-1)
                  + income(m) - budgetedTotal(m)`}
                     </code>
                 </pre>
+            </section>
+
+            <section className="bloom">
+                <div className="bloom__visual">
+                    <GlyphFlower />
+                </div>
+                <div className="bloom__copy">
+                    <span className="bloom__kicker">実り · minori · “harvest”</span>
+                    <h2 className="bloom__title">
+                        A harvest is planned. <span className="accent">So is money.</span>
+                    </h2>
+                    <p className="bloom__text">
+                        monori is named after the Japanese word for harvest. Every kopeck gets a job
+                        before it is spent — planted in an envelope, tended month by month. Nothing
+                        guessed, nothing lost.
+                    </p>
+                    <Link className="btn btn_ghost" to="/docs/getting-started">
+                        Start growing
+                        <Icon data={ArrowRight} size={15} />
+                    </Link>
+                </div>
             </section>
 
             <section className="cta-band">

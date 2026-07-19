@@ -535,150 +535,291 @@ a {
     flex-wrap: wrap;
 }
 
-/* hero visual */
-.hero-visual {
+/* hero visual — envelopes catching kopecks */
+.env-hero {
     position: relative;
+    min-height: 380px;
+    align-self: stretch;
 }
 
-.hero-card {
-    background: var(--m-surface);
-    border: 1px solid var(--m-border);
-    border-radius: 10px;
-    padding: 16px 16px 18px;
-    box-shadow: 0 24px 60px -30px rgb(0 0 0 / 30%);
+.env-hero__canvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
 }
 
-.hero-card__head {
+.env-hero__row {
+    position: absolute;
+    inset: auto 0 12px;
     display: flex;
-    justify-content: space-between;
-    align-items: center;
-    font-size: 12.5px;
-    color: var(--m-text-faint);
-    padding: 0 4px 12px;
-    border-bottom: 1px solid var(--m-border-soft);
-    margin-bottom: 12px;
+    justify-content: center;
+    gap: 18px;
 }
 
-.hero-card__tbb {
-    color: var(--m-accent);
-    font-weight: 700;
+.env-hero__env {
+    width: 108px;
+    min-width: 0;
 }
 
-.hero-row {
-    padding: 8px 4px;
-}
-
-.hero-row__top {
-    display: grid;
-    grid-template-columns: 1fr auto auto auto;
-    gap: 14px;
-    align-items: baseline;
-    font-size: 13.5px;
-}
-
-.hero-row__name {
-    color: var(--m-text);
-    font-weight: 600;
-}
-
-.hero-row__budget {
-    color: var(--m-text-faint);
-}
-
-.hero-row__act {
-    color: var(--m-expense);
-    font-weight: 600;
-}
-
-.hero-row__bal {
-    color: var(--m-text);
-    font-weight: 700;
-    min-width: 48px;
-    text-align: right;
-}
-
-.hero-row__bal.is-neg {
-    color: var(--m-expense);
-}
-
-.hero-row__bar {
-    height: 5px;
-    margin-top: 8px;
-    border-radius: 100px;
-    background: var(--m-surface-raised);
+.env-hero__pocket {
+    position: relative;
+    height: 74px;
+    background: var(--m-surface);
+    border: 1.5px solid var(--m-text);
+    border-radius: 9px;
     overflow: hidden;
 }
 
-.hero-row__fill {
+.env-hero__pocket::before {
+    content: "";
+    position: absolute;
+    inset: -2px -2px auto;
+    height: 40px;
+    border: 1.5px solid var(--m-text);
+    border-radius: 9px 9px 50% 50% / 9px 9px 100% 100%;
+    background: var(--m-surface-raised);
+}
+
+.env-hero__env.is-hot .env-hero__pocket,
+.env-hero__env.is-hot .env-hero__pocket::before {
+    border-color: var(--m-accent);
+}
+
+.env-hero__amt {
+    position: absolute;
+    inset: auto 0 8px;
+    text-align: center;
+    font-size: 13.5px;
+    font-weight: 800;
+    color: var(--m-text);
+}
+
+.env-hero__env.is-hot .env-hero__amt {
+    color: var(--m-accent);
+}
+
+.env-hero__name {
     display: block;
-    height: 100%;
-    border-radius: 100px;
-    background: var(--m-accent);
+    margin-top: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--m-text-dim);
+    text-align: center;
 }
 
-.hero-row__fill.is-over {
-    background: var(--m-expense);
-}
-
-/* features */
-.features {
+/* bento features */
+.bento {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 16px;
+    grid-template-columns: repeat(4, 1fr);
+    grid-auto-rows: minmax(150px, auto);
+    gap: 14px;
     padding: 8px 0 24px;
 }
 
-.feature {
+.bento__tile {
     display: block;
-    padding: 22px 20px;
+    padding: 20px;
     border: 1px solid var(--m-border);
-    border-radius: var(--m-radius);
+    border-radius: 14px;
     background: var(--m-surface);
     text-decoration: none;
+    position: relative;
+    overflow: hidden;
     transition:
         border-color 0.15s ease,
         transform 0.15s ease,
         box-shadow 0.15s ease;
 }
 
-.feature:hover {
+.bento__tile:hover {
     border-color: color-mix(in srgb, var(--m-accent) 55%, var(--m-border));
     transform: translateY(-2px);
     box-shadow: 0 18px 40px -28px rgb(0 0 0 / 35%);
 }
 
-.feature__icon {
+.bento__tile_wide {
+    grid-column: span 2;
+}
+
+.bento__icon {
     display: grid;
     place-items: center;
-    width: 40px;
-    height: 40px;
+    width: 34px;
+    height: 34px;
     border-radius: var(--m-radius);
     background: var(--m-accent-soft);
     color: var(--m-accent);
+    margin-bottom: 12px;
+}
+
+.bento__title {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--m-text);
+    margin: 0 0 6px;
+}
+
+.bento__text {
+    font-size: 13px;
+    line-height: 1.55;
+    color: var(--m-text-dim);
+    margin: 0;
+}
+
+.bento__text code {
+    font-family: var(--g-font-family-monospace, ui-monospace, monospace);
+    font-size: 0.9em;
+    background: var(--m-surface-raised);
+    border: 1px solid var(--m-border-soft);
+    border-radius: 4px;
+    padding: 0 4px;
+}
+
+.bento__rows {
+    margin-top: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.bento__rows i {
+    display: block;
+    height: 5px;
+    border-radius: 100px;
+    background: var(--m-surface-raised);
+    position: relative;
+    overflow: hidden;
+}
+
+.bento__rows i::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    width: var(--w);
+    background: var(--m-text);
+    border-radius: 100px;
+}
+
+.bento__rows i.is-over::after {
+    background: var(--m-accent);
+}
+
+.bento__tile_orange {
+    background: var(--m-accent);
+    border-color: var(--m-accent);
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+
+.bento__tile_orange .bento__title,
+.bento__tile_orange .bento__big {
+    color: var(--m-accent-contrast);
+}
+
+.bento__tile_orange .bento__text {
+    color: color-mix(in srgb, var(--m-accent-contrast) 82%, var(--m-accent));
+}
+
+.bento__big {
+    font-size: 26px;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+}
+
+.bento__tile_dark {
+    background: var(--m-text);
+    border-color: var(--m-text);
+}
+
+.bento__tile_dark .bento__title {
+    color: var(--m-bg);
+}
+
+.bento__code {
+    margin: 10px 0 0;
+    font-family: var(--g-font-family-monospace, ui-monospace, monospace);
+    font-size: 12px;
+    line-height: 1.75;
+    color: color-mix(in srgb, var(--m-bg) 80%, var(--m-text));
+    white-space: pre-wrap;
+}
+
+.bento__code .cmt {
+    color: color-mix(in srgb, var(--m-bg) 45%, var(--m-text));
+}
+
+.bento__code .acc {
+    color: var(--m-accent);
+}
+
+.bento__spark {
+    position: absolute;
+    inset: auto 0 0;
+    width: 100%;
+    height: 58px;
+    display: block;
+}
+
+.bento__spark-line {
+    fill: none;
+    stroke: var(--m-accent);
+    stroke-width: 1.6;
+    vector-effect: non-scaling-stroke;
+}
+
+.bento__spark-fill {
+    fill: var(--m-accent);
+    opacity: 0.12;
+}
+
+/* bloom — glyph flower */
+.bloom {
+    display: grid;
+    grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
+    gap: 56px;
+    align-items: center;
+    margin: 48px 0 0;
+}
+
+.bloom__visual {
+    position: relative;
+    height: 420px;
+}
+
+.bloom__canvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+}
+
+.bloom__kicker {
+    display: inline-block;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.6px;
+    text-transform: uppercase;
+    color: var(--m-text-faint);
     margin-bottom: 14px;
 }
 
-.feature__title {
-    font-size: 16px;
-    font-weight: 700;
+.bloom__title {
+    font-size: 34px;
+    font-weight: 800;
+    letter-spacing: -0.8px;
+    line-height: 1.15;
     color: var(--m-text);
-    margin: 0 0 7px;
-}
-
-.feature__text {
-    font-size: 13.5px;
-    line-height: 1.6;
-    color: var(--m-text-dim);
     margin: 0 0 14px;
 }
 
-.feature__more {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--m-accent);
+.bloom__text {
+    font-size: 15px;
+    line-height: 1.7;
+    color: var(--m-text-dim);
+    margin: 0 0 24px;
+    max-width: 34em;
 }
 
 /* model strip */
@@ -845,13 +986,19 @@ a {
         font-size: 42px;
     }
 
-    .features {
+    .bento {
         grid-template-columns: 1fr 1fr;
     }
 
-    .model {
+    .model,
+    .bloom {
         grid-template-columns: 1fr;
         gap: 24px;
+    }
+
+    .bloom__visual {
+        height: 340px;
+        order: 2;
     }
 }
 
@@ -888,8 +1035,20 @@ a {
         box-shadow: 0 20px 60px -20px rgb(0 0 0 / 40%);
     }
 
-    .features {
+    .bento {
         grid-template-columns: 1fr;
+    }
+
+    .bento__tile_wide {
+        grid-column: auto;
+    }
+
+    .env-hero__row {
+        gap: 10px;
+    }
+
+    .env-hero__env {
+        width: 86px;
     }
 
     .hero__title {
