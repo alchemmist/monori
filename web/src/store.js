@@ -15,6 +15,44 @@ export const useStore = create((set, get) => ({
     loading: true,
     error: null,
     toast: null,
+    user: null,
+    authChecked: false,
+
+    async checkAuth() {
+        if (isDemo()) {
+            set({ authChecked: true });
+            return;
+        }
+        const token = localStorage.getItem("monori_token");
+        if (!token) {
+            set({ authChecked: true });
+            return;
+        }
+        try {
+            const user = await api.authMe(token);
+            set({ user, authChecked: true });
+        } catch {
+            localStorage.removeItem("monori_token");
+            set({ user: null, authChecked: true });
+        }
+    },
+
+    async login(email, password) {
+        const { access_token } = await api.authLogin(email, password);
+        localStorage.setItem("monori_token", access_token);
+        const user = await api.authMe(access_token);
+        set({ user });
+    },
+
+    async register(email, password) {
+        await api.authRegister(email, password);
+        await get().login(email, password);
+    },
+
+    logout() {
+        localStorage.removeItem("monori_token");
+        set({ user: null });
+    },
 
     async load() {
         if (isDemo()) {

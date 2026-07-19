@@ -24,6 +24,7 @@ import AnalyticsPage from "./pages/AnalyticsPage.jsx";
 import TransactionsPage from "./pages/TransactionsPage.jsx";
 import AccountsPage from "./pages/AccountsPage.jsx";
 import SettingsPage from "./pages/SettingsPage.jsx";
+import LoginPage from "./pages/LoginPage.jsx";
 
 const NAV = [
     { id: "budget", title: "Budget", icon: LayoutHeaderCellsLarge },
@@ -45,7 +46,7 @@ const SOON = [
 const FIRST_YEAR = 2020;
 
 export default function App({ theme, onToggleTheme }) {
-    const { snapshot, loading, error, load, toast } = useStore();
+    const { snapshot, loading, error, load, toast, user, authChecked, checkAuth } = useStore();
     const [page, setPage] = useState("budget");
     const [collapsed, setCollapsed] = useState(
         () => localStorage.getItem("sidebar_collapsed") === "1",
@@ -58,6 +59,10 @@ export default function App({ theme, onToggleTheme }) {
             localStorage.setItem("sidebar_collapsed", next ? "1" : "0");
             return next;
         });
+
+    useEffect(() => {
+        checkAuth();
+    }, [checkAuth]);
 
     useEffect(() => {
         load();
@@ -82,6 +87,16 @@ export default function App({ theme, onToggleTheme }) {
         [snapshot, lastYear],
     );
 
+    if (!isDemo() && !authChecked) {
+        return (
+            <div style={{ display: "grid", placeItems: "center", height: "100vh" }}>
+                <Loader size="l" />
+            </div>
+        );
+    }
+    if (!isDemo() && !user) {
+        return <LoginPage />;
+    }
     if (loading) {
         return (
             <div style={{ display: "grid", placeItems: "center", height: "100vh" }}>
