@@ -13,8 +13,8 @@ function toInternal(href) {
         return null;
     let h = href.replace(/^\.?\//, "").replace(/^docs\//, "");
     h = h.replace(/\.md($|#)/, "$1");
-    if (h === "README" || h === "") return "/";
-    return "/" + h;
+    if (h === "README" || h === "") return "/docs/getting-started";
+    return "/docs/" + h;
 }
 
 function MdLink({ href, children }) {
@@ -60,7 +60,10 @@ export default function MarkdownPage() {
                 <h1>Not found</h1>
                 <p>
                     There is no documentation page called <code>{slug}</code>.{" "}
-                    <button className="md-linklike" onClick={() => navigate("/getting-started")}>
+                    <button
+                        className="md-linklike"
+                        onClick={() => navigate("/docs/getting-started")}
+                    >
                         Back to the docs
                     </button>
                     .
@@ -85,7 +88,7 @@ export default function MarkdownPage() {
 
             <nav className="md-pager">
                 {prev ? (
-                    <Link className="md-pager__btn" to={`/${prev.slug}`}>
+                    <Link className="md-pager__btn" to={`/docs/${prev.slug}`}>
                         <Icon data={ArrowLeft} size={15} />
                         <span>
                             <span className="md-pager__dir">Previous</span>
@@ -96,7 +99,7 @@ export default function MarkdownPage() {
                     <span />
                 )}
                 {next && (
-                    <Link className="md-pager__btn md-pager__btn_next" to={`/${next.slug}`}>
+                    <Link className="md-pager__btn md-pager__btn_next" to={`/docs/${next.slug}`}>
                         <span>
                             <span className="md-pager__dir">Next</span>
                             <span className="md-pager__title">{next.title}</span>
