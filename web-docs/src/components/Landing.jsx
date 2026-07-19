@@ -121,9 +121,7 @@ export default function Landing() {
                         <Icon data={ShieldKeyhole} size={18} />
                     </span>
                     <h3 className="bento__title">Self-hosted &amp; private</h3>
-                    <p className="bento__text">
-                        One container on your server. Your data never leaves it.
-                    </p>
+                    <p className="bento__text">Runs on your server. Your data never leaves it.</p>
                 </Link>
                 <Link className="bento__tile" to="/docs/api">
                     <span className="bento__icon">
@@ -206,10 +204,10 @@ available(m)     = available(m-1) + overspent(m-1)
 
             <section className="cta-band">
                 <div>
-                    <h2 className="cta-band__title">Run it in one container.</h2>
+                    <h2 className="cta-band__title">Run it with one command.</h2>
                     <p className="cta-band__text">
-                        A single Docker image serves the app and the API; your budget lives in one
-                        SQLite file.
+                        One compose file brings up the app, the API and the bank-sync service; your
+                        budget lives in one SQLite file.
                     </p>
                 </div>
                 <div className="cta-band__actions">

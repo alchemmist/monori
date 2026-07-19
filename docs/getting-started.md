@@ -5,10 +5,17 @@ local dev setup with hot-reload for hacking on the code.
 
 ## Deploy with Docker
 
-The production image is a single container: a multi-stage build compiles the web
-app, then a Python image serves both the API and the compiled frontend on one
-port (8000). The SQLite database lives on a mounted volume so it survives
-restarts and rebuilds.
+The production deployment is three cooperating containers, defined in one
+compose file:
+
+- **front** — nginx serving the compiled web app and the docs site on port
+  8000, proxying `/api` to the back service;
+- **back** — the FastAPI API (slim Python image, no browser inside);
+- **sync** — the bank-sync service with Playwright and Chromium, reachable only
+  from the back service on the internal network.
+
+The SQLite database lives on a volume mounted into the back service so it
+survives restarts and rebuilds.
 
 Use `deploy/docker-compose.example.yml` as a starting point:
 
@@ -17,15 +24,26 @@ services:
   monori:
     build:
       context: ..
-      dockerfile: deploy/Dockerfile
-    container_name: monori
-    restart: unless-stopped
+      dockerfile: deploy/Dockerfile.front
     ports:
       - "8000:8000"
-    volumes:
-      - ./data:/app/data
+    depends_on: [back]
+
+  back:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.back
     environment:
       MONORI_DB: /app/data/monori.db
+      MONORI_SYNC_URL: http://sync:8010
+    volumes:
+      - ./data:/app/data
+    depends_on: [sync]
+
+  sync:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.sync
 ```
 
 Then:
@@ -36,7 +54,10 @@ docker compose -f docker-compose.example.yml up --build -d
 ```
 
 Open <http://localhost:8000>. The database is created on first run at
-`./data/monori.db` on the host.
+`./data/monori.db` on the host. Without `MONORI_SYNC_URL` the back service runs
+bank syncs in-process instead of delegating them, so a two-container setup
+(front + back) also works if you don't need bank sync isolation — but then the
+back image must be built with the `connectors` extra.
 
 > **Security.** monori has no built-in HTTPS and only an optional bearer token
 > on the API (see [Configuration](configuration.md)). Put it behind a reverse
