@@ -1,0 +1,148 @@
+.login {
+    position: relative;
+    min-height: 100vh;
+    background: #faf9f6;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+}
+
+.login__body {
+    position: relative;
+    z-index: 2;
+    text-align: center;
+    width: min(460px, 90vw);
+    margin-bottom: 18vh;
+}
+
+.login__brand {
+    font-family: "M PLUS Rounded 1c", var(--g-font-family-sans, sans-serif);
+    font-weight: 800;
+    font-size: 24px;
+    letter-spacing: 1px;
+    color: #1a1a1a;
+    margin-bottom: 34px;
+}
+
+.login__brand > span {
+    color: var(--m-accent);
+}
+
+.login__title {
+    font-family: Georgia, "Times New Roman", serif;
+    font-weight: 500;
+    font-size: 40px;
+    line-height: 1.15;
+    letter-spacing: -0.5px;
+    color: #1a1a1a;
+    margin: 0 0 34px;
+}
+
+.login__form {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    width: min(340px, 100%);
+    margin: 0 auto;
+}
+
+.login__input {
+    height: 48px;
+    background: #fff;
+    border: 1px solid #e6e5e0;
+    border-radius: 14px;
+    padding: 0 18px;
+    font-size: 14px;
+    font-family: inherit;
+    color: #1a1a1a;
+    outline: none;
+    box-shadow: 0 1px 3px rgb(0, 0, 0, 0.05);
+    transition: border-color 0.15s;
+}
+
+.login__input:focus {
+    border-color: #1a1a1a;
+}
+
+.login__error {
+    font-size: 12.5px;
+    color: var(--m-expense, #dc2626);
+    text-align: left;
+    padding: 0 4px;
+}
+
+.login__submit {
+    height: 48px;
+    border: none;
+    border-radius: 14px;
+    background: var(--m-accent);
+    color: #fff;
+    font-size: 14.5px;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    margin-top: 4px;
+    transition: background 0.15s;
+}
+
+.login__submit:hover {
+    background: #d94e10;
+}
+
+.login__submit:disabled {
+    opacity: 0.6;
+    cursor: default;
+}
+
+.login__switch {
+    font-size: 12.5px;
+    color: #8b8a85;
+    margin-top: 18px;
+}
+
+.login__switch button {
+    background: none;
+    border: none;
+    padding: 0;
+    font: inherit;
+    font-weight: 600;
+    color: var(--m-accent);
+    cursor: pointer;
+}
+
+.login__made {
+    font-family: Georgia, serif;
+    font-size: 13.5px;
+    color: #8b8a85;
+    margin-top: 44px;
+}
+
+.login__made b {
+    font-family: "M PLUS Rounded 1c", sans-serif;
+    font-weight: 800;
+    color: #1a1a1a;
+}
+
+.login__made b span {
+    color: var(--m-accent);
+}
+
+.login__links {
+    display: flex;
+    gap: 22px;
+    justify-content: center;
+    font-family: Georgia, serif;
+    font-size: 12.5px;
+    margin-top: 16px;
+}
+
+.login__links a {
+    color: #8b8a85;
+    text-decoration: none;
+}
+
+.login__links a:hover {
+    color: #1a1a1a;
+}
