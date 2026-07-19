@@ -16,7 +16,7 @@
     width: 208px;
     flex-shrink: 0;
     padding: 20px 12px 0;
-    border-right: 1px solid var(--m-border-soft);
+    border-right: 1px solid var(--m-sidebar-edge);
     display: flex;
     flex-direction: column;
     gap: 4px;
@@ -241,8 +241,8 @@
 }
 
 .card {
-    background: var(--m-surface);
-    border: 1px solid var(--m-border);
+    background: var(--m-card-bg);
+    border: 1px solid var(--m-card-border);
     border-radius: var(--m-radius);
 }
 
