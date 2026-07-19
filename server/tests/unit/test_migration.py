@@ -199,6 +199,30 @@ def test_upgrade_assigns_orphans_to_earliest_user(tmp_path):
         conn.close()
 
 
+def test_concurrent_first_connects_bootstrap_once(tmp_path, monkeypatch):
+    import threading
+    import time
+
+    import app.db as dbmod
+
+    db_path = os.path.join(tmp_path, "race.db")
+    calls = []
+    real_bootstrap = dbmod._bootstrap
+
+    def slow_bootstrap(path):
+        calls.append(1)
+        time.sleep(0.05)
+        real_bootstrap(path)
+
+    monkeypatch.setattr(dbmod, "_bootstrap", slow_bootstrap)
+    threads = [threading.Thread(target=lambda: connect(db_path).close()) for _ in range(6)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert len(calls) == 1
+
+
 def test_default_account_fields(tmp_path):
     db_path = os.path.join(tmp_path, "old.db")
     _make_old_db(db_path)

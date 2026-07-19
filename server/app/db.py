@@ -11,6 +11,7 @@ revision, then upgraded.
 import os
 import pathlib
 import sqlite3
+import threading
 
 DB_PATH = os.environ.get(
     "MONORI_DB", str(pathlib.Path(__file__).resolve().parent.parent / "data" / "monori.db")
@@ -24,6 +25,7 @@ MIGRATIONS_PATH = SERVER_DIR / "migrations"
 LEGACY_REVISIONS = ["0001", "0002", "0003", "0004", "0005", "0006"]
 
 _bootstrapped: set[str] = set()
+_bootstrap_lock = threading.Lock()
 
 
 def _alembic_config(path):
@@ -66,8 +68,10 @@ def connect(db_path=None):
     path.parent.mkdir(parents=True, exist_ok=True)
     key = str(path.resolve())
     if key not in _bootstrapped:
-        _bootstrap(path)
-        _bootstrapped.add(key)
+        with _bootstrap_lock:
+            if key not in _bootstrapped:
+                _bootstrap(path)
+                _bootstrapped.add(key)
     conn = sqlite3.connect(path)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys=ON")
