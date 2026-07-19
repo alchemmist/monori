@@ -138,12 +138,16 @@ class TBankPlaywrightConnector(Connector):
         try:
             self._restore_profile(work_dir)
             with sync_playwright() as p:
+                args = ["--disk-cache-size=1"]
+                if getattr(os, "geteuid", lambda: -1)() == 0:
+                    # chromium refuses to sandbox as root (the in-container case)
+                    args.append("--no-sandbox")
                 context = p.chromium.launch_persistent_context(
                     work_dir,
                     headless=self._headless(),
                     user_agent=USER_AGENT,
                     accept_downloads=True,
-                    args=["--disk-cache-size=1"],
+                    args=args,
                 )
                 page = context.pages[0] if context.pages else context.new_page()
                 try:
