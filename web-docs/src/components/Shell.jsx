@@ -33,7 +33,7 @@ function SidebarNav({ onNavigate }) {
 
 export default function Shell({ theme, onToggleTheme }) {
     const { pathname } = useLocation();
-    const isDoc = pathname !== "/" && pathname !== "";
+    const isDoc = pathname !== "/" && pathname !== "" && pathname !== "/welcome";
     const [menuOpen, setMenuOpen] = useState(false);
 
     return (
@@ -49,7 +49,7 @@ export default function Shell({ theme, onToggleTheme }) {
                             <Icon data={Bars} size={16} />
                         </button>
                     )}
-                    <Link to="/" className="docs-top__brand">
+                    <Link to="/welcome" className="docs-top__brand">
                         <Wordmark size={22} />
                         <span className="docs-top__brand-sub">docs</span>
                     </Link>
@@ -58,8 +58,8 @@ export default function Shell({ theme, onToggleTheme }) {
                     <NavLink to="/getting-started" className="docs-top__link">
                         Documentation
                     </NavLink>
-                    <a className="docs-top__link" href="/" title="Open the app">
-                        Open app
+                    <a className="docs-top__link" href="/login" title="Sign in">
+                        Sign in
                         <Icon data={ArrowUpRightFromSquare} size={13} />
                     </a>
                     <a
