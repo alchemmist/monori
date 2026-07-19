@@ -173,11 +173,27 @@ def _migrate_bank_connections(conn):
         )
 
 
+def _migrate_users(conn):
+    """Introduce first-class users so people can register and sign in to monori
+    itself (issue #34), replacing reverse-proxy basic-auth. Passwords are stored
+    only as Argon2 hashes. Per-user data ownership (a user_id on each table) is a
+    later phase; this migration only stands up the accounts to authenticate."""
+    conn.executescript("""
+    CREATE TABLE IF NOT EXISTS users (
+      id INTEGER PRIMARY KEY,
+      email TEXT NOT NULL UNIQUE,
+      password_hash TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    """)
+
+
 MIGRATIONS = [
     _migrate_accounts,
     _migrate_account_icon,
     _migrate_account_color_image,
     _migrate_bank_connections,
+    _migrate_users,
 ]
 
 

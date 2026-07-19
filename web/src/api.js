@@ -107,4 +107,23 @@ export const api = {
         }).then(json),
     cancelConnectionSync: (id) =>
         fetch(`/api/connections/${id}/cancel`, { method: "POST" }).then(json),
+    authRegister: (email, password) =>
+        fetch("/api/auth/register", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email, password }),
+        }).then(json),
+    authLogin: (email, password) => {
+        // OAuth2 password grant is form-encoded, username = email
+        const form = new URLSearchParams();
+        form.set("username", email);
+        form.set("password", password);
+        return fetch("/api/auth/token", {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: form,
+        }).then(json);
+    },
+    authMe: (token) =>
+        fetch("/api/auth/me", { headers: { Authorization: `Bearer ${token}` } }).then(json),
 };
