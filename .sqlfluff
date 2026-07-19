@@ -1,0 +1,10 @@
+[sqlfluff]
+exclude_rules = RF04
+dialect = sqlite
+templater = raw
+max_line_length = 100
+
+[sqlfluff:indentation]
+indent_unit = space
+tab_space_size = 2
+
