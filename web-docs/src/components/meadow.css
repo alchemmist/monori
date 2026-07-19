@@ -1,0 +1,53 @@
+@property --bend {
+    syntax: "<angle>";
+    initial-value: 0deg;
+    inherits: false;
+}
+
+.meadow {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 250px;
+    pointer-events: none;
+    overflow: hidden;
+}
+
+.meadow__layer {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: -45px;
+    width: 100%;
+    display: block;
+}
+
+.meadow__layer_back {
+    height: 225px;
+}
+
+.meadow__layer_mid {
+    height: 260px;
+}
+
+.meadow__layer_front {
+    height: 295px;
+}
+
+.meadow__sway {
+    transform-box: fill-box;
+    transform-origin: 50% 100%;
+    animation: meadow-sway var(--d, 3.5s) ease-in-out var(--del, 0s) infinite alternate;
+    transition: --bend 0.55s ease-out;
+}
+
+@keyframes meadow-sway {
+    from {
+        transform: rotate(calc(var(--bend, 0deg) - var(--a, 2deg)));
+    }
+
+    to {
+        transform: rotate(calc(var(--bend, 0deg) + var(--a, 2deg)));
+    }
+}
