@@ -84,6 +84,7 @@ export default function GlyphFlower() {
             const styles = getComputedStyle(box);
             const ink = parseColor(styles.getPropertyValue("--m-text"));
             const acc = parseColor(styles.getPropertyValue("--m-accent"));
+            const light = ink[0] + ink[1] + ink[2] < 380;
             ctx.clearRect(0, 0, W, H);
             ctx.textAlign = "center";
             ctx.textBaseline = "middle";
@@ -96,11 +97,15 @@ export default function GlyphFlower() {
                     "px ui-monospace, Menlo, monospace";
                 if (p.core > 0.08) {
                     const g = Math.min(1, p.core * 1.4);
+                    const coreAlpha = light
+                        ? Math.min(1, 0.45 + b * 0.35 + p.core * 0.5)
+                        : Math.min(1, b * 0.5 + p.core * 0.6);
                     ctx.fillStyle = `rgba(${acc[0]},${Math.round(acc[1] * (0.6 + 0.4 * g))},${
                         acc[2]
-                    },${Math.min(1, b * 0.5 + p.core * 0.6)})`;
+                    },${coreAlpha})`;
                 } else {
-                    ctx.fillStyle = `rgba(${ink[0]},${ink[1]},${ink[2]},${b * 0.85})`;
+                    const inkAlpha = light ? 0.3 + b * 0.7 : b * 0.85;
+                    ctx.fillStyle = `rgba(${ink[0]},${ink[1]},${ink[2]},${inkAlpha})`;
                 }
                 ctx.fillText(p.ch, p.x, p.y);
             }
