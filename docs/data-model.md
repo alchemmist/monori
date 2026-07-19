@@ -138,6 +138,19 @@ inspected and — planned in issue #22 — rolled back.
 | `inserted` / `skipped` | INTEGER | counts for the run |
 | `created_at` | TEXT | ISO datetime |
 
+### `users`
+
+In-app accounts that sign in to monori itself (issue #34). Passwords are stored
+only as Argon2 hashes. Per-user data ownership (a `user_id` on the other tables)
+is a later phase — this table only authenticates.
+
+| Column | Type | Notes |
+| -------- | ------ | ------- |
+| `id` | INTEGER PK | |
+| `email` | TEXT | unique, stored lowercased |
+| `password_hash` | TEXT | Argon2 hash; the plaintext is never stored |
+| `created_at` | TEXT | ISO datetime |
+
 ## Referential behavior
 
 - Deleting a **category** sets `category_id` to `NULL` on its transactions (they

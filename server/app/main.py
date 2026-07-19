@@ -10,6 +10,7 @@ from .auth import require_token
 from .deps import conn, snapshot
 from .routers import (
     accounts,
+    auth_router,
     budgets,
     categories,
     connections,
@@ -20,6 +21,9 @@ from .routers import (
 )
 
 app = FastAPI(title="monori", docs_url="/api-docs", redoc_url="/api-redoc")
+
+# authentication endpoints are public (they mint the tokens the rest would need)
+app.include_router(auth_router.router)
 
 STATIC_DIR = pathlib.Path(__file__).resolve().parent.parent / "static"
 DOCS_DIR = pathlib.Path(__file__).resolve().parent.parent / "docs-static"

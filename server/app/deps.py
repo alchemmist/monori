@@ -52,6 +52,11 @@ def serialize_tx(r):
     }
 
 
+def serialize_user(r):
+    """A user, without the password hash."""
+    return {"id": r["id"], "email": r["email"], "createdAt": r["created_at"]}
+
+
 def serialize_connection(r):
     """A bank connection, without any secret material (credentials/session)."""
     return {

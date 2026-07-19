@@ -10,6 +10,7 @@ file.
 | `MONORI_DB` | `server/data/monori.db` | Absolute path to the SQLite database file. Its parent directory is created on startup. In Docker this is set to `/app/data/monori.db`. |
 | `MONORI_API_TOKEN` | *(unset)* | Optional bearer token. When set, every `/api` data route (and `/api/snapshot`) requires `Authorization: Bearer <token>`; the docs site and OpenAPI endpoints (`/docs`, `/api-docs`, `/api-redoc`, `/openapi.json`) stay public. When unset, the API is open. |
 | `MONORI_ENCRYPTION_KEY` | *(unset)* | Required only for **bank sync connectors** (see below). A urlsafe base64 32-byte Fernet key used to encrypt stored bank credentials and cached sessions at rest. When unset, connections cannot be created and the feature is disabled. Generate one with `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`. |
+| `MONORI_AUTH_SECRET` | *(auto)* | Secret used to sign in-app auth JWTs (issue #34). If unset, a random one is generated once and persisted owner-only as `.auth_secret` next to the database, so logins survive restarts. Set it explicitly to share a secret across replicas or rotate it (rotating invalidates existing tokens). |
 | `API_PORT` | `8077` | Dev only — the port the local API runs on and the web dev server proxies to. Set via the `make` variable of the same name. |
 
 The production container also sets `MONORI_DB=/app/data/monori.db` in the

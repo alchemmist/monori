@@ -28,6 +28,22 @@ at `/docs`, plus the OpenAPI helpers `/api-docs`, `/api-redoc`, and
 curl -H "Authorization: Bearer $MONORI_API_TOKEN" http://localhost:8000/api/snapshot
 ```
 
+### In-app users (skeleton)
+
+Issue #34 adds real accounts that sign in to monori itself. This first cut ships
+the endpoints below; the `current_user` dependency they expose is not yet wired
+onto the data routes (per-user data ownership is a later phase), so it runs
+alongside the `MONORI_API_TOKEN` guard for now.
+
+- **`POST /api/auth/register`** — body `{email, password}` (password ≥ 8 chars).
+  Creates a user (Argon2-hashed password) and returns `{id, email, createdAt}`.
+  `409` if the email is already registered, `400` on a bad email/short password.
+- **`POST /api/auth/token`** — OAuth2 password grant (form-encoded `username` =
+  email, `password`). Returns `{access_token, token_type: "bearer"}` — a JWT
+  valid for 7 days — or `401`.
+- **`GET /api/auth/me`** — with `Authorization: Bearer <access_token>`, returns
+  the current user; `401` if the token is missing, malformed, or expired.
+
 ## Conventions
 
 - Create endpoints return `{"id": <new id>}`.
