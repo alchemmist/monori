@@ -7,6 +7,7 @@ export default defineConfig({
     server: {
         proxy: {
             "/api": process.env.MONORI_API ?? `http://localhost:${process.env.API_PORT ?? 8077}`,
+            "/docs": process.env.MONORI_API ?? `http://localhost:${process.env.API_PORT ?? 8077}`,
         },
         watch: process.env.VITE_FORCE_POLLING ? { usePolling: true, interval: 500 } : undefined,
     },

@@ -69,3 +69,11 @@ def test_budget_copy_validation_and_empty_source(api, client):
     )
     assert empty.json()["copied"] == 0
     assert api.snapshot()["budgets"] == []
+
+
+def test_budget_rejects_unknown_category(client):
+    r = client.put(
+        "/api/budgets", json={"categoryId": 999, "year": 2026, "month": 1, "amount": 100}
+    )
+    assert r.status_code == 400
+    assert r.json()["detail"] == "unknown category"

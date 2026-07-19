@@ -765,6 +765,16 @@ a {
     color: var(--m-accent);
 }
 
+/* meadow band */
+.landing__meadow {
+    position: relative;
+    height: 230px;
+    width: 100vw;
+    margin-left: calc(50% - 50vw);
+    margin-top: 40px;
+    overflow: hidden;
+}
+
 /* footer */
 .docs-footer {
     display: flex;
@@ -772,7 +782,7 @@ a {
     justify-content: space-between;
     gap: 20px;
     flex-wrap: wrap;
-    margin-top: 56px;
+    margin-top: 0;
     padding-top: 28px;
     border-top: 1px solid var(--m-border-soft);
 }

@@ -52,6 +52,11 @@ def serialize_tx(r):
     }
 
 
+def serialize_user(r):
+    """A user, without the password hash."""
+    return {"id": r["id"], "email": r["email"], "createdAt": r["created_at"]}
+
+
 def serialize_connection(r):
     """A bank connection, without any secret material (credentials/session)."""
     return {
@@ -77,49 +82,63 @@ def serialize_budget(r):
     }
 
 
-def snapshot(c):
+def snapshot(c, user_id):
     cur = c.cursor()
+    uid = (user_id,)
     return {
         "accounts": [
             serialize_account(r)
             for r in cur.execute(
                 "SELECT id, name, type, icon, color, icon_image, currency, sort, archived,"
-                " opening_balance, opening_date FROM accounts ORDER BY sort, id"
+                " opening_balance, opening_date FROM accounts WHERE user_id=? ORDER BY sort, id",
+                uid,
             )
         ],
         "groups": [
             serialize_group(r)
             for r in cur.execute(
-                "SELECT id, name, sort, kind FROM category_groups ORDER BY sort, id"
+                "SELECT id, name, sort, kind FROM category_groups WHERE user_id=?"
+                " ORDER BY sort, id",
+                uid,
             )
         ],
         "categories": [
             serialize_category(r)
             for r in cur.execute(
-                "SELECT id, group_id, name, keywords, sort, archived FROM categories"
-                " ORDER BY sort, id"
+                "SELECT c.id, c.group_id, c.name, c.keywords, c.sort, c.archived"
+                " FROM categories c JOIN category_groups g ON g.id = c.group_id"
+                " WHERE g.user_id=? ORDER BY c.sort, c.id",
+                uid,
             )
         ],
         "transactions": [
             serialize_tx(r)
             for r in cur.execute(
-                "SELECT id, date, amount, description, bank_category, mcc, category_id,"
-                " account_id, transfer_id, comment, source FROM transactions ORDER BY date, id"
+                "SELECT t.id, t.date, t.amount, t.description, t.bank_category, t.mcc,"
+                " t.category_id, t.account_id, t.transfer_id, t.comment, t.source"
+                " FROM transactions t JOIN accounts a ON a.id = t.account_id"
+                " WHERE a.user_id=? ORDER BY t.date, t.id",
+                uid,
             )
         ],
         "budgets": [
             serialize_budget(r)
             for r in cur.execute(
-                "SELECT category_id, year, month, amount FROM budgets"
-                " ORDER BY year, month, category_id"
+                "SELECT b.category_id, b.year, b.month, b.amount FROM budgets b"
+                " JOIN categories c ON c.id = b.category_id"
+                " JOIN category_groups g ON g.id = c.group_id"
+                " WHERE g.user_id=? ORDER BY b.year, b.month, b.category_id",
+                uid,
             )
         ],
         "connections": [
             serialize_connection(r)
             for r in cur.execute(
-                "SELECT id, account_id, bank, kind, status, last_sync, last_error,"
-                " credentials_encrypted, created_at, updated_at FROM bank_connections"
-                " ORDER BY id"
+                "SELECT bc.id, bc.account_id, bc.bank, bc.kind, bc.status, bc.last_sync,"
+                " bc.last_error, bc.credentials_encrypted, bc.created_at, bc.updated_at"
+                " FROM bank_connections bc JOIN accounts a ON a.id = bc.account_id"
+                " WHERE a.user_id=? ORDER BY bc.id",
+                uid,
             )
         ],
     }

@@ -10,8 +10,8 @@ ENV UV_PROJECT_ENVIRONMENT=/opt/venv \
     PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers
 
 # Dependencies + Chromium and its OS libraries, in one cached layer keyed by
-# pyproject/uv.lock — not reinstalled on every container start.
-COPY server/pyproject.toml server/uv.lock ./
+# pyproject.toml — not reinstalled on every container start.
+COPY server/pyproject.toml ./
 RUN uv sync --extra connectors --no-install-project \
     && uv run playwright install --with-deps chromium
 

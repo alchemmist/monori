@@ -16,8 +16,11 @@ RUN npm run build
 # Stage 2: python server
 FROM python:3.12-slim
 WORKDIR /app
-RUN pip install --no-cache-dir "fastapi>=0.115" "uvicorn[standard]>=0.30"
+COPY server/pyproject.toml ./
+RUN pip install --no-cache-dir "uv==0.11.26" && uv pip install --system -r pyproject.toml
 COPY server/app ./app
+COPY server/schema.sql ./schema.sql
+COPY server/migrations ./migrations
 COPY --from=web /build/web/dist ./static
 COPY --from=web /build/web-docs/dist ./docs-static
 ENV MONORI_DB=/app/data/monori.db

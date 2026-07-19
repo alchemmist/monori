@@ -13,8 +13,7 @@ STATEMENT = (
 )
 
 
-@pytest.fixture()
-def client(monkeypatch):
+def _fresh_app_client(monkeypatch):
     tmp = tempfile.mkdtemp()
     db_path = os.path.join(tmp, "test.db")
     monkeypatch.setenv("MONORI_DB", db_path)
@@ -28,6 +27,29 @@ def client(monkeypatch):
     from app.main import app as fastapi_app
 
     return TestClient(fastapi_app)
+
+
+def login_as(client, email, password="hunter2pw"):
+    """Register (if needed) and sign in; returns a bearer-token header dict."""
+    client.post("/api/auth/register", json={"email": email, "password": password})
+    r = client.post("/api/auth/token", data={"username": email, "password": password})
+    assert r.status_code == 200, r.text
+    return {"Authorization": f"Bearer {r.json()['access_token']}"}
+
+
+@pytest.fixture()
+def anon(monkeypatch):
+    """A client with no credentials attached (the DB is fresh and empty)."""
+    return _fresh_app_client(monkeypatch)
+
+
+@pytest.fixture()
+def client(monkeypatch):
+    """A client signed in as the default test user; every request carries the
+    bearer token via default headers."""
+    c = _fresh_app_client(monkeypatch)
+    c.headers.update(login_as(c, "tester@example.com"))
+    return c
 
 
 class Api:

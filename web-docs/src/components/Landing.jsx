@@ -13,6 +13,7 @@ import {
     LogoDocker,
 } from "@gravity-ui/icons";
 import Wordmark from "./Wordmark.jsx";
+import Meadow from "./Meadow.jsx";
 
 const GITHUB_URL = "https://github.com/alchemmist/monori";
 const DEMO_URL = "/demo";
@@ -186,6 +187,10 @@ available(m)     = available(m-1) + overspent(m-1)
                     </Link>
                 </div>
             </section>
+
+            <div className="landing__meadow">
+                <Meadow />
+            </div>
 
             <footer className="docs-footer">
                 <div className="docs-footer__brand">

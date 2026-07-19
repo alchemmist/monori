@@ -15,6 +15,7 @@ import {
     ClockArrowRotateLeft,
     SlidersVertical,
     Book,
+    ArrowRightFromSquare,
 } from "@gravity-ui/icons";
 import { useStore, isDemo } from "./store.js";
 import { computeRange } from "./engine/budget.js";
@@ -24,6 +25,7 @@ import AnalyticsPage from "./pages/AnalyticsPage.jsx";
 import TransactionsPage from "./pages/TransactionsPage.jsx";
 import AccountsPage from "./pages/AccountsPage.jsx";
 import SettingsPage from "./pages/SettingsPage.jsx";
+import LoginPage from "./pages/LoginPage.jsx";
 
 const NAV = [
     { id: "budget", title: "Budget", icon: LayoutHeaderCellsLarge },
@@ -45,7 +47,8 @@ const SOON = [
 const FIRST_YEAR = 2020;
 
 export default function App({ theme, onToggleTheme }) {
-    const { snapshot, loading, error, load, toast } = useStore();
+    const { snapshot, loading, error, load, toast, user, authChecked, checkAuth, logout } =
+        useStore();
     const [page, setPage] = useState("budget");
     const [collapsed, setCollapsed] = useState(
         () => localStorage.getItem("sidebar_collapsed") === "1",
@@ -60,8 +63,12 @@ export default function App({ theme, onToggleTheme }) {
         });
 
     useEffect(() => {
-        load();
-    }, [load]);
+        checkAuth();
+    }, [checkAuth]);
+
+    useEffect(() => {
+        if (isDemo() || user) load();
+    }, [load, user]);
 
     useEffect(() => {
         if (toast) toaster.add({ name: String(Date.now()), autoHiding: 5000, ...toast });
@@ -82,6 +89,16 @@ export default function App({ theme, onToggleTheme }) {
         [snapshot, lastYear],
     );
 
+    if (!isDemo() && !authChecked) {
+        return (
+            <div style={{ display: "grid", placeItems: "center", height: "100vh" }}>
+                <Loader size="l" />
+            </div>
+        );
+    }
+    if (!isDemo() && !user) {
+        return <LoginPage />;
+    }
     if (loading) {
         return (
             <div style={{ display: "grid", placeItems: "center", height: "100vh" }}>
@@ -159,6 +176,16 @@ export default function App({ theme, onToggleTheme }) {
                         <Gear width={16} height={16} />
                         <span className="sidebar__label">Settings</span>
                     </button>
+                    {!isDemo() && (
+                        <button
+                            className="sidebar__item"
+                            onClick={logout}
+                            title={collapsed ? "Log out" : user?.email}
+                        >
+                            <ArrowRightFromSquare width={16} height={16} />
+                            <span className="sidebar__label">Log out</span>
+                        </button>
+                    )}
                     <button
                         className="sidebar__collapse"
                         onClick={toggleSidebar}
