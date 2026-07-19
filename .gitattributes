@@ -3,4 +3,3 @@
 # pull-request diffs and exclude them from language stats.
 web/package-lock.json linguist-generated=true -diff
 web-docs/package-lock.json linguist-generated=true -diff
-server/uv.lock linguist-generated=true -diff
