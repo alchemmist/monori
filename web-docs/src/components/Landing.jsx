@@ -223,24 +223,25 @@ available(m)     = available(m-1) + overspent(m-1)
                 </div>
             </section>
 
-            <div className="landing__meadow">
-                <Meadow />
-            </div>
-
-            <footer className="docs-footer">
-                <div className="docs-footer__brand">
-                    <Wordmark size={20} />
-                    <span>docs</span>
+            <footer className="landing-footer">
+                <div className="docs-footer">
+                    <div className="docs-footer__brand">
+                        <Wordmark size={20} />
+                        <span>docs</span>
+                    </div>
+                    <div className="docs-footer__links">
+                        <Link to="/docs/getting-started">Getting started</Link>
+                        <Link to="/docs/api">API</Link>
+                        <Link to="/docs/development">Contributing</Link>
+                        <a href={GITHUB_URL} target="_blank" rel="noreferrer">
+                            GitHub
+                        </a>
+                    </div>
+                    <span className="docs-footer__copy">© alchemmist</span>
                 </div>
-                <div className="docs-footer__links">
-                    <Link to="/docs/getting-started">Getting started</Link>
-                    <Link to="/docs/api">API</Link>
-                    <Link to="/docs/development">Contributing</Link>
-                    <a href={GITHUB_URL} target="_blank" rel="noreferrer">
-                        GitHub
-                    </a>
+                <div className="landing__meadow">
+                    <Meadow />
                 </div>
-                <span className="docs-footer__copy">© alchemmist</span>
             </footer>
         </div>
     );

@@ -483,7 +483,7 @@ a {
 .landing {
     max-width: var(--docs-max);
     margin: 0 auto;
-    padding: 0 22px 80px;
+    padding: 0 22px;
 }
 
 .accent {
@@ -906,17 +906,20 @@ a {
     color: var(--m-accent);
 }
 
-/* meadow band */
+/* footer with meadow band at the very bottom */
+.landing-footer {
+    margin-top: 48px;
+}
+
 .landing__meadow {
     position: relative;
     height: 230px;
     width: 100vw;
     margin-left: calc(50% - 50vw);
-    margin-top: 40px;
+    margin-top: 8px;
     overflow: hidden;
 }
 
-/* footer */
 .docs-footer {
     display: flex;
     align-items: center;
