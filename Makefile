@@ -6,7 +6,7 @@ WEBBIN := web/node_modules/.bin
 
 .PHONY: dev down api web docs build \
         fmt fmt-check \
-        lint lint-web lint-docs lint-css lint-html lint-server lint-yaml lint-md lint-actions lint-docker lint-shell spell \
+        lint lint-web lint-docs lint-css lint-html lint-server lint-sql lint-yaml lint-md lint-actions lint-docker lint-shell spell \
         typecheck analyze audit audit-deps audit-deps-py audit-secrets \
         test t-fast t-medium t-slow coverage mutation \
         check
@@ -34,15 +34,19 @@ build:
 	rm -rf server/docs-static
 	cp -r web-docs/dist server/docs-static
 
+SQLFLUFF := uvx --from 'sqlfluff==3.4.2' sqlfluff
+
 fmt:
 	$(WEBBIN)/prettier --write .
 	cd server && uv run ruff format . && uv run ruff check . --fix
+	$(SQLFLUFF) fix -f server/schema.sql
 
 fmt-check:
 	$(WEBBIN)/prettier --check .
 	cd server && uv run ruff format --check .
+	$(SQLFLUFF) lint server/schema.sql
 
-lint: lint-web lint-docs lint-css lint-html lint-server lint-yaml lint-md lint-actions lint-docker lint-shell spell
+lint: lint-web lint-docs lint-css lint-html lint-server lint-sql lint-yaml lint-md lint-actions lint-docker lint-shell spell
 
 lint-web:
 	cd web && npm run --silent lint
@@ -58,6 +62,9 @@ lint-html:
 
 lint-server:
 	cd server && uv run ruff check .
+
+lint-sql:
+	$(SQLFLUFF) lint server/schema.sql
 
 lint-yaml:
 	uvx yamllint -c .yamllint.yaml .

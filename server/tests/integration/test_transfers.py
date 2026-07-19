@@ -5,7 +5,7 @@ pytestmark = pytest.mark.integration
 
 def test_transfer_creates_linked_pair(api):
     a = api.default_account()
-    b = api.account("Cash")
+    b = api.account("Vault")
     transfer_id = api.transfer(a, b, 5000, comment="move")
 
     rows = [t for t in api.snapshot()["transactions"] if t["transferId"] == transfer_id]
@@ -36,7 +36,7 @@ def test_transfer_rejects_unknown_account(api, client):
 
 def test_transfer_rejects_non_positive_amount(api, client):
     a = api.default_account()
-    b = api.account("Cash")
+    b = api.account("Vault")
     r = client.post(
         "/api/transfers",
         json={"fromAccountId": a, "toAccountId": b, "amount": 0, "date": "2026-01-01T00:00:00"},
@@ -46,7 +46,7 @@ def test_transfer_rejects_non_positive_amount(api, client):
 
 def test_delete_transfer_removes_both_rows(api, client):
     a = api.default_account()
-    b = api.account("Cash")
+    b = api.account("Vault")
     transfer_id = api.transfer(a, b, 5000)
     assert client.delete(f"/api/transfers/{transfer_id}").status_code == 200
     assert not [t for t in api.snapshot()["transactions"] if t["transferId"] == transfer_id]

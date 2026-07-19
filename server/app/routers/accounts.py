@@ -1,9 +1,11 @@
 import re
 from datetime import UTC, datetime
+from typing import Annotated
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+from ..auth import current_user
 from ..deps import conn, serialize_account
 from ..importer import tx_hash
 
@@ -62,14 +64,16 @@ class ReconcileBody(BaseModel):
 
 
 @router.get("")
-def list_accounts():
+def list_accounts(user: Annotated[dict, Depends(current_user)]):
+    uid = user["id"]
     c = conn()
     try:
         return [
             serialize_account(r)
             for r in c.execute(
                 "SELECT id, name, type, icon, color, icon_image, currency, sort, archived,"
-                " opening_balance, opening_date FROM accounts ORDER BY sort, id"
+                " opening_balance, opening_date FROM accounts WHERE user_id=? ORDER BY sort, id",
+                (uid,),
             )
         ]
     finally:
@@ -77,22 +81,28 @@ def list_accounts():
 
 
 @router.post("")
-def create_account(body: AccountBody):
+def create_account(body: AccountBody, user: Annotated[dict, Depends(current_user)]):
+    uid = user["id"]
     if body.type not in TYPES:
         raise HTTPException(400, "type must be one of card, cash, savings, other")
     _validate_color(body.color)
     _validate_icon_image(body.iconImage)
     c = conn()
     try:
-        if c.execute("SELECT id FROM accounts WHERE name=?", (body.name,)).fetchone():
+        if c.execute(
+            "SELECT id FROM accounts WHERE user_id=? AND name=?", (uid, body.name)
+        ).fetchone():
             raise HTTPException(409, "account with this name already exists")
-        max_sort = c.execute("SELECT COALESCE(MAX(sort),0) FROM accounts").fetchone()[0]
+        max_sort = c.execute(
+            "SELECT COALESCE(MAX(sort),0) FROM accounts WHERE user_id=?", (uid,)
+        ).fetchone()[0]
         cur = c.execute(
             """INSERT INTO accounts
-               (name, type, icon, color, icon_image, currency, opening_balance,
+               (user_id, name, type, icon, color, icon_image, currency, opening_balance,
                 opening_date, sort)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
+                uid,
                 body.name,
                 body.type,
                 body.icon,
@@ -111,14 +121,20 @@ def create_account(body: AccountBody):
 
 
 @router.patch("/{account_id}")
-def patch_account(account_id: int, patch: AccountPatch):
+def patch_account(
+    account_id: int, patch: AccountPatch, user: Annotated[dict, Depends(current_user)]
+):
+    uid = user["id"]
     c = conn()
     try:
-        if not c.execute("SELECT id FROM accounts WHERE id=?", (account_id,)).fetchone():
+        if not c.execute(
+            "SELECT id FROM accounts WHERE id=? AND user_id=?", (account_id, uid)
+        ).fetchone():
             raise HTTPException(404, "account not found")
         if patch.name is not None:
             dup = c.execute(
-                "SELECT id FROM accounts WHERE name=? AND id<>?", (patch.name, account_id)
+                "SELECT id FROM accounts WHERE user_id=? AND name=? AND id<>?",
+                (uid, patch.name, account_id),
             ).fetchone()
             if dup:
                 raise HTTPException(409, "account with this name already exists")
@@ -161,15 +177,22 @@ def patch_account(account_id: int, patch: AccountPatch):
 
 
 @router.delete("/{account_id}")
-def delete_account(account_id: int, reassignTo: int | None = None):
+def delete_account(
+    account_id: int,
+    user: Annotated[dict, Depends(current_user)],
+    reassignTo: int | None = None,
+):
     """Deleting an account reassigns its transactions to another account. A
     transaction must always belong to an account, so a non-empty account cannot
     be deleted without a reassign target, and the last account cannot be deleted."""
+    uid = user["id"]
     c = conn()
     try:
-        if not c.execute("SELECT id FROM accounts WHERE id=?", (account_id,)).fetchone():
+        if not c.execute(
+            "SELECT id FROM accounts WHERE id=? AND user_id=?", (account_id, uid)
+        ).fetchone():
             raise HTTPException(404, "account not found")
-        if c.execute("SELECT COUNT(*) FROM accounts").fetchone()[0] == 1:
+        if c.execute("SELECT COUNT(*) FROM accounts WHERE user_id=?", (uid,)).fetchone()[0] == 1:
             raise HTTPException(400, "cannot delete the last account")
         has_tx = c.execute(
             "SELECT 1 FROM transactions WHERE account_id=? LIMIT 1", (account_id,)
@@ -179,7 +202,9 @@ def delete_account(account_id: int, reassignTo: int | None = None):
                 raise HTTPException(400, "account has transactions; a reassign target is required")
             if (
                 reassignTo == account_id
-                or not c.execute("SELECT id FROM accounts WHERE id=?", (reassignTo,)).fetchone()
+                or not c.execute(
+                    "SELECT id FROM accounts WHERE id=? AND user_id=?", (reassignTo, uid)
+                ).fetchone()
             ):
                 raise HTTPException(400, "unknown reassign target")
             c.execute(
@@ -193,12 +218,17 @@ def delete_account(account_id: int, reassignTo: int | None = None):
 
 
 @router.post("/{account_id}/reconcile")
-def reconcile_account(account_id: int, body: ReconcileBody):
+def reconcile_account(
+    account_id: int, body: ReconcileBody, user: Annotated[dict, Depends(current_user)]
+):
     """Bring an account's computed balance to the real bank balance by posting a
     single adjustment transaction for the difference. Returns the delta applied."""
+    uid = user["id"]
     c = conn()
     try:
-        acc = c.execute("SELECT opening_balance FROM accounts WHERE id=?", (account_id,)).fetchone()
+        acc = c.execute(
+            "SELECT opening_balance FROM accounts WHERE id=? AND user_id=?", (account_id, uid)
+        ).fetchone()
         if not acc:
             raise HTTPException(404, "account not found")
         total = c.execute(
@@ -222,10 +252,11 @@ def reconcile_account(account_id: int, body: ReconcileBody):
 
 
 @router.post("/reorder")
-def reorder_accounts(body: Reorder):
+def reorder_accounts(body: Reorder, user: Annotated[dict, Depends(current_user)]):
+    uid = user["id"]
     c = conn()
     try:
-        known = {r["id"] for r in c.execute("SELECT id FROM accounts")}
+        known = {r["id"] for r in c.execute("SELECT id FROM accounts WHERE user_id=?", (uid,))}
         if set(body.ids) != known:
             raise HTTPException(400, "ids must list every existing account exactly once")
         for sort, aid in enumerate(body.ids, 1):

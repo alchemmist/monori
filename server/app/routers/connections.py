@@ -9,15 +9,18 @@ until the user posts the code to ``/sms``.
 import contextlib
 import secrets
 from datetime import datetime
+from typing import Annotated
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from .. import crypto
+from ..auth import current_user
 from ..connectors import base as connectors
 from ..connectors.base import ConnectorError, SmsRequired
 from ..deps import conn, serialize_connection
-from ..ingest import categorize_rows, commit_rows, load_rules
+from ..importer import build_rules
+from ..ingest import categorize_rows, commit_rows
 
 router = APIRouter(prefix="/api/connections", tags=["connections"])
 
@@ -55,11 +58,31 @@ class SmsBody(BaseModel):
     code: str
 
 
-def _load(c, cid):
-    row = c.execute("SELECT * FROM bank_connections WHERE id=?", (cid,)).fetchone()
+def _load(c, cid, uid):
+    row = c.execute(
+        "SELECT bc.* FROM bank_connections bc JOIN accounts a ON a.id = bc.account_id"
+        " WHERE bc.id=? AND a.user_id=?",
+        (cid, uid),
+    ).fetchone()
     if row is None:
         raise HTTPException(404, "unknown connection")
     return row
+
+
+def _load_user_rules(c, uid):
+    groups = {
+        r["id"]: r["kind"]
+        for r in c.execute("SELECT id, kind FROM category_groups WHERE user_id=?", (uid,))
+    }
+    cats = [
+        dict(r)
+        for r in c.execute(
+            "SELECT c.id, c.name, c.keywords, c.group_id FROM categories c"
+            " JOIN category_groups g ON g.id = c.group_id WHERE g.user_id=? ORDER BY c.sort",
+            (uid,),
+        )
+    ]
+    return build_rules(cats, groups)
 
 
 def _require_crypto():
@@ -75,9 +98,9 @@ def _mark_error(c, cid, message):
     c.commit()
 
 
-def _finish(c, row, result):
+def _finish(c, row, result, uid):
     """Categorize, commit as a batch, cache the session and mark connected."""
-    rules = load_rules(c)
+    rules = _load_user_rules(c, uid)
     categorize_rows(result.rows, rules)
     cur = c.execute(
         "INSERT INTO import_batches (account_id, connection_id, source, created_at)"
@@ -111,11 +134,14 @@ def _finish(c, row, result):
 
 
 @router.post("")
-def create_connection(body: ConnectionBody):
+def create_connection(body: ConnectionBody, user: Annotated[dict, Depends(current_user)]):
     _require_crypto()
+    uid = user["id"]
     c = conn()
     try:
-        if not c.execute("SELECT id FROM accounts WHERE id=?", (body.accountId,)).fetchone():
+        if not c.execute(
+            "SELECT id FROM accounts WHERE id=? AND user_id=?", (body.accountId, uid)
+        ).fetchone():
             raise HTTPException(400, "unknown account")
         try:
             connectors.get_connector_class(body.bank, body.kind)
@@ -132,17 +158,20 @@ def create_connection(body: ConnectionBody):
             (body.accountId, body.bank, body.kind, creds, _now(), _now()),
         )
         c.commit()
-        return serialize_connection(_load(c, cur.lastrowid))
+        return serialize_connection(_load(c, cur.lastrowid, uid))
     finally:
         c.close()
 
 
 @router.patch("/{cid}")
-def update_credentials(cid: int, credentials: Credentials):
+def update_credentials(
+    cid: int, credentials: Credentials, user: Annotated[dict, Depends(current_user)]
+):
     _require_crypto()
+    uid = user["id"]
     c = conn()
     try:
-        _load(c, cid)
+        _load(c, cid, uid)
         creds_dict = credentials.model_dump()
         creds_dict["code"] = f"{secrets.randbelow(10000):04d}"
         c.execute(
@@ -151,16 +180,17 @@ def update_credentials(cid: int, credentials: Credentials):
             (crypto.encrypt(creds_dict), _now(), cid),
         )
         c.commit()
-        return serialize_connection(_load(c, cid))
+        return serialize_connection(_load(c, cid, uid))
     finally:
         c.close()
 
 
 @router.delete("/{cid}")
-def delete_connection(cid: int):
+def delete_connection(cid: int, user: Annotated[dict, Depends(current_user)]):
+    uid = user["id"]
     c = conn()
     try:
-        _load(c, cid)
+        _load(c, cid, uid)
         _close_pending(cid)
         c.execute("DELETE FROM bank_connections WHERE id=?", (cid,))
         c.commit()
@@ -170,12 +200,13 @@ def delete_connection(cid: int):
 
 
 @router.post("/{cid}/cancel")
-def cancel_sync(cid: int):
+def cancel_sync(cid: int, user: Annotated[dict, Depends(current_user)]):
     """Abandon a login waiting for its OTP: close the parked connector and drop
     the connection out of the awaiting_sms state."""
+    uid = user["id"]
     c = conn()
     try:
-        _load(c, cid)
+        _load(c, cid, uid)
         _close_pending(cid)
         c.execute(
             "UPDATE bank_connections SET status='disconnected', updated_at=?"
@@ -189,11 +220,12 @@ def cancel_sync(cid: int):
 
 
 @router.post("/{cid}/sync")
-def sync_connection(cid: int):
+def sync_connection(cid: int, user: Annotated[dict, Depends(current_user)]):
     _require_crypto()
+    uid = user["id"]
     c = conn()
     try:
-        row = _load(c, cid)
+        row = _load(c, cid, uid)
         creds = crypto.decrypt(row["credentials_encrypted"])
         if not creds:
             raise HTTPException(400, "connection has no credentials")
@@ -210,7 +242,7 @@ def sync_connection(cid: int):
         cls = connectors.get_connector_class(row["bank"], row["kind"])
         connector = cls(creds, session)
         try:
-            return _finish(c, row, connector.sync(row["last_sync"]))
+            return _finish(c, row, connector.sync(row["last_sync"]), uid)
         except SmsRequired:
             PENDING[cid] = connector
             c.execute(
@@ -227,16 +259,17 @@ def sync_connection(cid: int):
 
 
 @router.post("/{cid}/sms")
-def submit_sms(cid: int, body: SmsBody):
+def submit_sms(cid: int, body: SmsBody, user: Annotated[dict, Depends(current_user)]):
     _require_crypto()
+    uid = user["id"]
     c = conn()
     try:
-        row = _load(c, cid)
+        row = _load(c, cid, uid)
         connector = PENDING.pop(cid, None)
         if connector is None:
             raise HTTPException(409, "no login awaiting a code")
         try:
-            return _finish(c, row, connector.resume_sync(body.code))
+            return _finish(c, row, connector.resume_sync(body.code), uid)
         except ConnectorError as e:
             _mark_error(c, cid, str(e))
             raise HTTPException(502, str(e)) from e

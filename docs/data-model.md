@@ -4,9 +4,14 @@ Everything monori knows lives in one SQLite file (`MONORI_DB`, default
 `server/data/monori.db`). The schema is created on first connection and runs in
 WAL mode with foreign keys enabled. Five tables hold the whole budget.
 
-Schema changes to existing databases are applied by small ordered migrations
-tracked with SQLite's `PRAGMA user_version`; connecting to an older database
-upgrades it in place (see the accounts migration below).
+The schema has a single canonical definition in `server/schema.sql`; its
+history lives as [Alembic](https://alembic.sqlalchemy.org/) revisions in
+`server/migrations/versions/`. A fresh database is created straight from
+`schema.sql` and stamped at the latest revision; an existing database is
+upgraded through the migration chain on first connection. Databases created
+before the Alembic switch (which tracked migrations with SQLite's
+`PRAGMA user_version`) are adopted automatically: they are stamped at the
+matching revision and upgraded from there (see the accounts migration below).
 
 ## Money
 
@@ -25,7 +30,8 @@ Top-level buckets that give categories their income/expense meaning.
 | Column | Type | Notes |
 | -------- | ------ | ------- |
 | `id` | INTEGER PK | |
-| `name` | TEXT | unique |
+| `user_id` | INTEGER | → `users(id)`; owner. `NULL` only for unclaimed pre-multi-user rows |
+| `name` | TEXT | unique per user |
 | `sort` | INTEGER | display order |
 | `kind` | TEXT | `income` or `expense` (checked) |
 
@@ -37,7 +43,8 @@ belongs to exactly one account.
 | Column | Type | Notes |
 | -------- | ------ | ------- |
 | `id` | INTEGER PK | |
-| `name` | TEXT | unique |
+| `user_id` | INTEGER | → `users(id)`; owner. `NULL` only for unclaimed pre-multi-user rows |
+| `name` | TEXT | unique per user |
 | `type` | TEXT | `card` / `cash` / `savings` / `other`; default `other` |
 | `icon` | TEXT | display glyph name (e.g. `wallet`, `card`, `ruble`); default `wallet` |
 | `color` | TEXT | `#rrggbb` tint for the glyph and its tile; default `#5b6472` |
@@ -60,7 +67,7 @@ The envelopes.
 | -------- | ------ | ------- |
 | `id` | INTEGER PK | |
 | `group_id` | INTEGER | → `category_groups(id)` |
-| `name` | TEXT | unique |
+| `name` | TEXT | unique per user (enforced in the API) |
 | `keywords` | TEXT | pipe-separated, for import auto-categorization; default `''` |
 | `sort` | INTEGER | display order; default `0` |
 | `archived` | INTEGER | `0`/`1`; default `0` |
@@ -138,6 +145,23 @@ inspected and — planned in issue #22 — rolled back.
 | `inserted` / `skipped` | INTEGER | counts for the run |
 | `created_at` | TEXT | ISO datetime |
 
+### `users`
+
+In-app accounts that sign in to monori (issue #34). Passwords are stored only as
+Argon2 hashes. Ownership hangs off two roots: `accounts.user_id` and
+`category_groups.user_id`. Everything else is scoped through them — categories
+via their group, transactions via their account, budgets via their category,
+connections and import batches via their account. Rows that predate multi-user
+have `user_id NULL` and are claimed by the first user who registers; every new
+user starts with a default **Cash** account.
+
+| Column | Type | Notes |
+| -------- | ------ | ------- |
+| `id` | INTEGER PK | |
+| `email` | TEXT | unique, stored lowercased |
+| `password_hash` | TEXT | Argon2 hash; the plaintext is never stored |
+| `created_at` | TEXT | ISO datetime |
+
 ## Referential behavior
 
 - Deleting a **category** sets `category_id` to `NULL` on its transactions (they
@@ -156,8 +180,9 @@ inspected and — planned in issue #22 — rolled back.
 Databases created before accounts existed are upgraded on first connection: a
 default **T-Bank** account is created and every existing transaction is
 backfilled onto it, so current data behaves exactly as before. The migration
-rebuilds the `transactions` table to add the NOT NULL `account_id`, then records
-itself via `PRAGMA user_version` so it runs only once.
+rebuilds the `transactions` table to add the NOT NULL `account_id`; Alembic's
+version table ensures it runs only once. A brand-new database also starts with
+the default T-Bank account.
 
 ## Dedup hashing
 
