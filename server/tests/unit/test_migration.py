@@ -1,14 +1,11 @@
 import os
 import sqlite3
 
-from app.db import (
-    MIGRATIONS,
-    _migrate_account_color_image,
-    _migrate_account_icon,
-    _migrate_accounts,
-    _migrate_bank_connections,
-    connect,
-)
+from alembic import command
+
+from app.db import LEGACY_REVISIONS, _alembic_config, connect
+
+HEAD = LEGACY_REVISIONS[-1]
 
 OLD_SCHEMA = """
 CREATE TABLE category_groups (
@@ -47,6 +44,10 @@ def _make_old_db(path):
     old.close()
 
 
+def _revision(conn):
+    return conn.execute("SELECT version_num FROM alembic_version").fetchone()[0]
+
+
 def test_migration_backfills_existing_transactions(tmp_path):
     db_path = os.path.join(tmp_path, "old.db")
     _make_old_db(db_path)
@@ -65,7 +66,6 @@ def test_migration_backfills_existing_transactions(tmp_path):
         cols = {r["name"]: r for r in conn.execute("PRAGMA table_info(transactions)")}
         assert cols["account_id"]["notnull"] == 1
 
-        assert accounts[0]["name"] == "T-Bank"
         icon = conn.execute("SELECT icon FROM accounts WHERE id=?", (default_id,)).fetchone()[
             "icon"
         ]
@@ -73,7 +73,7 @@ def test_migration_backfills_existing_transactions(tmp_path):
         acct_cols = {r["name"] for r in conn.execute("PRAGMA table_info(accounts)")}
         assert {"color", "icon_image"} <= acct_cols
 
-        assert conn.execute("PRAGMA user_version").fetchone()[0] == len(MIGRATIONS)
+        assert _revision(conn) == HEAD
     finally:
         conn.close()
 
@@ -86,17 +86,91 @@ def test_migration_is_idempotent(tmp_path):
     try:
         assert conn.execute("SELECT COUNT(*) FROM accounts").fetchone()[0] == 1
         assert conn.execute("SELECT COUNT(*) FROM transactions").fetchone()[0] == 2
+        assert _revision(conn) == HEAD
     finally:
         conn.close()
 
 
-def test_fresh_db_has_accounts_and_account_id(tmp_path):
+def test_fresh_db_is_created_from_schema_sql(tmp_path):
     db_path = os.path.join(tmp_path, "fresh.db")
     conn = connect(db_path)
     try:
+        tables = {
+            r["name"] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        }
+        assert {
+            "category_groups",
+            "categories",
+            "accounts",
+            "transactions",
+            "budgets",
+            "bank_connections",
+            "import_batches",
+            "users",
+        } <= tables
         assert conn.execute("SELECT COUNT(*) FROM accounts").fetchone()[0] == 1
         cols = {r["name"] for r in conn.execute("PRAGMA table_info(transactions)")}
-        assert {"account_id", "transfer_id"} <= cols
+        assert {"account_id", "transfer_id", "batch_id"} <= cols
+        assert _revision(conn) == HEAD
+    finally:
+        conn.close()
+
+
+def _describe(db_path):
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    try:
+        tables = sorted(
+            r["name"]
+            for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
+            if r["name"] != "alembic_version" and not r["name"].startswith("sqlite_")
+        )
+        shape = {}
+        for t in tables:
+            cols = sorted(
+                (r["name"], r["type"].upper(), r["notnull"], r["dflt_value"], bool(r["pk"]))
+                for r in conn.execute(f"PRAGMA table_info({t})")
+            )
+            indexes = sorted(
+                r["name"]
+                for r in conn.execute(f"PRAGMA index_list({t})")
+                if not r["name"].startswith("sqlite_")
+            )
+            shape[t] = (cols, indexes)
+        return shape
+    finally:
+        conn.close()
+
+
+def test_schema_sql_matches_migration_chain(tmp_path):
+    fresh = os.path.join(tmp_path, "fresh.db")
+    connect(fresh).close()
+
+    chained = os.path.join(tmp_path, "chained.db")
+    command.upgrade(_alembic_config(chained), "head")
+
+    assert _describe(fresh) == _describe(chained)
+
+
+def test_legacy_intermediate_user_version_is_adopted(tmp_path):
+    db_path = os.path.join(tmp_path, "v1.db")
+    command.upgrade(_alembic_config(db_path), "0002")
+    raw = sqlite3.connect(db_path)
+    raw.execute("DROP TABLE alembic_version")
+    raw.execute("PRAGMA user_version = 1")
+    raw.commit()
+    raw.close()
+
+    conn = connect(db_path)
+    try:
+        assert _revision(conn) == HEAD
+        assert conn.execute("SELECT COUNT(*) FROM accounts").fetchone()[0] == 1
+        acct_cols = {r["name"] for r in conn.execute("PRAGMA table_info(accounts)")}
+        assert {"icon", "color", "icon_image"} <= acct_cols
+        tables = {
+            r["name"] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        }
+        assert {"bank_connections", "import_batches", "users"} <= tables
     finally:
         conn.close()
 
@@ -109,7 +183,6 @@ def test_default_account_fields(tmp_path):
         a = conn.execute(
             "SELECT name, type, currency, sort, icon, color, icon_image FROM accounts"
         ).fetchone()
-        # the default account and the icon/color columns' DEFAULT clauses
         assert a["name"] == "T-Bank"
         assert a["type"] == "card"
         assert a["currency"] == "RUB"
@@ -138,77 +211,5 @@ def test_new_account_gets_column_defaults(tmp_path):
         assert a["icon"] == "wallet"
         assert a["color"] == "#5b6472"
         assert a["icon_image"] is None
-    finally:
-        conn.close()
-
-
-def test_column_migrations_are_idempotent_when_reapplied(tmp_path):
-    # Re-running a column migration must be a no-op: the `_has_column` guards
-    # protect the ALTERs. A guard that checks the wrong table/column would try to
-    # add an existing column and raise "duplicate column name".
-    db_path = os.path.join(tmp_path, "fresh.db")
-    conn = connect(db_path)
-    try:
-        _migrate_account_icon(conn)
-        _migrate_account_color_image(conn)
-        cols = {r["name"] for r in conn.execute("PRAGMA table_info(accounts)")}
-        assert {"icon", "color", "icon_image"} <= cols
-    finally:
-        conn.close()
-
-
-def test_reapplying_accounts_migration_keeps_single_default(tmp_path):
-    # Re-running the accounts migration must not insert a second T-Bank nor
-    # rebuild away the account_id column.
-    db_path = os.path.join(tmp_path, "old.db")
-    _make_old_db(db_path)
-    conn = connect(db_path)
-    try:
-        _migrate_accounts(conn)
-        assert conn.execute("SELECT COUNT(*) FROM accounts").fetchone()[0] == 1
-        cols = {r["name"] for r in conn.execute("PRAGMA table_info(transactions)")}
-        assert "account_id" in cols
-    finally:
-        conn.close()
-
-
-def test_bank_connections_tables_and_batch_column(tmp_path):
-    db_path = os.path.join(tmp_path, "old.db")
-    _make_old_db(db_path)
-    conn = connect(db_path)
-    try:
-        tables = {
-            r["name"] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
-        }
-        assert {"bank_connections", "import_batches"} <= tables
-        tx_cols = {r["name"] for r in conn.execute("PRAGMA table_info(transactions)")}
-        assert "batch_id" in tx_cols
-    finally:
-        conn.close()
-
-
-def test_bank_connections_migration_is_idempotent(tmp_path):
-    # Re-running must not fail on the batch_id ALTER (the _has_column guard) nor
-    # error on the CREATE TABLE IF NOT EXISTS.
-    db_path = os.path.join(tmp_path, "fresh.db")
-    conn = connect(db_path)
-    try:
-        _migrate_bank_connections(conn)
-        tx_cols = [r["name"] for r in conn.execute("PRAGMA table_info(transactions)")]
-        assert tx_cols.count("batch_id") == 1
-    finally:
-        conn.close()
-
-
-def test_run_migrations_marks_version_and_skips_when_current(tmp_path):
-    db_path = os.path.join(tmp_path, "old.db")
-    _make_old_db(db_path)
-    conn = connect(db_path)
-    try:
-        assert conn.execute("PRAGMA user_version").fetchone()[0] == len(MIGRATIONS)
-        # a second connect on the same file is a no-op and leaves the version pinned
-        conn.close()
-        conn = connect(db_path)
-        assert conn.execute("PRAGMA user_version").fetchone()[0] == len(MIGRATIONS)
     finally:
         conn.close()
