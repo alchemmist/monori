@@ -72,6 +72,7 @@ class TBankPlaywrightConnector(Connector):
     TEXT_SET_CODE = "Придумайте код"
     TEXT_ENTER_CODE = "Введите код"
     TEXT_SET_CODE_SUBMIT = "Установить"
+    TEXTS_OTP_REJECTED = ("Неверный код", "Код введён неверно", "Неправильный код")
 
     LOGIN_TIMEOUT_MS = 45_000
 
@@ -109,9 +110,9 @@ class TBankPlaywrightConnector(Connector):
             return payload
         raise ConnectorError(f"unexpected worker message: {kind}")
 
-    def _ask_sms(self):
+    def _ask_sms(self, message="enter the code sent by the bank"):
         """Signal the router that an OTP is needed and block for the code."""
-        self._from_worker.put(("sms_required", "enter the code sent by the bank"))
+        self._from_worker.put(("sms_required", message))
         kind, code = self._to_worker.get()
         if kind != "sms":
             raise ConnectorError("login aborted")
@@ -233,12 +234,17 @@ class TBankPlaywrightConnector(Connector):
             return False
 
     def _is_logged_in(self, page):
+        # no selector checks here: the /mybank home page legitimately contains
+        # phone inputs (transfer-by-phone widget), so only the URL plus the
+        # login-screen texts are trustworthy evidence
         return (
             "/mybank" in page.url
             and not self._has_text(page, self.TEXT_ENTER_CODE)
             and not self._has_text(page, self.TEXT_SET_CODE)
-            and page.query_selector(self.SEL_PHONE) is None
         )
+
+    def _otp_rejected(self, page):
+        return any(self._has_text(page, t) for t in self.TEXTS_OTP_REJECTED)
 
     def _type_code(self, page, code):
         """Enter the 4-digit quick-login code into the code widget."""
@@ -281,10 +287,17 @@ class TBankPlaywrightConnector(Connector):
             page.click(self.SEL_PASSWORD_SUBMIT)
             self._shot(page, "04-after-password")
         otp = self._ask_sms()
-        page.fill(self.SEL_SMS, otp)
-        page.click(self.SEL_SMS_SUBMIT)
-        page.wait_for_timeout(2_000)
-        self._shot(page, "05-after-sms")
+        while True:
+            page.fill(self.SEL_SMS, otp)
+            # the OTP widget usually auto-submits as the digits land; a submit
+            # button only exists on some variants of the screen
+            with contextlib.suppress(Exception):
+                page.locator(self.SEL_SMS_SUBMIT).first.click(timeout=5_000)
+            page.wait_for_timeout(2_000)
+            self._shot(page, "05-after-sms")
+            if not self._otp_rejected(page):
+                break
+            otp = self._ask_sms("the bank rejected the code — check it and try again")
 
         # Right after the OTP the bank offers to set a quick-login code — set ours
         # (and remember it) so future syncs skip the SMS, instead of skipping it.
@@ -311,6 +324,9 @@ class TBankPlaywrightConnector(Connector):
             self._dismiss_interstitials(page)
             page.goto(self.URL_HOME, wait_until="domcontentloaded")
             page.wait_for_timeout(2_500)
+            if code and self._has_text(page, self.TEXT_ENTER_CODE):
+                self._type_code(page, code)
+                page.wait_for_timeout(2_000)
         self._shot(page, "07-logged-in")
         if not self._is_logged_in(page):
             raise ConnectorError("login did not reach the bank home page")
