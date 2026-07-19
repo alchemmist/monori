@@ -17,7 +17,10 @@ RUN npm run build
 FROM python:3.12-slim
 WORKDIR /app
 COPY server/pyproject.toml ./
-RUN pip install --no-cache-dir "uv==0.11.26" && uv pip install --system -r pyproject.toml
+RUN pip install --no-cache-dir "uv==0.11.26" && \
+    uv pip install --system -r pyproject.toml --extra connectors && \
+    playwright install --with-deps chromium && \
+    rm -rf /var/lib/apt/lists/*
 COPY server/app ./app
 COPY server/schema.sql ./schema.sql
 COPY server/migrations ./migrations
