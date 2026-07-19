@@ -57,6 +57,13 @@ def auth_secret():
 
 
 def _load_or_create_secret(path):
+    return load_or_create_secret_file(path, lambda: secrets.token_hex(32))
+
+
+def load_or_create_secret_file(path, generate):
+    """Read a secret from ``path``; if it is missing or empty, generate one with
+    ``generate()`` and persist it owner-only. Concurrency-safe via exclusive
+    create — concurrent workers that lose the race read the winner's value."""
     if path.exists():
         existing = path.read_text().strip()
         if existing:
@@ -66,9 +73,8 @@ def _load_or_create_secret(path):
             return existing
         path.unlink()
     path.parent.mkdir(parents=True, exist_ok=True)
-    value = secrets.token_hex(32)
+    value = generate()
     try:
-        # exclusive create so concurrent workers can't overwrite each other
         fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     except FileExistsError:
         return path.read_text().strip()

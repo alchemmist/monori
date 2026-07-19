@@ -4,7 +4,7 @@ import pathlib
 from typing import Annotated
 
 from fastapi import Depends, FastAPI
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from .auth import current_user
@@ -67,14 +67,13 @@ def get_snapshot(user: Annotated[dict, Depends(current_user)]):
 if DOCS_DIR.is_dir():
     app.mount("/docs/assets", StaticFiles(directory=DOCS_DIR / "assets"), name="docs-assets")
 
+    @app.get("/welcome")
     @app.get("/docs")
     @app.get("/docs/{path:path}")
     def docs_site(path: str = ""):
+        # the docs bundle serves both the marketing landing (/welcome) and the
+        # documentation (/docs/*); its client router renders by full path
         return _serve_spa(DOCS_DIR, path)
-
-    @app.get("/welcome")
-    def welcome():
-        return RedirectResponse("/docs/welcome")
 
 
 if STATIC_DIR.is_dir():

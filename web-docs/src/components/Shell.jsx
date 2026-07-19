@@ -16,7 +16,7 @@ function SidebarNav({ onNavigate }) {
                     {group.items.map((item) => (
                         <NavLink
                             key={item.slug}
-                            to={`/${item.slug}`}
+                            to={`/docs/${item.slug}`}
                             className={({ isActive }) =>
                                 `docs-side__link ${isActive ? "docs-side__link_active" : ""}`
                             }
@@ -33,7 +33,7 @@ function SidebarNav({ onNavigate }) {
 
 export default function Shell({ theme, onToggleTheme }) {
     const { pathname } = useLocation();
-    const isDoc = pathname !== "/" && pathname !== "" && pathname !== "/welcome";
+    const isDoc = pathname.startsWith("/docs");
     const [menuOpen, setMenuOpen] = useState(false);
 
     return (
@@ -55,7 +55,7 @@ export default function Shell({ theme, onToggleTheme }) {
                     </Link>
                 </div>
                 <div className="docs-top__right">
-                    <NavLink to="/getting-started" className="docs-top__link">
+                    <NavLink to="/docs/getting-started" className="docs-top__link">
                         Documentation
                     </NavLink>
                     <a className="docs-top__link" href="/login" title="Sign in">

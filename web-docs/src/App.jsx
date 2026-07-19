@@ -7,9 +7,10 @@ export default function App({ theme, onToggleTheme }) {
     return (
         <Routes>
             <Route element={<Shell theme={theme} onToggleTheme={onToggleTheme} />}>
-                <Route index element={<Navigate to="/getting-started" replace />} />
-                <Route path="welcome" element={<Landing />} />
-                <Route path=":slug" element={<MarkdownPage />} />
+                <Route path="/welcome" element={<Landing />} />
+                <Route path="/docs" element={<Navigate to="/docs/getting-started" replace />} />
+                <Route path="/docs/:slug" element={<MarkdownPage />} />
+                <Route path="*" element={<Navigate to="/docs/getting-started" replace />} />
             </Route>
         </Routes>
     );

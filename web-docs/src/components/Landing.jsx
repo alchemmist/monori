@@ -23,37 +23,37 @@ const FEATURES = [
         icon: Envelope,
         title: "Envelope budgeting",
         text: "Hand money to categories, spend them down, roll the rest forward. The exact YNAB-style math of the spreadsheet it grew from.",
-        to: "/budgeting",
+        to: "/docs/budgeting",
     },
     {
         icon: ArrowDownToLine,
         title: "Bank-statement import",
         text: "Paste a statement and it parses, auto-categorizes from your keywords, and de-duplicates — preview before anything is written.",
-        to: "/importing",
+        to: "/docs/importing",
     },
     {
         icon: ChartColumn,
         title: "Dashboard & analytics",
         text: "KPIs, trends, plan-vs-fact, budget discipline, spending patterns and top merchants — derived live from your ledger.",
-        to: "/dashboard-analytics",
+        to: "/docs/dashboard-analytics",
     },
     {
         icon: CurlyBrackets,
         title: "Full REST API",
         text: "Every action the UI takes is an HTTP call. Groups, categories, transactions, budgets, import — behind per-user JWT auth.",
-        to: "/api",
+        to: "/docs/api",
     },
     {
         icon: CircleRuble,
         title: "Integer-kopeck money",
         text: "Every amount is a whole number of kopecks end to end. No floating point, no rounding drift — totals always reconcile.",
-        to: "/data-model",
+        to: "/docs/data-model",
     },
     {
         icon: ShieldKeyhole,
         title: "Self-hosted & private",
         text: "One container, one SQLite file. Your data never leaves your server. Back it up by copying a single file.",
-        to: "/configuration",
+        to: "/docs/configuration",
     },
 ];
 
@@ -118,7 +118,7 @@ export default function Landing() {
                             <Icon data={Sparkles} size={16} />
                             Try the live demo
                         </a>
-                        <Link className="btn btn_ghost" to="/getting-started">
+                        <Link className="btn btn_ghost" to="/docs/getting-started">
                             Get started
                             <Icon data={ArrowRight} size={16} />
                         </Link>
@@ -158,7 +158,7 @@ export default function Landing() {
                         monori is a faithful port of a spreadsheet budget. Its math is small enough
                         to read in full — carry, overspend, and the pool left to assign.
                     </p>
-                    <Link className="btn btn_ghost" to="/budgeting">
+                    <Link className="btn btn_ghost" to="/docs/budgeting">
                         How budgeting works
                         <Icon data={ArrowRight} size={15} />
                     </Link>
@@ -182,11 +182,11 @@ available(m)     = available(m-1) + overspent(m-1)
                     </p>
                 </div>
                 <div className="cta-band__actions">
-                    <Link className="btn btn_primary" to="/getting-started">
+                    <Link className="btn btn_primary" to="/docs/getting-started">
                         <Icon data={LogoDocker} size={16} />
                         Deploy monori
                     </Link>
-                    <Link className="btn btn_ghost" to="/configuration">
+                    <Link className="btn btn_ghost" to="/docs/configuration">
                         Configuration
                     </Link>
                 </div>
@@ -202,9 +202,9 @@ available(m)     = available(m-1) + overspent(m-1)
                     <span>docs</span>
                 </div>
                 <div className="docs-footer__links">
-                    <Link to="/getting-started">Getting started</Link>
-                    <Link to="/api">API</Link>
-                    <Link to="/development">Contributing</Link>
+                    <Link to="/docs/getting-started">Getting started</Link>
+                    <Link to="/docs/api">API</Link>
+                    <Link to="/docs/development">Contributing</Link>
                     <a href={GITHUB_URL} target="_blank" rel="noreferrer">
                         GitHub
                     </a>

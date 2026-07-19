@@ -21,10 +21,12 @@ def _connect(client, account_id):
     )
 
 
-def test_create_requires_encryption_key(api, client):
+def test_create_auto_provisions_encryption_key(api, client, monkeypatch):
+    # with no MONORI_ENCRYPTION_KEY set, the key is generated and persisted on
+    # demand, so bank connections work out of the box
+    monkeypatch.delenv("MONORI_ENCRYPTION_KEY", raising=False)
     r = _connect(client, api.default_account())
-    assert r.status_code == 400
-    assert "MONORI_ENCRYPTION_KEY" in r.json()["detail"]
+    assert r.status_code == 200, r.text
 
 
 def test_create_rejects_unknown_bank(api, client, keyed):

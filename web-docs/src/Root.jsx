@@ -34,7 +34,7 @@ export default function Root() {
 
     return (
         <ThemeProvider theme={theme}>
-            <BrowserRouter basename={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+            <BrowserRouter>
                 <App theme={theme} onToggleTheme={toggleTheme} />
             </BrowserRouter>
         </ThemeProvider>
