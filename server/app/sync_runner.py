@@ -42,7 +42,14 @@ class LocalRunner:
         connector = self._pending.pop(cid, None)
         if connector is None:
             raise NoPendingLogin
-        return connector.resume_sync(code)
+        try:
+            return connector.resume_sync(code)
+        except ConnectorError:
+            # the failed login is no longer tracked, so close it here or its
+            # live browser leaks
+            with contextlib.suppress(Exception):
+                connector.close()
+            raise
 
     def cancel(self, cid):
         old = self._pending.pop(cid, None)
@@ -59,7 +66,13 @@ class RemoteRunner:
         )
 
     @staticmethod
-    def _unpack(payload):
+    def _unpack(response):
+        try:
+            payload = response.json()
+        except ValueError as e:
+            raise ConnectorError("sync service returned an invalid response") from e
+        if not isinstance(payload, dict):
+            raise ConnectorError("sync service returned an invalid response")
         status = payload.get("status")
         if status == "done":
             return SyncResult(payload.get("rows") or [], payload.get("session"))
@@ -82,7 +95,7 @@ class RemoteRunner:
             r.raise_for_status()
         except httpx.HTTPError as e:
             raise ConnectorError(f"sync service unavailable: {e}") from e
-        return self._unpack(r.json())
+        return self._unpack(r)
 
     def resume(self, cid, code):
         try:
@@ -92,13 +105,14 @@ class RemoteRunner:
             r.raise_for_status()
         except httpx.HTTPError as e:
             raise ConnectorError(f"sync service unavailable: {e}") from e
-        return self._unpack(r.json())
+        return self._unpack(r)
 
     def cancel(self, cid):
-        # best-effort cleanup: deleting a connection must work even if the
-        # sync service is down
+        # best-effort cleanup on user-facing endpoints: must fail fast (not
+        # the 600 s sync timeout) and must not block deleting a connection
+        # when the sync service is down
         with contextlib.suppress(httpx.HTTPError):
-            self._client.post(f"/runs/{cid}/cancel")
+            self._client.post(f"/runs/{cid}/cancel", timeout=httpx.Timeout(5, connect=2))
 
 
 _runner = None
