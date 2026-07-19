@@ -6,6 +6,7 @@ from app.db import (
     _migrate_account_color_image,
     _migrate_account_icon,
     _migrate_accounts,
+    _migrate_bank_connections,
     connect,
 )
 
@@ -167,6 +168,34 @@ def test_reapplying_accounts_migration_keeps_single_default(tmp_path):
         assert conn.execute("SELECT COUNT(*) FROM accounts").fetchone()[0] == 1
         cols = {r["name"] for r in conn.execute("PRAGMA table_info(transactions)")}
         assert "account_id" in cols
+    finally:
+        conn.close()
+
+
+def test_bank_connections_tables_and_batch_column(tmp_path):
+    db_path = os.path.join(tmp_path, "old.db")
+    _make_old_db(db_path)
+    conn = connect(db_path)
+    try:
+        tables = {
+            r["name"] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        }
+        assert {"bank_connections", "import_batches"} <= tables
+        tx_cols = {r["name"] for r in conn.execute("PRAGMA table_info(transactions)")}
+        assert "batch_id" in tx_cols
+    finally:
+        conn.close()
+
+
+def test_bank_connections_migration_is_idempotent(tmp_path):
+    # Re-running must not fail on the batch_id ALTER (the _has_column guard) nor
+    # error on the CREATE TABLE IF NOT EXISTS.
+    db_path = os.path.join(tmp_path, "fresh.db")
+    conn = connect(db_path)
+    try:
+        _migrate_bank_connections(conn)
+        tx_cols = [r["name"] for r in conn.execute("PRAGMA table_info(transactions)")]
+        assert tx_cols.count("batch_id") == 1
     finally:
         conn.close()
 

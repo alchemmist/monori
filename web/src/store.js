@@ -260,4 +260,37 @@ export const useStore = create((set, get) => ({
         await get().load();
         return res;
     },
+
+    async createConnection(body) {
+        if (isDemo()) throw new Error("Bank sync is not available in the demo");
+        const conn = await api.createConnection(body);
+        await get().load();
+        return conn;
+    },
+
+    async deleteConnection(id) {
+        if (isDemo()) return;
+        await api.deleteConnection(id);
+        await get().load();
+    },
+
+    async syncConnection(id) {
+        if (isDemo()) throw new Error("Bank sync is not available in the demo");
+        const res = await api.syncConnection(id);
+        await get().load();
+        return res;
+    },
+
+    async submitConnectionSms(id, code) {
+        if (isDemo()) throw new Error("Bank sync is not available in the demo");
+        const res = await api.submitConnectionSms(id, code);
+        await get().load();
+        return res;
+    },
+
+    async cancelConnectionSync(id) {
+        if (isDemo()) return;
+        await api.cancelConnectionSync(id);
+        await get().load();
+    },
 }));

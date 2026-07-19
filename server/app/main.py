@@ -8,7 +8,16 @@ from fastapi.staticfiles import StaticFiles
 
 from .auth import require_token
 from .deps import conn, snapshot
-from .routers import accounts, budgets, categories, groups, imports, transactions, transfers
+from .routers import (
+    accounts,
+    budgets,
+    categories,
+    connections,
+    groups,
+    imports,
+    transactions,
+    transfers,
+)
 
 app = FastAPI(title="monori", docs_url="/api-docs", redoc_url="/api-redoc")
 
@@ -36,6 +45,7 @@ for _router in (
     transfers.router,
     budgets.router,
     imports.router,
+    connections.router,
 ):
     app.include_router(_router, dependencies=[Depends(require_token)])
 
