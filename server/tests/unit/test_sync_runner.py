@@ -73,6 +73,66 @@ def test_remote_maps_transport_failure_to_connector_error():
         r.start(1, "fake", "fake", CREDS, None, None)
 
 
+@pytest.mark.parametrize("content", [b"not json", b"[1, 2]"])
+def test_remote_maps_malformed_response_to_connector_error(content):
+    def handler(request):
+        return httpx.Response(200, content=content)
+
+    client = httpx.Client(transport=httpx.MockTransport(handler), base_url="http://sync")
+    r = RemoteRunner("http://sync", client=client)
+    with pytest.raises(ConnectorError, match="invalid response"):
+        r.start(1, "fake", "fake", CREDS, None, None)
+
+
+class ClosableConnector:
+    bank = "closable"
+    kind = "closable"
+    hidden = True
+    closed = 0
+
+    def __init__(self, credentials, session=None):
+        self.credentials = credentials
+        self.session = session
+
+    def sync(self, since=None):
+        raise SmsRequired("code sent")
+
+    def resume_sync(self, code):
+        raise ConnectorError("bad code")
+
+    def close(self):
+        type(self).closed += 1
+
+
+def test_failed_resume_closes_connector(monkeypatch):
+    from app.connectors import base
+
+    monkeypatch.setitem(base.REGISTRY, ("closable", "closable"), ClosableConnector)
+    ClosableConnector.closed = 0
+    runner = LocalRunner()
+    with pytest.raises(SmsRequired):
+        runner.start(1, "closable", "closable", CREDS, None, None)
+    with pytest.raises(ConnectorError, match="bad code"):
+        runner.resume(1, "0000")
+    assert ClosableConnector.closed == 1
+    with pytest.raises(NoPendingLogin):
+        runner.resume(1, "0000")
+
+
+def test_service_failed_resume_closes_connector(monkeypatch):
+    from app.connectors import base
+
+    monkeypatch.setitem(base.REGISTRY, ("closable", "closable"), ClosableConnector)
+    ClosableConnector.closed = 0
+    sync_service.PENDING.clear()
+    service = TestClient(sync_service.app)
+    service.post("/runs/1", json={"bank": "closable", "kind": "closable", "credentials": CREDS})
+    r = service.post("/runs/1/sms", json={"code": "0000"})
+    assert r.json()["status"] == "error"
+    assert ClosableConnector.closed == 1
+    assert 1 not in sync_service.PENDING
+
+
 def test_get_runner_selects_by_env(monkeypatch):
     import app.sync_runner as sr
 

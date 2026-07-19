@@ -75,6 +75,10 @@ def submit_sms(cid: int, body: SmsBody):
     try:
         return _done(connector.resume_sync(body.code))
     except ConnectorError as e:
+        # the failed login is no longer tracked, so close it here or its live
+        # browser leaks
+        with contextlib.suppress(Exception):
+            connector.close()
         return {"status": "error", "message": str(e)}
 
 
