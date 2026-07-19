@@ -1,0 +1,1815 @@
+<!doctype html>
+<html lang="ru">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width,initial-scale=1" />
+        <title>monori — landing concepts</title>
+        <style>
+            @font-face {
+                font-family: "M PLUS Rounded 1c";
+                font-weight: 800;
+                src: url("../src/assets/fonts/mplus-rounded-1c-800-monori.woff2") format("woff2");
+                unicode-range: U+306E, U+3082, U+308A;
+            }
+            :root {
+                --accent: #ef5a17;
+                --ink: #1a1a1a;
+                --paper: #fafaf8;
+                --mute: #8b8b88;
+                --line: #e4e4e0;
+            }
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+            @media (prefers-reduced-motion: no-preference) {
+                html {
+                    scroll-behavior: smooth;
+                }
+            }
+            body {
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+                background: #111;
+                color: var(--ink);
+            }
+            .num {
+                font-variant-numeric: tabular-nums;
+                font-feature-settings: "tnum";
+            }
+            .kana {
+                font-family: "M PLUS Rounded 1c", sans-serif;
+                font-weight: 800;
+            }
+            .brand {
+                font-weight: 800;
+                letter-spacing: 0.5px;
+                font-size: 20px;
+            }
+            .brand .a {
+                color: var(--accent);
+            }
+            nav.gallery {
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                z-index: 99;
+                display: flex;
+                gap: 4px;
+                justify-content: center;
+                padding: 10px;
+                background: rgba(17, 17, 17, 0.85);
+                backdrop-filter: blur(8px);
+            }
+            nav.gallery a {
+                color: #888;
+                text-decoration: none;
+                font-size: 12px;
+                padding: 5px 14px;
+                border-radius: 99px;
+                border: 1px solid #333;
+            }
+            nav.gallery a:hover {
+                color: #fff;
+                border-color: #666;
+            }
+            section {
+                min-height: 100vh;
+                position: relative;
+                overflow: hidden;
+            }
+            .btn {
+                display: inline-flex;
+                align-items: center;
+                gap: 8px;
+                height: 46px;
+                padding: 0 24px;
+                border-radius: 99px;
+                font-size: 14px;
+                font-weight: 600;
+                text-decoration: none;
+                cursor: pointer;
+                border: 1.5px solid transparent;
+                transition:
+                    transform 0.15s,
+                    background 0.15s,
+                    border-color 0.15s;
+            }
+            .btn:active {
+                transform: scale(0.97);
+            }
+            .btn-primary {
+                background: var(--ink);
+                color: #fff;
+            }
+            .btn-primary:hover {
+                background: #000;
+            }
+            .btn-accent {
+                background: var(--accent);
+                color: #fff;
+            }
+            .btn-accent:hover {
+                background: #d94f11;
+            }
+            .btn-ghost {
+                border-color: var(--line);
+                color: var(--ink);
+                background: transparent;
+            }
+            .btn-ghost:hover {
+                border-color: var(--ink);
+            }
+
+            /* ============ V1 — kana wall ============ */
+            #kana-wall {
+                background: var(--paper);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+            .kw-bg {
+                position: absolute;
+                inset: -60px;
+                display: flex;
+                flex-direction: column;
+                justify-content: space-between;
+                pointer-events: none;
+                user-select: none;
+            }
+            .kw-row {
+                white-space: nowrap;
+                font-size: 130px;
+                line-height: 0.94;
+                letter-spacing: 8px;
+                color: transparent;
+                -webkit-text-stroke: 1.5px #e9e9e5;
+                will-change: transform;
+            }
+            .kw-row .lit {
+                -webkit-text-stroke: 0;
+                color: var(--accent);
+            }
+            .kw-row .fill {
+                -webkit-text-stroke: 0;
+                color: #efefeb;
+            }
+            .kw-center {
+                position: relative;
+                z-index: 2;
+                text-align: center;
+                max-width: 720px;
+                padding: 40px;
+            }
+            .kw-center .brand {
+                font-size: 26px;
+                margin-bottom: 36px;
+                display: inline-block;
+            }
+            .kw-center h1 {
+                font-size: clamp(44px, 6.4vw, 76px);
+                font-weight: 800;
+                letter-spacing: -2px;
+                line-height: 1.02;
+                margin-bottom: 22px;
+            }
+            .kw-center h1 .a {
+                color: var(--accent);
+            }
+            .kw-center p {
+                font-size: 17px;
+                color: var(--mute);
+                line-height: 1.6;
+                max-width: 520px;
+                margin: 0 auto 34px;
+            }
+            .kw-cta {
+                display: flex;
+                gap: 12px;
+                justify-content: center;
+                flex-wrap: wrap;
+            }
+            .kw-halo {
+                position: absolute;
+                inset: -80px;
+                background: radial-gradient(
+                    ellipse 640px 460px at 50% 48%,
+                    var(--paper) 42%,
+                    rgba(250, 250, 248, 0.72) 68%,
+                    rgba(250, 250, 248, 0) 100%
+                );
+                z-index: 1;
+            }
+            .kw-foot {
+                position: absolute;
+                bottom: 22px;
+                left: 0;
+                right: 0;
+                display: flex;
+                justify-content: center;
+                gap: 28px;
+                font-size: 12.5px;
+                color: var(--mute);
+                z-index: 2;
+            }
+            .kw-foot span::before {
+                content: "";
+                display: inline-block;
+                width: 5px;
+                height: 5px;
+                border-radius: 99px;
+                background: var(--accent);
+                margin-right: 8px;
+                vertical-align: 2px;
+            }
+
+            /* ============ V2 — ledger ============ */
+            #ledger {
+                background: #f6f6f2;
+                background-image:
+                    linear-gradient(#eaeae4 1px, transparent 1px),
+                    linear-gradient(90deg, #eaeae4 1px, transparent 1px);
+                background-size: 34px 34px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                padding: 80px 40px 56px;
+            }
+            .ld-wrap {
+                width: min(1140px, 100%);
+                display: grid;
+                grid-template-columns: 1.05fr 1fr;
+                gap: 64px;
+                align-items: center;
+            }
+            .ld-copy .brand {
+                font-size: 22px;
+                margin-bottom: 40px;
+                display: inline-block;
+            }
+            .ld-copy h1 {
+                font-size: clamp(38px, 4.6vw, 58px);
+                font-weight: 800;
+                letter-spacing: -1.5px;
+                line-height: 1.05;
+                margin-bottom: 18px;
+            }
+            .ld-copy h1 .a {
+                color: var(--accent);
+            }
+            .ld-copy p {
+                font-size: 16px;
+                color: var(--mute);
+                line-height: 1.65;
+                max-width: 460px;
+                margin-bottom: 30px;
+            }
+            .ld-cta {
+                display: flex;
+                gap: 12px;
+                flex-wrap: wrap;
+                margin-bottom: 40px;
+            }
+            .ld-stats {
+                display: flex;
+                gap: 40px;
+            }
+            .ld-stat b {
+                display: block;
+                font-size: 26px;
+                font-weight: 800;
+                letter-spacing: -0.5px;
+            }
+            .ld-stat span {
+                font-size: 12px;
+                color: var(--mute);
+                text-transform: uppercase;
+                letter-spacing: 1px;
+            }
+            .ld-card {
+                background: #fff;
+                border: 1px solid var(--line);
+                border-radius: 20px;
+                box-shadow: 0 30px 70px rgba(26, 26, 26, 0.1);
+                overflow: hidden;
+                transform: rotate(0.6deg);
+            }
+            .ld-head {
+                display: flex;
+                justify-content: space-between;
+                align-items: baseline;
+                padding: 18px 22px 14px;
+                border-bottom: 1px solid var(--line);
+            }
+            .ld-head b {
+                font-size: 14px;
+            }
+            .ld-tbb {
+                font-size: 13px;
+                color: var(--accent);
+                font-weight: 700;
+            }
+            .ld-row {
+                display: grid;
+                grid-template-columns: 1fr 76px 86px 76px;
+                gap: 10px;
+                padding: 12px 22px;
+                font-size: 13.5px;
+                border-bottom: 1px solid #f1f1ed;
+                align-items: center;
+            }
+            .ld-row:last-child {
+                border-bottom: none;
+            }
+            .ld-row .name {
+                font-weight: 600;
+            }
+            .ld-row .r {
+                text-align: right;
+                color: #555;
+            }
+            .ld-row .bal {
+                font-weight: 700;
+                color: var(--ink);
+            }
+            .ld-row.over .bal,
+            .ld-row.over .act {
+                color: var(--accent);
+            }
+            .ld-bar {
+                grid-column: 1 / -1;
+                height: 4px;
+                border-radius: 99px;
+                background: #efefeb;
+                overflow: hidden;
+            }
+            .ld-fill {
+                display: block;
+                height: 100%;
+                border-radius: 99px;
+                background: var(--ink);
+                width: 0;
+                transition: width 1.1s cubic-bezier(0.2, 0.7, 0.2, 1);
+            }
+            .ld-row.over .ld-fill {
+                background: var(--accent);
+            }
+            .ld-counter {
+                font-size: clamp(46px, 5vw, 64px);
+                font-weight: 800;
+                letter-spacing: -1px;
+                margin: 6px 0 4px;
+            }
+            .ld-counter small {
+                font-size: 0.45em;
+                color: var(--mute);
+                font-weight: 600;
+                letter-spacing: 0;
+            }
+
+            /* ============ V3 — envelopes ============ */
+            #envelopes {
+                background: linear-gradient(#fbfaf7, #f4f2ec);
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                text-align: center;
+                padding: 90px 40px 0;
+            }
+            .en-copy {
+                position: relative;
+                z-index: 3;
+                max-width: 680px;
+            }
+            .en-copy .brand {
+                font-size: 24px;
+                margin-bottom: 32px;
+                display: inline-block;
+            }
+            .en-copy h1 {
+                font-size: clamp(40px, 5.4vw, 66px);
+                font-weight: 800;
+                letter-spacing: -2px;
+                line-height: 1.04;
+                margin-bottom: 18px;
+            }
+            .en-copy h1 .a {
+                color: var(--accent);
+            }
+            .en-copy p {
+                font-size: 16.5px;
+                color: var(--mute);
+                line-height: 1.6;
+                margin-bottom: 30px;
+            }
+            .en-cta {
+                display: flex;
+                gap: 12px;
+                justify-content: center;
+                flex-wrap: wrap;
+            }
+            .en-stage {
+                position: relative;
+                width: 100%;
+                max-width: 1080px;
+                height: 340px;
+                margin-top: 20px;
+            }
+            .en-canvas {
+                position: absolute;
+                inset: 0;
+                width: 100%;
+                height: 100%;
+            }
+            .en-envs {
+                position: absolute;
+                left: 0;
+                right: 0;
+                bottom: 34px;
+                display: flex;
+                justify-content: center;
+                gap: 26px;
+            }
+            .env {
+                width: 150px;
+                text-align: left;
+            }
+            .env-body {
+                position: relative;
+                height: 92px;
+                background: #fff;
+                border: 1.5px solid var(--ink);
+                border-radius: 10px;
+                overflow: hidden;
+            }
+            .env-body::before {
+                content: "";
+                position: absolute;
+                left: -2px;
+                right: -2px;
+                top: -2px;
+                height: 52px;
+                border: 1.5px solid var(--ink);
+                border-radius: 10px 10px 50% 50% / 10px 10px 100% 100%;
+                background: #fbfaf7;
+            }
+            .env.hot .env-body,
+            .env.hot .env-body::before {
+                border-color: var(--accent);
+            }
+            .env-amt {
+                position: absolute;
+                left: 0;
+                right: 0;
+                bottom: 10px;
+                text-align: center;
+                font-size: 15px;
+                font-weight: 800;
+            }
+            .env.hot .env-amt {
+                color: var(--accent);
+            }
+            .env-name {
+                display: block;
+                margin-top: 10px;
+                font-size: 12.5px;
+                font-weight: 600;
+                color: #555;
+                text-align: center;
+            }
+            .en-note {
+                position: relative;
+                z-index: 3;
+                padding: 14px 0 26px;
+                font-size: 12.5px;
+                color: var(--mute);
+            }
+
+            /* ============ V4 — terminal ============ */
+            #terminal {
+                background: #0d0d0e;
+                color: #e8e6e1;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                padding: 80px 40px;
+            }
+            .tm-wrap {
+                width: min(1080px, 100%);
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 70px;
+                align-items: center;
+            }
+            .tm-copy .brand {
+                font-size: 22px;
+                color: #fff;
+                margin-bottom: 38px;
+                display: inline-block;
+            }
+            .tm-copy h1 {
+                font-size: clamp(38px, 4.4vw, 56px);
+                font-weight: 800;
+                letter-spacing: -1.5px;
+                line-height: 1.06;
+                margin-bottom: 18px;
+                color: #fff;
+            }
+            .tm-copy h1 .a {
+                color: var(--accent);
+            }
+            .tm-copy p {
+                font-size: 16px;
+                color: #9a9892;
+                line-height: 1.65;
+                margin-bottom: 30px;
+                max-width: 440px;
+            }
+            .tm-cta {
+                display: flex;
+                gap: 12px;
+                flex-wrap: wrap;
+            }
+            .tm-cta .btn-ghost {
+                border-color: #333;
+                color: #e8e6e1;
+            }
+            .tm-cta .btn-ghost:hover {
+                border-color: #777;
+            }
+            .tm-term {
+                background: #161618;
+                border: 1px solid #26262a;
+                border-radius: 16px;
+                box-shadow: 0 40px 90px rgba(0, 0, 0, 0.5);
+                overflow: hidden;
+                font-family: "SF Mono", ui-monospace, Menlo, monospace;
+                font-size: 13.5px;
+                line-height: 1.8;
+            }
+            .tm-bar {
+                display: flex;
+                gap: 7px;
+                padding: 13px 16px;
+                border-bottom: 1px solid #26262a;
+            }
+            .tm-bar i {
+                width: 11px;
+                height: 11px;
+                border-radius: 99px;
+                background: #333;
+            }
+            .tm-bar i:first-child {
+                background: var(--accent);
+            }
+            .tm-body {
+                padding: 22px 24px 26px;
+                min-height: 300px;
+                white-space: pre-wrap;
+                word-break: break-all;
+            }
+            .tm-body .p {
+                color: var(--accent);
+            }
+            .tm-body .c {
+                color: #6f6d68;
+            }
+            .tm-body .g {
+                color: #7fbf7f;
+            }
+            .tm-caret {
+                display: inline-block;
+                width: 8px;
+                height: 16px;
+                background: var(--accent);
+                vertical-align: -3px;
+                animation: blink 1s steps(1) infinite;
+            }
+            @keyframes blink {
+                50% {
+                    opacity: 0;
+                }
+            }
+            .tm-badges {
+                display: flex;
+                gap: 22px;
+                margin-top: 34px;
+                font-size: 12.5px;
+                color: #7c7a75;
+            }
+            .tm-badges b {
+                color: #e8e6e1;
+                display: block;
+                font-size: 15px;
+            }
+
+            /* ============ V5 — sumi ============ */
+            #sumi {
+                background: #f7f5f0;
+                display: flex;
+                align-items: stretch;
+            }
+            .su-left {
+                flex: 0 0 46%;
+                position: relative;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+            .su-glyph {
+                font-size: clamp(300px, 34vw, 520px);
+                line-height: 1;
+                color: var(--ink);
+                user-select: none;
+                filter: blur(0.2px);
+            }
+            .su-seal {
+                position: absolute;
+                right: 18%;
+                bottom: 16%;
+                width: 64px;
+                height: 64px;
+                background: var(--accent);
+                border-radius: 10px;
+                color: #fff;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 26px;
+                writing-mode: vertical-rl;
+                letter-spacing: 2px;
+                box-shadow: 0 8px 20px rgba(239, 90, 23, 0.35);
+                transform: rotate(-4deg);
+            }
+            .su-vtext {
+                position: absolute;
+                left: 34px;
+                top: 50%;
+                transform: translateY(-50%);
+                writing-mode: vertical-rl;
+                font-size: 13px;
+                letter-spacing: 6px;
+                color: #b4b0a6;
+            }
+            .su-right {
+                flex: 1;
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
+                padding: 60px clamp(40px, 7vw, 110px);
+                border-left: 1px solid #e6e2d8;
+            }
+            .su-right .brand {
+                font-size: 22px;
+                margin-bottom: 46px;
+            }
+            .su-right h1 {
+                font-size: clamp(36px, 4vw, 54px);
+                font-weight: 800;
+                letter-spacing: -1.5px;
+                line-height: 1.08;
+                margin-bottom: 20px;
+                max-width: 480px;
+            }
+            .su-right h1 .a {
+                color: var(--accent);
+            }
+            .su-right > p {
+                font-size: 16px;
+                color: var(--mute);
+                line-height: 1.7;
+                max-width: 440px;
+                margin-bottom: 34px;
+            }
+            .su-list {
+                list-style: none;
+                margin-bottom: 38px;
+                max-width: 440px;
+            }
+            .su-list li {
+                display: flex;
+                gap: 14px;
+                padding: 13px 0;
+                border-top: 1px solid #e6e2d8;
+                font-size: 14.5px;
+                color: #444;
+            }
+            .su-list li:last-child {
+                border-bottom: 1px solid #e6e2d8;
+            }
+            .su-list .k {
+                color: var(--accent);
+                font-weight: 800;
+                min-width: 22px;
+            }
+            .su-cta {
+                display: flex;
+                gap: 12px;
+                flex-wrap: wrap;
+            }
+
+            /* ============ V6 — bento ============ */
+            #bento {
+                background: var(--paper);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                padding: 84px 40px 56px;
+            }
+            .bt-wrap {
+                width: min(1160px, 100%);
+            }
+            .bt-top {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                margin-bottom: 28px;
+            }
+            .bt-top .brand {
+                font-size: 22px;
+            }
+            .bt-top .links {
+                display: flex;
+                gap: 10px;
+            }
+            .bt-grid {
+                display: grid;
+                grid-template-columns: repeat(4, 1fr);
+                grid-auto-rows: 148px;
+                gap: 14px;
+            }
+            .tile {
+                background: #fff;
+                border: 1px solid var(--line);
+                border-radius: 20px;
+                padding: 24px;
+                position: relative;
+                overflow: hidden;
+                text-decoration: none;
+                color: var(--ink);
+                transition:
+                    transform 0.18s,
+                    box-shadow 0.18s,
+                    border-color 0.18s;
+            }
+            .tile:hover {
+                transform: translateY(-3px);
+                box-shadow: 0 16px 40px rgba(26, 26, 26, 0.09);
+                border-color: #d4d4cf;
+            }
+            .tile h3 {
+                font-size: 15px;
+                font-weight: 700;
+                margin-bottom: 6px;
+            }
+            .tile p {
+                font-size: 12.5px;
+                color: var(--mute);
+                line-height: 1.5;
+            }
+            .tile.hero {
+                grid-column: span 2;
+                grid-row: span 2;
+                background: var(--ink);
+                color: #fff;
+                display: flex;
+                flex-direction: column;
+                justify-content: flex-end;
+            }
+            .tile.hero h1 {
+                font-size: clamp(30px, 3vw, 42px);
+                font-weight: 800;
+                letter-spacing: -1px;
+                line-height: 1.08;
+                margin-bottom: 12px;
+            }
+            .tile.hero h1 .a {
+                color: var(--accent);
+            }
+            .tile.hero p {
+                color: #a5a3a0;
+                font-size: 14px;
+                max-width: 380px;
+                margin-bottom: 22px;
+            }
+            .tile.hero .kana-mark {
+                position: absolute;
+                top: -34px;
+                right: -14px;
+                font-size: 190px;
+                color: #262626;
+                user-select: none;
+            }
+            .tile.hero .cta {
+                display: flex;
+                gap: 10px;
+            }
+            .tile.hero .btn {
+                height: 42px;
+                font-size: 13.5px;
+            }
+            .tile.hero .btn-ghost {
+                border-color: #3a3a3a;
+                color: #fff;
+            }
+            .tile.spark {
+                grid-column: span 2;
+            }
+            .tile.spark canvas {
+                position: absolute;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                width: 100%;
+                height: 64px;
+            }
+            .tile.orange {
+                background: var(--accent);
+                color: #fff;
+                display: flex;
+                flex-direction: column;
+                justify-content: space-between;
+            }
+            .tile.orange p {
+                color: rgba(255, 255, 255, 0.85);
+            }
+            .tile.orange b {
+                font-size: 30px;
+                font-weight: 800;
+                letter-spacing: -0.5px;
+            }
+            .tile.code {
+                grid-column: span 2;
+                font-family: "SF Mono", ui-monospace, Menlo, monospace;
+                background: #161618;
+                color: #cfcdc8;
+                border-color: #26262a;
+            }
+            .tile.code .cmt {
+                color: #6f6d68;
+            }
+            .tile.code .acc {
+                color: #ff8a53;
+            }
+            .tile.code pre {
+                font-size: 12px;
+                line-height: 1.75;
+                margin-top: 10px;
+                white-space: pre-wrap;
+            }
+            .tile.code h3 {
+                color: #fff;
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            }
+            .tile .mini-rows {
+                margin-top: 14px;
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
+            }
+            .tile .mini-rows i {
+                display: block;
+                height: 5px;
+                border-radius: 99px;
+                background: #efefeb;
+                position: relative;
+                overflow: hidden;
+            }
+            .tile .mini-rows i::after {
+                content: "";
+                position: absolute;
+                inset: 0;
+                width: var(--w);
+                background: var(--ink);
+                border-radius: 99px;
+            }
+            .tile .mini-rows i.over::after {
+                background: var(--accent);
+            }
+            .bt-foot {
+                margin-top: 22px;
+                display: flex;
+                justify-content: center;
+                gap: 26px;
+                font-size: 12.5px;
+                color: var(--mute);
+            }
+
+            /* ============ V7 — gallery band ============ */
+            #artband {
+                background: #f0efec;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                padding: 96px 0 60px;
+            }
+            .ab-nav {
+                position: absolute;
+                top: 64px;
+                left: 50%;
+                transform: translateX(-50%);
+                z-index: 5;
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                background: #141414;
+                border-radius: 99px;
+                padding: 8px 10px 8px 22px;
+                box-shadow: 0 14px 40px rgba(0, 0, 0, 0.28);
+                white-space: nowrap;
+            }
+            .ab-nav .brand {
+                color: #fff;
+                font-size: 17px;
+                margin-right: 18px;
+            }
+            .ab-nav a {
+                color: #b9b9b6;
+                text-decoration: none;
+                font-size: 13.5px;
+                padding: 8px 12px;
+                border-radius: 99px;
+            }
+            .ab-nav a:hover {
+                color: #fff;
+            }
+            .ab-nav .pill {
+                border: 1px solid #3a3a3a;
+                color: #fff;
+                margin-left: 6px;
+            }
+            .ab-nav .pill:hover {
+                border-color: #666;
+            }
+            .ab-nav .solid {
+                background: var(--accent);
+                color: #fff;
+                font-weight: 600;
+            }
+            .ab-nav .solid:hover {
+                background: #d94f11;
+                color: #fff;
+            }
+            .ab-band {
+                width: min(1240px, calc(100% - 80px));
+                height: min(56vh, 470px);
+                margin-top: 40px;
+                position: relative;
+                overflow: hidden;
+                background: #dddbd4;
+            }
+            .ab-band .img {
+                position: absolute;
+                inset: 0;
+                background-repeat: repeat-x;
+                background-size: auto 100%;
+                image-rendering: pixelated;
+                filter: contrast(1.04);
+            }
+            .ab-band .tint {
+                position: absolute;
+                inset: 0;
+                background: linear-gradient(
+                    180deg,
+                    rgba(239, 90, 23, 0.12),
+                    rgba(239, 90, 23, 0.04) 45%,
+                    rgba(26, 26, 26, 0.08)
+                );
+                mix-blend-mode: multiply;
+            }
+            .ab-band .caption {
+                position: absolute;
+                right: 16px;
+                bottom: 12px;
+                font-size: 11px;
+                letter-spacing: 1.5px;
+                text-transform: uppercase;
+                color: rgba(255, 255, 255, 0.85);
+                background: rgba(20, 20, 20, 0.55);
+                padding: 4px 10px;
+                border-radius: 99px;
+                backdrop-filter: blur(4px);
+            }
+            .ab-below {
+                width: min(1240px, calc(100% - 80px));
+                display: grid;
+                grid-template-columns: 1.3fr 1fr;
+                gap: 60px;
+                align-items: end;
+                padding-top: 54px;
+            }
+            .ab-below h1 {
+                font-size: clamp(44px, 5.6vw, 74px);
+                font-weight: 800;
+                letter-spacing: -2.5px;
+                line-height: 1.02;
+            }
+            .ab-below h1 .a {
+                color: var(--accent);
+            }
+            .ab-side .label {
+                font-size: 13px;
+                color: var(--mute);
+                margin-bottom: 16px;
+            }
+            .ab-logos {
+                display: flex;
+                gap: 26px;
+                flex-wrap: wrap;
+                align-items: center;
+                font-weight: 700;
+                font-size: 15px;
+                color: #6f6f6b;
+            }
+            .ab-logos span {
+                display: inline-flex;
+                align-items: center;
+                gap: 7px;
+            }
+            .ab-logos i {
+                width: 8px;
+                height: 8px;
+                border-radius: 2px;
+                background: currentColor;
+                opacity: 0.55;
+            }
+            .ab-cta {
+                width: min(1240px, calc(100% - 80px));
+                display: flex;
+                gap: 12px;
+                padding-top: 34px;
+            }
+
+            /* ============ V8 — glyph flower ============ */
+            #glyphflower {
+                background: #050505;
+                color: #f2f0ea;
+                display: flex;
+                align-items: stretch;
+            }
+            #gfcv {
+                position: absolute;
+                inset: 0;
+                width: 100%;
+                height: 100%;
+            }
+            .gf-copy {
+                position: relative;
+                z-index: 2;
+                max-width: 520px;
+                padding: clamp(40px, 7vw, 90px);
+                display: flex;
+                flex-direction: column;
+                justify-content: flex-start;
+                gap: 0;
+            }
+            .gf-copy .brand {
+                color: #fff;
+                font-size: 20px;
+                margin-bottom: 56px;
+            }
+            .gf-copy h1 {
+                font-family: Georgia, "Times New Roman", serif;
+                font-weight: 500;
+                font-size: clamp(36px, 3.8vw, 52px);
+                line-height: 1.22;
+                letter-spacing: 0.2px;
+                margin-bottom: 26px;
+            }
+            .gf-copy h1 .a {
+                color: var(--accent);
+                font-style: italic;
+            }
+            .gf-copy p {
+                font-size: 16px;
+                line-height: 1.7;
+                color: #8f8d87;
+                margin-bottom: 38px;
+                max-width: 400px;
+            }
+            .gf-cta {
+                display: flex;
+                gap: 12px;
+                align-items: center;
+            }
+            .gf-cta .btn-paper {
+                background: #f2f0ea;
+                color: #111;
+            }
+            .gf-cta .btn-paper:hover {
+                background: #fff;
+            }
+            .gf-cta .ghost-link {
+                color: #8f8d87;
+                font-size: 14px;
+                text-decoration: none;
+            }
+            .gf-cta .ghost-link:hover {
+                color: #fff;
+            }
+            .gf-foot {
+                position: absolute;
+                left: clamp(40px, 7vw, 90px);
+                bottom: 30px;
+                z-index: 2;
+                font-size: 12px;
+                letter-spacing: 1.5px;
+                text-transform: uppercase;
+                color: #55534e;
+            }
+
+            @media (max-width: 900px) {
+                .ld-wrap,
+                .tm-wrap {
+                    grid-template-columns: 1fr;
+                    gap: 40px;
+                }
+                #sumi {
+                    flex-direction: column;
+                }
+                .su-left {
+                    min-height: 380px;
+                }
+                .bt-grid {
+                    grid-template-columns: 1fr 1fr;
+                }
+                .tile.hero {
+                    grid-column: span 2;
+                }
+                .kw-row {
+                    font-size: 80px;
+                }
+            }
+        </style>
+    </head>
+    <body>
+        <nav class="gallery">
+            <a href="#kana-wall">V1 стена каны</a>
+            <a href="#ledger">V2 гроссбух</a>
+            <a href="#envelopes">V3 конверты</a>
+            <a href="#terminal">V4 терминал</a>
+            <a href="#sumi">V5 суми</a>
+            <a href="#bento">V6 бенто</a>
+            <a href="#artband">V7 галерея</a>
+            <a href="#glyphflower">V8 цветок</a>
+        </nav>
+
+        <section id="kana-wall">
+            <div class="kw-bg" id="kwbg"></div>
+            <div class="kw-halo"></div>
+            <div class="kw-center">
+                <span class="brand">monori<span class="a">.</span></span>
+                <h1>Your budget,<br /><span class="a">to the last kopeck.</span></h1>
+                <p>
+                    Envelope budgeting you run yourself. The YNAB-style math of a spreadsheet,
+                    rebuilt as a fast, private web app — integer kopecks end to end.
+                </p>
+                <div class="kw-cta">
+                    <a class="btn btn-primary" href="#">Sign in →</a>
+                    <a class="btn btn-ghost" href="#">Try the live demo</a>
+                </div>
+            </div>
+            <div class="kw-foot">
+                <span>Self-hosted</span>
+                <span>Multi-user</span>
+                <span>Open source</span>
+                <span>One SQLite file</span>
+            </div>
+        </section>
+
+        <section id="ledger">
+            <div class="ld-wrap">
+                <div class="ld-copy">
+                    <span class="brand">monori<span class="a">.</span></span>
+                    <h1>Every ruble<br />has a <span class="a">job.</span></h1>
+                    <div class="ld-counter num">
+                        <span id="ldnum">0</span> ₽ <small>left to budget</small>
+                    </div>
+                    <p>
+                        Hand money to envelopes, spend them down, roll the rest forward. Import a
+                        bank statement, watch it auto-categorize, and always know what's left.
+                    </p>
+                    <div class="ld-cta">
+                        <a class="btn btn-accent" href="#">Start budgeting →</a>
+                        <a class="btn btn-ghost" href="#">Live demo</a>
+                    </div>
+                    <div class="ld-stats">
+                        <div class="ld-stat">
+                            <b class="num">0.00</b><span>rounding drift</span>
+                        </div>
+                        <div class="ld-stat"><b>1</b><span>container</span></div>
+                        <div class="ld-stat"><b>Open</b><span>source</span></div>
+                    </div>
+                </div>
+                <div class="ld-card">
+                    <div class="ld-head">
+                        <b>Budget · July</b>
+                        <span class="ld-tbb num">to budget 18 200 ₽</span>
+                    </div>
+                    <div class="ld-row">
+                        <span class="name">Groceries</span>
+                        <span class="r num">12 000</span>
+                        <span class="r act num">−8 450</span>
+                        <span class="r bal num">3 550</span>
+                        <span class="ld-bar"><span class="ld-fill" data-w="70%"></span></span>
+                    </div>
+                    <div class="ld-row over">
+                        <span class="name">Transport</span>
+                        <span class="r num">4 000</span>
+                        <span class="r act num">−4 380</span>
+                        <span class="r bal num">−380</span>
+                        <span class="ld-bar"><span class="ld-fill" data-w="100%"></span></span>
+                    </div>
+                    <div class="ld-row">
+                        <span class="name">Eating out</span>
+                        <span class="r num">6 000</span>
+                        <span class="r act num">−2 110</span>
+                        <span class="r bal num">3 890</span>
+                        <span class="ld-bar"><span class="ld-fill" data-w="35%"></span></span>
+                    </div>
+                    <div class="ld-row">
+                        <span class="name">Subscriptions</span>
+                        <span class="r num">2 500</span>
+                        <span class="r act num">−1 990</span>
+                        <span class="r bal num">510</span>
+                        <span class="ld-bar"><span class="ld-fill" data-w="80%"></span></span>
+                    </div>
+                    <div class="ld-row">
+                        <span class="name">Savings</span>
+                        <span class="r num">20 000</span>
+                        <span class="r act num">0</span>
+                        <span class="r bal num">20 000</span>
+                        <span class="ld-bar"><span class="ld-fill" data-w="12%"></span></span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="envelopes">
+            <div class="en-copy">
+                <span class="brand">monori<span class="a">.</span></span>
+                <h1>Put every ruble<br />in an <span class="a">envelope.</span></h1>
+                <p>
+                    Income lands, you split it across envelopes, and each purchase spends one down.
+                    What's left rolls into next month — nothing hides, nothing drifts.
+                </p>
+                <div class="en-cta">
+                    <a class="btn btn-primary" href="#">Sign in →</a>
+                    <a class="btn btn-ghost" href="#">Try the demo</a>
+                </div>
+            </div>
+            <div class="en-stage">
+                <canvas class="en-canvas" id="encv"></canvas>
+                <div class="en-envs" id="envs">
+                    <div class="env">
+                        <div class="env-body"><span class="env-amt num">12 000</span></div>
+                        <span class="env-name">Groceries</span>
+                    </div>
+                    <div class="env">
+                        <div class="env-body"><span class="env-amt num">4 000</span></div>
+                        <span class="env-name">Transport</span>
+                    </div>
+                    <div class="env hot">
+                        <div class="env-body"><span class="env-amt num">6 000</span></div>
+                        <span class="env-name">Eating out</span>
+                    </div>
+                    <div class="env">
+                        <div class="env-body"><span class="env-amt num">2 500</span></div>
+                        <span class="env-name">Subscriptions</span>
+                    </div>
+                    <div class="env">
+                        <div class="env-body"><span class="env-amt num">20 000</span></div>
+                        <span class="env-name">Savings</span>
+                    </div>
+                </div>
+            </div>
+            <div class="en-note">
+                Self-hosted · your data stays in one SQLite file on your server
+            </div>
+        </section>
+
+        <section id="terminal">
+            <div class="tm-wrap">
+                <div class="tm-copy">
+                    <span class="brand">monori<span class="a">.</span></span>
+                    <h1>Your money.<br />Your <span class="a">server.</span></h1>
+                    <p>
+                        One Docker image serves the app and the REST API; your entire budget lives
+                        in one SQLite file. Back it up with <b>cp</b>. Leave any time — it's your
+                        data, in a schema you can read.
+                    </p>
+                    <div class="tm-cta">
+                        <a class="btn btn-accent" href="#">Deploy in 60 seconds</a>
+                        <a class="btn btn-ghost" href="#">Read the docs</a>
+                    </div>
+                    <div class="tm-badges">
+                        <div><b>1</b>container</div>
+                        <div><b>1</b>SQLite file</div>
+                        <div><b>100%</b>API-driven</div>
+                        <div><b>Open</b>source</div>
+                    </div>
+                </div>
+                <div class="tm-term">
+                    <div class="tm-bar"><i></i><i></i><i></i></div>
+                    <div class="tm-body" id="tmbody"></div>
+                </div>
+            </div>
+        </section>
+
+        <section id="sumi">
+            <div class="su-left">
+                <span class="su-vtext">も の り — 実 り ・ harvest</span>
+                <span class="kana su-glyph">も</span>
+                <span class="kana su-seal">のり</span>
+            </div>
+            <div class="su-right">
+                <span class="brand">monori<span class="a">.</span></span>
+                <h1>Calm money.<br />Nothing <span class="a">hidden.</span></h1>
+                <p>
+                    monori (実り — “harvest”) is a quiet, self-hosted envelope budget. Small enough
+                    to understand, precise enough to trust.
+                </p>
+                <ul class="su-list">
+                    <li>
+                        <span class="k num">01</span>Envelope budgeting with the exact YNAB-style
+                        carry-forward math
+                    </li>
+                    <li>
+                        <span class="k num">02</span>Bank-statement import with keyword
+                        auto-categorization and de-dup
+                    </li>
+                    <li>
+                        <span class="k num">03</span>Integer kopecks everywhere — totals always
+                        reconcile
+                    </li>
+                    <li>
+                        <span class="k num">04</span>One container, one SQLite file, a full REST API
+                    </li>
+                </ul>
+                <div class="su-cta">
+                    <a class="btn btn-primary" href="#">Sign in →</a>
+                    <a class="btn btn-ghost" href="#">Live demo</a>
+                </div>
+            </div>
+        </section>
+
+        <section id="bento">
+            <div class="bt-wrap">
+                <div class="bt-top">
+                    <span class="brand">monori<span class="a">.</span></span>
+                    <div class="links">
+                        <a class="btn btn-ghost" style="height: 40px; font-size: 13px" href="#"
+                            >Demo</a
+                        >
+                        <a class="btn btn-primary" style="height: 40px; font-size: 13px" href="#"
+                            >Sign in</a
+                        >
+                    </div>
+                </div>
+                <div class="bt-grid">
+                    <a class="tile hero" href="#">
+                        <span class="kana kana-mark">り</span>
+                        <h1>Your budget,<br /><span class="a">to the last kopeck.</span></h1>
+                        <p>
+                            Self-hosted envelope budgeting — the workflow of a spreadsheet, the
+                            speed of an app.
+                        </p>
+                        <div class="cta">
+                            <span class="btn btn-accent">Get started →</span>
+                            <span class="btn btn-ghost">Live demo</span>
+                        </div>
+                    </a>
+                    <a class="tile" href="#">
+                        <h3>Envelope budgeting</h3>
+                        <p>Assign, spend down, roll forward.</p>
+                        <div class="mini-rows">
+                            <i style="--w: 70%"></i>
+                            <i class="over" style="--w: 100%"></i>
+                            <i style="--w: 35%"></i>
+                        </div>
+                    </a>
+                    <a class="tile orange" href="#">
+                        <h3>Integer kopecks</h3>
+                        <b class="num">0.00&nbsp;drift</b>
+                        <p>No floats. Totals always reconcile.</p>
+                    </a>
+                    <a class="tile spark" href="#">
+                        <h3>Dashboard &amp; analytics</h3>
+                        <p>KPIs, trends, plan-vs-fact — live from your ledger.</p>
+                        <canvas id="btspark"></canvas>
+                    </a>
+                    <a class="tile" href="#">
+                        <h3>Statement import</h3>
+                        <p>Paste, auto-categorize, de-duplicate — preview first.</p>
+                    </a>
+                    <a class="tile" href="#">
+                        <h3>Self-hosted</h3>
+                        <p>One container, one SQLite file. Your server, your data.</p>
+                    </a>
+                    <a class="tile code" href="#">
+                        <h3>Full REST API</h3>
+                        <pre><span class="cmt"># everything the UI does is an HTTP call</span>
+<span class="acc">GET</span> /api/snapshot
+<span class="acc">POST</span> /api/transactions</pre>
+                    </a>
+                </div>
+                <div class="bt-foot">
+                    <span>© alchemmist</span>
+                    <span>GitHub</span>
+                    <span>Docs</span>
+                </div>
+            </div>
+        </section>
+
+        <section id="artband">
+            <div class="ab-nav">
+                <span class="brand">monori<span class="a">.</span></span>
+                <a href="#">Features</a>
+                <a href="#">Docs</a>
+                <a href="#">API</a>
+                <a href="#">GitHub</a>
+                <a class="pill" href="#">Sign in</a>
+                <a class="solid" href="#">Try the demo</a>
+            </div>
+            <div class="ab-band">
+                <div class="img" id="abimg"></div>
+                <div class="tint"></div>
+                <span class="caption">実り — the harvest garden</span>
+            </div>
+            <div class="ab-below">
+                <h1>A place to grow money,<br />not just <span class="a">count it.</span></h1>
+                <div class="ab-side">
+                    <div class="label">Built on boring, dependable things</div>
+                    <div class="ab-logos">
+                        <span><i></i>Docker</span>
+                        <span><i></i>SQLite</span>
+                        <span><i></i>FastAPI</span>
+                        <span><i></i>React</span>
+                        
+                    </div>
+                </div>
+            </div>
+            <div class="ab-cta">
+                <a class="btn btn-primary" href="#">Sign in →</a>
+                <a class="btn btn-ghost" href="#">Read the docs</a>
+            </div>
+        </section>
+
+        <section id="glyphflower">
+            <canvas id="gfcv"></canvas>
+            <div class="gf-copy">
+                <span class="brand">monori<span class="a">.</span></span>
+                <h1>A harvest is planned.<br />So is <span class="a">money.</span></h1>
+                <p>
+                    monori (実り — “harvest”) is self-hosted envelope budgeting. Every kopeck gets a
+                    job before it's spent — nothing guessed, nothing lost.
+                </p>
+                <div class="gf-cta">
+                    <a class="btn btn-paper" href="#">Get started →</a>
+                    <a class="ghost-link" href="#">or try the live demo</a>
+                </div>
+            </div>
+            <div class="gf-foot">self-hosted · one sqlite file · mit</div>
+        </section>
+
+        <script src="assets/garden-gray.js"></script>
+        <script>
+            (function () {
+                const solo = new URLSearchParams(location.search).get("solo");
+                if (!solo) return;
+                document.querySelectorAll("section").forEach((s) => {
+                    if (s.id !== solo) s.remove();
+                });
+            })();
+
+            (function () {
+                const img = document.getElementById("abimg");
+                if (img) img.style.backgroundImage = "url(" + GARDEN_GRAY + ")";
+            })();
+
+            (function () {
+                const c = document.getElementById("gfcv");
+                if (!c) return;
+                const sec = document.getElementById("glyphflower");
+                const ctx = c.getContext("2d");
+                const GLYPHS = "0123456789₽¥01";
+                let W, H, cells;
+                const noise = (x, y) =>
+                    Math.sin(x * 12.9898 + y * 78.233) * 43758.5453 -
+                    Math.floor(Math.sin(x * 12.9898 + y * 78.233) * 43758.5453);
+                const smooth = (x, y) =>
+                    (Math.sin(x * 2.1) + Math.sin(y * 1.7 + 3) + Math.sin((x + y) * 1.3 + 7)) / 3;
+                function build() {
+                    W = c.width = sec.clientWidth * devicePixelRatio;
+                    H = c.height = sec.clientHeight * devicePixelRatio;
+                    const cs = Math.max(9, Math.round(W / 150));
+                    const cx = W * (sec.clientWidth > 900 ? 0.67 : 0.5);
+                    const cy = H * 0.47;
+                    const R = Math.min(W, H) * 0.46;
+                    cells = [];
+                    for (let gy = 0; gy < H / cs; gy++) {
+                        for (let gx = 0; gx < W / cs; gx++) {
+                            const x = gx * cs + cs / 2;
+                            const y = gy * cs + cs / 2;
+                            const dx = x - cx;
+                            const dy = y - cy;
+                            const r = Math.hypot(dx, dy);
+                            const th = Math.atan2(dy, dx);
+                            const wob = 1 + smooth(Math.cos(th) * 3, Math.sin(th) * 3) * 0.12;
+                            const petal =
+                                0.42 + 0.58 * Math.pow(Math.abs(Math.cos(th * 2.5 + 0.4)), 0.55);
+                            const edge = R * petal * wob;
+                            const inFlower = r < edge;
+                            const inStem =
+                                y > cy + R * 0.5 &&
+                                Math.abs(dx + Math.sin((y / H) * 6) * W * 0.008) < cs * 0.8;
+                            if (!inFlower && !inStem) continue;
+                            const n = noise(gx * 0.7, gy * 0.7);
+                            const depth = inFlower ? r / edge : 0.5;
+                            const core = inFlower ? Math.max(0, 1 - r / (R * 0.42)) : 0;
+                            const rim = inFlower ? Math.pow(depth, 7) * 0.5 : 0;
+                            const bright =
+                                0.18 +
+                                0.55 * Math.pow(n, 1.9) +
+                                0.26 * Math.max(0, smooth(gx * 0.24, gy * 0.24)) +
+                                rim +
+                                (inStem ? 0.15 : 0);
+                            cells.push({
+                                x,
+                                y,
+                                ch: GLYPHS[Math.floor(n * GLYPHS.length) % GLYPHS.length],
+                                b: Math.min(1, bright),
+                                core,
+                                tw: n * 6.28,
+                                cs,
+                            });
+                        }
+                    }
+                }
+                function paint(t) {
+                    ctx.fillStyle = "#050505";
+                    ctx.fillRect(0, 0, W, H);
+                    ctx.textAlign = "center";
+                    ctx.textBaseline = "middle";
+                    for (const p of cells) {
+                        const flick = 0.82 + 0.18 * Math.sin(t * 0.0012 + p.tw);
+                        const b = p.b * flick;
+                        ctx.font =
+                            (b > 0.55 ? "700 " : "400 ") +
+                            p.cs * 0.86 +
+                            "px ui-monospace, Menlo, monospace";
+                        if (p.core > 0.08) {
+                            const g = Math.min(1, p.core * 1.4);
+                            ctx.fillStyle =
+                                "rgba(" +
+                                Math.round(180 + 75 * g) +
+                                "," +
+                                Math.round(120 * g + 60 * b) +
+                                "," +
+                                Math.round(30 * g) +
+                                "," +
+                                Math.min(1, b + p.core * 0.45) +
+                                ")";
+                        } else {
+                            const v = Math.round(235 * b + 15);
+                            ctx.fillStyle =
+                                "rgba(" + v + "," + v + "," + Math.round(v * 0.96) + "," + b + ")";
+                        }
+                        ctx.fillText(p.ch, p.x, p.y);
+                    }
+                }
+                build();
+                paint(0);
+                window.addEventListener("resize", () => {
+                    build();
+                    paint(0);
+                });
+                if (!matchMedia("(prefers-reduced-motion: reduce)").matches) {
+                    let raf;
+                    const loop = (t) => {
+                        paint(t);
+                        raf = requestAnimationFrame(loop);
+                    };
+                    new IntersectionObserver((es) => {
+                        if (es[0].isIntersecting) raf = requestAnimationFrame(loop);
+                        else cancelAnimationFrame(raf);
+                    }).observe(sec);
+                }
+            })();
+
+            (function () {
+                const box = document.getElementById("kwbg");
+                if (!box) return;
+                const words = "ものり";
+                const rows = 7;
+                for (let r = 0; r < rows; r++) {
+                    const el = document.createElement("div");
+                    el.className = "kw-row kana";
+                    let html = "";
+                    for (let i = 0; i < 24; i++) {
+                        const ch = words[(i + r) % 3];
+                        if (r === 3 && i === 7) html += '<span class="lit">' + ch + "</span>";
+                        else if ((r * 5 + i) % 11 === 0)
+                            html += '<span class="fill">' + ch + "</span>";
+                        else html += ch;
+                    }
+                    el.innerHTML = html;
+                    el.style.transform = "translateX(" + (r % 2 ? -60 : -20) + "px)";
+                    box.appendChild(el);
+                }
+                let t = 0;
+                function drift() {
+                    t += 0.008;
+                    box.querySelectorAll(".kw-row").forEach((el, i) => {
+                        const dir = i % 2 ? 1 : -1;
+                        el.style.transform =
+                            "translateX(" + (dir * Math.sin(t + i) * 26 - 40) + "px)";
+                    });
+                    requestAnimationFrame(drift);
+                }
+                if (!matchMedia("(prefers-reduced-motion: reduce)").matches) drift();
+            })();
+
+            (function () {
+                const el = document.getElementById("ldnum");
+                if (!el) return;
+                const target = 18200;
+                let started = false;
+                function run() {
+                    const t0 = performance.now();
+                    function step(ts) {
+                        const p = Math.min((ts - t0) / 1400, 1);
+                        const v = Math.round(target * (1 - Math.pow(1 - p, 3)));
+                        el.textContent = v.toLocaleString("ru-RU");
+                        if (p < 1) requestAnimationFrame(step);
+                    }
+                    requestAnimationFrame(step);
+                    document
+                        .querySelectorAll(".ld-fill")
+                        .forEach((f) => (f.style.width = f.dataset.w));
+                }
+                new IntersectionObserver(
+                    (es) => {
+                        if (es[0].isIntersecting && !started) {
+                            started = true;
+                            run();
+                        }
+                    },
+                    { threshold: 0.4 },
+                ).observe(document.getElementById("ledger"));
+            })();
+
+            (function () {
+                const c = document.getElementById("encv");
+                if (!c) return;
+                const stage = c.parentElement;
+                const ctx = c.getContext("2d");
+                let W, H, slots;
+                function size() {
+                    W = c.width = stage.clientWidth * devicePixelRatio;
+                    H = c.height = stage.clientHeight * devicePixelRatio;
+                    const envs = [...document.querySelectorAll("#envs .env-body")];
+                    const sr = stage.getBoundingClientRect();
+                    slots = envs.map((e) => {
+                        const r = e.getBoundingClientRect();
+                        return (r.left + r.width / 2 - sr.left) * devicePixelRatio;
+                    });
+                }
+                size();
+                window.addEventListener("resize", size);
+                const coins = [];
+                function spawn() {
+                    coins.push({
+                        x: W / 2 + (Math.random() - 0.5) * W * 0.1,
+                        y: -10,
+                        vx: 0,
+                        vy: (1.2 + Math.random() * 0.8) * devicePixelRatio,
+                        r: (3 + Math.random() * 2.5) * devicePixelRatio,
+                        slot: slots[Math.floor(Math.random() * slots.length)],
+                        hot: Math.random() < 0.22,
+                    });
+                }
+                let last = 0;
+                function frame(ts) {
+                    if (ts - last > 260) {
+                        spawn();
+                        last = ts;
+                    }
+                    ctx.clearRect(0, 0, W, H);
+                    const floor = H - 78 * devicePixelRatio;
+                    for (let i = coins.length - 1; i >= 0; i--) {
+                        const p = coins[i];
+                        p.vx += (p.slot - p.x) * 0.0012;
+                        p.vx *= 0.985;
+                        p.x += p.vx;
+                        p.y += p.vy;
+                        if (p.y > floor) {
+                            coins.splice(i, 1);
+                            continue;
+                        }
+                        ctx.beginPath();
+                        ctx.arc(p.x, p.y, p.r, 0, 7);
+                        ctx.fillStyle = p.hot ? "#ef5a17" : "#1a1a1a";
+                        ctx.globalAlpha = Math.min(1, (floor - p.y) / (40 * devicePixelRatio));
+                        ctx.fill();
+                    }
+                    ctx.globalAlpha = 1;
+                    requestAnimationFrame(frame);
+                }
+                if (!matchMedia("(prefers-reduced-motion: reduce)").matches)
+                    requestAnimationFrame(frame);
+            })();
+
+            (function () {
+                const body = document.getElementById("tmbody");
+                if (!body) return;
+                const script = [
+                    { t: "$ ", cls: "p" },
+                    {
+                        t: "docker run -d -p 8000:8000 \\\n    -v ./data:/app/data alchemmist/monori\n",
+                        type: true,
+                    },
+                    { t: "a41f9c2e8b7d\n\n", cls: "c", pause: 500 },
+                    { t: "$ ", cls: "p" },
+                    { t: "curl localhost:8000/api/snapshot\n", type: true },
+                    {
+                        t: '{"accounts": 1, "transactions": 6721,\n "budgets": 552}\n\n',
+                        cls: "g",
+                        pause: 400,
+                    },
+                    { t: "✓ your budget is live — and it never left this machine\n", cls: "c" },
+                ];
+                let started = false;
+                async function play() {
+                    for (const step of script) {
+                        if (step.pause) await new Promise((r) => setTimeout(r, step.pause));
+                        if (step.type) {
+                            for (const ch of step.t) {
+                                body.insertAdjacentText("beforeend", ch);
+                                await new Promise((r) => setTimeout(r, 18 + Math.random() * 30));
+                            }
+                        } else {
+                            const s = document.createElement("span");
+                            if (step.cls) s.className = step.cls;
+                            s.textContent = step.t;
+                            body.appendChild(s);
+                        }
+                    }
+                    const caret = document.createElement("span");
+                    caret.className = "tm-caret";
+                    body.appendChild(caret);
+                }
+                new IntersectionObserver(
+                    (es) => {
+                        if (es[0].isIntersecting && !started) {
+                            started = true;
+                            play();
+                        }
+                    },
+                    { threshold: 0.4 },
+                ).observe(document.getElementById("terminal"));
+            })();
+
+            (function () {
+                const c = document.getElementById("btspark");
+                if (!c) return;
+                const tile = c.parentElement;
+                const ctx = c.getContext("2d");
+                function draw() {
+                    const W = (c.width = tile.clientWidth * devicePixelRatio);
+                    const H = (c.height = 64 * devicePixelRatio);
+                    const n = 40;
+                    let v = 0.5;
+                    const pts = [];
+                    for (let i = 0; i < n; i++) {
+                        v += Math.sin(i * 0.6) * 0.09 + Math.sin(i * 0.17 + 2) * 0.12;
+                        pts.push(v);
+                    }
+                    const min = Math.min(...pts),
+                        max = Math.max(...pts);
+                    ctx.beginPath();
+                    pts.forEach((p, i) => {
+                        const x = (i / (n - 1)) * W;
+                        const y = H - ((p - min) / (max - min)) * H * 0.8 - H * 0.1;
+                        i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+                    });
+                    ctx.strokeStyle = "#ef5a17";
+                    ctx.lineWidth = 2 * devicePixelRatio;
+                    ctx.stroke();
+                    ctx.lineTo(W, H);
+                    ctx.lineTo(0, H);
+                    ctx.closePath();
+                    const g = ctx.createLinearGradient(0, 0, 0, H);
+                    g.addColorStop(0, "rgba(239,90,23,.18)");
+                    g.addColorStop(1, "rgba(239,90,23,0)");
+                    ctx.fillStyle = g;
+                    ctx.fill();
+                }
+                draw();
+                window.addEventListener("resize", draw);
+            })();
+        </script>
+    </body>
+</html>
