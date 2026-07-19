@@ -15,6 +15,7 @@ import {
     ClockArrowRotateLeft,
     SlidersVertical,
     Book,
+    ArrowRightFromSquare,
 } from "@gravity-ui/icons";
 import { useStore, isDemo } from "./store.js";
 import { computeRange } from "./engine/budget.js";
@@ -46,7 +47,8 @@ const SOON = [
 const FIRST_YEAR = 2020;
 
 export default function App({ theme, onToggleTheme }) {
-    const { snapshot, loading, error, load, toast, user, authChecked, checkAuth } = useStore();
+    const { snapshot, loading, error, load, toast, user, authChecked, checkAuth, logout } =
+        useStore();
     const [page, setPage] = useState("budget");
     const [collapsed, setCollapsed] = useState(
         () => localStorage.getItem("sidebar_collapsed") === "1",
@@ -174,6 +176,16 @@ export default function App({ theme, onToggleTheme }) {
                         <Gear width={16} height={16} />
                         <span className="sidebar__label">Settings</span>
                     </button>
+                    {!isDemo() && (
+                        <button
+                            className="sidebar__item"
+                            onClick={logout}
+                            title={collapsed ? "Log out" : user?.email}
+                        >
+                            <ArrowRightFromSquare width={16} height={16} />
+                            <span className="sidebar__label">Log out</span>
+                        </button>
+                    )}
                     <button
                         className="sidebar__collapse"
                         onClick={toggleSidebar}
