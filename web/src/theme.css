@@ -39,6 +39,9 @@
     --m-warning: #b45309;
     --m-income-soft: #e4f3e9;
     --m-expense-soft: #fbe3e3;
+    --m-card-bg: var(--m-surface);
+    --m-card-border: var(--m-border);
+    --m-sidebar-edge: var(--m-border-soft);
 
     /* Gravity widget alignment */
     --g-color-base-brand: #ef5a17;
@@ -71,6 +74,9 @@
     --m-warning: #fbbf24;
     --m-income-soft: #16281c;
     --m-expense-soft: #331919;
+    --m-card-bg: #121211;
+    --m-card-border: #1d1d1b;
+    --m-sidebar-edge: var(--m-border);
 
     --g-color-base-brand: #ff7a3c;
     --g-color-base-brand-hover: #ff8f5a;
