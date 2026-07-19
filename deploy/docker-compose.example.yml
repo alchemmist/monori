@@ -1,16 +1,36 @@
-# Self-contained deployment: builds the image, publishes port 8000 and keeps
-# the SQLite database in ./data. See the security note in the README before
+# Self-contained deployment: three services — front (static + routing), back
+# (API) and sync (bank sync via Playwright). Publishes port 8000 and keeps the
+# SQLite database in ./data. See the security note in the README before
 # exposing this beyond localhost.
 services:
     monori:
         build:
             context: ..
-            dockerfile: deploy/Dockerfile
+            dockerfile: deploy/Dockerfile.front
         container_name: monori
         restart: unless-stopped
         ports:
             - "8000:8000"
-        volumes:
-            - ./data:/app/data
+        depends_on:
+            - back
+
+    back:
+        build:
+            context: ..
+            dockerfile: deploy/Dockerfile.back
+        container_name: monori-back
+        restart: unless-stopped
         environment:
             MONORI_DB: /app/data/monori.db
+            MONORI_SYNC_URL: http://sync:8010
+        volumes:
+            - ./data:/app/data
+        depends_on:
+            - sync
+
+    sync:
+        build:
+            context: ..
+            dockerfile: deploy/Dockerfile.sync
+        container_name: monori-sync
+        restart: unless-stopped
