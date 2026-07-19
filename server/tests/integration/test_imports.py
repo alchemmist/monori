@@ -67,3 +67,9 @@ def test_import_commit_keeps_category(api, client):
     client.post("/api/import/commit", json={"accountId": api.default_account(), "rows": rows})
     imported = client.get(f"/api/transactions?categoryId={cat}").json()
     assert imported["total"] == 1 and imported["rows"][0]["source"] == "import"
+
+
+def test_commit_rejects_unknown_account(client):
+    r = client.post("/api/import/commit", json={"accountId": 999, "rows": []})
+    assert r.status_code == 400
+    assert r.json()["detail"] == "unknown account"

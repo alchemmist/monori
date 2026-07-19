@@ -5,7 +5,8 @@ from alembic import command
 
 from app.db import LEGACY_REVISIONS, _alembic_config, connect
 
-HEAD = LEGACY_REVISIONS[-1]
+HEAD = "0007"
+assert LEGACY_REVISIONS[-1] == "0006"
 
 OLD_SCHEMA = """
 CREATE TABLE category_groups (
@@ -108,9 +109,11 @@ def test_fresh_db_is_created_from_schema_sql(tmp_path):
             "import_batches",
             "users",
         } <= tables
-        assert conn.execute("SELECT COUNT(*) FROM accounts").fetchone()[0] == 1
+        assert conn.execute("SELECT COUNT(*) FROM accounts").fetchone()[0] == 0
         cols = {r["name"] for r in conn.execute("PRAGMA table_info(transactions)")}
         assert {"account_id", "transfer_id", "batch_id"} <= cols
+        acct_cols = {r["name"] for r in conn.execute("PRAGMA table_info(accounts)")}
+        assert "user_id" in acct_cols
         assert _revision(conn) == HEAD
     finally:
         conn.close()
@@ -171,6 +174,27 @@ def test_legacy_intermediate_user_version_is_adopted(tmp_path):
             r["name"] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
         }
         assert {"bank_connections", "import_batches", "users"} <= tables
+    finally:
+        conn.close()
+
+
+def test_upgrade_assigns_orphans_to_earliest_user(tmp_path):
+    db_path = os.path.join(tmp_path, "v6.db")
+    command.upgrade(_alembic_config(db_path), "0006")
+    raw = sqlite3.connect(db_path)
+    raw.execute("INSERT INTO users (email, password_hash, created_at) VALUES ('a@b.co', 'h', 't')")
+    raw.execute(
+        "INSERT INTO accounts (name, type, currency, sort) VALUES ('Old', 'card', 'RUB', 1)"
+    )
+    raw.execute("INSERT INTO category_groups (name, sort, kind) VALUES ('G', 1, 'expense')")
+    raw.commit()
+    raw.close()
+
+    conn = connect(db_path)
+    try:
+        uid = conn.execute("SELECT MIN(id) FROM users").fetchone()[0]
+        assert conn.execute("SELECT user_id FROM accounts").fetchone()[0] == uid
+        assert conn.execute("SELECT user_id FROM category_groups").fetchone()[0] == uid
     finally:
         conn.close()
 

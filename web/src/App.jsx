@@ -65,8 +65,8 @@ export default function App({ theme, onToggleTheme }) {
     }, [checkAuth]);
 
     useEffect(() => {
-        load();
-    }, [load]);
+        if (isDemo() || user) load();
+    }, [load, user]);
 
     useEffect(() => {
         if (toast) toaster.add({ name: String(Date.now()), autoHiding: 5000, ...toast });

@@ -1,12 +1,13 @@
 """Monori API. Money in/out of this API is integer kopecks everywhere."""
 
 import pathlib
+from typing import Annotated
 
 from fastapi import Depends, FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from .auth import require_token
+from .auth import current_user
 from .deps import conn, snapshot
 from .routers import (
     accounts,
@@ -51,14 +52,14 @@ for _router in (
     imports.router,
     connections.router,
 ):
-    app.include_router(_router, dependencies=[Depends(require_token)])
+    app.include_router(_router, dependencies=[Depends(current_user)])
 
 
-@app.get("/api/snapshot", dependencies=[Depends(require_token)])
-def get_snapshot():
+@app.get("/api/snapshot")
+def get_snapshot(user: Annotated[dict, Depends(current_user)]):
     c = conn()
     try:
-        return snapshot(c)
+        return snapshot(c, user["id"])
     finally:
         c.close()
 

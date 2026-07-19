@@ -55,10 +55,6 @@ def _bootstrap(path):
         conn = sqlite3.connect(path)
         try:
             conn.executescript(SCHEMA_PATH.read_text())
-            conn.execute(
-                "INSERT INTO accounts (name, type, currency, sort) "
-                "SELECT 'T-Bank', 'card', 'RUB', 1 WHERE NOT EXISTS (SELECT 1 FROM accounts)"
-            )
             conn.commit()
         finally:
             conn.close()

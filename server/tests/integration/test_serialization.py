@@ -22,8 +22,8 @@ def test_snapshot_serialization_contract(api, client):
     assert snap["accounts"] == [
         {
             "id": 1,
-            "name": "T-Bank",
-            "type": "card",
+            "name": "Cash",
+            "type": "cash",
             "icon": "wallet",
             "color": "#5b6472",
             "iconImage": None,

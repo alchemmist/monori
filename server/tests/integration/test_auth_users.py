@@ -57,27 +57,30 @@ def test_login_is_case_insensitive_on_email(client):
     assert _login(client, email="USER@example.com").status_code == 200
 
 
-def test_me_requires_and_accepts_token(client):
-    _register(client)
-    token = _login(client).json()["access_token"]
+def test_me_requires_and_accepts_token(anon):
+    _register(anon)
+    token = _login(anon).json()["access_token"]
 
-    assert client.get("/api/auth/me").status_code == 401
-    bad = client.get("/api/auth/me", headers={"Authorization": "Bearer garbage"})
+    assert anon.get("/api/auth/me").status_code == 401
+    bad = anon.get("/api/auth/me", headers={"Authorization": "Bearer garbage"})
     assert bad.status_code == 401
     assert bad.json()["detail"] == "invalid or expired token"
 
-    r = client.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"})
+    r = anon.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"})
     assert r.status_code == 200
     assert r.json()["email"] == "user@example.com"
 
 
-def test_me_rejects_token_of_deleted_user(client):
+def test_me_rejects_token_of_deleted_user(anon):
+    client = anon
     _register(client)
     token = _login(client).json()["access_token"]
 
     import app.db as dbmod
 
     c = dbmod.connect()
+    c.execute("DELETE FROM accounts")
+    c.execute("DELETE FROM category_groups")
     c.execute("DELETE FROM users")
     c.commit()
     c.close()

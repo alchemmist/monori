@@ -52,9 +52,18 @@ def register(body: RegisterBody):
             c.commit()
         except sqlite3.IntegrityError:
             raise HTTPException(409, "email already registered") from None
-        row = c.execute(
-            "SELECT id, email, created_at FROM users WHERE id=?", (cur.lastrowid,)
-        ).fetchone()
+        uid = cur.lastrowid
+        if c.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 1:
+            c.execute("UPDATE accounts SET user_id=? WHERE user_id IS NULL", (uid,))
+            c.execute("UPDATE category_groups SET user_id=? WHERE user_id IS NULL", (uid,))
+        if not c.execute("SELECT id FROM accounts WHERE user_id=?", (uid,)).fetchone():
+            c.execute(
+                "INSERT INTO accounts (user_id, name, type, currency, sort)"
+                " VALUES (?, 'Cash', 'cash', 'RUB', 1)",
+                (uid,),
+            )
+        c.commit()
+        row = c.execute("SELECT id, email, created_at FROM users WHERE id=?", (uid,)).fetchone()
         return serialize_user(row)
     finally:
         c.close()
