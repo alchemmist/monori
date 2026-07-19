@@ -301,8 +301,19 @@ class TBankPlaywrightConnector(Connector):
         else:
             self._dismiss_interstitials(page)
 
-        page.wait_for_url(self.URL_LOGGED_IN_MARKER, timeout=self.LOGIN_TIMEOUT_MS)
+        # The session is live once the OTP is accepted, but the bank may park
+        # us on any number of post-login screens (code confirmations, promos)
+        # instead of redirecting. Wait briefly, then force our way home rather
+        # than trying to know every screen.
+        with contextlib.suppress(Exception):
+            page.wait_for_url(self.URL_LOGGED_IN_MARKER, timeout=15_000)
+        if not self._is_logged_in(page):
+            self._dismiss_interstitials(page)
+            page.goto(self.URL_HOME, wait_until="domcontentloaded")
+            page.wait_for_timeout(2_500)
         self._shot(page, "07-logged-in")
+        if not self._is_logged_in(page):
+            raise ConnectorError("login did not reach the bank home page")
 
     def _download_and_parse(self, page, since):
         page.goto(self.URL_OPERATIONS, wait_until="domcontentloaded")

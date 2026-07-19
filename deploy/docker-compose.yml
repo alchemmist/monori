@@ -32,6 +32,12 @@ services:
             dockerfile: deploy/Dockerfile.sync
         container_name: monori-sync
         restart: unless-stopped
+        environment:
+            # per-step screenshots + HTML land in ./data/sync-debug on the
+            # host; collected by the sync-debug workflow when a login breaks
+            MONORI_CONNECTOR_DEBUG: "1"
+        volumes:
+            - ./data/sync-debug:/app/data
         networks:
             - internal
 
