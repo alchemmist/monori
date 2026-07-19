@@ -2,14 +2,40 @@ services:
     monori:
         build:
             context: ..
-            dockerfile: deploy/Dockerfile
+            dockerfile: deploy/Dockerfile.front
         container_name: monori
         restart: unless-stopped
-        volumes:
-            - ./data:/app/data
+        depends_on:
+            - back
         networks:
             - personal-site_default
+            - internal
+
+    back:
+        build:
+            context: ..
+            dockerfile: deploy/Dockerfile.back
+        container_name: monori-back
+        restart: unless-stopped
+        environment:
+            MONORI_SYNC_URL: http://sync:8010
+        volumes:
+            - ./data:/app/data
+        depends_on:
+            - sync
+        networks:
+            - internal
+
+    sync:
+        build:
+            context: ..
+            dockerfile: deploy/Dockerfile.sync
+        container_name: monori-sync
+        restart: unless-stopped
+        networks:
+            - internal
 
 networks:
     personal-site_default:
         external: true
+    internal: {}
