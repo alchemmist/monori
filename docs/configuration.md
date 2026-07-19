@@ -8,13 +8,15 @@ file.
 | Variable | Default | Purpose |
 | ---------- | --------- | --------- |
 | `MONORI_DB` | `server/data/monori.db` | Absolute path to the SQLite database file. Its parent directory is created on startup. In Docker this is set to `/app/data/monori.db`. |
-| `MONORI_ENCRYPTION_KEY` | *(unset)* | Required only for **bank sync connectors** (see below). A urlsafe base64 32-byte Fernet key used to encrypt stored bank credentials and cached sessions at rest. When unset, connections cannot be created and the feature is disabled. Generate one with `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`. |
+| `MONORI_ENCRYPTION_KEY` | *(auto)* | A urlsafe base64 32-byte Fernet key used to encrypt stored bank credentials and cached sessions at rest. If unset, one is generated once and persisted owner-only as `.encryption_key` next to the database. Set it explicitly to manage the key yourself: `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`. |
 | `MONORI_AUTH_SECRET` | *(auto)* | Secret used to sign in-app auth JWTs (issue #34). If unset, a random one is generated once and persisted owner-only as `.auth_secret` next to the database, so logins survive restarts. Set it explicitly to share a secret across replicas or rotate it (rotating invalidates existing tokens). |
+| `MONORI_SYNC_URL` | *(unset)* | Base URL of the standalone bank-sync service (e.g. `http://sync:8010` in the production compose). When set, the API delegates bank syncs there over the private network; when unset, syncs run in-process, which requires the `connectors` extra and a Playwright Chromium in the API image. |
 | `API_PORT` | `8077` | Dev only — the port the local API runs on and the web dev server proxies to. Set via the `make` variable of the same name. |
 
-The production container also sets `MONORI_DB=/app/data/monori.db` in the
-`Dockerfile` itself, and the server auto-detects its bundled frontend at
-`server/static` (populated by `make build` or the Docker build).
+The production back container sets `MONORI_DB=/app/data/monori.db` in
+`deploy/Dockerfile.back`; in production the static frontend is served by the
+front (nginx) container. Outside Docker the server also auto-detects a bundled
+frontend at `server/static` (populated by `make build`).
 
 ## The database file
 

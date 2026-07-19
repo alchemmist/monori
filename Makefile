@@ -76,7 +76,7 @@ lint-actions:
 	actionlint
 
 lint-docker:
-	hadolint deploy/Dockerfile deploy/Dockerfile.dev
+	hadolint deploy/Dockerfile.front deploy/Dockerfile.back deploy/Dockerfile.sync deploy/Dockerfile.dev
 
 lint-shell:
 	@files=$$(git ls-files '*.sh'); [ -z "$$files" ] || shellcheck $$files

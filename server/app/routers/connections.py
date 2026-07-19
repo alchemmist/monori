@@ -1,12 +1,11 @@
 """Bank connections: connect an account to a connector and sync it on demand.
 
 There is no background scheduler — syncs run only when triggered here. A sync
-that hits an OTP step returns ``status: awaiting_sms`` and parks the live
-connector in ``PENDING`` (in-process; fine for a single-user self-hosted app)
-until the user posts the code to ``/sms``.
+that hits an OTP step returns ``status: awaiting_sms`` and stays parked in the
+sync runner (in-process or in the standalone sync service, see
+:mod:`app.sync_runner`) until the user posts the code to ``/sms``.
 """
 
-import contextlib
 import secrets
 from datetime import datetime
 from typing import Annotated
@@ -21,25 +20,13 @@ from ..connectors.base import ConnectorError, SmsRequired
 from ..deps import conn, serialize_connection
 from ..importer import build_rules
 from ..ingest import categorize_rows, commit_rows
+from ..sync_runner import NoPendingLogin, get_runner
 
 router = APIRouter(prefix="/api/connections", tags=["connections"])
-
-# connection id -> a live connector mid-login, awaiting its OTP code
-PENDING: dict[int, connectors.Connector] = {}
 
 
 def _now():
     return datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
-
-
-def _close_pending(cid):
-    """Drop and close any connector parked mid-login for this connection, so its
-    browser/worker never leaks when the attempt is replaced, cancelled or the
-    connection is deleted."""
-    old = PENDING.pop(cid, None)
-    if old is not None:
-        with contextlib.suppress(Exception):
-            old.close()
 
 
 class Credentials(BaseModel):
@@ -191,7 +178,7 @@ def delete_connection(cid: int, user: Annotated[dict, Depends(current_user)]):
     c = conn()
     try:
         _load(c, cid, uid)
-        _close_pending(cid)
+        get_runner().cancel(cid)
         c.execute("DELETE FROM bank_connections WHERE id=?", (cid,))
         c.commit()
         return {"deleted": cid}
@@ -207,7 +194,7 @@ def cancel_sync(cid: int, user: Annotated[dict, Depends(current_user)]):
     c = conn()
     try:
         _load(c, cid, uid)
-        _close_pending(cid)
+        get_runner().cancel(cid)
         c.execute(
             "UPDATE bank_connections SET status='disconnected', updated_at=?"
             " WHERE id=? AND status='awaiting_sms'",
@@ -237,14 +224,13 @@ def sync_connection(cid: int, user: Annotated[dict, Depends(current_user)]):
             )
             c.commit()
         session = crypto.decrypt(row["session_encrypted"])
-        # a re-triggered sync replaces any earlier attempt still parked on its OTP
-        _close_pending(cid)
-        cls = connectors.get_connector_class(row["bank"], row["kind"])
-        connector = cls(creds, session)
         try:
-            return _finish(c, row, connector.sync(row["last_sync"]), uid)
+            # the runner replaces any earlier attempt still parked on its OTP
+            result = get_runner().start(
+                cid, row["bank"], row["kind"], creds, session, row["last_sync"]
+            )
+            return _finish(c, row, result, uid)
         except SmsRequired:
-            PENDING[cid] = connector
             c.execute(
                 "UPDATE bank_connections SET status='awaiting_sms', updated_at=? WHERE id=?",
                 (_now(), cid),
@@ -265,11 +251,10 @@ def submit_sms(cid: int, body: SmsBody, user: Annotated[dict, Depends(current_us
     c = conn()
     try:
         row = _load(c, cid, uid)
-        connector = PENDING.pop(cid, None)
-        if connector is None:
-            raise HTTPException(409, "no login awaiting a code")
         try:
-            return _finish(c, row, connector.resume_sync(body.code), uid)
+            return _finish(c, row, get_runner().resume(cid, body.code), uid)
+        except NoPendingLogin as e:
+            raise HTTPException(409, "no login awaiting a code") from e
         except ConnectorError as e:
             _mark_error(c, cid, str(e))
             raise HTTPException(502, str(e)) from e
