@@ -4,7 +4,8 @@ from fastapi.testclient import TestClient
 
 import app.connectors.fake  # noqa: F401  (registers the FakeConnector)
 from app import sync_service
-from app.connectors.base import ConnectorError, SmsRequired
+from app.connectors import base
+from app.connectors.base import ConnectorError, SmsRequired, SyncResult
 from app.sync_runner import LocalRunner, NoPendingLogin, RemoteRunner, get_runner
 
 CREDS = {"phone": "+70000000000", "password": "pw"}
@@ -105,8 +106,6 @@ class ClosableConnector:
 
 
 def test_failed_resume_closes_connector(monkeypatch):
-    from app.connectors import base
-
     monkeypatch.setitem(base.REGISTRY, ("closable", "closable"), ClosableConnector)
     ClosableConnector.closed = 0
     runner = LocalRunner()
@@ -120,8 +119,6 @@ def test_failed_resume_closes_connector(monkeypatch):
 
 
 def test_service_failed_resume_closes_connector(monkeypatch):
-    from app.connectors import base
-
     monkeypatch.setitem(base.REGISTRY, ("closable", "closable"), ClosableConnector)
     ClosableConnector.closed = 0
     sync_service.PENDING.clear()
@@ -131,6 +128,137 @@ def test_service_failed_resume_closes_connector(monkeypatch):
     assert r.json()["status"] == "error"
     assert ClosableConnector.closed == 1
     assert 1 not in sync_service.PENDING
+
+
+class RecordingConnector:
+    bank = "recording"
+    kind = "recording"
+    hidden = True
+    last_since = None
+
+    def __init__(self, credentials, session=None):
+        self.credentials = credentials
+        self.session = session
+
+    def sync(self, since=None):
+        type(self).last_since = since
+        return SyncResult([], session=None)
+
+    def resume_sync(self, code):
+        raise ConnectorError("no login in progress")
+
+    def close(self):
+        pass
+
+
+class FailingCloseConnector(ClosableConnector):
+    bank = "failclose"
+    kind = "failclose"
+
+    def close(self):
+        type(self).closed += 1
+        raise RuntimeError("close blew up")
+
+
+def test_since_is_passed_through(runner, monkeypatch):
+    monkeypatch.setitem(base.REGISTRY, ("recording", "recording"), RecordingConnector)
+    RecordingConnector.last_since = None
+    runner.start(1, "recording", "recording", CREDS, None, "2026-01-01")
+    assert RecordingConnector.last_since == "2026-01-01"
+
+
+def test_new_start_closes_previous_pending(runner, monkeypatch):
+    monkeypatch.setitem(base.REGISTRY, ("closable", "closable"), ClosableConnector)
+    ClosableConnector.closed = 0
+    with pytest.raises(SmsRequired):
+        runner.start(1, "closable", "closable", CREDS, None, None)
+    with pytest.raises(SmsRequired):
+        runner.start(1, "closable", "closable", CREDS, None, None)
+    assert ClosableConnector.closed == 1
+
+
+def test_cancel_closes_pending_connector(runner, monkeypatch):
+    monkeypatch.setitem(base.REGISTRY, ("closable", "closable"), ClosableConnector)
+    ClosableConnector.closed = 0
+    with pytest.raises(SmsRequired):
+        runner.start(1, "closable", "closable", CREDS, None, None)
+    runner.cancel(1)
+    assert ClosableConnector.closed == 1
+
+
+def test_failing_close_never_masks_the_flow(runner, monkeypatch):
+    monkeypatch.setitem(base.REGISTRY, ("failclose", "failclose"), FailingCloseConnector)
+    FailingCloseConnector.closed = 0
+    with pytest.raises(SmsRequired):
+        runner.start(1, "failclose", "failclose", CREDS, None, None)
+    runner.cancel(1)
+    assert FailingCloseConnector.closed == 1
+    with pytest.raises(SmsRequired):
+        runner.start(2, "failclose", "failclose", CREDS, None, None)
+    with pytest.raises(ConnectorError, match="bad code"):
+        runner.resume(2, "0000")
+    assert FailingCloseConnector.closed == 2
+
+
+def test_remote_error_messages_are_exact():
+    responses = {
+        b"not json": "sync service returned an invalid response",
+        b"[1, 2]": "sync service returned an invalid response",
+        b'{"status": "error"}': "sync failed",
+    }
+    for content, expected in responses.items():
+
+        def handler(request, content=content):
+            return httpx.Response(200, content=content)
+
+        client = httpx.Client(transport=httpx.MockTransport(handler), base_url="http://sync")
+        r = RemoteRunner("http://sync", client=client)
+        with pytest.raises(ConnectorError) as ei:
+            r.start(1, "fake", "fake", CREDS, None, None)
+        assert str(ei.value) == expected
+
+
+def test_remote_awaiting_sms_message():
+    def handler(request):
+        return httpx.Response(200, json={"status": "awaiting_sms"})
+
+    client = httpx.Client(transport=httpx.MockTransport(handler), base_url="http://sync")
+    r = RemoteRunner("http://sync", client=client)
+    with pytest.raises(SmsRequired) as ei:
+        r.start(1, "fake", "fake", CREDS, None, None)
+    assert str(ei.value) == "code sent"
+
+
+def test_remote_resume_transport_failure():
+    def handler(request):
+        raise httpx.ConnectError("refused")
+
+    client = httpx.Client(transport=httpx.MockTransport(handler), base_url="http://sync")
+    r = RemoteRunner("http://sync", client=client)
+    with pytest.raises(ConnectorError, match="sync service unavailable"):
+        r.resume(1, "0000")
+
+
+def test_remote_cancel_uses_short_timeout():
+    captured = {}
+
+    def handler(request):
+        captured["path"] = request.url.path
+        captured["timeout"] = request.extensions.get("timeout")
+        return httpx.Response(200, json={"cancelled": 5})
+
+    client = httpx.Client(transport=httpx.MockTransport(handler), base_url="http://sync")
+    RemoteRunner("http://sync", client=client).cancel(5)
+    assert captured["path"] == "/runs/5/cancel"
+    assert captured["timeout"] == {"connect": 2.0, "read": 5.0, "write": 5.0, "pool": 5.0}
+
+
+def test_remote_cancel_swallows_transport_failure():
+    def handler(request):
+        raise httpx.ConnectError("refused")
+
+    client = httpx.Client(transport=httpx.MockTransport(handler), base_url="http://sync")
+    RemoteRunner("http://sync", client=client).cancel(5)
 
 
 def test_get_runner_selects_by_env(monkeypatch):
