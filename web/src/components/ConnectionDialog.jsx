@@ -76,8 +76,14 @@ export default function ConnectionDialog({ account, connection, onClose }) {
         setStep("syncing");
         try {
             const res = await submitConnectionSms(connId.current, code.trim());
-            setResult(res);
-            setStep("done");
+            if (res.status === "awaiting_sms") {
+                setCode("");
+                setError(res.message || "The bank rejected the code — try again.");
+                setStep("sms");
+            } else {
+                setResult(res);
+                setStep("done");
+            }
         } catch (e) {
             setError(String(e));
             setStep("error");
@@ -169,6 +175,11 @@ export default function ConnectionDialog({ account, connection, onClose }) {
                 <Text color="secondary" variant="caption-2">
                     Enter the code the bank sent to your phone.
                 </Text>
+                {error && (
+                    <Text color="danger" variant="caption-2">
+                        {error}
+                    </Text>
+                )}
                 <TextInput label="SMS code" value={code} onUpdate={setCode} autoFocus />
             </>
         );

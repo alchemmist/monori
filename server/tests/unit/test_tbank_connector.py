@@ -84,12 +84,20 @@ class FakePage:
     """A minimal, scripted stand-in for a Playwright page."""
 
     def __init__(
-        self, *, scenario="fresh", needs_password=False, export_label="CSV", csv=STATEMENT
+        self,
+        *,
+        scenario="fresh",
+        needs_password=False,
+        export_label="CSV",
+        csv=STATEMENT,
+        wrong_codes=None,
     ):
         self.scenario = scenario
         self.needs_password = needs_password
         self.export_label = export_label
         self.csv = csv
+        self.wrong_codes = wrong_codes or set()
+        self.last_otp = None
         self.url = ""
         self.log = []
         self.keyboard = FakeKeyboard(self)
@@ -123,6 +131,8 @@ class FakePage:
     # form interaction -------------------------------------------------------
     def fill(self, selector, value):
         self.log.append(("fill", selector, value))
+        if selector == TB.SEL_SMS:
+            self.last_otp = value
 
     def click(self, selector):
         self.log.append(("click", selector))
@@ -144,6 +154,7 @@ class FakePage:
         return {
             "enter_code": {TB.TEXT_ENTER_CODE},
             "setcode": {TB.TEXT_SET_CODE},
+            "sms_rejected": {TB.TEXTS_OTP_REJECTED[0]},
         }.get(self.stage, set())
 
     def get_by_text(self, text, exact=False):
@@ -162,6 +173,12 @@ class FakePage:
         on_click = None
         if selector == TB.SEL_CODE and self.stage in ("enter_code", "setcode"):
             present = True
+        elif selector == TB.SEL_SMS_SUBMIT and self.stage in ("sms", "sms_rejected"):
+            present = True
+
+            def on_click():
+                self.stage = "sms_rejected" if self.last_otp in self.wrong_codes else "setcode"
+
         elif selector == f"text={TB.TEXT_SET_CODE_SUBMIT}" and self.stage == "setcode":
             present = True
 
@@ -287,6 +304,26 @@ def test_full_login_sets_code_and_enters_otp():
     assert ("wait_url", TB.URL_LOGGED_IN_MARKER) in page.log
 
 
+def test_wrong_otp_reprompts_with_rejection_message():
+    c = _connector()
+    c._to_worker.put(("sms", "1111"))
+    c._to_worker.put(("sms", "2222"))
+    page = FakePage(scenario="fresh", wrong_codes={"1111"})
+    c._ensure_logged_in(page)
+    fills = [a for a in page.log if a[0] == "fill"]
+    assert ("fill", TB.SEL_SMS, "1111") in fills
+    assert ("fill", TB.SEL_SMS, "2222") in fills
+    messages = []
+    while not c._from_worker.empty():
+        kind, payload = c._from_worker.get()
+        if kind == "sms_required":
+            messages.append(payload)
+    assert messages == [
+        "enter the code sent by the bank",
+        "the bank rejected the code — check it and try again",
+    ]
+
+
 def test_full_login_with_password_step():
     c = _connector()
     c._to_worker.put(("sms", "0000"))
@@ -294,6 +331,55 @@ def test_full_login_with_password_step():
     c._ensure_logged_in(page)
     fills = [a for a in page.log if a[0] == "fill"]
     assert ("fill", TB.SEL_PASSWORD, "pw") in fills
+
+
+class _OtpClickPage(FakePage):
+    """A fresh-login page whose OTP submit button click raises a chosen error."""
+
+    def __init__(self, error, **kw):
+        super().__init__(scenario="fresh", **kw)
+        self._error = error
+
+    def locator(self, selector):
+        if selector == TB.SEL_SMS_SUBMIT and self.stage in ("sms", "sms_rejected"):
+
+            def on_click():
+                raise self._error
+
+            return FakeLocator(self, True, on_click)
+        return super().locator(selector)
+
+
+def test_otp_submit_timeout_is_skipped(monkeypatch):
+    import app.connectors.tbank_playwright as mod
+
+    class FakeTimeout(Exception):
+        pass
+
+    monkeypatch.setattr(mod, "PlaywrightTimeoutError", FakeTimeout)
+    c = _connector()
+    c._to_worker.put(("sms", "0000"))
+    page = _OtpClickPage(FakeTimeout("no submit button"))
+    # a missing/auto-submit button reads as a timeout: it is skipped and the
+    # login still reaches the bank home without raising
+    c._ensure_logged_in(page)
+    assert ("wait_url", TB.URL_LOGGED_IN_MARKER) in page.log
+
+
+def test_otp_submit_real_click_error_propagates(monkeypatch):
+    import app.connectors.tbank_playwright as mod
+
+    class FakeTimeout(Exception):
+        pass
+
+    monkeypatch.setattr(mod, "PlaywrightTimeoutError", FakeTimeout)
+    c = _connector()
+    c._to_worker.put(("sms", "0000"))
+    page = _OtpClickPage(RuntimeError("click intercepted"))
+    # a real interaction failure is not a timeout: it must surface, not be
+    # swallowed into a broken, silently-continuing login
+    with pytest.raises(RuntimeError, match="click intercepted"):
+        c._ensure_logged_in(page)
 
 
 # --- download ---------------------------------------------------------------

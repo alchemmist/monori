@@ -60,9 +60,9 @@ def start_run(cid: int, body: RunBody):
     connector = cls(body.credentials, body.session)
     try:
         return _done(connector.sync(body.since))
-    except SmsRequired:
+    except SmsRequired as e:
         PENDING[cid] = connector
-        return {"status": "awaiting_sms"}
+        return {"status": "awaiting_sms", "message": str(e)}
     except ConnectorError as e:
         return {"status": "error", "message": str(e)}
 
@@ -74,6 +74,10 @@ def submit_sms(cid: int, body: SmsBody):
         raise HTTPException(409, "no login awaiting a code")
     try:
         return _done(connector.resume_sync(body.code))
+    except SmsRequired as e:
+        # a rejected code keeps the login alive — re-park it and ask again
+        PENDING[cid] = connector
+        return {"status": "awaiting_sms", "message": str(e)}
     except ConnectorError as e:
         # the failed login is no longer tracked, so close it here or its live
         # browser leaks

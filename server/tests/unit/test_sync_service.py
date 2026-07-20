@@ -19,7 +19,7 @@ def test_health(client):
 
 def test_otp_flow(client):
     r = client.post("/runs/1", json={"bank": "fake", "kind": "fake", "credentials": CREDS})
-    assert r.json() == {"status": "awaiting_sms"}
+    assert r.json() == {"status": "awaiting_sms", "message": "code sent"}
     assert 1 in sync_service.PENDING
 
     r = client.post("/runs/1/sms", json={"code": "0000"})
