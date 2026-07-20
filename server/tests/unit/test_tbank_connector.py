@@ -14,6 +14,7 @@ import types
 
 import pytest
 
+from app.connectors import tbank_playwright as tbank_mod
 from app.connectors.base import ConnectorError, SmsRequired
 from app.connectors.tbank_playwright import TBankPlaywrightConnector as TB
 
@@ -157,6 +158,12 @@ class FakePage:
             selector == TB.SEL_PASSWORD and self.stage == "password"
         )
         return object() if present else None
+
+    def wait_for_selector(self, selector, timeout=None):
+        self.log.append(("wait_selector", selector))
+        if self.query_selector(selector) is not None:
+            return object()
+        raise tbank_mod.PlaywrightTimeoutError("element not found")
 
     def _visible_texts(self):
         return {
@@ -339,6 +346,47 @@ def test_full_login_with_password_step():
     c._ensure_logged_in(page)
     fills = [a for a in page.log if a[0] == "fill"]
     assert ("fill", TB.SEL_PASSWORD, "pw") in fills
+
+
+class _SlowPasswordPage(FakePage):
+    """The SSO paints the password screen a beat after the phone step: an
+    immediate query_selector misses it, but wait_for_selector catches it once it
+    renders. Proves the login waits for the field instead of skipping the
+    password step and stalling on it (the prod race)."""
+
+    def __init__(self, **kw):
+        super().__init__(scenario="fresh", needs_password=True, **kw)
+
+    def click(self, selector):
+        self.log.append(("click", selector))
+        # only the submit control advances the screen — a click on any other
+        # selector must not masquerade as progress, or the test would pass even
+        # when the connector clicks the wrong control
+        if selector != TB.SEL_PASSWORD_SUBMIT:
+            return
+        if self.stage == "phone":
+            self.stage = "loading"  # password screen not painted yet
+        elif self.stage == "password":
+            self.stage = "sms"
+
+    def wait_for_selector(self, selector, timeout=None):
+        self.log.append(("wait_selector", selector))
+        if selector == TB.SEL_PASSWORD and self.stage == "loading":
+            self.stage = "password"  # the screen finishes rendering during the wait
+            return object()
+        return super().wait_for_selector(selector, timeout)
+
+
+def test_password_step_waits_for_late_rendered_field():
+    c = _connector()
+    c._to_worker.put(("sms", "0000"))
+    page = _SlowPasswordPage()
+    c._ensure_logged_in(page)
+    fills = [a for a in page.log if a[0] == "fill"]
+    # the password that rendered only after the wait was filled before the OTP
+    assert fills.index(("fill", TB.SEL_PASSWORD, "pw")) < fills.index(("fill", TB.SEL_SMS, "0000"))
+    # and it was actually submitted (not just filled) via the submit control
+    assert ("click", TB.SEL_PASSWORD_SUBMIT) in page.log
 
 
 class _SetCodeReparkPage(FakePage):
