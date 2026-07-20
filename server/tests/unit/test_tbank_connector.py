@@ -103,8 +103,16 @@ class FakePage:
         self.keyboard = FakeKeyboard(self)
         self.download_triggered = False
         self.screenshots = []
+        self.nav_timeout = None
+        self.action_timeout = None
         # starting screen depends on the scenario
         self.stage = {"logged_in": "in", "quick": "enter_code"}.get(scenario, "start")
+
+    def set_default_navigation_timeout(self, ms):
+        self.nav_timeout = ms
+
+    def set_default_timeout(self, ms):
+        self.action_timeout = ms
 
     # navigation -------------------------------------------------------------
     def goto(self, url, wait_until=None):
@@ -333,6 +341,60 @@ def test_full_login_with_password_step():
     assert ("fill", TB.SEL_PASSWORD, "pw") in fills
 
 
+class _SetCodeReparkPage(FakePage):
+    """After the OTP the bank re-parks on the 'Придумайте код' (set-code) screen
+    even past the forced home redirect. The recovery must clear it (enter the
+    code, then skip) instead of raising 'login did not reach the bank home page'.
+    Here the set-code submit does NOT clear the screen, so the skip fallback runs."""
+
+    def __init__(self, **kw):
+        super().__init__(scenario="fresh", **kw)
+
+    def locator(self, selector):
+        if selector == TB.SEL_SMS_SUBMIT and self.stage == "sms":
+
+            def on_click():
+                self.stage = "parked"  # authenticated but parked, not on set-code yet
+
+            return FakeLocator(self, True, on_click)
+        if selector == f"text={TB.TEXT_SET_CODE_SUBMIT}" and self.stage == "setcode":
+            return FakeLocator(self, True, None)  # submit is a no-op -> forces the skip
+        return super().locator(selector)
+
+    def goto(self, url, wait_until=None):
+        self.log.append(("goto", url))
+        if url == TB.URL_LOGIN:
+            self.stage, self.url = "phone", TB.URL_LOGIN
+        elif url == TB.URL_HOME:
+            if self.stage == "start":
+                self.stage, self.url = "phone", TB.URL_LOGIN  # initial redirect to login
+            elif self.stage == "parked":
+                self.stage, self.url = "setcode", TB.URL_HOME  # re-parked on set-code
+            elif self.stage == "setcode":
+                self.stage, self.url = "in", TB.URL_HOME  # the skip finally lands home
+            else:
+                self.url = TB.URL_HOME
+
+    def wait_for_url(self, marker, timeout=None):
+        self.log.append(("wait_url", marker))  # no redirect happens on its own
+
+    def _visible_texts(self):
+        if self.stage == "setcode":
+            return {TB.TEXT_SET_CODE}
+        return super()._visible_texts()
+
+
+def test_setcode_reprompt_after_redirect_is_handled():
+    c = _connector()
+    c._to_worker.put(("sms", "0000"))
+    page = _SetCodeReparkPage()
+    # must not raise "login did not reach the bank home page"
+    c._ensure_logged_in(page)
+    assert page.url == TB.URL_HOME
+    # the stored quick-login code was entered on the re-parked set-code screen
+    assert ("type", "1234") in page.log
+
+
 class _OtpClickPage(FakePage):
     """A fresh-login page whose OTP submit button click raises a chosen error."""
 
@@ -533,6 +595,9 @@ def test_run_two_phase_produces_rows_and_session(monkeypatch):
     result = c.resume_sync("5555")
     assert [r["description"] for r in result.rows] == ["Lenta", "Okey"]
     assert "profile" in result.session
+    # navigations get the full login budget, not Playwright's default 30s
+    assert page.nav_timeout == TB.LOGIN_TIMEOUT_MS
+    assert page.action_timeout == TB.LOGIN_TIMEOUT_MS
 
 
 def test_run_missing_playwright_reports_error(monkeypatch):
