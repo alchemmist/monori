@@ -27,7 +27,6 @@ app = FastAPI(title="monori", docs_url="/api-docs", redoc_url="/api-redoc")
 app.include_router(auth_router.router)
 
 STATIC_DIR = pathlib.Path(__file__).resolve().parent.parent / "static"
-DOCS_DIR = pathlib.Path(__file__).resolve().parent.parent / "docs-static"
 
 
 def _serve_spa(base: pathlib.Path, path: str):
@@ -64,21 +63,11 @@ def get_snapshot(user: Annotated[dict, Depends(current_user)]):
         c.close()
 
 
-if DOCS_DIR.is_dir():
-    app.mount("/docs/assets", StaticFiles(directory=DOCS_DIR / "assets"), name="docs-assets")
-
-    @app.get("/welcome")
-    @app.get("/docs")
-    @app.get("/docs/{path:path}")
-    def docs_site(path: str = ""):
-        # the docs bundle serves both the marketing landing (/welcome) and the
-        # documentation (/docs/*); its client router renders by full path
-        return _serve_spa(DOCS_DIR, path)
-
-
 if STATIC_DIR.is_dir():
     app.mount("/assets", StaticFiles(directory=STATIC_DIR / "assets"), name="assets")
 
+    # one SPA serves everything: the app, the marketing landing (/welcome) and
+    # the docs (/docs/*) — its client router renders by full path
     @app.get("/{path:path}")
     def spa(path: str):
         return _serve_spa(STATIC_DIR, path)

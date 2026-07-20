@@ -4,9 +4,9 @@ MUTATION_THRESHOLD ?= 85
 
 WEBBIN := web/node_modules/.bin
 
-.PHONY: dev down api web docs build \
+.PHONY: dev down api web build \
         fmt fmt-check \
-        lint lint-web lint-docs lint-css lint-html lint-server lint-sql lint-yaml lint-md lint-actions lint-docker lint-shell spell \
+        lint lint-web lint-css lint-html lint-server lint-sql lint-yaml lint-md lint-actions lint-docker lint-shell spell \
         typecheck analyze audit audit-deps audit-deps-py audit-secrets \
         test t-fast t-medium t-slow coverage mutation \
         check
@@ -23,16 +23,10 @@ api:
 web:
 	cd web && API_PORT=$(API_PORT) npm run dev
 
-docs:
-	cd web-docs && npm run dev
-
 build:
 	cd web && npm run build
 	rm -rf server/static
 	cp -r web/dist server/static
-	cd web-docs && npm run build
-	rm -rf server/docs-static
-	cp -r web-docs/dist server/docs-static
 
 SQLFLUFF := uvx --from 'sqlfluff==3.4.2' sqlfluff
 
@@ -46,19 +40,16 @@ fmt-check:
 	cd server && uv run ruff format --check .
 	$(SQLFLUFF) lint server/schema.sql
 
-lint: lint-web lint-docs lint-css lint-html lint-server lint-sql lint-yaml lint-md lint-actions lint-docker lint-shell spell
+lint: lint-web lint-css lint-html lint-server lint-sql lint-yaml lint-md lint-actions lint-docker lint-shell spell
 
 lint-web:
 	cd web && npm run --silent lint
 
-lint-docs:
-	cd web-docs && npm run --silent lint
-
 lint-css:
-	$(WEBBIN)/stylelint --config web/.stylelintrc.json "web/src/**/*.css" "web-docs/src/**/*.css"
+	$(WEBBIN)/stylelint --config web/.stylelintrc.json "web/src/**/*.css"
 
 lint-html:
-	$(WEBBIN)/htmlhint web/index.html web-docs/index.html
+	$(WEBBIN)/htmlhint web/index.html
 
 lint-server:
 	cd server && uv run ruff check .
