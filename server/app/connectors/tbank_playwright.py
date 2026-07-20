@@ -160,6 +160,11 @@ class TBankPlaywrightConnector(Connector):
                     args=args,
                 )
                 page = context.pages[0] if context.pages else context.new_page()
+                # the authenticated /mybank SPA can take well over Playwright's
+                # default 30s to reach domcontentloaded (seen as a goto timeout on
+                # retry) — give navigations and actions the full login budget
+                page.set_default_navigation_timeout(self.LOGIN_TIMEOUT_MS)
+                page.set_default_timeout(self.LOGIN_TIMEOUT_MS)
                 try:
                     self._ensure_logged_in(page)
                     rows = self._download_and_parse(page, since)
@@ -263,6 +268,19 @@ class TBankPlaywrightConnector(Connector):
         page.keyboard.type(code)
         page.wait_for_timeout(1_000)
 
+    def _set_quick_login_code(self, page, code):
+        """Set our quick-login code on the bank's "Придумайте код" screen so
+        future syncs skip the SMS. The submit button is optional (some layouts
+        auto-advance), so a genuinely-absent button times out and is skipped —
+        but real click failures surface. Some flows then ask for the code a
+        second time to confirm; enter it again when the screen is still shown."""
+        self._type_code(page, code)
+        with contextlib.suppress(PlaywrightTimeoutError):
+            page.locator(f"text={self.TEXT_SET_CODE_SUBMIT}").first.click(timeout=3_000)
+            page.wait_for_timeout(1_000)
+            if self._has_text(page, self.TEXT_SET_CODE):
+                self._type_code(page, code)
+
     def _dismiss_interstitials(self, page):
         for label in ("Не сейчас", "Пропустить", "Позже", "Закрыть"):
             # the label just isn't on this screen
@@ -313,15 +331,7 @@ class TBankPlaywrightConnector(Connector):
         # Right after the OTP the bank offers to set a quick-login code — set ours
         # (and remember it) so future syncs skip the SMS, instead of skipping it.
         if code and self._has_text(page, self.TEXT_SET_CODE):
-            self._type_code(page, code)
-            # the submit button is optional here too; skip it only when it is
-            # genuinely absent (times out), not on real interaction failures
-            with contextlib.suppress(PlaywrightTimeoutError):
-                page.locator(f"text={self.TEXT_SET_CODE_SUBMIT}").first.click(timeout=3_000)
-                page.wait_for_timeout(1_000)
-                # some flows confirm the code by entering it a second time
-                if self._has_text(page, self.TEXT_SET_CODE):
-                    self._type_code(page, code)
+            self._set_quick_login_code(page, code)
             self._shot(page, "06-set-code")
         else:
             self._dismiss_interstitials(page)
@@ -336,8 +346,19 @@ class TBankPlaywrightConnector(Connector):
             self._dismiss_interstitials(page)
             page.goto(self.URL_HOME, wait_until="domcontentloaded")
             page.wait_for_timeout(2_500)
+            # the redirect can re-park us on a code prompt: either the quick-login
+            # "enter code" screen or a "set a code" screen the bank insists on
+            # before letting us through. Handle both — the session is already live.
             if code and self._has_text(page, self.TEXT_ENTER_CODE):
                 self._type_code(page, code)
+                page.wait_for_timeout(2_000)
+            elif code and self._has_text(page, self.TEXT_SET_CODE):
+                self._set_quick_login_code(page, code)
+                page.wait_for_timeout(2_000)
+            # if a prompt still blocks the way, skip it rather than fail the login
+            if not self._is_logged_in(page):
+                self._dismiss_interstitials(page)
+                page.goto(self.URL_HOME, wait_until="domcontentloaded")
                 page.wait_for_timeout(2_000)
         self._shot(page, "07-logged-in")
         if not self._is_logged_in(page):
