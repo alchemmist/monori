@@ -59,34 +59,36 @@ class TBankPlaywrightConnector(Connector):
     bank = "tbank"
     kind = "playwright"
 
-    URL_LOGIN = "https://www.tbank.ru/login/"
+    URL_LOGIN = "https://www.tbank.ru/auth/login/"
     URL_HOME = "https://www.tbank.ru/mybank/"
     URL_OPERATIONS = "https://www.tbank.ru/mybank/operations/"
-    URL_LOGGED_IN_MARKER = "**/mybank/**"
 
-    SEL_PHONE = "input[name='phone'], input[type='tel']"
-    SEL_PHONE_SUBMIT = "button[type='submit']"
-    SEL_PASSWORD = "input[name='password']"
-    SEL_PASSWORD_SUBMIT = "button[type='submit']"
-    SEL_SMS = "input[name='otp'], input[autocomplete='one-time-code']"
-    SEL_SMS_SUBMIT = "button[type='submit']"
-    # the 4-box code widget on both the "create a code" and "enter code" screens
-    SEL_CODE = "input[autocomplete='one-time-code'], input[inputmode='numeric']"
+    # The login is the id.tbank.ru SSO: every step is a card at /auth/step with a
+    # heading in [automation-id='form-title'] and a single submit in
+    # [automation-id='button-submit']. There are three input screens — phone,
+    # password, and a 4-box pin widget reused for BOTH the SMS code and the
+    # quick-login code. We drive it as a state machine keyed on which field is on
+    # screen (and the title, to tell "set a code" from "enter a code"), rather
+    # than a fixed phone→password→sms sequence, so slow renders or a reordered
+    # step can't make us skip one.
+    SEL_PHONE = "[automation-id='phone-input']"
+    SEL_PASSWORD = "[automation-id='password-input']"
+    SEL_PIN = "[automation-id='pin-code-input-0']"
+    SEL_SUBMIT = "[automation-id='button-submit']"
+    SEL_FORM_TITLE = "[automation-id='form-title']"
     # the operations page: a period switcher and an export dropdown whose format
     # items (CSV/Excel/PDF) only render once the dropdown is opened
     SEL_PERIOD_YEAR = "[data-qa-type='period-tab-Год']"
     SEL_EXPORT_TRIGGER = "[data-qa-type='molecule-export-dropdown-operations-button']"
     EXPORT_FORMAT_LABELS = ("CSV", "Выгрузить в CSV", "CSV-файл", "Excel")
 
-    TEXT_SET_CODE = "Придумайте код"
-    TEXT_ENTER_CODE = "Введите код"
-    TEXT_SET_CODE_SUBMIT = "Установить"
-    TEXTS_OTP_REJECTED = ("Неверный код", "Код введён неверно", "Неправильный код")
+    # form-title text that distinguishes the "create a quick-login code" screen
+    # from the "enter a code" screens (SMS or quick-login)
+    TITLE_SET_CODE = "Придумайте код"
 
+    LOGIN_STEPS = 24
+    STEP_PAUSE_MS = 2_500
     LOGIN_TIMEOUT_MS = 45_000
-    # how long to wait for the SSO password screen to render after the phone step
-    # before deciding this flow has no password step and falling through
-    PASSWORD_WAIT_MS = 20_000
 
     def __init__(self, credentials, session=None):
         super().__init__(credentials, session)
@@ -243,60 +245,34 @@ class TBankPlaywrightConnector(Connector):
     def _save_debug(self, page):
         self._shot(page, "error")
 
-    @staticmethod
-    def _has_text(page, text):
-        try:
-            return page.get_by_text(text, exact=False).count() > 0
-        except Exception:  # noqa: BLE001 - treat a query failure as "not present"
-            return False
-
     def _is_logged_in(self, page):
-        # no selector checks here: the /mybank home page legitimately contains
-        # phone inputs (transfer-by-phone widget), so only the URL plus the
-        # login-screen texts are trustworthy evidence
-        return (
-            "/mybank" in page.url
-            and not self._has_text(page, self.TEXT_ENTER_CODE)
-            and not self._has_text(page, self.TEXT_SET_CODE)
-        )
+        # the authenticated app lives under /mybank; the SSO login stays on
+        # id.tbank.ru/auth/step, so the path alone is trustworthy evidence
+        return "/mybank" in page.url
 
-    def _otp_rejected(self, page):
-        return any(self._has_text(page, t) for t in self.TEXTS_OTP_REJECTED)
-
-    def _enter_password(self, page):
-        """Wait for the SSO password screen, then fill and submit it. Waiting for
-        the field (rather than a fixed sleep followed by a single query) is what
-        makes the step reliable on slow transitions; a genuinely password-less
-        flow just times out here and falls through to the OTP."""
-        try:
-            page.wait_for_selector(self.SEL_PASSWORD, timeout=self.PASSWORD_WAIT_MS)
-        except PlaywrightTimeoutError:
-            return False
-        page.fill(self.SEL_PASSWORD, self.credentials["password"])
-        page.click(self.SEL_PASSWORD_SUBMIT)
-        page.wait_for_timeout(1_500)
-        return True
-
-    def _type_code(self, page, code):
-        """Enter the 4-digit quick-login code into the code widget."""
-        # some widgets grab keystrokes without a focusable box
+    def _form_title(self, page):
+        """The heading of the current SSO step, or '' when none is shown."""
         with contextlib.suppress(Exception):
-            page.locator(self.SEL_CODE).first.click(timeout=5_000)
-        page.keyboard.type(code)
-        page.wait_for_timeout(1_000)
+            el = page.query_selector(self.SEL_FORM_TITLE)
+            if el is not None:
+                return (el.inner_text() or "").strip()
+        return ""
 
-    def _set_quick_login_code(self, page, code):
-        """Set our quick-login code on the bank's "Придумайте код" screen so
-        future syncs skip the SMS. The submit button is optional (some layouts
-        auto-advance), so a genuinely-absent button times out and is skipped —
-        but real click failures surface. Some flows then ask for the code a
-        second time to confirm; enter it again when the screen is still shown."""
-        self._type_code(page, code)
+    def _submit(self, page):
+        """Click the step's submit button. Some layouts auto-advance as the last
+        digit lands, so a genuinely-absent button times out and is skipped — but
+        a real click failure (detached node, intercepted click) still surfaces."""
         with contextlib.suppress(PlaywrightTimeoutError):
-            page.locator(f"text={self.TEXT_SET_CODE_SUBMIT}").first.click(timeout=3_000)
-            page.wait_for_timeout(1_000)
-            if self._has_text(page, self.TEXT_SET_CODE):
-                self._type_code(page, code)
+            page.locator(self.SEL_SUBMIT).first.click(timeout=5_000)
+
+    def _type_pin(self, page, digits):
+        """Type into the 4-box pin widget used for both the SMS code and the
+        quick-login code. Focusing the first box and typing lets it auto-advance
+        across the boxes."""
+        with contextlib.suppress(Exception):
+            page.locator(self.SEL_PIN).first.click(timeout=5_000)
+        page.keyboard.type(digits)
+        page.wait_for_timeout(1_000)
 
     def _dismiss_interstitials(self, page):
         for label in ("Не сейчас", "Пропустить", "Позже", "Закрыть"):
@@ -311,77 +287,65 @@ class TBankPlaywrightConnector(Connector):
         self._shot(page, "01-open")
         if self._is_logged_in(page):
             return
-
-        # Known device, expired session: quick-login with the stored code.
-        code = self.credentials.get("code")
-        if code and self._has_text(page, self.TEXT_ENTER_CODE):
-            self._type_code(page, code)
-            self._shot(page, "02-quicklogin")
-            if self._is_logged_in(page):
-                return
-
-        # Full login on a fresh device.
-        page.goto(self.URL_LOGIN, wait_until="domcontentloaded")
-        self._shot(page, "03-login")
-        page.fill(self.SEL_PHONE, self.credentials["phone"])
-        page.click(self.SEL_PHONE_SUBMIT)
-        # the id.tbank.ru SSO paints the password screen client-side a beat after
-        # the phone step, and on a slow (prod) transition it lands well after any
-        # fixed delay. Waiting for the field — instead of sleeping then querying
-        # once — is what stops the password step from being silently skipped,
-        # which otherwise stalls the login on the password screen after the OTP.
-        if self._enter_password(page):
-            self._shot(page, "04-after-password")
-        otp = self._ask_sms()
-        while True:
-            page.fill(self.SEL_SMS, otp)
-            # the OTP widget usually auto-submits as the digits land; a submit
-            # button only exists on some variants of the screen, so a missing
-            # button times out and is skipped — but real click failures
-            # (detached node, intercepted click, closed page) must surface
-            with contextlib.suppress(PlaywrightTimeoutError):
-                page.locator(self.SEL_SMS_SUBMIT).first.click(timeout=5_000)
-            page.wait_for_timeout(2_000)
-            self._shot(page, "05-after-sms")
-            if not self._otp_rejected(page):
-                break
-            otp = self._ask_sms("the bank rejected the code — check it and try again")
-
-        # Right after the OTP the bank offers to set a quick-login code — set ours
-        # (and remember it) so future syncs skip the SMS, instead of skipping it.
-        if code and self._has_text(page, self.TEXT_SET_CODE):
-            self._set_quick_login_code(page, code)
-            self._shot(page, "06-set-code")
-        else:
-            self._dismiss_interstitials(page)
-
-        # The session is live once the OTP is accepted, but the bank may park
-        # us on any number of post-login screens (code confirmations, promos)
-        # instead of redirecting. Wait briefly, then force our way home rather
-        # than trying to know every screen.
-        with contextlib.suppress(Exception):
-            page.wait_for_url(self.URL_LOGGED_IN_MARKER, timeout=15_000)
-        if not self._is_logged_in(page):
-            self._dismiss_interstitials(page)
-            page.goto(self.URL_HOME, wait_until="domcontentloaded")
-            page.wait_for_timeout(2_500)
-            # the redirect can re-park us on a code prompt: either the quick-login
-            # "enter code" screen or a "set a code" screen the bank insists on
-            # before letting us through. Handle both — the session is already live.
-            if code and self._has_text(page, self.TEXT_ENTER_CODE):
-                self._type_code(page, code)
-                page.wait_for_timeout(2_000)
-            elif code and self._has_text(page, self.TEXT_SET_CODE):
-                self._set_quick_login_code(page, code)
-                page.wait_for_timeout(2_000)
-            # if a prompt still blocks the way, skip it rather than fail the login
-            if not self._is_logged_in(page):
-                self._dismiss_interstitials(page)
-                page.goto(self.URL_HOME, wait_until="domcontentloaded")
-                page.wait_for_timeout(2_000)
-        self._shot(page, "07-logged-in")
+        # a cold visit to /mybank bounces to id.tbank.ru; make sure we're on the
+        # SSO before driving it (goto is a no-op if we're already there)
+        if not (page.query_selector(self.SEL_PHONE) or page.query_selector(self.SEL_PIN)):
+            page.goto(self.URL_LOGIN, wait_until="domcontentloaded")
+            page.wait_for_timeout(1_500)
+        self._shot(page, "02-login")
+        self._drive_sso_login(page)
+        self._shot(page, "09-logged-in")
         if not self._is_logged_in(page):
             raise ConnectorError("login did not reach the bank home page")
+
+    def _drive_sso_login(self, page):
+        """Walk the id.tbank.ru SSO one step at a time until we reach /mybank.
+
+        Each iteration reacts to whatever step is on screen — phone, password, or
+        the pin widget (set-a-code / enter-a-code) — so a slow render or a
+        reordered step just means another pass, never a skipped field."""
+        code = self.credentials.get("code")
+        entered_phone = False
+        tried_quick = False
+        otp_prompt = "enter the code sent by the bank"
+        for step in range(self.LOGIN_STEPS):
+            if self._is_logged_in(page):
+                return
+            if page.query_selector(self.SEL_PHONE):
+                page.fill(self.SEL_PHONE, self.credentials["phone"])
+                self._submit(page)
+                entered_phone = True
+            elif page.query_selector(self.SEL_PASSWORD):
+                page.fill(self.SEL_PASSWORD, self.credentials["password"])
+                self._submit(page)
+            elif page.query_selector(self.SEL_PIN):
+                title = self._form_title(page)
+                if self.TITLE_SET_CODE in title:
+                    # the bank wants us to create a quick-login code — set the one
+                    # the server generated (and stored) so future syncs skip SMS
+                    self._type_pin(page, code)
+                    self._submit(page)
+                elif code and not entered_phone and not tried_quick:
+                    # trusted device, expired session: quick-login with the stored
+                    # code, no SMS round-trip. Try it once — if it's stale the same
+                    # screen stays up and we fall through to the SMS path below.
+                    self._type_pin(page, code)
+                    self._submit(page)
+                    tried_quick = True
+                else:
+                    # a one-time SMS code — ask the user (re-ask on rejection, i.e.
+                    # when this same screen is still up on the next pass)
+                    otp = self._ask_sms(otp_prompt)
+                    otp_prompt = "the bank rejected the code — check it and try again"
+                    self._type_pin(page, otp)
+                    self._submit(page)
+            else:
+                # an interstitial (promo, "not now") between steps — clear it and
+                # nudge back toward home
+                self._dismiss_interstitials(page)
+                page.goto(self.URL_HOME, wait_until="domcontentloaded")
+            page.wait_for_timeout(self.STEP_PAUSE_MS)
+            self._shot(page, f"step-{step:02d}")
 
     def _download_and_parse(self, page, since):
         page.goto(self.URL_OPERATIONS, wait_until="domcontentloaded")
