@@ -697,7 +697,7 @@ a {
     position: absolute;
     inset: 0;
     width: var(--w);
-    background: var(--m-text);
+    background: var(--m-text-dim);
     border-radius: 100px;
 }
 
@@ -729,7 +729,7 @@ a {
 }
 
 .bento__tile_dark {
-    background: var(--m-surface-raised);
+    background: var(--m-surface);
     border-color: var(--m-border);
 }
 
