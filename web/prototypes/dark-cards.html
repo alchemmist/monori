@@ -1,0 +1,539 @@
+<!doctype html>
+<html lang="ru">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>monori — dark card treatments</title>
+        <style>
+            /* Shared dark-theme tokens (current main), plus per-variant card overrides.
+               Each .stage below overrides --page-bg / --card-bg / --card-border /
+               --card-radius so the same mini-dashboard can be compared side by side. */
+            :root {
+                --m-surface: #0f0f0f;
+                --m-surface-raised: #131312;
+                --m-text: #fafafa;
+                --m-text-dim: #a3a29d;
+                --m-text-faint: #6b6a65;
+                --m-accent: #ff7a3c;
+                --m-income: #4ade80;
+                --m-radius: 6px;
+                font-family:
+                    "Inter",
+                    -apple-system,
+                    BlinkMacSystemFont,
+                    "Segoe UI",
+                    sans-serif;
+            }
+
+            * {
+                box-sizing: border-box;
+            }
+
+            body {
+                margin: 0;
+                background: #050505;
+                color: var(--m-text);
+                -webkit-font-smoothing: antialiased;
+                padding: 32px 28px 80px;
+            }
+
+            .page-title {
+                font-size: 22px;
+                font-weight: 800;
+                letter-spacing: -0.3px;
+                margin: 0 0 6px;
+            }
+
+            .page-sub {
+                color: var(--m-text-dim);
+                font-size: 13.5px;
+                margin: 0 0 28px;
+                max-width: 70ch;
+                line-height: 1.6;
+            }
+
+            .num {
+                font-variant-numeric: tabular-nums;
+            }
+
+            /* ---- variant frame ---- */
+            .variant {
+                margin-bottom: 26px;
+                border: 1px solid #1c1c1a;
+                border-radius: 10px;
+                overflow: hidden;
+            }
+
+            .variant__head {
+                display: flex;
+                align-items: baseline;
+                gap: 12px;
+                padding: 12px 16px;
+                background: #0c0c0c;
+                border-bottom: 1px solid #1c1c1a;
+            }
+
+            .variant__name {
+                font-size: 13px;
+                font-weight: 700;
+            }
+
+            .variant__badge {
+                font-size: 10px;
+                font-weight: 700;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+                color: var(--m-accent);
+                border: 1px solid color-mix(in srgb, var(--m-accent) 40%, transparent);
+                border-radius: 4px;
+                padding: 1px 6px;
+            }
+
+            .variant__tokens {
+                margin-left: auto;
+                font-family: ui-monospace, "SF Mono", monospace;
+                font-size: 11px;
+                color: var(--m-text-faint);
+            }
+
+            /* ---- the mini dashboard rendered inside each variant ---- */
+            .stage {
+                background: var(--page-bg);
+                padding: 20px;
+            }
+
+            .card {
+                background: var(--card-bg);
+                border: 1px solid var(--card-border);
+                border-radius: var(--card-radius, var(--m-radius));
+            }
+
+            .balance {
+                padding: 16px 18px;
+                margin-bottom: 14px;
+                display: flex;
+                align-items: center;
+                gap: 12px;
+            }
+
+            .balance__badge {
+                width: 30px;
+                height: 30px;
+                border-radius: 6px;
+                background: #ffdd2d;
+                color: #111;
+                font-weight: 800;
+                display: grid;
+                place-items: center;
+                font-size: 15px;
+            }
+
+            .balance__name {
+                color: var(--m-text-dim);
+                font-size: 13px;
+            }
+
+            .balance__value {
+                font-size: 20px;
+                font-weight: 800;
+                margin-top: 2px;
+            }
+
+            .kpi-row {
+                display: grid;
+                grid-template-columns: repeat(4, 1fr);
+                gap: 12px;
+                margin-bottom: 14px;
+            }
+
+            .kpi {
+                padding: 14px 16px;
+            }
+
+            .kpi__label {
+                font-size: 11px;
+                font-weight: 600;
+                letter-spacing: 0.7px;
+                text-transform: uppercase;
+                color: var(--m-text-faint);
+                margin-bottom: 6px;
+            }
+
+            .kpi__value {
+                font-size: 20px;
+                font-weight: 700;
+            }
+
+            .kpi__value_pos {
+                color: var(--m-income);
+            }
+
+            .kpi__sub {
+                font-size: 12px;
+                color: var(--m-text-dim);
+                margin-top: 3px;
+            }
+
+            .chart {
+                padding: 16px 18px;
+            }
+
+            .chart__title {
+                font-size: 14px;
+                font-weight: 600;
+                margin-bottom: 14px;
+            }
+
+            .chart__bars {
+                display: flex;
+                align-items: flex-end;
+                gap: 6px;
+                height: 120px;
+            }
+
+            .chart__bars i {
+                flex: 1;
+                border-radius: 2px 2px 0 0;
+                background: color-mix(in srgb, var(--m-income) 55%, transparent);
+            }
+
+            .chart__bars i:nth-child(2n) {
+                background: color-mix(in srgb, var(--m-accent) 50%, transparent);
+            }
+
+            @media (width <= 720px) {
+                .kpi-row {
+                    grid-template-columns: repeat(2, 1fr);
+                }
+            }
+        </style>
+    </head>
+    <body>
+        <h1 class="page-title">Тёмная тема — варианты карточек</h1>
+        <p class="page-sub">
+            Один и тот же кусок дашборда (баланс, KPI-ряд, карточка графика) в шести обработках
+            карточек. Фон страницы, заливка карточки и бордер меняются от варианта к варианту —
+            смотри, какой вид «естественнее» и не читается как жёсткие чёрные блоки. Открой в тёмной
+            комнате / на нужном мониторе.
+        </p>
+
+        <!-- 0. current main -->
+        <section
+            class="variant"
+            style="--page-bg: #0a0a0a; --card-bg: #0e0e0d; --card-border: #171716"
+        >
+            <div class="variant__head">
+                <span class="variant__name">0 · Текущий (main)</span>
+                <span class="variant__tokens">bg #0a0a0a · card #0e0e0d · border #171716</span>
+            </div>
+            <div class="stage">
+                <div class="card balance">
+                    <span class="balance__badge">T</span>
+                    <div>
+                        <div class="balance__name">Black</div>
+                        <div class="balance__value num">24 769 ₽</div>
+                    </div>
+                </div>
+                <div class="kpi-row">
+                    <div class="card kpi">
+                        <div class="kpi__label">Net year to date</div>
+                        <div class="kpi__value kpi__value_pos num">86 859 ₽</div>
+                        <div class="kpi__sub">2026</div>
+                    </div>
+                    <div class="card kpi">
+                        <div class="kpi__label">Savings rate</div>
+                        <div class="kpi__value kpi__value_pos num">8 %</div>
+                        <div class="kpi__sub">last 12 months</div>
+                    </div>
+                    <div class="card kpi">
+                        <div class="kpi__label">Avg monthly spend</div>
+                        <div class="kpi__value num">71 715 ₽</div>
+                        <div class="kpi__sub">last 12 months</div>
+                    </div>
+                    <div class="card kpi">
+                        <div class="kpi__label">Spent this month</div>
+                        <div class="kpi__value num">18 245 ₽</div>
+                        <div class="kpi__sub">vs 141 678 ₽ last</div>
+                    </div>
+                </div>
+                <div class="card chart">
+                    <div class="chart__title">Income vs expenses</div>
+                    <div class="chart__bars">
+                        <i style="height: 30%"></i><i style="height: 45%"></i
+                        ><i style="height: 25%"></i><i style="height: 60%"></i
+                        ><i style="height: 40%"></i><i style="height: 75%"></i
+                        ><i style="height: 55%"></i><i style="height: 90%"></i
+                        ><i style="height: 65%"></i><i style="height: 100%"></i
+                        ><i style="height: 70%"></i><i style="height: 85%"></i>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- A. soft elevated -->
+        <section
+            class="variant"
+            style="--page-bg: #0a0a0a; --card-bg: #151412; --card-border: #1a1917"
+        >
+            <div class="variant__head">
+                <span class="variant__name">A · Мягко приподнятые</span>
+                <span class="variant__badge">рекоменд.</span>
+                <span class="variant__tokens">bg #0a0a0a · card #151412 · border #1a1917</span>
+            </div>
+            <div class="stage">
+                <div class="card balance">
+                    <span class="balance__badge">T</span>
+                    <div>
+                        <div class="balance__name">Black</div>
+                        <div class="balance__value num">24 769 ₽</div>
+                    </div>
+                </div>
+                <div class="kpi-row">
+                    <div class="card kpi">
+                        <div class="kpi__label">Net year to date</div>
+                        <div class="kpi__value kpi__value_pos num">86 859 ₽</div>
+                        <div class="kpi__sub">2026</div>
+                    </div>
+                    <div class="card kpi">
+                        <div class="kpi__label">Savings rate</div>
+                        <div class="kpi__value kpi__value_pos num">8 %</div>
+                        <div class="kpi__sub">last 12 months</div>
+                    </div>
+                    <div class="card kpi">
+                        <div class="kpi__label">Avg monthly spend</div>
+                        <div class="kpi__value num">71 715 ₽</div>
+                        <div class="kpi__sub">last 12 months</div>
+                    </div>
+                    <div class="card kpi">
+                        <div class="kpi__label">Spent this month</div>
+                        <div class="kpi__value num">18 245 ₽</div>
+                        <div class="kpi__sub">vs 141 678 ₽ last</div>
+                    </div>
+                </div>
+                <div class="card chart">
+                    <div class="chart__title">Income vs expenses</div>
+                    <div class="chart__bars">
+                        <i style="height: 30%"></i><i style="height: 45%"></i
+                        ><i style="height: 25%"></i><i style="height: 60%"></i
+                        ><i style="height: 40%"></i><i style="height: 75%"></i
+                        ><i style="height: 55%"></i><i style="height: 90%"></i
+                        ><i style="height: 65%"></i><i style="height: 100%"></i
+                        ><i style="height: 70%"></i><i style="height: 85%"></i>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- B. elevated + hairline -->
+        <section
+            class="variant"
+            style="--page-bg: #0a0a0a; --card-bg: #141312; --card-border: #242320"
+        >
+            <div class="variant__head">
+                <span class="variant__name">B · Приподнятые + чёткий волосок</span>
+                <span class="variant__tokens">bg #0a0a0a · card #141312 · border #242320</span>
+            </div>
+            <div class="stage">
+                <div class="card balance">
+                    <span class="balance__badge">T</span>
+                    <div>
+                        <div class="balance__name">Black</div>
+                        <div class="balance__value num">24 769 ₽</div>
+                    </div>
+                </div>
+                <div class="kpi-row">
+                    <div class="card kpi">
+                        <div class="kpi__label">Net year to date</div>
+                        <div class="kpi__value kpi__value_pos num">86 859 ₽</div>
+                        <div class="kpi__sub">2026</div>
+                    </div>
+                    <div class="card kpi">
+                        <div class="kpi__label">Savings rate</div>
+                        <div class="kpi__value kpi__value_pos num">8 %</div>
+                        <div class="kpi__sub">last 12 months</div>
+                    </div>
+                    <div class="card kpi">
+                        <div class="kpi__label">Avg monthly spend</div>
+                        <div class="kpi__value num">71 715 ₽</div>
+                        <div class="kpi__sub">last 12 months</div>
+                    </div>
+                    <div class="card kpi">
+                        <div class="kpi__label">Spent this month</div>
+                        <div class="kpi__value num">18 245 ₽</div>
+                        <div class="kpi__sub">vs 141 678 ₽ last</div>
+                    </div>
+                </div>
+                <div class="card chart">
+                    <div class="chart__title">Income vs expenses</div>
+                    <div class="chart__bars">
+                        <i style="height: 30%"></i><i style="height: 45%"></i
+                        ><i style="height: 25%"></i><i style="height: 60%"></i
+                        ><i style="height: 40%"></i><i style="height: 75%"></i
+                        ><i style="height: 55%"></i><i style="height: 90%"></i
+                        ><i style="height: 65%"></i><i style="height: 100%"></i
+                        ><i style="height: 70%"></i><i style="height: 85%"></i>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- C. borderless elevated -->
+        <section
+            class="variant"
+            style="--page-bg: #0a0a0a; --card-bg: #161513; --card-border: transparent"
+        >
+            <div class="variant__head">
+                <span class="variant__name">C · Без бордера, только заливка</span>
+                <span class="variant__tokens">bg #0a0a0a · card #161513 · border нет</span>
+            </div>
+            <div class="stage">
+                <div class="card balance">
+                    <span class="balance__badge">T</span>
+                    <div>
+                        <div class="balance__name">Black</div>
+                        <div class="balance__value num">24 769 ₽</div>
+                    </div>
+                </div>
+                <div class="kpi-row">
+                    <div class="card kpi">
+                        <div class="kpi__label">Net year to date</div>
+                        <div class="kpi__value kpi__value_pos num">86 859 ₽</div>
+                        <div class="kpi__sub">2026</div>
+                    </div>
+                    <div class="card kpi">
+                        <div class="kpi__label">Savings rate</div>
+                        <div class="kpi__value kpi__value_pos num">8 %</div>
+                        <div class="kpi__sub">last 12 months</div>
+                    </div>
+                    <div class="card kpi">
+                        <div class="kpi__label">Avg monthly spend</div>
+                        <div class="kpi__value num">71 715 ₽</div>
+                        <div class="kpi__sub">last 12 months</div>
+                    </div>
+                    <div class="card kpi">
+                        <div class="kpi__label">Spent this month</div>
+                        <div class="kpi__value num">18 245 ₽</div>
+                        <div class="kpi__sub">vs 141 678 ₽ last</div>
+                    </div>
+                </div>
+                <div class="card chart">
+                    <div class="chart__title">Income vs expenses</div>
+                    <div class="chart__bars">
+                        <i style="height: 30%"></i><i style="height: 45%"></i
+                        ><i style="height: 25%"></i><i style="height: 60%"></i
+                        ><i style="height: 40%"></i><i style="height: 75%"></i
+                        ><i style="height: 55%"></i><i style="height: 90%"></i
+                        ><i style="height: 65%"></i><i style="height: 100%"></i
+                        ><i style="height: 70%"></i><i style="height: 85%"></i>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- D. seamless -->
+        <section
+            class="variant"
+            style="--page-bg: #0a0a0a; --card-bg: #0d0d0c; --card-border: #131211"
+        >
+            <div class="variant__head">
+                <span class="variant__name">D · Бесшовные (почти в цвет фона)</span>
+                <span class="variant__tokens">bg #0a0a0a · card #0d0d0c · border #131211</span>
+            </div>
+            <div class="stage">
+                <div class="card balance">
+                    <span class="balance__badge">T</span>
+                    <div>
+                        <div class="balance__name">Black</div>
+                        <div class="balance__value num">24 769 ₽</div>
+                    </div>
+                </div>
+                <div class="kpi-row">
+                    <div class="card kpi">
+                        <div class="kpi__label">Net year to date</div>
+                        <div class="kpi__value kpi__value_pos num">86 859 ₽</div>
+                        <div class="kpi__sub">2026</div>
+                    </div>
+                    <div class="card kpi">
+                        <div class="kpi__label">Savings rate</div>
+                        <div class="kpi__value kpi__value_pos num">8 %</div>
+                        <div class="kpi__sub">last 12 months</div>
+                    </div>
+                    <div class="card kpi">
+                        <div class="kpi__label">Avg monthly spend</div>
+                        <div class="kpi__value num">71 715 ₽</div>
+                        <div class="kpi__sub">last 12 months</div>
+                    </div>
+                    <div class="card kpi">
+                        <div class="kpi__label">Spent this month</div>
+                        <div class="kpi__value num">18 245 ₽</div>
+                        <div class="kpi__sub">vs 141 678 ₽ last</div>
+                    </div>
+                </div>
+                <div class="card chart">
+                    <div class="chart__title">Income vs expenses</div>
+                    <div class="chart__bars">
+                        <i style="height: 30%"></i><i style="height: 45%"></i
+                        ><i style="height: 25%"></i><i style="height: 60%"></i
+                        ><i style="height: 40%"></i><i style="height: 75%"></i
+                        ><i style="height: 55%"></i><i style="height: 90%"></i
+                        ><i style="height: 65%"></i><i style="height: 100%"></i
+                        ><i style="height: 70%"></i><i style="height: 85%"></i>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- E. inset on lifted canvas -->
+        <section
+            class="variant"
+            style="--page-bg: #141311; --card-bg: #0c0c0b; --card-border: #1c1b19"
+        >
+            <div class="variant__head">
+                <span class="variant__name">E · Тёмные карточки на светлом холсте (inset)</span>
+                <span class="variant__tokens">bg #141311 · card #0c0c0b · border #1c1b19</span>
+            </div>
+            <div class="stage">
+                <div class="card balance">
+                    <span class="balance__badge">T</span>
+                    <div>
+                        <div class="balance__name">Black</div>
+                        <div class="balance__value num">24 769 ₽</div>
+                    </div>
+                </div>
+                <div class="kpi-row">
+                    <div class="card kpi">
+                        <div class="kpi__label">Net year to date</div>
+                        <div class="kpi__value kpi__value_pos num">86 859 ₽</div>
+                        <div class="kpi__sub">2026</div>
+                    </div>
+                    <div class="card kpi">
+                        <div class="kpi__label">Savings rate</div>
+                        <div class="kpi__value kpi__value_pos num">8 %</div>
+                        <div class="kpi__sub">last 12 months</div>
+                    </div>
+                    <div class="card kpi">
+                        <div class="kpi__label">Avg monthly spend</div>
+                        <div class="kpi__value num">71 715 ₽</div>
+                        <div class="kpi__sub">last 12 months</div>
+                    </div>
+                    <div class="card kpi">
+                        <div class="kpi__label">Spent this month</div>
+                        <div class="kpi__value num">18 245 ₽</div>
+                        <div class="kpi__sub">vs 141 678 ₽ last</div>
+                    </div>
+                </div>
+                <div class="card chart">
+                    <div class="chart__title">Income vs expenses</div>
+                    <div class="chart__bars">
+                        <i style="height: 30%"></i><i style="height: 45%"></i
+                        ><i style="height: 25%"></i><i style="height: 60%"></i
+                        ><i style="height: 40%"></i><i style="height: 75%"></i
+                        ><i style="height: 55%"></i><i style="height: 90%"></i
+                        ><i style="height: 65%"></i><i style="height: 100%"></i
+                        ><i style="height: 70%"></i><i style="height: 85%"></i>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </body>
+</html>
