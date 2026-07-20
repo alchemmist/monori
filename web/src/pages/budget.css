@@ -276,3 +276,19 @@
         min-width: 0;
     }
 }
+
+/* dark: the grid lives inside a frosted card — its sticky header, group rows and
+   hover become translucent glass lifts instead of opaque near-black bars over it.
+   the sticky header keeps its own blur so scrolled rows don't bleed through */
+.g-root_theme_dark .budget-grid th {
+    background: rgb(255 255 255 / 6%);
+    backdrop-filter: blur(7px);
+}
+
+.g-root_theme_dark .group-row td {
+    background: rgb(255 255 255 / 6%);
+}
+
+.g-root_theme_dark .cat-row:hover {
+    background: rgb(255 255 255 / 9%);
+}
