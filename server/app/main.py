@@ -3,7 +3,7 @@
 import pathlib
 from typing import Annotated
 
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -27,7 +27,6 @@ app = FastAPI(title="monori", docs_url="/api-docs", redoc_url="/api-redoc")
 app.include_router(auth_router.router)
 
 STATIC_DIR = pathlib.Path(__file__).resolve().parent.parent / "static"
-DOCS_DIR = pathlib.Path(__file__).resolve().parent.parent / "docs-static"
 
 
 def _serve_spa(base: pathlib.Path, path: str):
@@ -64,21 +63,22 @@ def get_snapshot(user: Annotated[dict, Depends(current_user)]):
         c.close()
 
 
-if DOCS_DIR.is_dir():
-    app.mount("/docs/assets", StaticFiles(directory=DOCS_DIR / "assets"), name="docs-assets")
-
-    @app.get("/welcome")
-    @app.get("/docs")
-    @app.get("/docs/{path:path}")
-    def docs_site(path: str = ""):
-        # the docs bundle serves both the marketing landing (/welcome) and the
-        # documentation (/docs/*); its client router renders by full path
-        return _serve_spa(DOCS_DIR, path)
+# unknown /api/* paths must 404 as JSON, not fall through to the SPA index below
+# (declared after the real API routers so only unregistered paths reach it)
+@app.api_route(
+    "/api/{path:path}",
+    methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"],
+    include_in_schema=False,
+)
+def api_not_found(path: str):
+    raise HTTPException(status_code=404, detail="Not Found")
 
 
 if STATIC_DIR.is_dir():
     app.mount("/assets", StaticFiles(directory=STATIC_DIR / "assets"), name="assets")
 
+    # one SPA serves everything: the app, the marketing landing (/welcome) and
+    # the docs (/docs/*) — its client router renders by full path
     @app.get("/{path:path}")
     def spa(path: str):
         return _serve_spa(STATIC_DIR, path)

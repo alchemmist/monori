@@ -43,7 +43,6 @@ jobs:
                   cache: npm
                   cache-dependency-path: |
                       web/package-lock.json
-                      web-docs/package-lock.json
 
             - name: Setup uv
               uses: astral-sh/setup-uv@v5
@@ -53,11 +52,6 @@ jobs:
             - name: Install web deps
               run: npm ci
               working-directory: web
-
-            - name: Install docs deps
-              if: matrix.target == 'build' || matrix.target == 'lint'
-              run: npm ci
-              working-directory: web-docs
 
             - name: Install server deps
               run: uv sync
