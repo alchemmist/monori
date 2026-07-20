@@ -246,9 +246,17 @@ class TBankPlaywrightConnector(Connector):
         self._shot(page, "error")
 
     def _is_logged_in(self, page):
-        # the authenticated app lives under /mybank; the SSO login stays on
-        # id.tbank.ru/auth/step, so the path alone is trustworthy evidence
-        return "/mybank" in page.url
+        # the authenticated app lives under /mybank while the SSO login stays on
+        # id.tbank.ru/auth/step — but the bank can also re-park a code prompt over
+        # a /mybank URL, so require both: the /mybank path AND no login step still
+        # on screen, or the driver would stop early on a prompt it hasn't cleared
+        if "/mybank" not in page.url:
+            return False
+        return not (
+            page.query_selector(self.SEL_PHONE)
+            or page.query_selector(self.SEL_PASSWORD)
+            or page.query_selector(self.SEL_PIN)
+        )
 
     def _form_title(self, page):
         """The heading of the current SSO step, or '' when none is shown."""
@@ -296,7 +304,10 @@ class TBankPlaywrightConnector(Connector):
         self._drive_sso_login(page)
         self._shot(page, "09-logged-in")
         if not self._is_logged_in(page):
-            raise ConnectorError("login did not reach the bank home page")
+            # name the screen we're stuck on so the failure points at the real
+            # step (a wrong selector, an unhandled prompt) instead of being generic
+            where = self._form_title(page) or page.url or "unknown screen"
+            raise ConnectorError(f"login did not reach the bank home page (stuck on: {where})")
 
     def _drive_sso_login(self, page):
         """Walk the id.tbank.ru SSO one step at a time until we reach /mybank.

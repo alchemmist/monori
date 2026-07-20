@@ -252,6 +252,14 @@ def test_is_logged_in_is_true_only_on_mybank():
     assert c._is_logged_in(page) is False
 
 
+def test_is_logged_in_false_when_a_code_prompt_is_reparked_over_mybank():
+    c = _connector()
+    page = FakePage(scenario="fresh")
+    # the bank shows a pin (set/enter-code) prompt on a /mybank URL — not yet in
+    page.stage, page.url = "setcode", TB.URL_HOME
+    assert c._is_logged_in(page) is False
+
+
 def test_form_title_reads_heading_or_empty():
     c = _connector()
     page = FakePage(scenario="fresh")
