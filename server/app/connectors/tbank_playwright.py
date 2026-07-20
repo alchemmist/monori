@@ -160,6 +160,11 @@ class TBankPlaywrightConnector(Connector):
                     args=args,
                 )
                 page = context.pages[0] if context.pages else context.new_page()
+                # the authenticated /mybank SPA can take well over Playwright's
+                # default 30s to reach domcontentloaded (seen as a goto timeout on
+                # retry) — give navigations and actions the full login budget
+                page.set_default_navigation_timeout(self.LOGIN_TIMEOUT_MS)
+                page.set_default_timeout(self.LOGIN_TIMEOUT_MS)
                 try:
                     self._ensure_logged_in(page)
                     rows = self._download_and_parse(page, since)
@@ -336,8 +341,21 @@ class TBankPlaywrightConnector(Connector):
             self._dismiss_interstitials(page)
             page.goto(self.URL_HOME, wait_until="domcontentloaded")
             page.wait_for_timeout(2_500)
+            # the redirect can re-park us on a code prompt: either the quick-login
+            # "enter code" screen or a "set a code" screen the bank insists on
+            # before letting us through. Handle both — the session is already live.
             if code and self._has_text(page, self.TEXT_ENTER_CODE):
                 self._type_code(page, code)
+                page.wait_for_timeout(2_000)
+            elif code and self._has_text(page, self.TEXT_SET_CODE):
+                self._type_code(page, code)
+                with contextlib.suppress(PlaywrightTimeoutError):
+                    page.locator(f"text={self.TEXT_SET_CODE_SUBMIT}").first.click(timeout=3_000)
+                page.wait_for_timeout(2_000)
+            # if a prompt still blocks the way, skip it rather than fail the login
+            if not self._is_logged_in(page):
+                self._dismiss_interstitials(page)
+                page.goto(self.URL_HOME, wait_until="domcontentloaded")
                 page.wait_for_timeout(2_000)
         self._shot(page, "07-logged-in")
         if not self._is_logged_in(page):
