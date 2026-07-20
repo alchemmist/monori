@@ -57,16 +57,22 @@
 }
 
 /* ---------- DARK ---------- */
+/*
+ * "Aurora" dark theme: a deep violet-tinted canvas lit by a soft glow in the
+ * top-right (set on the body below), with frosted-glass cards that sit a step
+ * lighter than the canvas. Neutrals carry a faint violet cast; the orange
+ * accent and green/red money colors are unchanged.
+ */
 .g-root_theme_dark {
-    --m-bg: #0a0a0a;
-    --m-surface: #0f0f0f;
-    --m-surface-hover: #181817;
-    --m-surface-raised: #131312;
-    --m-border: #1c1c1a;
-    --m-border-soft: #161615;
-    --m-text: #fafafa;
-    --m-text-dim: #a3a29d;
-    --m-text-faint: #6b6a65;
+    --m-bg: #08070d;
+    --m-surface: #0d0b15;
+    --m-surface-hover: #191426;
+    --m-surface-raised: #141020;
+    --m-border: #221d31;
+    --m-border-soft: #191426;
+    --m-text: #f2f1f6;
+    --m-text-dim: #a3a0b0;
+    --m-text-faint: #6c6980;
     --m-accent: #ff7a3c;
     --m-accent-soft: #3a1e10;
     --m-income: #4ade80;
@@ -74,8 +80,9 @@
     --m-warning: #fbbf24;
     --m-income-soft: #16281c;
     --m-expense-soft: #331919;
-    --m-card-bg: #0e0e0d;
-    --m-card-border: #171716;
+    /* cards are frosted glass over the aurora canvas — a translucent white lift */
+    --m-card-bg: rgba(255, 255, 255, 0.04);
+    --m-card-border: rgba(255, 255, 255, 0.065);
     --m-sidebar-edge: var(--m-border);
 
     --g-color-base-brand: #ff7a3c;
@@ -102,6 +109,22 @@ body {
 
 #root {
     min-height: 100vh;
+}
+
+/* aurora canvas: a soft violet glow in the top-right, fixed to the viewport so
+   it reads as a lit backdrop rather than tiling on scroll (dark theme only) */
+body:has(.g-root_theme_dark) {
+    background: radial-gradient(120% 90% at 82% -12%, #17102a 0%, #0a0812 46%, #060509 100%);
+    background-attachment: fixed;
+}
+
+/* frosted-glass cards over the aurora: the translucent --m-card-bg is blurred
+   and lifted with a soft drop shadow so panels feel like glass, not black tiles */
+.g-root_theme_dark .card {
+    border-radius: 12px;
+    backdrop-filter: blur(7px);
+    -webkit-backdrop-filter: blur(7px);
+    box-shadow: 0 14px 34px -20px rgb(0 0 0 / 90%);
 }
 
 .num {
