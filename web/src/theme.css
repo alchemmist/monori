@@ -57,6 +57,7 @@
 }
 
 /* ---------- DARK ---------- */
+
 /*
  * "Aurora" dark theme: a deep violet-tinted canvas lit by a soft glow in the
  * top-right (set on the body below), with frosted-glass cards that sit a step
@@ -80,9 +81,10 @@
     --m-warning: #fbbf24;
     --m-income-soft: #16281c;
     --m-expense-soft: #331919;
+
     /* cards are frosted glass over the aurora canvas — a translucent white lift */
-    --m-card-bg: rgba(255, 255, 255, 0.04);
-    --m-card-border: rgba(255, 255, 255, 0.065);
+    --m-card-bg: rgb(255, 255, 255, 0.04);
+    --m-card-border: rgb(255, 255, 255, 0.065);
     --m-sidebar-edge: var(--m-border);
 
     --g-color-base-brand: #ff7a3c;
@@ -123,7 +125,6 @@ body:has(.g-root_theme_dark) {
 .g-root_theme_dark .card {
     border-radius: 12px;
     backdrop-filter: blur(7px);
-    -webkit-backdrop-filter: blur(7px);
     box-shadow: 0 14px 34px -20px rgb(0 0 0 / 90%);
 }
 

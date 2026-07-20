@@ -5,32 +5,87 @@
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <title>monori — C4 aurora, darker (real UI)</title>
         <style>
-            :root { --accent: #ff7a3c; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif; }
-            * { box-sizing: border-box; }
-            body { margin: 0; background: #060608; color: #f2f2f4; -webkit-font-smoothing: antialiased; padding: 32px 28px 80px; }
-            h1 { font-size: 22px; font-weight: 800; letter-spacing: -0.3px; margin: 0 0 6px; }
-            .sub { color: #a0a0aa; font-size: 13.5px; margin: 0 0 28px; max-width: 84ch; line-height: 1.6; }
-            .sub b { color: #f2f2f4; }
-            .grid { display: grid; gap: 24px; }
-            .v { border: 1px solid #1e1e22; border-radius: 12px; overflow: hidden; background: #0c0c0e; }
-            .v__head { display: flex; align-items: baseline; gap: 12px; padding: 12px 16px; border-bottom: 1px solid #1e1e22; }
-            .v__name { font-size: 14px; font-weight: 700; }
-            .v__badge {
-                font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;
-                color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
-                border-radius: 4px; padding: 1px 6px;
+            :root {
+                --accent: #ff7a3c;
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif;
             }
-            .v__tokens { margin-left: auto; font-family: ui-monospace, "SF Mono", monospace; font-size: 11px; color: #66666f; }
-            .v img { display: block; width: 100%; height: auto; }
+            * {
+                box-sizing: border-box;
+            }
+            body {
+                margin: 0;
+                background: #060608;
+                color: #f2f2f4;
+                -webkit-font-smoothing: antialiased;
+                padding: 32px 28px 80px;
+            }
+            h1 {
+                font-size: 22px;
+                font-weight: 800;
+                letter-spacing: -0.3px;
+                margin: 0 0 6px;
+            }
+            .sub {
+                color: #a0a0aa;
+                font-size: 13.5px;
+                margin: 0 0 28px;
+                max-width: 84ch;
+                line-height: 1.6;
+            }
+            .sub b {
+                color: #f2f2f4;
+            }
+            .grid {
+                display: grid;
+                gap: 24px;
+            }
+            .v {
+                border: 1px solid #1e1e22;
+                border-radius: 12px;
+                overflow: hidden;
+                background: #0c0c0e;
+            }
+            .v__head {
+                display: flex;
+                align-items: baseline;
+                gap: 12px;
+                padding: 12px 16px;
+                border-bottom: 1px solid #1e1e22;
+            }
+            .v__name {
+                font-size: 14px;
+                font-weight: 700;
+            }
+            .v__badge {
+                font-size: 10px;
+                font-weight: 700;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+                color: var(--accent);
+                border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+                border-radius: 4px;
+                padding: 1px 6px;
+            }
+            .v__tokens {
+                margin-left: auto;
+                font-family: ui-monospace, "SF Mono", monospace;
+                font-size: 11px;
+                color: #66666f;
+            }
+            .v img {
+                display: block;
+                width: 100%;
+                height: auto;
+            }
         </style>
     </head>
     <body>
         <h1>C4 «Aurora», уведённый темнее</h1>
         <p class="sub">
-            База — <b>C4</b>: фиолетовое свечение на холсте, карточки — матовое стекло. Принцип, который
-            ты назвала: <b>фон темнее элементов</b> (карточки светлее холста). Холст и секции сдвинуты
-            глубже в тёмное, свечение сохранено. Три градации глубины — выбери, и применю в
-            <code>theme.css</code> (web + web-docs). Реальный дашборд /demo.
+            База — <b>C4</b>: фиолетовое свечение на холсте, карточки — матовое стекло. Принцип,
+            который ты назвала: <b>фон темнее элементов</b> (карточки светлее холста). Холст и
+            секции сдвинуты глубже в тёмное, свечение сохранено. Три градации глубины — выбери, и
+            применю в <code>theme.css</code> (web + web-docs). Реальный дашборд /demo.
         </p>
         <div class="grid">
             <div class="v">
@@ -73,7 +128,9 @@
             <div class="v">
                 <div class="v__head">
                     <span class="v__name">C4-6 · pitch (фон и секции ещё темнее)</span>
-                    <span class="v__tokens">glow #080511 · base #000000 · bg #010102 · card 4.5%</span>
+                    <span class="v__tokens"
+                        >glow #080511 · base #000000 · bg #010102 · card 4.5%</span
+                    >
                 </div>
                 <img src="dark-cards/C4d6-pitch.png" alt="c4 pitch" />
             </div>
