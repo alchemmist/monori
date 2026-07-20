@@ -3,7 +3,7 @@
 import pathlib
 from typing import Annotated
 
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -61,6 +61,17 @@ def get_snapshot(user: Annotated[dict, Depends(current_user)]):
         return snapshot(c, user["id"])
     finally:
         c.close()
+
+
+# unknown /api/* paths must 404 as JSON, not fall through to the SPA index below
+# (declared after the real API routers so only unregistered paths reach it)
+@app.api_route(
+    "/api/{path:path}",
+    methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"],
+    include_in_schema=False,
+)
+def api_not_found(path: str):
+    raise HTTPException(status_code=404, detail="Not Found")
 
 
 if STATIC_DIR.is_dir():
