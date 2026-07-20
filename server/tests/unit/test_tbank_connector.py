@@ -340,6 +340,29 @@ def test_wrong_otp_reprompts_with_rejection_message():
     ]
 
 
+class _BlockedPage(FakePage):
+    """The bank shows its 'Доступ заблокирован' popup over the phone screen —
+    the driver must fail fast with that message, not loop re-entering the phone."""
+
+    def query_selector(self, selector):
+        if selector == TB.SEL_ACCESS_DENIED:
+            return object()
+        if selector == TB.SEL_ACCESS_DENIED_TITLE:
+            return FakeElement("Доступ заблокирован")
+        if selector == TB.SEL_ACCESS_DENIED_DESC:
+            return FakeElement("Попробуйте снова позже")
+        return super().query_selector(selector)
+
+
+def test_access_denied_popup_fails_fast_with_bank_message():
+    c = _connector()
+    page = _BlockedPage(scenario="fresh")
+    with pytest.raises(ConnectorError, match="blocked the login: Доступ заблокирован"):
+        c._ensure_logged_in(page)
+    # it stopped at the block, never entering the phone in a doomed loop
+    assert not any(a[0] == "fill" for a in page.log)
+
+
 class _SubmitClickPage:
     """A page whose submit-button click raises a chosen error — used to check
     that _submit swallows a missing-button timeout but surfaces a real failure."""

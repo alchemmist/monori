@@ -76,6 +76,12 @@ class TBankPlaywrightConnector(Connector):
     SEL_PIN = "[automation-id='pin-code-input-0']"
     SEL_SUBMIT = "[automation-id='button-submit']"
     SEL_FORM_TITLE = "[automation-id='form-title']"
+    # the bank's "Доступ заблокирован" popup (anti-automation / rate limit); it
+    # sits over the phone screen, so the driver must detect it and stop rather
+    # than re-entering the phone until the step loop is exhausted
+    SEL_ACCESS_DENIED = "[automation-id='access-denied-popup']"
+    SEL_ACCESS_DENIED_TITLE = "[automation-id='access-denied-title']"
+    SEL_ACCESS_DENIED_DESC = "[automation-id='access-denied-description']"
     # the operations page: a period switcher and an export dropdown whose format
     # items (CSV/Excel/PDF) only render once the dropdown is opened
     SEL_PERIOD_YEAR = "[data-qa-type='period-tab-Год']"
@@ -258,6 +264,23 @@ class TBankPlaywrightConnector(Connector):
             or page.query_selector(self.SEL_PIN)
         )
 
+    def _access_denied(self, page):
+        """The bank's "Доступ заблокирован" popup text when it's shown, else ''.
+        It blocks the phone screen (anti-automation / rate limit), so the driver
+        checks for it first and fails fast with the bank's own wording."""
+        with contextlib.suppress(Exception):
+            if page.query_selector(self.SEL_ACCESS_DENIED) is None:
+                return ""
+            parts = []
+            for sel in (self.SEL_ACCESS_DENIED_TITLE, self.SEL_ACCESS_DENIED_DESC):
+                el = page.query_selector(sel)
+                if el is not None:
+                    text = " ".join((el.inner_text() or "").split())
+                    if text:
+                        parts.append(text)
+            return " — ".join(parts) or "access denied"
+        return ""
+
     def _form_title(self, page):
         """The heading of the current SSO step, or '' when none is shown."""
         with contextlib.suppress(Exception):
@@ -322,6 +345,9 @@ class TBankPlaywrightConnector(Connector):
         for step in range(self.LOGIN_STEPS):
             if self._is_logged_in(page):
                 return
+            blocked = self._access_denied(page)
+            if blocked:
+                raise ConnectorError(f"the bank blocked the login: {blocked}")
             if page.query_selector(self.SEL_PHONE):
                 page.fill(self.SEL_PHONE, self.credentials["phone"])
                 self._submit(page)
