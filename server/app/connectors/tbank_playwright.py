@@ -84,6 +84,9 @@ class TBankPlaywrightConnector(Connector):
     TEXTS_OTP_REJECTED = ("Неверный код", "Код введён неверно", "Неправильный код")
 
     LOGIN_TIMEOUT_MS = 45_000
+    # how long to wait for the SSO password screen to render after the phone step
+    # before deciding this flow has no password step and falling through
+    PASSWORD_WAIT_MS = 20_000
 
     def __init__(self, credentials, session=None):
         super().__init__(credentials, session)
@@ -260,6 +263,20 @@ class TBankPlaywrightConnector(Connector):
     def _otp_rejected(self, page):
         return any(self._has_text(page, t) for t in self.TEXTS_OTP_REJECTED)
 
+    def _enter_password(self, page):
+        """Wait for the SSO password screen, then fill and submit it. Waiting for
+        the field (rather than a fixed sleep followed by a single query) is what
+        makes the step reliable on slow transitions; a genuinely password-less
+        flow just times out here and falls through to the OTP."""
+        try:
+            page.wait_for_selector(self.SEL_PASSWORD, timeout=self.PASSWORD_WAIT_MS)
+        except PlaywrightTimeoutError:
+            return False
+        page.fill(self.SEL_PASSWORD, self.credentials["password"])
+        page.click(self.SEL_PASSWORD_SUBMIT)
+        page.wait_for_timeout(1_500)
+        return True
+
     def _type_code(self, page, code):
         """Enter the 4-digit quick-login code into the code widget."""
         # some widgets grab keystrokes without a focusable box
@@ -308,10 +325,12 @@ class TBankPlaywrightConnector(Connector):
         self._shot(page, "03-login")
         page.fill(self.SEL_PHONE, self.credentials["phone"])
         page.click(self.SEL_PHONE_SUBMIT)
-        page.wait_for_timeout(1_500)
-        if page.query_selector(self.SEL_PASSWORD):
-            page.fill(self.SEL_PASSWORD, self.credentials["password"])
-            page.click(self.SEL_PASSWORD_SUBMIT)
+        # the id.tbank.ru SSO paints the password screen client-side a beat after
+        # the phone step, and on a slow (prod) transition it lands well after any
+        # fixed delay. Waiting for the field — instead of sleeping then querying
+        # once — is what stops the password step from being silently skipped,
+        # which otherwise stalls the login on the password screen after the OTP.
+        if self._enter_password(page):
             self._shot(page, "04-after-password")
         otp = self._ask_sms()
         while True:
