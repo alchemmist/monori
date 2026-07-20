@@ -279,10 +279,11 @@
 
 /* dark: the grid lives inside a frosted card — its sticky header, group rows and
    hover become translucent glass lifts instead of opaque near-black bars over it.
-   the sticky header keeps its own blur so scrolled rows don't bleed through */
+   the header stays opaque enough to hide rows scrolling under it without a
+   backdrop blur (which would escape the card's overflow clip and square its top
+   corners) */
 .g-root_theme_dark .budget-grid th {
     background: rgb(255 255 255 / 6%);
-    backdrop-filter: blur(7px);
 }
 
 .g-root_theme_dark .group-row td {
