@@ -262,6 +262,8 @@ class TBankPlaywrightConnector(Connector):
                 page.wait_for_timeout(1_000)
 
     def _ensure_logged_in(self, page):
+        from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
+
         page.goto(self.URL_HOME, wait_until="domcontentloaded")
         page.wait_for_timeout(1_500)
         self._shot(page, "01-open")
@@ -290,8 +292,10 @@ class TBankPlaywrightConnector(Connector):
         while True:
             page.fill(self.SEL_SMS, otp)
             # the OTP widget usually auto-submits as the digits land; a submit
-            # button only exists on some variants of the screen
-            with contextlib.suppress(Exception):
+            # button only exists on some variants of the screen, so a missing
+            # button times out and is skipped — but real click failures
+            # (detached node, intercepted click, closed page) must surface
+            with contextlib.suppress(PlaywrightTimeoutError):
                 page.locator(self.SEL_SMS_SUBMIT).first.click(timeout=5_000)
             page.wait_for_timeout(2_000)
             self._shot(page, "05-after-sms")
@@ -303,8 +307,9 @@ class TBankPlaywrightConnector(Connector):
         # (and remember it) so future syncs skip the SMS, instead of skipping it.
         if code and self._has_text(page, self.TEXT_SET_CODE):
             self._type_code(page, code)
-            # layout varies; screenshots show what happened
-            with contextlib.suppress(Exception):
+            # the submit button is optional here too; skip it only when it is
+            # genuinely absent (times out), not on real interaction failures
+            with contextlib.suppress(PlaywrightTimeoutError):
                 page.locator(f"text={self.TEXT_SET_CODE_SUBMIT}").first.click(timeout=3_000)
                 page.wait_for_timeout(1_000)
                 # some flows confirm the code by entering it a second time

@@ -471,6 +471,7 @@ def _install_fake_playwright(monkeypatch, page):
 
     module = types.ModuleType("playwright.sync_api")
     module.sync_playwright = lambda: FakeCtxMgr()
+    module.TimeoutError = type("TimeoutError", (Exception,), {})
     monkeypatch.setitem(sys.modules, "playwright", types.ModuleType("playwright"))
     monkeypatch.setitem(sys.modules, "playwright.sync_api", module)
 
