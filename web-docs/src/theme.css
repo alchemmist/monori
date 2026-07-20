@@ -57,10 +57,10 @@
 .g-root_theme_dark {
     --m-bg: #0a0a0a;
     --m-surface: #0f0f0f;
-    --m-surface-hover: #1a1a19;
-    --m-surface-raised: #171716;
-    --m-border: #262624;
-    --m-border-soft: #1e1e1c;
+    --m-surface-hover: #181817;
+    --m-surface-raised: #131312;
+    --m-border: #1c1c1a;
+    --m-border-soft: #161615;
     --m-text: #fafafa;
     --m-text-dim: #a3a29d;
     --m-text-faint: #6b6a65;
