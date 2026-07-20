@@ -2,12 +2,9 @@ pass.txt
 migration/raw/
 migration/out/
 server/static/
-server/docs-static/
 server/data/
 web/node_modules/
 web/dist/
-web-docs/node_modules/
-web-docs/dist/
 server/.venv/
 server/uv.lock
 __pycache__/
