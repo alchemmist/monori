@@ -729,12 +729,12 @@ a {
 }
 
 .bento__tile_dark {
-    background: var(--m-text);
-    border-color: var(--m-text);
+    background: var(--m-surface-raised);
+    border-color: var(--m-border);
 }
 
 .bento__tile_dark .bento__title {
-    color: var(--m-bg);
+    color: var(--m-text);
 }
 
 .bento__code {
@@ -742,12 +742,12 @@ a {
     font-family: var(--g-font-family-monospace, ui-monospace, monospace);
     font-size: 12px;
     line-height: 1.75;
-    color: color-mix(in srgb, var(--m-bg) 80%, var(--m-text));
+    color: var(--m-text-dim);
     white-space: pre-wrap;
 }
 
 .bento__code .cmt {
-    color: color-mix(in srgb, var(--m-bg) 45%, var(--m-text));
+    color: var(--m-text-faint);
 }
 
 .bento__code .acc {
@@ -872,8 +872,9 @@ a {
     margin: 48px 0 0;
     padding: 40px;
     border-radius: 12px;
-    background: var(--m-text);
-    color: var(--m-bg);
+    background: var(--m-accent-soft);
+    border: 1px solid color-mix(in srgb, var(--m-accent) 22%, var(--m-border));
+    color: var(--m-text);
 }
 
 .cta-band__title {
@@ -885,7 +886,7 @@ a {
 
 .cta-band__text {
     margin: 0;
-    color: color-mix(in srgb, var(--m-bg) 72%, var(--m-text));
+    color: var(--m-text-dim);
     font-size: 14.5px;
 }
 
@@ -896,9 +897,9 @@ a {
 }
 
 .cta-band .btn_ghost {
-    background: transparent;
-    border-color: color-mix(in srgb, var(--m-bg) 40%, transparent);
-    color: var(--m-bg);
+    background: var(--m-surface);
+    border-color: var(--m-border);
+    color: var(--m-text);
 }
 
 .cta-band .btn_ghost:hover {
