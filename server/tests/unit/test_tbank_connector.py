@@ -40,8 +40,10 @@ class FakeLocator:
         return 1 if self._present else 0
 
     def click(self, timeout=None):
+        # clicking a control that isn't on screen times out in real Playwright —
+        # callers that treat a missing button as optional suppress exactly that
         if not self._present:
-            raise RuntimeError("locator not present")
+            raise tbank_mod.PlaywrightTimeoutError("locator not present")
         if self._on_click:
             self._on_click()
 
@@ -52,8 +54,20 @@ class FakeKeyboard:
 
     def type(self, text):
         self.page.log.append(("type", text))
-        if self.page.stage == "enter_code":
-            self.page.stage = "in"
+        # every code entry (SMS, quick-login, set-code) types into the pin widget;
+        # remember it (to recognize a wrong SMS code) and auto-advance as the last
+        # digit lands, which is how the real widget submits without a button click
+        self.page.last_code = text
+        if self.page.stage in self.page.PIN_STAGES:
+            self.page._advance()
+
+
+class FakeElement:
+    def __init__(self, text):
+        self._text = text
+
+    def inner_text(self):
+        return self._text
 
 
 class FakeDownload:
@@ -82,23 +96,29 @@ class FakeDownloadExpectation:
 
 
 class FakePage:
-    """A minimal, scripted stand-in for a Playwright page."""
+    """A scripted stand-in for a Playwright page driving the id.tbank.ru SSO.
 
-    def __init__(
-        self,
-        *,
-        scenario="fresh",
-        needs_password=False,
-        export_label="CSV",
-        csv=STATEMENT,
-        wrong_codes=None,
-    ):
+    ``stage`` is the current step: phone → password → sms → setcode → in for a
+    fresh login, ``quickcode`` for a trusted-device quick login, and in/ops/
+    export_open for the post-login statement download. Each login step exposes a
+    ``form-title`` and a single submit button; the pin widget backs both the SMS
+    code and the quick-login/set-code screens."""
+
+    TITLES = {
+        "phone": "Вход в Т-Банк",
+        "password": "Введите пароль",
+        "sms": "Введите код из СМС",
+        "setcode": TB.TITLE_SET_CODE,
+        "quickcode": "Введите код",
+    }
+    PIN_STAGES = ("sms", "setcode", "quickcode")
+
+    def __init__(self, *, scenario="fresh", export_label="CSV", csv=STATEMENT, wrong_codes=None):
         self.scenario = scenario
-        self.needs_password = needs_password
         self.export_label = export_label
         self.csv = csv
         self.wrong_codes = wrong_codes or set()
-        self.last_otp = None
+        self.last_code = None
         self.url = ""
         self.log = []
         self.keyboard = FakeKeyboard(self)
@@ -106,8 +126,7 @@ class FakePage:
         self.screenshots = []
         self.nav_timeout = None
         self.action_timeout = None
-        # starting screen depends on the scenario
-        self.stage = {"logged_in": "in", "quick": "enter_code"}.get(scenario, "start")
+        self.stage = {"logged_in": "in", "quick": "quickcode"}.get(scenario, "start")
 
     def set_default_navigation_timeout(self, ms):
         self.nav_timeout = ms
@@ -119,63 +138,39 @@ class FakePage:
     def goto(self, url, wait_until=None):
         self.log.append(("goto", url))
         if url == TB.URL_HOME:
-            if self.scenario == "logged_in":
+            if self.scenario == "logged_in" or self.stage == "in":
                 self.stage, self.url = "in", TB.URL_HOME
             elif self.scenario == "quick":
-                self.stage, self.url = "enter_code", TB.URL_HOME
+                self.stage, self.url = "quickcode", TB.URL_LOGIN
             else:
-                self.stage, self.url = "phone", TB.URL_LOGIN  # redirect to login
+                self.stage, self.url = "phone", TB.URL_LOGIN  # bounces to the SSO
         elif url == TB.URL_LOGIN:
-            self.stage, self.url = "phone", TB.URL_LOGIN
+            self.stage = "quickcode" if self.scenario == "quick" else "phone"
+            self.url = TB.URL_LOGIN
         elif url == TB.URL_OPERATIONS:
             self.stage, self.url = "ops", TB.URL_OPERATIONS
 
     def wait_for_timeout(self, ms):
         self.log.append(("wait", ms))
 
-    def wait_for_url(self, marker, timeout=None):
-        self.log.append(("wait_url", marker))
-        self.url = TB.URL_HOME
-
     # form interaction -------------------------------------------------------
     def fill(self, selector, value):
         self.log.append(("fill", selector, value))
-        if selector == TB.SEL_SMS:
-            self.last_otp = value
-
-    def click(self, selector):
-        self.log.append(("click", selector))
-        if self.stage == "phone":
-            self.stage = "password" if self.needs_password else "sms"
-        elif self.stage == "password":
-            self.stage = "sms"
-        elif self.stage == "sms":
-            self.stage = "setcode"
 
     def query_selector(self, selector):
         self.log.append(("query", selector))
-        present = (selector == TB.SEL_PHONE and self.stage == "phone") or (
-            selector == TB.SEL_PASSWORD and self.stage == "password"
-        )
-        return object() if present else None
-
-    def wait_for_selector(self, selector, timeout=None):
-        self.log.append(("wait_selector", selector))
-        if self.query_selector(selector) is not None:
+        if (
+            (selector == TB.SEL_PHONE and self.stage == "phone")
+            or (selector == TB.SEL_PASSWORD and self.stage == "password")
+            or (selector == TB.SEL_PIN and self.stage in self.PIN_STAGES)
+        ):
             return object()
-        raise tbank_mod.PlaywrightTimeoutError("element not found")
-
-    def _visible_texts(self):
-        return {
-            "enter_code": {TB.TEXT_ENTER_CODE},
-            "setcode": {TB.TEXT_SET_CODE},
-            "sms_rejected": {TB.TEXTS_OTP_REJECTED[0]},
-        }.get(self.stage, set())
+        if selector == TB.SEL_FORM_TITLE and self.stage in self.TITLES:
+            return FakeElement(self.TITLES[self.stage])
+        return None
 
     def get_by_text(self, text, exact=False):
-        present = any(text in t for t in self._visible_texts())
-        if self.stage == "export_open" and text == self.export_label:
-            present = True
+        present = self.stage == "export_open" and text == self.export_label
 
         def on_click():
             if self.stage == "export_open":
@@ -183,23 +178,28 @@ class FakePage:
 
         return FakeLocator(self, present, on_click)
 
+    def _advance(self):
+        if self.stage == "phone":
+            self.stage = "password"
+        elif self.stage == "password":
+            self.stage = "sms"
+        elif self.stage == "sms":
+            # a correct OTP advances to the set-code screen; a wrong one stays put
+            self.stage = "sms" if self.last_code in self.wrong_codes else "setcode"
+        elif self.stage in ("setcode", "quickcode"):
+            self.stage, self.url = "in", TB.URL_HOME
+
     def locator(self, selector):
         present = False
         on_click = None
-        if selector == TB.SEL_CODE and self.stage in ("enter_code", "setcode"):
+        if selector == TB.SEL_PIN and self.stage in self.PIN_STAGES:
+            present = True  # focus target for _type_pin
+        elif selector == TB.SEL_SUBMIT and self.stage in (*self.PIN_STAGES, "phone", "password"):
             present = True
-        elif selector == TB.SEL_SMS_SUBMIT and self.stage in ("sms", "sms_rejected"):
-            present = True
-
-            def on_click():
-                self.stage = "sms_rejected" if self.last_otp in self.wrong_codes else "setcode"
-
-        elif selector == f"text={TB.TEXT_SET_CODE_SUBMIT}" and self.stage == "setcode":
-            present = True
-
-            def on_click():
-                self.stage = "in"
-
+            # phone/password submit via the button; the pin widget already
+            # auto-advanced on the last digit, so its button click is a no-op
+            if self.stage in ("phone", "password"):
+                on_click = self._advance
         elif selector == TB.SEL_PERIOD_YEAR and self.stage == "ops":
             present = True
         elif selector == TB.SEL_EXPORT_TRIGGER and self.stage == "ops":
@@ -242,31 +242,31 @@ def test_debug_flag(monkeypatch):
     assert TB._debug_on() is True
 
 
-def test_has_text_true_false_and_error():
-    c = _connector()
-    page = FakePage(scenario="quick")
-    page.stage = "enter_code"
-    assert c._has_text(page, TB.TEXT_ENTER_CODE) is True
-    assert c._has_text(page, TB.TEXT_SET_CODE) is False
-
-    class Boom:
-        def get_by_text(self, *a, **k):
-            raise RuntimeError("x")
-
-    assert c._has_text(Boom(), "x") is False
-
-
-def test_is_logged_in_requires_mybank_no_code_no_phone():
+def test_is_logged_in_is_true_only_on_mybank():
     c = _connector()
     page = FakePage(scenario="logged_in")
     page.stage, page.url = "in", TB.URL_HOME
     assert c._is_logged_in(page) is True
-    # code screen visible -> not logged in
-    page.stage = "enter_code"
+    # still on the SSO -> not logged in
+    page.url = TB.URL_LOGIN
     assert c._is_logged_in(page) is False
-    # off /mybank -> not logged in
-    page.stage, page.url = "in", TB.URL_LOGIN
+
+
+def test_is_logged_in_false_when_a_code_prompt_is_reparked_over_mybank():
+    c = _connector()
+    page = FakePage(scenario="fresh")
+    # the bank shows a pin (set/enter-code) prompt on a /mybank URL — not yet in
+    page.stage, page.url = "setcode", TB.URL_HOME
     assert c._is_logged_in(page) is False
+
+
+def test_form_title_reads_heading_or_empty():
+    c = _connector()
+    page = FakePage(scenario="fresh")
+    page.stage = "password"
+    assert c._form_title(page) == "Введите пароль"
+    page.stage = "in"  # the app has no SSO form-title element
+    assert c._form_title(page) == ""
 
 
 def test_click_export_format_picks_present_label():
@@ -292,7 +292,7 @@ def test_already_logged_in_skips_login():
     c = _connector()
     page = FakePage(scenario="logged_in")
     c._ensure_logged_in(page)
-    # went to home, found itself logged in, never touched the phone field
+    # went to home, found itself logged in, never drove the SSO
     assert ("goto", TB.URL_LOGIN) not in page.log
     assert not any(a[0] == "fill" for a in page.log)
 
@@ -302,21 +302,23 @@ def test_quick_login_uses_stored_code():
     page = FakePage(scenario="quick")
     c._ensure_logged_in(page)
     assert ("type", "1234") in page.log
-    # never fell through to a phone login
-    assert ("goto", TB.URL_LOGIN) not in page.log
+    # a trusted-device quick login never fills the phone or password
+    assert not any(a[0] == "fill" for a in page.log)
 
 
-def test_full_login_sets_code_and_enters_otp():
+def test_full_login_enters_phone_password_otp_then_sets_code():
     c = _connector()
-    c._to_worker.put(("sms", "9999"))  # the code the user would submit
+    c._to_worker.put(("sms", "9999"))  # the SMS code the user would submit
     page = FakePage(scenario="fresh")
     c._ensure_logged_in(page)
     fills = [a for a in page.log if a[0] == "fill"]
-    assert (("fill", TB.SEL_PHONE, "+70000000000")) in fills
-    assert (("fill", TB.SEL_SMS, "9999")) in fills
-    # the quick-login code was set on the "create a code" screen
-    assert ("type", "1234") in page.log
-    assert ("wait_url", TB.URL_LOGGED_IN_MARKER) in page.log
+    assert ("fill", TB.SEL_PHONE, "+70000000000") in fills
+    assert ("fill", TB.SEL_PASSWORD, "pw") in fills
+    # the user's SMS code is typed into the pin widget, then our quick-login code
+    # is set on the "Придумайте код" screen — in that order
+    types = [a[1] for a in page.log if a[0] == "type"]
+    assert types == ["9999", "1234"]
+    assert c._is_logged_in(page) is True
 
 
 def test_wrong_otp_reprompts_with_rejection_message():
@@ -325,9 +327,8 @@ def test_wrong_otp_reprompts_with_rejection_message():
     c._to_worker.put(("sms", "2222"))
     page = FakePage(scenario="fresh", wrong_codes={"1111"})
     c._ensure_logged_in(page)
-    fills = [a for a in page.log if a[0] == "fill"]
-    assert ("fill", TB.SEL_SMS, "1111") in fills
-    assert ("fill", TB.SEL_SMS, "2222") in fills
+    types = [a[1] for a in page.log if a[0] == "type"]
+    assert "1111" in types and "2222" in types
     messages = []
     while not c._from_worker.empty():
         kind, payload = c._from_worker.get()
@@ -339,157 +340,50 @@ def test_wrong_otp_reprompts_with_rejection_message():
     ]
 
 
-def test_full_login_with_password_step():
-    c = _connector()
-    c._to_worker.put(("sms", "0000"))
-    page = FakePage(scenario="fresh", needs_password=True)
-    c._ensure_logged_in(page)
-    fills = [a for a in page.log if a[0] == "fill"]
-    assert ("fill", TB.SEL_PASSWORD, "pw") in fills
+class _SubmitClickPage:
+    """A page whose submit-button click raises a chosen error — used to check
+    that _submit swallows a missing-button timeout but surfaces a real failure."""
 
-
-class _SlowPasswordPage(FakePage):
-    """The SSO paints the password screen a beat after the phone step: an
-    immediate query_selector misses it, but wait_for_selector catches it once it
-    renders. Proves the login waits for the field instead of skipping the
-    password step and stalling on it (the prod race)."""
-
-    def __init__(self, **kw):
-        super().__init__(scenario="fresh", needs_password=True, **kw)
-
-    def click(self, selector):
-        self.log.append(("click", selector))
-        # only the submit control advances the screen — a click on any other
-        # selector must not masquerade as progress, or the test would pass even
-        # when the connector clicks the wrong control
-        if selector != TB.SEL_PASSWORD_SUBMIT:
-            return
-        if self.stage == "phone":
-            self.stage = "loading"  # password screen not painted yet
-        elif self.stage == "password":
-            self.stage = "sms"
-
-    def wait_for_selector(self, selector, timeout=None):
-        self.log.append(("wait_selector", selector))
-        if selector == TB.SEL_PASSWORD and self.stage == "loading":
-            self.stage = "password"  # the screen finishes rendering during the wait
-            return object()
-        return super().wait_for_selector(selector, timeout)
-
-
-def test_password_step_waits_for_late_rendered_field():
-    c = _connector()
-    c._to_worker.put(("sms", "0000"))
-    page = _SlowPasswordPage()
-    c._ensure_logged_in(page)
-    fills = [a for a in page.log if a[0] == "fill"]
-    # the password that rendered only after the wait was filled before the OTP
-    assert fills.index(("fill", TB.SEL_PASSWORD, "pw")) < fills.index(("fill", TB.SEL_SMS, "0000"))
-    # and it was actually submitted (not just filled) via the submit control
-    assert ("click", TB.SEL_PASSWORD_SUBMIT) in page.log
-
-
-class _SetCodeReparkPage(FakePage):
-    """After the OTP the bank re-parks on the 'Придумайте код' (set-code) screen
-    even past the forced home redirect. The recovery must clear it (enter the
-    code, then skip) instead of raising 'login did not reach the bank home page'.
-    Here the set-code submit does NOT clear the screen, so the skip fallback runs."""
-
-    def __init__(self, **kw):
-        super().__init__(scenario="fresh", **kw)
-
-    def locator(self, selector):
-        if selector == TB.SEL_SMS_SUBMIT and self.stage == "sms":
-
-            def on_click():
-                self.stage = "parked"  # authenticated but parked, not on set-code yet
-
-            return FakeLocator(self, True, on_click)
-        if selector == f"text={TB.TEXT_SET_CODE_SUBMIT}" and self.stage == "setcode":
-            return FakeLocator(self, True, None)  # submit is a no-op -> forces the skip
-        return super().locator(selector)
-
-    def goto(self, url, wait_until=None):
-        self.log.append(("goto", url))
-        if url == TB.URL_LOGIN:
-            self.stage, self.url = "phone", TB.URL_LOGIN
-        elif url == TB.URL_HOME:
-            if self.stage == "start":
-                self.stage, self.url = "phone", TB.URL_LOGIN  # initial redirect to login
-            elif self.stage == "parked":
-                self.stage, self.url = "setcode", TB.URL_HOME  # re-parked on set-code
-            elif self.stage == "setcode":
-                self.stage, self.url = "in", TB.URL_HOME  # the skip finally lands home
-            else:
-                self.url = TB.URL_HOME
-
-    def wait_for_url(self, marker, timeout=None):
-        self.log.append(("wait_url", marker))  # no redirect happens on its own
-
-    def _visible_texts(self):
-        if self.stage == "setcode":
-            return {TB.TEXT_SET_CODE}
-        return super()._visible_texts()
-
-
-def test_setcode_reprompt_after_redirect_is_handled():
-    c = _connector()
-    c._to_worker.put(("sms", "0000"))
-    page = _SetCodeReparkPage()
-    # must not raise "login did not reach the bank home page"
-    c._ensure_logged_in(page)
-    assert page.url == TB.URL_HOME
-    # the stored quick-login code was entered on the re-parked set-code screen
-    assert ("type", "1234") in page.log
-
-
-class _OtpClickPage(FakePage):
-    """A fresh-login page whose OTP submit button click raises a chosen error."""
-
-    def __init__(self, error, **kw):
-        super().__init__(scenario="fresh", **kw)
+    def __init__(self, error):
         self._error = error
 
     def locator(self, selector):
-        if selector == TB.SEL_SMS_SUBMIT and self.stage in ("sms", "sms_rejected"):
+        error = self._error
 
-            def on_click():
-                raise self._error
+        class L:
+            @property
+            def first(self):
+                return self
 
-            return FakeLocator(self, True, on_click)
-        return super().locator(selector)
+            def click(self, timeout=None):
+                raise error
+
+        return L()
 
 
-def test_otp_submit_timeout_is_skipped(monkeypatch):
+def test_submit_skips_missing_button_timeout(monkeypatch):
     import app.connectors.tbank_playwright as mod
 
     class FakeTimeout(Exception):
         pass
 
     monkeypatch.setattr(mod, "PlaywrightTimeoutError", FakeTimeout)
-    c = _connector()
-    c._to_worker.put(("sms", "0000"))
-    page = _OtpClickPage(FakeTimeout("no submit button"))
-    # a missing/auto-submit button reads as a timeout: it is skipped and the
-    # login still reaches the bank home without raising
-    c._ensure_logged_in(page)
-    assert ("wait_url", TB.URL_LOGGED_IN_MARKER) in page.log
+    # a missing/auto-submit button reads as a timeout: _submit swallows it so the
+    # pin widget's own auto-submit can carry the step
+    _connector()._submit(_SubmitClickPage(FakeTimeout("no submit button")))
 
 
-def test_otp_submit_real_click_error_propagates(monkeypatch):
+def test_submit_propagates_real_click_error(monkeypatch):
     import app.connectors.tbank_playwright as mod
 
     class FakeTimeout(Exception):
         pass
 
     monkeypatch.setattr(mod, "PlaywrightTimeoutError", FakeTimeout)
-    c = _connector()
-    c._to_worker.put(("sms", "0000"))
-    page = _OtpClickPage(RuntimeError("click intercepted"))
     # a real interaction failure is not a timeout: it must surface, not be
     # swallowed into a broken, silently-continuing login
     with pytest.raises(RuntimeError, match="click intercepted"):
-        c._ensure_logged_in(page)
+        _connector()._submit(_SubmitClickPage(RuntimeError("click intercepted")))
 
 
 # --- download ---------------------------------------------------------------
