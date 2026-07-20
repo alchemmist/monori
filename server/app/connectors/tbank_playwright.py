@@ -73,6 +73,10 @@ class TBankPlaywrightConnector(Connector):
     # step can't make us skip one.
     SEL_PHONE = "[automation-id='phone-input']"
     SEL_PASSWORD = "[automation-id='password-input']"
+    # the SMS code screen is a single one-time-code input (auto-submits on the
+    # last digit) — distinct from the 4-box pin widget used to set/enter the
+    # quick-login code
+    SEL_OTP = "[automation-id='otp-input']"
     SEL_PIN = "[automation-id='pin-code-input-0']"
     SEL_SUBMIT = "[automation-id='button-submit']"
     SEL_FORM_TITLE = "[automation-id='form-title']"
@@ -261,6 +265,7 @@ class TBankPlaywrightConnector(Connector):
         return not (
             page.query_selector(self.SEL_PHONE)
             or page.query_selector(self.SEL_PASSWORD)
+            or page.query_selector(self.SEL_OTP)
             or page.query_selector(self.SEL_PIN)
         )
 
@@ -320,7 +325,12 @@ class TBankPlaywrightConnector(Connector):
             return
         # a cold visit to /mybank bounces to id.tbank.ru; make sure we're on the
         # SSO before driving it (goto is a no-op if we're already there)
-        if not (page.query_selector(self.SEL_PHONE) or page.query_selector(self.SEL_PIN)):
+        on_sso = (
+            page.query_selector(self.SEL_PHONE)
+            or page.query_selector(self.SEL_OTP)
+            or page.query_selector(self.SEL_PIN)
+        )
+        if not on_sso:
             page.goto(self.URL_LOGIN, wait_until="domcontentloaded")
             page.wait_for_timeout(1_500)
         self._shot(page, "02-login")
@@ -339,7 +349,6 @@ class TBankPlaywrightConnector(Connector):
         the pin widget (set-a-code / enter-a-code) — so a slow render or a
         reordered step just means another pass, never a skipped field."""
         code = self.credentials.get("code")
-        entered_phone = False
         tried_quick = False
         otp_prompt = "enter the code sent by the bank"
         for step in range(self.LOGIN_STEPS):
@@ -351,9 +360,17 @@ class TBankPlaywrightConnector(Connector):
             if page.query_selector(self.SEL_PHONE):
                 page.fill(self.SEL_PHONE, self.credentials["phone"])
                 self._submit(page)
-                entered_phone = True
             elif page.query_selector(self.SEL_PASSWORD):
                 page.fill(self.SEL_PASSWORD, self.credentials["password"])
+                self._submit(page)
+            elif page.query_selector(self.SEL_OTP):
+                # the SMS one-time code: surface the input to the user right away,
+                # then type it into the single otp field (it auto-submits on the
+                # last digit). If the same screen is still up next pass the code was
+                # rejected, so we ask again with the rejection message.
+                otp = self._ask_sms(otp_prompt)
+                otp_prompt = "the bank rejected the code — check it and try again"
+                page.fill(self.SEL_OTP, otp)
                 self._submit(page)
             elif page.query_selector(self.SEL_PIN):
                 title = self._form_title(page)
@@ -362,20 +379,16 @@ class TBankPlaywrightConnector(Connector):
                     # the server generated (and stored) so future syncs skip SMS
                     self._type_pin(page, code)
                     self._submit(page)
-                elif code and not entered_phone and not tried_quick:
+                elif code and not tried_quick:
                     # trusted device, expired session: quick-login with the stored
-                    # code, no SMS round-trip. Try it once — if it's stale the same
-                    # screen stays up and we fall through to the SMS path below.
+                    # code. Try it once — if it's stale the screen persists and we
+                    # fall through (to the phone / SMS path) instead of looping.
                     self._type_pin(page, code)
                     self._submit(page)
                     tried_quick = True
                 else:
-                    # a one-time SMS code — ask the user (re-ask on rejection, i.e.
-                    # when this same screen is still up on the next pass)
-                    otp = self._ask_sms(otp_prompt)
-                    otp_prompt = "the bank rejected the code — check it and try again"
-                    self._type_pin(page, otp)
-                    self._submit(page)
+                    self._dismiss_interstitials(page)
+                    page.goto(self.URL_HOME, wait_until="domcontentloaded")
             else:
                 # an interstitial (promo, "not now") between steps — clear it and
                 # nudge back toward home

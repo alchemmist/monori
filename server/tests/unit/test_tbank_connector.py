@@ -100,18 +100,18 @@ class FakePage:
 
     ``stage`` is the current step: phone → password → sms → setcode → in for a
     fresh login, ``quickcode`` for a trusted-device quick login, and in/ops/
-    export_open for the post-login statement download. Each login step exposes a
-    ``form-title`` and a single submit button; the pin widget backs both the SMS
-    code and the quick-login/set-code screens."""
+    export_open for the post-login statement download. The SMS step is a single
+    ``otp-input`` (auto-submits); the 4-box pin widget backs only the
+    quick-login/set-code screens."""
 
     TITLES = {
         "phone": "Вход в Т-Банк",
         "password": "Введите пароль",
-        "sms": "Введите код из СМС",
+        "sms": "Введите код",
         "setcode": TB.TITLE_SET_CODE,
         "quickcode": "Введите код",
     }
-    PIN_STAGES = ("sms", "setcode", "quickcode")
+    PIN_STAGES = ("setcode", "quickcode")
 
     def __init__(self, *, scenario="fresh", export_label="CSV", csv=STATEMENT, wrong_codes=None):
         self.scenario = scenario
@@ -156,12 +156,17 @@ class FakePage:
     # form interaction -------------------------------------------------------
     def fill(self, selector, value):
         self.log.append(("fill", selector, value))
+        if selector == TB.SEL_OTP and self.stage == "sms":
+            # the single otp field auto-submits as the last digit lands
+            self.last_code = value
+            self._advance()
 
     def query_selector(self, selector):
         self.log.append(("query", selector))
         if (
             (selector == TB.SEL_PHONE and self.stage == "phone")
             or (selector == TB.SEL_PASSWORD and self.stage == "password")
+            or (selector == TB.SEL_OTP and self.stage == "sms")
             or (selector == TB.SEL_PIN and self.stage in self.PIN_STAGES)
         ):
             return object()
@@ -314,10 +319,10 @@ def test_full_login_enters_phone_password_otp_then_sets_code():
     fills = [a for a in page.log if a[0] == "fill"]
     assert ("fill", TB.SEL_PHONE, "+70000000000") in fills
     assert ("fill", TB.SEL_PASSWORD, "pw") in fills
-    # the user's SMS code is typed into the pin widget, then our quick-login code
-    # is set on the "Придумайте код" screen — in that order
-    types = [a[1] for a in page.log if a[0] == "type"]
-    assert types == ["9999", "1234"]
+    # the user's SMS code goes into the single otp field, then our quick-login
+    # code is typed into the pin widget on the "Придумайте код" screen
+    assert ("fill", TB.SEL_OTP, "9999") in fills
+    assert [a[1] for a in page.log if a[0] == "type"] == ["1234"]
     assert c._is_logged_in(page) is True
 
 
@@ -327,8 +332,8 @@ def test_wrong_otp_reprompts_with_rejection_message():
     c._to_worker.put(("sms", "2222"))
     page = FakePage(scenario="fresh", wrong_codes={"1111"})
     c._ensure_logged_in(page)
-    types = [a[1] for a in page.log if a[0] == "type"]
-    assert "1111" in types and "2222" in types
+    otp_fills = [a[2] for a in page.log if a[0] == "fill" and a[1] == TB.SEL_OTP]
+    assert "1111" in otp_fills and "2222" in otp_fills
     messages = []
     while not c._from_worker.empty():
         kind, payload = c._from_worker.get()
