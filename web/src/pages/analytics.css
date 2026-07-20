@@ -56,22 +56,22 @@
 }
 
 .disc-cell_ok {
-    background: color-mix(in srgb, var(--m-income) 42%, transparent);
+    background: color-mix(in srgb, var(--g-color-text-positive) 42%, transparent);
 }
 
 .disc-cell_warn {
-    background: color-mix(in srgb, var(--m-warning) 55%, transparent);
+    background: color-mix(in srgb, var(--m-accent) 48%, transparent);
 }
 
 .disc-cell_over {
-    background: color-mix(in srgb, var(--m-expense) 62%, transparent);
+    background: color-mix(in srgb, var(--g-color-text-danger) 62%, transparent);
 }
 
 .disc-cell_nobudget {
     background: repeating-linear-gradient(
         45deg,
-        color-mix(in srgb, var(--m-expense) 50%, transparent),
-        color-mix(in srgb, var(--m-expense) 50%, transparent) 3px,
+        color-mix(in srgb, var(--g-color-text-danger) 50%, transparent),
+        color-mix(in srgb, var(--g-color-text-danger) 50%, transparent) 3px,
         transparent 3px,
         transparent 6px
     );
@@ -100,22 +100,22 @@
 }
 
 .disc-swatch_ok {
-    background: color-mix(in srgb, var(--m-income) 45%, transparent);
+    background: color-mix(in srgb, var(--g-color-text-positive) 45%, transparent);
 }
 
 .disc-swatch_warn {
-    background: color-mix(in srgb, var(--m-warning) 58%, transparent);
+    background: color-mix(in srgb, var(--m-accent) 52%, transparent);
 }
 
 .disc-swatch_over {
-    background: color-mix(in srgb, var(--m-expense) 65%, transparent);
+    background: color-mix(in srgb, var(--g-color-text-danger) 65%, transparent);
 }
 
 .disc-swatch_nobudget {
     background: repeating-linear-gradient(
         45deg,
-        color-mix(in srgb, var(--m-expense) 52%, transparent),
-        color-mix(in srgb, var(--m-expense) 52%, transparent) 2px,
+        color-mix(in srgb, var(--g-color-text-danger) 52%, transparent),
+        color-mix(in srgb, var(--g-color-text-danger) 52%, transparent) 2px,
         transparent 2px,
         transparent 4px
     );
