@@ -54,16 +54,18 @@
 }
 
 /* ---------- DARK ---------- */
+/* "Aurora" dark theme — deep violet-tinted canvas with a soft top-right glow
+   (set on the body below). Matches the app so the landing/docs feel continuous. */
 .g-root_theme_dark {
-    --m-bg: #0a0a0a;
-    --m-surface: #0f0f0f;
-    --m-surface-hover: #181817;
-    --m-surface-raised: #131312;
-    --m-border: #1c1c1a;
-    --m-border-soft: #161615;
-    --m-text: #fafafa;
-    --m-text-dim: #a3a29d;
-    --m-text-faint: #6b6a65;
+    --m-bg: #08070d;
+    --m-surface: #0d0b15;
+    --m-surface-hover: #191426;
+    --m-surface-raised: #141020;
+    --m-border: #221d31;
+    --m-border-soft: #191426;
+    --m-text: #f2f1f6;
+    --m-text-dim: #a3a0b0;
+    --m-text-faint: #6c6980;
     --m-accent: #ff7a3c;
     --m-accent-contrast: #1a0d05;
     --m-accent-soft: #3a1e10;
@@ -97,6 +99,12 @@ body {
 
 #root {
     min-height: 100vh;
+}
+
+/* aurora canvas — matches the app; fixed so it reads as a lit backdrop (dark only) */
+body:has(.g-root_theme_dark) {
+    background: radial-gradient(120% 90% at 82% -12%, #17102a 0%, #0a0812 46%, #060509 100%);
+    background-attachment: fixed;
 }
 
 .num {
