@@ -44,6 +44,9 @@ class LocalRunner:
             raise NoPendingLogin
         try:
             return connector.resume_sync(code)
+        except SmsRequired:
+            self._pending[cid] = connector
+            raise
         except ConnectorError:
             # the failed login is no longer tracked, so close it here or its
             # live browser leaks
@@ -77,7 +80,7 @@ class RemoteRunner:
         if status == "done":
             return SyncResult(payload.get("rows") or [], payload.get("session"))
         if status == "awaiting_sms":
-            raise SmsRequired("code sent")
+            raise SmsRequired(payload.get("message") or "code sent")
         raise ConnectorError(payload.get("message") or "sync failed")
 
     def start(self, cid, bank, kind, credentials, session, since):

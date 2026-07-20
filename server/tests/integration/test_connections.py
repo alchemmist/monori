@@ -2,6 +2,8 @@ import pytest
 from cryptography.fernet import Fernet
 
 import app.connectors.fake  # noqa: F401  (registers the FakeConnector)
+from app.connectors import base
+from app.connectors.base import SmsRequired, SyncResult
 
 
 @pytest.fixture()
@@ -135,3 +137,49 @@ def test_delete_connection(api, client, keyed):
     cid = _connect(client, api.default_account()).json()["id"]
     assert client.delete(f"/api/connections/{cid}").status_code == 200
     assert api.snapshot()["connections"] == []
+
+
+class RetryOtpConnector:
+    bank = "retryotp"
+    kind = "retryotp"
+    hidden = True
+
+    def __init__(self, credentials, session=None):
+        self.credentials = credentials
+        self.session = session
+
+    def sync(self, since=None):
+        raise SmsRequired("code sent")
+
+    def resume_sync(self, code):
+        if code != "4242":
+            raise SmsRequired("the bank rejected the code — check it and try again")
+        return SyncResult([], session=None)
+
+    def close(self):
+        pass
+
+
+def test_rejected_code_stays_awaiting(api, client, keyed, monkeypatch):
+    monkeypatch.setitem(base.REGISTRY, ("retryotp", "retryotp"), RetryOtpConnector)
+    cid = client.post(
+        "/api/connections",
+        json={
+            "accountId": api.default_account(),
+            "bank": "retryotp",
+            "kind": "retryotp",
+            "credentials": {"phone": "+70000000000", "password": "pw"},
+        },
+    ).json()["id"]
+    assert client.post(f"/api/connections/{cid}/sync").json()["status"] == "awaiting_sms"
+
+    r = client.post(f"/api/connections/{cid}/sms", json={"code": "1111"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["status"] == "awaiting_sms"
+    assert body["message"] == "the bank rejected the code — check it and try again"
+    assert api.snapshot()["connections"][0]["status"] == "awaiting_sms"
+
+    assert client.post(f"/api/connections/{cid}/sms", json={"code": "4242"}).json()["status"] == (
+        "connected"
+    )
