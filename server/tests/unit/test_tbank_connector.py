@@ -333,6 +333,55 @@ def test_full_login_with_password_step():
     assert ("fill", TB.SEL_PASSWORD, "pw") in fills
 
 
+class _OtpClickPage(FakePage):
+    """A fresh-login page whose OTP submit button click raises a chosen error."""
+
+    def __init__(self, error, **kw):
+        super().__init__(scenario="fresh", **kw)
+        self._error = error
+
+    def locator(self, selector):
+        if selector == TB.SEL_SMS_SUBMIT and self.stage in ("sms", "sms_rejected"):
+
+            def on_click():
+                raise self._error
+
+            return FakeLocator(self, True, on_click)
+        return super().locator(selector)
+
+
+def test_otp_submit_timeout_is_skipped(monkeypatch):
+    import app.connectors.tbank_playwright as mod
+
+    class FakeTimeout(Exception):
+        pass
+
+    monkeypatch.setattr(mod, "PlaywrightTimeoutError", FakeTimeout)
+    c = _connector()
+    c._to_worker.put(("sms", "0000"))
+    page = _OtpClickPage(FakeTimeout("no submit button"))
+    # a missing/auto-submit button reads as a timeout: it is skipped and the
+    # login still reaches the bank home without raising
+    c._ensure_logged_in(page)
+    assert ("wait_url", TB.URL_LOGGED_IN_MARKER) in page.log
+
+
+def test_otp_submit_real_click_error_propagates(monkeypatch):
+    import app.connectors.tbank_playwright as mod
+
+    class FakeTimeout(Exception):
+        pass
+
+    monkeypatch.setattr(mod, "PlaywrightTimeoutError", FakeTimeout)
+    c = _connector()
+    c._to_worker.put(("sms", "0000"))
+    page = _OtpClickPage(RuntimeError("click intercepted"))
+    # a real interaction failure is not a timeout: it must surface, not be
+    # swallowed into a broken, silently-continuing login
+    with pytest.raises(RuntimeError, match="click intercepted"):
+        c._ensure_logged_in(page)
+
+
 # --- download ---------------------------------------------------------------
 
 
@@ -471,7 +520,6 @@ def _install_fake_playwright(monkeypatch, page):
 
     module = types.ModuleType("playwright.sync_api")
     module.sync_playwright = lambda: FakeCtxMgr()
-    module.TimeoutError = type("TimeoutError", (Exception,), {})
     monkeypatch.setitem(sys.modules, "playwright", types.ModuleType("playwright"))
     monkeypatch.setitem(sys.modules, "playwright.sync_api", module)
 
