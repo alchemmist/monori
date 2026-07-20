@@ -62,3 +62,14 @@
 .timenav__grip {
     fill: var(--m-accent);
 }
+
+/* dark: the strip sits on a frosted card — a faint glass lift instead of the
+   near-black --m-bg, which read as a dark block */
+.g-root_theme_dark .timenav__svg {
+    background: rgb(255 255 255 / 3%);
+}
+
+.g-root_theme_dark .timenav__dim {
+    fill: #000;
+    fill-opacity: 0.32;
+}

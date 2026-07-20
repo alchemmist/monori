@@ -52,26 +52,30 @@
     height: 16px;
     min-width: 28px;
     border-radius: 2px;
-    background: var(--m-surface-hover);
+
+    /* a month with no envelope — a faint neutral, never a dark block */
+    background: color-mix(in srgb, var(--m-text) 7%, transparent);
 }
 
+/* the three states use the same full-strength scheme colors as every other
+   chart (positive / warning / danger), not washed-out tints */
 .disc-cell_ok {
-    background: color-mix(in srgb, var(--g-color-text-positive) 42%, transparent);
+    background: var(--g-color-text-positive);
 }
 
 .disc-cell_warn {
-    background: color-mix(in srgb, var(--m-accent) 48%, transparent);
+    background: var(--g-color-text-warning);
 }
 
 .disc-cell_over {
-    background: color-mix(in srgb, var(--g-color-text-danger) 62%, transparent);
+    background: var(--g-color-text-danger);
 }
 
 .disc-cell_nobudget {
     background: repeating-linear-gradient(
         45deg,
-        color-mix(in srgb, var(--g-color-text-danger) 50%, transparent),
-        color-mix(in srgb, var(--g-color-text-danger) 50%, transparent) 3px,
+        var(--g-color-text-danger),
+        var(--g-color-text-danger) 3px,
         transparent 3px,
         transparent 6px
     );
@@ -100,22 +104,22 @@
 }
 
 .disc-swatch_ok {
-    background: color-mix(in srgb, var(--g-color-text-positive) 45%, transparent);
+    background: var(--g-color-text-positive);
 }
 
 .disc-swatch_warn {
-    background: color-mix(in srgb, var(--m-accent) 52%, transparent);
+    background: var(--g-color-text-warning);
 }
 
 .disc-swatch_over {
-    background: color-mix(in srgb, var(--g-color-text-danger) 65%, transparent);
+    background: var(--g-color-text-danger);
 }
 
 .disc-swatch_nobudget {
     background: repeating-linear-gradient(
         45deg,
-        color-mix(in srgb, var(--g-color-text-danger) 52%, transparent),
-        color-mix(in srgb, var(--g-color-text-danger) 52%, transparent) 2px,
+        var(--g-color-text-danger),
+        var(--g-color-text-danger) 2px,
         transparent 2px,
         transparent 4px
     );
@@ -167,7 +171,7 @@
 }
 
 .report-table__row_current td {
-    background: var(--m-surface-hover);
+    background: color-mix(in srgb, var(--m-accent) 8%, transparent);
 }
 
 .report-table__row_current td:first-child {

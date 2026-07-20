@@ -333,6 +333,46 @@
     min-width: 0;
 }
 
+/* dark: the frozen category column and the header bands are frosted glass over
+   the aurora canvas — not opaque near-black blocks. A blur keeps the frozen
+   column and sticky header legible as columns scroll underneath them. */
+.g-root_theme_dark .year-grid thead th {
+    background: rgb(255 255 255 / 6%);
+    backdrop-filter: blur(10px);
+}
+
+.g-root_theme_dark .yg-band th {
+    background: rgb(255 255 255 / 5%);
+}
+
+.g-root_theme_dark .yg-corner,
+.g-root_theme_dark .yg-name {
+    background: rgb(255 255 255 / 6%);
+    backdrop-filter: blur(10px);
+}
+
+.g-root_theme_dark .yg-corner_year {
+    background: rgb(255 255 255 / 8%);
+}
+
+.g-root_theme_dark .yg-group td {
+    background: rgb(255 255 255 / 8%);
+}
+
+.g-root_theme_dark .yg-group .yg-name {
+    background-color: rgb(255 255 255 / 8%);
+    background-image: none;
+}
+
+.g-root_theme_dark .yg-msum_now {
+    background: color-mix(in srgb, var(--m-accent) 14%, transparent);
+}
+
+.g-root_theme_dark .yg-row:hover .yg-name {
+    background-color: rgb(255 255 255 / 9%);
+    background-image: none;
+}
+
 /* narrower frozen column on phones so more data stays visible */
 @media (width <= 760px) {
     .yg-corner,
