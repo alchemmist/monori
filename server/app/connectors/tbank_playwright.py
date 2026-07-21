@@ -35,6 +35,7 @@ import shutil
 import tarfile
 import tempfile
 import threading
+from urllib.parse import quote
 
 from ..importer import parse_statement
 from .base import Connector, ConnectorError, SmsRequired, SyncResult, register
@@ -401,8 +402,23 @@ class TBankPlaywrightConnector(Connector):
             page.wait_for_timeout(self.STEP_PAUSE_MS)
             self._shot(page, f"step-{step:02d}")
 
+    def _operations_url(self):
+        # scope the export to a single T-Bank account when the connection names
+        # one (the cabinet's own per-account link is
+        # /mybank/operations/?account=<id>, e.g. the Black debit 5858870594);
+        # without it the page exports the default all-accounts feed. Each monori
+        # account maps to its own connection, so a savings account is just
+        # another connection with its own id.
+        account = (self.credentials or {}).get("account")
+        # a whitespace-only id is not a real account — strip before deciding, so
+        # stored creds from a non-web client can't scope us to ...?account=%20
+        account = str(account).strip() if account is not None else ""
+        if account:
+            return f"{self.URL_OPERATIONS}?account={quote(account, safe='')}"
+        return self.URL_OPERATIONS
+
     def _download_and_parse(self, page, since):
-        page.goto(self.URL_OPERATIONS, wait_until="domcontentloaded")
+        page.goto(self._operations_url(), wait_until="domcontentloaded")
         page.wait_for_timeout(2_500)
         self._shot(page, "08-operations")
 
