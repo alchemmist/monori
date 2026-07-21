@@ -123,6 +123,8 @@ export default function TransactionsPage() {
                     onChange={(e) => resetScroll(setQuery)(e.target.value)}
                     placeholder="Search description"
                     label={<Magnifier style={{ marginInline: 6 }} width={14} height={14} />}
+                    aria-label="Search description"
+                    rightSectionPointerEvents="all"
                     rightSection={
                         query ? (
                             <CloseButton
