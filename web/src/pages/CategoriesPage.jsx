@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { Fragment, useMemo, useRef, useState } from "react";
 import { Button, DropdownMenu, Label } from "@gravity-ui/uikit";
 import { Plus } from "@gravity-ui/icons";
 import { useStore } from "../store.js";
@@ -14,7 +14,7 @@ export default function CategoriesPage() {
     const { snapshot, moveCategory, reorderGroups } = useStore();
     const [dialog, setDialog] = useState(null);
     const [drag, setDrag] = useState(null); // {type:'card'|'col', id}
-    const [overGroup, setOverGroup] = useState(null); // group id highlighted as a card drop target
+    const [over, setOver] = useState(null); // {groupId, index} — live card insertion point
     const [overCol, setOverCol] = useState(null); // {id, side:'before'|'after'} for column reorder
     const boardRef = useRef(null);
 
@@ -37,8 +37,12 @@ export default function CategoriesPage() {
     }, [snapshot.transactions]);
 
     // ---- card drag & drop (move between / reorder within groups) ----
-    const cardDropIndex = (colEl, clientY) => {
-        const cards = [...colEl.querySelectorAll(".kb-card")];
+    // insertion index among the column's cards, ignoring the one being dragged
+    // (it's hidden mid-drag) so the index lines up with the drop math below
+    const cardDropIndex = (colEl, clientY, draggedId) => {
+        const cards = [...colEl.querySelectorAll(".kb-card")].filter(
+            (el) => +el.dataset.id !== draggedId,
+        );
         for (let i = 0; i < cards.length; i++) {
             const r = cards[i].getBoundingClientRect();
             if (clientY < r.top + r.height / 2) return i;
@@ -46,12 +50,19 @@ export default function CategoriesPage() {
         return cards.length;
     };
 
+    const onCardDragOver = (e, groupId) => {
+        if (drag?.type !== "card") return;
+        e.preventDefault();
+        const colEl = e.currentTarget.querySelector(".kb-cards");
+        const index = colEl ? cardDropIndex(colEl, e.clientY, drag.id) : 0;
+        setOver((o) => (o && o.groupId === groupId && o.index === index ? o : { groupId, index }));
+    };
+
     const onCardDrop = (e, toGroupId) => {
         e.preventDefault();
-        setOverGroup(null);
         if (drag?.type !== "card") return;
         const colEl = e.currentTarget.querySelector(".kb-cards");
-        const index = colEl ? cardDropIndex(colEl, e.clientY) : 0;
+        const index = colEl ? cardDropIndex(colEl, e.clientY, drag.id) : 0;
         const cols = new Map(groups.map((g) => [g.id, (catsByGroup.get(g.id) ?? []).slice()]));
         for (const arr of cols.values()) {
             const i = arr.findIndex((c) => c.id === drag.id);
@@ -62,6 +73,7 @@ export default function CategoriesPage() {
         const orderedIds = groups.flatMap((g) => cols.get(g.id).map((c) => c.id));
         moveCategory(drag.id, toGroupId, orderedIds);
         setDrag(null);
+        setOver(null);
     };
 
     // ---- column drag & drop (reorder groups) ----
@@ -116,6 +128,56 @@ export default function CategoriesPage() {
         },
     ];
 
+    // `hidden` renders the source card while it's being dragged: kept mounted (so
+    // its dragend still fires) but display:none, so the origin gap closes and the
+    // placeholder alone shows where it will land
+    const renderCard = (c, hidden) => (
+        <div
+            key={hidden ? `drag-${c.id}` : c.id}
+            data-id={c.id}
+            className={`kb-card${hidden ? " kb-card_dragging" : ""}`}
+            draggable
+            onDragStart={(e) => {
+                setDrag({ type: "card", id: c.id });
+                e.dataTransfer.effectAllowed = "move";
+            }}
+            onDragEnd={() => {
+                setDrag(null);
+                setOver(null);
+            }}
+        >
+            <div className="kb-card__top">
+                <span className="kb-card__name">{c.name}</span>
+                {c.archived && (
+                    <Label size="xs" theme="warning">
+                        arch
+                    </Label>
+                )}
+                <span
+                    className="kb-card__usage"
+                    title={`${txCountByCat.get(c.id) ?? 0} transactions`}
+                >
+                    {txCountByCat.get(c.id) ?? 0}
+                </span>
+                <div
+                    className="kb-card__menu"
+                    draggable
+                    onDragStart={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                    }}
+                >
+                    <DropdownMenu size="s" items={catMenu(c)} />
+                </div>
+            </div>
+            {c.keywords && (
+                <div className="kb-card__kw">
+                    {c.keywords.split("|").filter(Boolean).join(", ")}
+                </div>
+            )}
+        </div>
+    );
+
     return (
         <div className="fade-in">
             <div className="budget-toolbar">
@@ -141,19 +203,22 @@ export default function CategoriesPage() {
             <div className="kb-board" ref={boardRef}>
                 {groups.map((g) => {
                     const cats = catsByGroup.get(g.id) ?? [];
-                    const dropHere = drag?.type === "card" && overGroup === g.id;
+                    const dragId = drag?.type === "card" ? drag.id : null;
+                    const visible = dragId != null ? cats.filter((c) => c.id !== dragId) : cats;
+                    const draggedHere = dragId != null && cats.some((c) => c.id === dragId);
+                    const insertAt =
+                        over?.groupId === g.id ? Math.min(over.index, visible.length) : -1;
                     const colMark =
                         drag?.type === "col" && overCol?.id === g.id ? overCol.side : null;
                     return (
                         <div
                             key={g.id}
-                            className={`kb-col kb-col_${g.kind}${dropHere ? " kb-col_drop" : ""}${
+                            className={`kb-col kb-col_${g.kind}${
                                 colMark ? ` kb-col_mark-${colMark}` : ""
                             }${drag?.type === "col" && drag.id === g.id ? " kb-col_dragging" : ""}`}
                             onDragOver={(e) => {
                                 if (drag?.type === "card") {
-                                    e.preventDefault();
-                                    setOverGroup(g.id);
+                                    onCardDragOver(e, g.id);
                                 } else if (drag?.type === "col" && drag.id !== g.id) {
                                     e.preventDefault();
                                     const r = e.currentTarget.getBoundingClientRect();
@@ -165,7 +230,7 @@ export default function CategoriesPage() {
                             }}
                             onDragLeave={(e) => {
                                 if (!e.currentTarget.contains(e.relatedTarget)) {
-                                    if (drag?.type === "card") setOverGroup(null);
+                                    if (drag?.type === "card") setOver(null);
                                     else if (drag?.type === "col") setOverCol(null);
                                 }
                             }}
@@ -203,55 +268,18 @@ export default function CategoriesPage() {
                             </div>
 
                             <div className="kb-cards">
-                                {cats.map((c) => (
-                                    <div
-                                        key={c.id}
-                                        className={`kb-card${
-                                            drag?.type === "card" && drag.id === c.id
-                                                ? " kb-card_dragging"
-                                                : ""
-                                        }`}
-                                        draggable
-                                        onDragStart={(e) => {
-                                            setDrag({ type: "card", id: c.id });
-                                            e.dataTransfer.effectAllowed = "move";
-                                        }}
-                                        onDragEnd={() => {
-                                            setDrag(null);
-                                            setOverGroup(null);
-                                        }}
-                                    >
-                                        <div className="kb-card__top">
-                                            <span className="kb-card__name">{c.name}</span>
-                                            {c.archived && (
-                                                <Label size="xs" theme="warning">
-                                                    arch
-                                                </Label>
-                                            )}
-                                            <span
-                                                className="kb-card__usage"
-                                                title={`${txCountByCat.get(c.id) ?? 0} transactions`}
-                                            >
-                                                {txCountByCat.get(c.id) ?? 0}
-                                            </span>
-                                            <div
-                                                className="kb-card__menu"
-                                                draggable
-                                                onDragStart={(e) => {
-                                                    e.preventDefault();
-                                                    e.stopPropagation();
-                                                }}
-                                            >
-                                                <DropdownMenu size="s" items={catMenu(c)} />
-                                            </div>
-                                        </div>
-                                        {c.keywords && (
-                                            <div className="kb-card__kw">
-                                                {c.keywords.split("|").filter(Boolean).join(", ")}
-                                            </div>
-                                        )}
-                                    </div>
+                                {visible.map((c, i) => (
+                                    <Fragment key={c.id}>
+                                        {insertAt === i && <div className="kb-placeholder" />}
+                                        {renderCard(c, false)}
+                                    </Fragment>
                                 ))}
+                                {insertAt === visible.length && <div className="kb-placeholder" />}
+                                {draggedHere &&
+                                    renderCard(
+                                        cats.find((c) => c.id === dragId),
+                                        true,
+                                    )}
                             </div>
 
                             <button

@@ -91,7 +91,17 @@
 }
 
 .kb-card_dragging {
-    opacity: 0.4;
+    display: none;
+}
+
+/* the gap that opens under the cursor while dragging so you can aim a card at an
+   exact slot; sized like a card so surrounding cards visibly part */
+.kb-placeholder {
+    height: 46px;
+    border: 1px dashed var(--m-accent);
+    border-radius: var(--m-radius);
+    background: var(--m-accent-soft);
+    opacity: 0.6;
 }
 
 .kb-card__top {
@@ -239,12 +249,13 @@
     filter: brightness(0.96);
 }
 
-/* ---- dashed "new group" column ---- */
+/* ---- dashed "new group" button: a compact fixed-size tile, not a full-height
+   column (align-self:flex-start keeps it from stretching to the tallest column) ---- */
 .kb-col_add {
     position: relative;
+    align-self: flex-start;
     border-style: dashed;
-    min-height: 140px;
-    align-self: stretch;
+    height: 92px;
     cursor: pointer;
     background: none;
     overflow: hidden;
@@ -306,9 +317,12 @@
     filter: brightness(0.96);
 }
 
-/* ---- dark: flat gravity canvas, cards are the frosted glass ---- */
+/* ---- dark: cards float directly on the flat canvas so their translucent lift
+   reads as frosted glass (same as the budget card). A tinted column bg would sit
+   between card and canvas and flatten that lift, so keep columns transparent with
+   just a faint outline. ---- */
 .g-root_theme_dark .kb-col {
-    background: rgb(255 255 255 / 2.5%);
+    background: transparent;
     border-color: var(--m-card-border);
 }
 
