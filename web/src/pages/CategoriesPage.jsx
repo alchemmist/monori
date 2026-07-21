@@ -1,4 +1,4 @@
-import { Fragment, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Button, DropdownMenu, Label } from "@gravity-ui/uikit";
 import { Plus } from "@gravity-ui/icons";
 import { useStore } from "../store.js";
@@ -37,11 +37,24 @@ export default function CategoriesPage() {
     }, [snapshot.transactions]);
 
     // ---- card drag & drop (move between / reorder within groups) ----
+    // The dragged card is NOT hidden (display:none aborts the native drag in
+    // Chrome). Instead we live-reorder: remove it from its origin and splice it,
+    // dimmed, into the hovered column at the target index — it acts as its own
+    // placeholder, parting the neighbours right where it will land.
+    const previewCats = (groupId) => {
+        const base = catsByGroup.get(groupId) ?? [];
+        if (drag?.type !== "card") return base;
+        const list = base.filter((c) => c.id !== drag.id);
+        if (over?.groupId !== groupId) return list;
+        const moved = snapshot.categories.find((c) => c.id === drag.id);
+        const idx = Math.min(over.index, list.length);
+        return [...list.slice(0, idx), moved, ...list.slice(idx)];
+    };
+
     // insertion index among the column's cards, ignoring the one being dragged
-    // (it's hidden mid-drag) so the index lines up with the drop math below
-    const cardDropIndex = (colEl, clientY, draggedId) => {
+    const cardDropIndex = (colEl, clientY) => {
         const cards = [...colEl.querySelectorAll(".kb-card")].filter(
-            (el) => +el.dataset.id !== draggedId,
+            (el) => +el.dataset.id !== drag.id,
         );
         for (let i = 0; i < cards.length; i++) {
             const r = cards[i].getBoundingClientRect();
@@ -54,24 +67,26 @@ export default function CategoriesPage() {
         if (drag?.type !== "card") return;
         e.preventDefault();
         const colEl = e.currentTarget.querySelector(".kb-cards");
-        const index = colEl ? cardDropIndex(colEl, e.clientY, drag.id) : 0;
+        const index = colEl ? cardDropIndex(colEl, e.clientY) : 0;
         setOver((o) => (o && o.groupId === groupId && o.index === index ? o : { groupId, index }));
     };
 
     const onCardDrop = (e, toGroupId) => {
         e.preventDefault();
         if (drag?.type !== "card") return;
-        const colEl = e.currentTarget.querySelector(".kb-cards");
-        const index = colEl ? cardDropIndex(colEl, e.clientY, drag.id) : 0;
-        const cols = new Map(groups.map((g) => [g.id, (catsByGroup.get(g.id) ?? []).slice()]));
-        for (const arr of cols.values()) {
-            const i = arr.findIndex((c) => c.id === drag.id);
-            if (i >= 0) arr.splice(i, 1);
-        }
+        const target = over?.groupId ?? toGroupId;
+        const index = over?.index ?? 0;
+        const cols = new Map(
+            groups.map((g) => [
+                g.id,
+                (catsByGroup.get(g.id) ?? []).filter((c) => c.id !== drag.id),
+            ]),
+        );
         const moved = snapshot.categories.find((c) => c.id === drag.id);
-        cols.get(toGroupId).splice(index, 0, moved);
+        const dest = cols.get(target);
+        dest.splice(Math.min(index, dest.length), 0, moved);
         const orderedIds = groups.flatMap((g) => cols.get(g.id).map((c) => c.id));
-        moveCategory(drag.id, toGroupId, orderedIds);
+        moveCategory(drag.id, target, orderedIds);
         setDrag(null);
         setOver(null);
     };
@@ -128,17 +143,18 @@ export default function CategoriesPage() {
         },
     ];
 
-    // `hidden` renders the source card while it's being dragged: kept mounted (so
-    // its dragend still fires) but display:none, so the origin gap closes and the
-    // placeholder alone shows where it will land
-    const renderCard = (c, hidden) => (
+    // the card being dragged stays mounted and visible (dimmed via kb-card_dragging)
+    // so it reads as the live placeholder at the drop point
+    const renderCard = (c, groupId) => (
         <div
-            key={hidden ? `drag-${c.id}` : c.id}
+            key={c.id}
             data-id={c.id}
-            className={`kb-card${hidden ? " kb-card_dragging" : ""}`}
+            className={`kb-card${drag?.type === "card" && drag.id === c.id ? " kb-card_dragging" : ""}`}
             draggable
             onDragStart={(e) => {
+                const list = catsByGroup.get(groupId) ?? [];
                 setDrag({ type: "card", id: c.id });
+                setOver({ groupId, index: list.findIndex((x) => x.id === c.id) });
                 e.dataTransfer.effectAllowed = "move";
             }}
             onDragEnd={() => {
@@ -203,11 +219,7 @@ export default function CategoriesPage() {
             <div className="kb-board" ref={boardRef}>
                 {groups.map((g) => {
                     const cats = catsByGroup.get(g.id) ?? [];
-                    const dragId = drag?.type === "card" ? drag.id : null;
-                    const visible = dragId != null ? cats.filter((c) => c.id !== dragId) : cats;
-                    const draggedHere = dragId != null && cats.some((c) => c.id === dragId);
-                    const insertAt =
-                        over?.groupId === g.id ? Math.min(over.index, visible.length) : -1;
+                    const shown = previewCats(g.id);
                     const colMark =
                         drag?.type === "col" && overCol?.id === g.id ? overCol.side : null;
                     return (
@@ -229,9 +241,13 @@ export default function CategoriesPage() {
                                 }
                             }}
                             onDragLeave={(e) => {
-                                if (!e.currentTarget.contains(e.relatedTarget)) {
-                                    if (drag?.type === "card") setOver(null);
-                                    else if (drag?.type === "col") setOverCol(null);
+                                // keep the card's `over` until another column claims it, so the
+                                // dragged card doesn't vanish mid-transit; only clear col marker
+                                if (
+                                    drag?.type === "col" &&
+                                    !e.currentTarget.contains(e.relatedTarget)
+                                ) {
+                                    setOverCol(null);
                                 }
                             }}
                             onDrop={(e) =>
@@ -267,20 +283,7 @@ export default function CategoriesPage() {
                                 </div>
                             </div>
 
-                            <div className="kb-cards">
-                                {visible.map((c, i) => (
-                                    <Fragment key={c.id}>
-                                        {insertAt === i && <div className="kb-placeholder" />}
-                                        {renderCard(c, false)}
-                                    </Fragment>
-                                ))}
-                                {insertAt === visible.length && <div className="kb-placeholder" />}
-                                {draggedHere &&
-                                    renderCard(
-                                        cats.find((c) => c.id === dragId),
-                                        true,
-                                    )}
-                            </div>
+                            <div className="kb-cards">{shown.map((c) => renderCard(c, g.id))}</div>
 
                             <button
                                 className="kb-add-card"

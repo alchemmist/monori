@@ -90,18 +90,15 @@
     cursor: grabbing;
 }
 
+/* the dragged card, live-reordered into its drop slot, reads as the placeholder:
+   dashed accent outline + faded content so surrounding cards visibly part around
+   it. NOT display:none — hiding the drag source aborts native DnD in Chrome. */
 .kb-card_dragging {
-    display: none;
-}
-
-/* the gap that opens under the cursor while dragging so you can aim a card at an
-   exact slot; sized like a card so surrounding cards visibly part */
-.kb-placeholder {
-    height: 46px;
-    border: 1px dashed var(--m-accent);
-    border-radius: var(--m-radius);
+    border-color: var(--m-accent);
+    border-style: dashed;
     background: var(--m-accent-soft);
-    opacity: 0.6;
+    opacity: 0.7;
+    cursor: grabbing;
 }
 
 .kb-card__top {
