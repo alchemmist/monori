@@ -18,29 +18,44 @@ export default function CategoriesPage() {
     const [overCol, setOverCol] = useState(null); // {id, side:'before'|'after'} for column reorder
     const boardRef = useRef(null);
     const rectsRef = useRef(new Map());
+    const animsRef = useRef(new Map());
 
-    // FLIP: after each render, slide every card from its previous box to its new
-    // one so neighbours part smoothly instead of snapping when the live-reorder
-    // moves them. The dragged card is skipped (its position is the drop target).
+    // FLIP: slide cards from their previous Y to the new one so neighbours part
+    // smoothly as the live-reorder moves them, instead of snapping. Deliberately:
+    //  - only the VERTICAL delta is animated — horizontal board scroll changes
+    //    every card's left, and animating that made grabbing-after-scroll jump;
+    //  - any in-flight FLIP is cancelled BEFORE measuring, so a mid-animation
+    //    transform can't compound into the next delta (that made cards fly apart
+    //    on fast drags);
+    //  - the dragged card is skipped, and it only runs during an active card drag.
     useLayoutEffect(() => {
         const board = boardRef.current;
         if (!board) return;
+        const cards = [...board.querySelectorAll(".kb-card[data-id]")];
+        for (const el of cards) {
+            const a = animsRef.current.get(el.dataset.id);
+            if (a) {
+                a.cancel();
+                animsRef.current.delete(el.dataset.id);
+            }
+        }
         const next = new Map();
-        board.querySelectorAll(".kb-card[data-id]").forEach((el) => {
-            const r = el.getBoundingClientRect();
-            next.set(el.dataset.id, r);
-            const prev = rectsRef.current.get(el.dataset.id);
-            if (!prev || el.classList.contains("kb-card_dragging")) return;
-            const dx = prev.left - r.left;
-            const dy = prev.top - r.top;
-            if (!dx && !dy) return;
-            el.style.transition = "none";
-            el.style.transform = `translate(${dx}px, ${dy}px)`;
-            requestAnimationFrame(() => {
-                el.style.transition = "";
-                el.style.transform = "";
-            });
-        });
+        for (const el of cards) next.set(el.dataset.id, el.getBoundingClientRect().top);
+        if (drag?.type === "card") {
+            for (const el of cards) {
+                const id = el.dataset.id;
+                const prev = rectsRef.current.get(id);
+                const top = next.get(id);
+                if (prev == null || prev === top || el.classList.contains("kb-card_dragging"))
+                    continue;
+                const anim = el.animate(
+                    [{ transform: `translateY(${prev - top}px)` }, { transform: "translateY(0)" }],
+                    { duration: 150, easing: "ease" },
+                );
+                animsRef.current.set(id, anim);
+                anim.onfinish = () => animsRef.current.delete(id);
+            }
+        }
         rectsRef.current = next;
     });
 

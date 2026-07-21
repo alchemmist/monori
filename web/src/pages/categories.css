@@ -77,7 +77,6 @@
     padding: 10px 12px;
     cursor: grab;
     transition:
-        transform 0.18s ease,
         border-color 0.15s ease,
         box-shadow 0.15s ease;
 }
