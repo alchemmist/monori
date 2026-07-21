@@ -114,12 +114,7 @@ body {
 }
 
 /* aurora canvas: a soft violet glow in the top-right, fixed to the viewport so
-   it reads as a lit backdrop rather than tiling on scroll (dark theme only).
-   gravity-ui applies the theme class to <body> itself, so match that directly;
-   the :has() variant keeps it working if a future version nests the class in a
-   child instead. Without this the flat gravity base color shows and the aurora
-   never renders. */
-body.g-root_theme_dark,
+   it reads as a lit backdrop rather than tiling on scroll (dark theme only) */
 body:has(.g-root_theme_dark) {
     background: radial-gradient(120% 90% at 82% -12%, #17102a 0%, #0a0812 46%, #060509 100%);
     background-attachment: fixed;
