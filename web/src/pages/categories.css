@@ -1,0 +1,85 @@
+.cat-groups {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    max-width: 640px;
+}
+
+.cat-group__head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.cat-group__name {
+    font-weight: 600;
+    font-size: 15px;
+}
+
+.cat-group__count {
+    color: var(--m-text-faint);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+}
+
+.cat-list {
+    overflow: hidden;
+}
+
+.cat-list__empty {
+    padding: 14px 16px;
+    color: var(--m-text-faint);
+    font-size: 13px;
+}
+
+.cat-list-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 11px 16px;
+    border-bottom: 1px solid var(--m-border-soft);
+    background: var(--m-surface);
+}
+
+.cat-list-row:last-child {
+    border-bottom: none;
+}
+
+.cat-list-row__main {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+    min-width: 0;
+}
+
+.cat-list-row__name {
+    font-weight: 600;
+}
+
+.cat-list-row__keywords {
+    color: var(--m-text-faint);
+    font-size: 12px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.cat-list-row__count {
+    color: var(--m-text-dim);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.cat-list-row__actions {
+    display: flex;
+    align-items: center;
+}
+
+/* dark: rows sit on the frosted card, so keep them translucent instead of
+   repainting an opaque near-black block over the aurora */
+.g-root_theme_dark .cat-list-row {
+    background: transparent;
+}
