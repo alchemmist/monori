@@ -1,12 +1,13 @@
 import { useState } from "react";
-import { ThemeProvider, ToasterProvider, ToasterComponent, Toaster } from "@gravity-ui/uikit";
+import { ThemeProvider } from "@gravity-ui/uikit";
+import { MantineProvider } from "@mantine/core";
+import { Notifications } from "@mantine/notifications";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import App from "./App.jsx";
 import Shell from "./components/Shell.jsx";
 import Landing from "./components/Landing.jsx";
 import MarkdownPage from "./components/MarkdownPage.jsx";
-
-const toaster = new Toaster();
+import { theme as mantineTheme } from "./ui/theme.js";
 
 // one theme for the whole site (landing, docs, auth, app), persisted under a
 // single localStorage key so it never diverges between routes
@@ -35,9 +36,12 @@ export default function Root() {
             return next;
         });
 
+    // the gravity ThemeProvider stays for @gravity-ui/charts: its tooltips need
+    // the uikit theme context, and it keeps .g-root_theme_* on <body> — the
+    // classes every stylesheet keys its dark variant off (goes away with charts)
     return (
         <ThemeProvider theme={theme}>
-            <ToasterProvider toaster={toaster}>
+            <MantineProvider theme={mantineTheme} forceColorScheme={theme}>
                 <BrowserRouter>
                     <Routes>
                         {/* marketing landing + documentation share the docs Shell */}
@@ -56,8 +60,8 @@ export default function Root() {
                         />
                     </Routes>
                 </BrowserRouter>
-                <ToasterComponent />
-            </ToasterProvider>
+                <Notifications position="bottom-right" />
+            </MantineProvider>
         </ThemeProvider>
     );
 }

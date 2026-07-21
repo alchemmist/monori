@@ -1,4 +1,4 @@
-import { SegmentedRadioGroup } from "@gravity-ui/uikit";
+import { SegmentedControl } from "@mantine/core";
 
 export default function SettingsPage({ theme, onToggleTheme }) {
     return (
@@ -9,15 +9,15 @@ export default function SettingsPage({ theme, onToggleTheme }) {
                     <div className="settings-row__title">Theme</div>
                     <div className="settings-row__hint">Light or dark appearance</div>
                 </div>
-                <SegmentedRadioGroup
-                    size="l"
+                <SegmentedControl
+                    className="seg-l"
                     value={theme}
-                    onUpdate={(v) => {
+                    onChange={(v) => {
                         if (v !== theme) onToggleTheme();
                     }}
-                    options={[
-                        { value: "light", content: "Light" },
-                        { value: "dark", content: "Dark" },
+                    data={[
+                        { value: "light", label: "Light" },
+                        { value: "dark", label: "Dark" },
                     ]}
                 />
             </div>
