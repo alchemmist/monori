@@ -104,8 +104,28 @@
     width: 90px;
 }
 
-.tx-table {
+/* the long virtualized list scrolls with the window; drop the grid's overflow
+   clip here so the table isn't a scroll container and the sticky header can pin
+   to the viewport (the budget grid keeps its clip for its rounded card).
+   table-layout:fixed pins column widths to the header so a long nowrap value
+   can't widen the table past the viewport now that nothing clips it. */
+.tx-grid {
+    table-layout: fixed;
+    overflow: visible;
+}
+
+/* with fixed layout a long unbroken value would visually spill its cell; clip it
+   (the description cell already ellipsizes; this covers the rest) */
+.tx-grid td {
     overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.tx-table {
+    /* full-bleed (radius 0), so nothing needs clipping here — and an overflow
+       clip would make it a scroll container, breaking the header's
+       position:sticky pin to the window as the long list scrolls */
+    overflow: visible;
     margin-inline: calc(-1 * var(--pad-x));
     border-inline: none;
     border-radius: 0;
