@@ -3,10 +3,22 @@ of the 6802 rows is ever in the DOM, spacers stand in for the rest, and
 scrolling recycles the rendered rows while the sticky header stays pinned."""
 
 import pathlib
+import sys
 
 from playwright.sync_api import sync_playwright
 
-TOKEN = pathlib.Path("/tmp/monori-token.txt").read_text().strip()
+TOKEN_FILE = pathlib.Path("/tmp/monori-token.txt")
+
+
+def load_token():
+    if not TOKEN_FILE.exists():
+        sys.exit(
+            f"{TOKEN_FILE} not found — mint one first, e.g.:\n"
+            "  cd server && uv run python -c "
+            "'from app.security import create_access_token; print(create_access_token(1))'"
+            f" > {TOKEN_FILE}"
+        )
+    return TOKEN_FILE.read_text().strip()
 
 
 def measure(page):
@@ -33,10 +45,11 @@ def measure(page):
 
 
 def main():
+    token = load_token()
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         page = browser.new_page(viewport={"width": 1280, "height": 900})
-        page.add_init_script(f"localStorage.setItem('monori_token', {TOKEN!r});")
+        page.add_init_script(f"localStorage.setItem('monori_token', {token!r});")
         page.goto("http://localhost:5173/", wait_until="networkidle")
         page.get_by_text("Transactions", exact=True).first.click()
         page.wait_for_selector("tr.cat-row", timeout=15000)
