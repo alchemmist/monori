@@ -24,6 +24,7 @@ export default function ConnectionDialog({ account, connection, onClose }) {
     const [step, setStep] = useState(connection ? "ready" : "credentials");
     const [phone, setPhone] = useState("");
     const [password, setPassword] = useState("");
+    const [tbankAccount, setTbankAccount] = useState("");
     const [code, setCode] = useState("");
     const [busy, setBusy] = useState(false);
     const [result, setResult] = useState(null);
@@ -58,7 +59,11 @@ export default function ConnectionDialog({ account, connection, onClose }) {
                 accountId: account.id,
                 bank: BANK.bank,
                 kind: BANK.kind,
-                credentials: { phone: phone.trim(), password },
+                credentials: {
+                    phone: phone.trim(),
+                    password,
+                    account: tbankAccount.trim() || null,
+                },
             });
             connId.current = conn.id;
             await runSync(conn.id);
@@ -131,6 +136,13 @@ export default function ConnectionDialog({ account, connection, onClose }) {
                     type="password"
                     value={password}
                     onUpdate={setPassword}
+                />
+                <TextInput
+                    label="T-Bank account number (optional)"
+                    placeholder="e.g. 5858870594 — leave empty to sync the default feed"
+                    value={tbankAccount}
+                    onUpdate={setTbankAccount}
+                    note="The number from the account's operations link in the cabinet; scopes the sync to that one account."
                 />
             </>
         );
