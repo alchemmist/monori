@@ -11,7 +11,7 @@ from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from .. import crypto
 from ..auth import current_user
@@ -35,6 +35,13 @@ class Credentials(BaseModel):
     # the T-Bank account id to scope the export to (the number in the cabinet's
     # /mybank/operations/?account=<id> link); empty means the default feed
     account: str | None = None
+
+    @field_validator("account")
+    @classmethod
+    def _blank_account_is_none(cls, v):
+        # normalize so a blank/whitespace id is stored as "no account" rather
+        # than scoping the sync to a bogus ...?account=%20 view
+        return (v.strip() or None) if v is not None else None
 
 
 class ConnectionBody(BaseModel):

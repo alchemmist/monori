@@ -410,8 +410,11 @@ class TBankPlaywrightConnector(Connector):
         # account maps to its own connection, so a savings account is just
         # another connection with its own id.
         account = (self.credentials or {}).get("account")
+        # a whitespace-only id is not a real account — strip before deciding, so
+        # stored creds from a non-web client can't scope us to ...?account=%20
+        account = str(account).strip() if account is not None else ""
         if account:
-            return f"{self.URL_OPERATIONS}?account={quote(str(account), safe='')}"
+            return f"{self.URL_OPERATIONS}?account={quote(account, safe='')}"
         return self.URL_OPERATIONS
 
     def _download_and_parse(self, page, since):
