@@ -443,6 +443,24 @@ def test_submit_propagates_real_click_error(monkeypatch):
 # --- download ---------------------------------------------------------------
 
 
+def test_operations_url_scopes_to_account_when_set():
+    c = _connector({**CREDS, "account": "5858870594"})
+    assert c._operations_url() == TB.URL_OPERATIONS + "?account=5858870594"
+
+
+def test_operations_url_defaults_to_all_feed_when_account_absent_or_blank():
+    assert _connector(dict(CREDS))._operations_url() == TB.URL_OPERATIONS
+    assert _connector({**CREDS, "account": ""})._operations_url() == TB.URL_OPERATIONS
+    # a whitespace-only id from a non-web client is not a real account
+    assert _connector({**CREDS, "account": "   "})._operations_url() == TB.URL_OPERATIONS
+    assert _connector({**CREDS, "account": None})._operations_url() == TB.URL_OPERATIONS
+
+
+def test_operations_url_encodes_the_account():
+    c = _connector({**CREDS, "account": "a b&x"})
+    assert c._operations_url() == TB.URL_OPERATIONS + "?account=a%20b%26x"
+
+
 def test_download_and_parse_returns_rows():
     c = _connector()
     page = FakePage(scenario="logged_in", export_label="CSV")
