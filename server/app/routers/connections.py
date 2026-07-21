@@ -32,6 +32,9 @@ def _now():
 class Credentials(BaseModel):
     phone: str
     password: str
+    # the T-Bank account id to scope the export to (the number in the cabinet's
+    # /mybank/operations/?account=<id> link); empty means the default feed
+    account: str | None = None
 
 
 class ConnectionBody(BaseModel):
