@@ -1,0 +1,543 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>Categories — Kanban prototype</title>
+        <style>
+            :root {
+                --m-radius: 6px;
+                --m-radius-sm: 4px;
+                --m-accent: #ef5a17;
+                --m-accent-contrast: #fff;
+                --m-bg: #fff;
+                --m-surface: #fff;
+                --m-surface-hover: #f7f7f6;
+                --m-surface-raised: #f5f5f4;
+                --m-border: #e7e6e3;
+                --m-border-soft: #efefed;
+                --m-text: #0a0a0a;
+                --m-text-dim: #5c5c58;
+                --m-text-faint: #a3a29d;
+                --m-accent-soft: #ffe6d9;
+                --m-income: #15803d;
+                --m-expense: #dc2626;
+                --m-income-soft: #e4f3e9;
+                --m-expense-soft: #fbe3e3;
+                --m-warning: #b45309;
+                --m-warning-soft: #fef3c7;
+
+                --m-card-bg: var(--m-surface);
+                --m-card-border: var(--m-border);
+                --board-bg: #fafafa;
+            }
+            /* exact prod dark tokens (theme.css .g-root_theme_dark) */
+            [data-theme="dark"] {
+                --m-bg: #08070d;
+                --m-surface: #0d0b15;
+                --m-surface-hover: #191426;
+                --m-surface-raised: #141020;
+                --m-border: #221d31;
+                --m-border-soft: #191426;
+                --m-text: #f2f1f6;
+                --m-text-dim: #a3a0b0;
+                --m-text-faint: #6c6980;
+                --m-accent: #ff7a3c;
+                --m-accent-soft: #3a1e10;
+                --m-income: #4ade80;
+                --m-expense: #f87171;
+                --m-warning: #fbbf24;
+                --m-income-soft: #16281c;
+                --m-expense-soft: #331919;
+                --m-warning-soft: #2a2410;
+
+                --m-card-bg: rgb(255 255 255 / 4%);
+                --m-card-border: rgb(255 255 255 / 6.5%);
+                --board-bg: transparent;
+            }
+
+            * {
+                box-sizing: border-box;
+            }
+            body {
+                margin: 0;
+                font-family:
+                    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial,
+                    sans-serif;
+                background: var(--m-bg);
+                color: var(--m-text);
+                min-height: 100vh;
+            }
+            /* exact prod dark canvas: gravity-ui's flat base --g-color-base-background
+               (rgb(34,29,34) = #221d22), applied to body.g-root_theme_dark. The
+               theme.css aurora gradient does NOT show in prod — its selector
+               body:has(.g-root_theme_dark) can't match since gravity puts the theme
+               class on <body> itself, not a descendant. */
+            [data-theme="dark"] body,
+            body[data-theme="dark"] {
+                background: #221d22;
+            }
+
+            .wrap {
+                padding: 28px 32px 60px;
+            }
+            .toolbar {
+                display: flex;
+                align-items: center;
+                gap: 14px;
+                margin-bottom: 22px;
+            }
+            .page-title {
+                font-size: 26px;
+                font-weight: 700;
+                letter-spacing: -0.02em;
+                margin: 0;
+            }
+            .spacer {
+                flex: 1;
+            }
+            .btn {
+                display: inline-flex;
+                align-items: center;
+                gap: 6px;
+                height: 32px;
+                padding: 0 14px;
+                border-radius: var(--m-radius);
+                border: 1px solid var(--m-border);
+                background: var(--m-surface);
+                color: var(--m-text);
+                font-size: 13px;
+                font-weight: 500;
+                cursor: pointer;
+            }
+            .btn_action {
+                background: var(--m-accent);
+                border-color: var(--m-accent);
+                color: var(--m-accent-contrast);
+            }
+            .theme-toggle {
+                cursor: pointer;
+                border: 1px solid var(--m-border);
+                background: var(--m-surface);
+                color: var(--m-text-dim);
+                border-radius: var(--m-radius);
+                height: 32px;
+                padding: 0 12px;
+                font-size: 12px;
+            }
+            [data-theme="dark"] .theme-toggle,
+            [data-theme="dark"] .btn {
+                background: var(--m-card-bg);
+                border-color: var(--m-card-border);
+            }
+
+            /* ---- split "new group" control: hovers open into income | expense ---- */
+            .newgroup {
+                position: relative;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                height: 32px;
+                min-width: 132px;
+                padding: 0 14px;
+                border: 1px solid var(--m-border);
+                border-radius: var(--m-radius);
+                background: var(--m-surface);
+                color: var(--m-text);
+                font-size: 13px;
+                font-weight: 500;
+                cursor: pointer;
+                overflow: hidden;
+            }
+            [data-theme="dark"] .newgroup {
+                background: var(--m-card-bg);
+                border-color: var(--m-card-border);
+            }
+            .newgroup__label {
+                transition:
+                    opacity 0.14s ease,
+                    transform 0.14s ease;
+            }
+            .newgroup__half {
+                position: absolute;
+                top: 0;
+                bottom: 0;
+                width: 50%;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 12px;
+                font-weight: 600;
+                opacity: 0;
+                transition: opacity 0.14s ease;
+            }
+            .newgroup__half_income {
+                left: 0;
+                color: var(--m-income);
+                background: var(--m-income-soft);
+            }
+            .newgroup__half_expense {
+                right: 0;
+                color: var(--m-expense);
+                background: var(--m-expense-soft);
+            }
+            .newgroup__half:hover {
+                filter: brightness(0.97);
+            }
+            .newgroup:hover .newgroup__label {
+                opacity: 0;
+            }
+            .newgroup:hover .newgroup__half {
+                opacity: 1;
+            }
+
+            /* ---- board ---- */
+            .board {
+                display: flex;
+                gap: 16px;
+                align-items: flex-start;
+                overflow-x: auto;
+                padding-bottom: 12px;
+            }
+            .col {
+                flex: 0 0 288px;
+                width: 288px;
+                background: var(--board-bg);
+                border: 1px solid var(--m-border);
+                border-radius: 12px;
+                padding: 12px;
+                display: flex;
+                flex-direction: column;
+                gap: 10px;
+            }
+            [data-theme="dark"] .col {
+                background: rgb(255 255 255 / 2.5%);
+                border-color: var(--m-card-border);
+            }
+            .col__head {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+            }
+            .col__name {
+                font-weight: 650;
+                font-size: 14px;
+            }
+            .kind-pill {
+                font-size: 10px;
+                font-weight: 600;
+                letter-spacing: 0.4px;
+                text-transform: uppercase;
+                padding: 2px 7px;
+                border-radius: 20px;
+                color: var(--m-text-dim);
+                background: var(--m-surface-raised);
+            }
+            .col_income .kind-pill {
+                color: var(--m-income);
+                background: var(--m-income-soft);
+            }
+            .col_expense .kind-pill {
+                color: var(--m-expense);
+                background: var(--m-expense-soft);
+            }
+            .col__count {
+                color: var(--m-text-faint);
+                font-size: 12px;
+                font-variant-numeric: tabular-nums;
+            }
+            .col__menu {
+                margin-left: auto;
+                color: var(--m-text-faint);
+                cursor: pointer;
+                border: none;
+                background: none;
+                font-size: 18px;
+                line-height: 1;
+                padding: 2px 4px;
+                border-radius: var(--m-radius-sm);
+            }
+            .col__menu:hover {
+                background: var(--m-surface-hover);
+                color: var(--m-text);
+            }
+
+            .cards {
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
+                min-height: 8px;
+            }
+            .card {
+                position: relative;
+                background: var(--m-card-bg);
+                border: 1px solid var(--m-card-border);
+                border-radius: var(--m-radius);
+                padding: 10px 12px;
+                cursor: grab;
+                transition:
+                    border-color 0.15s ease,
+                    box-shadow 0.15s ease,
+                    transform 0.1s ease;
+            }
+            /* dark: cards ARE the frosted glass (exact prod treatment) */
+            [data-theme="dark"] .card {
+                border-radius: 10px;
+                backdrop-filter: blur(7px);
+                box-shadow: 0 14px 34px -20px rgb(0 0 0 / 90%);
+            }
+            .card:hover {
+                border-color: var(--m-accent);
+                box-shadow: 0 3px 12px rgb(0 0 0 / 8%);
+            }
+            [data-theme="dark"] .card:hover {
+                border-color: var(--m-accent);
+            }
+            .card__top {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+            }
+            .card__name {
+                font-weight: 600;
+                font-size: 13.5px;
+            }
+            /* subtle usage dot: a faint count, no "tx" abbreviation, title tooltip */
+            .card__usage {
+                margin-left: auto;
+                display: inline-flex;
+                align-items: center;
+                gap: 5px;
+                font-size: 11px;
+                color: var(--m-text-faint);
+                font-variant-numeric: tabular-nums;
+                white-space: nowrap;
+            }
+            .card__usage::before {
+                content: "";
+                width: 5px;
+                height: 5px;
+                border-radius: 50%;
+                background: currentColor;
+                opacity: 0.55;
+            }
+            .card__kw {
+                margin-top: 5px;
+                font-size: 11.5px;
+                color: var(--m-text-faint);
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+            .card__archived {
+                font-size: 9.5px;
+                font-weight: 600;
+                text-transform: uppercase;
+                letter-spacing: 0.4px;
+                color: var(--m-warning);
+                background: var(--m-warning-soft);
+                border-radius: 20px;
+                padding: 1px 6px;
+            }
+
+            .add-card {
+                border: 1px dashed var(--m-border);
+                border-radius: var(--m-radius);
+                background: none;
+                color: var(--m-text-dim);
+                font-size: 12.5px;
+                padding: 8px;
+                cursor: pointer;
+                text-align: left;
+            }
+            [data-theme="dark"] .add-card {
+                border-color: var(--m-card-border);
+            }
+            .add-card:hover {
+                border-color: var(--m-accent);
+                color: var(--m-accent);
+            }
+
+            /* dashed add-group column: same split-on-hover as the toolbar control */
+            .col_add {
+                position: relative;
+                border-style: dashed;
+                border-color: var(--m-border);
+                min-height: 132px;
+                cursor: pointer;
+                background: none;
+                overflow: hidden;
+                padding: 0;
+            }
+            [data-theme="dark"] .col_add {
+                border-color: var(--m-card-border);
+            }
+            .col_add__label {
+                position: absolute;
+                inset: 0;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                color: var(--m-text-dim);
+                font-size: 13px;
+                font-weight: 500;
+                transition: opacity 0.14s ease;
+            }
+            .col_add__half {
+                position: absolute;
+                left: 0;
+                right: 0;
+                height: 50%;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                gap: 6px;
+                font-size: 13px;
+                font-weight: 600;
+                opacity: 0;
+                transition: opacity 0.14s ease;
+            }
+            .col_add__half_income {
+                top: 0;
+                color: var(--m-income);
+                background: var(--m-income-soft);
+            }
+            .col_add__half_expense {
+                bottom: 0;
+                color: var(--m-expense);
+                background: var(--m-expense-soft);
+            }
+            .col_add:hover .col_add__label {
+                opacity: 0;
+            }
+            .col_add:hover .col_add__half {
+                opacity: 1;
+            }
+            .col_add__half:hover {
+                filter: brightness(0.97);
+            }
+
+            .note {
+                max-width: 660px;
+                margin: 0 0 22px;
+                color: var(--m-text-dim);
+                font-size: 13px;
+                line-height: 1.5;
+            }
+            .note b {
+                color: var(--m-text);
+            }
+        </style>
+    </head>
+    <body data-theme="light">
+        <div class="wrap">
+            <div class="toolbar">
+                <h1 class="page-title">Categories</h1>
+                <div class="spacer"></div>
+                <button class="theme-toggle" onclick="toggleTheme()">◐ theme</button>
+                <div class="newgroup" title="Create a group">
+                    <span class="newgroup__label">+ New group</span>
+                    <span class="newgroup__half newgroup__half_income">Income</span>
+                    <span class="newgroup__half newgroup__half_expense">Expense</span>
+                </div>
+                <button class="btn btn_action">+ New category</button>
+            </div>
+
+            <p class="note">
+                Kanban prototype. Each <b>column is a category group</b> you own — rename it, switch
+                income/expense, delete, reorder. Each <b>card is a category</b>; drag a card between
+                columns to move it to another group. Hover <b>New group</b> (or the dashed column):
+                it splits into a green <b>Income</b> and red <b>Expense</b> half — click a half to
+                create a group of that kind, then name it.
+            </p>
+
+            <div class="board" id="board"></div>
+        </div>
+
+        <script>
+            const GROUPS = [
+                {
+                    name: "Income",
+                    kind: "income",
+                    cats: [
+                        { name: "Salary", kw: "зарплата, аванс", n: 24 },
+                        { name: "Freelance", kw: "yandex, upwork", n: 7 },
+                        { name: "Interest", kw: "проценты, кэшбэк", n: 12 },
+                    ],
+                },
+                {
+                    name: "Fixed expenses",
+                    kind: "expense",
+                    cats: [
+                        { name: "Rent", kw: "аренда", n: 12 },
+                        { name: "Utilities", kw: "жкх, свет, вода", n: 34 },
+                        { name: "Subscriptions", kw: "netflix, spotify", n: 41, archived: true },
+                    ],
+                },
+                {
+                    name: "Daily living",
+                    kind: "expense",
+                    cats: [
+                        { name: "Groceries", kw: "пятёрочка, лента, ашан", n: 210 },
+                        { name: "Transport", kw: "метро, такси, топливо", n: 88 },
+                        { name: "Pharmacy", kw: "аптека", n: 19 },
+                        { name: "Cafes", kw: "кофе, ресторан", n: 63 },
+                    ],
+                },
+                {
+                    name: "Lifestyle",
+                    kind: "expense",
+                    cats: [
+                        { name: "Shopping", kw: "wildberries, ozon", n: 57 },
+                        { name: "Travel", kw: "отель, авиабилет", n: 15 },
+                        { name: "Gifts", kw: "", n: 8 },
+                    ],
+                },
+            ];
+
+            const board = document.getElementById("board");
+            for (const g of GROUPS) {
+                const col = document.createElement("div");
+                col.className = "col col_" + g.kind;
+                col.innerHTML = `
+          <div class="col__head">
+            <span class="col__name">${g.name}</span>
+            <span class="kind-pill">${g.kind}</span>
+            <span class="col__count">${g.cats.length}</span>
+            <button class="col__menu" title="Rename · change kind · delete">⋯</button>
+          </div>
+          <div class="cards">
+            ${g.cats
+                .map(
+                    (c) => `
+              <div class="card">
+                <div class="card__top">
+                  <span class="card__name">${c.name}</span>
+                  ${c.archived ? '<span class="card__archived">arch</span>' : ""}
+                  <span class="card__usage" title="${c.n} transactions">${c.n}</span>
+                </div>
+                ${c.kw ? `<div class="card__kw">${c.kw}</div>` : ""}
+              </div>`,
+                )
+                .join("")}
+          </div>
+          <button class="add-card">+ Add category</button>
+        `;
+                board.appendChild(col);
+            }
+            const addCol = document.createElement("div");
+            addCol.className = "col col_add";
+            addCol.innerHTML = `
+        <span class="col_add__label">+ New group</span>
+        <span class="col_add__half col_add__half_income">+ Income group</span>
+        <span class="col_add__half col_add__half_expense">+ Expense group</span>
+      `;
+            board.appendChild(addCol);
+
+            function toggleTheme() {
+                const b = document.body;
+                b.dataset.theme = b.dataset.theme === "dark" ? "light" : "dark";
+            }
+        </script>
+    </body>
+</html>

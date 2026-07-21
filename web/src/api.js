@@ -95,6 +95,31 @@ export const api = {
         apiFetch(`/api/categories/${id}${reassignTo ? `?reassignTo=${reassignTo}` : ""}`, {
             method: "DELETE",
         }).then(json),
+    reorderCategories: (ids) =>
+        apiFetch("/api/categories/reorder", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ids }),
+        }).then(json),
+    createGroup: (body) =>
+        apiFetch("/api/groups", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+        }).then(json),
+    patchGroup: (id, patch) =>
+        apiFetch(`/api/groups/${id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(patch),
+        }).then(json),
+    deleteGroup: (id) => apiFetch(`/api/groups/${id}`, { method: "DELETE" }).then(json),
+    reorderGroups: (ids) =>
+        apiFetch("/api/groups/reorder", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ids }),
+        }).then(json),
     importPreview: (text, accountId) =>
         apiFetch("/api/import/preview", {
             method: "POST",
