@@ -7,18 +7,19 @@ import "./categories.css";
 
 const KIND_LABEL = { expense: "Expense", income: "Income" };
 
+// match the backend's ORDER BY sort, id — and stay deterministic when sort is
+// missing (the demo groups omit it) or tied
+const bySortThenId = (a, b) => (a.sort ?? 0) - (b.sort ?? 0) || a.id - b.id;
+
 export default function CategoriesPage() {
     const { snapshot, notify } = useStore();
     const [dialog, setDialog] = useState(null); // {type: 'edit'|'delete', category}
 
-    const groups = useMemo(
-        () => [...snapshot.groups].sort((a, b) => a.sort - b.sort),
-        [snapshot.groups],
-    );
+    const groups = useMemo(() => [...snapshot.groups].sort(bySortThenId), [snapshot.groups]);
 
     const catsByGroup = useMemo(() => {
         const m = new Map(groups.map((g) => [g.id, []]));
-        for (const c of [...snapshot.categories].sort((a, b) => a.sort - b.sort)) {
+        for (const c of [...snapshot.categories].sort(bySortThenId)) {
             if (m.has(c.groupId)) m.get(c.groupId).push(c);
         }
         return m;
@@ -113,7 +114,10 @@ export default function CategoriesPage() {
                                             )}
                                             {c.keywords && (
                                                 <span className="cat-list-row__keywords">
-                                                    {c.keywords.split("|").filter(Boolean).join(", ")}
+                                                    {c.keywords
+                                                        .split("|")
+                                                        .filter(Boolean)
+                                                        .join(", ")}
                                                 </span>
                                             )}
                                         </div>
