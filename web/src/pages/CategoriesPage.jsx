@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Button, DropdownMenu, Label } from "@gravity-ui/uikit";
 import { Plus } from "@gravity-ui/icons";
 import { useStore } from "../store.js";
@@ -17,6 +17,32 @@ export default function CategoriesPage() {
     const [over, setOver] = useState(null); // {groupId, index} — live card insertion point
     const [overCol, setOverCol] = useState(null); // {id, side:'before'|'after'} for column reorder
     const boardRef = useRef(null);
+    const rectsRef = useRef(new Map());
+
+    // FLIP: after each render, slide every card from its previous box to its new
+    // one so neighbours part smoothly instead of snapping when the live-reorder
+    // moves them. The dragged card is skipped (its position is the drop target).
+    useLayoutEffect(() => {
+        const board = boardRef.current;
+        if (!board) return;
+        const next = new Map();
+        board.querySelectorAll(".kb-card[data-id]").forEach((el) => {
+            const r = el.getBoundingClientRect();
+            next.set(el.dataset.id, r);
+            const prev = rectsRef.current.get(el.dataset.id);
+            if (!prev || el.classList.contains("kb-card_dragging")) return;
+            const dx = prev.left - r.left;
+            const dy = prev.top - r.top;
+            if (!dx && !dy) return;
+            el.style.transition = "none";
+            el.style.transform = `translate(${dx}px, ${dy}px)`;
+            requestAnimationFrame(() => {
+                el.style.transition = "";
+                el.style.transform = "";
+            });
+        });
+        rectsRef.current = next;
+    });
 
     const groups = useMemo(() => [...snapshot.groups].sort(bySortThenId), [snapshot.groups]);
 
@@ -216,7 +242,7 @@ export default function CategoriesPage() {
                 </Button>
             </div>
 
-            <div className="kb-board" ref={boardRef}>
+            <div className={`kb-board${drag ? " kb-board_dragging" : ""}`} ref={boardRef}>
                 {groups.map((g) => {
                     const cats = catsByGroup.get(g.id) ?? [];
                     const shown = previewCats(g.id);
