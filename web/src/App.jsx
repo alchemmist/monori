@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, lazy, useEffect, useMemo, useState } from "react";
 import { Loader } from "@mantine/core";
 import {
     ChartColumn,
@@ -22,8 +22,10 @@ import { useStore, isDemo } from "./store.js";
 import { showToast } from "./ui/notify.js";
 import { computeRange } from "./engine/budget.js";
 import BudgetPage from "./pages/BudgetPage.jsx";
-import DashboardPage from "./pages/DashboardPage.jsx";
-import AnalyticsPage from "./pages/AnalyticsPage.jsx";
+
+// the whole d3/charts stack is only used here — keep it out of the entry chunk
+const DashboardPage = lazy(() => import("./pages/DashboardPage.jsx"));
+const AnalyticsPage = lazy(() => import("./pages/AnalyticsPage.jsx"));
 import TransactionsPage from "./pages/TransactionsPage.jsx";
 import AccountsPage from "./pages/AccountsPage.jsx";
 import CategoriesPage from "./pages/CategoriesPage.jsx";
@@ -231,14 +233,14 @@ export default function App({ theme, onToggleTheme }) {
                     <BudgetPage results={results} firstYear={FIRST_YEAR} lastYear={lastYear} />
                 )}
                 {page === "dashboard" && (
-                    <>
+                    <Suspense fallback={null}>
                         <DashboardPage firstYear={FIRST_YEAR} lastYear={lastYear} />
                         <AnalyticsPage
                             results={results}
                             firstYear={FIRST_YEAR}
                             lastYear={lastYear}
                         />
-                    </>
+                    </Suspense>
                 )}
                 {page === "transactions" && <TransactionsPage />}
                 {page === "accounts" && <AccountsPage />}
