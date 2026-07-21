@@ -342,34 +342,35 @@
     min-width: 0;
 }
 
-/* dark: the frozen category column and the header bands are frosted glass over
-   the aurora canvas — not opaque near-black blocks. A blur keeps the frozen
-   column and sticky header legible as columns scroll underneath them. */
+/* dark: the frozen category column and the floating header are OPAQUE dark
+   surfaces, NOT backdrop-filter glass. backdrop-filter on the JS-transformed
+   <thead> (see YearGrid.jsx) triggers a Chrome compositing bug that paints a
+   translucent block over the whole grid and janks badly on scroll. Opaque
+   surfaces also hide the scrolling cells behind the frozen chrome more cleanly
+   than a blur ever did. Frosted glass stays on the static cards elsewhere. */
 .g-root_theme_dark .year-grid thead th {
-    background: rgb(255 255 255 / 6%);
-    backdrop-filter: blur(10px);
+    background: #191521;
 }
 
 .g-root_theme_dark .yg-band th {
-    background: rgb(255 255 255 / 5%);
+    background: #1e1929;
 }
 
 .g-root_theme_dark .yg-corner,
 .g-root_theme_dark .yg-name {
-    background: rgb(255 255 255 / 6%);
-    backdrop-filter: blur(10px);
+    background: #191521;
 }
 
 .g-root_theme_dark .yg-corner_year {
-    background: rgb(255 255 255 / 8%);
+    background: #1e1929;
 }
 
 .g-root_theme_dark .yg-group td {
-    background: rgb(255 255 255 / 8%);
+    background: #201b2b;
 }
 
 .g-root_theme_dark .yg-group .yg-name {
-    background-color: rgb(255 255 255 / 8%);
+    background-color: #201b2b;
     background-image: none;
 }
 
@@ -378,7 +379,7 @@
 }
 
 .g-root_theme_dark .yg-row:hover .yg-name {
-    background-color: rgb(255 255 255 / 9%);
+    background-color: #241f30;
     background-image: none;
 }
 
