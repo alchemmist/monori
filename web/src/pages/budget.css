@@ -359,9 +359,11 @@
 }
 
 @media (width <= 760px) {
+    /* lift it clear of the fixed bottom tab bar (its reserved height is the
+       72px + safe-area that .content pads for) so it isn't covered/unclickable */
     .scroll-top {
         right: 16px;
-        bottom: 16px;
+        bottom: calc(72px + env(safe-area-inset-bottom, 0px) + 12px);
     }
 }
 
