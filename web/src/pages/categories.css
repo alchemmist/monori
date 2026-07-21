@@ -32,9 +32,11 @@
 .kb-col_mark-before {
     box-shadow: -3px 0 0 var(--m-accent);
 }
+
 .kb-col_mark-after {
     box-shadow: 3px 0 0 var(--m-accent);
 }
+
 .kb-col_dragging {
     opacity: 0.5;
 }
@@ -45,6 +47,7 @@
     gap: 8px;
     cursor: grab;
 }
+
 .kb-col__head:active {
     cursor: grabbing;
 }
@@ -77,13 +80,16 @@
         border-color 0.15s ease,
         box-shadow 0.15s ease;
 }
+
 .kb-card:hover {
     border-color: var(--m-accent);
     box-shadow: 0 3px 12px rgb(0 0 0 / 8%);
 }
+
 .kb-card:active {
     cursor: grabbing;
 }
+
 .kb-card_dragging {
     opacity: 0.4;
 }
@@ -115,12 +121,13 @@
     white-space: nowrap;
     cursor: default;
 }
+
 .kb-card__usage::before {
     content: "";
     width: 5px;
     height: 5px;
     border-radius: 50%;
-    background: currentColor;
+    background: currentcolor;
     opacity: 0.55;
 }
 
@@ -129,6 +136,7 @@
     margin-right: -4px;
     transition: opacity 0.12s ease;
 }
+
 .kb-card:hover .kb-card__menu {
     opacity: 1;
 }
@@ -158,6 +166,7 @@
         border-color 0.15s ease,
         color 0.15s ease;
 }
+
 .kb-add-card:hover {
     border-color: var(--m-accent);
     color: var(--m-accent);
@@ -181,12 +190,14 @@
     cursor: pointer;
     overflow: hidden;
 }
+
 .kb-newgroup__label {
     display: inline-flex;
     align-items: center;
     gap: 6px;
     transition: opacity 0.14s ease;
 }
+
 .kb-newgroup__half {
     position: absolute;
     top: 0;
@@ -203,22 +214,27 @@
     cursor: pointer;
     transition: opacity 0.14s ease;
 }
+
 .kb-newgroup__half_income {
     left: 0;
     color: var(--m-income);
     background: var(--m-income-soft);
 }
+
 .kb-newgroup__half_expense {
     right: 0;
     color: var(--m-expense);
     background: var(--m-expense-soft);
 }
+
 .kb-newgroup:hover .kb-newgroup__label {
     opacity: 0;
 }
+
 .kb-newgroup:hover .kb-newgroup__half {
     opacity: 1;
 }
+
 .kb-newgroup__half:hover {
     filter: brightness(0.96);
 }
@@ -234,6 +250,7 @@
     overflow: hidden;
     padding: 0;
 }
+
 .kb-col_add__label {
     position: absolute;
     inset: 0;
@@ -246,6 +263,7 @@
     font-weight: 500;
     transition: opacity 0.14s ease;
 }
+
 .kb-col_add__half {
     position: absolute;
     left: 0;
@@ -263,22 +281,27 @@
     cursor: pointer;
     transition: opacity 0.14s ease;
 }
+
 .kb-col_add__half_income {
     top: 0;
     color: var(--m-income);
     background: var(--m-income-soft);
 }
+
 .kb-col_add__half_expense {
     bottom: 0;
     color: var(--m-expense);
     background: var(--m-expense-soft);
 }
+
 .kb-col_add:hover .kb-col_add__label {
     opacity: 0;
 }
+
 .kb-col_add:hover .kb-col_add__half {
     opacity: 1;
 }
+
 .kb-col_add__half:hover {
     filter: brightness(0.96);
 }
@@ -288,6 +311,7 @@
     background: rgb(255 255 255 / 2.5%);
     border-color: var(--m-card-border);
 }
+
 .g-root_theme_dark .kb-card {
     background: var(--m-card-bg);
     border-color: var(--m-card-border);
@@ -295,9 +319,11 @@
     backdrop-filter: blur(7px);
     box-shadow: 0 14px 34px -20px rgb(0 0 0 / 90%);
 }
+
 .g-root_theme_dark .kb-card:hover {
     border-color: var(--m-accent);
 }
+
 .g-root_theme_dark .kb-newgroup,
 .g-root_theme_dark .kb-col_add {
     background: var(--m-card-bg);
