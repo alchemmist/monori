@@ -299,7 +299,13 @@ export default function TransactionsPage() {
                     className="scroll-top"
                     aria-label="Back to top"
                     title="Back to top"
-                    onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+                    onClick={() => {
+                        // honour reduced-motion: jump instantly instead of panning
+                        const reduce = window.matchMedia?.(
+                            "(prefers-reduced-motion: reduce)",
+                        ).matches;
+                        window.scrollTo({ top: 0, behavior: reduce ? "auto" : "smooth" });
+                    }}
                 >
                     <ArrowUpToLine width={18} height={18} />
                 </button>
