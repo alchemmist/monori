@@ -86,11 +86,15 @@ class TBankPlaywrightConnector(Connector):
     SEL_ACCESS_DENIED = "[automation-id='access-denied-popup']"
     SEL_ACCESS_DENIED_TITLE = "[automation-id='access-denied-title']"
     SEL_ACCESS_DENIED_DESC = "[automation-id='access-denied-description']"
-    # the operations page: a period switcher and an export dropdown whose format
-    # items (CSV/Excel/PDF) only render once the dropdown is opened
-    SEL_PERIOD_YEAR = "[data-qa-type='period-tab-Год']"
+    # the operations page: an export dropdown whose format items only render once
+    # the dropdown is opened. Each item carries a stable per-format hook — CSV is
+    # the one the statement parser consumes. data-qa-type is a space-joined token
+    # list ("click-area … menuItem menuItem-csv"), so match the token with ~=.
     SEL_EXPORT_TRIGGER = "[data-qa-type='molecule-export-dropdown-operations-button']"
-    EXPORT_FORMAT_LABELS = ("CSV", "Выгрузить в CSV", "CSV-файл", "Excel")
+    SEL_EXPORT_CSV = "[data-qa-type~='molecule-export-dropdown-operations-menuItem-csv']"
+    # fall back to a visible CSV label only if that hook ever changes; every
+    # candidate is a CSV variant (xlsx/ofx would break the CSV statement parser)
+    EXPORT_FORMAT_LABELS = ("Скачать в CSV", "Выгрузить в CSV", "CSV-файл", "CSV")
 
     # form-title text that distinguishes the "create a quick-login code" screen
     # from the "enter a code" screens (SMS or quick-login)
@@ -400,13 +404,14 @@ class TBankPlaywrightConnector(Connector):
     def _download_and_parse(self, page, since):
         page.goto(self.URL_OPERATIONS, wait_until="domcontentloaded")
         page.wait_for_timeout(2_500)
-        # widen the shown range to a year so a sync pulls more than the default
-        with contextlib.suppress(Exception):
-            page.locator(self.SEL_PERIOD_YEAR).first.click(timeout=3_000)
-            page.wait_for_timeout(1_500)
         self._shot(page, "08-operations")
 
-        # open the export dropdown, then pick a CSV format inside it
+        # The feed's default period (the current month) is what's exported. The
+        # "Год" period tab lives in a collapsed analytics widget that stays
+        # visibility:hidden here and doesn't drive the export, so there's nothing
+        # to click — overlapping syncs are deduped by row hash downstream, so a
+        # regular sync misses nothing.
+        # open the export dropdown, then pick the CSV format inside it
         page.locator(self.SEL_EXPORT_TRIGGER).first.click(timeout=self.LOGIN_TIMEOUT_MS)
         page.wait_for_timeout(1_000)
         self._shot(page, "09-export-menu")
@@ -422,6 +427,12 @@ class TBankPlaywrightConnector(Connector):
         return rows
 
     def _click_export_format(self, page):
+        # prefer the stable per-format hook (reliable even when a "CSV" substring
+        # shows up elsewhere on the page); fall back to a visible label only if
+        # the markup drifts. Both target CSV — what the statement parser reads.
+        with contextlib.suppress(Exception):
+            page.locator(self.SEL_EXPORT_CSV).first.click(timeout=5_000)
+            return True
         for label in self.EXPORT_FORMAT_LABELS:
             # try the next candidate label if this one isn't in the dropdown
             with contextlib.suppress(Exception):
