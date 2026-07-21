@@ -293,6 +293,69 @@ export const useStore = create((set, get) => ({
         });
     },
 
+    /** Kanban drop: move a card to `toGroupId` and lay out every category by the
+     *  global order in `orderedIds` (assigns 1..N to sort). Optimistic; the group
+     *  change and the reorder are both persisted, then resynced on failure. */
+    async moveCategory(id, toGroupId, orderedIds) {
+        const { snapshot } = get();
+        const cat = snapshot.categories.find((c) => c.id === id);
+        const groupChanged = cat && cat.groupId !== toGroupId;
+        const sortById = new Map(orderedIds.map((cid, i) => [cid, i + 1]));
+        const categories = snapshot.categories.map((c) => ({
+            ...c,
+            groupId: c.id === id ? toGroupId : c.groupId,
+            sort: sortById.get(c.id) ?? c.sort,
+        }));
+        set({ snapshot: { ...snapshot, categories } });
+        if (isDemo()) return;
+        try {
+            if (groupChanged) await api.patchCategory(id, { groupId: toGroupId });
+            await api.reorderCategories(orderedIds);
+        } catch (e) {
+            get().notify({ title: "Failed to move category", theme: "danger", content: String(e) });
+            await get().load();
+        }
+    },
+
+    async createGroup(body) {
+        const { snapshot } = get();
+        const id = isDemo()
+            ? Math.max(0, ...snapshot.groups.map((g) => g.id)) + 1
+            : (await api.createGroup(body)).id;
+        const groups = [...snapshot.groups, { id, name: body.name, kind: body.kind, sort: 1e9 }];
+        set({ snapshot: { ...snapshot, groups } });
+        return id;
+    },
+
+    async patchGroup(id, patch) {
+        if (!isDemo()) await api.patchGroup(id, patch);
+        const { snapshot } = get();
+        const groups = snapshot.groups.map((g) => (g.id === id ? { ...g, ...patch } : g));
+        set({ snapshot: { ...snapshot, groups } });
+    },
+
+    async deleteGroup(id) {
+        if (!isDemo()) await api.deleteGroup(id);
+        const { snapshot } = get();
+        set({ snapshot: { ...snapshot, groups: snapshot.groups.filter((g) => g.id !== id) } });
+    },
+
+    async reorderGroups(orderedIds) {
+        const { snapshot } = get();
+        const sortById = new Map(orderedIds.map((gid, i) => [gid, i + 1]));
+        const groups = snapshot.groups.map((g) => ({ ...g, sort: sortById.get(g.id) ?? g.sort }));
+        set({ snapshot: { ...snapshot, groups } });
+        if (isDemo()) return;
+        api.reorderGroups(orderedIds).catch(async (e) => {
+            get().notify({
+                title: "Failed to reorder groups",
+                theme: "danger",
+                content: String(e),
+            });
+            await get().load();
+        });
+    },
+
     async commitImport(rows, accountId) {
         if (isDemo()) return { imported: 0, skipped: 0, demo: true };
         const res = await api.importCommit(rows, accountId);
