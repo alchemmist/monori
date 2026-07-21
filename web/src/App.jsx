@@ -3,6 +3,7 @@ import { Loader, useToaster } from "@gravity-ui/uikit";
 import {
     ChartColumn,
     ListUl,
+    Tags,
     LayoutHeaderCellsLarge,
     ChevronLeft,
     ChevronRight,
@@ -24,6 +25,7 @@ import DashboardPage from "./pages/DashboardPage.jsx";
 import AnalyticsPage from "./pages/AnalyticsPage.jsx";
 import TransactionsPage from "./pages/TransactionsPage.jsx";
 import AccountsPage from "./pages/AccountsPage.jsx";
+import CategoriesPage from "./pages/CategoriesPage.jsx";
 import SettingsPage from "./pages/SettingsPage.jsx";
 import LoginPage from "./pages/LoginPage.jsx";
 
@@ -32,6 +34,7 @@ const NAV = [
     { id: "dashboard", title: "Dashboard", icon: ChartColumn },
     { id: "transactions", title: "Transactions", icon: ListUl },
     { id: "accounts", title: "Accounts", icon: Wallet },
+    { id: "categories", title: "Categories", icon: Tags },
 ];
 
 // planned destinations from the roadmap — shown disabled until their issue ships
@@ -240,6 +243,7 @@ export default function App({ theme, onToggleTheme }) {
                 )}
                 {page === "transactions" && <TransactionsPage />}
                 {page === "accounts" && <AccountsPage />}
+                {page === "categories" && <CategoriesPage />}
                 {page === "settings" && (
                     <SettingsPage theme={theme} onToggleTheme={onToggleTheme} />
                 )}
