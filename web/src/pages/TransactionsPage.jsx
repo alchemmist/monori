@@ -1,13 +1,16 @@
-import { useMemo, useState } from "react";
-import { Button, Pagination, Select, TextInput, Label } from "@gravity-ui/uikit";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Button, Select, TextInput, Label } from "@gravity-ui/uikit";
 import { ArrowDownToLine, ArrowRightArrowLeft, Magnifier } from "@gravity-ui/icons";
 import { useStore } from "../store.js";
 import { money, fmtDate } from "../format.js";
+import { useWindowedRows } from "../useWindowedRows.js";
 import ImportDialog from "../components/ImportDialog.jsx";
 import TransferDialog from "../components/TransferDialog.jsx";
 import "./budget.css";
 
-const PAGE_SIZE = 100;
+// td is a fixed 38px + a 1px bottom border; measured for real on mount so zoom
+// or font metrics can't let the windowing math drift over thousands of rows
+const ROW_H_FALLBACK = 39;
 
 export default function TransactionsPage() {
     const { snapshot, setTxCategory, setTxAccount } = useStore();
@@ -15,9 +18,10 @@ export default function TransactionsPage() {
     const [catFilter, setCatFilter] = useState("all");
     const [yearFilter, setYearFilter] = useState("all");
     const [acctFilter, setAcctFilter] = useState("all");
-    const [page, setPage] = useState(1);
     const [importing, setImporting] = useState(false);
     const [transferring, setTransferring] = useState(false);
+    const bodyRef = useRef(null);
+    const [rowH, setRowH] = useState(ROW_H_FALLBACK);
 
     const accounts = useMemo(() => snapshot.accounts ?? [], [snapshot.accounts]);
     const activeAccounts = useMemo(() => accounts.filter((a) => !a.archived), [accounts]);
@@ -64,10 +68,24 @@ export default function TransactionsPage() {
         return [...rows].reverse(); // newest first
     }, [snapshot.transactions, query, catFilter, yearFilter, acctFilter]);
 
-    const pageRows = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+    // measure a real row once it's on screen so the spacer math matches the DOM
+    useLayoutEffect(() => {
+        const row = bodyRef.current?.querySelector("tr.cat-row");
+        const h = row?.getBoundingClientRect().height;
+        if (h && Math.abs(h - rowH) > 0.5) setRowH(h);
+    }, [filtered.length, rowH]);
 
-    const resetPage = (fn) => (v) => {
-        setPage(1);
+    const { start, end, padTop, padBottom } = useWindowedRows({
+        count: filtered.length,
+        rowHeight: rowH,
+        anchorRef: bodyRef,
+    });
+    const visibleRows = filtered.slice(start, end);
+
+    // a new filter/search jumps back to the top so you're never left staring at
+    // a blank gap where you'd scrolled past the (now shorter) list
+    const resetScroll = (fn) => (v) => {
+        window.scrollTo({ top: 0 });
         fn(v);
     };
 
@@ -79,7 +97,7 @@ export default function TransactionsPage() {
                 </h1>
                 <TextInput
                     value={query}
-                    onUpdate={resetPage(setQuery)}
+                    onUpdate={resetScroll(setQuery)}
                     placeholder="Search description"
                     startContent={<Magnifier style={{ marginInline: 6 }} width={14} height={14} />}
                     hasClear
@@ -87,7 +105,7 @@ export default function TransactionsPage() {
                 />
                 <Select
                     value={[catFilter]}
-                    onUpdate={resetPage((v) => setCatFilter(v[0]))}
+                    onUpdate={resetScroll((v) => setCatFilter(v[0]))}
                     options={[
                         { value: "all", content: "All categories" },
                         { value: "none", content: "Uncategorized" },
@@ -97,7 +115,7 @@ export default function TransactionsPage() {
                 />
                 <Select
                     value={[yearFilter]}
-                    onUpdate={resetPage((v) => setYearFilter(v[0]))}
+                    onUpdate={resetScroll((v) => setYearFilter(v[0]))}
                     options={[
                         { value: "all", content: "All years" },
                         ...years.map((y) => ({ value: y, content: y })),
@@ -106,7 +124,7 @@ export default function TransactionsPage() {
                 {activeAccounts.length > 1 && (
                     <Select
                         value={[acctFilter]}
-                        onUpdate={resetPage((v) => setAcctFilter(v[0]))}
+                        onUpdate={resetScroll((v) => setAcctFilter(v[0]))}
                         options={[{ value: "all", content: "All accounts" }, ...acctOptions]}
                     />
                 )}
@@ -146,8 +164,13 @@ export default function TransactionsPage() {
                             <th style={{ textAlign: "left", width: 190 }}>Category</th>
                         </tr>
                     </thead>
-                    <tbody>
-                        {pageRows.map((t) => (
+                    <tbody ref={bodyRef}>
+                        {padTop > 0 && (
+                            <tr aria-hidden="true">
+                                <td colSpan={6} style={{ height: padTop, padding: 0, border: 0 }} />
+                            </tr>
+                        )}
+                        {visibleRows.map((t) => (
                             <tr key={t.id} className="cat-row">
                                 <td style={{ textAlign: "left" }} className="num">
                                     {fmtDate(t.date)}
@@ -224,7 +247,15 @@ export default function TransactionsPage() {
                                 </td>
                             </tr>
                         ))}
-                        {pageRows.length === 0 && (
+                        {padBottom > 0 && (
+                            <tr aria-hidden="true">
+                                <td
+                                    colSpan={6}
+                                    style={{ height: padBottom, padding: 0, border: 0 }}
+                                />
+                            </tr>
+                        )}
+                        {filtered.length === 0 && (
                             <tr>
                                 <td
                                     colSpan={6}
@@ -241,18 +272,6 @@ export default function TransactionsPage() {
                     </tbody>
                 </table>
             </div>
-
-            {filtered.length > PAGE_SIZE && (
-                <div style={{ marginTop: 14, display: "flex", justifyContent: "center" }}>
-                    <Pagination
-                        page={page}
-                        pageSize={PAGE_SIZE}
-                        total={filtered.length}
-                        onUpdate={(p) => setPage(p)}
-                        compact
-                    />
-                </div>
-            )}
 
             {importing && <ImportDialog onClose={() => setImporting(false)} />}
             {transferring && (

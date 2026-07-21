@@ -104,8 +104,18 @@
     width: 90px;
 }
 
+/* the long virtualized list scrolls with the window; drop the grid's overflow
+   clip here so the table isn't a scroll container and the sticky header can pin
+   to the viewport (the budget grid keeps its clip for its rounded card) */
+.tx-grid {
+    overflow: visible;
+}
+
 .tx-table {
-    overflow: hidden;
+    /* full-bleed (radius 0), so nothing needs clipping here — and an overflow
+       clip would make it a scroll container, breaking the header's
+       position:sticky pin to the window as the long list scrolls */
+    overflow: visible;
     margin-inline: calc(-1 * var(--pad-x));
     border-inline: none;
     border-radius: 0;
