@@ -451,6 +451,9 @@ def test_operations_url_scopes_to_account_when_set():
 def test_operations_url_defaults_to_all_feed_when_account_absent_or_blank():
     assert _connector(dict(CREDS))._operations_url() == TB.URL_OPERATIONS
     assert _connector({**CREDS, "account": ""})._operations_url() == TB.URL_OPERATIONS
+    # a whitespace-only id from a non-web client is not a real account
+    assert _connector({**CREDS, "account": "   "})._operations_url() == TB.URL_OPERATIONS
+    assert _connector({**CREDS, "account": None})._operations_url() == TB.URL_OPERATIONS
 
 
 def test_operations_url_encodes_the_account():
