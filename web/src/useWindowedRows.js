@@ -42,7 +42,12 @@ export function useWindowedRows({ count, rowHeight, anchorRef, overscan = 10 }) 
         };
     }, [count, rowHeight, anchorRef, overscan]);
 
-    const start = Math.min(range.start, count);
-    const end = Math.min(range.end, count);
+    // when the list shrinks below the previous window (a filter applied while
+    // scrolled deep), the old range can sit entirely past the new end — clamping
+    // alone would give start===end===count and paint a blank list for one frame.
+    // Fall back to a top window until the scroll effect re-measures next frame.
+    const fellPastEnd = count > 0 && range.start >= count;
+    const start = fellPastEnd ? 0 : Math.min(range.start, count);
+    const end = fellPastEnd ? Math.min(count, 60) : Math.min(range.end, count);
     return { start, end, padTop: start * rowHeight, padBottom: (count - end) * rowHeight };
 }
