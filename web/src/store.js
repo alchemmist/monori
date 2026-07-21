@@ -271,6 +271,7 @@ export const useStore = create((set, get) => ({
                       ...(patch.name != null ? { name: patch.name } : {}),
                       ...(patch.groupId != null ? { groupId: patch.groupId } : {}),
                       ...(patch.keywords != null ? { keywords: patch.keywords } : {}),
+                      ...(patch.archived != null ? { archived: patch.archived } : {}),
                   }
                 : c,
         );
