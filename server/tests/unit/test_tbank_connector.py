@@ -100,22 +100,33 @@ class FakePage:
 
     ``stage`` is the current step: phone → password → sms → setcode → in for a
     fresh login, ``quickcode`` for a trusted-device quick login, and in/ops/
-    export_open for the post-login statement download. Each login step exposes a
-    ``form-title`` and a single submit button; the pin widget backs both the SMS
-    code and the quick-login/set-code screens."""
+    export_open for the post-login statement download. The SMS step is a single
+    ``otp-input`` (auto-submits); the 4-box pin widget backs only the
+    quick-login/set-code screens."""
 
     TITLES = {
         "phone": "Вход в Т-Банк",
         "password": "Введите пароль",
-        "sms": "Введите код из СМС",
+        "sms": "Введите код",
         "setcode": TB.TITLE_SET_CODE,
         "quickcode": "Введите код",
     }
-    PIN_STAGES = ("sms", "setcode", "quickcode")
+    PIN_STAGES = ("setcode", "quickcode")
 
-    def __init__(self, *, scenario="fresh", export_label="CSV", csv=STATEMENT, wrong_codes=None):
+    def __init__(
+        self,
+        *,
+        scenario="fresh",
+        export_label="CSV",
+        csv_hook=True,
+        csv=STATEMENT,
+        wrong_codes=None,
+    ):
         self.scenario = scenario
         self.export_label = export_label
+        # whether the stable per-format CSV hook is present in the opened
+        # dropdown; when absent the connector falls back to a text label
+        self.csv_hook = csv_hook
         self.csv = csv
         self.wrong_codes = wrong_codes or set()
         self.last_code = None
@@ -156,12 +167,17 @@ class FakePage:
     # form interaction -------------------------------------------------------
     def fill(self, selector, value):
         self.log.append(("fill", selector, value))
+        if selector == TB.SEL_OTP and self.stage == "sms":
+            # the single otp field auto-submits as the last digit lands
+            self.last_code = value
+            self._advance()
 
     def query_selector(self, selector):
         self.log.append(("query", selector))
         if (
             (selector == TB.SEL_PHONE and self.stage == "phone")
             or (selector == TB.SEL_PASSWORD and self.stage == "password")
+            or (selector == TB.SEL_OTP and self.stage == "sms")
             or (selector == TB.SEL_PIN and self.stage in self.PIN_STAGES)
         ):
             return object()
@@ -170,7 +186,9 @@ class FakePage:
         return None
 
     def get_by_text(self, text, exact=False):
-        present = self.stage == "export_open" and text == self.export_label
+        # the text label is the fallback path — only reachable when the stable
+        # hook is absent
+        present = self.stage == "export_open" and not self.csv_hook and text == self.export_label
 
         def on_click():
             if self.stage == "export_open":
@@ -200,13 +218,17 @@ class FakePage:
             # auto-advanced on the last digit, so its button click is a no-op
             if self.stage in ("phone", "password"):
                 on_click = self._advance
-        elif selector == TB.SEL_PERIOD_YEAR and self.stage == "ops":
-            present = True
         elif selector == TB.SEL_EXPORT_TRIGGER and self.stage == "ops":
             present = True
 
             def on_click():
                 self.stage = "export_open"
+
+        elif selector == TB.SEL_EXPORT_CSV and self.stage == "export_open" and self.csv_hook:
+            present = True
+
+            def on_click():
+                self.download_triggered = True
 
         return FakeLocator(self, present, on_click)
 
@@ -269,9 +291,18 @@ def test_form_title_reads_heading_or_empty():
     assert c._form_title(page) == ""
 
 
-def test_click_export_format_picks_present_label():
+def test_click_export_format_uses_stable_hook():
     c = _connector()
-    page = FakePage(export_label="CSV")
+    page = FakePage(csv_hook=True)
+    page.stage = "export_open"
+    assert c._click_export_format(page) is True
+    assert page.download_triggered is True
+
+
+def test_click_export_format_falls_back_to_label():
+    c = _connector()
+    # hook gone (markup drift) — the connector still finds CSV by its label
+    page = FakePage(csv_hook=False, export_label="Скачать в CSV")
     page.stage = "export_open"
     assert c._click_export_format(page) is True
     assert page.download_triggered is True
@@ -279,7 +310,7 @@ def test_click_export_format_picks_present_label():
 
 def test_click_export_format_none_present():
     c = _connector()
-    page = FakePage(export_label="nope")
+    page = FakePage(csv_hook=False, export_label="nope")
     page.stage = "export_open"
     assert c._click_export_format(page) is False
     assert page.download_triggered is False
@@ -314,10 +345,10 @@ def test_full_login_enters_phone_password_otp_then_sets_code():
     fills = [a for a in page.log if a[0] == "fill"]
     assert ("fill", TB.SEL_PHONE, "+70000000000") in fills
     assert ("fill", TB.SEL_PASSWORD, "pw") in fills
-    # the user's SMS code is typed into the pin widget, then our quick-login code
-    # is set on the "Придумайте код" screen — in that order
-    types = [a[1] for a in page.log if a[0] == "type"]
-    assert types == ["9999", "1234"]
+    # the user's SMS code goes into the single otp field, then our quick-login
+    # code is typed into the pin widget on the "Придумайте код" screen
+    assert ("fill", TB.SEL_OTP, "9999") in fills
+    assert [a[1] for a in page.log if a[0] == "type"] == ["1234"]
     assert c._is_logged_in(page) is True
 
 
@@ -327,8 +358,8 @@ def test_wrong_otp_reprompts_with_rejection_message():
     c._to_worker.put(("sms", "2222"))
     page = FakePage(scenario="fresh", wrong_codes={"1111"})
     c._ensure_logged_in(page)
-    types = [a[1] for a in page.log if a[0] == "type"]
-    assert "1111" in types and "2222" in types
+    otp_fills = [a[2] for a in page.log if a[0] == "fill" and a[1] == TB.SEL_OTP]
+    assert "1111" in otp_fills and "2222" in otp_fills
     messages = []
     while not c._from_worker.empty():
         kind, payload = c._from_worker.get()
@@ -422,7 +453,8 @@ def test_download_and_parse_returns_rows():
 
 def test_download_without_export_option_raises():
     c = _connector()
-    page = FakePage(scenario="logged_in", export_label="missing")
+    # neither the stable hook nor any known CSV label is in the dropdown
+    page = FakePage(scenario="logged_in", csv_hook=False, export_label="missing")
     page.stage = "in"
     with pytest.raises(ConnectorError):
         c._download_and_parse(page, None)

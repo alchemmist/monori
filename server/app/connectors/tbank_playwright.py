@@ -73,6 +73,10 @@ class TBankPlaywrightConnector(Connector):
     # step can't make us skip one.
     SEL_PHONE = "[automation-id='phone-input']"
     SEL_PASSWORD = "[automation-id='password-input']"
+    # the SMS code screen is a single one-time-code input (auto-submits on the
+    # last digit) — distinct from the 4-box pin widget used to set/enter the
+    # quick-login code
+    SEL_OTP = "[automation-id='otp-input']"
     SEL_PIN = "[automation-id='pin-code-input-0']"
     SEL_SUBMIT = "[automation-id='button-submit']"
     SEL_FORM_TITLE = "[automation-id='form-title']"
@@ -82,11 +86,15 @@ class TBankPlaywrightConnector(Connector):
     SEL_ACCESS_DENIED = "[automation-id='access-denied-popup']"
     SEL_ACCESS_DENIED_TITLE = "[automation-id='access-denied-title']"
     SEL_ACCESS_DENIED_DESC = "[automation-id='access-denied-description']"
-    # the operations page: a period switcher and an export dropdown whose format
-    # items (CSV/Excel/PDF) only render once the dropdown is opened
-    SEL_PERIOD_YEAR = "[data-qa-type='period-tab-Год']"
+    # the operations page: an export dropdown whose format items only render once
+    # the dropdown is opened. Each item carries a stable per-format hook — CSV is
+    # the one the statement parser consumes. data-qa-type is a space-joined token
+    # list ("click-area … menuItem menuItem-csv"), so match the token with ~=.
     SEL_EXPORT_TRIGGER = "[data-qa-type='molecule-export-dropdown-operations-button']"
-    EXPORT_FORMAT_LABELS = ("CSV", "Выгрузить в CSV", "CSV-файл", "Excel")
+    SEL_EXPORT_CSV = "[data-qa-type~='molecule-export-dropdown-operations-menuItem-csv']"
+    # fall back to a visible CSV label only if that hook ever changes; every
+    # candidate is a CSV variant (xlsx/ofx would break the CSV statement parser)
+    EXPORT_FORMAT_LABELS = ("Скачать в CSV", "Выгрузить в CSV", "CSV-файл", "CSV")
 
     # form-title text that distinguishes the "create a quick-login code" screen
     # from the "enter a code" screens (SMS or quick-login)
@@ -261,6 +269,7 @@ class TBankPlaywrightConnector(Connector):
         return not (
             page.query_selector(self.SEL_PHONE)
             or page.query_selector(self.SEL_PASSWORD)
+            or page.query_selector(self.SEL_OTP)
             or page.query_selector(self.SEL_PIN)
         )
 
@@ -320,7 +329,12 @@ class TBankPlaywrightConnector(Connector):
             return
         # a cold visit to /mybank bounces to id.tbank.ru; make sure we're on the
         # SSO before driving it (goto is a no-op if we're already there)
-        if not (page.query_selector(self.SEL_PHONE) or page.query_selector(self.SEL_PIN)):
+        on_sso = (
+            page.query_selector(self.SEL_PHONE)
+            or page.query_selector(self.SEL_OTP)
+            or page.query_selector(self.SEL_PIN)
+        )
+        if not on_sso:
             page.goto(self.URL_LOGIN, wait_until="domcontentloaded")
             page.wait_for_timeout(1_500)
         self._shot(page, "02-login")
@@ -339,7 +353,6 @@ class TBankPlaywrightConnector(Connector):
         the pin widget (set-a-code / enter-a-code) — so a slow render or a
         reordered step just means another pass, never a skipped field."""
         code = self.credentials.get("code")
-        entered_phone = False
         tried_quick = False
         otp_prompt = "enter the code sent by the bank"
         for step in range(self.LOGIN_STEPS):
@@ -351,9 +364,17 @@ class TBankPlaywrightConnector(Connector):
             if page.query_selector(self.SEL_PHONE):
                 page.fill(self.SEL_PHONE, self.credentials["phone"])
                 self._submit(page)
-                entered_phone = True
             elif page.query_selector(self.SEL_PASSWORD):
                 page.fill(self.SEL_PASSWORD, self.credentials["password"])
+                self._submit(page)
+            elif page.query_selector(self.SEL_OTP):
+                # the SMS one-time code: surface the input to the user right away,
+                # then type it into the single otp field (it auto-submits on the
+                # last digit). If the same screen is still up next pass the code was
+                # rejected, so we ask again with the rejection message.
+                otp = self._ask_sms(otp_prompt)
+                otp_prompt = "the bank rejected the code — check it and try again"
+                page.fill(self.SEL_OTP, otp)
                 self._submit(page)
             elif page.query_selector(self.SEL_PIN):
                 title = self._form_title(page)
@@ -362,20 +383,16 @@ class TBankPlaywrightConnector(Connector):
                     # the server generated (and stored) so future syncs skip SMS
                     self._type_pin(page, code)
                     self._submit(page)
-                elif code and not entered_phone and not tried_quick:
+                elif code and not tried_quick:
                     # trusted device, expired session: quick-login with the stored
-                    # code, no SMS round-trip. Try it once — if it's stale the same
-                    # screen stays up and we fall through to the SMS path below.
+                    # code. Try it once — if it's stale the screen persists and we
+                    # fall through (to the phone / SMS path) instead of looping.
                     self._type_pin(page, code)
                     self._submit(page)
                     tried_quick = True
                 else:
-                    # a one-time SMS code — ask the user (re-ask on rejection, i.e.
-                    # when this same screen is still up on the next pass)
-                    otp = self._ask_sms(otp_prompt)
-                    otp_prompt = "the bank rejected the code — check it and try again"
-                    self._type_pin(page, otp)
-                    self._submit(page)
+                    self._dismiss_interstitials(page)
+                    page.goto(self.URL_HOME, wait_until="domcontentloaded")
             else:
                 # an interstitial (promo, "not now") between steps — clear it and
                 # nudge back toward home
@@ -387,13 +404,14 @@ class TBankPlaywrightConnector(Connector):
     def _download_and_parse(self, page, since):
         page.goto(self.URL_OPERATIONS, wait_until="domcontentloaded")
         page.wait_for_timeout(2_500)
-        # widen the shown range to a year so a sync pulls more than the default
-        with contextlib.suppress(Exception):
-            page.locator(self.SEL_PERIOD_YEAR).first.click(timeout=3_000)
-            page.wait_for_timeout(1_500)
         self._shot(page, "08-operations")
 
-        # open the export dropdown, then pick a CSV format inside it
+        # The feed's default period (the current month) is what's exported. The
+        # "Год" period tab lives in a collapsed analytics widget that stays
+        # visibility:hidden here and doesn't drive the export, so there's nothing
+        # to click — overlapping syncs are deduped by row hash downstream, so a
+        # regular sync misses nothing.
+        # open the export dropdown, then pick the CSV format inside it
         page.locator(self.SEL_EXPORT_TRIGGER).first.click(timeout=self.LOGIN_TIMEOUT_MS)
         page.wait_for_timeout(1_000)
         self._shot(page, "09-export-menu")
@@ -409,6 +427,12 @@ class TBankPlaywrightConnector(Connector):
         return rows
 
     def _click_export_format(self, page):
+        # prefer the stable per-format hook (reliable even when a "CSV" substring
+        # shows up elsewhere on the page); fall back to a visible label only if
+        # the markup drifts. Both target CSV — what the statement parser reads.
+        with contextlib.suppress(Exception):
+            page.locator(self.SEL_EXPORT_CSV).first.click(timeout=5_000)
+            return True
         for label in self.EXPORT_FORMAT_LABELS:
             # try the next candidate label if this one isn't in the dropdown
             with contextlib.suppress(Exception):
