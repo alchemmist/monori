@@ -313,3 +313,60 @@
 .g-root_theme_dark .cat-row:hover {
     background: rgb(255 255 255 / 9%);
 }
+
+/* floating "back to top" for the long transactions ledger — fixed to the
+   viewport's bottom-right, appears once you've scrolled a screenful down */
+.scroll-top {
+    position: fixed;
+    right: 28px;
+    bottom: 28px;
+    z-index: 20;
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    border: 1px solid var(--m-border);
+    border-radius: 50%;
+    background: var(--m-surface);
+    color: var(--m-text-dim);
+    cursor: pointer;
+    box-shadow: 0 6px 20px rgb(0 0 0 / 14%);
+    transition:
+        background 0.15s ease,
+        color 0.15s ease,
+        transform 0.15s ease,
+        box-shadow 0.15s ease;
+    animation: scroll-top-in 0.2s ease;
+}
+
+.scroll-top:hover {
+    background: var(--m-accent);
+    color: var(--m-accent-contrast);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgb(0 0 0 / 20%);
+}
+
+@keyframes scroll-top-in {
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+
+    to {
+        opacity: 1;
+        transform: none;
+    }
+}
+
+@media (width <= 760px) {
+    .scroll-top {
+        right: 16px;
+        bottom: 16px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .scroll-top {
+        animation: none;
+    }
+}
