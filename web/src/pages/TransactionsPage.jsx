@@ -1,6 +1,6 @@
-import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Button, Select, TextInput, Label } from "@gravity-ui/uikit";
-import { ArrowDownToLine, ArrowRightArrowLeft, Magnifier } from "@gravity-ui/icons";
+import { ArrowDownToLine, ArrowRightArrowLeft, ArrowUpToLine, Magnifier } from "@gravity-ui/icons";
 import { useStore } from "../store.js";
 import { money, fmtDate } from "../format.js";
 import { useWindowedRows } from "../useWindowedRows.js";
@@ -22,6 +22,26 @@ export default function TransactionsPage() {
     const [transferring, setTransferring] = useState(false);
     const bodyRef = useRef(null);
     const [rowH, setRowH] = useState(ROW_H_FALLBACK);
+    const [showTop, setShowTop] = useState(false);
+
+    // the ledger is one long scroll, so once you're a screenful down offer a jump
+    // back to the top (rAF-coalesced so the scroll handler stays cheap)
+    useEffect(() => {
+        let raf = 0;
+        const onScroll = () => {
+            if (raf) return;
+            raf = requestAnimationFrame(() => {
+                raf = 0;
+                setShowTop(window.scrollY > window.innerHeight);
+            });
+        };
+        onScroll();
+        window.addEventListener("scroll", onScroll, { passive: true });
+        return () => {
+            window.removeEventListener("scroll", onScroll);
+            if (raf) cancelAnimationFrame(raf);
+        };
+    }, []);
 
     const accounts = useMemo(() => snapshot.accounts ?? [], [snapshot.accounts]);
     const activeAccounts = useMemo(() => accounts.filter((a) => !a.archived), [accounts]);
@@ -272,6 +292,18 @@ export default function TransactionsPage() {
                     </tbody>
                 </table>
             </div>
+
+            {showTop && (
+                <button
+                    type="button"
+                    className="scroll-top"
+                    aria-label="Back to top"
+                    title="Back to top"
+                    onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+                >
+                    <ArrowUpToLine width={18} height={18} />
+                </button>
+            )}
 
             {importing && <ImportDialog onClose={() => setImporting(false)} />}
             {transferring && (
