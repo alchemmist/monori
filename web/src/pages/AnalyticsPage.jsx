@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Select } from "@gravity-ui/uikit";
+import InlineSelect from "../ui/InlineSelect.jsx";
 import { ChartBoundary } from "../components/ChartCard.jsx";
 import { useStore } from "../store.js";
 import { rub, money, fmtDate, MONTHS_SHORT } from "../format.js";
@@ -204,12 +204,7 @@ export default function AnalyticsPage({ results, firstYear, lastYear }) {
         <div className="fade-in dash-section">
             <h2 className="section-title">
                 Yearly analytics
-                <Select
-                    size="m"
-                    value={[year]}
-                    onUpdate={(v) => setYear(v[0])}
-                    options={years.map((y) => ({ value: y, content: y }))}
-                />
+                <InlineSelect value={year} onChange={setYear} data={years} />
             </h2>
 
             <div className="kpi-row">

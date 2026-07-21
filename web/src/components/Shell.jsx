@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { Outlet, NavLink, Link, useLocation } from "react-router-dom";
-import { Icon } from "@gravity-ui/uikit";
 import { Sun, Moon, LogoGithub, ArrowUpRightFromSquare, Bars } from "@gravity-ui/icons";
 import { NAV } from "../content.js";
 import Wordmark from "./Wordmark.jsx";
@@ -46,7 +45,7 @@ export default function Shell({ theme, onToggleTheme }) {
                             onClick={() => setMenuOpen((v) => !v)}
                             aria-label="Toggle navigation"
                         >
-                            <Icon data={Bars} size={16} />
+                            <Bars width={16} height={16} />
                         </button>
                     )}
                     <Link to="/welcome" className="docs-top__brand">
@@ -60,7 +59,7 @@ export default function Shell({ theme, onToggleTheme }) {
                     </NavLink>
                     <a className="docs-top__link" href="/login" title="Sign in">
                         Sign in
-                        <Icon data={ArrowUpRightFromSquare} size={13} />
+                        <ArrowUpRightFromSquare width={13} height={13} />
                     </a>
                     <a
                         className="docs-top__icon"
@@ -69,7 +68,7 @@ export default function Shell({ theme, onToggleTheme }) {
                         rel="noreferrer"
                         aria-label="GitHub"
                     >
-                        <Icon data={LogoGithub} size={17} />
+                        <LogoGithub width={17} height={17} />
                     </a>
                     <button
                         className="docs-top__icon"
@@ -77,7 +76,11 @@ export default function Shell({ theme, onToggleTheme }) {
                         aria-label="Toggle theme"
                         title="Toggle theme"
                     >
-                        <Icon data={theme === "light" ? Moon : Sun} size={17} />
+                        {theme === "light" ? (
+                            <Moon width={17} height={17} />
+                        ) : (
+                            <Sun width={17} height={17} />
+                        )}
                     </button>
                 </div>
             </header>

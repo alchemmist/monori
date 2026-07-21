@@ -1,5 +1,4 @@
 import { Link } from "react-router-dom";
-import { Icon } from "@gravity-ui/uikit";
 import {
     ArrowDownToLine,
     ShieldKeyhole,
@@ -61,15 +60,15 @@ export default function Landing() {
                     <div className="hero__cta">
                         <a className="btn btn_primary" href="/login">
                             Sign in
-                            <Icon data={ArrowRight} size={16} />
+                            <ArrowRight width={16} height={16} />
                         </a>
                         <a className="btn btn_ghost" href={DEMO_URL}>
-                            <Icon data={Sparkles} size={16} />
+                            <Sparkles width={16} height={16} />
                             Try the live demo
                         </a>
                         <Link className="btn btn_ghost" to="/docs/getting-started">
                             Get started
-                            <Icon data={ArrowRight} size={16} />
+                            <ArrowRight width={16} height={16} />
                         </Link>
                         <a
                             className="btn btn_text"
@@ -77,7 +76,7 @@ export default function Landing() {
                             target="_blank"
                             rel="noreferrer"
                         >
-                            <Icon data={LogoGithub} size={16} />
+                            <LogoGithub width={16} height={16} />
                             GitHub
                         </a>
                     </div>
@@ -101,7 +100,7 @@ export default function Landing() {
                 </Link>
                 <Link className="bento__tile" to="/docs/importing">
                     <span className="bento__icon">
-                        <Icon data={ArrowDownToLine} size={18} />
+                        <ArrowDownToLine width={18} height={18} />
                     </span>
                     <h3 className="bento__title">Statement import</h3>
                     <p className="bento__text">
@@ -118,14 +117,14 @@ export default function Landing() {
                 </Link>
                 <Link className="bento__tile" to="/docs/configuration">
                     <span className="bento__icon">
-                        <Icon data={ShieldKeyhole} size={18} />
+                        <ShieldKeyhole width={18} height={18} />
                     </span>
                     <h3 className="bento__title">Self-hosted &amp; private</h3>
                     <p className="bento__text">Runs on your server. Your data never leaves it.</p>
                 </Link>
                 <Link className="bento__tile" to="/docs/api">
                     <span className="bento__icon">
-                        <Icon data={Persons} size={18} />
+                        <Persons width={18} height={18} />
                     </span>
                     <h3 className="bento__title">Multi-user</h3>
                     <p className="bento__text">
@@ -143,7 +142,7 @@ export default function Landing() {
                 </Link>
                 <Link className="bento__tile" to="/docs/configuration">
                     <span className="bento__icon">
-                        <Icon data={Copy} size={18} />
+                        <Copy width={18} height={18} />
                     </span>
                     <h3 className="bento__title">One-file backup</h3>
                     <p className="bento__text">
@@ -152,7 +151,7 @@ export default function Landing() {
                 </Link>
                 <a className="bento__tile" href={GITHUB_URL} target="_blank" rel="noreferrer">
                     <span className="bento__icon">
-                        <Icon data={LogoGithub} size={18} />
+                        <LogoGithub width={18} height={18} />
                     </span>
                     <h3 className="bento__title">Open source</h3>
                     <p className="bento__text">Built in the open on GitHub.</p>
@@ -168,7 +167,7 @@ export default function Landing() {
                     </p>
                     <Link className="btn btn_ghost" to="/docs/budgeting">
                         How budgeting works
-                        <Icon data={ArrowRight} size={15} />
+                        <ArrowRight width={15} height={15} />
                     </Link>
                 </div>
                 <pre className="model__code num">
@@ -197,7 +196,7 @@ available(m)     = available(m-1) + overspent(m-1)
                     </p>
                     <Link className="btn btn_ghost" to="/docs/getting-started">
                         Start growing
-                        <Icon data={ArrowRight} size={15} />
+                        <ArrowRight width={15} height={15} />
                     </Link>
                 </div>
             </section>
@@ -212,7 +211,7 @@ available(m)     = available(m-1) + overspent(m-1)
                 </div>
                 <div className="cta-band__actions">
                     <Link className="btn btn_primary" to="/docs/getting-started">
-                        <Icon data={LogoDocker} size={16} />
+                        <LogoDocker width={16} height={16} />
                         Deploy monori
                     </Link>
                     <Link className="btn btn_ghost" to="/docs/configuration">

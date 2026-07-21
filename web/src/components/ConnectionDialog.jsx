@@ -1,7 +1,11 @@
 import { useRef, useState } from "react";
-import { Button, Dialog, Label, Text, TextInput } from "@gravity-ui/uikit";
+import { Button } from "@mantine/core";
 import { useStore } from "../store.js";
 import { fmtDate } from "../format.js";
+import AppDialog from "../ui/AppDialog.jsx";
+import { FTextInput } from "../ui/fields.jsx";
+import Tag from "../ui/Tag.jsx";
+import Txt from "../ui/Txt.jsx";
 
 const BANK = { bank: "tbank", kind: "playwright", label: "T-Bank (browser sync)" };
 
@@ -124,25 +128,30 @@ export default function ConnectionDialog({ account, connection, onClose }) {
     if (step === "credentials") {
         body = (
             <>
-                <Text color="secondary" variant="caption-2">
+                <Txt tone="secondary" caption>
                     Connects to {BANK.label} in a headless browser and pulls your operations.
                     Automated access to your own account is a grey area under the bank's terms — use
                     it at your own risk. Your phone and password are stored encrypted on this server
                     and used only by it to log in to the bank as you.
-                </Text>
-                <TextInput label="Phone" value={phone} onUpdate={setPhone} autoFocus />
-                <TextInput
+                </Txt>
+                <FTextInput
+                    label="Phone"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    autoFocus
+                />
+                <FTextInput
                     label="Password"
                     type="password"
                     value={password}
-                    onUpdate={setPassword}
+                    onChange={(e) => setPassword(e.target.value)}
                 />
-                <TextInput
+                <FTextInput
                     label="T-Bank account number (optional)"
                     placeholder="e.g. 5858870594 — leave empty to sync the default feed"
                     value={tbankAccount}
-                    onUpdate={setTbankAccount}
-                    note="The number from the account's operations link in the cabinet; scopes the sync to that one account."
+                    onChange={(e) => setTbankAccount(e.target.value)}
+                    title="The number from the account's operations link in the cabinet; scopes the sync to that one account."
                 />
             </>
         );
@@ -155,23 +164,29 @@ export default function ConnectionDialog({ account, connection, onClose }) {
         body = (
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <Text color="secondary">Status</Text>
-                    <Label theme={STATUS_THEME[connection.status] ?? "unknown"}>
+                    <Txt tone="secondary">Status</Txt>
+                    <Tag theme={STATUS_THEME[connection.status] ?? "unknown"}>
                         {connection.status}
-                    </Label>
+                    </Tag>
                 </div>
                 <div style={{ display: "flex", justifyContent: "space-between" }}>
-                    <Text color="secondary">Last sync</Text>
+                    <Txt tone="secondary">Last sync</Txt>
                     <span className="num">
                         {connection.lastSync ? fmtDate(connection.lastSync) : "never"}
                     </span>
                 </div>
                 {connection.lastError && (
-                    <Text color="danger" variant="caption-2">
+                    <Txt tone="danger" caption>
                         {connection.lastError}
-                    </Text>
+                    </Txt>
                 )}
-                <Button view="flat-danger" size="s" onClick={disconnect} loading={busy}>
+                <Button
+                    variant="subtle"
+                    data-tone="danger"
+                    size="s"
+                    onClick={disconnect}
+                    loading={busy}
+                >
                     Disconnect
                 </Button>
             </div>
@@ -184,15 +199,20 @@ export default function ConnectionDialog({ account, connection, onClose }) {
     } else if (step === "sms") {
         body = (
             <>
-                <Text color="secondary" variant="caption-2">
+                <Txt tone="secondary" caption>
                     Enter the code the bank sent to your phone.
-                </Text>
+                </Txt>
                 {error && (
-                    <Text color="danger" variant="caption-2">
+                    <Txt tone="danger" caption>
                         {error}
-                    </Text>
+                    </Txt>
                 )}
-                <TextInput label="SMS code" value={code} onUpdate={setCode} autoFocus />
+                <FTextInput
+                    label="SMS code"
+                    value={code}
+                    onChange={(e) => setCode(e.target.value)}
+                    autoFocus
+                />
             </>
         );
         footer = {
@@ -201,26 +221,26 @@ export default function ConnectionDialog({ account, connection, onClose }) {
             applyProps: { loading: busy, disabled: !code.trim() },
         };
     } else if (step === "syncing") {
-        body = <Text color="secondary">Syncing…</Text>;
+        body = <Txt tone="secondary">Syncing…</Txt>;
         footer = { apply: "Close", onApply: onClose, applyProps: { disabled: true } };
     } else if (step === "done") {
         body = (
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                <Text>
+                <Txt block>
                     {result.inserted} new, {result.skipped} duplicates skipped.
-                </Text>
+                </Txt>
                 {result.dateFrom && (
-                    <Text color="secondary" variant="caption-2">
+                    <Txt tone="secondary" caption>
                         {fmtDate(result.dateFrom)} — {fmtDate(result.dateTo)}
-                    </Text>
+                    </Txt>
                 )}
             </div>
         );
     } else if (step === "error") {
         body = (
-            <Text color="danger" variant="caption-2">
+            <Txt tone="danger" caption>
                 {error}
-            </Text>
+            </Txt>
         );
         footer = {
             apply: "Retry",
@@ -230,20 +250,18 @@ export default function ConnectionDialog({ account, connection, onClose }) {
     }
 
     return (
-        <Dialog open onClose={handleClose} size="s">
-            <Dialog.Header caption={`Bank sync — ${account.name}`} />
-            <Dialog.Body>
-                <div style={{ display: "flex", flexDirection: "column", gap: 12, paddingTop: 4 }}>
-                    {body}
-                </div>
-            </Dialog.Body>
-            <Dialog.Footer
-                textButtonApply={footer.apply}
-                textButtonCancel="Cancel"
-                onClickButtonApply={footer.onApply}
-                onClickButtonCancel={handleClose}
-                propsButtonApply={footer.applyProps}
-            />
-        </Dialog>
+        <AppDialog
+            title={`Bank sync — ${account.name}`}
+            onClose={handleClose}
+            applyText={footer.apply}
+            onApply={footer.onApply}
+            applyLoading={footer.applyProps.loading ?? false}
+            applyDisabled={footer.applyProps.disabled ?? false}
+            onCancel={handleClose}
+        >
+            <div style={{ display: "flex", flexDirection: "column", gap: 12, paddingTop: 4 }}>
+                {body}
+            </div>
+        </AppDialog>
     );
 }

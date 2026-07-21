@@ -1,5 +1,7 @@
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Button, DropdownMenu, Label } from "@gravity-ui/uikit";
+import { Button } from "@mantine/core";
+import RowMenu from "../ui/RowMenu.jsx";
+import Tag from "../ui/Tag.jsx";
 import { Plus } from "@gravity-ui/icons";
 import { useStore } from "../store.js";
 import { CategoryEditDialog, CategoryDeleteDialog } from "../components/CategoryDialogs.jsx";
@@ -205,11 +207,7 @@ export default function CategoriesPage() {
         >
             <div className="kb-card__top">
                 <span className="kb-card__name">{c.name}</span>
-                {c.archived && (
-                    <Label size="xs" theme="warning">
-                        arch
-                    </Label>
-                )}
+                {c.archived && <Tag theme="warning">arch</Tag>}
                 <span
                     className="kb-card__usage"
                     title={`${txCountByCat.get(c.id) ?? 0} transactions`}
@@ -224,7 +222,7 @@ export default function CategoriesPage() {
                         e.stopPropagation();
                     }}
                 >
-                    <DropdownMenu size="s" items={catMenu(c)} />
+                    <RowMenu size="s" items={catMenu(c)} />
                 </div>
             </div>
             {c.keywords && (
@@ -246,14 +244,15 @@ export default function CategoriesPage() {
                     onPick={(kind) => setDialog({ type: "group-edit", group: { kind } })}
                 />
                 <Button
-                    view="action"
+                    variant="filled"
                     size="m"
                     onClick={() =>
                         setDialog({ type: "cat-edit", category: { groupId: groups[0]?.id } })
                     }
                     disabled={groups.length === 0}
+                    leftSection={<Plus width={14} height={14} />}
                 >
-                    <Plus width={14} height={14} /> New category
+                    New category
                 </Button>
             </div>
 
@@ -308,9 +307,9 @@ export default function CategoriesPage() {
                                 }}
                             >
                                 <span className="kb-col__name">{g.name}</span>
-                                <Label size="xs" theme={g.kind === "income" ? "success" : "danger"}>
+                                <Tag theme={g.kind === "income" ? "success" : "danger"}>
                                     {g.kind}
-                                </Label>
+                                </Tag>
                                 <span className="kb-col__count">{cats.length}</span>
                                 <div
                                     style={{ marginLeft: "auto" }}
@@ -320,7 +319,7 @@ export default function CategoriesPage() {
                                         e.stopPropagation();
                                     }}
                                 >
-                                    <DropdownMenu size="s" items={groupMenu(g)} />
+                                    <RowMenu size="s" items={groupMenu(g)} />
                                 </div>
                             </div>
 

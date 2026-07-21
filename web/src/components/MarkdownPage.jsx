@@ -3,7 +3,6 @@ import { useParams, Link, useNavigate, useLocation } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeSlug from "rehype-slug";
-import { Icon } from "@gravity-ui/uikit";
 import { ArrowLeft, ArrowRight } from "@gravity-ui/icons";
 import { sectionBySlug, neighbors } from "../content.js";
 
@@ -89,7 +88,7 @@ export default function MarkdownPage() {
             <nav className="md-pager">
                 {prev ? (
                     <Link className="md-pager__btn" to={`/docs/${prev.slug}`}>
-                        <Icon data={ArrowLeft} size={15} />
+                        <ArrowLeft width={15} height={15} />
                         <span>
                             <span className="md-pager__dir">Previous</span>
                             <span className="md-pager__title">{prev.title}</span>
@@ -104,7 +103,7 @@ export default function MarkdownPage() {
                             <span className="md-pager__dir">Next</span>
                             <span className="md-pager__title">{next.title}</span>
                         </span>
-                        <Icon data={ArrowRight} size={15} />
+                        <ArrowRight width={15} height={15} />
                     </Link>
                 )}
             </nav>

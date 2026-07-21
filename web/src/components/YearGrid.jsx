@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
-import { Button, DropdownMenu } from "@gravity-ui/uikit";
+import { ActionIcon } from "@mantine/core";
+import RowMenu from "../ui/RowMenu.jsx";
 import { Plus, ChevronDown, EllipsisVertical } from "@gravity-ui/icons";
 import BudgetCell from "./BudgetCell.jsx";
 import { rub } from "../format.js";
@@ -197,17 +198,18 @@ export default function YearGrid({
                                     </span>
                                     {g.name}
                                     <span className="yg-count">{cats.length}</span>
-                                    <Button
-                                        size="xs"
-                                        view="flat-secondary"
+                                    <ActionIcon
+                                        size={20}
+                                        variant="subtle"
                                         className="yg-add"
+                                        aria-label="Add category"
                                         onClick={(e) => {
                                             e.stopPropagation();
                                             onAddCategory(g.id);
                                         }}
                                     >
                                         <Plus width={12} height={12} />
-                                    </Button>
+                                    </ActionIcon>
                                 </td>
                                 {sub.map((s, m) =>
                                     cols.map((metric, j) => (
@@ -239,19 +241,14 @@ export default function YearGrid({
                                                     className="yg-row-menu"
                                                     onClick={(e) => e.stopPropagation()}
                                                 >
-                                                    <DropdownMenu
-                                                        renderSwitcher={(props) => (
-                                                            <Button
-                                                                {...props}
-                                                                size="xs"
-                                                                view="flat-secondary"
-                                                            >
-                                                                <EllipsisVertical
-                                                                    width={13}
-                                                                    height={13}
-                                                                />
-                                                            </Button>
-                                                        )}
+                                                    <RowMenu
+                                                        size="xs"
+                                                        icon={
+                                                            <EllipsisVertical
+                                                                width={13}
+                                                                height={13}
+                                                            />
+                                                        }
                                                         items={onCategoryMenu(c)}
                                                     />
                                                 </span>
