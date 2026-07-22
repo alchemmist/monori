@@ -131,10 +131,12 @@
     border-radius: 0;
 }
 
-/* outspecify `.theme-dark .card` (two classes) so the glass shadow doesn't
-   come back on the full-bleed table in dark theme */
+/* outspecify `.theme-dark .card` (two classes) so the glass shadow and the 12px
+   radius don't come back on the full-bleed table — the rounded corners would
+   expose the card's gray fill where the square grid doesn't follow the curve */
 .theme-dark .card.tx-table {
     box-shadow: none;
+    border-radius: 0;
 }
 
 @media (width <= 760px) {
