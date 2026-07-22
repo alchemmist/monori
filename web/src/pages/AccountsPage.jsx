@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Button, DropdownMenu, Label } from "@gravity-ui/uikit";
+import { Button } from "@mantine/core";
+import RowMenu from "../ui/RowMenu.jsx";
+import Tag from "../ui/Tag.jsx";
 import { Plus, Grip } from "@gravity-ui/icons";
 import { useStore, isDemo } from "../store.js";
 import { api } from "../api.js";
@@ -118,11 +120,12 @@ export default function AccountsPage() {
                 </h1>
                 <div style={{ flex: 1 }} />
                 <Button
-                    view="action"
+                    variant="filled"
                     size="m"
                     onClick={() => setDialog({ type: "edit", account: {} })}
+                    leftSection={<Plus width={14} height={14} />}
                 >
-                    <Plus width={14} height={14} /> New account
+                    New account
                 </Button>
             </div>
 
@@ -146,17 +149,10 @@ export default function AccountsPage() {
                             <AccountBadge account={a} size={32} />
                             <div className="account-row__main">
                                 <span className="account-row__name">{a.name}</span>
-                                <Label size="xs" theme="unknown">
-                                    {TYPE_LABEL[a.type] ?? a.type}
-                                </Label>
-                                {a.archived && (
-                                    <Label size="xs" theme="warning">
-                                        archived
-                                    </Label>
-                                )}
+                                <Tag theme="unknown">{TYPE_LABEL[a.type] ?? a.type}</Tag>
+                                {a.archived && <Tag theme="warning">archived</Tag>}
                                 {connByAccount.has(a.id) && (
-                                    <Label
-                                        size="xs"
+                                    <Tag
                                         theme={
                                             connByAccount.get(a.id).status === "error"
                                                 ? "danger"
@@ -168,14 +164,14 @@ export default function AccountsPage() {
                                         {connByAccount.get(a.id).status === "connected"
                                             ? "synced"
                                             : connByAccount.get(a.id).status}
-                                    </Label>
+                                    </Tag>
                                 )}
                             </div>
                             <span className="account-row__balance num">
                                 {money(balances.get(a.id) ?? 0)}
                             </span>
                             <div className="account-row__actions">
-                                <DropdownMenu
+                                <RowMenu
                                     size="s"
                                     items={[
                                         {

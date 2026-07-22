@@ -1,6 +1,9 @@
 import { useState } from "react";
-import { Dialog, TextInput, SegmentedRadioGroup, Text } from "@gravity-ui/uikit";
+import { SegmentedControl } from "@mantine/core";
 import { useStore } from "../store.js";
+import AppDialog from "../ui/AppDialog.jsx";
+import { FTextInput } from "../ui/fields.jsx";
+import Txt from "../ui/Txt.jsx";
 
 export function GroupEditDialog({ group, onClose }) {
     const { createGroup, patchGroup, notify } = useStore();
@@ -31,38 +34,41 @@ export function GroupEditDialog({ group, onClose }) {
     };
 
     return (
-        <Dialog open onClose={onClose} size="s">
-            <Dialog.Header caption={isNew ? "New group" : `Edit ${group.name}`} />
-            <Dialog.Body>
-                <div style={{ display: "flex", flexDirection: "column", gap: 14, paddingTop: 4 }}>
-                    <TextInput label="Name" value={name} onUpdate={setName} autoFocus />
-                    <div>
-                        <Text variant="subheader-1" style={{ display: "block", marginBottom: 6 }}>
-                            Kind
-                        </Text>
-                        <SegmentedRadioGroup value={kind} onUpdate={setKind} width="max">
-                            <SegmentedRadioGroup.Option value="income">
-                                Income
-                            </SegmentedRadioGroup.Option>
-                            <SegmentedRadioGroup.Option value="expense">
-                                Expense
-                            </SegmentedRadioGroup.Option>
-                        </SegmentedRadioGroup>
-                    </div>
-                    <Text color="secondary" variant="caption-2">
-                        Income groups collect money coming in; expense groups collect what you
-                        spend. Categories inside inherit this split for auto-categorization.
-                    </Text>
+        <AppDialog
+            title={isNew ? "New group" : `Edit ${group.name}`}
+            onClose={onClose}
+            applyText={isNew ? "Create" : "Save"}
+            onApply={apply}
+            applyLoading={busy}
+            applyDisabled={!name.trim()}
+        >
+            <div style={{ display: "flex", flexDirection: "column", gap: 14, paddingTop: 4 }}>
+                <FTextInput
+                    label="Name"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    autoFocus
+                />
+                <div>
+                    <Txt block style={{ fontWeight: 600, marginBottom: 6 }}>
+                        Kind
+                    </Txt>
+                    <SegmentedControl
+                        fullWidth
+                        value={kind}
+                        onChange={setKind}
+                        data={[
+                            { value: "income", label: "Income" },
+                            { value: "expense", label: "Expense" },
+                        ]}
+                    />
                 </div>
-            </Dialog.Body>
-            <Dialog.Footer
-                textButtonApply={isNew ? "Create" : "Save"}
-                textButtonCancel="Cancel"
-                onClickButtonApply={apply}
-                onClickButtonCancel={onClose}
-                propsButtonApply={{ loading: busy, disabled: !name.trim() }}
-            />
-        </Dialog>
+                <Txt tone="secondary" caption>
+                    Income groups collect money coming in; expense groups collect what you spend.
+                    Categories inside inherit this split for auto-categorization.
+                </Txt>
+            </div>
+        </AppDialog>
     );
 }
 
@@ -84,24 +90,22 @@ export function GroupDeleteDialog({ group, catCount, onClose }) {
     };
 
     return (
-        <Dialog open onClose={onClose} size="s">
-            <Dialog.Header caption={`Delete ${group.name}`} />
-            <Dialog.Body>
-                <Text>
-                    {blocked
-                        ? `This group still holds ${catCount} ${
-                              catCount === 1 ? "category" : "categories"
-                          }. Move or delete them first — drag the cards to another column.`
-                        : "This group is empty and will be removed. Nothing else is affected."}
-                </Text>
-            </Dialog.Body>
-            <Dialog.Footer
-                textButtonApply="Delete"
-                textButtonCancel="Cancel"
-                onClickButtonApply={apply}
-                onClickButtonCancel={onClose}
-                propsButtonApply={{ view: "outlined-danger", loading: busy, disabled: blocked }}
-            />
-        </Dialog>
+        <AppDialog
+            title={`Delete ${group.name}`}
+            onClose={onClose}
+            applyText="Delete"
+            onApply={apply}
+            applyLoading={busy}
+            applyDisabled={blocked}
+            applyDanger
+        >
+            <Txt block>
+                {blocked
+                    ? `This group still holds ${catCount} ${
+                          catCount === 1 ? "category" : "categories"
+                      }. Move or delete them first — drag the cards to another column.`
+                    : "This group is empty and will be removed. Nothing else is affected."}
+            </Txt>
+        </AppDialog>
     );
 }

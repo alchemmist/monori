@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { Loader, useToaster } from "@gravity-ui/uikit";
+import { Suspense, lazy, useEffect, useMemo, useState } from "react";
+import { Loader } from "@mantine/core";
 import {
     ChartColumn,
     ListUl,
@@ -19,10 +19,13 @@ import {
     ArrowRightFromSquare,
 } from "@gravity-ui/icons";
 import { useStore, isDemo } from "./store.js";
+import { showToast } from "./ui/notify.js";
 import { computeRange } from "./engine/budget.js";
 import BudgetPage from "./pages/BudgetPage.jsx";
-import DashboardPage from "./pages/DashboardPage.jsx";
-import AnalyticsPage from "./pages/AnalyticsPage.jsx";
+
+// the whole d3/charts stack is only used here — keep it out of the entry chunk
+const DashboardPage = lazy(() => import("./pages/DashboardPage.jsx"));
+const AnalyticsPage = lazy(() => import("./pages/AnalyticsPage.jsx"));
 import TransactionsPage from "./pages/TransactionsPage.jsx";
 import AccountsPage from "./pages/AccountsPage.jsx";
 import CategoriesPage from "./pages/CategoriesPage.jsx";
@@ -56,8 +59,6 @@ export default function App({ theme, onToggleTheme }) {
     const [collapsed, setCollapsed] = useState(
         () => localStorage.getItem("sidebar_collapsed") === "1",
     );
-    const toaster = useToaster();
-
     const toggleSidebar = () =>
         setCollapsed((c) => {
             const next = !c;
@@ -74,8 +75,8 @@ export default function App({ theme, onToggleTheme }) {
     }, [load, user]);
 
     useEffect(() => {
-        if (toast) toaster.add({ name: String(Date.now()), autoHiding: 5000, ...toast });
-    }, [toast, toaster]);
+        if (toast) showToast(toast);
+    }, [toast]);
 
     useEffect(() => {
         if (!isDemo() && user && window.location.pathname === "/login") {
@@ -101,7 +102,7 @@ export default function App({ theme, onToggleTheme }) {
     if (!isDemo() && !authChecked) {
         return (
             <div style={{ display: "grid", placeItems: "center", height: "100vh" }}>
-                <Loader size="l" />
+                <Loader size="lg" type="bars" />
             </div>
         );
     }
@@ -115,7 +116,7 @@ export default function App({ theme, onToggleTheme }) {
     if (loading) {
         return (
             <div style={{ display: "grid", placeItems: "center", height: "100vh" }}>
-                <Loader size="l" />
+                <Loader size="lg" type="bars" />
             </div>
         );
     }
@@ -232,14 +233,20 @@ export default function App({ theme, onToggleTheme }) {
                     <BudgetPage results={results} firstYear={FIRST_YEAR} lastYear={lastYear} />
                 )}
                 {page === "dashboard" && (
-                    <>
+                    <Suspense
+                        fallback={
+                            <div style={{ display: "grid", placeItems: "center", height: "60vh" }}>
+                                <Loader size="lg" type="bars" />
+                            </div>
+                        }
+                    >
                         <DashboardPage firstYear={FIRST_YEAR} lastYear={lastYear} />
                         <AnalyticsPage
                             results={results}
                             firstYear={FIRST_YEAR}
                             lastYear={lastYear}
                         />
-                    </>
+                    </Suspense>
                 )}
                 {page === "transactions" && <TransactionsPage />}
                 {page === "accounts" && <AccountsPage />}

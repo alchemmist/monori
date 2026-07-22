@@ -1,0 +1,490 @@
+/* Mono skin for Mantine components. Colors come from the live g/m tokens
+   (theme.css + the retained gravity stylesheet), so light and dark stay in
+   sync with the body theme class automatically. Metrics mirror the gravity
+   widgets these replaced: m=28px, s=24px, dialog buttons l=36px. */
+
+/* Mantine's preflight forces border-box on every element; the whole legacy
+   layout was built against UA defaults and shifts under it. Revert to the UA
+   value globally and re-apply border-box only inside Mantine markup. */
+*,
+*::before,
+*::after {
+    box-sizing: content-box;
+}
+
+input,
+select,
+button,
+textarea,
+progress,
+meter {
+    box-sizing: border-box;
+}
+
+[class^="m_"],
+[class*=" m_"],
+[class*="mantine-"],
+.mi-input,
+.tag,
+[class^="m_"] *,
+[class*=" m_"] *,
+[class*="mantine-"] *,
+[class^="m_"] *::before,
+[class^="m_"] *::after {
+    box-sizing: border-box;
+}
+
+/* ---- Button ---- */
+
+/* gravity size names (s/m/l): Mantine resolves size="m" to
+   var(--button-height-m) etc inline, so supply those variables */
+.mantine-Button-root {
+    font-weight: 400;
+    border: none;
+    --button-radius: 6px;
+    --button-height-s: 24px;
+    --button-padding-x-s: 8px;
+    --button-height-m: 28px;
+    --button-padding-x-m: 12px;
+    --button-height-l: 36px;
+    --button-padding-x-l: 20px;
+    --mantine-font-size-s: 13px;
+    --mantine-font-size-m: 13px;
+    --mantine-font-size-l: 13px;
+}
+
+.mantine-Button-root[data-size="l"] {
+    --button-radius: 8px;
+}
+
+.mantine-Button-section[data-position="left"] {
+    margin-inline-end: 8px;
+}
+
+.mantine-Button-root[data-variant="filled"] {
+    background: var(--g-color-base-brand);
+    color: var(--g-color-text-brand-contrast);
+}
+
+.mantine-Button-root[data-variant="filled"]:hover {
+    background: var(--g-color-base-brand-hover);
+}
+
+.mantine-Button-root[data-variant="default"] {
+    background: transparent;
+    border: 1px solid var(--g-color-line-generic);
+    color: var(--m-text);
+}
+
+.mantine-Button-root[data-variant="default"]:hover {
+    background: var(--g-color-base-simple-hover);
+}
+
+.mantine-Button-root[data-variant="light"] {
+    background: var(--g-color-base-generic);
+    color: var(--m-text);
+}
+
+.mantine-Button-root[data-variant="light"]:hover {
+    background: var(--g-color-base-generic-hover);
+}
+
+.mantine-Button-root[data-variant="subtle"] {
+    background: transparent;
+    color: var(--m-text);
+}
+
+.mantine-Button-root[data-variant="subtle"]:hover {
+    background: var(--g-color-base-simple-hover);
+}
+
+.mantine-Button-root[data-variant="subtle"][data-tone="secondary"] {
+    color: var(--m-text-dim);
+}
+
+.mantine-Button-root[data-variant="subtle"][data-tone="danger"],
+.mantine-Button-root[data-variant="outline"][data-tone="danger"] {
+    color: var(--g-color-text-danger);
+}
+
+.mantine-Button-root[data-variant="outline"][data-tone="danger"] {
+    background: transparent;
+    border: 1px solid var(--g-color-line-danger);
+}
+
+.mantine-Button-root[data-variant="outline"][data-tone="danger"]:hover {
+    background: var(--g-color-base-danger-light);
+}
+
+.mantine-Button-root:disabled,
+.mantine-Button-root[data-disabled] {
+    background: var(--g-color-base-generic-accent-disabled);
+    border: none;
+    color: var(--g-color-text-hint);
+}
+
+.mantine-Button-root[data-loading] .mantine-Button-loader {
+    color: currentcolor;
+}
+
+/* ---- ActionIcon (icon-only flat buttons: row menus, close, pickers) ---- */
+.mantine-ActionIcon-root {
+    --ai-radius: 5px;
+    background: transparent;
+    border: none;
+    color: var(--m-text);
+}
+
+.mantine-ActionIcon-root:hover {
+    background: var(--g-color-base-simple-hover);
+    color: var(--m-text);
+}
+
+/* ---- inputs: bordered box with the label INSIDE it, gravity-style ---- */
+.mi-input {
+    display: flex;
+    align-items: center;
+    min-height: 28px;
+    border: 1px solid var(--g-color-line-generic);
+    border-radius: 6px;
+    background: transparent;
+    transition: border-color 0.1s ease;
+}
+
+.mi-input:focus-within {
+    border-color: var(--g-color-line-generic-active);
+}
+
+.mi-input__label {
+    flex: none;
+    margin: 0;
+    padding: 0 4px 0 8px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--m-text);
+    white-space: nowrap;
+}
+
+.mi-input__wrap {
+    flex: 1;
+    min-width: 0;
+}
+
+.mi-input__field {
+    width: 100%;
+    min-height: 26px;
+    height: 26px;
+    border: none;
+    background: none;
+    padding: 0 8px;
+    font-size: 13px;
+    color: var(--m-text);
+}
+
+/* with an inline label the value hugs it like gravity did */
+.mi-input__label + .mi-input__wrap .mi-input__field {
+    padding-left: 2px;
+}
+
+.mi-input__field::placeholder {
+    color: var(--g-color-text-hint);
+}
+
+.mi-input__field:focus {
+    outline: none;
+}
+
+textarea.mi-input__field {
+    height: auto;
+    padding: 5px 8px;
+    line-height: 18px;
+    resize: vertical;
+}
+
+.mi-input__section {
+    color: var(--m-text-faint);
+}
+
+.mi-input__section[data-position="right"] {
+    margin-right: 4px;
+}
+
+.mi-input .mantine-InputWrapper-error {
+    display: none;
+}
+
+/* Select shares .mi-input classes; its value is a readonly input */
+.mi-input__field[readonly] {
+    cursor: pointer;
+}
+
+/* ---- InlineSelect: button-shaped select, auto-width like gravity's ---- */
+.gsel {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    height: 28px;
+    padding: 0 4px 0 8px;
+    border: 1px solid var(--g-color-line-generic);
+    border-radius: 6px;
+    background: transparent;
+    font: inherit;
+    font-size: 13px;
+    color: var(--m-text);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: border-color 0.1s ease;
+}
+
+.gsel:hover {
+    border-color: var(--g-color-line-generic-hover);
+}
+
+.gsel_s {
+    height: 24px;
+}
+
+.gsel_borderless {
+    border-color: transparent;
+}
+
+.gsel_borderless:hover {
+    border-color: var(--g-color-line-generic);
+}
+
+.gsel__text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.gsel__text_empty {
+    color: var(--g-color-text-hint);
+}
+
+.gsel__chev {
+    flex: none;
+    color: var(--m-text-faint);
+}
+
+/* ---- dropdown surfaces (Select options, Menu) ---- */
+.mantine-Select-dropdown,
+.mantine-Combobox-dropdown,
+.mantine-Menu-dropdown {
+    background: var(--g-color-base-float);
+    border: none;
+    border-radius: 6px;
+    box-shadow:
+        0 0 0 1px var(--g-color-sfx-fade, rgb(0 0 0 / 5%)),
+        0 8px 20px -5px rgb(0 0 0 / 15%);
+    padding: 4px;
+}
+
+.mantine-Select-option,
+.mantine-Combobox-option,
+.mantine-Menu-item {
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-size: 13px;
+    line-height: 18px;
+    color: var(--m-text);
+}
+
+.mantine-Select-option:hover,
+.mantine-Select-option[data-combobox-active],
+.mantine-Combobox-option:hover,
+.mantine-Combobox-option[data-combobox-active],
+.mantine-Menu-item:hover {
+    background: var(--g-color-base-simple-hover);
+}
+
+.mantine-Select-option[data-combobox-selected],
+.mantine-Combobox-option[data-selected] {
+    background: var(--g-color-base-selection);
+    color: var(--m-text);
+}
+
+.mantine-Combobox-search {
+    border: none;
+    border-bottom: 1px solid var(--g-color-line-generic);
+    border-radius: 0;
+    background: transparent;
+    font-size: 13px;
+    color: var(--m-text);
+    margin-bottom: 4px;
+}
+
+.mantine-Menu-item[data-tone="danger"] {
+    color: var(--g-color-text-danger);
+}
+
+/* ---- Modal (dialogs) ---- */
+.mantine-Modal-content {
+    background: var(--g-color-base-float);
+    border-radius: 10px;
+    box-shadow: 0 8px 40px -10px rgb(0 0 0 / 30%);
+    color: var(--m-text);
+}
+
+.mantine-Modal-header {
+    background: transparent;
+    padding: 24px 32px 12px;
+    min-height: 0;
+}
+
+.mantine-Modal-title {
+    font-size: 17px;
+    font-weight: 600;
+    line-height: 24px;
+}
+
+.mantine-Modal-close {
+    color: var(--m-text);
+    width: 28px;
+    height: 28px;
+}
+
+.mantine-Modal-close:hover {
+    background: var(--g-color-base-simple-hover);
+}
+
+.mantine-Modal-body {
+    padding: 0 32px 32px;
+    font-size: 13px;
+    line-height: 18px;
+}
+
+.mantine-Modal-overlay {
+    background: rgb(0 0 0 / 50%);
+}
+
+.app-dialog__footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    padding-top: 32px;
+}
+
+.app-dialog__footer .mantine-Button-root {
+    width: 128px;
+}
+
+/* ---- SegmentedControl ---- */
+.mantine-SegmentedControl-root {
+    background: var(--g-color-base-generic);
+    border-radius: 6px;
+    padding: 2px;
+    --sc-transition-duration: 100ms;
+}
+
+/* checked option carries the brand outline + brand text, like gravity */
+.mantine-SegmentedControl-indicator {
+    background: var(--g-color-base-selection);
+    border-radius: 5px;
+    box-shadow: inset 0 0 0 1px var(--g-color-line-brand);
+}
+
+.mantine-SegmentedControl-label {
+    font-size: 13px;
+    font-weight: 400;
+    padding: 3px 12px;
+    color: var(--m-text);
+}
+
+.mantine-SegmentedControl-label[data-active] {
+    color: var(--g-color-text-brand);
+}
+
+/* the large variant used on Settings (gravity size l) */
+.seg-l .mantine-SegmentedControl-label {
+    font-size: 14px;
+    padding: 6px 16px;
+}
+
+/* ---- tags (gravity Label look: soft themed chip, lowercase, 20px) ---- */
+.tag {
+    display: inline-flex;
+    align-items: center;
+    height: 20px;
+    padding: 0 8px;
+    border-radius: 3px;
+    font-size: 13px;
+    line-height: 1;
+    white-space: nowrap;
+}
+
+.tag_info {
+    background: var(--g-color-base-info-light);
+    color: var(--g-color-text-info-heavy);
+}
+
+.tag_success {
+    background: var(--g-color-base-positive-light);
+    color: var(--g-color-text-positive-heavy);
+}
+
+.tag_warning {
+    background: var(--g-color-base-warning-light);
+    color: var(--g-color-text-warning-heavy);
+}
+
+.tag_danger {
+    background: var(--g-color-base-danger-light);
+    color: var(--g-color-text-danger-heavy);
+}
+
+.tag_unknown {
+    background: var(--g-color-base-neutral-light);
+    color: var(--g-color-text-complementary);
+}
+
+/* ---- text helpers (replacing gravity <Text color/variant>) ---- */
+.t-secondary {
+    color: var(--m-text-dim);
+}
+
+.t-danger {
+    color: var(--g-color-text-danger);
+}
+
+.t-warning {
+    color: var(--g-color-text-warning);
+}
+
+.t-caption {
+    font-size: 12px;
+    line-height: 17px;
+}
+
+/* ---- notifications (toasts) ---- */
+.mantine-Notification-root {
+    background: var(--g-color-base-float);
+    border-radius: 8px;
+    box-shadow:
+        0 0 0 1px var(--g-color-sfx-fade, rgb(0 0 0 / 5%)),
+        0 8px 20px -5px rgb(0 0 0 / 15%);
+    padding: 12px 16px;
+}
+
+.mantine-Notification-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--m-text);
+}
+
+.mantine-Notification-description {
+    font-size: 12.5px;
+    color: var(--m-text-dim);
+}
+
+.mantine-Notification-closeButton {
+    color: var(--m-text-dim);
+}
+
+.mantine-Notification-closeButton:hover {
+    background: var(--g-color-base-simple-hover);
+}
+
+/* ---- Loader ---- */
+.mantine-Loader-root {
+    --loader-color: var(--m-accent);
+}

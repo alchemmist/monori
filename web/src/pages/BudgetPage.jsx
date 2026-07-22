@@ -1,5 +1,7 @@
 import { useMemo, useState } from "react";
-import { Button, DropdownMenu, SegmentedRadioGroup, Select } from "@gravity-ui/uikit";
+import { ActionIcon, SegmentedControl } from "@mantine/core";
+import InlineSelect from "../ui/InlineSelect.jsx";
+import RowMenu from "../ui/RowMenu.jsx";
 import { Plus, ChevronDown, EllipsisVertical } from "@gravity-ui/icons";
 import { useStore } from "../store.js";
 import { MONTHS_SHORT, MONTHS, rub } from "../format.js";
@@ -70,42 +72,38 @@ export default function BudgetPage({ results, firstYear, lastYear }) {
                 <h1 className="page-title" style={{ margin: 0 }}>
                     Budget
                 </h1>
-                <Select
-                    value={[String(year)]}
-                    onUpdate={(v) => setYear(+v[0])}
-                    options={years.map((y) => ({ value: String(y), content: String(y) }))}
-                    size="m"
+                <InlineSelect
+                    value={String(year)}
+                    onChange={(v) => setYear(+v)}
+                    data={years.map((y) => String(y))}
                 />
                 {mode === "month" && (
                     <div className="toolbar-scroll">
-                        <SegmentedRadioGroup
-                            size="m"
+                        <SegmentedControl
                             value={String(month)}
-                            onUpdate={(v) => setMonth(+v)}
-                            options={MONTHS_SHORT.map((m, i) => ({ value: String(i), content: m }))}
+                            onChange={(v) => setMonth(+v)}
+                            data={MONTHS_SHORT.map((m, i) => ({ value: String(i), label: m }))}
                         />
                     </div>
                 )}
                 <div style={{ flex: 1 }} />
                 {mode === "year" && (
-                    <SegmentedRadioGroup
-                        size="m"
+                    <SegmentedControl
                         value={density}
-                        onUpdate={setDensity}
-                        options={[
-                            { value: "full", content: "Full" },
-                            { value: "plan", content: "Plan" },
-                            { value: "actual", content: "Actual" },
+                        onChange={setDensity}
+                        data={[
+                            { value: "full", label: "Full" },
+                            { value: "plan", label: "Plan" },
+                            { value: "actual", label: "Actual" },
                         ]}
                     />
                 )}
-                <SegmentedRadioGroup
-                    size="m"
+                <SegmentedControl
                     value={mode}
-                    onUpdate={setMode}
-                    options={[
-                        { value: "month", content: "Month" },
-                        { value: "year", content: "Year" },
+                    onChange={setMode}
+                    data={[
+                        { value: "month", label: "Month" },
+                        { value: "year", label: "Year" },
                     ]}
                 />
             </div>
@@ -195,10 +193,11 @@ export default function BudgetPage({ results, firstYear, lastYear }) {
                                                 <span className="group-row__count">
                                                     {cats.length}
                                                 </span>
-                                                <Button
-                                                    size="xs"
-                                                    view="flat-secondary"
+                                                <ActionIcon
+                                                    size={20}
+                                                    variant="subtle"
                                                     style={{ marginLeft: 8 }}
+                                                    aria-label="Add category"
                                                     onClick={(e) => {
                                                         e.stopPropagation();
                                                         setDialog({
@@ -208,7 +207,7 @@ export default function BudgetPage({ results, firstYear, lastYear }) {
                                                     }}
                                                 >
                                                     <Plus width={12} height={12} />
-                                                </Button>
+                                                </ActionIcon>
                                             </td>
                                             <td>
                                                 <Money value={gb} />
@@ -277,19 +276,14 @@ export default function BudgetPage({ results, firstYear, lastYear }) {
                                                                 className="cat-row__menu"
                                                                 onClick={(e) => e.stopPropagation()}
                                                             >
-                                                                <DropdownMenu
-                                                                    renderSwitcher={(props) => (
-                                                                        <Button
-                                                                            {...props}
-                                                                            size="xs"
-                                                                            view="flat-secondary"
-                                                                        >
-                                                                            <EllipsisVertical
-                                                                                width={14}
-                                                                                height={14}
-                                                                            />
-                                                                        </Button>
-                                                                    )}
+                                                                <RowMenu
+                                                                    size="xs"
+                                                                    icon={
+                                                                        <EllipsisVertical
+                                                                            width={14}
+                                                                            height={14}
+                                                                        />
+                                                                    }
                                                                     items={catMenu(c)}
                                                                 />
                                                             </span>

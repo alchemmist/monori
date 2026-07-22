@@ -1,7 +1,8 @@
 import { useMemo, useState } from "react";
 import { ChartBoundary } from "../components/ChartCard.jsx";
 import TimeNavigator from "../components/TimeNavigator.jsx";
-import { Button, Select } from "@gravity-ui/uikit";
+import { Button } from "@mantine/core";
+import InlineSelect from "../ui/InlineSelect.jsx";
 import { useStore } from "../store.js";
 import { accountBalances } from "../engine/analytics.js";
 import AccountBadge from "../components/AccountBadge.jsx";
@@ -363,7 +364,7 @@ export default function DashboardPage({ firstYear, lastYear }) {
 
     const expenseCatOptions = snapshot.categories
         .filter((c) => !incomeGroupIds.has(c.groupId))
-        .map((c) => ({ value: String(c.id), content: c.name }));
+        .map((c) => ({ value: String(c.id), label: c.name }));
 
     return (
         <div className="fade-in">
@@ -372,13 +373,12 @@ export default function DashboardPage({ firstYear, lastYear }) {
                     Dashboard
                 </h1>
                 {accounts.length > 1 && (
-                    <Select
-                        size="m"
-                        value={[acctFilter]}
-                        onUpdate={(v) => setAcctFilter(v[0])}
-                        options={[
-                            { value: "all", content: "All accounts" },
-                            ...accounts.map((a) => ({ value: String(a.id), content: a.name })),
+                    <InlineSelect
+                        value={acctFilter}
+                        onChange={setAcctFilter}
+                        data={[
+                            { value: "all", label: "All accounts" },
+                            ...accounts.map((a) => ({ value: String(a.id), label: a.name })),
                         ]}
                     />
                 )}
@@ -473,8 +473,9 @@ export default function DashboardPage({ firstYear, lastYear }) {
                                 <Button
                                     key={p.id}
                                     size="s"
-                                    view={activePreset === p.id ? "normal" : "flat-secondary"}
-                                    selected={activePreset === p.id}
+                                    variant="subtle"
+                                    data-tone={activePreset === p.id ? undefined : "secondary"}
+                                    data-selected={activePreset === p.id || undefined}
                                     onClick={() => setTrendRange(presetRange(p.id))}
                                 >
                                     {p.label}
@@ -495,11 +496,11 @@ export default function DashboardPage({ firstYear, lastYear }) {
                 <div className="card chart-card">
                     <div className="chart-card__head">
                         <div className="chart-card__title">Spending by category</div>
-                        <Select
-                            size="s"
-                            value={[donutYear]}
-                            onUpdate={(v) => setDonutYear(v[0])}
-                            options={years.map((y) => ({ value: y, content: y }))}
+                        <InlineSelect
+                            small
+                            value={donutYear}
+                            onChange={setDonutYear}
+                            data={years}
                         />
                     </div>
                     <div className="chart-card__body">
@@ -511,19 +512,19 @@ export default function DashboardPage({ firstYear, lastYear }) {
                     <div className="chart-card__head">
                         <div className="chart-card__title">Category by month</div>
                         <div style={{ display: "flex", gap: 8 }}>
-                            <Select
-                                size="s"
-                                filterable
+                            <InlineSelect
+                                small
+                                searchable
                                 placeholder="Category"
-                                value={drillCat ? [drillCat] : []}
-                                onUpdate={(v) => setDrillCat(v[0] ?? "")}
-                                options={expenseCatOptions}
+                                value={drillCat || null}
+                                onChange={(v) => setDrillCat(v ?? "")}
+                                data={expenseCatOptions}
                             />
-                            <Select
-                                size="s"
-                                value={[drillYear]}
-                                onUpdate={(v) => setDrillYear(v[0])}
-                                options={years.map((y) => ({ value: y, content: y }))}
+                            <InlineSelect
+                                small
+                                value={drillYear}
+                                onChange={setDrillYear}
+                                data={years}
                             />
                         </div>
                     </div>
@@ -548,11 +549,11 @@ export default function DashboardPage({ firstYear, lastYear }) {
                 <div className="card chart-card chart-card_wide">
                     <div className="chart-card__head">
                         <div className="chart-card__title">Spending by category · by month</div>
-                        <Select
-                            size="s"
-                            value={[catStackYear]}
-                            onUpdate={(v) => setCatStackYear(v[0])}
-                            options={years.map((y) => ({ value: y, content: y }))}
+                        <InlineSelect
+                            small
+                            value={catStackYear}
+                            onChange={setCatStackYear}
+                            data={years}
                         />
                     </div>
                     <div className="chart-card__body">
@@ -572,11 +573,11 @@ export default function DashboardPage({ firstYear, lastYear }) {
                 <div className="card chart-card">
                     <div className="chart-card__head">
                         <div className="chart-card__title">Expense structure by group</div>
-                        <Select
-                            size="s"
-                            value={[stackYear]}
-                            onUpdate={(v) => setStackYear(v[0])}
-                            options={years.map((y) => ({ value: y, content: y }))}
+                        <InlineSelect
+                            small
+                            value={stackYear}
+                            onChange={setStackYear}
+                            data={years}
                         />
                     </div>
                     <div className="chart-card__body">
