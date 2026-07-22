@@ -131,6 +131,29 @@
     border-radius: 0;
 }
 
+/* full-bleed table with rounded top corners only; drop the glass shadow. The
+   header cells round their outer top corners to match, so the card's gray fill
+   never peeks through where the square grid meets the curve. */
+.theme-dark .card.tx-table {
+    box-shadow: none;
+    border-radius: 12px 12px 0 0;
+}
+
+.theme-dark .tx-table .tx-grid thead th:first-child {
+    border-top-left-radius: 12px;
+}
+
+.theme-dark .tx-table .tx-grid thead th:last-child {
+    border-top-right-radius: 12px;
+}
+
+/* month budget table: rounded top, flat bottom (matches the tx table and the
+   year grid) so the card's fill doesn't show as a rounded gap under the last
+   row. Outspecifies `.theme-dark .card`'s 12px all-round radius. */
+.theme-dark .card.budget-month-card {
+    border-radius: 12px 12px 0 0;
+}
+
 @media (width <= 760px) {
     .tx-table {
         overflow-x: auto;
