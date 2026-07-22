@@ -131,7 +131,7 @@
 
     --m-card-bg: var(--glass-fill);
     --m-card-border: var(--glass-border);
-    --m-sidebar-edge: var(--m-border);
+    --m-sidebar-edge: rgb(255 255 255 / 8%);
 
     --g-color-base-brand: #ff7a3c;
     --g-color-base-brand-hover: #ff8f5a;
