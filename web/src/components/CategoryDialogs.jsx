@@ -1,6 +1,8 @@
 import { useState } from "react";
-import { Dialog, TextInput, Select, Text } from "@gravity-ui/uikit";
 import { useStore } from "../store.js";
+import AppDialog from "../ui/AppDialog.jsx";
+import { FSelect, FTextInput } from "../ui/fields.jsx";
+import Txt from "../ui/Txt.jsx";
 
 export function CategoryEditDialog({ category, groups, onClose }) {
     const { patchCategory, createCategory, notify } = useStore();
@@ -36,38 +38,39 @@ export function CategoryEditDialog({ category, groups, onClose }) {
     };
 
     return (
-        <Dialog open onClose={onClose} size="s">
-            <Dialog.Header caption={isNew ? "New category" : `Edit ${category.name}`} />
-            <Dialog.Body>
-                <div style={{ display: "flex", flexDirection: "column", gap: 12, paddingTop: 4 }}>
-                    <TextInput label="Name" value={name} onUpdate={setName} autoFocus />
-                    <Select
-                        label="Group"
-                        value={[groupId]}
-                        onUpdate={(v) => setGroupId(v[0])}
-                        options={groups.map((g) => ({ value: String(g.id), content: g.name }))}
-                        width="max"
-                    />
-                    <TextInput
-                        label="Keywords"
-                        value={keywords}
-                        onUpdate={setKeywords}
-                        placeholder="Substring|Another substring"
-                    />
-                    <Text color="secondary" variant="caption-2">
-                        Keywords are matched against transaction descriptions during import,
-                        separated by |. First matching category wins.
-                    </Text>
-                </div>
-            </Dialog.Body>
-            <Dialog.Footer
-                textButtonApply={isNew ? "Create" : "Save"}
-                textButtonCancel="Cancel"
-                onClickButtonApply={apply}
-                onClickButtonCancel={onClose}
-                propsButtonApply={{ loading: busy, disabled: !name.trim() }}
-            />
-        </Dialog>
+        <AppDialog
+            title={isNew ? "New category" : `Edit ${category.name}`}
+            onClose={onClose}
+            applyText={isNew ? "Create" : "Save"}
+            onApply={apply}
+            applyLoading={busy}
+            applyDisabled={!name.trim()}
+        >
+            <div style={{ display: "flex", flexDirection: "column", gap: 12, paddingTop: 4 }}>
+                <FTextInput
+                    label="Name"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    autoFocus
+                />
+                <FSelect
+                    label="Group"
+                    value={groupId}
+                    onChange={setGroupId}
+                    data={groups.map((g) => ({ value: String(g.id), label: g.name }))}
+                />
+                <FTextInput
+                    label="Keywords"
+                    value={keywords}
+                    onChange={(e) => setKeywords(e.target.value)}
+                    placeholder="Substring|Another substring"
+                />
+                <Txt tone="secondary" caption>
+                    Keywords are matched against transaction descriptions during import, separated
+                    by |. First matching category wins.
+                </Txt>
+            </div>
+        </AppDialog>
     );
 }
 
@@ -90,40 +93,36 @@ export function CategoryDeleteDialog({ category, categories, txCount, onClose })
     };
 
     return (
-        <Dialog open onClose={onClose} size="s">
-            <Dialog.Header caption={`Delete ${category.name}`} />
-            <Dialog.Body>
-                <div style={{ display: "flex", flexDirection: "column", gap: 12, paddingTop: 4 }}>
-                    <Text>
-                        {txCount > 0
-                            ? `${txCount} transactions use this category. Where should they go?`
-                            : "No transactions use this category. Its budget history will be removed."}
-                    </Text>
-                    {txCount > 0 && (
-                        <Select
-                            label="Move to"
-                            value={target ? [target] : []}
-                            onUpdate={(v) => setTarget(v[0] ?? "")}
-                            options={[
-                                { value: "", content: "Leave uncategorized" },
-                                ...others.map((c) => ({ value: String(c.id), content: c.name })),
-                            ]}
-                            width="max"
-                        />
-                    )}
-                    <Text color="secondary" variant="caption-2">
-                        Nothing else is affected: other categories, budgets and years stay exactly
-                        as they are.
-                    </Text>
-                </div>
-            </Dialog.Body>
-            <Dialog.Footer
-                textButtonApply="Delete"
-                textButtonCancel="Cancel"
-                onClickButtonApply={apply}
-                onClickButtonCancel={onClose}
-                propsButtonApply={{ view: "outlined-danger", loading: busy }}
-            />
-        </Dialog>
+        <AppDialog
+            title={`Delete ${category.name}`}
+            onClose={onClose}
+            applyText="Delete"
+            onApply={apply}
+            applyLoading={busy}
+            applyDanger
+        >
+            <div style={{ display: "flex", flexDirection: "column", gap: 12, paddingTop: 4 }}>
+                <Txt block>
+                    {txCount > 0
+                        ? `${txCount} transactions use this category. Where should they go?`
+                        : "No transactions use this category. Its budget history will be removed."}
+                </Txt>
+                {txCount > 0 && (
+                    <FSelect
+                        label="Move to"
+                        value={target}
+                        onChange={(v) => setTarget(v ?? "")}
+                        data={[
+                            { value: "", label: "Leave uncategorized" },
+                            ...others.map((c) => ({ value: String(c.id), label: c.name })),
+                        ]}
+                    />
+                )}
+                <Txt tone="secondary" caption>
+                    Nothing else is affected: other categories, budgets and years stay exactly as
+                    they are.
+                </Txt>
+            </div>
+        </AppDialog>
     );
 }

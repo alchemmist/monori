@@ -1,16 +1,19 @@
 import { useMemo, useRef, useState } from "react";
-import { Button, Dialog, TextInput, Select, Text } from "@gravity-ui/uikit";
+import { Button } from "@mantine/core";
 import { TrashBin } from "@gravity-ui/icons";
 import { useStore } from "../store.js";
 import { parseRub, money } from "../format.js";
 import { ACCOUNT_ICONS, ACCOUNT_COLORS, DEFAULT_ACCOUNT_COLOR } from "./accountIcons.js";
 import AccountBadge from "./AccountBadge.jsx";
+import AppDialog from "../ui/AppDialog.jsx";
+import { FSelect, FTextInput } from "../ui/fields.jsx";
+import Txt from "../ui/Txt.jsx";
 
 const ACCOUNT_TYPES = [
-    { value: "card", content: "Card" },
-    { value: "cash", content: "Cash" },
-    { value: "savings", content: "Savings" },
-    { value: "other", content: "Other" },
+    { value: "card", label: "Card" },
+    { value: "cash", label: "Cash" },
+    { value: "savings", label: "Savings" },
+    { value: "other", label: "Other" },
 ];
 
 /** Downscale a picked image to a small square-ish PNG data URL so the snapshot
@@ -108,121 +111,122 @@ export function AccountEditDialog({ account, onClose }) {
     };
 
     return (
-        <Dialog open onClose={onClose} size="s">
-            <Dialog.Header caption={isNew ? "New account" : `Edit ${account.name}`} />
-            <Dialog.Body>
-                <div style={{ display: "flex", flexDirection: "column", gap: 12, paddingTop: 4 }}>
-                    <TextInput label="Name" value={name} onUpdate={setName} autoFocus />
-                    <Select
-                        label="Type"
-                        value={[type]}
-                        onUpdate={(v) => setType(v[0])}
-                        options={ACCOUNT_TYPES}
-                        width="max"
-                    />
-                    <div>
-                        <div className="appearance-head">
-                            <Text color="secondary" variant="caption-2">
-                                Appearance
-                            </Text>
-                            <AccountBadge account={{ icon, color, iconImage: image }} size={34} />
-                        </div>
-
-                        {image ? (
-                            <div className="appearance-custom">
-                                <Text color="secondary" variant="caption-2">
-                                    Using a custom image. Icon and color don't apply.
-                                </Text>
-                                <Button
-                                    view="flat"
-                                    size="s"
-                                    onClick={() => setImage("")}
-                                    title="Remove custom image"
-                                >
-                                    <TrashBin width={14} height={14} /> Remove
-                                </Button>
-                            </div>
-                        ) : (
-                            <>
-                                <div className="icon-picker">
-                                    {ACCOUNT_ICONS.map(({ name: iconName, Icon }) => (
-                                        <button
-                                            key={iconName}
-                                            type="button"
-                                            className={`icon-picker__item ${icon === iconName ? "icon-picker__item_active" : ""}`}
-                                            onClick={() => setIcon(iconName)}
-                                            aria-label={iconName}
-                                            aria-pressed={icon === iconName}
-                                        >
-                                            <Icon width={18} height={18} />
-                                        </button>
-                                    ))}
-                                </div>
-                                <div className="color-picker">
-                                    {ACCOUNT_COLORS.map((c) => (
-                                        <button
-                                            key={c}
-                                            type="button"
-                                            className={`color-picker__item ${color === c ? "color-picker__item_active" : ""}`}
-                                            style={{ "--swatch": c }}
-                                            onClick={() => setColor(c)}
-                                            aria-label={c}
-                                            aria-pressed={color === c}
-                                        />
-                                    ))}
-                                </div>
-                                <div className="image-reuse">
-                                    <Button
-                                        view="normal"
-                                        size="s"
-                                        onClick={() => fileRef.current?.click()}
-                                    >
-                                        Upload custom image…
-                                    </Button>
-                                    {savedImages.map((img) => (
-                                        <button
-                                            key={img}
-                                            type="button"
-                                            className="image-reuse__item"
-                                            onClick={() => setImage(img)}
-                                            title="Reuse this image"
-                                        >
-                                            <img src={img} alt="" />
-                                        </button>
-                                    ))}
-                                </div>
-                            </>
-                        )}
-                        <input
-                            ref={fileRef}
-                            type="file"
-                            accept="image/*"
-                            hidden
-                            onChange={onPickImage}
-                        />
+        <AppDialog
+            title={isNew ? "New account" : `Edit ${account.name}`}
+            onClose={onClose}
+            applyText={isNew ? "Create" : "Save"}
+            onApply={apply}
+            applyLoading={busy}
+            applyDisabled={!name.trim()}
+        >
+            <div style={{ display: "flex", flexDirection: "column", gap: 12, paddingTop: 4 }}>
+                <FTextInput
+                    label="Name"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    autoFocus
+                />
+                <FSelect label="Type" value={type} onChange={setType} data={ACCOUNT_TYPES} />
+                <div>
+                    <div className="appearance-head">
+                        <Txt tone="secondary" caption>
+                            Appearance
+                        </Txt>
+                        <AccountBadge account={{ icon, color, iconImage: image }} size={34} />
                     </div>
-                    <TextInput label="Currency" value={currency} onUpdate={setCurrency} />
-                    <TextInput
-                        label="Opening balance"
-                        value={opening}
-                        onUpdate={setOpening}
-                        placeholder="0"
+
+                    {image ? (
+                        <div className="appearance-custom">
+                            <Txt tone="secondary" caption>
+                                Using a custom image. Icon and color don't apply.
+                            </Txt>
+                            <Button
+                                variant="subtle"
+                                size="s"
+                                onClick={() => setImage("")}
+                                title="Remove custom image"
+                                leftSection={<TrashBin width={14} height={14} />}
+                            >
+                                Remove
+                            </Button>
+                        </div>
+                    ) : (
+                        <>
+                            <div className="icon-picker">
+                                {ACCOUNT_ICONS.map(({ name: iconName, Icon }) => (
+                                    <button
+                                        key={iconName}
+                                        type="button"
+                                        className={`icon-picker__item ${icon === iconName ? "icon-picker__item_active" : ""}`}
+                                        onClick={() => setIcon(iconName)}
+                                        aria-label={iconName}
+                                        aria-pressed={icon === iconName}
+                                    >
+                                        <Icon width={18} height={18} />
+                                    </button>
+                                ))}
+                            </div>
+                            <div className="color-picker">
+                                {ACCOUNT_COLORS.map((c) => (
+                                    <button
+                                        key={c}
+                                        type="button"
+                                        className={`color-picker__item ${color === c ? "color-picker__item_active" : ""}`}
+                                        style={{ "--swatch": c }}
+                                        onClick={() => setColor(c)}
+                                        aria-label={c}
+                                        aria-pressed={color === c}
+                                    />
+                                ))}
+                            </div>
+                            <div className="image-reuse">
+                                <Button
+                                    variant="light"
+                                    size="s"
+                                    onClick={() => fileRef.current?.click()}
+                                >
+                                    Upload custom image…
+                                </Button>
+                                {savedImages.map((img) => (
+                                    <button
+                                        key={img}
+                                        type="button"
+                                        className="image-reuse__item"
+                                        onClick={() => setImage(img)}
+                                        title="Reuse this image"
+                                    >
+                                        <img src={img} alt="" />
+                                    </button>
+                                ))}
+                            </div>
+                        </>
+                    )}
+                    <input
+                        ref={fileRef}
+                        type="file"
+                        accept="image/*"
+                        hidden
+                        onChange={onPickImage}
                     />
-                    <Text color="secondary" variant="caption-2">
-                        The running balance is the opening balance plus every transaction on this
-                        account. Currency is a label for now — all amounts are treated as a single
-                        currency.
-                    </Text>
                 </div>
-            </Dialog.Body>
-            <Dialog.Footer
-                textButtonApply={isNew ? "Create" : "Save"}
-                textButtonCancel="Cancel"
-                onClickButtonApply={apply}
-                onClickButtonCancel={onClose}
-                propsButtonApply={{ loading: busy, disabled: !name.trim() }}
-            />
-        </Dialog>
+                <FTextInput
+                    label="Currency"
+                    value={currency}
+                    onChange={(e) => setCurrency(e.target.value)}
+                />
+                <FTextInput
+                    label="Opening balance"
+                    value={opening}
+                    onChange={(e) => setOpening(e.target.value)}
+                    placeholder="0"
+                />
+                <Txt tone="secondary" caption>
+                    The running balance is the opening balance plus every transaction on this
+                    account. Currency is a label for now — all amounts are treated as a single
+                    currency.
+                </Txt>
+            </div>
+        </AppDialog>
     );
 }
 
@@ -246,38 +250,31 @@ export function AccountDeleteDialog({ account, accounts, txCount, onClose }) {
     };
 
     return (
-        <Dialog open onClose={onClose} size="s">
-            <Dialog.Header caption={`Delete ${account.name}`} />
-            <Dialog.Body>
-                <div style={{ display: "flex", flexDirection: "column", gap: 12, paddingTop: 4 }}>
-                    <Text>
-                        {txCount > 0
-                            ? `${txCount} transactions belong to this account. Move them where?`
-                            : "No transactions belong to this account."}
-                    </Text>
-                    {txCount > 0 && (
-                        <Select
-                            label="Move to"
-                            value={target ? [target] : []}
-                            onUpdate={(v) => setTarget(v[0] ?? "")}
-                            options={others.map((a) => ({ value: String(a.id), content: a.name }))}
-                            width="max"
-                        />
-                    )}
-                </div>
-            </Dialog.Body>
-            <Dialog.Footer
-                textButtonApply="Delete"
-                textButtonCancel="Cancel"
-                onClickButtonApply={apply}
-                onClickButtonCancel={onClose}
-                propsButtonApply={{
-                    view: "outlined-danger",
-                    loading: busy,
-                    disabled: txCount > 0 && !target,
-                }}
-            />
-        </Dialog>
+        <AppDialog
+            title={`Delete ${account.name}`}
+            onClose={onClose}
+            applyText="Delete"
+            onApply={apply}
+            applyLoading={busy}
+            applyDisabled={txCount > 0 && !target}
+            applyDanger
+        >
+            <div style={{ display: "flex", flexDirection: "column", gap: 12, paddingTop: 4 }}>
+                <Txt block>
+                    {txCount > 0
+                        ? `${txCount} transactions belong to this account. Move them where?`
+                        : "No transactions belong to this account."}
+                </Txt>
+                {txCount > 0 && (
+                    <FSelect
+                        label="Move to"
+                        value={target || null}
+                        onChange={(v) => setTarget(v ?? "")}
+                        data={others.map((a) => ({ value: String(a.id), label: a.name }))}
+                    />
+                )}
+            </div>
+        </AppDialog>
     );
 }
 
@@ -312,35 +309,31 @@ export function AccountReconcileDialog({ account, balance, onClose }) {
     };
 
     return (
-        <Dialog open onClose={onClose} size="s">
-            <Dialog.Header caption={`Reconcile ${account.name}`} />
-            <Dialog.Body>
-                <div style={{ display: "flex", flexDirection: "column", gap: 12, paddingTop: 4 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between" }}>
-                        <Text color="secondary">Computed balance</Text>
-                        <span className="num">{money(balance)}</span>
-                    </div>
-                    <TextInput
-                        label="Actual bank balance"
-                        value={actual}
-                        onUpdate={setActual}
-                        autoFocus
-                    />
-                    {delta != null && delta !== 0 && (
-                        <Text color="secondary" variant="caption-2">
-                            An adjustment of {money(delta)} will be posted so the account matches
-                            your bank.
-                        </Text>
-                    )}
+        <AppDialog
+            title={`Reconcile ${account.name}`}
+            onClose={onClose}
+            applyText="Reconcile"
+            onApply={apply}
+            applyLoading={busy}
+        >
+            <div style={{ display: "flex", flexDirection: "column", gap: 12, paddingTop: 4 }}>
+                <div style={{ display: "flex", justifyContent: "space-between" }}>
+                    <Txt tone="secondary">Computed balance</Txt>
+                    <span className="num">{money(balance)}</span>
                 </div>
-            </Dialog.Body>
-            <Dialog.Footer
-                textButtonApply="Reconcile"
-                textButtonCancel="Cancel"
-                onClickButtonApply={apply}
-                onClickButtonCancel={onClose}
-                propsButtonApply={{ loading: busy }}
-            />
-        </Dialog>
+                <FTextInput
+                    label="Actual bank balance"
+                    value={actual}
+                    onChange={(e) => setActual(e.target.value)}
+                    autoFocus
+                />
+                {delta != null && delta !== 0 && (
+                    <Txt tone="secondary" caption>
+                        An adjustment of {money(delta)} will be posted so the account matches your
+                        bank.
+                    </Txt>
+                )}
+            </div>
+        </AppDialog>
     );
 }

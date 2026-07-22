@@ -1,7 +1,9 @@
 import { useState } from "react";
-import { Dialog, TextInput, Select, Text } from "@gravity-ui/uikit";
 import { useStore } from "../store.js";
 import { parseRub } from "../format.js";
+import AppDialog from "../ui/AppDialog.jsx";
+import { FSelect, FTextInput } from "../ui/fields.jsx";
+import Txt from "../ui/Txt.jsx";
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -38,44 +40,43 @@ export default function TransferDialog({ accounts, onClose }) {
         }
     };
 
-    const options = active.map((a) => ({ value: String(a.id), content: a.name }));
+    const options = active.map((a) => ({ value: String(a.id), label: a.name }));
 
     return (
-        <Dialog open onClose={onClose} size="s">
-            <Dialog.Header caption="Transfer between accounts" />
-            <Dialog.Body>
-                <div style={{ display: "flex", flexDirection: "column", gap: 12, paddingTop: 4 }}>
-                    <Select
-                        label="From"
-                        value={from ? [from] : []}
-                        onUpdate={(v) => setFrom(v[0])}
-                        options={options}
-                        width="max"
-                    />
-                    <Select
-                        label="To"
-                        value={to ? [to] : []}
-                        onUpdate={(v) => setTo(v[0])}
-                        options={options}
-                        width="max"
-                    />
-                    <TextInput label="Amount" value={amount} onUpdate={setAmount} autoFocus />
-                    <TextInput label="Date" type="date" value={date} onUpdate={setDate} />
-                    <TextInput label="Comment" value={comment} onUpdate={setComment} />
-                    {from && to && from === to && (
-                        <Text color="danger" variant="caption-2">
-                            Pick two different accounts.
-                        </Text>
-                    )}
-                </div>
-            </Dialog.Body>
-            <Dialog.Footer
-                textButtonApply="Transfer"
-                textButtonCancel="Cancel"
-                onClickButtonApply={apply}
-                onClickButtonCancel={onClose}
-                propsButtonApply={{ loading: busy, disabled: !valid }}
-            />
-        </Dialog>
+        <AppDialog
+            title="Transfer between accounts"
+            onClose={onClose}
+            applyText="Transfer"
+            onApply={apply}
+            applyLoading={busy}
+            applyDisabled={!valid}
+        >
+            <div style={{ display: "flex", flexDirection: "column", gap: 12, paddingTop: 4 }}>
+                <FSelect label="From" value={from || null} onChange={setFrom} data={options} />
+                <FSelect label="To" value={to || null} onChange={setTo} data={options} />
+                <FTextInput
+                    label="Amount"
+                    value={amount}
+                    onChange={(e) => setAmount(e.target.value)}
+                    autoFocus
+                />
+                <FTextInput
+                    label="Date"
+                    type="date"
+                    value={date}
+                    onChange={(e) => setDate(e.target.value)}
+                />
+                <FTextInput
+                    label="Comment"
+                    value={comment}
+                    onChange={(e) => setComment(e.target.value)}
+                />
+                {from && to && from === to && (
+                    <Txt tone="danger" caption>
+                        Pick two different accounts.
+                    </Txt>
+                )}
+            </div>
+        </AppDialog>
     );
 }

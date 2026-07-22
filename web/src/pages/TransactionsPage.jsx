@@ -1,5 +1,8 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Button, Select, TextInput, Label } from "@gravity-ui/uikit";
+import { Button, CloseButton } from "@mantine/core";
+import { FTextInput } from "../ui/fields.jsx";
+import InlineSelect from "../ui/InlineSelect.jsx";
+import Tag from "../ui/Tag.jsx";
 import { ArrowDownToLine, ArrowRightArrowLeft, ArrowUpToLine, Magnifier } from "@gravity-ui/icons";
 import { useStore } from "../store.js";
 import { money, fmtDate } from "../format.js";
@@ -48,7 +51,7 @@ export default function TransactionsPage() {
     const acctById = useMemo(() => new Map(accounts.map((a) => [a.id, a])), [accounts]);
     const acctName = useMemo(() => new Map(accounts.map((a) => [a.id, a.name])), [accounts]);
     const acctOptions = useMemo(
-        () => activeAccounts.map((a) => ({ value: String(a.id), content: a.name })),
+        () => activeAccounts.map((a) => ({ value: String(a.id), label: a.name })),
         [activeAccounts],
     );
 
@@ -57,13 +60,13 @@ export default function TransactionsPage() {
     const acctOptionsFor = (t) => {
         const cur = acctById.get(t.accountId);
         if (cur && cur.archived) {
-            return [{ value: String(cur.id), content: cur.name }, ...acctOptions];
+            return [{ value: String(cur.id), label: cur.name }, ...acctOptions];
         }
         return acctOptions;
     };
 
     const catOptions = useMemo(
-        () => snapshot.categories.map((c) => ({ value: String(c.id), content: c.name })),
+        () => snapshot.categories.map((c) => ({ value: String(c.id), label: c.name })),
         [snapshot.categories],
     );
 
@@ -115,55 +118,62 @@ export default function TransactionsPage() {
                 <h1 className="page-title" style={{ margin: 0 }}>
                     Transactions
                 </h1>
-                <TextInput
+                <FTextInput
                     value={query}
-                    onUpdate={resetScroll(setQuery)}
+                    onChange={(e) => resetScroll(setQuery)(e.target.value)}
                     placeholder="Search description"
-                    startContent={<Magnifier style={{ marginInline: 6 }} width={14} height={14} />}
-                    hasClear
+                    label={<Magnifier style={{ marginInline: 6 }} width={14} height={14} />}
+                    aria-label="Search description"
+                    rightSectionPointerEvents="all"
+                    rightSection={
+                        query ? (
+                            <CloseButton
+                                size="sm"
+                                aria-label="Clear search"
+                                onClick={() => resetScroll(setQuery)("")}
+                            />
+                        ) : null
+                    }
                     style={{ width: 260 }}
                 />
-                <Select
-                    value={[catFilter]}
-                    onUpdate={resetScroll((v) => setCatFilter(v[0]))}
-                    options={[
-                        { value: "all", content: "All categories" },
-                        { value: "none", content: "Uncategorized" },
+                <InlineSelect
+                    value={catFilter}
+                    onChange={resetScroll(setCatFilter)}
+                    data={[
+                        { value: "all", label: "All categories" },
+                        { value: "none", label: "Uncategorized" },
                         ...catOptions,
                     ]}
-                    filterable
+                    searchable
                 />
-                <Select
-                    value={[yearFilter]}
-                    onUpdate={resetScroll((v) => setYearFilter(v[0]))}
-                    options={[
-                        { value: "all", content: "All years" },
-                        ...years.map((y) => ({ value: y, content: y })),
-                    ]}
+                <InlineSelect
+                    value={yearFilter}
+                    onChange={resetScroll(setYearFilter)}
+                    data={[{ value: "all", label: "All years" }, ...years]}
                 />
                 {activeAccounts.length > 1 && (
-                    <Select
-                        value={[acctFilter]}
-                        onUpdate={resetScroll((v) => setAcctFilter(v[0]))}
-                        options={[{ value: "all", content: "All accounts" }, ...acctOptions]}
+                    <InlineSelect
+                        value={acctFilter}
+                        onChange={resetScroll(setAcctFilter)}
+                        data={[{ value: "all", label: "All accounts" }, ...acctOptions]}
                     />
                 )}
                 <div style={{ flex: 1 }} />
                 <Button
-                    view="outlined"
+                    variant="default"
                     size="m"
                     onClick={() => setTransferring(true)}
                     disabled={activeAccounts.length < 2}
+                    leftSection={<ArrowRightArrowLeft width={14} height={14} />}
                 >
-                    <Button.Icon>
-                        <ArrowRightArrowLeft width={14} height={14} />
-                    </Button.Icon>
                     Transfer
                 </Button>
-                <Button view="action" size="m" onClick={() => setImporting(true)}>
-                    <Button.Icon>
-                        <ArrowDownToLine width={14} height={14} />
-                    </Button.Icon>
+                <Button
+                    variant="filled"
+                    size="m"
+                    onClick={() => setImporting(true)}
+                    leftSection={<ArrowDownToLine width={14} height={14} />}
+                >
                     Import statement
                 </Button>
             </div>
@@ -205,14 +215,14 @@ export default function TransactionsPage() {
                                 >
                                     {t.description}
                                     {t.source === "adjustment" && (
-                                        <Label size="xs" theme="warning" style={{ marginLeft: 8 }}>
+                                        <Tag theme="warning" style={{ marginLeft: 8 }}>
                                             adjustment
-                                        </Label>
+                                        </Tag>
                                     )}
                                     {t.transferId != null && (
-                                        <Label size="xs" theme="info" style={{ marginLeft: 8 }}>
+                                        <Tag theme="info" style={{ marginLeft: 8 }}>
                                             transfer
-                                        </Label>
+                                        </Tag>
                                     )}
                                 </td>
                                 <td style={{ textAlign: "left", color: "var(--m-text-dim)" }}>
@@ -233,12 +243,12 @@ export default function TransactionsPage() {
                                             {acctName.get(t.accountId) ?? "—"}
                                         </span>
                                     ) : (
-                                        <Select
-                                            size="s"
-                                            view="clear"
-                                            value={t.accountId != null ? [String(t.accountId)] : []}
-                                            onUpdate={(v) => v[0] && setTxAccount(t.id, +v[0])}
-                                            options={acctOptionsFor(t)}
+                                        <InlineSelect
+                                            small
+                                            borderless
+                                            value={t.accountId != null ? String(t.accountId) : null}
+                                            onChange={(v) => v && setTxAccount(t.id, +v)}
+                                            data={acctOptionsFor(t)}
                                         />
                                     )}
                                 </td>
@@ -250,18 +260,16 @@ export default function TransactionsPage() {
                                             —
                                         </span>
                                     ) : (
-                                        <Select
-                                            size="s"
-                                            view="clear"
-                                            filterable
+                                        <InlineSelect
+                                            small
+                                            borderless
+                                            searchable
                                             placeholder="—"
                                             value={
-                                                t.categoryId != null ? [String(t.categoryId)] : []
+                                                t.categoryId != null ? String(t.categoryId) : null
                                             }
-                                            onUpdate={(v) =>
-                                                setTxCategory(t.id, v[0] ? +v[0] : null)
-                                            }
-                                            options={catOptions}
+                                            onChange={(v) => setTxCategory(t.id, v ? +v : null)}
+                                            data={catOptions}
                                         />
                                     )}
                                 </td>

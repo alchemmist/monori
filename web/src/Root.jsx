@@ -1,12 +1,16 @@
-import { useState } from "react";
-import { ThemeProvider, ToasterProvider, ToasterComponent, Toaster } from "@gravity-ui/uikit";
+import { Suspense, lazy, useState } from "react";
+import { ThemeProvider } from "@gravity-ui/uikit";
+import { Loader, MantineProvider } from "@mantine/core";
+import { Notifications } from "@mantine/notifications";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import App from "./App.jsx";
 import Shell from "./components/Shell.jsx";
-import Landing from "./components/Landing.jsx";
-import MarkdownPage from "./components/MarkdownPage.jsx";
+import { theme as mantineTheme } from "./ui/theme.js";
 
-const toaster = new Toaster();
+// the marketing/docs bundle (react-markdown and friends) is not needed inside
+// the app itself, so it loads on demand
+const Landing = lazy(() => import("./components/Landing.jsx"));
+const MarkdownPage = lazy(() => import("./components/MarkdownPage.jsx"));
 
 // one theme for the whole site (landing, docs, auth, app), persisted under a
 // single localStorage key so it never diverges between routes
@@ -35,29 +39,40 @@ export default function Root() {
             return next;
         });
 
+    // the gravity ThemeProvider stays for @gravity-ui/charts: its tooltips need
+    // the uikit theme context, and it keeps .g-root_theme_* on <body> — the
+    // classes every stylesheet keys its dark variant off (goes away with charts)
     return (
         <ThemeProvider theme={theme}>
-            <ToasterProvider toaster={toaster}>
+            <MantineProvider theme={mantineTheme} forceColorScheme={theme}>
                 <BrowserRouter>
-                    <Routes>
-                        {/* marketing landing + documentation share the docs Shell */}
-                        <Route element={<Shell theme={theme} onToggleTheme={toggleTheme} />}>
-                            <Route path="/welcome" element={<Landing />} />
+                    <Suspense
+                        fallback={
+                            <div style={{ display: "grid", placeItems: "center", height: "100vh" }}>
+                                <Loader size="lg" type="bars" />
+                            </div>
+                        }
+                    >
+                        <Routes>
+                            {/* marketing landing + documentation share the docs Shell */}
+                            <Route element={<Shell theme={theme} onToggleTheme={toggleTheme} />}>
+                                <Route path="/welcome" element={<Landing />} />
+                                <Route
+                                    path="/docs"
+                                    element={<Navigate to="/docs/getting-started" replace />}
+                                />
+                                <Route path="/docs/:slug" element={<MarkdownPage />} />
+                            </Route>
+                            {/* everything else is the app itself (auth, demo, panel) */}
                             <Route
-                                path="/docs"
-                                element={<Navigate to="/docs/getting-started" replace />}
+                                path="*"
+                                element={<App theme={theme} onToggleTheme={toggleTheme} />}
                             />
-                            <Route path="/docs/:slug" element={<MarkdownPage />} />
-                        </Route>
-                        {/* everything else is the app itself (auth, demo, panel) */}
-                        <Route
-                            path="*"
-                            element={<App theme={theme} onToggleTheme={toggleTheme} />}
-                        />
-                    </Routes>
+                        </Routes>
+                    </Suspense>
                 </BrowserRouter>
-                <ToasterComponent />
-            </ToasterProvider>
+                <Notifications position="bottom-right" />
+            </MantineProvider>
         </ThemeProvider>
     );
 }
