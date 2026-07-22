@@ -355,13 +355,13 @@ textarea.mi-input__field {
 }
 
 /* dark: the category dropdown reads as frosted glass like the kanban cards — a
-   translucent fill (not the tooltip's near-opaque dark) with a strong blur, so
-   the ledger behind smears into a soft wash through it while the option text
-   stays crisp on the dark tint */
+   milky *light* veil (not a dark fill, which over the dark ledger just looks
+   solid) with a strong blur, so the rows behind smear into a soft wash through
+   it (autoprefixer adds the -webkit- form for Safari at build) */
 .theme-dark .gsel__drop_glass {
-    background: rgb(44 38 44 / 62%);
-    backdrop-filter: blur(24px) saturate(1.4);
-    border: 1px solid rgb(255 255 255 / 13%);
+    background: rgb(255 255 255 / 9%);
+    backdrop-filter: blur(20px) saturate(1.5);
+    border: 1px solid rgb(255 255 255 / 14%);
     box-shadow: 0 16px 38px -12px rgb(0 0 0 / 80%);
 }
 
