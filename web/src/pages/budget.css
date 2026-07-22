@@ -129,6 +129,11 @@
     margin-inline: calc(-1 * var(--pad-x));
     border-inline: none;
     border-radius: 0;
+}
+
+/* outspecify `.theme-dark .card` (two classes) so the glass shadow doesn't
+   come back on the full-bleed table in dark theme */
+.theme-dark .card.tx-table {
     box-shadow: none;
 }
 
