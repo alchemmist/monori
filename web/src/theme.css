@@ -127,7 +127,7 @@
        every glass surface matches. */
     --glass-fill: rgb(44 38 46 / 38%);
     --glass-border: rgb(255 255 255 / 16%);
-    --glass-shadow: 0 0 18px rgb(0 0 0 / 40%);
+    --glass-shadow: 0 0 18px rgb(0 0 0 / 25%);
 
     --m-card-bg: var(--glass-fill);
     --m-card-border: var(--glass-border);
