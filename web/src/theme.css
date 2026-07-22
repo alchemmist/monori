@@ -126,7 +126,7 @@
        category dropdown, now the shared standard. Cards read the same tokens so
        every glass surface matches. */
     --glass-fill: rgb(44 38 46 / 38%);
-    --glass-border: rgb(255 255 255 / 16%);
+    --glass-border: transparent;
     --glass-shadow: 0 0 18px rgb(0 0 0 / 25%);
 
     --m-card-bg: var(--glass-fill);
