@@ -233,7 +233,13 @@ export default function App({ theme, onToggleTheme }) {
                     <BudgetPage results={results} firstYear={FIRST_YEAR} lastYear={lastYear} />
                 )}
                 {page === "dashboard" && (
-                    <Suspense fallback={null}>
+                    <Suspense
+                        fallback={
+                            <div style={{ display: "grid", placeItems: "center", height: "60vh" }}>
+                                <Loader size="lg" type="bars" />
+                            </div>
+                        }
+                    >
                         <DashboardPage firstYear={FIRST_YEAR} lastYear={lastYear} />
                         <AnalyticsPage
                             results={results}

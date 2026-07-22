@@ -1,6 +1,6 @@
 import { Suspense, lazy, useState } from "react";
 import { ThemeProvider } from "@gravity-ui/uikit";
-import { MantineProvider } from "@mantine/core";
+import { Loader, MantineProvider } from "@mantine/core";
 import { Notifications } from "@mantine/notifications";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import App from "./App.jsx";
@@ -46,7 +46,13 @@ export default function Root() {
         <ThemeProvider theme={theme}>
             <MantineProvider theme={mantineTheme} forceColorScheme={theme}>
                 <BrowserRouter>
-                    <Suspense fallback={null}>
+                    <Suspense
+                        fallback={
+                            <div style={{ display: "grid", placeItems: "center", height: "100vh" }}>
+                                <Loader size="lg" type="bars" />
+                            </div>
+                        }
+                    >
                         <Routes>
                             {/* marketing landing + documentation share the docs Shell */}
                             <Route element={<Shell theme={theme} onToggleTheme={toggleTheme} />}>
