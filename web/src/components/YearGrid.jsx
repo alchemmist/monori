@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useLayoutEffect, useRef } from "react";
 import { ActionIcon } from "@mantine/core";
 import RowMenu from "../ui/RowMenu.jsx";
 import { Plus, ChevronDown, EllipsisVertical } from "@gravity-ui/icons";
@@ -37,34 +37,26 @@ export default function YearGrid({
 }) {
     const span = cols.length;
     const wrapRef = useRef(null);
-    const theadRef = useRef(null);
 
-    // Sticky header without an internal scroll pane: the page scrolls the whole
-    // (full-height) table, and this floats the <thead> down to keep the months
-    // pinned at the viewport top. Horizontal alignment is native — the thead
-    // lives inside the same horizontally-scrolled wrapper as the body.
-    useEffect(() => {
+    // The wrap is its own scroll pane filling the viewport below the toolbar, so
+    // the header and the category column pin with native position:sticky — no
+    // per-scroll JS. The only measurement is the pane's top offset (toolbar and
+    // demo banner heights vary), taken on mount and on layout changes, never on
+    // scroll; CSS turns it into the pane height.
+    useLayoutEffect(() => {
         const wrap = wrapRef.current;
-        const thead = theadRef.current;
-        if (!wrap || !thead) return;
-        let raf = 0;
-        const update = () => {
-            raf = 0;
-            const rect = wrap.getBoundingClientRect();
-            const maxY = wrap.offsetHeight - thead.offsetHeight;
-            const y = rect.top < 0 ? Math.min(-rect.top, Math.max(maxY, 0)) : 0;
-            thead.style.transform = y > 0 ? `translateY(${y}px)` : "";
+        if (!wrap) return;
+        const fit = () => {
+            const top = Math.max(0, Math.round(wrap.getBoundingClientRect().top + window.scrollY));
+            wrap.style.setProperty("--yg-top", `${top}px`);
         };
-        const onScroll = () => {
-            if (!raf) raf = requestAnimationFrame(update);
-        };
-        window.addEventListener("scroll", onScroll, { passive: true });
-        window.addEventListener("resize", onScroll);
-        update();
+        fit();
+        const ro = new ResizeObserver(fit);
+        ro.observe(document.body);
+        window.addEventListener("resize", fit);
         return () => {
-            window.removeEventListener("scroll", onScroll);
-            window.removeEventListener("resize", onScroll);
-            if (raf) cancelAnimationFrame(raf);
+            ro.disconnect();
+            window.removeEventListener("resize", fit);
         };
     }, []);
 
@@ -91,7 +83,7 @@ export default function YearGrid({
     return (
         <div className="year-grid-wrap" ref={wrapRef}>
             <table className="year-grid">
-                <thead ref={theadRef}>
+                <thead>
                     {/* header band: the year, then the colored Available-to-budget hero per month */}
                     <tr className="yg-band">
                         <th className="yg-corner yg-corner_year">
