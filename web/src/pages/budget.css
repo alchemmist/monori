@@ -147,6 +147,13 @@
     border-top-right-radius: 12px;
 }
 
+/* month budget table: rounded top, flat bottom (matches the tx table and the
+   year grid) so the card's fill doesn't show as a rounded gap under the last
+   row. Outspecifies `.theme-dark .card`'s 12px all-round radius. */
+.theme-dark .card.budget-month-card {
+    border-radius: 12px 12px 0 0;
+}
+
 @media (width <= 760px) {
     .tx-table {
         overflow-x: auto;
