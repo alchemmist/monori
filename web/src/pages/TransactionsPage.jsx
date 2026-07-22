@@ -81,7 +81,8 @@ export default function TransactionsPage() {
                 .filter((c) => !c.archived)
                 .map((c) => ({ value: String(c.id), label: c.name }));
             flat.push(...opts);
-            if (opts.length) sections.push({ group: g.name, kind: g.kind, options: opts });
+            if (opts.length)
+                sections.push({ id: g.id, group: g.name, kind: g.kind, options: opts });
         }
         return { catOptions: flat, catSections: sections };
     }, [snapshot.groups, snapshot.categories]);
@@ -102,12 +103,17 @@ export default function TransactionsPage() {
         const cur = t.categoryId != null ? catById.get(t.categoryId) : null;
         if (!cur || !cur.archived) return catSections;
         const g = groupById.get(cur.groupId);
-        const gname = g?.name ?? "Archived";
         const opt = { value: String(cur.id), label: cur.name };
         const clone = catSections.map((s) => ({ ...s, options: [...s.options] }));
-        const sec = clone.find((s) => s.group === gname);
+        const sec = clone.find((s) => s.id === cur.groupId);
         if (sec) sec.options.push(opt);
-        else clone.push({ group: gname, kind: g?.kind, options: [opt] });
+        else
+            clone.push({
+                id: cur.groupId,
+                group: g?.name ?? "Archived",
+                kind: g?.kind,
+                options: [opt],
+            });
         return clone;
     };
 
