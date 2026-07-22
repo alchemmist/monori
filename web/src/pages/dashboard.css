@@ -140,6 +140,7 @@
    can't do a tidy side list at this size */
 .chart-donut {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     justify-content: center;
     gap: 18px;
@@ -147,7 +148,8 @@
 
 .donut-legend {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    min-width: 0;
     gap: 4px 14px;
     margin: 0;
     padding: 0;
@@ -160,7 +162,8 @@
     display: flex;
     align-items: center;
     gap: 7px;
-    white-space: nowrap;
+    min-width: 0;
+    overflow-wrap: anywhere;
     cursor: default;
     transition: opacity 120ms;
 }
@@ -176,10 +179,19 @@
     flex-shrink: 0;
 }
 
+/* Recharts positions the legend wrapper over the plot area (offset right by the
+   Y-axis gutter), so a legend centered inside it drifts right of the card. Pin
+   the wrapper to the full card width and center the content within it so the
+   legend lines up with the card, not the plot. */
+.chart-card .recharts-legend-wrapper {
+    width: 100% !important;
+    left: 0 !important;
+}
+
 /* Mantine chart legends default to right-aligned (justify-content: flex-end)
-   and BarChart never forwards the `centered` flag; center them so they line up
-   under/over the plot instead of hugging the right edge */
-.mantine-ChartLegend-root {
+   and BarChart never forwards the `centered` flag; center them within the
+   now-full-width wrapper above. */
+.mantine-ChartLegend-legend {
     justify-content: center;
 }
 

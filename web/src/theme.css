@@ -177,8 +177,11 @@ body {
 }
 
 /* flat dark canvas — the approved look. (Previously this was gravity's default
-   base background; now that uikit is gone we set it explicitly.) */
-body.theme-dark {
+   base background; now that uikit is gone we set it explicitly.) The theme-dark
+   class only lands on <body>, but html also paints --m-bg (the light #fff),
+   which shows through on overscroll; keep it in sync with the dark body. */
+body.theme-dark,
+html:has(> body.theme-dark) {
     background: #221d22;
 }
 
