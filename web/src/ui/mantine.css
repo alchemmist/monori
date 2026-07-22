@@ -313,6 +313,59 @@ textarea.mi-input__field {
     margin-bottom: 4px;
 }
 
+/* ---- grouped picker sections (transaction category select) ---- */
+.mantine-Combobox-groupLabel {
+    padding: 6px 8px 3px;
+}
+
+/* a hairline divider parts adjacent groups so sections read as distinct */
+.mantine-Combobox-group + .mantine-Combobox-group .mantine-Combobox-groupLabel {
+    margin-top: 3px;
+    border-top: 1px solid var(--m-border-soft);
+    padding-top: 7px;
+}
+
+.gsel__grp {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    color: var(--m-text-faint);
+}
+
+/* a small kind-colored dot in front of the group name — income vs expense at a glance */
+.gsel__grp::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentcolor;
+    opacity: 0.75;
+}
+
+.gsel__grp_income {
+    color: var(--m-income);
+}
+
+.gsel__grp_expense {
+    color: var(--m-expense);
+}
+
+/* dark: frosted glass over the dark ledger. A plain blur is invisible here —
+   unlike the chart tooltip (which floats over a colorful plot), the dropdown
+   sits over a near-flat dark table, so there's little contrast for the blur to
+   reveal. `brightness()` lifts that blurred dark backdrop into a luminous milky
+   wash so the panel actually reads as lit glass, not a solid tile. */
+.theme-dark .gsel__drop_glass {
+    background: rgb(44 38 46 / 38%);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgb(255 255 255 / 16%);
+    box-shadow: 0 16px 38px -12px rgb(0 0 0 / 80%);
+}
+
 .mantine-Menu-item[data-tone="danger"] {
     color: var(--g-color-text-danger);
 }

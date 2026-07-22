@@ -5,6 +5,7 @@ import InlineSelect from "../ui/InlineSelect.jsx";
 import Tag from "../ui/Tag.jsx";
 import { ArrowDownToLine, ArrowRightArrowLeft, ArrowUpToLine, Magnifier } from "@gravity-ui/icons";
 import { useStore } from "../store.js";
+import { orderedGroups, categoriesByGroup } from "../categoryOrder.js";
 import { money, fmtDate } from "../format.js";
 import { useWindowedRows } from "../useWindowedRows.js";
 import ImportDialog from "../components/ImportDialog.jsx";
@@ -65,10 +66,56 @@ export default function TransactionsPage() {
         return acctOptions;
     };
 
-    const catOptions = useMemo(
-        () => snapshot.categories.map((c) => ({ value: String(c.id), label: c.name })),
+    // categories in the exact order arranged on the kanban board — groups first
+    // (group.sort), then categories within each group (category.sort). `catOptions`
+    // is the flat ordered list for the top filter; `catSections` are labelled,
+    // group-tinted sections for the per-row picker. Archived ones are dropped here
+    // and only re-surfaced by `catSectionsFor` when a row still points at one.
+    const { catOptions, catSections } = useMemo(() => {
+        const groups = orderedGroups(snapshot.groups);
+        const byGroup = categoriesByGroup(snapshot.categories, groups);
+        const flat = [];
+        const sections = [];
+        for (const g of groups) {
+            const opts = (byGroup.get(g.id) ?? [])
+                .filter((c) => !c.archived)
+                .map((c) => ({ value: String(c.id), label: c.name }));
+            flat.push(...opts);
+            if (opts.length)
+                sections.push({ id: g.id, group: g.name, kind: g.kind, options: opts });
+        }
+        return { catOptions: flat, catSections: sections };
+    }, [snapshot.groups, snapshot.categories]);
+
+    const catById = useMemo(
+        () => new Map(snapshot.categories.map((c) => [c.id, c])),
         [snapshot.categories],
     );
+    const groupById = useMemo(
+        () => new Map(snapshot.groups.map((g) => [g.id, g])),
+        [snapshot.groups],
+    );
+
+    // like acctOptionsFor: an archived category is missing from the sections, so
+    // when this row still points at one, surface it under its own group so the
+    // value renders and can be kept or changed.
+    const catSectionsFor = (t) => {
+        const cur = t.categoryId != null ? catById.get(t.categoryId) : null;
+        if (!cur || !cur.archived) return catSections;
+        const g = groupById.get(cur.groupId);
+        const opt = { value: String(cur.id), label: cur.name };
+        const clone = catSections.map((s) => ({ ...s, options: [...s.options] }));
+        const sec = clone.find((s) => s.id === cur.groupId);
+        if (sec) sec.options.push(opt);
+        else
+            clone.push({
+                id: cur.groupId,
+                group: g?.name ?? "Archived",
+                kind: g?.kind,
+                options: [opt],
+            });
+        return clone;
+    };
 
     const years = useMemo(() => {
         const s = new Set(snapshot.transactions.map((t) => t.date.slice(0, 4)));
@@ -269,7 +316,8 @@ export default function TransactionsPage() {
                                                 t.categoryId != null ? String(t.categoryId) : null
                                             }
                                             onChange={(v) => setTxCategory(t.id, v ? +v : null)}
-                                            data={catOptions}
+                                            data={catSectionsFor(t)}
+                                            dropdownClassName="gsel__drop_glass"
                                         />
                                     )}
                                 </td>
