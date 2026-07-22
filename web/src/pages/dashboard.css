@@ -136,10 +136,44 @@
 }
 
 /* the donut is a fixed-size chart (unlike the responsive cartesian ones), so
-   center it and let its legend sit underneath */
+   center it and lay its own legend out alongside — the built-in Mantine legend
+   can't do a tidy side list at this size */
 .chart-donut {
     display: flex;
     align-items: center;
+    justify-content: center;
+    gap: 18px;
+}
+
+.donut-legend {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4px 14px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    font-size: 12px;
+    color: var(--m-text-dim);
+}
+
+.donut-legend li {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    white-space: nowrap;
+}
+
+.donut-legend__dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+/* Mantine chart legends default to right-aligned (justify-content: flex-end)
+   and BarChart never forwards the `centered` flag; center them so they line up
+   under/over the plot instead of hugging the right edge */
+.mantine-ChartLegend-root {
     justify-content: center;
 }
 
