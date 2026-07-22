@@ -89,9 +89,12 @@ export default function CategoriesPage() {
         scrollRef.current = { winY, boardX };
     });
 
-    const groups = useMemo(() => orderedGroups(snapshot), [snapshot]);
+    const groups = useMemo(() => orderedGroups(snapshot.groups), [snapshot.groups]);
 
-    const catsByGroup = useMemo(() => categoriesByGroup(snapshot, groups), [snapshot, groups]);
+    const catsByGroup = useMemo(
+        () => categoriesByGroup(snapshot.categories, groups),
+        [snapshot.categories, groups],
+    );
 
     const txCountByCat = useMemo(() => {
         const m = new Map();

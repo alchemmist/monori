@@ -9,13 +9,16 @@
 // missing (demo groups omit it) or tied
 export const bySortThenId = (a, b) => (a.sort ?? 0) - (b.sort ?? 0) || a.id - b.id;
 
-export function orderedGroups(snapshot) {
-    return [...(snapshot.groups ?? [])].sort(bySortThenId);
+export function orderedGroups(groups) {
+    return [...(groups ?? [])].sort(bySortThenId);
 }
 
-export function categoriesByGroup(snapshot, groups = orderedGroups(snapshot)) {
+// `groups` must already be in order (pass the result of orderedGroups); the map
+// preserves that order and only fills groups it was given, so callers can scope
+// to a subset (e.g. the budget grid's expense-only groups)
+export function categoriesByGroup(categories, groups) {
     const m = new Map(groups.map((g) => [g.id, []]));
-    for (const c of [...(snapshot.categories ?? [])].sort(bySortThenId)) {
+    for (const c of [...(categories ?? [])].sort(bySortThenId)) {
         if (m.has(c.groupId)) m.get(c.groupId).push(c);
     }
     return m;

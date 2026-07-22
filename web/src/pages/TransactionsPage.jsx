@@ -72,8 +72,8 @@ export default function TransactionsPage() {
     // group-tinted sections for the per-row picker. Archived ones are dropped here
     // and only re-surfaced by `catSectionsFor` when a row still points at one.
     const { catOptions, catSections } = useMemo(() => {
-        const groups = orderedGroups(snapshot);
-        const byGroup = categoriesByGroup(snapshot, groups);
+        const groups = orderedGroups(snapshot.groups);
+        const byGroup = categoriesByGroup(snapshot.categories, groups);
         const flat = [];
         const sections = [];
         for (const g of groups) {
@@ -84,7 +84,7 @@ export default function TransactionsPage() {
             if (opts.length) sections.push({ group: g.name, kind: g.kind, options: opts });
         }
         return { catOptions: flat, catSections: sections };
-    }, [snapshot]);
+    }, [snapshot.groups, snapshot.categories]);
 
     const catById = useMemo(
         () => new Map(snapshot.categories.map((c) => [c.id, c])),
