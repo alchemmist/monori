@@ -39,6 +39,7 @@ export default function DashboardPage({ firstYear, lastYear }) {
     const { snapshot } = useStore();
     const now = useMemo(() => new Date(), []);
     const [donutYear, setDonutYear] = useState(String(now.getFullYear()));
+    const [donutActive, setDonutActive] = useState(null); // legend-hovered category name
     const [drillCat, setDrillCat] = useState(() =>
         String(snapshot.categories.find((c) => c.name === "Groceries")?.id ?? ""),
     );
@@ -424,12 +425,23 @@ export default function DashboardPage({ firstYear, lastYear }) {
                                 strokeWidth={2}
                                 strokeColor="var(--m-surface)"
                                 tooltipDataSource="segment"
-                                valueFormatter={(v) => `${v.toLocaleString("ru-RU")} ₽`}
+                                valueFormatter={(v) => `${v.toLocaleString("ru-RU")} ₽`}
+                                cellProps={(cell) => ({
+                                    opacity: donutActive && cell.name !== donutActive ? 0.3 : 1,
+                                    style: { transition: "opacity 120ms" },
+                                })}
                             />
                         </ChartBoundary>
                         <ul className="donut-legend">
                             {donutData.map((d) => (
-                                <li key={d.name}>
+                                <li
+                                    key={d.name}
+                                    data-dim={
+                                        donutActive && d.name !== donutActive ? "" : undefined
+                                    }
+                                    onMouseEnter={() => setDonutActive(d.name)}
+                                    onMouseLeave={() => setDonutActive(null)}
+                                >
                                     <span
                                         className="donut-legend__dot"
                                         style={{ background: d.color }}

@@ -161,6 +161,12 @@
     align-items: center;
     gap: 7px;
     white-space: nowrap;
+    cursor: default;
+    transition: opacity 120ms;
+}
+
+.donut-legend li[data-dim] {
+    opacity: 0.4;
 }
 
 .donut-legend__dot {
@@ -175,6 +181,35 @@
    under/over the plot instead of hugging the right edge */
 .mantine-ChartLegend-root {
     justify-content: center;
+}
+
+/* compact the chart tooltip: a 12-series stacked tooltip is otherwise taller than
+   the 280px card and gets clipped by its overflow. Tightening rows keeps it under
+   the card height so Recharts can clamp it fully in view. */
+.mantine-ChartTooltip-tooltip {
+    padding: 8px 10px;
+}
+
+.mantine-ChartTooltip-tooltipLabel {
+    margin-bottom: 5px;
+    font-size: 12px;
+}
+
+.mantine-ChartTooltip-tooltipItem {
+    font-size: 12px;
+}
+
+.mantine-ChartTooltip-tooltipItem + .mantine-ChartTooltip-tooltipItem {
+    margin-top: 2px;
+}
+
+.mantine-ChartTooltip-tooltipItemName {
+    margin-inline-end: 18px;
+}
+
+/* keep the value (e.g. "175 126 ₽") on one line so the currency sign never wraps */
+.mantine-ChartTooltip-tooltipItemData {
+    white-space: nowrap;
 }
 
 @media (width <= 1100px) {
