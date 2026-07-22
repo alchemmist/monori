@@ -214,7 +214,8 @@ export default function DashboardPage({ firstYear, lastYear }) {
         }
         const data = MONTHS_SHORT.map((mo, m) => {
             const row = { month: mo };
-            for (const g of expenseGroups) row[`g${g.id}`] = Math.round(perGroup.get(g.id)[m] / 100);
+            for (const g of expenseGroups)
+                row[`g${g.id}`] = Math.round(perGroup.get(g.id)[m] / 100);
             return row;
         });
         const series = expenseGroups.map((g, i) => ({
