@@ -380,11 +380,11 @@ body.kb-grabbing * {
 }
 
 .theme-dark .kb-card {
-    background: rgb(255 255 255 / 9%);
-    border-color: rgb(255 255 255 / 12%);
+    background: var(--glass-fill);
+    border-color: var(--glass-border);
     border-radius: 10px;
-    backdrop-filter: blur(7px);
-    box-shadow: 0 14px 34px -20px rgb(0 0 0 / 90%);
+    backdrop-filter: blur(var(--glass-blur));
+    box-shadow: var(--glass-shadow);
 }
 
 .theme-dark .kb-card:hover {

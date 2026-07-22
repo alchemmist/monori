@@ -354,16 +354,12 @@ textarea.mi-input__field {
     color: var(--m-expense);
 }
 
-/* dark: frosted glass over the dark ledger. A plain blur is invisible here —
-   unlike the chart tooltip (which floats over a colorful plot), the dropdown
-   sits over a near-flat dark table, so there's little contrast for the blur to
-   reveal. `brightness()` lifts that blurred dark backdrop into a luminous milky
-   wash so the panel actually reads as lit glass, not a solid tile. */
-.theme-dark .gsel__drop_glass {
-    background: rgb(44 38 46 / 38%);
-    backdrop-filter: blur(10px);
-    border: 1px solid rgb(255 255 255 / 16%);
-    box-shadow: 0 16px 38px -12px rgb(0 0 0 / 80%);
+/* frosted glass over the ledger — the shared --glass-* recipe (see theme.css) */
+.gsel__drop_glass {
+    background: var(--glass-fill);
+    backdrop-filter: blur(var(--glass-blur));
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--glass-shadow);
 }
 
 .mantine-Menu-item[data-tone="danger"] {
