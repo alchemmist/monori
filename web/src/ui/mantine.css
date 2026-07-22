@@ -354,14 +354,15 @@ textarea.mi-input__field {
     color: var(--m-expense);
 }
 
-/* dark: the category dropdown reads as frosted glass like the kanban cards — a
-   milky *light* veil (not a dark fill, which over the dark ledger just looks
-   solid) with a strong blur, so the rows behind smear into a soft wash through
-   it (autoprefixer adds the -webkit- form for Safari at build) */
+/* dark: frosted glass over the dark ledger. A plain blur is invisible here —
+   unlike the chart tooltip (which floats over a colorful plot), the dropdown
+   sits over a near-flat dark table, so there's little contrast for the blur to
+   reveal. `brightness()` lifts that blurred dark backdrop into a luminous milky
+   wash so the panel actually reads as lit glass, not a solid tile. */
 .theme-dark .gsel__drop_glass {
-    background: rgb(255 255 255 / 9%);
-    backdrop-filter: blur(20px) saturate(1.5);
-    border: 1px solid rgb(255 255 255 / 14%);
+    background: rgb(46 40 48 / 50%);
+    backdrop-filter: blur(18px) brightness(1.7) saturate(1.35);
+    border: 1px solid rgb(255 255 255 / 16%);
     box-shadow: 0 16px 38px -12px rgb(0 0 0 / 80%);
 }
 
