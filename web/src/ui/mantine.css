@@ -354,12 +354,14 @@ textarea.mi-input__field {
     color: var(--m-expense);
 }
 
-/* dark: the category dropdown floats over the aurora canvas as frosted glass,
-   matching the kanban cards and chart tooltip (same lift, blur and translucency) */
+/* dark: the category dropdown reads as frosted glass like the kanban cards — a
+   translucent fill (not the tooltip's near-opaque dark) with a strong blur, so
+   the ledger behind smears into a soft wash through it while the option text
+   stays crisp on the dark tint */
 .theme-dark .gsel__drop_glass {
-    background: rgb(40 34 40 / 82%);
-    backdrop-filter: blur(18px);
-    border: 1px solid rgb(255 255 255 / 14%);
+    background: rgb(44 38 44 / 62%);
+    backdrop-filter: blur(24px) saturate(1.4);
+    border: 1px solid rgb(255 255 255 / 13%);
     box-shadow: 0 16px 38px -12px rgb(0 0 0 / 80%);
 }
 
