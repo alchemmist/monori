@@ -214,11 +214,12 @@ export default function DashboardPage({ firstYear, lastYear }) {
         }
         const data = MONTHS_SHORT.map((mo, m) => {
             const row = { month: mo };
-            for (const g of expenseGroups) row[g.name] = Math.round(perGroup.get(g.id)[m] / 100);
+            for (const g of expenseGroups) row[`g${g.id}`] = Math.round(perGroup.get(g.id)[m] / 100);
             return row;
         });
         const series = expenseGroups.map((g, i) => ({
-            name: g.name,
+            name: `g${g.id}`,
+            label: g.name,
             color: PALETTE[i % PALETTE.length],
         }));
         return { data, series };
@@ -422,8 +423,7 @@ export default function DashboardPage({ firstYear, lastYear }) {
                                 size={196}
                                 thickness={36}
                                 paddingAngle={0}
-                                strokeWidth={2}
-                                strokeColor="var(--m-surface)"
+                                strokeWidth={0}
                                 tooltipDataSource="segment"
                                 valueFormatter={(v) => `${v.toLocaleString("ru-RU")} ₽`}
                                 cellProps={(cell) => ({

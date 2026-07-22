@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { BarChart, LineChart } from "@mantine/charts";
+import { Rectangle } from "recharts";
 import InlineSelect from "../ui/InlineSelect.jsx";
 import { ChartBoundary } from "../components/ChartCard.jsx";
 import { useStore } from "../store.js";
@@ -18,6 +19,11 @@ import "./dashboard.css";
 import "./analytics.css";
 
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+// per-bar color from a data-row field, so each bar's color is keyed by its own
+// row (month/day) rather than its numeric value — Mantine's getBarColor only
+// sees the value, which collides when two rows share the same amount.
+const perRowColor = (field) => (props) => <Rectangle {...props} fill={props.payload[field]} />;
 
 /** Annual report: planning discipline, year-over-year shape, spending patterns. */
 export default function AnalyticsPage({ results, firstYear, lastYear }) {
@@ -39,18 +45,22 @@ export default function AnalyticsPage({ results, firstYear, lastYear }) {
     }, [results, snapshot.categories, snapshot.groups, year, now]);
 
     // Plan vs fact: budgeted total per month vs actual expenses. Spent bars flip to
-    // expense-red when they overshoot that month's budget (looked up by value).
+    // expense-red when they overshoot that month's budget — the color is carried on
+    // each row so months that happen to share a spent value keep their own verdict.
     const planFact = useMemo(() => {
         const res = results.get(+year);
-        const overColor = new Map();
         const data = MONTHS_SHORT.map((mo, m) => {
             const v = monthly.find(([k]) => k === `${year}-${String(m + 1).padStart(2, "0")}`);
             const spent = Math.round((v ? v[1].expense : 0) / 100);
             const budgeted = Math.round(res.budgetedTotal[m] / 100);
-            overColor.set(spent, spent > budgeted ? SERIES.expense : SERIES.accent);
-            return { month: mo, Budgeted: budgeted, Spent: spent };
+            return {
+                month: mo,
+                Budgeted: budgeted,
+                Spent: spent,
+                spentColor: spent > budgeted ? SERIES.expense : SERIES.accent,
+            };
         });
-        return { data, overColor };
+        return { data };
     }, [results, monthly, year]);
 
     // Year over year: monthly expenses, selected year vs two previous (older recede)
@@ -161,10 +171,10 @@ export default function AnalyticsPage({ results, firstYear, lastYear }) {
                                     { name: "Spent", color: SERIES.accent },
                                 ]}
                                 withLegend
-                                getBarColor={(value, series) =>
-                                    series.name === "Budgeted"
-                                        ? SERIES.hint
-                                        : (planFact.overColor.get(value) ?? SERIES.accent)
+                                barProps={(series) =>
+                                    series.name === "Spent"
+                                        ? { shape: perRowColor("spentColor") }
+                                        : {}
                                 }
                                 {...cartesian}
                             />
@@ -284,6 +294,7 @@ export default function AnalyticsPage({ results, firstYear, lastYear }) {
                                 data={weekdayData}
                                 dataKey="day"
                                 series={[{ name: "Share", color: PALETTE[0] }]}
+                                barProps={{ shape: perRowColor("color") }}
                                 unit="%"
                                 {...cartesian}
                             />
