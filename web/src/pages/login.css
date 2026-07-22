@@ -148,17 +148,17 @@
 }
 
 /* ---------- dark variant: follows the theme from localStorage, no toggle ---------- */
-.g-root_theme_dark .login {
+.theme-dark .login {
     background: radial-gradient(120% 90% at 82% -12%, #17102a 0%, #0a0812 46%, #060509 100%);
 }
 
-.g-root_theme_dark .login__brand,
-.g-root_theme_dark .login__title,
-.g-root_theme_dark .login__made b {
+.theme-dark .login__brand,
+.theme-dark .login__title,
+.theme-dark .login__made b {
     color: #f2f1f6;
 }
 
-.g-root_theme_dark .login__input {
+.theme-dark .login__input {
     background: rgb(255 255 255 / 4%);
     border-color: rgb(255 255 255 / 9%);
     color: #f2f1f6;
@@ -166,20 +166,20 @@
     backdrop-filter: blur(7px);
 }
 
-.g-root_theme_dark .login__input::placeholder {
+.theme-dark .login__input::placeholder {
     color: #6c6980;
 }
 
-.g-root_theme_dark .login__input:focus {
+.theme-dark .login__input:focus {
     border-color: var(--m-accent);
 }
 
-.g-root_theme_dark .login__switch,
-.g-root_theme_dark .login__made,
-.g-root_theme_dark .login__links a {
+.theme-dark .login__switch,
+.theme-dark .login__made,
+.theme-dark .login__links a {
     color: #8a8798;
 }
 
-.g-root_theme_dark .login__links a:hover {
+.theme-dark .login__links a:hover {
     color: #f2f1f6;
 }

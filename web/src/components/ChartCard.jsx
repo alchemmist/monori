@@ -1,17 +1,17 @@
 import { Component } from "react";
-import { Chart } from "@gravity-ui/charts";
 
-/** A chart that can never take the page down with it. */
+/** An error boundary so a single bad chart can never take the page down with it. */
 class ChartBoundary extends Component {
-    state = { error: null, prevData: undefined };
+    state = { error: null, prevChildren: undefined };
 
     static getDerivedStateFromError(error) {
         return { error };
     }
 
     static getDerivedStateFromProps(props, state) {
-        if (props.data !== state.prevData) {
-            return { error: null, prevData: props.data };
+        // give the chart a fresh try whenever its content changes (new data/filters)
+        if (props.children !== state.prevChildren) {
+            return { error: null, prevChildren: props.children };
         }
         return null;
     }
@@ -31,11 +31,11 @@ class ChartBoundary extends Component {
                 </div>
             );
         }
-        return <Chart data={this.props.data} />;
+        return this.props.children;
     }
 }
 
-export default function ChartCard({ title, wide, tall, controls, children, data }) {
+export default function ChartCard({ title, wide, tall, controls, children }) {
     return (
         <div className={`card chart-card ${wide ? "chart-card_wide" : ""}`}>
             <div className="chart-card__head">
@@ -43,7 +43,7 @@ export default function ChartCard({ title, wide, tall, controls, children, data 
                 {controls}
             </div>
             <div className={`chart-card__body ${tall ? "chart-card__body_tall" : ""}`}>
-                {children ?? <ChartBoundary data={data} />}
+                <ChartBoundary>{children}</ChartBoundary>
             </div>
         </div>
     );

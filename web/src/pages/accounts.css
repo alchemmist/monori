@@ -171,15 +171,15 @@
 
 /* dark: rows and picker tiles sit on the frosted card, so they stay
    translucent glass instead of repainting an opaque near-black block over it */
-.g-root_theme_dark .account-row {
+.theme-dark .account-row {
     background: transparent;
 }
 
-.g-root_theme_dark .icon-picker__item {
+.theme-dark .icon-picker__item {
     background: rgb(255 255 255 / 4%);
     border-color: rgb(255 255 255 / 8%);
 }
 
-.g-root_theme_dark .icon-picker__item:hover {
+.theme-dark .icon-picker__item:hover {
     background: rgb(255 255 255 / 8%);
 }
