@@ -1,8 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import "@gravity-ui/uikit/styles/fonts.css";
-import "@gravity-ui/uikit/styles/styles.css";
 import "@mantine/core/styles.css";
+import "@mantine/charts/styles.css";
 import "@mantine/notifications/styles.css";
 import "./ui/mantine.css";
 import "./theme.css";

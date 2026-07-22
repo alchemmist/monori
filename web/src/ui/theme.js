@@ -6,7 +6,7 @@ export const theme = createTheme({
     // theme.css sets html font-size to 14px; counter-scale so Mantine's
     // rem-based metrics still resolve to their intended px values
     scale: 16 / 14,
-    fontFamily: "'Inter Variable', var(--g-font-family-sans, sans-serif)",
+    fontFamily: "var(--g-font-family-sans, sans-serif)",
     defaultRadius: "6px",
     cursorType: "pointer",
     components: {

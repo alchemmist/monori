@@ -1,7 +1,7 @@
 // monori "Mono" categorical palette — an Observable-10 style qualitative set,
 // orange-led so the brand accent leads the series, then distinct hues that stay
 // legible against the near-monochrome UI in both light and dark themes.
-const CATEGORY_PALETTE = [
+export const PALETTE = [
     "#ef5a17",
     "#4269d0",
     "#3ca951",
@@ -16,25 +16,29 @@ const CATEGORY_PALETTE = [
     "#9498a0",
 ];
 
-/** Chart tokens. income/expense/accent map to the theme's semantic tokens so
- * the data keeps its green/red/brand meaning across light & dark; every other
- * series color comes from the qualitative CATEGORY_PALETTE. */
-export const C = {
-    income: "var(--g-color-text-positive)",
-    expense: "var(--g-color-text-danger)",
-    accent: "var(--g-color-text-brand)",
-    amber: "var(--g-color-text-warning)",
-    palette: CATEGORY_PALETTE,
+// income/expense/accent map to the theme's semantic tokens so the data keeps its
+// green/red/brand meaning across light & dark; the neutral tokens back the
+// "budgeted target" and receding year-over-year lines.
+export const SERIES = {
+    income: "var(--m-income)",
+    expense: "var(--m-expense)",
+    accent: "var(--m-accent)",
+    warning: "var(--m-warning)",
+    hint: "var(--g-color-text-hint)",
+    secondary: "var(--g-color-text-secondary)",
 };
 
-export const axisCommon = {
-    labels: { style: { fontSize: "11px", fontColor: "var(--m-text-dim)" } },
-    lineColor: "var(--m-border)",
-    gridColor: "var(--m-border-soft)",
-    ticksColor: "var(--m-border)",
-};
+// number formatter for axis ticks and tooltip values (data is already in rubles)
+export const fmtNum = (v) => (v == null ? "" : Math.round(v).toLocaleString("ru-RU"));
 
-export const legendCommon = {
-    enabled: true,
-    itemStyle: { fontColor: "var(--m-text-dim)", fontSize: "12px" },
+// shared props for every cartesian Mantine chart (Bar/Line/Area/Composite). The
+// grid/axis-text colors are set in CSS via --chart-grid-color/--chart-text-color
+// (see dashboard.css) rather than props: CompositeChart leaks those two props to
+// the DOM, so keeping them out of here avoids a React unknown-attribute warning.
+export const cartesian = {
+    withTooltip: true,
+    tooltipAnimationDuration: 100,
+    strokeDasharray: "3 3",
+    tickLine: "none",
+    valueFormatter: fmtNum,
 };

@@ -302,15 +302,15 @@
    the header stays opaque enough to hide rows scrolling under it without a
    backdrop blur (which would escape the card's overflow clip and square its top
    corners) */
-.g-root_theme_dark .budget-grid th {
+.theme-dark .budget-grid th {
     background: rgb(255 255 255 / 6%);
 }
 
-.g-root_theme_dark .group-row td {
+.theme-dark .group-row td {
     background: rgb(255 255 255 / 6%);
 }
 
-.g-root_theme_dark .cat-row:hover {
+.theme-dark .cat-row:hover {
     background: rgb(255 255 255 / 9%);
 }
 
