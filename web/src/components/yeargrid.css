@@ -13,7 +13,7 @@
     overflow: auto;
     max-height: calc(100dvh - var(--yg-top, 200px) - var(--yg-bottom-inset));
     border-top: 1px solid var(--m-border);
-    border-radius: var(--m-radius) var(--m-radius) 0 0;
+    border-radius: 12px 12px 0 0;
     margin: 0 calc(-1 * var(--pad-x, 28px)) calc(-1 * var(--pad-b, 48px));
 }
 
@@ -21,7 +21,7 @@
    (.yg-corner_year) is rounded in its own rule below. Rounding the cells too is
    needed because their dark-theme backdrop blur escapes the wrap's overflow clip */
 .year-grid thead tr:first-child th:last-child {
-    border-top-right-radius: var(--m-radius);
+    border-top-right-radius: 12px;
 }
 
 .year-grid {
@@ -163,7 +163,7 @@
     background: var(--m-surface-raised);
     padding: 10px 14px;
     vertical-align: bottom;
-    border-top-left-radius: var(--m-radius);
+    border-top-left-radius: 12px;
 }
 
 .yg-year {
