@@ -1,4 +1,4 @@
-import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@mantine/core";
 import RowMenu from "../ui/RowMenu.jsx";
 import Tag from "../ui/Tag.jsx";
@@ -12,53 +12,84 @@ import "./categories.css";
 // (demo groups omit it) or tied
 const bySortThenId = (a, b) => (a.sort ?? 0) - (b.sort ?? 0) || a.id - b.id;
 
+const DRAG_THRESHOLD = 5;
+const EDGE = 80;
+const EDGE_SPEED = 16;
+
 export default function CategoriesPage() {
     const { snapshot, moveCategory, reorderGroups } = useStore();
     const [dialog, setDialog] = useState(null);
-    const [drag, setDrag] = useState(null); // {type:'card'|'col', id}
-    const [over, setOver] = useState(null); // {groupId, index} — live card insertion point
-    const [overCol, setOverCol] = useState(null); // {id, side:'before'|'after'} for column reorder
+    const [drag, setDrag] = useState(null); // {type:'card'|'col', id, x, y, w} — floating clone
+    const [over, setOver] = useState(null); // card: {groupId,index}; col: {index}
     const boardRef = useRef(null);
-    const rectsRef = useRef(new Map());
+    const pressRef = useRef(null);
+    const dragRef = useRef(null);
+    const overRef = useRef(null);
+    const cardTopsRef = useRef(new Map());
+    const colLeftsRef = useRef(new Map());
+    const scrollRef = useRef({ winY: 0, boardX: 0 });
     const animsRef = useRef(new Map());
+    const handlersRef = useRef({});
 
-    // FLIP: slide cards from their previous Y to the new one so neighbours part
-    // smoothly as the live-reorder moves them, instead of snapping. Deliberately:
-    //  - only the VERTICAL delta is animated — horizontal board scroll changes
-    //    every card's left, and animating that made grabbing-after-scroll jump;
+    // FLIP: slide cards (vertically) and columns (horizontally) from their previous
+    // position to the new one so neighbours part smoothly as the live-reorder moves
+    // them, instead of snapping. Deliberately:
     //  - any in-flight FLIP is cancelled BEFORE measuring, so a mid-animation
     //    transform can't compound into the next delta (that made cards fly apart
     //    on fast drags);
-    //  - the dragged card is skipped, and it only runs during an active card drag.
+    //  - deltas caused purely by auto-scroll are subtracted out — without that,
+    //    scrolling the board mid-drag makes every element fake-slide;
+    //  - the dragged element's ghost is skipped so the drop slot moves instantly.
     useLayoutEffect(() => {
         const board = boardRef.current;
         if (!board) return;
+        for (const a of animsRef.current.values()) a.cancel();
+        animsRef.current.clear();
         const cards = [...board.querySelectorAll(".kb-card[data-id]")];
-        for (const el of cards) {
-            const a = animsRef.current.get(el.dataset.id);
-            if (a) {
-                a.cancel();
-                animsRef.current.delete(el.dataset.id);
-            }
-        }
-        const next = new Map();
-        for (const el of cards) next.set(el.dataset.id, el.getBoundingClientRect().top);
+        const cols = [...board.querySelectorAll(".kb-col[data-gid]")];
+        const nextTops = new Map();
+        for (const el of cards) nextTops.set(el.dataset.id, el.getBoundingClientRect().top);
+        const nextLefts = new Map();
+        for (const el of cols) nextLefts.set(el.dataset.gid, el.getBoundingClientRect().left);
+        const winY = window.scrollY;
+        const boardX = board.scrollLeft;
+        const scrollDy = winY - scrollRef.current.winY;
+        const scrollDx = boardX - scrollRef.current.boardX;
         if (drag?.type === "card") {
             for (const el of cards) {
                 const id = el.dataset.id;
-                const prev = rectsRef.current.get(id);
-                const top = next.get(id);
-                if (prev == null || prev === top || el.classList.contains("kb-card_dragging"))
-                    continue;
+                const prev = cardTopsRef.current.get(id);
+                const top = nextTops.get(id);
+                if (prev == null || el.classList.contains("kb-card_ghost")) continue;
+                const dy = prev - top - scrollDy;
+                if (!dy) continue;
                 const anim = el.animate(
-                    [{ transform: `translateY(${prev - top}px)` }, { transform: "translateY(0)" }],
+                    [{ transform: `translateY(${dy}px)` }, { transform: "translateY(0)" }],
                     { duration: 150, easing: "ease" },
                 );
-                animsRef.current.set(id, anim);
-                anim.onfinish = () => animsRef.current.delete(id);
+                animsRef.current.set(`c${id}`, anim);
+                anim.onfinish = () => animsRef.current.delete(`c${id}`);
             }
         }
-        rectsRef.current = next;
+        if (drag?.type === "col") {
+            for (const el of cols) {
+                const gid = el.dataset.gid;
+                const prev = colLeftsRef.current.get(gid);
+                const left = nextLefts.get(gid);
+                if (prev == null || el.classList.contains("kb-col_ghost")) continue;
+                const dx = prev - left - scrollDx;
+                if (!dx) continue;
+                const anim = el.animate(
+                    [{ transform: `translateX(${dx}px)` }, { transform: "translateX(0)" }],
+                    { duration: 170, easing: "ease" },
+                );
+                animsRef.current.set(`g${gid}`, anim);
+                anim.onfinish = () => animsRef.current.delete(`g${gid}`);
+            }
+        }
+        cardTopsRef.current = nextTops;
+        colLeftsRef.current = nextLefts;
+        scrollRef.current = { winY, boardX };
     });
 
     const groups = useMemo(() => [...snapshot.groups].sort(bySortThenId), [snapshot.groups]);
@@ -79,11 +110,9 @@ export default function CategoriesPage() {
         return m;
     }, [snapshot.transactions]);
 
-    // ---- card drag & drop (move between / reorder within groups) ----
-    // The dragged card is NOT hidden (display:none aborts the native drag in
-    // Chrome). Instead we live-reorder: remove it from its origin and splice it,
-    // dimmed, into the hovered column at the target index — it acts as its own
-    // placeholder, parting the neighbours right where it will land.
+    // live previews: the dragged card/column is spliced, as a dashed ghost slot,
+    // into the hovered position — it acts as its own placeholder, parting the
+    // neighbours right where it will land
     const previewCats = (groupId) => {
         const base = catsByGroup.get(groupId) ?? [];
         if (drag?.type !== "card") return base;
@@ -94,63 +123,221 @@ export default function CategoriesPage() {
         return [...list.slice(0, idx), moved, ...list.slice(idx)];
     };
 
-    // insertion index among the column's cards, ignoring the one being dragged
+    const shownGroups = useMemo(() => {
+        if (drag?.type !== "col" || over?.index == null) return groups;
+        const rest = groups.filter((g) => g.id !== drag.id);
+        const moved = groups.find((g) => g.id === drag.id);
+        const idx = Math.min(over.index, rest.length);
+        return [...rest.slice(0, idx), moved, ...rest.slice(idx)];
+    }, [groups, drag, over]);
+
+    // ---- pointer-based drag & drop (cards and columns) ----
+    // Hand-rolled on pointer events instead of native HTML5 DnD: the browser ghost,
+    // frozen cursors and missing edge auto-scroll made the native version unpleasant.
+    const startPress = (e, info) => {
+        if (e.button !== 0) return;
+        if (e.pointerType !== "mouse" && e.pointerType !== "pen") return;
+        if (e.target.closest("button, a, input, [role='menuitem']")) return;
+        e.preventDefault();
+        pressRef.current = { ...info, startX: e.clientX, startY: e.clientY };
+    };
+
     const cardDropIndex = (colEl, clientY) => {
-        const cards = [...colEl.querySelectorAll(".kb-card")].filter(
-            (el) => +el.dataset.id !== drag.id,
+        const els = [...colEl.querySelectorAll(".kb-card")].filter(
+            (el) => +el.dataset.id !== dragRef.current.id,
         );
-        for (let i = 0; i < cards.length; i++) {
-            const r = cards[i].getBoundingClientRect();
+        for (let i = 0; i < els.length; i++) {
+            const r = els[i].getBoundingClientRect();
             if (clientY < r.top + r.height / 2) return i;
         }
-        return cards.length;
+        return els.length;
     };
 
-    const onCardDragOver = (e, groupId) => {
-        if (drag?.type !== "card") return;
-        e.preventDefault();
-        const colEl = e.currentTarget.querySelector(".kb-cards");
-        const index = colEl ? cardDropIndex(colEl, e.clientY) : 0;
-        setOver((o) => (o && o.groupId === groupId && o.index === index ? o : { groupId, index }));
+    const updateOver = (x, y) => {
+        const d = dragRef.current;
+        const board = boardRef.current;
+        if (!d || !board) return;
+        const cols = [...board.querySelectorAll(".kb-col[data-gid]")];
+        if (!cols.length) return;
+        if (d.type === "card") {
+            let target = null;
+            let best = Infinity;
+            for (const el of cols) {
+                const r = el.getBoundingClientRect();
+                const dist = x < r.left ? r.left - x : x > r.right ? x - r.right : 0;
+                if (dist < best) {
+                    best = dist;
+                    target = el;
+                }
+            }
+            const groupId = +target.dataset.gid;
+            const index = cardDropIndex(target.querySelector(".kb-cards"), y);
+            if (overRef.current?.groupId !== groupId || overRef.current?.index !== index) {
+                overRef.current = { groupId, index };
+                setOver(overRef.current);
+            }
+        } else {
+            const others = cols.filter((el) => +el.dataset.gid !== d.id);
+            let index = others.length;
+            for (let i = 0; i < others.length; i++) {
+                const r = others[i].getBoundingClientRect();
+                if (x < r.left + r.width / 2) {
+                    index = i;
+                    break;
+                }
+            }
+            if (overRef.current?.index !== index) {
+                overRef.current = { index };
+                setOver({ index });
+            }
+        }
     };
 
-    const onCardDrop = (e, toGroupId) => {
-        e.preventDefault();
-        if (drag?.type !== "card") return;
-        const target = over?.groupId ?? toGroupId;
-        const index = over?.index ?? 0;
-        const cols = new Map(
-            groups.map((g) => [
-                g.id,
-                (catsByGroup.get(g.id) ?? []).filter((c) => c.id !== drag.id),
-            ]),
-        );
-        const moved = snapshot.categories.find((c) => c.id === drag.id);
-        const dest = cols.get(target);
-        dest.splice(Math.min(index, dest.length), 0, moved);
-        const orderedIds = groups.flatMap((g) => cols.get(g.id).map((c) => c.id));
-        moveCategory(drag.id, target, orderedIds);
+    const autoScrollTick = () => {
+        const d = dragRef.current;
+        if (!d) return;
+        const board = boardRef.current;
+        if (board) {
+            const r = board.getBoundingClientRect();
+            let moved = false;
+            if (d.px < r.left + EDGE) {
+                board.scrollLeft -= Math.ceil(((r.left + EDGE - d.px) / EDGE) * EDGE_SPEED);
+                moved = true;
+            } else if (d.px > r.right - EDGE) {
+                board.scrollLeft += Math.ceil(((d.px - (r.right - EDGE)) / EDGE) * EDGE_SPEED);
+                moved = true;
+            }
+            if (d.py < EDGE) {
+                window.scrollBy(0, -12);
+                moved = true;
+            } else if (d.py > window.innerHeight - EDGE) {
+                window.scrollBy(0, 12);
+                moved = true;
+            }
+            if (moved) updateOver(d.px, d.py);
+        }
+        d.raf = requestAnimationFrame(autoScrollTick);
+    };
+
+    const beginDrag = (e) => {
+        const press = pressRef.current;
+        const src = press.type === "card" ? press.el : press.el.closest(".kb-col");
+        if (!src) return;
+        const r = src.getBoundingClientRect();
+        dragRef.current = {
+            type: press.type,
+            id: press.id,
+            dx: press.startX - r.left,
+            dy: press.startY - r.top,
+            px: e.clientX,
+            py: e.clientY,
+            raf: 0,
+        };
+        if (press.type === "card") {
+            const cat = snapshot.categories.find((c) => c.id === press.id);
+            const list = catsByGroup.get(cat.groupId) ?? [];
+            overRef.current = {
+                groupId: cat.groupId,
+                index: Math.max(
+                    0,
+                    list.findIndex((c) => c.id === press.id),
+                ),
+            };
+        } else {
+            overRef.current = {
+                index: Math.max(
+                    0,
+                    groups.findIndex((g) => g.id === press.id),
+                ),
+            };
+        }
+        setOver(overRef.current);
+        setDrag({
+            type: press.type,
+            id: press.id,
+            x: e.clientX - dragRef.current.dx,
+            y: e.clientY - dragRef.current.dy,
+            w: r.width,
+        });
+        document.body.classList.add("kb-grabbing");
+        dragRef.current.raf = requestAnimationFrame(autoScrollTick);
+    };
+
+    const endDrag = () => {
+        if (dragRef.current?.raf) cancelAnimationFrame(dragRef.current.raf);
+        pressRef.current = null;
+        dragRef.current = null;
+        overRef.current = null;
         setDrag(null);
         setOver(null);
+        document.body.classList.remove("kb-grabbing");
     };
 
-    // ---- column drag & drop (reorder groups) ----
-    const onColDrop = (e, targetId) => {
-        e.preventDefault();
-        setOverCol(null);
-        if (drag?.type !== "col" || drag.id === targetId) {
-            setDrag(null);
-            return;
+    const onMove = (e) => {
+        const press = pressRef.current;
+        if (press && !dragRef.current) {
+            if (Math.hypot(e.clientX - press.startX, e.clientY - press.startY) < DRAG_THRESHOLD)
+                return;
+            beginDrag(e);
         }
-        const r = e.currentTarget.getBoundingClientRect();
-        const after = e.clientX > r.left + r.width / 2;
-        const ids = groups.map((g) => g.id).filter((id) => id !== drag.id);
-        let at = ids.indexOf(targetId);
-        if (after) at += 1;
-        ids.splice(at, 0, drag.id);
-        reorderGroups(ids);
-        setDrag(null);
+        const d = dragRef.current;
+        if (!d) return;
+        d.px = e.clientX;
+        d.py = e.clientY;
+        setDrag((p) => p && { ...p, x: e.clientX - d.dx, y: e.clientY - d.dy });
+        updateOver(e.clientX, e.clientY);
     };
+
+    const onUp = () => {
+        const d = dragRef.current;
+        const ov = overRef.current;
+        if (d && ov) {
+            if (d.type === "card") {
+                const cols = new Map(
+                    groups.map((g) => [
+                        g.id,
+                        (catsByGroup.get(g.id) ?? []).filter((c) => c.id !== d.id),
+                    ]),
+                );
+                const moved = snapshot.categories.find((c) => c.id === d.id);
+                const dest = cols.get(ov.groupId);
+                if (moved && dest) {
+                    dest.splice(Math.min(ov.index, dest.length), 0, moved);
+                    const orderedIds = groups.flatMap((g) => cols.get(g.id).map((c) => c.id));
+                    moveCategory(d.id, ov.groupId, orderedIds);
+                }
+            } else {
+                const ids = groups.map((g) => g.id).filter((id) => id !== d.id);
+                ids.splice(Math.min(ov.index, ids.length), 0, d.id);
+                reorderGroups(ids);
+            }
+        }
+        endDrag();
+    };
+
+    const onKey = (e) => {
+        if (e.key === "Escape" && dragRef.current) endDrag();
+    };
+
+    handlersRef.current = { onMove, onUp, onKey, endDrag };
+
+    useEffect(() => {
+        const move = (e) => handlersRef.current.onMove(e);
+        const up = () => handlersRef.current.onUp();
+        const cancel = () => handlersRef.current.endDrag();
+        const key = (e) => handlersRef.current.onKey(e);
+        window.addEventListener("pointermove", move);
+        window.addEventListener("pointerup", up);
+        window.addEventListener("pointercancel", cancel);
+        window.addEventListener("keydown", key);
+        return () => {
+            window.removeEventListener("pointermove", move);
+            window.removeEventListener("pointerup", up);
+            window.removeEventListener("pointercancel", cancel);
+            window.removeEventListener("keydown", key);
+            handlersRef.current.endDrag();
+        };
+    }, []);
 
     const notify = (t) => useStore.getState().notify(t);
 
@@ -186,52 +373,24 @@ export default function CategoriesPage() {
         },
     ];
 
-    // the card being dragged stays mounted and visible (dimmed via kb-card_dragging)
-    // so it reads as the live placeholder at the drop point
-    const renderCard = (c, groupId) => (
+    const renderCard = (c) => (
         <div
             key={c.id}
             data-id={c.id}
-            className={`kb-card${drag?.type === "card" && drag.id === c.id ? " kb-card_dragging" : ""}`}
-            draggable
-            onDragStart={(e) => {
-                const list = catsByGroup.get(groupId) ?? [];
-                setDrag({ type: "card", id: c.id });
-                setOver({ groupId, index: list.findIndex((x) => x.id === c.id) });
-                e.dataTransfer.effectAllowed = "move";
-            }}
-            onDragEnd={() => {
-                setDrag(null);
-                setOver(null);
-            }}
+            className={`kb-card${drag?.type === "card" && drag.id === c.id ? " kb-card_ghost" : ""}`}
+            onPointerDown={(e) => startPress(e, { type: "card", id: c.id, el: e.currentTarget })}
         >
-            <div className="kb-card__top">
-                <span className="kb-card__name">{c.name}</span>
-                {c.archived && <Tag theme="warning">arch</Tag>}
-                <span
-                    className="kb-card__usage"
-                    title={`${txCountByCat.get(c.id) ?? 0} transactions`}
-                >
-                    {txCountByCat.get(c.id) ?? 0}
-                </span>
-                <div
-                    className="kb-card__menu"
-                    draggable
-                    onDragStart={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                    }}
-                >
-                    <RowMenu size="s" items={catMenu(c)} />
-                </div>
-            </div>
-            {c.keywords && (
-                <div className="kb-card__kw">
-                    {c.keywords.split("|").filter(Boolean).join(", ")}
-                </div>
-            )}
+            <CardBody
+                c={c}
+                count={txCountByCat.get(c.id) ?? 0}
+                menu={<RowMenu size="s" items={catMenu(c)} />}
+            />
         </div>
     );
+
+    const dragCat =
+        drag?.type === "card" ? snapshot.categories.find((c) => c.id === drag.id) : null;
+    const dragGroup = drag?.type === "col" ? groups.find((g) => g.id === drag.id) : null;
 
     return (
         <div className="fade-in">
@@ -257,73 +416,33 @@ export default function CategoriesPage() {
             </div>
 
             <div className={`kb-board${drag ? " kb-board_dragging" : ""}`} ref={boardRef}>
-                {groups.map((g) => {
+                {shownGroups.map((g) => {
                     const cats = catsByGroup.get(g.id) ?? [];
                     const shown = previewCats(g.id);
-                    const colMark =
-                        drag?.type === "col" && overCol?.id === g.id ? overCol.side : null;
+                    const isGhost = drag?.type === "col" && drag.id === g.id;
                     return (
                         <div
                             key={g.id}
-                            className={`kb-col kb-col_${g.kind}${
-                                colMark ? ` kb-col_mark-${colMark}` : ""
-                            }${drag?.type === "col" && drag.id === g.id ? " kb-col_dragging" : ""}`}
-                            onDragOver={(e) => {
-                                if (drag?.type === "card") {
-                                    onCardDragOver(e, g.id);
-                                } else if (drag?.type === "col" && drag.id !== g.id) {
-                                    e.preventDefault();
-                                    const r = e.currentTarget.getBoundingClientRect();
-                                    setOverCol({
-                                        id: g.id,
-                                        side: e.clientX > r.left + r.width / 2 ? "after" : "before",
-                                    });
-                                }
-                            }}
-                            onDragLeave={(e) => {
-                                // keep the card's `over` until another column claims it, so the
-                                // dragged card doesn't vanish mid-transit; only clear col marker
-                                if (
-                                    drag?.type === "col" &&
-                                    !e.currentTarget.contains(e.relatedTarget)
-                                ) {
-                                    setOverCol(null);
-                                }
-                            }}
-                            onDrop={(e) =>
-                                drag?.type === "col" ? onColDrop(e, g.id) : onCardDrop(e, g.id)
-                            }
+                            data-gid={g.id}
+                            className={`kb-col kb-col_${g.kind}${isGhost ? " kb-col_ghost" : ""}`}
                         >
                             <div
                                 className="kb-col__head"
-                                draggable
-                                onDragStart={(e) => {
-                                    setDrag({ type: "col", id: g.id });
-                                    e.dataTransfer.effectAllowed = "move";
-                                }}
-                                onDragEnd={() => {
-                                    setDrag(null);
-                                    setOverCol(null);
-                                }}
+                                onPointerDown={(e) =>
+                                    startPress(e, { type: "col", id: g.id, el: e.currentTarget })
+                                }
                             >
                                 <span className="kb-col__name">{g.name}</span>
                                 <Tag theme={g.kind === "income" ? "success" : "danger"}>
                                     {g.kind}
                                 </Tag>
                                 <span className="kb-col__count">{cats.length}</span>
-                                <div
-                                    style={{ marginLeft: "auto" }}
-                                    draggable
-                                    onDragStart={(e) => {
-                                        e.preventDefault();
-                                        e.stopPropagation();
-                                    }}
-                                >
+                                <div style={{ marginLeft: "auto" }}>
                                     <RowMenu size="s" items={groupMenu(g)} />
                                 </div>
                             </div>
 
-                            <div className="kb-cards">{shown.map((c) => renderCard(c, g.id))}</div>
+                            <div className="kb-cards">{shown.map((c) => renderCard(c))}</div>
 
                             <button
                                 className="kb-add-card"
@@ -341,6 +460,36 @@ export default function CategoriesPage() {
                     onPick={(kind) => setDialog({ type: "group-edit", group: { kind } })}
                 />
             </div>
+
+            {drag && (
+                <div className="kb-drag-layer" style={{ left: drag.x, top: drag.y, width: drag.w }}>
+                    {dragCat && (
+                        <div className="kb-card kb-card_clone">
+                            <CardBody c={dragCat} count={txCountByCat.get(dragCat.id) ?? 0} />
+                        </div>
+                    )}
+                    {dragGroup && (
+                        <div className={`kb-col kb-col_clone kb-col_${dragGroup.kind}`}>
+                            <div className="kb-col__head">
+                                <span className="kb-col__name">{dragGroup.name}</span>
+                                <Tag theme={dragGroup.kind === "income" ? "success" : "danger"}>
+                                    {dragGroup.kind}
+                                </Tag>
+                                <span className="kb-col__count">
+                                    {(catsByGroup.get(dragGroup.id) ?? []).length}
+                                </span>
+                            </div>
+                            <div className="kb-cards">
+                                {(catsByGroup.get(dragGroup.id) ?? []).map((c) => (
+                                    <div key={c.id} className="kb-card">
+                                        <CardBody c={c} count={txCountByCat.get(c.id) ?? 0} />
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                </div>
+            )}
 
             {dialog?.type === "cat-edit" && (
                 <CategoryEditDialog
@@ -368,6 +517,26 @@ export default function CategoriesPage() {
                 />
             )}
         </div>
+    );
+}
+
+function CardBody({ c, count, menu }) {
+    return (
+        <>
+            <div className="kb-card__top">
+                <span className="kb-card__name">{c.name}</span>
+                {c.archived && <Tag theme="warning">arch</Tag>}
+                <span className="kb-card__usage" title={`${count} transactions`}>
+                    {count}
+                </span>
+                {menu && <div className="kb-card__menu">{menu}</div>}
+            </div>
+            {c.keywords && (
+                <div className="kb-card__kw">
+                    {c.keywords.split("|").filter(Boolean).join(", ")}
+                </div>
+            )}
+        </>
     );
 }
 

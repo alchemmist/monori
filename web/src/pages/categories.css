@@ -6,6 +6,25 @@
     padding-bottom: 12px;
     margin-inline: calc(-1 * var(--pad-x));
     padding-inline: var(--pad-x);
+
+    /* the board is the one place a hidden scrollbar hurts: columns get clipped
+       off-screen with no hint that more exist — show a thin one just here */
+    scrollbar-width: thin;
+    scrollbar-color: var(--m-border) transparent;
+}
+
+.kb-board::-webkit-scrollbar {
+    display: block;
+    height: 6px;
+}
+
+.kb-board::-webkit-scrollbar-thumb {
+    background: var(--m-border);
+    border-radius: 3px;
+}
+
+.kb-board::-webkit-scrollbar-track {
+    background: transparent;
 }
 
 .kb-col {
@@ -23,22 +42,16 @@
         border-color 0.15s ease;
 }
 
-.kb-col_drop {
+/* the dragged column, live-reordered into its drop slot: a dashed empty frame
+   the same size as the column, so the drop target is unmistakable */
+.kb-col_ghost {
+    border-style: dashed;
     border-color: var(--m-accent);
-    box-shadow: inset 0 0 0 1px var(--m-accent);
+    background: var(--m-accent-soft);
 }
 
-/* column-reorder insertion marker */
-.kb-col_mark-before {
-    box-shadow: -3px 0 0 var(--m-accent);
-}
-
-.kb-col_mark-after {
-    box-shadow: 3px 0 0 var(--m-accent);
-}
-
-.kb-col_dragging {
-    opacity: 0.5;
+.kb-col_ghost > * {
+    visibility: hidden;
 }
 
 .kb-col__head {
@@ -93,19 +106,55 @@
     box-shadow: none;
 }
 
+.kb-board_dragging .kb-card:hover .kb-card__menu {
+    opacity: 0;
+}
+
 .kb-card:active {
     cursor: grabbing;
 }
 
-/* the dragged card, live-reordered into its drop slot, reads as the placeholder:
-   dashed accent outline + faded content so surrounding cards visibly part around
-   it. NOT display:none — hiding the drag source aborts native DnD in Chrome. */
-.kb-card_dragging {
-    border-color: var(--m-accent);
+/* the dragged card, live-reordered into its drop slot, is an empty dashed frame
+   of the same size — the visible card itself flies with the cursor in the
+   drag layer */
+.kb-card_ghost {
     border-style: dashed;
+    border-color: var(--m-accent);
     background: var(--m-accent-soft);
-    opacity: 0.7;
-    cursor: grabbing;
+    box-shadow: none;
+}
+
+.kb-card_ghost > * {
+    visibility: hidden;
+}
+
+/* floating clone that follows the cursor: lifted with a soft shadow and the
+   classic slight kanban tilt so it reads as "picked up" */
+.kb-drag-layer {
+    position: fixed;
+    z-index: 320;
+    pointer-events: none;
+    transform: rotate(2deg);
+}
+
+.kb-drag-layer .kb-card_clone {
+    box-shadow: 0 16px 36px -10px rgb(0 0 0 / 28%);
+    border-color: var(--m-accent);
+}
+
+.kb-drag-layer .kb-col_clone {
+    width: 100%;
+    max-height: 70vh;
+    overflow: hidden;
+    background: var(--m-surface);
+    box-shadow: 0 20px 44px -12px rgb(0 0 0 / 30%);
+    border-color: var(--m-accent);
+}
+
+body.kb-grabbing,
+body.kb-grabbing * {
+    cursor: grabbing !important;
+    user-select: none !important;
 }
 
 .kb-card__top {
@@ -351,4 +400,25 @@
 .theme-dark .kb-col_add {
     background: var(--m-card-bg);
     border-color: var(--m-card-border);
+}
+
+.theme-dark .kb-card_ghost {
+    background: var(--m-accent-soft);
+    border-color: var(--m-accent);
+    backdrop-filter: none;
+    box-shadow: none;
+}
+
+.theme-dark .kb-col_ghost {
+    background: var(--m-accent-soft);
+    border-color: var(--m-accent);
+}
+
+.theme-dark .kb-drag-layer .kb-card_clone,
+.theme-dark .kb-drag-layer .kb-col_clone {
+    border-color: var(--m-accent);
+}
+
+.theme-dark .kb-drag-layer .kb-col_clone {
+    background: var(--m-surface-raised);
 }
