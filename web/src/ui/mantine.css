@@ -313,6 +313,56 @@ textarea.mi-input__field {
     margin-bottom: 4px;
 }
 
+/* ---- grouped picker sections (transaction category select) ---- */
+.mantine-Combobox-groupLabel {
+    padding: 6px 8px 3px;
+}
+
+/* a hairline divider parts adjacent groups so sections read as distinct */
+.mantine-Combobox-group + .mantine-Combobox-group .mantine-Combobox-groupLabel {
+    margin-top: 3px;
+    border-top: 1px solid var(--m-border-soft);
+    padding-top: 7px;
+}
+
+.gsel__grp {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    color: var(--m-text-faint);
+}
+
+/* a small kind-colored dot in front of the group name — income vs expense at a glance */
+.gsel__grp::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentcolor;
+    opacity: 0.75;
+}
+
+.gsel__grp_income {
+    color: var(--m-income);
+}
+
+.gsel__grp_expense {
+    color: var(--m-expense);
+}
+
+/* dark: the category dropdown floats over the aurora canvas as frosted glass,
+   matching the kanban cards and chart tooltip (same lift, blur and translucency) */
+.theme-dark .gsel__drop_glass {
+    background: rgb(40 34 40 / 82%);
+    backdrop-filter: blur(18px);
+    border: 1px solid rgb(255 255 255 / 14%);
+    box-shadow: 0 16px 38px -12px rgb(0 0 0 / 80%);
+}
+
 .mantine-Menu-item[data-tone="danger"] {
     color: var(--g-color-text-danger);
 }

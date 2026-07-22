@@ -4,13 +4,10 @@ import RowMenu from "../ui/RowMenu.jsx";
 import Tag from "../ui/Tag.jsx";
 import { Plus } from "@gravity-ui/icons";
 import { useStore } from "../store.js";
+import { orderedGroups, categoriesByGroup } from "../categoryOrder.js";
 import { CategoryEditDialog, CategoryDeleteDialog } from "../components/CategoryDialogs.jsx";
 import { GroupEditDialog, GroupDeleteDialog } from "../components/GroupDialogs.jsx";
 import "./categories.css";
-
-// match the backend's ORDER BY sort, id — deterministic even when sort is missing
-// (demo groups omit it) or tied
-const bySortThenId = (a, b) => (a.sort ?? 0) - (b.sort ?? 0) || a.id - b.id;
 
 const DRAG_THRESHOLD = 5;
 const EDGE = 80;
@@ -92,15 +89,9 @@ export default function CategoriesPage() {
         scrollRef.current = { winY, boardX };
     });
 
-    const groups = useMemo(() => [...snapshot.groups].sort(bySortThenId), [snapshot.groups]);
+    const groups = useMemo(() => orderedGroups(snapshot), [snapshot]);
 
-    const catsByGroup = useMemo(() => {
-        const m = new Map(groups.map((g) => [g.id, []]));
-        for (const c of [...snapshot.categories].sort(bySortThenId)) {
-            if (m.has(c.groupId)) m.get(c.groupId).push(c);
-        }
-        return m;
-    }, [snapshot.categories, groups]);
+    const catsByGroup = useMemo(() => categoriesByGroup(snapshot, groups), [snapshot, groups]);
 
     const txCountByCat = useMemo(() => {
         const m = new Map();
