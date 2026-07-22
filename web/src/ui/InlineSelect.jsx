@@ -124,7 +124,7 @@ export default function InlineSelect({
                             {grouped
                                 ? sections.map((s) => (
                                       <Combobox.Group
-                                          key={s.group}
+                                          key={s.id ?? s.group}
                                           label={
                                               <span
                                                   className={`gsel__grp gsel__grp_${s.kind ?? "neutral"}`}
