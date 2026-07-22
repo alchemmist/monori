@@ -360,8 +360,8 @@ textarea.mi-input__field {
    reveal. `brightness()` lifts that blurred dark backdrop into a luminous milky
    wash so the panel actually reads as lit glass, not a solid tile. */
 .theme-dark .gsel__drop_glass {
-    background: rgb(46 40 48 / 50%);
-    backdrop-filter: blur(18px) brightness(1.7) saturate(1.35);
+    background: rgb(44 38 46 / 38%);
+    backdrop-filter: blur(10px);
     border: 1px solid rgb(255 255 255 / 16%);
     box-shadow: 0 16px 38px -12px rgb(0 0 0 / 80%);
 }
