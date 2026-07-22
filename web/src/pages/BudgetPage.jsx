@@ -148,7 +148,7 @@ export default function BudgetPage({ results, firstYear, lastYear }) {
                         </div>
                     </div>
 
-                    <div className="card" style={{ overflow: "hidden" }}>
+                    <div className="card budget-month-card" style={{ overflow: "hidden" }}>
                         <table className="budget-grid">
                             <thead>
                                 <tr>

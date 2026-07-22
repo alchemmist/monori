@@ -53,8 +53,8 @@ a {
     align-items: center;
     justify-content: space-between;
     padding: 0 22px;
-    background: color-mix(in srgb, var(--m-bg) 82%, transparent);
-    backdrop-filter: saturate(180%) blur(12px);
+    background: var(--glass-fill);
+    backdrop-filter: blur(var(--glass-blur));
     border-bottom: 1px solid var(--m-border-soft);
 }
 
@@ -1070,10 +1070,10 @@ a {
 .theme-dark .model,
 .theme-dark .md pre,
 .theme-dark .md-table-wrap {
-    background: rgb(255 255 255 / 4%);
-    border-color: rgb(255 255 255 / 7%);
-    backdrop-filter: blur(7px);
-    box-shadow: 0 14px 34px -20px rgb(0 0 0 / 90%);
+    background: var(--glass-fill);
+    border-color: var(--glass-border);
+    backdrop-filter: blur(var(--glass-blur));
+    box-shadow: var(--glass-shadow);
 }
 
 /* keep syntax tokens inside a code block transparent — only the block is glass */

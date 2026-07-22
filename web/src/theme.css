@@ -46,6 +46,17 @@
     --m-card-border: var(--m-border);
     --m-sidebar-edge: var(--m-border-soft);
 
+    /* ---- frosted glass: single source of truth for every glass surface ----
+       Transparency (--glass-fill), blur (--glass-blur), border and lift are set
+       once here and reused by cards, the category dropdown, the chart tooltip,
+       kanban cards and the docs surfaces. Tune a token and every glass surface
+       updates together. Light theme keeps solid cards; these values only show on
+       translucent overlays (the tooltip, dropdown, sticky docs bar). */
+    --glass-blur: 8px;
+    --glass-fill: rgb(255 255 255 / 72%);
+    --glass-border: rgb(0 0 0 / 8%);
+    --glass-shadow: 0 0 24px rgb(0 0 0 / 12%);
+
     /* accent-tuned brand tokens (drive the Mantine skin's filled/selection look) */
     --g-color-base-brand: #ef5a17;
     --g-color-base-brand-hover: #d94e10;
@@ -111,10 +122,16 @@
     --m-income-soft: #16281c;
     --m-expense-soft: #331919;
 
-    /* cards are frosted glass over the dark canvas — a translucent white lift */
-    --m-card-bg: rgb(255, 255, 255, 0.04);
-    --m-card-border: rgb(255, 255, 255, 0.065);
-    --m-sidebar-edge: var(--m-border);
+    /* glass over the dark canvas: the approved warm, see-through panel from the
+       category dropdown, now the shared standard. Cards read the same tokens so
+       every glass surface matches. */
+    --glass-fill: rgb(44 38 46 / 38%);
+    --glass-border: transparent;
+    --glass-shadow: 0 0 18px rgb(0 0 0 / 25%);
+
+    --m-card-bg: var(--glass-fill);
+    --m-card-border: var(--glass-border);
+    --m-sidebar-edge: rgb(255 255 255 / 8%);
 
     --g-color-base-brand: #ff7a3c;
     --g-color-base-brand-hover: #ff8f5a;
@@ -189,8 +206,18 @@ html:has(> body.theme-dark) {
    and lifted with a soft drop shadow so panels feel like glass, not black tiles */
 .theme-dark .card {
     border-radius: 12px;
-    backdrop-filter: blur(7px);
-    box-shadow: 0 14px 34px -20px rgb(0 0 0 / 90%);
+    backdrop-filter: blur(var(--glass-blur));
+    box-shadow: var(--glass-shadow);
+}
+
+/* reusable frosted-glass surface — fill, blur, border and lift all come from the
+   --glass-* tokens. Add this class to any panel that should read as glass;
+   tuning a token restyles every surface at once. */
+.glass {
+    background: var(--glass-fill);
+    backdrop-filter: blur(var(--glass-blur));
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--glass-shadow);
 }
 
 .num {
