@@ -40,6 +40,10 @@ services:
             VITE_FORCE_POLLING: "1"
         volumes:
             - ../web:/app
+            # docs pages inline ../docs/*.md at build time via import.meta.glob;
+            # from /app/src that resolves to /docs, so mount the repo docs there
+            # or every doc page renders empty (prod bakes them in via Dockerfile.front)
+            - ../docs:/docs:ro
             - web-modules:/app/node_modules
         ports:
             - "5173:5173"
