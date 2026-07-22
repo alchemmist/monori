@@ -129,6 +129,7 @@
     margin-inline: calc(-1 * var(--pad-x));
     border-inline: none;
     border-radius: 0;
+    box-shadow: none;
 }
 
 @media (width <= 760px) {
