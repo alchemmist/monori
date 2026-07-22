@@ -125,10 +125,103 @@
 
 .chart-card__body {
     height: 280px;
+
+    /* Mono grid/axis-text colors for the Mantine charts (inherited into the SVG) */
+    --chart-grid-color: var(--m-border-soft);
+    --chart-text-color: var(--m-text-dim);
 }
 
 .chart-card__body_tall {
     height: 320px;
+}
+
+/* the donut is a fixed-size chart (unlike the responsive cartesian ones), so
+   center it and lay its own legend out alongside — the built-in Mantine legend
+   can't do a tidy side list at this size */
+.chart-donut {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 18px;
+}
+
+.donut-legend {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    min-width: 0;
+    gap: 4px 14px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    font-size: 12px;
+    color: var(--m-text-dim);
+}
+
+.donut-legend li {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    min-width: 0;
+    overflow-wrap: anywhere;
+    cursor: default;
+    transition: opacity 120ms;
+}
+
+.donut-legend li[data-dim] {
+    opacity: 0.4;
+}
+
+.donut-legend__dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+/* Recharts positions the legend wrapper over the plot area (offset right by the
+   Y-axis gutter), so a legend centered inside it drifts right of the card. Pin
+   the wrapper to the full card width and center the content within it so the
+   legend lines up with the card, not the plot. */
+.chart-card .recharts-legend-wrapper {
+    width: 100% !important;
+    left: 0 !important;
+}
+
+/* Mantine chart legends default to right-aligned (justify-content: flex-end)
+   and BarChart never forwards the `centered` flag; center them within the
+   now-full-width wrapper above. */
+.mantine-ChartLegend-legend {
+    justify-content: center;
+}
+
+/* compact the chart tooltip: a 12-series stacked tooltip is otherwise taller than
+   the 280px card and gets clipped by its overflow. Tightening rows keeps it under
+   the card height so Recharts can clamp it fully in view. */
+.mantine-ChartTooltip-tooltip {
+    padding: 8px 10px;
+}
+
+.mantine-ChartTooltip-tooltipLabel {
+    margin-bottom: 5px;
+    font-size: 12px;
+}
+
+.mantine-ChartTooltip-tooltipItem {
+    font-size: 12px;
+}
+
+.mantine-ChartTooltip-tooltipItem + .mantine-ChartTooltip-tooltipItem {
+    margin-top: 2px;
+}
+
+.mantine-ChartTooltip-tooltipItemName {
+    margin-inline-end: 18px;
+}
+
+/* keep the value (e.g. "175 126 ₽") on one line so the currency sign never wraps */
+.mantine-ChartTooltip-tooltipItemData {
+    white-space: nowrap;
 }
 
 @media (width <= 1100px) {

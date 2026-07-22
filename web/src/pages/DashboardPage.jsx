@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { AreaChart, BarChart, CompositeChart, DonutChart } from "@mantine/charts";
 import { ChartBoundary } from "../components/ChartCard.jsx";
 import TimeNavigator from "../components/TimeNavigator.jsx";
 import { Button } from "@mantine/core";
@@ -7,6 +8,7 @@ import { useStore } from "../store.js";
 import { accountBalances } from "../engine/analytics.js";
 import AccountBadge from "../components/AccountBadge.jsx";
 import { rub, money, MONTHS_SHORT } from "../format.js";
+import { PALETTE, SERIES, cartesian } from "./chartTheme.js";
 import "./dashboard.css";
 
 const PRESETS = [
@@ -18,7 +20,18 @@ const PRESETS = [
     { id: "all", label: "All" },
 ];
 
-import { C, axisCommon } from "./chartTheme.js";
+// Income/expense bars + a savings-rate line on a secondary axis.
+const TREND_SERIES = [
+    { name: "Income", color: SERIES.income, type: "bar" },
+    { name: "Expenses", color: SERIES.expense, type: "bar" },
+    { name: "Savings rate %", color: SERIES.accent, type: "line", yAxisId: "right" },
+];
+
+// 'YYYY-MM' → "Jan '24" for the trend/cumulative x-axis ticks
+function fmtMonthTick(key) {
+    if (!key) return "";
+    return `${MONTHS_SHORT[+key.slice(5, 7) - 1]} '${key.slice(2, 4)}`;
+}
 
 /** Analytics count "To be Budgeted" as real inflow (it holds actual money
  * injections). Internal transfers are uncategorized and thus excluded. */
@@ -26,6 +39,7 @@ export default function DashboardPage({ firstYear, lastYear }) {
     const { snapshot } = useStore();
     const now = useMemo(() => new Date(), []);
     const [donutYear, setDonutYear] = useState(String(now.getFullYear()));
+    const [donutActive, setDonutActive] = useState(null); // legend-hovered category name
     const [drillCat, setDrillCat] = useState(() =>
         String(snapshot.categories.find((c) => c.name === "Groceries")?.id ?? ""),
     );
@@ -113,78 +127,35 @@ export default function DashboardPage({ firstYear, lastYear }) {
         return { netYtd, savingsRate, exp12avg, cur, dailyRate, forecast, prev, saved12, runway };
     }, [monthly, last12, nowKey, now]);
 
-    // Chart 1: income/expense bars + savings rate line over the selected window
+    // Chart 1: income/expense bars + savings rate line over the selected window.
+    // 1-2-1 weighted moving average on the rate so the line reads as a calm curve.
     const trendData = useMemo(() => {
         const rows = closed.slice(trendLo, trendHi + 1);
-        return {
-            xAxis: { type: "category", categories: rows.map(([k]) => k), ...axisCommon },
-            yAxis: [
-                { labels: { ...axisCommon.labels, formatter: undefined }, ...axisCommon },
-                {
-                    labels: axisCommon.labels,
-                    lineColor: "transparent",
-                    gridColor: "transparent",
-                    maxPadding: 0.05,
-                },
-            ],
-            legend: {
-                enabled: true,
-                itemStyle: { fontColor: "var(--m-text-dim)", fontSize: "12px" },
-            },
-            series: {
-                data: [
-                    {
-                        type: "bar-x",
-                        name: "Income",
-                        color: C.income,
-                        data: rows.map(([k, v]) => ({ x: k, y: v.income / 100 })),
-                    },
-                    {
-                        type: "bar-x",
-                        name: "Expenses",
-                        color: C.expense,
-                        data: rows.map(([k, v]) => ({ x: k, y: v.expense / 100 })),
-                    },
-                    {
-                        type: "line",
-                        name: "Savings rate %",
-                        color: C.accent,
-                        yAxis: 1,
-                        lineWidth: 1.5,
-                        // 1-2-1 weighted moving average: the lib draws straight polylines only,
-                        // smoothing the data is what keeps this line from looking like a saw
-                        data: rows.map(([k], i) => {
-                            const rate = (j) => {
-                                const v = rows[Math.max(0, Math.min(rows.length - 1, j))][1];
-                                return v.income > 0
-                                    ? Math.max(
-                                          -100,
-                                          Math.min(100, ((v.income - v.expense) / v.income) * 100),
-                                      )
-                                    : null;
-                            };
-                            const [a, b, c] = [rate(i - 1), rate(i), rate(i + 1)];
-                            if (b == null) return { x: k, y: null };
-                            const parts = [
-                                [a, 1],
-                                [b, 2],
-                                [c, 1],
-                            ].filter(([v]) => v != null);
-                            const w = parts.reduce((s, [, ww]) => s + ww, 0);
-                            return {
-                                x: k,
-                                y: Math.round(parts.reduce((s, [v, ww]) => s + v * ww, 0) / w),
-                            };
-                        }),
-                    },
-                ],
-            },
-            chart: {
-                margin: { top: 10, right: 10, bottom: 0, left: 10 },
-                zoom: { enabled: true, type: "x" },
-            },
-            tooltip: { enabled: true },
+        const rate = (j) => {
+            const v = rows[Math.max(0, Math.min(rows.length - 1, j))][1];
+            return v.income > 0
+                ? Math.max(-100, Math.min(100, ((v.income - v.expense) / v.income) * 100))
+                : null;
         };
+        return rows.map(([k, v], i) => {
+            const [a, b, c] = [rate(i - 1), rate(i), rate(i + 1)];
+            let sr = null;
+            if (b != null) {
+                const parts = [
+                    [a, 1],
+                    [b, 2],
+                    [c, 1],
+                ].filter(([x]) => x != null);
+                const w = parts.reduce((s, [, ww]) => s + ww, 0);
+                sr = Math.round(parts.reduce((s, [x, ww]) => s + x * ww, 0) / w);
+            }
+            return {
+                x: k,
+                Income: v.income / 100,
+                Expenses: v.expense / 100,
+                "Savings rate %": sr,
+            };
+        });
     }, [closed, trendLo, trendHi]);
 
     // Chart 2: donut by category for a year
@@ -201,32 +172,15 @@ export default function DashboardPage({ firstYear, lastYear }) {
         const top = sorted.slice(0, 11);
         const rest = sorted.slice(11).reduce((s, [, v]) => s + v, 0);
         if (rest > 0) top.push(["Other", rest]);
-        return {
-            legend: {
-                enabled: true,
-                itemStyle: { fontColor: "var(--m-text-dim)", fontSize: "12px" },
-            },
-            series: {
-                data: [
-                    {
-                        type: "pie",
-                        innerRadius: "62%",
-                        borderColor: "var(--m-surface)",
-                        borderWidth: 2,
-                        dataLabels: { enabled: false },
-                        data: top.map(([name, v], i) => ({
-                            name,
-                            value: Math.round(v / 100),
-                            color: C.palette[i % C.palette.length],
-                        })),
-                    },
-                ],
-            },
-            tooltip: { enabled: true },
-        };
+        return top.map(([name, v], i) => ({
+            name,
+            value: Math.round(v / 100),
+            color: PALETTE[i % PALETTE.length],
+        }));
     }, [txns, donutYear, catById, incomeGroupIds, excludedIds]);
 
     // Chart 3: selected category by month for a year
+    const drillName = drillCat ? catById.get(+drillCat)?.name : "";
     const drillData = useMemo(() => {
         const catId = drillCat ? +drillCat : null;
         const sums = Array(12).fill(0);
@@ -236,54 +190,20 @@ export default function DashboardPage({ firstYear, lastYear }) {
                 sums[+t.date.slice(5, 7) - 1] += Math.abs(t.amount);
             }
         }
-        return {
-            xAxis: { type: "category", categories: MONTHS_SHORT, ...axisCommon },
-            yAxis: [{ labels: axisCommon.labels, ...axisCommon }],
-            legend: { enabled: false },
-            series: {
-                data: [
-                    {
-                        type: "bar-x",
-                        name: catId != null ? catById.get(catId)?.name : "",
-                        color: C.accent,
-                        data: sums.map((v, i) => ({ x: i, y: v / 100 })),
-                    },
-                ],
-            },
-            tooltip: { enabled: true },
-        };
-    }, [txns, drillCat, drillYear, catById]);
+        return sums.map((v, i) => ({ month: MONTHS_SHORT[i], Spent: Math.round(v / 100) }));
+    }, [txns, drillCat, drillYear]);
 
     // Chart 4: cumulative net over all history
     const cumulativeData = useMemo(() => {
         let acc = 0;
-        const pts = monthly.map(([k, v]) => {
+        return monthly.map(([k, v]) => {
             acc += v.income - v.expense;
-            return { x: k, y: Math.round(acc / 100) };
+            return { x: k, "Cumulative net": Math.round(acc / 100) };
         });
-        return {
-            xAxis: { type: "category", categories: pts.map((p) => p.x), ...axisCommon },
-            yAxis: [{ labels: axisCommon.labels, ...axisCommon }],
-            legend: { enabled: false },
-            series: {
-                data: [
-                    {
-                        type: "area",
-                        name: "Cumulative net",
-                        color: C.income,
-                        lineWidth: 2,
-                        opacity: 0.25,
-                        data: pts,
-                    },
-                ],
-            },
-            chart: { zoom: { enabled: true, type: "x" } },
-            tooltip: { enabled: true },
-        };
     }, [monthly]);
 
     // Chart 5: expense structure by group, stacked, its own year selector
-    const groupStackData = useMemo(() => {
+    const groupStack = useMemo(() => {
         const expenseGroups = snapshot.groups.filter((g) => g.kind === "expense");
         const perGroup = new Map(expenseGroups.map((g) => [g.id, Array(12).fill(0)]));
         for (const t of txns) {
@@ -292,29 +212,23 @@ export default function DashboardPage({ firstYear, lastYear }) {
             if (!cat || !perGroup.has(cat.groupId) || excludedIds.has(t.categoryId)) continue;
             perGroup.get(cat.groupId)[+t.date.slice(5, 7) - 1] -= t.amount;
         }
-        return {
-            xAxis: { type: "category", categories: MONTHS_SHORT, ...axisCommon },
-            yAxis: [{ labels: axisCommon.labels, ...axisCommon }],
-            legend: {
-                enabled: true,
-                itemStyle: { fontColor: "var(--m-text-dim)", fontSize: "12px" },
-            },
-            series: {
-                data: expenseGroups.map((g, i) => ({
-                    type: "bar-x",
-                    stacking: "normal",
-                    name: g.name,
-                    color: C.palette[i % C.palette.length],
-                    data: perGroup.get(g.id).map((v, m) => ({ x: m, y: Math.round(v / 100) })),
-                })),
-            },
-            tooltip: { enabled: true },
-        };
+        const data = MONTHS_SHORT.map((mo, m) => {
+            const row = { month: mo };
+            for (const g of expenseGroups)
+                row[`g${g.id}`] = Math.round(perGroup.get(g.id)[m] / 100);
+            return row;
+        });
+        const series = expenseGroups.map((g, i) => ({
+            name: `g${g.id}`,
+            label: g.name,
+            color: PALETTE[i % PALETTE.length],
+        }));
+        return { data, series };
     }, [txns, snapshot.groups, stackYear, catById, excludedIds]);
 
     // Spending by category, stacked by month — same top-N categories (and thus
     // colors) as the donut, so the two views line up.
-    const catStackData = useMemo(() => {
+    const catStack = useMemo(() => {
         const perCat = new Map(); // name -> Array(12) monthly outflow totals
         for (const t of txns) {
             if (!t.date.startsWith(catStackYear) || t.categoryId == null || t.amount >= 0) continue;
@@ -329,34 +243,20 @@ export default function DashboardPage({ firstYear, lastYear }) {
             .sort((a, b) => b.total - a.total);
         const top = rows.slice(0, 11);
         const rest = rows.slice(11);
-        const series = top.map((r, i) => ({
-            type: "bar-x",
-            stacking: "normal",
-            name: r.name,
-            color: C.palette[i % C.palette.length],
-            data: r.arr.map((v, m) => ({ x: m, y: Math.round(v / 100) })),
-        }));
+        const names = top.map((r) => r.name);
+        const other = Array(12).fill(0);
         if (rest.length) {
-            const other = Array(12).fill(0);
             for (const r of rest) r.arr.forEach((v, m) => (other[m] += v));
-            series.push({
-                type: "bar-x",
-                stacking: "normal",
-                name: "Other",
-                color: C.palette[11 % C.palette.length],
-                data: other.map((v, m) => ({ x: m, y: Math.round(v / 100) })),
-            });
+            names.push("Other");
         }
-        return {
-            xAxis: { type: "category", categories: MONTHS_SHORT, ...axisCommon },
-            yAxis: [{ labels: axisCommon.labels, ...axisCommon }],
-            legend: {
-                enabled: true,
-                itemStyle: { fontColor: "var(--m-text-dim)", fontSize: "12px" },
-            },
-            series: { data: series },
-            tooltip: { enabled: true },
-        };
+        const data = MONTHS_SHORT.map((mo, m) => {
+            const row = { month: mo };
+            top.forEach((r) => (row[r.name] = Math.round(r.arr[m] / 100)));
+            if (rest.length) row.Other = Math.round(other[m] / 100);
+            return row;
+        });
+        const series = names.map((name, i) => ({ name, color: PALETTE[i % PALETTE.length] }));
+        return { data, series };
     }, [txns, catStackYear, catById, incomeGroupIds, excludedIds]);
 
     const years = [];
@@ -484,7 +384,21 @@ export default function DashboardPage({ firstYear, lastYear }) {
                         </div>
                     </div>
                     <div className="chart-card__body chart-card__body_tall">
-                        <ChartBoundary data={trendData} />
+                        <ChartBoundary>
+                            <CompositeChart
+                                h="100%"
+                                data={trendData}
+                                dataKey="x"
+                                series={TREND_SERIES}
+                                withLegend
+                                withDots={false}
+                                connectNulls={false}
+                                withRightYAxis
+                                rightYAxisProps={{ tickFormatter: (v) => `${v}%` }}
+                                xAxisProps={{ tickFormatter: fmtMonthTick, minTickGap: 24 }}
+                                {...cartesian}
+                            />
+                        </ChartBoundary>
                     </div>
                     <TimeNavigator
                         items={closed.map(([k, v]) => ({ key: k, value: v.expense }))}
@@ -503,8 +417,40 @@ export default function DashboardPage({ firstYear, lastYear }) {
                             data={years}
                         />
                     </div>
-                    <div className="chart-card__body">
-                        <ChartBoundary data={donutData} />
+                    <div className="chart-card__body chart-donut">
+                        <ChartBoundary>
+                            <DonutChart
+                                data={donutData}
+                                size={196}
+                                thickness={36}
+                                paddingAngle={0}
+                                strokeWidth={0}
+                                tooltipDataSource="segment"
+                                valueFormatter={(v) => `${v.toLocaleString("ru-RU")} ₽`}
+                                cellProps={(cell) => ({
+                                    opacity: donutActive && cell.name !== donutActive ? 0.3 : 1,
+                                    style: { transition: "opacity 120ms" },
+                                })}
+                            />
+                        </ChartBoundary>
+                        <ul className="donut-legend">
+                            {donutData.map((d) => (
+                                <li
+                                    key={d.name}
+                                    data-dim={
+                                        donutActive && d.name !== donutActive ? "" : undefined
+                                    }
+                                    onMouseEnter={() => setDonutActive(d.name)}
+                                    onMouseLeave={() => setDonutActive(null)}
+                                >
+                                    <span
+                                        className="donut-legend__dot"
+                                        style={{ background: d.color }}
+                                    />
+                                    {d.name}
+                                </li>
+                            ))}
+                        </ul>
                     </div>
                 </div>
 
@@ -530,7 +476,17 @@ export default function DashboardPage({ firstYear, lastYear }) {
                     </div>
                     <div className="chart-card__body">
                         {drillCat ? (
-                            <ChartBoundary data={drillData} />
+                            <ChartBoundary>
+                                <BarChart
+                                    h="100%"
+                                    data={drillData}
+                                    dataKey="month"
+                                    series={[
+                                        { name: "Spent", label: drillName, color: SERIES.accent },
+                                    ]}
+                                    {...cartesian}
+                                />
+                            </ChartBoundary>
                         ) : (
                             <div
                                 style={{
@@ -557,7 +513,17 @@ export default function DashboardPage({ firstYear, lastYear }) {
                         />
                     </div>
                     <div className="chart-card__body">
-                        <ChartBoundary data={catStackData} />
+                        <ChartBoundary>
+                            <BarChart
+                                h="100%"
+                                type="stacked"
+                                data={catStack.data}
+                                dataKey="month"
+                                series={catStack.series}
+                                withLegend
+                                {...cartesian}
+                            />
+                        </ChartBoundary>
                     </div>
                 </div>
 
@@ -566,7 +532,19 @@ export default function DashboardPage({ firstYear, lastYear }) {
                         <div className="chart-card__title">Cumulative net · all time</div>
                     </div>
                     <div className="chart-card__body">
-                        <ChartBoundary data={cumulativeData} />
+                        <ChartBoundary>
+                            <AreaChart
+                                h="100%"
+                                data={cumulativeData}
+                                dataKey="x"
+                                series={[{ name: "Cumulative net", color: SERIES.income }]}
+                                withDots={false}
+                                fillOpacity={0.25}
+                                strokeWidth={2}
+                                xAxisProps={{ tickFormatter: fmtMonthTick, minTickGap: 24 }}
+                                {...cartesian}
+                            />
+                        </ChartBoundary>
                     </div>
                 </div>
 
@@ -581,7 +559,17 @@ export default function DashboardPage({ firstYear, lastYear }) {
                         />
                     </div>
                     <div className="chart-card__body">
-                        <ChartBoundary data={groupStackData} />
+                        <ChartBoundary>
+                            <BarChart
+                                h="100%"
+                                type="stacked"
+                                data={groupStack.data}
+                                dataKey="month"
+                                series={groupStack.series}
+                                withLegend
+                                {...cartesian}
+                            />
+                        </ChartBoundary>
                     </div>
                 </div>
             </div>

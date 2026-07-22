@@ -1066,10 +1066,10 @@ a {
 }
 
 /* ---------- dark: frosted-glass panels on the aurora canvas (match the app) ---------- */
-.g-root_theme_dark .bento__tile:not(.bento__tile_orange),
-.g-root_theme_dark .model,
-.g-root_theme_dark .md pre,
-.g-root_theme_dark .md-table-wrap {
+.theme-dark .bento__tile:not(.bento__tile_orange),
+.theme-dark .model,
+.theme-dark .md pre,
+.theme-dark .md-table-wrap {
     background: rgb(255 255 255 / 4%);
     border-color: rgb(255 255 255 / 7%);
     backdrop-filter: blur(7px);
@@ -1077,7 +1077,7 @@ a {
 }
 
 /* keep syntax tokens inside a code block transparent — only the block is glass */
-.g-root_theme_dark .md pre code {
+.theme-dark .md pre code {
     background: none;
     border: none;
 }

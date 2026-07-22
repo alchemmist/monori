@@ -1,4 +1,6 @@
 import { useMemo, useState } from "react";
+import { BarChart, LineChart } from "@mantine/charts";
+import { Rectangle } from "recharts";
 import InlineSelect from "../ui/InlineSelect.jsx";
 import { ChartBoundary } from "../components/ChartCard.jsx";
 import { useStore } from "../store.js";
@@ -12,11 +14,16 @@ import {
     txStats,
     disciplineMatrix,
 } from "../engine/analytics.js";
-import { C, axisCommon, legendCommon } from "./chartTheme.js";
+import { PALETTE, SERIES, cartesian } from "./chartTheme.js";
 import "./dashboard.css";
 import "./analytics.css";
 
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+// per-bar color from a data-row field, so each bar's color is keyed by its own
+// row (month/day) rather than its numeric value — Mantine's getBarColor only
+// sees the value, which collides when two rows share the same amount.
+const perRowColor = (field) => (props) => <Rectangle {...props} fill={props.payload[field]} />;
 
 /** Annual report: planning discipline, year-over-year shape, spending patterns. */
 export default function AnalyticsPage({ results, firstYear, lastYear }) {
@@ -37,164 +44,62 @@ export default function AnalyticsPage({ results, firstYear, lastYear }) {
         return disciplineMatrix(res, snapshot.categories, snapshot.groups, { upToMonth });
     }, [results, snapshot.categories, snapshot.groups, year, now]);
 
-    // Plan vs fact: budgeted total per month vs actual expenses
-    const planFactData = useMemo(() => {
+    // Plan vs fact: budgeted total per month vs actual expenses. Spent bars flip to
+    // expense-red when they overshoot that month's budget — the color is carried on
+    // each row so months that happen to share a spent value keep their own verdict.
+    const planFact = useMemo(() => {
         const res = results.get(+year);
-        const actual = MONTHS_SHORT.map((_, m) => {
+        const data = MONTHS_SHORT.map((mo, m) => {
             const v = monthly.find(([k]) => k === `${year}-${String(m + 1).padStart(2, "0")}`);
-            return v ? v[1].expense : 0;
+            const spent = Math.round((v ? v[1].expense : 0) / 100);
+            const budgeted = Math.round(res.budgetedTotal[m] / 100);
+            return {
+                month: mo,
+                Budgeted: budgeted,
+                Spent: spent,
+                spentColor: spent > budgeted ? SERIES.expense : SERIES.accent,
+            };
         });
-        return {
-            xAxis: { type: "category", categories: MONTHS_SHORT, ...axisCommon },
-            yAxis: [{ labels: axisCommon.labels, ...axisCommon }],
-            legend: legendCommon,
-            series: {
-                data: [
-                    {
-                        // the plan sits behind as a neutral target
-                        type: "bar-x",
-                        name: "Budgeted",
-                        color: "var(--g-color-text-hint)",
-                        opacity: 0.5,
-                        data: MONTHS_SHORT.map((_, m) => ({
-                            x: m,
-                            y: Math.round(res.budgetedTotal[m] / 100),
-                        })),
-                    },
-                    {
-                        // actual in the brand accent, flipping to expense-red only when it
-                        // overshoots that month's budget
-                        type: "bar-x",
-                        name: "Spent",
-                        color: C.accent,
-                        data: actual.map((v, m) => ({
-                            x: m,
-                            y: Math.round(v / 100),
-                            color: v > res.budgetedTotal[m] ? C.expense : C.accent,
-                        })),
-                    },
-                ],
-            },
-            chart: { margin: { top: 10, right: 10, bottom: 0, left: 10 } },
-            tooltip: { enabled: true },
-        };
+        return { data };
     }, [results, monthly, year]);
 
-    // Year over year: monthly expenses, selected year vs two previous
-    const yoyData = useMemo(() => {
+    // Year over year: monthly expenses, selected year vs two previous (older recede)
+    const yoy = useMemo(() => {
         const yrs = [+year - 2, +year - 1, +year].filter((y) => y >= firstYear);
-        const dims = ["var(--g-color-text-hint)", "var(--g-color-text-secondary)", C.accent]; // older years recede
-        return {
-            xAxis: { type: "category", categories: MONTHS_SHORT, ...axisCommon },
-            yAxis: [{ labels: axisCommon.labels, ...axisCommon }],
-            legend: legendCommon,
-            series: {
-                data: yrs.map((y, i) => ({
-                    type: "line",
-                    name: String(y),
-                    color: dims[i + (3 - yrs.length)],
-                    lineWidth: y === +year ? 2 : 1.5,
-                    data: MONTHS_SHORT.map((_, m) => {
-                        const v = monthly.find(
-                            ([k]) => k === `${y}-${String(m + 1).padStart(2, "0")}`,
-                        );
-                        return { x: m, y: v ? Math.round(v[1].expense / 100) : null };
-                    }),
-                })),
-            },
-            chart: { margin: { top: 10, right: 10, bottom: 0, left: 10 } },
-            tooltip: { enabled: true },
-        };
+        const dims = [SERIES.hint, SERIES.secondary, SERIES.accent];
+        const data = MONTHS_SHORT.map((mo, m) => {
+            const row = { month: mo };
+            for (const y of yrs) {
+                const v = monthly.find(([k]) => k === `${y}-${String(m + 1).padStart(2, "0")}`);
+                row[String(y)] = v ? Math.round(v[1].expense / 100) : null;
+            }
+            return row;
+        });
+        const series = yrs.map((y, i) => ({
+            name: String(y),
+            color: dims[i + (3 - yrs.length)],
+        }));
+        return { data, series, current: String(+year) };
     }, [monthly, year, firstYear]);
 
     const weekdayData = useMemo(() => {
         const sums = weekdayProfile(snapshot, year);
         const total = sums.reduce((s, v) => s + v, 0) || 1;
-        return {
-            xAxis: { type: "category", categories: WEEKDAYS, ...axisCommon },
-            yAxis: [{ labels: axisCommon.labels, ...axisCommon }],
-            legend: { enabled: false },
-            series: {
-                data: [
-                    {
-                        type: "bar-x",
-                        name: "Share of spending",
-                        data: sums.map((v, i) => ({
-                            x: i,
-                            y: Math.round((v / total) * 100),
-                            color: i >= 5 ? C.accent : C.palette[0],
-                        })),
-                    },
-                ],
-            },
-            tooltip: { enabled: true },
-        };
+        return sums.map((v, i) => ({
+            day: WEEKDAYS[i],
+            Share: Math.round((v / total) * 100),
+            color: i >= 5 ? SERIES.accent : PALETTE[0],
+        }));
     }, [snapshot, year]);
 
     const domData = useMemo(() => {
         const sums = dayOfMonthProfile(snapshot, year);
-        return {
-            xAxis: {
-                type: "category",
-                categories: sums.map((_, i) => String(i + 1)),
-                labels: { ...axisCommon.labels },
-                lineColor: axisCommon.lineColor,
-                gridColor: "transparent",
-                ticksColor: axisCommon.ticksColor,
-            },
-            yAxis: [{ labels: axisCommon.labels, ...axisCommon }],
-            legend: { enabled: false },
-            series: {
-                data: [
-                    {
-                        type: "bar-x",
-                        name: "Spent",
-                        color: C.palette[0],
-                        data: sums.map((v, i) => ({ x: i, y: Math.round(v / 100) })),
-                    },
-                ],
-            },
-            tooltip: { enabled: true },
-        };
+        return sums.map((v, i) => ({ day: String(i + 1), Spent: Math.round(v / 100) }));
     }, [snapshot, year]);
 
     const merchants = useMemo(() => topMerchants(snapshot, year, 10), [snapshot, year]);
     const merchantsData = useMemo(
-        () => ({
-            xAxis: {
-                type: "linear",
-                labels: axisCommon.labels,
-                lineColor: axisCommon.lineColor,
-                gridColor: axisCommon.gridColor,
-                ticksColor: axisCommon.ticksColor,
-            },
-            yAxis: [
-                {
-                    type: "category",
-                    categories: [...merchants.map((m) => m.name)].reverse(),
-                    labels: { style: { fontSize: "11px", fontColor: "var(--m-text)" } },
-                    lineColor: axisCommon.lineColor,
-                    gridColor: "transparent",
-                    ticksColor: axisCommon.ticksColor,
-                },
-            ],
-            legend: { enabled: false },
-            series: {
-                data: [
-                    {
-                        type: "bar-y",
-                        name: "Spent",
-                        color: C.accent,
-                        data: merchants.map((m, i) => ({
-                            y: merchants.length - 1 - i,
-                            x: Math.round(m.total / 100),
-                        })),
-                    },
-                ],
-            },
-            chart: { margin: { top: 6, right: 12, bottom: 0, left: 6 } },
-            tooltip: { enabled: true },
-        }),
+        () => merchants.map((m) => ({ name: m.name, Spent: Math.round(m.total / 100) })),
         [merchants],
     );
 
@@ -256,7 +161,24 @@ export default function AnalyticsPage({ results, firstYear, lastYear }) {
                         <div className="chart-card__title">Plan vs fact · {year}</div>
                     </div>
                     <div className="chart-card__body">
-                        <ChartBoundary data={planFactData} />
+                        <ChartBoundary>
+                            <BarChart
+                                h="100%"
+                                data={planFact.data}
+                                dataKey="month"
+                                series={[
+                                    { name: "Budgeted", color: SERIES.hint },
+                                    { name: "Spent", color: SERIES.accent },
+                                ]}
+                                withLegend
+                                barProps={(series) =>
+                                    series.name === "Spent"
+                                        ? { shape: perRowColor("spentColor") }
+                                        : {}
+                                }
+                                {...cartesian}
+                            />
+                        </ChartBoundary>
                     </div>
                 </div>
 
@@ -292,7 +214,20 @@ export default function AnalyticsPage({ results, firstYear, lastYear }) {
                         <div className="chart-card__title">Expenses year over year</div>
                     </div>
                     <div className="chart-card__body">
-                        <ChartBoundary data={yoyData} />
+                        <ChartBoundary>
+                            <LineChart
+                                h="100%"
+                                data={yoy.data}
+                                dataKey="month"
+                                series={yoy.series}
+                                withDots={false}
+                                connectNulls={false}
+                                lineProps={(s) => ({
+                                    strokeWidth: s.name === yoy.current ? 2 : 1.5,
+                                })}
+                                {...cartesian}
+                            />
+                        </ChartBoundary>
                     </div>
                 </div>
 
@@ -353,7 +288,17 @@ export default function AnalyticsPage({ results, firstYear, lastYear }) {
                         <span className="chart-card__hint">% of year total</span>
                     </div>
                     <div className="chart-card__body">
-                        <ChartBoundary data={weekdayData} />
+                        <ChartBoundary>
+                            <BarChart
+                                h="100%"
+                                data={weekdayData}
+                                dataKey="day"
+                                series={[{ name: "Share", color: PALETTE[0] }]}
+                                barProps={{ shape: perRowColor("color") }}
+                                unit="%"
+                                {...cartesian}
+                            />
+                        </ChartBoundary>
                     </div>
                 </div>
 
@@ -362,7 +307,16 @@ export default function AnalyticsPage({ results, firstYear, lastYear }) {
                         <div className="chart-card__title">Spending by day of month · {year}</div>
                     </div>
                     <div className="chart-card__body">
-                        <ChartBoundary data={domData} />
+                        <ChartBoundary>
+                            <BarChart
+                                h="100%"
+                                data={domData}
+                                dataKey="day"
+                                series={[{ name: "Spent", color: PALETTE[0] }]}
+                                gridAxis="x"
+                                {...cartesian}
+                            />
+                        </ChartBoundary>
                     </div>
                 </div>
 
@@ -372,7 +326,17 @@ export default function AnalyticsPage({ results, firstYear, lastYear }) {
                     </div>
                     <div className="chart-card__body">
                         {merchants.length ? (
-                            <ChartBoundary data={merchantsData} />
+                            <ChartBoundary>
+                                <BarChart
+                                    h="100%"
+                                    orientation="vertical"
+                                    data={merchantsData}
+                                    dataKey="name"
+                                    series={[{ name: "Spent", color: SERIES.accent }]}
+                                    yAxisProps={{ width: 110 }}
+                                    {...cartesian}
+                                />
+                            </ChartBoundary>
                         ) : (
                             <div className="chart-card__empty">
                                 No categorized expenses in {year}

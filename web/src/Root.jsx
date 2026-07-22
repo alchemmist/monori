@@ -1,5 +1,4 @@
-import { Suspense, lazy, useState } from "react";
-import { ThemeProvider } from "@gravity-ui/uikit";
+import { Suspense, lazy, useLayoutEffect, useState } from "react";
 import { Loader, MantineProvider } from "@mantine/core";
 import { Notifications } from "@mantine/notifications";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
@@ -39,40 +38,42 @@ export default function Root() {
             return next;
         });
 
-    // the gravity ThemeProvider stays for @gravity-ui/charts: its tooltips need
-    // the uikit theme context, and it keeps .g-root_theme_* on <body> — the
-    // classes every stylesheet keys its dark variant off (goes away with charts)
+    // the whole app keys its dark variant off body.theme-dark; keep that class in
+    // sync with the theme state (an inline script in index.html sets it pre-paint)
+    useLayoutEffect(() => {
+        document.body.classList.toggle("theme-dark", theme === "dark");
+    }, [theme]);
+
+    // MantineProvider drives its own dark styles via data-mantine-color-scheme
     return (
-        <ThemeProvider theme={theme}>
-            <MantineProvider theme={mantineTheme} forceColorScheme={theme}>
-                <BrowserRouter>
-                    <Suspense
-                        fallback={
-                            <div style={{ display: "grid", placeItems: "center", height: "100vh" }}>
-                                <Loader size="lg" type="bars" />
-                            </div>
-                        }
-                    >
-                        <Routes>
-                            {/* marketing landing + documentation share the docs Shell */}
-                            <Route element={<Shell theme={theme} onToggleTheme={toggleTheme} />}>
-                                <Route path="/welcome" element={<Landing />} />
-                                <Route
-                                    path="/docs"
-                                    element={<Navigate to="/docs/getting-started" replace />}
-                                />
-                                <Route path="/docs/:slug" element={<MarkdownPage />} />
-                            </Route>
-                            {/* everything else is the app itself (auth, demo, panel) */}
+        <MantineProvider theme={mantineTheme} forceColorScheme={theme}>
+            <BrowserRouter>
+                <Suspense
+                    fallback={
+                        <div style={{ display: "grid", placeItems: "center", height: "100vh" }}>
+                            <Loader size="lg" type="bars" />
+                        </div>
+                    }
+                >
+                    <Routes>
+                        {/* marketing landing + documentation share the docs Shell */}
+                        <Route element={<Shell theme={theme} onToggleTheme={toggleTheme} />}>
+                            <Route path="/welcome" element={<Landing />} />
                             <Route
-                                path="*"
-                                element={<App theme={theme} onToggleTheme={toggleTheme} />}
+                                path="/docs"
+                                element={<Navigate to="/docs/getting-started" replace />}
                             />
-                        </Routes>
-                    </Suspense>
-                </BrowserRouter>
-                <Notifications position="bottom-right" />
-            </MantineProvider>
-        </ThemeProvider>
+                            <Route path="/docs/:slug" element={<MarkdownPage />} />
+                        </Route>
+                        {/* everything else is the app itself (auth, demo, panel) */}
+                        <Route
+                            path="*"
+                            element={<App theme={theme} onToggleTheme={toggleTheme} />}
+                        />
+                    </Routes>
+                </Suspense>
+            </BrowserRouter>
+            <Notifications position="bottom-right" />
+        </MantineProvider>
     );
 }

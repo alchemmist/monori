@@ -8,6 +8,16 @@
     </head>
     <body>
         <div id="root"></div>
+        <script>
+            // set the theme class before paint so dark users never see a light flash
+            try {
+                if ((localStorage.getItem("theme") || "light") === "dark") {
+                    document.body.classList.add("theme-dark");
+                }
+            } catch (e) {
+                /* storage unavailable — Root syncs the class on mount */
+            }
+        </script>
         <script type="module" src="/src/main.jsx"></script>
     </body>
 </html>
