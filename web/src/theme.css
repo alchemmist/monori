@@ -1,28 +1,31 @@
-@import url("@fontsource-variable/inter");
+@import url("@fontsource/inter/400.css");
+@import url("@fontsource/inter/500.css");
+@import url("@fontsource/inter/600.css");
+@import url("@fontsource/inter/700.css");
+@import url("@fontsource/inter/800.css");
 
 /*
  * monori "Mono" design system — near-monochrome neutrals with a single sharp
  * orange accent, sharp corners, large tabular numbers. Semantic --m-* tokens
- * drive the app's own CSS; a handful of Gravity --g-* vars are overridden so
- * stock Gravity widgets (Button, Select, SegmentedRadioGroup) adopt the accent.
- * Light is the default; dark is the toggled variant.
+ * drive the app's own CSS. The former Gravity --g-* vars are now defined here
+ * too: the app is off @gravity-ui/uikit, so these are our own tokens that the
+ * Mantine skin (ui/mantine.css) and a few charts still read. Light is the
+ * default; dark is the toggled variant, keyed off body.theme-dark (set by Root).
  */
 
-/* ---------- shared, theme-independent ---------- */
-:root,
-.g-root {
+/* ---------- LIGHT (default) + theme-independent tokens ---------- */
+:root {
     --m-radius: 6px;
     --m-radius-sm: 5px;
-    --m-accent: #ef5a17;
     --m-accent-contrast: #fff;
     --m-title-weight: 800;
     --m-num-weight: 800;
-}
 
-/* ---------- LIGHT (default) ---------- */
-:root,
-.g-root,
-.g-root_theme_light {
+    --g-font-family-sans: "Inter", "Helvetica Neue", "Helvetica", "Arial", sans-serif;
+    --g-font-family-monospace:
+        "Menlo", "Monaco", "Consolas", "Liberation Mono", "Ubuntu Mono", "DejaVu Sans Mono",
+        "Courier New", "Courier", monospace;
+
     --m-bg: #fff;
     --m-surface: #fff;
     --m-surface-hover: #f7f7f6;
@@ -43,7 +46,7 @@
     --m-card-border: var(--m-border);
     --m-sidebar-edge: var(--m-border-soft);
 
-    /* Gravity widget alignment */
+    /* accent-tuned brand tokens (drive the Mantine skin's filled/selection look) */
     --g-color-base-brand: #ef5a17;
     --g-color-base-brand-hover: #d94e10;
     --g-color-line-brand: #ef5a17;
@@ -54,17 +57,43 @@
     --g-color-text-brand-contrast: #fff;
     --g-color-base-selection: #ffe6d9;
     --g-color-base-selection-hover: #ffd9c5;
+
+    /* neutral / semantic tokens the skin and charts read (former uikit values) */
+    --g-color-base-danger-light: rgb(255, 0, 61, 0.15);
+    --g-color-base-float: rgb(255, 255, 255);
+    --g-color-base-generic: rgb(0, 0, 0, 0.05);
+    --g-color-base-generic-accent-disabled: rgb(0, 0, 0, 0.07);
+    --g-color-base-generic-hover: rgb(0, 0, 0, 0.15);
+    --g-color-base-info-light: rgb(54, 151, 241, 0.15);
+    --g-color-base-neutral-light: rgb(0, 0, 0, 0.05);
+    --g-color-base-positive-light: rgb(50, 186, 118, 0.15);
+    --g-color-base-simple-hover: rgb(0, 0, 0, 0.05);
+    --g-color-base-warning-light: rgb(255, 190, 92, 0.3);
+    --g-color-line-danger: rgb(255, 0, 61, 0.8);
+    --g-color-line-generic: rgb(0, 0, 0, 0.1);
+    --g-color-line-generic-active: rgb(0, 0, 0, 0.3);
+    --g-color-line-generic-hover: rgb(0, 0, 0, 0.15);
+    --g-color-sfx-fade: rgb(255, 255, 255, 0.3);
+    --g-color-text-complementary: rgb(0, 0, 0, 0.7);
+    --g-color-text-danger: rgb(233, 3, 58);
+    --g-color-text-danger-heavy: rgb(189, 9, 53);
+    --g-color-text-hint: rgb(0, 0, 0, 0.3);
+    --g-color-text-info-heavy: rgb(48, 114, 179);
+    --g-color-text-positive: rgb(48, 170, 110);
+    --g-color-text-positive-heavy: rgb(45, 139, 93);
+    --g-color-text-secondary: rgb(0, 0, 0, 0.5);
+    --g-color-text-warning: rgb(189, 142, 75);
+    --g-color-text-warning-heavy: rgb(189, 92, 10);
 }
 
 /* ---------- DARK ---------- */
 
 /*
- * "Aurora" dark theme: a deep violet-tinted canvas lit by a soft glow in the
- * top-right (set on the body below), with frosted-glass cards that sit a step
- * lighter than the canvas. Neutrals carry a faint violet cast; the orange
- * accent and green/red money colors are unchanged.
+ * Dark theme: a flat, deep near-black canvas (the approved look) with
+ * frosted-glass cards that sit a step lighter than the canvas. Neutrals carry a
+ * faint violet cast; the orange accent and green/red money colors are unchanged.
  */
-.g-root_theme_dark {
+.theme-dark {
     --m-bg: #08070d;
     --m-surface: #0d0b15;
     --m-surface-hover: #191426;
@@ -82,7 +111,7 @@
     --m-income-soft: #16281c;
     --m-expense-soft: #331919;
 
-    /* cards are frosted glass over the aurora canvas — a translucent white lift */
+    /* cards are frosted glass over the dark canvas — a translucent white lift */
     --m-card-bg: rgb(255, 255, 255, 0.04);
     --m-card-border: rgb(255, 255, 255, 0.065);
     --m-sidebar-edge: var(--m-border);
@@ -97,6 +126,32 @@
     --g-color-text-brand-contrast: #0a0a0a;
     --g-color-base-selection: #3a1e10;
     --g-color-base-selection-hover: #4a2614;
+
+    --g-color-base-danger-light: rgb(229, 50, 93, 0.2);
+    --g-color-base-float: rgb(56, 52, 56);
+    --g-color-base-generic: rgb(255, 255, 255, 0.1);
+    --g-color-base-generic-accent-disabled: rgb(255, 255, 255, 0.07);
+    --g-color-base-generic-hover: rgb(255, 255, 255, 0.15);
+    --g-color-base-info-light: rgb(54, 151, 241, 0.2);
+    --g-color-base-neutral-light: rgb(255, 255, 255, 0.1);
+    --g-color-base-positive-light: rgb(77, 176, 155, 0.2);
+    --g-color-base-simple-hover: rgb(255, 255, 255, 0.1);
+    --g-color-base-warning-light: rgb(255, 190, 92, 0.2);
+    --g-color-line-danger: rgb(229, 50, 93, 0.8);
+    --g-color-line-generic: rgb(255, 255, 255, 0.15);
+    --g-color-line-generic-active: rgb(255, 255, 255, 0.3);
+    --g-color-line-generic-hover: rgb(255, 255, 255, 0.25);
+    --g-color-sfx-fade: rgb(255, 255, 255, 0.25);
+    --g-color-text-complementary: rgb(255, 255, 255, 0.7);
+    --g-color-text-danger: rgb(229, 50, 93);
+    --g-color-text-danger-heavy: rgb(232, 71, 109);
+    --g-color-text-hint: rgb(255, 255, 255, 0.3);
+    --g-color-text-info-heavy: rgb(74, 161, 242);
+    --g-color-text-positive: rgb(77, 176, 155);
+    --g-color-text-positive-heavy: rgb(95, 184, 165);
+    --g-color-text-secondary: rgb(255, 255, 255, 0.5);
+    --g-color-text-warning: rgb(255, 190, 92);
+    --g-color-text-warning-heavy: rgb(255, 197, 108);
 }
 
 html,
@@ -109,20 +164,27 @@ body {
     -webkit-font-smoothing: antialiased;
 }
 
+/* gravity's .g-root set the base text metrics the whole app was designed
+   against; reproduce them now that uikit is gone. html stays 14px as the rem
+   base Mantine's scale counts on; body carries the 13px / 18px text metrics. */
+body {
+    font-size: 13px;
+    line-height: 18px;
+}
+
 #root {
     min-height: 100vh;
 }
 
-/* aurora canvas: a soft violet glow in the top-right, fixed to the viewport so
-   it reads as a lit backdrop rather than tiling on scroll (dark theme only) */
-body:has(.g-root_theme_dark) {
-    background: radial-gradient(120% 90% at 82% -12%, #17102a 0%, #0a0812 46%, #060509 100%);
-    background-attachment: fixed;
+/* flat dark canvas — the approved look. (Previously this was gravity's default
+   base background; now that uikit is gone we set it explicitly.) */
+body.theme-dark {
+    background: #221d22;
 }
 
-/* frosted-glass cards over the aurora: the translucent --m-card-bg is blurred
+/* frosted-glass cards over the canvas: the translucent --m-card-bg is blurred
    and lifted with a soft drop shadow so panels feel like glass, not black tiles */
-.g-root_theme_dark .card {
+.theme-dark .card {
     border-radius: 12px;
     backdrop-filter: blur(7px);
     box-shadow: 0 14px 34px -20px rgb(0 0 0 / 90%);

@@ -325,12 +325,12 @@
    reads as frosted glass (same as the budget card). A tinted column bg would sit
    between card and canvas and flatten that lift, so keep columns transparent with
    just a faint outline. ---- */
-.g-root_theme_dark .kb-col {
+.theme-dark .kb-col {
     background: transparent;
     border-color: var(--m-card-border);
 }
 
-.g-root_theme_dark .kb-card {
+.theme-dark .kb-card {
     background: rgb(255 255 255 / 9%);
     border-color: rgb(255 255 255 / 12%);
     border-radius: 10px;
@@ -338,17 +338,17 @@
     box-shadow: 0 14px 34px -20px rgb(0 0 0 / 90%);
 }
 
-.g-root_theme_dark .kb-card:hover {
+.theme-dark .kb-card:hover {
     border-color: var(--m-accent);
 }
 
-.g-root_theme_dark .kb-board_dragging .kb-card:hover {
+.theme-dark .kb-board_dragging .kb-card:hover {
     border-color: rgb(255 255 255 / 12%);
     box-shadow: none;
 }
 
-.g-root_theme_dark .kb-newgroup,
-.g-root_theme_dark .kb-col_add {
+.theme-dark .kb-newgroup,
+.theme-dark .kb-col_add {
     background: var(--m-card-bg);
     border-color: var(--m-card-border);
 }

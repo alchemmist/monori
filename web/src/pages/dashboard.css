@@ -125,10 +125,22 @@
 
 .chart-card__body {
     height: 280px;
+
+    /* Mono grid/axis-text colors for the Mantine charts (inherited into the SVG) */
+    --chart-grid-color: var(--m-border-soft);
+    --chart-text-color: var(--m-text-dim);
 }
 
 .chart-card__body_tall {
     height: 320px;
+}
+
+/* the donut is a fixed-size chart (unlike the responsive cartesian ones), so
+   center it and let its legend sit underneath */
+.chart-donut {
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 @media (width <= 1100px) {
