@@ -4,6 +4,7 @@ import InlineSelect from "../ui/InlineSelect.jsx";
 import RowMenu from "../ui/RowMenu.jsx";
 import { Plus, ChevronDown, EllipsisVertical } from "@gravity-ui/icons";
 import { useStore } from "../store.js";
+import { orderedGroups, categoriesByGroup } from "../categoryOrder.js";
 import { MONTHS_SHORT, MONTHS, rub } from "../format.js";
 import BudgetCell from "../components/BudgetCell.jsx";
 import { Money, BalancePill } from "../components/Money.jsx";
@@ -30,16 +31,10 @@ export default function BudgetPage({ results, firstYear, lastYear }) {
 
     const res = results.get(year);
     const groups = useMemo(
-        () => snapshot.groups.filter((g) => g.kind === "expense"),
-        [snapshot.groups],
+        () => orderedGroups(snapshot).filter((g) => g.kind === "expense"),
+        [snapshot],
     );
-    const catsByGroup = useMemo(() => {
-        const m = new Map(groups.map((g) => [g.id, []]));
-        for (const c of snapshot.categories) {
-            if (m.has(c.groupId)) m.get(c.groupId).push(c);
-        }
-        return m;
-    }, [snapshot.categories, groups]);
+    const catsByGroup = useMemo(() => categoriesByGroup(snapshot, groups), [snapshot, groups]);
 
     const txCountByCat = useMemo(() => {
         const m = new Map();
