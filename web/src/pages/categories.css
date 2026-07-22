@@ -376,7 +376,7 @@ body.kb-grabbing * {
    just a faint outline. ---- */
 .theme-dark .kb-col {
     background: transparent;
-    border-color: var(--m-card-border);
+    border-color: rgb(255 255 255 / 10%);
 }
 
 .theme-dark .kb-card {
