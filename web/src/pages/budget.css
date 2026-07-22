@@ -131,12 +131,20 @@
     border-radius: 0;
 }
 
-/* outspecify `.theme-dark .card` (two classes) so the glass shadow and the 12px
-   radius don't come back on the full-bleed table — the rounded corners would
-   expose the card's gray fill where the square grid doesn't follow the curve */
+/* full-bleed table with rounded top corners only; drop the glass shadow. The
+   header cells round their outer top corners to match, so the card's gray fill
+   never peeks through where the square grid meets the curve. */
 .theme-dark .card.tx-table {
     box-shadow: none;
-    border-radius: 0;
+    border-radius: 12px 12px 0 0;
+}
+
+.theme-dark .tx-table .tx-grid thead th:first-child {
+    border-top-left-radius: 12px;
+}
+
+.theme-dark .tx-table .tx-grid thead th:last-child {
+    border-top-right-radius: 12px;
 }
 
 @media (width <= 760px) {
