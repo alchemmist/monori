@@ -418,17 +418,26 @@ export default function DashboardPage({ firstYear, lastYear }) {
                         <ChartBoundary>
                             <DonutChart
                                 data={donutData}
-                                size={200}
-                                thickness={38}
+                                size={196}
+                                thickness={36}
                                 paddingAngle={0}
                                 strokeWidth={2}
                                 strokeColor="var(--m-surface)"
-                                withLegend
-                                legendProps={{ verticalAlign: "bottom", height: 60 }}
                                 tooltipDataSource="segment"
                                 valueFormatter={(v) => `${v.toLocaleString("ru-RU")} ₽`}
                             />
                         </ChartBoundary>
+                        <ul className="donut-legend">
+                            {donutData.map((d) => (
+                                <li key={d.name}>
+                                    <span
+                                        className="donut-legend__dot"
+                                        style={{ background: d.color }}
+                                    />
+                                    {d.name}
+                                </li>
+                            ))}
+                        </ul>
                     </div>
                 </div>
 
