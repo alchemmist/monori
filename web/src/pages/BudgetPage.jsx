@@ -31,10 +31,13 @@ export default function BudgetPage({ results, firstYear, lastYear }) {
 
     const res = results.get(year);
     const groups = useMemo(
-        () => orderedGroups(snapshot).filter((g) => g.kind === "expense"),
-        [snapshot],
+        () => orderedGroups(snapshot.groups).filter((g) => g.kind === "expense"),
+        [snapshot.groups],
     );
-    const catsByGroup = useMemo(() => categoriesByGroup(snapshot, groups), [snapshot, groups]);
+    const catsByGroup = useMemo(
+        () => categoriesByGroup(snapshot.categories, groups),
+        [snapshot.categories, groups],
+    );
 
     const txCountByCat = useMemo(() => {
         const m = new Map();

@@ -64,7 +64,11 @@ export default function InlineSelect({
     }, [combobox.dropdownOpened]);
 
     const renderOption = (o) => (
-        <Combobox.Option key={o.value} value={o.value} data-selected={o.value === value || undefined}>
+        <Combobox.Option
+            key={o.value}
+            value={o.value}
+            data-selected={o.value === value || undefined}
+        >
             {o.label}
         </Combobox.Option>
     );
