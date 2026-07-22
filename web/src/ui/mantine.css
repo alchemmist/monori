@@ -244,11 +244,11 @@ textarea.mi-input__field {
     height: 24px;
 }
 
-.gsel_clear {
+.gsel_borderless {
     border-color: transparent;
 }
 
-.gsel_clear:hover {
+.gsel_borderless:hover {
     border-color: var(--g-color-line-generic);
 }
 

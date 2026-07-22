@@ -245,7 +245,7 @@ export default function TransactionsPage() {
                                     ) : (
                                         <InlineSelect
                                             small
-                                            clear
+                                            borderless
                                             value={t.accountId != null ? String(t.accountId) : null}
                                             onChange={(v) => v && setTxAccount(t.id, +v)}
                                             data={acctOptionsFor(t)}
@@ -262,7 +262,7 @@ export default function TransactionsPage() {
                                     ) : (
                                         <InlineSelect
                                             small
-                                            clear
+                                            borderless
                                             searchable
                                             placeholder="—"
                                             value={

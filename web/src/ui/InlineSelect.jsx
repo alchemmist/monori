@@ -3,9 +3,9 @@ import { Combobox, useCombobox } from "@mantine/core";
 import { ChevronDown } from "@gravity-ui/icons";
 
 /* Auto-width select rendered as a button (value + chevron hugging), the way
- * the gravity Select control looked. `clear` drops the border for table rows,
- * `small` is the compact 24px size, `searchable` adds a search box on top of
- * the dropdown. */
+ * the gravity Select control looked. `borderless` drops the border for table
+ * rows, `small` is the compact 24px size, `searchable` adds a search box on
+ * top of the dropdown. */
 export default function InlineSelect({
     value,
     onChange,
@@ -13,7 +13,7 @@ export default function InlineSelect({
     searchable = false,
     placeholder = "—",
     small = false,
-    clear = false,
+    borderless = false,
     className = "",
 }) {
     const [search, setSearch] = useState("");
@@ -43,7 +43,12 @@ export default function InlineSelect({
             <Combobox.Target>
                 <button
                     type="button"
-                    className={["gsel", small && "gsel_s", clear && "gsel_clear", className]
+                    className={[
+                        "gsel",
+                        small && "gsel_s",
+                        borderless && "gsel_borderless",
+                        className,
+                    ]
                         .filter(Boolean)
                         .join(" ")}
                     onClick={() => combobox.toggleDropdown()}
