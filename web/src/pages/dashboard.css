@@ -201,13 +201,13 @@
 .mantine-ChartTooltip-tooltip {
     padding: 8px 10px;
 
-    /* frosted glass, same lift as the kanban cards — the tooltip floats over the
-       chart (not inside a scroll container), so the Chrome sticky-blur bug that
-       forced opaque surfaces on the budget grid doesn't apply here */
-    background: color-mix(in srgb, var(--m-surface) 88%, transparent);
-    backdrop-filter: blur(18px);
-    border: 1px solid var(--m-border);
-    box-shadow: 0 12px 30px -10px rgb(0 0 0 / 22%);
+    /* shared --glass-* recipe (see theme.css); the tooltip floats over the chart
+       (not inside a scroll container), so the Chrome sticky-blur bug that forced
+       opaque surfaces on the budget grid doesn't apply here */
+    background: var(--glass-fill);
+    backdrop-filter: blur(var(--glass-blur));
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--glass-shadow);
 }
 
 .mantine-ChartTooltip-tooltipLabel {

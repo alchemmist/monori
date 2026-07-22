@@ -163,7 +163,7 @@
     border-color: rgb(255 255 255 / 9%);
     color: #f2f1f6;
     box-shadow: none;
-    backdrop-filter: blur(7px);
+    backdrop-filter: blur(var(--glass-blur));
 }
 
 .theme-dark .login__input::placeholder {
