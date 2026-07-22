@@ -55,7 +55,7 @@
     --glass-blur: 8px;
     --glass-fill: rgb(255 255 255 / 72%);
     --glass-border: rgb(0 0 0 / 8%);
-    --glass-shadow: 0 16px 38px -12px rgb(0 0 0 / 18%);
+    --glass-shadow: 0 16px 38px -12px rgb(0 0 0 / 9%);
 
     /* accent-tuned brand tokens (drive the Mantine skin's filled/selection look) */
     --g-color-base-brand: #ef5a17;
@@ -127,7 +127,7 @@
        every glass surface matches. */
     --glass-fill: rgb(44 38 46 / 38%);
     --glass-border: rgb(255 255 255 / 16%);
-    --glass-shadow: 0 16px 38px -12px rgb(0 0 0 / 80%);
+    --glass-shadow: 0 16px 38px -12px rgb(0 0 0 / 40%);
 
     --m-card-bg: var(--glass-fill);
     --m-card-border: var(--glass-border);
