@@ -51,9 +51,8 @@ def _categories_sheet(ws, snap):
         for cat in by_group[group["id"]]:
             ws.append([group["sort"], _text(display), _text(cat["name"]), _text(cat["keywords"])])
     ws.append([])
-    header_row = ws.max_row + 1
     ws.append(spec.GROUP_HEADERS)
-    for cell in ws[header_row]:
+    for cell in ws[ws.max_row]:
         cell.font = BOLD
     for group in snap["groups"]:
         ws.append(
