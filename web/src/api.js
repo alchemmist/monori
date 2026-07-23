@@ -167,4 +167,9 @@ export const api = {
     },
     authMe: (token) =>
         apiFetch("/api/auth/me", { headers: { Authorization: `Bearer ${token}` } }).then(json),
+    exportXlsx: async () => {
+        const r = await apiFetch("/api/export/xlsx");
+        if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+        return r.blob();
+    },
 };

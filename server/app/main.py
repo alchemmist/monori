@@ -15,6 +15,7 @@ from .routers import (
     budgets,
     categories,
     connections,
+    export,
     groups,
     imports,
     transactions,
@@ -50,6 +51,7 @@ for _router in (
     budgets.router,
     imports.router,
     connections.router,
+    export.router,
 ):
     app.include_router(_router, dependencies=[Depends(current_user)])
 
