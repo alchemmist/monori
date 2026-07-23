@@ -26,6 +26,12 @@ def _parse_dt(value: str) -> datetime.datetime:
         return datetime.datetime.fromisoformat(value[:10])
 
 
+def _text(value):
+    if isinstance(value, str) and value.startswith(("=", "+", "@")):
+        return "'" + value
+    return value
+
+
 def _money_cell(ws, row: int, col: int, kop: int):
     cell = ws.cell(row=row, column=col, value=spec.kop_to_rub(kop))
     cell.number_format = spec.MONEY_FORMAT
@@ -43,7 +49,7 @@ def _categories_sheet(ws, snap):
     for group in snap["groups"]:
         display = spec.group_display(group["name"], group["kind"])
         for cat in by_group[group["id"]]:
-            ws.append([group["sort"], display, cat["name"], cat["keywords"]])
+            ws.append([group["sort"], _text(display), _text(cat["name"]), _text(cat["keywords"])])
     ws.append([])
     header_row = ws.max_row + 1
     ws.append(spec.GROUP_HEADERS)
@@ -52,7 +58,7 @@ def _categories_sheet(ws, snap):
     for group in snap["groups"]:
         ws.append(
             [
-                spec.group_display(group["name"], group["kind"]),
+                _text(spec.group_display(group["name"], group["kind"])),
                 group["sort"],
                 spec.group_type(group["kind"]),
             ]
@@ -79,12 +85,12 @@ def _transactions_sheet(ws, snap, cat_names, acct_names, acct_currency):
         ws.cell(row=row, column=8, value=f"{rub:.2f} ₽")
         ws.cell(row=row, column=9, value=currency)
         ws.cell(row=row, column=10, value="")
-        ws.cell(row=row, column=11, value=tx["bankCategory"])
-        ws.cell(row=row, column=12, value=tx["mcc"])
-        ws.cell(row=row, column=13, value=tx["description"])
-        ws.cell(row=row, column=14, value=cat_names.get(tx["categoryId"], ""))
-        ws.cell(row=row, column=15, value=acct_names.get(tx["accountId"], ""))
-        ws.cell(row=row, column=16, value=tx["comment"])
+        ws.cell(row=row, column=11, value=_text(tx["bankCategory"]))
+        ws.cell(row=row, column=12, value=_text(tx["mcc"]))
+        ws.cell(row=row, column=13, value=_text(tx["description"]))
+        ws.cell(row=row, column=14, value=_text(cat_names.get(tx["categoryId"], "")))
+        ws.cell(row=row, column=15, value=_text(acct_names.get(tx["accountId"], "")))
+        ws.cell(row=row, column=16, value=_text(tx["comment"]))
         row += 1
     ws.freeze_panes = "A2"
 
@@ -129,12 +135,14 @@ def _year_sheet(ws, year, snap, activity, budgets):
         cats = by_group[group["id"]]
         if not cats:
             continue
-        label = ws.cell(row=row, column=1, value=spec.group_display(group["name"], group["kind"]))
+        label = ws.cell(
+            row=row, column=1, value=_text(spec.group_display(group["name"], group["kind"]))
+        )
         label.font = BOLD
         row += 1
         expense = group["kind"] == "expense"
         for cat in cats:
-            ws.cell(row=row, column=1, value=cat["name"])
+            ws.cell(row=row, column=1, value=_text(cat["name"]))
             balance = 0
             total_out = 0
             for m in range(1, 13):
@@ -182,12 +190,16 @@ def _dashdata_sheet(ws, snap, activity):
     for cell in ws[1]:
         cell.font = BOLD
     monthly: defaultdict[tuple[int, int], list[int]] = defaultdict(lambda: [0, 0])
+    kinds = {g["id"]: g["kind"] for g in snap["groups"]}
+    cat_kind = {c["id"]: kinds[c["groupId"]] for c in snap["categories"]}
     for tx in snap["transactions"]:
         if tx["transferId"]:
             continue
         dt = _parse_dt(tx["date"])
         key = (dt.year, dt.month)
-        if tx["amount"] > 0:
+        kind = cat_kind.get(tx["categoryId"])
+        income = kind == "income" if kind else tx["amount"] > 0
+        if income:
             monthly[key][0] += tx["amount"]
         else:
             monthly[key][1] -= tx["amount"]
@@ -212,7 +224,7 @@ def _dashdata_sheet(ws, snap, activity):
             ws.cell(row=row, column=2 + i, value=year).font = BOLD
         for cat in snap["categories"]:
             row += 1
-            ws.cell(row=row, column=1, value=cat["name"])
+            ws.cell(row=row, column=1, value=_text(cat["name"]))
             for i, year in enumerate(years):
                 total = sum(activity.get((cat["id"], year, m), 0) for m in range(1, 13))
                 _money_cell(ws, row, 2 + i, total)

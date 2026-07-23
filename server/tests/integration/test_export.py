@@ -92,7 +92,14 @@ def test_export_dashdata_sheet(api, client):
     assert row[0] == "2026-01"
     assert row[1] == 5000.0
     assert row[2] == 125.5
+    assert row[3] == round(125.5 / 5000.0, 2)
     assert row[4] == 4874.5
+    rows = [[c.value for c in r] for r in ws.iter_rows(min_row=3)]
+    header_idx = next(i for i, r in enumerate(rows) if r[0] == "Category")
+    assert rows[header_idx][1] == 2026
+    by_cat = {r[0]: r[1] for r in rows[header_idx + 1 :]}
+    assert by_cat["Groceries"] == -125.5
+    assert by_cat["Salary"] == 5000.0
 
 
 def test_export_excludes_transfers_from_dashdata(api, client):
@@ -113,3 +120,37 @@ def test_export_requires_auth(anon):
 def test_export_empty_user(client):
     wb = _export(client)
     assert wb.sheetnames == ["Categories", "Transactions", "DashData"]
+    assert [c.value for c in wb["Categories"][1]] == [
+        "Sort Order",
+        "Category Group",
+        "Category",
+        "Keywords",
+    ]
+    assert wb["Transactions"].cell(row=1, column=1).value == "Дата операции"
+    assert [c.value for c in wb["DashData"][1]] == ["Month", "Income", "Expense", "Ratio", "CumNet"]
+
+
+def test_export_escapes_formula_prefixes(api, client):
+    cat, acct = _setup(api, client)
+    api.tx(
+        "2026-02-01T10:00:00",
+        -100,
+        accountId=acct,
+        categoryId=cat,
+        description="=HYPERLINK(evil)",
+        comment="+SUM(A1)",
+    )
+    ws = _export(client)["Transactions"]
+    descriptions = {ws.cell(row=r, column=13).value for r in range(2, ws.max_row + 1)}
+    comments = {ws.cell(row=r, column=16).value for r in range(2, ws.max_row + 1)}
+    assert "'=HYPERLINK(evil)" in descriptions
+    assert "'+SUM(A1)" in comments
+
+
+def test_export_dashdata_refund_reduces_expense(api, client):
+    cat, acct = _setup(api, client)
+    api.tx("2026-01-20T10:00:00", 2550, accountId=acct, categoryId=cat, description="Refund")
+    ws = _export(client)["DashData"]
+    row = [c.value for c in ws[2]]
+    assert row[1] == 5000.0
+    assert row[2] == 100.0
