@@ -24,10 +24,14 @@ export default function AccountsPage() {
 
     const accounts = snapshot.accounts ?? [];
     const connByAccount = useMemo(() => {
+        const byId = new Map((snapshot.connections ?? []).map((c) => [c.id, c]));
         const m = new Map();
-        for (const c of snapshot.connections ?? []) m.set(c.accountId, c);
+        for (const a of snapshot.accounts ?? []) {
+            const conn = a.connectionId != null ? byId.get(a.connectionId) : null;
+            if (conn) m.set(a.id, conn);
+        }
         return m;
-    }, [snapshot.connections]);
+    }, [snapshot.connections, snapshot.accounts]);
     const balances = useMemo(() => accountBalances(snapshot), [snapshot]);
     const txCounts = useMemo(() => {
         const m = new Map();

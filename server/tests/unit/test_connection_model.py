@@ -1,10 +1,45 @@
-"""Unit tests for the connections router's request models."""
+"""Unit tests for the connections router's credential validation and the
+connector registry's parameter declarations."""
 
-from app.routers.connections import Credentials
+import pytest
+from fastapi import HTTPException
+
+import app.connectors.fake  # noqa: F401
+from app.connectors.base import available_connectors
+from app.routers.connections import _validate_credentials
 
 
-def test_credentials_normalize_blank_account_to_none():
-    assert Credentials(phone="+7", password="p", account="  5858870594 ").account == "5858870594"
-    assert Credentials(phone="+7", password="p", account="   ").account is None
-    assert Credentials(phone="+7", password="p", account="").account is None
-    assert Credentials(phone="+7", password="p").account is None
+def test_validate_credentials_requires_declared_fields():
+    with pytest.raises(HTTPException) as e:
+        _validate_credentials("tbank", "playwright", {"phone": "+7"})
+    assert e.value.status_code == 400
+    assert "password" in e.value.detail
+
+
+def test_validate_credentials_rejects_blank_required():
+    with pytest.raises(HTTPException) as e:
+        _validate_credentials("tbank", "playwright", {"phone": "  ", "password": "p"})
+    assert "phone" in e.value.detail
+
+
+def test_validate_credentials_accepts_complete_set():
+    _validate_credentials("tbank", "playwright", {"phone": "+7", "password": "p"})
+
+
+def test_validate_credentials_unknown_connector():
+    with pytest.raises(HTTPException) as e:
+        _validate_credentials("nope", "nope", {})
+    assert e.value.status_code == 400
+
+
+def test_available_connectors_declare_params_and_hide_fake():
+    conns = available_connectors()
+    banks = {c["bank"] for c in conns}
+    assert "fake" not in banks
+    tbank = next(c for c in conns if c["bank"] == "tbank")
+    assert tbank["label"]
+    names = {p["name"] for p in tbank["connectionParams"]}
+    assert {"phone", "password"} <= names
+    secret = {p["name"]: p["secret"] for p in tbank["connectionParams"]}
+    assert secret["password"] is True
+    assert [p["name"] for p in tbank["accountParams"]] == ["account"]

@@ -26,6 +26,8 @@ class AccountBody(BaseModel):
     currency: str = Field(default="RUB", min_length=1, max_length=8)
     openingBalance: int = 0
     openingDate: str | None = None
+    connectionId: int | None = None
+    bankRef: str = Field(default="", max_length=64)
 
 
 class AccountPatch(BaseModel):
@@ -39,6 +41,16 @@ class AccountPatch(BaseModel):
     openingBalance: int | None = None
     openingDate: str | None = None
     archived: bool | None = None
+    # None = leave as is, 0 = unlink from its bank connection
+    connectionId: int | None = None
+    bankRef: str | None = Field(default=None, max_length=64)
+
+
+def _owned_connection(c, connection_id, uid):
+    if not c.execute(
+        "SELECT id FROM bank_connections WHERE id=? AND user_id=?", (connection_id, uid)
+    ).fetchone():
+        raise HTTPException(400, "unknown connection")
 
 
 def _validate_color(color):
@@ -72,7 +84,8 @@ def list_accounts(user: Annotated[dict, Depends(current_user)]):
             serialize_account(r)
             for r in c.execute(
                 "SELECT id, name, type, icon, color, icon_image, currency, sort, archived,"
-                " opening_balance, opening_date FROM accounts WHERE user_id=? ORDER BY sort, id",
+                " opening_balance, opening_date, connection_id, bank_ref"
+                " FROM accounts WHERE user_id=? ORDER BY sort, id",
                 (uid,),
             )
         ]
@@ -93,14 +106,16 @@ def create_account(body: AccountBody, user: Annotated[dict, Depends(current_user
             "SELECT id FROM accounts WHERE user_id=? AND name=?", (uid, body.name)
         ).fetchone():
             raise HTTPException(409, "account with this name already exists")
+        if body.connectionId:
+            _owned_connection(c, body.connectionId, uid)
         max_sort = c.execute(
             "SELECT COALESCE(MAX(sort),0) FROM accounts WHERE user_id=?", (uid,)
         ).fetchone()[0]
         cur = c.execute(
             """INSERT INTO accounts
                (user_id, name, type, icon, color, icon_image, currency, opening_balance,
-                opening_date, sort)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                opening_date, sort, connection_id, bank_ref)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 uid,
                 body.name,
@@ -112,6 +127,8 @@ def create_account(body: AccountBody, user: Annotated[dict, Depends(current_user
                 body.openingBalance,
                 body.openingDate,
                 max_sort + 1,
+                body.connectionId or None,
+                body.bankRef.strip(),
             ),
         )
         c.commit()
@@ -169,6 +186,20 @@ def patch_account(
             c.execute(
                 "UPDATE accounts SET archived=? WHERE id=?",
                 (1 if patch.archived else 0, account_id),
+            )
+        if patch.connectionId is not None:
+            if patch.connectionId == 0:
+                c.execute("UPDATE accounts SET connection_id=NULL WHERE id=?", (account_id,))
+            else:
+                _owned_connection(c, patch.connectionId, uid)
+                c.execute(
+                    "UPDATE accounts SET connection_id=? WHERE id=?",
+                    (patch.connectionId, account_id),
+                )
+        if patch.bankRef is not None:
+            c.execute(
+                "UPDATE accounts SET bank_ref=? WHERE id=?",
+                (patch.bankRef.strip(), account_id),
             )
         c.commit()
         return {"ok": True}

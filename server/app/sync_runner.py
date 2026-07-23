@@ -28,10 +28,10 @@ class LocalRunner:
     def __init__(self):
         self._pending: dict[int, connectors.Connector] = {}
 
-    def start(self, cid, bank, kind, credentials, session, since):
+    def start(self, cid, bank, kind, credentials, session, since, account_ref=None):
         self.cancel(cid)
         cls = connectors.get_connector_class(bank, kind)
-        connector = cls(credentials, session)
+        connector = cls(credentials, session, account_ref=account_ref)
         try:
             return connector.sync(since)
         except SmsRequired:
@@ -83,7 +83,7 @@ class RemoteRunner:
             raise SmsRequired(payload.get("message") or "code sent")
         raise ConnectorError(payload.get("message") or "sync failed")
 
-    def start(self, cid, bank, kind, credentials, session, since):
+    def start(self, cid, bank, kind, credentials, session, since, account_ref=None):
         try:
             r = self._client.post(
                 f"/runs/{cid}",
@@ -93,6 +93,7 @@ class RemoteRunner:
                     "credentials": credentials,
                     "session": session,
                     "since": since,
+                    "accountRef": account_ref,
                 },
             )
             r.raise_for_status()

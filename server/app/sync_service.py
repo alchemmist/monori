@@ -28,6 +28,7 @@ class RunBody(BaseModel):
     credentials: dict
     session: dict | None = None
     since: str | None = None
+    accountRef: str | None = None
 
 
 class SmsBody(BaseModel):
@@ -57,7 +58,7 @@ def start_run(cid: int, body: RunBody):
         cls = connectors.get_connector_class(body.bank, body.kind)
     except ConnectorError as e:
         return {"status": "error", "message": str(e)}
-    connector = cls(body.credentials, body.session)
+    connector = cls(body.credentials, body.session, account_ref=body.accountRef)
     try:
         return _done(connector.sync(body.since))
     except SmsRequired as e:
