@@ -132,6 +132,7 @@ export const api = {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ accountId, rows }),
         }).then(json),
+    connectionsAvailable: () => apiFetch("/api/connections/available").then(json),
     createConnection: (body) =>
         apiFetch("/api/connections", {
             method: "POST",

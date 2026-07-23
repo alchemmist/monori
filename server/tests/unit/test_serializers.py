@@ -56,6 +56,8 @@ def test_serialize_account():
         "archived": 0,
         "opening_balance": 12345,
         "opening_date": "2024-01-01",
+        "connection_id": 9,
+        "bank_ref": "5858870594",
     }
     assert serialize_account(row) == {
         "id": 5,
@@ -69,6 +71,8 @@ def test_serialize_account():
         "archived": False,
         "openingBalance": 12345,
         "openingDate": "2024-01-01",
+        "connectionId": 9,
+        "bankRef": "5858870594",
     }
 
 
@@ -85,6 +89,8 @@ def test_serialize_account_archived_true():
         "archived": 1,
         "opening_balance": 0,
         "opening_date": None,
+        "connection_id": None,
+        "bank_ref": "",
     }
     out = serialize_account(row)
     assert out["archived"] is True
@@ -133,7 +139,6 @@ def test_serialize_budget():
 def test_serialize_connection():
     row = {
         "id": 8,
-        "account_id": 2,
         "bank": "tbank",
         "kind": "playwright",
         "status": "connected",
@@ -145,7 +150,6 @@ def test_serialize_connection():
     }
     assert serialize_connection(row) == {
         "id": 8,
-        "accountId": 2,
         "bank": "tbank",
         "kind": "playwright",
         "status": "connected",
@@ -160,7 +164,6 @@ def test_serialize_connection():
 def test_serialize_connection_without_credentials_and_with_error():
     row = {
         "id": 8,
-        "account_id": 2,
         "bank": "tbank",
         "kind": "playwright",
         "status": "error",

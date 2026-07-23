@@ -39,13 +39,16 @@ CREATE TABLE IF NOT EXISTS accounts (
   icon TEXT NOT NULL DEFAULT 'wallet',
   color TEXT NOT NULL DEFAULT '#5b6472',
   icon_image TEXT,
+  connection_id INTEGER REFERENCES bank_connections (id),
+  bank_ref TEXT NOT NULL DEFAULT '',
   UNIQUE (user_id, name)
 );
 CREATE INDEX IF NOT EXISTS idx_accounts_user ON accounts (user_id);
+CREATE INDEX IF NOT EXISTS idx_accounts_connection ON accounts (connection_id);
 
 CREATE TABLE IF NOT EXISTS bank_connections (
   id INTEGER PRIMARY KEY,
-  account_id INTEGER NOT NULL REFERENCES accounts (id) ON DELETE CASCADE,
+  user_id INTEGER REFERENCES users (id),
   bank TEXT NOT NULL,
   kind TEXT NOT NULL,
   status TEXT NOT NULL DEFAULT 'disconnected'
@@ -57,7 +60,7 @@ CREATE TABLE IF NOT EXISTS bank_connections (
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
-CREATE INDEX IF NOT EXISTS idx_conn_account ON bank_connections (account_id);
+CREATE INDEX IF NOT EXISTS idx_conn_user ON bank_connections (user_id);
 
 CREATE TABLE IF NOT EXISTS import_batches (
   id INTEGER PRIMARY KEY,

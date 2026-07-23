@@ -12,15 +12,18 @@ def keyed(monkeypatch):
 
 
 def _connect(client, account_id):
-    return client.post(
+    r = client.post(
         "/api/connections",
         json={
-            "accountId": account_id,
             "bank": "fake",
             "kind": "fake",
             "credentials": {"phone": "+70000000000", "password": "pw"},
         },
     )
+    if r.status_code == 200 and account_id is not None:
+        link = client.patch(f"/api/accounts/{account_id}", json={"connectionId": r.json()["id"]})
+        assert link.status_code == 200, link.text
+    return r
 
 
 def test_create_auto_provisions_encryption_key(api, client, monkeypatch):
@@ -35,7 +38,6 @@ def test_create_rejects_unknown_bank(api, client, keyed):
     r = client.post(
         "/api/connections",
         json={
-            "accountId": api.default_account(),
             "bank": "nope",
             "kind": "nope",
             "credentials": {"phone": "+7", "password": "p"},
@@ -86,7 +88,7 @@ def test_two_phase_sync_then_incremental_dedup(api, client, keyed):
     assert body["skipped"] == 0
     assert body["dateFrom"] == "2026-02-01T09:00:00"
     assert body["dateTo"] == "2026-02-02T12:30:00"
-    assert body["batchId"] is not None
+    assert body["accounts"][0]["batchId"] is not None
 
     snap = api.snapshot()
     synced = [t for t in snap["transactions"] if t["source"] == "sync"]
@@ -144,9 +146,10 @@ class RetryOtpConnector:
     kind = "retryotp"
     hidden = True
 
-    def __init__(self, credentials, session=None):
+    def __init__(self, credentials, session=None, account_ref=None):
         self.credentials = credentials
         self.session = session
+        self.account_ref = account_ref
 
     def sync(self, since=None):
         raise SmsRequired("code sent")
@@ -165,12 +168,13 @@ def test_rejected_code_stays_awaiting(api, client, keyed, monkeypatch):
     cid = client.post(
         "/api/connections",
         json={
-            "accountId": api.default_account(),
             "bank": "retryotp",
             "kind": "retryotp",
             "credentials": {"phone": "+70000000000", "password": "pw"},
         },
     ).json()["id"]
+    r = client.patch(f"/api/accounts/{api.default_account()}", json={"connectionId": cid})
+    assert r.status_code == 200, r.text
     assert client.post(f"/api/connections/{cid}/sync").json()["status"] == "awaiting_sms"
 
     r = client.post(f"/api/connections/{cid}/sms", json={"code": "1111"})
@@ -183,3 +187,89 @@ def test_rejected_code_stays_awaiting(api, client, keyed, monkeypatch):
     assert client.post(f"/api/connections/{cid}/sms", json={"code": "4242"}).json()["status"] == (
         "connected"
     )
+
+
+def test_available_lists_connectors_with_params(client):
+    r = client.get("/api/connections/available")
+    assert r.status_code == 200
+    banks = {c["bank"]: c for c in r.json()}
+    assert "fake" not in banks
+    tbank = banks["tbank"]
+    assert tbank["label"] == "T-Bank (browser sync)"
+    assert {p["name"] for p in tbank["connectionParams"]} == {"phone", "password"}
+    assert [p["name"] for p in tbank["accountParams"]] == ["account"]
+
+
+def test_one_connection_syncs_multiple_accounts(api, client, keyed):
+    a1 = api.default_account()
+    a2 = api.account("Savings")
+    cid = _connect(client, a1).json()["id"]
+    r = client.patch(f"/api/accounts/{a2}", json={"connectionId": cid, "bankRef": " 8121254731 "})
+    assert r.status_code == 200
+    snap = api.snapshot()
+    linked = {a["id"]: a for a in snap["accounts"]}
+    assert linked[a1]["connectionId"] == cid
+    assert linked[a2]["connectionId"] == cid
+    assert linked[a2]["bankRef"] == "8121254731"
+
+    assert client.post(f"/api/connections/{cid}/sync").json()["status"] == "awaiting_sms"
+    body = client.post(f"/api/connections/{cid}/sms", json={"code": "0000"}).json()
+    assert body["status"] == "connected"
+    assert len(body["accounts"]) == 2
+    assert {r["accountId"] for r in body["accounts"]} == {a1, a2}
+    assert body["inserted"] == 4
+    per_account = {r["accountId"]: r for r in body["accounts"]}
+    assert per_account[a1]["inserted"] == 2
+    assert per_account[a2]["inserted"] == 2
+    assert per_account[a1]["batchId"] != per_account[a2]["batchId"]
+    txs = api.snapshot()["transactions"]
+    assert len([t for t in txs if t["accountId"] == a1]) == 2
+    assert len([t for t in txs if t["accountId"] == a2]) == 2
+
+
+def test_sync_requires_a_linked_account(api, client, keyed):
+    r = client.post(
+        "/api/connections",
+        json={
+            "bank": "fake",
+            "kind": "fake",
+            "credentials": {"phone": "+70000000000", "password": "pw"},
+        },
+    )
+    cid = r.json()["id"]
+    r = client.post(f"/api/connections/{cid}/sync")
+    assert r.status_code == 400
+    assert "linked" in r.json()["detail"]
+
+
+def test_delete_connection_unlinks_accounts(api, client, keyed):
+    a1 = api.default_account()
+    cid = _connect(client, a1).json()["id"]
+    assert api.snapshot()["accounts"][0]["connectionId"] == cid
+    client.delete(f"/api/connections/{cid}")
+    snap = api.snapshot()
+    assert snap["connections"] == []
+    assert snap["accounts"][0]["connectionId"] is None
+
+
+def test_unlink_account_via_patch(api, client, keyed):
+    a1 = api.default_account()
+    _connect(client, a1)
+    r = client.patch(f"/api/accounts/{a1}", json={"connectionId": 0})
+    assert r.status_code == 200
+    assert api.snapshot()["accounts"][0]["connectionId"] is None
+    assert len(api.snapshot()["connections"]) == 1
+
+
+def test_link_rejects_unknown_connection(api, client, keyed):
+    r = client.patch(f"/api/accounts/{api.default_account()}", json={"connectionId": 999})
+    assert r.status_code == 400
+
+
+def test_missing_required_credentials_rejected(api, client, keyed):
+    r = client.post(
+        "/api/connections",
+        json={"bank": "tbank", "kind": "playwright", "credentials": {"phone": "+7"}},
+    )
+    assert r.status_code == 400
+    assert "password" in r.json()["detail"]
