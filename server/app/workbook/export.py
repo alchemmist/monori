@@ -81,7 +81,7 @@ def _transactions_sheet(ws, snap, cat_names, acct_names, acct_currency):
         ws.cell(row=row, column=5, value="OK")
         _money_cell(ws, row, 6, tx["amount"])
         ws.cell(row=row, column=7, value=currency)
-        ws.cell(row=row, column=8, value=f"{rub:.2f} ₽")
+        ws.cell(row=row, column=8, value=spec.amount_display(rub, currency))
         ws.cell(row=row, column=9, value=currency)
         ws.cell(row=row, column=10, value="")
         ws.cell(row=row, column=11, value=_text(tx["bankCategory"]))
@@ -194,11 +194,12 @@ def _dashdata_sheet(ws, snap, activity):
     for tx in snap["transactions"]:
         if tx["transferId"]:
             continue
+        kind = cat_kind.get(tx["categoryId"])
+        if kind is None:
+            continue
         dt = _parse_dt(tx["date"])
         key = (dt.year, dt.month)
-        kind = cat_kind.get(tx["categoryId"])
-        income = kind == "income" if kind else tx["amount"] > 0
-        if income:
+        if kind == "income":
             monthly[key][0] += tx["amount"]
         else:
             monthly[key][1] -= tx["amount"]
