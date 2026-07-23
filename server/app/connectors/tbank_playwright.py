@@ -120,8 +120,8 @@ class TBankPlaywrightConnector(Connector):
     STEP_PAUSE_MS = 2_500
     LOGIN_TIMEOUT_MS = 45_000
 
-    def __init__(self, credentials, session=None):
-        super().__init__(credentials, session)
+    def __init__(self, credentials, session=None, account_ref=None):
+        super().__init__(credentials, session, account_ref)
         self._worker = None
         self._to_worker: queue.Queue = queue.Queue()
         self._from_worker: queue.Queue = queue.Queue()

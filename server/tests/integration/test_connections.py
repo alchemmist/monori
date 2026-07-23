@@ -273,3 +273,70 @@ def test_missing_required_credentials_rejected(api, client, keyed):
     )
     assert r.status_code == 400
     assert "password" in r.json()["detail"]
+
+
+class SinceRecorder:
+    bank = "sincer"
+    kind = "sincer"
+    hidden = True
+    calls = []
+
+    def __init__(self, credentials, session=None, account_ref=None):
+        self.credentials = credentials
+        self.session = session
+        self.account_ref = account_ref
+
+    def sync(self, since=None):
+        SinceRecorder.calls.append((self.account_ref, since))
+        return SyncResult([], session={"token": "ok"})
+
+    def close(self):
+        pass
+
+
+def test_newly_linked_account_gets_a_full_pull(api, client, keyed, monkeypatch):
+    monkeypatch.setitem(base.REGISTRY, ("sincer", "sincer"), SinceRecorder)
+    SinceRecorder.calls = []
+    a1 = api.default_account()
+    cid = client.post(
+        "/api/connections",
+        json={"bank": "sincer", "kind": "sincer", "credentials": {"phone": "+7"}},
+    ).json()["id"]
+    client.patch(f"/api/accounts/{a1}", json={"connectionId": cid, "bankRef": "ref1"})
+    assert client.post(f"/api/connections/{cid}/sync").json()["status"] == "connected"
+    assert SinceRecorder.calls == [("ref1", None)]
+
+    a2 = api.account("Second")
+    client.patch(f"/api/accounts/{a2}", json={"connectionId": cid, "bankRef": "ref2"})
+    SinceRecorder.calls = []
+    assert client.post(f"/api/connections/{cid}/sync").json()["status"] == "connected"
+    refs = dict(SinceRecorder.calls)
+    assert refs["ref1"] is not None
+    assert refs["ref2"] is None
+
+
+def test_pending_account_is_persisted_and_resume_skips_synced(api, client, keyed):
+    a1 = api.default_account()
+    a2 = api.account("Second")
+    cid = _connect(client, a1).json()["id"]
+    client.patch(f"/api/accounts/{a2}", json={"connectionId": cid})
+    assert client.post(f"/api/connections/{cid}/sync").json()["status"] == "awaiting_sms"
+    import app.db as dbmod
+
+    c = dbmod.connect()
+    pending = c.execute("SELECT pending_account_id FROM bank_connections WHERE id=?", (cid,))
+    assert pending.fetchone()[0] == a1
+    c.close()
+    body = client.post(f"/api/connections/{cid}/sms", json={"code": "0000"}).json()
+    assert body["status"] == "connected"
+    assert [r["accountId"] for r in body["accounts"]] == [a1, a2]
+    c = dbmod.connect()
+    assert (
+        c.execute("SELECT pending_account_id FROM bank_connections WHERE id=?", (cid,)).fetchone()[
+            0
+        ]
+        is None
+    )
+    batches = c.execute("SELECT COUNT(*) FROM import_batches WHERE connection_id=?", (cid,))
+    assert batches.fetchone()[0] == 2
+    c.close()

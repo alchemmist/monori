@@ -40,6 +40,7 @@ def upgrade():
           session_encrypted BLOB,
           last_sync TEXT,
           last_error TEXT,
+          pending_account_id INTEGER REFERENCES accounts (id),
           created_at TEXT NOT NULL,
           updated_at TEXT NOT NULL
         )""")
