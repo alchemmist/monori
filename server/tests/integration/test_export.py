@@ -112,6 +112,99 @@ def test_export_excludes_transfers_from_dashdata(api, client):
     assert row[2] == 125.5
 
 
+def test_export_transactions_static_columns(api, client):
+    _setup(api, client)
+    ws = _export(client)["Transactions"]
+    row = [c.value for c in ws[2]]
+    assert row[2] == "05.01.2026"
+    assert row[3] is None or row[3] == ""
+    assert row[6] == "RUB"
+    assert row[8] == "RUB"
+    assert row[9] is None or row[9] == ""
+    assert ws.cell(row=2, column=6).number_format == "0.00"
+
+
+def test_export_categories_layout(api, client):
+    _setup(api, client)
+    ws = _export(client)["Categories"]
+    assert ws.freeze_panes == "A2"
+    assert all(c.font.bold for c in ws[1])
+    assert [c.value for c in ws[2]] == [1, "▼Daily Expenses", "Groceries", "lenta|okey"]
+    assert [c.value for c in ws[3]] == [2, "▲Inflow", "Salary", None]
+    assert ws.cell(row=4, column=1).value is None
+    assert [c.value for c in ws[5]][:3] == ["Category Group", "Sort Order", "Type"]
+    assert ws.cell(row=5, column=1).font.bold
+
+
+def test_export_year_sheet_layout(api, client):
+    _setup(api, client)
+    ws = _export(client)["2026"]
+    assert ws.freeze_panes == "B3"
+    months = [ws.cell(row=1, column=2 + m * 3).value for m in range(12)]
+    assert months == [
+        "January",
+        "February",
+        "March",
+        "April",
+        "May",
+        "June",
+        "July",
+        "August",
+        "September",
+        "October",
+        "November",
+        "December",
+    ]
+    merged = {str(r) for r in ws.merged_cells.ranges}
+    assert "B1:D1" in merged
+    assert "AI1:AK1" in merged
+    assert [ws.cell(row=2, column=c).value for c in (35, 36, 37)] == [
+        "Budgeted",
+        "Outflows",
+        "Balance",
+    ]
+    assert ws.cell(row=1, column=38).value == "Total"
+    assert ws.cell(row=1, column=39).value == "Average"
+    assert ws.column_dimensions["A"].width == 24
+    assert ws.column_dimensions["B"].width == 11
+    assert ws.cell(row=1, column=2).font.bold
+    assert ws.cell(row=3, column=1).font.bold
+
+
+def test_export_year_sheet_totals(api, client):
+    _setup(api, client)
+    ws = _export(client)["2026"]
+    groceries_row = next(
+        r for r in range(1, ws.max_row + 1) if ws.cell(row=r, column=1).value == "Groceries"
+    )
+    assert ws.cell(row=groceries_row, column=38).value == 125.5
+    assert ws.cell(row=groceries_row, column=39).value == 10.46
+    assert ws.cell(row=groceries_row, column=5).value == 0.0
+    assert ws.cell(row=groceries_row, column=6).value == 0.0
+    assert ws.cell(row=groceries_row, column=7).value == 74.5
+    assert ws.cell(row=3, column=38).value == 125.5
+    assert ws.cell(row=3, column=39).value == 10.46
+    salary_row = next(
+        r for r in range(1, ws.max_row + 1) if ws.cell(row=r, column=1).value == "Salary"
+    )
+    assert ws.cell(row=salary_row, column=3).value == 5000.0
+
+
+def test_export_escapes_at_prefix(api, client):
+    cat, acct = _setup(api, client)
+    api.tx("2026-03-01T10:00:00", -100, accountId=acct, categoryId=cat, description="@cmd|test")
+    ws = _export(client)["Transactions"]
+    descriptions = {ws.cell(row=r, column=13).value for r in range(2, ws.max_row + 1)}
+    assert "'@cmd|test" in descriptions
+
+
+def test_export_dashdata_freeze_and_bold(api, client):
+    _setup(api, client)
+    ws = _export(client)["DashData"]
+    assert ws.freeze_panes == "A2"
+    assert all(c.font.bold for c in ws[1])
+
+
 def test_export_requires_auth(anon):
     r = anon.get("/api/export/xlsx")
     assert r.status_code == 401
