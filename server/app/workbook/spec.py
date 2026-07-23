@@ -50,9 +50,16 @@ TYPE_OUT = "OUT"
 
 MONEY_FORMAT = "0.00"
 
+CURRENCY_SYMBOLS = {"RUB": "₽", "USD": "$", "EUR": "€"}
+
 
 def kop_to_rub(kop: int) -> float:
     return round(kop / 100, 2)
+
+
+def amount_display(value: float, currency: str) -> str:
+    symbol = CURRENCY_SYMBOLS.get(currency, currency)
+    return f"{value:.2f} {symbol}"
 
 
 def group_display(name: str, kind: str) -> str:

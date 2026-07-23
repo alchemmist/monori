@@ -205,6 +205,31 @@ def test_export_dashdata_freeze_and_bold(api, client):
     assert all(c.font.bold for c in ws[1])
 
 
+def test_export_amount_uses_account_currency_symbol(api, client):
+    cat, _ = _setup(api, client)
+    usd = api.account("Dollars", currency="USD")
+    eur = api.account("Euros", currency="EUR")
+    chf = api.account("Francs", currency="CHF")
+    api.tx("2026-04-01T10:00:00", -30000, accountId=usd, categoryId=cat, description="Hotel")
+    api.tx("2026-04-02T10:00:00", -20000, accountId=eur, categoryId=cat, description="Train")
+    api.tx("2026-04-03T10:00:00", -10000, accountId=chf, categoryId=cat, description="Cheese")
+    ws = _export(client)["Transactions"]
+    amounts = {ws.cell(row=r, column=8).value for r in range(2, ws.max_row + 1)}
+    assert "-125.50 ₽" in amounts
+    assert "-300.00 $" in amounts
+    assert "-200.00 €" in amounts
+    assert "-100.00 CHF" in amounts
+
+
+def test_export_dashdata_skips_uncategorized(api, client):
+    _setup(api, client)
+    api.tx("2026-01-25T10:00:00", -99900, description="Mystery")
+    ws = _export(client)["DashData"]
+    row = [c.value for c in ws[2]]
+    assert row[1] == 5000.0
+    assert row[2] == 125.5
+
+
 def test_export_requires_auth(anon):
     r = anon.get("/api/export/xlsx")
     assert r.status_code == 401
