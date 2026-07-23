@@ -84,13 +84,11 @@ export default function MigrateDialog({ onClose }) {
                     <>
                         <Txt>
                             {preview.groups} groups, {preview.categories} categories,{" "}
-                            {preview.transactions} transactions, {preview.budgetCells} budget
-                            cells
+                            {preview.transactions} transactions, {preview.budgetCells} budget cells
                         </Txt>
                         {preview.errors.length > 0 && (
                             <Txt tone="secondary" caption>
-                                {preview.errors.length} rows could not be parsed and will be
-                                skipped
+                                {preview.errors.length} rows could not be parsed and will be skipped
                             </Txt>
                         )}
                         {preview.warnings.map((w) => (
