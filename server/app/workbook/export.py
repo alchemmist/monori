@@ -112,9 +112,7 @@ def _year_sheet(ws, year, snap, activity, budgets):
         head = ws.cell(row=1, column=col, value=spec.MONTHS[m])
         head.font = BOLD
         head.alignment = CENTER
-        ws.merge_cells(
-            start_row=1, start_column=col, end_row=1, end_column=col + 2
-        )
+        ws.merge_cells(start_row=1, start_column=col, end_row=1, end_column=col + 2)
         for i, label in enumerate(spec.MONTH_COLS):
             ws.cell(row=2, column=col + i, value=label).font = BOLD
     total_col = 2 + 12 * 3
@@ -131,9 +129,7 @@ def _year_sheet(ws, year, snap, activity, budgets):
         cats = by_group[group["id"]]
         if not cats:
             continue
-        label = ws.cell(
-            row=row, column=1, value=spec.group_display(group["name"], group["kind"])
-        )
+        label = ws.cell(row=row, column=1, value=spec.group_display(group["name"], group["kind"]))
         label.font = BOLD
         row += 1
         expense = group["kind"] == "expense"
@@ -218,9 +214,7 @@ def _dashdata_sheet(ws, snap, activity):
             row += 1
             ws.cell(row=row, column=1, value=cat["name"])
             for i, year in enumerate(years):
-                total = sum(
-                    activity.get((cat["id"], year, m), 0) for m in range(1, 13)
-                )
+                total = sum(activity.get((cat["id"], year, m), 0) for m in range(1, 13))
                 _money_cell(ws, row, 2 + i, total)
     ws.freeze_panes = "A2"
 
@@ -237,9 +231,7 @@ def build_workbook(snap) -> Workbook:
     _transactions_sheet(
         wb.create_sheet(spec.SHEET_TRANSACTIONS), snap, cat_names, acct_names, acct_currency
     )
-    years = sorted(
-        {y for (_, y, _m) in activity} | {b["year"] for b in snap["budgets"]}
-    )
+    years = sorted({y for (_, y, _m) in activity} | {b["year"] for b in snap["budgets"]})
     for year in years:
         _year_sheet(wb.create_sheet(str(year)), year, snap, activity, budgets)
     _dashdata_sheet(wb.create_sheet(spec.SHEET_DASHDATA), snap, activity)
