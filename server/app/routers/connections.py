@@ -29,10 +29,6 @@ from ..sync_runner import NoPendingLogin, get_runner
 
 router = APIRouter(prefix="/api/connections", tags=["connections"])
 
-# which linked account a parked (awaiting_sms) login belongs to, so /sms knows
-# whose rows the resumed result carries; in-process like the LocalRunner state
-PENDING_ACCOUNT: dict[int, int] = {}
-
 
 def _now():
     return datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
@@ -105,7 +101,8 @@ def _validate_credentials(bank, kind, credentials):
 
 def _mark_error(c, cid, message):
     c.execute(
-        "UPDATE bank_connections SET status='error', last_error=?, updated_at=? WHERE id=?",
+        "UPDATE bank_connections SET status='error', last_error=?, pending_account_id=NULL,"
+        " updated_at=? WHERE id=?",
         (message, _now(), cid),
     )
     c.commit()
@@ -146,7 +143,7 @@ def _finish_account(c, row, account_id, result, uid):
 def _mark_connected(c, cid):
     c.execute(
         "UPDATE bank_connections SET status='connected', last_sync=?, last_error=NULL,"
-        " updated_at=? WHERE id=?",
+        " pending_account_id=NULL, updated_at=? WHERE id=?",
         (_now(), _now(), cid),
     )
     c.commit()
@@ -165,9 +162,23 @@ def _aggregate(results):
     }
 
 
+def _account_since(c, cid, account_id, last_sync):
+    """An account newly linked to an already-synced connection still needs a
+    full pull: the connection's last_sync cursor only applies to accounts that
+    have synced through it before."""
+    if last_sync is None:
+        return None
+    prior = c.execute(
+        "SELECT 1 FROM import_batches WHERE connection_id=? AND account_id=?"
+        " AND source='sync' LIMIT 1",
+        (cid, account_id),
+    ).fetchone()
+    return last_sync if prior else None
+
+
 def _sync_accounts(c, row, accounts, creds, session, uid):
     """Pull each account in order. Returns per-account summaries; raises
-    SmsRequired after recording which account the parked login belongs to."""
+    SmsRequired after persisting which account the parked login belongs to."""
     cid = row["id"]
     results = []
     for acct in accounts:
@@ -178,14 +189,14 @@ def _sync_accounts(c, row, accounts, creds, session, uid):
                 row["kind"],
                 creds,
                 session,
-                row["last_sync"],
+                _account_since(c, cid, acct["id"], row["last_sync"]),
                 acct["bank_ref"] or None,
             )
         except SmsRequired:
-            PENDING_ACCOUNT[cid] = acct["id"]
             c.execute(
-                "UPDATE bank_connections SET status='awaiting_sms', updated_at=? WHERE id=?",
-                (_now(), cid),
+                "UPDATE bank_connections SET status='awaiting_sms', pending_account_id=?,"
+                " updated_at=? WHERE id=?",
+                (acct["id"], _now(), cid),
             )
             c.commit()
             raise
@@ -256,7 +267,6 @@ def delete_connection(cid: int, user: Annotated[dict, Depends(current_user)]):
     try:
         _load(c, cid, uid)
         get_runner().cancel(cid)
-        PENDING_ACCOUNT.pop(cid, None)
         c.execute("UPDATE accounts SET connection_id=NULL WHERE connection_id=?", (cid,))
         c.execute("DELETE FROM bank_connections WHERE id=?", (cid,))
         c.commit()
@@ -274,10 +284,9 @@ def cancel_sync(cid: int, user: Annotated[dict, Depends(current_user)]):
     try:
         _load(c, cid, uid)
         get_runner().cancel(cid)
-        PENDING_ACCOUNT.pop(cid, None)
         c.execute(
-            "UPDATE bank_connections SET status='disconnected', updated_at=?"
-            " WHERE id=? AND status='awaiting_sms'",
+            "UPDATE bank_connections SET status='disconnected', pending_account_id=NULL,"
+            " updated_at=? WHERE id=? AND status='awaiting_sms'",
             (_now(), cid),
         )
         c.commit()
@@ -328,7 +337,7 @@ def submit_sms(cid: int, body: SmsBody, user: Annotated[dict, Depends(current_us
     try:
         row = _load(c, cid, uid)
         accounts = _linked_accounts(c, cid, uid)
-        pending_id = PENDING_ACCOUNT.get(cid, accounts[0]["id"] if accounts else None)
+        pending_id = row["pending_account_id"] or (accounts[0]["id"] if accounts else None)
         if pending_id is None:
             raise HTTPException(400, "no accounts are linked to this connection")
         try:
@@ -340,10 +349,11 @@ def submit_sms(cid: int, body: SmsBody, user: Annotated[dict, Depends(current_us
         except ConnectorError as e:
             _mark_error(c, cid, str(e))
             raise HTTPException(502, str(e)) from e
-        PENDING_ACCOUNT.pop(cid, None)
         results = [_finish_account(c, row, pending_id, result, uid)]
         session = result.session or crypto.decrypt(row["session_encrypted"])
-        remaining = [a for a in accounts if a["id"] != pending_id]
+        ids = [a["id"] for a in accounts]
+        after = ids.index(pending_id) + 1 if pending_id in ids else len(ids)
+        remaining = accounts[after:]
         try:
             results.extend(_sync_accounts(c, row, remaining, _creds(c, row), session, uid))
         except SmsRequired as e:
