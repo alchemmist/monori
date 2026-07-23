@@ -202,3 +202,22 @@ def test_workbook_import_lands_as_rollbackable_batch(api, client):
     batch = r.json()["batches"][0]
     assert batch["accountId"] == target
     assert batch["inserted"] == 3
+
+
+def test_workbook_upload_guards(api, client, monkeypatch):
+    r = client.post(
+        "/api/import/workbook/preview",
+        files={"file": ("book.xlsx", b"", "application/octet-stream")},
+    )
+    assert r.status_code == 400
+    assert r.json()["detail"] == "empty upload"
+
+    import app.routers.imports as imports_mod
+
+    monkeypatch.setattr(imports_mod, "WORKBOOK_MAX_BYTES", 10)
+    r = client.post(
+        "/api/import/workbook/preview",
+        files={"file": ("book.xlsx", b"x" * 11, "application/octet-stream")},
+    )
+    assert r.status_code == 413
+    assert r.json()["detail"] == "workbook is too large"
