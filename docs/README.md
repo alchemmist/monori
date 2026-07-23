@@ -15,6 +15,7 @@ end, so there is no floating-point rounding anywhere.
 - [Transactions](transactions.md) — the ledger, filters, categorization, manual edits.
 - [Accounts & transfers](accounts.md) — multiple accounts, transfers, reconcile.
 - [Importing statements](importing.md) — the statement format, auto-categorization, dedup.
+- [Migrating from a spreadsheet](migration.md) — one-shot import of a YNAB-style workbook.
 - [Dashboard & analytics](dashboard-analytics.md) — charts and the annual report.
 - [REST API](api.md) — every endpoint, request and response shapes, auth.
 - [Data model](data-model.md) — the SQLite schema and the money representation.
