@@ -5,17 +5,23 @@ import { api } from "../api.js";
 
 export default function SettingsPage({ theme, onToggleTheme }) {
     const [exporting, setExporting] = useState(false);
+    const [exportError, setExportError] = useState("");
 
     const exportXlsx = async () => {
         setExporting(true);
+        setExportError("");
         try {
             const blob = await api.exportXlsx();
             const url = URL.createObjectURL(blob);
             const a = document.createElement("a");
             a.href = url;
             a.download = "monori-export.xlsx";
+            document.body.appendChild(a);
             a.click();
-            URL.revokeObjectURL(url);
+            a.remove();
+            setTimeout(() => URL.revokeObjectURL(url), 10000);
+        } catch (e) {
+            setExportError(e.message || "Export failed");
         } finally {
             setExporting(false);
         }
@@ -45,7 +51,7 @@ export default function SettingsPage({ theme, onToggleTheme }) {
                 <div className="settings-row__text">
                     <div className="settings-row__title">Export</div>
                     <div className="settings-row__hint">
-                        Download all data as a YNAB-style Excel workbook
+                        {exportError || "Download all data as a YNAB-style Excel workbook"}
                     </div>
                 </div>
                 <Button variant="default" loading={exporting} onClick={exportXlsx}>
