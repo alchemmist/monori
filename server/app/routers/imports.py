@@ -109,7 +109,9 @@ def import_commit(body: CommitBody, user: Annotated[dict, Depends(current_user)]
 
 
 async def _read_workbook_upload(file: UploadFile) -> bytes:
-    data = await file.read()
+    if file.size is not None and file.size > WORKBOOK_MAX_BYTES:
+        raise HTTPException(413, "workbook is too large")
+    data = await file.read(WORKBOOK_MAX_BYTES + 1)
     if len(data) > WORKBOOK_MAX_BYTES:
         raise HTTPException(413, "workbook is too large")
     if not data:

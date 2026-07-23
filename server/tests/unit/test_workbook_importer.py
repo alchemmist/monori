@@ -82,10 +82,13 @@ def _tx_row(
     ]
 
 
-def test_unquote_strips_only_leading_apostrophe():
+def test_unquote_reverses_only_the_formula_escape():
     assert _unquote("'=SUM(A1)") == "=SUM(A1)"
+    assert _unquote("'+A1") == "+A1"
+    assert _unquote("'@cmd") == "@cmd"
     assert _unquote("plain") == "plain"
     assert _unquote("mid'dle") == "mid'dle"
+    assert _unquote("'legit apostrophe") == "'legit apostrophe"
 
 
 def test_parse_dt_cell_variants():

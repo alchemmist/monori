@@ -28,7 +28,12 @@ def _cell_str(value) -> str:
 
 
 def _unquote(value: str) -> str:
-    return value[1:] if value.startswith("'") else value
+    """Reverses the exporter's formula-escape and nothing else: a leading
+    apostrophe is stripped only when it guards a formula prefix, so legitimate
+    values that happen to start with an apostrophe survive the round-trip."""
+    if value.startswith("'") and value[1:].startswith(("=", "+", "@")):
+        return value[1:]
+    return value
 
 
 def _parse_dt_cell(value):
