@@ -15,7 +15,3 @@ Full docs live in [`docs/`](docs/README.md):
 - [Dashboard & analytics](docs/dashboard-analytics.md).
 - [REST API](docs/api.md) and [Data model](docs/data-model.md).
 - [Development](docs/development.md) — the stack, the `make` targets, testing.
-
-
-
-
