@@ -19,7 +19,7 @@ def test_health(client):
 
 def test_otp_flow(client):
     r = client.post("/runs/1", json={"bank": "fake", "kind": "fake", "credentials": CREDS})
-    assert r.json() == {"status": "awaiting_sms", "message": "code sent"}
+    assert r.json() == {"status": "awaiting_sms", "message": sync_service.SMS_SENT}
     assert 1 in sync_service.PENDING
 
     r = client.post("/runs/1/sms", json={"code": "0000"})
@@ -40,7 +40,7 @@ def test_cached_session_skips_otp(client):
 
 def test_connector_error_is_reported(client):
     r = client.post("/runs/1", json={"bank": "fake", "kind": "fake", "credentials": {}})
-    assert r.json() == {"status": "error", "message": "missing phone"}
+    assert r.json() == {"status": "error", "message": sync_service.SYNC_FAILED}
 
 
 def test_unknown_connector(client):

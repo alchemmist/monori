@@ -2,6 +2,7 @@
 Monori API. Money in/out of this API is integer kopecks everywhere.
 """
 
+import os
 import pathlib
 from typing import Annotated
 
@@ -32,18 +33,30 @@ app.include_router(auth_router.router)
 STATIC_DIR = pathlib.Path(__file__).resolve().parent.parent / "static"
 
 
+def _safe_target(root: str, path: str) -> str | None:
+    """
+    Resolve ``path`` (untrusted) under ``root`` and return the real path only if
+    it stays inside ``root``; otherwise None. Symlinks and ``..`` are resolved
+    first, then containment is verified with ``commonpath`` so absolute paths or
+    traversal escaping ``root`` are rejected.
+    """
+    target = os.path.realpath(os.path.join(root, path.lstrip("/")))
+    if os.path.commonpath([root, target]) != root:
+        return None
+    return target
+
+
 def _serve_spa(base: pathlib.Path, path: str):
     """
     Serve a file from ``base`` if the request maps to one inside it, else the
-    SPA index. The containment check blocks path traversal (absolute paths or
-    ``..`` escaping ``base``).
+    SPA index.
     """
-    root = base.resolve()
+    root = os.path.realpath(base)
     if path:
-        target = (root / path.lstrip("/")).resolve()
-        if target.is_file() and target.is_relative_to(root):
+        target = _safe_target(root, path)
+        if target is not None and os.path.isfile(target):
             return FileResponse(target)
-    return FileResponse(root / "index.html")
+    return FileResponse(os.path.join(root, "index.html"))
 
 
 for _router in (
