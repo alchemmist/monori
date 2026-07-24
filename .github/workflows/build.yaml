@@ -42,7 +42,7 @@ jobs:
                   node-version: 22
                   cache: npm
                   cache-dependency-path: |
-                      web/package-lock.json
+                      web/package.json
 
             - name: Setup uv
               uses: astral-sh/setup-uv@v5
@@ -50,7 +50,7 @@ jobs:
                   enable-cache: true
 
             - name: Install web deps
-              run: npm ci
+              run: npm install --no-audit --no-fund
               working-directory: web
 
             - name: Install server deps

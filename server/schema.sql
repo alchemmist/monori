@@ -105,11 +105,28 @@ CREATE TABLE IF NOT EXISTS budgets (
 CREATE TABLE IF NOT EXISTS users (
   id INTEGER PRIMARY KEY,
   email TEXT NOT NULL UNIQUE,
+  email_canonical TEXT NOT NULL DEFAULT '',   -- aliasing-collapsed key, one per mailbox
   password_hash TEXT NOT NULL,
   created_at TEXT NOT NULL,
   is_admin INTEGER NOT NULL DEFAULT 0,
   last_login TEXT
 );
+CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_canonical ON users (email_canonical);
+
+-- email_canonical defaults to '' only so ALTER TABLE ADD COLUMN can backfill
+-- legacy rows; a blank value can never authenticate (login resolves by it) and
+-- would collide on the unique index, so reject any insert or update that blanks it
+CREATE TRIGGER IF NOT EXISTS users_email_canonical_not_blank
+BEFORE INSERT ON users WHEN new.email_canonical = ''
+BEGIN
+SELECT RAISE(ABORT, 'email_canonical must not be blank');
+END;
+
+CREATE TRIGGER IF NOT EXISTS users_email_canonical_not_blank_upd
+BEFORE UPDATE ON users WHEN new.email_canonical = ''
+BEGIN
+SELECT RAISE(ABORT, 'email_canonical must not be blank');
+END;
 
 CREATE TABLE IF NOT EXISTS activity_events (
   id INTEGER PRIMARY KEY,

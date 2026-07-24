@@ -3,8 +3,8 @@
 # "monori" so the outer reverse proxy config does not change.
 FROM node:22-alpine AS web
 WORKDIR /build/web
-COPY web/package.json web/package-lock.json ./
-RUN npm ci --silent
+COPY web/package.json ./
+RUN npm install --silent --no-audit --no-fund
 COPY web/ ./
 # the docs pages bundle the markdown from ../docs at build time (import.meta.glob)
 COPY docs/ /build/docs/

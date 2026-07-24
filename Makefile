@@ -101,7 +101,8 @@ analyze:
 audit: audit-deps audit-deps-py audit-secrets
 
 audit-deps:
-	cd web && npm audit --audit-level=high
+	cd web && npm install --no-audit --no-fund --silent
+	cd web && npm audit --audit-level=high --json | python3 ../scripts/npm-audit-gate.py
 
 audit-deps-py:
 	cd server && uv export --no-dev --no-hashes --format requirements-txt | uv run pip-audit -r /dev/stdin
