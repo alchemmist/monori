@@ -1,5 +1,7 @@
-"""Bottom of the depth scale — pure black canvas, glow all but gone, sections at
-the faintest lift so cards are held mostly by a hairline border + shadow."""
+"""
+Bottom of the depth scale — pure black canvas, glow all but gone, sections at
+the faintest lift so cards are held mostly by a hairline border + shadow.
+"""
 
 from playwright.sync_api import sync_playwright
 

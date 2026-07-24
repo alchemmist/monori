@@ -1,4 +1,5 @@
-"""Where bank syncs actually run.
+"""
+Where bank syncs actually run.
 
 The connections router talks to a :class:`SyncRunner` instead of driving
 connectors directly. Two implementations exist: :class:`LocalRunner` executes
@@ -21,7 +22,9 @@ from .connectors.base import ConnectorError, SmsRequired, SyncResult
 
 
 class NoPendingLogin(Exception):
-    """An OTP code or cancel arrived but no login is parked for the connection."""
+    """
+    An OTP code or cancel arrived but no login is parked for the connection.
+    """
 
 
 class LocalRunner:

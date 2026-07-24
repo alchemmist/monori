@@ -1,5 +1,7 @@
-"""Writes a parsed workbook (see ``importer.parse_workbook``) into the
-database for one user. The caller owns the connection and the commit."""
+"""
+Writes a parsed workbook (see ``importer.parse_workbook``) into the
+database for one user. The caller owns the connection and the commit.
+"""
 
 import datetime
 
@@ -149,8 +151,10 @@ def _import_budgets(c, budgets, category_ids, overwrite):
 
 
 def apply_workbook(c, uid, parsed, mapping, budget_policy="overwrite"):
-    """``mapping``: marker -> account id (all markers must be present and owned).
-    Returns a result summary dict. Does not commit."""
+    """
+    ``mapping``: marker -> account id (all markers must be present and owned).
+    Returns a result summary dict. Does not commit.
+    """
     group_ids, groups_created = _upsert_groups(c, uid, parsed["groups"])
     category_ids, categories_created = _upsert_categories(c, uid, parsed["categories"], group_ids)
     inserted, skipped, batches = _import_transactions(

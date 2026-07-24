@@ -28,9 +28,11 @@ def _account_exists(c, account_id, uid):
 
 @router.post("")
 def create_transfer(body: TransferBody, user: Annotated[dict, Depends(current_user)]):
-    """A transfer is two linked transactions sharing a transfer_id: a negative
+    """
+    A transfer is two linked transactions sharing a transfer_id: a negative
     row on the source account and a positive row on the destination. Both are
-    uncategorized, so they never count as income or expense."""
+    uncategorized, so they never count as income or expense.
+    """
     uid = user["id"]
     if body.fromAccountId == body.toAccountId:
         raise HTTPException(400, "cannot transfer to the same account")

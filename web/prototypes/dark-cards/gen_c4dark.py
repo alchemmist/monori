@@ -1,6 +1,8 @@
-"""C4 (aurora glass), shifted DARKER — canvas + sections deeper, keeping the
+"""
+C4 (aurora glass), shifted DARKER — canvas + sections deeper, keeping the
 violet glow and the principle 'background darker than the (translucent) cards'.
-Three depth steps to pick the exact darkness."""
+Three depth steps to pick the exact darkness.
+"""
 
 from playwright.sync_api import sync_playwright
 

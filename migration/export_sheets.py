@@ -1,4 +1,5 @@
-"""Export all budget data from a Google Sheets budget to JSON in migration/raw/.
+"""
+Export all budget data from a Google Sheets budget to JSON in migration/raw/.
 
 Dumps, per sheet, both unformatted values and formulas so downstream steps can
 tell hand-entered budget numbers from formula-derived ones.

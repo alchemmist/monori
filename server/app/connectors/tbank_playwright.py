@@ -1,4 +1,5 @@
-"""T-Bank connector that drives the real web cabinet with Playwright.
+"""
+T-Bank connector that drives the real web cabinet with Playwright.
 
 This logs into ``www.tbank.ru`` **as you**, downloads the operations export, and
 feeds it through the same statement parser as the manual paste import. It talks
@@ -155,7 +156,9 @@ class TBankPlaywrightConnector(Connector):
         raise ConnectorError(f"unexpected worker message: {kind}")
 
     def _ask_sms(self, message="enter the code sent by the bank"):
-        """Signal the router that an OTP is needed and block for the code."""
+        """
+        Signal the router that an OTP is needed and block for the code.
+        """
         self._from_worker.put(("sms_required", message))
         kind, code = self._to_worker.get()
         if kind != "sms":
@@ -233,8 +236,10 @@ class TBankPlaywrightConnector(Connector):
 
     @staticmethod
     def _prune_cache(work_dir):
-        """Drop Chromium cache dirs before archiving so the encrypted session
-        blob stays small — only cookies/localStorage/IndexedDB matter."""
+        """
+        Drop Chromium cache dirs before archiving so the encrypted session
+        blob stays small — only cookies/localStorage/IndexedDB matter.
+        """
         junk = {
             "Cache",
             "Code Cache",
@@ -290,9 +295,11 @@ class TBankPlaywrightConnector(Connector):
         )
 
     def _access_denied(self, page):
-        """The bank's "Доступ заблокирован" popup text when it's shown, else ''.
+        """
+        The bank's "Доступ заблокирован" popup text when it's shown, else ''.
         It blocks the phone screen (anti-automation / rate limit), so the driver
-        checks for it first and fails fast with the bank's own wording."""
+        checks for it first and fails fast with the bank's own wording.
+        """
         with contextlib.suppress(Exception):
             if page.query_selector(self.SEL_ACCESS_DENIED) is None:
                 return ""
@@ -307,7 +314,9 @@ class TBankPlaywrightConnector(Connector):
         return ""
 
     def _form_title(self, page):
-        """The heading of the current SSO step, or '' when none is shown."""
+        """
+        The heading of the current SSO step, or '' when none is shown.
+        """
         with contextlib.suppress(Exception):
             el = page.query_selector(self.SEL_FORM_TITLE)
             if el is not None:
@@ -315,16 +324,20 @@ class TBankPlaywrightConnector(Connector):
         return ""
 
     def _submit(self, page):
-        """Click the step's submit button. Some layouts auto-advance as the last
+        """
+        Click the step's submit button. Some layouts auto-advance as the last
         digit lands, so a genuinely-absent button times out and is skipped — but
-        a real click failure (detached node, intercepted click) still surfaces."""
+        a real click failure (detached node, intercepted click) still surfaces.
+        """
         with contextlib.suppress(PlaywrightTimeoutError):
             page.locator(self.SEL_SUBMIT).first.click(timeout=5_000)
 
     def _type_pin(self, page, digits):
-        """Type into the 4-box pin widget used for both the SMS code and the
+        """
+        Type into the 4-box pin widget used for both the SMS code and the
         quick-login code. Focusing the first box and typing lets it auto-advance
-        across the boxes."""
+        across the boxes.
+        """
         with contextlib.suppress(Exception):
             page.locator(self.SEL_PIN).first.click(timeout=5_000)
         page.keyboard.type(digits)
@@ -363,11 +376,13 @@ class TBankPlaywrightConnector(Connector):
             raise ConnectorError(f"login did not reach the bank home page (stuck on: {where})")
 
     def _drive_sso_login(self, page):
-        """Walk the id.tbank.ru SSO one step at a time until we reach /mybank.
+        """
+        Walk the id.tbank.ru SSO one step at a time until we reach /mybank.
 
         Each iteration reacts to whatever step is on screen — phone, password, or
         the pin widget (set-a-code / enter-a-code) — so a slow render or a
-        reordered step just means another pass, never a skipped field."""
+        reordered step just means another pass, never a skipped field.
+        """
         code = self.credentials.get("code")
         tried_quick = False
         otp_prompt = "enter the code sent by the bank"

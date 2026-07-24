@@ -1,4 +1,6 @@
-"""Monori API. Money in/out of this API is integer kopecks everywhere."""
+"""
+Monori API. Money in/out of this API is integer kopecks everywhere.
+"""
 
 import pathlib
 from typing import Annotated
@@ -31,9 +33,11 @@ STATIC_DIR = pathlib.Path(__file__).resolve().parent.parent / "static"
 
 
 def _serve_spa(base: pathlib.Path, path: str):
-    """Serve a file from ``base`` if the request maps to one inside it, else the
+    """
+    Serve a file from ``base`` if the request maps to one inside it, else the
     SPA index. The containment check blocks path traversal (absolute paths or
-    ``..`` escaping ``base``)."""
+    ``..`` escaping ``base``).
+    """
     root = base.resolve()
     if path:
         target = (root / path.lstrip("/")).resolve()

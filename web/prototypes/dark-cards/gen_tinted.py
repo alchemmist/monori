@@ -1,10 +1,12 @@
-"""Violet-tinted dark-theme explorations on the real /demo dashboard.
+"""
+Violet-tinted dark-theme explorations on the real /demo dashboard.
 
 The user likes a soft purple background but dislikes neutral near-black cards
 sitting on it as "black cubes". These variants tint the whole dark palette
 (bg + cards + borders) toward violet so cards read as a harmonious elevated
 surface rather than black blocks. Also overrides surface-raised/border/text-dim
-so sidebar, header and chart gridlines stay in the same family."""
+so sidebar, header and chart gridlines stay in the same family.
+"""
 
 from playwright.sync_api import sync_playwright
 

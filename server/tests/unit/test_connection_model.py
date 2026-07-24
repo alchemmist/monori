@@ -1,5 +1,7 @@
-"""Unit tests for the connections router's credential validation and the
-connector registry's parameter declarations."""
+"""
+Unit tests for the connections router's credential validation and the
+connector registry's parameter declarations.
+"""
 
 import pytest
 from fastapi import HTTPException

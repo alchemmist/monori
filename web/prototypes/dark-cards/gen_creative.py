@@ -1,6 +1,8 @@
-"""Creative, from-scratch dark-theme directions on the real /demo dashboard.
+"""
+Creative, from-scratch dark-theme directions on the real /demo dashboard.
 Each variant injects full CSS (canvas + .card restyle) so we can explore depth
-via shadows, gradients, glass, and warm/cool tone — not just fill+border."""
+via shadows, gradients, glass, and warm/cool tone — not just fill+border.
+"""
 
 from playwright.sync_api import sync_playwright
 

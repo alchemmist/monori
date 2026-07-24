@@ -1,4 +1,5 @@
-"""Dump the full data snapshot as JSON — same shape the /api/snapshot endpoint serves.
+"""
+Dump the full data snapshot as JSON — same shape the /api/snapshot endpoint serves.
 
 Used by the JS engine golden tests so they run against the exact migrated data.
 """

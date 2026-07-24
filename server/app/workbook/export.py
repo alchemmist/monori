@@ -1,4 +1,5 @@
-"""Builds the YNAB-style export workbook from a snapshot dict.
+"""
+Builds the YNAB-style export workbook from a snapshot dict.
 
 The workbook layout (sheet names, glyphs, column orders) is defined in
 ``spec.py`` and shared with the future spreadsheet importer so the two

@@ -1,4 +1,6 @@
-"""Accounts gain a display icon (a short glyph name mapped by the frontend)."""
+"""
+Accounts gain a display icon (a short glyph name mapped by the frontend).
+"""
 
 from alembic import op
 

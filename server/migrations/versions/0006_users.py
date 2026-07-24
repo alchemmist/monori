@@ -1,5 +1,7 @@
-"""First-class users that sign in to monori itself (issue #34). Passwords are
-stored only as Argon2 hashes; per-user data ownership is a later phase."""
+"""
+First-class users that sign in to monori itself (issue #34). Passwords are
+stored only as Argon2 hashes; per-user data ownership is a later phase.
+"""
 
 from alembic import op
 

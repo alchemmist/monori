@@ -1,6 +1,8 @@
-"""Headless check that the Transactions page virtualizes: only a windowed slice
+"""
+Headless check that the Transactions page virtualizes: only a windowed slice
 of the 6802 rows is ever in the DOM, spacers stand in for the rest, and
-scrolling recycles the rendered rows while the sticky header stays pinned."""
+scrolling recycles the rendered rows while the sticky header stays pinned.
+"""
 
 import pathlib
 import sys

@@ -1,4 +1,6 @@
-"""Base schema: category groups, categories, transactions, budgets."""
+"""
+Base schema: category groups, categories, transactions, budgets.
+"""
 
 from alembic import op
 

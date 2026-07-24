@@ -28,8 +28,10 @@ def test_import_commit_double_submit_is_idempotent(api, client):
 
 
 def test_import_commit_skips_only_the_first_n_already_stored(api, client):
-    """Skip as many identical rows as already exist in the DB, insert the rest —
-    a fresh statement's own repeats are legitimate, only re-imports are skipped."""
+    """
+    Skip as many identical rows as already exist in the DB, insert the rest —
+    a fresh statement's own repeats are legitimate, only re-imports are skipped.
+    """
     r0 = api.preview(api.statement)[0]
 
     # fresh DB: three identical rows are all genuinely new

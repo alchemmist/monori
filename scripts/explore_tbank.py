@@ -1,4 +1,5 @@
-"""Interactive T-Bank markup explorer / driver.
+"""
+Interactive T-Bank markup explorer / driver.
 
 Launches a headed persistent Chromium and stays alive, driven by single-line
 commands so selectors can be verified and clicked against the real markup — no

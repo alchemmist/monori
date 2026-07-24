@@ -1,4 +1,5 @@
-"""Parses a YNAB-style workbook (the format written by ``export.py``) back
+"""
+Parses a YNAB-style workbook (the format written by ``export.py``) back
 into monori data. The sheet layout contract lives in ``spec.py`` and is shared
 with the exporter so the two directions never drift.
 """
@@ -28,9 +29,11 @@ def _cell_str(value) -> str:
 
 
 def _unquote(value: str) -> str:
-    """Reverses the exporter's formula-escape and nothing else: a leading
+    """
+    Reverses the exporter's formula-escape and nothing else: a leading
     apostrophe is stripped only when it guards a formula prefix, so legitimate
-    values that happen to start with an apostrophe survive the round-trip."""
+    values that happen to start with an apostrophe survive the round-trip.
+    """
     if value.startswith("'") and value[1:].startswith(("=", "+", "@")):
         return value[1:]
     return value
@@ -189,7 +192,9 @@ def _parse_year_sheet(ws, year, category_names, warnings):
 
 
 def parse_workbook(data: bytes):
-    """Returns {groups, categories, transactions, budgets, warnings, errors}."""
+    """
+    Returns {groups, categories, transactions, budgets, warnings, errors}.
+    """
     try:
         wb = load_workbook(BytesIO(data), data_only=True, read_only=True)
     except Exception as exc:

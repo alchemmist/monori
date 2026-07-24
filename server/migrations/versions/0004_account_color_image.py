@@ -1,4 +1,6 @@
-"""Accounts gain a display color and an optional custom icon image."""
+"""
+Accounts gain a display color and an optional custom icon image.
+"""
 
 from alembic import op
 

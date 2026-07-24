@@ -1,4 +1,5 @@
-"""Password hashing and JWT access tokens for in-app authentication.
+"""
+Password hashing and JWT access tokens for in-app authentication.
 
 Passwords are hashed with Argon2; access tokens are stateless JWTs signed with a
 per-instance secret. The secret comes from ``MONORI_AUTH_SECRET`` or, if unset,
@@ -61,9 +62,11 @@ def _load_or_create_secret(path):
 
 
 def load_or_create_secret_file(path, generate):
-    """Read a secret from ``path``; if it is missing or empty, generate one with
+    """
+    Read a secret from ``path``; if it is missing or empty, generate one with
     ``generate()`` and persist it owner-only. Concurrency-safe via exclusive
-    create — concurrent workers that lose the race read the winner's value."""
+    create — concurrent workers that lose the race read the winner's value.
+    """
     if path.exists():
         existing = path.read_text().strip()
         if existing:
@@ -90,5 +93,7 @@ def create_access_token(user_id):
 
 
 def decode_access_token(token):
-    """Return the token's payload, or raise jwt.InvalidTokenError."""
+    """
+    Return the token's payload, or raise jwt.InvalidTokenError.
+    """
     return jwt.decode(token, auth_secret(), algorithms=[ALGORITHM])

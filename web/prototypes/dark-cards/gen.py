@@ -1,7 +1,9 @@
-"""Render the real /demo dashboard in dark mode with different card-token
+"""
+Render the real /demo dashboard in dark mode with different card-token
 overrides, so the card treatments can be compared on the actual UI (real colors,
 fonts, layout) instead of a hand-built mock. Run with the server venv's python
-while `npm run dev` serves the web app on :5173."""
+while `npm run dev` serves the web app on :5173.
+"""
 
 from playwright.sync_api import sync_playwright
 

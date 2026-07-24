@@ -1,4 +1,5 @@
-"""Standalone bank-sync service.
+"""
+Standalone bank-sync service.
 
 Runs connectors (Playwright, Chromium) in their own container so the API stays
 slim and a browser crash cannot take the API down. Exposed only on the private

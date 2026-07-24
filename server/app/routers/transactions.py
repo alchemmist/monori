@@ -61,7 +61,9 @@ class BulkBody(BaseModel):
 
 
 def _resolve_category(c, category_id, uid):
-    """0 (or None handled by caller) means uncategorized; else must exist."""
+    """
+    0 (or None handled by caller) means uncategorized; else must exist.
+    """
     if category_id in (None, 0):
         return None
     if not c.execute(

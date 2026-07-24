@@ -1,4 +1,5 @@
-"""Unit tests for the T-Bank Playwright connector's flow logic.
+"""
+Unit tests for the T-Bank Playwright connector's flow logic.
 
 The real browser is replaced by a scripted fake page/context, so the login
 sequence, selectors, quick-login-code handling, statement download and the
@@ -96,13 +97,15 @@ class FakeDownloadExpectation:
 
 
 class FakePage:
-    """A scripted stand-in for a Playwright page driving the id.tbank.ru SSO.
+    """
+    A scripted stand-in for a Playwright page driving the id.tbank.ru SSO.
 
     ``stage`` is the current step: phone → password → sms → setcode → in for a
     fresh login, ``quickcode`` for a trusted-device quick login, and in/ops/
     export_open for the post-login statement download. The SMS step is a single
     ``otp-input`` (auto-submits); the 4-box pin widget backs only the
-    quick-login/set-code screens."""
+    quick-login/set-code screens.
+    """
 
     TITLES = {
         "phone": "Вход в Т-Банк",
@@ -372,8 +375,10 @@ def test_wrong_otp_reprompts_with_rejection_message():
 
 
 class _BlockedPage(FakePage):
-    """The bank shows its 'Доступ заблокирован' popup over the phone screen —
-    the driver must fail fast with that message, not loop re-entering the phone."""
+    """
+    The bank shows its 'Доступ заблокирован' popup over the phone screen —
+    the driver must fail fast with that message, not loop re-entering the phone.
+    """
 
     def query_selector(self, selector):
         if selector == TB.SEL_ACCESS_DENIED:
@@ -395,8 +400,10 @@ def test_access_denied_popup_fails_fast_with_bank_message():
 
 
 class _SubmitClickPage:
-    """A page whose submit-button click raises a chosen error — used to check
-    that _submit swallows a missing-button timeout but surfaces a real failure."""
+    """
+    A page whose submit-button click raises a chosen error — used to check
+    that _submit swallows a missing-button timeout but surfaces a real failure.
+    """
 
     def __init__(self, error):
         self._error = error

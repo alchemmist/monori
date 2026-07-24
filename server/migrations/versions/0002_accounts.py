@@ -1,5 +1,7 @@
-"""Accounts: every transaction gains a NOT NULL account_id and a nullable
-transfer_id; pre-existing rows are backfilled onto a default 'T-Bank' account."""
+"""
+Accounts: every transaction gains a NOT NULL account_id and a nullable
+transfer_id; pre-existing rows are backfilled onto a default 'T-Bank' account.
+"""
 
 from alembic import op
 
