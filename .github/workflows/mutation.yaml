@@ -1,0 +1,49 @@
+name: Mutation
+
+# The mutation gate is by far the longest check (~20-30 min), so it lives in
+# its own workflow: Deploy triggers on the CI workflow's success and no longer
+# waits for it, while PRs and main still get the gate's status.
+
+on:
+    pull_request:
+        branches: [main]
+    push:
+        branches: [main]
+    workflow_dispatch:
+
+permissions:
+    contents: read
+
+jobs:
+    mutation:
+        name: mutation
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+              with:
+                  persist-credentials: false
+
+            - name: Setup Node
+              uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+                  cache: npm
+                  cache-dependency-path: |
+                      web/package-lock.json
+
+            - name: Setup uv
+              uses: astral-sh/setup-uv@v5
+              with:
+                  enable-cache: true
+
+            - name: Install web deps
+              run: npm ci
+              working-directory: web
+
+            - name: Install server deps
+              run: uv sync
+              working-directory: server
+
+            - name: Run mutation
+              run: make mutation
