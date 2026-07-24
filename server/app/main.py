@@ -33,28 +33,17 @@ app.include_router(auth_router.router)
 STATIC_DIR = pathlib.Path(__file__).resolve().parent.parent / "static"
 
 
-def _safe_target(root: str, path: str) -> str | None:
-    """
-    Resolve ``path`` (untrusted) under ``root`` and return the real path only if
-    it stays inside ``root``; otherwise None. Symlinks and ``..`` are resolved
-    first, then containment is verified with ``commonpath`` so absolute paths or
-    traversal escaping ``root`` are rejected.
-    """
-    target = os.path.realpath(os.path.join(root, path.lstrip("/")))
-    if os.path.commonpath([root, target]) != root:
-        return None
-    return target
-
-
 def _serve_spa(base: pathlib.Path, path: str):
     """
     Serve a file from ``base`` if the request maps to one inside it, else the
-    SPA index.
+    SPA index. The untrusted path is resolved (``..`` and symlinks collapsed)
+    and must stay strictly under ``base`` before the file is opened, so absolute
+    paths or traversal escaping ``base`` are rejected.
     """
     root = os.path.realpath(base)
     if path:
-        target = _safe_target(root, path)
-        if target is not None and os.path.isfile(target):
+        target = os.path.realpath(os.path.join(root, path.lstrip("/")))
+        if target.startswith(root + os.sep) and os.path.isfile(target):
             return FileResponse(target)
     return FileResponse(os.path.join(root, "index.html"))
 
