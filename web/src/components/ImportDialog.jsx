@@ -2,7 +2,7 @@ import { useRef, useState } from "react";
 import { Button } from "@mantine/core";
 import { Checkbox } from "@mantine/core";
 import { api } from "../api.js";
-import { readStatementFile, statementTails } from "../importFile.js";
+import { readStatementFile, statementTails, tailMatches } from "../importFile.js";
 import { useStore } from "../store.js";
 import { money, fmtDate } from "../format.js";
 import AppDialog from "../ui/AppDialog.jsx";
@@ -43,7 +43,9 @@ export default function ImportDialog({ onClose }) {
             // duplicate flags are account-specific, so a switch re-previews
             const tails = statementTails(p.rows);
             if (tails.length === 1) {
-                const owners = accounts.filter((a) => (a.cardTails ?? []).includes(tails[0]));
+                const owners = accounts.filter((a) =>
+                    (a.cardTails ?? []).some((t) => tailMatches(t, tails[0])),
+                );
                 if (owners.length === 1 && owners[0].id !== accId) {
                     accId = owners[0].id;
                     setAccount(String(accId));
@@ -74,9 +76,12 @@ export default function ImportDialog({ onClose }) {
 
     const fresh = preview?.rows.filter((r) => !r.duplicate) ?? [];
     const selected = accounts.find((a) => String(a.id) === account);
-    const offerRemember = Boolean(
-        preview && detectedTail && selected && !(selected.cardTails ?? []).includes(detectedTail),
-    );
+    // offer to bind the tail only while NO account owns it — remembering a
+    // tail that already belongs elsewhere would make future routing ambiguous
+    const tailOwners = detectedTail
+        ? accounts.filter((a) => (a.cardTails ?? []).some((t) => tailMatches(t, detectedTail)))
+        : [];
+    const offerRemember = Boolean(preview && detectedTail && selected && tailOwners.length === 0);
 
     const commit = async () => {
         setBusy(true);

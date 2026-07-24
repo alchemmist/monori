@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { decodeStatementBytes, statementTails } from "./importFile.js";
+import {
+    MAX_STATEMENT_FILE_BYTES,
+    decodeStatementBytes,
+    readStatementFile,
+    statementTails,
+    tailMatches,
+} from "./importFile.js";
 
 describe("decodeStatementBytes", () => {
     it("decodes valid UTF-8 as UTF-8", () => {
@@ -16,6 +22,39 @@ describe("decodeStatementBytes", () => {
     it("keeps plain ASCII intact either way", () => {
         const ascii = new TextEncoder().encode("05.07.2026;OK;-20.00");
         expect(decodeStatementBytes(ascii)).toBe("05.07.2026;OK;-20.00");
+    });
+});
+
+describe("readStatementFile", () => {
+    const fakeFile = (bytes) => ({
+        size: bytes.byteLength,
+        arrayBuffer: async () => bytes,
+    });
+
+    it("reads and decodes a normal file", async () => {
+        const bytes = new TextEncoder().encode("05.07.2026;OK;-20.00");
+        expect(await readStatementFile(fakeFile(bytes))).toBe("05.07.2026;OK;-20.00");
+    });
+
+    it("rejects empty and oversized files without reading them", async () => {
+        await expect(readStatementFile({ size: 0 })).rejects.toThrow(/empty/);
+        await expect(readStatementFile({ size: MAX_STATEMENT_FILE_BYTES + 1 })).rejects.toThrow(
+            /larger than/,
+        );
+    });
+});
+
+describe("tailMatches", () => {
+    it("matches equal tails and mutual suffixes", () => {
+        expect(tailMatches("8181", "8181")).toBe(true);
+        expect(tailMatches("5536912947", "2947")).toBe(true);
+        expect(tailMatches("47", "2947")).toBe(true);
+    });
+
+    it("rejects different or empty tails", () => {
+        expect(tailMatches("8181", "2947")).toBe(false);
+        expect(tailMatches("", "2947")).toBe(false);
+        expect(tailMatches("8181", "")).toBe(false);
     });
 });
 
