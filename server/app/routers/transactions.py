@@ -137,7 +137,7 @@ def create_transaction(body: TxCreate, user: Annotated[dict, Depends(current_use
                 category,
                 account,
                 body.comment,
-                tx_hash(body.date, body.amount, body.description),
+                tx_hash(account, body.date, body.amount, body.description),
             ),
         )
         c.commit()
@@ -186,7 +186,7 @@ def patch_transaction(tx_id: int, patch: TxPatch, user: Annotated[dict, Depends(
                 category,
                 account,
                 comment,
-                tx_hash(date, amount, description),
+                tx_hash(account, date, amount, description),
                 tx_id,
             ),
         )

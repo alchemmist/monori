@@ -20,7 +20,6 @@ from io import BytesIO
 
 from openpyxl import load_workbook
 
-from ..importer import tx_hash
 from . import spec
 
 YEAR_RE = re.compile(r"^(\d{4})(_archive)?$")
@@ -341,11 +340,12 @@ def _parse_transactions(ws, warnings, errors):
         if currency and currency != "RUB":
             non_rub += 1
         date_iso = dt.strftime("%Y-%m-%dT%H:%M:%S")
-        h = tx_hash(date_iso, amount, description)
-        if h in seen:
+        marker = _s(col(row, "card"))
+        key = (date_iso, amount, description, marker)
+        if key in seen:
             dupes += 1
             continue
-        seen.add(h)
+        seen.add(key)
         category = _s(row[cat_col]) if cat_col < len(row) else ""
         rows.append(
             {
@@ -356,8 +356,7 @@ def _parse_transactions(ws, warnings, errors):
                 "mcc": _s(col(row, "mcc")),
                 "comment": "",
                 "monori_category": category,
-                "marker": _s(col(row, "card")),
-                "hash": h,
+                "marker": marker,
             }
         )
     if dupes:
@@ -397,7 +396,6 @@ def _synthetic(year, month, amount, category, description, marker=""):
         "comment": "",
         "monori_category": category,
         "marker": marker,
-        "hash": tx_hash(date_iso, amount, description),
     }
 
 

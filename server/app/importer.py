@@ -56,14 +56,22 @@ def parse_amount_kop(raw):
         return None
 
 
-def tx_hash(date_iso, amount_kop, description):
-    return hashlib.sha256(f"{date_iso}|{amount_kop}|{description}".encode()).hexdigest()
+def tx_hash(account_id, date_iso, amount_kop, description):
+    """
+    Dedup key of a transaction. Always scoped to the account: the same
+    date/amount/description legitimately occurs on two different accounts
+    (transfer legs, mirrored cards) and must not collide.
+    """
+    return hashlib.sha256(
+        f"{account_id}|{date_iso}|{amount_kop}|{description}".encode()
+    ).hexdigest()
 
 
 def parse_statement(text):
     """
     Returns (rows, errors). Each row: dict with date (ISO), amount (kopecks),
-    description, bank_category, mcc, hash.
+    description, bank_category, mcc. Hashes are not computed here — the account
+    is not known yet; ingestion derives the account-scoped hash on insert.
     """
     rows, errors = [], []
     for ln, line in enumerate(text.splitlines(), 1):
@@ -92,7 +100,6 @@ def parse_statement(text):
                 "description": rec["description"],
                 "bank_category": rec["bank_category"],
                 "mcc": rec["mcc"],
-                "hash": tx_hash(date_iso, amount, rec["description"]),
             }
         )
     return rows, errors

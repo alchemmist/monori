@@ -85,7 +85,7 @@ CREATE TABLE IF NOT EXISTS transactions (
   account_id INTEGER NOT NULL REFERENCES accounts (id),
   transfer_id TEXT,                  -- links the two rows of a transfer
   comment TEXT NOT NULL DEFAULT '',
-  hash TEXT NOT NULL,                -- sha1(date|amount|description) for dedup
+  hash TEXT NOT NULL,                -- sha256(account_id|date|amount|description) for dedup
   source TEXT NOT NULL DEFAULT 'import',
   batch_id INTEGER REFERENCES import_batches (id) ON DELETE SET NULL
 );
