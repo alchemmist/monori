@@ -34,10 +34,8 @@ def upgrade():
         " count INTEGER NOT NULL DEFAULT 0,"
         " PRIMARY KEY (user_id, feature, day))"
     )
+    op.execute("CREATE INDEX idx_usage_day ON feature_usage (day)")
 
 
 def downgrade():
-    op.execute("DROP TABLE feature_usage")
-    op.execute("DROP TABLE activity_events")
-    op.execute("ALTER TABLE users DROP COLUMN last_login")
-    op.execute("ALTER TABLE users DROP COLUMN is_admin")
+    raise NotImplementedError("monori migrations are forward-only")

@@ -126,3 +126,4 @@ CREATE TABLE IF NOT EXISTS feature_usage (
   count INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (user_id, feature, day)
 );
+CREATE INDEX IF NOT EXISTS idx_usage_day ON feature_usage (day);

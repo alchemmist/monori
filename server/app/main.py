@@ -10,6 +10,7 @@ from typing import Annotated
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.concurrency import run_in_threadpool
 
 from .admin import record_api_usage
 from .auth import current_user
@@ -40,9 +41,12 @@ app.include_router(admin.router)
 @app.middleware("http")
 async def count_feature_usage(request, call_next):
     response = await call_next(request)
-    # analytics must never break the request it observes
+    # analytics must never break the request it observes; the sqlite write goes
+    # through the threadpool so it cannot block the event loop
     with contextlib.suppress(Exception):
-        record_api_usage(request.url.path, request.headers.get("authorization"))
+        await run_in_threadpool(
+            record_api_usage, request.url.path, request.headers.get("authorization")
+        )
     return response
 
 
