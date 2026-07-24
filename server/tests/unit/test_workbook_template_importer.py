@@ -555,7 +555,11 @@ def test_outflow_fallback_when_balance_cell_missing():
         rows=[("▼Daily", None), ("Groceries", {1: (None, None, 100), 2: (None, 200, None)})],
     )
     parsed = parse_template_workbook(_save(wb))
+    # (description, date) keys are unique here — pin cardinality so a collision
+    # in a future change can't silently drop a row from the dict
+    assert len(parsed["transactions"]) == 2
     synth = {(t["description"], t["date"]): t for t in parsed["transactions"]}
+    assert len(synth) == 2
     # Jan aligns balance to 100.00; Feb has no balance cell, so the outflow drives
     # the target: projected(100) - have(0) + outflow(200) = 300 -> +200.00 delta.
     assert synth[("Groceries", "2025-02-28T12:00:00")]["amount"] == 20000
@@ -590,6 +594,7 @@ def test_dead_category_and_available_seed_at_seam():
     )
     parsed = parse_template_workbook(_save(wb))
     synth = {(t["description"], t["date"]): t for t in parsed["transactions"]}
+    assert len(synth) == len(parsed["transactions"])  # keys unique, nothing overwritten
     assert synth[("OldPhone", "2024-01-31T12:00:00")]["amount"] == 30000
     assert synth[("OldPhone", "2024-12-31T12:00:00")]["amount"] == -30000  # dead category zeroed
     assert synth[("Income", "2024-12-31T12:00:00")]["amount"] == 20000  # available seed
