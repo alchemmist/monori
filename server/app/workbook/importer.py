@@ -195,6 +195,13 @@ def parse_workbook(data: bytes):
     """
     Returns {groups, categories, transactions, budgets, warnings, errors}.
     """
+    from .template_importer import TemplateError, looks_like_template, parse_template_workbook
+
+    if looks_like_template(data):
+        try:
+            return parse_template_workbook(data)
+        except TemplateError as exc:
+            raise WorkbookError(str(exc)) from exc
     try:
         wb = load_workbook(BytesIO(data), data_only=True, read_only=True)
     except Exception as exc:
