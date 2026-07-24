@@ -172,4 +172,16 @@ export const api = {
         if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
         return r.blob();
     },
+    workbookPreview: (file) => {
+        const form = new FormData();
+        form.append("file", file);
+        return apiFetch("/api/import/workbook/preview", { method: "POST", body: form }).then(json);
+    },
+    workbookCommit: (file, mapping, budgetPolicy) => {
+        const form = new FormData();
+        form.append("file", file);
+        form.append("mapping", JSON.stringify(mapping));
+        form.append("budgetPolicy", budgetPolicy);
+        return apiFetch("/api/import/workbook/commit", { method: "POST", body: form }).then(json);
+    },
 };

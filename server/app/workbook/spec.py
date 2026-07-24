@@ -57,6 +57,18 @@ def kop_to_rub(kop: int) -> float:
     return round(kop / 100, 2)
 
 
+def kop_from_rub(value: float) -> int:
+    return round(round(float(value), 2) * 100)
+
+
+def strip_glyph(display: str) -> tuple[str, str | None]:
+    if display.startswith(GLYPH_IN):
+        return display[len(GLYPH_IN) :], "income"
+    if display.startswith(GLYPH_OUT):
+        return display[len(GLYPH_OUT) :], "expense"
+    return display, None
+
+
 def amount_display(value: float, currency: str) -> str:
     symbol = CURRENCY_SYMBOLS.get(currency, currency)
     return f"{value:.2f} {symbol}"
