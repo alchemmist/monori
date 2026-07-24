@@ -534,12 +534,11 @@ def _parse(wb):
     for source in list(archive_years.values()) + list(live_years.values()):
         year = source["year"]
         live = year in live_years
-        label = "Migration adjustment: income" if live else "Migration history: income"
         for m, target in source["income"].items():
             have = income_sums.get((year, m), 0)
             delta = target - have
             if abs(delta) > ADJUST_TOLERANCE_KOP:
-                synthetic.append(_synthetic(year, m, delta, INCOME_CATEGORY, label))
+                synthetic.append(_synthetic(year, m, delta, INCOME_CATEGORY, INCOME_CATEGORY))
                 income_sums[(year, m)] = have + delta
                 if live:
                     n_adjust += 1
@@ -605,15 +604,12 @@ def _parse(wb):
             delta = 0 if target is None else target - projected
             if abs(delta) > ADJUST_TOLERANCE_KOP:
                 if at_seam:
-                    desc = f"Migration carry: {name}"
                     n_seam += 1
                 elif live:
-                    desc = f"Migration adjustment: {name}"
                     n_adjust += 1
                 else:
-                    desc = f"Migration history: {name}"
                     n_hist += 1
-                synthetic.append(_synthetic(y, m, delta, name, desc))
+                synthetic.append(_synthetic(y, m, delta, name, name))
                 tx_sums[(name, y, m)] = have + delta
                 projected += delta
             balances[name] = projected
@@ -621,9 +617,7 @@ def _parse(wb):
         if at_seam and seam_seed is not None:
             delta = seam_seed - avail
             if abs(delta) > ADJUST_TOLERANCE_KOP:
-                synthetic.append(
-                    _synthetic(y, m, delta, INCOME_CATEGORY, "Migration: available seed")
-                )
+                synthetic.append(_synthetic(y, m, delta, INCOME_CATEGORY, INCOME_CATEGORY))
                 income_sums[(y, m)] = income_sums.get((y, m), 0) + delta
                 avail += delta
                 n_seam += 1
