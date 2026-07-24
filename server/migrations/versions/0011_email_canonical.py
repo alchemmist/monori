@@ -39,7 +39,25 @@ def upgrade():
             "UPDATE users SET email_canonical = ? WHERE id = ?",
             (_canonical(email), uid),
         )
+    # the old uniqueness was on the exact email string; the canonical key is
+    # derived (drops +tags everywhere, dots for gmail), so distinct emails can
+    # collapse to one canonical. Report such collisions explicitly rather than
+    # letting CREATE UNIQUE INDEX fail with an opaque error.
+    dupes = conn.exec_driver_sql(
+        "SELECT email_canonical, GROUP_CONCAT(id || ':' || email, ', ') AS members"
+        " FROM users GROUP BY email_canonical HAVING COUNT(*) > 1"
+    ).fetchall()
+    if dupes:
+        detail = "; ".join(f"{canon} <- {members}" for canon, members in dupes)
+        raise RuntimeError(
+            "cannot enforce one account per canonical email — merge these first: " + detail
+        )
     op.execute("CREATE UNIQUE INDEX idx_users_email_canonical ON users (email_canonical)")
+    op.execute(
+        "CREATE TRIGGER users_email_canonical_not_blank "
+        "BEFORE INSERT ON users WHEN NEW.email_canonical = '' "
+        "BEGIN SELECT RAISE(ABORT, 'email_canonical must not be blank'); END"
+    )
 
 
 def downgrade():

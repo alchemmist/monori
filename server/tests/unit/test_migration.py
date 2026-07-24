@@ -155,6 +155,75 @@ def test_schema_sql_matches_migration_chain(tmp_path):
     assert _describe(fresh) == _describe(chained)
 
 
+def test_migration_0011_backfills_and_enforces_canonical(tmp_path):
+    db_path = os.path.join(tmp_path, "v6.db")
+    command.upgrade(_alembic_config(db_path), "0006")
+    raw = sqlite3.connect(db_path)
+    raw.execute(
+        "INSERT INTO users (email, password_hash, created_at)"
+        " VALUES ('a.n.ton+shop@gmail.com', 'h', 't')"
+    )
+    raw.commit()
+    raw.close()
+
+    conn = connect(db_path)
+    try:
+        assert _revision(conn) == HEAD
+        canon = conn.execute("SELECT email_canonical FROM users").fetchone()[0]
+        assert canon == "anton@gmail.com"
+        # a distinct alias of the same mailbox collapses to the same canonical
+        # and is rejected by the new unique index
+        try:
+            conn.execute(
+                "INSERT INTO users (email, email_canonical, password_hash, created_at)"
+                " VALUES ('anton@gmail.com', 'anton@gmail.com', 'h', 't')"
+            )
+            raise AssertionError("canonical alias collision was accepted")
+        except sqlite3.IntegrityError:
+            pass
+    finally:
+        conn.close()
+
+
+def test_migration_0011_reports_canonical_collisions(tmp_path):
+    db_path = os.path.join(tmp_path, "v6.db")
+    command.upgrade(_alembic_config(db_path), "0006")
+    raw = sqlite3.connect(db_path)
+    raw.execute(
+        "INSERT INTO users (email, password_hash, created_at) VALUES"
+        " ('anton@gmail.com', 'h', 't'), ('an.ton@gmail.com', 'h', 't')"
+    )
+    raw.commit()
+    raw.close()
+
+    try:
+        connect(db_path).close()
+        raise AssertionError("migration did not report the canonical collision")
+    except Exception as exc:  # noqa: BLE001 — alembic wraps the RuntimeError
+        assert "merge these first" in str(exc)
+
+
+def test_blank_email_canonical_is_rejected(tmp_path):
+    for name, builder in (
+        ("fresh.db", lambda p: connect(p).close()),
+        ("chained.db", lambda p: command.upgrade(_alembic_config(p), "head")),
+    ):
+        path = os.path.join(tmp_path, name)
+        builder(path)
+        raw = sqlite3.connect(path)
+        try:
+            try:
+                raw.execute(
+                    "INSERT INTO users (email, password_hash, created_at)"
+                    " VALUES ('u@e.co', 'h', 't')"
+                )
+                raise AssertionError(f"{name}: blank email_canonical was accepted")
+            except sqlite3.IntegrityError:
+                pass
+        finally:
+            raw.close()
+
+
 def test_legacy_intermediate_user_version_is_adopted(tmp_path):
     db_path = os.path.join(tmp_path, "v1.db")
     command.upgrade(_alembic_config(db_path), "0002")

@@ -9,7 +9,10 @@ from app.workbook.apply import apply_workbook, budget_conflicts
 
 def _db(tmp_path):
     c = dbmod.connect(str(tmp_path / "t.db"))
-    c.execute("INSERT INTO users (email, password_hash, created_at) VALUES ('u@e.co', 'h', 't')")
+    c.execute(
+        "INSERT INTO users (email, email_canonical, password_hash, created_at)"
+        " VALUES ('u@e.co', 'u@e.co', 'h', 't')"
+    )
     uid = c.execute("SELECT id FROM users").fetchone()[0]
     c.execute(
         "INSERT INTO accounts (user_id, name, type, currency, sort)"

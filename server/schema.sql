@@ -113,6 +113,15 @@ CREATE TABLE IF NOT EXISTS users (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_canonical ON users (email_canonical);
 
+-- email_canonical defaults to '' only so ALTER TABLE ADD COLUMN can backfill
+-- legacy rows; a blank value can never authenticate (login resolves by it) and
+-- would collide on the unique index, so reject any insert that omits it
+CREATE TRIGGER IF NOT EXISTS users_email_canonical_not_blank
+BEFORE INSERT ON users WHEN new.email_canonical = ''
+BEGIN
+SELECT RAISE(ABORT, 'email_canonical must not be blank');
+END;
+
 CREATE TABLE IF NOT EXISTS activity_events (
   id INTEGER PRIMARY KEY,
   user_id INTEGER NOT NULL REFERENCES users (id) ON DELETE CASCADE,
