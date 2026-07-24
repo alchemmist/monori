@@ -334,6 +334,14 @@ export default function ConnectionDialog({ account, connection, onClose }) {
                         {fmtDate(result.dateFrom)} — {fmtDate(result.dateTo)}
                     </Txt>
                 )}
+                {result.unmappedTails?.length > 0 && (
+                    <Txt tone="warning" caption block>
+                        Cards not bound to any account:{" "}
+                        {result.unmappedTails.map((u) => `*${u.tail} (${u.rows} rows)`).join(", ")}.
+                        Their rows landed on this account — add each tail to its account (Accounts →
+                        Edit → Card tails) to route them automatically.
+                    </Txt>
+                )}
             </div>
         );
     } else if (step === "error") {

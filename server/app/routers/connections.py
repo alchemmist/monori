@@ -126,38 +126,83 @@ def _fail(c, cid, error) -> NoReturn:
     raise HTTPException(502, SYNC_FAILED) from error
 
 
+def _tail(card):
+    digits = "".join(ch for ch in str(card or "") if ch.isdigit())
+    return digits[-4:]
+
+
+def _route_rows(c, uid, default_account_id, rows):
+    """
+    Split synced rows between the user's accounts by their bound card tails
+    (``accounts.card_tails``). Rows whose tail is not bound anywhere stay on
+    the synced account; when the feed mixes several cards, those tails are
+    reported back so the user can bind them instead of silently merging.
+    """
+    bound = {}
+    for r in c.execute("SELECT id, card_tails FROM accounts WHERE user_id=?", (uid,)):
+        for t in (r["card_tails"] or "").split(","):
+            if t and t not in bound:
+                bound[t] = r["id"]
+    routed: dict[int, list] = {}
+    unmapped: dict[str, int] = {}
+    seen_tails = set()
+    for row in rows:
+        tail = _tail(row.get("card"))
+        if tail:
+            seen_tails.add(tail)
+        target = bound.get(tail, default_account_id)
+        if tail and tail not in bound:
+            unmapped[tail] = unmapped.get(tail, 0) + 1
+        routed.setdefault(target, []).append(row)
+    if len(seen_tails) <= 1:
+        # a single-card feed is unambiguous — nothing to warn about
+        unmapped = {}
+    return routed, unmapped
+
+
 def _finish_account(c, row, account_id, result, uid):
     """
-    Categorize, commit one account's rows as a batch, cache the session.
+    Categorize, route rows to their bound accounts (falling back to the synced
+    account), commit each slice as its own batch, cache the session. Returns
+    (per-account summaries, unmapped card tails).
     """
     rules = _load_user_rules(c, uid)
     categorize_rows(result.rows, rules)
-    cur = c.execute(
-        "INSERT INTO import_batches (account_id, connection_id, source, created_at)"
-        " VALUES (?, ?, 'sync', ?)",
-        (account_id, row["id"], _now()),
-    )
-    batch_id = cur.lastrowid
-    inserted, skipped = commit_rows(c, account_id, result.rows, source="sync", batch_id=batch_id)
-    c.execute(
-        "UPDATE import_batches SET inserted=?, skipped=? WHERE id=?",
-        (inserted, skipped, batch_id),
-    )
+    routed, unmapped = _route_rows(c, uid, account_id, result.rows)
+    # the synced account always gets its batch, even for an empty pull — the
+    # incremental-sync cursor (_account_since) keys on that batch's existence
+    routed.setdefault(account_id, [])
+    summaries = []
+    for target_id, rows in sorted(routed.items(), key=lambda kv: kv[0] != account_id):
+        cur = c.execute(
+            "INSERT INTO import_batches (account_id, connection_id, source, created_at)"
+            " VALUES (?, ?, 'sync', ?)",
+            (target_id, row["id"], _now()),
+        )
+        batch_id = cur.lastrowid
+        inserted, skipped = commit_rows(c, target_id, rows, source="sync", batch_id=batch_id)
+        c.execute(
+            "UPDATE import_batches SET inserted=?, skipped=? WHERE id=?",
+            (inserted, skipped, batch_id),
+        )
+        dates = sorted(r["date"] for r in rows)
+        summaries.append(
+            {
+                "accountId": target_id,
+                "inserted": inserted,
+                "skipped": skipped,
+                "batchId": batch_id,
+                "dateFrom": dates[0] if dates else None,
+                "dateTo": dates[-1] if dates else None,
+            }
+        )
     if result.session:
         c.execute(
             "UPDATE bank_connections SET session_encrypted=?, updated_at=? WHERE id=?",
             (crypto.encrypt(result.session), _now(), row["id"]),
         )
     c.commit()
-    dates = sorted(r["date"] for r in result.rows)
-    return {
-        "accountId": account_id,
-        "inserted": inserted,
-        "skipped": skipped,
-        "batchId": batch_id,
-        "dateFrom": dates[0] if dates else None,
-        "dateTo": dates[-1] if dates else None,
-    }
+    return summaries, unmapped
 
 
 def _mark_connected(c, cid):
@@ -169,7 +214,7 @@ def _mark_connected(c, cid):
     c.commit()
 
 
-def _aggregate(results):
+def _aggregate(results, unmapped=None):
     dates_from = [r["dateFrom"] for r in results if r["dateFrom"]]
     dates_to = [r["dateTo"] for r in results if r["dateTo"]]
     return {
@@ -179,6 +224,7 @@ def _aggregate(results):
         "accounts": results,
         "dateFrom": min(dates_from) if dates_from else None,
         "dateTo": max(dates_to) if dates_to else None,
+        "unmappedTails": [{"tail": t, "rows": n} for t, n in sorted((unmapped or {}).items())],
     }
 
 
@@ -200,11 +246,13 @@ def _account_since(c, cid, account_id, last_sync):
 
 def _sync_accounts(c, row, accounts, creds, session, uid):
     """
-    Pull each account in order. Returns per-account summaries; raises
-    SmsRequired after persisting which account the parked login belongs to.
+    Pull each account in order. Returns (per-account summaries, unmapped card
+    tails); raises SmsRequired after persisting which account the parked login
+    belongs to.
     """
     cid = row["id"]
     results = []
+    unmapped: dict[str, int] = {}
     for acct in accounts:
         try:
             result = get_runner().start(
@@ -224,9 +272,12 @@ def _sync_accounts(c, row, accounts, creds, session, uid):
             )
             c.commit()
             raise
-        results.append(_finish_account(c, row, acct["id"], result, uid))
+        summaries, missed = _finish_account(c, row, acct["id"], result, uid)
+        results.extend(summaries)
+        for t, n in missed.items():
+            unmapped[t] = unmapped.get(t, 0) + n
         session = result.session or session
-    return results
+    return results, unmapped
 
 
 @router.get("/available")
@@ -343,9 +394,9 @@ def sync_connection(cid: int, user: Annotated[dict, Depends(current_user)]):
             c.commit()
         session = crypto.decrypt(row["session_encrypted"])
         try:
-            results = _sync_accounts(c, row, accounts, creds, session, uid)
+            results, unmapped = _sync_accounts(c, row, accounts, creds, session, uid)
             _mark_connected(c, cid)
-            return _aggregate(results)
+            return _aggregate(results, unmapped)
         except SmsRequired:
             return {"status": "awaiting_sms", "message": SMS_SENT}
         except ConnectorError as e:
@@ -373,19 +424,22 @@ def submit_sms(cid: int, body: SmsBody, user: Annotated[dict, Depends(current_us
             return {"status": "awaiting_sms", "message": CODE_REJECTED}
         except ConnectorError as e:
             _fail(c, cid, e)
-        results = [_finish_account(c, row, pending_id, result, uid)]
+        results, unmapped = _finish_account(c, row, pending_id, result, uid)
         session = result.session or crypto.decrypt(row["session_encrypted"])
         ids = [a["id"] for a in accounts]
         after = ids.index(pending_id) + 1 if pending_id in ids else len(ids)
         remaining = accounts[after:]
         try:
-            results.extend(_sync_accounts(c, row, remaining, _creds(c, row), session, uid))
+            more, missed = _sync_accounts(c, row, remaining, _creds(c, row), session, uid)
         except SmsRequired:
             return {"status": "awaiting_sms", "message": SMS_SENT}
         except ConnectorError as e:
             _fail(c, cid, e)
+        results.extend(more)
+        for t, n in missed.items():
+            unmapped[t] = unmapped.get(t, 0) + n
         _mark_connected(c, cid)
-        return _aggregate(results)
+        return _aggregate(results, unmapped)
     finally:
         c.close()
 
