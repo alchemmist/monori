@@ -24,8 +24,6 @@ def _hash(date_iso, amount_kop, description):
 
 
 def upgrade():
-    # keyset pagination keeps at most BATCH rows in memory and avoids holding a
-    # read cursor open across the UPDATEs, so this scales to large histories
     conn = op.get_bind()
     last_id = 0
     while True:
@@ -45,7 +43,4 @@ def upgrade():
 
 
 def downgrade():
-    # No SHA-1 downgrade: it would reintroduce the weak hash this migration
-    # exists to remove. A rollback re-derives fingerprints on the next sync,
-    # which is idempotent, so no duplicates result.
     raise NotImplementedError("SHA-1 fingerprints are not restorable")

@@ -33,9 +33,6 @@ router = APIRouter(prefix="/api/connections", tags=["connections"])
 
 log = logging.getLogger(__name__)
 
-# Client-facing sync messages are fixed strings chosen by code path, never the
-# exception text: a connector's error can carry raw internal detail (browser
-# selectors, paths) that must not reach the user. The real error is logged.
 SMS_SENT = "A confirmation code was sent to your phone."
 CODE_REJECTED = "The bank rejected the code — check it and try again."
 SYNC_FAILED = "The bank sync could not be completed. Check the connection and try again."

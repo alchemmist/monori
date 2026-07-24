@@ -23,9 +23,6 @@ app = FastAPI(title="monori-sync")
 
 log = logging.getLogger(__name__)
 
-# Fixed client-facing messages: a connector error can carry raw internal detail
-# (browser selectors, paths, URLs), so the exception text is logged, never
-# returned. Messages are chosen by code path.
 SMS_SENT = "A confirmation code was sent to your phone."
 CODE_REJECTED = "The bank rejected the code — check it and try again."
 SYNC_FAILED = "The bank sync could not be completed."
