@@ -18,6 +18,7 @@ from pydantic import BaseModel
 from ..admin import admin_emails
 from ..auth import current_user
 from ..deps import conn, serialize_user
+from ..emails import canonical_email, normalize_email
 from ..security import create_access_token, hash_password, verify_password
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -45,17 +46,17 @@ class RegisterBody(BaseModel):
     password: str
 
 
-def _normalize_email(email):
-    return email.strip().lower()
-
-
 def create_user(c, raw_email, password):
     """
     Validate and insert a user (with a default Cash account), returning the
     serialized user. Shared by public registration and admin user creation.
     Raises HTTPException on invalid input or duplicate email.
+
+    Duplicates are rejected on the canonical form of the address, so a single
+    real mailbox cannot register several accounts through provider aliasing
+    (Gmail dots, ``+tag`` sub-addressing).
     """
-    email = _normalize_email(raw_email)
+    email = normalize_email(raw_email)
     if not _valid_email(email):
         raise HTTPException(400, "invalid email")
     if len(password) < MIN_PASSWORD_LEN:
@@ -63,8 +64,9 @@ def create_user(c, raw_email, password):
     now = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S")
     try:
         cur = c.execute(
-            "INSERT INTO users (email, password_hash, created_at) VALUES (?, ?, ?)",
-            (email, hash_password(password), now),
+            "INSERT INTO users (email, email_canonical, password_hash, created_at)"
+            " VALUES (?, ?, ?, ?)",
+            (email, canonical_email(email), hash_password(password), now),
         )
         c.commit()
     except sqlite3.IntegrityError:
@@ -101,18 +103,23 @@ def token(form: Annotated[OAuth2PasswordRequestForm, Depends()]):
     """
     OAuth2 password grant: ``username`` is the email. Returns a bearer token.
     """
-    email = _normalize_email(form.username)
+    email = normalize_email(form.username)
     c = conn()
     try:
-        row = c.execute("SELECT id, password_hash FROM users WHERE email=?", (email,)).fetchone()
+        row = c.execute(
+            "SELECT id, password_hash FROM users WHERE email_canonical=?",
+            (canonical_email(email),),
+        ).fetchone()
         if row is None or not verify_password(row["password_hash"], form.password):
             raise HTTPException(401, "incorrect email or password")
         # MONORI_ADMIN_EMAILS is the source of truth for admin rights, so the
-        # flag is (re)synced on every successful login
+        # flag is (re)synced on every successful login; matched on the canonical
+        # form so an admin's mailbox is recognised through any of its aliases
         now = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S")
+        admin_canon = {canonical_email(e) for e in admin_emails()}
         c.execute(
             "UPDATE users SET is_admin=?, last_login=? WHERE id=?",
-            (1 if email in admin_emails() else 0, now, row["id"]),
+            (1 if canonical_email(email) in admin_canon else 0, now, row["id"]),
         )
         c.execute(
             "INSERT INTO activity_events (user_id, kind, created_at) VALUES (?, 'login', ?)",

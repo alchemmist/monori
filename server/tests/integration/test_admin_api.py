@@ -54,6 +54,14 @@ def test_admin_flag_synced_from_env_at_login(anon, monkeypatch):
     assert anon.get("/api/auth/me", headers=headers).json()["isAdmin"] is False
 
 
+def test_admin_flag_matches_env_through_a_gmail_alias(anon, monkeypatch):
+    # the admin env holds one form of a Gmail address; logging in through an
+    # alias of the same mailbox must still grant admin
+    monkeypatch.setenv("MONORI_ADMIN_EMAILS", "admin.person@gmail.com")
+    headers = login_as(anon, "adminperson+work@gmail.com")
+    assert anon.get("/api/auth/me", headers=headers).json()["isAdmin"] is True
+
+
 def test_overview_counts_users_and_transactions(anon, monkeypatch):
     other = login_as(anon, "other@example.com")
     anon.headers.update(other)
