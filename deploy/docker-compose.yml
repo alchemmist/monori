@@ -19,6 +19,8 @@ services:
         restart: unless-stopped
         environment:
             MONORI_SYNC_URL: http://sync:8010
+            # comma-separated admin emails; set in deploy/.env on the host
+            MONORI_ADMIN_EMAILS: ${MONORI_ADMIN_EMAILS:-}
         volumes:
             - ./data:/app/data
         depends_on:

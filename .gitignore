@@ -1,5 +1,6 @@
 pass.txt
 .env
+deploy/data/
 migration/raw/
 migration/out/
 server/static/
