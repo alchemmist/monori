@@ -11,6 +11,7 @@ on ``/runs/{cid}/sms``, the run is cancelled, or it is replaced by a new run.
 """
 
 import contextlib
+import logging
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
@@ -20,7 +21,18 @@ from .connectors.base import ConnectorError, SmsRequired
 
 app = FastAPI(title="monori-sync")
 
+log = logging.getLogger(__name__)
+
+SMS_SENT = "A confirmation code was sent to your phone."
+CODE_REJECTED = "The bank rejected the code — check it and try again."
+SYNC_FAILED = "The bank sync could not be completed."
+
 PENDING: dict[int, connectors.Connector] = {}
+
+
+def _error(cid, error):
+    log.warning("sync run %s failed: %s", cid, error)
+    return {"status": "error", "message": SYNC_FAILED}
 
 
 class RunBody(BaseModel):
@@ -58,15 +70,15 @@ def start_run(cid: int, body: RunBody):
     try:
         cls = connectors.get_connector_class(body.bank, body.kind)
     except ConnectorError as e:
-        return {"status": "error", "message": str(e)}
+        return _error(cid, e)
     connector = cls(body.credentials, body.session, account_ref=body.accountRef)
     try:
         return _done(connector.sync(body.since))
-    except SmsRequired as e:
+    except SmsRequired:
         PENDING[cid] = connector
-        return {"status": "awaiting_sms", "message": str(e)}
+        return {"status": "awaiting_sms", "message": SMS_SENT}
     except ConnectorError as e:
-        return {"status": "error", "message": str(e)}
+        return _error(cid, e)
 
 
 @app.post("/runs/{cid}/sms")
@@ -76,16 +88,16 @@ def submit_sms(cid: int, body: SmsBody):
         raise HTTPException(409, "no login awaiting a code")
     try:
         return _done(connector.resume_sync(body.code))
-    except SmsRequired as e:
+    except SmsRequired:
         # a rejected code keeps the login alive — re-park it and ask again
         PENDING[cid] = connector
-        return {"status": "awaiting_sms", "message": str(e)}
+        return {"status": "awaiting_sms", "message": CODE_REJECTED}
     except ConnectorError as e:
         # the failed login is no longer tracked, so close it here or its live
         # browser leaks
         with contextlib.suppress(Exception):
             connector.close()
-        return {"status": "error", "message": str(e)}
+        return _error(cid, e)
 
 
 @app.post("/runs/{cid}/cancel")

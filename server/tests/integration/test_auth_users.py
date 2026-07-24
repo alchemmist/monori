@@ -37,6 +37,33 @@ def test_register_validates_email_and_password(client):
     assert _register(client, email="a@b.co", password="short").status_code == 400
 
 
+@pytest.mark.parametrize("email", ["user@example.com", "a.b+c@sub.example.co"])
+def test_valid_email_accepts(email):
+    from app.routers.auth_router import _valid_email
+
+    assert _valid_email(email)
+
+
+@pytest.mark.parametrize(
+    "email",
+    [
+        "",
+        "no-at-sign",
+        "@example.com",
+        "user@nodot",
+        "user@@example.com",
+        "user@.com",
+        "user@example.",
+        "user name@example.com",
+        "u" * 250 + "@x.com",
+    ],
+)
+def test_valid_email_rejects(email):
+    from app.routers.auth_router import _valid_email
+
+    assert not _valid_email(email)
+
+
 def test_login_returns_bearer_token(client):
     _register(client)
     r = _login(client)

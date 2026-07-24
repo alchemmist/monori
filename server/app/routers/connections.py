@@ -12,9 +12,10 @@ completes the parked account's pull and the remaining accounts follow on the
 now-cached session.
 """
 
+import logging
 import secrets
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, NoReturn
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -29,6 +30,12 @@ from ..ingest import categorize_rows, commit_rows
 from ..sync_runner import NoPendingLogin, get_runner
 
 router = APIRouter(prefix="/api/connections", tags=["connections"])
+
+log = logging.getLogger(__name__)
+
+SMS_SENT = "A confirmation code was sent to your phone."
+CODE_REJECTED = "The bank rejected the code — check it and try again."
+SYNC_FAILED = "The bank sync could not be completed. Check the connection and try again."
 
 
 def _now():
@@ -107,6 +114,16 @@ def _mark_error(c, cid, message):
         (message, _now(), cid),
     )
     c.commit()
+
+
+def _fail(c, cid, error) -> NoReturn:
+    """
+    Record a failed sync and surface it to the client without leaking the raw
+    connector error: the detail is logged, the user sees a fixed message.
+    """
+    log.warning("bank connection %s sync failed: %s", cid, error)
+    _mark_error(c, cid, SYNC_FAILED)
+    raise HTTPException(502, SYNC_FAILED) from error
 
 
 def _finish_account(c, row, account_id, result, uid):
@@ -329,11 +346,10 @@ def sync_connection(cid: int, user: Annotated[dict, Depends(current_user)]):
             results = _sync_accounts(c, row, accounts, creds, session, uid)
             _mark_connected(c, cid)
             return _aggregate(results)
-        except SmsRequired as e:
-            return {"status": "awaiting_sms", "message": str(e)}
+        except SmsRequired:
+            return {"status": "awaiting_sms", "message": SMS_SENT}
         except ConnectorError as e:
-            _mark_error(c, cid, str(e))
-            raise HTTPException(502, str(e)) from e
+            _fail(c, cid, e)
     finally:
         c.close()
 
@@ -353,11 +369,10 @@ def submit_sms(cid: int, body: SmsBody, user: Annotated[dict, Depends(current_us
             result = get_runner().resume(cid, body.code)
         except NoPendingLogin as e:
             raise HTTPException(409, "no login awaiting a code") from e
-        except SmsRequired as e:
-            return {"status": "awaiting_sms", "message": str(e)}
+        except SmsRequired:
+            return {"status": "awaiting_sms", "message": CODE_REJECTED}
         except ConnectorError as e:
-            _mark_error(c, cid, str(e))
-            raise HTTPException(502, str(e)) from e
+            _fail(c, cid, e)
         results = [_finish_account(c, row, pending_id, result, uid)]
         session = result.session or crypto.decrypt(row["session_encrypted"])
         ids = [a["id"] for a in accounts]
@@ -365,11 +380,10 @@ def submit_sms(cid: int, body: SmsBody, user: Annotated[dict, Depends(current_us
         remaining = accounts[after:]
         try:
             results.extend(_sync_accounts(c, row, remaining, _creds(c, row), session, uid))
-        except SmsRequired as e:
-            return {"status": "awaiting_sms", "message": str(e)}
+        except SmsRequired:
+            return {"status": "awaiting_sms", "message": SMS_SENT}
         except ConnectorError as e:
-            _mark_error(c, cid, str(e))
-            raise HTTPException(502, str(e)) from e
+            _fail(c, cid, e)
         _mark_connected(c, cid)
         return _aggregate(results)
     finally:

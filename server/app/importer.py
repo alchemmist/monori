@@ -57,9 +57,7 @@ def parse_amount_kop(raw):
 
 
 def tx_hash(date_iso, amount_kop, description):
-    return hashlib.sha1(
-        f"{date_iso}|{amount_kop}|{description}".encode(), usedforsecurity=False
-    ).hexdigest()
+    return hashlib.sha256(f"{date_iso}|{amount_kop}|{description}".encode()).hexdigest()
 
 
 def parse_statement(text):
