@@ -105,11 +105,13 @@ CREATE TABLE IF NOT EXISTS budgets (
 CREATE TABLE IF NOT EXISTS users (
   id INTEGER PRIMARY KEY,
   email TEXT NOT NULL UNIQUE,
+  email_canonical TEXT NOT NULL DEFAULT '',   -- aliasing-collapsed key, one per mailbox
   password_hash TEXT NOT NULL,
   created_at TEXT NOT NULL,
   is_admin INTEGER NOT NULL DEFAULT 0,
   last_login TEXT
 );
+CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_canonical ON users (email_canonical);
 
 CREATE TABLE IF NOT EXISTS activity_events (
   id INTEGER PRIMARY KEY,

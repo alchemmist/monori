@@ -32,6 +32,37 @@ def test_register_normalizes_email(client):
     assert _register(client, email="mixed@example.com").status_code == 409
 
 
+@pytest.mark.parametrize(
+    "alias",
+    [
+        "antoningrish@gmail.com",
+        "a.n.t.o.n.ingrish@gmail.com",
+        "anton.ingrish+shopping@gmail.com",
+    ],
+)
+def test_register_rejects_gmail_alias_of_same_mailbox(client, alias):
+    assert _register(client, email="anton.ingrish@gmail.com").status_code == 200
+    # a Gmail alias (dots / +tag) resolves to the same inbox and is rejected
+    assert _register(client, email=alias).status_code == 409
+
+
+def test_register_rejects_plus_tag_alias_on_any_domain(client):
+    assert _register(client, email="user@example.com").status_code == 200
+    assert _register(client, email="user+promo@example.com").status_code == 409
+
+
+def test_register_allows_dots_on_non_gmail_domain(client):
+    # dots only collapse for Gmail; other providers keep them distinct
+    assert _register(client, email="a.b@example.com").status_code == 200
+    assert _register(client, email="ab@example.com").status_code == 200
+
+
+def test_login_works_through_a_gmail_alias(client):
+    _register(client, email="anton.ingrish@gmail.com")
+    r = _login(client, email="antoningrish+phone@gmail.com")
+    assert r.status_code == 200, r.text
+
+
 def test_register_validates_email_and_password(client):
     assert _register(client, email="not-an-email").status_code == 400
     assert _register(client, email="a@b.co", password="short").status_code == 400

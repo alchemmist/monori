@@ -5,7 +5,7 @@ from alembic import command
 
 from app.db import LEGACY_REVISIONS, _alembic_config, connect
 
-HEAD = "0010"
+HEAD = "0011"
 assert LEGACY_REVISIONS[-1] == "0006"
 
 OLD_SCHEMA = """
