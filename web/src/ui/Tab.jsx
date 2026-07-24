@@ -1,4 +1,4 @@
-import { useEffect, useId, useState, useSyncExternalStore } from "react";
+import { useId, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { ChevronLeft, ChevronRight, Xmark } from "@gravity-ui/icons";
 
 /**
@@ -65,20 +65,25 @@ function unregisterTab(id) {
 
 export default function Tab({ title, strip, onClose, footer, defaultCollapsed = false, children }) {
     const id = useId();
+    const ref = useRef(null);
     const [collapsed, setCollapsed] = useState(defaultCollapsed);
     const [animating, setAnimating] = useState(false);
-    const width = collapsed ? TAB_STRIP_WIDTH : TAB_WIDTH;
 
-    useEffect(() => {
-        registerTab(id, defaultCollapsed ? TAB_STRIP_WIDTH : TAB_WIDTH);
-        return () => unregisterTab(id);
-        // registration happens once per mounted tab
-        // eslint-disable-next-line react-hooks/exhaustive-deps
+    // register before paint (so co-mounting tabs never flash overlapped) with
+    // the real rendered width — CSS caps the tab at 92vw, so the 420px constant
+    // can overstate the slot on narrow viewports; a ResizeObserver keeps the
+    // slot honest through collapse/expand transitions and window resizes
+    useLayoutEffect(() => {
+        registerTab(id, ref.current?.offsetWidth ?? TAB_WIDTH);
+        const ro = new ResizeObserver(() => {
+            if (ref.current) resizeTab(id, ref.current.offsetWidth);
+        });
+        if (ref.current) ro.observe(ref.current);
+        return () => {
+            ro.disconnect();
+            unregisterTab(id);
+        };
     }, [id]);
-
-    useEffect(() => {
-        resizeTab(id, width);
-    }, [id, width]);
 
     const offset = useSyncExternalStore(subscribe, () => computeOffset(stack.tabs, id));
 
@@ -93,6 +98,7 @@ export default function Tab({ title, strip, onClose, footer, defaultCollapsed = 
 
     return (
         <aside
+            ref={ref}
             className={cls}
             style={{ right: offset }}
             onTransitionEnd={(e) => {
@@ -100,6 +106,7 @@ export default function Tab({ title, strip, onClose, footer, defaultCollapsed = 
             }}
         >
             <button
+                type="button"
                 className="ui-tab__strip"
                 onClick={() => toggle(false)}
                 title={`Expand ${strip || title}`}
@@ -115,6 +122,7 @@ export default function Tab({ title, strip, onClose, footer, defaultCollapsed = 
                     <div className="ui-tab__title">{title}</div>
                     <div className="ui-tab__head-actions">
                         <button
+                            type="button"
                             className="ui-tab__icon-btn"
                             onClick={() => toggle(true)}
                             title="Collapse — the app stays usable behind the tab"
@@ -123,6 +131,7 @@ export default function Tab({ title, strip, onClose, footer, defaultCollapsed = 
                             <ChevronRight width={16} height={16} />
                         </button>
                         <button
+                            type="button"
                             className="ui-tab__icon-btn"
                             onClick={onClose}
                             title="Close"
