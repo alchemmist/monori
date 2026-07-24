@@ -169,9 +169,15 @@ export default function ConnectionDialog({ account, connection, onClose }) {
     };
 
     // unlink/disconnect refresh the snapshot before onClose runs, so the
-    // connection prop can vanish while the dialog is still mounted — close
-    // quietly instead of crashing the whole page on connection.status
-    if (step === "ready" && !connection) return null;
+    // connection prop can vanish while the dialog is still mounted — render
+    // nothing instead of crashing on connection.status, and actively close so
+    // the parent's dialog state is cleared even when the connection vanished
+    // for an external reason (another tab's sync, a background refresh)
+    const gone = step === "ready" && !connection;
+    useEffect(() => {
+        if (gone) onClose();
+    }, [gone, onClose]);
+    if (gone) return null;
 
     let footer = { apply: "Close", onApply: handleClose, applyProps: {} };
     let body = null;
