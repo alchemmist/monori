@@ -265,6 +265,89 @@ def test_export_escapes_formula_prefixes(api, client):
     assert "'+SUM(A1)" in comments
 
 
+def test_export_header_band_is_slate(api, client):
+    _setup(api, client)
+    wb = _export(client)
+    for name in ("Categories", "Transactions", "DashData", "2026"):
+        head = wb[name].cell(row=1, column=1)
+        assert head.fill.fgColor.rgb == "FF3C464D"
+        assert head.font.color.rgb == "FFFFFFFF"
+        assert head.font.bold
+
+
+def test_export_year_sheet_bands(api, client):
+    _setup(api, client)
+    ws = _export(client)["2026"]
+    assert ws.cell(row=1, column=2).fill.fgColor.rgb == "FF3C464D"
+    assert ws.cell(row=2, column=2).fill.fgColor.rgb == "FF3C464D"
+    assert ws.cell(row=3, column=2).fill.fgColor.rgb == "FFEEF5E7"
+    group_row = next(
+        r for r in range(1, ws.max_row + 1) if ws.cell(row=r, column=1).value == "▼Daily Expenses"
+    )
+    assert ws.cell(row=group_row, column=1).fill.fgColor.rgb == "FFE6F4FB"
+
+
+def test_export_summary_balance_is_colored(api, client):
+    _setup(api, client)
+    ws = _export(client)["2026"]
+    balance = ws.cell(row=3, column=4)
+    assert balance.value == 74.5
+    assert balance.fill.fgColor.rgb == "FFEEF5E7"
+    assert balance.font.color.rgb == "FF4F7A00"
+
+
+def test_export_money_cells_have_grid_border(api, client):
+    _setup(api, client)
+    ws = _export(client)["2026"]
+    groceries_row = next(
+        r for r in range(1, ws.max_row + 1) if ws.cell(row=r, column=1).value == "Groceries"
+    )
+    cell = ws.cell(row=groceries_row, column=2)
+    assert cell.border.left.style == "thin"
+    assert cell.border.bottom.style == "thin"
+
+
+def test_export_positive_balance_is_green(api, client):
+    _setup(api, client)
+    ws = _export(client)["2026"]
+    groceries_row = next(
+        r for r in range(1, ws.max_row + 1) if ws.cell(row=r, column=1).value == "Groceries"
+    )
+    balance = ws.cell(row=groceries_row, column=4)
+    assert balance.value == 74.5
+    assert balance.font.color.rgb == "FF4F7A00"
+
+
+def test_export_negative_balance_is_red(api, client):
+    g_out = api.group("Overspend")
+    cat = api.category("Splurge", g_out)
+    acct = api.account("Card")
+    api.tx("2026-01-05T10:00:00", -20000, accountId=acct, categoryId=cat, description="Big")
+    client.put("/api/budgets", json={"categoryId": cat, "year": 2026, "month": 1, "amount": 10000})
+    ws = _export(client)["2026"]
+    splurge_row = next(
+        r for r in range(1, ws.max_row + 1) if ws.cell(row=r, column=1).value == "Splurge"
+    )
+    balance = ws.cell(row=splurge_row, column=4)
+    assert balance.value == -100.0
+    assert balance.font.color.rgb == "FFC0392B"
+
+
+def test_export_zero_balance_is_grey(api, client):
+    g_out = api.group("OnBudget")
+    cat = api.category("Exact", g_out)
+    acct = api.account("Card")
+    api.tx("2026-01-05T10:00:00", -10000, accountId=acct, categoryId=cat, description="Spend")
+    client.put("/api/budgets", json={"categoryId": cat, "year": 2026, "month": 1, "amount": 10000})
+    ws = _export(client)["2026"]
+    exact_row = next(
+        r for r in range(1, ws.max_row + 1) if ws.cell(row=r, column=1).value == "Exact"
+    )
+    balance = ws.cell(row=exact_row, column=4)
+    assert balance.value == 0.0
+    assert balance.font.color.rgb == "FF434343"
+
+
 def test_export_dashdata_refund_reduces_expense(api, client):
     cat, acct = _setup(api, client)
     api.tx("2026-01-20T10:00:00", 2550, accountId=acct, categoryId=cat, description="Refund")
