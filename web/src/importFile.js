@@ -14,3 +14,15 @@ export function decodeStatementBytes(buffer) {
 export async function readStatementFile(file) {
     return decodeStatementBytes(await file.arrayBuffer());
 }
+
+/** Distinct card tails found in parsed statement rows ('*8181' -> '8181'). */
+export function statementTails(rows) {
+    const tails = new Set();
+    for (const r of rows ?? []) {
+        const t = String(r.card ?? "")
+            .replace(/\D/g, "")
+            .slice(-4);
+        if (t) tails.add(t);
+    }
+    return [...tails];
+}

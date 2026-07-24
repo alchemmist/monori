@@ -35,6 +35,7 @@ def serialize_account(r):
         "openingDate": r["opening_date"],
         "connectionId": r["connection_id"],
         "bankRef": r["bank_ref"],
+        "cardTails": [t for t in r["card_tails"].split(",") if t],
     }
 
 
@@ -101,7 +102,7 @@ def snapshot(c, user_id):
             serialize_account(r)
             for r in cur.execute(
                 "SELECT id, name, type, icon, color, icon_image, currency, sort, archived,"
-                " opening_balance, opening_date, connection_id, bank_ref"
+                " opening_balance, opening_date, connection_id, bank_ref, card_tails"
                 " FROM accounts WHERE user_id=? ORDER BY sort, id",
                 uid,
             )

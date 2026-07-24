@@ -128,3 +128,18 @@ def test_import_targets_account(api, client):
 
     bad = client.post("/api/import/commit", json={"accountId": 999, "rows": rows})
     assert bad.status_code == 400
+
+
+def test_card_tails_stored_normalized_and_validated(api, client):
+    acc = api.account("Card", cardTails=["*8181", "8181", "29-47"])
+    row = api.acct(acc)
+    assert row["cardTails"] == ["8181", "2947"]
+
+    client.patch(f"/api/accounts/{acc}", json={"cardTails": ["*1111"]})
+    assert api.acct(acc)["cardTails"] == ["1111"]
+
+    client.patch(f"/api/accounts/{acc}", json={"cardTails": []})
+    assert api.acct(acc)["cardTails"] == []
+
+    bad = client.patch(f"/api/accounts/{acc}", json={"cardTails": ["no-digits"]})
+    assert bad.status_code == 400

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { decodeStatementBytes } from "./importFile.js";
+import { decodeStatementBytes, statementTails } from "./importFile.js";
 
 describe("decodeStatementBytes", () => {
     it("decodes valid UTF-8 as UTF-8", () => {
@@ -16,5 +16,22 @@ describe("decodeStatementBytes", () => {
     it("keeps plain ASCII intact either way", () => {
         const ascii = new TextEncoder().encode("05.07.2026;OK;-20.00");
         expect(decodeStatementBytes(ascii)).toBe("05.07.2026;OK;-20.00");
+    });
+});
+
+describe("statementTails", () => {
+    it("collects distinct digit tails from masked card numbers", () => {
+        const rows = [
+            { card: "*8181" },
+            { card: "*8181" },
+            { card: "553691******2947" },
+            { card: "" },
+            {},
+        ];
+        expect(statementTails(rows)).toEqual(["8181", "2947"]);
+    });
+
+    it("returns empty for missing rows", () => {
+        expect(statementTails(undefined)).toEqual([]);
     });
 });

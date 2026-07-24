@@ -83,6 +83,8 @@ def test_parse_statement_row_fields():
     assert rows[0]["description"] == "Сбербанк"
     assert rows[1]["bank_category"] == "Супермаркеты"
     assert rows[1]["mcc"] == "5411"
+    # the masked card number rides along so the client can route by its tail
+    assert rows[0]["card"] == "*2947"
     # hashes are account-scoped and derived at ingest time, not during parsing
     assert "hash" not in rows[0]
 

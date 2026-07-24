@@ -64,6 +64,7 @@ export function AccountEditDialog({ account, onClose }) {
     const [opening, setOpening] = useState(
         account.openingBalance ? String(account.openingBalance / 100) : "",
     );
+    const [tails, setTails] = useState((account.cardTails ?? []).join(", "));
     const [busy, setBusy] = useState(false);
     const fileRef = useRef(null);
 
@@ -95,6 +96,10 @@ export function AccountEditDialog({ account, onClose }) {
                 iconImage: image,
                 currency: currency.trim() || "RUB",
                 openingBalance,
+                cardTails: tails
+                    .split(",")
+                    .map((t) => t.replace(/\D/g, ""))
+                    .filter(Boolean),
             };
             if (isNew) await createAccount(body);
             else await patchAccount(account.id, body);
@@ -219,6 +224,13 @@ export function AccountEditDialog({ account, onClose }) {
                     value={opening}
                     onChange={(e) => setOpening(e.target.value)}
                     placeholder="0"
+                />
+                <FTextInput
+                    label="Card tails"
+                    value={tails}
+                    onChange={(e) => setTails(e.target.value)}
+                    placeholder="8181, 2947"
+                    title="Last digits of the cards on this account — CSV import routes a statement here automatically"
                 />
                 <Txt tone="secondary" caption>
                     The running balance is the opening balance plus every transaction on this

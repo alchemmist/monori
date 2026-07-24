@@ -41,6 +41,7 @@ CREATE TABLE IF NOT EXISTS accounts (
   icon_image TEXT,
   connection_id INTEGER REFERENCES bank_connections (id),
   bank_ref TEXT NOT NULL DEFAULT '',
+  card_tails TEXT NOT NULL DEFAULT '', -- comma-separated card tails, e.g. '8181,2947'
   UNIQUE (user_id, name)
 );
 CREATE INDEX IF NOT EXISTS idx_accounts_user ON accounts (user_id);
