@@ -244,24 +244,25 @@ def delete_user_transactions(
     try:
         if c.execute("SELECT 1 FROM users WHERE id=?", (uid,)).fetchone() is None:
             raise HTTPException(404, "unknown user")
-        owned = 0
+        # the delete itself is scoped to the user's accounts and its rowcount
+        # verified, so there is no check-then-delete window: an id that stopped
+        # belonging to this user mid-flight rolls the whole batch back
+        deleted = 0
         for i in range(0, len(ids), SQL_CHUNK):
             chunk = ids[i : i + SQL_CHUNK]
             marks = ",".join("?" * len(chunk))
             # the interpolation only builds "?" placeholders; values are bound
-            owned += c.execute(
-                f"SELECT COUNT(*) FROM transactions t JOIN accounts"  # nosec B608
-                f" a ON a.id = t.account_id WHERE a.user_id=? AND t.id IN ({marks})",
-                (uid, *chunk),
-            ).fetchone()[0]
-        if owned != len(ids):
+            cur = c.execute(
+                f"DELETE FROM transactions WHERE id IN ({marks})"  # nosec B608
+                " AND account_id IN (SELECT id FROM accounts WHERE user_id=?)",
+                (*chunk, uid),
+            )
+            deleted += cur.rowcount
+        if deleted != len(ids):
+            c.rollback()
             raise HTTPException(400, "some transactions do not belong to this user")
-        for i in range(0, len(ids), SQL_CHUNK):
-            chunk = ids[i : i + SQL_CHUNK]
-            marks = ",".join("?" * len(chunk))
-            c.execute(f"DELETE FROM transactions WHERE id IN ({marks})", chunk)  # nosec B608
         c.commit()
-        return {"deleted": len(ids)}
+        return {"deleted": deleted}
     finally:
         c.close()
 
