@@ -177,6 +177,41 @@ def user_detail(uid: int, admin: Annotated[dict, Depends(admin_user)]):
         c.close()
 
 
+@router.get("/users/{uid}/transactions")
+def user_transactions(uid: int, admin: Annotated[dict, Depends(admin_user)]):
+    """
+    Every transaction of a user, newest first — the full list behind the detail
+    view's preview, rendered as one JSON object per line by the client.
+    """
+    c = conn()
+    try:
+        if c.execute("SELECT 1 FROM users WHERE id=?", (uid,)).fetchone() is None:
+            raise HTTPException(404, "unknown user")
+        return [
+            {
+                "id": r["id"],
+                "date": r["date"],
+                "amount": r["amount"],
+                "description": r["description"],
+                "account": r["account_name"],
+                "category": r["category_name"],
+                "mcc": r["mcc"],
+                "comment": r["comment"],
+                "source": r["source"],
+            }
+            for r in c.execute(
+                "SELECT t.id, t.date, t.amount, t.description, t.mcc, t.comment, t.source,"
+                " a.name AS account_name, cat.name AS category_name"
+                " FROM transactions t JOIN accounts a ON a.id = t.account_id"
+                " LEFT JOIN categories cat ON cat.id = t.category_id"
+                " WHERE a.user_id=? ORDER BY t.date DESC, t.id DESC",
+                (uid,),
+            )
+        ]
+    finally:
+        c.close()
+
+
 class CreateUserBody(BaseModel):
     email: str
     password: str
