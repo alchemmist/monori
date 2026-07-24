@@ -238,9 +238,7 @@ def test_migration_0011_reports_blank_backfill(tmp_path):
     db_path = os.path.join(tmp_path, "v6.db")
     command.upgrade(_alembic_config(db_path), "0006")
     raw = sqlite3.connect(db_path)
-    raw.execute(
-        "INSERT INTO users (email, password_hash, created_at) VALUES ('', 'h', 't')"
-    )
+    raw.execute("INSERT INTO users (email, password_hash, created_at) VALUES ('', 'h', 't')")
     raw.commit()
     raw.close()
 

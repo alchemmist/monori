@@ -60,8 +60,7 @@ def upgrade():
     if blanks:
         detail = ", ".join(member for (member,) in blanks)
         raise RuntimeError(
-            "cannot backfill a canonical email for these rows — fix their address first: "
-            + detail
+            "cannot backfill a canonical email for these rows — fix their address first: " + detail
         )
     op.execute("CREATE UNIQUE INDEX idx_users_email_canonical ON users (email_canonical)")
     op.execute(
