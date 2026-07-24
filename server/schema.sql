@@ -106,5 +106,25 @@ CREATE TABLE IF NOT EXISTS users (
   id INTEGER PRIMARY KEY,
   email TEXT NOT NULL UNIQUE,
   password_hash TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  is_admin INTEGER NOT NULL DEFAULT 0,
+  last_login TEXT
+);
+
+CREATE TABLE IF NOT EXISTS activity_events (
+  id INTEGER PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  kind TEXT NOT NULL,
   created_at TEXT NOT NULL
 );
+CREATE INDEX IF NOT EXISTS idx_activity_user ON activity_events (user_id);
+CREATE INDEX IF NOT EXISTS idx_activity_created ON activity_events (created_at);
+
+CREATE TABLE IF NOT EXISTS feature_usage (
+  user_id INTEGER NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  feature TEXT NOT NULL,
+  day TEXT NOT NULL,                 -- ISO date, UTC
+  count INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (user_id, feature, day)
+);
+CREATE INDEX IF NOT EXISTS idx_usage_day ON feature_usage (day);
