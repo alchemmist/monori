@@ -57,6 +57,19 @@ def test_parse_statement():
     assert rows[1]["amount"] == -150050
 
 
+def test_parse_statement_skips_csv_header_row():
+    header = (
+        "Дата операции;Дата платежа;Номер карты;Статус;Сумма операции;Валюта операции;"
+        "Сумма платежа;Валюта платежа;Кэшбэк;Категория;MCC;Описание;Бонусы (включая кэшбэк);"
+        "Округление на инвесткопилку;Сумма операции с округлением\n"
+    )
+    line = '05.07.2026;05.07.2026;*1;OK;-20,00;RUB;-20,00;RUB;;Транспорт;4111;"Метро";0;0;-20,00\n'
+    rows, errors = parse_statement(header + line)
+    assert not errors
+    assert len(rows) == 1
+    assert rows[0]["description"] == "Метро"
+
+
 def test_parse_statement_bad_line():
     rows, errors = parse_statement("garbage line\n")
     assert not rows
