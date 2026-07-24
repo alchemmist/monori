@@ -5,7 +5,7 @@ from alembic import command
 
 from app.db import LEGACY_REVISIONS, _alembic_config, connect
 
-HEAD = "0007"
+HEAD = "0008"
 assert LEGACY_REVISIONS[-1] == "0006"
 
 OLD_SCHEMA = """
@@ -261,3 +261,33 @@ def test_new_account_gets_column_defaults(tmp_path):
         assert a["icon_image"] is None
     finally:
         conn.close()
+
+
+def test_connection_conversion_to_user_level(tmp_path):
+    db_path = os.path.join(tmp_path, "conv.db")
+    command.upgrade(_alembic_config(db_path), "0007")
+    c = sqlite3.connect(db_path)
+    c.execute("INSERT INTO users (email, password_hash, created_at) VALUES ('u@e.co', 'h', 't')")
+    c.execute(
+        "INSERT INTO accounts (user_id, name, type, currency, sort)"
+        " VALUES (1, 'Card', 'card', 'RUB', 1)"
+    )
+    acct_id = c.execute("SELECT id FROM accounts WHERE name='Card'").fetchone()[0]
+    c.execute(
+        "INSERT INTO bank_connections (account_id, bank, kind, status, created_at, updated_at)"
+        f" VALUES ({acct_id}, 'tbank', 'playwright', 'connected', 't1', 't2')"
+    )
+    c.commit()
+    c.close()
+
+    command.upgrade(_alembic_config(db_path), "head")
+    c = sqlite3.connect(db_path)
+    c.row_factory = sqlite3.Row
+    conn_row = c.execute("SELECT * FROM bank_connections").fetchone()
+    assert conn_row["user_id"] == 1
+    conn_cols = conn_row.keys()
+    assert "account_id" not in conn_cols
+    acct = c.execute("SELECT connection_id, bank_ref FROM accounts WHERE name='Card'").fetchone()
+    assert acct["connection_id"] == conn_row["id"]
+    assert acct["bank_ref"] == ""
+    c.close()

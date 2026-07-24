@@ -91,7 +91,8 @@ class ClosableConnector:
     hidden = True
     closed = 0
 
-    def __init__(self, credentials, session=None):
+    def __init__(self, credentials, session=None, account_ref=None):
+        self.account_ref = account_ref
         self.credentials = credentials
         self.session = session
 
@@ -136,7 +137,8 @@ class RecordingConnector:
     hidden = True
     last_since = None
 
-    def __init__(self, credentials, session=None):
+    def __init__(self, credentials, session=None, account_ref=None):
+        self.account_ref = account_ref
         self.credentials = credentials
         self.session = session
 
@@ -157,7 +159,8 @@ class RetryOtpConnector:
     hidden = True
     closed = 0
 
-    def __init__(self, credentials, session=None):
+    def __init__(self, credentials, session=None, account_ref=None):
+        self.account_ref = account_ref
         self.credentials = credentials
         self.session = session
 

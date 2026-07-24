@@ -32,6 +32,8 @@ def test_snapshot_serialization_contract(api, client):
             "archived": False,
             "openingBalance": 0,
             "openingDate": None,
+            "connectionId": None,
+            "bankRef": "",
         }
     ]
     assert snap["groups"] == [{"id": g, "name": "Expenses", "sort": 1, "kind": "expense"}]

@@ -211,42 +211,66 @@ is idempotent. See [Importing statements](importing.md) for the dedup rules.
 
 ## Connections
 
-Bank connections tie an account to a connector that can sync transactions on
-demand. The routes that handle secrets — create, update, sync and SMS — require
-`MONORI_ENCRYPTION_KEY` to be set (credentials and the cached session are stored
-encrypted) and return `400` without it; delete and cancel do not need the key.
-Connections also appear in the snapshot as `connections[]`, never carrying any
-secret material. See [Configuration → Bank sync connectors](configuration.md#bank-sync-connectors).
+A connection is **one bank login owned by the user**; any number of accounts
+link to it (`PATCH /api/accounts/{id}` with `{connectionId, bankRef}` — pass
+`connectionId: 0` to unlink). A sync logs in once and pulls every linked
+account in turn, each landing as its own batch. The routes that handle
+secrets — create, update, sync and SMS — require `MONORI_ENCRYPTION_KEY` to be
+set (credentials and the cached session are stored encrypted) and return `400`
+without it; delete and cancel do not need the key. Connections also appear in
+the snapshot as `connections[]`, never carrying any secret material. See
+[Configuration → Bank sync connectors](configuration.md#bank-sync-connectors).
+
+### `GET /api/connections/available`
+
+The connectors offered in the bank picker, each with its declared form fields:
+
+```json
+[{ "bank": "tbank", "kind": "playwright", "label": "T-Bank (browser sync)",
+   "connectionParams": [{ "name": "phone", "label": "Phone", "secret": false, "required": true },
+                        { "name": "password", "label": "Password", "secret": true, "required": true }],
+   "accountParams": [{ "name": "account", "label": "T-Bank account number (optional)", "required": false }] }]
+```
+
+`connectionParams` describe the per-login credentials; `accountParams` describe
+the per-account locator stored as the account's `bankRef`.
 
 ### `POST /api/connections`
 
-Body `{accountId, bank, kind, credentials: {phone, password}}`. Creates a
-connection in the `disconnected` state and returns it (without secrets).
+Body `{bank, kind, credentials: {…}}` — the credential keys are the connector's
+declared `connectionParams`; missing required fields answer `400`. Creates a
+connection in the `disconnected` state and returns it (without secrets). Link
+accounts to it afterwards via `PATCH /api/accounts/{id}`.
 
 ### `PATCH /api/connections/{id}`
 
-Body `{phone, password}` — replaces the stored credentials and clears the cached
-session.
+Body `{credentials: {…}}` — replaces the stored credentials and clears the
+cached session.
 
 ### `DELETE /api/connections/{id}`
 
-Removes the connection. Returns `{deleted: id}`.
+Removes the connection and unlinks its accounts (they stay, as manual
+accounts). Returns `{deleted: id}`.
 
 ### `POST /api/connections/{id}/sync`
 
-Runs a sync now. If login needs an OTP the response is `{"status":
-"awaiting_sms"}` and the connection moves to `awaiting_sms`; otherwise rows are
-committed as a batch (`source: "sync"`) and the response summarizes the run:
+Runs a sync now over every linked account (`400` if none are linked). If login
+needs an OTP the response is `{"status": "awaiting_sms"}` and the connection
+moves to `awaiting_sms`; otherwise each account's rows are committed as their
+own batch (`source: "sync"`) and the response summarizes the run:
 
 ```json
-{ "status": "connected", "inserted": 12, "skipped": 3, "batchId": 8,
+{ "status": "connected", "inserted": 12, "skipped": 3,
+  "accounts": [{ "accountId": 1, "inserted": 8, "skipped": 2, "batchId": 8,
+                 "dateFrom": "2026-02-01T09:00:00", "dateTo": "2026-02-14T18:20:00" }],
   "dateFrom": "2026-02-01T09:00:00", "dateTo": "2026-02-14T18:20:00" }
 ```
 
 ### `POST /api/connections/{id}/sms`
 
-Body `{code}` — supplies the OTP for a sync that returned `awaiting_sms`,
-continuing the same login and returning the same summary as `/sync`. Returns
+Body `{code}` — supplies the OTP for a sync that returned `awaiting_sms`. The
+code completes the parked account's pull and the remaining linked accounts
+follow on the now-cached session; returns the same summary as `/sync`. Returns
 `409` if no login is awaiting a code.
 
 ### `POST /api/connections/{id}/cancel`
