@@ -217,11 +217,38 @@ def test_blank_email_canonical_is_rejected(tmp_path):
                     "INSERT INTO users (email, password_hash, created_at)"
                     " VALUES ('u@e.co', 'h', 't')"
                 )
-                raise AssertionError(f"{name}: blank email_canonical was accepted")
+                raise AssertionError(f"{name}: blank email_canonical on insert was accepted")
+            except sqlite3.IntegrityError:
+                pass
+            # blanking an existing row via UPDATE is rejected too
+            raw.execute(
+                "INSERT INTO users (email, email_canonical, password_hash, created_at)"
+                " VALUES ('v@e.co', 'v@e.co', 'h', 't')"
+            )
+            try:
+                raw.execute("UPDATE users SET email_canonical = '' WHERE email = 'v@e.co'")
+                raise AssertionError(f"{name}: blank email_canonical on update was accepted")
             except sqlite3.IntegrityError:
                 pass
         finally:
             raw.close()
+
+
+def test_migration_0011_reports_blank_backfill(tmp_path):
+    db_path = os.path.join(tmp_path, "v6.db")
+    command.upgrade(_alembic_config(db_path), "0006")
+    raw = sqlite3.connect(db_path)
+    raw.execute(
+        "INSERT INTO users (email, password_hash, created_at) VALUES ('', 'h', 't')"
+    )
+    raw.commit()
+    raw.close()
+
+    try:
+        connect(db_path).close()
+        raise AssertionError("migration did not report the blank backfill")
+    except Exception as exc:  # noqa: BLE001 — alembic wraps the RuntimeError
+        assert "fix their address first" in str(exc)
 
 
 def test_legacy_intermediate_user_version_is_adopted(tmp_path):

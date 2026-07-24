@@ -52,10 +52,26 @@ def upgrade():
         raise RuntimeError(
             "cannot enforce one account per canonical email — merge these first: " + detail
         )
+    # a legacy row with a blank email backfills to a blank canonical, which can
+    # never authenticate; surface it before the unique index locks it in.
+    blanks = conn.exec_driver_sql(
+        "SELECT id || ':' || email FROM users WHERE email_canonical = ''"
+    ).fetchall()
+    if blanks:
+        detail = ", ".join(member for (member,) in blanks)
+        raise RuntimeError(
+            "cannot backfill a canonical email for these rows — fix their address first: "
+            + detail
+        )
     op.execute("CREATE UNIQUE INDEX idx_users_email_canonical ON users (email_canonical)")
     op.execute(
         "CREATE TRIGGER users_email_canonical_not_blank "
         "BEFORE INSERT ON users WHEN NEW.email_canonical = '' "
+        "BEGIN SELECT RAISE(ABORT, 'email_canonical must not be blank'); END"
+    )
+    op.execute(
+        "CREATE TRIGGER users_email_canonical_not_blank_upd "
+        "BEFORE UPDATE ON users WHEN NEW.email_canonical = '' "
         "BEGIN SELECT RAISE(ABORT, 'email_canonical must not be blank'); END"
     )
 

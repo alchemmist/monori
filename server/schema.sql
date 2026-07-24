@@ -115,9 +115,15 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_canonical ON users (email_cano
 
 -- email_canonical defaults to '' only so ALTER TABLE ADD COLUMN can backfill
 -- legacy rows; a blank value can never authenticate (login resolves by it) and
--- would collide on the unique index, so reject any insert that omits it
+-- would collide on the unique index, so reject any insert or update that blanks it
 CREATE TRIGGER IF NOT EXISTS users_email_canonical_not_blank
 BEFORE INSERT ON users WHEN new.email_canonical = ''
+BEGIN
+SELECT RAISE(ABORT, 'email_canonical must not be blank');
+END;
+
+CREATE TRIGGER IF NOT EXISTS users_email_canonical_not_blank_upd
+BEFORE UPDATE ON users WHEN new.email_canonical = ''
 BEGIN
 SELECT RAISE(ABORT, 'email_canonical must not be blank');
 END;
