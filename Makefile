@@ -4,7 +4,7 @@ MUTATION_THRESHOLD ?= 85
 
 WEBBIN := web/node_modules/.bin
 
-.PHONY: dev down api web build \
+.PHONY: dev down deploy api web build \
         fmt fmt-check \
         lint lint-web lint-css lint-html lint-server lint-sql lint-yaml lint-md lint-actions lint-docker lint-shell spell \
         typecheck analyze audit audit-deps audit-deps-py audit-secrets \
@@ -16,6 +16,21 @@ up:
 
 down:
 	$(COMPOSE) -f deploy/docker-compose.dev.yml down
+
+# Manual rollout of exactly the revision this command is run on (mirrors the
+# Deploy workflow). Needs SSH_HOST, SSH_USER and SSH_PROJECT_PATH in the
+# environment; the revision must already be pushed so the server can fetch it.
+deploy:
+	@test -n "$(SSH_HOST)" && test -n "$(SSH_USER)" && test -n "$(SSH_PROJECT_PATH)" || \
+		{ echo "set SSH_HOST, SSH_USER and SSH_PROJECT_PATH"; exit 1; }
+	@rev=$$(git rev-parse HEAD); \
+	git fetch -q origin; \
+	git branch -r --contains "$$rev" | grep -q . || \
+		{ echo "revision $$rev is not on origin — push it first"; exit 1; }; \
+	echo "deploying $$rev to $(SSH_HOST)"; \
+	ssh "$(SSH_USER)@$(SSH_HOST)" "set -e; cd '$(SSH_PROJECT_PATH)'; \
+		git fetch origin; git checkout --detach $$rev; \
+		cd deploy; docker compose up --build -d"
 
 api:
 	cd server && uv run uvicorn app.main:app --port $(API_PORT) --reload
