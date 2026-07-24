@@ -11,6 +11,12 @@ on:
         branches: [main]
     workflow_dispatch:
 
+# a superseded run's verdict is worthless and the job is ~20-30 min, so newer
+# commits cancel in-flight PR runs; main pushes run to completion
+concurrency:
+    group: mutation-${{ github.event.pull_request.number || github.ref }}
+    cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 permissions:
     contents: read
 
