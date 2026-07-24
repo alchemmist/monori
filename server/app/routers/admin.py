@@ -19,6 +19,7 @@ router = APIRouter(prefix="/api/admin", tags=["admin"])
 
 RECENT_TX_LIMIT = 50
 TX_PAGE_MAX = 1000
+SQL_CHUNK = 500
 RECENT_LOGINS_LIMIT = 50
 ACTIVITY_WINDOW_DAYS = 30
 
@@ -217,6 +218,49 @@ def user_transactions(
                 (uid, limit, offset),
             )
         ]
+    finally:
+        c.close()
+
+
+class DeleteTransactionsBody(BaseModel):
+    ids: list[int]
+
+
+@router.post("/users/{uid}/transactions/delete")
+def delete_user_transactions(
+    uid: int,
+    body: DeleteTransactionsBody,
+    admin: Annotated[dict, Depends(admin_user)],
+):
+    """
+    Bulk-delete a selection of one user's transactions. All-or-nothing: every
+    id must belong to the target user, otherwise nothing is deleted — a stale
+    selection must fail loudly rather than remove half of it.
+    """
+    ids = sorted(set(body.ids))
+    if not ids:
+        raise HTTPException(400, "no transaction ids given")
+    c = conn()
+    try:
+        if c.execute("SELECT 1 FROM users WHERE id=?", (uid,)).fetchone() is None:
+            raise HTTPException(404, "unknown user")
+        owned = 0
+        for i in range(0, len(ids), SQL_CHUNK):
+            chunk = ids[i : i + SQL_CHUNK]
+            marks = ",".join("?" * len(chunk))
+            owned += c.execute(
+                f"SELECT COUNT(*) FROM transactions t JOIN accounts a ON a.id = t.account_id"
+                f" WHERE a.user_id=? AND t.id IN ({marks})",
+                (uid, *chunk),
+            ).fetchone()[0]
+        if owned != len(ids):
+            raise HTTPException(400, "some transactions do not belong to this user")
+        for i in range(0, len(ids), SQL_CHUNK):
+            chunk = ids[i : i + SQL_CHUNK]
+            marks = ",".join("?" * len(chunk))
+            c.execute(f"DELETE FROM transactions WHERE id IN ({marks})", chunk)
+        c.commit()
+        return {"deleted": len(ids)}
     finally:
         c.close()
 

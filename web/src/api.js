@@ -183,6 +183,12 @@ export const api = {
     adminUserDetail: (id) => apiFetch(`/api/admin/users/${id}`).then(json),
     adminUserTransactions: (id, { limit = 1000, offset = 0 } = {}) =>
         apiFetch(`/api/admin/users/${id}/transactions?limit=${limit}&offset=${offset}`).then(json),
+    adminDeleteUserTransactions: (id, ids) =>
+        apiFetch(`/api/admin/users/${id}/transactions/delete`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ids }),
+        }).then(json),
     adminActivity: () => apiFetch("/api/admin/activity").then(json),
     adminCreateUser: (email, password) =>
         apiFetch("/api/admin/users", {

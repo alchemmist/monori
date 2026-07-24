@@ -162,6 +162,11 @@
     gap: 12px;
 }
 
+.admin-detail__actions {
+    display: flex;
+    gap: 4px;
+}
+
 @media (width <= 900px) {
     .admin-detail {
         grid-template-columns: 1fr;
