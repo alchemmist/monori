@@ -303,9 +303,10 @@ describe("dayOfMonthProfile", () => {
     });
 });
 
-// Rows every year-scoped expense aggregator must ignore: wrong year, an income
-// category, a positive amount, and an uncategorized row. Shared to pin the
-// guard `!startsWith(year) || categoryId == null || amount >= 0` in each function.
+// Rows the year-scoped chart aggregators (weekday/day-of-month/topMerchants)
+// must ignore: wrong year, an income category, a positive amount, and an
+// uncategorized row. txStats intentionally diverges — it COUNTS uncategorized
+// outflows (see its own tests below) and only shares the first three guards.
 const ignoredRows = [
     { id: 90, date: "2023-01-01", amount: -9_999_00, categoryId: 20, description: "LAST YEAR" },
     { id: 91, date: "2024-01-01", amount: -8_888_00, categoryId: 10, description: "INCOME LEG" },
@@ -407,6 +408,25 @@ describe("txStats keeps the first of tied-largest expenses", () => {
         const s = txStats(withUncat, "2024");
         expect(s.count).toBe(4);
         expect(s.largest.description).toBe("UNCATEGORIZED SPEND");
+    });
+
+    it("counts an outflow whose categoryId no longer resolves as uncategorized", () => {
+        const withDangling = {
+            ...snap,
+            transactions: [
+                ...snap.transactions,
+                {
+                    id: 96,
+                    date: "2024-01-06",
+                    amount: -5_500_00,
+                    categoryId: 999,
+                    description: "X",
+                },
+            ],
+        };
+        const s = txStats(withDangling, "2024");
+        expect(s.count).toBe(4);
+        expect(s.largest.description).toBe("X");
     });
 });
 

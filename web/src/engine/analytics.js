@@ -140,6 +140,9 @@ export function txStats(snapshot, year) {
     for (const t of snapshot.transactions) {
         if (!t.date.startsWith(year) || t.amount >= 0) continue;
         if (t.transferId != null) continue; // moving money is not spending
+        // a categoryId the snapshot can't resolve counts like an uncategorized
+        // row: the server nulls categoryId on category delete, so a dangling id
+        // is still a real outflow, not something to hide from the count
         const cat = t.categoryId != null ? catById.get(t.categoryId) : null;
         if (cat && incomeIds.has(cat.groupId)) continue;
         const v = -t.amount;
