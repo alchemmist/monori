@@ -20,6 +20,7 @@ export const NAV = [
             { slug: "transactions", title: "Transactions", body: md("transactions") },
             { slug: "accounts", title: "Accounts & transfers", body: md("accounts") },
             { slug: "importing", title: "Importing statements", body: md("importing") },
+            { slug: "migration", title: "Migrating from a spreadsheet", body: md("migration") },
             {
                 slug: "dashboard-analytics",
                 title: "Dashboard & analytics",
