@@ -9,6 +9,11 @@ on:
         workflows: [CI]
         types: [completed]
         branches: [main]
+    workflow_dispatch:
+        inputs:
+            sha:
+                description: Commit SHA to roll out (must be on main)
+                required: true
 
 # the job only SSHes out with its own secrets; it needs no GITHUB_TOKEN scopes
 permissions: {}
@@ -17,7 +22,9 @@ jobs:
     deploy:
         name: Deploy over SSH
         runs-on: ubuntu-latest
-        if: github.event.workflow_run.conclusion == 'success'
+        if: >-
+            github.event_name == 'workflow_dispatch'
+            || github.event.workflow_run.conclusion == 'success'
         steps:
             - name: Pull and rebuild
               uses: appleboy/ssh-action@v1
@@ -29,6 +36,6 @@ jobs:
                       set -e
                       cd ${{ secrets.SSH_PROJECT_PATH }}
                       git fetch origin main
-                      git checkout --detach ${{ github.event.workflow_run.head_sha }}
+                      git checkout --detach ${{ github.event.inputs.sha || github.event.workflow_run.head_sha }}
                       cd deploy
                       docker compose up --build -d

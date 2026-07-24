@@ -17,25 +17,17 @@ up:
 down:
 	$(COMPOSE) -f deploy/docker-compose.dev.yml down
 
-# Manual rollout of exactly the revision this command is run on (mirrors the
-# Deploy workflow). Reads SSH_HOST, SSH_USER, SSH_PROJECT_PATH and the optional
-# SSH_KEY (path to a private key) from a .env file in the repo root (falling
-# back to the environment); the revision must already be pushed so the server
-# can fetch it.
+# Manual rollout of exactly the revision this command is run on: dispatches the
+# Deploy workflow with the current HEAD, so the SSH secrets live only in GitHub.
+# Needs the gh CLI authenticated; the revision must already be on origin/main.
 deploy:
-	@set -a; [ -f .env ] && . ./.env; set +a; \
-	: "$${SSH_HOST:?set SSH_HOST in .env or the environment}"; \
-	: "$${SSH_USER:?set SSH_USER in .env or the environment}"; \
-	: "$${SSH_PROJECT_PATH:?set SSH_PROJECT_PATH in .env or the environment}"; \
-	key_opt=""; [ -n "$${SSH_KEY:-}" ] && key_opt="-i $$SSH_KEY"; \
-	rev=$$(git rev-parse HEAD); \
+	@rev=$$(git rev-parse HEAD); \
 	git fetch -q origin; \
-	git branch -r --contains "$$rev" | grep -q . || \
-		{ echo "revision $$rev is not on origin — push it first"; exit 1; }; \
-	echo "deploying $$rev to $$SSH_HOST"; \
-	ssh $$key_opt "$$SSH_USER@$$SSH_HOST" "set -e; cd '$$SSH_PROJECT_PATH'; \
-		git fetch origin; git checkout --detach $$rev; \
-		cd deploy; docker compose up --build -d"
+	git merge-base --is-ancestor "$$rev" origin/main || \
+		{ echo "revision $$rev is not on origin/main — push it first"; exit 1; }; \
+	echo "dispatching Deploy for $$rev"; \
+	gh workflow run deploy.yaml --ref main -f sha="$$rev"; \
+	echo "follow it with: gh run watch \$$(gh run list --workflow deploy.yaml -L1 --json databaseId -q '.[0].databaseId')"
 
 api:
 	cd server && uv run uvicorn app.main:app --port $(API_PORT) --reload
