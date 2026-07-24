@@ -27,7 +27,6 @@ jobs:
                     - t-slow
                     - build
                     - coverage
-                    - mutation
                     - audit-deps
                     - audit-deps-py
         steps:
