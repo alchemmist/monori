@@ -31,6 +31,7 @@ def test_admin_endpoints_reject_non_admin(client):
         ("get", "/api/admin/overview"),
         ("get", "/api/admin/users"),
         ("get", "/api/admin/users/1"),
+        ("get", "/api/admin/users/1/transactions"),
         ("get", "/api/admin/activity"),
         ("post", "/api/admin/users"),
         ("delete", "/api/admin/users/2"),
@@ -124,6 +125,58 @@ def test_user_detail_returns_accounts_transactions_and_activity(anon, monkeypatc
 def test_user_detail_404_for_unknown_user(anon, monkeypatch):
     anon.headers.update(_make_admin(anon, monkeypatch))
     assert anon.get("/api/admin/users/999").status_code == 404
+
+
+def test_user_transactions_returns_every_row_newest_first(anon, monkeypatch):
+    other = login_as(anon, "other@example.com")
+    anon.headers.update(other)
+    _add_tx(anon, amount=-500, date="2026-07-01T12:00:00")
+    _add_tx(anon, amount=-700, date="2026-07-03T12:00:00")
+    _add_tx(anon, amount=-300, date="2026-07-02T12:00:00")
+    uid = anon.get("/api/auth/me").json()["id"]
+    anon.headers.clear()
+    anon.headers.update(_make_admin(anon, monkeypatch))
+
+    rows = anon.get(f"/api/admin/users/{uid}/transactions").json()
+    assert [r["date"] for r in rows] == [
+        "2026-07-03T12:00:00",
+        "2026-07-02T12:00:00",
+        "2026-07-01T12:00:00",
+    ]
+    assert {
+        "id",
+        "amount",
+        "description",
+        "account",
+        "category",
+        "mcc",
+        "comment",
+        "source",
+    } <= set(rows[0])
+
+
+def test_user_transactions_paginates_with_limit_and_offset(anon, monkeypatch):
+    other = login_as(anon, "paged@example.com")
+    anon.headers.update(other)
+    for day in range(1, 6):
+        _add_tx(anon, amount=-100 * day, date=f"2026-07-0{day}T12:00:00")
+    uid = anon.get("/api/auth/me").json()["id"]
+    anon.headers.clear()
+    anon.headers.update(_make_admin(anon, monkeypatch))
+
+    base = f"/api/admin/users/{uid}/transactions"
+    page1 = anon.get(f"{base}?limit=2&offset=0").json()
+    page2 = anon.get(f"{base}?limit=2&offset=2").json()
+    assert [r["date"] for r in page1] == ["2026-07-05T12:00:00", "2026-07-04T12:00:00"]
+    assert [r["date"] for r in page2] == ["2026-07-03T12:00:00", "2026-07-02T12:00:00"]
+    # limit is capped, and out-of-range params are rejected rather than unbounded
+    assert anon.get(f"{base}?limit=99999").status_code == 422
+    assert anon.get(f"{base}?offset=-1").status_code == 422
+
+
+def test_user_transactions_404_for_unknown_user(anon, monkeypatch):
+    anon.headers.update(_make_admin(anon, monkeypatch))
+    assert anon.get("/api/admin/users/999/transactions").status_code == 404
 
 
 def test_admin_creates_user(anon, monkeypatch):
