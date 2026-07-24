@@ -178,6 +178,17 @@ export const api = {
         form.append("file", file);
         return apiFetch("/api/import/workbook/preview", { method: "POST", body: form }).then(json);
     },
+    adminOverview: () => apiFetch("/api/admin/overview").then(json),
+    adminUsers: () => apiFetch("/api/admin/users").then(json),
+    adminUserDetail: (id) => apiFetch(`/api/admin/users/${id}`).then(json),
+    adminActivity: () => apiFetch("/api/admin/activity").then(json),
+    adminCreateUser: (email, password) =>
+        apiFetch("/api/admin/users", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email, password }),
+        }).then(json),
+    adminDeleteUser: (id) => apiFetch(`/api/admin/users/${id}`, { method: "DELETE" }).then(json),
     workbookCommit: (file, mapping, budgetPolicy) => {
         const form = new FormData();
         form.append("file", file);

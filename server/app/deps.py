@@ -58,7 +58,13 @@ def serialize_user(r):
     """
     A user, without the password hash.
     """
-    return {"id": r["id"], "email": r["email"], "createdAt": r["created_at"]}
+    return {
+        "id": r["id"],
+        "email": r["email"],
+        "createdAt": r["created_at"],
+        "isAdmin": bool(r["is_admin"]),
+        "lastLogin": r["last_login"],
+    }
 
 
 def serialize_connection(r):

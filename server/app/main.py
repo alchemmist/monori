@@ -2,6 +2,7 @@
 Monori API. Money in/out of this API is integer kopecks everywhere.
 """
 
+import contextlib
 import os
 import pathlib
 from typing import Annotated
@@ -10,10 +11,12 @@ from fastapi import Depends, FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
+from .admin import record_api_usage
 from .auth import current_user
 from .deps import conn, snapshot
 from .routers import (
     accounts,
+    admin,
     auth_router,
     budgets,
     categories,
@@ -29,6 +32,19 @@ app = FastAPI(title="monori", docs_url="/api-docs", redoc_url="/api-redoc")
 
 # authentication endpoints are public (they mint the tokens the rest would need)
 app.include_router(auth_router.router)
+
+# admin routes carry their own guard (admin_user wraps current_user with a 403)
+app.include_router(admin.router)
+
+
+@app.middleware("http")
+async def count_feature_usage(request, call_next):
+    response = await call_next(request)
+    # analytics must never break the request it observes
+    with contextlib.suppress(Exception):
+        record_api_usage(request.url.path, request.headers.get("authorization"))
+    return response
+
 
 STATIC_DIR = pathlib.Path(__file__).resolve().parent.parent / "static"
 

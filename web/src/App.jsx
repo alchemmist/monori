@@ -17,6 +17,7 @@ import {
     SlidersVertical,
     Book,
     ArrowRightFromSquare,
+    PersonGear,
 } from "@gravity-ui/icons";
 import { useStore, isDemo } from "./store.js";
 import { showToast } from "./ui/notify.js";
@@ -26,6 +27,7 @@ import BudgetPage from "./pages/BudgetPage.jsx";
 // the whole d3/charts stack is only used here — keep it out of the entry chunk
 const DashboardPage = lazy(() => import("./pages/DashboardPage.jsx"));
 const AnalyticsPage = lazy(() => import("./pages/AnalyticsPage.jsx"));
+const AdminPage = lazy(() => import("./pages/AdminPage.jsx"));
 import TransactionsPage from "./pages/TransactionsPage.jsx";
 import AccountsPage from "./pages/AccountsPage.jsx";
 import CategoriesPage from "./pages/CategoriesPage.jsx";
@@ -174,6 +176,16 @@ export default function App({ theme, onToggleTheme }) {
                 ))}
 
                 <div className="sidebar__bottom">
+                    {user?.isAdmin && (
+                        <button
+                            className={`sidebar__item ${page === "admin" ? "sidebar__item_active" : ""}`}
+                            onClick={() => setPage("admin")}
+                            title={collapsed ? "Admin" : undefined}
+                        >
+                            <PersonGear width={16} height={16} />
+                            <span className="sidebar__label">Admin</span>
+                        </button>
+                    )}
                     <a
                         className="sidebar__item"
                         href="/docs"
@@ -253,6 +265,17 @@ export default function App({ theme, onToggleTheme }) {
                 {page === "transactions" && <TransactionsPage />}
                 {page === "accounts" && <AccountsPage />}
                 {page === "categories" && <CategoriesPage />}
+                {page === "admin" && user?.isAdmin && (
+                    <Suspense
+                        fallback={
+                            <div style={{ display: "grid", placeItems: "center", height: "60vh" }}>
+                                <Loader size="lg" type="bars" />
+                            </div>
+                        }
+                    >
+                        <AdminPage />
+                    </Suspense>
+                )}
                 {page === "settings" && (
                     <SettingsPage
                         theme={theme}

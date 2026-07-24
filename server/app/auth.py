@@ -21,7 +21,9 @@ def current_user(token: Annotated[str, Depends(oauth2_scheme)]):
         raise HTTPException(401, "invalid or expired token") from e
     c = conn()
     try:
-        row = c.execute("SELECT id, email, created_at FROM users WHERE id=?", (user_id,)).fetchone()
+        row = c.execute(
+            "SELECT id, email, created_at, is_admin, last_login FROM users WHERE id=?", (user_id,)
+        ).fetchone()
     finally:
         c.close()
     if row is None:
