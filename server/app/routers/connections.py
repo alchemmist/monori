@@ -126,33 +126,51 @@ def _fail(c, cid, error) -> NoReturn:
     raise HTTPException(502, SYNC_FAILED) from error
 
 
-def _tail(card):
-    digits = "".join(ch for ch in str(card or "") if ch.isdigit())
-    return digits[-4:]
+def _card_digits(card):
+    return "".join(ch for ch in str(card or "") if ch.isdigit())
+
+
+def _match_tail(bound, digits):
+    """
+    The bound tail that identifies this card, by mutual suffix (a 4-digit
+    statement tail must still match a longer stored tail and vice versa).
+    The longest — most specific — matching tail wins.
+    """
+    matches = [t for t in bound if digits.endswith(t) or t.endswith(digits)]
+    return max(matches, key=len) if matches else None
 
 
 def _route_rows(c, uid, default_account_id, rows):
     """
     Split synced rows between the user's accounts by their bound card tails
-    (``accounts.card_tails``). Rows whose tail is not bound anywhere stay on
-    the synced account; when the feed mixes several cards, those tails are
-    reported back so the user can bind them instead of silently merging.
+    (``accounts.card_tails``). Rows whose tail is not bound anywhere — or is
+    bound to several accounts, which makes routing ambiguous — stay on the
+    synced account; when the feed mixes several cards, those tails are
+    reported back so the user can fix the bindings instead of silently merging.
     """
-    bound = {}
-    for r in c.execute("SELECT id, card_tails FROM accounts WHERE user_id=?", (uid,)):
+    bound: dict[str, set] = {}
+    for r in c.execute("SELECT id, card_tails FROM accounts WHERE user_id=? ORDER BY id", (uid,)):
         for t in (r["card_tails"] or "").split(","):
-            if t and t not in bound:
-                bound[t] = r["id"]
+            if t:
+                bound.setdefault(t, set()).add(r["id"])
     routed: dict[int, list] = {}
     unmapped: dict[str, int] = {}
     seen_tails = set()
     for row in rows:
-        tail = _tail(row.get("card"))
+        digits = _card_digits(row.get("card"))
+        tail = digits[-4:]
         if tail:
             seen_tails.add(tail)
-        target = bound.get(tail, default_account_id)
-        if tail and tail not in bound:
-            unmapped[tail] = unmapped.get(tail, 0) + 1
+        matched = _match_tail(bound, digits) if digits else None
+        owners = bound.get(matched, set()) if matched else set()
+        if len(owners) == 1:
+            target = next(iter(owners))
+        else:
+            # unbound, or the same tail bound to several accounts: routing is
+            # undefined, keep the row where the sync ran and say so
+            target = default_account_id
+            if tail:
+                unmapped[tail] = unmapped.get(tail, 0) + 1
         routed.setdefault(target, []).append(row)
     if len(seen_tails) <= 1:
         # a single-card feed is unambiguous — nothing to warn about

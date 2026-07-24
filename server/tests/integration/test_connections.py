@@ -398,3 +398,34 @@ def test_single_card_feed_reports_no_unmapped_tails(api, client, keyed):
     body = client.post(f"/api/connections/{cid}/sms", json={"code": "0000"}).json()
     assert body["status"] == "connected"
     assert body["unmappedTails"] == []
+
+
+def test_sync_routing_matches_longer_stored_tails_by_suffix(api, client, keyed, monkeypatch):
+    monkeypatch.setitem(base.REGISTRY, ("multicard", "multicard"), MultiCardConnector)
+    main = api.default_account()
+    # stored tail longer than the 4 digits the statement shows still matches
+    other = api.account("Other card", cardTails=["55362947"])
+    cid = _connect_multicard(client, main)
+
+    body = client.post(f"/api/connections/{cid}/sync").json()
+    by_account = {r["accountId"]: r for r in body["accounts"]}
+    assert by_account[other]["inserted"] == 1
+    routed = {t["description"]: t["accountId"] for t in api.snapshot()["transactions"]}
+    assert routed["B"] == other
+
+
+def test_sync_routing_treats_duplicated_tail_as_unmapped(api, client, keyed, monkeypatch):
+    monkeypatch.setitem(base.REGISTRY, ("multicard", "multicard"), MultiCardConnector)
+    main = api.default_account()
+    api.account("One", cardTails=["2947"])
+    api.account("Two", cardTails=["2947"])
+    cid = _connect_multicard(client, main)
+
+    body = client.post(f"/api/connections/{cid}/sync").json()
+    # the twice-bound tail is ambiguous: its rows stay on the synced account
+    # and it is surfaced alongside the unbound tails
+    by_account = {r["accountId"]: r for r in body["accounts"]}
+    assert by_account[main]["inserted"] == 3
+    assert {u["tail"] for u in body["unmappedTails"]} == {"1111", "2947", "8181"}
+    routed = {t["description"]: t["accountId"] for t in api.snapshot()["transactions"]}
+    assert routed["B"] == main
