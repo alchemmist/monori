@@ -18,17 +18,20 @@ down:
 	$(COMPOSE) -f deploy/docker-compose.dev.yml down
 
 # Manual rollout of exactly the revision this command is run on (mirrors the
-# Deploy workflow). Needs SSH_HOST, SSH_USER and SSH_PROJECT_PATH in the
-# environment; the revision must already be pushed so the server can fetch it.
+# Deploy workflow). Reads SSH_HOST, SSH_USER and SSH_PROJECT_PATH from a .env
+# file in the repo root (falling back to the environment); the revision must
+# already be pushed so the server can fetch it.
 deploy:
-	@test -n "$(SSH_HOST)" && test -n "$(SSH_USER)" && test -n "$(SSH_PROJECT_PATH)" || \
-		{ echo "set SSH_HOST, SSH_USER and SSH_PROJECT_PATH"; exit 1; }
-	@rev=$$(git rev-parse HEAD); \
+	@set -a; [ -f .env ] && . ./.env; set +a; \
+	: "$${SSH_HOST:?set SSH_HOST in .env or the environment}"; \
+	: "$${SSH_USER:?set SSH_USER in .env or the environment}"; \
+	: "$${SSH_PROJECT_PATH:?set SSH_PROJECT_PATH in .env or the environment}"; \
+	rev=$$(git rev-parse HEAD); \
 	git fetch -q origin; \
 	git branch -r --contains "$$rev" | grep -q . || \
 		{ echo "revision $$rev is not on origin — push it first"; exit 1; }; \
-	echo "deploying $$rev to $(SSH_HOST)"; \
-	ssh "$(SSH_USER)@$(SSH_HOST)" "set -e; cd '$(SSH_PROJECT_PATH)'; \
+	echo "deploying $$rev to $$SSH_HOST"; \
+	ssh "$$SSH_USER@$$SSH_HOST" "set -e; cd '$$SSH_PROJECT_PATH'; \
 		git fetch origin; git checkout --detach $$rev; \
 		cd deploy; docker compose up --build -d"
 

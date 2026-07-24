@@ -1,4 +1,5 @@
 pass.txt
+.env
 migration/raw/
 migration/out/
 server/static/
