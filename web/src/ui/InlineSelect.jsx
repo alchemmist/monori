@@ -9,22 +9,25 @@ const norm = (o) => (typeof o === "string" ? { value: o, label: o } : o);
 // account/year filters and the sectioned category picker.
 const isGrouped = (data) => data.length > 0 && data[0] && Array.isArray(data[0].options);
 
-/* Auto-width select rendered as a button (value + chevron hugging), the way
- * the gravity Select control looked. `borderless` drops the border for table
- * rows, `small` is the compact 24px size, `searchable` adds a search box on
- * top of the dropdown. Pass grouped data to render labelled sections (used by
- * the transaction category picker); `dropdownClassName` styles the dropdown
- * surface (e.g. frosted glass). */
+/* THE select of this app — every dropdown goes through it and opens the same
+ * frosted-glass surface (see .mantine-Combobox-dropdown in ui/mantine.css).
+ * The trigger is a button (value + chevron hugging, auto width); `field` turns
+ * it into a full-width form row with the label inside the border (dialog
+ * forms), `borderless` drops the border for table rows, `small` is the compact
+ * 24px size, `searchable` adds a search box on top of the dropdown. Pass
+ * grouped data (`[{ group, kind, options }]`) to render labelled sections. */
 export default function InlineSelect({
     value,
     onChange,
     data,
+    label,
+    field = false,
     searchable = false,
     placeholder = "—",
     small = false,
     borderless = false,
     className = "",
-    dropdownClassName = "",
+    style,
 }) {
     const [search, setSearch] = useState("");
     const optionsRef = useRef(null);
@@ -79,7 +82,7 @@ export default function InlineSelect({
             position="bottom-start"
             shadow="md"
             offset={4}
-            width={220}
+            width={field ? "target" : 220}
             onOptionSubmit={(v) => {
                 onChange(v);
                 combobox.closeDropdown();
@@ -92,19 +95,22 @@ export default function InlineSelect({
                         "gsel",
                         small && "gsel_s",
                         borderless && "gsel_borderless",
+                        field && "gsel_field",
                         className,
                     ]
                         .filter(Boolean)
                         .join(" ")}
+                    style={style}
                     onClick={() => combobox.toggleDropdown()}
                 >
+                    {label && <span className="gsel__label">{label}</span>}
                     <span className={`gsel__text${current ? "" : " gsel__text_empty"}`}>
                         {current?.label ?? placeholder}
                     </span>
                     <ChevronDown width={14} height={14} className="gsel__chev" />
                 </button>
             </Combobox.Target>
-            <Combobox.Dropdown className={`gsel__drop ${dropdownClassName}`.trim()}>
+            <Combobox.Dropdown className="gsel__drop">
                 {/* the dropdown node stays mounted (hidden) for every instance, so
                     with dozens of row selects the options only render while open */}
                 {combobox.dropdownOpened && (

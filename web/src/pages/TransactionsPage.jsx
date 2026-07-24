@@ -317,7 +317,6 @@ export default function TransactionsPage() {
                                             }
                                             onChange={(v) => setTxCategory(t.id, v ? +v : null)}
                                             data={catSectionsFor(t)}
-                                            dropdownClassName="gsel__drop_glass"
                                         />
                                     )}
                                 </td>

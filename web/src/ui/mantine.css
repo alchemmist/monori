@@ -215,11 +215,6 @@ textarea.mi-input__field {
     display: none;
 }
 
-/* Select shares .mi-input classes; its value is a readonly input */
-.mi-input__field[readonly] {
-    cursor: pointer;
-}
-
 /* ---- InlineSelect: button-shaped select, auto-width like gravity's ---- */
 .gsel {
     display: inline-flex;
@@ -254,6 +249,23 @@ textarea.mi-input__field {
     border-color: var(--g-color-line-generic);
 }
 
+/* form-row variant: full width, label inside the border like .mi-input */
+.gsel_field {
+    display: flex;
+    width: 100%;
+}
+
+.gsel_field .gsel__text {
+    flex: 1;
+    text-align: left;
+}
+
+.gsel__label {
+    flex: none;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
 .gsel__text {
     overflow: hidden;
     text-overflow: ellipsis;
@@ -268,20 +280,18 @@ textarea.mi-input__field {
     color: var(--m-text-faint);
 }
 
-/* ---- dropdown surfaces (Select options, Menu) ---- */
-.mantine-Select-dropdown,
+/* ---- dropdown surfaces: ONE look everywhere — frosted glass over the page
+   (the approved category-picker recipe; --glass-* tokens live in theme.css) ---- */
 .mantine-Combobox-dropdown,
 .mantine-Menu-dropdown {
-    background: var(--g-color-base-float);
-    border: none;
-    border-radius: 6px;
-    box-shadow:
-        0 0 0 1px var(--g-color-sfx-fade, rgb(0 0 0 / 5%)),
-        0 8px 20px -5px rgb(0 0 0 / 15%);
+    background: var(--glass-fill);
+    backdrop-filter: blur(var(--glass-blur));
+    border: 1px solid var(--glass-border);
+    border-radius: 8px;
+    box-shadow: var(--glass-shadow);
     padding: 4px;
 }
 
-.mantine-Select-option,
 .mantine-Combobox-option,
 .mantine-Menu-item {
     border-radius: 4px;
@@ -291,15 +301,12 @@ textarea.mi-input__field {
     color: var(--m-text);
 }
 
-.mantine-Select-option:hover,
-.mantine-Select-option[data-combobox-active],
 .mantine-Combobox-option:hover,
 .mantine-Combobox-option[data-combobox-active],
 .mantine-Menu-item:hover {
     background: var(--g-color-base-simple-hover);
 }
 
-.mantine-Select-option[data-combobox-selected],
 .mantine-Combobox-option[data-selected] {
     background: var(--g-color-base-selection);
     color: var(--m-text);
@@ -354,14 +361,6 @@ textarea.mi-input__field {
 
 .gsel__grp_expense {
     color: var(--m-expense);
-}
-
-/* frosted glass over the ledger — the shared --glass-* recipe (see theme.css) */
-.gsel__drop_glass {
-    background: var(--glass-fill);
-    backdrop-filter: blur(var(--glass-blur));
-    border: 1px solid var(--glass-border);
-    box-shadow: var(--glass-shadow);
 }
 
 .mantine-Menu-item[data-tone="danger"] {

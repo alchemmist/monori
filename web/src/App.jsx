@@ -31,6 +31,7 @@ import AccountsPage from "./pages/AccountsPage.jsx";
 import CategoriesPage from "./pages/CategoriesPage.jsx";
 import SettingsPage from "./pages/SettingsPage.jsx";
 import LoginPage from "./pages/LoginPage.jsx";
+import MigratePanel from "./components/MigratePanel.jsx";
 
 const NAV = [
     { id: "budget", title: "Budget", icon: LayoutHeaderCellsLarge },
@@ -56,6 +57,7 @@ export default function App({ theme, onToggleTheme }) {
     const { snapshot, loading, error, load, toast, user, authChecked, checkAuth, logout } =
         useStore();
     const [page, setPage] = useState("budget");
+    const [migrating, setMigrating] = useState(false);
     const [collapsed, setCollapsed] = useState(
         () => localStorage.getItem("sidebar_collapsed") === "1",
     );
@@ -252,9 +254,14 @@ export default function App({ theme, onToggleTheme }) {
                 {page === "accounts" && <AccountsPage />}
                 {page === "categories" && <CategoriesPage />}
                 {page === "settings" && (
-                    <SettingsPage theme={theme} onToggleTheme={onToggleTheme} />
+                    <SettingsPage
+                        theme={theme}
+                        onToggleTheme={onToggleTheme}
+                        onMigrate={() => setMigrating(true)}
+                    />
                 )}
             </main>
+            {migrating && <MigratePanel onClose={() => setMigrating(false)} />}
         </div>
     );
 }

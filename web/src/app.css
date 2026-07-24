@@ -318,6 +318,157 @@
     flex-shrink: 0;
 }
 
+/* migration side panel */
+.migrate-panel {
+    position: fixed;
+    inset: 0 0 0 auto;
+    width: 420px;
+    max-width: 92vw;
+    z-index: 120;
+    display: flex;
+    overflow: hidden;
+    background: var(--m-bg);
+    border: 1px solid var(--m-border);
+    border-right: none;
+    border-radius: 26px 0 0 26px;
+    box-shadow:
+        -4px 0 14px rgb(0 0 0 / 4%),
+        -16px 0 40px rgb(0 0 0 / 5%);
+    animation: migrate-panel-in 0.3s cubic-bezier(0.22, 0.85, 0.35, 1) both;
+    transition: width 0.25s ease;
+}
+
+/* the dark canvas is painted on <body> as a literal (see theme.css) — the dark
+   --m-bg token is a stale near-black nothing else uses; match the body color */
+.theme-dark .migrate-panel {
+    background: #221d22;
+    box-shadow:
+        -4px 0 14px rgb(0 0 0 / 12%),
+        -16px 0 40px rgb(0 0 0 / 16%);
+}
+
+@keyframes migrate-panel-in {
+    from {
+        transform: translateX(100%);
+    }
+
+    to {
+        transform: translateX(0);
+    }
+}
+
+.migrate-panel_collapsed {
+    width: 34px;
+}
+
+/* while the width animates the strip and inner are both "wrong" targets —
+   ignore the pointer so hover styles can't flash mid-transition */
+.migrate-panel_animating {
+    pointer-events: none;
+}
+
+/* overlay, not flow: the strip fades in over the fixed-width content, so the
+   layout never reflows and the header text can't jump during the animation */
+.migrate-panel__strip {
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 34px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 0;
+    background: inherit;
+    border: none;
+    cursor: pointer;
+    color: var(--m-text-dim);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.15s ease;
+    z-index: 1;
+}
+
+.migrate-panel_collapsed .migrate-panel__strip {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.migrate-panel_collapsed.migrate-panel_animating .migrate-panel__strip {
+    pointer-events: none;
+}
+
+.migrate-panel__strip:hover {
+    background: var(--m-surface-hover);
+    color: var(--m-text);
+}
+
+.migrate-panel__strip-label {
+    writing-mode: vertical-rl;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+}
+
+.migrate-panel__inner {
+    flex: none;
+    width: min(420px, 92vw);
+    display: flex;
+    flex-direction: column;
+}
+
+.migrate-panel__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--m-border-soft);
+}
+
+.migrate-panel__title {
+    font-weight: var(--m-title-weight);
+    white-space: nowrap;
+}
+
+.migrate-panel__head-actions {
+    display: flex;
+    gap: 4px;
+}
+
+.migrate-panel__icon-btn {
+    display: grid;
+    place-items: center;
+    width: 28px;
+    height: 28px;
+    background: none;
+    border: none;
+    border-radius: var(--m-radius-sm);
+    cursor: pointer;
+    color: var(--m-text-dim);
+}
+
+.migrate-panel__icon-btn:hover {
+    background: var(--m-surface-hover);
+    color: var(--m-text);
+}
+
+.migrate-panel__content {
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 16px 20px;
+}
+
+.migrate-panel__footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 14px 20px;
+    border-top: 1px solid var(--m-border-soft);
+}
+
 .settings-row__title {
     font-weight: 600;
 }

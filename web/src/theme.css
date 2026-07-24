@@ -55,7 +55,7 @@
     --glass-blur: 8px;
     --glass-fill: rgb(255 255 255 / 72%);
     --glass-border: rgb(0 0 0 / 8%);
-    --glass-shadow: 0 0 24px rgb(0 0 0 / 12%);
+    --glass-shadow: 0 2px 16px rgb(0 0 0 / 6%);
 
     /* accent-tuned brand tokens (drive the Mantine skin's filled/selection look) */
     --g-color-base-brand: #ef5a17;
@@ -107,10 +107,10 @@
 .theme-dark {
     --m-bg: #08070d;
     --m-surface: #0d0b15;
-    --m-surface-hover: #191426;
+    --m-surface-hover: #2a242a;
     --m-surface-raised: #141020;
     --m-border: #221d31;
-    --m-border-soft: #191426;
+    --m-border-soft: #2c252c;
     --m-text: #f2f1f6;
     --m-text-dim: #a3a0b0;
     --m-text-faint: #6c6980;
@@ -127,7 +127,7 @@
        every glass surface matches. */
     --glass-fill: rgb(44 38 46 / 38%);
     --glass-border: transparent;
-    --glass-shadow: 0 0 18px rgb(0 0 0 / 25%);
+    --glass-shadow: 0 2px 14px rgb(0 0 0 / 16%);
 
     --m-card-bg: var(--glass-fill);
     --m-card-border: var(--glass-border);

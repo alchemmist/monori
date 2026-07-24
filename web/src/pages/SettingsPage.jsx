@@ -2,12 +2,10 @@ import { Button, SegmentedControl } from "@mantine/core";
 import { useState } from "react";
 
 import { api } from "../api.js";
-import MigrateDialog from "../components/MigrateDialog.jsx";
 
-export default function SettingsPage({ theme, onToggleTheme }) {
+export default function SettingsPage({ theme, onToggleTheme, onMigrate }) {
     const [exporting, setExporting] = useState(false);
     const [exportError, setExportError] = useState("");
-    const [migrating, setMigrating] = useState(false);
 
     const exportXlsx = async () => {
         setExporting(true);
@@ -67,11 +65,10 @@ export default function SettingsPage({ theme, onToggleTheme }) {
                         Import categories, transactions and budgets from a YNAB-style workbook
                     </div>
                 </div>
-                <Button variant="default" onClick={() => setMigrating(true)}>
+                <Button variant="default" onClick={onMigrate}>
                     Migrate from spreadsheet
                 </Button>
             </div>
-            {migrating && <MigrateDialog onClose={() => setMigrating(false)} />}
         </div>
     );
 }

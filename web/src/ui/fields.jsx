@@ -1,9 +1,9 @@
-import { Select, Textarea, TextInput } from "@mantine/core";
-import { ChevronDown } from "@gravity-ui/icons";
+import { Textarea, TextInput } from "@mantine/core";
+
+import InlineSelect from "./InlineSelect.jsx";
 
 /* Gravity-style form fields: the label sits INSIDE the bordered box, inline
- * with the value (see ui/mantine.css .mi-input). Plain unlabeled selects use
- * ui/InlineSelect.jsx instead. */
+ * with the value (see ui/mantine.css .mi-input). */
 const cls = {
     root: "mi-input",
     label: "mi-input__label",
@@ -20,13 +20,8 @@ export function FTextArea(props) {
     return <Textarea classNames={cls} {...props} />;
 }
 
-export function FSelect(props) {
-    return (
-        <Select
-            classNames={cls}
-            rightSection={<ChevronDown width={14} height={14} />}
-            rightSectionPointerEvents="none"
-            {...props}
-        />
-    );
+/* Form-row face of the one shared select: same InlineSelect engine and the
+ * same frosted-glass dropdown as everywhere else, styled as a labelled field. */
+export function FSelect({ placeholder = "—", ...props }) {
+    return <InlineSelect field placeholder={placeholder} {...props} />;
 }
