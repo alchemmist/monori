@@ -67,10 +67,14 @@ def import_preview(body: ImportBody, user: Annotated[dict, Depends(current_user)
         rows, errors = parse_statement(body.text)
         rules = _load_user_rules(c, uid)
         account_id = body.accountId if _owned_account(c, body.accountId, uid) else None
-        existing = existing_hash_counts(c, account_id)
+        existing = existing_hash_counts(c, account_id) if account_id is not None else {}
         seen_in_batch: dict = {}
         for row in rows:
             row["categoryId"] = categorize(row["description"], row["amount"], rules)
+            if account_id is None:
+                # no account to dedup against — don't fabricate account-less hashes
+                row["duplicate"] = False
+                continue
             row["hash"] = tx_hash(account_id, row["date"], row["amount"], row["description"])
             n_batch = seen_in_batch.get(row["hash"], 0)
             row["duplicate"] = existing.get(row["hash"], 0) > n_batch
