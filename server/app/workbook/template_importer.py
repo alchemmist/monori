@@ -64,6 +64,9 @@ MONTH_TOKENS = {
     "DEC": 12,
 }
 
+PAY_AMOUNT_HEADER = "Сумма платежа"
+PAY_CURRENCY_HEADER = "Валюта платежа"
+
 BUDGET_HEADERS = ("Бюджет", "Budgeted")
 OUTFLOW_HEADERS = ("Расход", "Outflows")
 BALANCE_HEADERS = ("Баланс", "Balance")
@@ -89,7 +92,17 @@ def _s(value) -> str:
 
 
 def _kop(value):
-    if isinstance(value, bool) or not isinstance(value, int | float):
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, str):
+        cleaned = re.sub(r"[\s\u00a0\u202f]", "", value).replace(",", ".")
+        if not cleaned:
+            return None
+        try:
+            value = float(cleaned)
+        except ValueError:
+            return None
+    if not isinstance(value, int | float):
         return None
     return spec.kop_from_rub(value)
 
@@ -295,6 +308,10 @@ def _parse_transactions(ws, warnings, errors):
         i = idx[RU_HEADERS[key]]
         return row[i] if i < len(row) else None
 
+    def opt(row, header):
+        i = idx.get(header)
+        return row[i] if i is not None and i < len(row) else None
+
     cat_col = max(idx.values()) + 2
     rows = []
     seen = set()
@@ -310,13 +327,19 @@ def _parse_transactions(ws, warnings, errors):
             continue
         dt = _parse_dt(col(row, "date"))
         amount = _kop(col(row, "amount"))
+        currency = _s(col(row, "currency"))
+        if amount is None:
+            amount = _kop(opt(row, PAY_AMOUNT_HEADER))
+            if amount is not None:
+                currency = _s(opt(row, PAY_CURRENCY_HEADER)) or currency
+        description = _s(col(row, "description"))
         if dt is None or amount is None:
+            if dt is None and amount is None and not description:
+                continue
             errors.append({"row": n, "error": "unparseable date or amount"})
             continue
-        currency = _s(col(row, "currency"))
         if currency and currency != "RUB":
             non_rub += 1
-        description = _s(col(row, "description"))
         date_iso = dt.strftime("%Y-%m-%dT%H:%M:%S")
         h = tx_hash(date_iso, amount, description)
         if h in seen:
@@ -596,7 +619,7 @@ def _parse(wb):
             balances[name] = projected
             overspent += min(projected, 0)
         if at_seam and seam_seed is not None:
-            delta = seam_seed - (avail + overspent)
+            delta = seam_seed - avail
             if abs(delta) > ADJUST_TOLERANCE_KOP:
                 synthetic.append(
                     _synthetic(y, m, delta, INCOME_CATEGORY, "Migration: available seed")

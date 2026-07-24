@@ -314,6 +314,10 @@
     max-width: 460px;
 }
 
+.settings-row button {
+    flex-shrink: 0;
+}
+
 .settings-row__title {
     font-weight: 600;
 }

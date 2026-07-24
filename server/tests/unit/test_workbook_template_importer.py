@@ -124,10 +124,18 @@ def test_s_strips_and_handles_none():
 def test_kop_rejects_bool_and_non_numbers():
     assert _kop(True) is None
     assert _kop(False) is None
-    assert _kop("12") is None
     assert _kop(None) is None
+    assert _kop("abc") is None
+    assert _kop("   ") is None
     assert _kop(12.5) == 1250
     assert _kop(-3) == -300
+
+
+def test_kop_parses_formatted_strings():
+    assert _kop("12") == 1200
+    assert _kop("-4 172,00") == -417200
+    assert _kop("1 234,5") == 123450
+    assert _kop("2 000") == 200000
 
 
 def test_last_day_handles_december_and_others():
@@ -367,6 +375,57 @@ def test_parse_transactions_dedup_status_currency_and_category():
     assert "Transactions: 1 non-RUB rows imported with their face value" in warnings
 
 
+def test_parse_transactions_pay_amount_fallback_and_blankish_rows():
+    wb = Workbook()
+    wb.remove(wb.active)
+    ws = wb.create_sheet(spec.SHEET_TRANSACTIONS)
+    ws.append(TX_HEADER + ["Сумма платежа", "Валюта платежа"])
+
+    manual = [None] * 13
+    manual[0] = datetime.datetime(2025, 3, 1, 9)
+    manual[2] = "OK"
+    manual[4] = "RUB"
+    manual[7] = "Salary"
+    manual[8] = 47337.0
+    manual[11] = "Income"
+    ws.append(manual)
+
+    formatted = [None] * 13
+    formatted[0] = datetime.datetime(2025, 3, 2)
+    formatted[2] = "OK"
+    formatted[7] = "Points"
+    formatted[8] = "-4 172,00"
+    formatted[9] = "RUB"
+    formatted[11] = "Groceries"
+    ws.append(formatted)
+
+    foreign = [None] * 13
+    foreign[0] = datetime.datetime(2025, 3, 3)
+    foreign[2] = "OK"
+    foreign[7] = "Abroad"
+    foreign[8] = 10.0
+    foreign[9] = "USD"
+    foreign[11] = "Travel"
+    ws.append(foreign)
+
+    blankish = [None] * 13
+    blankish[11] = 0
+    ws.append(blankish)
+
+    dated_only = [None] * 13
+    dated_only[0] = datetime.datetime(2025, 3, 4)
+    dated_only[7] = "no amount anywhere"
+    ws.append(dated_only)
+
+    warnings, errors = [], []
+    rows = _parse_transactions(ws, warnings, errors)
+    assert [r["amount"] for r in rows] == [4733700, -417200, 1000]
+    assert rows[0]["monori_category"] == "Income"
+    assert rows[1]["monori_category"] == "Groceries"
+    assert errors == [{"row": 6, "error": "unparseable date or amount"}]
+    assert "Transactions: 1 non-RUB rows imported with their face value" in warnings
+
+
 def test_parse_keywords_reads_side_table():
     ws = _tx_only_ws(
         [
@@ -539,6 +598,45 @@ def test_dead_category_and_available_seed_at_seam():
     assert synth["Migration: available seed"]["date"] == "2024-12-31T12:00:00"
     assert "history: 2 synthetic transactions rebuilt from archive sheets" in parsed["warnings"]
     assert "seam: 3 carry corrections at 2024-12" in parsed["warnings"]
+
+
+def test_available_seed_excludes_seam_overspend():
+    """
+    The template's "Not budgeted in Dec" seed is the December available BEFORE
+    overspend; the sheet adds "Overspent in Dec" separately in January. The
+    seed correction must therefore target avail alone, not avail + overspent.
+    """
+    wb = Workbook()
+    wb.remove(wb.active)
+    _tx_sheet(wb, [])
+    _write_year(
+        wb.create_sheet("2024_archive"),
+        months=[1, 2],
+        start_token="ЯНВ 2024",
+        rows=[("▼Daily", None), ("Groceries", {1: (None, None, 500)})],
+        income={1: 100},
+        header_row=8,
+    )
+    _write_year(
+        wb.create_sheet("2024"),
+        months=[1, 2],
+        start_token="ЯНВ 2024",
+        rows=[("▼Daily", None), ("Groceries", {2: (None, None, -100)})],
+    )
+    _write_year(
+        wb.create_sheet("2025"),
+        months=[1, 2],
+        start_token="ЯНВ 2025",
+        rows=[("▼Daily", None), ("Groceries", None)],
+        seed=200,
+        available={1: 100},
+        header_row=8,
+    )
+    parsed = parse_template_workbook(_save(wb))
+    synth = {t["description"]: t for t in parsed["transactions"]}
+    assert synth["Migration carry: Groceries"]["amount"] == -60000
+    assert synth["Migration: available seed"]["amount"] == 10000
+    assert not any(w.startswith("verify:") for w in parsed["warnings"])
 
 
 def test_no_live_year_sheets_raises():
