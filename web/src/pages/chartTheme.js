@@ -41,4 +41,7 @@ export const cartesian = {
     strokeDasharray: "3 3",
     tickLine: "none",
     valueFormatter: fmtNum,
+    /* recharts' fixed 60px default clips million-scale ruble ticks against the
+       card edge; "auto" sizes the axis to the longest label */
+    yAxisProps: { width: "auto", tickMargin: 6 },
 };

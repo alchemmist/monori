@@ -355,8 +355,8 @@ export default function AnalyticsPage({ results, firstYear, lastYear }) {
                                     data={merchantsData}
                                     dataKey="name"
                                     series={[{ name: "Spent", color: SERIES.accent }]}
-                                    yAxisProps={{ width: 150, interval: 0, tick: <MerchantTick /> }}
                                     {...cartesian}
+                                    yAxisProps={{ width: 150, interval: 0, tick: <MerchantTick /> }}
                                 />
                             </ChartBoundary>
                         ) : (
