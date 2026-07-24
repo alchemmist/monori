@@ -248,9 +248,10 @@ def delete_user_transactions(
         for i in range(0, len(ids), SQL_CHUNK):
             chunk = ids[i : i + SQL_CHUNK]
             marks = ",".join("?" * len(chunk))
+            # the interpolation only builds "?" placeholders; values are bound
             owned += c.execute(
-                f"SELECT COUNT(*) FROM transactions t JOIN accounts a ON a.id = t.account_id"
-                f" WHERE a.user_id=? AND t.id IN ({marks})",
+                f"SELECT COUNT(*) FROM transactions t JOIN accounts"  # nosec B608
+                f" a ON a.id = t.account_id WHERE a.user_id=? AND t.id IN ({marks})",
                 (uid, *chunk),
             ).fetchone()[0]
         if owned != len(ids):
@@ -258,7 +259,7 @@ def delete_user_transactions(
         for i in range(0, len(ids), SQL_CHUNK):
             chunk = ids[i : i + SQL_CHUNK]
             marks = ",".join("?" * len(chunk))
-            c.execute(f"DELETE FROM transactions WHERE id IN ({marks})", chunk)
+            c.execute(f"DELETE FROM transactions WHERE id IN ({marks})", chunk)  # nosec B608
         c.commit()
         return {"deleted": len(ids)}
     finally:
