@@ -25,6 +25,28 @@ const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 // sees the value, which collides when two rows share the same amount.
 const perRowColor = (field) => (props) => <Rectangle {...props} fill={props.payload[field]} />;
 
+// Middle-ellipsis so long merchant names keep both ends legible (names that share
+// a prefix — e.g. "Migration adjustment: …" — stay distinguishable by their tail).
+const truncateMid = (s, max = 24) => {
+    if (s.length <= max) return s;
+    const head = Math.ceil((max - 1) / 2);
+    const tail = max - 1 - head;
+    return `${s.slice(0, head)}…${s.slice(s.length - tail)}`;
+};
+
+// Single-line Y-axis tick for the horizontal merchant chart: recharts wraps long
+// labels across lines when the axis width is fixed, so neighbouring ticks overlap.
+// We render one non-wrapping line, truncated, with the full name in a native title.
+function MerchantTick({ x, y, payload }) {
+    const full = String(payload.value);
+    return (
+        <text x={x} y={y} dy={4} textAnchor="end" fontSize={12} fill="var(--m-text-dim)">
+            <title>{full}</title>
+            {truncateMid(full)}
+        </text>
+    );
+}
+
 /** Annual report: planning discipline, year-over-year shape, spending patterns. */
 export default function AnalyticsPage({ results, firstYear, lastYear }) {
     const { snapshot } = useStore();
@@ -333,7 +355,7 @@ export default function AnalyticsPage({ results, firstYear, lastYear }) {
                                     data={merchantsData}
                                     dataKey="name"
                                     series={[{ name: "Spent", color: SERIES.accent }]}
-                                    yAxisProps={{ width: 110 }}
+                                    yAxisProps={{ width: 150, interval: 0, tick: <MerchantTick /> }}
                                     {...cartesian}
                                 />
                             </ChartBoundary>
