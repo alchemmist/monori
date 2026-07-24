@@ -1,13 +1,12 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@mantine/core";
 import { useStore } from "../store.js";
+import { api } from "../api.js";
 import { fmtDate } from "../format.js";
 import AppDialog from "../ui/AppDialog.jsx";
-import { FTextInput } from "../ui/fields.jsx";
+import { FSelect, FTextInput } from "../ui/fields.jsx";
 import Tag from "../ui/Tag.jsx";
 import Txt from "../ui/Txt.jsx";
-
-const BANK = { bank: "tbank", kind: "playwright", label: "T-Bank (browser sync)" };
 
 const STATUS_THEME = {
     connected: "success",
@@ -16,6 +15,8 @@ const STATUS_THEME = {
     disconnected: "unknown",
 };
 
+const NEW_LOGIN = "new";
+
 export default function ConnectionDialog({ account, connection, onClose }) {
     const {
         createConnection,
@@ -23,17 +24,43 @@ export default function ConnectionDialog({ account, connection, onClose }) {
         submitConnectionSms,
         cancelConnectionSync,
         deleteConnection,
+        patchAccount,
         notify,
     } = useStore();
+    const connections = useStore((s) => s.snapshot?.connections ?? []);
+    const [connectors, setConnectors] = useState([]);
+    const [bankKey, setBankKey] = useState(null);
+    const [loginChoice, setLoginChoice] = useState(NEW_LOGIN);
+    const [credentials, setCredentials] = useState({});
+    const [accountFields, setAccountFields] = useState({ account: account.bankRef || "" });
     const [step, setStep] = useState(connection ? "ready" : "credentials");
-    const [phone, setPhone] = useState("");
-    const [password, setPassword] = useState("");
-    const [tbankAccount, setTbankAccount] = useState("");
     const [code, setCode] = useState("");
     const [busy, setBusy] = useState(false);
     const [result, setResult] = useState(null);
     const [error, setError] = useState("");
     const connId = useRef(connection?.id ?? null);
+
+    useEffect(() => {
+        api.connectionsAvailable()
+            .then((list) => {
+                setConnectors(list);
+                if (list.length === 1) setBankKey(`${list[0].bank}/${list[0].kind}`);
+            })
+            .catch((e) =>
+                notify({ title: "Failed to load banks", theme: "danger", content: String(e) }),
+            );
+    }, [notify]);
+
+    const connector = connectors.find((c) => `${c.bank}/${c.kind}` === bankKey) ?? null;
+    const existingLogins = connector
+        ? connections.filter((c) => c.bank === connector.bank && c.kind === connector.kind)
+        : [];
+    const needsCredentials = loginChoice === NEW_LOGIN;
+    const credentialsComplete =
+        connector &&
+        connector.connectionParams.every(
+            (p) => !p.required || String(credentials[p.name] ?? "").trim(),
+        );
 
     const runSync = async (id) => {
         setBusy(true);
@@ -55,22 +82,29 @@ export default function ConnectionDialog({ account, connection, onClose }) {
     };
 
     const connect = async () => {
-        if (!phone.trim() || !password) return;
         setBusy(true);
         setError("");
         try {
-            const conn = await createConnection({
-                accountId: account.id,
-                bank: BANK.bank,
-                kind: BANK.kind,
-                credentials: {
-                    phone: phone.trim(),
-                    password,
-                    account: tbankAccount.trim() || null,
-                },
-            });
-            connId.current = conn.id;
-            await runSync(conn.id);
+            let id;
+            if (needsCredentials) {
+                const conn = await createConnection({
+                    bank: connector.bank,
+                    kind: connector.kind,
+                    credentials: Object.fromEntries(
+                        connector.connectionParams.map((p) => [
+                            p.name,
+                            String(credentials[p.name] ?? "").trim(),
+                        ]),
+                    ),
+                });
+                id = conn.id;
+            } else {
+                id = Number(loginChoice);
+            }
+            connId.current = id;
+            const ref = String(accountFields.account ?? "").trim();
+            await patchAccount(account.id, { connectionId: id, bankRef: ref });
+            await runSync(id);
         } catch (e) {
             setError(String(e));
             setStep("error");
@@ -97,6 +131,18 @@ export default function ConnectionDialog({ account, connection, onClose }) {
             setError(String(e));
             setStep("error");
         } finally {
+            setBusy(false);
+        }
+    };
+
+    const unlink = async () => {
+        setBusy(true);
+        try {
+            await patchAccount(account.id, { connectionId: 0 });
+            notify({ title: "Account unlinked", theme: "info" });
+            onClose();
+        } catch (e) {
+            notify({ title: "Failed to unlink", theme: "danger", content: String(e) });
             setBusy(false);
         }
     };
@@ -128,37 +174,76 @@ export default function ConnectionDialog({ account, connection, onClose }) {
     if (step === "credentials") {
         body = (
             <>
-                <Txt tone="secondary" caption>
-                    Connects to {BANK.label} in a headless browser and pulls your operations.
-                    Automated access to your own account is a grey area under the bank's terms — use
-                    it at your own risk. Your phone and password are stored encrypted on this server
-                    and used only by it to log in to the bank as you.
-                </Txt>
-                <FTextInput
-                    label="Phone"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    autoFocus
+                <FSelect
+                    label="Bank"
+                    placeholder="Pick a bank"
+                    value={bankKey}
+                    onChange={setBankKey}
+                    data={connectors.map((c) => ({
+                        value: `${c.bank}/${c.kind}`,
+                        label: c.label,
+                    }))}
                 />
-                <FTextInput
-                    label="Password"
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                />
-                <FTextInput
-                    label="T-Bank account number (optional)"
-                    placeholder="e.g. 5858870594 — leave empty to sync the default feed"
-                    value={tbankAccount}
-                    onChange={(e) => setTbankAccount(e.target.value)}
-                    title="The number from the account's operations link in the cabinet; scopes the sync to that one account."
-                />
+                {connector && (
+                    <Txt tone="secondary" caption>
+                        Connects to {connector.label} in a headless browser and pulls your
+                        operations. Automated access to your own account is a grey area under the
+                        bank's terms — use it at your own risk. Credentials are stored encrypted on
+                        this server and used only by it to log in to the bank as you.
+                    </Txt>
+                )}
+                {connector && existingLogins.length > 0 && (
+                    <FSelect
+                        label="Bank login"
+                        value={loginChoice}
+                        onChange={(v) => setLoginChoice(v ?? NEW_LOGIN)}
+                        data={[
+                            { value: NEW_LOGIN, label: "New login…" },
+                            ...existingLogins.map((c) => ({
+                                value: String(c.id),
+                                label: `${connector.label} login #${c.id}`,
+                            })),
+                        ]}
+                    />
+                )}
+                {connector &&
+                    needsCredentials &&
+                    connector.connectionParams.map((p) => (
+                        <FTextInput
+                            key={p.name}
+                            label={p.label}
+                            type={p.secret ? "password" : "text"}
+                            value={credentials[p.name] ?? ""}
+                            onChange={(e) =>
+                                setCredentials((prev) => ({ ...prev, [p.name]: e.target.value }))
+                            }
+                        />
+                    ))}
+                {connector &&
+                    connector.accountParams.map((p) => (
+                        <FTextInput
+                            key={p.name}
+                            label={p.label}
+                            placeholder={p.help}
+                            title={p.help}
+                            value={accountFields[p.name] ?? ""}
+                            onChange={(e) =>
+                                setAccountFields((prev) => ({
+                                    ...prev,
+                                    [p.name]: e.target.value,
+                                }))
+                            }
+                        />
+                    ))}
             </>
         );
         footer = {
             apply: "Connect & sync",
             onApply: connect,
-            applyProps: { loading: busy, disabled: !phone.trim() || !password },
+            applyProps: {
+                loading: busy,
+                disabled: !connector || (needsCredentials && !credentialsComplete),
+            },
         };
     } else if (step === "ready") {
         body = (
@@ -175,20 +260,31 @@ export default function ConnectionDialog({ account, connection, onClose }) {
                         {connection.lastSync ? fmtDate(connection.lastSync) : "never"}
                     </span>
                 </div>
+                {account.bankRef && (
+                    <div style={{ display: "flex", justifyContent: "space-between" }}>
+                        <Txt tone="secondary">Bank account</Txt>
+                        <span className="num">{account.bankRef}</span>
+                    </div>
+                )}
                 {connection.lastError && (
                     <Txt tone="danger" caption>
                         {connection.lastError}
                     </Txt>
                 )}
-                <Button
-                    variant="subtle"
-                    data-tone="danger"
-                    size="s"
-                    onClick={disconnect}
-                    loading={busy}
-                >
-                    Disconnect
-                </Button>
+                <div style={{ display: "flex", gap: 8 }}>
+                    <Button variant="subtle" size="s" onClick={unlink} loading={busy}>
+                        Unlink account
+                    </Button>
+                    <Button
+                        variant="subtle"
+                        data-tone="danger"
+                        size="s"
+                        onClick={disconnect}
+                        loading={busy}
+                    >
+                        Disconnect bank
+                    </Button>
+                </div>
             </div>
         );
         footer = {
@@ -227,7 +323,11 @@ export default function ConnectionDialog({ account, connection, onClose }) {
         body = (
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 <Txt block>
-                    {result.inserted} new, {result.skipped} duplicates skipped.
+                    {result.inserted} new, {result.skipped} duplicates skipped
+                    {result.accounts && result.accounts.length > 1
+                        ? ` across ${result.accounts.length} accounts`
+                        : ""}
+                    .
                 </Txt>
                 {result.dateFrom && (
                     <Txt tone="secondary" caption>

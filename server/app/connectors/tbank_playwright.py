@@ -59,6 +59,21 @@ USER_AGENT = (
 class TBankPlaywrightConnector(Connector):
     bank = "tbank"
     kind = "playwright"
+    label = "T-Bank (browser sync)"
+    connection_params = [
+        {"name": "phone", "label": "Phone", "secret": False, "required": True},
+        {"name": "password", "label": "Password", "secret": True, "required": True},
+    ]
+    account_params = [
+        {
+            "name": "account",
+            "label": "T-Bank account number (optional)",
+            "required": False,
+            "help": "The number from the account's operations link in the cabinet"
+            " (/mybank/operations/?account=<id>); scopes the sync to that one"
+            " account. Leave empty for the default feed.",
+        }
+    ]
 
     URL_LOGIN = "https://www.tbank.ru/auth/login/"
     URL_HOME = "https://www.tbank.ru/mybank/"
@@ -105,8 +120,8 @@ class TBankPlaywrightConnector(Connector):
     STEP_PAUSE_MS = 2_500
     LOGIN_TIMEOUT_MS = 45_000
 
-    def __init__(self, credentials, session=None):
-        super().__init__(credentials, session)
+    def __init__(self, credentials, session=None, account_ref=None):
+        super().__init__(credentials, session, account_ref)
         self._worker = None
         self._to_worker: queue.Queue = queue.Queue()
         self._from_worker: queue.Queue = queue.Queue()
@@ -409,7 +424,7 @@ class TBankPlaywrightConnector(Connector):
         # without it the page exports the default all-accounts feed. Each monori
         # account maps to its own connection, so a savings account is just
         # another connection with its own id.
-        account = (self.credentials or {}).get("account")
+        account = self.account_ref or (self.credentials or {}).get("account")
         # a whitespace-only id is not a real account — strip before deciding, so
         # stored creds from a non-web client can't scope us to ...?account=%20
         account = str(account).strip() if account is not None else ""

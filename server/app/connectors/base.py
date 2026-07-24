@@ -28,14 +28,23 @@ class SyncResult:
 class Connector:
     bank = ""
     kind = ""
+    label = ""
     #: connectors meant only for tests/demos are hidden from the bank picker
     hidden = False
+    #: fields the user fills once per bank login (one form entry each:
+    #: name, label, secret, required, help)
+    connection_params: list[dict] = []
+    #: fields locating one bank account within the login, stored per monori
+    #: account as its bank_ref
+    account_params: list[dict] = []
 
-    def __init__(self, credentials, session=None):
+    def __init__(self, credentials, session=None, account_ref=None):
         self.credentials = credentials or {}
         #: opaque per-connector state cached (encrypted) between syncs, e.g. a
         #: browser session; None on the first sync
         self.session = session
+        #: the bank-side locator of the one account this sync is scoped to
+        self.account_ref = account_ref or None
 
     def sync(self, since=None):
         """Pull transactions changed since ``since`` (ISO date string or None for
@@ -70,4 +79,14 @@ def get_connector_class(bank, kind):
 
 def available_connectors():
     """The connectors offered in the UI (registration order, demos excluded)."""
-    return [{"bank": cls.bank, "kind": cls.kind} for cls in REGISTRY.values() if not cls.hidden]
+    return [
+        {
+            "bank": cls.bank,
+            "kind": cls.kind,
+            "label": cls.label or cls.bank,
+            "connectionParams": cls.connection_params,
+            "accountParams": cls.account_params,
+        }
+        for cls in REGISTRY.values()
+        if not cls.hidden
+    ]

@@ -53,6 +53,8 @@ belongs to exactly one account.
 | `sort` | INTEGER | display order; default `0` |
 | `archived` | INTEGER | `0`/`1`; default `0` |
 | `opening_balance` | INTEGER | kopecks; default `0` |
+| `connection_id` | INTEGER | → `bank_connections(id)`; the bank login this account syncs through, nullable |
+| `bank_ref` | TEXT | bank-side account locator within that login; default `''` |
 | `opening_date` | TEXT | ISO date, nullable |
 
 An account's **running balance** is `opening_balance` plus the sum of its
@@ -115,17 +117,21 @@ category-month. A cell with amount `0` is deleted rather than stored.
 
 ### `bank_connections`
 
-Ties an account to a bank connector for on-demand sync. Secrets are stored
-encrypted with `MONORI_ENCRYPTION_KEY` and are never serialized.
+One bank login owned by a user. Any number of accounts link to a connection via
+`accounts.connection_id`, each carrying its own bank-side locator in
+`accounts.bank_ref` (for T-Bank: the id from the cabinet's
+`/mybank/operations/?account=<id>` link). A sync logs in once per connection and
+pulls every linked account in turn. Secrets are stored encrypted with
+`MONORI_ENCRYPTION_KEY` and are never serialized.
 
 | Column | Type | Notes |
 | -------- | ------ | ------- |
 | `id` | INTEGER PK | |
-| `account_id` | INTEGER | → `accounts(id)`, `ON DELETE CASCADE` |
+| `user_id` | INTEGER | → `users(id)` |
 | `bank` | TEXT | connector bank, e.g. `tbank` |
 | `kind` | TEXT | connector mechanism, e.g. `playwright` |
 | `status` | TEXT | `disconnected` / `connected` / `awaiting_sms` / `error` |
-| `credentials_encrypted` | BLOB | Fernet-encrypted `{phone, password}`, nullable |
+| `credentials_encrypted` | BLOB | Fernet-encrypted connector credentials, nullable |
 | `session_encrypted` | BLOB | Fernet-encrypted browser session (profile archive), nullable |
 | `last_sync` | TEXT | ISO datetime of the last successful sync, nullable |
 | `last_error` | TEXT | last sync error message, nullable |
@@ -151,7 +157,7 @@ In-app accounts that sign in to monori (issue #34). Passwords are stored only as
 Argon2 hashes. Ownership hangs off two roots: `accounts.user_id` and
 `category_groups.user_id`. Everything else is scoped through them — categories
 via their group, transactions via their account, budgets via their category,
-connections and import batches via their account. Rows that predate multi-user
+import batches via their account, connections via their own `user_id`. Rows that predate multi-user
 have `user_id NULL` and are claimed by the first user who registers; every new
 user starts with a default **Cash** account.
 

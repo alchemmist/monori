@@ -33,6 +33,8 @@ def serialize_account(r):
         "archived": bool(r["archived"]),
         "openingBalance": r["opening_balance"],
         "openingDate": r["opening_date"],
+        "connectionId": r["connection_id"],
+        "bankRef": r["bank_ref"],
     }
 
 
@@ -61,7 +63,6 @@ def serialize_connection(r):
     """A bank connection, without any secret material (credentials/session)."""
     return {
         "id": r["id"],
-        "accountId": r["account_id"],
         "bank": r["bank"],
         "kind": r["kind"],
         "status": r["status"],
@@ -90,7 +91,8 @@ def snapshot(c, user_id):
             serialize_account(r)
             for r in cur.execute(
                 "SELECT id, name, type, icon, color, icon_image, currency, sort, archived,"
-                " opening_balance, opening_date FROM accounts WHERE user_id=? ORDER BY sort, id",
+                " opening_balance, opening_date, connection_id, bank_ref"
+                " FROM accounts WHERE user_id=? ORDER BY sort, id",
                 uid,
             )
         ],
@@ -134,10 +136,9 @@ def snapshot(c, user_id):
         "connections": [
             serialize_connection(r)
             for r in cur.execute(
-                "SELECT bc.id, bc.account_id, bc.bank, bc.kind, bc.status, bc.last_sync,"
+                "SELECT bc.id, bc.bank, bc.kind, bc.status, bc.last_sync,"
                 " bc.last_error, bc.credentials_encrypted, bc.created_at, bc.updated_at"
-                " FROM bank_connections bc JOIN accounts a ON a.id = bc.account_id"
-                " WHERE a.user_id=? ORDER BY bc.id",
+                " FROM bank_connections bc WHERE bc.user_id=? ORDER BY bc.id",
                 uid,
             )
         ],

@@ -186,11 +186,10 @@ def test_snapshot_full_shape(tmp_path):
 
 def test_snapshot_includes_connections_without_secrets(tmp_path):
     c = _db(tmp_path)
-    acct = c.execute("SELECT MIN(id) FROM accounts").fetchone()[0]
     c.execute(
-        "INSERT INTO bank_connections (account_id, bank, kind, status, credentials_encrypted,"
+        "INSERT INTO bank_connections (user_id, bank, kind, status, credentials_encrypted,"
         " created_at, updated_at) VALUES (?, 'tbank', 'playwright', 'connected', ?, 't1', 't2')",
-        (acct, b"cipher"),
+        (_uid(c), b"cipher"),
     )
     c.commit()
     conns = snapshot(c, _uid(c))["connections"]
