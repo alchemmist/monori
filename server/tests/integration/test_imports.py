@@ -75,3 +75,12 @@ def test_commit_rejects_unknown_account(client):
     r = client.post("/api/import/commit", json={"accountId": 999, "rows": []})
     assert r.status_code == 400
     assert r.json()["detail"] == "unknown account"
+
+
+def test_preview_rejects_oversized_statement(api, client):
+    from app.routers.imports import MAX_STATEMENT_TEXT
+
+    big = "x" * (MAX_STATEMENT_TEXT + 1)
+    r = client.post("/api/import/preview", json={"text": big, "accountId": api.default_account()})
+    assert r.status_code == 413
+    assert r.json()["detail"] == "statement is too large"
