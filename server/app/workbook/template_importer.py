@@ -183,8 +183,8 @@ def _sheet_sections(ws, layout):
     glyph-less layout the first labelled row after a fully blank gap does.
     """
     label_col = layout["label_col"]
-    sections = []
-    current = None
+    sections: list[dict] = []
+    current: dict | None = None
     in_gap = True
     for r in range(layout["header_row"] + 1, ws.max_row + 1):
         label = _s(ws.cell(r, label_col).value)
@@ -221,7 +221,7 @@ def _parse_year_sheet(ws, year, layout):
         if m > 12:
             break
         months.append((m, base))
-    cats = {}
+    cats: dict[str, dict] = {}
     for section in _sheet_sections(ws, layout):
         for r, name in section["rows"]:
             entry = cats.setdefault(
@@ -352,7 +352,7 @@ def _parse_keywords(ws, idx):
     column: category name | pipe-separated keywords, starting at row 1.
     """
     base = max(idx.values()) + 3
-    keywords = {}
+    keywords: dict[str, str] = {}
     for row in ws.iter_rows(min_row=1, values_only=True):
         if base >= len(row):
             continue
@@ -416,8 +416,8 @@ def _parse(wb):
     live_years = {}
     plain_sheets = {}
     for name in wb.sheetnames:
-        m = YEAR_RE.match(name)
-        if not m:
+        year_match = YEAR_RE.match(name)
+        if not year_match:
             continue
         ws = wb[name]
         if not hasattr(ws, "iter_rows"):
@@ -426,9 +426,9 @@ def _parse(wb):
         if layout is None:
             warnings.append(f"{name}: unrecognized year sheet layout, ignored")
             continue
-        year = int(m.group(1))
+        year = int(year_match.group(1))
         parsed = _parse_year_sheet(ws, year, layout)
-        if m.group(2):
+        if year_match.group(2):
             archive_years[year] = parsed
         else:
             plain_sheets[year] = parsed
