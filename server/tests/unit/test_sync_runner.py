@@ -47,7 +47,6 @@ def test_cached_session_skips_otp(runner):
 
 
 def test_connector_error(runner):
-    # the remote path genericises connector messages at the sync-service boundary
     expected = sync_service.SYNC_FAILED if isinstance(runner, RemoteRunner) else "missing phone"
     with pytest.raises(ConnectorError) as ei:
         runner.start(1, "fake", "fake", {}, None, None)
