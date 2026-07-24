@@ -26,6 +26,7 @@ def upgrade():
         " created_at TEXT NOT NULL)"
     )
     op.execute("CREATE INDEX idx_activity_user ON activity_events (user_id)")
+    op.execute("CREATE INDEX idx_activity_created ON activity_events (created_at)")
     op.execute(
         "CREATE TABLE feature_usage ("
         " user_id INTEGER NOT NULL REFERENCES users (id) ON DELETE CASCADE,"

@@ -118,6 +118,7 @@ CREATE TABLE IF NOT EXISTS activity_events (
   created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_activity_user ON activity_events (user_id);
+CREATE INDEX IF NOT EXISTS idx_activity_created ON activity_events (created_at);
 
 CREATE TABLE IF NOT EXISTS feature_usage (
   user_id INTEGER NOT NULL REFERENCES users (id) ON DELETE CASCADE,
