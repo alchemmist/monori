@@ -288,14 +288,29 @@ function UserDetail({ detail }) {
         // point it at a plain-text blob of one JSON transaction per line
         const w = window.open("", "_blank", "noopener");
         try {
-            const rows = await api.adminUserTransactions(detail.user.id);
+            // the endpoint is paged (capped server-side); walk offset until a
+            // short page signals the end so a heavy history still loads in full
+            const PAGE = 1000;
+            const rows = [];
+            for (let offset = 0; ; offset += PAGE) {
+                const page = await api.adminUserTransactions(detail.user.id, {
+                    limit: PAGE,
+                    offset,
+                });
+                rows.push(...page);
+                if (page.length < PAGE) break;
+            }
             const text = rows.map((r) => JSON.stringify(r)).join("\n");
             const url = URL.createObjectURL(new Blob([text], { type: "text/plain" }));
             if (w) w.location = url;
             setTimeout(() => URL.revokeObjectURL(url), 60000);
         } catch (e) {
             if (w) w.close();
-            showToast({ title: "Failed to load transactions", content: e.message, theme: "danger" });
+            showToast({
+                title: "Failed to load transactions",
+                content: e.message,
+                theme: "danger",
+            });
         }
     };
 
