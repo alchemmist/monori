@@ -280,7 +280,25 @@ function UserRow({ user, open, onOpen, onDeleted }) {
     );
 }
 
+const TX_PREVIEW = 5;
+
 function UserDetail({ detail }) {
+    const openFull = async () => {
+        // open the tab inside the click gesture so it is not popup-blocked, then
+        // point it at a plain-text blob of one JSON transaction per line
+        const w = window.open("", "_blank", "noopener");
+        try {
+            const rows = await api.adminUserTransactions(detail.user.id);
+            const text = rows.map((r) => JSON.stringify(r)).join("\n");
+            const url = URL.createObjectURL(new Blob([text], { type: "text/plain" }));
+            if (w) w.location = url;
+            setTimeout(() => URL.revokeObjectURL(url), 60000);
+        } catch (e) {
+            if (w) w.close();
+            showToast({ title: "Failed to load transactions", content: e.message, theme: "danger" });
+        }
+    };
+
     return (
         <div className="admin-detail">
             <div className="admin-detail__col">
@@ -322,10 +340,17 @@ function UserDetail({ detail }) {
                 </ul>
             </div>
             <div className="admin-detail__col admin-detail__col_wide">
-                <div className="admin-detail__title">Recent transactions</div>
+                <div className="admin-detail__title admin-detail__head">
+                    <span>Recent transactions</span>
+                    {detail.recentTransactions.length > 0 && (
+                        <Button size="xs" variant="subtle" onClick={openFull}>
+                            Full
+                        </Button>
+                    )}
+                </div>
                 <table className="admin-table admin-table_compact">
                     <tbody>
-                        {detail.recentTransactions.map((t) => (
+                        {detail.recentTransactions.slice(0, TX_PREVIEW).map((t) => (
                             <tr key={t.id}>
                                 <td className="num">{fmtDate(t.date)}</td>
                                 <td>{t.description || t.category || "—"}</td>
@@ -373,7 +398,7 @@ function CreateUser({ onCreated }) {
 
     return (
         <form className="card admin-create" onSubmit={submit}>
-            <div className="chart-card__title">Create user</div>
+            <div className="chart-card__title admin-create__title">Create user</div>
             <FTextInput
                 label="Email"
                 type="email"

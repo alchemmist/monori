@@ -140,13 +140,26 @@
     margin-top: 18px;
     padding: 16px;
     display: flex;
+    justify-content: center;
     align-items: flex-end;
     gap: 12px;
     flex-wrap: wrap;
 }
 
+.admin-create__title {
+    flex-basis: 100%;
+    text-align: center;
+}
+
 .admin-create .mi-input {
     min-width: 220px;
+}
+
+.admin-detail__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
 }
 
 @media (width <= 900px) {
