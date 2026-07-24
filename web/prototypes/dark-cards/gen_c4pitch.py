@@ -1,5 +1,7 @@
-"""Deepest C4 — background essentially pure black, sections darker too (less
-glass), while cards stay a hair lighter than the canvas so the principle holds."""
+"""
+Deepest C4 — background essentially pure black, sections darker too (less
+glass), while cards stay a hair lighter than the canvas so the principle holds.
+"""
 
 from playwright.sync_api import sync_playwright
 

@@ -120,8 +120,10 @@ def delete_category(
     user: Annotated[dict, Depends(current_user)],
     reassignTo: int | None = None,
 ):
-    """Deleting a category never shifts anything: transactions are reassigned
-    (or left uncategorized), its budgets are removed by FK cascade."""
+    """
+    Deleting a category never shifts anything: transactions are reassigned
+    (or left uncategorized), its budgets are removed by FK cascade.
+    """
     uid = user["id"]
     c = conn()
     try:
@@ -166,8 +168,10 @@ def reorder_categories(body: Reorder, user: Annotated[dict, Depends(current_user
 
 @router.post("/{cat_id}/merge")
 def merge_category(cat_id: int, body: MergeBody, user: Annotated[dict, Depends(current_user)]):
-    """Combine a category into another: its transactions move to the target,
-    keywords are unioned, then the source category is deleted."""
+    """
+    Combine a category into another: its transactions move to the target,
+    keywords are unioned, then the source category is deleted.
+    """
     uid = user["id"]
     c = conn()
     try:

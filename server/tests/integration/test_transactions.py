@@ -45,8 +45,10 @@ def test_transaction_partial_patch_preserves_other_fields(api, client):
 
 
 def test_transaction_patch_recomputes_hash_for_dedup(api, client):
-    """Editing date/amount/description must recompute the dedup hash: a statement
-    row that matched the old content should stop being a duplicate."""
+    """
+    Editing date/amount/description must recompute the dedup hash: a statement
+    row that matched the old content should stop being a duplicate.
+    """
     tx = api.tx("2026-01-05T10:00:00", -10000, description="Lenta")
     assert api.preview(api.statement)[0]["duplicate"] is True
 

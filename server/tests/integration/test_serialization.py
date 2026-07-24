@@ -4,7 +4,9 @@ pytestmark = pytest.mark.integration
 
 
 def test_snapshot_serialization_contract(api, client):
-    """Pin the exact shape every serializer emits — API consumers depend on it."""
+    """
+    Pin the exact shape every serializer emits — API consumers depend on it.
+    """
     g = api.group("Expenses", "expense")
     cat = api.category("Food", g, "lenta|okey")
     client.patch(f"/api/categories/{cat}", json={"archived": True})
@@ -66,7 +68,9 @@ def test_snapshot_serialization_contract(api, client):
 
 
 def test_snapshot_ordering_is_deterministic(api):
-    """Rows sharing a sort key fall back to id, so the order is stable."""
+    """
+    Rows sharing a sort key fall back to id, so the order is stable.
+    """
     a = api.tx("2026-01-01T00:00:00", -1)
     b = api.tx("2026-01-01T00:00:00", -2)  # same timestamp as a
     c = api.tx("2026-01-01T00:00:00", -3)

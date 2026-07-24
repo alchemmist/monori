@@ -1,4 +1,5 @@
-"""Bank connections: one bank login per connection, owned by the user, with any
+"""
+Bank connections: one bank login per connection, owned by the user, with any
 number of accounts linked to it (``accounts.connection_id`` + a bank-specific
 ``accounts.bank_ref`` locator). A sync logs in once and pulls every linked
 account in turn, reusing the cached session between pulls.
@@ -109,7 +110,9 @@ def _mark_error(c, cid, message):
 
 
 def _finish_account(c, row, account_id, result, uid):
-    """Categorize, commit one account's rows as a batch, cache the session."""
+    """
+    Categorize, commit one account's rows as a batch, cache the session.
+    """
     rules = _load_user_rules(c, uid)
     categorize_rows(result.rows, rules)
     cur = c.execute(
@@ -163,9 +166,11 @@ def _aggregate(results):
 
 
 def _account_since(c, cid, account_id, last_sync):
-    """An account newly linked to an already-synced connection still needs a
+    """
+    An account newly linked to an already-synced connection still needs a
     full pull: the connection's last_sync cursor only applies to accounts that
-    have synced through it before."""
+    have synced through it before.
+    """
     if last_sync is None:
         return None
     prior = c.execute(
@@ -177,8 +182,10 @@ def _account_since(c, cid, account_id, last_sync):
 
 
 def _sync_accounts(c, row, accounts, creds, session, uid):
-    """Pull each account in order. Returns per-account summaries; raises
-    SmsRequired after persisting which account the parked login belongs to."""
+    """
+    Pull each account in order. Returns per-account summaries; raises
+    SmsRequired after persisting which account the parked login belongs to.
+    """
     cid = row["id"]
     results = []
     for acct in accounts:
@@ -277,8 +284,10 @@ def delete_connection(cid: int, user: Annotated[dict, Depends(current_user)]):
 
 @router.post("/{cid}/cancel")
 def cancel_sync(cid: int, user: Annotated[dict, Depends(current_user)]):
-    """Abandon a login waiting for its OTP: close the parked connector and drop
-    the connection out of the awaiting_sms state."""
+    """
+    Abandon a login waiting for its OTP: close the parked connector and drop
+    the connection out of the awaiting_sms state.
+    """
     uid = user["id"]
     c = conn()
     try:

@@ -1,5 +1,7 @@
-"""The SPA catch-all must not swallow unknown /api paths — those still 404 as
-JSON so typoed/removed endpoints don't silently return the app's index.html."""
+"""
+The SPA catch-all must not swallow unknown /api paths — those still 404 as
+JSON so typoed/removed endpoints don't silently return the app's index.html.
+"""
 
 
 def test_unknown_api_path_returns_json_404(anon):

@@ -1,4 +1,5 @@
-"""Bank statement parsing and auto-categorization.
+"""
+Bank statement parsing and auto-categorization.
 
 The paste format is the bank's statement export: one transaction per line,
 tab- or semicolon-separated, dates as dd.mm.yyyy [hh:mm:ss], decimal commas.
@@ -42,7 +43,9 @@ def parse_date(raw):
 
 
 def parse_amount_kop(raw):
-    """'-1 500,00' -> -150000 kopecks."""
+    """
+    '-1 500,00' -> -150000 kopecks.
+    """
     s = str(raw).strip().replace(" ", "").replace(" ", "").replace(",", ".")
     if not s or s in ("-", "."):
         return None
@@ -60,8 +63,10 @@ def tx_hash(date_iso, amount_kop, description):
 
 
 def parse_statement(text):
-    """Returns (rows, errors). Each row: dict with date (ISO), amount (kopecks),
-    description, bank_category, mcc, hash."""
+    """
+    Returns (rows, errors). Each row: dict with date (ISO), amount (kopecks),
+    description, bank_category, mcc, hash.
+    """
     rows, errors = [], []
     for ln, line in enumerate(text.splitlines(), 1):
         if not line.strip():
@@ -96,8 +101,10 @@ def parse_statement(text):
 
 
 def build_rules(categories, groups):
-    """categories: iterable of dicts with name/keywords/group_id;
-    groups: id -> kind ('income'|'expense'). Returns {'IN': [...], 'OUT': [...]}."""
+    """
+    categories: iterable of dicts with name/keywords/group_id;
+    groups: id -> kind ('income'|'expense'). Returns {'IN': [...], 'OUT': [...]}.
+    """
     rules: dict[str, list] = {"IN": [], "OUT": []}
     for c in categories:
         keywords = [k.strip().lower() for k in str(c["keywords"] or "").split("|") if k.strip()]
@@ -113,7 +120,9 @@ def build_rules(categories, groups):
 
 
 def categorize(description, amount_kop, rules):
-    """Returns category_id or None."""
+    """
+    Returns category_id or None.
+    """
     desc = str(description or "").lower()
     if not desc or amount_kop == 0:
         return None

@@ -1,5 +1,7 @@
-"""Automated import: bank connections, import batches, and a batch_id on
-transactions pointing at the sync run that inserted the row."""
+"""
+Automated import: bank connections, import batches, and a batch_id on
+transactions pointing at the sync run that inserted the row.
+"""
 
 from alembic import op
 

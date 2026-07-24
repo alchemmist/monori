@@ -11,7 +11,9 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/auth/token", auto_error=True)
 
 
 def current_user(token: Annotated[str, Depends(oauth2_scheme)]):
-    """Resolve the signed-in user from a bearer JWT, or raise 401."""
+    """
+    Resolve the signed-in user from a bearer JWT, or raise 401.
+    """
     try:
         payload = decode_access_token(token)
         user_id = int(payload["sub"])

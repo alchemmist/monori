@@ -1,4 +1,5 @@
-"""A deterministic in-memory connector for exercising the sync path in tests.
+"""
+A deterministic in-memory connector for exercising the sync path in tests.
 
 It reproduces the two-phase login: the first sync of a fresh connection raises
 :class:`SmsRequired`; supplying the code ``0000`` via :meth:`resume_sync`

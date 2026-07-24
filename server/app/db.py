@@ -1,4 +1,5 @@
-"""SQLite access layer. All money amounts are stored as integer kopecks.
+"""
+SQLite access layer. All money amounts are stored as integer kopecks.
 
 The schema has a single canonical definition in ``server/schema.sql``; its
 history lives as alembic revisions in ``server/migrations``. A fresh database

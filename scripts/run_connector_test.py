@@ -1,4 +1,5 @@
-"""Run the REAL TBankPlaywrightConnector against a prepared profile, headless,
+"""
+Run the REAL TBankPlaywrightConnector against a prepared profile, headless,
 exactly as prod does — to reproduce/confirm sync errors locally.
 
 Feeds it the trusted-device profile captured by explore_tbank.py as its session

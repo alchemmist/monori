@@ -1,6 +1,8 @@
-"""Card = background slightly DARKENED + a readable border (the border defines
+"""
+Card = background slightly DARKENED + a readable border (the border defines
 the card, not a lighter fill). Neutral palette kept; only card-bg/card-border
-change, across a few border strengths so the right weight can be picked."""
+change, across a few border strengths so the right weight can be picked.
+"""
 
 from playwright.sync_api import sync_playwright
 

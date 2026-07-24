@@ -1,6 +1,8 @@
-"""Option B: BOTH canvas and cards darker, cards kept a step LIGHTER than the
+"""
+Option B: BOTH canvas and cards darker, cards kept a step LIGHTER than the
 canvas so depth holds. Cards use a solid fill (not translucent) so their
-darkening is unmistakable across steps. Aurora violet glow kept, subtle."""
+darkening is unmistakable across steps. Aurora violet glow kept, subtle.
+"""
 
 from playwright.sync_api import sync_playwright
 

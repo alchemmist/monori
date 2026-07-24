@@ -59,8 +59,10 @@ def _validate_color(color):
 
 
 def _validate_icon_image(image):
-    """A custom icon is optional; when present it must be an image data URL and
-    stay within the size cap so the snapshot doesn't bloat."""
+    """
+    A custom icon is optional; when present it must be an image data URL and
+    stay within the size cap so the snapshot doesn't bloat.
+    """
     if not image:
         return
     if len(image) > MAX_ICON_IMAGE or not image.startswith("data:image/"):
@@ -213,9 +215,11 @@ def delete_account(
     user: Annotated[dict, Depends(current_user)],
     reassignTo: int | None = None,
 ):
-    """Deleting an account reassigns its transactions to another account. A
+    """
+    Deleting an account reassigns its transactions to another account. A
     transaction must always belong to an account, so a non-empty account cannot
-    be deleted without a reassign target, and the last account cannot be deleted."""
+    be deleted without a reassign target, and the last account cannot be deleted.
+    """
     uid = user["id"]
     c = conn()
     try:
@@ -252,8 +256,10 @@ def delete_account(
 def reconcile_account(
     account_id: int, body: ReconcileBody, user: Annotated[dict, Depends(current_user)]
 ):
-    """Bring an account's computed balance to the real bank balance by posting a
-    single adjustment transaction for the difference. Returns the delta applied."""
+    """
+    Bring an account's computed balance to the real bank balance by posting a
+    single adjustment transaction for the difference. Returns the delta applied.
+    """
     uid = user["id"]
     c = conn()
     try:

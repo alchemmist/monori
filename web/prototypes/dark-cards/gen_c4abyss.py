@@ -1,5 +1,7 @@
-"""Even deeper C4 — near-black canvas, faint violet glow, glass cards still
-clearly lighter than the background."""
+"""
+Even deeper C4 — near-black canvas, faint violet glow, glass cards still
+clearly lighter than the background.
+"""
 
 from playwright.sync_api import sync_playwright
 

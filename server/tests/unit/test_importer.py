@@ -188,8 +188,10 @@ def test_categorize_guards_on_empty_desc_and_zero_amount():
 
 
 def test_categorizer_agreement_with_sheet_history():
-    """Port fidelity check: recategorize all historical transactions and compare
-    with the sheet's own FIND_CATEGORIES output (auto_category column)."""
+    """
+    Port fidelity check: recategorize all historical transactions and compare
+    with the sheet's own FIND_CATEGORIES output (auto_category column).
+    """
     out = pathlib.Path(__file__).resolve().parents[3] / "migration" / "out"
     if not (out / "transactions.json").exists():
         pytest.skip("migration/out fixtures not present (private Google Sheet data)")

@@ -1,8 +1,10 @@
-"""Bank connections become user-level: a connection is one bank login owned by
+"""
+Bank connections become user-level: a connection is one bank login owned by
 a user, and any number of accounts link to it via accounts.connection_id plus a
 bank-specific accounts.bank_ref locator. Existing 1:1 connections are converted
 in place; the legacy account id kept inside encrypted credentials remains a
-fallback the connector still honors."""
+fallback the connector still honors.
+"""
 
 from alembic import op
 

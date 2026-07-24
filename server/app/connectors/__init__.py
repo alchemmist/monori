@@ -1,4 +1,5 @@
-"""Pluggable bank connectors.
+"""
+Pluggable bank connectors.
 
 A connector knows how to pull transactions from one bank via one mechanism
 (browser automation, a file drop, an API) and return them in the parsed-row

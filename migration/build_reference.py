@@ -1,4 +1,5 @@
-"""Build normalized datasets + the golden reference from raw Sheets dumps.
+"""
+Build normalized datasets + the golden reference from raw Sheets dumps.
 
 Outputs into migration/out/:
   categories.json   — groups & categories with keywords/type as defined in Categories sheet
@@ -92,7 +93,9 @@ def month_cols(m):  # m: 1..12 -> (budget, outflow, balance) 0-indexed cols
 
 
 def build_year(year, vals):
-    """Extract per-category monthly figures + totals for one year sheet."""
+    """
+    Extract per-category monthly figures + totals for one year sheet.
+    """
     out = {"year": year, "totals": {}, "groups": [], "rows": []}
     out["totals"] = {
         "income_total": cell(vals, 0, 3, 0),

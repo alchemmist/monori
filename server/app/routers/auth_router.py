@@ -1,4 +1,5 @@
-"""In-app authentication: register, obtain a token, and read the current user.
+"""
+In-app authentication: register, obtain a token, and read the current user.
 
 This is the skeleton of issue #34 — real accounts that sign in to monori itself.
 Per-user data ownership (scoping every table to a user) is a later phase; for now
@@ -72,7 +73,9 @@ def register(body: RegisterBody):
 
 @router.post("/token")
 def token(form: Annotated[OAuth2PasswordRequestForm, Depends()]):
-    """OAuth2 password grant: ``username`` is the email. Returns a bearer token."""
+    """
+    OAuth2 password grant: ``username`` is the email. Returns a bearer token.
+    """
     email = _normalize_email(form.username)
     c = conn()
     try:

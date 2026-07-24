@@ -83,8 +83,10 @@ def import_preview(body: ImportBody, user: Annotated[dict, Depends(current_user)
 
 @router.post("/commit")
 def import_commit(body: CommitBody, user: Annotated[dict, Depends(current_user)]):
-    """Server-side dedup: rows whose hash already exists — or repeats within the
-    batch — are skipped, so a double-submit can't create duplicates."""
+    """
+    Server-side dedup: rows whose hash already exists — or repeats within the
+    batch — are skipped, so a double-submit can't create duplicates.
+    """
     uid = user["id"]
     c = conn()
     try:

@@ -1,4 +1,5 @@
-"""One-shot migration: load migration/out/*.json into the SQLite database.
+"""
+One-shot migration: load migration/out/*.json into the SQLite database.
 
 Money is converted to integer kopecks. The three manual Loans adjustments
 found in the 2026 sheet formulas are materialized as adjustment transactions

@@ -74,9 +74,11 @@ def bulk_budgets(body: BulkBody, user: Annotated[dict, Depends(current_user)]):
 
 @router.post("/copy")
 def copy_budgets(body: CopyBody, user: Annotated[dict, Depends(current_user)]):
-    """Copy month->month (both months given) or a whole year->year (months
+    """
+    Copy month->month (both months given) or a whole year->year (months
     omitted). The destination scope is cleared first, so it becomes an exact
-    copy of the source."""
+    copy of the source.
+    """
     uid = user["id"]
     month_mode = body.fromMonth is not None and body.toMonth is not None
     year_mode = body.fromMonth is None and body.toMonth is None

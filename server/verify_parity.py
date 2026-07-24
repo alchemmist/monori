@@ -1,4 +1,5 @@
-"""Parity check: the SQLite database must reproduce the Sheets reference.
+"""
+Parity check: the SQLite database must reproduce the Sheets reference.
 
 Checks per (year, month, category): outflows from transactions and budgeted
 amounts; per (year, month): income totals. Exits non-zero on any mismatch.
