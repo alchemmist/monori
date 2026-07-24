@@ -4,6 +4,7 @@ from cryptography.fernet import Fernet
 import app.connectors.fake  # noqa: F401  (registers the FakeConnector)
 from app.connectors import base
 from app.connectors.base import SmsRequired, SyncResult
+from app.routers import connections
 
 
 @pytest.fixture()
@@ -181,7 +182,7 @@ def test_rejected_code_stays_awaiting(api, client, keyed, monkeypatch):
     assert r.status_code == 200
     body = r.json()
     assert body["status"] == "awaiting_sms"
-    assert body["message"] == "the bank rejected the code — check it and try again"
+    assert body["message"] == connections.CODE_REJECTED
     assert api.snapshot()["connections"][0]["status"] == "awaiting_sms"
 
     assert client.post(f"/api/connections/{cid}/sms", json={"code": "4242"}).json()["status"] == (

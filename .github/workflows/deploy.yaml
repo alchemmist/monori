@@ -10,6 +10,9 @@ on:
         types: [completed]
         branches: [main]
 
+# the job only SSHes out with its own secrets; it needs no GITHUB_TOKEN scopes
+permissions: {}
+
 jobs:
     deploy:
         name: Deploy over SSH

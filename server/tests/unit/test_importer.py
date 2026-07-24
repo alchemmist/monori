@@ -70,7 +70,7 @@ def test_parse_statement_row_fields():
     assert rows[0]["description"] == "Сбербанк"
     assert rows[1]["bank_category"] == "Супермаркеты"
     assert rows[1]["mcc"] == "5411"
-    # the hash is exactly sha1 of "date|amount|description"
+    # the hash is exactly sha256 of "date|amount|description"
     from app.importer import tx_hash
 
     assert rows[0]["hash"] == tx_hash("2026-07-03T19:48:24", -45000, "Сбербанк")

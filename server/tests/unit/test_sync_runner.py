@@ -47,8 +47,11 @@ def test_cached_session_skips_otp(runner):
 
 
 def test_connector_error(runner):
-    with pytest.raises(ConnectorError, match="missing phone"):
+    # the remote path genericises connector messages at the sync-service boundary
+    expected = sync_service.SYNC_FAILED if isinstance(runner, RemoteRunner) else "missing phone"
+    with pytest.raises(ConnectorError) as ei:
         runner.start(1, "fake", "fake", {}, None, None)
+    assert expected in str(ei.value)
 
 
 def test_resume_without_login(runner):
@@ -220,8 +223,10 @@ def test_failing_close_never_masks_the_flow(runner, monkeypatch):
     assert FailingCloseConnector.closed == 1
     with pytest.raises(SmsRequired):
         runner.start(2, "failclose", "failclose", CREDS, None, None)
-    with pytest.raises(ConnectorError, match="bad code"):
+    expected = sync_service.SYNC_FAILED if isinstance(runner, RemoteRunner) else "bad code"
+    with pytest.raises(ConnectorError) as ei:
         runner.resume(2, "0000")
+    assert expected in str(ei.value)
     assert FailingCloseConnector.closed == 2
 
 
@@ -232,7 +237,12 @@ def test_rejected_code_keeps_login_alive(runner, monkeypatch):
         runner.start(1, "retryotp", "retryotp", CREDS, None, None)
     with pytest.raises(SmsRequired) as ei:
         runner.resume(1, "0000")
-    assert str(ei.value) == "the bank rejected the code — check it and try again"
+    expected = (
+        sync_service.CODE_REJECTED
+        if isinstance(runner, RemoteRunner)
+        else "the bank rejected the code — check it and try again"
+    )
+    assert str(ei.value) == expected
     assert RetryOtpConnector.closed == 0
     result = runner.resume(1, "4242")
     assert result.rows == []

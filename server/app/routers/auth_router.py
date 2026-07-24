@@ -7,7 +7,6 @@ these endpoints stand up registration and OAuth2 password-grant login, and expos
 a ``current_user`` dependency other routes can adopt.
 """
 
-import re
 import sqlite3
 from datetime import UTC, datetime
 from typing import Annotated
@@ -22,8 +21,22 @@ from ..security import create_access_token, hash_password, verify_password
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
-EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 MIN_PASSWORD_LEN = 8
+MAX_EMAIL_LEN = 254
+
+
+def _valid_email(email):
+    """
+    Shape check for an email: one ``@``, non-empty local part, and a dotted
+    domain with no empty labels. Linear and non-backtracking (bounded by
+    ``MAX_EMAIL_LEN``) so it cannot be driven into a ReDoS.
+    """
+    if not email or len(email) > MAX_EMAIL_LEN or any(ch.isspace() for ch in email):
+        return False
+    local, sep, domain = email.partition("@")
+    if not sep or not local or "@" in domain or "." not in domain:
+        return False
+    return all(domain.split("."))
 
 
 class RegisterBody(BaseModel):
@@ -38,7 +51,7 @@ def _normalize_email(email):
 @router.post("/register")
 def register(body: RegisterBody):
     email = _normalize_email(body.email)
-    if not EMAIL_RE.match(email):
+    if not _valid_email(email):
         raise HTTPException(400, "invalid email")
     if len(body.password) < MIN_PASSWORD_LEN:
         raise HTTPException(400, f"password must be at least {MIN_PASSWORD_LEN} characters")

@@ -643,13 +643,13 @@ def test_shot_writes_when_debug_on(monkeypatch, tmp_path):
 # --- connector registry / fake connector -----------------------------------
 
 
-def test_fake_connector_rows_have_sha1_hashes():
+def test_fake_connector_rows_have_sha256_hashes():
     from app.connectors.fake import FIXTURE_ROWS, _rows
 
     rows = _rows()
     assert len(rows) == len(FIXTURE_ROWS) == 2
     assert [r["description"] for r in rows] == ["Lenta", "Salary"]
-    assert all(len(r["hash"]) == 40 for r in rows)
+    assert all(len(r["hash"]) == 64 for r in rows)
 
 
 def test_get_connector_class_lookup_and_unknown():
