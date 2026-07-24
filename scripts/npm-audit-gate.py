@@ -24,6 +24,17 @@ ALLOWED = {
 
 def main():
     data = json.load(sys.stdin)
+    # npm audit could not run (e.g. ENOLOCK with no lockfile) — it returns an
+    # error payload with no vulnerabilities data. Fail loudly rather than let an
+    # audit that never happened read as a clean pass.
+    if "error" in data or "vulnerabilities" not in data:
+        err = data.get("error", {})
+        print(
+            "npm-audit-gate [FAIL]: npm audit did not run — "
+            f"{err.get('code', 'unknown')}: {err.get('summary', data.keys())}",
+            file=sys.stderr,
+        )
+        return 1
     blocking = []
     for name, vuln in data.get("vulnerabilities", {}).items():
         for via in vuln.get("via", []):
