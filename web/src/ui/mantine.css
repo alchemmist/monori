@@ -156,6 +156,8 @@ meter {
 }
 
 .mi-input__label {
+    display: flex;
+    align-items: center;
     flex: none;
     margin: 0;
     padding: 0 4px 0 8px;
