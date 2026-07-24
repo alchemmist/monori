@@ -168,6 +168,11 @@ export default function ConnectionDialog({ account, connection, onClose }) {
         onClose();
     };
 
+    // unlink/disconnect refresh the snapshot before onClose runs, so the
+    // connection prop can vanish while the dialog is still mounted — close
+    // quietly instead of crashing the whole page on connection.status
+    if (step === "ready" && !connection) return null;
+
     let footer = { apply: "Close", onApply: handleClose, applyProps: {} };
     let body = null;
 
