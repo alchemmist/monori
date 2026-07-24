@@ -43,7 +43,17 @@ def test_workbook_preview_summarizes(api, client):
     assert body["transactionsByYear"] == {"2026": 3}
     assert body["budgetCells"] == 2
     assert body["accountMarkers"] == ["Card"]
+    assert body["budgetConflicts"] == 2
     assert body["errors"] == []
+
+
+def test_workbook_preview_reports_no_conflicts_for_fresh_user(api, client):
+    _seed(api, client)
+    data = _export_bytes(client)
+    client.headers.update(login_as(client, "fresh@example.com"))
+    r = _upload(client, "/api/import/workbook/preview", data)
+    assert r.status_code == 200, r.text
+    assert r.json()["budgetConflicts"] == 0
 
 
 def test_workbook_preview_rejects_garbage(client):

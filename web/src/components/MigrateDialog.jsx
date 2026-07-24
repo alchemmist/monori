@@ -106,16 +106,18 @@ export default function MigrateDialog({ onClose }) {
                                 data={accountOptions}
                             />
                         ))}
-                        <Radio.Group
-                            label="Existing budget cells"
-                            value={budgetPolicy}
-                            onChange={setBudgetPolicy}
-                        >
-                            <div style={{ display: "flex", gap: 16, paddingTop: 6 }}>
-                                <Radio value="overwrite" label="Overwrite" />
-                                <Radio value="skip" label="Keep mine" />
-                            </div>
-                        </Radio.Group>
+                        {preview.budgetConflicts > 0 && (
+                            <Radio.Group
+                                label={`${preview.budgetConflicts} budget cells already exist`}
+                                value={budgetPolicy}
+                                onChange={setBudgetPolicy}
+                            >
+                                <div style={{ display: "flex", gap: 16, paddingTop: 6 }}>
+                                    <Radio value="overwrite" label="Overwrite" />
+                                    <Radio value="skip" label="Keep mine" />
+                                </div>
+                            </Radio.Group>
+                        )}
                     </>
                 )}
                 {result && (

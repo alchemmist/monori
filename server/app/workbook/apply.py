@@ -150,6 +150,24 @@ def _import_budgets(c, budgets, category_ids, overwrite):
     return written, skipped
 
 
+def budget_conflicts(c, uid, budgets):
+    """
+    Count workbook budget cells that collide with the user's existing budgets
+    (category matched by name, same year and month) — the only case where the
+    overwrite/skip choice makes a difference.
+    """
+    existing = {
+        (r["name"], r["year"], r["month"])
+        for r in c.execute(
+            "SELECT cat.name AS name, b.year AS year, b.month AS month FROM budgets b"
+            " JOIN categories cat ON cat.id = b.category_id"
+            " JOIN category_groups g ON g.id = cat.group_id WHERE g.user_id=?",
+            (uid,),
+        )
+    }
+    return sum(1 for cell in budgets if (cell["category"], cell["year"], cell["month"]) in existing)
+
+
 def apply_workbook(c, uid, parsed, mapping, budget_policy="overwrite"):
     """
     ``mapping``: marker -> account id (all markers must be present and owned).

@@ -4,7 +4,7 @@ import sys
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
 
 import app.db as dbmod
-from app.workbook.apply import apply_workbook
+from app.workbook.apply import apply_workbook, budget_conflicts
 
 
 def _db(tmp_path):
@@ -180,3 +180,22 @@ def test_apply_is_idempotent_on_rerun(tmp_path):
     assert result["groupsCreated"] == 0
     assert result["categoriesCreated"] == 0
     assert c.execute("SELECT COUNT(*) FROM transactions").fetchone()[0] == 2
+
+
+def test_budget_conflicts_counts_only_matching_cells(tmp_path):
+    c, uid, acct = _db(tmp_path)
+    cells = _parsed()["budgets"]
+    assert budget_conflicts(c, uid, cells) == 0
+
+    apply_workbook(c, uid, _parsed(), {"": acct})
+    c.commit()
+    # Groceries 2026-01 now exists; the Ghost cell has no matching category.
+    assert budget_conflicts(c, uid, cells) == 1
+    assert budget_conflicts(c, uid, []) == 0
+
+    other = [
+        {"category": "Groceries", "year": 2026, "month": 2, "amount": 1},
+        {"category": "Groceries", "year": 2027, "month": 1, "amount": 1},
+        {"category": "Cafes", "year": 2026, "month": 1, "amount": 1},
+    ]
+    assert budget_conflicts(c, uid, other) == 0

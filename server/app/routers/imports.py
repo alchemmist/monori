@@ -8,7 +8,7 @@ from ..auth import current_user
 from ..deps import conn
 from ..importer import build_rules, categorize, parse_statement
 from ..ingest import commit_rows, existing_hash_counts
-from ..workbook.apply import apply_workbook
+from ..workbook.apply import apply_workbook, budget_conflicts
 from ..workbook.importer import WorkbookError, parse_workbook
 
 router = APIRouter(prefix="/api/import", tags=["import"])
@@ -149,7 +149,13 @@ async def workbook_preview(
         parsed = parse_workbook(data)
     except WorkbookError as exc:
         raise HTTPException(400, str(exc)) from exc
-    return _workbook_preview_summary(parsed)
+    summary = _workbook_preview_summary(parsed)
+    c = conn()
+    try:
+        summary["budgetConflicts"] = budget_conflicts(c, user["id"], parsed["budgets"])
+    finally:
+        c.close()
+    return summary
 
 
 @router.post("/workbook/commit")
