@@ -17,14 +17,9 @@ up:
 down:
 	$(COMPOSE) -f deploy/docker-compose.dev.yml down
 
-# Drop the local dev database (a host file, not a compose volume, so `down -v`
-# never touches it). The next `make up` recreates it fresh from schema.sql.
 reset-db:
 	rm -f server/data/monori.db server/data/monori.db-wal server/data/monori.db-shm
 
-# Manual rollout of exactly the revision this command is run on: dispatches the
-# Deploy workflow with the current HEAD, so the SSH secrets live only in GitHub.
-# Needs the gh CLI authenticated; the revision must already be on origin/main.
 deploy:
 	@rev=$$(git rev-parse HEAD); \
 	git fetch -q origin; \
