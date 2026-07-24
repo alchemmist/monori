@@ -4,7 +4,7 @@ MUTATION_THRESHOLD ?= 85
 
 WEBBIN := web/node_modules/.bin
 
-.PHONY: dev down deploy api web build \
+.PHONY: dev down reset-db deploy api web build \
         fmt fmt-check \
         lint lint-web lint-css lint-html lint-server lint-sql lint-yaml lint-md lint-actions lint-docker lint-shell spell \
         typecheck analyze audit audit-deps audit-deps-py audit-secrets \
@@ -17,9 +17,9 @@ up:
 down:
 	$(COMPOSE) -f deploy/docker-compose.dev.yml down
 
-# Manual rollout of exactly the revision this command is run on: dispatches the
-# Deploy workflow with the current HEAD, so the SSH secrets live only in GitHub.
-# Needs the gh CLI authenticated; the revision must already be on origin/main.
+reset-db:
+	rm -f server/data/monori.db server/data/monori.db-wal server/data/monori.db-shm
+
 deploy:
 	@rev=$$(git rev-parse HEAD); \
 	git fetch -q origin; \
