@@ -287,6 +287,15 @@ def test_export_year_sheet_bands(api, client):
     assert ws.cell(row=group_row, column=1).fill.fgColor.rgb == "FFE6F4FB"
 
 
+def test_export_summary_balance_is_colored(api, client):
+    _setup(api, client)
+    ws = _export(client)["2026"]
+    balance = ws.cell(row=3, column=4)
+    assert balance.value == 74.5
+    assert balance.fill.fgColor.rgb == "FFEEF5E7"
+    assert balance.font.color.rgb == "FF4F7A00"
+
+
 def test_export_money_cells_have_grid_border(api, client):
     _setup(api, client)
     ws = _export(client)["2026"]

@@ -197,6 +197,7 @@ def _year_sheet(ws, year, snap, activity, budgets):
     hero_balance = 0
     ws.cell(row=3, column=1, value="Month Summary")
     hero_total = 0
+    summary_balances = []
     for m in range(1, 13):
         budgeted, out, _ = hero[m]
         hero_balance += budgeted - out
@@ -204,10 +205,13 @@ def _year_sheet(ws, year, snap, activity, budgets):
         _money_cell(ws, 3, col, budgeted)
         _money_cell(ws, 3, col + 1, out)
         _money_cell(ws, 3, col + 2, hero_balance)
+        summary_balances.append((col + 2, hero_balance))
         hero_total += out
     _money_cell(ws, 3, total_col, hero_total)
     _money_cell(ws, 3, total_col + 1, round(hero_total / 12))
     _fill_band(ws, 3, total_col + 1, SUMMARY_FILL, SUMMARY_FONT)
+    for col, bal in summary_balances:
+        ws.cell(row=3, column=col).font = _balance_font(bal)
 
     _fill_band(ws, 1, total_col + 1, HEADER_FILL, HEADER_FONT)
     ws.cell(row=1, column=2).alignment = CENTER
