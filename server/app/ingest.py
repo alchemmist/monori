@@ -54,7 +54,7 @@ def commit_rows(c, account_id, rows, source, batch_id=None):
     seen: dict = {}
     inserted = skipped = 0
     for r in rows:
-        h = tx_hash(r["date"], r["amount"], r["description"])
+        h = tx_hash(account_id, r["date"], r["amount"], r["description"])
         n_batch = seen.get(h, 0)
         seen[h] = n_batch + 1
         if n_batch < existing.get(h, 0):

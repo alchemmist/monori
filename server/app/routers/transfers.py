@@ -59,7 +59,7 @@ def create_transfer(body: TransferBody, user: Annotated[dict, Depends(current_us
                     account_id,
                     transfer_id,
                     body.comment,
-                    tx_hash(body.date, amount, description),
+                    tx_hash(account_id, body.date, amount, description),
                 ),
             )
         c.commit()

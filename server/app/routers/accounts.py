@@ -280,7 +280,7 @@ def reconcile_account(
                 """INSERT INTO transactions
                    (date, amount, description, account_id, hash, source)
                    VALUES (?, ?, ?, ?, ?, 'adjustment')""",
-                (date, delta, desc, account_id, tx_hash(date, delta, desc)),
+                (date, delta, desc, account_id, tx_hash(account_id, date, delta, desc)),
             )
             c.commit()
         return {"delta": delta}

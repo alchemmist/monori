@@ -6,7 +6,7 @@ from pydantic import BaseModel
 
 from ..auth import current_user
 from ..deps import conn
-from ..importer import build_rules, categorize, parse_statement
+from ..importer import build_rules, categorize, parse_statement, tx_hash
 from ..ingest import commit_rows, existing_hash_counts
 from ..workbook.apply import apply_workbook, budget_conflicts
 from ..workbook.importer import WorkbookError, parse_workbook
@@ -71,6 +71,7 @@ def import_preview(body: ImportBody, user: Annotated[dict, Depends(current_user)
         seen_in_batch: dict = {}
         for row in rows:
             row["categoryId"] = categorize(row["description"], row["amount"], rules)
+            row["hash"] = tx_hash(account_id, row["date"], row["amount"], row["description"])
             n_batch = seen_in_batch.get(row["hash"], 0)
             row["duplicate"] = existing.get(row["hash"], 0) > n_batch
             seen_in_batch[row["hash"]] = n_batch + 1
