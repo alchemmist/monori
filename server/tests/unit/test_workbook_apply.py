@@ -250,3 +250,82 @@ def test_budget_conflicts_counts_only_matching_cells(tmp_path):
         {"category": "Cafes", "year": 2026, "month": 1, "amount": 1},
     ]
     assert budget_conflicts(c, uid, other) == 0
+
+
+def _row(date, amount, description, category, marker="", **over):
+    row = {
+        "date": date,
+        "amount": amount,
+        "description": description,
+        "bank_category": "Super",
+        "mcc": "5411",
+        "comment": "",
+        "monori_category": category,
+        "marker": marker,
+        "currency": "RUB",
+    }
+    row.update(over)
+    return row
+
+
+def test_every_row_lands_in_its_account_batch_with_the_bank_columns_intact(tmp_path):
+    """
+    The batch is what an import is later browsed and undone by, so each row has
+    to carry the id of the batch on its own account — and the bank's own
+    category and MCC have to survive the trip, since nothing else records them.
+    """
+    c, uid, acct = _db(tmp_path)
+    c.execute(
+        "INSERT INTO accounts (user_id, name, type, currency, sort)"
+        " VALUES (?, 'Second', 'card', 'RUB', 2)",
+        (uid,),
+    )
+    second = c.execute("SELECT id FROM accounts WHERE name='Second'").fetchone()[0]
+    parsed = _parsed(
+        transactions=[
+            _row("2026-01-05T10:00:00", -12550, "Lenta", "Groceries"),
+            _row("2026-01-06T11:00:00", -700, "unfiled one", ""),
+            _row("2026-01-07T11:00:00", -800, "unfiled two", ""),
+            _row("2026-02-05T10:00:00", -3000, "Pyaterochka", "Groceries", marker="*2947"),
+        ]
+    )
+    result = apply_workbook(c, uid, parsed, {"RUB:": acct, "RUB:*2947": second})
+    c.commit()
+
+    assert result["inserted"] == 4
+    assert result["skipped"] == 0
+    assert [b["accountId"] for b in result["batches"]] == sorted([acct, second])
+    assert [b["inserted"] for b in result["batches"]] == [3, 1]
+    assert set(result["batches"][0]) == {"accountId", "batchId", "inserted"}
+    assert result["warnings"][0].startswith("2 rows carry no category in the sheet")
+
+    stamped = {
+        r[0]: (r[1], r[2], r[3])
+        for r in c.execute("SELECT description, batch_id, bank_category, mcc FROM transactions")
+    }
+    by_account = {b["accountId"]: b["batchId"] for b in result["batches"]}
+    assert stamped["Lenta"] == (by_account[acct], "Super", "5411")
+    assert stamped["Pyaterochka"] == (by_account[second], "Super", "5411")
+    assert len(set(by_account.values())) == 2
+
+
+def test_unmatched_category_names_are_listed_ten_at_a_time(tmp_path):
+    """
+    The warning names what was left uncategorized so it can be fixed by hand;
+    a long list is cut off rather than filling the screen.
+    """
+    c, uid, acct = _db(tmp_path)
+    names = [f"Nowhere {i:02d}" for i in range(11)]
+    parsed = _parsed(
+        transactions=[
+            _row(f"2026-01-{i + 1:02d}T10:00:00", -100 * (i + 1), f"row {i}", name)
+            for i, name in enumerate(names)
+        ]
+    )
+    result = apply_workbook(c, uid, parsed, {"RUB:": acct})
+    c.commit()
+    assert result["warnings"] == [
+        "11 category names in the sheet match nothing in monori"
+        " — those rows were left uncategorized rather than guessed:"
+        f" {', '.join(names[:10])}"
+    ]

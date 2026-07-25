@@ -44,7 +44,14 @@ def _write_year(
     available=None,
     seed=None,
     seeds=None,
+    labels="en",
+    available_row=6,
 ):
+    carried_label, income_label, available_label = (
+        ("Not budgeted in Dec", "Income for month", "Available")
+        if labels == "en"
+        else ("Не заложено в дек", "Поступления в месяце", "Доступный остаток")
+    )
     bases = [2 + 4 * i for i in range(len(months))]
     ws.cell(row=1, column=bases[0], value=start_token)
     ws.cell(row=header_row, column=1, value="Категория")
@@ -69,20 +76,20 @@ def _write_year(
         r += 1
     for mnum, value in {**({} if seed is None else {months[0]: seed}), **(seeds or {})}.items():
         b = bases[months.index(mnum)]
-        ws.cell(row=1, column=b + 2, value="Not budgeted in Dec")
+        ws.cell(row=1, column=b + 2, value=carried_label)
         ws.cell(row=1, column=b + 1, value=value)
     if income:
         for mi, mnum in enumerate(months):
             if mnum in income:
                 b = bases[mi]
-                ws.cell(row=2, column=b + 2, value="Income for month")
+                ws.cell(row=2, column=b + 2, value=income_label)
                 ws.cell(row=2, column=b + 1, value=income[mnum])
     if available:
         for mi, mnum in enumerate(months):
             if mnum in available:
                 b = bases[mi]
-                ws.cell(row=6, column=b + 1, value="Available")
-                ws.cell(row=5, column=b + 1, value=available[mnum])
+                ws.cell(row=available_row, column=b + 1, value=available_label)
+                ws.cell(row=available_row - 1, column=b + 1, value=available[mnum])
 
 
 def _tx_sheet(wb, tx_rows):
@@ -669,6 +676,83 @@ def test_available_seed_excludes_seam_overspend():
     assert not any(w.startswith("verify:") for w in parsed["warnings"])
 
 
+def test_russian_header_labels_are_read_like_the_english_ones():
+    """
+    The live spreadsheet labels its month headers in Russian. Every figure the
+    reconciliation leans on — income, the carried-over remainder, the running
+    Available — is found by those labels, so a sheet in Russian has to yield
+    exactly what the same sheet in English does.
+    """
+    wb = Workbook()
+    wb.remove(wb.active)
+    _tx_sheet(wb, [_tx(datetime.datetime(2025, 1, 15), -300.0, "Groceries", desc="Lenta")])
+    _write_year(
+        wb.create_sheet("2025"),
+        months=[1, 2],
+        rows=[("▼Daily", None), ("Groceries", {1: (1000, -300, 700)})],
+        income={1: 5000},
+        available={1: 5900},
+        seeds={1: 1900},
+        labels="ru",
+        header_row=8,
+    )
+    parsed = parse_workbook(_save(wb))
+    opening = next(t for t in parsed["transactions"] if t["description"] == "Opening balance")
+    assert opening["amount"] == 190000  # "Не заложено"
+    assert not any(w.startswith("verify:") for w in parsed["warnings"])  # "Доступный"
+    income = next(t for t in parsed["transactions"] if t["description"] == "Income")
+    assert income["amount"] == 500000  # "Поступления в"
+
+
+def test_available_label_is_found_wherever_the_summary_block_puts_it():
+    wb = Workbook()
+    wb.remove(wb.active)
+    _tx_sheet(wb, [_tx(datetime.datetime(2025, 1, 15), -300.0, "Groceries", desc="Lenta")])
+    _write_year(
+        wb.create_sheet("2025"),
+        months=[1, 2],
+        rows=[("▼Daily", None), ("Groceries", {1: (1000, -300, 700)})],
+        income={1: 5000},
+        available={1: 99999},
+        available_row=7,
+        header_row=8,
+    )
+    parsed = parse_workbook(_save(wb))
+    assert any(w.startswith("verify:") for w in parsed["warnings"])
+
+
+def test_summary_labels_below_the_header_block_are_not_read():
+    """
+    The summary block is the first six rows; row seven is where the grid's own
+    Budgeted/Outflows/Balance header sits on the live sheet. Reading one row
+    further would take a column heading for a figure.
+    """
+    wb = Workbook()
+    wb.remove(wb.active)
+    _tx_sheet(wb, [])
+    ws = wb.create_sheet("2025")
+    _write_year(
+        ws,
+        months=[1, 2],
+        rows=[("▼Daily", None), ("Groceries", {1: (1000, 0, 1000)})],
+        header_row=8,
+    )
+    ws.cell(row=7, column=4, value="Income for month")
+    ws.cell(row=7, column=3, value=777)
+    parsed = parse_workbook(_save(wb))
+    assert not any(t["monori_category"] == "Income" for t in parsed["transactions"])
+
+
+def test_a_sheet_running_to_december_keeps_its_last_month():
+    _, ws = _one_year_wb(
+        months=list(range(1, 13)),
+        rows=[("▼Daily", None), ("Groceries", {12: (1000, -300, 700)})],
+    )
+    parsed = _parse_year_sheet(ws, 2025, _find_layout(ws))
+    assert parsed["months"][-1] == 12
+    assert parsed["cats"]["Groceries"]["balances"][12] == 70000
+
+
 def test_history_and_adjustment_split_follows_the_rows_not_the_sheet_name():
     """
     A workbook can keep years of history on ordinary year sheets and never write
@@ -754,6 +838,30 @@ def test_opening_balance_predating_the_sheet_is_dated_before_it():
     assert opening["date"] == "2024-12-31T12:00:00"
     assert opening["amount"] == 190000
     assert not any(w.startswith("verify:") for w in parsed["warnings"])
+
+
+def test_activity_span_reads_two_digit_months_whole():
+    """
+    A ledger that only starts in October is where a one-character month slice
+    stops being harmless: it would read 11 as 1 and seed the opening balance
+    ten months early, off the wrong header cell.
+    """
+    wb = Workbook()
+    wb.remove(wb.active)
+    _tx_sheet(wb, [_tx(datetime.datetime(2025, 11, 15), -300.0, "Groceries", desc="Lenta")])
+    _write_year(
+        wb.create_sheet("2025"),
+        months=[10, 11],
+        start_token="ОКТ 2025",
+        rows=[("▼Daily", None), ("Groceries", {11: (1000, -300, 700)})],
+        income={11: 5000},
+        seeds={10: 400, 11: 1900},
+        header_row=8,
+    )
+    parsed = parse_workbook(_save(wb))
+    opening = next(t for t in parsed["transactions"] if t["description"] == "Opening balance")
+    assert opening["date"] == "2025-10-31T12:00:00"
+    assert opening["amount"] == 190000
 
 
 def test_opening_balance_left_alone_when_the_sheet_starts_from_nothing():
