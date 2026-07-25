@@ -37,6 +37,18 @@ export function offsetOf(id) {
     return computeOffset(stack.tabs, id);
 }
 
+/** Layer tabs like overlapping cards: the one nearest the right edge (mounted
+ * first) stays above the tabs pushed to its left, so its left-facing shadow
+ * falls onto the neighbouring card instead of disappearing beneath it. */
+export function computeLayer(tabs, id) {
+    const index = tabs.findIndex((tab) => tab.id === id);
+    return index < 0 ? 0 : tabs.length - index;
+}
+
+export function layerOf(id) {
+    return computeLayer(stack.tabs, id);
+}
+
 export function registerTab(id, width) {
     stack.tabs = [...stack.tabs, { id, width }];
     emit();

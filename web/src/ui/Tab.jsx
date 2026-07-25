@@ -2,6 +2,7 @@ import { useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalSto
 import { ChevronLeft, ChevronRight, Xmark } from "@gravity-ui/icons";
 import {
     TAB_WIDTH,
+    layerOf,
     offsetOf,
     registerTab,
     resizeTab,
@@ -83,6 +84,7 @@ export default function Tab({
     }, [id]);
 
     const offset = useSyncExternalStore(subscribe, () => offsetOf(id));
+    const layer = useSyncExternalStore(subscribe, () => layerOf(id));
 
     // closing the tab mid-drag must not leave the page unselectable
     useEffect(
@@ -157,7 +159,11 @@ export default function Tab({
         <aside
             ref={ref}
             className={cls}
-            style={{ right: offset, ...(widthVar ? { "--ui-tab-w": widthVar } : null) }}
+            style={{
+                right: offset,
+                zIndex: 120 + layer,
+                ...(widthVar ? { "--ui-tab-w": widthVar } : null),
+            }}
             onTransitionEnd={(e) => {
                 if (e.propertyName === "width") setAnimating(false);
             }}

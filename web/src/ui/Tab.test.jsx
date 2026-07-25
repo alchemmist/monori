@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { TAB_STRIP_WIDTH, TAB_WIDTH, computeOffset } from "./tabStack.js";
+import { TAB_STRIP_WIDTH, TAB_WIDTH, computeLayer, computeOffset } from "./tabStack.js";
 
 describe("computeOffset", () => {
     it("puts the first tab at the edge and pushes later ones left", () => {
@@ -23,5 +23,22 @@ describe("computeOffset", () => {
 
     it("is zero for an unknown or first tab", () => {
         expect(computeOffset([], "x")).toBe(0);
+    });
+});
+
+describe("computeLayer", () => {
+    it("keeps the tab nearest the edge above the tabs to its left", () => {
+        const tabs = [
+            { id: "a", width: TAB_WIDTH },
+            { id: "b", width: TAB_WIDTH },
+            { id: "c", width: TAB_WIDTH },
+        ];
+
+        expect(computeLayer(tabs, "a")).toBeGreaterThan(computeLayer(tabs, "b"));
+        expect(computeLayer(tabs, "b")).toBeGreaterThan(computeLayer(tabs, "c"));
+    });
+
+    it("returns zero for an unknown tab", () => {
+        expect(computeLayer([], "x")).toBe(0);
     });
 });
