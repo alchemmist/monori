@@ -9,7 +9,21 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
 
 from app.currencies import CURRENCIES, catalog, is_known, normalize, symbol, validate
 
-WEB_CURRENCIES = pathlib.Path(__file__).resolve().parents[3] / "web" / "src" / "currencies.js"
+
+def _web_currencies():
+    """
+    The frontend registry, found by walking up rather than by counting parents:
+    mutmut runs this suite from a copy under ``server/mutants/``, where a fixed
+    depth points at nothing.
+    """
+    for parent in pathlib.Path(__file__).resolve().parents:
+        candidate = parent / "web" / "src" / "currencies.js"
+        if candidate.exists():
+            return candidate
+    return None
+
+
+WEB_CURRENCIES = _web_currencies()
 
 
 def test_normalize_trims_and_upcases():
@@ -46,6 +60,7 @@ def test_catalog_covers_every_currency():
     assert all(e["minorUnits"] == 2 for e in entries)
 
 
+@pytest.mark.skipif(WEB_CURRENCIES is None, reason="frontend tree is not next to this checkout")
 def test_frontend_registry_lists_the_same_codes():
     """
     The two lists are written twice — once per language — and a code offered on
