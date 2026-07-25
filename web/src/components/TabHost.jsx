@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useStore } from "../store.js";
 import { AccountEditTab } from "./AccountDialogs.jsx";
+import AdminSqlTab from "./AdminSqlTab.jsx";
 import AdminTxTab from "./AdminTxTab.jsx";
 import MigratePanel from "./MigratePanel.jsx";
 
@@ -32,6 +33,9 @@ export default function TabHost() {
         }
         if (t.kind === "admin-tx") {
             return <AdminTxTab key={t.id} user={t.props.user} onClose={close} />;
+        }
+        if (t.kind === "admin-sql") {
+            return <AdminSqlTab key={t.id} onClose={close} />;
         }
         if (t.kind === "migrate") {
             return <MigratePanel key={t.id} onClose={close} />;

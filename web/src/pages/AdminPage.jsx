@@ -45,6 +45,7 @@ export default function AdminPage() {
 
     // persistent tabs signal admin-data mutations through the store instead of
     // holding a callback into this (possibly unmounted) page
+    const openTab = useStore((s) => s.openTab);
     const adminTick = useStore((s) => s.adminTick);
     useEffect(() => {
         if (!adminTick) return;
@@ -76,7 +77,16 @@ export default function AdminPage() {
 
     return (
         <div className="fade-in">
-            <h1 className="page-title">Admin</h1>
+            <div className="admin-page__head">
+                <h1 className="page-title">Admin</h1>
+                <Button
+                    size="xs"
+                    variant="subtle"
+                    onClick={() => openTab("admin-sql", {}, "admin-sql")}
+                >
+                    SQL console
+                </Button>
+            </div>
 
             <div className="kpi-row admin-kpis">
                 <Kpi
