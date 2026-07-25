@@ -11,6 +11,7 @@ import {
     Eye,
     EyeSlash,
     Magnifier,
+    Plus,
 } from "@gravity-ui/icons";
 import { useStore } from "../store.js";
 import { orderedGroups, categoriesByGroup } from "../categoryOrder.js";
@@ -41,6 +42,7 @@ export default function TransactionsPage() {
         unhideTx,
         splitTransfer,
         deleteTransferWithLegs,
+        openTab,
         notify,
     } = useStore();
     const [query, setQuery] = useState("");
@@ -372,6 +374,15 @@ export default function TransactionsPage() {
                     Hidden
                 </Button>
                 <div style={{ flex: 1 }} />
+                <Button
+                    variant="default"
+                    size="m"
+                    onClick={() => openTab("tx-new", {}, "tx-new")}
+                    disabled={!activeAccounts.length}
+                    leftSection={<Plus width={14} height={14} />}
+                >
+                    Add transaction
+                </Button>
                 <Button
                     variant="default"
                     size="m"

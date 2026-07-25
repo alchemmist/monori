@@ -40,6 +40,23 @@ the transaction. This is the main day-to-day task after an import: sweep the
 uncategorized rows into envelopes so the budget reflects reality. The account
 column has a matching dropdown to move a row to a different account.
 
+### Adding a transaction by hand
+
+The **Add transaction** button opens a side tab: pick expense or income, type
+the amount in rubles (`123.45` or `123,45` — it is stored as kopecks), and add a
+description, date, account, category and comment. **Add** records the row
+straight into the ledger and the tab stays open, cleared for the next one, so a
+whole run of cash spends goes in without reopening anything. Amount, description
+and comment reset after each row; the date, account and category stay put,
+because a run of entries is usually from the same day, card and envelope. Enter
+records the row from any field.
+
+The tab is docked, not modal: the ledger behind it stays readable and clickable,
+the tab collapses to a strip, and it survives navigating to another page.
+
+Manual rows are ordinary transactions with `source` set to `manual` — the
+budget, the dashboard and the year grid count them exactly like imported ones.
+
 ### Transfers
 
 A transfer between two of your own accounts is shown as **one row**, set apart
@@ -67,14 +84,15 @@ preview → commit flow.
 - **Import** — rows created by pasting a bank statement. Their `source` is
   `import`, and they are deduplicated by a content hash so re-importing an
   overlapping statement does not double them.
-- **Manual** — rows created through the API with `source` set to `manual`.
+- **Manual** — rows entered by hand, through the **Add transaction** tab or the
+  API, with `source` set to `manual`.
 
-## Manual editing via the API
+## Editing beyond the page
 
 The full CRUD surface for transactions — create, edit every field, delete, and
-bulk operations (bulk categorize/move/delete) — already exists in the
-[REST API](api.md#transactions). A dedicated in-app editing UI for it (add a row,
-edit any field, restore the comment column) is tracked in issue #16, and an
-advanced search-and-bulk-edit explorer in issue #17. Until those ship, the page
-above covers viewing, filtering, and per-row categorization; anything more is a
-call away through the API.
+bulk operations (bulk categorize/move/delete) — exists in the
+[REST API](api.md#transactions). In the app, adding and categorizing are
+covered by the page above; inline editing of every field, deleting a row and the
+comment column are tracked in issue #16, and an advanced search-and-bulk-edit
+explorer in issue #17. Until those ship, anything more is a call away through the
+API.

@@ -256,6 +256,43 @@ export const useStore = create((set, get) => ({
         );
     },
 
+    /** Record a transaction by hand. The row is merged straight into the loaded
+     * ledger instead of reloading the whole snapshot, so entering a run of them
+     * one after another never blanks the page or loses the scroll position —
+     * every derived view (budget, analytics, balances) recomputes from the
+     * snapshot anyway. Returns the created row. */
+    async addTransaction(body) {
+        const { snapshot } = get();
+        const row = {
+            date: body.date,
+            amount: body.amount,
+            description: body.description ?? "",
+            bankCategory: "",
+            mcc: "",
+            categoryId: body.categoryId ?? null,
+            accountId: body.accountId,
+            transferId: null,
+            comment: body.comment ?? "",
+            source: "manual",
+        };
+        let id;
+        if (isDemo()) {
+            id = Math.max(0, ...snapshot.transactions.map((t) => t.id)) + 1;
+        } else {
+            ({ id } = await api.createTx(body));
+        }
+        const tx = { ...row, id };
+        const current = get().snapshot;
+        set({
+            snapshot: {
+                ...current,
+                transactions: mergeTransactions(current.transactions, [tx]),
+                transactionsTotal: (current.transactionsTotal ?? current.transactions.length) + 1,
+            },
+        });
+        return tx;
+    },
+
     /** Hidden transactions live outside the snapshot on purpose: nothing in
      * the app (budgets, analytics, balances) can see them by accident. null
      * until the transactions page first asks for them. */

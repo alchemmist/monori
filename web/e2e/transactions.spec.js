@@ -90,3 +90,59 @@ test("hiding a transaction removes it everywhere and the toggle brings it back",
     await expect(page.locator(".tx-grid .tx-hidden-row")).toHaveCount(0);
     await expect(page.locator(".tx-grid .cat-row", { hasText: "JUNK ROW" })).toBeVisible();
 });
+
+test("the add-transaction tab records rows one after another without closing", async ({
+    page,
+    user,
+}) => {
+    const { id: group } = await user.api.createGroup("Daily");
+    await user.api.createCategory("Coffee", group);
+
+    await openApp(page, user);
+    await gotoSection(page, "Transactions");
+    await page.getByRole("button", { name: "Add transaction" }).click();
+
+    const tab = page.locator(".ui-tab");
+    await expect(tab).toBeVisible();
+    await tab.getByLabel("Amount").fill("123.45");
+    await tab.getByLabel("Description").fill("MANUAL ONE");
+    // the category is picked once here and then stays on for every later row
+    await tab.locator(".gsel").last().click();
+    await page.locator(".gsel__drop").getByRole("option", { name: "Coffee" }).click();
+
+    const first = page.waitForResponse(
+        (r) => r.request().method() === "POST" && r.url().endsWith("/api/transactions") && r.ok(),
+    );
+    await tab.getByRole("button", { name: "Add", exact: true }).click();
+    await first;
+
+    // the row lands in the ledger and the tab stays open, cleared for the next
+    await expect(page.locator(".tx-grid .cat-row", { hasText: "MANUAL ONE" })).toBeVisible();
+    await expect(tab).toBeVisible();
+    await expect(tab.getByLabel("Amount")).toHaveValue("");
+    await expect(tab.getByLabel("Description")).toHaveValue("");
+
+    const second = page.waitForResponse(
+        (r) => r.request().method() === "POST" && r.url().endsWith("/api/transactions") && r.ok(),
+    );
+    await tab.getByLabel("Amount").fill("50");
+    await tab.getByLabel("Description").fill("MANUAL TWO");
+    await tab.getByRole("button", { name: "Add", exact: true }).click();
+    await second;
+
+    // both rows survive a reload, on the category that stayed picked
+    await page.reload();
+    await expect(page.locator(".sidebar")).toBeVisible();
+    await gotoSection(page, "Transactions");
+    const one = page.locator(".tx-grid .cat-row", { hasText: "MANUAL ONE" });
+    const two = page.locator(".tx-grid .cat-row", { hasText: "MANUAL TWO" });
+    await expect(one.locator(".gsel").last()).toContainText("Coffee");
+    await expect(two.locator(".gsel").last()).toContainText("Coffee");
+
+    // and they are real manual rows on the server, in kopecks, as expenses
+    const saved = (await user.api.snapshot()).transactions.filter((t) => t.source === "manual");
+    expect(saved.map((t) => [t.description, t.amount])).toEqual([
+        ["MANUAL ONE", -12345],
+        ["MANUAL TWO", -5000],
+    ]);
+});
