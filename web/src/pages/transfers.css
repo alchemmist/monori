@@ -1,0 +1,110 @@
+/* A transfer reads as one operation, so its row is set apart from the ledger
+   around it: a tinted band with an accent edge. The row height is deliberately
+   left alone — the transactions table windows on a fixed row height, and a
+   taller row here would drift the spacer math over thousands of rows. */
+.tx-row_transfer {
+    background: var(--m-surface-sunken, rgb(0 0 0 / 3%));
+    box-shadow: inset 3px 0 0 0 var(--m-accent, #5b6472);
+}
+
+.tx-row_transfer:hover {
+    background: var(--m-surface-hover);
+}
+
+.tx-transfer__toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    margin-right: 4px;
+    color: var(--m-text-dim);
+    vertical-align: middle;
+    background: none;
+    border: 0;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.tx-transfer__toggle:hover {
+    background: var(--m-surface-hover);
+}
+
+.tx-transfer__icon {
+    margin-right: 8px;
+    color: var(--m-text-dim);
+    vertical-align: middle;
+}
+
+.tx-transfer__route {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    vertical-align: middle;
+}
+
+.tx-transfer__account {
+    font-weight: 500;
+}
+
+.tx-transfer__arrow {
+    color: var(--m-text-dim);
+}
+
+.tx-transfer__note,
+.tx-transfer__second-date {
+    margin-left: 8px;
+    font-size: 12px;
+    color: var(--m-text-dim);
+}
+
+/* neither red nor green: a transfer nets to zero across the two accounts */
+.tx-transfer__amount {
+    color: var(--m-text-dim);
+}
+
+.tx-transfer__label {
+    font-size: 12px;
+    color: var(--m-text-dim);
+}
+
+.tx-transfer__menu {
+    margin-left: 8px;
+    vertical-align: middle;
+}
+
+/* the two underlying transactions, when the row is expanded: same shape, pushed
+   in and dimmed so they read as belonging to the transfer above */
+.tx-row_leg {
+    color: var(--m-text-dim);
+    background: var(--m-surface-sunken, rgb(0 0 0 / 2%));
+}
+
+.tx-row_leg td:first-child {
+    padding-left: 22px;
+}
+
+.tx-suggestion {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 10px 12px;
+    border: 1px solid var(--m-border);
+    border-radius: 8px;
+}
+
+.tx-suggestion__route {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.tx-suggestion__route .money {
+    margin-left: auto;
+}
+
+.tx-suggestion__actions {
+    display: flex;
+    gap: 8px;
+}

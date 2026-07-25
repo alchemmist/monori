@@ -42,11 +42,19 @@ column has a matching dropdown to move a row to a different account.
 
 ### Transfers
 
-The **Transfer** button moves money between two of your own accounts. It records
-two linked rows — money out of one account, the same amount into the other —
-tagged with a **transfer** badge. Transfers are uncategorized on purpose, so they
-never show up as income or expense in the budget or on the dashboard. See
-[Accounts](accounts.md).
+A transfer between two of your own accounts is shown as **one row**, set apart
+from the ledger around it, reading `source account → destination account` with
+the amount untinted — a transfer nets to zero, so neither red nor green would be
+telling the truth. The two transactions behind it are still there: the chevron
+on the row opens them up underneath.
+
+The **Transfer** button records one by hand. **Find transfers** scans the ledger
+for pairs the bank delivered as two rows and offers to merge them; monori also
+does this by itself after every import and sync. The row menu splits a transfer
+back into two ordinary transactions, or deletes both.
+
+Transfers are uncategorized on purpose, so they never show up as income or
+expense in the budget or on the dashboard. See [Accounts](accounts.md).
 
 ### Importing
 
