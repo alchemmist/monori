@@ -7,7 +7,12 @@ import {
     switchUser,
     makeUser,
     YEAR,
+    MONTH,
 } from "./fixtures/fixtures.js";
+
+// seed dates hang off the pinned clock: month m (1-based), day d, noon
+const date = (m, d) =>
+    `${YEAR}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}T12:00:00`;
 
 const FIXTURE = fileURLToPath(new URL("./fixtures/template-workbook.xlsx", import.meta.url));
 
@@ -62,10 +67,9 @@ async function migrate(page, filePath, mapAccount) {
     const count = await selects.count();
     for (let i = 0; i < count; i++) {
         const sel = selects.nth(i);
-        const marker = (await sel.locator(".gsel__label").textContent()).replace(
-            /^Account for\s*/,
-            "",
-        );
+        const label = (await sel.locator(".gsel__label").textContent()) ?? "";
+        expect(label, "account marker label").toMatch(/^Account for /);
+        const marker = label.replace(/^Account for\s*/, "");
         await sel.click();
         await page
             .locator(".gsel__drop")
@@ -81,22 +85,25 @@ async function migrate(page, filePath, mapAccount) {
     return text;
 }
 
-// Click Settings -> Export to Excel and capture the downloaded workbook.
-async function exportWorkbook(page) {
+// Click Settings -> Export to Excel and save the downloaded workbook to the
+// test's own output dir (download.path() may be unavailable in some runners).
+async function exportWorkbook(page, testInfo) {
     await gotoSection(page, "Settings");
     const [download] = await Promise.all([
         page.waitForEvent("download"),
         page.getByRole("button", { name: "Export to Excel" }).click(),
     ]);
     expect(download.suggestedFilename()).toBe("monori-export.xlsx");
-    return download.path();
+    const out = testInfo.outputPath("monori-export.xlsx");
+    await download.saveAs(out);
+    return out;
 }
 
 test("monori data survives export and re-import into a fresh account", async ({
     page,
     request,
     user,
-}) => {
+}, testInfo) => {
     // world A: two accounts, income + expense groups, keywords, budgets and
     // a mix of categorized/uncategorized transactions
     const { id: cardId } = await user.api.createAccount({ name: "Card" });
@@ -111,35 +118,35 @@ test("monori data survives export and re-import into a fresh account", async ({
         accountId: cashId,
         categoryId: salary,
         amount: 90000,
-        date: `${YEAR}-05-05T12:00:00`,
+        date: date(MONTH - 1, 5),
         description: "PAYROLL",
     });
     await user.api.addTransaction({
         accountId: cardId,
         categoryId: groceries,
         amount: -12300,
-        date: `${YEAR}-05-15T12:00:00`,
+        date: date(MONTH - 1, 15),
         description: "LENTA-101",
     });
     await user.api.addTransaction({
         accountId: cardId,
         categoryId: cafe,
         amount: -4500,
-        date: `${YEAR}-06-02T12:00:00`,
+        date: date(MONTH, 2),
         description: "COFFEE POINT",
     });
     await user.api.addTransaction({
         accountId: cashId,
         amount: -700,
-        date: `${YEAR}-06-05T12:00:00`,
+        date: date(MONTH, 5),
         description: "MISC SHOP",
     });
-    await user.api.setBudget(groceries, YEAR, 5, 30000);
-    await user.api.setBudget(groceries, YEAR, 6, 30000);
-    await user.api.setBudget(cafe, YEAR, 6, 5000);
+    await user.api.setBudget(groceries, YEAR, MONTH - 1, 30000);
+    await user.api.setBudget(groceries, YEAR, MONTH, 30000);
+    await user.api.setBudget(cafe, YEAR, MONTH, 5000);
 
     await openApp(page, user);
-    const exported = await exportWorkbook(page);
+    const exported = await exportWorkbook(page, testInfo);
 
     // world B: a brand-new tenant with same-named accounts to map onto
     const userB = await makeUser(request, "wb-b");
@@ -171,7 +178,7 @@ test("monori data survives export and re-import into a fresh account", async ({
 test("a template workbook migrates in, exports back out with nothing lost", async ({
     page,
     user,
-}) => {
+}, testInfo) => {
     // the fixture is a miniature of the real YNAB-like template: Russian
     // T-Bank headers, keyword side table, a 2026 budget grid, two card markers
     await user.api.createAccount({ name: "Salary card" });
@@ -195,7 +202,7 @@ test("a template workbook migrates in, exports back out with nothing lost", asyn
     // recognised as a duplicate and nothing new may appear — that is "the
     // exported file equals the imported data" checked through the product
     const before = comparable(await user.api.snapshot());
-    const exported = await exportWorkbook(page);
+    const exported = await exportWorkbook(page, testInfo);
     const again = await migrate(page, exported, (marker) => marker);
     expect(again).toContain("Imported 0 transactions (5 duplicates skipped)");
     expect(again).toContain("0 groups and 0 categories created");

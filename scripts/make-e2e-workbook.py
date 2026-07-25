@@ -143,6 +143,20 @@ def main():
     print(f"errors: {parsed['errors']}")
     assert not synthetic, f"cached grid does not reconcile, synthetic rows: {synthetic}"
     assert not parsed["errors"], parsed["errors"]
+
+    # counts alone would not catch a column-index slip in tx() — pin the
+    # content of one row per domain as well
+    by_desc = {t["description"]: t for t in parsed["transactions"]}
+    lenta = by_desc["LENTA-101"]
+    assert lenta["amount"] == -300000, lenta
+    assert lenta["monori_category"] == "Groceries", lenta
+    assert lenta["marker"] == "*1111", lenta
+    assert by_desc["PAYROLL JAN"]["amount"] == 5000000, by_desc["PAYROLL JAN"]
+    assert by_desc["MISC SHOP"]["monori_category"] == "", by_desc["MISC SHOP"]
+    keywords = {c["name"]: c["keywords"] for c in parsed["categories"]}
+    assert keywords["Groceries"] == "lenta|okey", keywords
+    cell = next(b for b in parsed["budgets"] if b["category"] == "Groceries" and b["month"] == 1)
+    assert (cell["year"], cell["amount"]) == (2026, 500000), cell
     # 4 categories: Groceries/Cafe/Salary from the grid plus the importer's
     # auto-created "Income" for the income summary row
     assert counts == {"groups": 2, "categories": 4, "transactions": 5, "budget_cells": 3}, counts

@@ -113,7 +113,12 @@ export async function gotoSection(page, label) {
 // openApp's one re-runs on every reload and would put the old token back;
 // init scripts run in registration order, so the later tenant wins.
 export async function switchUser(page, user) {
-    await page.addInitScript((token) => localStorage.setItem("monori_token", token), user.token);
+    await page.addInitScript((token) => {
+        // a token swap is a tenant switch: wipe the previous tenant's persisted
+        // UI state (docked tabs etc.) so it cannot leak ids across users
+        localStorage.clear();
+        localStorage.setItem("monori_token", token);
+    }, user.token);
     await page.reload();
     await expect(page.locator(".sidebar")).toBeVisible();
 }
