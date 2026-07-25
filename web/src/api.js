@@ -181,6 +181,8 @@ export const api = {
     adminOverview: () => apiFetch("/api/admin/overview").then(json),
     adminUsers: () => apiFetch("/api/admin/users").then(json),
     adminUserDetail: (id) => apiFetch(`/api/admin/users/${id}`).then(json),
+    adminUserTransactions: (id, { limit = 1000, offset = 0 } = {}) =>
+        apiFetch(`/api/admin/users/${id}/transactions?limit=${limit}&offset=${offset}`).then(json),
     adminActivity: () => apiFetch("/api/admin/activity").then(json),
     adminCreateUser: (email, password) =>
         apiFetch("/api/admin/users", {
