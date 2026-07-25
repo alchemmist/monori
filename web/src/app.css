@@ -320,13 +320,15 @@
 
 /* dockable side tabs (ui/Tab.jsx): pinned to the right edge, collapsible to
    a strip, stacking side by side; `right` is set inline per tab by the stack
-   registry so open tabs line up instead of overlapping */
+   registry so open tabs line up instead of overlapping. --ui-tab-w is the
+   expanded width, set inline from the `width` prop (a percentage of the
+   viewport); the card inside reads the same value, so a tab is widened in
+   exactly one place */
 .ui-tab {
     position: fixed;
     top: 0;
     bottom: 0;
-    width: 420px;
-    max-width: 92vw;
+    width: min(var(--ui-tab-w, 420px), 92vw);
     z-index: 120;
     display: flex;
     overflow: hidden;
@@ -360,12 +362,6 @@
     to {
         transform: translateX(0);
     }
-}
-
-/* a result grid needs room the 420px card cannot give; never narrower than the
-   default, and the 92vw cap above still keeps the app visible behind it */
-.ui-tab_wide {
-    width: max(420px, 60vw);
 }
 
 .ui-tab_collapsed {
@@ -420,9 +416,11 @@
     letter-spacing: 0.05em;
 }
 
+/* pinned to the expanded width so collapsing slides the card out of view
+   instead of reflowing its content mid-animation */
 .ui-tab__inner {
     flex: none;
-    width: min(420px, 92vw);
+    width: min(var(--ui-tab-w, 420px), 92vw);
     display: flex;
     flex-direction: column;
 }

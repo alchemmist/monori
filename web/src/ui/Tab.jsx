@@ -23,8 +23,9 @@ import {
  *  - onClose:    called when the user closes the tab
  *  - footer:     optional node rendered pinned to the bottom (actions)
  *  - defaultCollapsed: start collapsed (default false)
- *  - wide:       take about 60% of the viewport instead of the default 420px,
- *                for tabs that show tabular data (the SQL console)
+ *  - width:      expanded width as a percentage of the viewport, for tabs that
+ *                need more than the default 420px card (the SQL console asks
+ *                for 60). CSS still caps it at 92vw so the app stays visible.
  */
 
 export default function Tab({
@@ -33,7 +34,7 @@ export default function Tab({
     onClose,
     footer,
     defaultCollapsed = false,
-    wide = false,
+    width,
     children,
 }) {
     const id = useId();
@@ -73,12 +74,7 @@ export default function Tab({
         return () => clearTimeout(t);
     }, [animating]);
 
-    const cls = [
-        "ui-tab",
-        wide && "ui-tab_wide",
-        collapsed && "ui-tab_collapsed",
-        animating && "ui-tab_animating",
-    ]
+    const cls = ["ui-tab", collapsed && "ui-tab_collapsed", animating && "ui-tab_animating"]
         .filter(Boolean)
         .join(" ");
 
@@ -86,7 +82,7 @@ export default function Tab({
         <aside
             ref={ref}
             className={cls}
-            style={{ right: offset }}
+            style={{ right: offset, ...(width ? { "--ui-tab-w": `${width}vw` } : null) }}
             onTransitionEnd={(e) => {
                 if (e.propertyName === "width") setAnimating(false);
             }}

@@ -111,7 +111,7 @@ export default function AdminSqlTab({ onClose }) {
     );
 
     return (
-        <Tab title="SQL console" strip="SQL" onClose={onClose} footer={footer} wide>
+        <Tab title="SQL console" strip="SQL" onClose={onClose} footer={footer} width={60}>
             {/* a plain Textarea, not the inline-label FTextArea: SQL is written
                 on several lines and wants the whole box */}
             <Textarea
