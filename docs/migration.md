@@ -50,6 +50,20 @@ The importer expects the structure monori's export writes:
 Unknown sheets and unrecognized rows are skipped with a warning, never a
 silent drop.
 
+The original live spreadsheet is read a little differently, because it grew by
+hand:
+
+- **The category is the one you wrote.** That sheet keeps two category columns —
+  what the keyword rules guessed, and what actually counts, which is either that
+  guess accepted or a label typed over it. Only the second one is read: a
+  hand-written category wins outright, the automatic guess survives only where
+  you let it.
+- **Split operations stay split.** One card operation divided across categories
+  repeats its full amount on every part and carries each part's real share in
+  *Сумма платежа* — sometimes as a formula (`=-48480+16990`), which is added up
+  on import. Every part becomes its own transaction with its own category; only
+  rows identical down to that share count as duplicates.
+
 ## What the importer guarantees
 
 - **Idempotent.** Every transaction is hashed (`date|amount|description`), and

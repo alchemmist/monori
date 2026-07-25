@@ -376,6 +376,45 @@ def test_parse_transactions_dedup_status_currency_and_category():
     assert "Transactions: 1 non-RUB rows imported with their face value" in warnings
 
 
+def test_split_operation_keeps_both_parts_with_their_own_amounts():
+    """
+    One card operation split across categories repeats the operation's full
+    amount on every part and carries each part's real share in "Сумма платежа" —
+    sometimes as a formula the user typed by hand. Reading the operation amount
+    made the parts look identical and collapsed all but the first, dropping the
+    money and the category the user assigned to it.
+    """
+    wb = Workbook()
+    wb.remove(wb.active)
+    ws = wb.create_sheet(spec.SHEET_TRANSACTIONS)
+    ws.append(TX_HEADER + ["Сумма платежа", "Валюта платежа"])
+
+    def part(pay, category):
+        row = [None] * 13
+        row[0] = datetime.datetime(2026, 5, 31, 14, 30)
+        row[1] = "*0548"
+        row[2] = "OK"
+        row[3] = -48480.0
+        row[4] = "RUB"
+        row[7] = "Brandshop"
+        row[8] = pay
+        row[11] = category
+        return row
+
+    ws.append(part("=-48480+16990", "Clothes"))
+    ws.append(part(-16990.0, "Wedding"))
+
+    warnings, errors = [], []
+    rows = _parse_transactions(ws, warnings, errors)
+    assert [(r["amount"], r["monori_category"]) for r in rows] == [
+        (-3149000, "Clothes"),
+        (-1699000, "Wedding"),
+    ]
+    assert sum(r["amount"] for r in rows) == -4848000
+    assert errors == []
+    assert not any("duplicated" in w for w in warnings)
+
+
 def test_parse_transactions_pay_amount_fallback_and_blankish_rows():
     wb = Workbook()
     wb.remove(wb.active)
@@ -755,20 +794,27 @@ def test_live_layout_locates_category_and_keywords_by_content():
     The live template's keyword table starts at row 1 (its cells pollute the
     header index) and the category column follows the bank headers with no
     gap column — both must be found by content, not fixed offsets.
+
+    There are two candidate columns: the keyword rules guess into the first,
+    the second carries that guess through or replaces it with a hand-written
+    category, and only the second is what the sheet's totals are built from.
+    The hand label must win and the guess must never override it.
     """
     wb = Workbook()
     wb.remove(wb.active)
     ws = wb.create_sheet(spec.SHEET_TRANSACTIONS)
     ws.append([None, *TX_HEADER, None, None, "Income", "salary|bonus"])
     row = [None, datetime.datetime(2025, 1, 1), "*1111", "OK", -100.0, "RUB", "Super", "5411"]
-    ws.append([*row, "Lenta"][:9] + ["Groceries", "stale", "МТС", "мтс|телефон"])
+    ws.append([*row, "Lenta"][:9] + ["Groceries", "Groceries", "МТС", "мтс|телефон"])
     row2 = [None, datetime.datetime(2025, 1, 2), "*1111", "OK", -50.0, "RUB", "Super", "5411"]
-    ws.append([*row2, "Okey"][:9] + ["", "stale", "Cafes", "кафе|бар"])
+    ws.append([*row2, "Okey"][:9] + ["Cafes", "Lunch", "Cafes", "кафе|бар"])
+    row3 = [None, datetime.datetime(2025, 1, 3), "*1111", "OK", -20.0, "RUB", "Super", "5411"]
+    ws.append([*row3, "Metro"][:9] + ["", "Transport"])
     idx = _tx_header_index(ws)
     warnings, errors = [], []
     rows = _parse_transactions(ws, warnings, errors)
     assert errors == []
-    assert [r["monori_category"] for r in rows] == ["Groceries", ""]
+    assert [r["monori_category"] for r in rows] == ["Groceries", "Lunch", "Transport"]
     kws = _parse_keywords(ws, idx)
     assert kws == {"Income": "salary|bonus", "МТС": "мтс|телефон", "Cafes": "кафе|бар"}
 

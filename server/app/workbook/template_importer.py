@@ -107,6 +107,9 @@ def _s(value) -> str:
     return str(value).strip()
 
 
+SUM_FORMULA_RE = re.compile(r"^=[-+]?\d+(\.\d+)?([-+]\d+(\.\d+)?)*$")
+
+
 def _kop(value):
     if isinstance(value, bool):
         return None
@@ -114,6 +117,12 @@ def _kop(value):
         cleaned = re.sub(r"[\s\u00a0\u202f]", "", value).replace(",", ".")
         if not cleaned:
             return None
+        # a split the user typed straight into the cell (`=-48480+16990`); the
+        # workbook may carry no cached result for it, so add the terms up here
+        # rather than lose the row
+        if SUM_FORMULA_RE.match(cleaned):
+            terms = re.findall(r"[-+]?\d+(?:\.\d+)?", cleaned[1:])
+            return spec.kop_from_rub(sum(float(t) for t in terms))
         try:
             value = float(cleaned)
         except ValueError:
@@ -342,12 +351,15 @@ def _parse_transactions(ws, warnings, errors):
             skipped_status += 1
             continue
         dt = _parse_dt(col(row, "date"))
-        amount = _kop(col(row, "amount"))
-        currency = _s(col(row, "currency"))
+        # what actually left the account, not what the bank operation was for:
+        # one operation split across categories keeps its original total in
+        # "Сумма операции" on every part and carries the real share here
+        amount = _kop(opt(row, PAY_AMOUNT_HEADER))
+        currency = _s(opt(row, PAY_CURRENCY_HEADER))
         if amount is None:
-            amount = _kop(opt(row, PAY_AMOUNT_HEADER))
-            if amount is not None:
-                currency = _s(opt(row, PAY_CURRENCY_HEADER)) or currency
+            amount = _kop(col(row, "amount"))
+            currency = _s(col(row, "currency"))
+        currency = currency or _s(col(row, "currency"))
         description = _s(col(row, "description"))
         if dt is None or amount is None:
             if dt is None and amount is None and not description:
@@ -413,26 +425,32 @@ def _find_keyword_block(ws, idx):
 
 def _category_col(ws, idx):
     """
-    The per-row category column is the first populated column right of the
-    known bank headers and left of the keyword table. (The exporter leaves a
-    gap column, the live template doesn't — a fixed offset satisfies only one
-    of them.)
+    The per-row category lives right of the known bank headers and left of the
+    keyword table — but the live template puts *two* columns there: the keyword
+    rules compute a guess in the first, and the second either carries that guess
+    through or replaces it with what the user typed by hand. Only the second one
+    is what the sheet's own totals are built from, so it is the truth: a hand
+    label wins outright, and the automatic guess only survives where the user let
+    it. Taking the first populated column instead left 56% of the rows here
+    uncategorized.
+
+    Picking the fullest column finds it without hardcoding an offset, and still
+    works for our own exporter, which writes a single column.
     """
     start = _known_max_col(idx) + 1
     stop = _find_keyword_block(ws, idx)
     if stop is None:
         stop = ws.max_column
-    used = set()
+    filled: dict[int, int] = {}
     for row in ws.iter_rows(
         min_row=2, max_row=min(ws.max_row, SIDE_TABLE_SCAN_ROWS), values_only=True
     ):
         for c in range(start, min(stop, len(row))):
             if _s(row[c]):
-                used.add(c)
-    for c in range(start, stop):
-        if c in used:
-            return c
-    return _known_max_col(idx) + 2
+                filled[c] = filled.get(c, 0) + 1
+    if not filled:
+        return _known_max_col(idx) + 2
+    return max(filled, key=lambda c: (filled[c], c))
 
 
 def _parse_keywords(ws, idx):
