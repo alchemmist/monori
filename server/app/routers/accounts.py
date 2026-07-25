@@ -306,7 +306,8 @@ def reconcile_account(
         if not acc:
             raise HTTPException(404, "account not found")
         total = c.execute(
-            "SELECT COALESCE(SUM(amount),0) FROM transactions WHERE account_id=?", (account_id,)
+            "SELECT COALESCE(SUM(amount),0) FROM transactions WHERE account_id=? AND hidden = 0",
+            (account_id,),
         ).fetchone()[0]
         current = acc["opening_balance"] + total
         delta = body.actualBalance - current

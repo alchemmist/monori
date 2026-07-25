@@ -48,3 +48,45 @@ test("categorizing via the grouped picker persists and follows kanban order", as
         page.locator(".tx-grid .cat-row", { hasText: "COFFEE POINT" }).locator(".gsel").last(),
     ).toContainText("Coffee");
 });
+
+test("hiding a transaction removes it everywhere and the toggle brings it back", async ({
+    page,
+    user,
+}) => {
+    const snap = await user.api.snapshot();
+    const accountId = snap.accounts[0].id;
+    await user.api.addTransaction({ accountId, amount: -1000, description: "KEEP ME" });
+    await user.api.addTransaction({ accountId, amount: -66600, description: "JUNK ROW" });
+
+    await openApp(page, user);
+    await gotoSection(page, "Transactions");
+
+    const junk = page.locator(".tx-grid .cat-row", { hasText: "JUNK ROW" });
+    await expect(junk).toBeVisible();
+    const hidden = page.waitForResponse(
+        (r) => r.request().method() === "PATCH" && r.url().includes("/api/transactions/") && r.ok(),
+    );
+    await junk.hover();
+    await junk.getByRole("button", { name: "Hide transaction" }).click();
+    await expect(junk).toHaveCount(0);
+    await hidden;
+
+    // gone for real: a reload rebuilds from the server snapshot
+    await page.reload();
+    await expect(page.locator(".sidebar")).toBeVisible();
+    await gotoSection(page, "Transactions");
+    await expect(page.locator(".tx-grid .cat-row", { hasText: "KEEP ME" })).toBeVisible();
+    await expect(page.locator(".tx-grid .cat-row", { hasText: "JUNK ROW" })).toHaveCount(0);
+
+    // the toggle surfaces it, highlighted, with a way back
+    await page.getByRole("button", { name: "Hidden" }).click();
+    const back = page.locator(".tx-grid .tx-hidden-row", { hasText: "JUNK ROW" });
+    await expect(back).toBeVisible();
+    const unhidden = page.waitForResponse(
+        (r) => r.request().method() === "PATCH" && r.url().includes("/api/transactions/") && r.ok(),
+    );
+    await back.getByRole("button", { name: "Unhide transaction" }).click();
+    await unhidden;
+    await expect(page.locator(".tx-grid .tx-hidden-row")).toHaveCount(0);
+    await expect(page.locator(".tx-grid .cat-row", { hasText: "JUNK ROW" })).toBeVisible();
+});

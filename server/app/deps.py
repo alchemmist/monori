@@ -52,6 +52,7 @@ def serialize_tx(r):
         "transferId": r["transfer_id"],
         "comment": r["comment"],
         "source": r["source"],
+        "hidden": bool(r["hidden"]),
     }
 
 
@@ -98,8 +99,9 @@ LIGHT_SNAPSHOT_TX_LIMIT = 500
 
 TX_COLUMNS = (
     "SELECT t.id, t.date, t.amount, t.description, t.bank_category, t.mcc,"
-    " t.category_id, t.account_id, t.transfer_id, t.comment, t.source"
-    " FROM transactions t JOIN accounts a ON a.id = t.account_id WHERE a.user_id=?"
+    " t.category_id, t.account_id, t.transfer_id, t.comment, t.source, t.hidden"
+    " FROM transactions t JOIN accounts a ON a.id = t.account_id"
+    " WHERE a.user_id=? AND t.hidden = 0"
 )
 
 
@@ -124,7 +126,7 @@ def snapshot(c, user_id, tx_limit=None):
         if tx_limit is None or len(transactions) < tx_limit
         else cur.execute(
             "SELECT COUNT(*) FROM transactions t JOIN accounts a ON a.id = t.account_id"
-            " WHERE a.user_id=?",
+            " WHERE a.user_id=? AND t.hidden = 0",
             uid,
         ).fetchone()[0]
     )

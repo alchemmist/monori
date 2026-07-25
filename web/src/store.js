@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { api } from "./api.js";
 import { demoSnapshot } from "./demo/demoData.js";
 import { mergeCategories } from "./mergeCategories.js";
-import { mergeTransactions } from "./mergeTransactions.js";
+import { compareTx, mergeTransactions } from "./mergeTransactions.js";
 import { loadTabs, saveTabs } from "./ui/tabPersist.js";
 
 /** Rows per background chunk once the light snapshot has painted. */
@@ -226,6 +226,78 @@ export const useStore = create((set, get) => ({
             set({
                 toast: {
                     title: "Failed to update transaction",
+                    theme: "danger",
+                    content: String(e),
+                },
+            }),
+        );
+    },
+
+    /** Hidden transactions live outside the snapshot on purpose: nothing in
+     * the app (budgets, analytics, balances) can see them by accident. null
+     * until the transactions page first asks for them. */
+    hiddenTx: null,
+
+    async loadHiddenTx() {
+        if (isDemo()) {
+            if (!get().hiddenTx) set({ hiddenTx: [] });
+            return;
+        }
+        try {
+            const { rows } = await api.hiddenTx();
+            set({ hiddenTx: rows });
+        } catch (e) {
+            set({
+                toast: {
+                    title: "Failed to load hidden transactions",
+                    theme: "danger",
+                    content: String(e),
+                },
+            });
+        }
+    },
+
+    hideTx(txId) {
+        const { snapshot, hiddenTx } = get();
+        const t = snapshot.transactions.find((x) => x.id === txId);
+        if (!t) return;
+        set({
+            snapshot: {
+                ...snapshot,
+                transactions: snapshot.transactions.filter((x) => x.id !== txId),
+                transactionsTotal: Math.max(0, (snapshot.transactionsTotal ?? 1) - 1),
+            },
+            hiddenTx: [...(hiddenTx ?? []), { ...t, hidden: true }].sort(compareTx),
+        });
+        if (isDemo()) return;
+        api.patchTx(txId, { hidden: true }).catch((e) =>
+            set({
+                toast: {
+                    title: "Failed to hide transaction",
+                    theme: "danger",
+                    content: String(e),
+                },
+            }),
+        );
+    },
+
+    unhideTx(txId) {
+        const { snapshot, hiddenTx } = get();
+        const t = (hiddenTx ?? []).find((x) => x.id === txId);
+        if (!t) return;
+        set({
+            snapshot: {
+                ...snapshot,
+                transactions: mergeTransactions(snapshot.transactions, [{ ...t, hidden: false }]),
+                transactionsTotal: (snapshot.transactionsTotal ?? 0) + 1,
+            },
+            hiddenTx: hiddenTx.filter((x) => x.id !== txId),
+        });
+        if (isDemo()) return;
+        api.patchTx(txId, { hidden: false }).catch((e) =>
+            set({
+                toast: {
+                    title: "Failed to unhide transaction",
                     theme: "danger",
                     content: String(e),
                 },

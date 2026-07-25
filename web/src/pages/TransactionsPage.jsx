@@ -1,14 +1,22 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Button, CloseButton } from "@mantine/core";
+import { ActionIcon, Button, CloseButton } from "@mantine/core";
 import { FTextInput } from "../ui/fields.jsx";
 import InlineSelect from "../ui/InlineSelect.jsx";
 import Tag from "../ui/Tag.jsx";
 import ProgressRing from "../ui/ProgressRing.jsx";
-import { ArrowDownToLine, ArrowRightArrowLeft, ArrowUpToLine, Magnifier } from "@gravity-ui/icons";
+import {
+    ArrowDownToLine,
+    ArrowRightArrowLeft,
+    ArrowUpToLine,
+    Eye,
+    EyeSlash,
+    Magnifier,
+} from "@gravity-ui/icons";
 import { useStore } from "../store.js";
 import { orderedGroups, categoriesByGroup } from "../categoryOrder.js";
 import { money, fmtDate } from "../format.js";
 import { useWindowedRows } from "../useWindowedRows.js";
+import { compareTx } from "../mergeTransactions.js";
 import ImportDialog from "../components/ImportDialog.jsx";
 import TransferDialog from "../components/TransferDialog.jsx";
 import "./budget.css";
@@ -18,11 +26,26 @@ import "./budget.css";
 const ROW_H_FALLBACK = 39;
 
 export default function TransactionsPage() {
-    const { snapshot, txProgress, setTxCategory, setTxAccount } = useStore();
+    const {
+        snapshot,
+        txProgress,
+        setTxCategory,
+        setTxAccount,
+        hiddenTx,
+        loadHiddenTx,
+        hideTx,
+        unhideTx,
+    } = useStore();
     const [query, setQuery] = useState("");
     const [catFilter, setCatFilter] = useState("all");
     const [yearFilter, setYearFilter] = useState("all");
     const [acctFilter, setAcctFilter] = useState("all");
+    const [showHidden, setShowHidden] = useState(false);
+
+    // hidden rows are not in the snapshot at all; the first toggle fetches them
+    useEffect(() => {
+        if (showHidden) loadHiddenTx();
+    }, [showHidden, loadHiddenTx]);
     const [importing, setImporting] = useState(false);
     const [transferring, setTransferring] = useState(false);
     const bodyRef = useRef(null);
@@ -126,6 +149,7 @@ export default function TransactionsPage() {
     const filtered = useMemo(() => {
         const q = query.trim().toLowerCase();
         let rows = snapshot.transactions;
+        if (showHidden && hiddenTx?.length) rows = [...rows, ...hiddenTx].sort(compareTx);
         if (yearFilter !== "all") rows = rows.filter((t) => t.date.startsWith(yearFilter));
         if (acctFilter !== "all") rows = rows.filter((t) => t.accountId === +acctFilter);
         if (catFilter === "none") rows = rows.filter((t) => t.categoryId == null);
@@ -137,7 +161,7 @@ export default function TransactionsPage() {
                     t.bankCategory.toLowerCase().includes(q),
             );
         return [...rows].reverse(); // newest first
-    }, [snapshot.transactions, query, catFilter, yearFilter, acctFilter]);
+    }, [snapshot.transactions, hiddenTx, showHidden, query, catFilter, yearFilter, acctFilter]);
 
     // measure a real row once it's on screen so the spacer math matches the DOM
     useLayoutEffect(() => {
@@ -206,6 +230,21 @@ export default function TransactionsPage() {
                         data={[{ value: "all", label: "All accounts" }, ...acctOptions]}
                     />
                 )}
+                <Button
+                    variant={showHidden ? "light" : "default"}
+                    size="m"
+                    aria-pressed={showHidden}
+                    onClick={() => setShowHidden((v) => !v)}
+                    leftSection={
+                        showHidden ? (
+                            <Eye width={14} height={14} />
+                        ) : (
+                            <EyeSlash width={14} height={14} />
+                        )
+                    }
+                >
+                    Hidden
+                </Button>
                 <div style={{ flex: 1 }} />
                 <Button
                     variant="default"
@@ -237,6 +276,7 @@ export default function TransactionsPage() {
                 }}
             >
                 <span>{filtered.length} transactions</span>
+                {showHidden && hiddenTx && <span>{hiddenTx.length} hidden shown</span>}
                 {txProgress && (
                     <ProgressRing
                         value={txProgress.total ? txProgress.loaded / txProgress.total : 0}
@@ -255,16 +295,17 @@ export default function TransactionsPage() {
                             <th style={{ width: 120 }}>Amount</th>
                             <th style={{ textAlign: "left", width: 150 }}>Account</th>
                             <th style={{ textAlign: "left", width: 190 }}>Category</th>
+                            <th style={{ width: 44 }} aria-label="Row actions" />
                         </tr>
                     </thead>
                     <tbody ref={bodyRef}>
                         {padTop > 0 && (
                             <tr aria-hidden="true">
-                                <td colSpan={6} style={{ height: padTop, padding: 0, border: 0 }} />
+                                <td colSpan={7} style={{ height: padTop, padding: 0, border: 0 }} />
                             </tr>
                         )}
                         {visibleRows.map((t) => (
-                            <tr key={t.id} className="cat-row">
+                            <tr key={t.id} className={`cat-row${t.hidden ? " tx-hidden-row" : ""}`}>
                                 <td style={{ textAlign: "left" }} className="num">
                                     {fmtDate(t.date)}
                                 </td>
@@ -287,6 +328,7 @@ export default function TransactionsPage() {
                                             transfer
                                         </Tag>
                                     )}
+                                    {t.hidden && <Tag style={{ marginLeft: 8 }}>hidden</Tag>}
                                 </td>
                                 <td style={{ textAlign: "left", color: "var(--m-text-dim)" }}>
                                     {t.bankCategory}
@@ -299,7 +341,7 @@ export default function TransactionsPage() {
                                     </span>
                                 </td>
                                 <td style={{ textAlign: "left" }}>
-                                    {t.transferId != null ? (
+                                    {t.transferId != null || t.hidden ? (
                                         <span
                                             style={{ color: "var(--m-text-dim)", paddingLeft: 4 }}
                                         >
@@ -316,11 +358,13 @@ export default function TransactionsPage() {
                                     )}
                                 </td>
                                 <td style={{ textAlign: "left" }}>
-                                    {t.transferId != null ? (
+                                    {t.transferId != null || t.hidden ? (
                                         <span
                                             style={{ color: "var(--m-text-faint)", paddingLeft: 4 }}
                                         >
-                                            —
+                                            {t.hidden
+                                                ? (catById.get(t.categoryId)?.name ?? "—")
+                                                : "—"}
                                         </span>
                                     ) : (
                                         <InlineSelect
@@ -336,12 +380,36 @@ export default function TransactionsPage() {
                                         />
                                     )}
                                 </td>
+                                <td className="tx-row-action">
+                                    {t.transferId == null &&
+                                        (t.hidden ? (
+                                            <ActionIcon
+                                                size={24}
+                                                variant="subtle"
+                                                aria-label="Unhide transaction"
+                                                title="Unhide transaction"
+                                                onClick={() => unhideTx(t.id)}
+                                            >
+                                                <Eye width={14} height={14} />
+                                            </ActionIcon>
+                                        ) : (
+                                            <ActionIcon
+                                                size={24}
+                                                variant="subtle"
+                                                aria-label="Hide transaction"
+                                                title="Hide transaction"
+                                                onClick={() => hideTx(t.id)}
+                                            >
+                                                <EyeSlash width={14} height={14} />
+                                            </ActionIcon>
+                                        ))}
+                                </td>
                             </tr>
                         ))}
                         {padBottom > 0 && (
                             <tr aria-hidden="true">
                                 <td
-                                    colSpan={6}
+                                    colSpan={7}
                                     style={{ height: padBottom, padding: 0, border: 0 }}
                                 />
                             </tr>
@@ -349,7 +417,7 @@ export default function TransactionsPage() {
                         {filtered.length === 0 && (
                             <tr>
                                 <td
-                                    colSpan={6}
+                                    colSpan={7}
                                     style={{
                                         textAlign: "center",
                                         color: "var(--m-text-faint)",
