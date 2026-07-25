@@ -7,14 +7,14 @@ from openpyxl import Workbook
 from app.workbook import spec
 from app.workbook.importer import parse_workbook
 from app.workbook.template_importer import (
-    MONTH_TOKENS,
+    MONTH_ABBREVS,
     RU_HEADERS,
     TemplateError,
     _find_layout,
     _kop,
     _last_day,
+    _month_num,
     _month_range,
-    _month_token,
     _parse_dt,
     _parse_keywords,
     _parse_transactions,
@@ -151,13 +151,13 @@ def test_stamp_is_noon_on_last_day():
     assert _stamp(2024, 12) == "2024-12-31T12:00:00"
 
 
-def test_month_token_matches_ru_and_en_and_rejects():
-    assert _month_token("ЯНВ 2025") == 1
-    assert _month_token("мая") == 5
-    assert _month_token("DEC 2024") == 12
-    assert _month_token("garbage") is None
-    assert _month_token(None) is None
-    assert MONTH_TOKENS["ИЮЛ"] == 7
+def test_month_num_matches_ru_and_en_and_rejects():
+    assert _month_num("ЯНВ 2025") == 1
+    assert _month_num("мая") == 5
+    assert _month_num("DEC 2024") == 12
+    assert _month_num("garbage") is None
+    assert _month_num(None) is None
+    assert MONTH_ABBREVS["ИЮЛ"] == 7
 
 
 def test_parse_dt_variants():

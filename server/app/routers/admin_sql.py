@@ -119,6 +119,9 @@ def run_sql(body: SqlBody, admin: Annotated[dict, Depends(admin_user)]):
                     lambda: 1 if time.monotonic() > deadline else 0, PROGRESS_INSTRUCTIONS
                 )
                 c.execute("BEGIN")
+                # codeql[py/sql-injection] — executing admin-typed SQL is this
+                # console's entire purpose; guarded by admin auth, transactions,
+                # write confirmation, timeouts and audit above
                 cur = c.execute(sql)
                 columns = [d[0] for d in cur.description] if cur.description else []
                 rows = (

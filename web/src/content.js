@@ -5,9 +5,16 @@ const raw = import.meta.glob("../../docs/*.md", {
 });
 
 // react-markdown 9 has no raw-HTML pass, so an HTML comment reaches the page as
-// literal text; the docs use them as generator markers, so drop them here
+// literal text; the docs use them as generator markers, so drop them here.
+// Loops to a fixpoint: a single pass over "<!<!---->--…-->" leaves a comment
 export function stripHtmlComments(text) {
-    return text.replace(/<!--[\s\S]*?-->[ \t]*\n?/g, "");
+    let out = text;
+    let prev;
+    do {
+        prev = out;
+        out = out.replace(/<!--[\s\S]*?-->[ \t]*\n?/g, "");
+    } while (out !== prev);
+    return out;
 }
 
 function md(name) {

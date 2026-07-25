@@ -35,7 +35,7 @@ RU_HEADERS = {
     "description": "Описание",
 }
 
-MONTH_TOKENS = {
+MONTH_ABBREVS = {
     "ЯНВ": 1,
     "ФЕВ": 2,
     "МАР": 3,
@@ -154,9 +154,9 @@ def looks_like_template(data: bytes) -> bool:
         wb.close()
 
 
-def _month_token(value):
-    token = _s(value).upper()[:3]
-    return MONTH_TOKENS.get(token)
+def _month_num(value):
+    abbr = _s(value).upper()[:3]
+    return MONTH_ABBREVS.get(abbr)
 
 
 def _find_layout(ws):
@@ -190,9 +190,9 @@ def _find_layout(ws):
                 break
         start_month = None
         for rr in (1, 2, 3):
-            token = _month_token(ws.cell(rr, bases[0]).value)
-            if token:
-                start_month = token
+            mon = _month_num(ws.cell(rr, bases[0]).value)
+            if mon:
+                start_month = mon
                 break
         return {
             "header_row": r,
