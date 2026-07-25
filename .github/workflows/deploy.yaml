@@ -1,8 +1,8 @@
 name: Deploy
 
 # Rolls out a release after the CI workflow succeeds on main: SSH into the
-# server, check out the exact commit that passed and rebuild the container
-# from deploy/docker-compose.yml.
+# server, move the tree to the exact commit that passed and rebuild the
+# container from deploy/docker-compose.yml.
 
 on:
     workflow_run:
@@ -36,6 +36,10 @@ jobs:
                       set -e
                       cd ${{ secrets.SSH_PROJECT_PATH }}
                       git fetch origin main
-                      git checkout --detach ${{ github.event.inputs.sha || github.event.workflow_run.head_sha }}
+                      # reset, not checkout: a hand-edit to a tracked file on
+                      # the host makes checkout abort and takes the whole
+                      # rollout with it. reset leaves untracked files alone, so
+                      # the live DB bind-mounted from deploy/data survives.
+                      git reset --hard ${{ github.event.inputs.sha || github.event.workflow_run.head_sha }}
                       cd deploy
                       docker compose up --build -d
