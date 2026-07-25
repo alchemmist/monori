@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Eye, EyeSlash } from "@gravity-ui/icons";
 import { useStore } from "../store.js";
 import Meadow from "../components/Meadow.jsx";
 import "./login.css";
@@ -8,6 +9,7 @@ export default function LoginPage() {
     const [mode, setMode] = useState("login");
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
+    const [showPassword, setShowPassword] = useState(false);
     const [error, setError] = useState(null);
     const [busy, setBusy] = useState(false);
 
@@ -62,18 +64,35 @@ export default function LoginPage() {
                         onChange={(e) => setEmail(e.target.value)}
                         required
                     />
-                    <input
-                        className="login__input"
-                        type="password"
-                        placeholder={
-                            mode === "register" ? "Password (min 8 characters)" : "Password"
-                        }
-                        autoComplete={mode === "register" ? "new-password" : "current-password"}
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        minLength={mode === "register" ? 8 : undefined}
-                        required
-                    />
+                    <div className="login__password">
+                        <input
+                            className="login__input"
+                            type={showPassword ? "text" : "password"}
+                            placeholder={
+                                mode === "register" ? "Password (min 8 characters)" : "Password"
+                            }
+                            autoComplete={mode === "register" ? "new-password" : "current-password"}
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            minLength={mode === "register" ? 8 : undefined}
+                            required
+                        />
+                        <button
+                            type="button"
+                            className="login__eye"
+                            onClick={() => setShowPassword((v) => !v)}
+                            title={showPassword ? "Hide password" : "Show password"}
+                            aria-label={showPassword ? "Hide password" : "Show password"}
+                            aria-pressed={showPassword}
+                            tabIndex={-1}
+                        >
+                            {showPassword ? (
+                                <EyeSlash width={16} height={16} />
+                            ) : (
+                                <Eye width={16} height={16} />
+                            )}
+                        </button>
+                    </div>
                     {error && <div className="login__error">{error}</div>}
                     <button className="login__submit" type="submit" disabled={busy}>
                         {busy ? "…" : mode === "login" ? "Sign in" : "Create account"}

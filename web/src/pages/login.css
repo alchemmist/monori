@@ -66,6 +66,35 @@
     border-color: #1a1a1a;
 }
 
+.login__password {
+    position: relative;
+    display: flex;
+}
+
+.login__password .login__input {
+    width: 100%;
+    padding-right: 44px;
+}
+
+.login__eye {
+    position: absolute;
+    top: 0;
+    right: 6px;
+    height: 100%;
+    width: 36px;
+    display: grid;
+    place-items: center;
+    border: 0;
+    background: none;
+    color: #9a988f;
+    cursor: pointer;
+    transition: color 0.15s;
+}
+
+.login__eye:hover {
+    color: #1a1a1a;
+}
+
 .login__error {
     font-size: 12.5px;
     color: var(--m-expense, #dc2626);
@@ -168,6 +197,14 @@
 
 .theme-dark .login__input::placeholder {
     color: #6c6980;
+}
+
+.theme-dark .login__eye {
+    color: #6c6980;
+}
+
+.theme-dark .login__eye:hover {
+    color: #f2f1f6;
 }
 
 .theme-dark .login__input:focus {
