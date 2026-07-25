@@ -94,6 +94,18 @@ export function computeYear({ year, categories, groupKindById, txIndex, budgetIn
     return { year, byCategory, income, budgetedTotal, overspent, available };
 }
 
+/**
+ * Where the chain has to start for a snapshot: Available carries forward from
+ * the very first month, so a year left out is not merely hidden — everything
+ * budgeted, earned and spent in it is dropped from every later year's running
+ * total. `floor` is only a default for an empty account.
+ */
+export function firstBudgetYear(snapshot, floor) {
+    if (!snapshot) return floor;
+    const minTx = snapshot.transactions.reduce((m, t) => Math.min(m, +t.date.slice(0, 4)), floor);
+    return snapshot.budgets.reduce((m, b) => Math.min(m, b.year), minTx);
+}
+
 /** Compute a chain of years [firstYear..lastYear]. Returns Map(year -> result). */
 export function computeRange(snapshot, firstYear, lastYear) {
     const groupKindById = new Map(snapshot.groups.map((g) => [g.id, g.kind]));

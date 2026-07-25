@@ -731,6 +731,31 @@ def test_opening_balance_is_taken_from_the_first_month_with_rows():
     assert not any(w.startswith("verify:") for w in parsed["warnings"])
 
 
+def test_opening_balance_predating_the_sheet_is_dated_before_it():
+    """
+    When the very first month of the earliest sheet already has rows, the money
+    it started with belongs to the December before — a month no sheet covers.
+    The row still has to exist, or Available starts short by that amount.
+    """
+    wb = Workbook()
+    wb.remove(wb.active)
+    _tx_sheet(wb, [_tx(datetime.datetime(2025, 1, 15), -300.0, "Groceries", desc="Lenta")])
+    _write_year(
+        wb.create_sheet("2025"),
+        months=[1, 2],
+        rows=[("▼Daily", None), ("Groceries", {1: (1000, -300, 700)})],
+        income={1: 5000},
+        available={1: 5900},
+        seeds={1: 1900},
+        header_row=8,
+    )
+    parsed = parse_workbook(_save(wb))
+    opening = next(t for t in parsed["transactions"] if t["description"] == "Opening balance")
+    assert opening["date"] == "2024-12-31T12:00:00"
+    assert opening["amount"] == 190000
+    assert not any(w.startswith("verify:") for w in parsed["warnings"])
+
+
 def test_opening_balance_left_alone_when_the_sheet_starts_from_nothing():
     wb = Workbook()
     wb.remove(wb.active)

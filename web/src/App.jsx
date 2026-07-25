@@ -21,7 +21,7 @@ import {
 } from "@gravity-ui/icons";
 import { useStore, isDemo } from "./store.js";
 import { showToast } from "./ui/notify.js";
-import { computeRange } from "./engine/budget.js";
+import { computeRange, firstBudgetYear } from "./engine/budget.js";
 import BudgetPage from "./pages/BudgetPage.jsx";
 
 // the whole d3/charts stack is only used here — keep it out of the entry chunk
@@ -59,10 +59,9 @@ const REPORT_BUG_URL = `https://github.com/alchemmist/monori/issues/new?labels=b
     "**What happened**\n\n\n**What I expected**\n\n\n**Steps to reproduce**\n\n1. \n",
 )}`;
 
-// where the budget chain starts when there is nothing to read it off yet. The
-// real first year comes from the data: Available carries forward from the very
-// first month, so starting the chain after a migrated year would silently drop
-// everything budgeted, earned and spent in it.
+// where the budget chain starts for an account with nothing in it yet; with data,
+// firstBudgetYear reads the real one off the snapshot
+
 const DEFAULT_FIRST_YEAR = 2020;
 
 export default function App({ theme, onToggleTheme }) {
@@ -97,18 +96,7 @@ export default function App({ theme, onToggleTheme }) {
         }
     }, [user]);
 
-    const firstYear = useMemo(() => {
-        if (!snapshot) return DEFAULT_FIRST_YEAR;
-        const minTx = snapshot.transactions.reduce(
-            (m, t) => Math.min(m, +t.date.slice(0, 4)),
-            DEFAULT_FIRST_YEAR,
-        );
-        const minBudget = snapshot.budgets.reduce(
-            (m, b) => Math.min(m, b.year),
-            DEFAULT_FIRST_YEAR,
-        );
-        return Math.min(minTx, minBudget);
-    }, [snapshot]);
+    const firstYear = useMemo(() => firstBudgetYear(snapshot, DEFAULT_FIRST_YEAR), [snapshot]);
 
     const lastYear = useMemo(() => {
         if (!snapshot) return new Date().getFullYear();
