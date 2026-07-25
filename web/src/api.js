@@ -103,6 +103,12 @@ export const api = {
         apiFetch(`/api/categories/${id}${reassignTo ? `?reassignTo=${reassignTo}` : ""}`, {
             method: "DELETE",
         }).then(json),
+    mergeCategory: (id, into) =>
+        apiFetch(`/api/categories/${id}/merge`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ into }),
+        }).then(json),
     reorderCategories: (ids) =>
         apiFetch("/api/categories/reorder", {
             method: "POST",

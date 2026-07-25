@@ -72,6 +72,8 @@ def test_category_merge_moves_tx_and_unions_keywords(api, client):
     dst = api.category("Cafe", g, "starbucks|shokoladnitsa")
     tx = api.tx("2026-01-01T00:00:00", -500, categoryId=src)
     client.put("/api/budgets", json={"categoryId": src, "year": 2026, "month": 1, "amount": 900})
+    client.put("/api/budgets", json={"categoryId": src, "year": 2026, "month": 2, "amount": 200})
+    client.put("/api/budgets", json={"categoryId": dst, "year": 2026, "month": 1, "amount": 100})
 
     assert client.post(f"/api/categories/{src}/merge", json={"into": src}).status_code == 400
     assert client.post(f"/api/categories/{src}/merge", json={"into": 999}).status_code == 400
@@ -82,7 +84,31 @@ def test_category_merge_moves_tx_and_unions_keywords(api, client):
     assert [c["id"] for c in snap["categories"]] == [dst]
     assert api.tx_by(tx)["categoryId"] == dst
     assert api.cat(dst)["keywords"].split("|") == ["starbucks", "shokoladnitsa", "cofix"]
-    assert snap["budgets"] == []
+    # the spending moved across, so the plan has to move with it: overlapping
+    # months are summed, months only the source had are carried over as they are
+    assert sorted((b["year"], b["month"], b["amount"]) for b in snap["budgets"]) == [
+        (2026, 1, 1000),
+        (2026, 2, 200),
+    ]
+    assert {b["categoryId"] for b in snap["budgets"]} == {dst}
+
+
+def test_merge_across_income_and_expense_is_refused(api, client):
+    # budgeting and analytics read the sign off the group kind, so this merge
+    # would reinterpret the whole moved history — the server refuses it even
+    # though the picker never offers it
+    salary = api.category("Salary", api.group("Income", kind="income"))
+    rent = api.category("Rent", api.group("Fixed", kind="expense"))
+    tx = api.tx("2026-01-01T00:00:00", 90000, categoryId=salary)
+    client.put("/api/budgets", json={"categoryId": salary, "year": 2026, "month": 1, "amount": 700})
+
+    assert client.post(f"/api/categories/{salary}/merge", json={"into": rent}).status_code == 400
+    assert client.post(f"/api/categories/{rent}/merge", json={"into": salary}).status_code == 400
+
+    snap = api.snapshot()
+    assert sorted(c["id"] for c in snap["categories"]) == sorted([salary, rent])
+    assert api.tx_by(tx)["categoryId"] == salary
+    assert [(b["categoryId"], b["amount"]) for b in snap["budgets"]] == [(salary, 700)]
 
 
 def test_merge_with_empty_keywords(api, client):

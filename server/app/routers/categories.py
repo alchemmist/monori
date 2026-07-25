@@ -9,7 +9,7 @@ from ..deps import conn
 router = APIRouter(prefix="/api/categories", tags=["categories"])
 
 _OWNED = (
-    "SELECT c.id, c.keywords FROM categories c"
+    "SELECT c.id, c.keywords, g.kind FROM categories c"
     " JOIN category_groups g ON g.id = c.group_id WHERE c.id=? AND g.user_id=?"
 )
 
@@ -170,7 +170,13 @@ def reorder_categories(body: Reorder, user: Annotated[dict, Depends(current_user
 def merge_category(cat_id: int, body: MergeBody, user: Annotated[dict, Depends(current_user)]):
     """
     Combine a category into another: its transactions move to the target,
-    keywords are unioned, then the source category is deleted.
+    keywords are unioned, budgets are summed month by month, then the source
+    category is deleted. Summing matters: the spending moves across, so a
+    dropped plan would read as a retroactive overspend on the target.
+
+    Income and expense never mix: budgeting and analytics read the sign off the
+    group kind, so a cross-kind merge would silently reinterpret the whole
+    moved history.
     """
     uid = user["id"]
     c = conn()
@@ -184,10 +190,19 @@ def merge_category(cat_id: int, body: MergeBody, user: Annotated[dict, Depends(c
         dst = _owned_category(c, body.into, uid)
         if not dst:
             raise HTTPException(400, "unknown merge target")
+        if src["kind"] != dst["kind"]:
+            raise HTTPException(400, "cannot merge across income and expense")
         c.execute("UPDATE transactions SET category_id=? WHERE category_id=?", (body.into, cat_id))
         c.execute(
             "UPDATE categories SET keywords=? WHERE id=?",
             (_merge_keywords(dst["keywords"], src["keywords"]), body.into),
+        )
+        c.execute(
+            "INSERT INTO budgets (category_id, year, month, amount)"
+            " SELECT ?, year, month, amount FROM budgets WHERE category_id=?"
+            " ON CONFLICT (category_id, year, month)"
+            " DO UPDATE SET amount = amount + excluded.amount",
+            (body.into, cat_id),
         )
         c.execute("DELETE FROM categories WHERE id=?", (cat_id,))
         c.commit()

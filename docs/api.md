@@ -142,7 +142,7 @@ importer.
 | PATCH | `/api/categories/{id}` | `{name?, groupId?, keywords?, archived?}` | Partial update. |
 | DELETE | `/api/categories/{id}` | — | Query `?reassignTo=<id>` moves its transactions first; budgets cascade-delete. |
 | POST | `/api/categories/reorder` | `{ids: [...]}` | Must list every category exactly once. |
-| POST | `/api/categories/{id}/merge` | `{into: <id>}` | Moves transactions to the target, unions keywords, deletes the source. |
+| POST | `/api/categories/{id}/merge` | `{into: <id>}` | Moves transactions to the target, unions keywords, sums budgets month by month, deletes the source. `400` when the two sit in groups of a different kind. |
 
 ## Transactions
 
