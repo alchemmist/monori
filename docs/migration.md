@@ -19,6 +19,10 @@ categories, transactions and budgets.
 4. **Map accounts.** The workbook only knows card markers (like `*2947`) or
    account names; monori asks which of your accounts each marker should land
    on. Create the accounts first if they don't exist yet.
+   A marker that carries rows in more than one currency is asked about once per
+   currency — `*2947 · USD` is its own line — and only accounts held in that
+   currency are offered. Without a USD account there is nothing to pick, so the
+   import stays blocked rather than filing dollars as rubles.
 5. Pick a **budget policy** for cells that already have a value in monori:
    *Overwrite* takes the workbook's number, *Keep mine* leaves yours untouched.
 6. Import. The result screen shows exactly what was created and what was
@@ -91,9 +95,35 @@ silent drop.
   reported as a warning and nothing is added. Closing that gap with a synthetic
   transaction would double the month rather than reconcile it.
 
+## What the preview warnings mean
+
+A warning is never a failure — it is the reader saying what it did with
+something ambiguous. The ones a hand-kept workbook usually raises:
+
+- **`Categories: no category rows recognized … structure taken from the year
+  grids`** — the sheet named `Categories` is laid out in some other way, so the
+  structure came from the sections of the year grids instead. The categories in
+  the count above the warnings are the ones that will be created; nothing was
+  lost.
+- **`history: N transactions stand in for months …`** — the archive years hold
+  no rows at all, only monthly totals. One transaction per category per month
+  stands in for them so those years still add up. They show up in monori as
+  ordinary rows named after their category.
+- **`reconciliation: in N category-months the total written in the sheet is
+  not what its own rows add up to`** — a cached or hand-edited total that its
+  own rows contradict. The rows are imported as they are; no filler row is
+  added, because that would double the month instead of reconciling it.
+- **`verify: the sheet's own Available differs …`** — the sheet's running
+  Available versus the one recomputed from everything imported. A difference
+  that stays roughly constant month over month is money carried in from before
+  the earliest sheet, not a mis-read row. Transactions and budgets are imported
+  either way; only this one running total starts from a different point.
+- **`Transactions: N rows in USD`** — see the currency rule in step 4 above.
+
 ## Limits
 
-- Amounts are treated as rubles (kopeck precision); multi-currency workbooks
-  are not yet understood.
+- Amounts keep their face value and are never converted: a row in USD goes to a
+  USD account as 95.78 USD. Cross-currency arithmetic (a single total across
+  accounts in different currencies) is still out of scope.
 - Transfers between accounts arrive as two ordinary transactions — link them
   in monori afterwards if you want them netted out of analytics.

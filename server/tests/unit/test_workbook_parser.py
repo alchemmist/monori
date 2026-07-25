@@ -351,9 +351,15 @@ def test_parse_transactions_dedup_status_currency_and_category():
     assert first["bank_category"] == "Super"
     assert first["mcc"] == "5411"
     assert errors == [{"row": 6, "error": "unparseable date or amount"}]
-    assert "Transactions: 1 duplicated rows collapsed" in warnings
+    assert (
+        "Transactions: 1 rows identical in date, amount, description and card — kept once"
+        in warnings
+    )
     assert "Transactions: 1 non-OK rows skipped" in warnings
-    assert "Transactions: 1 non-RUB rows imported with their face value" in warnings
+    assert [r["currency"] for r in rows] == ["RUB", "USD"]
+    assert "Transactions: 1 rows in USD — they need an account held in USD to land on" in (
+        warnings
+    )
 
 
 def test_split_operation_keeps_both_parts_with_their_own_amounts():
@@ -443,7 +449,10 @@ def test_parse_transactions_pay_amount_fallback_and_blankish_rows():
     assert rows[0]["monori_category"] == "Income"
     assert rows[1]["monori_category"] == "Groceries"
     assert errors == [{"row": 6, "error": "unparseable date or amount"}]
-    assert "Transactions: 1 non-RUB rows imported with their face value" in warnings
+    assert [r["currency"] for r in rows] == ["RUB", "RUB", "USD"]
+    assert "Transactions: 1 rows in USD — they need an account held in USD to land on" in (
+        warnings
+    )
 
 
 def test_parse_keywords_reads_side_table():
@@ -514,11 +523,14 @@ def test_live_year_keeps_its_rows_and_invents_nothing():
     assert all(t["marker"] for t in parsed["transactions"])
     assert not [t for t in parsed["transactions"] if t["date"].endswith("T12:00:00")]
 
-    assert (
-        "reconciliation: 3 totals in the sheet disagree with the rows of the same month"
-        " — the rows were kept as they are and nothing was invented" in parsed["warnings"]
+    assert any(
+        w.startswith("reconciliation: in 3 category-months") and "the rows win" in w
+        for w in parsed["warnings"]
     )
-    assert "verify: available 2025-01 differs by 1100.00" in parsed["warnings"]
+    assert any(
+        w.startswith("verify: the sheet's own Available differs") and "1,100.00 (2025-01)" in w
+        for w in parsed["warnings"]
+    )
     assert "2019: unrecognized year sheet layout, ignored" in parsed["warnings"]
     assert parsed["errors"] == []
 
@@ -555,7 +567,7 @@ def test_archive_history_and_seam_carry():
     assert synth[("Groceries", "2024-12-31T12:00:00")]["amount"] == 30000
     assert len(parsed["transactions"]) == 3
 
-    assert "history: 2 synthetic transactions rebuilt from archive sheets" in parsed["warnings"]
+    assert any(w.startswith("history: 2 transactions stand in for") for w in parsed["warnings"])
     assert "seam: 1 carry corrections at 2024-12" in parsed["warnings"]
 
 
@@ -613,7 +625,7 @@ def test_dead_category_and_available_seed_at_seam():
     assert synth[("OldPhone", "2024-01-31T12:00:00")]["amount"] == 30000
     assert synth[("OldPhone", "2024-12-31T12:00:00")]["amount"] == -30000  # dead category zeroed
     assert synth[("Income", "2024-12-31T12:00:00")]["amount"] == 20000  # available seed
-    assert "history: 2 synthetic transactions rebuilt from archive sheets" in parsed["warnings"]
+    assert any(w.startswith("history: 2 transactions stand in for") for w in parsed["warnings"])
     assert "seam: 3 carry corrections at 2024-12" in parsed["warnings"]
 
 

@@ -100,13 +100,13 @@ BALANCE_HEADERS = ("Баланс", "Balance")
 LABEL_HEADERS = ("Категория", "Категории", "Category", "Categories")
 SKIP_LABELS = LABEL_HEADERS + ("Month Summary", "Total", "Итого")
 
+DEFAULT_CURRENCY = "RUB"
 INCOME_GROUP = "Inflow"
 INCOME_CATEGORY = "Income"
 OTHER_GROUP = "Other"
 
 ADJUST_TOLERANCE_KOP = 2
 VERIFY_TOLERANCE_KOP = 5
-MAX_VERIFY_WARNINGS = 12
 
 
 class WorkbookError(Exception):
@@ -453,7 +453,7 @@ def _parse_transactions(ws, warnings, errors):
     rows = []
     seen = set()
     skipped_status = 0
-    non_rub = 0
+    foreign: dict[str, int] = {}
     dupes = 0
     for n, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
         if all(v is None or _s(v) == "" for v in row):
@@ -478,11 +478,12 @@ def _parse_transactions(ws, warnings, errors):
                 continue
             errors.append({"row": n, "error": "unparseable date or amount"})
             continue
-        if currency and currency != "RUB":
-            non_rub += 1
+        currency = (currency or DEFAULT_CURRENCY).upper()
+        if currency != DEFAULT_CURRENCY:
+            foreign[currency] = foreign.get(currency, 0) + 1
         date_iso = dt.strftime("%Y-%m-%dT%H:%M:%S")
         marker = text(row, "card") or text(row, "account")
-        key = (date_iso, amount, description, marker)
+        key = (date_iso, amount, description, marker, currency)
         if key in seen:
             dupes += 1
             continue
@@ -498,14 +499,20 @@ def _parse_transactions(ws, warnings, errors):
                 "comment": text(row, "comment"),
                 "monori_category": category,
                 "marker": marker,
+                "currency": currency,
             }
         )
     if dupes:
-        warnings.append(f"Transactions: {dupes} duplicated rows collapsed")
+        warnings.append(
+            f"Transactions: {dupes} rows identical in date, amount, description and card"
+            " — kept once"
+        )
     if skipped_status:
         warnings.append(f"Transactions: {skipped_status} non-OK rows skipped")
-    if non_rub:
-        warnings.append(f"Transactions: {non_rub} non-RUB rows imported with their face value")
+    for code, n in sorted(foreign.items()):
+        warnings.append(
+            f"Transactions: {n} rows in {code} — they need an account held in {code} to land on"
+        )
     return rows
 
 
@@ -594,7 +601,19 @@ def _synthetic(year, month, amount, category, description, marker=""):
         "comment": "",
         "monori_category": category,
         "marker": marker,
+        "currency": DEFAULT_CURRENCY,
     }
+
+
+def account_slot(tx):
+    """
+    Which account a row must land on. A card marker alone is not enough: the
+    same marker can carry rows in more than one currency (interest on a foreign
+    balance arrives with no card number at all), and an amount only means
+    anything on an account held in that currency. Marker and currency together
+    are the unit the user maps.
+    """
+    return f"{tx.get('currency') or DEFAULT_CURRENCY}:{tx['marker']}"
 
 
 def _last_activity(transactions, sources):
@@ -969,7 +988,11 @@ def _parse(wb):
                 avail_residuals.append((y, m, target_avail - avail))
 
     if n_hist:
-        warnings.append(f"history: {n_hist} synthetic transactions rebuilt from archive sheets")
+        warnings.append(
+            f"history: {n_hist} transactions stand in for months the sheet keeps only as monthly"
+            " totals (the archive years have no rows) — one per category per month, so those"
+            " years still add up"
+        )
     if n_adjust:
         warnings.append(
             f"reconciliation: {n_adjust} adjustment transactions align live months with the sheet"
@@ -978,14 +1001,17 @@ def _parse(wb):
         warnings.append(f"seam: {n_seam} carry corrections at {seam_year}-12")
     if n_trusted:
         warnings.append(
-            f"reconciliation: {n_trusted} totals in the sheet disagree with the rows of the"
-            " same month — the rows were kept as they are and nothing was invented"
+            f"reconciliation: in {n_trusted} category-months the total written in the sheet is not"
+            " what its own rows add up to (a hand-edited cell, usually) — the rows win, nothing"
+            " was added to close the gap"
         )
-    for y, m, diff in avail_residuals[:MAX_VERIFY_WARNINGS]:
-        warnings.append(f"verify: available {y}-{m:02d} differs by {diff / 100:.2f}")
-    if len(avail_residuals) > MAX_VERIFY_WARNINGS:
+    if avail_residuals:
+        (fy, fm, fd), (ly, lm, ld) = avail_residuals[0], avail_residuals[-1]
         warnings.append(
-            f"verify: {len(avail_residuals) - MAX_VERIFY_WARNINGS} more available mismatches"
+            f"verify: the sheet's own Available differs from the one rebuilt from its rows in "
+            f"{len(avail_residuals)} months, from {fd / 100:,.2f} ({fy}-{fm:02d}) to "
+            f"{ld / 100:,.2f} ({ly}-{lm:02d}) — a difference this steady is money carried in from "
+            "before the earliest sheet; transactions and budgets are imported either way"
         )
 
     return _result(groups, categories, transactions + synthetic, budgets, warnings, errors)
