@@ -93,8 +93,12 @@ From the budget grid you can:
   first — its budgets are removed with it,
 - **merge** one category into another, for when the same thing ended up split over
   two names ("Cafe" and "Coffee"). Its transactions move across, the two keyword
-  sets are unioned so auto-categorization keeps working, its monthly budgets are
-  added to the target's plan, and the empty source disappears. The dialog spells
-  out what will happen before you confirm; a merge cannot be undone.
+  sets are unioned so auto-categorization keeps working, and the empty source
+  disappears. Monthly budgets follow the spending: a month both categories
+  planned is summed, a month only the source planned is carried over as it is.
+  Only categories of the same kind can be merged — income with income, expense
+  with expense — because a cross-kind merge would flip the sign of the whole
+  moved history. The dialog spells out what will happen before you confirm; a
+  merge cannot be undone.
 
 A group can only be deleted once it has no categories.
