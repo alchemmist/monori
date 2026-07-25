@@ -2,6 +2,7 @@ import { Button, SegmentedControl } from "@mantine/core";
 import { useState } from "react";
 
 import { api } from "../api.js";
+import { seedDemoData } from "../demo/seedDemo.js";
 import { isDemo, useStore } from "../store.js";
 import { fmtDate } from "../format.js";
 import "./settings.css";
@@ -34,8 +35,12 @@ function Row({ label, hint, hintBad, children }) {
 export default function SettingsPage({ theme, onToggleTheme, onMigrate }) {
     const user = useStore((s) => s.user);
     const logout = useStore((s) => s.logout);
+    const snapshot = useStore((s) => s.snapshot);
+    const load = useStore((s) => s.load);
+    const notify = useStore((s) => s.notify);
     const [exporting, setExporting] = useState(false);
     const [exportError, setExportError] = useState("");
+    const [seedingDemo, setSeedingDemo] = useState(false);
 
     const exportXlsx = async () => {
         setExporting(true);
@@ -54,6 +59,29 @@ export default function SettingsPage({ theme, onToggleTheme, onMigrate }) {
             setExportError(e.message || "Export failed");
         } finally {
             setExporting(false);
+        }
+    };
+
+    const loadDemoData = async () => {
+        if (!snapshot) return;
+        setSeedingDemo(true);
+        try {
+            const { imported, skipped, transfers } = await seedDemoData(snapshot);
+            await load();
+            const added = imported + transfers;
+            notify({
+                title: added ? "Demo data added" : "Demo data is already loaded",
+                theme: "success",
+                content: added
+                    ? `${imported} transactions and ${transfers} transfers added${
+                          skipped ? `; ${skipped} duplicates skipped` : ""
+                      }.`
+                    : undefined,
+            });
+        } catch (e) {
+            notify({ title: "Could not add demo data", theme: "danger", content: String(e) });
+        } finally {
+            setSeedingDemo(false);
         }
     };
 
@@ -119,6 +147,21 @@ export default function SettingsPage({ theme, onToggleTheme, onMigrate }) {
                             Migrate from spreadsheet
                         </Button>
                     </Row>
+                    {!isDemo() && (
+                        <Row
+                            label="Demo data"
+                            hint="Add the sample accounts, categories, budgets and transactions from the demo"
+                        >
+                            <Button
+                                variant="default"
+                                loading={seedingDemo}
+                                disabled={!snapshot}
+                                onClick={loadDemoData}
+                            >
+                                Add demo data
+                            </Button>
+                        </Row>
+                    )}
                 </Section>
             </div>
         </div>
