@@ -5,11 +5,7 @@ import Tag from "../ui/Tag.jsx";
 import { Plus } from "@gravity-ui/icons";
 import { useStore } from "../store.js";
 import { orderedGroups, categoriesByGroup } from "../categoryOrder.js";
-import {
-    CategoryEditDialog,
-    CategoryMergeDialog,
-    CategoryDeleteDialog,
-} from "../components/CategoryDialogs.jsx";
+import { CategoryEditDialog, CategoryDeleteDialog } from "../components/CategoryDialogs.jsx";
 import { GroupEditDialog, GroupDeleteDialog } from "../components/GroupDialogs.jsx";
 import "./categories.css";
 
@@ -356,10 +352,6 @@ export default function CategoriesPage() {
                     ),
         },
         {
-            text: "Merge into…",
-            action: () => setDialog({ type: "cat-merge", category: c }),
-        },
-        {
             text: "Delete",
             theme: "danger",
             action: () => setDialog({ type: "cat-delete", category: c }),
@@ -497,14 +489,6 @@ export default function CategoriesPage() {
                 <CategoryEditDialog
                     category={dialog.category}
                     groups={groups}
-                    onClose={() => setDialog(null)}
-                />
-            )}
-            {dialog?.type === "cat-merge" && (
-                <CategoryMergeDialog
-                    category={dialog.category}
-                    categories={snapshot.categories}
-                    txCount={txCountByCat.get(dialog.category.id) ?? 0}
                     onClose={() => setDialog(null)}
                 />
             )}

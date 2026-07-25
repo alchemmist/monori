@@ -75,8 +75,8 @@ export function CategoryEditDialog({ category, groups, onClose }) {
     );
 }
 
-export function CategoryMergeDialog({ category, categories, txCount, onClose }) {
-    const { mergeCategory, snapshot, notify } = useStore();
+export function CategoryDeleteDialog({ category, categories, txCount, onClose }) {
+    const { deleteCategory, mergeCategory, snapshot, notify } = useStore();
     const [target, setTarget] = useState("");
     const [busy, setBusy] = useState(false);
     const others = useMemo(
@@ -85,8 +85,8 @@ export function CategoryMergeDialog({ category, categories, txCount, onClose }) 
     );
     const into = others.find((c) => String(c.id) === target);
 
-    // only same-kind groups are offered: merging an income category into an
-    // expense one would silently flip the sign of its whole history
+    // only same-kind groups are offered: moving an income category's history into
+    // an expense one would silently flip its sign, and the server refuses it
     const sections = useMemo(() => {
         const groups = orderedGroups(snapshot.groups);
         const kind = groups.find((g) => g.id === category.groupId)?.kind;
@@ -105,7 +105,7 @@ export function CategoryMergeDialog({ category, categories, txCount, onClose }) 
             .filter((s) => s.options.length);
     }, [snapshot.groups, others, category.groupId]);
 
-    // the merge is irreversible, so the dialog spells out what it will do to the
+    // the delete is irreversible, so the dialog spells out what it will do to the
     // target rather than asking for a blind confirmation
     const addedKeywords = useMemo(() => {
         if (!into) return [];
@@ -132,78 +132,13 @@ export function CategoryMergeDialog({ category, categories, txCount, onClose }) 
         [snapshot.budgets, category.id],
     );
 
-    const apply = async () => {
-        if (!into) return;
-        setBusy(true);
-        try {
-            await mergeCategory(category.id, into.id);
-            onClose();
-        } catch (e) {
-            notify({ title: "Failed to merge category", theme: "danger", content: String(e) });
-        } finally {
-            setBusy(false);
-        }
-    };
-
-    return (
-        <AppDialog
-            title={`Merge ${category.name}`}
-            onClose={onClose}
-            applyText="Merge"
-            onApply={apply}
-            applyLoading={busy}
-            applyDisabled={!into}
-        >
-            <div style={{ display: "flex", flexDirection: "column", gap: 12, paddingTop: 4 }}>
-                <FSelect
-                    label="Merge into"
-                    value={target}
-                    onChange={(v) => setTarget(v ?? "")}
-                    data={sections}
-                    placeholder="Pick a category"
-                    searchable
-                />
-                {into && (
-                    <ul className="cat-merge-plan">
-                        <li>
-                            {txCount === 1
-                                ? `1 transaction moves to ${into.name}`
-                                : `${txCount} transactions move to ${into.name}`}
-                        </li>
-                        <li>
-                            {addedKeywords.length
-                                ? `Keywords added to ${into.name}: ${addedKeywords.join(", ")}`
-                                : "No new keywords: the target already covers them"}
-                        </li>
-                        <li>
-                            {budgetMonths
-                                ? `Budgets for ${budgetMonths} month${budgetMonths === 1 ? "" : "s"} are added to the target's plan`
-                                : "No budgets to carry over"}
-                        </li>
-                        <li>
-                            <b>{category.name}</b> disappears. This cannot be undone.
-                        </li>
-                    </ul>
-                )}
-                <Txt tone="secondary" caption>
-                    Merging is for duplicates — two categories that mean the same thing. Nothing is
-                    deleted except the empty shell of the source.
-                </Txt>
-            </div>
-        </AppDialog>
-    );
-}
-
-export function CategoryDeleteDialog({ category, categories, txCount, onClose }) {
-    const { deleteCategory, notify } = useStore();
-    const [target, setTarget] = useState("");
-    const [busy, setBusy] = useState(false);
-    const others = categories.filter((c) => c.id !== category.id);
-
+    // picking a target folds this category into that one — the endpoint that
+    // carries the keywords and the monthly plan across with the spending
     const apply = async () => {
         setBusy(true);
         try {
-            await deleteCategory(category.id, target ? +target : undefined);
+            if (into) await mergeCategory(category.id, into.id);
+            else await deleteCategory(category.id);
             onClose();
         } catch (e) {
             notify({ title: "Failed to delete category", theme: "danger", content: String(e) });
@@ -225,22 +160,57 @@ export function CategoryDeleteDialog({ category, categories, txCount, onClose })
                 <Txt block>
                     {txCount > 0
                         ? `${txCount} transactions use this category. Where should they go?`
-                        : "No transactions use this category. Its budget history will be removed."}
+                        : "No transactions use this category."}
                 </Txt>
-                {txCount > 0 && (
-                    <FSelect
-                        label="Move to"
-                        value={target}
-                        onChange={(v) => setTarget(v ?? "")}
-                        data={[
-                            { value: "", label: "Leave uncategorized" },
-                            ...others.map((c) => ({ value: String(c.id), label: c.name })),
-                        ]}
-                    />
-                )}
+                <FSelect
+                    label="Move to"
+                    value={target}
+                    onChange={(v) => setTarget(v ?? "")}
+                    data={[{ value: "", label: "Leave uncategorized" }, ...sections]}
+                    searchable
+                />
+                <ul className="cat-delete-plan">
+                    {into ? (
+                        <>
+                            <li>
+                                {txCount === 1
+                                    ? `1 transaction moves to ${into.name}`
+                                    : `${txCount} transactions move to ${into.name}`}
+                            </li>
+                            <li>
+                                {addedKeywords.length
+                                    ? `Keywords added to ${into.name}: ${addedKeywords.join(", ")}`
+                                    : "No new keywords: the target already covers them"}
+                            </li>
+                            <li>
+                                {budgetMonths
+                                    ? `Budgets for ${budgetMonths} month${budgetMonths === 1 ? "" : "s"} are added to the target's plan`
+                                    : "No budgets to carry over"}
+                            </li>
+                        </>
+                    ) : (
+                        <>
+                            {txCount > 0 && (
+                                <li>
+                                    {txCount === 1
+                                        ? "1 transaction is left without a category"
+                                        : `${txCount} transactions are left without a category`}
+                                </li>
+                            )}
+                            <li>
+                                {budgetMonths
+                                    ? `Budgets for ${budgetMonths} month${budgetMonths === 1 ? "" : "s"} are removed`
+                                    : "No budget history to remove"}
+                            </li>
+                        </>
+                    )}
+                    <li>
+                        <b>{category.name}</b> disappears. This cannot be undone.
+                    </li>
+                </ul>
                 <Txt tone="secondary" caption>
-                    Nothing else is affected: other categories, budgets and years stay exactly as
-                    they are.
+                    Only categories of the same kind are offered — moving income history into an
+                    expense category would flip its sign.
                 </Txt>
             </div>
         </AppDialog>

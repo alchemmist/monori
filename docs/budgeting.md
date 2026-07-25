@@ -89,16 +89,19 @@ From the budget grid you can:
   [Importing](importing.md)),
 - **archive** a category to hide it from day-to-day use while keeping its history,
 - **reorder** groups and categories,
-- **delete** a category, optionally reassigning its transactions to another one
-  first — its budgets are removed with it,
-- **merge** one category into another, for when the same thing ended up split over
-  two names ("Cafe" and "Coffee"). Its transactions move across, the two keyword
-  sets are unioned so auto-categorization keeps working, and the empty source
-  disappears. Monthly budgets follow the spending: a month both categories
-  planned is summed, a month only the source planned is carried over as it is.
-  Only categories of the same kind can be merged — income with income, expense
-  with expense — because a cross-kind merge would flip the sign of the whole
-  moved history. The dialog spells out what will happen before you confirm; a
-  merge cannot be undone.
+- **delete** a category. The dialog always asks where its transactions should go,
+  and the answer decides what kind of delete it is:
+  - **into another category** — for when the same thing ended up split over two
+    names ("Cafe" and "Coffee"). The transactions move across, the two keyword
+    sets are unioned so auto-categorization keeps working, and the monthly
+    budgets follow the spending: a month both categories planned is summed, a
+    month only the deleted one planned is carried over as it is. Only categories
+    of the same kind are offered — income with income, expense with expense —
+    because moving history across the line would flip its sign.
+  - **leave uncategorized** — for a category that should never have existed. The
+    transactions stay, without a category, and the budget history goes with it.
+
+  Either way the dialog spells out what will happen before you confirm, and
+  neither can be undone.
 
 A group can only be deleted once it has no categories.

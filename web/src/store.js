@@ -408,8 +408,8 @@ export const useStore = create((set, get) => ({
         set({ snapshot: { ...snapshot, categories } });
     },
 
-    async deleteCategory(id, reassignTo) {
-        if (!isDemo()) await api.deleteCategory(id, reassignTo);
+    async deleteCategory(id) {
+        if (!isDemo()) await api.deleteCategory(id);
         const { snapshot } = get();
         set({
             snapshot: {
@@ -417,7 +417,7 @@ export const useStore = create((set, get) => ({
                 categories: snapshot.categories.filter((c) => c.id !== id),
                 budgets: snapshot.budgets.filter((b) => b.categoryId !== id),
                 transactions: snapshot.transactions.map((t) =>
-                    t.categoryId === id ? { ...t, categoryId: reassignTo ?? null } : t,
+                    t.categoryId === id ? { ...t, categoryId: null } : t,
                 ),
             },
         });

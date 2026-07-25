@@ -140,7 +140,7 @@ importer.
 | -------- | ------ | ------ | ------- |
 | POST | `/api/categories` | `{name, groupId, keywords?}` | `400` unknown group, `409` duplicate name. |
 | PATCH | `/api/categories/{id}` | `{name?, groupId?, keywords?, archived?}` | Partial update. |
-| DELETE | `/api/categories/{id}` | — | Query `?reassignTo=<id>` moves its transactions first; budgets cascade-delete. |
+| DELETE | `/api/categories/{id}` | — | Leaves its transactions uncategorized; budgets cascade-delete. To move them somewhere instead, use `/merge`. |
 | POST | `/api/categories/reorder` | `{ids: [...]}` | Must list every category exactly once. |
 | POST | `/api/categories/{id}/merge` | `{into: <id>}` | Moves transactions to the target, unions keywords, sums budgets month by month, deletes the source. `400` when the two sit in groups of a different kind. |
 

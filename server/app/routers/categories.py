@@ -115,14 +115,15 @@ def patch_category(cat_id: int, patch: CategoryPatch, user: Annotated[dict, Depe
 
 
 @router.delete("/{cat_id}")
-def delete_category(
-    cat_id: int,
-    user: Annotated[dict, Depends(current_user)],
-    reassignTo: int | None = None,
-):
+def delete_category(cat_id: int, user: Annotated[dict, Depends(current_user)]):
     """
-    Deleting a category never shifts anything: transactions are reassigned
-    (or left uncategorized), its budgets are removed by FK cascade.
+    Deleting a category never shifts anything: its transactions are left
+    uncategorized and its budgets are removed by FK cascade.
+
+    Moving the transactions somewhere instead is what /merge is for. Delete used
+    to take a reassignTo, which was the same move without the same-kind check
+    merge enforces — so the income/expense invariant was one API call from being
+    bypassed. There is now exactly one path that moves transactions.
     """
     uid = user["id"]
     c = conn()
@@ -130,12 +131,6 @@ def delete_category(
         c.execute("PRAGMA foreign_keys=ON")
         if not _owned_category(c, cat_id, uid):
             raise HTTPException(404, "category not found")
-        if reassignTo is not None:
-            if not _owned_category(c, reassignTo, uid):
-                raise HTTPException(400, "unknown reassign target")
-            c.execute(
-                "UPDATE transactions SET category_id=? WHERE category_id=?", (reassignTo, cat_id)
-            )
         c.execute("DELETE FROM categories WHERE id=?", (cat_id,))
         c.commit()
         return {"ok": True}
