@@ -66,7 +66,7 @@ export default function SettingsPage({ theme, onToggleTheme, onMigrate }) {
         if (!snapshot) return;
         setSeedingDemo(true);
         try {
-            const { imported, skipped, transfers } = await seedDemoData(snapshot);
+            const { imported, skipped, transfers } = await seedDemoData();
             await load();
             const added = imported + transfers;
             notify({
@@ -79,6 +79,7 @@ export default function SettingsPage({ theme, onToggleTheme, onMigrate }) {
                     : undefined,
             });
         } catch (e) {
+            await load();
             notify({ title: "Could not add demo data", theme: "danger", content: String(e) });
         } finally {
             setSeedingDemo(false);

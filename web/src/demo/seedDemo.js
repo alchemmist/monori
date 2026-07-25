@@ -7,7 +7,10 @@ import { demoSnapshot } from "./demoData.js";
  * second run reuses them), transactions go through the import endpoint whose
  * hash dedup makes re-runs skip everything already there.
  */
-export async function seedDemoData(snapshot) {
+export async function seedDemoData() {
+    // Always start from the server's current state. A previous attempt can
+    // have created accounts before failing later in the import.
+    const snapshot = await api.snapshot({ light: true });
     const accId = new Map();
     const accByName = new Map(snapshot.accounts.map((a) => [a.name, a]));
     for (const a of demoSnapshot.accounts) {
