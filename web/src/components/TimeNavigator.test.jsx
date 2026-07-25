@@ -12,12 +12,18 @@ const items = [
 
 describe("TimeNavigator", () => {
     beforeEach(() => {
-        Object.defineProperty(HTMLElement.prototype, "clientWidth", { configurable: true, get: () => 1200 });
+        Object.defineProperty(HTMLElement.prototype, "clientWidth", {
+            configurable: true,
+            get: () => 1200,
+        });
         SVGElement.prototype.setPointerCapture = () => {};
     });
     it("draws the history, year marks and selected window", () => {
         renderUI(<TimeNavigator items={items} range={[1, 3]} onChange={vi.fn()} />);
-        expect(document.querySelector(".timenav__area")).toHaveAttribute("d", expect.stringContaining("C"));
+        expect(document.querySelector(".timenav__area")).toHaveAttribute(
+            "d",
+            expect.stringContaining("C"),
+        );
         expect(screen.getByText("2026")).toBeInTheDocument();
         expect(document.querySelector(".timenav__window")).toHaveAttribute("width", "720");
     });
@@ -31,7 +37,10 @@ describe("TimeNavigator", () => {
         fireEvent.pointerMove(svg, { pointerId: 1, clientX: 350 });
         expect(onChange).toHaveBeenLastCalledWith([2, 4]);
         fireEvent.pointerUp(svg, { pointerId: 1 });
-        fireEvent.pointerDown(document.querySelectorAll(".timenav__handle")[0], { pointerId: 2, clientX: 300 });
+        fireEvent.pointerDown(document.querySelectorAll(".timenav__handle")[0], {
+            pointerId: 2,
+            clientX: 300,
+        });
         fireEvent.pointerMove(svg, { pointerId: 2, clientX: 700 });
         expect(onChange).toHaveBeenLastCalledWith([1, 3]);
     });

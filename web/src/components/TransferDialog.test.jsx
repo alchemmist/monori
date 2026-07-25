@@ -15,7 +15,8 @@ describe("TransferDialog", () => {
         seed({ accounts });
     });
 
-    const renderDialog = (props = {}) => renderUI(<TransferDialog accounts={accounts} onClose={vi.fn()} {...props} />);
+    const renderDialog = (props = {}) =>
+        renderUI(<TransferDialog accounts={accounts} onClose={vi.fn()} {...props} />);
     const fillAmount = async (user, amount = "12.50") => {
         await user.type(screen.getByLabelText("Amount"), amount);
     };
@@ -35,10 +36,15 @@ describe("TransferDialog", () => {
         await fillAmount(user);
         await user.type(screen.getByLabelText("Comment"), "  ATM  ");
         await user.click(screen.getByRole("button", { name: "Transfer" }));
-        await waitFor(() => expect(create).toHaveBeenCalledWith({
-            fromAccountId: 1, toAccountId: 2, amount: 1250,
-            date: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T12:00:00$/), comment: "ATM",
-        }));
+        await waitFor(() =>
+            expect(create).toHaveBeenCalledWith({
+                fromAccountId: 1,
+                toAccountId: 2,
+                amount: 1250,
+                date: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T12:00:00$/),
+                comment: "ATM",
+            }),
+        );
         expect(notify).toHaveBeenCalledWith({ title: "Transfer created", theme: "success" });
         expect(close).toHaveBeenCalledOnce();
     });
@@ -69,9 +75,13 @@ describe("TransferDialog", () => {
         const { user } = renderDialog({ onClose: close });
         await fillAmount(user);
         await user.click(screen.getByRole("button", { name: "Transfer" }));
-        await waitFor(() => expect(notify).toHaveBeenCalledWith({
-            title: "Failed to create transfer", theme: "danger", content: "Error: offline",
-        }));
+        await waitFor(() =>
+            expect(notify).toHaveBeenCalledWith({
+                title: "Failed to create transfer",
+                theme: "danger",
+                content: "Error: offline",
+            }),
+        );
         expect(close).not.toHaveBeenCalled();
     });
 

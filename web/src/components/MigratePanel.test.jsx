@@ -30,15 +30,13 @@ describe("MigratePanel", () => {
             accountMarkers: ["Main", "Savings"],
             budgetConflicts: 2,
         });
-        const commit = vi
-            .spyOn(api, "workbookCommit")
-            .mockResolvedValue({
-                inserted: 4,
-                skipped: 1,
-                groupsCreated: 2,
-                categoriesCreated: 3,
-                budgetsWritten: 5,
-            });
+        const commit = vi.spyOn(api, "workbookCommit").mockResolvedValue({
+            inserted: 4,
+            skipped: 1,
+            groupsCreated: 2,
+            categoriesCreated: 3,
+            budgetsWritten: 5,
+        });
         const load = vi.spyOn(useStore.getState(), "load").mockResolvedValue();
         const { container, user } = renderUI(<MigratePanel onClose={vi.fn()} />);
         fireEvent.change(container.querySelector('input[type="file"]'), {
@@ -76,15 +74,13 @@ describe("MigratePanel", () => {
             accountMarkers: ["Main"],
             budgetConflicts: 3,
         });
-        const commit = vi
-            .spyOn(api, "workbookCommit")
-            .mockResolvedValue({
-                inserted: 1,
-                skipped: 0,
-                groupsCreated: 0,
-                categoriesCreated: 0,
-                budgetsWritten: 1,
-            });
+        const commit = vi.spyOn(api, "workbookCommit").mockResolvedValue({
+            inserted: 1,
+            skipped: 0,
+            groupsCreated: 0,
+            categoriesCreated: 0,
+            budgetsWritten: 1,
+        });
         vi.spyOn(useStore.getState(), "load").mockResolvedValue();
         const { container, user } = renderUI(<MigratePanel onClose={vi.fn()} />);
         fireEvent.change(container.querySelector('input[type="file"]'), {

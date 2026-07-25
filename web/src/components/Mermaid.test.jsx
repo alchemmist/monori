@@ -16,7 +16,10 @@ describe("Mermaid", () => {
         useMermaidSvg.mockReturnValue({ svg: '<svg aria-label="chart"></svg>', failed: false });
         renderUI(<Mermaid chart="x" fullscreenHref="/diagram/x" />);
         expect(screen.getByRole("img")).toContainHTML("svg");
-        expect(screen.getByRole("link", { name: /full screen/i })).toHaveAttribute("href", "/diagram/x");
+        expect(screen.getByRole("link", { name: /full screen/i })).toHaveAttribute(
+            "href",
+            "/diagram/x",
+        );
     });
 
     it("falls back after an engine failure", () => {

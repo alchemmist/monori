@@ -55,15 +55,13 @@ describe("ConnectionDialog", () => {
         vi.spyOn(useStore.getState(), "syncConnection").mockResolvedValue({
             status: "awaiting_sms",
         });
-        const sms = vi
-            .spyOn(useStore.getState(), "submitConnectionSms")
-            .mockResolvedValue({
-                status: "connected",
-                inserted: 3,
-                skipped: 1,
-                dateFrom: "2026-07-01",
-                dateTo: "2026-07-02",
-            });
+        const sms = vi.spyOn(useStore.getState(), "submitConnectionSms").mockResolvedValue({
+            status: "connected",
+            inserted: 3,
+            skipped: 1,
+            dateFrom: "2026-07-01",
+            dateTo: "2026-07-02",
+        });
         const { user } = renderUI(<ConnectionDialog account={account} onClose={vi.fn()} />);
         await waitFor(() => expect(api.connectionsAvailable).toHaveBeenCalled());
         await user.type(screen.getByLabelText("Login"), "alice");

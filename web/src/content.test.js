@@ -72,7 +72,10 @@ describe("section navigation", () => {
 
     it("returns neighboring pages with edge sentinels", () => {
         expect(neighbors(SECTIONS[0].slug)).toMatchObject({ prev: null, next: SECTIONS[1] });
-        expect(neighbors(SECTIONS.at(-1).slug)).toMatchObject({ prev: SECTIONS.at(-2), next: null });
+        expect(neighbors(SECTIONS.at(-1).slug)).toMatchObject({
+            prev: SECTIONS.at(-2),
+            next: null,
+        });
         expect(neighbors("missing")).toEqual({ prev: null, next: null });
     });
 });

@@ -3,8 +3,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { fireEvent, renderUI, screen } from "../test/render.jsx";
 
 vi.mock("../content.js", () => ({
-    sectionBySlug: (slug) =>
-        slug === "guide" ? { title: "Guide", body: "diagram source" } : null,
+    sectionBySlug: (slug) => (slug === "guide" ? { title: "Guide", body: "diagram source" } : null),
     mermaidCharts: (body) => (body ? ["first chart", "second chart"] : []),
 }));
 vi.mock("./useMermaidSvg.js", () => ({
