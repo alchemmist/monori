@@ -1,19 +1,39 @@
 import { api } from "../api.js";
 import { demoSnapshot } from "./demoData.js";
 
+const seedAccountRef = (id) => `monori-demo:${id}`;
+
+function uniqueDemoName(accounts, name) {
+    const names = new Set(accounts.map((a) => a.name));
+    if (!names.has(name)) return name;
+    for (let n = 2; ; n += 1) {
+        const candidate = `${name} (Demo ${n})`;
+        if (!names.has(candidate)) return candidate;
+    }
+}
+
+async function allTransactions() {
+    const rows = [];
+    for (;;) {
+        const page = await api.transactions({ limit: 1000, offset: rows.length });
+        rows.push(...page.rows);
+        if (rows.length >= page.total || page.rows.length === 0) return rows;
+    }
+}
+
 /**
  * Replay the bundled /demo dataset into the signed-in account through the
- * regular API: accounts, groups and categories are matched by name (so a
- * second run reuses them), transactions go through the import endpoint whose
- * hash dedup makes re-runs skip everything already there.
+ * regular API. Accounts are marked in their bank reference so retries can
+ * reuse only accounts created by this flow; transactions use import hashes.
  */
 export async function seedDemoData() {
     // Always start from the server's current state. A previous attempt can
     // have created accounts before failing later in the import.
     const snapshot = await api.snapshot({ light: true });
     const accId = new Map();
-    const accByName = new Map(snapshot.accounts.map((a) => [a.name, a]));
+    const accBySeedRef = new Map(snapshot.accounts.map((a) => [a.bankRef, a]));
     for (const a of demoSnapshot.accounts) {
+        const bankRef = seedAccountRef(a.id);
         const props = {
             type: a.type,
             icon: a.icon,
@@ -21,13 +41,17 @@ export async function seedDemoData() {
             currency: a.currency,
             openingBalance: a.openingBalance,
             openingDate: a.openingDate,
+            bankRef,
         };
-        const existing = accByName.get(a.name);
+        const existing = accBySeedRef.get(bankRef);
         if (existing) {
             await api.patchAccount(existing.id, props);
             accId.set(a.id, existing.id);
         } else {
-            accId.set(a.id, (await api.createAccount({ name: a.name, ...props })).id);
+            const name = uniqueDemoName(snapshot.accounts, a.name);
+            const id = (await api.createAccount({ name, ...props })).id;
+            accId.set(a.id, id);
+            snapshot.accounts.push({ id, name, bankRef });
         }
     }
 
@@ -83,20 +107,35 @@ export async function seedDemoData() {
         skipped += res.skipped ?? 0;
     }
 
-    // transfer pairs are not deduped by the import hash, so only seed them on
-    // a run that actually imported something new
+    // Transfer pairs do not use import hashes. Match every pair independently
+    // so a retry repairs a partial run without duplicating completed transfers.
     let transfers = 0;
-    if (imported > 0) {
-        const txById = new Map(demoSnapshot.transactions.map((t) => [t.id, t]));
-        for (const tr of demoSnapshot.transfers) {
-            const inn = txById.get(tr.inTxId);
-            const out = txById.get(tr.outTxId);
+    const transferPairs = new Map();
+    for (const tx of demoSnapshot.transactions) {
+        if (!tx.transferId) continue;
+        const pair = transferPairs.get(tx.transferId) ?? {};
+        pair[tx.amount < 0 ? "out" : "inn"] = tx;
+        transferPairs.set(tx.transferId, pair);
+    }
+    const existing = await allTransactions();
+    for (const { out, inn } of transferPairs.values()) {
+        const fromAccountId = accId.get(out.accountId);
+        const toAccountId = accId.get(inn.accountId);
+        const exists = existing.some(
+            (t) =>
+                t.transferId &&
+                t.accountId === fromAccountId &&
+                t.amount === -inn.amount &&
+                t.date.slice(0, 10) === out.date &&
+                t.comment === (out.comment ?? ""),
+        );
+        if (!exists) {
             await api.createTransfer({
-                fromAccountId: accId.get(out.accountId),
-                toAccountId: accId.get(inn.accountId),
+                fromAccountId,
+                toAccountId,
                 amount: inn.amount,
                 date: `${inn.date}T12:00:00`,
-                comment: tr.note ?? "",
+                comment: out.comment ?? "",
             });
             transfers += 1;
         }

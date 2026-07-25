@@ -135,6 +135,11 @@ export const useStore = create((set, get) => ({
         // claimed before the await, so two overlapping loads (React StrictMode
         // remounts, a reload during a fill) leave only the last one filling
         const generation = (fillGeneration += 1);
+        // Do not briefly render a prior account's hidden ledger while the new
+        // snapshot is loading. The epoch also discards any old hidden request.
+        const reloadHidden = get().hiddenTx !== null;
+        hiddenEpoch += 1;
+        set({ hiddenTx: null });
         if (isDemo()) {
             const snapshot = structuredClone(demoSnapshot);
             set({
@@ -153,7 +158,7 @@ export const useStore = create((set, get) => ({
             set({ error: String(e), loading: false, txProgress: null });
             return;
         }
-        if (get().hiddenTx) get().loadHiddenTx();
+        if (reloadHidden) get().loadHiddenTx();
         get().fillTransactions(generation);
     },
 
