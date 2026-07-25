@@ -7,6 +7,7 @@ import datetime
 
 from ..importer import build_rules, categorize
 from ..ingest import commit_rows
+from .parser import account_slot
 
 
 def _now():
@@ -121,7 +122,7 @@ def _import_transactions(c, uid, transactions, mapping, category_ids):
     by_account: dict[int, list] = {}
     unmatched = set()
     for tx in transactions:
-        account_id = mapping[tx["marker"]]
+        account_id = mapping[account_slot(tx)]
         named = tx["monori_category"]
         if named:
             category_id = category_ids.get(named) or index.get(_norm(named))

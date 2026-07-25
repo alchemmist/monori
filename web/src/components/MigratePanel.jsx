@@ -21,9 +21,11 @@ export default function MigratePanel({ onClose }) {
     const [busy, setBusy] = useState(false);
     const [result, setResult] = useState(null);
 
-    const accountOptions = accounts
-        .filter((a) => !a.archived)
-        .map((a) => ({ value: String(a.id), label: a.name }));
+    const live = accounts.filter((a) => !a.archived);
+    const optionsIn = (currency) =>
+        live
+            .filter((a) => (a.currency || "RUB").toUpperCase() === currency)
+            .map((a) => ({ value: String(a.id), label: a.name }));
 
     const pick = async (picked) => {
         if (!picked) return;
@@ -42,13 +44,13 @@ export default function MigratePanel({ onClose }) {
         }
     };
 
-    const markers = preview?.accountMarkers ?? [];
-    const allMapped = markers.every((m) => mapping[m]);
+    const slots = preview?.accountSlots ?? [];
+    const allMapped = slots.every((s) => mapping[s.key]);
 
     const commit = async () => {
         setBusy(true);
         try {
-            const numeric = Object.fromEntries(markers.map((m) => [m, Number(mapping[m])]));
+            const numeric = Object.fromEntries(slots.map((s) => [s.key, Number(mapping[s.key])]));
             const r = await api.workbookCommit(file, numeric, budgetPolicy);
             setResult(r);
             await load();
@@ -111,22 +113,44 @@ export default function MigratePanel({ onClose }) {
                             {w}
                         </Txt>
                     ))}
-                    {markers.length > 0 && (
+                    {slots.length > 0 && (
                         <Txt tone="secondary" caption>
                             Missing an account? Collapse this tab with the arrow above, create it,
                             then come back — the file stays loaded.
                         </Txt>
                     )}
-                    {markers.map((m) => (
-                        <FSelect
-                            key={m || "(default)"}
-                            label={`Account for ${m || "unmarked rows"}`}
-                            placeholder="Pick an account"
-                            value={mapping[m] ?? null}
-                            onChange={(v) => setMapping((prev) => ({ ...prev, [m]: v }))}
-                            data={accountOptions}
-                        />
-                    ))}
+                    {slots.map((s) => {
+                        const data = optionsIn(s.currency);
+                        const who = s.marker || "unmarked rows";
+                        return (
+                            <div key={s.key}>
+                                <FSelect
+                                    label={
+                                        s.currency === "RUB"
+                                            ? `Account for ${who}`
+                                            : `Account for ${who} · ${s.currency} (${s.transactions} rows)`
+                                    }
+                                    placeholder={
+                                        data.length
+                                            ? "Pick an account"
+                                            : `No ${s.currency} account yet — create one`
+                                    }
+                                    value={mapping[s.key] ?? null}
+                                    onChange={(v) =>
+                                        setMapping((prev) => ({ ...prev, [s.key]: v }))
+                                    }
+                                    data={data}
+                                />
+                                {data.length === 0 && (
+                                    <Txt tone="danger" caption>
+                                        These rows are in {s.currency}. Create an account held in{" "}
+                                        {s.currency} to import them — on an account in another
+                                        currency the amounts would be recorded at face value.
+                                    </Txt>
+                                )}
+                            </div>
+                        );
+                    })}
                     {preview.budgetConflicts > 0 && (
                         <Radio.Group
                             label={`${preview.budgetConflicts} budget cells already exist`}

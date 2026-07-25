@@ -5,11 +5,10 @@ import pytest
 from openpyxl import Workbook
 
 from app.workbook import spec
-from app.workbook.importer import parse_workbook
-from app.workbook.template_importer import (
+from app.workbook.parser import (
     MONTH_ABBREVS,
-    RU_HEADERS,
-    TemplateError,
+    TX_ALIASES,
+    WorkbookError,
     _find_layout,
     _kop,
     _last_day,
@@ -25,12 +24,13 @@ from app.workbook.template_importer import (
     _summary_value,
     _synthetic,
     _tx_header_index,
-    is_template_transactions_header,
-    looks_like_template,
-    parse_template_workbook,
+    parse_workbook,
 )
 
-TX_HEADER = list(RU_HEADERS.values())
+TX_HEADER = [
+    TX_ALIASES[f][0]
+    for f in ("date", "card", "status", "amount", "currency", "bank_category", "mcc", "description")
+]
 
 
 def _write_year(
@@ -163,7 +163,9 @@ def test_month_num_matches_ru_and_en_and_rejects():
 def test_parse_dt_variants():
     assert _parse_dt(datetime.datetime(2025, 1, 5, 10)) == datetime.datetime(2025, 1, 5, 10)
     assert _parse_dt(datetime.date(2025, 1, 5)) == datetime.datetime(2025, 1, 5)
-    assert _parse_dt("2025-01-05") is None
+    assert _parse_dt("2025-01-05") == datetime.datetime(2025, 1, 5)
+    assert _parse_dt("05.01.2025 10:00:00") == datetime.datetime(2025, 1, 5, 10)
+    assert _parse_dt("garbage") is None
     assert _parse_dt(None) is None
 
 
@@ -189,30 +191,6 @@ def test_synthetic_shape():
 
 
 # --- detection ------------------------------------------------------------
-
-
-def test_is_template_header_detects_russian_status():
-    assert is_template_transactions_header(["Статус", "Сумма операции"]) is True
-    assert is_template_transactions_header(["Status", "Статус"]) is False
-    assert is_template_transactions_header(["Дата операции"]) is False
-
-
-def test_looks_like_template_true_and_false():
-    wb = Workbook()
-    wb.remove(wb.active)
-    _tx_sheet(wb, [])
-    assert looks_like_template(_save(wb)) is True
-
-    export = Workbook()
-    export.active.title = spec.SHEET_TRANSACTIONS
-    export.active.append(["Дата операции", "Status", "Сумма операции"])
-    assert looks_like_template(_save(export)) is False
-
-    assert looks_like_template(b"not a workbook") is False
-
-    no_tx = Workbook()
-    no_tx.active.title = "Something"
-    assert looks_like_template(_save(no_tx)) is False
 
 
 # --- layout & sections ----------------------------------------------------
@@ -259,8 +237,10 @@ def test_find_layout_label_and_month_fallbacks():
     for c, v in ((2, "Budgeted"), (3, "Outflows"), (4, "Balance"), (6, "Budgeted"), (8, "Balance")):
         ws.cell(row=5, column=c, value=v)
     ws.cell(row=5, column=7, value="Outflows")
+    ws.cell(row=6, column=1, value="▼Daily")
+    ws.cell(row=7, column=1, value="Groceries")
     layout = _find_layout(ws)
-    assert layout["label_col"] == 3
+    assert layout["label_col"] == 1
     assert layout["start_month"] == 1
 
 
@@ -339,13 +319,13 @@ def test_parse_transactions_empty_and_missing_columns():
     empty.remove(empty.active)
     empty.create_sheet(spec.SHEET_TRANSACTIONS)
     ro = load_workbook(BytesIO(_save(empty)), read_only=True, data_only=True)
-    with pytest.raises(TemplateError, match="Transactions sheet is empty"):
+    with pytest.raises(WorkbookError, match="Transactions sheet is empty"):
         _parse_transactions(ro[spec.SHEET_TRANSACTIONS], [], [])
 
     bad = Workbook()
     ws = bad.create_sheet(spec.SHEET_TRANSACTIONS)
     ws.append(["Дата операции", "Статус"])
-    with pytest.raises(TemplateError, match="missing required columns"):
+    with pytest.raises(WorkbookError, match="missing required columns"):
         _parse_transactions(ws, [], [])
 
 
@@ -371,9 +351,15 @@ def test_parse_transactions_dedup_status_currency_and_category():
     assert first["bank_category"] == "Super"
     assert first["mcc"] == "5411"
     assert errors == [{"row": 6, "error": "unparseable date or amount"}]
-    assert "Transactions: 1 duplicated rows collapsed" in warnings
+    assert (
+        "Transactions: 1 rows identical in date, amount, description and card — kept once"
+        in warnings
+    )
     assert "Transactions: 1 non-OK rows skipped" in warnings
-    assert "Transactions: 1 non-RUB rows imported with their face value" in warnings
+    assert [r["currency"] for r in rows] == ["RUB", "USD"]
+    assert "Transactions: 1 rows in USD — they need an account held in USD to land on" in (
+        warnings
+    )
 
 
 def test_split_operation_keeps_both_parts_with_their_own_amounts():
@@ -463,7 +449,10 @@ def test_parse_transactions_pay_amount_fallback_and_blankish_rows():
     assert rows[0]["monori_category"] == "Income"
     assert rows[1]["monori_category"] == "Groceries"
     assert errors == [{"row": 6, "error": "unparseable date or amount"}]
-    assert "Transactions: 1 non-RUB rows imported with their face value" in warnings
+    assert [r["currency"] for r in rows] == ["RUB", "RUB", "USD"]
+    assert "Transactions: 1 rows in USD — they need an account held in USD to land on" in (
+        warnings
+    )
 
 
 def test_parse_keywords_reads_side_table():
@@ -517,13 +506,13 @@ def _live_year_wb():
 
 
 def test_live_year_keeps_its_rows_and_invents_nothing():
-    parsed = parse_template_workbook(_save(_live_year_wb()))
+    parsed = parse_workbook(_save(_live_year_wb()))
 
     assert parsed["groups"] == [
-        {"name": "Inflow", "sort": 0, "kind": "income"},
-        {"name": "Daily", "sort": 1, "kind": "expense"},
+        {"name": "Daily", "sort": 0, "kind": "expense"},
+        {"name": "Inflow", "sort": 1, "kind": "income"},
     ]
-    assert [c["name"] for c in parsed["categories"]] == ["Income", "Groceries", "Salary"]
+    assert [c["name"] for c in parsed["categories"]] == ["Groceries", "Salary", "Income"]
 
     budgets = {(b["category"], b["year"], b["month"]): b["amount"] for b in parsed["budgets"]}
     assert budgets == {("Groceries", 2025, 1): 100000, ("Groceries", 2025, 2): 100000}
@@ -534,18 +523,16 @@ def test_live_year_keeps_its_rows_and_invents_nothing():
     assert all(t["marker"] for t in parsed["transactions"])
     assert not [t for t in parsed["transactions"] if t["date"].endswith("T12:00:00")]
 
-    assert (
-        "reconciliation: 3 totals in the sheet disagree with the rows of the same month"
-        " — the rows were kept as they are and nothing was invented" in parsed["warnings"]
+    assert any(
+        w.startswith("reconciliation: in 3 category-months") and "the rows win" in w
+        for w in parsed["warnings"]
     )
-    assert "verify: available 2025-01 differs by 1100.00" in parsed["warnings"]
+    assert any(
+        w.startswith("verify: the sheet's own Available differs") and "1,100.00 (2025-01)" in w
+        for w in parsed["warnings"]
+    )
     assert "2019: unrecognized year sheet layout, ignored" in parsed["warnings"]
     assert parsed["errors"] == []
-
-
-def test_parse_workbook_dispatches_to_template_parser():
-    parsed = parse_workbook(_save(_live_year_wb()))
-    assert [c["name"] for c in parsed["categories"]] == ["Income", "Groceries", "Salary"]
 
 
 def test_archive_history_and_seam_carry():
@@ -573,14 +560,14 @@ def test_archive_history_and_seam_carry():
         rows=[("▼Daily", None), ("Groceries", {1: (None, None, 800)})],
     )
 
-    parsed = parse_template_workbook(_save(wb))
+    parsed = parse_workbook(_save(wb))
     synth = {(t["description"], t["date"]): t for t in parsed["transactions"]}
     assert synth[("Income", "2024-01-31T12:00:00")]["amount"] == 10000
     assert synth[("Groceries", "2024-01-31T12:00:00")]["amount"] == 50000
     assert synth[("Groceries", "2024-12-31T12:00:00")]["amount"] == 30000
     assert len(parsed["transactions"]) == 3
 
-    assert "history: 2 synthetic transactions rebuilt from archive sheets" in parsed["warnings"]
+    assert any(w.startswith("history: 2 transactions stand in for") for w in parsed["warnings"])
     assert "seam: 1 carry corrections at 2024-12" in parsed["warnings"]
 
 
@@ -594,7 +581,7 @@ def test_outflow_fallback_when_balance_cell_missing():
         start_token="ЯНВ 2025",
         rows=[("▼Daily", None), ("Groceries", {1: (None, None, 100), 2: (None, 200, None)})],
     )
-    parsed = parse_template_workbook(_save(wb))
+    parsed = parse_workbook(_save(wb))
     # (description, date) keys are unique here — pin cardinality so a collision
     # in a future change can't silently drop a row from the dict
     assert len(parsed["transactions"]) == 2
@@ -632,13 +619,13 @@ def test_dead_category_and_available_seed_at_seam():
         rows=[("▼Daily", None), ("Groceries", {1: (None, None, 800)})],
         seed=200,
     )
-    parsed = parse_template_workbook(_save(wb))
+    parsed = parse_workbook(_save(wb))
     synth = {(t["description"], t["date"]): t for t in parsed["transactions"]}
     assert len(synth) == len(parsed["transactions"])  # keys unique, nothing overwritten
     assert synth[("OldPhone", "2024-01-31T12:00:00")]["amount"] == 30000
     assert synth[("OldPhone", "2024-12-31T12:00:00")]["amount"] == -30000  # dead category zeroed
     assert synth[("Income", "2024-12-31T12:00:00")]["amount"] == 20000  # available seed
-    assert "history: 2 synthetic transactions rebuilt from archive sheets" in parsed["warnings"]
+    assert any(w.startswith("history: 2 transactions stand in for") for w in parsed["warnings"])
     assert "seam: 3 carry corrections at 2024-12" in parsed["warnings"]
 
 
@@ -674,32 +661,18 @@ def test_available_seed_excludes_seam_overspend():
         available={1: 100},
         header_row=8,
     )
-    parsed = parse_template_workbook(_save(wb))
+    parsed = parse_workbook(_save(wb))
     synth = {(t["description"], t["date"]): t for t in parsed["transactions"]}
     assert synth[("Groceries", "2024-12-31T12:00:00")]["amount"] == -60000
     assert synth[("Income", "2024-12-31T12:00:00")]["amount"] == 10000  # available seed
     assert not any(w.startswith("verify:") for w in parsed["warnings"])
 
 
-def test_no_live_year_sheets_raises():
-    wb = Workbook()
-    wb.remove(wb.active)
-    _tx_sheet(wb, [])
-    _write_year(
-        wb.create_sheet("2024_archive"),
-        months=[1, 2],
-        start_token="ЯНВ 2024",
-        rows=[("▼Daily", None), ("Groceries", {1: (None, None, 500)})],
-    )
-    with pytest.raises(TemplateError, match="no live year sheets found"):
-        parse_template_workbook(_save(wb))
-
-
 def test_missing_transactions_sheet_raises():
     wb = Workbook()
     wb.active.title = "2025"
-    with pytest.raises(TemplateError, match="missing required sheet: Transactions"):
-        parse_template_workbook(_save(wb))
+    with pytest.raises(WorkbookError, match="missing required sheet: Transactions"):
+        parse_workbook(_save(wb))
 
 
 def test_trailing_zero_cached_months_get_no_synthetic_rows():
@@ -717,7 +690,7 @@ def test_trailing_zero_cached_months_get_no_synthetic_rows():
         income={1: 5000},
         header_row=8,
     )
-    parsed = parse_template_workbook(_save(wb))
+    parsed = parse_workbook(_save(wb))
     assert all(t["date"] < "2025-02" for t in parsed["transactions"])
 
 
@@ -738,7 +711,7 @@ def test_month_with_rows_is_never_doubled_by_a_cached_total():
         income={1: 0},
         header_row=8,
     )
-    parsed = parse_template_workbook(_save(wb))
+    parsed = parse_workbook(_save(wb))
     assert [(t["date"], t["amount"]) for t in parsed["transactions"]] == [
         ("2025-01-26T00:00:00", -45000)
     ]
@@ -766,7 +739,7 @@ def test_uncategorized_trailing_tx_does_not_extend_reconciliation():
         income={1: 5000},
         header_row=8,
     )
-    parsed = parse_template_workbook(_save(wb))
+    parsed = parse_workbook(_save(wb))
     synth = [t for t in parsed["transactions"] if not t["marker"]]
     assert all(t["date"] < "2025-02" for t in synth)
 
@@ -780,13 +753,13 @@ def test_prepared_next_year_sheet_adds_no_future_rows():
         rows=[("▼Daily", None), ("Groceries", {1: (0, 0, 0), 2: (0, 0, 0)})],
         header_row=8,
     )
-    parsed = parse_template_workbook(_save(wb))
+    parsed = parse_workbook(_save(wb))
     assert max(t["date"] for t in parsed["transactions"]) < "2025-03"
 
 
 def test_parse_template_rejects_garbage_bytes():
-    with pytest.raises(TemplateError, match="not a readable .xlsx workbook"):
-        parse_template_workbook(b"nope")
+    with pytest.raises(WorkbookError, match="not a readable .xlsx workbook"):
+        parse_workbook(b"nope")
 
 
 def test_live_layout_locates_category_and_keywords_by_content():
@@ -838,7 +811,7 @@ def test_future_budgets_do_not_extend_reconciliation():
         income={1: 5000},
         header_row=8,
     )
-    parsed = parse_template_workbook(_save(wb))
+    parsed = parse_workbook(_save(wb))
     assert all(t["date"] < "2025-02" for t in parsed["transactions"])
     assert {(b["year"], b["month"]) for b in parsed["budgets"]} == {(2025, 1), (2025, 2)}
 

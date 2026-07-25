@@ -44,6 +44,7 @@ def _parsed(**over):
                 "comment": "",
                 "monori_category": "Groceries",
                 "marker": "",
+                "currency": "RUB",
             },
             {
                 "date": "2026-01-06T11:00:00",
@@ -54,6 +55,7 @@ def _parsed(**over):
                 "comment": "",
                 "monori_category": "",
                 "marker": "",
+                "currency": "RUB",
             },
         ],
         "budgets": [
@@ -69,7 +71,7 @@ def _parsed(**over):
 
 def test_apply_creates_groups_categories_transactions_budgets(tmp_path):
     c, uid, acct = _db(tmp_path)
-    result = apply_workbook(c, uid, _parsed(), {"": acct})
+    result = apply_workbook(c, uid, _parsed(), {"RUB:": acct})
     c.commit()
     assert result["groupsCreated"] == 2
     assert result["categoriesCreated"] == 3
@@ -93,7 +95,7 @@ def test_apply_creates_groups_categories_transactions_budgets(tmp_path):
 
 def test_apply_categorizes_by_explicit_name_then_keywords(tmp_path):
     c, uid, acct = _db(tmp_path)
-    apply_workbook(c, uid, _parsed(), {"": acct})
+    apply_workbook(c, uid, _parsed(), {"RUB:": acct})
     c.commit()
     rows = list(
         c.execute(
@@ -122,7 +124,7 @@ def test_named_category_outside_the_sheet_beats_keywords(tmp_path):
     # "lenta" would match the Groceries keyword; the row names Pets instead, and
     # Pets exists only in monori — never on the workbook's Categories sheet
     parsed["transactions"][1]["monori_category"] = " PETS "
-    result = apply_workbook(c, uid, parsed, {"": acct})
+    result = apply_workbook(c, uid, parsed, {"RUB:": acct})
     c.commit()
     assert result["warnings"] == []
     named = c.execute(
@@ -136,7 +138,7 @@ def test_unknown_named_category_is_left_uncategorized_not_guessed(tmp_path):
     c, uid, acct = _db(tmp_path)
     parsed = _parsed()
     parsed["transactions"][1]["monori_category"] = "Nowhere"
-    result = apply_workbook(c, uid, parsed, {"": acct})
+    result = apply_workbook(c, uid, parsed, {"RUB:": acct})
     c.commit()
     assert (
         c.execute(
@@ -160,7 +162,7 @@ def test_apply_reuses_existing_by_name_and_keeps_keywords(tmp_path):
         (gid,),
     )
     c.commit()
-    result = apply_workbook(c, uid, _parsed(), {"": acct})
+    result = apply_workbook(c, uid, _parsed(), {"RUB:": acct})
     c.commit()
     assert result["groupsCreated"] == 1
     assert result["categoriesCreated"] == 2
@@ -172,17 +174,17 @@ def test_apply_reuses_existing_by_name_and_keeps_keywords(tmp_path):
 
 def test_apply_budget_policies(tmp_path):
     c, uid, acct = _db(tmp_path)
-    apply_workbook(c, uid, _parsed(), {"": acct})
+    apply_workbook(c, uid, _parsed(), {"RUB:": acct})
     c.commit()
     cid = c.execute("SELECT id FROM categories WHERE name='Groceries'").fetchone()[0]
     c.execute("UPDATE budgets SET amount=777 WHERE category_id=?", (cid,))
     c.commit()
-    result = apply_workbook(c, uid, _parsed(), {"": acct}, budget_policy="skip")
+    result = apply_workbook(c, uid, _parsed(), {"RUB:": acct}, budget_policy="skip")
     c.commit()
     assert result["budgetsWritten"] == 0
     assert result["budgetsSkipped"] == 2
     assert c.execute("SELECT amount FROM budgets WHERE category_id=?", (cid,)).fetchone()[0] == 777
-    result = apply_workbook(c, uid, _parsed(), {"": acct}, budget_policy="overwrite")
+    result = apply_workbook(c, uid, _parsed(), {"RUB:": acct}, budget_policy="overwrite")
     c.commit()
     assert result["budgetsWritten"] == 1
     assert (
@@ -201,7 +203,7 @@ def test_apply_batches_per_account_with_source(tmp_path):
     second = c.execute("SELECT id FROM accounts WHERE name='Second'").fetchone()[0]
     parsed = _parsed()
     parsed["transactions"][1]["marker"] = "*2"
-    result = apply_workbook(c, uid, parsed, {"": acct, "*2": second})
+    result = apply_workbook(c, uid, parsed, {"RUB:": acct, "RUB:*2": second})
     c.commit()
     assert len(result["batches"]) == 2
     assert {b["accountId"] for b in result["batches"]} == {acct, second}
@@ -214,9 +216,9 @@ def test_apply_batches_per_account_with_source(tmp_path):
 
 def test_apply_is_idempotent_on_rerun(tmp_path):
     c, uid, acct = _db(tmp_path)
-    apply_workbook(c, uid, _parsed(), {"": acct})
+    apply_workbook(c, uid, _parsed(), {"RUB:": acct})
     c.commit()
-    result = apply_workbook(c, uid, _parsed(), {"": acct})
+    result = apply_workbook(c, uid, _parsed(), {"RUB:": acct})
     c.commit()
     assert result["inserted"] == 0
     assert result["skipped"] == 2
@@ -230,7 +232,7 @@ def test_budget_conflicts_counts_only_matching_cells(tmp_path):
     cells = _parsed()["budgets"]
     assert budget_conflicts(c, uid, cells) == 0
 
-    apply_workbook(c, uid, _parsed(), {"": acct})
+    apply_workbook(c, uid, _parsed(), {"RUB:": acct})
     c.commit()
     # Groceries 2026-01 now exists; the Ghost cell has no matching category.
     assert budget_conflicts(c, uid, cells) == 1
