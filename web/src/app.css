@@ -362,6 +362,12 @@
     }
 }
 
+/* a result grid needs room the 420px card cannot give; never narrower than the
+   default, and the 92vw cap above still keeps the app visible behind it */
+.ui-tab_wide {
+    width: max(420px, 60vw);
+}
+
 .ui-tab_collapsed {
     width: 34px;
 }

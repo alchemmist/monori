@@ -23,9 +23,19 @@ import {
  *  - onClose:    called when the user closes the tab
  *  - footer:     optional node rendered pinned to the bottom (actions)
  *  - defaultCollapsed: start collapsed (default false)
+ *  - wide:       take about 60% of the viewport instead of the default 420px,
+ *                for tabs that show tabular data (the SQL console)
  */
 
-export default function Tab({ title, strip, onClose, footer, defaultCollapsed = false, children }) {
+export default function Tab({
+    title,
+    strip,
+    onClose,
+    footer,
+    defaultCollapsed = false,
+    wide = false,
+    children,
+}) {
     const id = useId();
     const ref = useRef(null);
     const [collapsed, setCollapsed] = useState(defaultCollapsed);
@@ -63,7 +73,12 @@ export default function Tab({ title, strip, onClose, footer, defaultCollapsed = 
         return () => clearTimeout(t);
     }, [animating]);
 
-    const cls = ["ui-tab", collapsed && "ui-tab_collapsed", animating && "ui-tab_animating"]
+    const cls = [
+        "ui-tab",
+        wide && "ui-tab_wide",
+        collapsed && "ui-tab_collapsed",
+        animating && "ui-tab_animating",
+    ]
         .filter(Boolean)
         .join(" ");
 
