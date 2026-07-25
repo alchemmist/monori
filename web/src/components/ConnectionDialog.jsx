@@ -280,30 +280,28 @@ export default function ConnectionDialog({ account, connection, onClose }) {
                         {connection.lastSync ? fmtDate(connection.lastSync) : "never"}
                     </span>
                 </div>
-                {readyConnector ? (
-                    readyConnector.accountParams.map((p) => (
-                        <FTextInput
-                            key={p.name}
-                            label={p.label}
-                            placeholder={p.help}
-                            title={p.help}
-                            value={accountFields[p.name] ?? ""}
-                            onChange={(e) =>
-                                setAccountFields((prev) => ({
-                                    ...prev,
-                                    [p.name]: e.target.value,
-                                }))
-                            }
-                        />
-                    ))
-                ) : (
-                    account.bankRef && (
-                        <div style={{ display: "flex", justifyContent: "space-between" }}>
-                            <Txt tone="secondary">Bank account</Txt>
-                            <span className="num">{account.bankRef}</span>
-                        </div>
-                    )
-                )}
+                {readyConnector
+                    ? readyConnector.accountParams.map((p) => (
+                          <FTextInput
+                              key={p.name}
+                              label={p.label}
+                              placeholder={p.help}
+                              title={p.help}
+                              value={accountFields[p.name] ?? ""}
+                              onChange={(e) =>
+                                  setAccountFields((prev) => ({
+                                      ...prev,
+                                      [p.name]: e.target.value,
+                                  }))
+                              }
+                          />
+                      ))
+                    : account.bankRef && (
+                          <div style={{ display: "flex", justifyContent: "space-between" }}>
+                              <Txt tone="secondary">Bank account</Txt>
+                              <span className="num">{account.bankRef}</span>
+                          </div>
+                      )}
                 {refDirty && (
                     <div>
                         <Button variant="subtle" size="s" onClick={saveRef} loading={busy}>
