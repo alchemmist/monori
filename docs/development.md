@@ -9,6 +9,11 @@
 - [Zustand](https://github.com/pmndrs/zustand) for state, with optimistic updates.
 - The budgeting and analytics math lives in `web/src/engine/` as pure functions,
   unit-tested in isolation.
+- Docked side panels use the shared `web/src/ui/Tab.jsx`. Which tabs are open,
+  and whether each is collapsed, is persisted to `localStorage` by
+  `web/src/ui/tabPersist.js`, so a reload restores the stack — a tab gets that
+  for free and its props must therefore be JSON-serializable (pass ids, not
+  objects with callbacks).
 - Lint with Oxlint, format with Prettier, style-check with Stylelint, test with
   Vitest, mutation-test with Stryker.
 

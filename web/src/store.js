@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { api } from "./api.js";
 import { demoSnapshot } from "./demo/demoData.js";
 import { mergeTransactions } from "./mergeTransactions.js";
+import { loadTabs, saveTabs } from "./ui/tabPersist.js";
 
 /** Rows per background chunk once the light snapshot has painted. */
 export const TX_CHUNK = 1000;
@@ -24,7 +25,11 @@ export const isDemo = () => {
     return p === "/demo" || p.startsWith("/demo/");
 };
 
-let nextTabId = 1;
+const restoredTabs = loadTabs();
+
+// carries on past the restored ids, so a reopened tab never collides with one
+// that came back from storage
+let nextTabId = restoredTabs.reduce((max, t) => Math.max(max, t.id), 0) + 1;
 
 export const useStore = create((set, get) => ({
     snapshot: null,
@@ -37,18 +42,23 @@ export const useStore = create((set, get) => ({
     authChecked: false,
 
     // globally mounted side tabs (see TabHost): they belong to the app shell,
-    // not a page, so navigating inside monori never closes them
-    tabs: [],
+    // not a page, so navigating inside monori never closes them — and they are
+    // mirrored into localStorage here, so a reload brings them back too
+    tabs: restoredTabs,
+    setTabs(tabs) {
+        saveTabs(tabs);
+        set({ tabs });
+    },
     openTab(kind, props = {}, key = null) {
         const tabs = get().tabs;
         if (key != null && tabs.some((t) => t.key === key)) return;
-        set({ tabs: [...tabs, { id: nextTabId++, key, kind, props }] });
+        get().setTabs([...tabs, { id: nextTabId++, key, kind, props }]);
     },
     closeTab(id) {
-        set({ tabs: get().tabs.filter((t) => t.id !== id) });
+        get().setTabs(get().tabs.filter((t) => t.id !== id));
     },
     closeTabByKey(key) {
-        set({ tabs: get().tabs.filter((t) => t.key !== key) });
+        get().setTabs(get().tabs.filter((t) => t.key !== key));
     },
 
     // bumped by tabs that mutate admin data; the Admin page re-fetches while
@@ -65,6 +75,9 @@ export const useStore = create((set, get) => ({
         }
         const token = localStorage.getItem("monori_token");
         if (!token) {
+            // no session — drop any restored tabs so they cannot resurface for
+            // whoever signs in on this browser next
+            get().setTabs([]);
             set({ authChecked: true });
             return;
         }
@@ -73,7 +86,8 @@ export const useStore = create((set, get) => ({
             set({ user, authChecked: true });
         } catch {
             localStorage.removeItem("monori_token");
-            set({ user: null, authChecked: true, tabs: [] });
+            get().setTabs([]);
+            set({ user: null, authChecked: true });
         }
     },
 
@@ -91,7 +105,8 @@ export const useStore = create((set, get) => ({
 
     logout() {
         localStorage.removeItem("monori_token");
-        set({ user: null, tabs: [] });
+        get().setTabs([]);
+        set({ user: null });
     },
 
     /**

@@ -8,6 +8,7 @@ import {
     subscribe,
     unregisterTab,
 } from "./tabStack.js";
+import { loadCollapsed, saveCollapsed } from "./tabPersist.js";
 
 /**
  * Tab — a dockable side panel that behaves like a real tab: it pins to the
@@ -22,10 +23,17 @@ import {
  *  - strip:      short label shown vertically on the collapsed strip
  *  - onClose:    called when the user closes the tab
  *  - footer:     optional node rendered pinned to the bottom (actions)
- *  - defaultCollapsed: start collapsed (default false)
+ *  - defaultCollapsed: start collapsed the first time (default false); after
+ *                that the user's own collapse/expand is remembered
+ *  - persistKey: storage key for that remembered state, defaulting to the strip
+ *                label; give it an explicit value when several tabs of one kind
+ *                can be open at once and should be remembered apart
  *  - width:      expanded width as a percentage of the viewport, for tabs that
  *                need more than the default 420px card (the SQL console asks
  *                for 60). CSS still caps it at 92vw so the app stays visible.
+ *
+ * Which tabs are open is persisted centrally by the store (see ui/tabPersist.js),
+ * so a reload restores the stack without any tab having to ask for it.
  */
 
 export default function Tab({
@@ -34,12 +42,14 @@ export default function Tab({
     onClose,
     footer,
     defaultCollapsed = false,
+    persistKey,
     width,
     children,
 }) {
     const id = useId();
     const ref = useRef(null);
-    const [collapsed, setCollapsed] = useState(defaultCollapsed);
+    const stateKey = persistKey ?? strip ?? title;
+    const [collapsed, setCollapsed] = useState(() => loadCollapsed(stateKey, defaultCollapsed));
     const [animating, setAnimating] = useState(false);
 
     // register before paint (so co-mounting tabs never flash overlapped) with
@@ -62,6 +72,7 @@ export default function Tab({
 
     const toggle = (next) => {
         setCollapsed(next);
+        saveCollapsed(stateKey, next);
         setAnimating(true);
     };
 

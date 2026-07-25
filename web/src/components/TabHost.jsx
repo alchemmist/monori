@@ -7,9 +7,18 @@ import MigratePanel from "./MigratePanel.jsx";
 
 /**
  * Renders the store's global tab stack at the app-shell level, so open tabs
- * survive any in-app navigation — a tab only goes away when the user closes
- * it (or its subject disappears, e.g. the edited account got deleted).
+ * survive any in-app navigation — and, since the stack is persisted, a page
+ * reload too. A tab only goes away when the user closes it (or its subject
+ * disappears, e.g. the edited account got deleted).
  */
+
+/** Drops a restored tab whose kind this build no longer knows about. */
+function UnknownTab({ onClose }) {
+    useEffect(() => {
+        onClose();
+    }, [onClose]);
+    return null;
+}
 
 function AccountEditHost({ accountId, onClose }) {
     const account = useStore((s) =>
@@ -40,6 +49,6 @@ export default function TabHost() {
         if (t.kind === "migrate") {
             return <MigratePanel key={t.id} onClose={close} />;
         }
-        return null;
+        return <UnknownTab key={t.id} onClose={close} />;
     });
 }

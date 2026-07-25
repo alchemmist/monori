@@ -121,6 +121,7 @@ export default function AdminTxTab({ user, onClose }) {
         <Tab
             title={`Transactions — ${user.email}`}
             strip="Transactions"
+            persistKey={`admin-tx:${user.id}`}
             onClose={onClose}
             footer={footer}
         >
