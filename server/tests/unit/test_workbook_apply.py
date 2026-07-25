@@ -107,6 +107,46 @@ def test_apply_categorizes_by_explicit_name_then_keywords(tmp_path):
     ]
 
 
+def test_named_category_outside_the_sheet_beats_keywords(tmp_path):
+    c, uid, acct = _db(tmp_path)
+    c.execute(
+        "INSERT INTO category_groups (user_id, name, sort, kind) VALUES (?, 'Mine', 9, 'expense')",
+        (uid,),
+    )
+    gid = c.execute("SELECT id FROM category_groups WHERE name='Mine'").fetchone()[0]
+    c.execute(
+        "INSERT INTO categories (group_id, name, keywords, sort) VALUES (?, 'Pets', '', 0)", (gid,)
+    )
+    c.commit()
+    parsed = _parsed()
+    # "lenta" would match the Groceries keyword; the row names Pets instead, and
+    # Pets exists only in monori — never on the workbook's Categories sheet
+    parsed["transactions"][1]["monori_category"] = " PETS "
+    result = apply_workbook(c, uid, parsed, {"": acct})
+    c.commit()
+    assert result["warnings"] == []
+    named = c.execute(
+        "SELECT cat.name FROM transactions t JOIN categories cat ON cat.id = t.category_id"
+        " WHERE t.description='lenta market'"
+    ).fetchone()[0]
+    assert named == "Pets"
+
+
+def test_unknown_named_category_is_left_uncategorized_not_guessed(tmp_path):
+    c, uid, acct = _db(tmp_path)
+    parsed = _parsed()
+    parsed["transactions"][1]["monori_category"] = "Nowhere"
+    result = apply_workbook(c, uid, parsed, {"": acct})
+    c.commit()
+    assert (
+        c.execute(
+            "SELECT category_id FROM transactions WHERE description='lenta market'"
+        ).fetchone()[0]
+        is None
+    )
+    assert "Nowhere" in result["warnings"][0]
+
+
 def test_apply_reuses_existing_by_name_and_keeps_keywords(tmp_path):
     c, uid, acct = _db(tmp_path)
     c.execute(

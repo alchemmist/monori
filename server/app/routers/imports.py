@@ -2,6 +2,7 @@ import json
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
 
 from ..auth import current_user
@@ -144,40 +145,26 @@ def _workbook_preview_summary(parsed):
     }
 
 
-@router.post("/workbook/preview")
-async def workbook_preview(
-    user: Annotated[dict, Depends(current_user)],
-    file: Annotated[UploadFile, File()],
-):
-    data = await _read_workbook_upload(file)
+def _parse_or_400(data):
     try:
-        parsed = parse_workbook(data)
+        return parse_workbook(data)
     except WorkbookError as exc:
         raise HTTPException(400, str(exc)) from exc
+
+
+def _preview_workbook(data, uid):
+    parsed = _parse_or_400(data)
     summary = _workbook_preview_summary(parsed)
     c = conn()
     try:
-        summary["budgetConflicts"] = budget_conflicts(c, user["id"], parsed["budgets"])
+        summary["budgetConflicts"] = budget_conflicts(c, uid, parsed["budgets"])
     finally:
         c.close()
     return summary
 
 
-@router.post("/workbook/commit")
-async def workbook_commit(
-    user: Annotated[dict, Depends(current_user)],
-    file: Annotated[UploadFile, File()],
-    mapping: Annotated[str, Form()],
-    budgetPolicy: Annotated[str, Form()] = "overwrite",
-):
-    uid = user["id"]
-    if budgetPolicy not in ("overwrite", "skip"):
-        raise HTTPException(400, "budgetPolicy must be overwrite or skip")
-    data = await _read_workbook_upload(file)
-    try:
-        parsed = parse_workbook(data)
-    except WorkbookError as exc:
-        raise HTTPException(400, str(exc)) from exc
+def _commit_workbook(data, uid, mapping, budget_policy):
+    parsed = _parse_or_400(data)
     try:
         raw_mapping = json.loads(mapping)
         marker_map = {str(k): int(v) for k, v in raw_mapping.items()}
@@ -192,8 +179,35 @@ async def workbook_commit(
         for account_id in set(marker_map.values()):
             if not _owned_account(c, account_id, uid):
                 raise HTTPException(400, f"unknown account: {account_id}")
-        result = apply_workbook(c, uid, parsed, marker_map, budgetPolicy)
+        result = apply_workbook(c, uid, parsed, marker_map, budget_policy)
         c.commit()
-        return {**result, "warnings": parsed["warnings"], "errors": parsed["errors"]}
+        warnings = [*parsed["warnings"], *result.pop("warnings", [])]
+        return {**result, "warnings": warnings, "errors": parsed["errors"]}
     finally:
         c.close()
+
+
+# Parsing a workbook and writing thousands of rows takes tens of seconds. Run it
+# on a worker thread: on the event loop it would freeze every other request for
+# the whole migration, and it opens its own connection there because a sqlite3
+# handle belongs to the thread that created it.
+@router.post("/workbook/preview")
+async def workbook_preview(
+    user: Annotated[dict, Depends(current_user)],
+    file: Annotated[UploadFile, File()],
+):
+    data = await _read_workbook_upload(file)
+    return await run_in_threadpool(_preview_workbook, data, user["id"])
+
+
+@router.post("/workbook/commit")
+async def workbook_commit(
+    user: Annotated[dict, Depends(current_user)],
+    file: Annotated[UploadFile, File()],
+    mapping: Annotated[str, Form()],
+    budgetPolicy: Annotated[str, Form()] = "overwrite",
+):
+    if budgetPolicy not in ("overwrite", "skip"):
+        raise HTTPException(400, "budgetPolicy must be overwrite or skip")
+    data = await _read_workbook_upload(file)
+    return await run_in_threadpool(_commit_workbook, data, user["id"], mapping, budgetPolicy)

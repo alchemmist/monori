@@ -72,6 +72,28 @@ def _upsert_categories(c, uid, categories, group_ids):
     return ids, created
 
 
+def _category_index(c, uid):
+    """
+    Every category the user owns, keyed by a normalized name, so a workbook cell
+    resolves against the whole account and not just the sheet's own category
+    table. Names that collide across groups map to the first one by sort order —
+    the workbook has no group column on the transaction row to tell them apart.
+    """
+    index: dict[str, int] = {}
+    for r in c.execute(
+        "SELECT c.id, c.name FROM categories c"
+        " JOIN category_groups g ON g.id = c.group_id WHERE g.user_id=?"
+        " ORDER BY c.sort, c.id",
+        (uid,),
+    ):
+        index.setdefault(_norm(r["name"]), r["id"])
+    return index
+
+
+def _norm(name):
+    return " ".join(str(name).split()).casefold()
+
+
 def _user_rules(c, uid):
     groups = {
         r["id"]: r["kind"]
@@ -89,12 +111,23 @@ def _user_rules(c, uid):
 
 
 def _import_transactions(c, uid, transactions, mapping, category_ids):
+    """
+    A row that names its own category keeps it: keyword auto-categorization only
+    ever fills a blank. Anything else would let the workbook's keywords silently
+    overrule a category the user assigned by hand.
+    """
     rules = _user_rules(c, uid)
+    index = _category_index(c, uid)
     by_account: dict[int, list] = {}
+    unmatched = set()
     for tx in transactions:
         account_id = mapping[tx["marker"]]
-        category_id = category_ids.get(tx["monori_category"])
-        if category_id is None:
+        named = tx["monori_category"]
+        if named:
+            category_id = category_ids.get(named) or index.get(_norm(named))
+            if category_id is None:
+                unmatched.add(named)
+        else:
             category_id = categorize(tx["description"], tx["amount"], rules)
         row = {
             "date": tx["date"],
@@ -120,7 +153,7 @@ def _import_transactions(c, uid, transactions, mapping, category_ids):
         inserted += ins
         skipped += skip
         batches.append({"accountId": account_id, "batchId": batch_id, "inserted": ins})
-    return inserted, skipped, batches
+    return inserted, skipped, batches, sorted(unmatched)
 
 
 def _import_budgets(c, budgets, category_ids, overwrite):
@@ -175,12 +208,19 @@ def apply_workbook(c, uid, parsed, mapping, budget_policy="overwrite"):
     """
     group_ids, groups_created = _upsert_groups(c, uid, parsed["groups"])
     category_ids, categories_created = _upsert_categories(c, uid, parsed["categories"], group_ids)
-    inserted, skipped, batches = _import_transactions(
+    inserted, skipped, batches, unmatched = _import_transactions(
         c, uid, parsed["transactions"], mapping, category_ids
     )
     budgets_written, budgets_skipped = _import_budgets(
         c, parsed["budgets"], category_ids, budget_policy == "overwrite"
     )
+    warnings = []
+    if unmatched:
+        warnings.append(
+            f"{len(unmatched)} category names in the sheet match nothing in monori"
+            f" — those rows were left uncategorized rather than guessed:"
+            f" {', '.join(unmatched[:10])}"
+        )
     return {
         "groupsCreated": groups_created,
         "categoriesCreated": categories_created,
@@ -189,4 +229,5 @@ def apply_workbook(c, uid, parsed, mapping, budget_policy="overwrite"):
         "batches": batches,
         "budgetsWritten": budgets_written,
         "budgetsSkipped": budgets_skipped,
+        "warnings": warnings,
     }

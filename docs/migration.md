@@ -36,7 +36,11 @@ The importer expects the structure monori's export writes:
 - **`Transactions`** — bank-statement-shaped columns: operation datetime,
   status, signed amount, bank category, MCC, description. Optional monori
   columns (`Monori Category`, `Account`, `Comment`) are used when present —
-  an explicit `Monori Category` wins over keyword matching.
+  an explicit `Monori Category` wins over keyword matching. It is matched
+  against **every** category you own (ignoring case and extra spaces), not just
+  the ones listed on the `Categories` sheet, and a row that names a category
+  monori has never heard of is left uncategorized and reported as a warning —
+  keywords never overrule a category you assigned by hand.
 - **Year sheets** (`2024`, `2025`, …) — the budget grid: categories down the
   side, `Budgeted / Outflows / Balance` per month. Only the *Budgeted* numbers
   are imported; outflows and balances are derived values that monori
