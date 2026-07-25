@@ -28,6 +28,7 @@ class AccountBody(BaseModel):
     openingDate: str | None = None
     connectionId: int | None = None
     bankRef: str = Field(default="", max_length=64)
+    cardTails: list[str] = Field(default_factory=list, max_length=8)
 
 
 class AccountPatch(BaseModel):
@@ -44,6 +45,7 @@ class AccountPatch(BaseModel):
     # None = leave as is, 0 = unlink from its bank connection
     connectionId: int | None = None
     bankRef: str | None = Field(default=None, max_length=64)
+    cardTails: list[str] | None = Field(default=None, max_length=8)
 
 
 def _owned_connection(c, connection_id, uid):
@@ -56,6 +58,21 @@ def _owned_connection(c, connection_id, uid):
 def _validate_color(color):
     if not HEX_COLOR.match(color):
         raise HTTPException(400, "color must be a #rrggbb hex string")
+
+
+def _clean_tails(tails):
+    """
+    Normalize card tails to the digits of the masked number ('*8181' -> '8181'),
+    deduplicated in order, stored comma-separated.
+    """
+    cleaned = []
+    for raw in tails:
+        digits = "".join(ch for ch in str(raw) if ch.isdigit())
+        if not digits or len(digits) > 8:
+            raise HTTPException(400, "card tail must be 1-8 digits")
+        if digits not in cleaned:
+            cleaned.append(digits)
+    return ",".join(cleaned)
 
 
 def _validate_icon_image(image):
@@ -86,7 +103,7 @@ def list_accounts(user: Annotated[dict, Depends(current_user)]):
             serialize_account(r)
             for r in c.execute(
                 "SELECT id, name, type, icon, color, icon_image, currency, sort, archived,"
-                " opening_balance, opening_date, connection_id, bank_ref"
+                " opening_balance, opening_date, connection_id, bank_ref, card_tails"
                 " FROM accounts WHERE user_id=? ORDER BY sort, id",
                 (uid,),
             )
@@ -116,8 +133,8 @@ def create_account(body: AccountBody, user: Annotated[dict, Depends(current_user
         cur = c.execute(
             """INSERT INTO accounts
                (user_id, name, type, icon, color, icon_image, currency, opening_balance,
-                opening_date, sort, connection_id, bank_ref)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                opening_date, sort, connection_id, bank_ref, card_tails)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 uid,
                 body.name,
@@ -131,6 +148,7 @@ def create_account(body: AccountBody, user: Annotated[dict, Depends(current_user
                 max_sort + 1,
                 body.connectionId or None,
                 body.bankRef.strip(),
+                _clean_tails(body.cardTails),
             ),
         )
         c.commit()
@@ -202,6 +220,11 @@ def patch_account(
             c.execute(
                 "UPDATE accounts SET bank_ref=? WHERE id=?",
                 (patch.bankRef.strip(), account_id),
+            )
+        if patch.cardTails is not None:
+            c.execute(
+                "UPDATE accounts SET card_tails=? WHERE id=?",
+                (_clean_tails(patch.cardTails), account_id),
             )
         c.commit()
         return {"ok": True}

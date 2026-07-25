@@ -23,3 +23,23 @@ export async function readStatementFile(file) {
     }
     return decodeStatementBytes(await file.arrayBuffer());
 }
+
+/** True when a stored account tail and a statement tail point at the same
+ * card: either is a suffix of the other, so a 4-digit statement tail still
+ * matches a longer stored tail like '553691...2947'. */
+export function tailMatches(storedTail, statementTail) {
+    if (!storedTail || !statementTail) return false;
+    return storedTail.endsWith(statementTail) || statementTail.endsWith(storedTail);
+}
+
+/** Distinct card tails found in parsed statement rows ('*8181' -> '8181'). */
+export function statementTails(rows) {
+    const tails = new Set();
+    for (const r of rows ?? []) {
+        const t = String(r.card ?? "")
+            .replace(/\D/g, "")
+            .slice(-4);
+        if (t) tails.add(t);
+    }
+    return [...tails];
+}

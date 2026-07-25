@@ -107,6 +107,7 @@ def parse_statement(text):
                 "description": rec["description"],
                 "bank_category": rec["bank_category"],
                 "mcc": rec["mcc"],
+                "card": rec["card"],
             }
         )
     return rows, errors
