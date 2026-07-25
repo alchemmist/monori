@@ -65,6 +65,9 @@ export default function ConnectionDialog({ account, connection, onClose }) {
         connector.connectionParams.every(
             (p) => !p.required || String(credentials[p.name] ?? "").trim(),
         );
+    const accountComplete = (c) =>
+        !c ||
+        c.accountParams.every((p) => !p.required || String(accountFields[p.name] ?? "").trim());
 
     const runSync = async (id) => {
         setBusy(true);
@@ -277,7 +280,10 @@ export default function ConnectionDialog({ account, connection, onClose }) {
             onApply: connect,
             applyProps: {
                 loading: busy,
-                disabled: !connector || (needsCredentials && !credentialsComplete),
+                disabled:
+                    !connector ||
+                    (needsCredentials && !credentialsComplete) ||
+                    !accountComplete(connector),
             },
         };
     } else if (step === "ready") {
@@ -319,7 +325,13 @@ export default function ConnectionDialog({ account, connection, onClose }) {
                       )}
                 {refDirty && (
                     <div>
-                        <Button variant="subtle" size="s" onClick={saveRef} loading={busy}>
+                        <Button
+                            variant="subtle"
+                            size="s"
+                            onClick={saveRef}
+                            loading={busy}
+                            disabled={!accountComplete(readyConnector)}
+                        >
                             Save bank account
                         </Button>
                     </div>
@@ -351,7 +363,7 @@ export default function ConnectionDialog({ account, connection, onClose }) {
                 if (refDirty && !(await saveRef())) return;
                 await runSync(connection.id);
             },
-            applyProps: { loading: busy },
+            applyProps: { loading: busy, disabled: !accountComplete(readyConnector) },
         };
     } else if (step === "sms") {
         body = (

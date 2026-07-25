@@ -68,11 +68,11 @@ class TBankPlaywrightConnector(Connector):
     account_params = [
         {
             "name": "account",
-            "label": "T-Bank account number (optional)",
-            "required": False,
+            "label": "T-Bank account number",
+            "required": True,
             "help": "The number from the account's operations link in the cabinet"
-            " (/mybank/operations/?account=<id>); scopes the sync to that one"
-            " account. Leave empty for the default feed.",
+            " (/mybank/operations/?account=<id>); the sync pulls exactly that"
+            " account.",
         }
     ]
 

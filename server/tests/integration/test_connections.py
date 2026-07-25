@@ -190,6 +190,36 @@ def test_rejected_code_stays_awaiting(api, client, keyed, monkeypatch):
     )
 
 
+class RefRequiredConnector(RetryOtpConnector):
+    bank = "refreq"
+    kind = "refreq"
+    account_params = [{"name": "account", "required": True}]
+
+    def sync(self, since=None):
+        return SyncResult([], session=None)
+
+
+def test_sync_requires_bank_ref_when_connector_demands_it(api, client, keyed, monkeypatch):
+    monkeypatch.setitem(base.REGISTRY, ("refreq", "refreq"), RefRequiredConnector)
+    cid = client.post(
+        "/api/connections",
+        json={
+            "bank": "refreq",
+            "kind": "refreq",
+            "credentials": {"phone": "+70000000000", "password": "pw"},
+        },
+    ).json()["id"]
+    acct = api.default_account()
+    assert client.patch(f"/api/accounts/{acct}", json={"connectionId": cid}).status_code == 200
+
+    r = client.post(f"/api/connections/{cid}/sync")
+    assert r.status_code == 400
+    assert "bank account id" in r.json()["detail"]
+
+    assert client.patch(f"/api/accounts/{acct}", json={"bankRef": "5858870594"}).status_code == 200
+    assert client.post(f"/api/connections/{cid}/sync").json()["status"] == "connected"
+
+
 def test_available_lists_connectors_with_params(client):
     r = client.get("/api/connections/available")
     assert r.status_code == 200

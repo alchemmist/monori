@@ -107,6 +107,23 @@ def _validate_credentials(bank, kind, credentials):
         raise HTTPException(400, f"missing credentials: {missing}")
 
 
+def _require_account_refs(row, accounts):
+    """
+    A connector that declares required account params cannot sync an account
+    without its bank_ref — the pull would silently fall back to the default
+    feed and land another account's operations here.
+    """
+    try:
+        cls = connectors.get_connector_class(row["bank"], row["kind"])
+    except ConnectorError:
+        return
+    if not any(p.get("required") for p in getattr(cls, "account_params", [])):
+        return
+    unset = [a["name"] for a in accounts if not str(a["bank_ref"] or "").strip()]
+    if unset:
+        raise HTTPException(400, f"these accounts need a bank account id before syncing: {unset}")
+
+
 def _mark_error(c, cid, message):
     c.execute(
         "UPDATE bank_connections SET status='error', last_error=?, pending_account_id=NULL,"
@@ -400,6 +417,7 @@ def sync_connection(cid: int, user: Annotated[dict, Depends(current_user)]):
         accounts = _linked_accounts(c, cid, uid)
         if not accounts:
             raise HTTPException(400, "no accounts are linked to this connection")
+        _require_account_refs(row, accounts)
         creds = crypto.decrypt(row["credentials_encrypted"])
         if not creds:
             raise HTTPException(400, "connection has no credentials")
