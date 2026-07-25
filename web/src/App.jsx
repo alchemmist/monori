@@ -33,7 +33,7 @@ import AccountsPage from "./pages/AccountsPage.jsx";
 import CategoriesPage from "./pages/CategoriesPage.jsx";
 import SettingsPage from "./pages/SettingsPage.jsx";
 import LoginPage from "./pages/LoginPage.jsx";
-import MigratePanel from "./components/MigratePanel.jsx";
+import TabHost from "./components/TabHost.jsx";
 
 const NAV = [
     { id: "budget", title: "Budget", icon: LayoutHeaderCellsLarge },
@@ -56,10 +56,9 @@ const SOON = [
 const FIRST_YEAR = 2020;
 
 export default function App({ theme, onToggleTheme }) {
-    const { snapshot, loading, error, load, toast, user, authChecked, checkAuth, logout } =
+    const { snapshot, loading, error, load, toast, user, authChecked, checkAuth, logout, openTab } =
         useStore();
     const [page, setPage] = useState("budget");
-    const [migrating, setMigrating] = useState(false);
     const [collapsed, setCollapsed] = useState(
         () => localStorage.getItem("sidebar_collapsed") === "1",
     );
@@ -280,11 +279,11 @@ export default function App({ theme, onToggleTheme }) {
                     <SettingsPage
                         theme={theme}
                         onToggleTheme={onToggleTheme}
-                        onMigrate={() => setMigrating(true)}
+                        onMigrate={() => openTab("migrate", {}, "migrate")}
                     />
                 )}
             </main>
-            {migrating && <MigratePanel onClose={() => setMigrating(false)} />}
+            <TabHost />
         </div>
     );
 }

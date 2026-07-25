@@ -8,18 +8,14 @@ import { api } from "../api.js";
 import { accountBalances } from "../engine/analytics.js";
 import AccountBadge from "../components/AccountBadge.jsx";
 import { money } from "../format.js";
-import {
-    AccountEditTab,
-    AccountDeleteDialog,
-    AccountReconcileDialog,
-} from "../components/AccountDialogs.jsx";
+import { AccountDeleteDialog, AccountReconcileDialog } from "../components/AccountDialogs.jsx";
 import ConnectionDialog from "../components/ConnectionDialog.jsx";
 import "./accounts.css";
 
 const TYPE_LABEL = { card: "Card", cash: "Cash", savings: "Savings", other: "Other" };
 
 export default function AccountsPage() {
-    const { snapshot, notify } = useStore();
+    const { snapshot, notify, openTab } = useStore();
     const [dialog, setDialog] = useState(null);
 
     const accounts = snapshot.accounts ?? [];
@@ -126,7 +122,7 @@ export default function AccountsPage() {
                 <Button
                     variant="filled"
                     size="m"
-                    onClick={() => setDialog({ type: "edit", account: {} })}
+                    onClick={() => openTab("account-edit", {}, "account-new")}
                     leftSection={<Plus width={14} height={14} />}
                 >
                     New account
@@ -180,7 +176,12 @@ export default function AccountsPage() {
                                     items={[
                                         {
                                             text: "Edit",
-                                            action: () => setDialog({ type: "edit", account: a }),
+                                            action: () =>
+                                                openTab(
+                                                    "account-edit",
+                                                    { accountId: a.id },
+                                                    `account-edit:${a.id}`,
+                                                ),
                                         },
                                         {
                                             text: "Reconcile",
@@ -221,9 +222,6 @@ export default function AccountsPage() {
                 })}
             </div>
 
-            {dialog?.type === "edit" && (
-                <AccountEditTab account={dialog.account} onClose={() => setDialog(null)} />
-            )}
             {dialog?.type === "delete" && (
                 <AccountDeleteDialog
                     account={dialog.account}

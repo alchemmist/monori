@@ -10,6 +10,8 @@ export const isDemo = () => {
     return p === "/demo" || p.startsWith("/demo/");
 };
 
+let nextTabId = 1;
+
 export const useStore = create((set, get) => ({
     snapshot: null,
     loading: true,
@@ -17,6 +19,18 @@ export const useStore = create((set, get) => ({
     toast: null,
     user: null,
     authChecked: false,
+
+    // globally mounted side tabs (see TabHost): they belong to the app shell,
+    // not a page, so navigating inside monori never closes them
+    tabs: [],
+    openTab(kind, props = {}, key = null) {
+        const tabs = get().tabs;
+        if (key != null && tabs.some((t) => t.key === key)) return;
+        set({ tabs: [...tabs, { id: nextTabId++, key, kind, props }] });
+    },
+    closeTab(id) {
+        set({ tabs: get().tabs.filter((t) => t.id !== id) });
+    },
 
     async checkAuth() {
         if (isDemo()) {

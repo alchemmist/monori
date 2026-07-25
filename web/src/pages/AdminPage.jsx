@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
 import { AreaChart, BarChart } from "@mantine/charts";
 import { Button } from "@mantine/core";
-import AdminTxTab from "../components/AdminTxTab.jsx";
 import { ChartBoundary } from "../components/ChartCard.jsx";
 import { api } from "../api.js";
 import { money } from "../format.js";
 import { SERIES, cartesian } from "./chartTheme.js";
 import { showToast } from "../ui/notify.js";
+import { useStore } from "../store.js";
 import "./dashboard.css";
 import "./admin.css";
 
@@ -301,7 +301,7 @@ function UserRow({ user, open, onOpen, onDeleted }) {
 const TX_PREVIEW = 5;
 
 function UserDetail({ detail, onChanged }) {
-    const [managing, setManaging] = useState(false);
+    const openTab = useStore((s) => s.openTab);
     const openFull = async () => {
         // open the tab inside the click gesture so it is not popup-blocked, then
         // point it at a plain-text blob of one JSON transaction per line
@@ -382,7 +382,17 @@ function UserDetail({ detail, onChanged }) {
                                 Full
                             </Button>
                         )}
-                        <Button size="xs" variant="subtle" onClick={() => setManaging(true)}>
+                        <Button
+                            size="xs"
+                            variant="subtle"
+                            onClick={() =>
+                                openTab(
+                                    "admin-tx",
+                                    { user: detail.user, onChanged },
+                                    `admin-tx:${detail.user.id}`,
+                                )
+                            }
+                        >
                             Manage
                         </Button>
                     </span>
@@ -410,13 +420,6 @@ function UserDetail({ detail, onChanged }) {
                     </tbody>
                 </table>
             </div>
-            {managing && (
-                <AdminTxTab
-                    user={detail.user}
-                    onClose={() => setManaging(false)}
-                    onChanged={onChanged}
-                />
-            )}
         </div>
     );
 }
