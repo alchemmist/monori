@@ -60,9 +60,10 @@ means you have assigned more than you have.
 
 `income(m)` is not only income transactions: an account's **opening balance**
 counts as income of the month the account opened, because money that sits on an
-account before its first transaction is still money you have to budget. An
-account with no opening date (or one that predates the grid) contributes to the
-very first month of the range, so its money is never lost.
+account before its first transaction is still money you have to budget. Without
+an opening date the balance falls back to the month of the account's earliest
+transaction; with neither (or a date that predates the grid) it contributes to
+the very first month of the range, so its money is never lost.
 
 ## Using the budget grid
 

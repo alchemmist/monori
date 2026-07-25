@@ -11,6 +11,8 @@ import Tab from "../ui/Tab.jsx";
 import { FAmountInput, FSelect, FTextInput } from "../ui/fields.jsx";
 import Txt from "../ui/Txt.jsx";
 
+const today = () => new Date().toISOString().slice(0, 10);
+
 const ACCOUNT_TYPES = [
     { value: "card", label: "Card" },
     { value: "cash", label: "Cash" },
@@ -65,6 +67,9 @@ export function AccountEditTab({ account, onClose }) {
     const [currency, setCurrency] = useState(account.currency ?? DEFAULT_CURRENCY);
     const currencies = useMemo(() => currencyOptions(account.currency), [account.currency]);
     const [opening, setOpening] = useState(amountInput(account.openingBalance));
+    const [openingDate, setOpeningDate] = useState(
+        account.openingDate?.slice(0, 10) ?? (isNew ? today() : ""),
+    );
     const [tails, setTails] = useState((account.cardTails ?? []).join(", "));
     const [busy, setBusy] = useState(false);
     const fileRef = useRef(null);
@@ -97,6 +102,7 @@ export function AccountEditTab({ account, onClose }) {
                 iconImage: image,
                 currency: currency || DEFAULT_CURRENCY,
                 openingBalance,
+                ...(openingDate ? { openingDate } : {}),
                 cardTails: tails
                     .split(",")
                     .map((t) => t.replace(/\D/g, ""))
@@ -228,6 +234,13 @@ export function AccountEditTab({ account, onClose }) {
                     value={opening}
                     onChange={setOpening}
                     placeholder="0"
+                />
+                <FTextInput
+                    label="Opening date"
+                    type="date"
+                    value={openingDate}
+                    onChange={(e) => setOpeningDate(e.target.value)}
+                    title="When the account was opened — its opening balance counts as income of that month on the Budget page"
                 />
                 <FTextInput
                     label="Card tails"

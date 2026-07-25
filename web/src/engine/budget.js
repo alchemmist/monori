@@ -40,23 +40,40 @@ export function monthKey(year, month) {
     return `${year}-${month}`;
 }
 
+const OPENING_DATE = /^(\d{4})-(\d{1,2})(?:\D|$)/;
+
+/** Map(accountId -> date of its earliest transaction). */
+function firstTxDates(transactions) {
+    const dates = new Map();
+    for (const t of transactions ?? []) {
+        const seen = dates.get(t.accountId);
+        if (seen == null || t.date < seen) dates.set(t.accountId, t.date);
+    }
+    return dates;
+}
+
 /**
  * Sum account opening balances into a Map keyed by year-month.
  *
- * An account opened before the range (or with no opening date at all) drops
- * into the very first month, so the money lands somewhere inside the range
- * instead of vanishing.
+ * An opening balance is what the account held before its first recorded
+ * transaction, so an account without an explicit opening date falls back to the
+ * month of that first transaction. An account with neither — or one opened
+ * before the range, or carrying an unparseable date — drops into the very first
+ * month, so the money lands somewhere inside the range instead of vanishing.
  */
-export function buildOpeningIndex(accounts, firstYear) {
+export function buildOpeningIndex(accounts, firstYear, transactions) {
     const index = new Map();
-    for (const a of accounts ?? []) {
+    if (!accounts?.length) return index;
+    const firstTx = firstTxDates(transactions);
+    for (const a of accounts) {
         const amount = a.openingBalance ?? 0;
         if (!amount) continue;
-        let year = a.openingDate ? +a.openingDate.slice(0, 4) : firstYear;
-        let month = a.openingDate ? +a.openingDate.slice(5, 7) : 1;
-        if (!(year >= firstYear)) {
-            year = firstYear;
-            month = 1;
+        const parsed = OPENING_DATE.exec(a.openingDate ?? firstTx.get(a.id) ?? "");
+        let year = firstYear;
+        let month = 1;
+        if (parsed && +parsed[1] >= firstYear && +parsed[2] >= 1 && +parsed[2] <= 12) {
+            year = +parsed[1];
+            month = +parsed[2];
         }
         const key = monthKey(year, month);
         index.set(key, (index.get(key) ?? 0) + amount);
@@ -142,7 +159,7 @@ export function computeRange(snapshot, firstYear, lastYear) {
     const groupKindById = new Map(snapshot.groups.map((g) => [g.id, g.kind]));
     const txIndex = buildTxIndex(snapshot.transactions);
     const budgetIndex = buildBudgetIndex(snapshot.budgets);
-    const openingIndex = buildOpeningIndex(snapshot.accounts, firstYear);
+    const openingIndex = buildOpeningIndex(snapshot.accounts, firstYear, snapshot.transactions);
     const results = new Map();
     let prev = null;
     for (let year = firstYear; year <= lastYear; year++) {
