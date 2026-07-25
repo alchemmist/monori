@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { api } from "./api.js";
 import { demoSnapshot } from "./demo/demoData.js";
+import { mergeCategories } from "./mergeCategories.js";
 import { mergeTransactions } from "./mergeTransactions.js";
 import { loadTabs, saveTabs } from "./ui/tabPersist.js";
 
@@ -420,6 +421,11 @@ export const useStore = create((set, get) => ({
                 ),
             },
         });
+    },
+
+    async mergeCategory(id, into) {
+        if (!isDemo()) await api.mergeCategory(id, into);
+        set({ snapshot: mergeCategories(get().snapshot, id, into) });
     },
 
     /** Kanban drop: move a card to `toGroupId` and lay out every category by the

@@ -170,7 +170,9 @@ def reorder_categories(body: Reorder, user: Annotated[dict, Depends(current_user
 def merge_category(cat_id: int, body: MergeBody, user: Annotated[dict, Depends(current_user)]):
     """
     Combine a category into another: its transactions move to the target,
-    keywords are unioned, then the source category is deleted.
+    keywords are unioned, budgets are summed month by month, then the source
+    category is deleted. Summing matters: the spending moves across, so a
+    dropped plan would read as a retroactive overspend on the target.
     """
     uid = user["id"]
     c = conn()
@@ -188,6 +190,13 @@ def merge_category(cat_id: int, body: MergeBody, user: Annotated[dict, Depends(c
         c.execute(
             "UPDATE categories SET keywords=? WHERE id=?",
             (_merge_keywords(dst["keywords"], src["keywords"]), body.into),
+        )
+        c.execute(
+            "INSERT INTO budgets (category_id, year, month, amount)"
+            " SELECT ?, year, month, amount FROM budgets WHERE category_id=?"
+            " ON CONFLICT (category_id, year, month)"
+            " DO UPDATE SET amount = amount + excluded.amount",
+            (body.into, cat_id),
         )
         c.execute("DELETE FROM categories WHERE id=?", (cat_id,))
         c.commit()

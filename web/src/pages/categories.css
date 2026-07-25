@@ -1,3 +1,19 @@
+/* the merge dialog's plan: what the irreversible action will actually do */
+.cat-merge-plan {
+    margin: 0;
+    padding-left: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 13px;
+    line-height: 1.45;
+    color: var(--m-text);
+}
+
+.cat-merge-plan li::marker {
+    color: var(--m-text-dim);
+}
+
 .kb-board {
     display: flex;
     gap: 16px;
