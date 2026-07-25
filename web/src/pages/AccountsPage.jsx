@@ -9,7 +9,7 @@ import { accountBalances } from "../engine/analytics.js";
 import AccountBadge from "../components/AccountBadge.jsx";
 import { money } from "../format.js";
 import {
-    AccountEditDialog,
+    AccountEditTab,
     AccountDeleteDialog,
     AccountReconcileDialog,
 } from "../components/AccountDialogs.jsx";
@@ -222,7 +222,7 @@ export default function AccountsPage() {
             </div>
 
             {dialog?.type === "edit" && (
-                <AccountEditDialog account={dialog.account} onClose={() => setDialog(null)} />
+                <AccountEditTab account={dialog.account} onClose={() => setDialog(null)} />
             )}
             {dialog?.type === "delete" && (
                 <AccountDeleteDialog

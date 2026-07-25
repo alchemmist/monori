@@ -6,6 +6,7 @@ import { parseRub, money } from "../format.js";
 import { ACCOUNT_ICONS, ACCOUNT_COLORS, DEFAULT_ACCOUNT_COLOR } from "./accountIcons.js";
 import AccountBadge from "./AccountBadge.jsx";
 import AppDialog from "../ui/AppDialog.jsx";
+import Tab from "../ui/Tab.jsx";
 import { FSelect, FTextInput } from "../ui/fields.jsx";
 import Txt from "../ui/Txt.jsx";
 
@@ -38,7 +39,7 @@ function fileToIconDataUrl(file, max = 128) {
     });
 }
 
-export function AccountEditDialog({ account, onClose }) {
+export function AccountEditTab({ account, onClose }) {
     const { snapshot, createAccount, patchAccount, notify } = useStore();
     const isNew = !account.id;
 
@@ -116,15 +117,17 @@ export function AccountEditDialog({ account, onClose }) {
     };
 
     return (
-        <AppDialog
+        <Tab
             title={isNew ? "New account" : `Edit ${account.name}`}
+            strip={isNew ? "New account" : account.name}
             onClose={onClose}
-            applyText={isNew ? "Create" : "Save"}
-            onApply={apply}
-            applyLoading={busy}
-            applyDisabled={!name.trim()}
+            footer={
+                <Button onClick={apply} loading={busy} disabled={!name.trim()}>
+                    {isNew ? "Create" : "Save"}
+                </Button>
+            }
         >
-            <div style={{ display: "flex", flexDirection: "column", gap: 12, paddingTop: 4 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                 <FTextInput
                     label="Name"
                     value={name}
@@ -238,7 +241,7 @@ export function AccountEditDialog({ account, onClose }) {
                     currency.
                 </Txt>
             </div>
-        </AppDialog>
+        </Tab>
     );
 }
 
