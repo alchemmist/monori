@@ -88,7 +88,8 @@ CREATE TABLE IF NOT EXISTS transactions (
   comment TEXT NOT NULL DEFAULT '',
   hash TEXT NOT NULL,                -- sha256(account_id|date|amount|description) for dedup
   source TEXT NOT NULL DEFAULT 'import',
-  batch_id INTEGER REFERENCES import_batches (id) ON DELETE SET NULL
+  batch_id INTEGER REFERENCES import_batches (id) ON DELETE SET NULL,
+  hidden INTEGER NOT NULL DEFAULT 0 -- excluded everywhere but kept for sync dedup
 );
 CREATE INDEX IF NOT EXISTS idx_tx_date ON transactions (date);
 CREATE INDEX IF NOT EXISTS idx_tx_hash ON transactions (hash);

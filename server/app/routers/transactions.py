@@ -13,6 +13,7 @@ router = APIRouter(prefix="/api/transactions", tags=["transactions"])
 _COUNT_TX = (
     "SELECT COUNT(*) FROM transactions"
     " WHERE account_id IN (SELECT id FROM accounts WHERE user_id=:uid)"
+    " AND hidden = :hidden"
     " AND (:from IS NULL OR date(date) >= date(:from))"
     " AND (:to IS NULL OR date(date) <= date(:to))"
     " AND (:uncat = 0 OR category_id IS NULL)"
@@ -23,6 +24,7 @@ _COUNT_TX = (
 _LIST_TX = (
     "SELECT * FROM transactions"
     " WHERE account_id IN (SELECT id FROM accounts WHERE user_id=:uid)"
+    " AND hidden = :hidden"
     " AND (:from IS NULL OR date(date) >= date(:from))"
     " AND (:to IS NULL OR date(date) <= date(:to))"
     " AND (:uncat = 0 OR category_id IS NULL)"
@@ -53,6 +55,7 @@ class TxPatch(BaseModel):
     mcc: str | None = None
     categoryId: int | None = None
     comment: str | None = None
+    hidden: bool | None = None
 
 
 class BulkBody(BaseModel):
@@ -92,6 +95,7 @@ def list_transactions(
     categoryId: int | None = None,
     accountId: int | None = None,
     uncategorized: bool = False,
+    hidden: bool = False,
     q: str | None = None,
     limit: int = Query(default=100, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
@@ -102,6 +106,7 @@ def list_transactions(
         "from": from_,
         "to": to,
         "uncat": 1 if uncategorized else 0,
+        "hidden": 1 if hidden else 0,
         "cat": categoryId,
         "acct": accountId,
         "q": f"%{q.lower()}%" if q else None,
@@ -173,10 +178,11 @@ def patch_transaction(tx_id: int, patch: TxPatch, user: Annotated[dict, Depends(
         account = row["account_id"]
         if patch.accountId is not None:
             account = _resolve_account(c, patch.accountId, uid)
+        hidden = int(patch.hidden) if patch.hidden is not None else row["hidden"]
         c.execute(
             """UPDATE transactions
                SET date=?, amount=?, description=?, bank_category=?, mcc=?, category_id=?,
-                   account_id=?, comment=?, hash=?
+                   account_id=?, comment=?, hidden=?, hash=?
                WHERE id=?""",
             (
                 date,
@@ -187,6 +193,7 @@ def patch_transaction(tx_id: int, patch: TxPatch, user: Annotated[dict, Depends(
                 category,
                 account,
                 comment,
+                hidden,
                 tx_hash(account, date, amount, description),
                 tx_id,
             ),

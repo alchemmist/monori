@@ -96,6 +96,7 @@ erDiagram
         TEXT hash "required"
         TEXT source "required"
         INTEGER batch_id FK "-> import_batches.id"
+        INTEGER hidden "required"
     }
     transfers {
         TEXT id PK

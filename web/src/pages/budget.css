@@ -121,6 +121,32 @@
     text-overflow: ellipsis;
 }
 
+/* hidden rows only appear behind the "Hidden" toggle; wash them out and tint
+   the row so they never read as part of the real ledger */
+.tx-hidden-row td {
+    background: color-mix(in srgb, var(--m-warning, #e8a33d) 7%, transparent);
+    color: var(--m-text-dim);
+}
+
+.tx-hidden-row .money {
+    color: var(--m-text-dim);
+    text-decoration: line-through;
+}
+
+/* the hide control stays out of the way until the row is pointed at (always
+   visible on hidden rows, or the way back would be invisible too) */
+.tx-row-action {
+    text-align: center;
+}
+
+.tx-grid tr:not(:hover, .tx-hidden-row) .tx-row-action button {
+    opacity: 0;
+}
+
+.tx-row-action button:focus-visible {
+    opacity: 1 !important;
+}
+
 .tx-table {
     /* full-bleed (radius 0), so nothing needs clipping here — and an overflow
        clip would make it a scroll container, breaking the header's

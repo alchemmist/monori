@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { api } from "./api.js";
 import { demoSnapshot } from "./demo/demoData.js";
 import { mergeCategories } from "./mergeCategories.js";
-import { mergeTransactions } from "./mergeTransactions.js";
+import { compareTx, mergeTransactions } from "./mergeTransactions.js";
 import { loadTabs, saveTabs } from "./ui/tabPersist.js";
 
 /** Rows per background chunk once the light snapshot has painted. */
@@ -15,6 +15,23 @@ export const TX_FLUSH_MS = 250;
 
 /** Bumped by every load(); a fill whose generation is stale drops its results. */
 let fillGeneration = 0;
+
+/** Bumped by every hide/unhide, so an in-flight hidden-list fetch can tell it
+ * is stale and must not overwrite the newer optimistic state. */
+let hiddenEpoch = 0;
+
+/** Rapid hide→unhide on one row must reach the server in order, or the earlier
+ * PATCH could land last and win — so per-transaction PATCHes are chained. */
+const txPatchChain = new Map();
+function chainedPatchTx(id, patch) {
+    const prev = txPatchChain.get(id) ?? Promise.resolve();
+    const next = prev.catch(() => {}).then(() => api.patchTx(id, patch));
+    txPatchChain.set(id, next);
+    next.catch(() => {}).finally(() => {
+        if (txPatchChain.get(id) === next) txPatchChain.delete(id);
+    });
+    return next;
+}
 
 const now = () => (typeof performance !== "undefined" ? performance.now() : 0);
 
@@ -107,7 +124,7 @@ export const useStore = create((set, get) => ({
     logout() {
         localStorage.removeItem("monori_token");
         get().setTabs([]);
-        set({ user: null });
+        set({ user: null, hiddenTx: null });
     },
 
     /**
@@ -118,6 +135,11 @@ export const useStore = create((set, get) => ({
         // claimed before the await, so two overlapping loads (React StrictMode
         // remounts, a reload during a fill) leave only the last one filling
         const generation = (fillGeneration += 1);
+        // Do not briefly render a prior account's hidden ledger while the new
+        // snapshot is loading. The epoch also discards any old hidden request.
+        const reloadHidden = get().hiddenTx !== null;
+        hiddenEpoch += 1;
+        set({ hiddenTx: null });
         if (isDemo()) {
             const snapshot = structuredClone(demoSnapshot);
             set({
@@ -136,6 +158,7 @@ export const useStore = create((set, get) => ({
             set({ error: String(e), loading: false, txProgress: null });
             return;
         }
+        if (reloadHidden) get().loadHiddenTx();
         get().fillTransactions(generation);
     },
 
@@ -226,6 +249,94 @@ export const useStore = create((set, get) => ({
             set({
                 toast: {
                     title: "Failed to update transaction",
+                    theme: "danger",
+                    content: String(e),
+                },
+            }),
+        );
+    },
+
+    /** Hidden transactions live outside the snapshot on purpose: nothing in
+     * the app (budgets, analytics, balances) can see them by accident. null
+     * until the transactions page first asks for them. */
+    hiddenTx: null,
+
+    async loadHiddenTx() {
+        if (isDemo()) {
+            if (!get().hiddenTx) set({ hiddenTx: [] });
+            return;
+        }
+        const epoch = hiddenEpoch;
+        try {
+            const rows = [];
+            for (;;) {
+                const page = await api.hiddenTx(rows.length);
+                if (epoch !== hiddenEpoch) return;
+                rows.push(...page.rows);
+                if (rows.length >= page.total || page.rows.length === 0) break;
+            }
+            set({ hiddenTx: rows.sort(compareTx) });
+        } catch (e) {
+            set({
+                toast: {
+                    title: "Failed to load hidden transactions",
+                    theme: "danger",
+                    content: String(e),
+                },
+            });
+        }
+    },
+
+    hideTx(txId) {
+        const { snapshot, hiddenTx } = get();
+        const t = snapshot.transactions.find((x) => x.id === txId);
+        if (!t) return;
+        set({
+            snapshot: {
+                ...snapshot,
+                transactions: snapshot.transactions.filter((x) => x.id !== txId),
+                transactionsTotal: Math.max(0, (snapshot.transactionsTotal ?? 1) - 1),
+            },
+            hiddenTx: [...(hiddenTx ?? []), { ...t, hidden: true }].sort(compareTx),
+        });
+        if (isDemo()) return;
+        hiddenEpoch += 1;
+        chainedPatchTx(txId, { hidden: true }).then(
+            () => {
+                // once the server excludes this row, every list offset past it
+                // shifts down by one — a running background fill would skip
+                // the row that slid into its boundary, so restart it
+                if (get().txProgress) get().fillTransactions((fillGeneration += 1));
+            },
+            (e) =>
+                set({
+                    toast: {
+                        title: "Failed to hide transaction",
+                        theme: "danger",
+                        content: String(e),
+                    },
+                }),
+        );
+    },
+
+    unhideTx(txId) {
+        const { snapshot, hiddenTx } = get();
+        const t = (hiddenTx ?? []).find((x) => x.id === txId);
+        if (!t) return;
+        set({
+            snapshot: {
+                ...snapshot,
+                transactions: mergeTransactions(snapshot.transactions, [{ ...t, hidden: false }]),
+                transactionsTotal: (snapshot.transactionsTotal ?? 0) + 1,
+            },
+            hiddenTx: hiddenTx.filter((x) => x.id !== txId),
+        });
+        if (isDemo()) return;
+        hiddenEpoch += 1;
+        chainedPatchTx(txId, { hidden: false }).catch((e) =>
+            set({
+                toast: {
+                    title: "Failed to unhide transaction",
                     theme: "danger",
                     content: String(e),
                 },

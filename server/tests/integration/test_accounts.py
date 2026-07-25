@@ -129,6 +129,16 @@ def test_reconcile_posts_adjustment_for_the_delta(api, client):
     assert again.json()["delta"] == 0
 
 
+def test_reconcile_ignores_hidden_transactions(api, client):
+    acc = api.account("Vault", openingBalance=10000)
+    junk = api.tx("2026-03-01T10:00:00", -2500, accountId=acc)
+    client.patch(f"/api/transactions/{junk}", json={"hidden": True})
+
+    # the user sees 10000, so matching reality must post no adjustment
+    r = client.post(f"/api/accounts/{acc}/reconcile", json={"actualBalance": 10000})
+    assert r.status_code == 200 and r.json()["delta"] == 0
+
+
 def test_import_targets_account(api, client):
     cash = api.account("Vault")
     rows = api.preview(api.statement)

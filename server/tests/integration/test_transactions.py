@@ -136,3 +136,46 @@ def test_transaction_delete(api, client):
     tx = api.tx("2026-01-01T00:00:00", -1)
     assert client.delete(f"/api/transactions/{tx}").status_code == 200
     assert client.delete(f"/api/transactions/{tx}").status_code == 404
+
+
+def test_hidden_transaction_disappears_from_list_and_snapshot(api, client):
+    keep = api.tx("2026-01-01T00:00:00", -100, description="Keep")
+    junk = api.tx("2026-01-02T00:00:00", -200, description="Junk")
+
+    assert client.patch(f"/api/transactions/{junk}", json={"hidden": True}).status_code == 200
+
+    listed = client.get("/api/transactions").json()
+    assert listed["total"] == 1
+    assert [r["id"] for r in listed["rows"]] == [keep]
+
+    snap = api.snapshot()
+    assert [t["id"] for t in snap["transactions"]] == [keep]
+    assert snap["transactionsTotal"] == 1
+
+    hidden = client.get("/api/transactions?hidden=true").json()
+    assert hidden["total"] == 1
+    assert [r["id"] for r in hidden["rows"]] == [junk]
+    assert hidden["rows"][0]["hidden"] is True
+
+    assert client.patch(f"/api/transactions/{junk}", json={"hidden": False}).status_code == 200
+    assert client.get("/api/transactions").json()["total"] == 2
+    assert client.get("/api/transactions?hidden=true").json()["total"] == 0
+
+
+def test_patch_without_hidden_keeps_the_flag(api, client):
+    tx = api.tx("2026-01-01T00:00:00", -100, description="Junk")
+    client.patch(f"/api/transactions/{tx}", json={"hidden": True})
+    client.patch(f"/api/transactions/{tx}", json={"comment": "still junk"})
+    hidden = client.get("/api/transactions?hidden=true").json()
+    assert hidden["total"] == 1 and hidden["rows"][0]["comment"] == "still junk"
+
+
+def test_hidden_transaction_still_blocks_reimport(api, client):
+    tx = api.tx("2026-01-05T10:00:00", -10000, description="Lenta")
+    assert client.patch(f"/api/transactions/{tx}", json={"hidden": True}).status_code == 200
+    assert client.get("/api/transactions").json()["total"] == 0
+    assert client.get("/api/transactions?hidden=true").json()["total"] == 1
+    # the row is invisible everywhere, but a re-sync of the same statement
+    # line must still see it as a duplicate — otherwise hiding is undone by
+    # the next bank sync
+    assert api.preview(api.statement)[0]["duplicate"] is True

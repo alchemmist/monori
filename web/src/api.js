@@ -44,6 +44,14 @@ export const api = {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(cell),
         }).then(json),
+    bulkBudgets: (cells) =>
+        apiFetch("/api/budgets/bulk", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ cells }),
+        }).then(json),
+    hiddenTx: (offset = 0) =>
+        apiFetch(`/api/transactions?hidden=true&limit=1000&offset=${offset}`).then(json),
     patchTx: (id, patch) =>
         apiFetch(`/api/transactions/${id}`, {
             method: "PATCH",
