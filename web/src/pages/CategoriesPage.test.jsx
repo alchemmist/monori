@@ -112,4 +112,28 @@ describe("CategoriesPage", () => {
         fireEvent.pointerUp(window);
         expect(moveCategory).toHaveBeenCalledWith(2, 2, [2, 3]);
     });
+
+    it("reorders a dragged group and cancels a drag with Escape", () => {
+        Object.defineProperty(HTMLElement.prototype, "animate", {
+            configurable: true,
+            value: () => ({ cancel: () => {} }),
+        });
+        seed({ groups, categories: [] });
+        const reorderGroups = vi.spyOn(useStore.getState(), "reorderGroups").mockResolvedValue();
+        const { container } = renderUI(<CategoriesPage />);
+        const income = container.querySelector('[data-gid="1"]');
+        const spending = container.querySelector('[data-gid="2"]');
+        income.getBoundingClientRect = () => ({ left: 0, right: 100, width: 100, top: 0, height: 100 });
+        spending.getBoundingClientRect = () => ({ left: 110, right: 210, width: 100, top: 0, height: 100 });
+        const head = income.querySelector(".kb-col__head");
+        fireEvent.pointerDown(head, { button: 0, pointerType: "mouse", clientX: 10, clientY: 10 });
+        fireEvent.pointerMove(window, { pointerType: "mouse", clientX: 180, clientY: 20 });
+        fireEvent.pointerUp(window);
+        expect(reorderGroups).toHaveBeenCalledWith([2, 1]);
+
+        fireEvent.pointerDown(head, { button: 0, pointerType: "mouse", clientX: 10, clientY: 10 });
+        fireEvent.pointerMove(window, { pointerType: "mouse", clientX: 20, clientY: 20 });
+        fireEvent.keyDown(window, { key: "Escape" });
+        expect(document.body).not.toHaveClass("kb-grabbing");
+    });
 });

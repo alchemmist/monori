@@ -69,4 +69,34 @@ describe("DashboardPage", () => {
         await user.click(screen.getByRole("button", { name: /navigator/ }));
         expect(screen.getByRole("button", { name: "Card" })).toBeInTheDocument();
     });
+
+    it("handles an empty dashboard and prompts to choose a category", () => {
+        seed({
+            accounts: [],
+            groups: [{ id: 2, name: "Spending", kind: "expense" }],
+            categories: [{ id: 10, groupId: 2, name: "Fuel" }],
+            transactions: [],
+        });
+        renderUI(<DashboardPage firstYear={year} lastYear={year} />);
+        expect(screen.queryByText("All accounts")).not.toBeInTheDocument();
+        expect(screen.getByText("Pick a category to see its monthly spending")).toBeInTheDocument();
+        expect(screen.getByText("—")).toBeInTheDocument();
+        expect(screen.getByTestId("donut-chart")).toHaveTextContent("");
+    });
+
+    it("groups spending after the first eleven categories into Other", () => {
+        const categories = Array.from({ length: 12 }, (_, i) => ({
+            id: i + 10, groupId: 2, name: `Expense ${i + 1}`,
+        }));
+        seed({
+            groups: [{ id: 2, name: "Spending", kind: "expense" }],
+            categories,
+            transactions: categories.map((c, i) => ({
+                id: c.id, accountId: 1, categoryId: c.id, amount: -(i + 1) * 100,
+                date: `${year}-02-10`,
+            })),
+        });
+        renderUI(<DashboardPage firstYear={year} lastYear={year} />);
+        expect(screen.getByTestId("donut-chart")).toHaveTextContent("Other");
+    });
 });

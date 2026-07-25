@@ -76,4 +76,51 @@ describe("AdminPage", () => {
         renderUI(<AdminPage />);
         expect(await screen.findByText("Failed to load admin data: forbidden")).toBeInTheDocument();
     });
+
+    it("renders empty user data, admin and failed sync states", async () => {
+        vi.spyOn(api, "adminUsers").mockResolvedValue([
+            { ...user, id: 8, email: "admin@example.test", isAdmin: true, connection: null },
+            {
+                ...user,
+                id: 9,
+                email: "failed-sync@example.test",
+                connection: { status: "error", lastSync: null, lastError: "token expired" },
+            },
+        ]);
+        vi.spyOn(api, "adminActivity").mockResolvedValue({ ...activity, recentLogins: [] });
+        vi.spyOn(api, "adminUserDetail").mockResolvedValue({
+            user: { ...user, id: 8, email: "admin@example.test" },
+            accounts: [], featureUsage: [], recentLogins: [], recentTransactions: [],
+        });
+        const { user: events } = renderUI(<AdminPage />);
+        await screen.findByText("No logins yet");
+        expect(screen.getByText("admin")).toBeInTheDocument();
+        expect(screen.getByText("failed-sync@example.test").closest("tr").querySelector(".admin-sync"))
+            .toHaveAttribute("title", "token expired");
+        expect(screen.getAllByRole("button", { name: "Delete" })).toHaveLength(1);
+
+        await events.click(screen.getByText("admin@example.test"));
+        expect(await screen.findByText("No accounts")).toBeInTheDocument();
+        expect(screen.getByText("No API activity")).toBeInTheDocument();
+        expect(screen.getByText("Never logged in")).toBeInTheDocument();
+        expect(screen.getByText("No transactions")).toBeInTheDocument();
+        expect(screen.queryByRole("button", { name: "Full" })).not.toBeInTheDocument();
+    });
+
+    it("downloads every transaction page from the detail", async () => {
+        vi.spyOn(api, "adminUserDetail").mockResolvedValue(detail);
+        vi.spyOn(api, "adminUserTransactions")
+            .mockResolvedValueOnce(Array.from({ length: 1000 }, (_, id) => ({ id })))
+            .mockResolvedValueOnce([{ id: 1001 }]);
+        const popup = { location: "", close: vi.fn() };
+        vi.spyOn(window, "open").mockReturnValue(popup);
+        vi.stubGlobal("URL", { createObjectURL: vi.fn(() => "blob:test"), revokeObjectURL: vi.fn() });
+        const { user: events } = renderUI(<AdminPage />);
+        await screen.findByRole("heading", { name: "Admin" });
+        await events.click(screen.getByRole("cell", { name: "person@example.test" }).closest("tr"));
+        await events.click(await screen.findByRole("button", { name: "Full" }));
+        await waitFor(() => expect(api.adminUserTransactions).toHaveBeenCalledTimes(2));
+        expect(api.adminUserTransactions).toHaveBeenLastCalledWith(7, { limit: 1000, offset: 1000 });
+        expect(popup.location).toBe("blob:test");
+    });
 });

@@ -51,4 +51,46 @@ describe("ImportDialog", () => {
         await user.click(screen.getByRole("button", { name: "Import 1" }));
         await waitFor(() => expect(patch).toHaveBeenCalledWith(1, { cardTails: ["8181"] }));
     });
+
+    it("shows parsing errors, allows going back, and does not remember an unchecked tail", async () => {
+        seed({ accounts: [{ id: 1, name: "Card", archived: false, cardTails: [] }] });
+        vi.spyOn(api, "importPreview").mockResolvedValue({
+            rows: [{ date: "2026-07-03", card: "*8181", description: "Shop", amount: -1, duplicate: false }],
+            errors: [{ line: 4, error: "bad date" }],
+        });
+        const commit = vi.spyOn(useStore.getState(), "commitImport").mockResolvedValue({ inserted: 1 });
+        const patch = vi.spyOn(useStore.getState(), "patchAccount");
+        const { user } = renderUI(<ImportDialog onClose={vi.fn()} />);
+        await user.type(screen.getByPlaceholderText(/03\.07\.2026/), "statement");
+        await user.click(screen.getByRole("button", { name: "Preview" }));
+        expect(await screen.findByText("1 unparsed lines")).toBeInTheDocument();
+        expect(screen.getByText("line 4: bad date")).toBeInTheDocument();
+        await user.click(screen.getByLabelText("Remember card *8181 for Card"));
+        await user.click(screen.getByRole("button", { name: "Import 1" }));
+        await waitFor(() => expect(commit).toHaveBeenCalled());
+        expect(patch).not.toHaveBeenCalled();
+    });
+
+    it("reports preview and import errors and clears a preview when account changes", async () => {
+        seed({ accounts: [{ id: 1, name: "Card", archived: false }, { id: 2, name: "Cash", archived: false }] });
+        const notify = vi.spyOn(useStore.getState(), "notify");
+        vi.spyOn(api, "importPreview")
+            .mockRejectedValueOnce(new Error("bad csv"))
+            .mockResolvedValue({ rows: [{ date: "2026-07-03", description: "Shop", amount: -1, duplicate: false }], errors: [] });
+        const commit = vi.spyOn(useStore.getState(), "commitImport").mockRejectedValue(new Error("offline"));
+        const { user } = renderUI(<ImportDialog onClose={vi.fn()} />);
+        await user.type(screen.getByPlaceholderText(/03\.07\.2026/), "broken");
+        await user.click(screen.getByRole("button", { name: "Preview" }));
+        await waitFor(() => expect(notify).toHaveBeenCalledWith(expect.objectContaining({ title: "Preview failed" })));
+        await user.click(screen.getByRole("button", { name: "Preview" }));
+        await screen.findByText("1 new");
+        await user.click(screen.getByRole("button", { name: "Card" }));
+        await user.click(screen.getByRole("option", { name: "Cash" }));
+        expect(screen.queryByText("1 new")).not.toBeInTheDocument();
+        await user.click(screen.getByRole("button", { name: "Preview" }));
+        await screen.findByText("1 new");
+        await user.click(screen.getByRole("button", { name: "Import 1" }));
+        await waitFor(() => expect(notify).toHaveBeenCalledWith(expect.objectContaining({ title: "Import failed" })));
+        expect(commit).toHaveBeenCalledWith(expect.any(Array), 2);
+    });
 });

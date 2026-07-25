@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { stripHtmlComments, mermaidCharts, SECTIONS } from "./content.js";
+import { stripHtmlComments, mermaidCharts, neighbors, sectionBySlug, SECTIONS } from "./content.js";
 
 describe("stripHtmlComments", () => {
     it("drops the generator markers around the schema diagram", () => {
@@ -61,5 +61,18 @@ describe("mermaidCharts", () => {
         const charts = mermaidCharts(page.body);
         expect(charts).toHaveLength(1);
         expect(charts[0]).toContain("erDiagram");
+    });
+});
+
+describe("section navigation", () => {
+    it("finds known sections and leaves unknown slugs undefined", () => {
+        expect(sectionBySlug("budgeting")).toMatchObject({ title: "Budgeting" });
+        expect(sectionBySlug("missing")).toBeUndefined();
+    });
+
+    it("returns neighboring pages with edge sentinels", () => {
+        expect(neighbors(SECTIONS[0].slug)).toMatchObject({ prev: null, next: SECTIONS[1] });
+        expect(neighbors(SECTIONS.at(-1).slug)).toMatchObject({ prev: SECTIONS.at(-2), next: null });
+        expect(neighbors("missing")).toEqual({ prev: null, next: null });
     });
 });

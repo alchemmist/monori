@@ -181,4 +181,44 @@ describe("EnvelopeHero", () => {
         expect(cancel).toHaveBeenCalled();
         vi.unstubAllGlobals();
     });
+
+    it("draws spawned coins on animation frames", () => {
+        let onIntersection;
+        let animation;
+        const context = {
+            clearRect: vi.fn(), beginPath: vi.fn(), arc: vi.fn(), fill: vi.fn(), globalAlpha: 1,
+        };
+        vi.spyOn(window, "matchMedia").mockReturnValue({ matches: false });
+        vi.spyOn(window, "getComputedStyle").mockReturnValue({
+            getPropertyValue: (name) => (name === "--m-text" ? "#111" : "#f00"),
+        });
+        vi.stubGlobal("IntersectionObserver", class {
+            constructor(callback) { onIntersection = callback; }
+            observe() {}
+            disconnect() {}
+        });
+        vi.stubGlobal("requestAnimationFrame", vi.fn((callback) => { animation = callback; return 7; }));
+        vi.stubGlobal("cancelAnimationFrame", vi.fn());
+        vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(context);
+        vi.spyOn(Math, "random").mockReturnValue(0.5);
+        const { container } = renderUI(<EnvelopeHero />);
+        const stage = container.querySelector(".env-hero");
+        Object.defineProperty(stage, "clientWidth", { configurable: true, value: 300 });
+        Object.defineProperty(stage, "clientHeight", { configurable: true, value: 200 });
+        stage.getBoundingClientRect = () => ({ left: 0 });
+        stage.querySelectorAll(".env-hero__pocket").forEach((pocket, index) => {
+            pocket.getBoundingClientRect = () => ({ left: index * 50, width: 40 });
+        });
+
+        onIntersection([{ isIntersecting: true }]);
+        animation(301);
+        expect(context.clearRect).toHaveBeenCalled();
+        expect(context.arc).toHaveBeenCalled();
+        expect(context.fill).toHaveBeenCalled();
+        expect(context.fillStyle).toBe("#111");
+        // Advance the same coin through the floor: expired particles are removed
+        // instead of being drawn indefinitely.
+        for (let timestamp = 602; timestamp < 30000; timestamp += 301) animation(timestamp);
+        vi.unstubAllGlobals();
+    });
 });

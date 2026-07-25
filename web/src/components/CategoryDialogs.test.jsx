@@ -48,4 +48,42 @@ describe("category and group dialogs", () => {
         expect(screen.getByText(/still holds 1 category/)).toBeInTheDocument(); expect(screen.getByRole("button", { name: "Delete" })).toBeDisabled();
         await blocker.click(screen.getByRole("button", { name: "Delete" }));
     });
+
+    it("creates an income group and closes only after the store resolves", async () => {
+        const create = vi.spyOn(useStore.getState(), "createGroup").mockResolvedValue(5);
+        const close = vi.fn();
+        const { user } = renderUI(<GroupEditDialog group={{}} onClose={close} />);
+        const apply = screen.getByRole("button", { name: "Create" });
+        expect(apply).toBeDisabled();
+        await user.type(screen.getByLabelText("Name"), " Paychecks ");
+        await user.click(screen.getByText("Income"));
+        await user.click(apply);
+        await waitFor(() => expect(create).toHaveBeenCalledWith({ name: "Paychecks", kind: "income" }));
+        expect(close).toHaveBeenCalledOnce();
+    });
+
+    it("reports group mutation failures and keeps the dialog open", async () => {
+        const notify = vi.spyOn(useStore.getState(), "notify");
+        vi.spyOn(useStore.getState(), "patchGroup").mockRejectedValue(new Error("offline"));
+        const close = vi.fn();
+        const { user } = renderUI(<GroupEditDialog group={groups[1]} onClose={close} />);
+        await user.click(screen.getByRole("button", { name: "Save" }));
+        await waitFor(() => expect(notify).toHaveBeenCalledWith(expect.objectContaining({ title: "Failed to update group", theme: "danger" })));
+        expect(close).not.toHaveBeenCalled();
+
+        vi.spyOn(useStore.getState(), "deleteGroup").mockRejectedValue(new Error("offline"));
+        renderUI(<GroupDeleteDialog group={groups[0]} catCount={0} onClose={close} />);
+        expect(screen.getByText(/group is empty and will be removed/)).toBeInTheDocument();
+        await user.click(screen.getByRole("button", { name: "Delete" }));
+        await waitFor(() => expect(notify).toHaveBeenCalledWith(expect.objectContaining({ title: "Failed to delete group", theme: "danger" })));
+    });
+
+    it("deletes an empty group", async () => {
+        const remove = vi.spyOn(useStore.getState(), "deleteGroup").mockResolvedValue();
+        const close = vi.fn();
+        const { user } = renderUI(<GroupDeleteDialog group={groups[0]} catCount={0} onClose={close} />);
+        await user.click(screen.getByRole("button", { name: "Delete" }));
+        await waitFor(() => expect(remove).toHaveBeenCalledWith(1));
+        expect(close).toHaveBeenCalledOnce();
+    });
 });
