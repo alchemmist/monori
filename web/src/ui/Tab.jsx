@@ -1,4 +1,4 @@
-import { useId, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { ChevronLeft, ChevronRight, Xmark } from "@gravity-ui/icons";
 
 /**
@@ -92,6 +92,15 @@ export default function Tab({ title, strip, onClose, footer, defaultCollapsed = 
         setAnimating(true);
     };
 
+    // `animating` gates pointer input; transitionend can be missed entirely
+    // (reduced motion, interrupted/overridden transition), so never leave the
+    // tab inert longer than the 0.25s transition could possibly last
+    useEffect(() => {
+        if (!animating) return undefined;
+        const t = setTimeout(() => setAnimating(false), 400);
+        return () => clearTimeout(t);
+    }, [animating]);
+
     const cls = ["ui-tab", collapsed && "ui-tab_collapsed", animating && "ui-tab_animating"]
         .filter(Boolean)
         .join(" ");
@@ -102,6 +111,9 @@ export default function Tab({ title, strip, onClose, footer, defaultCollapsed = 
             className={cls}
             style={{ right: offset }}
             onTransitionEnd={(e) => {
+                if (e.propertyName === "width") setAnimating(false);
+            }}
+            onTransitionCancel={(e) => {
                 if (e.propertyName === "width") setAnimating(false);
             }}
         >
