@@ -31,14 +31,7 @@ export default function TabHost() {
             return <AccountEditHost key={t.id} accountId={t.props.accountId} onClose={close} />;
         }
         if (t.kind === "admin-tx") {
-            return (
-                <AdminTxTab
-                    key={t.id}
-                    user={t.props.user}
-                    onChanged={t.props.onChanged}
-                    onClose={close}
-                />
-            );
+            return <AdminTxTab key={t.id} user={t.props.user} onClose={close} />;
         }
         if (t.kind === "migrate") {
             return <MigratePanel key={t.id} onClose={close} />;

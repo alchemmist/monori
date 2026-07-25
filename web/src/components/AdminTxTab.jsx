@@ -6,6 +6,7 @@ import Tab from "../ui/Tab.jsx";
 import Txt from "../ui/Txt.jsx";
 import { FSelect } from "../ui/fields.jsx";
 import { showToast } from "../ui/notify.js";
+import { useStore } from "../store.js";
 
 const PAGE = 1000;
 const ALL = "all";
@@ -13,7 +14,7 @@ const ALL = "all";
 /* Bulk operations on one user's transactions, docked as a Tab so the admin
  * page stays usable while working through a selection: filter by account,
  * tick rows (or everything visible), delete the whole selection at once. */
-export default function AdminTxTab({ user, onClose, onChanged }) {
+export default function AdminTxTab({ user, onClose }) {
     const [rows, setRows] = useState(null);
     const [filter, setFilter] = useState(ALL);
     const [selected, setSelected] = useState(() => new Set());
@@ -90,7 +91,7 @@ export default function AdminTxTab({ user, onClose, onChanged }) {
             setSelected(new Set());
             setArming(false);
             setRows(await load());
-            onChanged();
+            useStore.getState().bumpAdminTick();
         } catch (e) {
             showToast({ title: "Delete failed", content: e.message, theme: "danger" });
         } finally {

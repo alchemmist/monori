@@ -43,6 +43,22 @@ export default function AdminPage() {
         reload();
     }, [reload]);
 
+    // persistent tabs signal admin-data mutations through the store instead of
+    // holding a callback into this (possibly unmounted) page
+    const adminTick = useStore((s) => s.adminTick);
+    useEffect(() => {
+        if (!adminTick) return;
+        reload();
+        setDetail((d) => {
+            if (d) {
+                api.adminUserDetail(d.user.id)
+                    .then(setDetail)
+                    .catch(() => setDetail(null));
+            }
+            return d;
+        });
+    }, [adminTick, reload]);
+
     const openDetail = (id) => {
         if (detail?.user.id === id) {
             setDetail(null);
@@ -199,17 +215,7 @@ export default function AdminPage() {
                         ))}
                     </tbody>
                 </table>
-                {detail && (
-                    <UserDetail
-                        detail={detail}
-                        onChanged={() => {
-                            reload();
-                            api.adminUserDetail(detail.user.id)
-                                .then(setDetail)
-                                .catch(() => {});
-                        }}
-                    />
-                )}
+                {detail && <UserDetail detail={detail} />}
             </div>
         </div>
     );
@@ -259,6 +265,7 @@ function UserRow({ user, open, onOpen, onDeleted }) {
         setBusy(true);
         try {
             await api.adminDeleteUser(user.id);
+            useStore.getState().closeTabByKey(`admin-tx:${user.id}`);
             showToast({ title: "User deleted", content: user.email, theme: "success" });
             onDeleted();
         } catch (err) {
@@ -300,7 +307,7 @@ function UserRow({ user, open, onOpen, onDeleted }) {
 
 const TX_PREVIEW = 5;
 
-function UserDetail({ detail, onChanged }) {
+function UserDetail({ detail }) {
     const openTab = useStore((s) => s.openTab);
     const openFull = async () => {
         // open the tab inside the click gesture so it is not popup-blocked, then
@@ -388,7 +395,7 @@ function UserDetail({ detail, onChanged }) {
                             onClick={() =>
                                 openTab(
                                     "admin-tx",
-                                    { user: detail.user, onChanged },
+                                    { user: detail.user },
                                     `admin-tx:${detail.user.id}`,
                                 )
                             }

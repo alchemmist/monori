@@ -772,3 +772,15 @@ def test_future_budgets_do_not_extend_reconciliation():
     parsed = parse_template_workbook(_save(wb))
     assert all(t["date"] < "2025-02" for t in parsed["transactions"])
     assert {(b["year"], b["month"]) for b in parsed["budgets"]} == {(2025, 1), (2025, 2)}
+
+
+def test_parse_keywords_falls_back_without_pipes():
+    """
+    No pipe anywhere -> content detection abstains and the known-header
+    positional fallback (immune to side-table pollution) must still hit.
+    """
+    ws = _tx_only_ws(
+        [_tx(datetime.datetime(2025, 1, 2), -10.0, "Cafes", kw=("Cafes", "starbucks"))]
+    )
+    idx = {name: i for i, name in enumerate(TX_HEADER)}
+    assert _parse_keywords(ws, idx) == {"Cafes": "starbucks"}

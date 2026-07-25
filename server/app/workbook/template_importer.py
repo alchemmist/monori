@@ -432,7 +432,7 @@ def _category_col(ws, idx):
     for c in range(start, stop):
         if c in used:
             return c
-    return max(idx.values()) + 2
+    return _known_max_col(idx) + 2
 
 
 def _parse_keywords(ws, idx):
@@ -442,7 +442,7 @@ def _parse_keywords(ws, idx):
     """
     base = _find_keyword_block(ws, idx)
     if base is None:
-        base = max(idx.values()) + 3
+        base = _known_max_col(idx) + 3
     keywords: dict[str, str] = {}
     for row in ws.iter_rows(min_row=1, values_only=True):
         if base >= len(row):

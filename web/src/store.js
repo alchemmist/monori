@@ -31,6 +31,16 @@ export const useStore = create((set, get) => ({
     closeTab(id) {
         set({ tabs: get().tabs.filter((t) => t.id !== id) });
     },
+    closeTabByKey(key) {
+        set({ tabs: get().tabs.filter((t) => t.key !== key) });
+    },
+
+    // bumped by tabs that mutate admin data; the Admin page re-fetches while
+    // mounted instead of holding a page callback inside persistent tab props
+    adminTick: 0,
+    bumpAdminTick() {
+        set({ adminTick: get().adminTick + 1 });
+    },
 
     async checkAuth() {
         if (isDemo()) {
@@ -47,7 +57,7 @@ export const useStore = create((set, get) => ({
             set({ user, authChecked: true });
         } catch {
             localStorage.removeItem("monori_token");
-            set({ user: null, authChecked: true });
+            set({ user: null, authChecked: true, tabs: [] });
         }
     },
 
@@ -65,7 +75,7 @@ export const useStore = create((set, get) => ({
 
     logout() {
         localStorage.removeItem("monori_token");
-        set({ user: null });
+        set({ user: null, tabs: [] });
     },
 
     async load() {
