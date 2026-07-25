@@ -43,6 +43,7 @@ def _write_year(
     income=None,
     available=None,
     seed=None,
+    seeds=None,
 ):
     bases = [2 + 4 * i for i in range(len(months))]
     ws.cell(row=1, column=bases[0], value=start_token)
@@ -66,9 +67,10 @@ def _write_year(
                     if balance is not None:
                         ws.cell(row=r, column=b + 2, value=balance)
         r += 1
-    if seed is not None:
-        ws.cell(row=1, column=bases[0] + 2, value="Not budgeted in Dec")
-        ws.cell(row=1, column=bases[0] + 1, value=seed)
+    for mnum, value in {**({} if seed is None else {months[0]: seed}), **(seeds or {})}.items():
+        b = bases[months.index(mnum)]
+        ws.cell(row=1, column=b + 2, value="Not budgeted in Dec")
+        ws.cell(row=1, column=b + 1, value=value)
     if income:
         for mi, mnum in enumerate(months):
             if mnum in income:
@@ -664,6 +666,112 @@ def test_available_seed_excludes_seam_overspend():
     synth = {(t["description"], t["date"]): t for t in parsed["transactions"]}
     assert synth[("Groceries", "2024-12-31T12:00:00")]["amount"] == -60000
     assert synth[("Income", "2024-12-31T12:00:00")]["amount"] == 10000  # available seed
+    assert not any(w.startswith("verify:") for w in parsed["warnings"])
+
+
+def test_history_and_adjustment_split_follows_the_rows_not_the_sheet_name():
+    """
+    A workbook can keep years of history on ordinary year sheets and never write
+    `_archive` once. What makes a correction a stand-in is that the month has no
+    rows of its own, so counting by sheet name reports hundreds of history rows
+    as live adjustments.
+    """
+    wb = Workbook()
+    wb.remove(wb.active)
+    _tx_sheet(wb, [_tx(datetime.datetime(2025, 1, 15), -300.0, "Groceries", desc="Lenta")])
+    _write_year(
+        wb.create_sheet("2024"),
+        months=[1, 2],
+        start_token="ЯНВ 2024",
+        rows=[("▼Daily", None), ("Groceries", {1: (1000, -700, 300), 2: (0, 0, 300)})],
+        header_row=8,
+    )
+    _write_year(
+        wb.create_sheet("2025"),
+        months=[1, 2],
+        start_token="ЯНВ 2025",
+        rows=[("▼Daily", None), ("Groceries", {1: (1000, -900, 400)})],
+        header_row=8,
+    )
+    parsed = parse_workbook(_save(wb))
+    # 2024 has no rows at all — its correction stands in for the whole month;
+    # 2025-01 does, so its correction only tops the month up
+    assert any(w.startswith("history: 1 transactions stand in for") for w in parsed["warnings"])
+    assert (
+        "reconciliation: 1 adjustment transactions align live months with the sheet"
+        in (parsed["warnings"])
+    )
+
+
+def test_opening_balance_is_taken_from_the_first_month_with_rows():
+    """
+    A spreadsheet is started with money already in hand, and the only place that
+    money exists is the header cell of its first real month: what was left
+    unbudgeted the month before. The earlier blocks of that year are empty
+    scaffolding, so reading the seed off the January block finds nothing.
+    """
+    wb = Workbook()
+    wb.remove(wb.active)
+    _tx_sheet(wb, [_tx(datetime.datetime(2025, 7, 15), -300.0, "Groceries", desc="Lenta")])
+    _write_year(
+        wb.create_sheet("2025"),
+        months=[6, 7],
+        start_token="ИЮН 2025",
+        rows=[("▼Daily", None), ("Groceries", {7: (1000, -300, 700)})],
+        income={7: 5000},
+        available={7: 5900},
+        seeds={6: 0, 7: 1900},
+        header_row=8,
+    )
+    parsed = parse_workbook(_save(wb))
+    synth = {(t["description"], t["date"]): t for t in parsed["transactions"]}
+    assert synth[("Opening balance", "2025-06-30T12:00:00")]["amount"] == 190000
+    assert any(w.startswith("opening balance: 1,900.00") for w in parsed["warnings"])
+    # seeded once and the sheet's own Available then agrees month for month
+    assert not any(w.startswith("verify:") for w in parsed["warnings"])
+
+
+def test_opening_balance_left_alone_when_the_sheet_starts_from_nothing():
+    wb = Workbook()
+    wb.remove(wb.active)
+    _tx_sheet(wb, [_tx(datetime.datetime(2025, 7, 15), -300.0, "Groceries", desc="Lenta")])
+    _write_year(
+        wb.create_sheet("2025"),
+        months=[6, 7],
+        start_token="ИЮН 2025",
+        rows=[("▼Daily", None), ("Groceries", {7: (1000, -300, 700)})],
+        income={7: 5000},
+        seeds={6: 0, 7: 0},
+        header_row=8,
+    )
+    parsed = parse_workbook(_save(wb))
+    assert not any(t["description"] == "Opening balance" for t in parsed["transactions"])
+    assert not any(w.startswith("opening balance:") for w in parsed["warnings"])
+
+
+def test_available_ignores_budget_cells_on_income_categories():
+    """
+    The budget grid only spends down expense envelopes, so a Budgeted cell on an
+    income row buys nothing and must not be subtracted from Available — which is
+    what the client computes and therefore what the verify check has to assume.
+    """
+    wb = Workbook()
+    wb.remove(wb.active)
+    _tx_sheet(wb, [])
+    _write_year(
+        wb.create_sheet("2025"),
+        months=[1],
+        rows=[
+            ("▲Inflow", None),
+            ("Salary", {1: (700, None, None)}),
+            ("▼Daily", None),
+            ("Groceries", {1: (1000, -300, 700)}),
+        ],
+        income={1: 5000},
+        available={1: 4000},
+        header_row=8,
+    )
+    parsed = parse_workbook(_save(wb))
     assert not any(w.startswith("verify:") for w in parsed["warnings"])
 
 

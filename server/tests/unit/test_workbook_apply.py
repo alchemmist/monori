@@ -95,8 +95,14 @@ def test_apply_creates_groups_categories_transactions_budgets(tmp_path):
 
 def test_apply_preserves_blank_categories_despite_keywords(tmp_path):
     c, uid, acct = _db(tmp_path)
-    apply_workbook(c, uid, _parsed(), {"RUB:": acct})
+    result = apply_workbook(c, uid, _parsed(), {"RUB:": acct})
     c.commit()
+    # a wall of uncategorized rows reads as a fault unless the result says why
+    assert result["warnings"] == [
+        "1 rows carry no category in the sheet and were imported uncategorized"
+        " — typically transfers between your own accounts, which the spreadsheet"
+        " leaves out of the budget as well"
+    ]
     rows = list(
         c.execute(
             "SELECT t.description, cat.name FROM transactions t"

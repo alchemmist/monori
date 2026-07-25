@@ -74,6 +74,11 @@ workbook that is a bit of both still works.
   budget, and only where it is non-zero; outflows and balances are derived
   values monori recomputes — but they are still read, because they are what a
   month without rows gets rebuilt from.
+  - Every month block also states what was left unbudgeted the month before.
+    At the first month that has any activity that number is the **opening
+    balance** — money the spreadsheet was started with, which no row in it
+    accounts for. It is imported as one transaction, dated the month before,
+    so the running Available starts where the sheet starts and not at zero.
   - A year with an `_archive` sheet is read from that sheet alone: a plain
     sheet for the same year is a working copy of history and is ignored.
   - The year before the earliest live one is the **seam** — where the archived
@@ -129,10 +134,13 @@ something ambiguous. The ones a hand-kept workbook usually raises:
   structure came from the sections of the year grids instead. The categories in
   the count above the warnings are the ones that will be created; nothing was
   lost.
-- **`history: N transactions stand in for months …`** — the archive years hold
-  no rows at all, only monthly totals. One transaction per category per month
-  stands in for them so those years still add up. They show up in monori as
-  ordinary rows named after their category.
+- **`history: N transactions stand in for months …`** — those months hold no
+  rows at all, only monthly totals; a spreadsheet kept for years usually has
+  real rows for the recent ones and nothing but grid figures before that. One
+  transaction per category per month stands in for them so those months still
+  add up. They show up in monori as ordinary rows named after their category,
+  dated the last day of the month. Which months these are is decided by whether
+  any row is dated there, not by what their sheet is called.
 - **`reconciliation: N adjustment transactions …`** — the year grid and its
   rows differed, so N explicit correction transactions were added. The source
   rows themselves were not changed.
@@ -140,16 +148,27 @@ something ambiguous. The ones a hand-kept workbook usually raises:
   between the archived years and the first one that still has rows: N
   corrections so every category starts the live era on the balance the
   spreadsheet says it had.
+- **`N rows carry no category in the sheet …`** — raised on the result screen.
+  These are the rows the spreadsheet never filed anywhere, usually transfers
+  between your own accounts; its own totals leave them out too, so the budget is
+  unaffected. They arrive in monori uncategorized, which on a long ledger can be
+  a fifth of everything.
 - **`N category names in the sheet match nothing in monori`** — raised on the
   result screen, not the preview: those rows were imported uncategorized rather
   than filed under a guess. Re-running the
   migration will not fix them: the rows already exist and get skipped as
   duplicates, so categorize them in monori instead.
+- **`opening balance: N was already there …`** — the spreadsheet's first month
+  with rows did not start from zero, and nothing in the sheet says where that
+  money came from. It is imported as a single transaction dated the month
+  before, so Available carries forward from the same point the sheet does.
 - **`verify: the sheet's own Available differs …`** — the sheet's running
-  Available versus the one recomputed from everything imported. A difference
-  that stays roughly constant month over month is money carried in from before
-  the earliest sheet, not a mis-read row. Transactions and budgets are imported
-  either way; only this one running total starts from a different point.
+  Available versus the one recomputed from everything imported. Every row,
+  budget and carried balance is imported exactly as the sheet has it, so a
+  remaining gap is the sheet's own header arithmetic: a gap that grows only in
+  months with overspending is a formula that stopped subtracting it. monori
+  applies the envelope rules consistently, and does not fabricate income to
+  match a figure the spreadsheet computed wrong.
 - **`Transactions: N rows in USD`** — see the currency rule in step 4 above.
 
 ## Limits
@@ -158,4 +177,15 @@ something ambiguous. The ones a hand-kept workbook usually raises:
   USD account as 95.78 USD. Cross-currency arithmetic (a single total across
   accounts in different currencies) is still out of scope.
 - Transfers between accounts arrive as two ordinary transactions — link them
-  in monori afterwards if you want them netted out of analytics.
+  in monori afterwards if you want them netted out of analytics. Unlike a
+  statement import, a migration does not run transfer detection for you:
+  the grid has just been reconciled against the spreadsheet, and linking a pair
+  moves its categories aside, which would quietly take that money back out of
+  the budget you just matched.
+- Where the spreadsheet disagrees with itself — a Balance its own Budgeted and
+  Outflows do not add up to, an Available its own header cells do not make —
+  monori follows the balance the sheet displays and carries forward, and
+  recomputes the totals from it. It will not reproduce a figure the spreadsheet
+  computed wrong. `scripts/verify_migration.py` imports a workbook into a
+  throwaway database and lists every such cell, marking the ones where the sheet
+  contradicts itself.

@@ -104,6 +104,7 @@ DEFAULT_CURRENCY = "RUB"
 INCOME_GROUP = "Inflow"
 INCOME_CATEGORY = "Income"
 OTHER_GROUP = "Other"
+OPENING_DESCRIPTION = "Opening balance"
 
 ADJUST_TOLERANCE_KOP = 2
 VERIFY_TOLERANCE_KOP = 5
@@ -359,19 +360,22 @@ def _parse_year_sheet(ws, year, layout):
                 if av is not None:
                     available[m] = av
                 break
-    seed = None
-    first_base = months[0][1] if months else None
-    if first_base is not None:
-        label = _s(ws.cell(1, first_base + 2).value)
-        if label.startswith(("Not budgeted", "Не заложено")):
-            seed = _kop(ws.cell(1, first_base + 1).value)
+    # every month block carries what was left over at the end of the one before
+    # it, which is the only place a sheet records money it inherited rather than
+    # earned — including the balance the whole spreadsheet was started with
+    seeds = {}
+    for m, base in months:
+        carried = _summary_value(ws, base, ("Not budgeted", "Не заложено"))
+        if carried is not None:
+            seeds[m] = carried
     return {
         "year": year,
         "months": [m for m, _ in months],
         "cats": cats,
         "income": income,
         "available": available,
-        "seed": seed,
+        "seeds": seeds,
+        "seed": seeds.get(months[0][0]) if months else None,
         "sections": _sheet_sections(ws, layout),
     }
 
@@ -616,36 +620,29 @@ def account_slot(tx):
     return f"{tx.get('currency') or DEFAULT_CURRENCY}:{tx['marker']}"
 
 
-def _last_activity(transactions, sources):
+def _activity_span(transactions, sources):
     """
-    Last (year, month) showing real activity: a transaction, a nonzero cached
-    outflow or income. Budgets deliberately do not count — planning months
+    First and last (year, month) showing real activity: a transaction, a nonzero
+    cached outflow or income. Budgets deliberately do not count — planning months
     ahead is normal, a budget alone creates no transactions in the sheet, and
     the cached balances of those future months are pure carry residue;
-    reconciling against them fabricates future-dated synthetic rows.
+    reconciling against them fabricates future-dated synthetic rows. A sheet
+    whose earlier months are empty scaffolding is the same case read from the
+    other end: nothing happened there, so nothing is owed there either.
     """
-    last = None
-
-    def bump(y, m):
-        nonlocal last
-        if last is None or (y, m) > last:
-            last = (y, m)
+    seen = []
 
     # uncategorized transactions are excluded from the reconciliation sums, so
     # they must not extend the reconciled range either
     for tx in transactions:
         if tx["monori_category"]:
-            bump(int(tx["date"][:4]), int(tx["date"][5:7]))
+            seen.append((int(tx["date"][:4]), int(tx["date"][5:7])))
     for source in sources:
         y = source["year"]
-        for m, v in source["income"].items():
-            if v:
-                bump(y, m)
+        seen.extend((y, m) for m, v in source["income"].items() if v)
         for entry in source["cats"].values():
-            for m, v in entry["outflows"].items():
-                if v:
-                    bump(y, m)
-    return last
+            seen.extend((y, m) for m, v in entry["outflows"].items() if v)
+    return (min(seen), max(seen)) if seen else (None, None)
 
 
 def _month_range(start, end):
@@ -869,21 +866,34 @@ def _parse(wb):
         else:
             tx_sums[(cat, y, m)] = tx_sums.get((cat, y, m), 0) + tx["amount"]
 
+    # A correction is either standing in for a month the sheet kept only as
+    # totals or adjusting one that has its own rows, and which of the two it is
+    # follows from whether any row is dated there — not from what its sheet is
+    # called. A workbook can keep years of history on plain sheets and never
+    # write `_archive` once.
+    months_with_rows = {
+        (int(tx["date"][:4]), int(tx["date"][5:7])) for tx in transactions if tx["monori_category"]
+    }
+
     synthetic = []
     n_hist = n_adjust = 0
+
+    def count(y, m):
+        nonlocal n_hist, n_adjust
+        if (y, m) in months_with_rows:
+            n_adjust += 1
+        else:
+            n_hist += 1
+
     for source in list(archive_years.values()) + list(live_years.values()):
         year = source["year"]
-        live = year in live_years
         for m, target in source["income"].items():
             have = income_sums.get((year, m), 0)
             delta = target - have
             if abs(delta) > ADJUST_TOLERANCE_KOP:
                 synthetic.append(_synthetic(year, m, delta, income_category, income_category))
                 income_sums[(year, m)] = have + delta
-                if live:
-                    n_adjust += 1
-                else:
-                    n_hist += 1
+                count(year, m)
 
     budget_map: dict[tuple, int] = {}
     for cell in budgets:
@@ -894,7 +904,7 @@ def _parse(wb):
     first_sheet = archive_years.get(all_years[0]) or live_years[all_years[0]]
     start = (all_years[0], min(first_sheet["months"]))
     end = (all_years[-1], 12)
-    last_active = _last_activity(
+    first_active, last_active = _activity_span(
         transactions, list(archive_years.values()) + list(live_years.values())
     )
     if last_active is not None and last_active < end:
@@ -902,6 +912,19 @@ def _parse(wb):
         if seam_sheet is not None:
             end = max(end, (seam_year, 12))
     expense_cats = [c["name"] for c in categories if kinds[c["name"]] != "income"]
+
+    # What the sheet says was already there when its first month with rows began.
+    # A spreadsheet is almost never started on the day its owner had nothing, and
+    # that opening balance exists nowhere in the rows — only in the header cell of
+    # that month, as what was left unbudgeted the month before. Read once and
+    # seeded once: aligning the running Available every month would paper over the
+    # sheet's own arithmetic instead of reproducing it.
+    seeds = {}
+    for years in (archive_years, live_years):
+        for year, source in years.items():
+            for m, value in source["seeds"].items():
+                seeds[(year, m)] = value
+    opening = seeds.get(first_active) if first_active is not None else None
 
     seam_targets = {}
     if seam_sheet is not None:
@@ -917,9 +940,21 @@ def _parse(wb):
     prev_overspent = 0
     avail_residuals = []
     n_seam = 0
+    opened = None
     for y, m in _month_range(start, end):
+        if (y, m) == first_active and opening is not None:
+            delta = opening - avail
+            if abs(delta) > ADJUST_TOLERANCE_KOP:
+                # dated the month before, where the sheet itself puts it: the
+                # first active month's own Income must stay exactly what the
+                # sheet reports for it
+                py, pm = (y - 1, 12) if m == 1 else (y, m - 1)
+                synthetic.append(_synthetic(py, pm, delta, income_category, OPENING_DESCRIPTION))
+                income_sums[(py, pm)] = income_sums.get((py, pm), 0) + delta
+                avail += delta
+                opened = (opening, y, m)
         income = income_sums.get((y, m), 0)
-        budgeted_total = sum(budget_map.get((name, y, m), 0) for name in cat_names)
+        budgeted_total = sum(budget_map.get((name, y, m), 0) for name in expense_cats)
         avail = avail + prev_overspent + income - budgeted_total
         live = y in live_years
         source = live_years.get(y) or archive_years.get(y)
@@ -952,10 +987,8 @@ def _parse(wb):
             if abs(delta) > ADJUST_TOLERANCE_KOP:
                 if at_seam:
                     n_seam += 1
-                elif live:
-                    n_adjust += 1
                 else:
-                    n_hist += 1
+                    count(y, m)
                 synthetic.append(_synthetic(y, m, delta, name, name))
                 tx_sums[(name, y, m)] = have + delta
                 projected += delta
@@ -977,8 +1010,8 @@ def _parse(wb):
     if n_hist:
         warnings.append(
             f"history: {n_hist} transactions stand in for months the sheet keeps only as monthly"
-            " totals (the archive years have no rows) — one per category per month, so those"
-            " years still add up"
+            " totals, with no rows of their own — one per category per month, so those months"
+            " still add up"
         )
     if n_adjust:
         warnings.append(
@@ -986,13 +1019,21 @@ def _parse(wb):
         )
     if n_seam:
         warnings.append(f"seam: {n_seam} carry corrections at {seam_year}-12")
+    if opened is not None:
+        amount, oy, om = opened
+        warnings.append(
+            f"opening balance: {amount / 100:,.2f} was already there when the sheet's first month"
+            f" with rows ({oy}-{om:02d}) began — imported as one transaction, since no row in the"
+            " sheet accounts for it"
+        )
     if avail_residuals:
         (fy, fm, fd), (ly, lm, ld) = avail_residuals[0], avail_residuals[-1]
         warnings.append(
             f"verify: the sheet's own Available differs from the one rebuilt from its rows in "
             f"{len(avail_residuals)} months, from {fd / 100:,.2f} ({fy}-{fm:02d}) to "
-            f"{ld / 100:,.2f} ({ly}-{lm:02d}) — a difference this steady is money carried in from "
-            "before the earliest sheet; transactions and budgets are imported either way"
+            f"{ld / 100:,.2f} ({ly}-{lm:02d}) — every row, budget and carried balance is imported"
+            " as the sheet has it, so a gap that only grows in months with overspending is the"
+            " sheet's own header formula, not a mis-read row"
         )
 
     return _result(groups, categories, transactions + synthetic, budgets, warnings, errors)

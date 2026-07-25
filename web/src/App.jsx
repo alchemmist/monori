@@ -59,7 +59,11 @@ const REPORT_BUG_URL = `https://github.com/alchemmist/monori/issues/new?labels=b
     "**What happened**\n\n\n**What I expected**\n\n\n**Steps to reproduce**\n\n1. \n",
 )}`;
 
-const FIRST_YEAR = 2020;
+// where the budget chain starts when there is nothing to read it off yet. The
+// real first year comes from the data: Available carries forward from the very
+// first month, so starting the chain after a migrated year would silently drop
+// everything budgeted, earned and spent in it.
+const DEFAULT_FIRST_YEAR = 2020;
 
 export default function App({ theme, onToggleTheme }) {
     const { snapshot, loading, error, load, toast, user, authChecked, checkAuth, openTab } =
@@ -93,19 +97,35 @@ export default function App({ theme, onToggleTheme }) {
         }
     }, [user]);
 
+    const firstYear = useMemo(() => {
+        if (!snapshot) return DEFAULT_FIRST_YEAR;
+        const minTx = snapshot.transactions.reduce(
+            (m, t) => Math.min(m, +t.date.slice(0, 4)),
+            DEFAULT_FIRST_YEAR,
+        );
+        const minBudget = snapshot.budgets.reduce(
+            (m, b) => Math.min(m, b.year),
+            DEFAULT_FIRST_YEAR,
+        );
+        return Math.min(minTx, minBudget);
+    }, [snapshot]);
+
     const lastYear = useMemo(() => {
         if (!snapshot) return new Date().getFullYear();
         const maxTx = snapshot.transactions.reduce(
             (m, t) => Math.max(m, +t.date.slice(0, 4)),
-            FIRST_YEAR,
+            DEFAULT_FIRST_YEAR,
         );
-        const maxBudget = snapshot.budgets.reduce((m, b) => Math.max(m, b.year), FIRST_YEAR);
+        const maxBudget = snapshot.budgets.reduce(
+            (m, b) => Math.max(m, b.year),
+            DEFAULT_FIRST_YEAR,
+        );
         return Math.max(maxTx, maxBudget, new Date().getFullYear()) + 1;
     }, [snapshot]);
 
     const results = useMemo(
-        () => (snapshot ? computeRange(snapshot, FIRST_YEAR, lastYear) : null),
-        [snapshot, lastYear],
+        () => (snapshot ? computeRange(snapshot, firstYear, lastYear) : null),
+        [snapshot, firstYear, lastYear],
     );
 
     if (!isDemo() && !authChecked) {
@@ -249,7 +269,7 @@ export default function App({ theme, onToggleTheme }) {
                     </div>
                 )}
                 {page === "budget" && (
-                    <BudgetPage results={results} firstYear={FIRST_YEAR} lastYear={lastYear} />
+                    <BudgetPage results={results} firstYear={firstYear} lastYear={lastYear} />
                 )}
                 {page === "dashboard" && (
                     <Suspense
@@ -259,10 +279,10 @@ export default function App({ theme, onToggleTheme }) {
                             </div>
                         }
                     >
-                        <DashboardPage firstYear={FIRST_YEAR} lastYear={lastYear} />
+                        <DashboardPage firstYear={firstYear} lastYear={lastYear} />
                         <AnalyticsPage
                             results={results}
-                            firstYear={FIRST_YEAR}
+                            firstYear={firstYear}
                             lastYear={lastYear}
                         />
                     </Suspense>

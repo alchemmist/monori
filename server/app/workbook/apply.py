@@ -104,6 +104,7 @@ def _import_transactions(c, uid, transactions, mapping, category_ids):
     index = _category_index(c, uid)
     by_account: dict[int, list] = {}
     unmatched = set()
+    blank = 0
     for tx in transactions:
         account_id = mapping[account_slot(tx)]
         named = tx["monori_category"]
@@ -113,6 +114,7 @@ def _import_transactions(c, uid, transactions, mapping, category_ids):
                 unmatched.add(named)
         else:
             category_id = None
+            blank += 1
         row = {
             "date": tx["date"],
             "amount": tx["amount"],
@@ -137,7 +139,7 @@ def _import_transactions(c, uid, transactions, mapping, category_ids):
         inserted += ins
         skipped += skip
         batches.append({"accountId": account_id, "batchId": batch_id, "inserted": ins})
-    return inserted, skipped, batches, sorted(unmatched)
+    return inserted, skipped, batches, sorted(unmatched), blank
 
 
 def _import_budgets(c, budgets, category_ids, overwrite):
@@ -192,13 +194,22 @@ def apply_workbook(c, uid, parsed, mapping, budget_policy="overwrite"):
     """
     group_ids, groups_created = _upsert_groups(c, uid, parsed["groups"])
     category_ids, categories_created = _upsert_categories(c, uid, parsed["categories"], group_ids)
-    inserted, skipped, batches, unmatched = _import_transactions(
+    inserted, skipped, batches, unmatched, blank = _import_transactions(
         c, uid, parsed["transactions"], mapping, category_ids
     )
     budgets_written, budgets_skipped = _import_budgets(
         c, parsed["budgets"], category_ids, budget_policy == "overwrite"
     )
     warnings = []
+    if blank:
+        # the sheet's own totals leave these out too, so the budget is unaffected
+        # — but they are a fifth of some ledgers and turn up as a wall of
+        # uncategorized rows, which reads as a fault unless it is named
+        warnings.append(
+            f"{blank} rows carry no category in the sheet and were imported uncategorized"
+            " — typically transfers between your own accounts, which the spreadsheet"
+            " leaves out of the budget as well"
+        )
     if unmatched:
         warnings.append(
             f"{len(unmatched)} category names in the sheet match nothing in monori"
