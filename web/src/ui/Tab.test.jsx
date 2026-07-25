@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { TAB_STRIP_WIDTH, TAB_WIDTH, computeOffset } from "./Tab.jsx";
+import { TAB_STRIP_WIDTH, TAB_WIDTH, computeOffset } from "./tabStack.js";
 
 describe("computeOffset", () => {
     it("puts the first tab at the edge and pushes later ones left", () => {

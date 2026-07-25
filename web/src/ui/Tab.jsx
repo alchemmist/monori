@@ -1,5 +1,13 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { ChevronLeft, ChevronRight, Xmark } from "@gravity-ui/icons";
+import {
+    TAB_WIDTH,
+    offsetOf,
+    registerTab,
+    resizeTab,
+    subscribe,
+    unregisterTab,
+} from "./tabStack.js";
 
 /**
  * Tab — a dockable side panel that behaves like a real tab: it pins to the
@@ -16,52 +24,6 @@ import { ChevronLeft, ChevronRight, Xmark } from "@gravity-ui/icons";
  *  - footer:     optional node rendered pinned to the bottom (actions)
  *  - defaultCollapsed: start collapsed (default false)
  */
-
-export const TAB_WIDTH = 420;
-export const TAB_STRIP_WIDTH = 34;
-
-// module-level registry of mounted tabs so each one knows its offset from the
-// right edge; a context provider would demand wrapping the app for what is a
-// handful of fixed-position elements
-const stack = {
-    tabs: [], // [{id, width}] in mount order
-    listeners: new Set(),
-};
-
-function emit() {
-    for (const fn of stack.listeners) fn();
-}
-
-function subscribe(fn) {
-    stack.listeners.add(fn);
-    return () => stack.listeners.delete(fn);
-}
-
-/** Right-edge offset of tab `id`: earlier-mounted tabs sit at the edge, so a
- * later tab is pushed left by the summed widths of everything before it. */
-export function computeOffset(tabs, id) {
-    let offset = 0;
-    for (const t of tabs) {
-        if (t.id === id) return offset;
-        offset += t.width;
-    }
-    return offset;
-}
-
-function registerTab(id, width) {
-    stack.tabs = [...stack.tabs, { id, width }];
-    emit();
-}
-
-function resizeTab(id, width) {
-    stack.tabs = stack.tabs.map((t) => (t.id === id ? { ...t, width } : t));
-    emit();
-}
-
-function unregisterTab(id) {
-    stack.tabs = stack.tabs.filter((t) => t.id !== id);
-    emit();
-}
 
 export default function Tab({ title, strip, onClose, footer, defaultCollapsed = false, children }) {
     const id = useId();
@@ -85,7 +47,7 @@ export default function Tab({ title, strip, onClose, footer, defaultCollapsed = 
         };
     }, [id]);
 
-    const offset = useSyncExternalStore(subscribe, () => computeOffset(stack.tabs, id));
+    const offset = useSyncExternalStore(subscribe, () => offsetOf(id));
 
     const toggle = (next) => {
         setCollapsed(next);
