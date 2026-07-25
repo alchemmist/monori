@@ -143,6 +143,23 @@ describe("hiding transactions", () => {
         vi.unstubAllGlobals();
     });
 
+    it("load clears hidden rows before replacing the snapshot", async () => {
+        let resolveSnapshot;
+        vi.spyOn(api, "snapshot").mockReturnValue(
+            new Promise((resolve) => {
+                resolveSnapshot = resolve;
+            }),
+        );
+        vi.spyOn(api, "hiddenTx").mockResolvedValue({ total: 0, rows: [] });
+        useStore.setState({ hiddenTx: [{ ...tx(9), hidden: true }] });
+
+        const loading = useStore.getState().load();
+        expect(useStore.getState().hiddenTx).toBeNull();
+
+        resolveSnapshot({ ...useStore.getState().snapshot, transactionsTotal: 3 });
+        await loading;
+    });
+
     it("a failed hide patch surfaces a toast", async () => {
         vi.spyOn(api, "patchTx").mockRejectedValue(new Error("network down"));
 
