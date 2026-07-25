@@ -242,8 +242,22 @@ def delete_account(
                 ).fetchone()
             ):
                 raise HTTPException(400, "unknown reassign target")
-            c.execute(
-                "UPDATE transactions SET account_id=? WHERE account_id=?", (reassignTo, account_id)
+            # the dedup hash is account-scoped, so moved rows are re-fingerprinted
+            # for their new account or future imports would not dedup against them
+            moved = c.execute(
+                "SELECT id, date, amount, description FROM transactions WHERE account_id=?",
+                (account_id,),
+            ).fetchall()
+            c.executemany(
+                "UPDATE transactions SET account_id=?, hash=? WHERE id=?",
+                [
+                    (
+                        reassignTo,
+                        tx_hash(reassignTo, r["date"], r["amount"], r["description"]),
+                        r["id"],
+                    )
+                    for r in moved
+                ],
             )
         c.execute("DELETE FROM accounts WHERE id=?", (account_id,))
         c.commit()
@@ -280,7 +294,7 @@ def reconcile_account(
                 """INSERT INTO transactions
                    (date, amount, description, account_id, hash, source)
                    VALUES (?, ?, ?, ?, ?, 'adjustment')""",
-                (date, delta, desc, account_id, tx_hash(date, delta, desc)),
+                (date, delta, desc, account_id, tx_hash(account_id, date, delta, desc)),
             )
             c.commit()
         return {"delta": delta}
