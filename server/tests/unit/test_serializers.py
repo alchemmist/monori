@@ -58,6 +58,7 @@ def test_serialize_account():
         "opening_date": "2024-01-01",
         "connection_id": 9,
         "bank_ref": "5858870594",
+        "card_tails": "8181,2947",
     }
     assert serialize_account(row) == {
         "id": 5,
@@ -73,6 +74,7 @@ def test_serialize_account():
         "openingDate": "2024-01-01",
         "connectionId": 9,
         "bankRef": "5858870594",
+        "cardTails": ["8181", "2947"],
     }
 
 
@@ -91,6 +93,7 @@ def test_serialize_account_archived_true():
         "opening_date": None,
         "connection_id": None,
         "bank_ref": "",
+        "card_tails": "",
     }
     out = serialize_account(row)
     assert out["archived"] is True

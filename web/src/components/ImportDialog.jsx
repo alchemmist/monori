@@ -1,7 +1,8 @@
 import { useRef, useState } from "react";
 import { Button } from "@mantine/core";
+import { Checkbox } from "@mantine/core";
 import { api } from "../api.js";
-import { readStatementFile } from "../importFile.js";
+import { readStatementFile, statementTails, tailMatches } from "../importFile.js";
 import { useStore } from "../store.js";
 import { money, fmtDate } from "../format.js";
 import AppDialog from "../ui/AppDialog.jsx";
@@ -18,11 +19,13 @@ const readLastAccount = () => {
 };
 
 export default function ImportDialog({ onClose }) {
-    const { snapshot, commitImport, notify } = useStore();
+    const { snapshot, commitImport, patchAccount, notify } = useStore();
     const accounts = (snapshot.accounts ?? []).filter((a) => !a.archived);
     const [text, setText] = useState("");
     const [preview, setPreview] = useState(null);
     const [busy, setBusy] = useState(false);
+    const [detectedTail, setDetectedTail] = useState(null);
+    const [rememberTail, setRememberTail] = useState(true);
     const fileRef = useRef(null);
     const [account, setAccount] = useState(() => {
         const last = readLastAccount();
@@ -34,7 +37,23 @@ export default function ImportDialog({ onClose }) {
     const runPreview = async (source = text) => {
         setBusy(true);
         try {
-            setPreview(await api.importPreview(source, +account));
+            let accId = +account;
+            let p = await api.importPreview(source, accId);
+            // route the statement to the account that owns its card tail; the
+            // duplicate flags are account-specific, so a switch re-previews
+            const tails = statementTails(p.rows);
+            if (tails.length === 1) {
+                const owners = accounts.filter((a) =>
+                    (a.cardTails ?? []).some((t) => tailMatches(t, tails[0])),
+                );
+                if (owners.length === 1 && owners[0].id !== accId) {
+                    accId = owners[0].id;
+                    setAccount(String(accId));
+                    p = await api.importPreview(source, accId);
+                }
+            }
+            setDetectedTail(tails.length === 1 ? tails[0] : null);
+            setPreview(p);
         } catch (e) {
             notify({ title: "Preview failed", theme: "danger", content: String(e) });
         } finally {
@@ -56,11 +75,23 @@ export default function ImportDialog({ onClose }) {
     };
 
     const fresh = preview?.rows.filter((r) => !r.duplicate) ?? [];
+    const selected = accounts.find((a) => String(a.id) === account);
+    // offer to bind the tail only while NO account owns it — remembering a
+    // tail that already belongs elsewhere would make future routing ambiguous
+    const tailOwners = detectedTail
+        ? accounts.filter((a) => (a.cardTails ?? []).some((t) => tailMatches(t, detectedTail)))
+        : [];
+    const offerRemember = Boolean(preview && detectedTail && selected && tailOwners.length === 0);
 
     const commit = async () => {
         setBusy(true);
         try {
             const { inserted } = await commitImport(fresh, +account);
+            if (offerRemember && rememberTail) {
+                await patchAccount(+account, {
+                    cardTails: [...(selected.cardTails ?? []), detectedTail],
+                }).catch(() => {});
+            }
             try {
                 localStorage.setItem("import_last_account", account);
             } catch {
@@ -147,6 +178,14 @@ export default function ImportDialog({ onClose }) {
                             <Tag theme="danger">{preview.errors.length} unparsed lines</Tag>
                         )}
                     </div>
+                    {offerRemember && (
+                        <Checkbox
+                            size="sm"
+                            checked={rememberTail}
+                            onChange={(e) => setRememberTail(e.currentTarget.checked)}
+                            label={`Remember card *${detectedTail} for ${selected.name}`}
+                        />
+                    )}
                     <div style={{ maxHeight: 360, overflow: "auto" }}>
                         <table className="budget-grid">
                             <thead>

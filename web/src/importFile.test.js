@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { MAX_STATEMENT_FILE_BYTES, decodeStatementBytes, readStatementFile } from "./importFile.js";
+import {
+    MAX_STATEMENT_FILE_BYTES,
+    decodeStatementBytes,
+    readStatementFile,
+    statementTails,
+    tailMatches,
+} from "./importFile.js";
 
 describe("decodeStatementBytes", () => {
     it("decodes valid UTF-8 as UTF-8", () => {
@@ -35,5 +41,36 @@ describe("readStatementFile", () => {
         await expect(readStatementFile({ size: MAX_STATEMENT_FILE_BYTES + 1 })).rejects.toThrow(
             /larger than/,
         );
+    });
+});
+
+describe("tailMatches", () => {
+    it("matches equal tails and mutual suffixes", () => {
+        expect(tailMatches("8181", "8181")).toBe(true);
+        expect(tailMatches("5536912947", "2947")).toBe(true);
+        expect(tailMatches("47", "2947")).toBe(true);
+    });
+
+    it("rejects different or empty tails", () => {
+        expect(tailMatches("8181", "2947")).toBe(false);
+        expect(tailMatches("", "2947")).toBe(false);
+        expect(tailMatches("8181", "")).toBe(false);
+    });
+});
+
+describe("statementTails", () => {
+    it("collects distinct digit tails from masked card numbers", () => {
+        const rows = [
+            { card: "*8181" },
+            { card: "*8181" },
+            { card: "553691******2947" },
+            { card: "" },
+            {},
+        ];
+        expect(statementTails(rows)).toEqual(["8181", "2947"]);
+    });
+
+    it("returns empty for missing rows", () => {
+        expect(statementTails(undefined)).toEqual([]);
     });
 });
