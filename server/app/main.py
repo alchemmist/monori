@@ -26,6 +26,7 @@ from .routers import (
     export,
     groups,
     imports,
+    rates,
     transactions,
     transfers,
 )
@@ -78,6 +79,7 @@ for _router in (
     transfers.router,
     budgets.router,
     imports.router,
+    rates.router,
     connections.router,
     export.router,
 ):

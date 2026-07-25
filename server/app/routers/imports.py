@@ -6,9 +6,11 @@ from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
 
 from ..auth import current_user
+from ..currencies import is_known, normalize
 from ..deps import conn
 from ..importer import build_rules, categorize, parse_statement, tx_hash
 from ..ingest import commit_rows, existing_hash_counts
+from ..money import account_currency
 from ..transfer_service import detect
 from ..workbook.apply import apply_workbook, budget_conflicts
 from ..workbook.parser import DEFAULT_CURRENCY, WorkbookError, account_slot, parse_workbook
@@ -29,6 +31,7 @@ class CommitRow(BaseModel):
     accountId: int | None = None
     date: str
     amount: int
+    currency: str | None = None
     description: str = ""
     bank_category: str = ""
     mcc: str = ""
@@ -73,28 +76,6 @@ def _owned_account(c, account_id, uid):
     )
 
 
-def _validate_import_categories(c, uid, rows):
-    """
-    Every manually selected import category must belong to the account owner
-    and match the sign of its transaction.
-    """
-    for row in rows:
-        category_id = row.categoryId
-        if category_id is None:
-            continue
-        category = c.execute(
-            "SELECT g.kind FROM categories c JOIN category_groups g ON g.id = c.group_id"
-            " WHERE c.id=? AND g.user_id=?",
-            (category_id, uid),
-        ).fetchone()
-        if category is None:
-            raise HTTPException(400, "unknown category")
-        if row.amount < 0 and category["kind"] != "expense":
-            raise HTTPException(400, "expense transaction requires an expense category")
-        if row.amount > 0 and category["kind"] != "income":
-            raise HTTPException(400, "income transaction requires an income category")
-
-
 def _card_digits(card):
     return "".join(ch for ch in str(card or "") if ch.isdigit())
 
@@ -136,7 +117,9 @@ def _mark_duplicates(c, rows):
         if existing is None:
             existing = existing_hash_counts(c, account_id)
             existing_by_account[account_id] = existing
-        row["hash"] = tx_hash(account_id, row["date"], row["amount"], row["description"])
+        row["hash"] = tx_hash(
+            account_id, row["date"], row["amount"], row["description"], row.get("currency")
+        )
         key = (account_id, row["hash"])
         n_batch = seen_in_batch.get(key, 0)
         row["duplicate"] = existing.get(row["hash"], 0) > n_batch
@@ -154,23 +137,12 @@ def import_preview(body: ImportBody, user: Annotated[dict, Depends(current_user)
         rules = _load_user_rules(c, uid)
         fallback_account_id = body.accountId if _owned_account(c, body.accountId, uid) else None
         _detect_row_accounts(c, uid, rows, fallback_account_id)
-        # commit enforces category direction, so the preview must not propose
-        # a category the commit would then reject wholesale
-        kinds = {
-            r["id"]: r["kind"]
-            for r in c.execute(
-                "SELECT c.id, g.kind FROM categories c"
-                " JOIN category_groups g ON g.id = c.group_id WHERE g.user_id=?",
-                (uid,),
-            )
-        }
         for row in rows:
-            category_id = categorize(row["description"], row["amount"], rules)
-            if category_id is not None:
-                expected = "expense" if row["amount"] < 0 else "income"
-                if kinds.get(category_id) != expected:
-                    category_id = None
-            row["categoryId"] = category_id
+            row["categoryId"] = categorize(row["description"], row["amount"], rules)
+            account_id = row["accountId"]
+            held = account_currency(c, account_id) if account_id is not None else DEFAULT_CURRENCY
+            named = normalize(row.get("currency"), "")
+            row["currency"] = named if is_known(named) else held
         _mark_duplicates(c, rows)
         return {"rows": rows, "errors": errors}
     finally:
@@ -188,6 +160,7 @@ def import_duplicates(body: DuplicateBody, user: Annotated[dict, Depends(current
                 "accountId": row.accountId,
                 "date": row.date,
                 "amount": row.amount,
+                "currency": row.currency,
                 "description": row.description,
             }
             for row in body.rows
@@ -212,7 +185,6 @@ def import_commit(body: CommitBody, user: Annotated[dict, Depends(current_user)]
     try:
         if body.accountId is not None and not _owned_account(c, body.accountId, uid):
             raise HTTPException(400, "unknown account")
-        _validate_import_categories(c, uid, body.rows)
         grouped: dict[int, list[dict]] = {}
         for r in body.rows:
             # A body-level account is the legacy, single-account contract and
@@ -224,6 +196,7 @@ def import_commit(body: CommitBody, user: Annotated[dict, Depends(current_user)]
                 {
                     "date": r.date,
                     "amount": r.amount,
+                    "currency": r.currency,
                     "description": r.description,
                     "bank_category": r.bank_category,
                     "mcc": r.mcc,

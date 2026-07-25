@@ -86,6 +86,8 @@ erDiagram
         INTEGER id PK
         TEXT date "required"
         INTEGER amount "required"
+        TEXT currency "required"
+        INTEGER base_amount "required"
         TEXT description "required"
         TEXT bank_category "required"
         TEXT mcc "required"
@@ -97,6 +99,12 @@ erDiagram
         TEXT source "required"
         INTEGER batch_id FK "-> import_batches.id"
         INTEGER hidden "required"
+    }
+    exchange_rates {
+        TEXT day PK
+        TEXT code PK
+        REAL rub_per_unit "required"
+        TEXT source "required"
     }
     transfers {
         TEXT id PK
@@ -127,6 +135,7 @@ erDiagram
         TEXT created_at "required"
         INTEGER is_admin "required"
         TEXT last_login
+        TEXT base_currency "required"
         INTEGER default_account_id FK "-> accounts.id"
     }
     activity_events {
@@ -202,7 +211,7 @@ belongs to exactly one account.
 | `icon` | TEXT | display glyph name (e.g. `wallet`, `card`, `ruble`); default `wallet` |
 | `color` | TEXT | `#rrggbb` tint for the glyph and its tile; default `#5b6472` |
 | `icon_image` | TEXT | optional custom icon as an image data URL; when set it overrides `icon`/`color` |
-| `currency` | TEXT | ISO code, default `RUB`. A label only — monori is single-currency for now (see issue #29) |
+| `currency` | TEXT | ISO code, default `RUB`. What new transactions on this account are denominated in; the ones already filed keep theirs |
 | `sort` | INTEGER | display order; default `0` |
 | `archived` | INTEGER | `0`/`1`; default `0` |
 | `opening_balance` | INTEGER | kopecks; default `0` |
@@ -235,7 +244,9 @@ The ledger.
 | -------- | ------ | ------- |
 | `id` | INTEGER PK | |
 | `date` | TEXT | ISO-8601 datetime |
-| `amount` | INTEGER | signed kopecks; negative = expense |
+| `amount` | INTEGER | signed minor units of `currency`; negative = expense |
+| `currency` | TEXT | ISO code the amount is denominated in; NOT NULL, blank rejected by trigger |
+| `base_amount` | INTEGER | `amount` in the owner's reporting currency, at the rate for `date`. **The only column that may be summed across accounts** |
 | `description` | TEXT | default `''` |
 | `bank_category` | TEXT | the bank's own label; default `''` |
 | `mcc` | TEXT | merchant category code; default `''` |
@@ -243,7 +254,7 @@ The ledger.
 | `account_id` | INTEGER | → `accounts(id)`, NOT NULL |
 | `transfer_id` | TEXT | links the two legs of a transfer; `NULL` for normal rows |
 | `comment` | TEXT | default `''` |
-| `hash` | TEXT | `sha1(date \| amount \| description)`, for dedup |
+| `hash` | TEXT | `sha256(account_id \| date \| amount \| currency \| description)`, for dedup |
 | `source` | TEXT | `import` / `manual` / `transfer` / `adjustment` / `sync` / `sheets`; default `import` |
 | `batch_id` | INTEGER | → `import_batches(id)`, `ON DELETE SET NULL`; the batch that inserted the row (paste or sync), nullable |
 
@@ -252,7 +263,33 @@ Indexes: `date`, `hash`, `category_id`, `account_id`.
 A **transfer** between your own accounts is two linked rows sharing a
 `transfer_id`: a negative leg on the source account and a positive leg on the
 destination. Both are uncategorized, so a transfer never counts as income or
-expense in analytics — this is enforced by construction, not by convention.
+expense in analytics — this is enforced by construction, not by convention, and
+it is the link, not the arithmetic, that keeps a transfer out of every total.
+Across currencies the two legs are different numbers: each is denominated in its
+own account's currency. Their `base_amount`s are close but need not cancel
+exactly — the arriving leg records what the bank actually paid out, and a bank's
+spread is not the central bank's rate.
+
+`base_amount` is frozen when the row is written and only ever recomputed
+deliberately — by a new reporting currency, a corrected rate, or a rate
+backfill. Rates published later never rewrite what a past transaction was worth.
+
+### `exchange_rates`
+
+What a unit of a currency was worth, in rubles, on a given day. One pivot, so
+any A→B conversion is `amount * rate(A) / rate(B)`.
+
+| Column | Type | Notes |
+| -------- | ------ | ------- |
+| `day` | TEXT | ISO date |
+| `code` | TEXT | ISO currency code |
+| `rub_per_unit` | REAL | rubles per one unit of `code` |
+| `source` | TEXT | `cbr` (the Bank of Russia feed) or `manual`; default `cbr` |
+
+Primary key is `(day, code)`. A lookup takes the latest publication no later
+than the day asked for; for a transaction older than anything stored it reaches
+forward to the earliest one instead, and failing that falls back to a snapshot
+bundled with the app, so an offline monori still adds up.
 
 ### `budgets`
 
@@ -320,6 +357,7 @@ user starts with a default **Cash** account.
 | `email` | TEXT | unique, stored lowercased |
 | `password_hash` | TEXT | Argon2 hash; the plaintext is never stored |
 | `created_at` | TEXT | ISO datetime |
+| `base_currency` | TEXT | the reporting currency every total is expressed in; default `RUB` |
 
 ## Referential behavior
 
@@ -346,9 +384,12 @@ the default T-Bank account.
 
 ## Dedup hashing
 
-The `hash` is `sha1(f"{date}|{amount}|{description}")`. Two transactions are
-"the same" only when date, amount, and description all match. Import uses this to
-avoid inserting a row that already exists; see [Importing](importing.md).
+The `hash` is `sha256(f"{account_id}|{date}|{amount}|{currency}|{description}")`.
+Two transactions are "the same" only when all five match — the account, because
+mirrored cards and transfer legs legitimately repeat an amount, and the currency,
+because 100 lari and 100 rubles are different money. Import and bank sync use
+this to avoid inserting a row that already exists; see
+[Importing](importing.md).
 
 ## Backups
 

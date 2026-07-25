@@ -1,0 +1,99 @@
+/* Exchange rates — a plain list of numbers, one per currency, editable in
+   place. It sits inside a settings card, so it borrows the card's padding and
+   hairlines rather than drawing a frame of its own. */
+
+.rates {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 16px 20px;
+}
+
+.rates__head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 20px;
+}
+
+.rates__caption {
+    color: var(--m-text-dim);
+    font-size: 13px;
+    line-height: 1.45;
+}
+
+.rates__table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.rates__row > * {
+    padding: 7px 0;
+    border-top: 1px solid var(--m-border-soft);
+    text-align: left;
+    font-weight: 400;
+    vertical-align: baseline;
+}
+
+.rates__row_base > * {
+    font-weight: 600;
+}
+
+.rates__code {
+    display: inline-block;
+    width: 46px;
+    font-weight: 600;
+    font-size: 13px;
+}
+
+.rates__name {
+    color: var(--m-text-dim);
+    font-size: 13px;
+}
+
+.rates__value {
+    text-align: right;
+    white-space: nowrap;
+}
+
+/* the rate reads as text until it is clicked; only then does it look like a
+   field, so a table of twelve numbers is not a wall of inputs */
+.rates__edit {
+    background: none;
+    border: 0;
+    padding: 2px 4px;
+    border-radius: 5px;
+    font: inherit;
+    color: inherit;
+    cursor: pointer;
+}
+
+.rates__edit:hover:not(:disabled) {
+    background: var(--m-surface-hover);
+}
+
+.rates__edit:disabled {
+    cursor: default;
+}
+
+.rates__input {
+    width: 100px;
+    padding: 1px 4px;
+    text-align: right;
+    font: inherit;
+    color: inherit;
+    background: var(--m-surface);
+    border: 1px solid var(--m-accent);
+    border-radius: 5px;
+}
+
+.rates__meta {
+    padding-left: 16px;
+    color: var(--m-text-faint);
+    font-size: 12px;
+    white-space: nowrap;
+}
+
+.rates__stale::before {
+    content: " · ";
+}

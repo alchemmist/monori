@@ -4,8 +4,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from ..auth import current_user
+from ..currencies import validate as validate_currency
 from ..deps import conn, serialize_tx
 from ..importer import tx_hash
+from ..money import base_currency, resolve_currency, to_base
 from ..transfer_service import detach_leg
 
 router = APIRouter(prefix="/api/transactions", tags=["transactions"])
@@ -39,6 +41,7 @@ class TxCreate(BaseModel):
     date: str
     amount: int
     accountId: int
+    currency: str | None = None
     description: str = ""
     bankCategory: str = ""
     mcc: str = ""
@@ -50,6 +53,7 @@ class TxPatch(BaseModel):
     date: str | None = None
     amount: int | None = None
     accountId: int | None = None
+    currency: str | None = None
     description: str | None = None
     bankCategory: str | None = None
     mcc: str | None = None
@@ -139,21 +143,26 @@ def create_transaction(body: TxCreate, user: Annotated[dict, Depends(current_use
     try:
         category = _resolve_category(c, body.categoryId, uid, body.amount)
         account = _resolve_account(c, body.accountId, uid)
+        currency = resolve_currency(c, account, body.currency)
+        validate_currency(currency)
+        base = to_base(c, body.amount, currency, base_currency(c, uid), body.date)
         cur = c.execute(
             """INSERT INTO transactions
-               (date, amount, description, bank_category, mcc, category_id, account_id,
-                comment, hash, source)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'manual')""",
+               (date, amount, currency, base_amount, description, bank_category, mcc,
+                category_id, account_id, comment, hash, source)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'manual')""",
             (
                 body.date,
                 body.amount,
+                currency,
+                base,
                 body.description,
                 body.bankCategory,
                 body.mcc,
                 category,
                 account,
                 body.comment,
-                tx_hash(account, body.date, body.amount, body.description),
+                tx_hash(account, body.date, body.amount, body.description, currency),
             ),
         )
         c.commit()
@@ -191,14 +200,21 @@ def patch_transaction(tx_id: int, patch: TxPatch, user: Annotated[dict, Depends(
         if patch.accountId is not None:
             account = _resolve_account(c, patch.accountId, uid)
         hidden = int(patch.hidden) if patch.hidden is not None else row["hidden"]
+        # moving a transaction to another account does not re-denominate it: the
+        # money was spent in the currency it was spent in, whatever it is filed under
+        currency = validate_currency(patch.currency) if patch.currency else row["currency"]
+        base = to_base(c, amount, currency, base_currency(c, uid), date)
         c.execute(
             """UPDATE transactions
-               SET date=?, amount=?, description=?, bank_category=?, mcc=?, category_id=?,
+               SET date=?, amount=?, currency=?, base_amount=?, description=?,
+                   bank_category=?, mcc=?, category_id=?,
                    account_id=?, comment=?, hidden=?, hash=?
                WHERE id=?""",
             (
                 date,
                 amount,
+                currency,
+                base,
                 description,
                 bank_category,
                 mcc,
@@ -206,7 +222,7 @@ def patch_transaction(tx_id: int, patch: TxPatch, user: Annotated[dict, Depends(
                 account,
                 comment,
                 hidden,
-                tx_hash(account, date, amount, description),
+                tx_hash(account, date, amount, description, currency),
                 tx_id,
             ),
         )

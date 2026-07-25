@@ -14,13 +14,18 @@
  * January chains from the previous year's December; the first year starts at 0.
  */
 
+import { reported } from "./reported.js";
 import { isTransfer } from "./transfers.js";
 
 export function txKey(year, month, categoryId) {
     return `${year}-${month}-${categoryId}`;
 }
 
-/** Sum transaction amounts into a Map keyed by year-month-categoryId. */
+/** Sum transaction amounts into a Map keyed by year-month-categoryId.
+ *
+ * A category collects spending from every account, so the sum is over the
+ * reporting amount — the raw `amount` of a lari row and a ruble row are not
+ * addable, and a budget line that added them would be fiction. */
 export function buildTxIndex(transactions) {
     const index = new Map();
     for (const t of transactions) {
@@ -31,7 +36,7 @@ export function buildTxIndex(transactions) {
         const year = +t.date.slice(0, 4);
         const month = +t.date.slice(5, 7);
         const key = txKey(year, month, t.categoryId);
-        index.set(key, (index.get(key) ?? 0) + t.amount);
+        index.set(key, (index.get(key) ?? 0) + reported(t));
     }
     return index;
 }

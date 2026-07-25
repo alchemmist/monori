@@ -211,7 +211,7 @@ export default function ImportDialog({ onClose }) {
                                             <span
                                                 className={`money num ${r.amount > 0 ? "money_pos" : ""}`}
                                             >
-                                                {money(r.amount)}
+                                                {money(r.amount, r.currency)}
                                             </span>
                                         </td>
                                         <td style={{ textAlign: "left" }}>

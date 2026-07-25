@@ -2,9 +2,14 @@
  * Synthetic sample dataset for the public /demo page. Deterministic (seeded),
  * no real figures — generated so every screen looks populated: income vs
  * expenses over ~1.5 years, a full-year budget grid, and a long transaction
- * list. Amounts are integer kopecks, dates are YYYY-MM-DD, matching the shape
- * the API's /snapshot returns.
+ * list. Amounts are integer minor units, dates are YYYY-MM-DD, matching the
+ * shape the API's /snapshot returns.
+ *
+ * One of the three accounts is held in lari, so the demo shows what the app
+ * does with money in more than one currency: each row in its own, every total
+ * in the reporting one.
  */
+import { convertAmount } from "../money.js";
 
 const R = (rub) => Math.round(rub * 100); // rubles -> kopecks
 
@@ -48,6 +53,30 @@ const ACCOUNTS = [
         openingBalance: R(8000),
         openingDate: "2025-01-01",
     },
+    {
+        id: 3,
+        name: "Bank of Georgia",
+        type: "card",
+        icon: "card",
+        color: "#8b5cf6",
+        iconImage: null,
+        currency: "GEL",
+        sort: 3,
+        archived: false,
+        openingBalance: R(1200),
+        openingDate: "2025-01-01",
+    },
+];
+
+const BASE_CURRENCY = "RUB";
+
+// rubles per unit, the shape /api/rates serves; fixed so the demo is the same
+// dataset on every visit
+const RATES = [
+    { code: "RUB", rate: 1, day: "2026-07-01", source: "pivot", stale: false },
+    { code: "GEL", rate: 30.4, day: "2026-07-01", source: "cbr", stale: false },
+    { code: "USD", rate: 82.1, day: "2026-07-01", source: "cbr", stale: false },
+    { code: "EUR", rate: 95.6, day: "2026-07-01", source: "cbr", stale: false },
 ];
 
 const GROUPS = [
@@ -242,18 +271,23 @@ function build() {
             source: "transfer",
         });
 
-        // expenses per category; groceries, cafes and transport partly paid in cash
+        // expenses per category; groceries, cafes and transport partly paid in
+        // cash, and a slice of the going-out money spent abroad on the lari card
         const cashCats = new Set(["Groceries", "Cafes & restaurants", "Transport"]);
+        const lariCats = new Set(["Cafes & restaurants", "Entertainment", "Clothes"]);
         for (const [groupId, name, , , perMonth, [lo, hi], merchants] of CATS) {
             if (groupId === 1 || !perMonth) continue;
             const n = Math.max(1, Math.round(perMonth * between(0.7, 1.15)));
             for (let k = 0; k < n; k++) {
                 const rub = Math.round(between(lo, hi));
-                const accountId = cashCats.has(name) && rand() < 0.35 ? 2 : 1;
+                const abroad = lariCats.has(name) && rand() < 0.25;
+                const accountId = abroad ? 3 : cashCats.has(name) && rand() < 0.35 ? 2 : 1;
+                // spent abroad, so the row is priced in lari, not in rubles
+                const amount = abroad ? -R(Math.round(rub / 30.4)) : -R(rub);
                 transactions.push({
                     id: tid++,
                     date: `${y}-${day2(m)}-${day2(1 + Math.floor(rand() * 27))}`,
-                    amount: -R(rub),
+                    amount,
                     description: pick(merchants),
                     bankCategory: name,
                     categoryId: catId.get(name),
@@ -267,7 +301,24 @@ function build() {
 
     transactions.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : b.id - a.id));
 
-    return { accounts: ACCOUNTS, groups: GROUPS, categories, budgets, transactions, transfers };
+    // what the server does on write: stamp each row with its account's currency
+    // and what it is worth in the reporting one
+    const currencyOf = new Map(ACCOUNTS.map((a) => [a.id, a.currency]));
+    for (const t of transactions) {
+        t.currency = currencyOf.get(t.accountId) ?? BASE_CURRENCY;
+        t.baseAmount = convertAmount(t.amount, t.currency, BASE_CURRENCY, RATES);
+    }
+
+    return {
+        baseCurrency: BASE_CURRENCY,
+        rates: RATES,
+        accounts: ACCOUNTS,
+        groups: GROUPS,
+        categories,
+        budgets,
+        transactions,
+        transfers,
+    };
 }
 
 export const demoSnapshot = build();

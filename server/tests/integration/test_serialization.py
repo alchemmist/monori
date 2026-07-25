@@ -1,5 +1,7 @@
 import pytest
 
+from app.currencies import CURRENCIES
+
 pytestmark = pytest.mark.integration
 
 
@@ -55,6 +57,8 @@ def test_snapshot_serialization_contract(api, client):
             "id": tx,
             "date": "2026-01-05T10:00:00",
             "amount": -12345,
+            "currency": "RUB",
+            "baseAmount": -12345,
             "description": "Lenta",
             "bankCategory": "Super",
             "mcc": "5411",
@@ -67,6 +71,9 @@ def test_snapshot_serialization_contract(api, client):
         }
     ]
     assert snap["budgets"] == [{"categoryId": cat, "year": 2026, "month": 3, "amount": 5000}]
+    assert snap["baseCurrency"] == "RUB"
+    assert {r["code"] for r in snap["rates"]} == set(CURRENCIES)
+    assert next(r for r in snap["rates"] if r["code"] == "RUB")["rate"] == 1.0
 
 
 def test_snapshot_ordering_is_deterministic(api):

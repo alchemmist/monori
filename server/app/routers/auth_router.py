@@ -17,8 +17,10 @@ from pydantic import BaseModel
 
 from ..admin import admin_emails
 from ..auth import current_user
+from ..currencies import validate as validate_currency
 from ..deps import conn, serialize_user
 from ..emails import canonical_email, normalize_email
+from ..money import reprice_user
 from ..security import create_access_token, hash_password, verify_password
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -44,6 +46,11 @@ def _valid_email(email):
 class RegisterBody(BaseModel):
     email: str
     password: str
+
+
+class MePatch(BaseModel):
+    baseCurrency: str | None = None
+    defaultAccountId: int | None = None
 
 
 def create_user(c, raw_email, password):
@@ -84,7 +91,7 @@ def create_user(c, raw_email, password):
         )
     c.commit()
     row = c.execute(
-        "SELECT id, email, created_at, is_admin, last_login, default_account_id"
+        "SELECT id, email, created_at, is_admin, last_login, base_currency, default_account_id"
         " FROM users WHERE id=?",
         (uid,),
     ).fetchone()
@@ -143,34 +150,41 @@ def me(user: Annotated[dict, Depends(current_user)]):
     return user
 
 
-class MePatch(BaseModel):
-    defaultAccountId: int | None = None
-
-
 @router.patch("/me")
 def patch_me(body: MePatch, user: Annotated[dict, Depends(current_user)]):
     """
-    User-level preferences. ``defaultAccountId`` is where imports land rows no
-    card number can route; null clears it and those rows go back to being
-    assigned by hand.
+    Change reporting and import preferences. ``defaultAccountId`` is where
+    imports land rows no card number can route; null clears it.
     """
     uid = user["id"]
     c = conn()
     try:
+        if body.baseCurrency is not None:
+            c.execute(
+                "UPDATE users SET base_currency=? WHERE id=?",
+                (validate_currency(body.baseCurrency), uid),
+            )
+            repriced = reprice_user(c, uid)
+        else:
+            repriced = 0
         if (
-            body.defaultAccountId is not None
+            "defaultAccountId" in body.model_fields_set
+            and body.defaultAccountId is not None
             and not c.execute(
                 "SELECT id FROM accounts WHERE id=? AND user_id=?", (body.defaultAccountId, uid)
             ).fetchone()
         ):
             raise HTTPException(400, "unknown account")
-        c.execute("UPDATE users SET default_account_id=? WHERE id=?", (body.defaultAccountId, uid))
+        if "defaultAccountId" in body.model_fields_set:
+            c.execute(
+                "UPDATE users SET default_account_id=? WHERE id=?", (body.defaultAccountId, uid)
+            )
         c.commit()
         row = c.execute(
-            "SELECT id, email, created_at, is_admin, last_login, default_account_id"
+            "SELECT id, email, created_at, is_admin, last_login, base_currency, default_account_id"
             " FROM users WHERE id=?",
             (uid,),
         ).fetchone()
-        return serialize_user(row)
+        return {"user": serialize_user(row), "repriced": repriced}
     finally:
         c.close()

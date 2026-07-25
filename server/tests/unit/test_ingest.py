@@ -168,8 +168,8 @@ def test_snapshot_full_shape(tmp_path):
     )
     cid = c.execute("SELECT id FROM categories").fetchone()[0]
     c.execute(
-        "INSERT INTO transactions (date, amount, description, account_id, hash, source)"
-        " VALUES ('2026-01-01T00:00:00', -100, 'x', ?, 'h', 'import')",
+        "INSERT INTO transactions (date, amount, currency, description, account_id, hash, source)"
+        " VALUES ('2026-01-01T00:00:00', -100, 'RUB', 'x', ?, 'h', 'import')",
         (acct,),
     )
     c.execute(

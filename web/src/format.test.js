@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { amountInput, groupAmount, parseRub, rub } from "./format.js";
+import { amountInput, groupAmount, money, parseRub, rub } from "./format.js";
 
 const NB = "\u00a0";
 
@@ -46,5 +46,20 @@ describe("amountInput", () => {
 describe("rub", () => {
     it("separates thousands", () => {
         expect(rub(17679400)).toBe(`176${NB}794`);
+    });
+});
+
+describe("money", () => {
+    it("labels an amount with its currency", () => {
+        expect(money(17679400, "RUB")).toBe(`176${NB}794 ₽`);
+        expect(money(17679400, "gel")).toBe(`176${NB}794 ₾`);
+    });
+
+    it("defaults to rubles, since a total with no currency is the base one", () => {
+        expect(money(50000)).toBe("500 ₽");
+    });
+
+    it("prints an unknown code rather than dropping it", () => {
+        expect(money(50000, "XYZ")).toBe("500 XYZ");
     });
 });

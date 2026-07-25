@@ -139,16 +139,10 @@ export default function TransactionsPage() {
     // value renders and can be kept or changed.
     const catSectionsFor = (t) => {
         const cur = t.categoryId != null ? catById.get(t.categoryId) : null;
-        const uncategorized = { value: "", label: "Leave uncategorized" };
-        const kind = t.amount < 0 ? "expense" : t.amount > 0 ? "income" : null;
-        const matchingSections = kind
-            ? catSections.filter((section) => section.kind === kind)
-            : catSections;
-        if (!cur || !cur.archived) return [uncategorized, ...matchingSections];
+        if (!cur || !cur.archived) return catSections;
         const g = groupById.get(cur.groupId);
         const opt = { value: String(cur.id), label: cur.name };
-        const clone = matchingSections.map((s) => ({ ...s, options: [...s.options] }));
-        if (kind && g?.kind !== kind) return [uncategorized, ...clone];
+        const clone = catSections.map((s) => ({ ...s, options: [...s.options] }));
         const sec = clone.find((s) => s.id === cur.groupId);
         if (sec) sec.options.push(opt);
         else
@@ -158,7 +152,7 @@ export default function TransactionsPage() {
                 kind: g?.kind,
                 options: [opt],
             });
-        return [uncategorized, ...clone];
+        return clone;
     };
 
     // merged (and sorted) once here, so typing in the search box only refilters
@@ -305,7 +299,7 @@ export default function TransactionsPage() {
                             draft={String(t.amount / 100)}
                             display={
                                 <span className={`money num ${t.amount > 0 ? "money_pos" : ""}`}>
-                                    {money(t.amount)}
+                                    {money(t.amount, t.currency)}
                                 </span>
                             }
                             onCommit={(v) => {
@@ -320,7 +314,7 @@ export default function TransactionsPage() {
                         />
                     ) : (
                         <span className={`money num ${t.amount > 0 ? "money_pos" : ""}`}>
-                            {money(t.amount)}
+                            {money(t.amount, t.currency)}
                         </span>
                     )}
                 </td>

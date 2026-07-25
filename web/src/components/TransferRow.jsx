@@ -46,7 +46,9 @@ export default function TransferRow({ item, accountName, expanded, onToggle, onS
                 {note && <span className="tx-transfer__note">{note}</span>}
             </td>
             <td>
-                <span className="money num tx-transfer__amount">{money(item.amount)}</span>
+                <span className="money num tx-transfer__amount">
+                    {money(item.amount, item.currency)}
+                </span>
             </td>
             <td colSpan={3} style={{ textAlign: "left" }}>
                 <span className="tx-transfer__label">Transfer</span>

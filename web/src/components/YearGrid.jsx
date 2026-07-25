@@ -3,8 +3,9 @@ import { ActionIcon } from "@mantine/core";
 import RowMenu from "../ui/RowMenu.jsx";
 import { Plus, ChevronDown, EllipsisVertical } from "@gravity-ui/icons";
 import BudgetCell from "./BudgetCell.jsx";
-import { rub } from "../format.js";
+import { money, rub } from "../format.js";
 import { MONTHS_SHORT } from "../format.js";
+import { useBaseCurrency } from "../store.js";
 
 const METRICS = {
     budgeted: { key: "budgeted", label: "Bud" },
@@ -37,6 +38,7 @@ export default function YearGrid({
     onAddCategory,
 }) {
     const span = cols.length;
+    const base = useBaseCurrency();
     const wrapRef = useRef(null);
 
     // The wrap is its own scroll pane filling the viewport below the toolbar, so
@@ -110,7 +112,7 @@ export default function YearGrid({
                                     <div className="yg-msum__mon">
                                         {m} {year}
                                     </div>
-                                    <div className={`yg-msum__av ${cls}`}>{rub(a)} ₽</div>
+                                    <div className={`yg-msum__av ${cls}`}>{money(a, base)}</div>
                                     <div className="yg-msum__break">
                                         <BreakLine
                                             value={prevAvail}

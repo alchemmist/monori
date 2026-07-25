@@ -6,8 +6,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from ..auth import current_user
+from ..currencies import validate as validate_currency
 from ..deps import conn, serialize_account
 from ..importer import tx_hash
+from ..money import account_currency, base_currency, to_base
 
 router = APIRouter(prefix="/api/accounts", tags=["accounts"])
 
@@ -142,7 +144,7 @@ def create_account(body: AccountBody, user: Annotated[dict, Depends(current_user
                 body.icon,
                 body.color,
                 body.iconImage or None,
-                body.currency,
+                validate_currency(body.currency),
                 body.openingBalance,
                 body.openingDate,
                 max_sort + 1,
@@ -192,7 +194,13 @@ def patch_account(
                 (patch.iconImage or None, account_id),
             )
         if patch.currency is not None:
-            c.execute("UPDATE accounts SET currency=? WHERE id=?", (patch.currency, account_id))
+            # transactions already on the account keep the currency they were
+            # recorded in — the money was spent in it, whatever the account is
+            # re-labelled as. Only what comes next is denominated anew.
+            c.execute(
+                "UPDATE accounts SET currency=? WHERE id=?",
+                (validate_currency(patch.currency), account_id),
+            )
         if patch.openingBalance is not None:
             c.execute(
                 "UPDATE accounts SET opening_balance=? WHERE id=?",
@@ -268,7 +276,8 @@ def delete_account(
             # the dedup hash is account-scoped, so moved rows are re-fingerprinted
             # for their new account or future imports would not dedup against them
             moved = c.execute(
-                "SELECT id, date, amount, description FROM transactions WHERE account_id=?",
+                "SELECT id, date, amount, currency, description FROM transactions"
+                " WHERE account_id=?",
                 (account_id,),
             ).fetchall()
             c.executemany(
@@ -276,7 +285,9 @@ def delete_account(
                 [
                     (
                         reassignTo,
-                        tx_hash(reassignTo, r["date"], r["amount"], r["description"]),
+                        tx_hash(
+                            reassignTo, r["date"], r["amount"], r["description"], r["currency"]
+                        ),
                         r["id"],
                     )
                     for r in moved
@@ -304,7 +315,8 @@ def reconcile_account(
     c = conn()
     try:
         acc = c.execute(
-            "SELECT opening_balance FROM accounts WHERE id=? AND user_id=?", (account_id, uid)
+            "SELECT opening_balance, currency FROM accounts WHERE id=? AND user_id=?",
+            (account_id, uid),
         ).fetchone()
         if not acc:
             raise HTTPException(404, "account not found")
@@ -323,11 +335,20 @@ def reconcile_account(
         if delta != 0:
             date = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S")
             desc = "Reconcile adjustment"
+            currency = account_currency(c, account_id)
             c.execute(
                 """INSERT INTO transactions
-                   (date, amount, description, account_id, hash, source)
-                   VALUES (?, ?, ?, ?, ?, 'adjustment')""",
-                (date, delta, desc, account_id, tx_hash(account_id, date, delta, desc)),
+                   (date, amount, currency, base_amount, description, account_id, hash, source)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, 'adjustment')""",
+                (
+                    date,
+                    delta,
+                    currency,
+                    to_base(c, delta, currency, base_currency(c, uid), date),
+                    desc,
+                    account_id,
+                    tx_hash(account_id, date, delta, desc, currency),
+                ),
             )
             c.commit()
         return {"delta": delta}

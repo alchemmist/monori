@@ -21,8 +21,10 @@ Accounts live on the **Accounts** page in the sidebar. Each one has:
   entirely. An image you've already added to one account can be reused on another
   straight from the picker. Uploaded images are downscaled and stored inline with
   the account,
-- a **currency** — a label only for now; monori is single-currency and does no
-  conversion (full multi-currency is tracked in issue #29),
+- a **currency** — what money on this account is held in. New transactions here
+  are recorded in it, and the account's balance is shown in it; totals across
+  accounts are converted into your reporting currency (see
+  [Currencies](currencies.md)),
 - an **opening balance** — what the account held before the first recorded
   transaction. It is real money, so it also counts as income to hand out on the
   [Budget](budgeting.md) page,
