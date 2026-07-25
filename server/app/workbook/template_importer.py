@@ -616,6 +616,13 @@ def _parse(wb):
                         {"category": name, "year": source["year"], "month": m, "amount": amount}
                     )
 
+    # A month that carries real rows is never reconciled: the sheet's own
+    # cached totals are a summary of those very rows, so any gap between them
+    # means this parser read something wrong — inventing a transaction to close
+    # it would double the month instead of fixing it. Reconciliation exists for
+    # archive years, which hold aggregates and no rows at all.
+    real_months = {(int(tx["date"][:4]), int(tx["date"][5:7])) for tx in transactions}
+
     tx_sums: dict[tuple, int] = {}
     income_sums: dict[tuple, int] = {}
     for tx in transactions:
@@ -629,7 +636,7 @@ def _parse(wb):
             tx_sums[(cat, y, m)] = tx_sums.get((cat, y, m), 0) + tx["amount"]
 
     synthetic = []
-    n_hist = n_adjust = 0
+    n_hist = n_adjust = n_trusted = 0
     for source in list(archive_years.values()) + list(live_years.values()):
         year = source["year"]
         live = year in live_years
@@ -637,6 +644,9 @@ def _parse(wb):
             have = income_sums.get((year, m), 0)
             delta = target - have
             if abs(delta) > ADJUST_TOLERANCE_KOP:
+                if (year, m) in real_months:
+                    n_trusted += 1
+                    continue
                 synthetic.append(_synthetic(year, m, delta, INCOME_CATEGORY, INCOME_CATEGORY))
                 income_sums[(year, m)] = have + delta
                 if live:
@@ -708,6 +718,9 @@ def _parse(wb):
             ):
                 target = 0
             delta = 0 if target is None else target - projected
+            if abs(delta) > ADJUST_TOLERANCE_KOP and (y, m) in real_months:
+                n_trusted += 1
+                delta = 0
             if abs(delta) > ADJUST_TOLERANCE_KOP:
                 if at_seam:
                     n_seam += 1
@@ -720,7 +733,7 @@ def _parse(wb):
                 projected += delta
             balances[name] = projected
             overspent += min(projected, 0)
-        if at_seam and seam_seed is not None:
+        if at_seam and seam_seed is not None and (y, m) not in real_months:
             delta = seam_seed - avail
             if abs(delta) > ADJUST_TOLERANCE_KOP:
                 synthetic.append(_synthetic(y, m, delta, INCOME_CATEGORY, INCOME_CATEGORY))
@@ -741,6 +754,11 @@ def _parse(wb):
         )
     if n_seam:
         warnings.append(f"seam: {n_seam} carry corrections at {seam_year}-12")
+    if n_trusted:
+        warnings.append(
+            f"reconciliation: {n_trusted} totals in the sheet disagree with the rows of the"
+            " same month — the rows were kept as they are and nothing was invented"
+        )
     for y, m, diff in avail_residuals[:MAX_VERIFY_WARNINGS]:
         warnings.append(f"verify: available {y}-{m:02d} differs by {diff / 100:.2f}")
     if len(avail_residuals) > MAX_VERIFY_WARNINGS:

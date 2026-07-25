@@ -62,6 +62,12 @@ silent drop.
   up in the import history and can be rolled back as a unit.
 - **Non-OK rows are skipped** (declined or held operations) and reported in
   the preview count.
+- **Never invents a transaction in a month that has any.** A workbook whose
+  year sheets hold only yearly aggregates (no rows at all) has its history
+  rebuilt from those totals. But as soon as a month carries real rows, those
+  rows are the truth: if the sheet's cached total disagrees, the difference is
+  reported as a warning and nothing is added. Closing that gap with a synthetic
+  transaction would double the month rather than reconcile it.
 
 ## Limits
 

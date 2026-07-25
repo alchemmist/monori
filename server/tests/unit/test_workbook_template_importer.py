@@ -477,7 +477,7 @@ def _live_year_wb():
     return wb
 
 
-def test_live_year_reconciles_to_cached_balances_and_available():
+def test_live_year_keeps_its_rows_and_invents_nothing():
     parsed = parse_template_workbook(_save(_live_year_wb()))
 
     assert parsed["groups"] == [
@@ -489,17 +489,17 @@ def test_live_year_reconciles_to_cached_balances_and_available():
     budgets = {(b["category"], b["year"], b["month"]): b["amount"] for b in parsed["budgets"]}
     assert budgets == {("Groceries", 2025, 1): 100000, ("Groceries", 2025, 2): 100000}
 
-    # synthetic rows carry the plain category name and no card marker
-    synth = {(t["description"], t["date"]): t for t in parsed["transactions"] if not t["marker"]}
-    assert synth[("Groceries", "2025-01-31T12:00:00")]["amount"] == 20000
-    assert synth[("Income", "2025-01-31T12:00:00")]["amount"] == 100000
-    assert len(parsed["transactions"]) == 6  # 4 real (one uncategorized) + 2 synthetic
+    # both months carry real rows, so the cached totals never get to add one:
+    # a synthetic row here would double the month, not reconcile it
+    assert len(parsed["transactions"]) == 4
+    assert all(t["marker"] for t in parsed["transactions"])
+    assert not [t for t in parsed["transactions"] if t["date"].endswith("T12:00:00")]
 
     assert (
-        "reconciliation: 2 adjustment transactions align live months with the sheet"
-        in parsed["warnings"]
+        "reconciliation: 3 totals in the sheet disagree with the rows of the same month"
+        " — the rows were kept as they are and nothing was invented" in parsed["warnings"]
     )
-    assert "verify: available 2025-01 differs by 100.00" in parsed["warnings"]
+    assert "verify: available 2025-01 differs by 1100.00" in parsed["warnings"]
     assert "2019: unrecognized year sheet layout, ignored" in parsed["warnings"]
     assert parsed["errors"] == []
 
@@ -680,6 +680,29 @@ def test_trailing_zero_cached_months_get_no_synthetic_rows():
     )
     parsed = parse_template_workbook(_save(wb))
     assert all(t["date"] < "2025-02" for t in parsed["transactions"])
+
+
+def test_month_with_rows_is_never_doubled_by_a_cached_total():
+    """
+    The row is there but its category column was read as blank, so the
+    reconciliation sees an empty month and the cached total looks unmet. It must
+    still not invent the missing amount — that is how a real -450 on the 26th
+    grew a twin on the 31st and doubled the month in the analytics.
+    """
+    wb = Workbook()
+    wb.remove(wb.active)
+    _tx_sheet(wb, [_tx(datetime.datetime(2025, 1, 26), -450.0, "", desc="Y.M*lb")])
+    _write_year(
+        wb.create_sheet("2025"),
+        months=[1, 2],
+        rows=[("▼Daily", None), ("LifeLink", {1: (0, 450, -450)})],
+        income={1: 0},
+        header_row=8,
+    )
+    parsed = parse_template_workbook(_save(wb))
+    assert [(t["date"], t["amount"]) for t in parsed["transactions"]] == [
+        ("2025-01-26T00:00:00", -45000)
+    ]
 
 
 def test_uncategorized_trailing_tx_does_not_extend_reconciliation():
