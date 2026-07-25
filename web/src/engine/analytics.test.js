@@ -57,7 +57,15 @@ const snapshot = {
             date: "2024-02-05",
             amount: -1_000_00,
             categoryId: null,
+            transferId: "t1",
             description: "transfer, uncategorized",
+        },
+        {
+            id: 6,
+            date: "2024-02-07",
+            amount: -2_000_00,
+            categoryId: null,
+            description: "UNCATEGORIZED CAFE",
         },
     ],
     budgets: [
@@ -123,7 +131,8 @@ describe("weekdayProfile", () => {
 describe("txStats", () => {
     it("computes count, median and largest expense", () => {
         const s = txStats(snapshot, "2024");
-        expect(s.count).toBe(3);
+        // ids 2, 3, 4 plus the uncategorized cafe row; the transfer leg is out
+        expect(s.count).toBe(4);
         expect(s.median).toBe(10_000_00);
         expect(s.largest.amount).toBe(20_000_00);
     });
@@ -294,9 +303,10 @@ describe("dayOfMonthProfile", () => {
     });
 });
 
-// Rows every year-scoped expense aggregator must ignore: wrong year, an income
-// category, a positive amount, and an uncategorized row. Shared to pin the
-// guard `!startsWith(year) || categoryId == null || amount >= 0` in each function.
+// Rows the year-scoped chart aggregators (weekday/day-of-month/topMerchants)
+// must ignore: wrong year, an income category, a positive amount, and an
+// uncategorized row. txStats intentionally diverges — it COUNTS uncategorized
+// outflows (see its own tests below) and only shares the first three guards.
 const ignoredRows = [
     { id: 90, date: "2023-01-01", amount: -9_999_00, categoryId: 20, description: "LAST YEAR" },
     { id: 91, date: "2024-01-01", amount: -8_888_00, categoryId: 10, description: "INCOME LEG" },
@@ -360,7 +370,16 @@ describe("txStats keeps the first of tied-largest expenses", () => {
             { id: 1, date: "2024-01-01", amount: -3_000_00, categoryId: 20, description: "FIRST" },
             { id: 2, date: "2024-01-02", amount: -3_000_00, categoryId: 20, description: "SECOND" },
             { id: 3, date: "2024-01-03", amount: -1_000_00, categoryId: 20, description: "THIRD" },
-            ...ignoredRows,
+            // still ignored: wrong year, income category, refund, transfer leg
+            ...ignoredRows.filter((r) => r.categoryId != null),
+            {
+                id: 94,
+                date: "2024-01-04",
+                amount: -5_000_00,
+                categoryId: null,
+                transferId: "t1",
+                description: "TRANSFER LEG",
+            },
         ],
     };
 
@@ -370,6 +389,44 @@ describe("txStats keeps the first of tied-largest expenses", () => {
         expect(s.median).toBe(3_000_00);
         expect(s.largest.amount).toBe(3_000_00);
         expect(s.largest.description).toBe("FIRST");
+    });
+
+    it("includes uncategorized outflows in the count", () => {
+        const withUncat = {
+            ...snap,
+            transactions: [
+                ...snap.transactions,
+                {
+                    id: 95,
+                    date: "2024-01-05",
+                    amount: -6_000_00,
+                    categoryId: null,
+                    description: "UNCATEGORIZED SPEND",
+                },
+            ],
+        };
+        const s = txStats(withUncat, "2024");
+        expect(s.count).toBe(4);
+        expect(s.largest.description).toBe("UNCATEGORIZED SPEND");
+    });
+
+    it("counts an outflow whose categoryId no longer resolves as uncategorized", () => {
+        const withDangling = {
+            ...snap,
+            transactions: [
+                ...snap.transactions,
+                {
+                    id: 96,
+                    date: "2024-01-06",
+                    amount: -5_500_00,
+                    categoryId: 999,
+                    description: "X",
+                },
+            ],
+        };
+        const s = txStats(withDangling, "2024");
+        expect(s.count).toBe(4);
+        expect(s.largest.description).toBe("X");
     });
 });
 
