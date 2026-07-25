@@ -190,12 +190,6 @@ export const api = {
             body: JSON.stringify({ ids }),
         }).then(json),
     adminActivity: () => apiFetch("/api/admin/activity").then(json),
-    adminCreateUser: (email, password) =>
-        apiFetch("/api/admin/users", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ email, password }),
-        }).then(json),
     adminDeleteUser: (id) => apiFetch(`/api/admin/users/${id}`, { method: "DELETE" }).then(json),
     workbookCommit: (file, mapping, budgetPolicy) => {
         const form = new FormData();

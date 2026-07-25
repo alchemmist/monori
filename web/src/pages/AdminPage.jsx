@@ -3,7 +3,6 @@ import { AreaChart, BarChart } from "@mantine/charts";
 import { Button } from "@mantine/core";
 import AdminTxTab from "../components/AdminTxTab.jsx";
 import { ChartBoundary } from "../components/ChartCard.jsx";
-import { FTextInput } from "../ui/fields.jsx";
 import { api } from "../api.js";
 import { money } from "../format.js";
 import { SERIES, cartesian } from "./chartTheme.js";
@@ -202,8 +201,6 @@ export default function AdminPage() {
                     />
                 )}
             </div>
-
-            <CreateUser onCreated={reload} />
         </div>
     );
 }
@@ -411,52 +408,5 @@ function UserDetail({ detail, onChanged }) {
                 />
             )}
         </div>
-    );
-}
-
-function CreateUser({ onCreated }) {
-    const [email, setEmail] = useState("");
-    const [password, setPassword] = useState("");
-    const [busy, setBusy] = useState(false);
-
-    const submit = async (e) => {
-        e.preventDefault();
-        setBusy(true);
-        try {
-            const u = await api.adminCreateUser(email.trim(), password);
-            showToast({ title: "User created", content: u.email, theme: "success" });
-            setEmail("");
-            setPassword("");
-            onCreated();
-        } catch (err) {
-            showToast({ title: "Create failed", content: err.message, theme: "danger" });
-        } finally {
-            setBusy(false);
-        }
-    };
-
-    return (
-        <form className="card admin-create" onSubmit={submit}>
-            <div className="chart-card__title admin-create__title">Create user</div>
-            <FTextInput
-                label="Email"
-                type="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="user@example.com"
-            />
-            <FTextInput
-                label="Password"
-                type="password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="at least 8 characters"
-            />
-            <Button type="submit" loading={busy} disabled={!email || password.length < 8}>
-                Create
-            </Button>
-        </form>
     );
 }
