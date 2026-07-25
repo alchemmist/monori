@@ -66,6 +66,23 @@ MONTH_TOKENS = {
 PAY_AMOUNT_HEADER = "Сумма платежа"
 PAY_CURRENCY_HEADER = "Валюта платежа"
 
+# every header the bank/template is known to emit on the Transactions sheet;
+# anything to the right of the last of these is template bookkeeping (the
+# per-row category column, the keyword side table) rather than bank data
+KNOWN_TX_HEADERS = (
+    "Дата платежа",
+    "Кэшбэк",
+    "Бонусы (включая кэшбэк)",
+    "Округление на инвесткопилку",
+    "Сумма операции с округлением",
+    PAY_AMOUNT_HEADER,
+    PAY_CURRENCY_HEADER,
+)
+
+# the keyword table and category column live in the first few hundred rows;
+# scanning the whole multi-thousand-row transaction log for them is wasted work
+SIDE_TABLE_SCAN_ROWS = 500
+
 BUDGET_HEADERS = ("Бюджет", "Budgeted")
 OUTFLOW_HEADERS = ("Расход", "Outflows")
 BALANCE_HEADERS = ("Баланс", "Balance")
@@ -311,7 +328,7 @@ def _parse_transactions(ws, warnings, errors):
         i = idx.get(header)
         return row[i] if i is not None and i < len(row) else None
 
-    cat_col = max(idx.values()) + 2
+    cat_col = _category_col(ws, idx)
     rows = []
     seen = set()
     skipped_status = 0
@@ -368,12 +385,64 @@ def _parse_transactions(ws, warnings, errors):
     return rows
 
 
+def _known_max_col(idx):
+    known = set(RU_HEADERS.values()) | set(KNOWN_TX_HEADERS)
+    return max(i for h, i in idx.items() if h in known)
+
+
+def _find_keyword_block(ws, idx):
+    """
+    Locates the `category name | pipe-separated keywords` side table by
+    content: the column pair (right of the known bank headers) with the most
+    rows whose second cell contains a pipe. Purely positional lookup broke on
+    the live file — the table starts at row 1, so its own cells pollute the
+    header index and shift any fixed offset.
+    """
+    start = _known_max_col(idx) + 1
+    scores: dict[int, int] = {}
+    for row in ws.iter_rows(
+        min_row=1, max_row=min(ws.max_row, SIDE_TABLE_SCAN_ROWS), values_only=True
+    ):
+        for base in range(start, len(row) - 1):
+            if _s(row[base]) and "|" in _s(row[base + 1]):
+                scores[base] = scores.get(base, 0) + 1
+    if not scores:
+        return None
+    return max(scores, key=lambda b: (scores[b], -b))
+
+
+def _category_col(ws, idx):
+    """
+    The per-row category column is the first populated column right of the
+    known bank headers and left of the keyword table. (The exporter leaves a
+    gap column, the live template doesn't — a fixed offset satisfies only one
+    of them.)
+    """
+    start = _known_max_col(idx) + 1
+    stop = _find_keyword_block(ws, idx)
+    if stop is None:
+        stop = ws.max_column
+    used = set()
+    for row in ws.iter_rows(
+        min_row=2, max_row=min(ws.max_row, SIDE_TABLE_SCAN_ROWS), values_only=True
+    ):
+        for c in range(start, min(stop, len(row))):
+            if _s(row[c]):
+                used.add(c)
+    for c in range(start, stop):
+        if c in used:
+            return c
+    return max(idx.values()) + 2
+
+
 def _parse_keywords(ws, idx):
     """
-    The keyword table sits in the two columns right of the per-row category
-    column: category name | pipe-separated keywords, starting at row 1.
+    Reads the keyword side table (see _find_keyword_block): category name |
+    pipe-separated keywords, starting at row 1.
     """
-    base = max(idx.values()) + 3
+    base = _find_keyword_block(ws, idx)
+    if base is None:
+        base = max(idx.values()) + 3
     keywords: dict[str, str] = {}
     for row in ws.iter_rows(min_row=1, values_only=True):
         if base >= len(row):
@@ -399,12 +468,13 @@ def _synthetic(year, month, amount, category, description, marker=""):
     }
 
 
-def _last_activity(transactions, budget_map, sources):
+def _last_activity(transactions, sources):
     """
-    Last (year, month) showing real activity: a transaction, a nonzero budget,
-    a nonzero cached outflow or income. Trailing months beyond it only carry
-    formula residue (cached zero balances in prepared/empty blocks), and
-    reconciling against those would fabricate future-dated synthetic rows.
+    Last (year, month) showing real activity: a transaction, a nonzero cached
+    outflow or income. Budgets deliberately do not count — planning months
+    ahead is normal, a budget alone creates no transactions in the sheet, and
+    the cached balances of those future months are pure carry residue;
+    reconciling against them fabricates future-dated synthetic rows.
     """
     last = None
 
@@ -418,9 +488,6 @@ def _last_activity(transactions, budget_map, sources):
     for tx in transactions:
         if tx["monori_category"]:
             bump(int(tx["date"][:4]), int(tx["date"][5:7]))
-    for (_, y, m), amount in budget_map.items():
-        if amount:
-            bump(y, m)
     for source in sources:
         y = source["year"]
         for m, v in source["income"].items():
@@ -587,7 +654,7 @@ def _parse(wb):
     start = (all_years[0], min(first_sheet["months"]))
     end = (all_years[-1], 12)
     last_active = _last_activity(
-        transactions, budget_map, list(archive_years.values()) + list(live_years.values())
+        transactions, list(archive_years.values()) + list(live_years.values())
     )
     if last_active is not None and last_active < end:
         end = max(last_active, start)
