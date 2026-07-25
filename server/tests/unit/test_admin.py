@@ -47,7 +47,7 @@ def test_feature_from_path(path, feature):
 
 
 def test_user_id_from_auth_header_roundtrip(monkeypatch):
-    monkeypatch.setenv("MONORI_AUTH_SECRET", "unit-test-secret")
+    monkeypatch.setenv("MONORI_AUTH_SECRET", "unit-test-secret-0123456789abcdef")
     token = create_access_token(42)
     assert user_id_from_auth_header(f"Bearer {token}") == 42
     assert user_id_from_auth_header(f"bearer {token}") == 42
@@ -58,5 +58,5 @@ def test_user_id_from_auth_header_roundtrip(monkeypatch):
     [None, "", "Basic abc", "Bearer not-a-jwt"],
 )
 def test_user_id_from_auth_header_rejects_bad_headers(monkeypatch, header):
-    monkeypatch.setenv("MONORI_AUTH_SECRET", "unit-test-secret")
+    monkeypatch.setenv("MONORI_AUTH_SECRET", "unit-test-secret-0123456789abcdef")
     assert user_id_from_auth_header(header) is None
