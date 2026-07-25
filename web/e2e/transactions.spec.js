@@ -31,8 +31,15 @@ test("categorizing via the grouped picker persists and follows kanban order", as
     const ours = labels.filter((l) => l === "Alpha Group" || l === "Zeta Group");
     expect(ours).toEqual(["Alpha Group", "Zeta Group"]);
 
+    // the store updates optimistically and fires the PATCH in the background —
+    // wait for the server to actually accept it before reloading, or the
+    // reload can win the race and the category silently reverts
+    const saved = page.waitForResponse(
+        (r) => r.request().method() === "PATCH" && r.url().includes("/api/transactions/") && r.ok(),
+    );
     await page.locator(".gsel__drop").getByRole("option", { name: "Coffee" }).click();
     await expect(row.locator(".gsel").last()).toContainText("Coffee");
+    await saved;
 
     await page.reload();
     await expect(page.locator(".sidebar")).toBeVisible();
