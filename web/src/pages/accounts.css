@@ -23,6 +23,26 @@
     box-shadow: 0 8px 24px rgb(0 0 0 / 18%);
 }
 
+.account-row_add {
+    width: 100%;
+    gap: 10px;
+    font: inherit;
+    font-weight: 500;
+    color: var(--m-text-dim);
+    border-top: none;
+    border-right: none;
+    border-left: none;
+    cursor: pointer;
+    transition:
+        color 0.15s ease,
+        background 0.15s ease;
+}
+
+.account-row_add:hover {
+    color: var(--m-accent);
+    background: var(--m-surface-hover);
+}
+
 .account-row__grip {
     display: grid;
     place-items: center;
@@ -173,6 +193,10 @@
    translucent glass instead of repainting an opaque near-black block over it */
 .theme-dark .account-row {
     background: transparent;
+}
+
+.theme-dark .account-row_add:hover {
+    background: rgb(255 255 255 / 5%);
 }
 
 .theme-dark .icon-picker__item {
