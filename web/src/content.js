@@ -53,6 +53,14 @@ export const NAV = [
 
 export const SECTIONS = NAV.flatMap((g) => g.items);
 
+// the fullscreen viewer addresses a diagram by its position on the page, so the
+// page and the viewer have to extract the fences the same way
+export function mermaidCharts(body) {
+    return [...String(body ?? "").matchAll(/```mermaid[^\n]*\n([\s\S]*?)```/g)].map((m) =>
+        m[1].replace(/\n$/, ""),
+    );
+}
+
 export function sectionBySlug(slug) {
     return SECTIONS.find((s) => s.slug === slug);
 }

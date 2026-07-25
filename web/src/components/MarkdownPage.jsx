@@ -1,10 +1,10 @@
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { useParams, Link, useNavigate, useLocation } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeSlug from "rehype-slug";
 import { ArrowLeft, ArrowRight } from "@gravity-ui/icons";
-import { sectionBySlug, neighbors } from "../content.js";
+import { sectionBySlug, neighbors, mermaidCharts } from "../content.js";
 import Mermaid from "./Mermaid.jsx";
 
 function toInternal(href) {
@@ -29,31 +29,43 @@ function MdLink({ href, children }) {
 }
 
 // ```mermaid fences become diagrams; every other fence keeps the plain <pre>
-function MdPre({ children, ...props }) {
-    const code = Array.isArray(children) ? children[0] : children;
-    const className = code?.props?.className ?? "";
-    if (/(^|\s)language-mermaid(\s|$)/.test(className)) {
-        const source = String(code.props.children ?? "").replace(/\n$/, "");
-        return <Mermaid chart={source} />;
+function makeComponents(slug, charts) {
+    function MdPre({ children, ...props }) {
+        const code = Array.isArray(children) ? children[0] : children;
+        const className = code?.props?.className ?? "";
+        if (/(^|\s)language-mermaid(\s|$)/.test(className)) {
+            const source = String(code.props.children ?? "").replace(/\n$/, "");
+            const index = charts.indexOf(source);
+            return (
+                <Mermaid
+                    chart={source}
+                    fullscreenHref={index >= 0 ? `/docs/${slug}/diagram/${index}` : null}
+                />
+            );
+        }
+        return <pre {...props}>{children}</pre>;
     }
-    return <pre {...props}>{children}</pre>;
-}
 
-const COMPONENTS = {
-    a: MdLink,
-    pre: MdPre,
-    table: (props) => (
-        <div className="md-table-wrap">
-            <table {...props} />
-        </div>
-    ),
-};
+    return {
+        a: MdLink,
+        pre: MdPre,
+        table: (props) => (
+            <div className="md-table-wrap">
+                <table {...props} />
+            </div>
+        ),
+    };
+}
 
 export default function MarkdownPage() {
     const { slug } = useParams();
     const navigate = useNavigate();
     const { hash } = useLocation();
     const section = sectionBySlug(slug);
+    const components = useMemo(
+        () => makeComponents(slug, mermaidCharts(section?.body)),
+        [slug, section],
+    );
 
     useEffect(() => {
         if (hash) {
@@ -92,7 +104,7 @@ export default function MarkdownPage() {
                 <ReactMarkdown
                     remarkPlugins={[remarkGfm]}
                     rehypePlugins={[rehypeSlug]}
-                    components={COMPONENTS}
+                    components={components}
                 >
                     {section.body}
                 </ReactMarkdown>

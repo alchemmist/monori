@@ -312,18 +312,156 @@ a {
 }
 
 .md-mermaid {
+    position: relative;
     margin: 0 0 20px;
     padding: 18px;
     background: var(--m-surface-raised);
     border: 1px solid var(--m-border);
     border-radius: var(--m-radius);
-    overflow-x: auto;
     text-align: center;
+}
+
+/* a wide diagram would shrink to unreadable inside the article column, so the
+   page keeps a bounded preview and the real reading happens full screen */
+.md-mermaid__canvas {
+    max-height: 420px;
+    overflow: hidden;
 }
 
 .md-mermaid svg {
     max-width: 100%;
+    max-height: 420px;
     height: auto;
+}
+
+.md-mermaid__open {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 10px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--m-text-dim);
+    background: var(--m-surface);
+    border: 1px solid var(--m-border);
+    border-radius: 999px;
+    text-decoration: none;
+    opacity: 0;
+    transition:
+        opacity 0.15s ease,
+        color 0.15s ease,
+        border-color 0.15s ease;
+}
+
+.md-mermaid:hover .md-mermaid__open,
+.md-mermaid__open:focus-visible {
+    opacity: 1;
+}
+
+.md-mermaid__open:hover {
+    color: var(--m-accent);
+    border-color: var(--m-accent);
+}
+
+.diagram-page {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    background: var(--m-bg);
+}
+
+.diagram-page__bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--m-border);
+    background: var(--m-surface);
+}
+
+.diagram-page__back {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--m-text);
+    text-decoration: none;
+}
+
+.diagram-page__back:hover {
+    color: var(--m-accent);
+}
+
+.diagram-page__tools {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.diagram-page__tools button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    color: var(--m-text-dim);
+    background: none;
+    border: 1px solid var(--m-border);
+    border-radius: var(--m-radius);
+    cursor: pointer;
+}
+
+.diagram-page__tools button:hover {
+    color: var(--m-accent);
+    border-color: var(--m-accent);
+}
+
+.diagram-page__zoom {
+    min-width: 48px;
+    text-align: center;
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    color: var(--m-text-dim);
+}
+
+.diagram-page__stage {
+    position: relative;
+    flex: 1;
+    overflow: hidden;
+    cursor: grab;
+    touch-action: none;
+}
+
+.diagram-page__stage_dragging {
+    cursor: grabbing;
+}
+
+.diagram-page__canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    transform-origin: 0 0;
+}
+
+.diagram-page__canvas svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+    max-width: none !important;
+}
+
+.diagram-page__empty {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-content: center;
+    color: var(--m-text-dim);
 }
 
 .md blockquote {
