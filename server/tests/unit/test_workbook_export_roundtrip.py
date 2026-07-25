@@ -4,10 +4,10 @@ from io import BytesIO
 import pytest
 from openpyxl import Workbook
 
-from app.workbook.importer import (
+from app.workbook.parser import (
     WorkbookError,
-    _parse_amount_cell,
-    _parse_dt_cell,
+    _amount,
+    _parse_dt,
     _unquote,
     parse_workbook,
 )
@@ -52,6 +52,30 @@ def _book(categories=None, transactions=None, extra_sheets=None):
     return buf.getvalue()
 
 
+def _year_header(months=12):
+    """The two header rows the exporter writes above a year grid."""
+    names = [
+        "January",
+        "February",
+        "March",
+        "April",
+        "May",
+        "June",
+        "July",
+        "August",
+        "September",
+        "October",
+        "November",
+        "December",
+    ][:months]
+    top = [None]
+    sub = [None]
+    for name in names:
+        top += [name, None, None]
+        sub += ["Budgeted", "Outflows", "Balance"]
+    return [top, sub]
+
+
 def _tx_row(
     op="05.01.2026 10:00:00",
     status="OK",
@@ -91,25 +115,23 @@ def test_unquote_reverses_only_the_formula_escape():
     assert _unquote("'legit apostrophe") == "'legit apostrophe"
 
 
-def test_parse_dt_cell_variants():
-    assert _parse_dt_cell(datetime.datetime(2026, 1, 5, 10, 0)) == datetime.datetime(
-        2026, 1, 5, 10, 0
-    )
-    assert _parse_dt_cell(datetime.date(2026, 1, 5)) == datetime.datetime(2026, 1, 5)
-    assert _parse_dt_cell("05.01.2026 10:00:00") == datetime.datetime(2026, 1, 5, 10)
-    assert _parse_dt_cell("2026-01-05T10:00:00") == datetime.datetime(2026, 1, 5, 10)
-    assert _parse_dt_cell("") is None
-    assert _parse_dt_cell("garbage") is None
-    assert _parse_dt_cell(None) is None
+def test_parse_dt_variants():
+    assert _parse_dt(datetime.datetime(2026, 1, 5, 10, 0)) == datetime.datetime(2026, 1, 5, 10, 0)
+    assert _parse_dt(datetime.date(2026, 1, 5)) == datetime.datetime(2026, 1, 5)
+    assert _parse_dt("05.01.2026 10:00:00") == datetime.datetime(2026, 1, 5, 10)
+    assert _parse_dt("2026-01-05T10:00:00") == datetime.datetime(2026, 1, 5, 10)
+    assert _parse_dt("") is None
+    assert _parse_dt("garbage") is None
+    assert _parse_dt(None) is None
 
 
-def test_parse_amount_cell_variants():
-    assert _parse_amount_cell(-125.5) == -12550
-    assert _parse_amount_cell(500) == 50000
-    assert _parse_amount_cell("-1 500,00") == -150000
-    assert _parse_amount_cell("") is None
-    assert _parse_amount_cell(None) is None
-    assert _parse_amount_cell("abc") is None
+def test_amount_variants():
+    assert _amount(-125.5) == -12550
+    assert _amount(500) == 50000
+    assert _amount("-1 500,00") == -150000
+    assert _amount("") is None
+    assert _amount(None) is None
+    assert _amount("abc") is None
 
 
 def test_rejects_garbage_bytes():
@@ -118,14 +140,23 @@ def test_rejects_garbage_bytes():
     assert "not a readable .xlsx workbook" in str(e.value)
 
 
-def test_missing_sheets_are_reported():
+def test_transactions_are_the_only_required_sheet():
+    """
+    The category structure is read from a sheet of its own when there is one and
+    inferred from the year grids when there isn't, so only the rows themselves
+    are indispensable.
+    """
     wb = Workbook()
     wb.active.title = "Whatever"
     buf = BytesIO()
     wb.save(buf)
     with pytest.raises(WorkbookError) as e:
         parse_workbook(buf.getvalue())
-    assert str(e.value) == "missing required sheet: Categories"
+    assert str(e.value) == "missing required sheet: Transactions"
+
+    data = _book(transactions=[_tx_row(monori="Groceries")])
+    parsed = parse_workbook(data)
+    assert [t["monori_category"] for t in parsed["transactions"]] == ["Groceries"]
 
 
 def test_missing_transactions_sheet():
@@ -149,7 +180,7 @@ def test_missing_required_transaction_columns():
         parse_workbook(buf.getvalue())
     msg = str(e.value)
     assert msg.startswith("Transactions sheet is missing required columns:")
-    assert "Сумма операции" in msg and "Description" in msg
+    assert "Сумма операции" in msg
 
 
 def test_categories_main_and_group_tables():
@@ -177,9 +208,25 @@ def test_categories_main_and_group_tables():
 
 
 def test_categories_unrecognized_row_warns():
-    data = _book(categories=[["junk", "row", None]])
+    data = _book(categories=[[1, "▼Daily", "Groceries", ""], ["junk", "row", None]])
     parsed = parse_workbook(data)
     assert any(w.startswith("Categories: unrecognized row skipped:") for w in parsed["warnings"])
+
+
+def test_category_sheet_saying_nothing_defers_to_the_grids():
+    """
+    The live spreadsheet has a sheet called Categories too, laid out nothing like
+    ours. Rather than report every row of it, the reader treats a sheet it cannot
+    read as absent and takes the structure from the year grids.
+    """
+    data = _book(categories=[["junk", "row", None], ["more", "junk", None]])
+    parsed = parse_workbook(data)
+    assert parsed["categories"] == []
+    assert parsed["groups"] == []
+    assert parsed["warnings"] == [
+        "Categories: no category rows recognized (2 rows skipped),"
+        " structure taken from the year grids"
+    ]
 
 
 def test_groups_derived_when_group_table_missing():
@@ -250,7 +297,7 @@ def test_year_sheet_budgets_and_unknown_labels():
             ["Category Group", "Sort Order", "Type"],
             ["▼Daily", 1, "OUT"],
         ],
-        extra_sheets={"2026": [[], []] + year_rows, "Notes": [["hi"]]},
+        extra_sheets={"2026": _year_header() + year_rows, "Notes": [["hi"]]},
     )
     parsed = parse_workbook(data)
     cells = parsed["budgets"]

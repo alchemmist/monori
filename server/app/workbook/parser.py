@@ -1,17 +1,20 @@
 """
-Parses the original live "Budget YNAB-Like" Google-Sheets template (the
-spreadsheet monori grew from) into the same contract as
-``importer.parse_workbook``.
+Reads a budget workbook — ours or the live "Budget YNAB-Like" Google-Sheets
+spreadsheet monori grew from — into {groups, categories, transactions, budgets}.
 
-The live template cannot be replayed literally: transactions exist only for
-recent months, earlier history survives only as hand-written ``+N``
-corrections inside formulas, and the transaction sheet contains duplicated
-blocks with broken amounts. So instead of re-running the sheet's logic this
-parser reproduces the sheet's *cached numbers*: real transactions are
-imported as-is, and per category/month differences between the sheet's cached
-aggregates and what monori would compute are closed with synthetic
-"Migration" transactions. After migration the user sees the same budgeted /
-outflows / balance / available figures the spreadsheet showed.
+There is one pipeline, not one per file we have seen. What a workbook happens to
+carry is read off its own content: which columns the transaction sheet names,
+whether the category structure is spelled out on a sheet of its own or only
+implied by the sections of the year grids, and whether a month has rows in it or
+just the totals the sheet cached. So a workbook is never classified; it is
+measured, and every stage does the most it can with what is actually there.
+
+The last part matters most. A hand-kept spreadsheet holds real rows only for
+recent months and keeps its earlier history as cached aggregates. Those months
+are rebuilt from the aggregates with synthetic "Migration" transactions so the
+budgeted / outflows / balance / available figures survive the move. A month that
+does carry rows is never touched: the rows are the truth, and a total that
+disagrees with them is reported, never reconciled away.
 """
 
 import datetime
@@ -20,20 +23,33 @@ from io import BytesIO
 
 from openpyxl import load_workbook
 
+from ..importer import parse_amount_kop, parse_date
 from . import spec
 
 YEAR_RE = re.compile(r"^(\d{4})(_archive)?$")
 
-RU_HEADERS = {
-    "date": "Дата операции",
-    "card": "Номер карты",
-    "status": "Статус",
-    "amount": "Сумма операции",
-    "currency": "Валюта операции",
-    "bank_category": "Категория",
-    "mcc": "MCC",
-    "description": "Описание",
+# Every name a transaction column is known to go by. A workbook exported by
+# monori writes the English ones, the live spreadsheet the Russian ones, and
+# both are just names for the same field — so the reader resolves columns by
+# meaning and never has to know which kind of file it was handed.
+TX_ALIASES = {
+    "date": ("Дата операции", "Date"),
+    "card": ("Номер карты",),
+    "account": ("Account",),
+    "status": ("Статус", "Status"),
+    "amount": ("Сумма операции", "Amount"),
+    "currency": ("Валюта операции",),
+    "pay_amount": ("Сумма платежа",),
+    "pay_currency": ("Валюта платежа",),
+    "bank_category": ("Категория",),
+    "mcc": ("MCC",),
+    "description": ("Описание", "Description"),
+    "category": ("Monori Category",),
+    "comment": ("Comment",),
 }
+
+# a row is only worth reading if it can say when it happened and for how much
+TX_REQUIRED = ("date", "amount")
 
 MONTH_ABBREVS = {
     "ЯНВ": 1,
@@ -63,20 +79,15 @@ MONTH_ABBREVS = {
     "DEC": 12,
 }
 
-PAY_AMOUNT_HEADER = "Сумма платежа"
-PAY_CURRENCY_HEADER = "Валюта платежа"
-
-# every header the bank/template is known to emit on the Transactions sheet;
-# anything to the right of the last of these is template bookkeeping (the
-# per-row category column, the keyword side table) rather than bank data
-KNOWN_TX_HEADERS = (
+# every header a workbook is known to name on the transaction sheet; anything
+# to the right of the last of these is the sheet's own bookkeeping (an unnamed
+# category column, the keyword side table) rather than data with a header
+KNOWN_TX_HEADERS = tuple(name for names in TX_ALIASES.values() for name in names) + (
     "Дата платежа",
     "Кэшбэк",
     "Бонусы (включая кэшбэк)",
     "Округление на инвесткопилку",
     "Сумма операции с округлением",
-    PAY_AMOUNT_HEADER,
-    PAY_CURRENCY_HEADER,
 )
 
 # the keyword table and category column live in the first few hundred rows;
@@ -91,13 +102,14 @@ SKIP_LABELS = LABEL_HEADERS + ("Month Summary", "Total", "Итого")
 
 INCOME_GROUP = "Inflow"
 INCOME_CATEGORY = "Income"
+OTHER_GROUP = "Other"
 
 ADJUST_TOLERANCE_KOP = 2
 VERIFY_TOLERANCE_KOP = 5
 MAX_VERIFY_WARNINGS = 12
 
 
-class TemplateError(Exception):
+class WorkbookError(Exception):
     pass
 
 
@@ -141,28 +153,6 @@ def _stamp(year, month):
     return _last_day(year, month).strftime("%Y-%m-%dT12:00:00")
 
 
-def is_template_transactions_header(header_cells) -> bool:
-    names = {_s(v) for v in header_cells}
-    return RU_HEADERS["status"] in names and "Status" not in names
-
-
-def looks_like_template(data: bytes) -> bool:
-    try:
-        wb = load_workbook(BytesIO(data), data_only=True, read_only=True)
-    except Exception:
-        return False
-    try:
-        if spec.SHEET_TRANSACTIONS not in wb.sheetnames:
-            return False
-        ws = wb[spec.SHEET_TRANSACTIONS]
-        if not hasattr(ws, "iter_rows"):
-            return False
-        header = next(ws.iter_rows(min_row=1, max_row=1, values_only=True), None)
-        return header is not None and is_template_transactions_header(header)
-    finally:
-        wb.close()
-
-
 def _month_num(value):
     abbr = _s(value).upper()[:3]
     return MONTH_ABBREVS.get(abbr)
@@ -170,10 +160,13 @@ def _month_num(value):
 
 def _find_layout(ws):
     """
-    Locates the month blocks of a year sheet. Returns None when the sheet has
-    no recognizable Budgeted/Outflows/Balance header row.
+    Locates the month blocks of a year sheet by looking for the row that repeats
+    a Budgeted/Outflows/Balance header per month — which is the same grid in a
+    workbook we wrote and in the hand-kept spreadsheet, only sitting at a
+    different row and labelled in a different language. Returns None when no
+    such row exists, which is how a sheet says it is not a year grid at all.
     """
-    for r in range(5, 11):
+    for r in range(1, 11):
         row = [ws.cell(r, c).value for c in range(1, ws.max_column + 1)]
         bases = [i + 1 for i, v in enumerate(row) if _s(v) in BUDGET_HEADERS]
         if len(bases) < 2:
@@ -208,10 +201,87 @@ def _find_layout(ws):
             "bases": bases,
             "out_off": out_off,
             "bal_off": bal_off,
-            "label_col": label_col or 3,
+            "label_col": label_col or _label_col(ws, r, bases[0]),
             "start_month": start_month or 1,
         }
     return None
+
+
+def _label_col(ws, header_row, first_base):
+    """
+    The category column when the grid never names it: of the columns left of the
+    first month block, the one carrying the most labels below the header.
+    """
+    best, best_count = 1, 0
+    for c in range(1, first_base):
+        count = sum(
+            1
+            for r in range(header_row + 1, min(ws.max_row, header_row + 60) + 1)
+            if _s(ws.cell(r, c).value)
+        )
+        if count > best_count:
+            best, best_count = c, count
+    return best
+
+
+def _kind_of(group_name, groups):
+    return next((g["kind"] for g in groups if g["name"] == group_name), "expense")
+
+
+def _parse_categories(ws, warnings):
+    """
+    Reads a category sheet that states the structure outright: category rows
+    (`sort | group | category | keywords`) and, when present, a group table
+    (`group | sort | IN/OUT`). Groups fall back to the ones the category rows
+    name so a sheet missing that table still imports.
+    """
+    groups = []
+    categories = []
+    group_rows_seen = False
+    for row in ws.iter_rows(min_row=1, values_only=True):
+        cells = list(row) + [None] * (4 - len(row))
+        c1, c2, c3, c4 = cells[:4]
+        s1, s2, s3 = _s(c1), _s(c2), _s(c3)
+        if s1 in ("Sort Order", "Category Group") or (not s1 and not s2):
+            continue
+        if s3 in (spec.TYPE_IN, spec.TYPE_OUT) and isinstance(c2, int | float):
+            name, _ = spec.strip_glyph(_unquote(s1))
+            groups.append(
+                {
+                    "name": name,
+                    "sort": int(c2),
+                    "kind": "income" if s3 == spec.TYPE_IN else "expense",
+                }
+            )
+            group_rows_seen = True
+            continue
+        if isinstance(c1, int | float) and s2 and s3:
+            name, kind = spec.strip_glyph(_unquote(s2))
+            categories.append(
+                {
+                    "group": name,
+                    "group_kind": kind,
+                    "group_sort": int(c1),
+                    "name": _unquote(s3),
+                    "keywords": _unquote(_s(c4)),
+                }
+            )
+            continue
+        if s1 or s2 or s3:
+            warnings.append(f"Categories: unrecognized row skipped: {[s1, s2, s3][:3]}")
+    if not group_rows_seen:
+        seen: dict[str, dict] = {}
+        for cat in categories:
+            if str(cat["group"]) not in seen:
+                seen[str(cat["group"])] = {
+                    "name": cat["group"],
+                    "sort": cat["group_sort"],
+                    "kind": cat["group_kind"] or "expense",
+                }
+        groups = list(seen.values())
+        if groups:
+            warnings.append("Categories: group table missing, groups derived from category rows")
+    return groups, categories
 
 
 def _sheet_sections(ws, layout):
@@ -318,26 +388,68 @@ def _parse_dt(value):
         return value
     if isinstance(value, datetime.date):
         return datetime.datetime(value.year, value.month, value.day)
-    return None
+    text = _s(value)
+    if not text:
+        return None
+    parsed = parse_date(text)
+    if parsed:
+        return parsed
+    try:
+        return datetime.datetime.fromisoformat(text)
+    except ValueError:
+        return None
+
+
+def _unquote(value: str) -> str:
+    """
+    Reverses our exporter's formula-escape and nothing else: a leading
+    apostrophe is stripped only when it guards a formula prefix, so a value that
+    legitimately starts with one survives the round-trip.
+    """
+    if value.startswith("'") and value[1:].startswith(("=", "+", "@")):
+        return value[1:]
+    return value
+
+
+def _amount(value):
+    """Kopecks from a cell that may be a number, a formatted string, or blank."""
+    kop = _kop(value)
+    if kop is not None:
+        return kop
+    text = _s(value)
+    return parse_amount_kop(text) if text else None
+
+
+def _tx_columns(idx):
+    """Which column, if any, holds each field this reader knows how to use."""
+    return {
+        field: next((idx[name] for name in names if name in idx), None)
+        for field, names in TX_ALIASES.items()
+    }
 
 
 def _parse_transactions(ws, warnings, errors):
     idx = _tx_header_index(ws)
     if idx is None:
-        raise TemplateError("Transactions sheet is empty")
-    missing = [h for h in RU_HEADERS.values() if h not in idx]
+        raise WorkbookError("Transactions sheet is empty")
+    at = _tx_columns(idx)
+    missing = [TX_ALIASES[f][0] for f in TX_REQUIRED if at[f] is None]
+    if at["pay_amount"] is not None and TX_ALIASES["amount"][0] in missing:
+        missing.remove(TX_ALIASES["amount"][0])
     if missing:
-        raise TemplateError(f"Transactions sheet is missing required columns: {missing}")
+        raise WorkbookError(f"Transactions sheet is missing required columns: {missing}")
 
-    def col(row, key):
-        i = idx[RU_HEADERS[key]]
-        return row[i] if i < len(row) else None
-
-    def opt(row, header):
-        i = idx.get(header)
+    def col(row, field):
+        i = at[field]
         return row[i] if i is not None and i < len(row) else None
 
-    cat_col = _category_col(ws, idx)
+    def text(row, field):
+        return _unquote(_s(col(row, field)))
+
+    # a workbook that spells the category out in a column of its own says so in
+    # the header; the live spreadsheet leaves it unnamed and has to be found by
+    # position, so only look for it when there is no named column to use
+    cat_col = at["category"] if at["category"] is not None else _category_col(ws, idx)
     rows = []
     seen = set()
     skipped_status = 0
@@ -352,15 +464,15 @@ def _parse_transactions(ws, warnings, errors):
             continue
         dt = _parse_dt(col(row, "date"))
         # what actually left the account, not what the bank operation was for:
-        # one operation split across categories keeps its original total in
-        # "Сумма операции" on every part and carries the real share here
-        amount = _kop(opt(row, PAY_AMOUNT_HEADER))
-        currency = _s(opt(row, PAY_CURRENCY_HEADER))
+        # one operation split across categories keeps its original total in the
+        # operation amount on every part and carries the real share here
+        amount = _amount(col(row, "pay_amount"))
+        currency = _s(col(row, "pay_currency"))
         if amount is None:
-            amount = _kop(col(row, "amount"))
+            amount = _amount(col(row, "amount"))
             currency = _s(col(row, "currency"))
         currency = currency or _s(col(row, "currency"))
-        description = _s(col(row, "description"))
+        description = text(row, "description")
         if dt is None or amount is None:
             if dt is None and amount is None and not description:
                 continue
@@ -369,21 +481,21 @@ def _parse_transactions(ws, warnings, errors):
         if currency and currency != "RUB":
             non_rub += 1
         date_iso = dt.strftime("%Y-%m-%dT%H:%M:%S")
-        marker = _s(col(row, "card"))
+        marker = text(row, "card") or text(row, "account")
         key = (date_iso, amount, description, marker)
         if key in seen:
             dupes += 1
             continue
         seen.add(key)
-        category = _s(row[cat_col]) if cat_col < len(row) else ""
+        category = _unquote(_s(row[cat_col])) if cat_col is not None and cat_col < len(row) else ""
         rows.append(
             {
                 "date": date_iso,
                 "amount": amount,
                 "description": description,
-                "bank_category": _s(col(row, "bank_category")),
-                "mcc": _s(col(row, "mcc")),
-                "comment": "",
+                "bank_category": text(row, "bank_category"),
+                "mcc": text(row, "mcc"),
+                "comment": text(row, "comment"),
                 "monori_category": category,
                 "marker": marker,
             }
@@ -398,8 +510,7 @@ def _parse_transactions(ws, warnings, errors):
 
 
 def _known_max_col(idx):
-    known = set(RU_HEADERS.values()) | set(KNOWN_TX_HEADERS)
-    return max(i for h, i in idx.items() if h in known)
+    return max((i for h, i in idx.items() if h in KNOWN_TX_HEADERS), default=-1)
 
 
 def _find_keyword_block(ws, idx):
@@ -527,15 +638,15 @@ def _month_range(start, end):
             y, m = y + 1, 1
 
 
-def parse_template_workbook(data: bytes):
+def parse_workbook(data: bytes):
     """
-    Returns {groups, categories, transactions, budgets, warnings, errors}
-    (the ``parse_workbook`` contract) built from a live YNAB-Like template.
+    Returns {groups, categories, transactions, budgets, warnings, errors} for any
+    budget workbook — see the module docstring for how the shape is discovered.
     """
     try:
         wb = load_workbook(BytesIO(data), data_only=True)
     except Exception as exc:
-        raise TemplateError(f"not a readable .xlsx workbook: {exc}") from exc
+        raise WorkbookError(f"not a readable .xlsx workbook: {exc}") from exc
     try:
         return _parse(wb)
     finally:
@@ -546,7 +657,7 @@ def _parse(wb):
     warnings: list[str] = []
     errors: list[dict] = []
     if spec.SHEET_TRANSACTIONS not in wb.sheetnames:
-        raise TemplateError(f"missing required sheet: {spec.SHEET_TRANSACTIONS}")
+        raise WorkbookError(f"missing required sheet: {spec.SHEET_TRANSACTIONS}")
     tx_ws = wb[spec.SHEET_TRANSACTIONS]
     tx_idx = _tx_header_index(tx_ws)
     transactions = _parse_transactions(tx_ws, warnings, errors)
@@ -575,11 +686,13 @@ def _parse(wb):
     for year, parsed in plain_sheets.items():
         if year not in archive_years:
             live_years[year] = parsed
-    if not live_years:
-        raise TemplateError("no live year sheets found")
+    known_sheets = {spec.SHEET_CATEGORIES, spec.SHEET_TRANSACTIONS, spec.SHEET_DASHDATA}
+    for name in wb.sheetnames:
+        if name not in known_sheets and not YEAR_RE.match(name):
+            warnings.append(f"unknown sheet ignored: {name}")
 
-    first_live = min(live_years)
-    seam_year = first_live - 1
+    first_live = min(live_years) if live_years else None
+    seam_year = -1 if first_live is None else first_live - 1
     seam_sheet = plain_sheets.get(seam_year)
 
     groups: list[dict] = []
@@ -587,38 +700,127 @@ def _parse(wb):
     group_names = set()
     cat_names = {}
 
-    def add_group(name, kind):
+    def add_group(name, kind, sort=None):
         if name in group_names:
             return
         group_names.add(name)
-        groups.append({"name": name, "sort": len(groups), "kind": kind})
+        groups.append({"name": name, "sort": len(groups) if sort is None else sort, "kind": kind})
 
-    def add_category(name, group):
+    def add_category(name, group, keywords_text=None, group_kind=None, group_sort=0):
         if name in cat_names:
             return
         cat_names[name] = group
         categories.append(
             {
                 "group": group,
-                "group_kind": None,
-                "group_sort": 0,
+                "group_kind": group_kind,
+                "group_sort": group_sort,
                 "name": name,
-                "keywords": keywords.get(name, ""),
+                "keywords": keywords_text if keywords_text is not None else keywords.get(name, ""),
             }
         )
 
-    add_group(INCOME_GROUP, "income")
-    add_category(INCOME_CATEGORY, INCOME_GROUP)
-    for year in sorted(live_years, reverse=True):
-        for section in live_years[year]["sections"]:
-            add_group(section["name"], section["kind"])
-            for _, name in section["rows"]:
-                add_category(name, section["name"])
-    for year in sorted(archive_years, reverse=True):
-        for section in archive_years[year]["sections"]:
-            add_group(section["name"], section["kind"])
-            for _, name in section["rows"]:
-                add_category(name, section["name"])
+    # A workbook that states its category structure outright is believed; one
+    # that doesn't has it read off the sections of its year grids, which is the
+    # only place a hand-kept sheet records it.
+    stated_warnings: list[str] = []
+    stated_groups, stated_categories = (
+        _parse_categories(wb[spec.SHEET_CATEGORIES], stated_warnings)
+        if spec.SHEET_CATEGORIES in wb.sheetnames
+        else ([], [])
+    )
+    # a sheet by that name whose rows say nothing this reader recognizes is not
+    # a structure sheet at all — the grids know better, and complaining about
+    # every row of it would bury the warnings that matter
+    if stated_categories:
+        warnings.extend(stated_warnings)
+    else:
+        stated_groups = []
+        if stated_warnings:
+            warnings.append(
+                f"Categories: no category rows recognized ({len(stated_warnings)} rows skipped),"
+                " structure taken from the year grids"
+            )
+    for group in stated_groups:
+        add_group(group["name"], group["kind"], group["sort"])
+    for cat in stated_categories:
+        add_group(cat["group"], cat["group_kind"] or "expense", cat["group_sort"])
+        add_category(
+            cat["name"], cat["group"], cat["keywords"], cat["group_kind"], cat["group_sort"]
+        )
+
+    # ...and when the structure was stated, the grids may not invent categories
+    # it left out: a label down the side that no category claims is a leftover
+    # or a subtotal, and gets reported rather than imported.
+    stated = bool(stated_categories)
+    # A grid gives income no section of its own — it is summarised in a header
+    # cell per month — so a workbook whose structure never marks a group as
+    # income has none, and the income the reconciliation rebuilds needs
+    # somewhere to live. Declared before the sections so a category named for it
+    # is not swallowed by whichever expense section happens to contain the row.
+    all_sections = [
+        section
+        for years in (live_years, archive_years)
+        for year in years
+        for section in years[year]["sections"]
+    ]
+    if not stated and all_sections and not any(s["kind"] == "income" for s in all_sections):
+        add_group(INCOME_GROUP, "income")
+        add_category(INCOME_CATEGORY, INCOME_GROUP)
+
+    for years in (live_years, archive_years):
+        for year in sorted(years, reverse=True):
+            for section in years[year]["sections"]:
+                if stated:
+                    for _, name in section["rows"]:
+                        if name not in cat_names:
+                            warnings.append(f"{year}: unknown row label skipped: {name[:60]}")
+                    continue
+                add_group(section["name"], section["kind"])
+                for _, name in section["rows"]:
+                    add_category(name, section["name"])
+
+    # A category a row names but no structure lists still exists — losing it
+    # would silently uncategorize that row. It joins the income side when
+    # everything filed under it came in, and the expense side otherwise.
+    named_only: dict[str, list] = {}
+    for tx in transactions:
+        name = tx["monori_category"]
+        if name and name not in cat_names:
+            named_only.setdefault(name, []).append(tx["amount"])
+    if named_only:
+        income_group = next((g["name"] for g in groups if g["kind"] == "income"), None)
+        expense_group = next((g["name"] for g in groups if g["kind"] != "income"), None)
+        for name, amounts in named_only.items():
+            if all(a >= 0 for a in amounts):
+                if income_group is None:
+                    add_group(INCOME_GROUP, "income")
+                    income_group = INCOME_GROUP
+                add_category(name, income_group)
+            else:
+                if expense_group is None:
+                    add_group(OTHER_GROUP, "expense")
+                    expense_group = OTHER_GROUP
+                add_category(name, expense_group)
+
+    if not live_years and not archive_years:
+        # no grids, so nothing cached to reconcile against: the rows are all there is
+        return _result(groups, categories, transactions, [], warnings, errors)
+
+    # where rebuilt income lands: whatever income category the workbook already
+    # has, and only failing that a new one
+    income_category = next(
+        (
+            c["name"]
+            for c in categories
+            if c["name"] == INCOME_CATEGORY or _kind_of(c["group"], groups) == "income"
+        ),
+        None,
+    )
+    if income_category is None:
+        add_group(INCOME_GROUP, "income")
+        add_category(INCOME_CATEGORY, INCOME_GROUP)
+        income_category = INCOME_CATEGORY
 
     kinds = {}
     group_kind = {g["name"]: g["kind"] for g in groups}
@@ -628,6 +830,8 @@ def _parse(wb):
     budgets = []
     for source in list(archive_years.values()) + list(live_years.values()):
         for name, entry in source["cats"].items():
+            if name not in cat_names:
+                continue
             for m, amount in entry["budgets"].items():
                 if amount:
                     budgets.append(
@@ -665,7 +869,7 @@ def _parse(wb):
                 if (year, m) in real_months:
                     n_trusted += 1
                     continue
-                synthetic.append(_synthetic(year, m, delta, INCOME_CATEGORY, INCOME_CATEGORY))
+                synthetic.append(_synthetic(year, m, delta, income_category, income_category))
                 income_sums[(year, m)] = have + delta
                 if live:
                     n_adjust += 1
@@ -697,7 +901,7 @@ def _parse(wb):
             bal = entry["balances"].get(last_m)
             if bal is not None:
                 seam_targets[name] = bal
-    seam_seed = live_years[first_live]["seed"]
+    seam_seed = live_years[first_live]["seed"] if first_live is not None else None
 
     balances: dict[str, int] = {}
     avail = 0
@@ -722,7 +926,7 @@ def _parse(wb):
             if at_seam:
                 if name in seam_targets:
                     target = seam_targets[name]
-                elif name not in live_years[first_live]["cats"]:
+                elif first_live is not None and name not in live_years[first_live]["cats"]:
                     target = 0
             elif entry is not None:
                 target = entry["balances"].get(m)
@@ -754,7 +958,7 @@ def _parse(wb):
         if at_seam and seam_seed is not None and (y, m) not in real_months:
             delta = seam_seed - avail
             if abs(delta) > ADJUST_TOLERANCE_KOP:
-                synthetic.append(_synthetic(y, m, delta, INCOME_CATEGORY, INCOME_CATEGORY))
+                synthetic.append(_synthetic(y, m, delta, income_category, income_category))
                 income_sums[(y, m)] = income_sums.get((y, m), 0) + delta
                 avail += delta
                 n_seam += 1
@@ -784,11 +988,14 @@ def _parse(wb):
             f"verify: {len(avail_residuals) - MAX_VERIFY_WARNINGS} more available mismatches"
         )
 
-    groups_out = [{"name": g["name"], "sort": i, "kind": g["kind"]} for i, g in enumerate(groups)]
+    return _result(groups, categories, transactions + synthetic, budgets, warnings, errors)
+
+
+def _result(groups, categories, transactions, budgets, warnings, errors):
     return {
-        "groups": groups_out,
+        "groups": [{"name": g["name"], "sort": g["sort"], "kind": g["kind"]} for g in groups],
         "categories": categories,
-        "transactions": transactions + synthetic,
+        "transactions": transactions,
         "budgets": budgets,
         "warnings": warnings,
         "errors": errors,

@@ -10,7 +10,7 @@ from ..deps import conn
 from ..importer import build_rules, categorize, parse_statement, tx_hash
 from ..ingest import commit_rows, existing_hash_counts
 from ..workbook.apply import apply_workbook, budget_conflicts
-from ..workbook.importer import WorkbookError, parse_workbook
+from ..workbook.parser import WorkbookError, parse_workbook
 
 router = APIRouter(prefix="/api/import", tags=["import"])
 
