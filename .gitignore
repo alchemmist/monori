@@ -22,3 +22,5 @@ coverage/
 reports/
 .mutmut-cache
 mutants/
+web/test-results/
+web/playwright-report/
