@@ -117,10 +117,11 @@ export default function AnalyticsPage({ results, firstYear, lastYear }) {
     }, [monthly, year, firstYear]);
 
     // The year read one category at a time: a stack shows how the months are
-    // composed, lines show how one category drifts across the year. Series names
-    // double as the chart's data keys, so two categories that share a name (only
-    // the group tells them apart) get the group appended — otherwise one would
-    // silently overwrite the other's column.
+    // composed, lines show how one category drifts across the year. Data keys
+    // are stable category ids rather than display labels: duplicate names (or a
+    // real category called "Other") must not overwrite each other's columns —
+    // the label only disambiguates the legend, appending the group where names
+    // clash.
     const byCategory = useMemo(() => {
         const rows = categoryYearMatrix(snapshot, year, { limit: CATEGORY_LIMIT });
         const groupName = new Map(snapshot.groups.map((g) => [g.id, g.name]));
@@ -128,28 +129,31 @@ export default function AnalyticsPage({ results, firstYear, lastYear }) {
         for (const r of rows) seen.set(r.name, (seen.get(r.name) ?? 0) + 1);
         const named = rows.map((r) => ({
             ...r,
-            label: seen.get(r.name) > 1 ? `${r.name} · ${groupName.get(r.groupId)}` : r.name,
+            key: r.id == null ? "other" : `cat-${r.id}`,
+            label:
+                r.id != null && seen.get(r.name) > 1
+                    ? `${r.name} · ${groupName.get(r.groupId)}`
+                    : r.name,
         }));
-        // months past the last one that saw any money are blank, not zero: on the
-        // line view a running year would otherwise plunge every category to the
-        // floor for the months that simply haven't happened yet
-        const lastActive = MONTHS_SHORT.reduce(
-            (last, _, m) => (named.some((r) => r.monthly[m] !== 0) ? m : last),
-            -1,
-        );
+        // months that have not happened yet are blank, not zero: on the line
+        // view a running year would otherwise plunge every category to the
+        // floor for the rest of the calendar; elapsed months with no spending
+        // stay a real 0, in past years every month has happened
+        const blankAfter = +year === now.getFullYear() ? now.getMonth() : 11;
         const data = MONTHS_SHORT.map((mo, m) => {
             const row = { month: mo };
             for (const r of named) {
-                row[r.label] = m > lastActive ? null : Math.round(r.monthly[m] / 100);
+                row[r.key] = m > blankAfter ? null : Math.round(r.monthly[m] / 100);
             }
             return row;
         });
         const series = named.map((r, i) => ({
-            name: r.label,
+            name: r.key,
+            label: r.label,
             color: r.id == null ? SERIES.hint : PALETTE[i % PALETTE.length],
         }));
-        return { data, series, total: named.reduce((s, r) => s + r.total, 0) };
-    }, [snapshot, year]);
+        return { data, series, hasData: named.length > 0 };
+    }, [snapshot, year, now]);
 
     const weekdayData = useMemo(() => {
         const sums = weekdayProfile(snapshot, year);
@@ -263,7 +267,7 @@ export default function AnalyticsPage({ results, firstYear, lastYear }) {
                         <InlineSelect small value={catShape} onChange={setCatShape} data={SHAPES} />
                     </div>
                     <div className="chart-card__body chart-card__body_tall">
-                        {byCategory.total !== 0 ? (
+                        {byCategory.hasData ? (
                             <ChartBoundary>
                                 {catShape === "stacked" ? (
                                     <BarChart
