@@ -37,6 +37,10 @@ def test_unknown_codes_survive_normalization_but_fail_validation():
     # data written before a code left the registry must still be readable
     assert normalize("xyz") == "XYZ"
     assert not is_known("XYZ")
+    # and nothing at all is not the default currency, it is simply not a currency
+    assert not is_known("")
+    assert not is_known(None)
+    assert is_known(" rub ")
     with pytest.raises(HTTPException) as e:
         validate("XYZ")
     assert e.value.status_code == 400
@@ -52,12 +56,18 @@ def test_symbol_falls_back_to_the_code():
     assert symbol("RUB") == "₽"
     assert symbol("gel") == "₾"
     assert symbol("XYZ") == "XYZ"
+    # a missing code has no symbol of its own, and must not borrow the default's
+    assert symbol("") == ""
+    assert symbol(None) == ""
 
 
 def test_catalog_covers_every_currency():
     entries = catalog()
     assert [e["code"] for e in entries] == list(CURRENCIES)
     assert all(e["minorUnits"] == 2 for e in entries)
+    # the exact keys the frontend reads off each entry
+    assert all(set(e) == {"code", "name", "symbol", "minorUnits"} for e in entries)
+    assert entries[0] == {"code": "RUB", "name": "Russian ruble", "symbol": "₽", "minorUnits": 2}
 
 
 @pytest.mark.skipif(WEB_CURRENCIES is None, reason="frontend tree is not next to this checkout")

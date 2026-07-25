@@ -10,7 +10,9 @@ import app.db as dbmod
 from app.rates import (
     BUNDLED_DAY,
     BUNDLED_RATES,
+    CBR_TIMEOUT,
     SOURCE_BUNDLED,
+    SOURCE_CBR,
     SOURCE_MANUAL,
     RateUnavailable,
     backfill,
@@ -52,8 +54,10 @@ class _Feed:
         self.payload = payload
         self.fail = fail
         self.asked = []
+        self.params = []
 
     def get(self, url, params=None):
+        self.params.append(params)
         self.asked.append((params or {}).get("date_req"))
         if self.fail:
             raise httpx.ConnectError("offline")
@@ -73,12 +77,40 @@ def test_parse_cbr_ignores_junk():
     assert parse_cbr("<ValCurs><Valute><CharCode>USD</CharCode></Valute></ValCurs>") == {}
 
 
+def test_parse_cbr_needs_all_three_fields():
+    """
+    A block missing any one of code, nominal or value is not half-usable — it
+    is skipped, and the blocks after it are still read.
+    """
+    feed = (
+        "<ValCurs>"
+        "<Valute><CharCode>USD</CharCode><Nominal>1</Nominal></Valute>"
+        "<Valute><Nominal>1</Nominal><Value>92,4000</Value></Valute>"
+        "<Valute><CharCode>EUR</CharCode><Nominal>1</Nominal>"
+        "<Value>92,4000</Value></Valute>"
+        "</ValCurs>"
+    )
+    assert parse_cbr(feed) == {"EUR": 92.4}
+
+
 def test_parse_cbr_refuses_to_divide_by_a_zero_nominal():
     feed = (
         "<ValCurs><Valute><CharCode>USD</CharCode><Nominal>0</Nominal>"
         "<Value>78,5000</Value></Valute></ValCurs>"
     )
     assert parse_cbr(feed) == {}
+
+
+def test_parse_cbr_keeps_reading_past_an_unusable_nominal():
+    feed = (
+        "<ValCurs>"
+        "<Valute><CharCode>USD</CharCode><Nominal>0</Nominal>"
+        "<Value>78,5000</Value></Valute>"
+        "<Valute><CharCode>EUR</CharCode><Nominal>1</Nominal>"
+        "<Value>92,4000</Value></Valute>"
+        "</ValCurs>"
+    )
+    assert parse_cbr(feed) == {"EUR": 92.4}
 
 
 def test_parse_cbr_reads_a_blank_nominal_as_one():
@@ -207,7 +239,11 @@ def test_rate_table_flags_a_stale_quote(tmp_path):
         table = {r["code"]: r for r in rate_table(c, "2026-07-01")}
         assert table["USD"]["stale"] is True
         assert table["USD"]["day"] == "2026-06-01"
+        assert table["USD"]["source"] == SOURCE_CBR
         assert table["RUB"]["stale"] is False
+        # a datetime is trimmed to its day, or every quote would read as stale
+        same = {r["code"]: r for r in rate_table(c, "2026-06-01T10:00:00")}
+        assert same["USD"]["stale"] is False
     finally:
         c.close()
 
@@ -221,6 +257,15 @@ def test_refresh_stores_the_day_that_was_asked_for(tmp_path):
         # rates that were in force on Sunday
         assert feed.asked == ["06/07/2025"]
         assert rate_on(c, "USD", "2025-07-06")[:2] == (78.5, "2025-07-06")
+    finally:
+        c.close()
+
+
+def test_missing_days_looks_a_month_back_by_default(tmp_path):
+    c = _db(tmp_path)
+    try:
+        # 30 days back plus today
+        assert len(missing_days(c, today="2026-07-25")) == 31
     finally:
         c.close()
 
@@ -245,6 +290,15 @@ def test_backfill_fetches_every_gap(tmp_path):
         c.close()
 
 
+def test_backfill_covers_a_month_by_default(tmp_path):
+    c = _db(tmp_path)
+    feed = _Feed()
+    try:
+        assert backfill(c, today="2026-07-25", client=feed) == 31
+    finally:
+        c.close()
+
+
 def test_backfill_stops_at_the_first_network_failure(tmp_path):
     c = _db(tmp_path)
     feed = _Feed(fail=True)
@@ -261,21 +315,27 @@ def test_fetch_cbr_opens_its_own_client_when_not_given_one(monkeypatch):
     bare must still get a connection, and must still close it.
     """
     closed = []
+    opened = []
 
     class _Client:
         def __init__(self, timeout=None):
             self.timeout = timeout
+            self.feed = _Feed()
+            opened.append(self)
 
         def __enter__(self):
-            return _Feed()
+            return self.feed
 
         def __exit__(self, *exc):
             closed.append(True)
             return False
 
     monkeypatch.setattr(httpx, "Client", _Client)
-    assert fetch_cbr("2025-07-01")["USD"] == 78.5
+    assert fetch_cbr("2025-07-01T09:00:00")["USD"] == 78.5
     assert closed == [True]
+    assert opened[0].timeout == CBR_TIMEOUT
+    # the day asked for still reaches the feed, trimmed out of a datetime
+    assert opened[0].feed.asked == ["01/07/2025"]
 
 
 def test_rate_table_skips_a_currency_nothing_quotes(tmp_path, monkeypatch):
@@ -286,6 +346,9 @@ def test_rate_table_skips_a_currency_nothing_quotes(tmp_path, monkeypatch):
     c = _db(tmp_path)
     monkeypatch.delitem(BUNDLED_RATES, "GEL")
     try:
-        assert "GEL" not in {r["code"] for r in rate_table(c, "2026-07-01")}
+        codes = [r["code"] for r in rate_table(c, "2026-07-01")]
+        assert "GEL" not in codes
+        # and the currencies after it are still there
+        assert {"AMD", "TRY", "RSD"} <= set(codes)
     finally:
         c.close()
