@@ -48,12 +48,12 @@ workbook that is a bit of both still works.
     share in the payment amount — sometimes as a formula (`=-48480+16990`),
     which is added up on import. Every part becomes its own transaction with its
     own category; only rows identical down to that share count as duplicates.
-  - The **category** is the one you wrote. A workbook that names a category
+  - The **category** is copied literally. A workbook that names a category
     column in its header is taken at its word. The live spreadsheet doesn't name
     it and keeps two: what the keyword rules guessed and what actually counts —
-    that guess accepted, or a label typed over it. Only the second is read, so a
-    hand-written category wins outright and the guess survives only where you
-    let it.
+    that guess accepted, or a label typed over it. Only the second is read. A
+    blank stays uncategorized: workbook keywords are saved for future imports
+    and syncs, never applied retroactively to its historical rows.
 - **`Categories`**, when a workbook states its structure outright — a table of
   `Sort Order`, `Category Group`, `Category`, `Keywords`, with `▲`/`▼` glyphs or
   an `IN`/`OUT` group table marking direction. Keywords (pipe-separated, like
@@ -88,12 +88,11 @@ silent drop.
   up in the import history and can be rolled back as a unit.
 - **Non-OK rows are skipped** (declined or held operations) and reported in
   the preview count.
-- **Never invents a transaction in a month that has any.** A workbook whose
-  year sheets hold only yearly aggregates (no rows at all) has its history
-  rebuilt from those totals. But as soon as a month carries real rows, those
-  rows are the truth: if the sheet's cached total disagrees, the difference is
-  reported as a warning and nothing is added. Closing that gap with a synthetic
-  transaction would double the month rather than reconcile it.
+- **Reconciles the grid explicitly.** Every source row is copied unchanged.
+  When the year grid's cached income, outflow or balance differs, the importer
+  adds a dated correction transaction for the difference. This preserves
+  hand-maintained adjustments such as `+10,000` in formulas and makes the
+  imported grid equal the spreadsheet without rewriting its original rows.
 
 ## What the preview warnings mean
 
@@ -109,10 +108,9 @@ something ambiguous. The ones a hand-kept workbook usually raises:
   no rows at all, only monthly totals. One transaction per category per month
   stands in for them so those years still add up. They show up in monori as
   ordinary rows named after their category.
-- **`reconciliation: in N category-months the total written in the sheet is
-  not what its own rows add up to`** — a cached or hand-edited total that its
-  own rows contradict. The rows are imported as they are; no filler row is
-  added, because that would double the month instead of reconciling it.
+- **`reconciliation: N adjustment transactions …`** — the year grid and its
+  rows differed, so N explicit correction transactions were added. The source
+  rows themselves were not changed.
 - **`verify: the sheet's own Available differs …`** — the sheet's running
   Available versus the one recomputed from everything imported. A difference
   that stays roughly constant month over month is money carried in from before

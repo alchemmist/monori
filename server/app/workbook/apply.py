@@ -5,7 +5,6 @@ database for one user. The caller owns the connection and the commit.
 
 import datetime
 
-from ..importer import build_rules, categorize
 from ..ingest import commit_rows
 from .parser import account_slot
 
@@ -95,29 +94,13 @@ def _norm(name):
     return " ".join(str(name).split()).casefold()
 
 
-def _user_rules(c, uid):
-    groups = {
-        r["id"]: r["kind"]
-        for r in c.execute("SELECT id, kind FROM category_groups WHERE user_id=?", (uid,))
-    }
-    cats = [
-        dict(r)
-        for r in c.execute(
-            "SELECT c.id, c.name, c.keywords, c.group_id FROM categories c"
-            " JOIN category_groups g ON g.id = c.group_id WHERE g.user_id=? ORDER BY c.sort",
-            (uid,),
-        )
-    ]
-    return build_rules(cats, groups)
-
-
 def _import_transactions(c, uid, transactions, mapping, category_ids):
     """
-    A row that names its own category keeps it: keyword auto-categorization only
-    ever fills a blank. Anything else would let the workbook's keywords silently
-    overrule a category the user assigned by hand.
+    A workbook is historical evidence, not a fresh bank feed: every category is
+    copied exactly as it is written. In particular, a blank stays uncategorized.
+    Imported keywords are retained for transactions added *after* migration,
+    where the normal import/sync pipeline applies them.
     """
-    rules = _user_rules(c, uid)
     index = _category_index(c, uid)
     by_account: dict[int, list] = {}
     unmatched = set()
@@ -129,7 +112,7 @@ def _import_transactions(c, uid, transactions, mapping, category_ids):
             if category_id is None:
                 unmatched.add(named)
         else:
-            category_id = categorize(tx["description"], tx["amount"], rules)
+            category_id = None
         row = {
             "date": tx["date"],
             "amount": tx["amount"],

@@ -501,7 +501,7 @@ def _live_year_wb():
     return wb
 
 
-def test_live_year_keeps_its_rows_and_invents_nothing():
+def test_live_year_reconciles_rows_to_cached_totals():
     parsed = parse_workbook(_save(_live_year_wb()))
 
     assert parsed["groups"] == [
@@ -513,18 +513,21 @@ def test_live_year_keeps_its_rows_and_invents_nothing():
     budgets = {(b["category"], b["year"], b["month"]): b["amount"] for b in parsed["budgets"]}
     assert budgets == {("Groceries", 2025, 1): 100000, ("Groceries", 2025, 2): 100000}
 
-    # both months carry real rows, so the cached totals never get to add one:
-    # a synthetic row here would double the month, not reconcile it
-    assert len(parsed["transactions"]) == 4
-    assert all(t["marker"] for t in parsed["transactions"])
-    assert not [t for t in parsed["transactions"] if t["date"].endswith("T12:00:00")]
+    # The grid is authoritative alongside the rows. Its January income and
+    # Groceries balance each need one explicit correction transaction.
+    synth = [t for t in parsed["transactions"] if t["date"].endswith("T12:00:00")]
+    assert len(parsed["transactions"]) == 6
+    assert {(t["description"], t["amount"]) for t in synth} == {
+        ("Salary", 100000),
+        ("Groceries", 20000),
+    }
 
     assert any(
-        w.startswith("reconciliation: in 3 category-months") and "the rows win" in w
+        w == "reconciliation: 2 adjustment transactions align live months with the sheet"
         for w in parsed["warnings"]
     )
     assert any(
-        w.startswith("verify: the sheet's own Available differs") and "1,100.00 (2025-01)" in w
+        w.startswith("verify: the sheet's own Available differs") and "100.00 (2025-01)" in w
         for w in parsed["warnings"]
     )
     assert "2019: unrecognized year sheet layout, ignored" in parsed["warnings"]
@@ -690,12 +693,11 @@ def test_trailing_zero_cached_months_get_no_synthetic_rows():
     assert all(t["date"] < "2025-02" for t in parsed["transactions"])
 
 
-def test_month_with_rows_is_never_doubled_by_a_cached_total():
+def test_month_with_blank_category_gets_an_explicit_grid_correction():
     """
-    The row is there but its category column was read as blank, so the
-    reconciliation sees an empty month and the cached total looks unmet. It must
-    still not invent the missing amount — that is how a real -450 on the 26th
-    grew a twin on the 31st and doubled the month in the analytics.
+    The historical row stays uncategorized, while the grid's category total is
+    represented by a separate correction. That preserves the source row exactly
+    and lets the imported budget balance equal the spreadsheet.
     """
     wb = Workbook()
     wb.remove(wb.active)
@@ -708,8 +710,9 @@ def test_month_with_rows_is_never_doubled_by_a_cached_total():
         header_row=8,
     )
     parsed = parse_workbook(_save(wb))
-    assert [(t["date"], t["amount"]) for t in parsed["transactions"]] == [
-        ("2025-01-26T00:00:00", -45000)
+    assert [(t["date"], t["amount"], t["monori_category"]) for t in parsed["transactions"]] == [
+        ("2025-01-26T00:00:00", -45000, ""),
+        ("2025-01-31T12:00:00", -45000, "LifeLink"),
     ]
 
 

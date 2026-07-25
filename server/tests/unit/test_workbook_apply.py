@@ -93,7 +93,7 @@ def test_apply_creates_groups_categories_transactions_budgets(tmp_path):
     assert cats["Salary"] == ("", 0)
 
 
-def test_apply_categorizes_by_explicit_name_then_keywords(tmp_path):
+def test_apply_preserves_blank_categories_despite_keywords(tmp_path):
     c, uid, acct = _db(tmp_path)
     apply_workbook(c, uid, _parsed(), {"RUB:": acct})
     c.commit()
@@ -105,7 +105,7 @@ def test_apply_categorizes_by_explicit_name_then_keywords(tmp_path):
     )
     assert [(r[0], r[1]) for r in rows] == [
         ("Lenta", "Groceries"),
-        ("lenta market", "Groceries"),
+        ("lenta market", None),
     ]
 
 

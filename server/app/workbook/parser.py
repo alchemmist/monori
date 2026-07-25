@@ -10,11 +10,11 @@ just the totals the sheet cached. So a workbook is never classified; it is
 measured, and every stage does the most it can with what is actually there.
 
 The last part matters most. A hand-kept spreadsheet holds real rows only for
-recent months and keeps its earlier history as cached aggregates. Those months
-are rebuilt from the aggregates with synthetic "Migration" transactions so the
-budgeted / outflows / balance / available figures survive the move. A month that
-does carry rows is never touched: the rows are the truth, and a total that
-disagrees with them is reported, never reconciled away.
+recent months and keeps its earlier history as cached aggregates. Every source
+row is copied unchanged; when a grid total differs, a separate synthetic
+"Migration" correction closes the gap. That preserves hand-maintained formula
+adjustments while making budgeted / outflows / balance / available figures
+survive the move.
 """
 
 import datetime
@@ -857,13 +857,6 @@ def _parse(wb):
                         {"category": name, "year": source["year"], "month": m, "amount": amount}
                     )
 
-    # A month that carries real rows is never reconciled: the sheet's own
-    # cached totals are a summary of those very rows, so any gap between them
-    # means this parser read something wrong — inventing a transaction to close
-    # it would double the month instead of fixing it. Reconciliation exists for
-    # archive years, which hold aggregates and no rows at all.
-    real_months = {(int(tx["date"][:4]), int(tx["date"][5:7])) for tx in transactions}
-
     tx_sums: dict[tuple, int] = {}
     income_sums: dict[tuple, int] = {}
     for tx in transactions:
@@ -877,7 +870,7 @@ def _parse(wb):
             tx_sums[(cat, y, m)] = tx_sums.get((cat, y, m), 0) + tx["amount"]
 
     synthetic = []
-    n_hist = n_adjust = n_trusted = 0
+    n_hist = n_adjust = 0
     for source in list(archive_years.values()) + list(live_years.values()):
         year = source["year"]
         live = year in live_years
@@ -885,9 +878,6 @@ def _parse(wb):
             have = income_sums.get((year, m), 0)
             delta = target - have
             if abs(delta) > ADJUST_TOLERANCE_KOP:
-                if (year, m) in real_months:
-                    n_trusted += 1
-                    continue
                 synthetic.append(_synthetic(year, m, delta, income_category, income_category))
                 income_sums[(year, m)] = have + delta
                 if live:
@@ -959,9 +949,6 @@ def _parse(wb):
             ):
                 target = 0
             delta = 0 if target is None else target - projected
-            if abs(delta) > ADJUST_TOLERANCE_KOP and (y, m) in real_months:
-                n_trusted += 1
-                delta = 0
             if abs(delta) > ADJUST_TOLERANCE_KOP:
                 if at_seam:
                     n_seam += 1
@@ -974,7 +961,7 @@ def _parse(wb):
                 projected += delta
             balances[name] = projected
             overspent += min(projected, 0)
-        if at_seam and seam_seed is not None and (y, m) not in real_months:
+        if at_seam and seam_seed is not None:
             delta = seam_seed - avail
             if abs(delta) > ADJUST_TOLERANCE_KOP:
                 synthetic.append(_synthetic(y, m, delta, income_category, income_category))
@@ -999,12 +986,6 @@ def _parse(wb):
         )
     if n_seam:
         warnings.append(f"seam: {n_seam} carry corrections at {seam_year}-12")
-    if n_trusted:
-        warnings.append(
-            f"reconciliation: in {n_trusted} category-months the total written in the sheet is not"
-            " what its own rows add up to (a hand-edited cell, usually) — the rows win, nothing"
-            " was added to close the gap"
-        )
     if avail_residuals:
         (fy, fm, fd), (ly, lm, ld) = avail_residuals[0], avail_residuals[-1]
         warnings.append(

@@ -124,7 +124,7 @@ def test_workbook_roundtrip_into_fresh_user(api, client):
     ]
     assert txs[0]["categoryId"] == cats["Groceries"]["id"]
     assert txs[1]["categoryId"] == cats["Salary"]["id"]
-    assert txs[2]["categoryId"] == cats["Groceries"]["id"]
+    assert txs[2]["categoryId"] is None
     budgets = {(b["month"]): b["amount"] for b in snap["budgets"]}
     assert budgets == {1: 20000, 2: 30000}
 
