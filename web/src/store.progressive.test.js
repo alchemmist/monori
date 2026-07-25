@@ -49,6 +49,26 @@ describe("progressive transaction loading", () => {
         expect(ids).toHaveLength(TX_CHUNK * 2 + 5);
     });
 
+    it("coalesces fast chunks into one snapshot write but still ticks progress", async () => {
+        stubServer(TX_CHUNK * 3 + 7, 5);
+        const snapshots = new Set();
+        const progress = [];
+        const unsub = useStore.subscribe((s) => {
+            if (s.snapshot) snapshots.add(s.snapshot);
+            if (s.txProgress) progress.push(s.txProgress.loaded);
+        });
+
+        await useStore.getState().load();
+        await vi.waitFor(() => expect(useStore.getState().txProgress).toBeNull());
+        unsub();
+
+        // the mocked chunks land inside one flush window: the light snapshot and
+        // a single merged write, not one write per chunk
+        expect(snapshots.size).toBe(2);
+        expect(progress).toEqual([5, TX_CHUNK + 5, TX_CHUNK * 2 + 5, TX_CHUNK * 3 + 5]);
+        expect(useStore.getState().snapshot.transactions).toHaveLength(TX_CHUNK * 3 + 7);
+    });
+
     it("reports progress while the fill runs and clears it at the end", async () => {
         stubServer(10, 2);
         const seen = [];

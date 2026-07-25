@@ -81,7 +81,7 @@ Query parameters:
 | Param | Meaning |
 | ------- | --------- |
 | `light` | `1` caps `transactions` at the newest `limit` rows, still in canonical `date, id` order. Everything else — accounts, groups, categories, budgets, connections — stays complete. |
-| `limit` | Size of that window: 1–5000, default 500. Ignored without `light`. |
+| `limit` | Size of that window: 1–5000, default 500. Validated whenever it is present, but only has an effect together with `light`. |
 
 `transactionsTotal` always reports the full transaction count, so a client can
 tell how much of the ledger it holds. The frontend requests `?light=1` for a

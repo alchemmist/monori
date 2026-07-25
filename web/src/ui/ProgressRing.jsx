@@ -7,7 +7,7 @@ const CIRCUMFERENCE = 2 * Math.PI * R;
 
 const prefersReducedMotion = () =>
     typeof window !== "undefined" &&
-    (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false);
+    (window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches ?? false);
 
 /**
  * A small determinate ring for background work. Under `prefers-reduced-motion`

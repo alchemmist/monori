@@ -92,7 +92,8 @@ def get_snapshot(
     Everything the app needs to render. ``light=1`` caps the transactions at the
     newest ``limit`` rows so first paint doesn't wait on years of history; the
     client fills the rest in the background over ``GET /api/transactions``.
-    ``transactionsTotal`` always reports the full count.
+    ``transactionsTotal`` always reports the full count. ``limit`` is bounds-
+    checked whenever it is present, but only takes effect together with ``light``.
     """
     c = conn()
     try:
