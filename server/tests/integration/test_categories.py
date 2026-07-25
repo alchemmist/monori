@@ -42,7 +42,9 @@ def test_category_reorder_and_archive_roundtrip(api, client):
     assert api.cat(a)["archived"] is False
 
 
-def test_category_delete_reassign_never_shifts(api, client):
+def test_category_delete_never_reassigns(api, client):
+    # moving transactions is /merge's job now; delete only ever uncategorizes,
+    # and a leftover reassignTo from an old client must not resurrect the move
     g = api.group("Expenses")
     a = api.category("A", g)
     b = api.category("B", g)
@@ -50,10 +52,9 @@ def test_category_delete_reassign_never_shifts(api, client):
     client.put("/api/budgets", json={"categoryId": a, "year": 2026, "month": 1, "amount": 1000})
     client.put("/api/budgets", json={"categoryId": b, "year": 2026, "month": 1, "amount": 2000})
 
-    assert client.delete(f"/api/categories/{a}?reassignTo=999").status_code == 400
     assert client.delete(f"/api/categories/{a}?reassignTo={b}").status_code == 200
     snap = api.snapshot()
-    assert api.tx_by(tx)["categoryId"] == b
+    assert api.tx_by(tx)["categoryId"] is None
     assert {x["categoryId"]: x["amount"] for x in snap["budgets"]} == {b: 2000}
 
 

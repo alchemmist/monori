@@ -1,5 +1,5 @@
-/* the merge dialog's plan: what the irreversible action will actually do */
-.cat-merge-plan {
+/* the delete dialog's plan: what the irreversible action will actually do */
+.cat-delete-plan {
     margin: 0;
     padding-left: 18px;
     display: flex;
@@ -10,7 +10,7 @@
     color: var(--m-text);
 }
 
-.cat-merge-plan li::marker {
+.cat-delete-plan li::marker {
     color: var(--m-text-dim);
 }
 

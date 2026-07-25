@@ -6,8 +6,12 @@ const norm = (o) => (typeof o === "string" ? { value: o, label: o } : o);
 
 // grouped data is `[{ group, kind, options: [...] }]`; flat data is a plain
 // array of options. Detect the shape so a single component serves both the flat
-// account/year filters and the sectioned category picker.
-const isGrouped = (data) => data.length > 0 && data[0] && Array.isArray(data[0].options);
+// account/year filters and the sectioned category picker. Grouped data may also
+// carry plain options among the sections — they render loose, above every
+// section, which is how a picker offers an escape hatch ("Leave uncategorized")
+// next to its real choices.
+const isSection = (d) => Array.isArray(d?.options);
+const isGrouped = (data) => data.some(isSection);
 
 /* THE select of this app — every dropdown goes through it and opens the same
  * frosted-glass surface (see .mantine-Combobox-dropdown in ui/mantine.css).
@@ -43,13 +47,17 @@ export default function InlineSelect({
     const match = (o) => o.label.toLowerCase().includes(q);
 
     // every option flattened, for the button label lookup regardless of shape
-    const allOpts = grouped ? data.flatMap((s) => s.options.map(norm)) : data.map(norm);
+    const loose = grouped ? data.filter((d) => !isSection(d)).map(norm) : [];
+    const allOpts = grouped
+        ? [...loose, ...data.filter(isSection).flatMap((s) => s.options.map(norm))]
+        : data.map(norm);
     const current = allOpts.find((o) => o.value === value);
 
     // while searching keep a section whose group name matches (show all its
     // options), otherwise filter its options; drop sections left empty
     const sections = grouped
         ? data
+              .filter(isSection)
               .map((s) => {
                   const groupHit = q && s.group && s.group.toLowerCase().includes(q);
                   const options = (groupHit ? s.options : s.options.filter(match)).map(norm);
@@ -57,8 +65,9 @@ export default function InlineSelect({
               })
               .filter((s) => s.options.length > 0)
         : null;
+    const looseShown = q ? loose.filter(match) : loose;
     const flat = grouped ? null : q ? allOpts.filter(match) : allOpts;
-    const nothing = grouped ? sections.length === 0 : flat.length === 0;
+    const nothing = grouped ? sections.length + looseShown.length === 0 : flat.length === 0;
 
     // bring the current selection into view when the dropdown opens
     useEffect(() => {
@@ -127,6 +136,7 @@ export default function InlineSelect({
                             style={{ maxHeight: 264, overflowY: "auto" }}
                         >
                             {nothing && <Combobox.Empty>Nothing found</Combobox.Empty>}
+                            {grouped && looseShown.map(renderOption)}
                             {grouped
                                 ? sections.map((s) => (
                                       <Combobox.Group

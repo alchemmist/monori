@@ -99,10 +99,7 @@ export const api = {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(patch),
         }).then(json),
-    deleteCategory: (id, reassignTo) =>
-        apiFetch(`/api/categories/${id}${reassignTo ? `?reassignTo=${reassignTo}` : ""}`, {
-            method: "DELETE",
-        }).then(json),
+    deleteCategory: (id) => apiFetch(`/api/categories/${id}`, { method: "DELETE" }).then(json),
     mergeCategory: (id, into) =>
         apiFetch(`/api/categories/${id}/merge`, {
             method: "POST",

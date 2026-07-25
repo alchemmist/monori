@@ -301,8 +301,9 @@ user starts with a default **Cash** account.
 ## Referential behavior
 
 - Deleting a **category** sets `category_id` to `NULL` on its transactions (they
-  become uncategorized) and cascade-deletes its budgets. The API also lets you
-  reassign transactions to another category first (`?reassignTo=`).
+  become uncategorized) and cascade-deletes its budgets. Moving the transactions
+  to another category instead is `POST /api/categories/{id}/merge` — the only
+  path that does so, and the one that enforces the income/expense invariant.
 - Deleting a **group** is refused while it still has categories.
 - Deleting an **account** reassigns its transactions to another account
   (`?reassignTo=`). Since every transaction must belong to an account, deleting a
