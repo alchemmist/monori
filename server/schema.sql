@@ -133,7 +133,8 @@ CREATE TABLE IF NOT EXISTS activity_events (
   id INTEGER PRIMARY KEY,
   user_id INTEGER NOT NULL REFERENCES users (id) ON DELETE CASCADE,
   kind TEXT NOT NULL,
-  created_at TEXT NOT NULL
+  created_at TEXT NOT NULL,
+  detail TEXT                        -- free-form payload, e.g. the SQL executed
 );
 CREATE INDEX IF NOT EXISTS idx_activity_user ON activity_events (user_id);
 CREATE INDEX IF NOT EXISTS idx_activity_created ON activity_events (created_at);

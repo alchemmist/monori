@@ -1,0 +1,141 @@
+"""
+Admin SQL console (issue #168): run one statement against the live database.
+
+This is deliberately unrestricted full data access — the same scope the rest of
+the admin API already has (#128), for an instance owner who would otherwise SSH
+in and open the file with the sqlite3 CLI. What the endpoint does add over that
+CLI is safety rails: one statement at a time, everything inside an explicit
+transaction, writes refused unless the caller confirmed them, reads capped, a
+wall-clock ceiling on runaway queries, and an audit row per attempt.
+"""
+
+import contextlib
+import re
+import sqlite3
+import time
+from datetime import UTC, datetime
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
+
+from ..admin import admin_user
+from ..deps import conn
+
+router = APIRouter(prefix="/api/admin", tags=["admin"])
+
+ROW_LIMIT = 1000
+STATEMENT_MAX_CHARS = 20000
+AUDIT_MAX_CHARS = 4000
+QUERY_TIMEOUT_S = 15.0
+# SQLite calls the progress handler every N virtual-machine instructions; small
+# enough to notice the deadline promptly, large enough not to dominate the query
+PROGRESS_INSTRUCTIONS = 10000
+BLOB_PREVIEW = 32
+
+COMMENTS = re.compile(r"^(?:\s|--[^\n]*|/\*.*?\*/)+", re.DOTALL)
+
+
+def leading_keyword(sql):
+    bare = COMMENTS.sub("", sql).strip()
+    return bare.split(None, 1)[0].upper() if bare else ""
+
+
+def cell(value):
+    if isinstance(value, bytes):
+        head = value[:BLOB_PREVIEW].hex()
+        return f"x'{head}{'…' if len(value) > BLOB_PREVIEW else ''}' ({len(value)} bytes)"
+    return value
+
+
+class SqlBody(BaseModel):
+    sql: str = Field(max_length=STATEMENT_MAX_CHARS)
+    confirmWrite: bool = False  # noqa: N815 — the JSON API is camelCase
+
+
+@router.post("/sql")
+def run_sql(body: SqlBody, admin: Annotated[dict, Depends(admin_user)]):
+    """
+    Execute one statement and return either its rows or its affected-row count.
+
+    A statement is classified as a write by what it *did*, not by how it reads:
+    anything that returned no result set or touched a row needs ``confirmWrite``,
+    so a ``WITH … DELETE`` cannot slip through as a query. Unconfirmed writes are
+    rolled back and reported, which doubles as a dry run — the response says how
+    many rows the statement would have hit.
+    """
+    sql = body.sql.strip()
+    if not sql:
+        raise HTTPException(400, "empty statement")
+
+    c = conn()
+    # autocommit hands transaction control to us, so DDL rolls back too (under
+    # the legacy mode Python only opens a transaction for DML)
+    c.isolation_level = None
+    deadline = time.monotonic() + QUERY_TIMEOUT_S
+    c.set_progress_handler(lambda: 1 if time.monotonic() > deadline else 0, PROGRESS_INSTRUCTIONS)
+    try:
+        started = time.perf_counter()
+        before = c.total_changes
+        try:
+            c.execute("BEGIN")
+            cur = c.execute(sql)
+            columns = [d[0] for d in cur.description] if cur.description else []
+            rows = [[cell(v) for v in r] for r in cur.fetchmany(ROW_LIMIT + 1)] if columns else []
+        except sqlite3.Error as e:
+            c.rollback()
+            _audit(c, admin["id"], "admin_sql_failed", sql)
+            raise HTTPException(400, str(e)) from e
+        elapsed_ms = round((time.perf_counter() - started) * 1000, 1)
+
+        changed = c.total_changes - before
+        is_write = not columns or changed > 0
+        if is_write and not body.confirmWrite:
+            c.rollback()
+            _audit(c, admin["id"], "admin_sql_rejected", sql)
+            n = max(changed, cur.rowcount, 0)
+            raise HTTPException(
+                400,
+                f"write statement ({leading_keyword(sql) or 'statement'}) needs confirmation;"
+                f" it would have affected {n} row{'' if n == 1 else 's'}",
+            )
+
+        if is_write:
+            c.commit()
+            _audit(c, admin["id"], "admin_sql", sql)
+            return {
+                "kind": "write",
+                "columns": [],
+                "rows": [],
+                "rowCount": max(changed, cur.rowcount, 0),
+                "truncated": False,
+                "elapsedMs": elapsed_ms,
+            }
+
+        # a read needs nothing committed; rolling back also undoes anything a
+        # statement did that neither returned rows nor bumped total_changes
+        c.rollback()
+        _audit(c, admin["id"], "admin_sql", sql)
+        truncated = len(rows) > ROW_LIMIT
+        return {
+            "kind": "read",
+            "columns": columns,
+            "rows": rows[:ROW_LIMIT],
+            "rowCount": min(len(rows), ROW_LIMIT),
+            "truncated": truncated,
+            "elapsedMs": elapsed_ms,
+        }
+    finally:
+        c.set_progress_handler(None, 0)
+        c.close()
+
+
+def _audit(c, uid, kind, sql):
+    # a console statement can leave the schema unable to record itself (dropped
+    # table, deleted admin row); losing the audit row must not lose the result
+    with contextlib.suppress(sqlite3.Error):
+        c.execute(
+            "INSERT INTO activity_events (user_id, kind, created_at, detail) VALUES (?, ?, ?, ?)",
+            (uid, kind, datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S"), sql[:AUDIT_MAX_CHARS]),
+        )
+        c.commit()
