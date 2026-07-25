@@ -1,6 +1,7 @@
 import { Textarea, TextInput } from "@mantine/core";
 
 import InlineSelect from "./InlineSelect.jsx";
+import useAmountField from "./useAmountField.js";
 
 /* Gravity-style form fields: the label sits INSIDE the bordered box, inline
  * with the value (see ui/mantine.css .mi-input). */
@@ -14,6 +15,13 @@ const cls = {
 
 export function FTextInput(props) {
     return <TextInput classNames={cls} {...props} />;
+}
+
+/* Money field: same look as FTextInput, but the digits group as they are typed.
+ * onChange hands back the text itself — there is no event worth passing on. */
+export function FAmountInput({ value, onChange, ...props }) {
+    const amount = useAmountField(onChange);
+    return <TextInput classNames={cls} value={value} {...amount} {...props} />;
 }
 
 export function FTextArea(props) {
