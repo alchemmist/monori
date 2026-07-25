@@ -45,7 +45,6 @@ export default function DashboardPage({ firstYear, lastYear }) {
     );
     const [drillYear, setDrillYear] = useState(String(now.getFullYear()));
     const [stackYear, setStackYear] = useState(String(now.getFullYear()));
-    const [catStackYear, setCatStackYear] = useState(String(now.getFullYear()));
     const [acctFilter, setAcctFilter] = useState("all");
 
     const accounts = snapshot.accounts ?? [];
@@ -225,39 +224,6 @@ export default function DashboardPage({ firstYear, lastYear }) {
         }));
         return { data, series };
     }, [txns, snapshot.groups, stackYear, catById, excludedIds]);
-
-    // Spending by category, stacked by month — same top-N categories (and thus
-    // colors) as the donut, so the two views line up.
-    const catStack = useMemo(() => {
-        const perCat = new Map(); // name -> Array(12) monthly outflow totals
-        for (const t of txns) {
-            if (!t.date.startsWith(catStackYear) || t.categoryId == null || t.amount >= 0) continue;
-            const cat = catById.get(t.categoryId);
-            if (!cat || incomeGroupIds.has(cat.groupId) || excludedIds.has(t.categoryId)) continue;
-            let arr = perCat.get(cat.name);
-            if (!arr) perCat.set(cat.name, (arr = Array(12).fill(0)));
-            arr[+t.date.slice(5, 7) - 1] -= t.amount;
-        }
-        const rows = [...perCat.entries()]
-            .map(([name, arr]) => ({ name, arr, total: arr.reduce((s, v) => s + v, 0) }))
-            .sort((a, b) => b.total - a.total);
-        const top = rows.slice(0, 11);
-        const rest = rows.slice(11);
-        const names = top.map((r) => r.name);
-        const other = Array(12).fill(0);
-        if (rest.length) {
-            for (const r of rest) r.arr.forEach((v, m) => (other[m] += v));
-            names.push("Other");
-        }
-        const data = MONTHS_SHORT.map((mo, m) => {
-            const row = { month: mo };
-            top.forEach((r) => (row[r.name] = Math.round(r.arr[m] / 100)));
-            if (rest.length) row.Other = Math.round(other[m] / 100);
-            return row;
-        });
-        const series = names.map((name, i) => ({ name, color: PALETTE[i % PALETTE.length] }));
-        return { data, series };
-    }, [txns, catStackYear, catById, incomeGroupIds, excludedIds]);
 
     const years = [];
     for (let y = firstYear; y <= Math.min(lastYear, now.getFullYear()); y++) years.push(String(y));
@@ -499,31 +465,6 @@ export default function DashboardPage({ firstYear, lastYear }) {
                                 Pick a category to see its monthly spending
                             </div>
                         )}
-                    </div>
-                </div>
-
-                <div className="card chart-card chart-card_wide">
-                    <div className="chart-card__head">
-                        <div className="chart-card__title">Spending by category · by month</div>
-                        <InlineSelect
-                            small
-                            value={catStackYear}
-                            onChange={setCatStackYear}
-                            data={years}
-                        />
-                    </div>
-                    <div className="chart-card__body">
-                        <ChartBoundary>
-                            <BarChart
-                                h="100%"
-                                type="stacked"
-                                data={catStack.data}
-                                dataKey="month"
-                                series={catStack.series}
-                                withLegend
-                                {...cartesian}
-                            />
-                        </ChartBoundary>
                     </div>
                 </div>
 

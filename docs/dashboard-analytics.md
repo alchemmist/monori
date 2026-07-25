@@ -24,6 +24,9 @@ A row of headline numbers:
 - **Month-over-month** and **plan vs. fact** views comparing budgeted against
   actual per month.
 
+The per-category view of a whole year lives in the annual report below, as
+**Categories through the year**.
+
 Charts are rendered with the Gravity UI charts library and share a theme so
 colors line up across views. Each is wrapped in an error boundary so a single
 bad chart cannot take the page down.
@@ -38,6 +41,12 @@ Pick a year and get a structured review:
   overrun in rubles, and the worst category by overrun. A per-category ×
   per-month grid (`disciplineMatrix`) shows budgeted vs. spent for every cell.
 - **Plan vs. fact** for the year and **expenses year over year**.
+- **Categories through the year** — the whole year split per category, Jan–Dec.
+  *Stacked* shows what each month is made of, *Lines* shows how one category
+  drifts across the year; the switch is in the card's header. The biggest
+  categories get their own color and everything past the palette is summed into
+  a neutral **Other**, so a long tail of small categories cannot bury the rest.
+  Months that haven't happened yet stay blank instead of reading as zero.
 - **Yearly report, all time** — a table of income, expense, net, and savings rate
   per year.
 - **Spending patterns**:
