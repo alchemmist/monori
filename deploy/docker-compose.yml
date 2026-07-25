@@ -5,6 +5,9 @@ services:
             dockerfile: deploy/Dockerfile.front
         container_name: monori
         restart: unless-stopped
+        # the nginx image already stops on SIGQUIT, which finishes in-flight
+        # requests instead of cutting them; it just needs to be allowed the time
+        stop_grace_period: 10m
         depends_on:
             - back
         networks:
@@ -17,6 +20,10 @@ services:
             dockerfile: deploy/Dockerfile.back
         container_name: monori-back
         restart: unless-stopped
+        # a workbook migration writes for tens of seconds; the default 10s kill
+        # would cut it off mid-request, which is what turned a redeploy into a
+        # 502 for whoever was importing at the time
+        stop_grace_period: 10m
         # ./data is a Syncthing folder owned by www (uid 1000) — write as that
         # user or root-owned files break the sync with permission denied
         user: "1000:1000"
@@ -38,6 +45,8 @@ services:
             dockerfile: deploy/Dockerfile.sync
         container_name: monori-sync
         restart: unless-stopped
+        # a bank login drives a real browser and can outlast any short timeout
+        stop_grace_period: 10m
         environment:
             # per-step screenshots + HTML land in ./sync-debug on the host —
             # deliberately outside ./data: these dumps hold live bank pages and

@@ -9,4 +9,8 @@ COPY server/schema.sql ./schema.sql
 COPY server/migrations ./migrations
 ENV MONORI_DB=/app/data/monori.db
 EXPOSE 8000
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# on SIGTERM uvicorn stops accepting connections and finishes what is already
+# running, so a redeploy never cuts a long import short; the compose
+# stop_grace_period must stay at least this generous
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", \
+     "--timeout-graceful-shutdown", "600"]
