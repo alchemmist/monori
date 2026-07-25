@@ -141,15 +141,21 @@ export default function TransactionsPage() {
         return clone;
     };
 
+    // merged (and sorted) once here, so typing in the search box only refilters
+    // instead of re-sorting the whole ledger on every keystroke
+    const combined = useMemo(() => {
+        if (!showHidden || !hiddenTx?.length) return snapshot.transactions;
+        return [...snapshot.transactions, ...hiddenTx].sort(compareTx);
+    }, [snapshot.transactions, hiddenTx, showHidden]);
+
     const years = useMemo(() => {
-        const s = new Set(snapshot.transactions.map((t) => t.date.slice(0, 4)));
+        const s = new Set(combined.map((t) => t.date.slice(0, 4)));
         return [...s].sort().reverse();
-    }, [snapshot.transactions]);
+    }, [combined]);
 
     const filtered = useMemo(() => {
         const q = query.trim().toLowerCase();
-        let rows = snapshot.transactions;
-        if (showHidden && hiddenTx?.length) rows = [...rows, ...hiddenTx].sort(compareTx);
+        let rows = combined;
         if (yearFilter !== "all") rows = rows.filter((t) => t.date.startsWith(yearFilter));
         if (acctFilter !== "all") rows = rows.filter((t) => t.accountId === +acctFilter);
         if (catFilter === "none") rows = rows.filter((t) => t.categoryId == null);
@@ -161,7 +167,7 @@ export default function TransactionsPage() {
                     t.bankCategory.toLowerCase().includes(q),
             );
         return [...rows].reverse(); // newest first
-    }, [snapshot.transactions, hiddenTx, showHidden, query, catFilter, yearFilter, acctFilter]);
+    }, [combined, query, catFilter, yearFilter, acctFilter]);
 
     // measure a real row once it's on screen so the spacer math matches the DOM
     useLayoutEffect(() => {

@@ -44,7 +44,8 @@ export const api = {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(cell),
         }).then(json),
-    hiddenTx: () => apiFetch("/api/transactions?hidden=true&limit=1000").then(json),
+    hiddenTx: (offset = 0) =>
+        apiFetch(`/api/transactions?hidden=true&limit=1000&offset=${offset}`).then(json),
     patchTx: (id, patch) =>
         apiFetch(`/api/transactions/${id}`, {
             method: "PATCH",

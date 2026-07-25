@@ -10,6 +10,8 @@ const tx = (id, date = "2026-01-05T00:00:00") => ({
     hidden: false,
 });
 
+const flush = () => new Promise((r) => setTimeout(r, 0));
+
 beforeEach(() => {
     useStore.setState({
         snapshot: {
@@ -31,7 +33,7 @@ afterEach(() => {
 });
 
 describe("hiding transactions", () => {
-    it("hideTx moves the row out of the snapshot and patches the server", () => {
+    it("hideTx moves the row out of the snapshot and patches the server", async () => {
         vi.spyOn(api, "patchTx").mockResolvedValue({});
 
         useStore.getState().hideTx(2);
@@ -41,10 +43,11 @@ describe("hiding transactions", () => {
         expect(s.snapshot.transactionsTotal).toBe(2);
         expect(s.hiddenTx.map((t) => t.id)).toEqual([2]);
         expect(s.hiddenTx[0].hidden).toBe(true);
+        await flush();
         expect(api.patchTx).toHaveBeenCalledWith(2, { hidden: true });
     });
 
-    it("unhideTx puts the row back in canonical date order", () => {
+    it("unhideTx puts the row back in canonical date order", async () => {
         vi.spyOn(api, "patchTx").mockResolvedValue({});
 
         useStore.getState().hideTx(2);
@@ -55,14 +58,36 @@ describe("hiding transactions", () => {
         expect(s.snapshot.transactions[1].hidden).toBe(false);
         expect(s.snapshot.transactionsTotal).toBe(3);
         expect(s.hiddenTx).toEqual([]);
+        await flush();
         expect(api.patchTx).toHaveBeenLastCalledWith(2, { hidden: false });
     });
 
-    it("hiding an unknown id is a no-op", () => {
+    it("a rapid hide then unhide reaches the server in that order", async () => {
+        const calls = [];
+        let releaseFirst;
+        vi.spyOn(api, "patchTx").mockImplementation((id, patch) => {
+            calls.push(patch.hidden);
+            if (calls.length === 1) return new Promise((r) => (releaseFirst = r));
+            return Promise.resolve({});
+        });
+
+        useStore.getState().hideTx(2);
+        useStore.getState().unhideTx(2);
+        await flush();
+
+        // the unhide PATCH waits behind the unresolved hide PATCH
+        expect(calls).toEqual([true]);
+        releaseFirst({});
+        await flush();
+        expect(calls).toEqual([true, false]);
+    });
+
+    it("hiding an unknown id is a no-op", async () => {
         const patch = vi.spyOn(api, "patchTx").mockResolvedValue({});
 
         useStore.getState().hideTx(99);
         useStore.getState().unhideTx(99);
+        await flush();
 
         expect(useStore.getState().snapshot.transactions).toHaveLength(3);
         expect(patch).not.toHaveBeenCalled();
@@ -77,6 +102,45 @@ describe("hiding transactions", () => {
         await useStore.getState().loadHiddenTx();
 
         expect(useStore.getState().hiddenTx.map((t) => t.id)).toEqual([9]);
+    });
+
+    it("loadHiddenTx pages through more rows than one request returns", async () => {
+        const spy = vi
+            .spyOn(api, "hiddenTx")
+            .mockResolvedValueOnce({ total: 2, rows: [{ ...tx(9), hidden: true }] })
+            .mockResolvedValueOnce({
+                total: 2,
+                rows: [{ ...tx(8, "2026-03-01T00:00:00"), hidden: true }],
+            });
+
+        await useStore.getState().loadHiddenTx();
+
+        expect(spy).toHaveBeenNthCalledWith(1, 0);
+        expect(spy).toHaveBeenNthCalledWith(2, 1);
+        expect(useStore.getState().hiddenTx.map((t) => t.id)).toEqual([9, 8]);
+    });
+
+    it("a stale hidden-list response cannot overwrite a newer hide", async () => {
+        vi.spyOn(api, "patchTx").mockResolvedValue({});
+        let releaseLoad;
+        vi.spyOn(api, "hiddenTx").mockReturnValue(new Promise((r) => (releaseLoad = r)));
+
+        const loading = useStore.getState().loadHiddenTx();
+        useStore.getState().hideTx(2);
+        releaseLoad({ total: 0, rows: [] });
+        await loading;
+
+        expect(useStore.getState().hiddenTx.map((t) => t.id)).toEqual([2]);
+    });
+
+    it("logout clears the hidden list", () => {
+        vi.stubGlobal("localStorage", { removeItem: () => {} });
+        useStore.setState({ hiddenTx: [{ ...tx(9), hidden: true }] });
+
+        useStore.getState().logout();
+
+        expect(useStore.getState().hiddenTx).toBeNull();
+        vi.unstubAllGlobals();
     });
 
     it("a failed hide patch surfaces a toast", async () => {

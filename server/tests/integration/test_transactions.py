@@ -172,7 +172,9 @@ def test_patch_without_hidden_keeps_the_flag(api, client):
 
 def test_hidden_transaction_still_blocks_reimport(api, client):
     tx = api.tx("2026-01-05T10:00:00", -10000, description="Lenta")
-    client.patch(f"/api/transactions/{tx}", json={"hidden": True})
+    assert client.patch(f"/api/transactions/{tx}", json={"hidden": True}).status_code == 200
+    assert client.get("/api/transactions").json()["total"] == 0
+    assert client.get("/api/transactions?hidden=true").json()["total"] == 1
     # the row is invisible everywhere, but a re-sync of the same statement
     # line must still see it as a duplicate — otherwise hiding is undone by
     # the next bank sync
