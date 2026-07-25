@@ -10,7 +10,6 @@ wall-clock ceiling on runaway queries, and an audit row per attempt.
 """
 
 import contextlib
-import re
 import sqlite3
 import time
 from datetime import UTC, datetime
@@ -33,12 +32,34 @@ QUERY_TIMEOUT_S = 15.0
 PROGRESS_INSTRUCTIONS = 10000
 BLOB_PREVIEW = 32
 
-COMMENTS = re.compile(r"^(?:\s|--[^\n]*|/\*.*?\*/)+", re.DOTALL)
-
 
 def leading_keyword(sql):
-    bare = COMMENTS.sub("", sql).strip()
-    return bare.split(None, 1)[0].upper() if bare else ""
+    """
+    The first word of a statement, past any leading whitespace and comments —
+    ``UPDATE`` in ``/* fix */ -- one row\\n update users …``. Used only to name
+    the statement back to the admin; classification never relies on it.
+
+    Scanned character by character rather than with a regex on purpose: an
+    alternation of whitespace and comment forms backtracks polynomially on
+    adversarial input like ``/*/*/*…``, and the statement comes from a request.
+    """
+    i, n = 0, len(sql)
+    while i < n:
+        if sql[i].isspace():
+            i += 1
+        elif sql.startswith("--", i):
+            end = sql.find("\n", i)
+            if end < 0:
+                return ""
+            i = end + 1
+        elif sql.startswith("/*", i):
+            end = sql.find("*/", i + 2)
+            if end < 0:
+                return ""
+            i = end + 2
+        else:
+            return sql[i:].split(None, 1)[0].upper()
+    return ""
 
 
 def cell(value):
