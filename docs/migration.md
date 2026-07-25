@@ -6,8 +6,10 @@ category groups, categories with their keywords, every transaction, and the
 budget grid for every year. No retyping.
 
 The importer and the exporter share one format definition, so a monori export
-re-imports cleanly: **export → import is a lossless round-trip** for groups,
-categories, transactions and budgets.
+re-imports cleanly: **export → import round-trips** groups, categories,
+transactions and budgets. One field does not survive the trip: a transaction's
+**comment** is written to the workbook and read back off it, but the importer
+does not store it — re-importing an export leaves comments blank.
 
 ## Running a migration
 
@@ -51,9 +53,12 @@ workbook that is a bit of both still works.
   - The **category** is copied literally. A workbook that names a category
     column in its header is taken at its word. The live spreadsheet doesn't name
     it and keeps two: what the keyword rules guessed and what actually counts —
-    that guess accepted, or a label typed over it. Only the second is read. A
-    blank stays uncategorized: workbook keywords are saved for future imports
-    and syncs, never applied retroactively to its historical rows.
+    that guess accepted, or a label typed over it. Only the second is what its
+    totals are built from, so of the unnamed columns between the last known bank
+    header and the keyword table the reader takes the **fullest** one, which is
+    that column in the live sheet and the only one in a monori export. A blank
+    stays uncategorized: workbook keywords are saved for future imports and
+    syncs, never applied retroactively to its historical rows.
 - **`Categories`**, when a workbook states its structure outright — a table of
   `Sort Order`, `Category Group`, `Category`, `Keywords`, with `▲`/`▼` glyphs or
   an `IN`/`OUT` group table marking direction. Keywords (pipe-separated, like
@@ -66,8 +71,16 @@ workbook that is a bit of both still works.
   header row is found by content, so it doesn't matter which row it sits on or
   whether it says `Budgeted` or `Бюджет`. Where no `Categories` sheet stated the
   structure, the grid's own sections supply it. Only *Budgeted* is imported as a
-  budget; outflows and balances are derived values monori recomputes — but they
-  are still read, because they are what a month without rows gets rebuilt from.
+  budget, and only where it is non-zero; outflows and balances are derived
+  values monori recomputes — but they are still read, because they are what a
+  month without rows gets rebuilt from.
+  - A year with an `_archive` sheet is read from that sheet alone: a plain
+    sheet for the same year is a working copy of history and is ignored.
+  - The year before the earliest live one is the **seam** — where the archived
+    past hands over to the months that still have rows. Its December is where
+    every carried-over balance is squared up (see the reconciliation rule
+    below), and its successor's *Not budgeted* / *Не заложено* header cell
+    fixes the running Available at that hand-over.
 - **`DashData`** — derived analytics; ignored on import for the same reason.
 - A category a row names that no sheet lists is still imported, on the income
   side if everything filed under it came in and the expense side otherwise.
@@ -78,21 +91,33 @@ silent drop.
 
 ## What the importer guarantees
 
-- **Idempotent.** Every transaction is hashed (`date|amount|description`), and
-  rows whose hash already exists on the target account are skipped. Running the
-  same migration twice imports nothing the second time.
+- **Idempotent.** Every transaction is hashed
+  (`account|date|amount|description`), and rows whose hash already exists on the
+  target account are skipped. The corrections the importer derives are computed
+  from the workbook alone, so they hash the same way on a second run: running
+  the same migration twice imports nothing the second time.
 - **Merges by name.** A group or category that already exists in monori (same
   name, same group) is reused, not duplicated. Existing categories keep their
   keywords.
-- **Batched.** Each migration lands as an import batch per account, so it shows
-  up in the import history and can be rolled back as a unit.
-- **Non-OK rows are skipped** (declined or held operations) and reported in
-  the preview count.
+- **Resolves categories against your whole account.** A name the workbook's own
+  structure doesn't list is still matched against every category you already
+  have, ignoring case and extra spaces. Only a name that matches nothing is left
+  uncategorized — reported, never guessed at.
+- **Batched.** Each migration lands as an import batch per account, tagged as
+  coming from a workbook. (Browsing and rolling back those batches is not built
+  yet — see issue #22.)
+- **Non-OK rows are skipped** (declined or held operations) and reported as a
+  preview warning.
 - **Reconciles the grid explicitly.** Every source row is copied unchanged.
   When the year grid's cached income, outflow or balance differs, the importer
   adds a dated correction transaction for the difference. This preserves
   hand-maintained adjustments such as `+10,000` in formulas and makes the
   imported grid equal the spreadsheet without rewriting its original rows.
+  Reconciliation runs month by month from the earliest sheet up to the last
+  month with real activity — a row, a cached outflow, or income. Budgeted-only
+  months beyond that are left alone: budgeting ahead is normal, and squaring up
+  against a future month's carry residue would invent future-dated
+  transactions.
 
 ## What the preview warnings mean
 
@@ -111,6 +136,15 @@ something ambiguous. The ones a hand-kept workbook usually raises:
 - **`reconciliation: N adjustment transactions …`** — the year grid and its
   rows differed, so N explicit correction transactions were added. The source
   rows themselves were not changed.
+- **`seam: N carry corrections at YYYY-12`** — the same thing at the hand-over
+  between the archived years and the first one that still has rows: N
+  corrections so every category starts the live era on the balance the
+  spreadsheet says it had.
+- **`N category names in the sheet match nothing in monori`** — raised on the
+  result screen, not the preview: those rows were imported uncategorized rather
+  than filed under a guess. Re-running the
+  migration will not fix them: the rows already exist and get skipped as
+  duplicates, so categorize them in monori instead.
 - **`verify: the sheet's own Available differs …`** — the sheet's running
   Available versus the one recomputed from everything imported. A difference
   that stays roughly constant month over month is money carried in from before
