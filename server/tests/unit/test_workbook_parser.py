@@ -357,9 +357,7 @@ def test_parse_transactions_dedup_status_currency_and_category():
     )
     assert "Transactions: 1 non-OK rows skipped" in warnings
     assert [r["currency"] for r in rows] == ["RUB", "USD"]
-    assert "Transactions: 1 rows in USD — they need an account held in USD to land on" in (
-        warnings
-    )
+    assert "Transactions: 1 rows in USD — they need an account held in USD to land on" in (warnings)
 
 
 def test_split_operation_keeps_both_parts_with_their_own_amounts():
@@ -450,9 +448,7 @@ def test_parse_transactions_pay_amount_fallback_and_blankish_rows():
     assert rows[1]["monori_category"] == "Groceries"
     assert errors == [{"row": 6, "error": "unparseable date or amount"}]
     assert [r["currency"] for r in rows] == ["RUB", "RUB", "USD"]
-    assert "Transactions: 1 rows in USD — they need an account held in USD to land on" in (
-        warnings
-    )
+    assert "Transactions: 1 rows in USD — they need an account held in USD to land on" in (warnings)
 
 
 def test_parse_keywords_reads_side_table():

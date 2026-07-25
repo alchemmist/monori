@@ -197,7 +197,11 @@ def _reject_currency_mismatch(c, slots, marker_map):
     placeholders = ",".join("?" * len(ids))
     held = {
         r["id"]: (r["currency"] or DEFAULT_CURRENCY).upper()
-        for r in c.execute(f"SELECT id, currency FROM accounts WHERE id IN ({placeholders})", ids)
+        # only "?" marks are interpolated; the values go through bind params
+        for r in c.execute(
+            f"SELECT id, currency FROM accounts WHERE id IN ({placeholders})",  # nosec B608
+            ids,
+        )
     }
     for key, slot in slots.items():
         account_id = marker_map[key]
