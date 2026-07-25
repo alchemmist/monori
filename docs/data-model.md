@@ -2,7 +2,8 @@
 
 Everything monori knows lives in one SQLite file (`MONORI_DB`, default
 `server/data/monori.db`). The schema is created on first connection and runs in
-WAL mode with foreign keys enabled. Five tables hold the whole budget.
+WAL mode with foreign keys enabled. A handful of tables hold the whole budget —
+the diagram below is generated from the schema itself.
 
 The schema has a single canonical definition in `server/schema.sql`; its
 history lives as [Alembic](https://alembic.sqlalchemy.org/) revisions in
@@ -12,6 +13,135 @@ upgraded through the migration chain on first connection. Databases created
 before the Alembic switch (which tracked migrations with SQLite's
 `PRAGMA user_version`) are adopted automatically: they are stamped at the
 matching revision and upgraded from there (see the accounts migration below).
+
+## Schema diagram
+
+The diagram below is generated from `server/schema.sql` — it is the real shape
+of the database, read back through `PRAGMA` after executing the schema, not a
+drawing kept in sync by hand. Regenerate it with `make schema-diagram`; CI fails
+if the schema changed and the diagram did not.
+
+<!-- schema-diagram:start -->
+
+<!-- generated from server/schema.sql by scripts/gen_schema_diagram.py — run `make schema-diagram` after changing the schema -->
+
+```mermaid
+erDiagram
+    category_groups {
+        INTEGER id PK
+        INTEGER user_id FK "-> users.id"
+        TEXT name "required"
+        INTEGER sort "required"
+        TEXT kind "required"
+    }
+    categories {
+        INTEGER id PK
+        INTEGER group_id FK "-> category_groups.id, required"
+        TEXT name "required"
+        TEXT keywords "required"
+        INTEGER sort "required"
+        INTEGER archived "required"
+    }
+    accounts {
+        INTEGER id PK
+        INTEGER user_id FK "-> users.id"
+        TEXT name "required"
+        TEXT type "required"
+        TEXT currency "required"
+        INTEGER sort "required"
+        INTEGER archived "required"
+        INTEGER opening_balance "required"
+        TEXT opening_date
+        TEXT icon "required"
+        TEXT color "required"
+        TEXT icon_image
+        INTEGER connection_id FK "-> bank_connections.id"
+        TEXT bank_ref "required"
+        TEXT card_tails "required"
+    }
+    bank_connections {
+        INTEGER id PK
+        INTEGER user_id FK "-> users.id"
+        TEXT bank "required"
+        TEXT kind "required"
+        TEXT status "required"
+        BLOB credentials_encrypted
+        BLOB session_encrypted
+        TEXT last_sync
+        TEXT last_error
+        INTEGER pending_account_id FK "-> accounts.id"
+        TEXT created_at "required"
+        TEXT updated_at "required"
+    }
+    import_batches {
+        INTEGER id PK
+        INTEGER account_id FK "-> accounts.id, required"
+        INTEGER connection_id FK "-> bank_connections.id"
+        TEXT source "required"
+        INTEGER inserted "required"
+        INTEGER skipped "required"
+        TEXT created_at "required"
+    }
+    transactions {
+        INTEGER id PK
+        TEXT date "required"
+        INTEGER amount "required"
+        TEXT description "required"
+        TEXT bank_category "required"
+        TEXT mcc "required"
+        INTEGER category_id FK "-> categories.id"
+        INTEGER account_id FK "-> accounts.id, required"
+        TEXT transfer_id
+        TEXT comment "required"
+        TEXT hash "required"
+        TEXT source "required"
+        INTEGER batch_id FK "-> import_batches.id"
+    }
+    budgets {
+        INTEGER category_id PK, FK "-> categories.id"
+        INTEGER year PK
+        INTEGER month PK
+        INTEGER amount "required"
+    }
+    users {
+        INTEGER id PK
+        TEXT email "required"
+        TEXT email_canonical "required"
+        TEXT password_hash "required"
+        TEXT created_at "required"
+        INTEGER is_admin "required"
+        TEXT last_login
+    }
+    activity_events {
+        INTEGER id PK
+        INTEGER user_id FK "-> users.id, required"
+        TEXT kind "required"
+        TEXT created_at "required"
+        TEXT detail
+    }
+    feature_usage {
+        INTEGER user_id PK, FK "-> users.id"
+        TEXT feature PK
+        TEXT day PK
+        INTEGER count "required"
+    }
+    users |o--o{ category_groups : "user_id"
+    category_groups ||--o{ categories : "group_id"
+    bank_connections |o--o{ accounts : "connection_id"
+    users |o--o{ accounts : "user_id"
+    accounts |o--o{ bank_connections : "pending_account_id"
+    users |o--o{ bank_connections : "user_id"
+    bank_connections |o--o{ import_batches : "connection_id"
+    accounts ||--o{ import_batches : "account_id"
+    import_batches |o--o{ transactions : "batch_id"
+    accounts ||--o{ transactions : "account_id"
+    categories |o--o{ transactions : "category_id"
+    categories ||--o{ budgets : "category_id"
+    users ||--o{ activity_events : "user_id"
+    users ||--o{ feature_usage : "user_id"
+```
+
+<!-- schema-diagram:end -->
 
 ## Money
 

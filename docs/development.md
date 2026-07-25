@@ -40,9 +40,10 @@ one-to-one — there is no separate CI script to drift out of sync.
 
 | Target | Does |
 | -------- | ------ |
-| `make fmt` | Prettier + Ruff format/fix. |
+| `make fmt` | Prettier + Ruff format/fix, and regenerates the schema diagram. |
 | `make fmt-check` | The same, check-only. |
-| `make lint` | Everything: web (Oxlint), CSS, HTML, server (Ruff), YAML, Markdown, GitHub Actions, Dockerfile, shell, and spelling. |
+| `make lint` | Everything: web (Oxlint), CSS, HTML, server (Ruff), YAML, Markdown, generated docs, GitHub Actions, Dockerfile, shell, and spelling. |
+| `make schema-diagram` | Regenerates the ER diagram in [data-model.md](data-model.md) from `server/schema.sql`. `make lint` fails if it is stale. |
 | `make typecheck` | mypy on the server. |
 | `make analyze` | bandit + semgrep security scan. |
 | `make audit` | Dependency + secret scanning (`audit-deps`, `audit-deps-py`, `audit-secrets`). |

@@ -6,10 +6,10 @@ WEBBIN := web/node_modules/.bin
 
 .PHONY: dev down reset-db deploy api web build \
         fmt fmt-check \
-        lint lint-web lint-css lint-html lint-server lint-sql lint-yaml lint-md lint-actions lint-docker lint-shell spell \
+        lint lint-web lint-css lint-html lint-server lint-sql lint-yaml lint-md lint-docs lint-actions lint-docker lint-shell spell \
         typecheck analyze audit audit-deps audit-deps-py audit-secrets \
         test t-fast t-medium t-slow coverage mutation \
-        check
+        schema-diagram check
 
 up:
 	$(COMPOSE) -f deploy/docker-compose.dev.yml up --build
@@ -42,7 +42,10 @@ build:
 
 SQLFLUFF := uvx --from 'sqlfluff==3.4.2' sqlfluff
 
-fmt:
+schema-diagram:
+	python3 scripts/gen_schema_diagram.py
+
+fmt: schema-diagram
 	$(WEBBIN)/prettier --write .
 	cd server && uv run ruff format . && uv run ruff check . --fix
 	$(SQLFLUFF) fix -f server/schema.sql
@@ -52,7 +55,7 @@ fmt-check:
 	cd server && uv run ruff format --check .
 	$(SQLFLUFF) lint server/schema.sql
 
-lint: lint-web lint-css lint-html lint-server lint-sql lint-yaml lint-md lint-actions lint-docker lint-shell spell
+lint: lint-web lint-css lint-html lint-server lint-sql lint-yaml lint-md lint-docs lint-actions lint-docker lint-shell spell
 
 lint-web:
 	cd web && npm run --silent lint
@@ -74,6 +77,10 @@ lint-yaml:
 
 lint-md:
 	$(WEBBIN)/markdownlint-cli2
+
+# the ER diagram in docs/data-model.md is generated; fail if the schema moved on without it
+lint-docs:
+	python3 scripts/gen_schema_diagram.py --check
 
 lint-actions:
 	actionlint
