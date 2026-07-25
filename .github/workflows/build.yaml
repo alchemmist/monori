@@ -10,6 +10,13 @@ on:
 permissions:
     contents: read
 
+# a new push supersedes any still-running CI for the same ref: with the slow
+# mutation target, back-to-back merges to main otherwise pile up stale runs
+# (deploy fires off the newest successful run, so cancelling old ones is safe)
+concurrency:
+    group: ci-${{ github.ref }}
+    cancel-in-progress: true
+
 jobs:
     check:
         name: ${{ matrix.target }}
