@@ -4,6 +4,7 @@ import { TrashBin } from "@gravity-ui/icons";
 import { useStore } from "../store.js";
 import { parseRub, money } from "../format.js";
 import { ACCOUNT_ICONS, ACCOUNT_COLORS, DEFAULT_ACCOUNT_COLOR } from "./accountIcons.js";
+import { DEFAULT_CURRENCY, currencyOptions } from "../currencies.js";
 import AccountBadge from "./AccountBadge.jsx";
 import AppDialog from "../ui/AppDialog.jsx";
 import Tab from "../ui/Tab.jsx";
@@ -61,7 +62,8 @@ export function AccountEditTab({ account, onClose }) {
     const [icon, setIcon] = useState(account.icon ?? "wallet");
     const [color, setColor] = useState(account.color ?? DEFAULT_ACCOUNT_COLOR);
     const [image, setImage] = useState(account.iconImage ?? "");
-    const [currency, setCurrency] = useState(account.currency ?? "RUB");
+    const [currency, setCurrency] = useState(account.currency ?? DEFAULT_CURRENCY);
+    const currencies = useMemo(() => currencyOptions(account.currency), [account.currency]);
     const [opening, setOpening] = useState(
         account.openingBalance ? String(account.openingBalance / 100) : "",
     );
@@ -95,7 +97,7 @@ export function AccountEditTab({ account, onClose }) {
                 icon,
                 color,
                 iconImage: image,
-                currency: currency.trim() || "RUB",
+                currency: currency || DEFAULT_CURRENCY,
                 openingBalance,
                 cardTails: tails
                     .split(",")
@@ -217,10 +219,11 @@ export function AccountEditTab({ account, onClose }) {
                         onChange={onPickImage}
                     />
                 </div>
-                <FTextInput
+                <FSelect
                     label="Currency"
                     value={currency}
-                    onChange={(e) => setCurrency(e.target.value)}
+                    onChange={setCurrency}
+                    data={currencies}
                 />
                 <FTextInput
                     label="Opening balance"
