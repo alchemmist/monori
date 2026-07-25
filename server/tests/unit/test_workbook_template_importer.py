@@ -177,11 +177,11 @@ def test_month_range_wraps_across_years():
 
 
 def test_synthetic_shape():
-    a = _synthetic(2025, 1, 20000, "Groceries", "Migration adjustment: Groceries")
+    a = _synthetic(2025, 1, 20000, "Groceries", "Groceries")
     assert a["date"] == "2025-01-31T12:00:00"
     assert a["amount"] == 20000
     assert a["monori_category"] == "Groceries"
-    assert a["description"] == "Migration adjustment: Groceries"
+    assert a["description"] == "Groceries"
     assert a["marker"] == ""
     assert a["bank_category"] == "" and a["mcc"] == "" and a["comment"] == ""
     assert "hash" not in a
@@ -488,10 +488,10 @@ def test_live_year_reconciles_to_cached_balances_and_available():
     budgets = {(b["category"], b["year"], b["month"]): b["amount"] for b in parsed["budgets"]}
     assert budgets == {("Groceries", 2025, 1): 100000, ("Groceries", 2025, 2): 100000}
 
-    synth = {t["description"]: t for t in parsed["transactions"] if "Migration" in t["description"]}
-    assert synth["Migration adjustment: Groceries"]["amount"] == 20000
-    assert synth["Migration adjustment: Groceries"]["date"] == "2025-01-31T12:00:00"
-    assert synth["Migration adjustment: income"]["amount"] == 100000
+    # synthetic rows carry the plain category name and no card marker
+    synth = {(t["description"], t["date"]): t for t in parsed["transactions"] if not t["marker"]}
+    assert synth[("Groceries", "2025-01-31T12:00:00")]["amount"] == 20000
+    assert synth[("Income", "2025-01-31T12:00:00")]["amount"] == 100000
     assert len(parsed["transactions"]) == 6  # 4 real (one uncategorized) + 2 synthetic
 
     assert (
@@ -534,12 +534,10 @@ def test_archive_history_and_seam_carry():
     )
 
     parsed = parse_template_workbook(_save(wb))
-    synth = {t["description"]: t for t in parsed["transactions"]}
-    assert synth["Migration history: income"]["amount"] == 10000
-    assert synth["Migration history: Groceries"]["amount"] == 50000
-    assert synth["Migration history: Groceries"]["date"] == "2024-01-31T12:00:00"
-    assert synth["Migration carry: Groceries"]["amount"] == 30000
-    assert synth["Migration carry: Groceries"]["date"] == "2024-12-31T12:00:00"
+    synth = {(t["description"], t["date"]): t for t in parsed["transactions"]}
+    assert synth[("Income", "2024-01-31T12:00:00")]["amount"] == 10000
+    assert synth[("Groceries", "2024-01-31T12:00:00")]["amount"] == 50000
+    assert synth[("Groceries", "2024-12-31T12:00:00")]["amount"] == 30000
     assert len(parsed["transactions"]) == 3
 
     assert "history: 2 synthetic transactions rebuilt from archive sheets" in parsed["warnings"]
@@ -557,10 +555,14 @@ def test_outflow_fallback_when_balance_cell_missing():
         rows=[("▼Daily", None), ("Groceries", {1: (None, None, 100), 2: (None, 200, None)})],
     )
     parsed = parse_template_workbook(_save(wb))
-    synth = {t["description"]: t for t in parsed["transactions"]}
+    # (description, date) keys are unique here — pin cardinality so a collision
+    # in a future change can't silently drop a row from the dict
+    assert len(parsed["transactions"]) == 2
+    synth = {(t["description"], t["date"]): t for t in parsed["transactions"]}
+    assert len(synth) == 2
     # Jan aligns balance to 100.00; Feb has no balance cell, so the outflow drives
     # the target: projected(100) - have(0) + outflow(200) = 300 -> +200.00 delta.
-    assert synth["Migration adjustment: Groceries"]["amount"] == 20000
+    assert synth[("Groceries", "2025-02-28T12:00:00")]["amount"] == 20000
 
 
 def test_dead_category_and_available_seed_at_seam():
@@ -591,11 +593,11 @@ def test_dead_category_and_available_seed_at_seam():
         seed=200,
     )
     parsed = parse_template_workbook(_save(wb))
-    synth = {t["description"]: t for t in parsed["transactions"]}
-    assert synth["Migration history: OldPhone"]["amount"] == 30000
-    assert synth["Migration carry: OldPhone"]["amount"] == -30000  # dead category zeroed
-    assert synth["Migration: available seed"]["amount"] == 20000
-    assert synth["Migration: available seed"]["date"] == "2024-12-31T12:00:00"
+    synth = {(t["description"], t["date"]): t for t in parsed["transactions"]}
+    assert len(synth) == len(parsed["transactions"])  # keys unique, nothing overwritten
+    assert synth[("OldPhone", "2024-01-31T12:00:00")]["amount"] == 30000
+    assert synth[("OldPhone", "2024-12-31T12:00:00")]["amount"] == -30000  # dead category zeroed
+    assert synth[("Income", "2024-12-31T12:00:00")]["amount"] == 20000  # available seed
     assert "history: 2 synthetic transactions rebuilt from archive sheets" in parsed["warnings"]
     assert "seam: 3 carry corrections at 2024-12" in parsed["warnings"]
 
@@ -633,9 +635,9 @@ def test_available_seed_excludes_seam_overspend():
         header_row=8,
     )
     parsed = parse_template_workbook(_save(wb))
-    synth = {t["description"]: t for t in parsed["transactions"]}
-    assert synth["Migration carry: Groceries"]["amount"] == -60000
-    assert synth["Migration: available seed"]["amount"] == 10000
+    synth = {(t["description"], t["date"]): t for t in parsed["transactions"]}
+    assert synth[("Groceries", "2024-12-31T12:00:00")]["amount"] == -60000
+    assert synth[("Income", "2024-12-31T12:00:00")]["amount"] == 10000  # available seed
     assert not any(w.startswith("verify:") for w in parsed["warnings"])
 
 
