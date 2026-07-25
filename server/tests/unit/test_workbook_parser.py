@@ -11,6 +11,7 @@ from app.workbook.parser import (
     WorkbookError,
     _find_layout,
     _kop,
+    _label_col,
     _last_day,
     _month_num,
     _month_range,
@@ -1066,3 +1067,45 @@ def test_parse_keywords_falls_back_without_pipes():
     )
     idx = {name: i for i, name in enumerate(TX_HEADER)}
     assert _parse_keywords(ws, idx) == {"Cafes": "starbucks"}
+
+
+def test_label_col_picks_the_fullest_column_below_the_header():
+    """
+    The live grid never names its category column, so it is found by weight:
+    of the columns left of the first month block, the one carrying the most
+    labels — counted strictly below the header row, since the header itself and
+    whatever title sits above it are not categories.
+    """
+    wb = Workbook()
+    ws = wb.active
+    ws.cell(row=4, column=1, value="Бюджет на год")
+    ws.cell(row=5, column=1, value="Категория")
+    for r in range(6, 10):
+        ws.cell(row=r, column=1, value=f"left {r}")
+    for r in range(6, 11):
+        ws.cell(row=r, column=2, value=f"middle {r}")
+    assert _label_col(ws, 5, 4) == 2
+
+
+def test_label_col_keeps_the_leftmost_of_a_tie_and_falls_back_to_the_first():
+    wb = Workbook()
+    ws = wb.active
+    assert _label_col(ws, 5, 4) == 1  # nothing anywhere
+    for c in (1, 2):
+        for r in range(6, 9):
+            ws.cell(row=r, column=c, value=f"c{c} r{r}")
+    assert _label_col(ws, 5, 4) == 1
+
+
+def test_label_col_only_counts_the_rows_just_under_the_header():
+    """
+    A sheet carries hundreds of rows below its grid — notes, a second table,
+    leftovers. Only the band the categories live in decides the column.
+    """
+    wb = Workbook()
+    ws = wb.active
+    for r in range(6, 9):
+        ws.cell(row=r, column=1, value=f"category {r}")
+    for r in range(80, 140):
+        ws.cell(row=r, column=2, value=f"note {r}")
+    assert _label_col(ws, 5, 4) == 1

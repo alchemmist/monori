@@ -329,3 +329,54 @@ def test_unmatched_category_names_are_listed_ten_at_a_time(tmp_path):
         " — those rows were left uncategorized rather than guessed:"
         f" {', '.join(names[:10])}"
     ]
+
+
+def test_category_names_match_across_any_spacing(tmp_path):
+    """
+    A name typed with a stray double space is the same envelope to a human, so
+    the whole-account fallback compares names with their inner runs of
+    whitespace collapsed, not just their ends trimmed.
+    """
+    c, uid, acct = _db(tmp_path)
+    c.execute(
+        "INSERT INTO category_groups (user_id, name, sort, kind) VALUES (?, 'Mine', 9, 'expense')",
+        (uid,),
+    )
+    gid = c.execute("SELECT id FROM category_groups WHERE name='Mine'").fetchone()[0]
+    c.execute(
+        "INSERT INTO categories (group_id, name, keywords, sort) VALUES (?, ?, '', 0)",
+        (gid, "Lunch  Coffee"),
+    )
+    c.commit()
+    parsed = _parsed(transactions=[_row("2026-01-05T10:00:00", -500, "Kofein", "  Lunch Coffee ")])
+    result = apply_workbook(c, uid, parsed, {"RUB:": acct})
+    c.commit()
+    assert result["warnings"] == []
+    matched = c.execute(
+        "SELECT cat.name FROM transactions t JOIN categories cat ON cat.id = t.category_id"
+    ).fetchone()[0]
+    assert matched == "Lunch  Coffee"
+
+
+def test_a_category_whose_group_is_missing_does_not_stop_the_rest(tmp_path):
+    """
+    Structure and grid can disagree — a category can name a group no sheet ever
+    declared. That one has nowhere to go, but the categories after it in the
+    list still do.
+    """
+    c, uid, acct = _db(tmp_path)
+    parsed = _parsed(
+        categories=[
+            {"group": "Nowhere", "name": "Orphan", "keywords": "", "group_kind": "expense"},
+            {"group": "Daily", "name": "Groceries", "keywords": "", "group_kind": "expense"},
+        ],
+        groups=[{"name": "Daily", "sort": 1, "kind": "expense"}],
+        transactions=[_row("2026-01-05T10:00:00", -500, "Lenta", "Groceries")],
+        budgets=[],
+    )
+    result = apply_workbook(c, uid, parsed, {"RUB:": acct})
+    c.commit()
+    assert result["categoriesCreated"] == 1
+    assert result["warnings"] == []
+    names = [r[0] for r in c.execute("SELECT name FROM categories")]
+    assert names == ["Groceries"]
