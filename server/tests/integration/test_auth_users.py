@@ -106,8 +106,13 @@ def test_login_returns_bearer_token(client):
 
 def test_login_wrong_password_and_unknown_user(client):
     _register(client)
-    assert _login(client, password="wrongpassword").status_code == 401
-    assert _login(client, email="nobody@example.com").status_code == 401
+    wrong_password = _login(client, password="wrongpassword")
+    unknown = _login(client, email="nobody@example.com")
+    assert wrong_password.status_code == 401
+    assert unknown.status_code == 401
+    # the two failures are told apart, so the form can point at the bad field
+    assert wrong_password.json()["detail"] == "incorrect password"
+    assert unknown.json()["detail"] == "no account is registered for this email"
 
 
 def test_login_is_case_insensitive_on_email(client):

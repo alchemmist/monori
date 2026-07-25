@@ -66,6 +66,11 @@
     border-color: #1a1a1a;
 }
 
+.login__input--bad,
+.login__input--bad:focus {
+    border-color: var(--m-expense, #dc2626);
+}
+
 .login__password {
     position: relative;
     display: flex;

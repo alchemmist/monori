@@ -25,7 +25,10 @@ are public.
   [Data model](data-model.md)).
 - **`POST /api/auth/token`** — OAuth2 password grant (form-encoded `username` =
   email, `password`). Returns `{access_token, token_type: "bearer"}` — a JWT
-  valid for 7 days — or `401`.
+  valid for 7 days — or `401`. The failure `detail` names the field at fault:
+  `no account is registered for this email` vs `incorrect password`, so the
+  sign-in form can point at it. This trades away enumeration resistance — the
+  endpoint confirms which addresses are registered.
 - **`GET /api/auth/me`** — with `Authorization: Bearer <access_token>`, returns
   the current user; `401` if the token is missing, malformed, or expired.
 

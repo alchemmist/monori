@@ -4,6 +4,14 @@ import { useStore } from "../store.js";
 import Meadow from "../components/Meadow.jsx";
 import "./login.css";
 
+/** Which field the server blamed, so the form can point at it. */
+const badField = (message) => {
+    if (!message) return null;
+    if (/email/i.test(message)) return "email";
+    if (/password/i.test(message)) return "password";
+    return null;
+};
+
 export default function LoginPage() {
     const { login, register } = useStore();
     const [mode, setMode] = useState("login");
@@ -27,6 +35,8 @@ export default function LoginPage() {
             setBusy(false);
         }
     };
+
+    const blamed = badField(error);
 
     const switchMode = () => {
         setMode((m) => (m === "login" ? "register" : "login"));
@@ -56,9 +66,10 @@ export default function LoginPage() {
                 </h1>
                 <form className="login__form" onSubmit={submit}>
                     <input
-                        className="login__input"
+                        className={`login__input${blamed === "email" ? " login__input--bad" : ""}`}
                         type="email"
                         placeholder="Email"
+                        aria-invalid={blamed === "email" || undefined}
                         autoComplete="email"
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
@@ -66,8 +77,11 @@ export default function LoginPage() {
                     />
                     <div className="login__password">
                         <input
-                            className="login__input"
+                            className={`login__input${
+                                blamed === "password" ? " login__input--bad" : ""
+                            }`}
                             type={showPassword ? "text" : "password"}
+                            aria-invalid={blamed === "password" || undefined}
                             placeholder={
                                 mode === "register" ? "Password (min 8 characters)" : "Password"
                             }

@@ -110,8 +110,13 @@ def token(form: Annotated[OAuth2PasswordRequestForm, Depends()]):
             "SELECT id, password_hash FROM users WHERE email_canonical=?",
             (canonical_email(email),),
         ).fetchone()
-        if row is None or not verify_password(row["password_hash"], form.password):
-            raise HTTPException(401, "incorrect email or password")
+        # deliberately distinguishable: the sign-in form tells the user which of
+        # the two fields is wrong, at the cost of confirming which addresses are
+        # registered (account enumeration)
+        if row is None:
+            raise HTTPException(401, "no account is registered for this email")
+        if not verify_password(row["password_hash"], form.password):
+            raise HTTPException(401, "incorrect password")
         # MONORI_ADMIN_EMAILS is the source of truth for admin rights, so the
         # flag is (re)synced on every successful login; matched on the canonical
         # form so an admin's mailbox is recognised through any of its aliases
