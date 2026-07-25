@@ -18,6 +18,7 @@ from .deps import conn, snapshot
 from .routers import (
     accounts,
     admin,
+    admin_sql,
     auth_router,
     budgets,
     categories,
@@ -36,6 +37,7 @@ app.include_router(auth_router.router)
 
 # admin routes carry their own guard (admin_user wraps current_user with a 403)
 app.include_router(admin.router)
+app.include_router(admin_sql.router)
 
 
 @app.middleware("http")

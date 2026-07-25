@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { AreaChart, BarChart } from "@mantine/charts";
 import { Button } from "@mantine/core";
+import AdminSqlTab from "../components/AdminSqlTab.jsx";
 import AdminTxTab from "../components/AdminTxTab.jsx";
 import { ChartBoundary } from "../components/ChartCard.jsx";
 import { api } from "../api.js";
@@ -28,6 +29,7 @@ export default function AdminPage() {
     const [activity, setActivity] = useState(null);
     const [detail, setDetail] = useState(null);
     const [error, setError] = useState(null);
+    const [sqlOpen, setSqlOpen] = useState(false);
 
     const reload = useCallback(() => {
         Promise.all([api.adminOverview(), api.adminUsers(), api.adminActivity()])
@@ -60,7 +62,12 @@ export default function AdminPage() {
 
     return (
         <div className="fade-in">
-            <h1 className="page-title">Admin</h1>
+            <div className="admin-page__head">
+                <h1 className="page-title">Admin</h1>
+                <Button size="xs" variant="subtle" onClick={() => setSqlOpen(true)}>
+                    SQL console
+                </Button>
+            </div>
 
             <div className="kpi-row admin-kpis">
                 <Kpi
@@ -211,6 +218,8 @@ export default function AdminPage() {
                     />
                 )}
             </div>
+
+            {sqlOpen && <AdminSqlTab onClose={() => setSqlOpen(false)} onChanged={reload} />}
         </div>
     );
 }

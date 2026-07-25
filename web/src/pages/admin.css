@@ -153,3 +153,77 @@
         grid-template-columns: 1fr;
     }
 }
+
+.admin-page__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.sql-console__warn,
+.sql-console__error {
+    padding: 8px 10px;
+    border-radius: var(--m-radius-sm);
+    font-size: 12.5px;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.sql-console__warn {
+    color: var(--m-warning);
+    border: 1px solid var(--m-warning);
+}
+
+.sql-console__error {
+    color: var(--m-expense);
+    border: 1px solid var(--m-expense);
+    font-family: var(--g-font-family-monospace, ui-monospace, monospace);
+}
+
+/* results scroll on their own, so editor and footer keep their place */
+.sql-console__scroll {
+    overflow: auto;
+    max-height: 45vh;
+    border: 1px solid var(--m-border-soft);
+    border-radius: var(--m-radius-sm);
+}
+
+.sql-console__table td,
+.sql-console__table th {
+    max-width: 280px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.sql-console__table thead th {
+    position: sticky;
+    top: 0;
+    background: var(--m-surface);
+}
+
+.sql-console__history {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    font-size: 12px;
+}
+
+.sql-console__history button {
+    display: block;
+    width: 100%;
+    padding: 4px 0;
+    border: none;
+    background: none;
+    text-align: left;
+    cursor: pointer;
+    color: var(--m-text-secondary);
+    font-family: var(--g-font-family-monospace, ui-monospace, monospace);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.sql-console__history button:hover {
+    color: var(--m-text);
+}
