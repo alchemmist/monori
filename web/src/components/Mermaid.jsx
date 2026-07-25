@@ -1,4 +1,4 @@
-import { ArrowsExpand } from "@gravity-ui/icons";
+import { ArrowUpRightFromSquare } from "@gravity-ui/icons";
 import { useMermaidSvg } from "./useMermaidSvg.js";
 
 export default function Mermaid({ chart, fullscreenHref }) {
@@ -29,9 +29,9 @@ export default function Mermaid({ chart, fullscreenHref }) {
                     target="_blank"
                     rel="noreferrer"
                     title="Open the diagram full screen"
+                    aria-label="Open the diagram full screen"
                 >
-                    <ArrowsExpand width={14} height={14} />
-                    <span>Full screen</span>
+                    <ArrowUpRightFromSquare width={14} height={14} />
                 </a>
             )}
         </figure>
