@@ -399,6 +399,37 @@ def _synthetic(year, month, amount, category, description, marker=""):
     }
 
 
+def _last_activity(transactions, budget_map, sources):
+    """
+    Last (year, month) showing real activity: a transaction, a nonzero budget,
+    a nonzero cached outflow or income. Trailing months beyond it only carry
+    formula residue (cached zero balances in prepared/empty blocks), and
+    reconciling against those would fabricate future-dated synthetic rows.
+    """
+    last = None
+
+    def bump(y, m):
+        nonlocal last
+        if last is None or (y, m) > last:
+            last = (y, m)
+
+    for tx in transactions:
+        bump(int(tx["date"][:4]), int(tx["date"][5:7]))
+    for (_, y, m), amount in budget_map.items():
+        if amount:
+            bump(y, m)
+    for source in sources:
+        y = source["year"]
+        for m, v in source["income"].items():
+            if v:
+                bump(y, m)
+        for entry in source["cats"].values():
+            for m, v in entry["outflows"].items():
+                if v:
+                    bump(y, m)
+    return last
+
+
 def _month_range(start, end):
     y, m = start
     while (y, m) <= end:
@@ -552,6 +583,13 @@ def _parse(wb):
     first_sheet = archive_years.get(all_years[0]) or live_years[all_years[0]]
     start = (all_years[0], min(first_sheet["months"]))
     end = (all_years[-1], 12)
+    last_active = _last_activity(
+        transactions, budget_map, list(archive_years.values()) + list(live_years.values())
+    )
+    if last_active is not None and last_active < end:
+        end = max(last_active, start)
+        if seam_sheet is not None:
+            end = max(end, (seam_year, 12))
     expense_cats = [c["name"] for c in categories if kinds[c["name"]] != "income"]
 
     seam_targets = {}
