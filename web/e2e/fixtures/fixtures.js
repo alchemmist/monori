@@ -65,6 +65,22 @@ class Api {
     }
 }
 
+// Register a brand-new tenant through the real signup API and hand back its
+// token plus a seed-builder client. Specs that need several isolated users in
+// one scenario (e.g. the workbook round-trip) call this directly.
+export async function makeUser(request, tag = "u") {
+    const email = `e2e-${tag}-${++seq}-${Date.now()}@example.com`;
+    const password = "e2e-password-123";
+    const reg = await request.post("/api/auth/register", { data: { email, password } });
+    expect(reg.ok(), `register -> ${reg.status()}`).toBeTruthy();
+    const tok = await request.post("/api/auth/token", {
+        form: { username: email, password },
+    });
+    expect(tok.ok(), `token -> ${tok.status()}`).toBeTruthy();
+    const { access_token: token } = await tok.json();
+    return { email, password, token, api: new Api(request, token) };
+}
+
 export const test = base.extend({
     // Each test owns its world: a fresh user registered through the real
     // signup API, with a seed-builder client bound to its token. Isolation is
@@ -72,16 +88,7 @@ export const test = base.extend({
     // playwright's fixture callback is conventionally named `use`, but oxlint
     // reads that as a React hook — `provide` keeps the linter out of it
     user: async ({ request }, provide, testInfo) => {
-        const email = `e2e-w${testInfo.workerIndex}-${++seq}-${Date.now()}@example.com`;
-        const password = "e2e-password-123";
-        const reg = await request.post("/api/auth/register", { data: { email, password } });
-        expect(reg.ok(), `register -> ${reg.status()}`).toBeTruthy();
-        const tok = await request.post("/api/auth/token", {
-            form: { username: email, password },
-        });
-        expect(tok.ok(), `token -> ${tok.status()}`).toBeTruthy();
-        const { access_token: token } = await tok.json();
-        await provide({ email, password, token, api: new Api(request, token) });
+        await provide(await makeUser(request, `w${testInfo.workerIndex}`));
     },
 });
 
@@ -99,4 +106,14 @@ export async function openApp(page, user) {
 
 export async function gotoSection(page, label) {
     await page.locator(".sidebar__item", { hasText: label }).first().click();
+}
+
+// Swap the signed-in tenant on an already-open page (the clock stays pinned —
+// clock.install survives reloads). Registered as another init script because
+// openApp's one re-runs on every reload and would put the old token back;
+// init scripts run in registration order, so the later tenant wins.
+export async function switchUser(page, user) {
+    await page.addInitScript((token) => localStorage.setItem("monori_token", token), user.token);
+    await page.reload();
+    await expect(page.locator(".sidebar")).toBeVisible();
 }
