@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
 import MarkdownPage from "./MarkdownPage.jsx";
 import { renderUI, screen, waitFor, resetStore } from "../test/render.jsx";
 
@@ -24,7 +24,7 @@ vi.mock("../content.js", () => ({
             return {
                 slug: "api",
                 title: "REST API",
-                body: "# REST API\n\n```mermaid\ngraph TD\n  A-->B\n```",
+                body: "# REST API\n\n[Guide](./getting-started.md) [Web](https://example.com)\n\n| A | B |\n|---|---|\n| 1 | 2 |\n\n```mermaid\ngraph TD\n  A-->B\n```",
             };
         }
         return null;
@@ -46,53 +46,51 @@ describe("MarkdownPage", () => {
         resetStore();
     });
 
-    it("renders for valid slug", () => {
-        const { container } = renderUI(
-            <MemoryRouter initialEntries={["/docs/getting-started"]}>
-                <MarkdownPage />
-            </MemoryRouter>,
-        );
-        expect(container).toBeTruthy();
-    });
-
-    it("shows not found for invalid slug", () => {
+    const renderPage = (path) =>
         renderUI(
-            <MemoryRouter initialEntries={["/docs/nonexistent"]}>
-                <MarkdownPage />
+            <MemoryRouter initialEntries={[path]}>
+                <Routes>
+                    <Route path="/docs/:slug" element={<MarkdownPage />} />
+                </Routes>
             </MemoryRouter>,
         );
-        expect(screen.getByText("Not found")).toBeTruthy();
-    });
 
-    it("renders article element", () => {
-        const { container } = renderUI(
-            <MemoryRouter initialEntries={["/docs/getting-started"]}>
-                <MarkdownPage />
-            </MemoryRouter>,
+    it("renders markdown headings and the neighbouring page navigation", () => {
+        renderPage("/docs/getting-started");
+        expect(screen.getByRole("heading", { name: "Getting Started" })).toBeInTheDocument();
+        expect(screen.getByRole("link", { name: /next\s*rest api/i })).toHaveAttribute(
+            "href",
+            "/docs/api",
         );
-        const article = container.querySelector("article.md");
-        if (article) {
-            expect(article).toBeTruthy();
-        }
     });
 
-    it("includes navigation when section exists", () => {
-        const { container } = renderUI(
-            <MemoryRouter initialEntries={["/docs/getting-started"]}>
-                <MarkdownPage />
-            </MemoryRouter>,
+    it("shows not found for invalid slug", async () => {
+        const { user } = renderPage("/docs/nonexistent");
+        expect(screen.getByRole("heading", { name: "Not found" })).toBeInTheDocument();
+        expect(screen.getByText(/nonexistent/)).toBeInTheDocument();
+        await user.click(screen.getByRole("button", { name: /back to the docs/i }));
+        expect(screen.getByRole("heading", { name: "Getting Started" })).toBeInTheDocument();
+    });
+
+    it("turns Mermaid fences into diagrams and preserves links and tables", () => {
+        const { container } = renderPage("/docs/api");
+        expect(screen.getByTestId("mermaid")).toHaveAttribute("data-chart", "graph TD\n  A-->B");
+        expect(container.querySelector(".md-table-wrap table")).toBeInTheDocument();
+        expect(screen.getByRole("link", { name: "Guide" })).toHaveAttribute(
+            "href",
+            "/docs/getting-started",
         );
-        // Navigation may or may not be present depending on section
-        expect(container).toBeTruthy();
+        expect(screen.getByRole("link", { name: "Web" })).toHaveAttribute("target", "_blank");
     });
 
-    it("handles hash navigation", () => {
+    it("scrolls to an existing hash target, otherwise resets page scroll", () => {
+        const scrollIntoView = vi.fn();
+        window.HTMLElement.prototype.scrollIntoView = scrollIntoView;
         const scrollSpy = vi.spyOn(window, "scrollTo");
-        renderUI(
-            <MemoryRouter initialEntries={["/docs/getting-started#test"]}>
-                <MarkdownPage />
-            </MemoryRouter>,
-        );
+        renderPage("/docs/getting-started#getting-started");
+        expect(scrollIntoView).toHaveBeenCalled();
+        renderPage("/docs/getting-started#missing");
+        expect(scrollSpy).toHaveBeenCalledWith(0, 0);
         scrollSpy.mockRestore();
     });
 });

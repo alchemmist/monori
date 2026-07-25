@@ -62,6 +62,54 @@ describe("TransactionsPage", () => {
         expect(screen.getByText("Nothing found")).toBeInTheDocument();
     });
 
+    it("filters by year, account, category and uncategorized state", async () => {
+        seed({
+            accounts,
+            groups,
+            categories,
+            transactions: [
+                tx(1, { description: "Old food", date: "2025-12-01", accountId: 1, categoryId: 2 }),
+                tx(2, { description: "New uncategorized", date: "2026-03-01", accountId: 2, categoryId: null }),
+                tx(3, { description: "New food", date: "2026-03-02", accountId: 1, categoryId: 2 }),
+            ],
+        });
+        const { user } = renderUI(<TransactionsPage />);
+        const filters = document.querySelectorAll(".gsel");
+
+        await user.click(filters[1]);
+        await user.click(screen.getByRole("option", { name: "2025", hidden: true }));
+        expect(screen.getByText("Old food")).toBeInTheDocument();
+        expect(screen.queryByText("New food")).not.toBeInTheDocument();
+
+        await user.click(filters[1]);
+        await user.click(screen.getByRole("option", { name: "All years", hidden: true }));
+        await user.click(filters[2]);
+        await user.click(screen.getByRole("option", { name: "Savings", hidden: true }));
+        expect(screen.getByText("New uncategorized")).toBeInTheDocument();
+        expect(screen.queryByText("New food")).not.toBeInTheDocument();
+
+        await user.click(filters[0]);
+        await user.click(screen.getByRole("option", { name: "Uncategorized", hidden: true }));
+        expect(screen.getByText("New uncategorized")).toBeInTheDocument();
+        await user.click(filters[2]);
+        await user.click(screen.getByRole("option", { name: "All accounts", hidden: true }));
+        expect(screen.getByText("New uncategorized")).toBeInTheDocument();
+    });
+
+    it("keeps archived account and category selected on legacy rows", async () => {
+        seed({
+            accounts,
+            groups,
+            categories,
+            transactions: [tx(1, { accountId: 3, categoryId: 3 })],
+        });
+        renderUI(<TransactionsPage />);
+        const row = screen.getByText("tx 1").closest("tr");
+        expect(row).toHaveTextContent("Old card");
+        expect(row).toHaveTextContent("Archived");
+        expect(row.querySelectorAll("button.gsel")).toHaveLength(2);
+    });
+
     it("changes an ordinary row's account and category", async () => {
         seed({ accounts, groups, categories, transactions: [tx(1, { categoryId: 2, accountId: 1 })] });
         const setTxAccount = vi.spyOn(useStore.getState(), "setTxAccount").mockResolvedValue();

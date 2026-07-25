@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useStore } from "./store.js";
+import { api } from "./api.js";
 
 const snapshot = () => ({
     accounts: [{ id: 1, name: "Card", openingBalance: 100, archived: false }],
@@ -66,5 +67,29 @@ describe("store demo mutations", () => {
         await expect(store.submitConnectionSms(1, "1234")).rejects.toThrow(/not available/i);
         await expect(store.deleteConnection(1)).resolves.toBeUndefined();
         await expect(store.cancelConnectionSync(1)).resolves.toBeUndefined();
+    });
+});
+
+describe("store remote mutations", () => {
+    beforeEach(() => {
+        window.history.replaceState({}, "", "/app");
+        useStore.setState({ snapshot: snapshot(), toast: null, loading: false });
+        vi.spyOn(useStore.getState(), "load").mockResolvedValue();
+    });
+
+    it("persists account, category, group, transfer and connection changes before refreshing", async () => {
+        vi.spyOn(api, "createAccount").mockResolvedValue({ id: 4 }); vi.spyOn(api, "patchAccount").mockResolvedValue({}); vi.spyOn(api, "deleteAccount").mockResolvedValue({}); vi.spyOn(api, "reconcileAccount").mockResolvedValue({ delta: 5 });
+        vi.spyOn(api, "createTransfer").mockResolvedValue({ transferId: "x" }); vi.spyOn(api, "deleteTransfer").mockResolvedValue({});
+        vi.spyOn(api, "createCategory").mockResolvedValue({ id: 5 }); vi.spyOn(api, "patchCategory").mockResolvedValue({}); vi.spyOn(api, "deleteCategory").mockResolvedValue({}); vi.spyOn(api, "mergeCategory").mockResolvedValue({}); vi.spyOn(api, "reorderCategories").mockResolvedValue({});
+        vi.spyOn(api, "createGroup").mockResolvedValue({ id: 6 }); vi.spyOn(api, "patchGroup").mockResolvedValue({}); vi.spyOn(api, "deleteGroup").mockResolvedValue({}); vi.spyOn(api, "reorderGroups").mockResolvedValue({});
+        vi.spyOn(api, "importCommit").mockResolvedValue({ inserted: 1 }); vi.spyOn(api, "createConnection").mockResolvedValue({ id: 7 }); vi.spyOn(api, "deleteConnection").mockResolvedValue({}); vi.spyOn(api, "syncConnection").mockResolvedValue({}); vi.spyOn(api, "submitConnectionSms").mockResolvedValue({}); vi.spyOn(api, "cancelConnectionSync").mockResolvedValue({});
+        const s = useStore.getState();
+        await s.createAccount({ name: "Cash" }); await s.patchAccount(1, { name: "Card 2" }); await s.deleteAccount(1); await s.reconcileAccount(1, 100);
+        await s.createTransfer({}); await s.deleteTransfer("x");
+        await s.createCategory({ name: "Rent", groupId: 2 }); await s.patchCategory(2, { name: "Food 2" }); await s.moveCategory(2, 2, [2, 1]); await s.deleteCategory(2); await s.mergeCategory(1, 2);
+        await s.createGroup({ name: "Fun", kind: "expense" }); await s.patchGroup(2, { name: "Home 2" }); await s.deleteGroup(2); await s.reorderGroups([1]);
+        await s.commitImport([], 1); await s.createConnection({}); await s.deleteConnection(7); await s.syncConnection(7); await s.submitConnectionSms(7, "1234"); await s.cancelConnectionSync(7);
+        expect(api.createAccount).toHaveBeenCalled(); expect(api.reorderCategories).toHaveBeenCalledWith([2, 1]); expect(api.submitConnectionSms).toHaveBeenCalledWith(7, "1234");
+        expect(useStore.getState().load).toHaveBeenCalled();
     });
 });

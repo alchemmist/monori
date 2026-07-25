@@ -12,13 +12,17 @@ import {
     fireEvent,
 } from "../test/render.jsx";
 import { useStore } from "../store.js";
+import { api } from "../api.js";
+import { setPath } from "../test/render.jsx";
 
 vi.mock("../api.js");
 
 describe("AccountsPage", () => {
     beforeEach(() => {
         resetStore();
+        setPath("/");
         vi.clearAllMocks();
+        api.connectionsAvailable.mockResolvedValue([]);
     });
 
     describe("with demo data", () => {
@@ -69,6 +73,39 @@ describe("AccountsPage", () => {
     });
 
     describe("row menu", () => {
+        it("opens the edit action for an account", async () => {
+            seed({ accounts: [{ id: 1, name: "Card", type: "card", archived: false }] });
+            const { user } = renderUI(<AccountsPage />);
+            const menu = () => document.querySelector(".account-row__actions button");
+
+            await user.click(menu());
+            await user.click(await screen.findByRole("menuitem", { name: "Edit" }));
+            expect(useStore.getState().tabs).toEqual(expect.arrayContaining([
+                expect.objectContaining({ kind: "account-edit", props: { accountId: 1 } }),
+            ]));
+
+        });
+
+        it.each([
+            ["Reconcile", "Reconcile"],
+            ["Connect bank", "Bank sync"],
+            ["Delete", "Delete Card"],
+        ])("opens the %s dialog", async (action, title) => {
+            seed({ accounts: [{ id: 1, name: "Card", type: "card", archived: false }] });
+            const { user } = renderUI(<AccountsPage />);
+            await user.click(document.querySelector(".account-row__actions button"));
+            await user.click(await screen.findByRole("menuitem", { name: action }));
+            expect(screen.getByRole("dialog")).toHaveTextContent(title);
+        });
+
+        it("archives and unarchives accounts through the menu", async () => {
+            seed({ accounts: [{ id: 1, name: "Card", type: "card", archived: false }] });
+            const patchAccount = vi.spyOn(useStore.getState(), "patchAccount").mockResolvedValue();
+            const { user } = renderUI(<AccountsPage />);
+            await user.click(document.querySelector(".account-row__actions button"));
+            await user.click(await screen.findByRole("menuitem", { name: "Archive" }));
+            expect(patchAccount).toHaveBeenCalledWith(1, { archived: true });
+        });
         it("displays edit option in row menu", async () => {
             const data = seed();
             const user = userEvent.setup();
@@ -144,17 +181,19 @@ describe("AccountsPage", () => {
                     { id: 2, name: "Second", type: "card", sort: 2 },
                 ],
             });
-            const { api } = vi;
-            const reorderMock = vi.fn();
+            const reorderMock = vi.spyOn(api, "reorderAccounts").mockResolvedValue();
 
             const { container } = renderUI(<AccountsPage />);
 
             const firstGrip = container.querySelector(".account-row__grip");
             if (firstGrip) {
+                vi.spyOn(firstGrip.closest(".account-row"), "getBoundingClientRect").mockReturnValue({ height: 40 });
                 fireEvent.pointerDown(firstGrip, { button: 0, clientY: 100 });
                 fireEvent.pointerMove(document, { clientY: 150 });
                 fireEvent.pointerUp(document);
             }
+            expect(useStore.getState().snapshot.accounts.map((a) => a.id)).toEqual([2, 1]);
+            expect(reorderMock).toHaveBeenCalledWith([2, 1]);
         });
 
         it("prevents drag on right click", () => {

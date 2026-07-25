@@ -49,4 +49,61 @@ describe("account dialogs", () => {
         await waitFor(() => expect(reconcile).toHaveBeenCalledWith(1, 10250));
         expect(notify).toHaveBeenCalledWith(expect.objectContaining({ theme: "success" })); expect(close).toHaveBeenCalled();
     });
+
+    it("updates an existing account and reports a failed save", async () => {
+        seed({ accounts: [account] });
+        const patch = vi.spyOn(useStore.getState(), "patchAccount").mockResolvedValue();
+        const close = vi.fn();
+        const { user } = renderUI(<AccountEditTab account={account} onClose={close} />);
+        await user.clear(screen.getByLabelText("Name"));
+        await user.type(screen.getByLabelText("Name"), "Main card");
+        await user.clear(screen.getByLabelText("Currency"));
+        await user.click(screen.getByRole("button", { name: "Save" }));
+        await waitFor(() => expect(patch).toHaveBeenCalledWith(1, expect.objectContaining({ name: "Main card", currency: "RUB" })));
+        expect(close).toHaveBeenCalledOnce();
+    });
+
+    it("does not save a blank name and reports create failures", async () => {
+        seed({ accounts: [account] });
+        const create = vi.spyOn(useStore.getState(), "createAccount").mockRejectedValue(new Error("offline"));
+        const notify = vi.spyOn(useStore.getState(), "notify");
+        const { user } = renderUI(<AccountEditTab account={{}} onClose={vi.fn()} />);
+        expect(screen.getByRole("button", { name: "Create" })).toBeDisabled();
+        await user.type(screen.getByLabelText("Name"), "Cash");
+        await user.click(screen.getByRole("button", { name: "Create" }));
+        await waitFor(() => expect(create).toHaveBeenCalled());
+        expect(notify).toHaveBeenCalledWith(expect.objectContaining({ title: "Failed to create account", theme: "danger" }));
+    });
+
+    it("deletes an empty account without a target and reports deletion errors", async () => {
+        seed({ accounts: [account] });
+        const remove = vi.spyOn(useStore.getState(), "deleteAccount").mockResolvedValue();
+        const close = vi.fn();
+        const { user } = renderUI(<AccountDeleteDialog account={account} accounts={[account]} txCount={0} onClose={close} />);
+        expect(screen.getByText("No transactions belong to this account.")).toBeInTheDocument();
+        await user.click(screen.getByRole("button", { name: "Delete" }));
+        await waitFor(() => expect(remove).toHaveBeenCalledWith(1, undefined));
+        expect(close).toHaveBeenCalledOnce();
+    });
+
+    it("shows reconciliation validation, zero-delta result, and failure", async () => {
+        seed({ accounts: [account] });
+        const reconcile = vi.spyOn(useStore.getState(), "reconcileAccount");
+        const notify = vi.spyOn(useStore.getState(), "notify");
+        const { user, rerender } = renderUI(<AccountReconcileDialog account={account} balance={10000} onClose={vi.fn()} />);
+        await user.clear(screen.getByLabelText("Actual bank balance"));
+        await user.type(screen.getByLabelText("Actual bank balance"), "wat");
+        await user.click(screen.getByRole("button", { name: "Reconcile" }));
+        expect(reconcile).not.toHaveBeenCalled();
+        expect(notify).toHaveBeenCalledWith({ title: "Balance is not a number", theme: "danger" });
+        reconcile.mockResolvedValue({ delta: 0 });
+        await user.clear(screen.getByLabelText("Actual bank balance"));
+        await user.type(screen.getByLabelText("Actual bank balance"), "100");
+        await user.click(screen.getByRole("button", { name: "Reconcile" }));
+        await waitFor(() => expect(notify).toHaveBeenCalledWith({ title: "Already reconciled", theme: "success" }));
+        rerender(<AccountReconcileDialog account={account} balance={10000} onClose={vi.fn()} />);
+        reconcile.mockRejectedValue(new Error("offline"));
+        await user.click(screen.getByRole("button", { name: "Reconcile" }));
+        await waitFor(() => expect(notify).toHaveBeenCalledWith(expect.objectContaining({ title: "Failed to reconcile", theme: "danger" })));
+    });
 });

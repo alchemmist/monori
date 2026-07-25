@@ -124,4 +124,61 @@ describe("EnvelopeHero", () => {
         const stage = container.querySelector(".env-hero");
         expect(stage).toBeTruthy();
     });
+
+    it("does not start canvas work when reduced motion is requested", () => {
+        const observe = vi.fn();
+        vi.spyOn(window, "matchMedia").mockReturnValue({ matches: true });
+        vi.stubGlobal("IntersectionObserver", vi.fn(() => ({ observe, disconnect: vi.fn() })));
+        const context = { clearRect: vi.fn() };
+        vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(context);
+
+        renderUI(<EnvelopeHero />);
+        expect(observe).not.toHaveBeenCalled();
+        expect(context.clearRect).not.toHaveBeenCalled();
+        vi.unstubAllGlobals();
+    });
+
+    it("sizes, animates, pauses and cleans up when visibility changes", () => {
+        let onIntersection;
+        const observe = vi.fn();
+        const disconnect = vi.fn();
+        const cancel = vi.fn();
+        const frame = vi.fn(() => 42);
+        const context = {
+            clearRect: vi.fn(),
+            beginPath: vi.fn(),
+            arc: vi.fn(),
+            fill: vi.fn(),
+            globalAlpha: 1,
+        };
+        vi.spyOn(window, "matchMedia").mockReturnValue({ matches: false });
+        vi.stubGlobal("IntersectionObserver", class {
+            constructor(callback) {
+                onIntersection = callback;
+            }
+            observe = observe;
+            disconnect = disconnect;
+        });
+        vi.stubGlobal("requestAnimationFrame", frame);
+        vi.stubGlobal("cancelAnimationFrame", cancel);
+        vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(context);
+        const { container, unmount } = renderUI(<EnvelopeHero />);
+        const stage = container.querySelector(".env-hero");
+        Object.defineProperty(stage, "clientWidth", { configurable: true, value: 300 });
+        Object.defineProperty(stage, "clientHeight", { configurable: true, value: 120 });
+
+        onIntersection([{ isIntersecting: true }]);
+        const canvas = container.querySelector("canvas");
+        expect(observe).toHaveBeenCalledWith(stage);
+        expect(canvas).toHaveProperty("width", 300);
+        expect(canvas).toHaveProperty("height", 120);
+        expect(frame).toHaveBeenCalled();
+
+        onIntersection([{ isIntersecting: false }]);
+        expect(cancel).toHaveBeenCalledWith(42);
+        unmount();
+        expect(disconnect).toHaveBeenCalled();
+        expect(cancel).toHaveBeenCalled();
+        vi.unstubAllGlobals();
+    });
 });

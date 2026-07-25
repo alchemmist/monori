@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { renderUI, resetStore, screen, seed } from "../test/render.jsx";
+import { renderUI, resetStore, screen, seed, waitFor } from "../test/render.jsx";
+import { useStore } from "../store.js";
 import BudgetPage from "./BudgetPage.jsx";
 
 const result = () => ({
@@ -29,5 +30,22 @@ describe("BudgetPage", () => {
         const { user } = renderUI(<BudgetPage results={new Map([[2026, result()]])} firstYear={2026} lastYear={2026} />);
         await user.click(screen.getByText("Plan"));
         expect(document.querySelectorAll(".yg-metric")).toHaveLength(12);
+    });
+
+    it("edits a monthly budget cell and opens the category delete form", async () => {
+        const setBudget = vi.spyOn(useStore.getState(), "setBudget").mockResolvedValue();
+        const { user } = renderUI(<BudgetPage results={new Map([[2026, result()]])} firstYear={2026} lastYear={2026} />);
+        await user.click(screen.getByText("Month"));
+        const food = screen.getByText("Groceries").closest("tr");
+        await user.click(food.querySelector(".budget-cell"));
+        const input = food.querySelector(".budget-cell__input");
+        await user.clear(input);
+        await user.type(input, "300");
+        await user.keyboard("{Enter}");
+        await waitFor(() => expect(setBudget).toHaveBeenCalledWith(2, 2026, expect.any(Number), 30000));
+
+        await user.click(food.querySelector(".cat-row__menu button"));
+        await user.click(await screen.findByRole("menuitem", { name: "Delete" }));
+        expect(screen.getByRole("dialog")).toHaveTextContent("Delete Groceries");
     });
 });

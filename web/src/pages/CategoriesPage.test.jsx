@@ -59,6 +59,33 @@ describe("CategoriesPage", () => {
         expect(screen.getByRole("button", { name: "GroupSpending" })).toBeInTheDocument();
     });
 
+    it("starts income and expense group forms from both new-group controls", async () => {
+        seed({ groups, categories: [] });
+        const { user } = renderUI(<CategoriesPage />);
+        await user.click(screen.getByRole("button", { name: "Income" }));
+        expect(screen.getByRole("dialog")).toHaveTextContent("New group");
+
+        await user.keyboard("{Escape}");
+        await user.click(screen.getByRole("button", { name: "Expense group" }));
+        expect(screen.getByRole("dialog")).toHaveTextContent("New group");
+    });
+
+    it("opens group and category delete forms from row menus", async () => {
+        seed({ groups, categories: [{ id: 2, groupId: 2, name: "Food", keywords: "", sort: 1, archived: false }] });
+        const { user, unmount } = renderUI(<CategoriesPage />);
+        const group = document.querySelector('[data-gid="2"]');
+        await user.click(group.querySelector(".kb-col__head button"));
+        await user.click(await screen.findByRole("menuitem", { name: "Delete" }));
+        expect(screen.getByRole("dialog")).toHaveTextContent("Delete Spending");
+        unmount();
+
+        renderUI(<CategoriesPage />);
+        const card = document.querySelector('[data-id="2"]');
+        await user.click(card.querySelector("button"));
+        await user.click(await screen.findByRole("menuitem", { name: "Delete" }));
+        expect(screen.getByRole("dialog")).toHaveTextContent("Delete Food");
+    });
+
     it("archives a category through its row menu", async () => {
         seed({ groups, categories: [{ id: 2, groupId: 2, name: "Food", keywords: "", sort: 1, archived: false }] });
         const patchCategory = vi.spyOn(useStore.getState(), "patchCategory").mockResolvedValue();

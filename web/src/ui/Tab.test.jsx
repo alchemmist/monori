@@ -331,4 +331,31 @@ describe("Tab", () => {
         expect(aside1).toBeInTheDocument();
         expect(aside2).toBeInTheDocument();
     });
+
+    it("ends its input gate on the relevant width transition", async () => {
+        const { user, container } = renderUI(<Tab title="Details" strip="D" onClose={() => {}}>content</Tab>);
+        const tab = container.querySelector(".ui-tab");
+        await user.click(screen.getByRole("button", { name: /collapse/i }));
+        expect(tab).toHaveClass("ui-tab_animating");
+        fireEvent.transitionEnd(tab, { propertyName: "opacity" });
+        expect(tab).toHaveClass("ui-tab_animating");
+        fireEvent.transitionEnd(tab, { propertyName: "width" });
+        expect(tab).not.toHaveClass("ui-tab_animating");
+    });
+
+    it("resizes within viewport bounds, persists the width, and resets it", () => {
+        Object.defineProperty(window, "innerWidth", { configurable: true, value: 1000 });
+        const { container } = renderUI(<Tab title="Details" strip="D" persistKey="resize" onClose={() => {}}>content</Tab>);
+        const tab = container.querySelector(".ui-tab");
+        const grip = container.querySelector(".ui-tab__grip");
+        fireEvent.pointerDown(grip, { pointerId: 1, clientX: 800 });
+        expect(document.body.style.userSelect).toBe("none");
+        fireEvent.pointerMove(window, { clientX: -1000 });
+        expect(tab.style.getPropertyValue("--ui-tab-w")).toBe("900px");
+        fireEvent.pointerUp(window, { clientX: -1000 });
+        expect(document.body.style.userSelect).toBe("");
+        expect(localStorage.getItem("monori_tab_width")).toBe('{"resize":900}');
+        fireEvent.doubleClick(grip);
+        expect(localStorage.getItem("monori_tab_width")).toBe("{}");
+    });
 });
