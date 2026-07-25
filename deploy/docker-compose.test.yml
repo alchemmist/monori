@@ -1,0 +1,19 @@
+# e2e stack: the production images — the real API and the nginx-served web
+# build — on a throwaway database. The sqlite file lives inside the back
+# container (no volume), so tearing the stack down drops every bit of test
+# data. Separate from compose.dev (own project name, own host port) so an e2e
+# run never touches the developer's database or dev servers.
+services:
+    back:
+        build:
+            context: ..
+            dockerfile: deploy/Dockerfile.back
+
+    front:
+        build:
+            context: ..
+            dockerfile: deploy/Dockerfile.front
+        depends_on:
+            - back
+        ports:
+            - "${E2E_PORT:-8078}:8000"

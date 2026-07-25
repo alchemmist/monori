@@ -18,6 +18,9 @@ export default defineConfig({
         watch: process.env.VITE_FORCE_POLLING ? { usePolling: true, interval: 500 } : undefined,
     },
     test: {
+        // e2e/ holds Playwright specs with their own runner — vitest must not
+        // pick them up
+        include: ["src/**/*.{test,spec}.{js,jsx}"],
         coverage: {
             provider: "v8",
             all: true,

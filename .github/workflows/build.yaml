@@ -64,6 +64,11 @@ jobs:
               run: uv sync
               working-directory: server
 
+            - name: Install Playwright browsers
+              if: matrix.target == 't-slow'
+              run: npx playwright install --with-deps chromium
+              working-directory: web
+
             - name: Install external linters
               if: matrix.target == 'lint'
               env:
@@ -99,6 +104,16 @@ jobs:
 
             - name: Run ${{ matrix.target }}
               run: make ${{ matrix.target }}
+
+            - name: Upload Playwright report
+              if: failure() && matrix.target == 't-slow'
+              uses: actions/upload-artifact@v4
+              with:
+                  name: playwright-report
+                  path: |
+                      web/playwright-report
+                      web/test-results
+                  retention-days: 7
 
     secrets:
         name: secrets

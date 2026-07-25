@@ -127,7 +127,7 @@ t-medium:
 	cd server && uv run pytest -q -m integration
 
 t-slow:
-	@echo "e2e (Playwright) not implemented yet — see #42 rollout phase 6"
+	COMPOSE="$(COMPOSE)" bash scripts/e2e.sh
 
 coverage:
 	bash scripts/coverage-tree.sh
