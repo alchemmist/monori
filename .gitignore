@@ -1,5 +1,6 @@
 pass.txt
 .env
+.claude/worktrees/
 deploy/data/
 deploy/sync-debug/
 migration/raw/
