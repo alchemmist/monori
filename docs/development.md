@@ -66,7 +66,7 @@ dependencies (a real temp SQLite database, the real FastAPI app), not mocks.
 | `make t-fast` | Unit tests: Vitest + pytest `-m "not integration"`. |
 | `make t-medium` | Integration tests: pytest `-m integration` against a real DB. |
 | `make t-slow` | Placeholder for end-to-end (Playwright), not yet wired up. |
-| `make coverage` | Coverage as a tree (root → back/front → module → file), via `scripts/coverage-tree.sh`. |
+| `make coverage` | Coverage as a tree (root → back/front → module → file), via `scripts/coverage-tree.sh`. Fails below **80% statements and lines** in `web/src`. |
 | `make mutation` | Mutation testing: Stryker on `web/src/engine`, mutmut on `server/app`. |
 
 ### The pre-commit gate

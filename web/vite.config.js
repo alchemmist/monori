@@ -28,7 +28,12 @@ export default defineConfig({
             exclude: ["src/**/*.test.{js,jsx}", "src/main.jsx"],
             reporter: ["text", "json-summary"],
             reportsDirectory: "./coverage",
+            // the global gate is what stops coverage leaking away between
+            // features; the engine keeps its own line so the budgeting math
+            // cannot be diluted by cheaply-covered UI
             thresholds: {
+                lines: 80,
+                statements: 80,
                 "src/engine/**": { lines: 80, statements: 80 },
             },
         },
