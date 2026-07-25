@@ -78,6 +78,7 @@ def cell(value):
 class SqlBody(BaseModel):
     sql: str = Field(max_length=STATEMENT_MAX_CHARS)
     confirmWrite: bool = False  # noqa: N815 — the JSON API is camelCase
+    dryRun: bool = False  # noqa: N815
 
 
 @router.post("/sql")
@@ -90,6 +91,11 @@ def run_sql(body: SqlBody, admin: Annotated[dict, Depends(admin_user)]):
     so a ``WITH … DELETE`` cannot slip through as a query. Unconfirmed writes are
     rolled back and reported, which doubles as a dry run — the response says how
     many rows the statement would have hit.
+
+    ``dryRun`` asks for that rehearsal explicitly and for any statement: it runs
+    inside the transaction, reports what it saw or would have touched, and rolls
+    back unconditionally — a read is answered with its rows, a write with the
+    count, and nothing is ever committed.
     """
     sql = body.sql.strip()
     if not sql:
@@ -128,14 +134,28 @@ def run_sql(body: SqlBody, admin: Annotated[dict, Depends(admin_user)]):
 
         changed = c.total_changes - before
         is_write = not columns or changed > 0
+        write_rows = max(changed, cur.rowcount, 0)
+
+        if body.dryRun:
+            c.rollback()
+            _audit(c, admin["id"], "admin_sql_dry_run", sql)
+            return {
+                "kind": "dry",
+                "wouldWrite": is_write,
+                "columns": columns,
+                "rows": rows[:ROW_LIMIT],
+                "rowCount": write_rows if is_write else min(len(rows), ROW_LIMIT),
+                "truncated": not is_write and len(rows) > ROW_LIMIT,
+                "elapsedMs": elapsed_ms,
+            }
+
         if is_write and not body.confirmWrite:
             c.rollback()
             _audit(c, admin["id"], "admin_sql_rejected", sql)
-            n = max(changed, cur.rowcount, 0)
             raise HTTPException(
                 400,
                 f"write statement ({leading_keyword(sql) or 'statement'}) needs confirmation;"
-                f" it would have affected {n} row{'' if n == 1 else 's'}",
+                f" it would have affected {write_rows} row{'' if write_rows == 1 else 's'}",
             )
 
         if is_write:
@@ -145,7 +165,7 @@ def run_sql(body: SqlBody, admin: Annotated[dict, Depends(admin_user)]):
                 "kind": "write",
                 "columns": [],
                 "rows": [],
-                "rowCount": max(changed, cur.rowcount, 0),
+                "rowCount": write_rows,
                 "truncated": False,
                 "elapsedMs": elapsed_ms,
             }

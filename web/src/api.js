@@ -198,11 +198,11 @@ export const api = {
             body: JSON.stringify({ ids }),
         }).then(json),
     adminActivity: () => apiFetch("/api/admin/activity").then(json),
-    adminSql: (sql, confirmWrite = false) =>
+    adminSql: (sql, confirmWrite = false, dryRun = false) =>
         apiFetch("/api/admin/sql", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ sql, confirmWrite }),
+            body: JSON.stringify({ sql, confirmWrite, dryRun }),
         }).then(json),
     adminDeleteUser: (id) => apiFetch(`/api/admin/users/${id}`, { method: "DELETE" }).then(json),
     workbookCommit: (file, mapping, budgetPolicy) => {

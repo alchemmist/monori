@@ -35,14 +35,14 @@ export default function AdminSqlTab({ onClose }) {
     }, []);
 
     const run = useCallback(
-        async (confirmWrite = false) => {
+        async (confirmWrite = false, dryRun = false) => {
             const statement = sql.trim();
             if (!statement || busy) return;
             setBusy(true);
             setError(null);
             setPendingWrite(null);
             try {
-                const r = await api.adminSql(statement, confirmWrite);
+                const r = await api.adminSql(statement, confirmWrite, dryRun);
                 setResult(r);
                 setHistory(remember(statement));
                 if (r.kind === "write") {
@@ -72,18 +72,29 @@ export default function AdminSqlTab({ onClose }) {
     const onKeyDown = (e) => {
         if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
             e.preventDefault();
-            run();
+            run(false, e.shiftKey);
         }
     };
 
     const footer = (
         <>
             <Txt tone="secondary" caption style={{ marginRight: "auto", alignSelf: "center" }}>
-                ⌘/Ctrl + Enter
+                ⌘/Ctrl + Enter · ⇧ for a dry run
             </Txt>
-            {pendingWrite && (
+            {pendingWrite ? (
                 <Button size="l" variant="subtle" onClick={() => setPendingWrite(null)}>
                     Cancel
+                </Button>
+            ) : (
+                <Button
+                    size="l"
+                    variant="subtle"
+                    loading={busy}
+                    disabled={!sql.trim()}
+                    onClick={() => run(false, true)}
+                    title="Run inside a transaction and roll it back — nothing is committed"
+                >
+                    Dry run
                 </Button>
             )}
             <Button
@@ -127,16 +138,25 @@ export default function AdminSqlTab({ onClose }) {
             {pendingWrite && <div className="sql-console__warn">{pendingWrite}</div>}
             {error && <div className="sql-console__error">{error}</div>}
 
+            {result?.kind === "dry" && (
+                <div className="sql-console__dry">
+                    Rolled back — nothing was written.{" "}
+                    {result.wouldWrite
+                        ? `Applying this would affect ${rowsLabel(result.rowCount)}.`
+                        : `The query returned ${rowsLabel(result.rowCount)}.`}
+                </div>
+            )}
+
             {result && (
                 <>
                     <Txt tone="secondary" caption block>
-                        {result.kind === "write"
+                        {result.kind === "write" || (result.kind === "dry" && result.wouldWrite)
                             ? `${rowsLabel(result.rowCount)} affected`
                             : rowsLabel(result.rowCount)}
                         {` · ${result.elapsedMs} ms`}
                         {result.truncated && ` · showing first ${result.rowCount} rows`}
                     </Txt>
-                    {result.kind === "read" && (
+                    {result.columns.length > 0 && (
                         <div className="sql-console__scroll">
                             <table className="admin-table admin-table_compact sql-console__table">
                                 <thead>

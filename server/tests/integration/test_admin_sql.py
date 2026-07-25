@@ -11,8 +11,8 @@ def _make_admin(client, monkeypatch, email=ADMIN_EMAIL):
     return login_as(client, email)
 
 
-def _sql(client, sql, confirm=False):
-    return client.post("/api/admin/sql", json={"sql": sql, "confirmWrite": confirm})
+def _sql(client, sql, confirm=False, dry=False):
+    return client.post("/api/admin/sql", json={"sql": sql, "confirmWrite": confirm, "dryRun": dry})
 
 
 def test_sql_console_rejects_non_admin(client):
@@ -78,6 +78,39 @@ def test_confirmed_write_applies_and_reports_row_count(anon, monkeypatch):
         "truncated": False,
         "elapsedMs": r.json()["elapsedMs"],
     }
+
+
+def test_dry_run_reports_the_write_and_rolls_it_back(anon, monkeypatch):
+    anon.headers.update(_make_admin(anon, monkeypatch))
+    before = _sql(anon, "SELECT COUNT(*) FROM activity_events").json()["rows"][0][0]
+    r = _sql(anon, "DELETE FROM activity_events", dry=True)
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["kind"] == "dry"
+    assert body["wouldWrite"] is True
+    # +1: the counting SELECT audited itself before the DELETE looked at the table
+    assert body["rowCount"] == before + 1
+    assert body["rows"] == []
+    assert _sql(anon, "SELECT COUNT(*) FROM activity_events").json()["rows"][0][0] > before
+
+
+def test_dry_run_of_a_confirmed_write_still_commits_nothing(anon, monkeypatch):
+    anon.headers.update(_make_admin(anon, monkeypatch))
+    assert (
+        _sql(anon, "CREATE TABLE rehearsal (id INTEGER)", confirm=True, dry=True).json()["kind"]
+        == "dry"
+    )
+    assert _sql(anon, "SELECT * FROM rehearsal").status_code == 400
+
+
+def test_dry_run_of_a_read_returns_its_rows(anon, monkeypatch):
+    anon.headers.update(_make_admin(anon, monkeypatch))
+    body = _sql(anon, "SELECT 1 AS one", dry=True).json()
+    assert body["kind"] == "dry"
+    assert body["wouldWrite"] is False
+    assert body["columns"] == ["one"]
+    assert body["rows"] == [[1]]
+    assert body["rowCount"] == 1
 
 
 def test_write_disguised_as_a_query_still_needs_confirmation(anon, monkeypatch):
