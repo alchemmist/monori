@@ -210,7 +210,7 @@ export default function AnalyticsPage({ results, firstYear, lastYear }) {
                             Budget discipline · {year}
                             <span className="chart-card__hint">
                                 {" "}
-                                · spent vs budgeted, per envelope
+                                · spent vs available, per envelope
                             </span>
                         </div>
                         <div className="disc-legend">
@@ -453,7 +453,11 @@ function discClass(cell) {
 function discTitle(category, cell, m) {
     if (cell.ratio == null) return `${category.name} · ${MONTHS_SHORT[m]}: —`;
     const pct = cell.ratio === Infinity ? "no budget" : `${Math.round(cell.ratio * 100)}%`;
-    return `${category.name} · ${MONTHS_SHORT[m]}: ${rub(cell.spent)} / ${rub(cell.budgeted)} ₽ (${pct})`;
+    // available is the envelope (this month's budget plus what carried over), so
+    // spell the carry-over out whenever it differs from the plain budget line
+    const carried =
+        cell.available !== cell.budgeted ? ` · budgeted ${rub(cell.budgeted)} + carry-over` : "";
+    return `${category.name} · ${MONTHS_SHORT[m]}: ${rub(cell.spent)} / ${rub(cell.available)} ₽ (${pct})${carried}`;
 }
 
 function Kpi({ label, value, sub, color }) {

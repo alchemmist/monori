@@ -145,12 +145,14 @@ describe("disciplineMatrix", () => {
         const groceries = d.rows.find((r) => r.category.id === 20);
         const fun = d.rows.find((r) => r.category.id === 21);
         expect(groceries.cells[0].ratio).toBeCloseTo(0.8); // 20k of 25k
-        expect(groceries.cells[1].ratio).toBeCloseTo(2); // 10k of 5k → overrun
+        // Feb budgets 5k but January left 5k in the envelope: 10k of 10k, a hit
+        expect(groceries.cells[1].ratio).toBeCloseTo(1);
+        expect(groceries.cells[1].available).toBe(10_000_00);
         expect(fun.cells[0].ratio).toBeCloseTo(1.25); // 5k of 4k
-        // hits: groceries Jan; misses: groceries Feb, fun Jan → 1/3
-        expect(d.hitRate).toBeCloseTo(33.33, 1);
-        expect(d.totalOverrun).toBe(5_000_00 + 1_000_00);
-        expect(d.worst.category.id).toBe(20);
+        // hits: groceries Jan and Feb; misses: fun Jan → 2/3
+        expect(d.hitRate).toBeCloseTo(66.67, 1);
+        expect(d.totalOverrun).toBe(1_000_00);
+        expect(d.worst.category.id).toBe(21);
     });
 });
 
@@ -458,19 +460,24 @@ describe("disciplineMatrix mechanics", () => {
         { id: 20, groupId: 2, name: "Groceries" },
         { id: 21, groupId: 2, name: "Fun" },
         { id: 22, groupId: 2, name: "Idle" },
+        { id: 23, groupId: 2, name: "Impulse" },
     ];
     const zeros = () =>
         Array.from({ length: 12 }, () => ({ budgeted: 0, outflows: 0, balance: 0 }));
+    // balances chain the way the engine builds them: max(prev, 0) + budgeted + outflows
     const cat20 = zeros();
-    cat20[0] = { budgeted: 1_000_00, outflows: -800_00, balance: 200_00 }; // hit (spent ≤ budget)
-    cat20[1] = { budgeted: 0, outflows: -500_00, balance: -500_00 }; // no budget, spent → ratio Infinity, overrun 500
+    cat20[0] = { budgeted: 1_000_00, outflows: -800_00, balance: 200_00 }; // hit (spent ≤ available)
+    cat20[1] = { budgeted: 0, outflows: -500_00, balance: -300_00 }; // 500 of the 200 carried over → overrun 300
     const cat21 = zeros();
     cat21[0] = { budgeted: 1_000_00, outflows: -1_500_00, balance: -500_00 }; // overrun 500
+    const cat23 = zeros();
+    cat23[0] = { budgeted: 0, outflows: -500_00, balance: -500_00 }; // nothing available → overrun 500
     const yearResult = {
         byCategory: new Map([
             [20, cat20],
             [21, cat21],
             [22, zeros()], // nothing budgeted or spent all year
+            [23, cat23],
         ]),
     };
 
@@ -479,20 +486,47 @@ describe("disciplineMatrix mechanics", () => {
 
         const g = d.rows.find((r) => r.category.id === 20);
         expect(g.cells[0].ratio).toBeCloseTo(0.8); // 800 of 1000
-        expect(g.cells[1].ratio).toBe(Infinity); // spent with zero budget
+        expect(g.cells[1].ratio).toBeCloseTo(2.5); // 500 of the 200 left over
         expect(g.cells[2].ratio).toBeNull(); // month past upToMonth
-        expect(g.cells[2]).toEqual({ budgeted: 0, spent: 0, ratio: null });
+        expect(g.cells[2]).toEqual({ budgeted: 0, available: 0, spent: 0, ratio: null });
+
+        const impulse = d.rows.find((r) => r.category.id === 23);
+        expect(impulse.cells[0].ratio).toBe(Infinity); // spent with an empty envelope
 
         // income category is never a row; the all-zero category is dropped (no active month)
         expect(d.rows.find((r) => r.category.id === 10)).toBeUndefined();
         expect(d.rows.find((r) => r.category.id === 22)).toBeUndefined();
 
-        // hits 1 (cat20 Jan), active 3 (cat20 Jan+Feb, cat21 Jan) → 33.33%
-        expect(d.hitRate).toBeCloseTo(33.33, 1);
-        // overruns: cat20 Feb 500 + cat21 Jan 500
-        expect(d.totalOverrun).toBe(1_000_00);
-        // both overran by exactly 500 → the first one encountered wins
-        expect(d.worst.category.id).toBe(20);
+        // hits 1 (cat20 Jan), active 4 (cat20 Jan+Feb, cat21 Jan, cat23 Jan) → 25%
+        expect(d.hitRate).toBeCloseTo(25, 1);
+        // overruns: cat20 Feb 300 + cat21 Jan 500 + cat23 Jan 500
+        expect(d.totalOverrun).toBe(1_300_00);
+        // cat21 and cat23 both overran by 500 → the first one encountered wins
+        expect(d.worst.category.id).toBe(21);
+    });
+
+    it("counts a saved-up envelope spent in one go as its shortfall, not the whole spend", () => {
+        // the bug this guards: budgeting 100k a month for a trip and paying 900k
+        // for it in July used to report a ~800k overrun, while the envelope was
+        // only 200k short — the number the budget page shows
+        const snap = {
+            groups,
+            categories: [{ id: 30, groupId: 2, name: "Vacation" }],
+            accounts: [],
+            budgets: Array.from({ length: 7 }, (_, m) => ({
+                categoryId: 30,
+                year: 2024,
+                month: m + 1,
+                amount: 100_000_00,
+            })),
+            transactions: [
+                { id: 1, date: "2024-07-10", amount: -900_000_00, categoryId: 30, accountId: 1 },
+            ],
+        };
+        const res = computeRange(snap, 2024, 2024);
+        const d = disciplineMatrix(res.get(2024), snap.categories, groups, { upToMonth: 6 });
+        expect(res.get(2024).byCategory.get(30)[6].balance).toBe(-200_000_00);
+        expect(d.totalOverrun).toBe(200_000_00);
     });
 
     it("returns a null hit rate when no month is active", () => {

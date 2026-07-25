@@ -157,10 +157,20 @@ export function txStats(snapshot, year) {
 
 /**
  * Budget discipline for a year, from the engine's year result.
- * Per expense category: months[12] of {budgeted, spent, ratio|null}.
- * ratio = spent / budgeted; null when nothing budgeted and nothing spent.
- * Also aggregates hitRate (share of active months with spent <= budgeted),
- * totalOverrun (kopecks overspent beyond budget) and the worst category.
+ * Per expense category: months[12] of {budgeted, available, spent, ratio|null}.
+ *
+ * A month is judged against the envelope, not against that month's budget line:
+ * available = max(previous balance, 0) + budgeted, which is what the budget page
+ * shows and what the engine spends down. Comparing spend to the bare monthly
+ * budget double-counts every envelope that is saved up over months and emptied
+ * in one — a year of vacation savings spent on one trip would report the whole
+ * trip as an overrun even though the envelope covered all but the shortfall.
+ * Since balance = available + outflows, the month's available is recovered from
+ * the engine's own numbers with no extra state.
+ *
+ * ratio = spent / available; null when nothing is available and nothing spent.
+ * Also aggregates hitRate (share of active months with spent <= available),
+ * totalOverrun (kopecks the envelopes went negative by) and the worst category.
  */
 export function disciplineMatrix(yearResult, categories, groups, { upToMonth = 11 } = {}) {
     const incomeIds = incomeGroupIdSet(groups);
@@ -177,23 +187,24 @@ export function disciplineMatrix(yearResult, categories, groups, { upToMonth = 1
         let any = false,
             catOverrun = 0;
         for (let m = 0; m < 12; m++) {
-            const budgeted = months[m].budgeted;
+            const { budgeted, balance } = months[m];
             const spent = -months[m].outflows;
+            const availableThisMonth = balance + spent;
             if (m > upToMonth) {
-                cells.push({ budgeted: 0, spent: 0, ratio: null });
+                cells.push({ budgeted: 0, available: 0, spent: 0, ratio: null });
                 continue;
             }
-            if (budgeted <= 0 && spent <= 0) {
-                cells.push({ budgeted, spent, ratio: null });
+            if (availableThisMonth <= 0 && spent <= 0) {
+                cells.push({ budgeted, available: availableThisMonth, spent, ratio: null });
                 continue;
             }
             any = true;
-            const ratio = budgeted > 0 ? spent / budgeted : Infinity;
-            cells.push({ budgeted, spent, ratio });
+            const ratio = availableThisMonth > 0 ? spent / availableThisMonth : Infinity;
+            cells.push({ budgeted, available: availableThisMonth, spent, ratio });
             active += 1;
-            if (spent <= budgeted) hits += 1;
+            if (spent <= availableThisMonth) hits += 1;
             else {
-                const over = spent - Math.max(budgeted, 0);
+                const over = spent - Math.max(availableThisMonth, 0);
                 totalOverrun += over;
                 catOverrun += over;
             }
