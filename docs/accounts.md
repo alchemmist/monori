@@ -45,11 +45,33 @@ Moving money between two of your own accounts is a **transfer**, not spending.
 Use the **Transfer** button on the Transactions page: pick the source and
 destination accounts, an amount, and a date.
 
-Under the hood a transfer is two linked rows — money out of the source, the same
-amount into the destination — sharing a transfer id and shown with a **transfer**
-badge. Both legs are deliberately uncategorized, so a transfer never counts as
-income or expense: your budget and analytics stay honest by construction, not by
-remembering to exclude it. Deleting a transfer removes both legs together.
+Under the hood a transfer is two rows — money out of the source, the same amount
+into the destination — merged into one transfer entity. **Both rows stay real
+transactions**, which is the point: the bank sends them itself, and keeping them
+means a re-sync recognizes them instead of importing them again. Both legs are
+uncategorized while merged, so a transfer never counts as income or expense —
+your budget and analytics stay honest by construction, not by remembering to
+exclude it. Net worth is unchanged, since the two legs cancel out.
+
+### Transfers monori finds for you
+
+Most transfers are never created by hand: the bank delivers both legs and monori
+pairs them up. After every import and every sync it looks for an outflow and an
+inflow of exactly the same amount on two different accounts. A pair a day or
+less apart is merged straight away; a looser match is offered under **Find
+transfers** on the Transactions page, where it can be confirmed or dismissed —
+and a dismissed pair is never offered again.
+
+A transfer with a fee (1000 out, 995 in) is never matched automatically, because
+guessing which difference is a fee and which is a coincidence is not something
+worth being wrong about. Merge those yourself from **Find transfers**.
+
+### Splitting one apart
+
+**Split into two transactions** in the transfer's row menu undoes the merge:
+both transactions stay in the ledger and get back whatever categories they
+carried before. Removing the money as well is **Delete both transactions**,
+which is deliberately a separate action.
 
 ## Reconcile
 

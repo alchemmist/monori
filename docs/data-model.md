@@ -98,6 +98,21 @@ erDiagram
         INTEGER batch_id FK "-> import_batches.id"
         INTEGER hidden "required"
     }
+    transfers {
+        TEXT id PK
+        INTEGER user_id FK "-> users.id"
+        INTEGER out_tx_id FK "-> transactions.id, required"
+        INTEGER in_tx_id FK "-> transactions.id, required"
+        TEXT origin "required"
+        INTEGER out_category_id
+        INTEGER in_category_id
+        TEXT note "required"
+        TEXT created_at "required"
+    }
+    transfer_rejections {
+        INTEGER out_tx_id PK, FK "-> transactions.id"
+        INTEGER in_tx_id PK, FK "-> transactions.id"
+    }
     budgets {
         INTEGER category_id PK, FK "-> categories.id"
         INTEGER year PK
@@ -137,6 +152,11 @@ erDiagram
     import_batches |o--o{ transactions : "batch_id"
     accounts ||--o{ transactions : "account_id"
     categories |o--o{ transactions : "category_id"
+    transactions ||--o{ transfers : "in_tx_id"
+    transactions ||--o{ transfers : "out_tx_id"
+    users |o--o{ transfers : "user_id"
+    transactions ||--o{ transfer_rejections : "in_tx_id"
+    transactions ||--o{ transfer_rejections : "out_tx_id"
     categories ||--o{ budgets : "category_id"
     users ||--o{ activity_events : "user_id"
     users ||--o{ feature_usage : "user_id"

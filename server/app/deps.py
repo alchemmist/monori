@@ -1,4 +1,5 @@
 from . import db as dbmod
+from .transfer_service import list_transfers
 
 
 def conn():
@@ -159,6 +160,7 @@ def snapshot(c, user_id, tx_limit=None):
         ],
         "transactions": transactions,
         "transactionsTotal": transactions_total,
+        "transfers": list_transfers(cur, user_id),
         "budgets": [
             serialize_budget(r)
             for r in cur.execute(

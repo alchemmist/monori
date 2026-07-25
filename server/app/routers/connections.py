@@ -28,6 +28,7 @@ from ..deps import conn, serialize_connection
 from ..importer import build_rules
 from ..ingest import categorize_rows, commit_rows
 from ..sync_runner import NoPendingLogin, get_runner
+from ..transfer_service import detect
 
 router = APIRouter(prefix="/api/connections", tags=["connections"])
 
@@ -236,6 +237,10 @@ def _finish_account(c, row, account_id, result, uid):
             "UPDATE bank_connections SET session_encrypted=?, updated_at=? WHERE id=?",
             (crypto.encrypt(result.session), _now(), row["id"]),
         )
+    # a transfer arrives as two rows on two accounts, often from two different
+    # pulls — merging right after ingestion is the only moment both are present
+    # and still uncategorized
+    detect(c, uid)
     c.commit()
     return summaries, unmapped
 

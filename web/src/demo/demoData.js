@@ -167,6 +167,7 @@ function build() {
 
     const budgets = [];
     const transactions = [];
+    const transfers = [];
     let tid = 1;
     const day2 = (n) => String(n).padStart(2, "0");
 
@@ -206,6 +207,14 @@ function build() {
         // monthly cash withdrawal, represented as a transfer T-Bank -> Cash
         const withdrawal = R(Math.round(between(6000, 12000)));
         const transferId = `demo-tr-${y}-${m}`;
+        transfers.push({
+            id: transferId,
+            outTxId: tid,
+            inTxId: tid + 1,
+            origin: "matched",
+            note: "Cash withdrawal",
+            createdAt: `${y}-${day2(m)}-03`,
+        });
         transactions.push({
             id: tid++,
             date: `${y}-${day2(m)}-03`,
@@ -258,7 +267,7 @@ function build() {
 
     transactions.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : b.id - a.id));
 
-    return { accounts: ACCOUNTS, groups: GROUPS, categories, budgets, transactions };
+    return { accounts: ACCOUNTS, groups: GROUPS, categories, budgets, transactions, transfers };
 }
 
 export const demoSnapshot = build();

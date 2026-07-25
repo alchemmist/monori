@@ -93,8 +93,24 @@ export const api = {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(body),
         }).then(json),
-    deleteTransfer: (transferId) =>
+    // DELETE splits the transfer back into two ordinary transactions; the rows
+    // are never removed, since half of them came from a bank
+    splitTransfer: (transferId) =>
         apiFetch(`/api/transfers/${transferId}`, { method: "DELETE" }).then(json),
+    linkTransfer: (body) =>
+        apiFetch("/api/transfers/link", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+        }).then(json),
+    transferSuggestions: () => apiFetch("/api/transfers/suggestions").then(json),
+    dismissTransferSuggestion: (body) =>
+        apiFetch("/api/transfers/suggestions/dismiss", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+        }).then(json),
+    detectTransfers: () => apiFetch("/api/transfers/detect", { method: "POST" }).then(json),
     createCategory: (body) =>
         apiFetch("/api/categories", {
             method: "POST",
