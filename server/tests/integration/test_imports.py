@@ -3,6 +3,17 @@ import pytest
 pytestmark = pytest.mark.integration
 
 
+def counts(response):
+    body = response.json() if hasattr(response, "json") else response
+    return {"inserted": body["inserted"], "skipped": body["skipped"]}
+
+
+def commit(client, api, rows):
+    return counts(
+        client.post("/api/import/commit", json={"accountId": api.default_account(), "rows": rows})
+    )
+
+
 def test_import_preview_categorizes_and_flags_errors(api, client):
     g = api.group("Expenses")
     api.category("Groceries", g, "Lenta")
@@ -16,14 +27,8 @@ def test_import_preview_categorizes_and_flags_errors(api, client):
 
 def test_import_commit_double_submit_is_idempotent(api, client):
     rows = api.preview(api.statement)
-    first = client.post(
-        "/api/import/commit", json={"accountId": api.default_account(), "rows": rows}
-    ).json()
-    assert first == {"inserted": 2, "skipped": 0}
-    resubmit = client.post(
-        "/api/import/commit", json={"accountId": api.default_account(), "rows": rows}
-    ).json()
-    assert resubmit == {"inserted": 0, "skipped": 2}
+    assert commit(client, api, rows) == {"inserted": 2, "skipped": 0}
+    assert commit(client, api, rows) == {"inserted": 0, "skipped": 2}
     assert client.get("/api/transactions").json()["total"] == 2
 
 
@@ -35,29 +40,14 @@ def test_import_commit_skips_only_the_first_n_already_stored(api, client):
     r0 = api.preview(api.statement)[0]
 
     # fresh DB: three identical rows are all genuinely new
-    assert client.post(
-        "/api/import/commit", json={"accountId": api.default_account(), "rows": [r0, r0, r0]}
-    ).json() == {
-        "inserted": 3,
-        "skipped": 0,
-    }
+    assert commit(client, api, [r0, r0, r0]) == {"inserted": 3, "skipped": 0}
     assert client.get("/api/transactions").json()["total"] == 3
 
     # DB now holds 3; the same three are all skipped
-    assert client.post(
-        "/api/import/commit", json={"accountId": api.default_account(), "rows": [r0, r0, r0]}
-    ).json() == {
-        "inserted": 0,
-        "skipped": 3,
-    }
+    assert commit(client, api, [r0, r0, r0]) == {"inserted": 0, "skipped": 3}
 
     # DB holds 3; five identical -> two beyond the stored three are inserted
-    assert client.post(
-        "/api/import/commit", json={"accountId": api.default_account(), "rows": [r0] * 5}
-    ).json() == {
-        "inserted": 2,
-        "skipped": 3,
-    }
+    assert commit(client, api, [r0] * 5) == {"inserted": 2, "skipped": 3}
     assert client.get("/api/transactions").json()["total"] == 5
 
 

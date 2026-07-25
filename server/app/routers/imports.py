@@ -9,6 +9,7 @@ from ..auth import current_user
 from ..deps import conn
 from ..importer import build_rules, categorize, parse_statement, tx_hash
 from ..ingest import commit_rows, existing_hash_counts
+from ..transfer_service import detect
 from ..workbook.apply import apply_workbook, budget_conflicts
 from ..workbook.importer import WorkbookError, parse_workbook
 
@@ -114,8 +115,14 @@ def import_commit(body: CommitBody, user: Annotated[dict, Depends(current_user)]
             for r in body.rows
         ]
         inserted, skipped = commit_rows(c, body.accountId, rows, source="import")
+        merged, suggested = detect(c, uid)
         c.commit()
-        return {"inserted": inserted, "skipped": skipped}
+        return {
+            "inserted": inserted,
+            "skipped": skipped,
+            "transfersMerged": len(merged),
+            "transfersSuggested": len(suggested),
+        }
     finally:
         c.close()
 
