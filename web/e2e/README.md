@@ -9,6 +9,7 @@ here touches the dev database or dev servers.
 
 ```sh
 make t-slow          # brings the stack up, runs the suite, tears it down
+make t-slow-ui       # playwright's interactive ui: run tests on click, time-travel steps
 ```
 
 CI runs the exact same target. To iterate on specs without rebuilding the
@@ -38,3 +39,9 @@ docker compose -f deploy/docker-compose.test.yml -p monori-e2e down -v
   stay deterministic across month and year rollover.
 - Keep the cap small: a handful of critical journeys. Exhaustive coverage
   belongs in the engine unit tests and backend integration tests.
+- Multi-user journeys (like the workbook round-trip) create extra tenants with
+  `makeUser(request)` and swap them on the open page with `switchUser`.
+
+`fixtures/template-workbook.xlsx` is a miniature of the live YNAB-like
+template the migration importer targets; regenerate it (and its importer
+self-check) with `cd server && uv run python ../scripts/make-e2e-workbook.py`.

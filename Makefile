@@ -8,7 +8,7 @@ WEBBIN := web/node_modules/.bin
         fmt fmt-check \
         lint lint-web lint-css lint-html lint-server lint-sql lint-yaml lint-md lint-docs lint-actions lint-docker lint-shell spell \
         typecheck analyze audit audit-deps audit-deps-py audit-secrets \
-        test t-fast t-medium t-slow coverage mutation \
+        test t-fast t-medium t-slow t-slow-ui coverage mutation \
         schema-diagram check
 
 up:
@@ -128,6 +128,11 @@ t-medium:
 
 t-slow:
 	COMPOSE="$(COMPOSE)" bash scripts/e2e.sh
+
+# playwright's interactive ui: pick tests, run on click, time-travel each step;
+# the stack stays up until the ui window is closed
+t-slow-ui:
+	COMPOSE="$(COMPOSE)" bash scripts/e2e.sh --ui
 
 coverage:
 	bash scripts/coverage-tree.sh
