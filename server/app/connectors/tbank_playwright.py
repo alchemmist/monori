@@ -41,11 +41,12 @@ from urllib.parse import quote
 from ..importer import parse_statement
 from .base import Connector, ConnectorError, SmsRequired, SyncResult, register
 
+# playwright is an optional dependency (see _run); when it is installed we
+# catch its real timeout so only a missing element is skipped. Without the
+# extra the connector can't run a live sync at all, so this fallback type is
+# only ever hit by the flow unit tests, which drive a fake page.
+PlaywrightTimeoutError: type[Exception]
 try:
-    # playwright is an optional dependency (see _run); when it is installed we
-    # catch its real timeout so only a missing element is skipped. Without the
-    # extra the connector can't run a live sync at all, so this fallback type is
-    # only ever hit by the flow unit tests, which drive a fake page.
     from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 except ImportError:
     PlaywrightTimeoutError = Exception
