@@ -12,13 +12,21 @@ function uniqueDemoName(accounts, name) {
     }
 }
 
-async function allTransactions() {
+async function allPages(fetchPage) {
     const rows = [];
     for (;;) {
-        const page = await api.transactions({ limit: 1000, offset: rows.length });
+        const page = await fetchPage(rows.length);
         rows.push(...page.rows);
         if (rows.length >= page.total || page.rows.length === 0) return rows;
     }
+}
+
+async function allTransactions() {
+    const [visible, hidden] = await Promise.all([
+        allPages((offset) => api.transactions({ limit: 1000, offset })),
+        allPages((offset) => api.hiddenTx(offset)),
+    ]);
+    return [...visible, ...hidden];
 }
 
 /**
@@ -121,14 +129,22 @@ export async function seedDemoData() {
     for (const { out, inn } of transferPairs.values()) {
         const fromAccountId = accId.get(out.accountId);
         const toAccountId = accId.get(inn.accountId);
-        const exists = existing.some(
-            (t) =>
+        const exists = existing.some((t) => {
+            if (!(
                 t.transferId &&
                 t.accountId === fromAccountId &&
                 t.amount === -inn.amount &&
                 t.date.slice(0, 10) === out.date &&
-                t.comment === (out.comment ?? ""),
-        );
+                t.comment === (out.comment ?? "")
+            ))
+                return false;
+            return existing.some(
+                (other) =>
+                    other.transferId === t.transferId &&
+                    other.accountId === toAccountId &&
+                    other.amount === inn.amount,
+            );
+        });
         if (!exists) {
             await api.createTransfer({
                 fromAccountId,
