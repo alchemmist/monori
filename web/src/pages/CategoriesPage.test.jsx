@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, renderUI, resetStore, screen, seed, waitFor } from "../test/render.jsx";
+import { fireEvent, renderUI, resetStore, screen, seed, waitFor, within } from "../test/render.jsx";
 import { useStore } from "../store.js";
 import CategoriesPage from "./CategoriesPage.jsx";
 
@@ -21,23 +21,32 @@ describe("CategoriesPage", () => {
             groups,
             categories: [
                 { id: 3, groupId: 2, name: "Rent", keywords: "home", sort: 2, archived: true },
-                { id: 2, groupId: 2, name: "Food", keywords: "market|cafe", sort: 1, archived: false },
+                {
+                    id: 2,
+                    groupId: 2,
+                    name: "Food",
+                    keywords: "market|cafe",
+                    sort: 1,
+                    archived: false,
+                },
                 { id: 1, groupId: 1, name: "Salary", keywords: "", sort: 1, archived: false },
             ],
-            transactions: [{ id: 1, categoryId: 2 }, { id: 2, categoryId: 2 }, { id: 3, categoryId: 3 }],
+            transactions: [
+                { id: 1, categoryId: 2 },
+                { id: 2, categoryId: 2 },
+                { id: 3, categoryId: 3 },
+            ],
         });
         const { container } = renderUI(<CategoriesPage />);
 
         expect(screen.getByRole("heading", { name: "Categories" })).toBeInTheDocument();
-        expect([...container.querySelectorAll(".kb-col__name")].map((el) => el.textContent)).toEqual([
-            "Income",
-            "Spending",
-        ]);
+        expect(
+            [...container.querySelectorAll(".kb-col__name")].map((el) => el.textContent),
+        ).toEqual(["Income", "Spending"]);
         const spending = container.querySelector('[data-gid="2"]');
-        expect([...spending.querySelectorAll(".kb-card__name")].map((el) => el.textContent)).toEqual([
-            "Food",
-            "Rent",
-        ]);
+        expect(
+            [...spending.querySelectorAll(".kb-card__name")].map((el) => el.textContent),
+        ).toEqual(["Food", "Rent"]);
         expect(spending).toHaveTextContent("market, cafe");
         expect(spending).toHaveTextContent("arch");
         expect(screen.getByTitle("2 transactions")).toBeInTheDocument();
@@ -52,8 +61,8 @@ describe("CategoriesPage", () => {
     it("opens the category form from a column and preselects its group", async () => {
         seed({ groups, categories: [] });
         const { user } = renderUI(<CategoriesPage />);
-        const spending = document.querySelector('[data-gid="2"]');
-        await user.click(spending.querySelector(".kb-add-card"));
+        const spending = within(document.querySelector('[data-gid="2"]'));
+        await user.click(spending.getByRole("button", { name: /add category/i }));
         expect(screen.getByRole("dialog")).toBeInTheDocument();
         expect(screen.getByLabelText("Name")).toBeInTheDocument();
         expect(screen.getByRole("button", { name: "GroupSpending" })).toBeInTheDocument();
@@ -71,7 +80,12 @@ describe("CategoriesPage", () => {
     });
 
     it("opens group and category delete forms from row menus", async () => {
-        seed({ groups, categories: [{ id: 2, groupId: 2, name: "Food", keywords: "", sort: 1, archived: false }] });
+        seed({
+            groups,
+            categories: [
+                { id: 2, groupId: 2, name: "Food", keywords: "", sort: 1, archived: false },
+            ],
+        });
         const { user, unmount } = renderUI(<CategoriesPage />);
         const group = document.querySelector('[data-gid="2"]');
         await user.click(group.querySelector(".kb-col__head button"));
@@ -87,13 +101,46 @@ describe("CategoriesPage", () => {
     });
 
     it("archives a category through its row menu", async () => {
-        seed({ groups, categories: [{ id: 2, groupId: 2, name: "Food", keywords: "", sort: 1, archived: false }] });
+        seed({
+            groups,
+            categories: [
+                { id: 2, groupId: 2, name: "Food", keywords: "", sort: 1, archived: false },
+            ],
+        });
         const patchCategory = vi.spyOn(useStore.getState(), "patchCategory").mockResolvedValue();
         const { user } = renderUI(<CategoriesPage />);
         const card = document.querySelector('[data-id="2"]');
         await user.click(card.querySelector("button"));
         await user.click(await screen.findByRole("menuitem", { name: "Archive" }));
-        await waitFor(() => expect(patchCategory).toHaveBeenCalledWith(2, { archived: true }));
+        await waitFor(() =>
+            expect(patchCategory).toHaveBeenCalledExactlyOnceWith(2, { archived: true }),
+        );
+    });
+
+    it("offers unarchiving on an archived category and reports a failure", async () => {
+        seed({
+            groups,
+            categories: [
+                { id: 2, groupId: 2, name: "Food", keywords: "", sort: 1, archived: true },
+            ],
+        });
+        const patchCategory = vi
+            .spyOn(useStore.getState(), "patchCategory")
+            .mockRejectedValue(new Error("offline"));
+        const { user } = renderUI(<CategoriesPage />);
+        const card = document.querySelector('[data-id="2"]');
+        await user.click(card.querySelector("button"));
+        expect(screen.queryByRole("menuitem", { name: "Archive" })).not.toBeInTheDocument();
+        await user.click(await screen.findByRole("menuitem", { name: "Unarchive" }));
+        await waitFor(() =>
+            expect(patchCategory).toHaveBeenCalledExactlyOnceWith(2, { archived: false }),
+        );
+        await waitFor(() =>
+            expect(useStore.getState().toast).toMatchObject({
+                title: "Failed to update category",
+                theme: "danger",
+            }),
+        );
     });
 
     it("moves a dragged category and persists the resulting board order", () => {
@@ -123,8 +170,20 @@ describe("CategoriesPage", () => {
         const { container } = renderUI(<CategoriesPage />);
         const income = container.querySelector('[data-gid="1"]');
         const spending = container.querySelector('[data-gid="2"]');
-        income.getBoundingClientRect = () => ({ left: 0, right: 100, width: 100, top: 0, height: 100 });
-        spending.getBoundingClientRect = () => ({ left: 110, right: 210, width: 100, top: 0, height: 100 });
+        income.getBoundingClientRect = () => ({
+            left: 0,
+            right: 100,
+            width: 100,
+            top: 0,
+            height: 100,
+        });
+        spending.getBoundingClientRect = () => ({
+            left: 110,
+            right: 210,
+            width: 100,
+            top: 0,
+            height: 100,
+        });
         const head = income.querySelector(".kb-col__head");
         fireEvent.pointerDown(head, { button: 0, pointerType: "mouse", clientX: 10, clientY: 10 });
         fireEvent.pointerMove(window, { pointerType: "mouse", clientX: 180, clientY: 20 });

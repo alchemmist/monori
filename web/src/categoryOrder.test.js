@@ -10,10 +10,18 @@ describe("bySortThenId", () => {
         expect(bySortThenId({ id: 5, sort: 3 }, { id: 2, sort: 3 })).toBeGreaterThan(0);
     });
 
-    // demo groups carry no sort at all, so the comparator must not go NaN
-    it("treats a missing sort as zero", () => {
-        expect(bySortThenId({ id: 1 }, { id: 2, sort: 1 })).toBeLessThan(0);
-        expect(bySortThenId({ id: 4 }, { id: 2 })).toBeGreaterThan(0);
+    // demo groups carry no sort at all, so the comparator must not go NaN — and
+    // the fill-in has to be 0 on *both* sides, or a sortless item silently
+    // outranks (or is outranked by) a real sort: 0 item
+    it("treats a missing sort as zero on either side", () => {
+        expect(bySortThenId({ id: 1 }, { id: 2, sort: 1 })).toBe(-1);
+        expect(bySortThenId({ id: 4 }, { id: 2 })).toBe(2);
+        // a missing sort ties with an explicit 0, so the id alone decides
+        expect(bySortThenId({ id: 1 }, { id: 2, sort: 0 })).toBe(-1);
+        expect(bySortThenId({ id: 2, sort: 0 }, { id: 1 })).toBe(1);
+        // and it must lose to a negative sort, not win by an off-by-one default
+        expect(bySortThenId({ id: 1 }, { id: 2, sort: -1 })).toBeGreaterThan(0);
+        expect(bySortThenId({ id: 2, sort: -1 }, { id: 1 })).toBeLessThan(0);
     });
 });
 

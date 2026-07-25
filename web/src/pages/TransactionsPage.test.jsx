@@ -1,11 +1,26 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, renderUI, resetStore, screen, seed, tx, waitFor } from "../test/render.jsx";
+import {
+    fireEvent,
+    renderUI,
+    resetStore,
+    screen,
+    seed,
+    tx,
+    waitFor,
+    within,
+} from "../test/render.jsx";
 import { useStore } from "../store.js";
 import TransactionsPage from "./TransactionsPage.jsx";
 
 vi.mock("../api.js");
-vi.mock("../components/ImportDialog.jsx", () => ({ default: ({ onClose }) => <button onClick={onClose}>Close import</button> }));
-vi.mock("../components/TransferDialog.jsx", () => ({ default: ({ accounts, onClose }) => <button onClick={onClose}>Transfer with {accounts.length} accounts</button> }));
+vi.mock("../components/ImportDialog.jsx", () => ({
+    default: ({ onClose }) => <button onClick={onClose}>Close import</button>,
+}));
+vi.mock("../components/TransferDialog.jsx", () => ({
+    default: ({ accounts, onClose }) => (
+        <button onClick={onClose}>Transfer with {accounts.length} accounts</button>
+    ),
+}));
 
 const accounts = [
     { id: 1, name: "Card", archived: false },
@@ -30,8 +45,18 @@ describe("TransactionsPage", () => {
             groups,
             categories,
             transactions: [
-                tx(1, { description: "Paycheck", amount: 1000, source: "adjustment", date: "2026-03-01" }),
-                tx(2, { description: "Transfer out", transferId: 11, accountId: 2, date: "2026-03-02" }),
+                tx(1, {
+                    description: "Paycheck",
+                    amount: 1000,
+                    source: "adjustment",
+                    date: "2026-03-01",
+                }),
+                tx(2, {
+                    description: "Transfer out",
+                    transferId: 11,
+                    accountId: 2,
+                    date: "2026-03-02",
+                }),
             ],
         });
         useStore.setState({ txProgress: { loaded: 2, total: 5 } });
@@ -45,7 +70,12 @@ describe("TransactionsPage", () => {
     });
 
     it("filters by free-text and clears the search", async () => {
-        seed({ transactions: [tx(1, { description: "Coffee shop", bankCategory: "Cafe" }), tx(2, { description: "Monthly rent", bankCategory: "Housing" })] });
+        seed({
+            transactions: [
+                tx(1, { description: "Coffee shop", bankCategory: "Cafe" }),
+                tx(2, { description: "Monthly rent", bankCategory: "Housing" }),
+            ],
+        });
         const { user } = renderUI(<TransactionsPage />);
         const search = screen.getByLabelText("Search description");
         await user.type(search, "housing");
@@ -69,31 +99,37 @@ describe("TransactionsPage", () => {
             categories,
             transactions: [
                 tx(1, { description: "Old food", date: "2025-12-01", accountId: 1, categoryId: 2 }),
-                tx(2, { description: "New uncategorized", date: "2026-03-01", accountId: 2, categoryId: null }),
+                tx(2, {
+                    description: "New uncategorized",
+                    date: "2026-03-01",
+                    accountId: 2,
+                    categoryId: null,
+                }),
                 tx(3, { description: "New food", date: "2026-03-02", accountId: 1, categoryId: 2 }),
             ],
         });
-        const { user } = renderUI(<TransactionsPage />);
-        const filters = document.querySelectorAll(".gsel");
+        const { container, user } = renderUI(<TransactionsPage />);
+        const toolbar = within(container.querySelector(".budget-toolbar"));
+        /** Toolbar filters carry their current selection as their label. */
+        const pick = async (current, option) => {
+            await user.click(toolbar.getByRole("button", { name: current }));
+            await user.click(screen.getByRole("option", { name: option, hidden: true }));
+        };
 
-        await user.click(filters[1]);
-        await user.click(screen.getByRole("option", { name: "2025", hidden: true }));
+        await pick("All years", "2025");
         expect(screen.getByText("Old food")).toBeInTheDocument();
         expect(screen.queryByText("New food")).not.toBeInTheDocument();
 
-        await user.click(filters[1]);
-        await user.click(screen.getByRole("option", { name: "All years", hidden: true }));
-        await user.click(filters[2]);
-        await user.click(screen.getByRole("option", { name: "Savings", hidden: true }));
+        await pick("2025", "All years");
+        await pick("All accounts", "Savings");
         expect(screen.getByText("New uncategorized")).toBeInTheDocument();
         expect(screen.queryByText("New food")).not.toBeInTheDocument();
 
-        await user.click(filters[0]);
-        await user.click(screen.getByRole("option", { name: "Uncategorized", hidden: true }));
+        await pick("All categories", "Uncategorized");
         expect(screen.getByText("New uncategorized")).toBeInTheDocument();
-        await user.click(filters[2]);
-        await user.click(screen.getByRole("option", { name: "All accounts", hidden: true }));
+        await pick("Savings", "All accounts");
         expect(screen.getByText("New uncategorized")).toBeInTheDocument();
+        expect(screen.queryByText("Old food")).not.toBeInTheDocument();
     });
 
     it("keeps archived account and category selected on legacy rows", async () => {
@@ -111,7 +147,12 @@ describe("TransactionsPage", () => {
     });
 
     it("changes an ordinary row's account and category", async () => {
-        seed({ accounts, groups, categories, transactions: [tx(1, { categoryId: 2, accountId: 1 })] });
+        seed({
+            accounts,
+            groups,
+            categories,
+            transactions: [tx(1, { categoryId: 2, accountId: 1 })],
+        });
         const setTxAccount = vi.spyOn(useStore.getState(), "setTxAccount").mockResolvedValue();
         const setTxCategory = vi.spyOn(useStore.getState(), "setTxCategory").mockResolvedValue();
         const { user } = renderUI(<TransactionsPage />);
@@ -131,7 +172,9 @@ describe("TransactionsPage", () => {
         await user.click(screen.getByRole("button", { name: "Import statement" }));
         expect(screen.getByRole("button", { name: "Close import" })).toBeInTheDocument();
         await user.click(screen.getByRole("button", { name: "Transfer" }));
-        expect(screen.getByRole("button", { name: "Transfer with 3 accounts" })).toBeInTheDocument();
+        expect(
+            screen.getByRole("button", { name: "Transfer with 3 accounts" }),
+        ).toBeInTheDocument();
         unmount();
         seed({ accounts: [accounts[0]], transactions: [] });
         renderUI(<TransactionsPage />);

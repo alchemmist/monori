@@ -3,89 +3,50 @@ import ChartCard, { ChartBoundary } from "./ChartCard.jsx";
 import { renderUI, screen } from "../test/render.jsx";
 
 describe("ChartCard", () => {
-    it("renders title", () => {
-        renderUI(<ChartCard title="Test Chart">Content</ChartCard>);
-        expect(screen.getByText("Test Chart")).toBeInTheDocument();
-    });
-
-    it("renders children content", () => {
-        renderUI(<ChartCard title="Test">Hello World</ChartCard>);
-        expect(screen.getByText("Hello World")).toBeInTheDocument();
-    });
-
-    it("applies card class", () => {
-        const { container } = renderUI(<ChartCard title="Test">Content</ChartCard>);
-        expect(container.querySelector("div.card")).toBeInTheDocument();
-    });
-
-    it("applies chart-card class", () => {
-        const { container } = renderUI(<ChartCard title="Test">Content</ChartCard>);
-        expect(container.querySelector("div.chart-card")).toBeInTheDocument();
-    });
-
-    it("applies chart-card_wide class when wide prop is true", () => {
+    it("frames its title, controls and chart body", () => {
         const { container } = renderUI(
-            <ChartCard title="Test" wide>
-                Content
+            <ChartCard title="Spending" controls={<button>Filter</button>}>
+                Chart body
             </ChartCard>,
         );
-        expect(container.querySelector("div.chart-card_wide")).toBeInTheDocument();
+        const card = container.querySelector(".chart-card");
+        expect(card).toHaveClass("card");
+        expect(screen.getByText("Spending").closest(".chart-card__head")).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Filter" }).closest(".chart-card__head")).toBe(
+            card.querySelector(".chart-card__head"),
+        );
+        expect(screen.getByText("Chart body").closest(".chart-card__body")).toBeInTheDocument();
     });
 
-    it("does not apply chart-card_wide class when wide prop is false", () => {
-        const { container } = renderUI(<ChartCard title="Test">Content</ChartCard>);
-        expect(container.querySelector("div.chart-card_wide")).not.toBeInTheDocument();
-    });
+    it("takes the wide and tall modifiers only when asked to", () => {
+        const plain = renderUI(<ChartCard title="Plain">Body</ChartCard>);
+        expect(plain.container.querySelector(".chart-card")).not.toHaveClass("chart-card_wide");
+        expect(plain.container.querySelector(".chart-card__body")).not.toHaveClass(
+            "chart-card__body_tall",
+        );
+        plain.unmount();
 
-    it("applies chart-card__body_tall class when tall prop is true", () => {
         const { container } = renderUI(
-            <ChartCard title="Test" tall>
-                Content
+            <ChartCard title="Big" wide tall>
+                Body
             </ChartCard>,
         );
-        expect(container.querySelector("div.chart-card__body_tall")).toBeInTheDocument();
+        expect(container.querySelector(".chart-card")).toHaveClass("chart-card_wide");
+        expect(container.querySelector(".chart-card__body")).toHaveClass("chart-card__body_tall");
     });
 
-    it("does not apply chart-card__body_tall class when tall prop is false", () => {
-        const { container } = renderUI(<ChartCard title="Test">Content</ChartCard>);
-        expect(container.querySelector("div.chart-card__body_tall")).not.toBeInTheDocument();
-    });
-
-    it("renders controls when provided", () => {
-        renderUI(
-            <ChartCard title="Test" controls={<button>Filter</button>}>
-                Content
-            </ChartCard>,
-        );
-        expect(screen.getByRole("button", { name: "Filter" })).toBeInTheDocument();
-    });
-
-    it("wraps children in ChartBoundary", () => {
-        const { container } = renderUI(<ChartCard title="Test">Test Content</ChartCard>);
-        expect(container.querySelector("div.chart-card__body")).toBeInTheDocument();
-        expect(screen.getByText("Test Content")).toBeInTheDocument();
-    });
-
-    it("renders title in chart-card__head", () => {
-        const { container } = renderUI(<ChartCard title="Test Title">Content</ChartCard>);
-        const title = screen.getByText("Test Title");
-        expect(title.closest(".chart-card__head")).toBeInTheDocument();
-    });
-
-    it("renders title in chart-card__title", () => {
-        const { container } = renderUI(<ChartCard title="Test Title">Content</ChartCard>);
-        const title = screen.getByText("Test Title");
-        expect(title.classList.contains("chart-card__title")).toBe(true);
-    });
-
-    it("combines wide and tall classes", () => {
+    it("catches a throwing chart without taking the surrounding card down", () => {
+        const Boom = () => {
+            throw new Error("bad series");
+        };
         const { container } = renderUI(
-            <ChartCard title="Test" wide tall>
-                Content
+            <ChartCard title="Spending">
+                <Boom />
             </ChartCard>,
         );
-        expect(container.querySelector("div.chart-card_wide")).toBeInTheDocument();
-        expect(container.querySelector("div.chart-card__body_tall")).toBeInTheDocument();
+        expect(screen.getByText("Spending")).toBeInTheDocument();
+        expect(screen.getByText("No data for this chart")).toBeInTheDocument();
+        expect(container.querySelector(".chart-card__body")).toBeInTheDocument();
     });
 });
 
@@ -132,22 +93,7 @@ describe("ChartBoundary", () => {
         expect(screen.getByText("Second Content")).toBeInTheDocument();
     });
 
-    it("applies correct styling to error message", () => {
-        const ThrowingComponent = () => {
-            throw new Error("Chart render error");
-        };
-
-        const { container } = renderUI(
-            <ChartBoundary>
-                <ThrowingComponent />
-            </ChartBoundary>,
-        );
-
-        const errorDiv = container.querySelector("div");
-        expect(errorDiv).toHaveStyle({ display: "grid" });
-    });
-
-    it("error message has faint text color", () => {
+    it("greys out the fallback message", () => {
         const ThrowingComponent = () => {
             throw new Error("Chart render error");
         };
@@ -159,6 +105,7 @@ describe("ChartBoundary", () => {
         );
 
         expect(screen.getByText("No data for this chart")).toHaveStyle({
+            display: "grid",
             color: "var(--m-text-faint)",
         });
     });

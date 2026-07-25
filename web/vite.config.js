@@ -25,8 +25,9 @@ export default defineConfig({
         environment: "jsdom",
         setupFiles: ["src/test/setup.js"],
         // component tests wait on real DOM updates; the default 5s holds
-        // locally but not on a loaded runner with several workers competing
-        testTimeout: 20000,
+        // locally but not under v8 instrumentation on a loaded runner, where
+        // a lazy route plus the demo dataset can take tens of seconds to mount
+        testTimeout: 30000,
         coverage: {
             provider: "v8",
             all: true,

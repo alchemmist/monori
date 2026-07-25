@@ -6,7 +6,13 @@ vi.mock("@mantine/core", async (importOriginal) => {
     return {
         ...actual,
         Textarea: forwardRef(({ value, onChange, onKeyDown, ...props }, ref) => (
-            <textarea ref={ref} value={value} onChange={onChange} onKeyDown={onKeyDown} {...props} />
+            <textarea
+                ref={ref}
+                value={value}
+                onChange={onChange}
+                onKeyDown={onKeyDown}
+                {...props}
+            />
         )),
     };
 });
@@ -17,45 +23,86 @@ import { renderUI, resetStore, screen, waitFor } from "../test/render.jsx";
 import { useStore } from "../store.js";
 
 vi.mock("../ui/Tab.jsx", () => ({
-    default: ({ title, children, footer }) => <section><h1>{title}</h1>{children}<footer>{footer}</footer></section>,
+    default: ({ title, children, footer }) => (
+        <section>
+            <h1>{title}</h1>
+            {children}
+            <footer>{footer}</footer>
+        </section>
+    ),
 }));
 
 vi.mock("../ui/fields.jsx", () => ({
     FSelect: ({ label, value, onChange, data }) => (
-        <label>{label}<select value={value} onChange={(e) => onChange(e.target.value)}>
-            {data.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-        </select></label>
+        <label>
+            {label}
+            <select value={value} onChange={(e) => onChange(e.target.value)}>
+                {data.map((option) => (
+                    <option key={option.value} value={option.value}>
+                        {option.label}
+                    </option>
+                ))}
+            </select>
+        </label>
     ),
 }));
 
 const rows = [
-    { id: 1, account: "Card", date: "2026-01-01", description: "Coffee", category: "Food", amount: -350 },
-    { id: 2, account: "Cash", date: "2026-01-02", description: "Salary", category: "Income", amount: 10000 },
+    {
+        id: 1,
+        account: "Card",
+        date: "2026-01-01",
+        description: "Coffee",
+        category: "Food",
+        amount: -350,
+    },
+    {
+        id: 2,
+        account: "Cash",
+        date: "2026-01-02",
+        description: "Salary",
+        category: "Income",
+        amount: 10000,
+    },
 ];
 
 describe("AdminSqlTab", () => {
-    beforeEach(() => { resetStore(); });
+    beforeEach(() => {
+        resetStore();
+    });
     afterEach(() => vi.restoreAllMocks());
 
     it("runs a read query, renders values safely and restores it from history", async () => {
         vi.spyOn(api, "adminSql").mockResolvedValue({
-            kind: "read", rowCount: 1, elapsedMs: 3, columns: ["name", "value"],
-            rows: [["x".repeat(205), null]], truncated: true,
+            kind: "read",
+            rowCount: 1,
+            elapsedMs: 3,
+            columns: ["name", "value"],
+            rows: [["x".repeat(205), null]],
+            truncated: true,
         });
         const { user } = renderUI(<AdminSqlTab onClose={vi.fn()} />);
         await user.type(screen.getByLabelText("SQL statement"), "select 1");
         await user.click(screen.getByRole("button", { name: "Run" }));
         await screen.findByText(/1 row · 3 ms · showing first 1 rows/);
         expect(screen.getByText("NULL")).toBeInTheDocument();
-        expect(screen.getByText(/…$/)).toBeInTheDocument();
+        // long values are cut to exactly 200 characters plus the ellipsis
+        expect(screen.getByText(/…$/)).toHaveTextContent(new RegExp(`^x{200}…$`));
         await user.click(screen.getByRole("button", { name: "select 1" }));
         expect(screen.getByLabelText("SQL statement")).toHaveValue("select 1");
     });
 
     it("turns a refused write into a confirmation and bumps admin data after apply", async () => {
-        const run = vi.spyOn(api, "adminSql")
+        const run = vi
+            .spyOn(api, "adminSql")
             .mockRejectedValueOnce(new Error("write needs confirmation: 2 rows"))
-            .mockResolvedValueOnce({ kind: "write", rowCount: 2, elapsedMs: 5, columns: [], rows: [] });
+            .mockResolvedValueOnce({
+                kind: "write",
+                rowCount: 2,
+                elapsedMs: 5,
+                columns: [],
+                rows: [],
+            });
         const { user } = renderUI(<AdminSqlTab onClose={vi.fn()} />);
         await user.type(screen.getByLabelText("SQL statement"), "delete from tx");
         await user.click(screen.getByRole("button", { name: "Run" }));
@@ -75,16 +122,24 @@ describe("AdminSqlTab", () => {
 });
 
 describe("AdminTxTab", () => {
-    beforeEach(() => { resetStore(); useStore.setState({ adminTick: 0 }); });
+    beforeEach(() => {
+        resetStore();
+        useStore.setState({ adminTick: 0 });
+    });
     afterEach(() => vi.restoreAllMocks());
 
     it("loads, filters, selects and deletes the chosen transactions after confirmation", async () => {
-        const load = vi.spyOn(api, "adminUserTransactions")
+        const load = vi
+            .spyOn(api, "adminUserTransactions")
             .mockResolvedValueOnce(rows)
             .mockResolvedValueOnce(rows)
             .mockResolvedValueOnce(rows);
-        const remove = vi.spyOn(api, "adminDeleteUserTransactions").mockResolvedValue({ deleted: 1 });
-        const { user } = renderUI(<AdminTxTab user={{ id: 7, email: "person@example.test" }} onClose={vi.fn()} />);
+        const remove = vi
+            .spyOn(api, "adminDeleteUserTransactions")
+            .mockResolvedValue({ deleted: 1 });
+        const { user } = renderUI(
+            <AdminTxTab user={{ id: 7, email: "person@example.test" }} onClose={vi.fn()} />,
+        );
         await screen.findByText("Coffee");
         await user.click(screen.getByText("Coffee"));
         expect(screen.getByText("1 selected")).toBeInTheDocument();
@@ -97,7 +152,9 @@ describe("AdminTxTab", () => {
 
     it("shows an empty state after account filtering", async () => {
         vi.spyOn(api, "adminUserTransactions").mockResolvedValue(rows);
-        const { user } = renderUI(<AdminTxTab user={{ id: 7, email: "person@example.test" }} onClose={vi.fn()} />);
+        const { user } = renderUI(
+            <AdminTxTab user={{ id: 7, email: "person@example.test" }} onClose={vi.fn()} />,
+        );
         await screen.findByText("Coffee");
         await user.selectOptions(screen.getByLabelText("Account"), "Cash");
         expect(screen.getByText("Salary")).toBeInTheDocument();

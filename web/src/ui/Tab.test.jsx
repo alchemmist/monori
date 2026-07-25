@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import Tab from "./Tab.jsx";
-import { renderUI, screen, fireEvent, waitFor } from "../test/render.jsx";
+import { act, renderUI, screen, fireEvent, waitFor } from "../test/render.jsx";
 
 const fakeStorage = () => {
     const map = new Map();
@@ -11,8 +11,20 @@ const fakeStorage = () => {
     };
 };
 
+/** "420px" -> 420, so offsets can be compared as numbers. */
+const px = (value) => Number.parseFloat(value);
+
+// the jsdom stub in test/setup.js measures every element at 1200px wide, which
+// is the width a tab registers with the stack and the width a drag starts from
+const RENDERED_TAB_WIDTH = 1200;
+
+/** The resize clamp is a share of the viewport, so pin it for the drag tests. */
+const setViewportWidth = (value) =>
+    Object.defineProperty(window, "innerWidth", { configurable: true, value });
+
 beforeEach(() => {
     vi.stubGlobal("localStorage", fakeStorage());
+    setViewportWidth(1000);
 });
 
 afterEach(() => {
@@ -70,18 +82,6 @@ describe("Tab", () => {
             </Tab>,
         );
         expect(screen.getByRole("button", { name: "Save" })).toBeInTheDocument();
-    });
-
-    it("has the proper structure with header and content", () => {
-        const { container } = renderUI(
-            <Tab title="Test" strip="T" onClose={() => {}}>
-                <p>body</p>
-            </Tab>,
-        );
-        expect(container.querySelector(".ui-tab__head")).toBeInTheDocument();
-        expect(container.querySelector(".ui-tab__title")).toBeInTheDocument();
-        expect(container.querySelector(".ui-tab__content")).toBeInTheDocument();
-        expect(container.querySelector(".ui-tab__head-actions")).toBeInTheDocument();
     });
 
     it("renders collapse and close buttons in the header", () => {
@@ -149,17 +149,26 @@ describe("Tab", () => {
         expect(grip).toHaveAttribute("aria-orientation", "vertical");
     });
 
-    it("registers and unregisters the tab with the stack on mount/unmount", () => {
-        const { unmount } = renderUI(
-            <Tab title="SQL" strip="SQL" onClose={() => {}}>
-                <p>query</p>
+    // two tabs open at once must not overlap: the second is pushed left by the
+    // first tab's width, and closing the first pulls it back to the edge
+    it("takes a slot in the shared stack and gives it back on unmount", () => {
+        const { container: first, unmount: closeFirst } = renderUI(
+            <Tab title="First" strip="F" onClose={() => {}}>
+                <p>one</p>
             </Tab>,
         );
+        const base = px(first.querySelector("aside").style.right);
 
-        expect(screen.getByText("query")).toBeInTheDocument();
+        const { container: second } = renderUI(
+            <Tab title="Second" strip="S" onClose={() => {}}>
+                <p>two</p>
+            </Tab>,
+        );
+        const later = second.querySelector("aside");
+        expect(px(later.style.right)).toBe(base + RENDERED_TAB_WIDTH);
 
-        unmount();
-        expect(screen.queryByText("query")).not.toBeInTheDocument();
+        closeFirst();
+        expect(px(later.style.right)).toBe(base);
     });
 
     it("clears user-select and cursor on unmount to prevent dangling styles", () => {
@@ -314,7 +323,9 @@ describe("Tab", () => {
         expect(container2.querySelector(".ui-tab__grip")).not.toBeInTheDocument();
     });
 
-    it("creates a unique id for each tab instance", () => {
+    // the stack keys tabs by id, so two tabs sharing one would fight over the
+    // same slot — visible as both landing on the same right offset
+    it("gives each tab instance its own stack slot", () => {
         const { container: c1 } = renderUI(
             <Tab title="Tab1" strip="T1" onClose={() => {}}>
                 <p>content1</p>
@@ -326,14 +337,125 @@ describe("Tab", () => {
             </Tab>,
         );
 
-        const aside1 = c1.querySelector("aside");
-        const aside2 = c2.querySelector("aside");
-        expect(aside1).toBeInTheDocument();
-        expect(aside2).toBeInTheDocument();
+        const right1 = px(c1.querySelector("aside").style.right);
+        const right2 = px(c2.querySelector("aside").style.right);
+        expect(right2).toBe(right1 + RENDERED_TAB_WIDTH);
+        expect(right1).not.toBe(right2);
+    });
+
+    // dragging is what the user just did; a `width` prop is only the default the
+    // call site asked for, so the drag has to win — otherwise the tab snaps back
+    it("lets a dragged width override the declared width prop", () => {
+        const { container } = renderUI(
+            <Tab title="SQL" strip="SQL" width={60} persistKey="prec" onClose={() => {}}>
+                content
+            </Tab>,
+        );
+        const tab = container.querySelector(".ui-tab");
+        expect(tab.style.getPropertyValue("--ui-tab-w")).toBe("60vw");
+
+        const grip = container.querySelector(".ui-tab__grip");
+        // the tab measures 1200px in jsdom; pushing the grip 600px right
+        // narrows it to 600, inside the 100..900 clamp for a 1000px viewport
+        fireEvent.pointerDown(grip, { pointerId: 1, clientX: 200 });
+        fireEvent.pointerMove(window, { clientX: 800 });
+        fireEvent.pointerUp(window, { clientX: 800 });
+        expect(tab.style.getPropertyValue("--ui-tab-w")).toBe("600px");
+
+        // and resetting the drag hands the prop back its say
+        fireEvent.doubleClick(grip);
+        expect(tab.style.getPropertyValue("--ui-tab-w")).toBe("60vw");
+    });
+
+    it("restores a remembered drag over the width prop on the next mount", () => {
+        localStorage.setItem("monori_tab_width", JSON.stringify({ saved: 640 }));
+        const { container } = renderUI(
+            <Tab title="SQL" strip="SQL" width={60} persistKey="saved" onClose={() => {}}>
+                content
+            </Tab>,
+        );
+        expect(container.querySelector(".ui-tab").style.getPropertyValue("--ui-tab-w")).toBe(
+            "640px",
+        );
+    });
+
+    // the strip is the collapsed tab's only affordance; while the tab is open it
+    // is decorative, so it must be out of the tab order and hidden from AT
+    it("moves the strip in and out of the tab order with the collapse state", async () => {
+        const { user, container } = renderUI(
+            <Tab title="Details" strip="D" onClose={() => {}}>
+                <p>content</p>
+            </Tab>,
+        );
+        const strip = container.querySelector(".ui-tab__strip");
+        expect(strip).toHaveAttribute("tabindex", "-1");
+        expect(strip).toHaveAttribute("aria-hidden", "true");
+
+        await user.click(screen.getByRole("button", { name: /collapse/i }));
+
+        await waitFor(() => expect(strip).toHaveAttribute("tabindex", "0"));
+        expect(strip).toHaveAttribute("aria-hidden", "false");
+    });
+
+    // a collapsed tab offers no resize at all: the grip is gone, so no pointer
+    // gesture anywhere on it can start a drag or leave the page unselectable
+    it("offers no resize handle at all while collapsed", async () => {
+        const { user, container } = renderUI(
+            <Tab title="Details" strip="D" defaultCollapsed onClose={() => {}}>
+                content
+            </Tab>,
+        );
+        const tab = container.querySelector(".ui-tab");
+        expect(container.querySelector(".ui-tab__grip")).not.toBeInTheDocument();
+
+        fireEvent.pointerDown(tab, { pointerId: 1, clientX: 800 });
+        fireEvent.pointerMove(window, { clientX: 100 });
+        expect(document.body.style.userSelect).toBe("");
+        expect(document.body.style.cursor).toBe("");
+        expect(tab.style.getPropertyValue("--ui-tab-w")).toBe("");
+
+        // expanding brings the handle back, and it works
+        await user.click(screen.getByRole("button", { name: /expand/i }));
+        const grip = await waitFor(() => {
+            const el = container.querySelector(".ui-tab__grip");
+            expect(el).toBeInTheDocument();
+            return el;
+        });
+        fireEvent.pointerDown(grip, { pointerId: 1, clientX: 200 });
+        expect(document.body.style.userSelect).toBe("none");
+        fireEvent.pointerUp(window, { clientX: 200 });
+    });
+
+    // transitionend can be missed entirely (reduced motion, an interrupted
+    // transition), so the gate has to lift on its own well inside a second
+    it("lifts the input gate on a failsafe timer when no transition ever ends", async () => {
+        vi.useFakeTimers();
+        try {
+            const { container } = renderUI(
+                <Tab title="Details" strip="D" onClose={() => {}}>
+                    content
+                </Tab>,
+            );
+            const tab = container.querySelector(".ui-tab");
+            fireEvent.click(screen.getByRole("button", { name: /collapse/i }));
+            expect(tab).toHaveClass("ui-tab_animating");
+
+            act(() => vi.advanceTimersByTime(399));
+            expect(tab).toHaveClass("ui-tab_animating");
+
+            act(() => vi.advanceTimersByTime(1));
+            expect(tab).not.toHaveClass("ui-tab_animating");
+        } finally {
+            vi.useRealTimers();
+        }
     });
 
     it("ends its input gate on the relevant width transition", async () => {
-        const { user, container } = renderUI(<Tab title="Details" strip="D" onClose={() => {}}>content</Tab>);
+        const { user, container } = renderUI(
+            <Tab title="Details" strip="D" onClose={() => {}}>
+                content
+            </Tab>,
+        );
         const tab = container.querySelector(".ui-tab");
         await user.click(screen.getByRole("button", { name: /collapse/i }));
         expect(tab).toHaveClass("ui-tab_animating");
@@ -344,8 +466,11 @@ describe("Tab", () => {
     });
 
     it("resizes within viewport bounds, persists the width, and resets it", () => {
-        Object.defineProperty(window, "innerWidth", { configurable: true, value: 1000 });
-        const { container } = renderUI(<Tab title="Details" strip="D" persistKey="resize" onClose={() => {}}>content</Tab>);
+        const { container } = renderUI(
+            <Tab title="Details" strip="D" persistKey="resize" onClose={() => {}}>
+                content
+            </Tab>,
+        );
         const tab = container.querySelector(".ui-tab");
         const grip = container.querySelector(".ui-tab__grip");
         fireEvent.pointerDown(grip, { pointerId: 1, clientX: 800 });

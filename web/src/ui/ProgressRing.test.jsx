@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import ProgressRing from "./ProgressRing.jsx";
-import { renderUI, screen } from "../test/render.jsx";
+import { render, renderUI, screen } from "../test/render.jsx";
 
 const realMatchMedia = window.matchMedia;
 
@@ -63,5 +63,19 @@ describe("ProgressRing", () => {
         const { container } = renderUI(<ProgressRing value={0.6} label="Importing" />);
         expect(screen.getByRole("status", { name: "Importing" })).toHaveTextContent("60%");
         expect(container.querySelector("svg")).toBeNull();
+    });
+
+    // an environment that cannot answer the query has not asked for reduced
+    // motion — assuming it did would strip the ring from every such browser.
+    // These render without the Mantine provider, which needs a real matchMedia.
+    it.each([
+        ["answers nothing", () => undefined],
+        ["answers without a matches field", () => ({})],
+        ["is missing entirely", undefined],
+    ])("still draws the ring when matchMedia %s", (_label, stub) => {
+        window.matchMedia = stub;
+        const { container } = render(<ProgressRing value={0.5} label="x" />);
+        expect(container.querySelector(".progress-ring__value")).toBeInTheDocument();
+        expect(container.querySelector("svg")).toBeInTheDocument();
     });
 });

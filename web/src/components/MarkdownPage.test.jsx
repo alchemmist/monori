@@ -1,45 +1,59 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import MarkdownPage from "./MarkdownPage.jsx";
-import { renderUI, screen, waitFor, resetStore } from "../test/render.jsx";
+import { renderUI, screen, resetStore } from "../test/render.jsx";
 
 vi.mock("./Mermaid.jsx", () => ({
     default: ({ chart, fullscreenHref }) => (
-        <div data-testid="mermaid" data-chart={chart}>
+        <div data-testid="mermaid" data-chart={chart} data-href={fullscreenHref ?? ""}>
             Mermaid diagram
         </div>
     ),
 }));
 
-vi.mock("../content.js", () => ({
-    sectionBySlug: (slug) => {
-        if (slug === "getting-started") {
+// only the page catalogue is stubbed — mermaidCharts is the real parser, so the
+// diagram indices the page hands out are the ones production would compute
+vi.mock("../content.js", async (importOriginal) => {
+    const actual = await importOriginal();
+    const sections = [
+        {
+            slug: "getting-started",
+            title: "Getting Started",
+            body: "# Getting Started\n\n## Second stop\n\nThis is the intro page.",
+        },
+        {
+            slug: "api",
+            title: "REST API",
+            body: [
+                "# REST API",
+                "",
+                "[Guide](./getting-started.md) [Home](./README.md) [Web](https://example.com)",
+                "",
+                "| A | B |",
+                "|---|---|",
+                "| 1 | 2 |",
+                "",
+                "```mermaid\ngraph TD\n  A-->B\n```",
+                "",
+                "```mermaid\ngraph LR\n  C-->D\n```",
+                "",
+                "```js\nconst x = 1;\n```",
+            ].join("\n"),
+        },
+    ];
+    return {
+        ...actual,
+        NAV: [{ group: "Docs", items: sections }],
+        sectionBySlug: (slug) => sections.find((s) => s.slug === slug),
+        neighbors: (slug) => {
+            const i = sections.findIndex((s) => s.slug === slug);
             return {
-                slug: "getting-started",
-                title: "Getting Started",
-                body: "# Getting Started\n\nThis is the intro page.",
+                prev: i > 0 ? sections[i - 1] : null,
+                next: i >= 0 && i < sections.length - 1 ? sections[i + 1] : null,
             };
-        }
-        if (slug === "api") {
-            return {
-                slug: "api",
-                title: "REST API",
-                body: "# REST API\n\n[Guide](./getting-started.md) [Web](https://example.com)\n\n| A | B |\n|---|---|\n| 1 | 2 |\n\n```mermaid\ngraph TD\n  A-->B\n```",
-            };
-        }
-        return null;
-    },
-    neighbors: (slug) => {
-        if (slug === "getting-started") {
-            return { prev: null, next: { slug: "api", title: "REST API" } };
-        }
-        return { prev: null, next: null };
-    },
-    mermaidCharts: (body) => {
-        const matches = [...String(body ?? "").matchAll(/```mermaid[^\n]*\n([\s\S]*?)```/g)];
-        return matches.map((m) => m[1].replace(/\n$/, ""));
-    },
-}));
+        },
+    };
+});
 
 describe("MarkdownPage", () => {
     beforeEach(() => {
@@ -62,6 +76,7 @@ describe("MarkdownPage", () => {
             "href",
             "/docs/api",
         );
+        expect(screen.queryByRole("link", { name: /previous/i })).not.toBeInTheDocument();
     });
 
     it("shows not found for invalid slug", async () => {
@@ -72,25 +87,53 @@ describe("MarkdownPage", () => {
         expect(screen.getByRole("heading", { name: "Getting Started" })).toBeInTheDocument();
     });
 
-    it("turns Mermaid fences into diagrams and preserves links and tables", () => {
-        const { container } = renderPage("/docs/api");
-        expect(screen.getByTestId("mermaid")).toHaveAttribute("data-chart", "graph TD\n  A-->B");
-        expect(container.querySelector(".md-table-wrap table")).toBeInTheDocument();
+    it("rewrites in-repo markdown links, sending README to the docs entry page", () => {
+        renderPage("/docs/api");
         expect(screen.getByRole("link", { name: "Guide" })).toHaveAttribute(
             "href",
             "/docs/getting-started",
         );
+        expect(screen.getByRole("link", { name: "Home" })).toHaveAttribute(
+            "href",
+            "/docs/getting-started",
+        );
         expect(screen.getByRole("link", { name: "Web" })).toHaveAttribute("target", "_blank");
+        expect(screen.getByRole("link", { name: "Web" })).toHaveAttribute(
+            "href",
+            "https://example.com",
+        );
     });
 
-    it("scrolls to an existing hash target, otherwise resets page scroll", () => {
+    it("turns Mermaid fences into diagrams, each linking to its own full-screen view", () => {
+        const { container } = renderPage("/docs/api");
+        const diagrams = screen.getAllByTestId("mermaid");
+        expect(diagrams).toHaveLength(2);
+        expect(diagrams[0]).toHaveAttribute("data-chart", "graph TD\n  A-->B");
+        expect(diagrams[0]).toHaveAttribute("data-href", "/docs/api/diagram/0");
+        expect(diagrams[1]).toHaveAttribute("data-chart", "graph LR\n  C-->D");
+        expect(diagrams[1]).toHaveAttribute("data-href", "/docs/api/diagram/1");
+        // a non-mermaid fence keeps its plain <pre>
+        expect(container.querySelector("pre code.language-js")).toBeInTheDocument();
+        expect(container.querySelector(".md-table-wrap table")).toBeInTheDocument();
+    });
+
+    it("scrolls to an existing hash target instead of resetting the page scroll", () => {
         const scrollIntoView = vi.fn();
         window.HTMLElement.prototype.scrollIntoView = scrollIntoView;
-        const scrollSpy = vi.spyOn(window, "scrollTo");
-        renderPage("/docs/getting-started#getting-started");
-        expect(scrollIntoView).toHaveBeenCalled();
+        const scrollTo = vi.spyOn(window, "scrollTo").mockImplementation(() => {});
+
+        renderPage("/docs/getting-started#second-stop");
+        expect(scrollIntoView).toHaveBeenCalledOnce();
+        expect(scrollTo).not.toHaveBeenCalled();
+    });
+
+    it("resets the page scroll when the hash points at nothing", () => {
+        const scrollIntoView = vi.fn();
+        window.HTMLElement.prototype.scrollIntoView = scrollIntoView;
+        const scrollTo = vi.spyOn(window, "scrollTo").mockImplementation(() => {});
+
         renderPage("/docs/getting-started#missing");
-        expect(scrollSpy).toHaveBeenCalledWith(0, 0);
-        scrollSpy.mockRestore();
+        expect(scrollTo).toHaveBeenCalledWith(0, 0);
+        expect(scrollIntoView).not.toHaveBeenCalled();
     });
 });

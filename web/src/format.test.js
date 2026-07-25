@@ -100,7 +100,20 @@ describe("format", () => {
 
         it("formats small amounts without suffix", () => {
             expect(moneyCompact(50000)).toBe("500");
-            expect(moneyCompact(999900)).toMatch(/^10/);
+            expect(moneyCompact(99900)).toBe("999");
+        });
+
+        // both cut-offs are inclusive: exactly 1k is "1k", exactly 1M is "1.0M"
+        it("switches suffix at the boundary itself, not one unit past it", () => {
+            expect(moneyCompact(99_999_999)).toBe("1000k");
+            expect(moneyCompact(100_000_000)).toBe("1.0M");
+            expect(moneyCompact(99_900)).toBe("999");
+            expect(moneyCompact(100_000)).toBe("1k");
+        });
+
+        it("switches suffix at the negative boundary too", () => {
+            expect(moneyCompact(-100_000_000)).toBe("-1.0M");
+            expect(moneyCompact(-100_000)).toBe("-1k");
         });
 
         it("handles zero", () => {
@@ -201,22 +214,38 @@ describe("format", () => {
     });
 
     describe("MONTHS and MONTHS_SHORT", () => {
-        it("exports 12 months in full", () => {
-            expect(MONTHS).toHaveLength(12);
-            expect(MONTHS[0]).toBe("January");
-            expect(MONTHS[11]).toBe("December");
+        it("exports the full month names in calendar order", () => {
+            expect(MONTHS).toEqual([
+                "January",
+                "February",
+                "March",
+                "April",
+                "May",
+                "June",
+                "July",
+                "August",
+                "September",
+                "October",
+                "November",
+                "December",
+            ]);
         });
 
-        it("exports 12 months abbreviated", () => {
-            expect(MONTHS_SHORT).toHaveLength(12);
-            expect(MONTHS_SHORT[0]).toBe("Jan");
-            expect(MONTHS_SHORT[11]).toBe("Dec");
-        });
-
-        it("abbreviations are first three letters", () => {
-            for (let i = 0; i < MONTHS.length; i++) {
-                expect(MONTHS_SHORT[i]).toBe(MONTHS[i].slice(0, 3));
-            }
+        it("exports the three-letter abbreviations in calendar order", () => {
+            expect(MONTHS_SHORT).toEqual([
+                "Jan",
+                "Feb",
+                "Mar",
+                "Apr",
+                "May",
+                "Jun",
+                "Jul",
+                "Aug",
+                "Sep",
+                "Oct",
+                "Nov",
+                "Dec",
+            ]);
         });
     });
 });

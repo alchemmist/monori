@@ -1,139 +1,105 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
+import { Moon, Sun } from "@gravity-ui/icons";
 import Shell from "./Shell.jsx";
-import { renderUI, screen, waitFor, resetStore, userEvent } from "../test/render.jsx";
+import { renderUI, screen, waitFor, resetStore } from "../test/render.jsx";
+
+function renderShell(path, props = {}) {
+    return renderUI(
+        <MemoryRouter initialEntries={[path]}>
+            <Shell theme="light" onToggleTheme={() => {}} {...props} />
+        </MemoryRouter>,
+    );
+}
+
+/** The glyph inside the theme toggle, as markup, so Sun and Moon can be told apart. */
+function toggleGlyph() {
+    return screen.getByLabelText("Toggle theme").querySelector("svg").innerHTML;
+}
+
+function renderIcon(Icon) {
+    const { container, unmount } = renderUI(<Icon width={17} height={17} />);
+    const svg = container.querySelector("svg").innerHTML;
+    unmount();
+    return svg;
+}
 
 describe("Shell", () => {
     beforeEach(() => {
         resetStore();
     });
 
-    it("renders header with brand and links", () => {
-        renderUI(
-            <MemoryRouter initialEntries={["/welcome"]}>
-                <Shell theme="light" onToggleTheme={() => {}} />
-            </MemoryRouter>,
+    it("renders the brand and the outbound header links", () => {
+        renderShell("/welcome");
+        expect(screen.getByText("docs")).toBeInTheDocument();
+        expect(screen.getByText("Sign in")).toHaveAttribute("href", "/login");
+        expect(screen.getByLabelText("GitHub")).toHaveAttribute(
+            "href",
+            "https://github.com/alchemmist/monori",
         );
-        expect(screen.getByText("docs")).toBeTruthy();
-        expect(screen.getByText("Sign in")).toBeTruthy();
-        expect(screen.getByLabelText("GitHub")).toBeTruthy();
+        expect(screen.getByText("Documentation")).toHaveAttribute("href", "/docs/getting-started");
     });
 
-    it("toggles theme when clicking theme button", async () => {
-        const mockToggle = () => {};
-        const { user } = renderUI(
-            <MemoryRouter initialEntries={["/welcome"]}>
-                <Shell theme="light" onToggleTheme={mockToggle} />
-            </MemoryRouter>,
-        );
-        const themeBtn = screen.getByLabelText("Toggle theme");
-        expect(themeBtn).toBeTruthy();
-        await user.click(themeBtn);
+    it("offers to go dark in the light theme and to go light in the dark one", () => {
+        const moon = renderIcon(Moon);
+        const sun = renderIcon(Sun);
+        expect(moon).not.toBe(sun);
+
+        const light = renderShell("/welcome", { theme: "light" });
+        expect(toggleGlyph()).toBe(moon);
+        light.unmount();
+
+        renderShell("/welcome", { theme: "dark" });
+        expect(toggleGlyph()).toBe(sun);
     });
 
-    it("shows moon icon in light theme", () => {
-        renderUI(
-            <MemoryRouter initialEntries={["/welcome"]}>
-                <Shell theme="light" onToggleTheme={() => {}} />
-            </MemoryRouter>,
-        );
-        const svg = screen.getByLabelText("Toggle theme").querySelector("svg");
-        expect(svg).toBeTruthy();
+    it("calls back to the host when the theme toggle is pressed", async () => {
+        const onToggleTheme = vi.fn();
+        const { user } = renderShell("/welcome", { onToggleTheme });
+        await user.click(screen.getByLabelText("Toggle theme"));
+        expect(onToggleTheme).toHaveBeenCalledOnce();
     });
 
-    it("shows sun icon in dark theme", () => {
-        renderUI(
-            <MemoryRouter initialEntries={["/welcome"]}>
-                <Shell theme="dark" onToggleTheme={() => {}} />
-            </MemoryRouter>,
-        );
-        const svg = screen.getByLabelText("Toggle theme").querySelector("svg");
-        expect(svg).toBeTruthy();
+    it("carries the burger and the doc sidebar only on documentation routes", () => {
+        const landing = renderShell("/welcome");
+        expect(screen.queryByLabelText("Toggle navigation")).not.toBeInTheDocument();
+        expect(landing.container.querySelector(".docs-side")).not.toBeInTheDocument();
+        landing.unmount();
+
+        const { container } = renderShell("/docs/getting-started");
+        expect(screen.getByLabelText("Toggle navigation")).toBeInTheDocument();
+        expect(container.querySelector(".docs-side")).toBeInTheDocument();
     });
 
-    it("hides burger button on landing page", () => {
-        renderUI(
-            <MemoryRouter initialEntries={["/welcome"]}>
-                <Shell theme="light" onToggleTheme={() => {}} />
-            </MemoryRouter>,
-        );
-        expect(screen.queryByLabelText("Toggle navigation")).toBeFalsy();
-    });
-
-    it("shows burger button on docs pages", () => {
-        renderUI(
-            <MemoryRouter initialEntries={["/docs/getting-started"]}>
-                <Shell theme="light" onToggleTheme={() => {}} />
-            </MemoryRouter>,
-        );
-        expect(screen.getByLabelText("Toggle navigation")).toBeTruthy();
-    });
-
-    it("toggles docs sidebar when clicking burger", async () => {
-        const { user, container } = renderUI(
-            <MemoryRouter initialEntries={["/docs/getting-started"]}>
-                <Shell theme="light" onToggleTheme={() => {}} />
-            </MemoryRouter>,
-        );
-        const burger = screen.getByLabelText("Toggle navigation");
+    it("opens the mobile menu with the burger and closes it again on the next press", async () => {
+        const { user, container } = renderShell("/docs/getting-started");
         const sidebar = container.querySelector(".docs-side");
         expect(sidebar).not.toHaveClass("docs-side_open");
-        await user.click(burger);
-        await waitFor(() => {
-            expect(sidebar).toHaveClass("docs-side_open");
-        });
+
+        await user.click(screen.getByLabelText("Toggle navigation"));
+        await waitFor(() => expect(sidebar).toHaveClass("docs-side_open"));
+
+        await user.click(screen.getByLabelText("Toggle navigation"));
+        await waitFor(() => expect(sidebar).not.toHaveClass("docs-side_open"));
     });
 
-    it("closes sidebar when navigating to a doc", async () => {
-        const { user, container } = renderUI(
-            <MemoryRouter initialEntries={["/docs/getting-started"]}>
-                <Shell theme="light" onToggleTheme={() => {}} />
-            </MemoryRouter>,
-        );
-        const burger = screen.getByLabelText("Toggle navigation");
-        await user.click(burger);
+    it("closes the mobile menu once a doc page is picked from it", async () => {
+        const { user, container } = renderShell("/docs/getting-started");
         const sidebar = container.querySelector(".docs-side");
-        expect(sidebar).toHaveClass("docs-side_open");
-        // Click on a nav link would close sidebar, but we can't verify without actual nav items
+        await user.click(screen.getByLabelText("Toggle navigation"));
+        await waitFor(() => expect(sidebar).toHaveClass("docs-side_open"));
+
+        await user.click(screen.getByRole("link", { name: "Budgeting" }));
+        await waitFor(() => expect(sidebar).not.toHaveClass("docs-side_open"));
     });
 
-    it("shows documentation nav link", () => {
-        renderUI(
-            <MemoryRouter initialEntries={["/welcome"]}>
-                <Shell theme="light" onToggleTheme={() => {}} />
-            </MemoryRouter>,
+    it("marks the sidebar link of the page being read", () => {
+        renderShell("/docs/budgeting");
+        expect(screen.getByRole("link", { name: "Budgeting" })).toHaveClass(
+            "docs-side__link_active",
         );
-        const docLink = screen.getByText("Documentation");
-        expect(docLink).toHaveAttribute("href", "/docs/getting-started");
-    });
-
-    it("renders outlet for child routes", () => {
-        const { container } = renderUI(
-            <MemoryRouter initialEntries={["/welcome"]}>
-                <Shell theme="light" onToggleTheme={() => {}} />
-            </MemoryRouter>,
+        expect(screen.getByRole("link", { name: "Transactions" })).not.toHaveClass(
+            "docs-side__link_active",
         );
-        // Outlet should be rendered in the docs-root
-        expect(container.querySelector(".docs-root")).toBeTruthy();
-    });
-
-    it("links to GitHub with correct URL", () => {
-        renderUI(
-            <MemoryRouter initialEntries={["/welcome"]}>
-                <Shell theme="light" onToggleTheme={() => {}} />
-            </MemoryRouter>,
-        );
-        const githubLink = screen.getByLabelText("GitHub");
-        expect(githubLink).toHaveAttribute("href", "https://github.com/alchemmist/monori");
-    });
-
-    it("has correct sign in link", () => {
-        renderUI(
-            <MemoryRouter initialEntries={["/welcome"]}>
-                <Shell theme="light" onToggleTheme={() => {}} />
-            </MemoryRouter>,
-        );
-        const signInLink = screen.getByText("Sign in");
-        expect(signInLink).toHaveAttribute("href", "/login");
     });
 });

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, afterEach } from "vitest";
 import LoginPage from "./LoginPage.jsx";
-import { renderUI, screen, waitFor, userEvent, resetStore } from "../test/render.jsx";
+import { fireEvent, renderUI, screen, waitFor, resetStore } from "../test/render.jsx";
 
 vi.mock("../api.js");
 
@@ -216,24 +216,48 @@ describe("LoginPage", () => {
         expect(passwordInput).toBeInvalid();
     });
 
-    it("renders demo link", () => {
-        renderUI(<LoginPage />);
-        const demoLink = screen.getByRole("link", { name: "Demo" });
-        expect(demoLink).toHaveAttribute("href", "/demo");
-        expect(demoLink).toHaveAttribute("target", "_blank");
+    it("asks the browser for an 8-character password when registering only", async () => {
+        const { user } = renderUI(<LoginPage />);
+        expect(screen.getByPlaceholderText("Password")).not.toHaveAttribute("minlength");
+
+        await user.click(screen.getByRole("button", { name: "Register" }));
+        expect(screen.getByPlaceholderText("Password (min 8 characters)")).toHaveAttribute(
+            "minlength",
+            "8",
+        );
+
+        await user.click(screen.getByRole("button", { name: "Sign in" }));
+        expect(screen.getByPlaceholderText("Password")).not.toHaveAttribute("minlength");
     });
 
-    it("renders docs link", () => {
-        renderUI(<LoginPage />);
-        const docsLink = screen.getByRole("link", { name: "Docs" });
-        expect(docsLink).toHaveAttribute("href", "/docs");
-        expect(docsLink).toHaveAttribute("target", "_blank");
+    it("ignores a second submit while the first request is still in flight", async () => {
+        const { user } = renderUI(<LoginPage />);
+        const { useStore } = await import("../store.js");
+        let release = () => {};
+        const login = vi
+            .spyOn(useStore.getState(), "login")
+            .mockImplementation(() => new Promise((resolve) => (release = resolve)));
+
+        await user.type(screen.getByPlaceholderText("Email"), "user@test.com");
+        await user.type(screen.getByPlaceholderText("Password"), "password");
+        const form = document.querySelector("form");
+        fireEvent.submit(form);
+        fireEvent.submit(form);
+
+        expect(login).toHaveBeenCalledExactlyOnceWith("user@test.com", "password");
+        release();
+        await waitFor(() => expect(screen.getByRole("button", { name: "Sign in" })).toBeEnabled());
     });
 
-    it("renders GitHub link", () => {
+    it("opens docs, demo and GitHub in a new tab", () => {
         renderUI(<LoginPage />);
-        const githubLink = screen.getByRole("link", { name: "GitHub" });
-        expect(githubLink).toHaveAttribute("href", "https://github.com/alchemmist/monori");
-        expect(githubLink).toHaveAttribute("target", "_blank");
+        const links = screen
+            .getAllByRole("link")
+            .map((a) => [a.textContent, a.getAttribute("href"), a.getAttribute("target")]);
+        expect(links).toEqual([
+            ["Docs", "/docs", "_blank"],
+            ["Demo", "/demo", "_blank"],
+            ["GitHub", "https://github.com/alchemmist/monori", "_blank"],
+        ]);
     });
 });

@@ -62,11 +62,6 @@ describe("Root", () => {
         window.history.replaceState({}, "", "/");
     });
 
-    it("renders without crashing", () => {
-        const { container } = renderUI(<Root />);
-        expect(container).toBeTruthy();
-    });
-
     it("reads theme from localStorage on mount", () => {
         localStorage.setItem("theme", "dark");
         renderUI(<Root />);
@@ -85,36 +80,6 @@ describe("Root", () => {
         renderUI(<Root />);
         expect(document.body).not.toHaveClass("theme-dark");
         vi.restoreAllMocks();
-    });
-
-    it("renders MantineProvider wrapper", () => {
-        const { container } = renderUI(<Root />);
-        // MantineProvider should render content
-        expect(container.firstChild).toBeTruthy();
-    });
-
-    it("sets body class based on theme state", () => {
-        renderUI(<Root />);
-        const initialHasDarkClass = document.body.classList.contains("theme-dark");
-        expect(typeof initialHasDarkClass).toBe("boolean");
-    });
-
-    it("wraps content in BrowserRouter", () => {
-        const { container } = renderUI(<Root />);
-        // If Router is present, navigation and routes should work
-        expect(container).toBeTruthy();
-    });
-
-    it("renders Suspense boundary for lazy components", () => {
-        const { container } = renderUI(<Root />);
-        // The component should render even with lazy imports
-        expect(container).toBeTruthy();
-    });
-
-    it("applies MantineProvider with forceColorScheme prop", () => {
-        renderUI(<Root />);
-        // Color scheme should be applied
-        expect(document.body).toBeTruthy();
     });
 
     it("routes marketing, documentation and diagram URLs to their lazy pages", async () => {
