@@ -48,7 +48,7 @@ export default function TransferRow({ item, accountName, expanded, onToggle, onS
             <td>
                 <span className="money num tx-transfer__amount">{money(item.amount)}</span>
             </td>
-            <td colSpan={2} style={{ textAlign: "left" }}>
+            <td colSpan={3} style={{ textAlign: "left" }}>
                 <span className="tx-transfer__label">Transfer</span>
                 <RowMenu
                     className="cat-row__menu tx-transfer__menu"

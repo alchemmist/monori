@@ -293,6 +293,69 @@ export const useStore = create((set, get) => ({
         return tx;
     },
 
+    /** Edit a transaction's own fields — date, description, amount, comment.
+     * Optimistic like every other ledger edit, but a failed save rolls the row
+     * back: unlike a category, a wrong amount would keep every balance and
+     * budget on the page lying until the next reload. A changed date moves the
+     * row, so the ledger is re-sorted into canonical order. */
+    async updateTransaction(txId, patch) {
+        const { snapshot } = get();
+        const before = snapshot.transactions.find((t) => t.id === txId);
+        if (!before) return;
+        const rows = snapshot.transactions.map((t) => (t.id === txId ? { ...t, ...patch } : t));
+        if (patch.date !== undefined && patch.date !== before.date) rows.sort(compareTx);
+        set({ snapshot: { ...snapshot, transactions: rows } });
+        if (isDemo()) return;
+        try {
+            await api.patchTx(txId, patch);
+        } catch (e) {
+            const cur = get().snapshot;
+            const back = cur.transactions.map((t) => (t.id === txId ? before : t)).sort(compareTx);
+            set({
+                snapshot: { ...cur, transactions: back },
+                toast: {
+                    title: "Failed to update transaction",
+                    theme: "danger",
+                    content: String(e),
+                },
+            });
+        }
+    },
+
+    /** Delete a transaction for good. Also rolls back on failure, for the same
+     * reason: a row that vanished from the ledger but not from the server would
+     * quietly skew every total until a reload brought it back. */
+    async deleteTransaction(txId) {
+        const { snapshot } = get();
+        const gone = snapshot.transactions.find((t) => t.id === txId);
+        if (!gone) return;
+        set({
+            snapshot: {
+                ...snapshot,
+                transactions: snapshot.transactions.filter((t) => t.id !== txId),
+                transactionsTotal: Math.max(0, (snapshot.transactionsTotal ?? 1) - 1),
+            },
+        });
+        if (isDemo()) return;
+        try {
+            await api.deleteTx(txId);
+        } catch (e) {
+            const cur = get().snapshot;
+            set({
+                snapshot: {
+                    ...cur,
+                    transactions: mergeTransactions(cur.transactions, [gone]),
+                    transactionsTotal: (cur.transactionsTotal ?? 0) + 1,
+                },
+                toast: {
+                    title: "Failed to delete transaction",
+                    theme: "danger",
+                    content: String(e),
+                },
+            });
+        }
+    },
+
     /** Hidden transactions live outside the snapshot on purpose: nothing in
      * the app (budgets, analytics, balances) can see them by accident. null
      * until the transactions page first asks for them. */

@@ -11,11 +11,12 @@ Every amount is an integer in kopecks/cents, so nothing rounds.
 
 The **Transactions** page lists the ledger newest-first, 100 rows per page. It
 shows the date (`dd.mm.yyyy`), the description, the bank's own category label, the
-signed amount, the account, and the assigned category.
+signed amount, the account, the assigned category, and your own comment.
 
 ### Filters
 
-- **Search** — matches the description or the bank category, case-insensitive.
+- **Search** — matches the description, the bank category or your comment,
+  case-insensitive.
 - **Category** — a specific category, or *uncategorized* to find rows that still
   need a home.
 - **Account** — narrow to one account (shown once you have more than one).
@@ -39,6 +40,33 @@ Each row has an inline category dropdown — pick a category to assign or reassi
 the transaction. This is the main day-to-day task after an import: sweep the
 uncategorized rows into envelopes so the budget reflects reality. The account
 column has a matching dropdown to move a row to a different account.
+
+### Editing a row
+
+Date, description, amount and comment are edited in place: click the value, type
+over it, and **Enter** (or **Tab**, or clicking away) saves. **Escape** leaves
+the row as it was. The amount is typed in rubles and keeps its sign — a leading
+minus is money out, no minus is money in — and is stored as kopecks, so nothing
+rounds. Changing the date moves the row to where it belongs in the ledger.
+
+The **Comment** column is yours: the bank never fills it. It is empty and quiet
+until you point at a row, and everything typed there is searchable from the
+search box above.
+
+Every edit saves in the background and is reflected in the budget, the dashboard
+and the balances immediately. If the server refuses the change, the row snaps
+back to the value it had and a message says so, rather than leaving a total
+quietly wrong until the next reload.
+
+Rows that belong to a transfer, and hidden rows, are read-only: split the
+transfer or unhide the row first.
+
+### Deleting a row
+
+The **…** menu at the end of a row deletes it, after a confirmation that spells
+the row out. Deleting is final — the confirmation offers to hide the row
+instead, which keeps it out of every total but leaves it recoverable from the
+**Hidden** toggle.
 
 ### Adding a transaction by hand
 
@@ -89,10 +117,8 @@ preview → commit flow.
 
 ## Editing beyond the page
 
-The full CRUD surface for transactions — create, edit every field, delete, and
-bulk operations (bulk categorize/move/delete) — exists in the
-[REST API](api.md#transactions). In the app, adding and categorizing are
-covered by the page above; inline editing of every field, deleting a row and the
-comment column are tracked in issue #16, and an advanced search-and-bulk-edit
-explorer in issue #17. Until those ship, anything more is a call away through the
-API.
+The page above covers a single row end to end: add, edit every field, comment,
+hide, delete. What is not there yet is working on many rows at once — bulk
+categorize, move and delete exist in the [REST API](api.md#transactions) and an
+advanced search-and-bulk-edit explorer is tracked in issue #17. Until it ships,
+a mass change is a call away through the API.

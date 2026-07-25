@@ -91,6 +91,80 @@ test("hiding a transaction removes it everywhere and the toggle brings it back",
     await expect(page.locator(".tx-grid .cat-row", { hasText: "JUNK ROW" })).toBeVisible();
 });
 
+test("editing a row in place rewrites it on the server, and delete removes it", async ({
+    page,
+    user,
+}) => {
+    const snap = await user.api.snapshot();
+    const accountId = snap.accounts[0].id;
+    await user.api.addTransaction({
+        accountId,
+        amount: -100000,
+        description: "TYPO ROW",
+        date: "2026-06-10T12:00:00",
+    });
+    await user.api.addTransaction({ accountId, amount: -2500, description: "DOOMED ROW" });
+
+    await openApp(page, user);
+    await gotoSection(page, "Transactions");
+
+    const row = page.locator(".tx-grid .cat-row", { hasText: "TYPO ROW" });
+    await expect(row).toBeVisible();
+
+    const patched = () =>
+        page.waitForResponse(
+            (r) =>
+                r.request().method() === "PATCH" &&
+                r.url().includes("/api/transactions/") &&
+                r.ok(),
+        );
+    const editField = async (where, label, value) => {
+        const saved = patched();
+        await where.getByRole("button", { name: label }).click();
+        await where.getByLabel(label).fill(value);
+        await where.getByLabel(label).press("Enter");
+        await saved;
+    };
+
+    // the amount and the restored comment column, in place
+    await editField(row, "Amount", "-1234.50");
+    await editField(row, "Comment", "was a typo");
+
+    // the description is reached through the comment instead: an open input's
+    // value is not row text, so a filter on the old description would stop
+    // matching the moment the field opens
+    const edited = page.locator(".tx-grid .cat-row", { hasText: "was a typo" });
+    await editField(edited, "Description", "FIXED ROW");
+
+    await expect(page.locator(".tx-grid .cat-row", { hasText: "FIXED ROW" })).toContainText(
+        "was a typo",
+    );
+
+    // the comment is searchable too, alongside the description
+    await page.getByLabel("Search description or comment").fill("was a typo");
+    await expect(page.locator(".tx-grid .cat-row")).toHaveCount(1);
+    await page.getByLabel("Search description or comment").fill("");
+
+    // deleting asks first, then the row is gone for good
+    const doomed = page.locator(".tx-grid .cat-row", { hasText: "DOOMED ROW" });
+    await doomed.hover();
+    await doomed.getByRole("button", { name: "Transaction actions" }).click();
+    await page.getByRole("menuitem", { name: "Delete transaction" }).click();
+    const removed = page.waitForResponse(
+        (r) =>
+            r.request().method() === "DELETE" && r.url().includes("/api/transactions/") && r.ok(),
+    );
+    await page.getByRole("button", { name: "Delete", exact: true }).click();
+    await removed;
+    await expect(doomed).toHaveCount(0);
+
+    // and the server agrees on all of it after a reload
+    const after = (await user.api.snapshot()).transactions;
+    expect(after.some((t) => t.description === "DOOMED ROW")).toBe(false);
+    const fixed = after.find((t) => t.description === "FIXED ROW");
+    expect([fixed.amount, fixed.comment]).toEqual([-123450, "was a typo"]);
+});
+
 test("the add-transaction tab records rows one after another without closing", async ({
     page,
     user,

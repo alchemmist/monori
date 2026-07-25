@@ -1,7 +1,9 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ActionIcon, Button, CloseButton } from "@mantine/core";
 import { FTextInput } from "../ui/fields.jsx";
+import EditableCell from "../ui/EditableCell.jsx";
 import InlineSelect from "../ui/InlineSelect.jsx";
+import RowMenu from "../ui/RowMenu.jsx";
 import Tag from "../ui/Tag.jsx";
 import ProgressRing from "../ui/ProgressRing.jsx";
 import {
@@ -15,9 +17,10 @@ import {
 } from "@gravity-ui/icons";
 import { useStore } from "../store.js";
 import { orderedGroups, categoriesByGroup } from "../categoryOrder.js";
-import { money, fmtDate } from "../format.js";
+import { money, fmtDate, parseRub } from "../format.js";
 import { useWindowedRows } from "../useWindowedRows.js";
 import { compareTx } from "../mergeTransactions.js";
+import DeleteTxDialog from "../components/DeleteTxDialog.jsx";
 import ImportDialog from "../components/ImportDialog.jsx";
 import TransferDialog from "../components/TransferDialog.jsx";
 import TransferRow from "../components/TransferRow.jsx";
@@ -36,6 +39,7 @@ export default function TransactionsPage() {
         txProgress,
         setTxCategory,
         setTxAccount,
+        updateTransaction,
         hiddenTx,
         loadHiddenTx,
         hideTx,
@@ -59,6 +63,7 @@ export default function TransactionsPage() {
     const [transferring, setTransferring] = useState(false);
     const [suggesting, setSuggesting] = useState(false);
     const [expanded, setExpanded] = useState(() => new Set());
+    const [deleting, setDeleting] = useState(null);
     const bodyRef = useRef(null);
     const [rowH, setRowH] = useState(ROW_H_FALLBACK);
     const [showTop, setShowTop] = useState(false);
@@ -175,7 +180,8 @@ export default function TransactionsPage() {
             rows = rows.filter(
                 (t) =>
                     t.description.toLowerCase().includes(q) ||
-                    t.bankCategory.toLowerCase().includes(q),
+                    t.bankCategory.toLowerCase().includes(q) ||
+                    (t.comment ?? "").toLowerCase().includes(q),
             );
         return [...rows].reverse(); // newest first
     }, [combined, query, catFilter, yearFilter, acctFilter]);
@@ -205,91 +211,181 @@ export default function TransactionsPage() {
 
     // an ordinary ledger row. `leg` marks one half of an expanded transfer: the
     // same row, indented and muted, so it reads as belonging to the row above
-    const renderTxRow = (t, leg) => (
-        <tr
-            key={leg ? `l${t.id}` : t.id}
-            className={`cat-row${leg ? " tx-row_leg" : ""}${t.hidden ? " tx-hidden-row" : ""}`}
-        >
-            <td style={{ textAlign: "left" }} className="num">
-                {fmtDate(t.date)}
-            </td>
-            <td
-                style={{
-                    textAlign: "left",
-                    maxWidth: 380,
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                }}
+    // Editing a leg of a transfer would desync the pair, and a hidden row lives
+    // outside the snapshot the store edits — both stay read-only.
+    const isEditable = (t, leg) => t.transferId == null && !t.hidden && !leg;
+
+    const renderTxRow = (t, leg) => {
+        const editable = isEditable(t, leg);
+        return (
+            <tr
+                key={leg ? `l${t.id}` : t.id}
+                className={`cat-row${leg ? " tx-row_leg" : ""}${t.hidden ? " tx-hidden-row" : ""}`}
             >
-                {t.description}
-                {t.source === "adjustment" && (
-                    <Tag theme="warning" style={{ marginLeft: 8 }}>
-                        adjustment
-                    </Tag>
-                )}
-                {t.transferId != null && !leg && (
-                    <Tag theme="info" style={{ marginLeft: 8 }}>
-                        transfer
-                    </Tag>
-                )}
-                {t.hidden && <Tag style={{ marginLeft: 8 }}>hidden</Tag>}
-                {t.transferId == null && !leg && (
-                    <ActionIcon
-                        className="tx-row-action"
-                        size={24}
-                        variant="subtle"
-                        aria-label={t.hidden ? "Unhide transaction" : "Hide transaction"}
-                        title={t.hidden ? "Unhide transaction" : "Hide transaction"}
-                        onClick={() => (t.hidden ? unhideTx(t.id) : hideTx(t.id))}
-                    >
-                        {t.hidden ? (
-                            <Eye width={14} height={14} />
-                        ) : (
-                            <EyeSlash width={14} height={14} />
-                        )}
-                    </ActionIcon>
-                )}
-            </td>
-            <td style={{ textAlign: "left", color: "var(--m-text-dim)" }}>{t.bankCategory}</td>
-            <td>
-                <span className={`money num ${t.amount > 0 ? "money_pos" : ""}`}>
-                    {money(t.amount)}
-                </span>
-            </td>
-            <td style={{ textAlign: "left" }}>
-                {t.transferId != null || t.hidden ? (
-                    <span style={{ color: "var(--m-text-dim)", paddingLeft: 4 }}>
-                        {acctName.get(t.accountId) ?? "—"}
-                    </span>
-                ) : (
-                    <InlineSelect
-                        small
-                        borderless
-                        value={t.accountId != null ? String(t.accountId) : null}
-                        onChange={(v) => v && setTxAccount(t.id, +v)}
-                        data={acctOptionsFor(t)}
-                    />
-                )}
-            </td>
-            <td style={{ textAlign: "left" }}>
-                {t.transferId != null || t.hidden ? (
-                    <span style={{ color: "var(--m-text-faint)", paddingLeft: 4 }}>
-                        {t.hidden ? (catById.get(t.categoryId)?.name ?? "—") : "—"}
-                    </span>
-                ) : (
-                    <InlineSelect
-                        small
-                        borderless
-                        searchable
-                        placeholder="—"
-                        value={t.categoryId != null ? String(t.categoryId) : null}
-                        onChange={(v) => setTxCategory(t.id, v ? +v : null)}
-                        data={catSectionsFor(t)}
-                    />
-                )}
-            </td>
-        </tr>
-    );
+                <td style={{ textAlign: "left" }} className="num">
+                    {editable ? (
+                        <EditableCell
+                            label="Date"
+                            type="date"
+                            width={112}
+                            draft={t.date.slice(0, 10)}
+                            display={fmtDate(t.date)}
+                            onCommit={(v) =>
+                                v &&
+                                updateTransaction(t.id, {
+                                    // keep whatever time the row carried, so a row
+                                    // edited by hand still sorts where it did
+                                    date: t.date.length > 10 ? v + t.date.slice(10) : v,
+                                })
+                            }
+                        />
+                    ) : (
+                        fmtDate(t.date)
+                    )}
+                </td>
+                <td
+                    style={{
+                        textAlign: "left",
+                        maxWidth: 380,
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                    }}
+                >
+                    {editable ? (
+                        <EditableCell
+                            label="Description"
+                            width={220}
+                            placeholder="No description"
+                            draft={t.description}
+                            display={t.description}
+                            onCommit={(v) => updateTransaction(t.id, { description: v })}
+                        />
+                    ) : (
+                        t.description
+                    )}
+                    {t.source === "adjustment" && (
+                        <Tag theme="warning" style={{ marginLeft: 8 }}>
+                            adjustment
+                        </Tag>
+                    )}
+                    {t.transferId != null && !leg && (
+                        <Tag theme="info" style={{ marginLeft: 8 }}>
+                            transfer
+                        </Tag>
+                    )}
+                    {t.hidden && <Tag style={{ marginLeft: 8 }}>hidden</Tag>}
+                    {t.transferId == null && !leg && (
+                        <ActionIcon
+                            className="tx-row-action"
+                            size={24}
+                            variant="subtle"
+                            aria-label={t.hidden ? "Unhide transaction" : "Hide transaction"}
+                            title={t.hidden ? "Unhide transaction" : "Hide transaction"}
+                            onClick={() => (t.hidden ? unhideTx(t.id) : hideTx(t.id))}
+                        >
+                            {t.hidden ? (
+                                <Eye width={14} height={14} />
+                            ) : (
+                                <EyeSlash width={14} height={14} />
+                            )}
+                        </ActionIcon>
+                    )}
+                </td>
+                <td style={{ textAlign: "left", color: "var(--m-text-dim)" }}>{t.bankCategory}</td>
+                <td>
+                    {editable ? (
+                        <EditableCell
+                            label="Amount"
+                            align="right"
+                            width={96}
+                            draft={String(t.amount / 100)}
+                            display={
+                                <span className={`money num ${t.amount > 0 ? "money_pos" : ""}`}>
+                                    {money(t.amount)}
+                                </span>
+                            }
+                            onCommit={(v) => {
+                                // typed in rubles, stored in kopecks; the sign is
+                                // part of what you type, so an expense keeps its
+                                // minus and a refund can be flipped to income
+                                const kop = parseRub(v);
+                                if (kop != null && kop !== t.amount)
+                                    updateTransaction(t.id, { amount: kop });
+                            }}
+                        />
+                    ) : (
+                        <span className={`money num ${t.amount > 0 ? "money_pos" : ""}`}>
+                            {money(t.amount)}
+                        </span>
+                    )}
+                </td>
+                <td style={{ textAlign: "left" }}>
+                    {t.transferId != null || t.hidden ? (
+                        <span style={{ color: "var(--m-text-dim)", paddingLeft: 4 }}>
+                            {acctName.get(t.accountId) ?? "—"}
+                        </span>
+                    ) : (
+                        <InlineSelect
+                            small
+                            borderless
+                            value={t.accountId != null ? String(t.accountId) : null}
+                            onChange={(v) => v && setTxAccount(t.id, +v)}
+                            data={acctOptionsFor(t)}
+                        />
+                    )}
+                </td>
+                <td style={{ textAlign: "left" }}>
+                    {t.transferId != null || t.hidden ? (
+                        <span style={{ color: "var(--m-text-faint)", paddingLeft: 4 }}>
+                            {t.hidden ? (catById.get(t.categoryId)?.name ?? "—") : "—"}
+                        </span>
+                    ) : (
+                        <InlineSelect
+                            small
+                            borderless
+                            searchable
+                            placeholder="—"
+                            value={t.categoryId != null ? String(t.categoryId) : null}
+                            onChange={(v) => setTxCategory(t.id, v ? +v : null)}
+                            data={catSectionsFor(t)}
+                        />
+                    )}
+                </td>
+                <td style={{ textAlign: "left" }}>
+                    {editable ? (
+                        <EditableCell
+                            label="Comment"
+                            width={130}
+                            placeholder="Add a comment"
+                            draft={t.comment ?? ""}
+                            display={t.comment}
+                            onCommit={(v) => updateTransaction(t.id, { comment: v })}
+                        />
+                    ) : (
+                        <span style={{ color: "var(--m-text-dim)", paddingLeft: 4 }}>
+                            {t.comment || ""}
+                        </span>
+                    )}
+                    {editable && (
+                        <RowMenu
+                            className="cat-row__menu"
+                            label="Transaction actions"
+                            items={[
+                                [{ text: "Hide transaction", action: () => hideTx(t.id) }],
+                                [
+                                    {
+                                        text: "Delete transaction",
+                                        action: () => setDeleting(t),
+                                        theme: "danger",
+                                    },
+                                ],
+                            ]}
+                        />
+                    )}
+                </td>
+            </tr>
+        );
+    };
 
     // measure a real row once it's on screen so the spacer math matches the DOM
     useLayoutEffect(() => {
@@ -321,9 +417,9 @@ export default function TransactionsPage() {
                 <FTextInput
                     value={query}
                     onChange={(e) => resetScroll(setQuery)(e.target.value)}
-                    placeholder="Search description"
+                    placeholder="Search description or comment"
                     label={<Magnifier style={{ marginInline: 6 }} width={14} height={14} />}
-                    aria-label="Search description"
+                    aria-label="Search description or comment"
                     rightSectionPointerEvents="all"
                     rightSection={
                         query ? (
@@ -440,12 +536,13 @@ export default function TransactionsPage() {
                             <th style={{ width: 120 }}>Amount</th>
                             <th style={{ textAlign: "left", width: 150 }}>Account</th>
                             <th style={{ textAlign: "left", width: 190 }}>Category</th>
+                            <th style={{ textAlign: "left", width: 170 }}>Comment</th>
                         </tr>
                     </thead>
                     <tbody ref={bodyRef}>
                         {padTop > 0 && (
                             <tr aria-hidden="true">
-                                <td colSpan={6} style={{ height: padTop, padding: 0, border: 0 }} />
+                                <td colSpan={7} style={{ height: padTop, padding: 0, border: 0 }} />
                             </tr>
                         )}
                         {visibleRows.map((item) =>
@@ -476,7 +573,7 @@ export default function TransactionsPage() {
                         {padBottom > 0 && (
                             <tr aria-hidden="true">
                                 <td
-                                    colSpan={6}
+                                    colSpan={7}
                                     style={{ height: padBottom, padding: 0, border: 0 }}
                                 />
                             </tr>
@@ -484,7 +581,7 @@ export default function TransactionsPage() {
                         {filtered.length === 0 && (
                             <tr>
                                 <td
-                                    colSpan={6}
+                                    colSpan={7}
                                     style={{
                                         textAlign: "center",
                                         color: "var(--m-text-faint)",
@@ -522,6 +619,7 @@ export default function TransactionsPage() {
                 <TransferDialog accounts={accounts} onClose={() => setTransferring(false)} />
             )}
             {suggesting && <TransferSuggestions onClose={() => setSuggesting(false)} />}
+            {deleting && <DeleteTxDialog tx={deleting} onClose={() => setDeleting(null)} />}
         </div>
     );
 }

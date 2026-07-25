@@ -95,3 +95,66 @@ describe("addTransaction", () => {
         expect(s.snapshot.transactionsTotal).toBe(2);
     });
 });
+
+describe("updateTransaction", () => {
+    it("patches the row and shows the new value straight away", async () => {
+        vi.spyOn(api, "patchTx").mockResolvedValue({ ok: true });
+
+        await useStore.getState().updateTransaction(1, { amount: -5000, comment: "split" });
+
+        expect(api.patchTx).toHaveBeenCalledWith(1, { amount: -5000, comment: "split" });
+        const row = useStore.getState().snapshot.transactions.find((t) => t.id === 1);
+        expect(row).toMatchObject({ amount: -5000, comment: "split", description: "tx 1" });
+    });
+
+    it("re-sorts the ledger when the date moves the row", async () => {
+        vi.spyOn(api, "patchTx").mockResolvedValue({ ok: true });
+
+        await useStore.getState().updateTransaction(1, { date: "2026-04-01T00:00:00" });
+
+        expect(useStore.getState().snapshot.transactions.map((t) => t.id)).toEqual([3, 1]);
+    });
+
+    it("rolls the row back and warns when the server refuses", async () => {
+        vi.spyOn(api, "patchTx").mockRejectedValue(new Error("nope"));
+
+        await useStore.getState().updateTransaction(1, { amount: -5000 });
+
+        const s = useStore.getState();
+        expect(s.snapshot.transactions.find((t) => t.id === 1).amount).toBe(-100);
+        expect(s.toast.theme).toBe("danger");
+    });
+
+    it("ignores an id that is not in the ledger", async () => {
+        vi.spyOn(api, "patchTx").mockResolvedValue({ ok: true });
+
+        await useStore.getState().updateTransaction(999, { amount: 1 });
+
+        expect(api.patchTx).not.toHaveBeenCalled();
+        expect(useStore.getState().snapshot.transactions).toHaveLength(2);
+    });
+});
+
+describe("deleteTransaction", () => {
+    it("drops the row and its count", async () => {
+        vi.spyOn(api, "deleteTx").mockResolvedValue({ ok: true });
+
+        await useStore.getState().deleteTransaction(1);
+
+        expect(api.deleteTx).toHaveBeenCalledWith(1);
+        const s = useStore.getState();
+        expect(s.snapshot.transactions.map((t) => t.id)).toEqual([3]);
+        expect(s.snapshot.transactionsTotal).toBe(1);
+    });
+
+    it("puts the row back in order when the server refuses", async () => {
+        vi.spyOn(api, "deleteTx").mockRejectedValue(new Error("nope"));
+
+        await useStore.getState().deleteTransaction(1);
+
+        const s = useStore.getState();
+        expect(s.snapshot.transactions.map((t) => t.id)).toEqual([1, 3]);
+        expect(s.snapshot.transactionsTotal).toBe(2);
+        expect(s.toast.theme).toBe("danger");
+    });
+});
