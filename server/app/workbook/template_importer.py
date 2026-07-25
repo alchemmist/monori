@@ -413,8 +413,11 @@ def _last_activity(transactions, budget_map, sources):
         if last is None or (y, m) > last:
             last = (y, m)
 
+    # uncategorized transactions are excluded from the reconciliation sums, so
+    # they must not extend the reconciled range either
     for tx in transactions:
-        bump(int(tx["date"][:4]), int(tx["date"][5:7]))
+        if tx["monori_category"]:
+            bump(int(tx["date"][:4]), int(tx["date"][5:7]))
     for (_, y, m), amount in budget_map.items():
         if amount:
             bump(y, m)
