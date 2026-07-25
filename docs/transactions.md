@@ -24,6 +24,15 @@ signed amount, the account, and the assigned category.
 Filtering happens live over the loaded snapshot; changing a filter resets you to
 the first page.
 
+### Loading
+
+The app opens on the newest slice of the ledger and pulls the rest in the
+background, so first paint doesn't wait on years of history. While that runs, a
+small progress ring sits next to the row count and disappears once the last
+chunk lands; older rows and every total that depends on them (budgets, the
+dashboard) fill in as they arrive. With **reduce motion** turned on, the ring is
+replaced by a plain percentage.
+
 ### Categorizing
 
 Each row has an inline category dropdown — pick a category to assign or reassign

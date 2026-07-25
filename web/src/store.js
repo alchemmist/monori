@@ -1,6 +1,20 @@
 import { create } from "zustand";
 import { api } from "./api.js";
 import { demoSnapshot } from "./demo/demoData.js";
+import { mergeTransactions } from "./mergeTransactions.js";
+
+/** Rows per background chunk once the light snapshot has painted. */
+export const TX_CHUNK = 1000;
+
+/** How long chunks are allowed to pile up before they land in the snapshot.
+ * Every snapshot write re-runs the budget/dashboard math over the whole ledger,
+ * so on a fast link the chunks are coalesced instead of recomputing per chunk. */
+export const TX_FLUSH_MS = 250;
+
+/** Bumped by every load(); a fill whose generation is stale drops its results. */
+let fillGeneration = 0;
+
+const now = () => (typeof performance !== "undefined" ? performance.now() : 0);
 
 /** The public /demo page runs entirely on the bundled sample dataset: no auth,
  * no backend calls. Mutations still work but stay local (nothing is persisted). */
@@ -15,6 +29,8 @@ let nextTabId = 1;
 export const useStore = create((set, get) => ({
     snapshot: null,
     loading: true,
+    /** `{loaded, total}` while the background fill runs, null when it's done. */
+    txProgress: null,
     error: null,
     toast: null,
     user: null,
@@ -78,16 +94,90 @@ export const useStore = create((set, get) => ({
         set({ user: null, tabs: [] });
     },
 
+    /**
+     * First paint waits only on the light snapshot — everything but the bulk of
+     * the ledger, plus its newest page. The rest streams in behind it.
+     */
     async load() {
+        // claimed before the await, so two overlapping loads (React StrictMode
+        // remounts, a reload during a fill) leave only the last one filling
+        const generation = (fillGeneration += 1);
         if (isDemo()) {
-            set({ snapshot: structuredClone(demoSnapshot), loading: false, error: null });
+            const snapshot = structuredClone(demoSnapshot);
+            set({
+                snapshot: { ...snapshot, transactionsTotal: snapshot.transactions.length },
+                loading: false,
+                error: null,
+                txProgress: null,
+            });
             return;
         }
         try {
-            const snapshot = await api.snapshot();
+            const snapshot = await api.snapshot({ light: true });
+            if (generation !== fillGeneration) return;
             set({ snapshot, loading: false, error: null });
         } catch (e) {
-            set({ error: String(e), loading: false });
+            set({ error: String(e), loading: false, txProgress: null });
+            return;
+        }
+        get().fillTransactions(generation);
+    },
+
+    /**
+     * Pull the transactions the light snapshot left out, oldest-remaining first,
+     * merging each chunk into the canonical order so derived views just
+     * recompute. Offsets count back from the newest row: a local insert during
+     * the fill can shift them, and the id-dedupe in the merge absorbs that.
+     */
+    async fillTransactions(generation = fillGeneration) {
+        const snapshot = get().snapshot;
+        if (!snapshot) return;
+        let offset = snapshot.transactions.length;
+        let total = snapshot.transactionsTotal ?? offset;
+        if (offset >= total) {
+            set({ txProgress: null });
+            return;
+        }
+        set({ txProgress: { loaded: offset, total } });
+        // chunks wait here until a flush, so a fast link doesn't re-run the
+        // derived math once per chunk
+        let pending = [];
+        let flushedAt = now();
+        const flush = (done) => {
+            const current = get().snapshot;
+            const transactions = mergeTransactions(current.transactions, pending);
+            pending = [];
+            flushedAt = now();
+            set({
+                snapshot: {
+                    ...current,
+                    transactions,
+                    transactionsTotal: Math.max(total, transactions.length),
+                },
+                txProgress: done ? null : { loaded: transactions.length, total },
+            });
+        };
+        try {
+            for (;;) {
+                const page = await api.transactions({ limit: TX_CHUNK, offset });
+                if (generation !== fillGeneration) return;
+                offset += page.rows.length;
+                total = Math.max(page.total, offset);
+                pending = mergeTransactions(pending, [...page.rows].reverse());
+                const loaded = get().snapshot.transactions.length + pending.length;
+                const done = page.rows.length < TX_CHUNK || loaded >= total;
+                if (done || now() - flushedAt >= TX_FLUSH_MS) flush(done);
+                else set({ txProgress: { loaded, total } });
+                if (done) return;
+            }
+        } catch (e) {
+            if (generation !== fillGeneration) return;
+            set({ txProgress: null });
+            get().notify({
+                title: "Failed to load older transactions",
+                theme: "danger",
+                content: String(e),
+            });
         }
     },
 
