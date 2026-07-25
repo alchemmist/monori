@@ -10,7 +10,7 @@ from ..deps import conn
 from ..importer import build_rules, categorize, parse_statement, tx_hash
 from ..ingest import commit_rows, existing_hash_counts
 from ..workbook.apply import apply_workbook, budget_conflicts
-from ..workbook.importer import WorkbookError, parse_workbook
+from ..workbook.parser import DEFAULT_CURRENCY, WorkbookError, account_slot, parse_workbook
 
 router = APIRouter(prefix="/api/import", tags=["import"])
 
@@ -127,6 +127,29 @@ async def _read_workbook_upload(file: UploadFile) -> bytes:
     return data
 
 
+def _account_slots(transactions):
+    """
+    What the user has to map: one entry per card marker per currency. Splitting
+    by currency is what makes a foreign-currency migration impossible to get
+    wrong — a USD slot can only be pointed at a USD account, so a user without
+    one has nothing to pick and the import stays blocked until they make it.
+    """
+    slots: dict[str, dict] = {}
+    for row in transactions:
+        key = account_slot(row)
+        slot = slots.setdefault(
+            key,
+            {
+                "key": key,
+                "marker": row["marker"],
+                "currency": row.get("currency") or DEFAULT_CURRENCY,
+                "transactions": 0,
+            },
+        )
+        slot["transactions"] += 1
+    return sorted(slots.values(), key=lambda s: (s["currency"], s["marker"]))
+
+
 def _workbook_preview_summary(parsed):
     tx = parsed["transactions"]
     by_year: dict[str, int] = {}
@@ -139,7 +162,7 @@ def _workbook_preview_summary(parsed):
         "transactions": len(tx),
         "transactionsByYear": dict(sorted(by_year.items())),
         "budgetCells": len(parsed["budgets"]),
-        "accountMarkers": sorted({row["marker"] for row in tx}),
+        "accountSlots": _account_slots(tx),
         "warnings": parsed["warnings"],
         "errors": parsed["errors"],
     }
@@ -163,22 +186,48 @@ def _preview_workbook(data, uid):
     return summary
 
 
+def _reject_currency_mismatch(c, slots, marker_map):
+    """
+    An amount is only meaningful on an account held in the same currency:
+    putting 95.78 USD on a ruble account would silently record 95 rubles 78
+    kopecks. The UI already only offers matching accounts; this is the same rule
+    enforced where it cannot be clicked around.
+    """
+    ids = sorted(set(marker_map.values()))
+    placeholders = ",".join("?" * len(ids))
+    held = {
+        r["id"]: (r["currency"] or DEFAULT_CURRENCY).upper()
+        for r in c.execute(f"SELECT id, currency FROM accounts WHERE id IN ({placeholders})", ids)
+    }
+    for key, slot in slots.items():
+        account_id = marker_map[key]
+        currency = held.get(account_id, DEFAULT_CURRENCY)
+        if currency != slot["currency"]:
+            where = slot["marker"] or "rows with no card number"
+            raise HTTPException(
+                400,
+                f"{where}: {slot['currency']} rows cannot be imported into a"
+                f" {currency} account — create an account in {slot['currency']} first",
+            )
+
+
 def _commit_workbook(data, uid, mapping, budget_policy):
     parsed = _parse_or_400(data)
     try:
         raw_mapping = json.loads(mapping)
         marker_map = {str(k): int(v) for k, v in raw_mapping.items()}
     except (ValueError, TypeError, AttributeError) as exc:
-        raise HTTPException(400, "mapping must be a JSON object of marker -> accountId") from exc
-    markers = {row["marker"] for row in parsed["transactions"]}
-    missing = sorted(m for m in markers if m not in marker_map)
+        raise HTTPException(400, "mapping must be a JSON object of slot -> accountId") from exc
+    slots = {s["key"]: s for s in _account_slots(parsed["transactions"])}
+    missing = sorted(k for k in slots if k not in marker_map)
     if missing:
-        raise HTTPException(400, f"unmapped account markers: {missing}")
+        raise HTTPException(400, f"unmapped account slots: {missing}")
     c = conn()
     try:
         for account_id in set(marker_map.values()):
             if not _owned_account(c, account_id, uid):
                 raise HTTPException(400, f"unknown account: {account_id}")
+        _reject_currency_mismatch(c, slots, marker_map)
         result = apply_workbook(c, uid, parsed, marker_map, budget_policy)
         c.commit()
         warnings = [*parsed["warnings"], *result.pop("warnings", [])]

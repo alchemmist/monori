@@ -22,11 +22,14 @@ REPO = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO / "server"))
 
 from app.workbook import spec  # noqa: E402
-from app.workbook.template_importer import RU_HEADERS, parse_template_workbook  # noqa: E402
+from app.workbook.parser import TX_ALIASES, parse_workbook  # noqa: E402
 
 OUT = REPO / "web" / "e2e" / "fixtures" / "template-workbook.xlsx"
 
-TX_HEADER = list(RU_HEADERS.values())
+TX_HEADER = [
+    TX_ALIASES[f][0]
+    for f in ("date", "card", "status", "amount", "currency", "bank_category", "mcc", "description")
+]
 
 
 def tx(date, amount, category, *, card="*1111", desc="", kw=None):
@@ -129,7 +132,7 @@ def main():
     wb.save(buf)
     data = buf.getvalue()
 
-    parsed = parse_template_workbook(data)
+    parsed = parse_workbook(data)
     synthetic = [t for t in parsed["transactions"] if t.get("synthetic")]
     markers = sorted({t["marker"] for t in parsed["transactions"]})
     counts = {
@@ -158,9 +161,9 @@ def main():
     assert keywords["Groceries"] == "lenta|okey", keywords
     cell = next(b for b in parsed["budgets"] if b["category"] == "Groceries" and b["month"] == 1)
     assert (cell["year"], cell["amount"]) == (2026, 500000), cell
-    # 4 categories: Groceries/Cafe/Salary from the grid plus the importer's
-    # auto-created "Income" for the income summary row
-    assert counts == {"groups": 2, "categories": 4, "transactions": 5, "budget_cells": 3}, counts
+    # 3 categories, all from the grid: the workbook already has an income group,
+    # so the reader has somewhere to put rebuilt income and invents nothing
+    assert counts == {"groups": 2, "categories": 3, "transactions": 5, "budget_cells": 3}, counts
     assert markers == ["*1111", "*2222"], markers
 
     OUT.parent.mkdir(parents=True, exist_ok=True)
