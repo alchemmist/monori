@@ -1,6 +1,13 @@
 import { create } from "zustand";
 import { api } from "./api.js";
 import { demoSnapshot } from "./demo/demoData.js";
+import { mergeTransactions } from "./mergeTransactions.js";
+
+/** Rows per background chunk once the light snapshot has painted. */
+export const TX_CHUNK = 1000;
+
+/** Bumped by every load(); a fill whose generation is stale drops its results. */
+let fillGeneration = 0;
 
 /** The public /demo page runs entirely on the bundled sample dataset: no auth,
  * no backend calls. Mutations still work but stay local (nothing is persisted). */
@@ -13,6 +20,8 @@ export const isDemo = () => {
 export const useStore = create((set, get) => ({
     snapshot: null,
     loading: true,
+    /** `{loaded, total}` while the background fill runs, null when it's done. */
+    txProgress: null,
     error: null,
     toast: null,
     user: null,
@@ -54,16 +63,81 @@ export const useStore = create((set, get) => ({
         set({ user: null });
     },
 
+    /**
+     * First paint waits only on the light snapshot — everything but the bulk of
+     * the ledger, plus its newest page. The rest streams in behind it.
+     */
     async load() {
+        // claimed before the await, so two overlapping loads (React StrictMode
+        // remounts, a reload during a fill) leave only the last one filling
+        const generation = (fillGeneration += 1);
         if (isDemo()) {
-            set({ snapshot: structuredClone(demoSnapshot), loading: false, error: null });
+            const snapshot = structuredClone(demoSnapshot);
+            set({
+                snapshot: { ...snapshot, transactionsTotal: snapshot.transactions.length },
+                loading: false,
+                error: null,
+                txProgress: null,
+            });
             return;
         }
         try {
-            const snapshot = await api.snapshot();
+            const snapshot = await api.snapshot({ light: true });
+            if (generation !== fillGeneration) return;
             set({ snapshot, loading: false, error: null });
         } catch (e) {
-            set({ error: String(e), loading: false });
+            set({ error: String(e), loading: false, txProgress: null });
+            return;
+        }
+        get().fillTransactions(generation);
+    },
+
+    /**
+     * Pull the transactions the light snapshot left out, oldest-remaining first,
+     * merging each chunk into the canonical order so derived views just
+     * recompute. Offsets count back from the newest row: a local insert during
+     * the fill can shift them, and the id-dedupe in the merge absorbs that.
+     */
+    async fillTransactions(generation = fillGeneration) {
+        const snapshot = get().snapshot;
+        if (!snapshot) return;
+        let offset = snapshot.transactions.length;
+        let total = snapshot.transactionsTotal ?? offset;
+        if (offset >= total) {
+            set({ txProgress: null });
+            return;
+        }
+        set({ txProgress: { loaded: offset, total } });
+        try {
+            for (;;) {
+                const page = await api.transactions({ limit: TX_CHUNK, offset });
+                if (generation !== fillGeneration) return;
+                offset += page.rows.length;
+                total = Math.max(page.total, offset);
+                const current = get().snapshot;
+                const transactions = mergeTransactions(
+                    current.transactions,
+                    [...page.rows].reverse(),
+                );
+                const done = page.rows.length < TX_CHUNK || transactions.length >= total;
+                set({
+                    snapshot: {
+                        ...current,
+                        transactions,
+                        transactionsTotal: Math.max(total, transactions.length),
+                    },
+                    txProgress: done ? null : { loaded: transactions.length, total },
+                });
+                if (done) return;
+            }
+        } catch (e) {
+            if (generation !== fillGeneration) return;
+            set({ txProgress: null });
+            get().notify({
+                title: "Failed to load older transactions",
+                theme: "danger",
+                content: String(e),
+            });
         }
     },
 

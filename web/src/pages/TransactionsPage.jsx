@@ -3,6 +3,7 @@ import { Button, CloseButton } from "@mantine/core";
 import { FTextInput } from "../ui/fields.jsx";
 import InlineSelect from "../ui/InlineSelect.jsx";
 import Tag from "../ui/Tag.jsx";
+import ProgressRing from "../ui/ProgressRing.jsx";
 import { ArrowDownToLine, ArrowRightArrowLeft, ArrowUpToLine, Magnifier } from "@gravity-ui/icons";
 import { useStore } from "../store.js";
 import { orderedGroups, categoriesByGroup } from "../categoryOrder.js";
@@ -17,7 +18,7 @@ import "./budget.css";
 const ROW_H_FALLBACK = 39;
 
 export default function TransactionsPage() {
-    const { snapshot, setTxCategory, setTxAccount } = useStore();
+    const { snapshot, txProgress, setTxCategory, setTxAccount } = useStore();
     const [query, setQuery] = useState("");
     const [catFilter, setCatFilter] = useState("all");
     const [yearFilter, setYearFilter] = useState("all");
@@ -225,8 +226,23 @@ export default function TransactionsPage() {
                 </Button>
             </div>
 
-            <div style={{ marginBottom: 10, color: "var(--m-text-dim)", fontSize: 12 }}>
-                {filtered.length} transactions
+            <div
+                style={{
+                    marginBottom: 10,
+                    color: "var(--m-text-dim)",
+                    fontSize: 12,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 10,
+                }}
+            >
+                <span>{filtered.length} transactions</span>
+                {txProgress && (
+                    <ProgressRing
+                        value={txProgress.total ? txProgress.loaded / txProgress.total : 0}
+                        label={`Loading older transactions: ${txProgress.loaded} of ${txProgress.total}`}
+                    />
+                )}
             </div>
 
             <div className="card tx-table">

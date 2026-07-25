@@ -94,9 +94,40 @@ def serialize_budget(r):
     }
 
 
-def snapshot(c, user_id):
+LIGHT_SNAPSHOT_TX_LIMIT = 500
+
+TX_COLUMNS = (
+    "SELECT t.id, t.date, t.amount, t.description, t.bank_category, t.mcc,"
+    " t.category_id, t.account_id, t.transfer_id, t.comment, t.source"
+    " FROM transactions t JOIN accounts a ON a.id = t.account_id WHERE a.user_id=?"
+)
+
+
+def _snapshot_transactions(cur, uid, tx_limit):
+    """
+    The newest ``tx_limit`` transactions, handed back in the canonical
+    ``date, id`` order the client keeps them in. ``None`` means all of them.
+    """
+    if tx_limit is None:
+        return [serialize_tx(r) for r in cur.execute(f"{TX_COLUMNS} ORDER BY t.date, t.id", uid)]
+    rows = cur.execute(f"{TX_COLUMNS} ORDER BY t.date DESC, t.id DESC LIMIT ?", (*uid, tx_limit))
+    return [serialize_tx(r) for r in reversed(list(rows))]
+
+
+def snapshot(c, user_id, tx_limit=None):
     cur = c.cursor()
     uid = (user_id,)
+    transactions = _snapshot_transactions(cur, uid, tx_limit)
+    # a short read means the window covered everything, so the count is free
+    transactions_total = (
+        len(transactions)
+        if tx_limit is None or len(transactions) < tx_limit
+        else cur.execute(
+            "SELECT COUNT(*) FROM transactions t JOIN accounts a ON a.id = t.account_id"
+            " WHERE a.user_id=?",
+            uid,
+        ).fetchone()[0]
+    )
     return {
         "accounts": [
             serialize_account(r)
@@ -124,16 +155,8 @@ def snapshot(c, user_id):
                 uid,
             )
         ],
-        "transactions": [
-            serialize_tx(r)
-            for r in cur.execute(
-                "SELECT t.id, t.date, t.amount, t.description, t.bank_category, t.mcc,"
-                " t.category_id, t.account_id, t.transfer_id, t.comment, t.source"
-                " FROM transactions t JOIN accounts a ON a.id = t.account_id"
-                " WHERE a.user_id=? ORDER BY t.date, t.id",
-                uid,
-            )
-        ],
+        "transactions": transactions,
+        "transactionsTotal": transactions_total,
         "budgets": [
             serialize_budget(r)
             for r in cur.execute(

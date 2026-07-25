@@ -7,14 +7,14 @@ import os
 import pathlib
 from typing import Annotated
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 
 from .admin import record_api_usage
 from .auth import current_user
-from .deps import conn, snapshot
+from .deps import LIGHT_SNAPSHOT_TX_LIMIT, conn, snapshot
 from .routers import (
     accounts,
     admin,
@@ -83,10 +83,20 @@ for _router in (
 
 
 @app.get("/api/snapshot")
-def get_snapshot(user: Annotated[dict, Depends(current_user)]):
+def get_snapshot(
+    user: Annotated[dict, Depends(current_user)],
+    light: bool = False,
+    limit: int = Query(default=LIGHT_SNAPSHOT_TX_LIMIT, ge=1, le=5000),
+):
+    """
+    Everything the app needs to render. ``light=1`` caps the transactions at the
+    newest ``limit`` rows so first paint doesn't wait on years of history; the
+    client fills the rest in the background over ``GET /api/transactions``.
+    ``transactionsTotal`` always reports the full count.
+    """
     c = conn()
     try:
-        return snapshot(c, user["id"])
+        return snapshot(c, user["id"], tx_limit=limit if light else None)
     finally:
         c.close()
 

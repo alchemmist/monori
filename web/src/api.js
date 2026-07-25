@@ -29,7 +29,15 @@ const json = async (r) => {
 };
 
 export const api = {
-    snapshot: () => apiFetch("/api/snapshot").then(json),
+    snapshot: ({ light = false, limit } = {}) => {
+        const qs = new URLSearchParams();
+        if (light) qs.set("light", "1");
+        if (limit) qs.set("limit", String(limit));
+        const q = qs.toString();
+        return apiFetch(`/api/snapshot${q ? `?${q}` : ""}`).then(json);
+    },
+    transactions: ({ limit = 1000, offset = 0 } = {}) =>
+        apiFetch(`/api/transactions?limit=${limit}&offset=${offset}`).then(json),
     putBudget: (cell) =>
         apiFetch("/api/budgets", {
             method: "PUT",
