@@ -94,6 +94,51 @@ export function dayOfMonthProfile(snapshot, year) {
     return sums;
 }
 
+/**
+ * One year of expenses as a category × month matrix, ready to stack or plot.
+ * Returns [{id, name, monthly[12], total}] sorted by yearly total, biggest
+ * first, with everything past `limit` folded into a single trailing
+ * `{id: null, name: "Other"}` row so a long tail of small categories cannot
+ * turn the chart into an unreadable pile of slivers.
+ *
+ * Refunds are kept as the negative amounts they are (same as monthlySeries), so
+ * a category's year adds up to exactly what every other view reports for it.
+ */
+export function categoryYearMatrix(snapshot, year, { limit = 8 } = {}) {
+    const incomeIds = incomeGroupIdSet(snapshot.groups);
+    const catById = new Map(snapshot.categories.map((c) => [c.id, c]));
+    const rows = new Map();
+    for (const t of snapshot.transactions) {
+        if (!t.date.startsWith(year) || t.transferId != null || t.categoryId == null) continue;
+        const cat = catById.get(t.categoryId);
+        if (!cat || incomeIds.has(cat.groupId)) continue;
+        let row = rows.get(cat.id);
+        if (!row) {
+            row = {
+                id: cat.id,
+                groupId: cat.groupId,
+                name: cat.name,
+                monthly: Array(12).fill(0),
+                total: 0,
+            };
+            rows.set(cat.id, row);
+        }
+        const v = -t.amount;
+        row.monthly[+t.date.slice(5, 7) - 1] += v;
+        row.total += v;
+    }
+    const ranked = [...rows.values()]
+        .filter((r) => r.total !== 0 || r.monthly.some((v) => v !== 0))
+        .sort((a, b) => b.total - a.total || a.name.localeCompare(b.name));
+    if (ranked.length <= limit) return ranked;
+    const other = { id: null, groupId: null, name: "Other", monthly: Array(12).fill(0), total: 0 };
+    for (const r of ranked.slice(limit)) {
+        for (let m = 0; m < 12; m++) other.monthly[m] += r.monthly[m];
+        other.total += r.total;
+    }
+    return [...ranked.slice(0, limit), other];
+}
+
 /** Merchant key: strip trailing city/junk numbers, collapse whitespace, take a
  * stable prefix so "OZON ... MOSCOW" and "OZON ... MOSKVA G" group together. */
 export function merchantKey(description) {

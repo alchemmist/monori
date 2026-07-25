@@ -13,12 +13,23 @@ import {
     topMerchants,
     txStats,
     disciplineMatrix,
+    categoryYearMatrix,
 } from "../engine/analytics.js";
 import { PALETTE, SERIES, cartesian } from "./chartTheme.js";
 import "./dashboard.css";
 import "./analytics.css";
 
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+// how many categories the year-by-category chart names before the rest are
+// folded into a neutral "Other" — one per palette hue, so no two stacked bands
+// of a month can share a color and the legend stays a lookup table
+const CATEGORY_LIMIT = PALETTE.length;
+
+const SHAPES = [
+    { value: "stacked", label: "Stacked" },
+    { value: "lines", label: "Lines" },
+];
 
 // per-bar color from a data-row field, so each bar's color is keyed by its own
 // row (month/day) rather than its numeric value — Mantine's getBarColor only
@@ -52,6 +63,7 @@ export default function AnalyticsPage({ results, firstYear, lastYear }) {
     const { snapshot } = useStore();
     const now = useMemo(() => new Date(), []);
     const [year, setYear] = useState(String(now.getFullYear()));
+    const [catShape, setCatShape] = useState("stacked");
 
     const years = [];
     for (let y = firstYear; y <= Math.min(lastYear, now.getFullYear()); y++) years.push(String(y));
@@ -103,6 +115,45 @@ export default function AnalyticsPage({ results, firstYear, lastYear }) {
         }));
         return { data, series, current: String(+year) };
     }, [monthly, year, firstYear]);
+
+    // The year read one category at a time: a stack shows how the months are
+    // composed, lines show how one category drifts across the year. Data keys
+    // are stable category ids rather than display labels: duplicate names (or a
+    // real category called "Other") must not overwrite each other's columns —
+    // the label only disambiguates the legend, appending the group where names
+    // clash.
+    const byCategory = useMemo(() => {
+        const rows = categoryYearMatrix(snapshot, year, { limit: CATEGORY_LIMIT });
+        const groupName = new Map(snapshot.groups.map((g) => [g.id, g.name]));
+        const seen = new Map();
+        for (const r of rows) seen.set(r.name, (seen.get(r.name) ?? 0) + 1);
+        const named = rows.map((r) => ({
+            ...r,
+            key: r.id == null ? "other" : `cat-${r.id}`,
+            label:
+                r.id != null && seen.get(r.name) > 1
+                    ? `${r.name} · ${groupName.get(r.groupId)}`
+                    : r.name,
+        }));
+        // months that have not happened yet are blank, not zero: on the line
+        // view a running year would otherwise plunge every category to the
+        // floor for the rest of the calendar; elapsed months with no spending
+        // stay a real 0, in past years every month has happened
+        const blankAfter = +year === now.getFullYear() ? now.getMonth() : 11;
+        const data = MONTHS_SHORT.map((mo, m) => {
+            const row = { month: mo };
+            for (const r of named) {
+                row[r.key] = m > blankAfter ? null : Math.round(r.monthly[m] / 100);
+            }
+            return row;
+        });
+        const series = named.map((r, i) => ({
+            name: r.key,
+            label: r.label,
+            color: r.id == null ? SERIES.hint : PALETTE[i % PALETTE.length],
+        }));
+        return { data, series, hasData: named.length > 0 };
+    }, [snapshot, year, now]);
 
     const weekdayData = useMemo(() => {
         const sums = weekdayProfile(snapshot, year);
@@ -201,6 +252,51 @@ export default function AnalyticsPage({ results, firstYear, lastYear }) {
                                 {...cartesian}
                             />
                         </ChartBoundary>
+                    </div>
+                </div>
+
+                <div className="card chart-card chart-card_wide">
+                    <div className="chart-card__head">
+                        <div className="chart-card__title">
+                            Categories through the year · {year}
+                            <span className="chart-card__hint">
+                                {" "}
+                                · every month, top {CATEGORY_LIMIT} categories
+                            </span>
+                        </div>
+                        <InlineSelect small value={catShape} onChange={setCatShape} data={SHAPES} />
+                    </div>
+                    <div className="chart-card__body chart-card__body_tall">
+                        {byCategory.hasData ? (
+                            <ChartBoundary>
+                                {catShape === "stacked" ? (
+                                    <BarChart
+                                        h="100%"
+                                        data={byCategory.data}
+                                        dataKey="month"
+                                        series={byCategory.series}
+                                        type="stacked"
+                                        withLegend
+                                        {...cartesian}
+                                    />
+                                ) : (
+                                    <LineChart
+                                        h="100%"
+                                        data={byCategory.data}
+                                        dataKey="month"
+                                        series={byCategory.series}
+                                        withDots={false}
+                                        connectNulls={false}
+                                        withLegend
+                                        {...cartesian}
+                                    />
+                                )}
+                            </ChartBoundary>
+                        ) : (
+                            <div className="chart-card__empty">
+                                No categorized expenses in {year}
+                            </div>
+                        )}
                     </div>
                 </div>
 

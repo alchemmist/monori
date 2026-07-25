@@ -9,6 +9,7 @@ import {
     txStats,
     disciplineMatrix,
     accountBalances,
+    categoryYearMatrix,
 } from "./analytics.js";
 import { computeRange } from "./budget.js";
 
@@ -116,6 +117,68 @@ describe("topMerchants", () => {
         expect(pyat.total).toBe(30_000_00);
         expect(pyat.count).toBe(2);
         expect(top[0]).toBe(pyat);
+    });
+});
+
+describe("categoryYearMatrix", () => {
+    it("spreads each expense category across the twelve months of the year", () => {
+        const rows = categoryYearMatrix(snapshot, "2024");
+        expect(rows.map((r) => r.name)).toEqual(["Groceries", "Fun"]);
+        const [groceries, fun] = rows;
+        expect(groceries.monthly).toEqual([20_000_00, 10_000_00, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+        expect(groceries.total).toBe(30_000_00);
+        expect(fun.total).toBe(5_000_00);
+        // income, transfers and uncategorized rows have no place in an expense chart
+        expect(rows.every((r) => r.monthly.length === 12)).toBe(true);
+    });
+
+    it("ties out with the expense side of monthlySeries", () => {
+        const rows = categoryYearMatrix(snapshot, "2024");
+        const perMonth = monthlySeries(snapshot).filter(([k]) => k.startsWith("2024"));
+        for (const [key, v] of perMonth) {
+            const m = +key.slice(5, 7) - 1;
+            const stacked = rows.reduce((s, r) => s + r.monthly[m], 0);
+            expect(stacked).toBe(v.expense);
+        }
+    });
+
+    it("folds the tail past the limit into one Other row", () => {
+        const many = {
+            groups: [{ id: 2, name: "Daily", kind: "expense" }],
+            categories: [1, 2, 3, 4].map((i) => ({ id: i, groupId: 2, name: `C${i}` })),
+            transactions: [1, 2, 3, 4].map((i) => ({
+                id: i,
+                date: "2024-03-05",
+                amount: -i * 1_000_00,
+                categoryId: i,
+                description: `c${i}`,
+            })),
+        };
+        const rows = categoryYearMatrix(many, "2024", { limit: 2 });
+        expect(rows.map((r) => r.name)).toEqual(["C4", "C3", "Other"]);
+        const other = rows[2];
+        expect(other.id).toBe(null);
+        // C2 + C1, landing on March like the rows it stands for
+        expect(other.total).toBe(3_000_00);
+        expect(other.monthly[2]).toBe(3_000_00);
+    });
+
+    it("nets a refund against the month it lands in instead of dropping it", () => {
+        const refunded = {
+            groups: [{ id: 2, name: "Daily", kind: "expense" }],
+            categories: [{ id: 20, groupId: 2, name: "Groceries" }],
+            transactions: [
+                { id: 1, date: "2024-01-10", amount: -5_000_00, categoryId: 20, description: "a" },
+                { id: 2, date: "2024-01-20", amount: 2_000_00, categoryId: 20, description: "ref" },
+            ],
+        };
+        const [row] = categoryYearMatrix(refunded, "2024");
+        expect(row.monthly[0]).toBe(3_000_00);
+        expect(row.total).toBe(3_000_00);
+    });
+
+    it("returns nothing for a year without categorized expenses", () => {
+        expect(categoryYearMatrix(snapshot, "2019")).toEqual([]);
     });
 });
 
