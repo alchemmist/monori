@@ -1,0 +1,119 @@
+/* Settings — grouped rows instead of free-floating cards: one card per section,
+   rows divided by hairlines, so the page reads as a short list of decisions
+   rather than a pile of tiles. */
+
+.settings {
+    display: flex;
+    flex-direction: column;
+    gap: 26px;
+    max-width: 620px;
+}
+
+.settings__section-title {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--m-text-faint);
+    margin: 0 0 8px 2px;
+}
+
+.settings__group {
+    overflow: hidden;
+}
+
+.settings__row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+    padding: 16px 20px;
+}
+
+.settings__row + .settings__row,
+.settings__identity + .settings__row {
+    border-top: 1px solid var(--m-border-soft);
+}
+
+.settings__row button {
+    flex-shrink: 0;
+}
+
+.settings__label {
+    font-weight: 600;
+    font-size: 14px;
+}
+
+.settings__hint {
+    color: var(--m-text-dim);
+    font-size: 13px;
+    line-height: 1.45;
+    margin-top: 3px;
+}
+
+.settings__hint_bad {
+    color: var(--m-expense);
+}
+
+/* identity block: avatar + address, the one row that is a header rather than
+   a control */
+.settings__identity {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 18px 20px;
+}
+
+.settings__avatar {
+    width: 42px;
+    height: 42px;
+    flex-shrink: 0;
+    display: grid;
+    place-items: center;
+    border-radius: 50%;
+    background: var(--m-accent-soft);
+    color: var(--m-accent);
+    font-weight: 800;
+    font-size: 17px;
+    text-transform: uppercase;
+}
+
+.settings__email {
+    font-weight: 600;
+    font-size: 15px;
+    overflow-wrap: anywhere;
+}
+
+.settings__meta {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    color: var(--m-text-dim);
+    font-size: 12.5px;
+    margin-top: 3px;
+}
+
+.settings__badge {
+    display: inline-block;
+    padding: 1px 7px;
+    border-radius: 999px;
+    background: var(--m-accent-soft);
+    color: var(--m-accent);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+}
+
+@media (width <= 640px) {
+    .settings__row {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 12px;
+    }
+
+    .settings__row button {
+        width: 100%;
+    }
+}

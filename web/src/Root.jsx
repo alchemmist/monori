@@ -10,6 +10,7 @@ import { theme as mantineTheme } from "./ui/theme.js";
 // the app itself, so it loads on demand
 const Landing = lazy(() => import("./components/Landing.jsx"));
 const MarkdownPage = lazy(() => import("./components/MarkdownPage.jsx"));
+const DiagramPage = lazy(() => import("./components/DiagramPage.jsx"));
 
 // one theme for the whole site (landing, docs, auth, app), persisted under a
 // single localStorage key so it never diverges between routes
@@ -65,6 +66,8 @@ export default function Root() {
                             />
                             <Route path="/docs/:slug" element={<MarkdownPage />} />
                         </Route>
+                        {/* the diagram viewer owns the whole viewport, so it sits outside the Shell */}
+                        <Route path="/docs/:slug/diagram/:index" element={<DiagramPage />} />
                         {/* everything else is the app itself (auth, demo, panel) */}
                         <Route
                             path="*"

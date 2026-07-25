@@ -2,8 +2,38 @@ import { Button, SegmentedControl } from "@mantine/core";
 import { useState } from "react";
 
 import { api } from "../api.js";
+import { isDemo, useStore } from "../store.js";
+import { fmtDate } from "../format.js";
+import "./settings.css";
+
+function Section({ title, children }) {
+    return (
+        <section>
+            <h2 className="settings__section-title">{title}</h2>
+            <div className="card settings__group">{children}</div>
+        </section>
+    );
+}
+
+function Row({ label, hint, hintBad, children }) {
+    return (
+        <div className="settings__row">
+            <div>
+                <div className="settings__label">{label}</div>
+                {hint && (
+                    <div className={`settings__hint${hintBad ? " settings__hint_bad" : ""}`}>
+                        {hint}
+                    </div>
+                )}
+            </div>
+            {children}
+        </div>
+    );
+}
 
 export default function SettingsPage({ theme, onToggleTheme, onMigrate }) {
+    const user = useStore((s) => s.user);
+    const logout = useStore((s) => s.logout);
     const [exporting, setExporting] = useState(false);
     const [exportError, setExportError] = useState("");
 
@@ -30,44 +60,66 @@ export default function SettingsPage({ theme, onToggleTheme, onMigrate }) {
     return (
         <div className="fade-in">
             <h1 className="page-title">Settings</h1>
-            <div className="card settings-row">
-                <div className="settings-row__text">
-                    <div className="settings-row__title">Theme</div>
-                    <div className="settings-row__hint">Light or dark appearance</div>
-                </div>
-                <SegmentedControl
-                    className="seg-l"
-                    value={theme}
-                    onChange={(v) => {
-                        if (v !== theme) onToggleTheme();
-                    }}
-                    data={[
-                        { value: "light", label: "Light" },
-                        { value: "dark", label: "Dark" },
-                    ]}
-                />
-            </div>
-            <div className="card settings-row">
-                <div className="settings-row__text">
-                    <div className="settings-row__title">Export</div>
-                    <div className="settings-row__hint">
-                        {exportError || "Download all data as a YNAB-style Excel workbook"}
-                    </div>
-                </div>
-                <Button variant="default" loading={exporting} onClick={exportXlsx}>
-                    Export to Excel
-                </Button>
-            </div>
-            <div className="card settings-row">
-                <div className="settings-row__text">
-                    <div className="settings-row__title">Migrate</div>
-                    <div className="settings-row__hint">
-                        Import categories, transactions and budgets from a YNAB-style workbook
-                    </div>
-                </div>
-                <Button variant="default" onClick={onMigrate}>
-                    Migrate from spreadsheet
-                </Button>
+            <div className="settings">
+                {!isDemo() && user && (
+                    <Section title="Account">
+                        <div className="settings__identity">
+                            <div className="settings__avatar" aria-hidden="true">
+                                {user.email.slice(0, 1)}
+                            </div>
+                            <div>
+                                <div className="settings__email">{user.email}</div>
+                                <div className="settings__meta">
+                                    {user.createdAt && (
+                                        <span>Joined {fmtDate(user.createdAt)}</span>
+                                    )}
+                                    {user.isAdmin && <span className="settings__badge">Admin</span>}
+                                </div>
+                            </div>
+                        </div>
+                        <Row label="Session" hint="End this session on this device">
+                            <Button variant="outline" data-tone="danger" onClick={logout}>
+                                Log out
+                            </Button>
+                        </Row>
+                    </Section>
+                )}
+
+                <Section title="Appearance">
+                    <Row label="Theme" hint="Light or dark appearance">
+                        <SegmentedControl
+                            className="seg-l"
+                            value={theme}
+                            onChange={(v) => {
+                                if (v !== theme) onToggleTheme();
+                            }}
+                            data={[
+                                { value: "light", label: "Light" },
+                                { value: "dark", label: "Dark" },
+                            ]}
+                        />
+                    </Row>
+                </Section>
+
+                <Section title="Data">
+                    <Row
+                        label="Export"
+                        hint={exportError || "Download all data as a YNAB-style Excel workbook"}
+                        hintBad={!!exportError}
+                    >
+                        <Button variant="default" loading={exporting} onClick={exportXlsx}>
+                            Export to Excel
+                        </Button>
+                    </Row>
+                    <Row
+                        label="Migrate"
+                        hint="Import categories, transactions and budgets from a YNAB-style workbook"
+                    >
+                        <Button variant="default" onClick={onMigrate}>
+                            Migrate from spreadsheet
+                        </Button>
+                    </Row>
+                </Section>
             </div>
         </div>
     );

@@ -4,8 +4,14 @@ const raw = import.meta.glob("../../docs/*.md", {
     eager: true,
 });
 
+// react-markdown 9 has no raw-HTML pass, so an HTML comment reaches the page as
+// literal text; the docs use them as generator markers, so drop them here
+export function stripHtmlComments(text) {
+    return text.replace(/<!--[\s\S]*?-->[ \t]*\n?/g, "");
+}
+
 function md(name) {
-    return raw[`../../docs/${name}.md`] ?? "";
+    return stripHtmlComments(raw[`../../docs/${name}.md`] ?? "");
 }
 
 export const NAV = [
@@ -46,6 +52,14 @@ export const NAV = [
 ];
 
 export const SECTIONS = NAV.flatMap((g) => g.items);
+
+// the fullscreen viewer addresses a diagram by its position on the page, so the
+// page and the viewer have to extract the fences the same way
+export function mermaidCharts(body) {
+    return [...String(body ?? "").matchAll(/```mermaid[^\n]*\n([\s\S]*?)```/g)].map((m) =>
+        m[1].replace(/\n$/, ""),
+    );
+}
 
 export function sectionBySlug(slug) {
     return SECTIONS.find((s) => s.slug === slug);

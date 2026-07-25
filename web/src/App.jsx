@@ -16,7 +16,7 @@ import {
     ClockArrowRotateLeft,
     SlidersVertical,
     Book,
-    ArrowRightFromSquare,
+    Bug,
     PersonGear,
 } from "@gravity-ui/icons";
 import { useStore, isDemo } from "./store.js";
@@ -53,10 +53,16 @@ const SOON = [
     { title: "Rules", icon: SlidersVertical, issue: 21 },
 ];
 
+// the sidebar's bug button opens a pre-labelled GitHub issue carrying the
+// skeleton a usable report needs, so the reporter is not staring at an empty box
+const REPORT_BUG_URL = `https://github.com/alchemmist/monori/issues/new?labels=bug&body=${encodeURIComponent(
+    "**What happened**\n\n\n**What I expected**\n\n\n**Steps to reproduce**\n\n1. \n",
+)}`;
+
 const FIRST_YEAR = 2020;
 
 export default function App({ theme, onToggleTheme }) {
-    const { snapshot, loading, error, load, toast, user, authChecked, checkAuth, logout, openTab } =
+    const { snapshot, loading, error, load, toast, user, authChecked, checkAuth, openTab } =
         useStore();
     const [page, setPage] = useState("budget");
     const [collapsed, setCollapsed] = useState(
@@ -195,24 +201,24 @@ export default function App({ theme, onToggleTheme }) {
                         <Book width={16} height={16} />
                         <span className="sidebar__label">Docs</span>
                     </a>
+                    <a
+                        className="sidebar__item"
+                        href={REPORT_BUG_URL}
+                        target="_blank"
+                        rel="noreferrer"
+                        title="Report a bug on GitHub"
+                    >
+                        <Bug width={16} height={16} />
+                        <span className="sidebar__label">Report a bug</span>
+                    </a>
                     <button
                         className={`sidebar__item ${page === "settings" ? "sidebar__item_active" : ""}`}
                         onClick={() => setPage("settings")}
-                        title={collapsed ? "Settings" : undefined}
+                        title={collapsed ? "Settings" : user?.email}
                     >
                         <Gear width={16} height={16} />
                         <span className="sidebar__label">Settings</span>
                     </button>
-                    {!isDemo() && (
-                        <button
-                            className="sidebar__item"
-                            onClick={logout}
-                            title={collapsed ? "Log out" : user?.email}
-                        >
-                            <ArrowRightFromSquare width={16} height={16} />
-                            <span className="sidebar__label">Log out</span>
-                        </button>
-                    )}
                     <button
                         className="sidebar__collapse"
                         onClick={toggleSidebar}
