@@ -19,6 +19,7 @@ export default function Mermaid({ chart, fullscreenHref }) {
                 className="md-mermaid__canvas"
                 role="img"
                 // eslint-disable-next-line react/no-danger -- svg comes from mermaid's own renderer
+                // nosemgrep: typescript.react.security.audit.react-dangerouslysetinnerhtml.react-dangerouslysetinnerhtml -- mermaid runs at securityLevel "strict" (its bundled dompurify sanitizes the svg) and the source is repo-authored docs, not user input
                 dangerouslySetInnerHTML={{ __html: svg }}
             />
             {fullscreenHref && (
