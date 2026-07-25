@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { AreaChart, BarChart } from "@mantine/charts";
 import { Button } from "@mantine/core";
+import AdminTxTab from "../components/AdminTxTab.jsx";
 import { ChartBoundary } from "../components/ChartCard.jsx";
 import { FTextInput } from "../ui/fields.jsx";
 import { api } from "../api.js";
@@ -189,7 +190,17 @@ export default function AdminPage() {
                         ))}
                     </tbody>
                 </table>
-                {detail && <UserDetail detail={detail} />}
+                {detail && (
+                    <UserDetail
+                        detail={detail}
+                        onChanged={() => {
+                            reload();
+                            api.adminUserDetail(detail.user.id)
+                                .then(setDetail)
+                                .catch(() => {});
+                        }}
+                    />
+                )}
             </div>
 
             <CreateUser onCreated={reload} />
@@ -282,7 +293,8 @@ function UserRow({ user, open, onOpen, onDeleted }) {
 
 const TX_PREVIEW = 5;
 
-function UserDetail({ detail }) {
+function UserDetail({ detail, onChanged }) {
+    const [managing, setManaging] = useState(false);
     const openFull = async () => {
         // open the tab inside the click gesture so it is not popup-blocked, then
         // point it at a plain-text blob of one JSON transaction per line
@@ -357,11 +369,16 @@ function UserDetail({ detail }) {
             <div className="admin-detail__col admin-detail__col_wide">
                 <div className="admin-detail__title admin-detail__head">
                     <span>Recent transactions</span>
-                    {detail.recentTransactions.length > 0 && (
-                        <Button size="xs" variant="subtle" onClick={openFull}>
-                            Full
+                    <span className="admin-detail__actions">
+                        {detail.recentTransactions.length > 0 && (
+                            <Button size="xs" variant="subtle" onClick={openFull}>
+                                Full
+                            </Button>
+                        )}
+                        <Button size="xs" variant="subtle" onClick={() => setManaging(true)}>
+                            Manage
                         </Button>
-                    )}
+                    </span>
                 </div>
                 <table className="admin-table admin-table_compact">
                     <tbody>
@@ -386,6 +403,13 @@ function UserDetail({ detail }) {
                     </tbody>
                 </table>
             </div>
+            {managing && (
+                <AdminTxTab
+                    user={detail.user}
+                    onClose={() => setManaging(false)}
+                    onChanged={onChanged}
+                />
+            )}
         </div>
     );
 }

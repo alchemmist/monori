@@ -234,6 +234,53 @@ def test_activity_reports_feature_usage_and_logins(anon, monkeypatch):
     assert "other@example.com" in emails
 
 
+def test_bulk_delete_removes_only_selected_transactions(anon, monkeypatch):
+    other = login_as(anon, "bulk@example.com")
+    anon.headers.update(other)
+    kept = _add_tx(anon, amount=-100, date="2026-07-01T12:00:00")["id"]
+    doomed = [
+        _add_tx(anon, amount=-100 * d, date=f"2026-07-0{d}T13:00:00")["id"] for d in range(2, 6)
+    ]
+    uid = anon.get("/api/auth/me").json()["id"]
+    anon.headers.clear()
+    anon.headers.update(_make_admin(anon, monkeypatch))
+
+    r = anon.post(f"/api/admin/users/{uid}/transactions/delete", json={"ids": doomed})
+    assert r.status_code == 200, r.text
+    assert r.json() == {"deleted": 4}
+    rows = anon.get(f"/api/admin/users/{uid}/transactions").json()
+    assert [t["id"] for t in rows] == [kept]
+
+
+def test_bulk_delete_is_all_or_nothing_across_users(anon, monkeypatch):
+    victim = login_as(anon, "victim2@example.com")
+    anon.headers.update(victim)
+    foreign = _add_tx(anon)["id"]
+    anon.headers.clear()
+    owner = login_as(anon, "owner@example.com")
+    anon.headers.update(owner)
+    own = _add_tx(anon)["id"]
+    uid = anon.get("/api/auth/me").json()["id"]
+    anon.headers.clear()
+    anon.headers.update(_make_admin(anon, monkeypatch))
+
+    # one foreign id poisons the whole request; nothing is deleted
+    r = anon.post(f"/api/admin/users/{uid}/transactions/delete", json={"ids": [own, foreign]})
+    assert r.status_code == 400
+    assert anon.get(f"/api/admin/users/{uid}/transactions").json()[0]["id"] == own
+
+    empty = anon.post(f"/api/admin/users/{uid}/transactions/delete", json={"ids": []})
+    assert empty.status_code == 400
+    unknown = anon.post("/api/admin/users/999/transactions/delete", json={"ids": [own]})
+    assert unknown.status_code == 404
+
+
+def test_bulk_delete_rejects_non_admin(anon):
+    headers = login_as(anon, "pleb@example.com")
+    r = anon.post("/api/admin/users/1/transactions/delete", json={"ids": [1]}, headers=headers)
+    assert r.status_code == 403
+
+
 def test_usage_middleware_ignores_anonymous_and_garbage_tokens(anon, monkeypatch):
     anon.get("/api/snapshot")
     anon.get("/api/snapshot", headers={"Authorization": "Bearer garbage"})

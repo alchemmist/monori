@@ -19,6 +19,7 @@ router = APIRouter(prefix="/api/admin", tags=["admin"])
 
 RECENT_TX_LIMIT = 50
 TX_PAGE_MAX = 1000
+SQL_CHUNK = 500
 RECENT_LOGINS_LIMIT = 50
 ACTIVITY_WINDOW_DAYS = 30
 
@@ -217,6 +218,51 @@ def user_transactions(
                 (uid, limit, offset),
             )
         ]
+    finally:
+        c.close()
+
+
+class DeleteTransactionsBody(BaseModel):
+    ids: list[int]
+
+
+@router.post("/users/{uid}/transactions/delete")
+def delete_user_transactions(
+    uid: int,
+    body: DeleteTransactionsBody,
+    admin: Annotated[dict, Depends(admin_user)],
+):
+    """
+    Bulk-delete a selection of one user's transactions. All-or-nothing: every
+    id must belong to the target user, otherwise nothing is deleted — a stale
+    selection must fail loudly rather than remove half of it.
+    """
+    ids = sorted(set(body.ids))
+    if not ids:
+        raise HTTPException(400, "no transaction ids given")
+    c = conn()
+    try:
+        if c.execute("SELECT 1 FROM users WHERE id=?", (uid,)).fetchone() is None:
+            raise HTTPException(404, "unknown user")
+        # the delete itself is scoped to the user's accounts and its rowcount
+        # verified, so there is no check-then-delete window: an id that stopped
+        # belonging to this user mid-flight rolls the whole batch back
+        deleted = 0
+        for i in range(0, len(ids), SQL_CHUNK):
+            chunk = ids[i : i + SQL_CHUNK]
+            marks = ",".join("?" * len(chunk))
+            # the interpolation only builds "?" placeholders; values are bound
+            cur = c.execute(
+                f"DELETE FROM transactions WHERE id IN ({marks})"  # nosec B608
+                " AND account_id IN (SELECT id FROM accounts WHERE user_id=?)",
+                (*chunk, uid),
+            )
+            deleted += cur.rowcount
+        if deleted != len(ids):
+            c.rollback()
+            raise HTTPException(400, "some transactions do not belong to this user")
+        c.commit()
+        return {"deleted": deleted}
     finally:
         c.close()
 
