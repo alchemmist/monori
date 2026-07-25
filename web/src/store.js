@@ -10,6 +10,8 @@ export const isDemo = () => {
     return p === "/demo" || p.startsWith("/demo/");
 };
 
+let nextTabId = 1;
+
 export const useStore = create((set, get) => ({
     snapshot: null,
     loading: true,
@@ -17,6 +19,28 @@ export const useStore = create((set, get) => ({
     toast: null,
     user: null,
     authChecked: false,
+
+    // globally mounted side tabs (see TabHost): they belong to the app shell,
+    // not a page, so navigating inside monori never closes them
+    tabs: [],
+    openTab(kind, props = {}, key = null) {
+        const tabs = get().tabs;
+        if (key != null && tabs.some((t) => t.key === key)) return;
+        set({ tabs: [...tabs, { id: nextTabId++, key, kind, props }] });
+    },
+    closeTab(id) {
+        set({ tabs: get().tabs.filter((t) => t.id !== id) });
+    },
+    closeTabByKey(key) {
+        set({ tabs: get().tabs.filter((t) => t.key !== key) });
+    },
+
+    // bumped by tabs that mutate admin data; the Admin page re-fetches while
+    // mounted instead of holding a page callback inside persistent tab props
+    adminTick: 0,
+    bumpAdminTick() {
+        set({ adminTick: get().adminTick + 1 });
+    },
 
     async checkAuth() {
         if (isDemo()) {
@@ -33,7 +57,7 @@ export const useStore = create((set, get) => ({
             set({ user, authChecked: true });
         } catch {
             localStorage.removeItem("monori_token");
-            set({ user: null, authChecked: true });
+            set({ user: null, authChecked: true, tabs: [] });
         }
     },
 
@@ -51,7 +75,7 @@ export const useStore = create((set, get) => ({
 
     logout() {
         localStorage.removeItem("monori_token");
-        set({ user: null });
+        set({ user: null, tabs: [] });
     },
 
     async load() {

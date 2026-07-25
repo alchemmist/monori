@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button, Textarea } from "@mantine/core";
 import { api } from "../api.js";
+import { useStore } from "../store.js";
 import Tab from "../ui/Tab.jsx";
 import Txt from "../ui/Txt.jsx";
 import { showToast } from "../ui/notify.js";
@@ -20,7 +21,7 @@ const rowsLabel = (n) => `${n} ${n === 1 ? "row" : "rows"}`;
  * once by the server (rolled back, with the row count it would have touched)
  * and only applies after the admin confirms that count — the refusal doubles as
  * a dry run. */
-export default function AdminSqlTab({ onClose, onChanged }) {
+export default function AdminSqlTab({ onClose }) {
     const [sql, setSql] = useState("");
     const [busy, setBusy] = useState(false);
     const [result, setResult] = useState(null);
@@ -50,7 +51,7 @@ export default function AdminSqlTab({ onClose, onChanged }) {
                         content: statement,
                         theme: "success",
                     });
-                    onChanged?.();
+                    useStore.getState().bumpAdminTick();
                 }
             } catch (e) {
                 setResult(null);
@@ -65,7 +66,7 @@ export default function AdminSqlTab({ onClose, onChanged }) {
                 setBusy(false);
             }
         },
-        [sql, busy, onChanged],
+        [sql, busy],
     );
 
     const onKeyDown = (e) => {

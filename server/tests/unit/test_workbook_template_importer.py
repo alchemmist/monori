@@ -24,6 +24,7 @@ from app.workbook.template_importer import (
     _stamp,
     _summary_value,
     _synthetic,
+    _tx_header_index,
     is_template_transactions_header,
     looks_like_template,
     parse_template_workbook,
@@ -724,3 +725,62 @@ def test_prepared_next_year_sheet_adds_no_future_rows():
 def test_parse_template_rejects_garbage_bytes():
     with pytest.raises(TemplateError, match="not a readable .xlsx workbook"):
         parse_template_workbook(b"nope")
+
+
+def test_live_layout_locates_category_and_keywords_by_content():
+    """
+    The live template's keyword table starts at row 1 (its cells pollute the
+    header index) and the category column follows the bank headers with no
+    gap column — both must be found by content, not fixed offsets.
+    """
+    wb = Workbook()
+    wb.remove(wb.active)
+    ws = wb.create_sheet(spec.SHEET_TRANSACTIONS)
+    ws.append([None, *TX_HEADER, None, None, "Income", "salary|bonus"])
+    row = [None, datetime.datetime(2025, 1, 1), "*1111", "OK", -100.0, "RUB", "Super", "5411"]
+    ws.append([*row, "Lenta"][:9] + ["Groceries", "stale", "МТС", "мтс|телефон"])
+    row2 = [None, datetime.datetime(2025, 1, 2), "*1111", "OK", -50.0, "RUB", "Super", "5411"]
+    ws.append([*row2, "Okey"][:9] + ["", "stale", "Cafes", "кафе|бар"])
+    idx = _tx_header_index(ws)
+    warnings, errors = [], []
+    rows = _parse_transactions(ws, warnings, errors)
+    assert errors == []
+    assert [r["monori_category"] for r in rows] == ["Groceries", ""]
+    kws = _parse_keywords(ws, idx)
+    assert kws == {"Income": "salary|bonus", "МТС": "мтс|телефон", "Cafes": "кафе|бар"}
+
+
+def test_future_budgets_do_not_extend_reconciliation():
+    """
+    Budget cells in future months are planning, not activity; their stale
+    cached balances must not be reconciled into future-dated synthetic rows,
+    while the budgets themselves are still imported.
+    """
+    wb = Workbook()
+    wb.remove(wb.active)
+    _tx_sheet(wb, [_tx(datetime.datetime(2025, 1, 15), -300.0, "Groceries", desc="Lenta")])
+    _write_year(
+        wb.create_sheet("2025"),
+        months=[1, 2, 3],
+        rows=[
+            ("▼Daily", None),
+            ("Groceries", {1: (1000, 300, 700), 2: (500, None, 0), 3: (None, None, 0)}),
+        ],
+        income={1: 5000},
+        header_row=8,
+    )
+    parsed = parse_template_workbook(_save(wb))
+    assert all(t["date"] < "2025-02" for t in parsed["transactions"])
+    assert {(b["year"], b["month"]) for b in parsed["budgets"]} == {(2025, 1), (2025, 2)}
+
+
+def test_parse_keywords_falls_back_without_pipes():
+    """
+    No pipe anywhere -> content detection abstains and the known-header
+    positional fallback (immune to side-table pollution) must still hit.
+    """
+    ws = _tx_only_ws(
+        [_tx(datetime.datetime(2025, 1, 2), -10.0, "Cafes", kw=("Cafes", "starbucks"))]
+    )
+    idx = {name: i for i, name in enumerate(TX_HEADER)}
+    assert _parse_keywords(ws, idx) == {"Cafes": "starbucks"}

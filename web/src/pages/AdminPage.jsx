@@ -1,13 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
 import { AreaChart, BarChart } from "@mantine/charts";
 import { Button } from "@mantine/core";
-import AdminSqlTab from "../components/AdminSqlTab.jsx";
-import AdminTxTab from "../components/AdminTxTab.jsx";
 import { ChartBoundary } from "../components/ChartCard.jsx";
 import { api } from "../api.js";
 import { money } from "../format.js";
 import { SERIES, cartesian } from "./chartTheme.js";
 import { showToast } from "../ui/notify.js";
+import { useStore } from "../store.js";
 import "./dashboard.css";
 import "./admin.css";
 
@@ -29,7 +28,6 @@ export default function AdminPage() {
     const [activity, setActivity] = useState(null);
     const [detail, setDetail] = useState(null);
     const [error, setError] = useState(null);
-    const [sqlOpen, setSqlOpen] = useState(false);
 
     const reload = useCallback(() => {
         Promise.all([api.adminOverview(), api.adminUsers(), api.adminActivity()])
@@ -44,6 +42,23 @@ export default function AdminPage() {
     useEffect(() => {
         reload();
     }, [reload]);
+
+    // persistent tabs signal admin-data mutations through the store instead of
+    // holding a callback into this (possibly unmounted) page
+    const openTab = useStore((s) => s.openTab);
+    const adminTick = useStore((s) => s.adminTick);
+    useEffect(() => {
+        if (!adminTick) return;
+        reload();
+        setDetail((d) => {
+            if (d) {
+                api.adminUserDetail(d.user.id)
+                    .then(setDetail)
+                    .catch(() => setDetail(null));
+            }
+            return d;
+        });
+    }, [adminTick, reload]);
 
     const openDetail = (id) => {
         if (detail?.user.id === id) {
@@ -64,7 +79,11 @@ export default function AdminPage() {
         <div className="fade-in">
             <div className="admin-page__head">
                 <h1 className="page-title">Admin</h1>
-                <Button size="xs" variant="subtle" onClick={() => setSqlOpen(true)}>
+                <Button
+                    size="xs"
+                    variant="subtle"
+                    onClick={() => openTab("admin-sql", {}, "admin-sql")}
+                >
                     SQL console
                 </Button>
             </div>
@@ -206,20 +225,8 @@ export default function AdminPage() {
                         ))}
                     </tbody>
                 </table>
-                {detail && (
-                    <UserDetail
-                        detail={detail}
-                        onChanged={() => {
-                            reload();
-                            api.adminUserDetail(detail.user.id)
-                                .then(setDetail)
-                                .catch(() => {});
-                        }}
-                    />
-                )}
+                {detail && <UserDetail detail={detail} />}
             </div>
-
-            {sqlOpen && <AdminSqlTab onClose={() => setSqlOpen(false)} onChanged={reload} />}
         </div>
     );
 }
@@ -268,6 +275,7 @@ function UserRow({ user, open, onOpen, onDeleted }) {
         setBusy(true);
         try {
             await api.adminDeleteUser(user.id);
+            useStore.getState().closeTabByKey(`admin-tx:${user.id}`);
             showToast({ title: "User deleted", content: user.email, theme: "success" });
             onDeleted();
         } catch (err) {
@@ -309,8 +317,8 @@ function UserRow({ user, open, onOpen, onDeleted }) {
 
 const TX_PREVIEW = 5;
 
-function UserDetail({ detail, onChanged }) {
-    const [managing, setManaging] = useState(false);
+function UserDetail({ detail }) {
+    const openTab = useStore((s) => s.openTab);
     const openFull = async () => {
         // open the tab inside the click gesture so it is not popup-blocked, then
         // point it at a plain-text blob of one JSON transaction per line
@@ -391,7 +399,17 @@ function UserDetail({ detail, onChanged }) {
                                 Full
                             </Button>
                         )}
-                        <Button size="xs" variant="subtle" onClick={() => setManaging(true)}>
+                        <Button
+                            size="xs"
+                            variant="subtle"
+                            onClick={() =>
+                                openTab(
+                                    "admin-tx",
+                                    { user: detail.user },
+                                    `admin-tx:${detail.user.id}`,
+                                )
+                            }
+                        >
                             Manage
                         </Button>
                     </span>
@@ -419,13 +437,6 @@ function UserDetail({ detail, onChanged }) {
                     </tbody>
                 </table>
             </div>
-            {managing && (
-                <AdminTxTab
-                    user={detail.user}
-                    onClose={() => setManaging(false)}
-                    onChanged={onChanged}
-                />
-            )}
         </div>
     );
 }
