@@ -23,15 +23,24 @@ const initialState = useStore.getState();
 
 function Wrap({ children }) {
     return (
-        <MantineProvider theme={theme} forceColorScheme="light">
+        <MantineProvider theme={theme} forceColorScheme="light" env="test">
             {children}
             <Notifications position="bottom-right" />
         </MantineProvider>
     );
 }
 
+/**
+ * `env="test"` drops Mantine's mount transitions, and `delay: null` drops
+ * user-event's inter-keystroke wait. Both are timers, and timers under a
+ * parallel vitest run get starved: without this the dropdown-and-type tests
+ * fail a handful at a time depending on machine load.
+ */
 export function renderUI(ui, options) {
-    return { user: userEvent.setup(), ...render(ui, { wrapper: Wrap, ...options }) };
+    return {
+        user: userEvent.setup({ delay: null }),
+        ...render(ui, { wrapper: Wrap, ...options }),
+    };
 }
 
 /** Fresh store between tests: zustand keeps state on the module, not the tree. */

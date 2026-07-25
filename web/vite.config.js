@@ -24,6 +24,9 @@ export default defineConfig({
         // component tests render into jsdom; the pure-logic suites don't care
         environment: "jsdom",
         setupFiles: ["src/test/setup.js"],
+        // component tests wait on real DOM updates; the default 5s holds
+        // locally but not on a loaded runner with several workers competing
+        testTimeout: 20000,
         coverage: {
             provider: "v8",
             all: true,
@@ -32,11 +35,12 @@ export default defineConfig({
                 "src/**/*.test.{js,jsx}",
                 "src/main.jsx",
                 "src/test/**",
-                // decorative-only: generative canvas/SVG art with no behavior a
-                // DOM assertion could pin down (jsdom paints nothing anyway)
+                // decorative-only: generative canvas art whose every frame lands
+                // on a 2d context jsdom does not implement, so nothing a DOM
+                // assertion could reach ever happens (Wordmark is plain markup
+                // and stays in — it is covered like any other component)
                 "src/components/Meadow.jsx",
                 "src/components/GlyphFlower.jsx",
-                "src/components/Wordmark.jsx",
             ],
             reporter: ["text", "json-summary"],
             reportsDirectory: "./coverage",
@@ -44,9 +48,9 @@ export default defineConfig({
             // features; the engine keeps its own line so the budgeting math
             // cannot be diluted by cheaply-covered UI
             thresholds: {
-                lines: 80,
-                statements: 80,
-                "src/engine/**": { lines: 80, statements: 80 },
+                lines: 90,
+                statements: 90,
+                "src/engine/**": { lines: 90, statements: 90 },
             },
         },
     },
