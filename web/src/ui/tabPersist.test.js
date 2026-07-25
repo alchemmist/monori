@@ -2,10 +2,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
     TABS_KEY,
     TAB_COLLAPSED_KEY,
+    TAB_WIDTH_KEY,
     loadCollapsed,
     loadTabs,
+    loadWidth,
     saveCollapsed,
     saveTabs,
+    saveWidth,
 } from "./tabPersist.js";
 
 const fakeStorage = () => {
@@ -74,5 +77,29 @@ describe("collapsed state", () => {
 
         localStorage.setItem(TAB_COLLAPSED_KEY, "[]");
         expect(loadCollapsed("SQL", false)).toBe(false);
+    });
+});
+
+describe("dragged width", () => {
+    it("remembers a drag per tab and rounds it to whole pixels", () => {
+        expect(loadWidth("SQL", null)).toBe(null);
+        saveWidth("SQL", 733.4);
+        saveWidth("Migration", 420);
+        expect(loadWidth("SQL", null)).toBe(733);
+        expect(loadWidth("Migration", null)).toBe(420);
+    });
+
+    it("resets to the tab's own width when saved as null", () => {
+        saveWidth("SQL", 900);
+        saveWidth("SQL", null);
+        expect(loadWidth("SQL", null)).toBe(null);
+    });
+
+    it("ignores a corrupted map or a nonsense width", () => {
+        localStorage.setItem(TAB_WIDTH_KEY, "[]");
+        expect(loadWidth("SQL", 420)).toBe(420);
+        localStorage.setItem(TAB_WIDTH_KEY, JSON.stringify({ SQL: "wide", Migration: -5 }));
+        expect(loadWidth("SQL", 420)).toBe(420);
+        expect(loadWidth("Migration", 420)).toBe(420);
     });
 });

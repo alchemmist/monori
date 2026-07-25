@@ -1,8 +1,9 @@
 /**
- * Persistence for the docked tabs: which tabs are open, and whether each one is
- * collapsed. Written once here so every current and future tab survives a
- * reload without its call site opting in — openTab/closeTab in the store and
- * the collapse toggle in Tab.jsx are the only places that touch it.
+ * Persistence for the docked tabs: which tabs are open, whether each one is
+ * collapsed and how wide the user dragged it. Written once here so every
+ * current and future tab survives a reload without its call site opting in —
+ * openTab/closeTab in the store and the collapse/resize handlers in Tab.jsx are
+ * the only places that touch it.
  *
  * Tab props therefore have to be JSON-serializable; anything that isn't (a
  * callback, a DOM node) is dropped by the round-trip, so tabs pass ids and
@@ -11,6 +12,7 @@
 
 export const TABS_KEY = "monori_tabs";
 export const TAB_COLLAPSED_KEY = "monori_tab_collapsed";
+export const TAB_WIDTH_KEY = "monori_tab_width";
 
 const store = () => (typeof localStorage === "undefined" ? null : localStorage);
 
@@ -62,4 +64,21 @@ export function loadCollapsed(key, fallback) {
 export function saveCollapsed(key, collapsed) {
     const map = read(TAB_COLLAPSED_KEY, {});
     write(TAB_COLLAPSED_KEY, { ...(isPlainObject(map) ? map : {}), [key]: collapsed });
+}
+
+/** Dragged widths in px, keyed the same way; the viewport cap stays in CSS. */
+export function loadWidth(key, fallback) {
+    const map = read(TAB_WIDTH_KEY, {});
+    if (!isPlainObject(map)) return fallback;
+    const w = map[key];
+    return typeof w === "number" && Number.isFinite(w) && w > 0 ? w : fallback;
+}
+
+export function saveWidth(key, width) {
+    const map = read(TAB_WIDTH_KEY, {});
+    const next = { ...(isPlainObject(map) ? map : {}) };
+    // null resets the tab to whatever width its own props ask for
+    if (width == null) delete next[key];
+    else next[key] = Math.round(width);
+    write(TAB_WIDTH_KEY, next);
 }

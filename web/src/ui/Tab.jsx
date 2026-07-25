@@ -8,7 +8,12 @@ import {
     subscribe,
     unregisterTab,
 } from "./tabStack.js";
-import { loadCollapsed, saveCollapsed } from "./tabPersist.js";
+import { loadCollapsed, loadWidth, saveCollapsed, saveWidth } from "./tabPersist.js";
+
+// a dragged tab stays between a tenth and nine tenths of the viewport: never so
+// narrow it is unreadable, never so wide the app behind it is gone
+const MIN_TAB_RATIO = 0.1;
+const MAX_TAB_RATIO = 0.9;
 
 /**
  * Tab — a dockable side panel that behaves like a real tab: it pins to the
@@ -28,9 +33,14 @@ import { loadCollapsed, saveCollapsed } from "./tabPersist.js";
  *  - persistKey: storage key for that remembered state, defaulting to the strip
  *                label; give it an explicit value when several tabs of one kind
  *                can be open at once and should be remembered apart
- *  - width:      expanded width as a percentage of the viewport, for tabs that
- *                need more than the default 420px card (the SQL console asks
- *                for 60). CSS still caps it at 92vw so the app stays visible.
+ *  - width:      default expanded width as a percentage of the viewport, for
+ *                tabs that need more than the default 420px card (the SQL
+ *                console asks for 60). CSS still caps it at 90vw so the app
+ *                stays visible.
+ *
+ * Every tab can be resized by dragging its left edge, between a tenth and nine
+ * tenths of the viewport; the width is remembered under the same persistKey, so
+ * the drag survives a reload and no call site has to opt in.
  *
  * Which tabs are open is persisted centrally by the store (see ui/tabPersist.js),
  * so a reload restores the stack without any tab having to ask for it.
@@ -51,9 +61,13 @@ export default function Tab({
     const stateKey = persistKey ?? strip ?? title;
     const [collapsed, setCollapsed] = useState(() => loadCollapsed(stateKey, defaultCollapsed));
     const [animating, setAnimating] = useState(false);
+    // null means "never dragged" — the tab then keeps whatever width its own
+    // `width` prop (or the CSS default) asks for
+    const [dragged, setDragged] = useState(() => loadWidth(stateKey, null));
+    const [resizing, setResizing] = useState(false);
 
     // register before paint (so co-mounting tabs never flash overlapped) with
-    // the real rendered width — CSS caps the tab at 92vw, so the 420px constant
+    // the real rendered width — CSS caps the tab at 90vw, so the 420px constant
     // can overstate the slot on narrow viewports; a ResizeObserver keeps the
     // slot honest through collapse/expand transitions and window resizes
     useLayoutEffect(() => {
@@ -70,6 +84,15 @@ export default function Tab({
 
     const offset = useSyncExternalStore(subscribe, () => offsetOf(id));
 
+    // closing the tab mid-drag must not leave the page unselectable
+    useEffect(
+        () => () => {
+            document.body.style.userSelect = "";
+            document.body.style.cursor = "";
+        },
+        [],
+    );
+
     const toggle = (next) => {
         setCollapsed(next);
         saveCollapsed(stateKey, next);
@@ -85,15 +108,56 @@ export default function Tab({
         return () => clearTimeout(t);
     }, [animating]);
 
-    const cls = ["ui-tab", collapsed && "ui-tab_collapsed", animating && "ui-tab_animating"]
+    // dragging the left edge: the tab is pinned right, so pulling the pointer
+    // left by N px widens it by N; the width transition is dropped mid-drag so
+    // the edge tracks the cursor instead of lagging a quarter second behind
+    const startResize = (e) => {
+        if (collapsed) return;
+        e.preventDefault();
+        const startX = e.clientX;
+        const startW = ref.current?.offsetWidth ?? TAB_WIDTH;
+        const min = window.innerWidth * MIN_TAB_RATIO;
+        const max = window.innerWidth * MAX_TAB_RATIO;
+        let next = startW;
+        setResizing(true);
+        e.currentTarget.setPointerCapture(e.pointerId);
+        document.body.style.userSelect = "none";
+        document.body.style.cursor = "ew-resize";
+
+        const move = (ev) => {
+            next = Math.min(Math.max(startW + (startX - ev.clientX), min), max);
+            setDragged(next);
+        };
+        const stop = () => {
+            window.removeEventListener("pointermove", move);
+            window.removeEventListener("pointerup", stop);
+            window.removeEventListener("pointercancel", stop);
+            document.body.style.userSelect = "";
+            document.body.style.cursor = "";
+            setResizing(false);
+            saveWidth(stateKey, next);
+        };
+        window.addEventListener("pointermove", move);
+        window.addEventListener("pointerup", stop);
+        window.addEventListener("pointercancel", stop);
+    };
+
+    const cls = [
+        "ui-tab",
+        collapsed && "ui-tab_collapsed",
+        animating && "ui-tab_animating",
+        resizing && "ui-tab_resizing",
+    ]
         .filter(Boolean)
         .join(" ");
+
+    const widthVar = dragged != null ? `${dragged}px` : width ? `${width}vw` : null;
 
     return (
         <aside
             ref={ref}
             className={cls}
-            style={{ right: offset, ...(width ? { "--ui-tab-w": `${width}vw` } : null) }}
+            style={{ right: offset, ...(widthVar ? { "--ui-tab-w": widthVar } : null) }}
             onTransitionEnd={(e) => {
                 if (e.propertyName === "width") setAnimating(false);
             }}
@@ -101,6 +165,19 @@ export default function Tab({
                 if (e.propertyName === "width") setAnimating(false);
             }}
         >
+            {!collapsed && (
+                <div
+                    className="ui-tab__grip"
+                    onPointerDown={startResize}
+                    onDoubleClick={() => {
+                        setDragged(null);
+                        saveWidth(stateKey, null);
+                    }}
+                    title="Drag to resize — double-click to reset"
+                    role="separator"
+                    aria-orientation="vertical"
+                />
+            )}
             <button
                 type="button"
                 className="ui-tab__strip"

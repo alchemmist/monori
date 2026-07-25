@@ -314,7 +314,7 @@
     position: fixed;
     top: 0;
     bottom: 0;
-    width: min(var(--ui-tab-w, 420px), 92vw);
+    width: min(var(--ui-tab-w, 420px), 90vw);
     z-index: 120;
     display: flex;
     overflow: hidden;
@@ -352,6 +352,37 @@
 
 .ui-tab_collapsed {
     width: 34px;
+}
+
+/* the drag handle on the left edge: a 4px hairline widened to a 10px hit area
+   that only paints on hover, so it never competes with the card's own border */
+.ui-tab__grip {
+    position: absolute;
+    inset: 0 auto 0 -3px;
+    width: 10px;
+    cursor: ew-resize;
+    z-index: 2;
+    touch-action: none;
+}
+
+.ui-tab__grip::after {
+    content: "";
+    position: absolute;
+    inset: 0 auto 0 3px;
+    width: 4px;
+    background: var(--m-accent);
+    opacity: 0;
+    transition: opacity 0.15s ease;
+}
+
+.ui-tab__grip:hover::after,
+.ui-tab_resizing .ui-tab__grip::after {
+    opacity: 0.55;
+}
+
+/* mid-drag the edge must track the cursor, not ease behind it */
+.ui-tab_resizing {
+    transition: none;
 }
 
 /* while the width animates the strip and inner are both "wrong" targets —
@@ -406,7 +437,7 @@
    instead of reflowing its content mid-animation */
 .ui-tab__inner {
     flex: none;
-    width: min(var(--ui-tab-w, 420px), 92vw);
+    width: min(var(--ui-tab-w, 420px), 90vw);
     display: flex;
     flex-direction: column;
 }
