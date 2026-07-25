@@ -135,6 +135,26 @@ export default function ConnectionDialog({ account, connection, onClose }) {
         }
     };
 
+    // the connector of an existing connection (the credentials-step `connector`
+    // is keyed on the bank picker, which is untouched in the ready step)
+    const readyConnector = connection
+        ? (connectors.find((c) => c.bank === connection.bank && c.kind === connection.kind) ?? null)
+        : null;
+    const refDirty = String(accountFields.account ?? "").trim() !== (account.bankRef || "");
+
+    const saveRef = async () => {
+        setBusy(true);
+        try {
+            await patchAccount(account.id, { bankRef: String(accountFields.account ?? "").trim() });
+            return true;
+        } catch (e) {
+            notify({ title: "Failed to save bank account", theme: "danger", content: String(e) });
+            return false;
+        } finally {
+            setBusy(false);
+        }
+    };
+
     const unlink = async () => {
         setBusy(true);
         try {
@@ -260,10 +280,35 @@ export default function ConnectionDialog({ account, connection, onClose }) {
                         {connection.lastSync ? fmtDate(connection.lastSync) : "never"}
                     </span>
                 </div>
-                {account.bankRef && (
-                    <div style={{ display: "flex", justifyContent: "space-between" }}>
-                        <Txt tone="secondary">Bank account</Txt>
-                        <span className="num">{account.bankRef}</span>
+                {readyConnector ? (
+                    readyConnector.accountParams.map((p) => (
+                        <FTextInput
+                            key={p.name}
+                            label={p.label}
+                            placeholder={p.help}
+                            title={p.help}
+                            value={accountFields[p.name] ?? ""}
+                            onChange={(e) =>
+                                setAccountFields((prev) => ({
+                                    ...prev,
+                                    [p.name]: e.target.value,
+                                }))
+                            }
+                        />
+                    ))
+                ) : (
+                    account.bankRef && (
+                        <div style={{ display: "flex", justifyContent: "space-between" }}>
+                            <Txt tone="secondary">Bank account</Txt>
+                            <span className="num">{account.bankRef}</span>
+                        </div>
+                    )
+                )}
+                {refDirty && (
+                    <div>
+                        <Button variant="subtle" size="s" onClick={saveRef} loading={busy}>
+                            Save bank account
+                        </Button>
                     </div>
                 )}
                 {connection.lastError && (
@@ -289,7 +334,10 @@ export default function ConnectionDialog({ account, connection, onClose }) {
         );
         footer = {
             apply: "Sync now",
-            onApply: () => runSync(connection.id),
+            onApply: async () => {
+                if (refDirty && !(await saveRef())) return;
+                await runSync(connection.id);
+            },
             applyProps: { loading: busy },
         };
     } else if (step === "sms") {
