@@ -13,6 +13,15 @@ import "./admin.css";
 const fmtDt = (s) => (s ? s.slice(0, 16).replace("T", " ") : "—");
 const fmtDate = (s) => (s ? s.slice(0, 10) : "—");
 
+const fmtBytes = (n) => {
+    if (n == null) return "—";
+    let v = n;
+    for (const unit of ["B", "KB", "MB", "GB"]) {
+        if (v < 1024 || unit === "GB") return `${v >= 100 ? Math.round(v) : v.toFixed(1)} ${unit}`;
+        v /= 1024;
+    }
+};
+
 export default function AdminPage() {
     const [overview, setOverview] = useState(null);
     const [users, setUsers] = useState(null);
@@ -73,6 +82,7 @@ export default function AdminPage() {
                 />
                 <Kpi label="Accounts" value={overview.totals.accounts} sub="all users" />
                 <Kpi label="Bank connections" value={overview.totals.connections} sub="all users" />
+                <Kpi label="Database" value={fmtBytes(overview.dbSizeBytes)} sub="on disk" />
             </div>
 
             <div className="charts-grid">

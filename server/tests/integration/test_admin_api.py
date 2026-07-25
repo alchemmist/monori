@@ -79,6 +79,7 @@ def test_overview_counts_users_and_transactions(anon, monkeypatch):
     assert body["activeUsers7d"] == 2
     months = {r["month"]: r["count"] for r in body["registrations"]}
     assert sum(months.values()) == 2
+    assert body["dbSizeBytes"] > 0
 
 
 def test_users_list_reports_per_user_aggregates(anon, monkeypatch):

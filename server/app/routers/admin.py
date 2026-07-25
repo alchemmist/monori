@@ -50,6 +50,9 @@ def overview(admin: Annotated[dict, Depends(admin_user)]):
                 "accounts": _count(c, "SELECT COUNT(*) FROM accounts"),
                 "connections": _count(c, "SELECT COUNT(*) FROM bank_connections"),
             },
+            # pragmas rather than a filesystem stat: the connection knows the
+            # database regardless of where (or whether) the file lives
+            "dbSizeBytes": _count(c, "PRAGMA page_count") * _count(c, "PRAGMA page_size"),
             "newUsers7d": _count(c, "SELECT COUNT(*) FROM users WHERE created_at >= ?", (cutoff7,)),
             "newUsers30d": _count(
                 c, "SELECT COUNT(*) FROM users WHERE created_at >= ?", (cutoff30,)
