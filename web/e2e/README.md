@@ -9,7 +9,6 @@ here touches the dev database or dev servers.
 
 ```sh
 make t-slow          # brings the stack up, runs the suite, tears it down
-make t-slow-headed   # same, but watch it live in a real browser window
 make t-slow-ui       # playwright's interactive ui: run tests on click, time-travel steps
 ```
 

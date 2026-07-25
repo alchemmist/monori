@@ -17,7 +17,11 @@ services:
             dockerfile: deploy/Dockerfile.back
         container_name: monori-back
         restart: unless-stopped
+        # ./data is a Syncthing folder owned by www (uid 1000) — write as that
+        # user or root-owned files break the sync with permission denied
+        user: "1000:1000"
         environment:
+            PYTHONDONTWRITEBYTECODE: "1"
             MONORI_SYNC_URL: http://sync:8010
             # comma-separated admin emails; set in deploy/.env on the host
             MONORI_ADMIN_EMAILS: ${MONORI_ADMIN_EMAILS:-}
@@ -35,11 +39,12 @@ services:
         container_name: monori-sync
         restart: unless-stopped
         environment:
-            # per-step screenshots + HTML land in ./data/sync-debug on the
-            # host; collected by the sync-debug workflow when a login breaks
+            # per-step screenshots + HTML land in ./sync-debug on the host —
+            # deliberately outside ./data: these dumps hold live bank pages and
+            # this service runs as root, so they must stay out of the sync
             MONORI_CONNECTOR_DEBUG: "1"
         volumes:
-            - ./data/sync-debug:/app/data
+            - ./sync-debug:/app/data
         networks:
             - internal
 

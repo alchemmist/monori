@@ -8,7 +8,7 @@ WEBBIN := web/node_modules/.bin
         fmt fmt-check \
         lint lint-web lint-css lint-html lint-server lint-sql lint-yaml lint-md lint-docs lint-actions lint-docker lint-shell spell \
         typecheck analyze audit audit-deps audit-deps-py audit-secrets \
-        test t-fast t-medium t-slow t-slow-headed t-slow-ui coverage mutation \
+        test t-fast t-medium t-slow t-slow-ui coverage mutation \
         schema-diagram check
 
 up:
@@ -128,13 +128,6 @@ t-medium:
 
 t-slow:
 	COMPOSE="$(COMPOSE)" bash scripts/e2e.sh
-
-# watch the e2e suite run in a real browser window, one test at a time and
-# slowed down enough to follow with the eyes (E2E_SLOWMO ms per action)
-E2E_SLOWMO ?= 500
-
-t-slow-headed:
-	COMPOSE="$(COMPOSE)" E2E_SLOWMO=$(E2E_SLOWMO) bash scripts/e2e.sh --headed --workers=1
 
 # playwright's interactive ui: pick tests, run on click, time-travel each step;
 # the stack stays up until the ui window is closed
