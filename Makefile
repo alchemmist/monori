@@ -111,8 +111,13 @@ audit-deps:
 	cd web && npm install --no-audit --no-fund --silent
 	cd web && npm audit --audit-level=high --json | python3 ../scripts/npm-audit-gate.py
 
+# no pipe here: make's sh has no pipefail, and pip-audit on an empty stdin
+# reports a clean pass — a failed export must redden the check, not blank it
 audit-deps-py:
-	cd server && uv export --no-dev --no-hashes --format requirements-txt | uv run pip-audit -r /dev/stdin
+	@req=$$(mktemp); \
+	( cd server && uv export --no-dev --no-hashes --format requirements-txt -o "$$req" \
+		&& uv run pip-audit -r "$$req" ); code=$$?; \
+	rm -f "$$req"; exit $$code
 
 audit-secrets:
 	gitleaks detect --no-banner --redact
