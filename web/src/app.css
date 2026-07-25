@@ -304,20 +304,6 @@
     text-decoration: underline;
 }
 
-/* settings page rows */
-.settings-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 16px;
-    padding: 18px 20px;
-    max-width: 460px;
-}
-
-.settings-row button {
-    flex-shrink: 0;
-}
-
 /* dockable side tabs (ui/Tab.jsx): pinned to the right edge, collapsible to
    a strip, stacking side by side; `right` is set inline per tab by the stack
    registry so open tabs line up instead of overlapping. --ui-tab-w is the
@@ -476,16 +462,6 @@
     gap: 8px;
     padding: 14px 20px;
     border-top: 1px solid var(--m-border-soft);
-}
-
-.settings-row__title {
-    font-weight: 600;
-}
-
-.settings-row__hint {
-    color: var(--m-text-dim);
-    font-size: 13px;
-    margin-top: 2px;
 }
 
 .fade-in {

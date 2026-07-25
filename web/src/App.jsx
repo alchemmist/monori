@@ -16,7 +16,6 @@ import {
     ClockArrowRotateLeft,
     SlidersVertical,
     Book,
-    ArrowRightFromSquare,
     PersonGear,
 } from "@gravity-ui/icons";
 import { useStore, isDemo } from "./store.js";
@@ -56,7 +55,7 @@ const SOON = [
 const FIRST_YEAR = 2020;
 
 export default function App({ theme, onToggleTheme }) {
-    const { snapshot, loading, error, load, toast, user, authChecked, checkAuth, logout, openTab } =
+    const { snapshot, loading, error, load, toast, user, authChecked, checkAuth, openTab } =
         useStore();
     const [page, setPage] = useState("budget");
     const [collapsed, setCollapsed] = useState(
@@ -198,21 +197,11 @@ export default function App({ theme, onToggleTheme }) {
                     <button
                         className={`sidebar__item ${page === "settings" ? "sidebar__item_active" : ""}`}
                         onClick={() => setPage("settings")}
-                        title={collapsed ? "Settings" : undefined}
+                        title={collapsed ? "Settings" : user?.email}
                     >
                         <Gear width={16} height={16} />
                         <span className="sidebar__label">Settings</span>
                     </button>
-                    {!isDemo() && (
-                        <button
-                            className="sidebar__item"
-                            onClick={logout}
-                            title={collapsed ? "Log out" : user?.email}
-                        >
-                            <ArrowRightFromSquare width={16} height={16} />
-                            <span className="sidebar__label">Log out</span>
-                        </button>
-                    )}
                     <button
                         className="sidebar__collapse"
                         onClick={toggleSidebar}

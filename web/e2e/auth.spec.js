@@ -1,4 +1,4 @@
-import { test, expect } from "./fixtures/fixtures.js";
+import { test, expect, gotoSection, openApp } from "./fixtures/fixtures.js";
 
 // The one spec that drives the real auth UI; every other spec logs in
 // programmatically via the token (see openApp) and stays focused on its
@@ -29,5 +29,13 @@ test("a wrong password shows an error and stays on the login page", async ({ pag
     await page.getByPlaceholder("Password", { exact: true }).fill("definitely-wrong");
     await page.locator(".login__submit").click();
     await expect(page.locator(".login__error")).toBeVisible();
+    await expect(page.locator(".sidebar")).not.toBeVisible();
+});
+
+test("logging out from settings leaves the app", async ({ page, user }) => {
+    await openApp(page, user);
+    await gotoSection(page, "Settings");
+    await page.getByRole("button", { name: "Log out" }).click();
+    await expect(page).toHaveURL(/\/welcome$/);
     await expect(page.locator(".sidebar")).not.toBeVisible();
 });
