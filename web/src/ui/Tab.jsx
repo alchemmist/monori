@@ -117,7 +117,9 @@ export default function Tab({ title, strip, onClose, footer, defaultCollapsed = 
                 <ChevronLeft width={16} height={16} />
                 <span className="ui-tab__strip-label">{strip || title}</span>
             </button>
-            <div className="ui-tab__inner">
+            {/* collapsed content is only clipped visually — inert keeps keyboard
+                focus and assistive tech out of the invisible controls */}
+            <div className="ui-tab__inner" inert={collapsed || undefined}>
                 <div className="ui-tab__head">
                     <div className="ui-tab__title">{title}</div>
                     <div className="ui-tab__head-actions">
