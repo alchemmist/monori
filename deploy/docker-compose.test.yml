@@ -16,4 +16,4 @@ services:
         depends_on:
             - back
         ports:
-            - "8078:8000"
+            - "${E2E_PORT:-8078}:8000"

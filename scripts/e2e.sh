@@ -9,7 +9,9 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 COMPOSE=${COMPOSE:-"docker compose"}
-E2E_PORT=${E2E_PORT:-8078}
+# exported so the compose file's "${E2E_PORT:-8078}:8000" publishes the same
+# port the probe and Playwright talk to
+export E2E_PORT=${E2E_PORT:-8078}
 BASE_URL=${E2E_BASE_URL:-"http://localhost:${E2E_PORT}"}
 
 stack() {
@@ -27,7 +29,7 @@ stack up --build --detach
 echo "waiting for the e2e stack on ${BASE_URL} ..."
 ready=""
 for _ in $(seq 1 120); do
-  if curl -fsS "${BASE_URL}/openapi.json" >/dev/null 2>&1; then
+  if curl -fsS --connect-timeout 1 --max-time 2 "${BASE_URL}/openapi.json" >/dev/null 2>&1; then
     ready=1
     break
   fi
