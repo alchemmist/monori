@@ -21,11 +21,23 @@ export default defineConfig({
         // e2e/ holds Playwright specs with their own runner — vitest must not
         // pick them up
         include: ["src/**/*.{test,spec}.{js,jsx}"],
+        // component tests render into jsdom; the pure-logic suites don't care
+        environment: "jsdom",
+        setupFiles: ["src/test/setup.js"],
         coverage: {
             provider: "v8",
             all: true,
             include: ["src/**/*.{js,jsx}"],
-            exclude: ["src/**/*.test.{js,jsx}", "src/main.jsx"],
+            exclude: [
+                "src/**/*.test.{js,jsx}",
+                "src/main.jsx",
+                "src/test/**",
+                // decorative-only: generative canvas/SVG art with no behavior a
+                // DOM assertion could pin down (jsdom paints nothing anyway)
+                "src/components/Meadow.jsx",
+                "src/components/GlyphFlower.jsx",
+                "src/components/Wordmark.jsx",
+            ],
             reporter: ["text", "json-summary"],
             reportsDirectory: "./coverage",
             // the global gate is what stops coverage leaking away between
