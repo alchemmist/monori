@@ -28,6 +28,10 @@ export default function ConnectionDialog({ account, connection, onClose }) {
         notify,
     } = useStore();
     const connections = useStore((s) => s.snapshot?.connections ?? []);
+    // the `account` prop is captured when the dialog opens; read the live row
+    // from the store so a saved bankRef resets the dirty check without a reopen
+    const liveAccount =
+        useStore((s) => s.snapshot?.accounts?.find((a) => a.id === account.id)) ?? account;
     const [connectors, setConnectors] = useState([]);
     const [bankKey, setBankKey] = useState(null);
     const [loginChoice, setLoginChoice] = useState(NEW_LOGIN);
@@ -140,7 +144,7 @@ export default function ConnectionDialog({ account, connection, onClose }) {
     const readyConnector = connection
         ? (connectors.find((c) => c.bank === connection.bank && c.kind === connection.kind) ?? null)
         : null;
-    const refDirty = String(accountFields.account ?? "").trim() !== (account.bankRef || "");
+    const refDirty = String(accountFields.account ?? "").trim() !== (liveAccount.bankRef || "");
 
     const saveRef = async () => {
         setBusy(true);
@@ -296,10 +300,10 @@ export default function ConnectionDialog({ account, connection, onClose }) {
                               }
                           />
                       ))
-                    : account.bankRef && (
+                    : liveAccount.bankRef && (
                           <div style={{ display: "flex", justifyContent: "space-between" }}>
                               <Txt tone="secondary">Bank account</Txt>
-                              <span className="num">{account.bankRef}</span>
+                              <span className="num">{liveAccount.bankRef}</span>
                           </div>
                       )}
                 {refDirty && (
