@@ -341,3 +341,91 @@ def test_pending_account_is_persisted_and_resume_skips_synced(api, client, keyed
     batches = c.execute("SELECT COUNT(*) FROM import_batches WHERE connection_id=?", (cid,))
     assert batches.fetchone()[0] == 2
     c.close()
+
+
+class MultiCardConnector(base.Connector):
+    bank = "multicard"
+    kind = "multicard"
+    hidden = True
+    rows = [
+        {"date": "2026-03-01T09:00:00", "amount": -100, "description": "A", "card": "*8181"},
+        {"date": "2026-03-01T10:00:00", "amount": -200, "description": "B", "card": "*2947"},
+        {"date": "2026-03-01T11:00:00", "amount": -300, "description": "C", "card": "*1111"},
+    ]
+
+    def sync(self, since=None):
+        return SyncResult([dict(r) for r in self.rows], session={"token": "ok"})
+
+
+def _connect_multicard(client, account_id):
+    r = client.post(
+        "/api/connections",
+        json={"bank": "multicard", "kind": "multicard", "credentials": {"phone": "+7"}},
+    )
+    link = client.patch(f"/api/accounts/{account_id}", json={"connectionId": r.json()["id"]})
+    assert link.status_code == 200, link.text
+    return r.json()["id"]
+
+
+def test_sync_routes_rows_by_bound_card_tail(api, client, keyed, monkeypatch):
+    monkeypatch.setitem(base.REGISTRY, ("multicard", "multicard"), MultiCardConnector)
+    main = api.default_account()
+    other = api.account("Other card", cardTails=["2947"])
+    cid = _connect_multicard(client, main)
+
+    body = client.post(f"/api/connections/{cid}/sync").json()
+    assert body["status"] == "connected"
+    assert body["inserted"] == 3
+    # the bound tail routed to its account, the rest stayed on the synced one
+    by_account = {r["accountId"]: r for r in body["accounts"]}
+    assert by_account[main]["inserted"] == 2
+    assert by_account[other]["inserted"] == 1
+    # unbound tails in a multi-card feed are surfaced, not silently merged
+    assert body["unmappedTails"] == [
+        {"tail": "1111", "rows": 1},
+        {"tail": "8181", "rows": 1},
+    ]
+
+    snap = api.snapshot()
+    routed = {t["description"]: t["accountId"] for t in snap["transactions"]}
+    assert routed["B"] == other
+    assert routed["A"] == main and routed["C"] == main
+
+
+def test_single_card_feed_reports_no_unmapped_tails(api, client, keyed):
+    cid = _connect(client, api.default_account()).json()["id"]
+    client.post(f"/api/connections/{cid}/sync")
+    body = client.post(f"/api/connections/{cid}/sms", json={"code": "0000"}).json()
+    assert body["status"] == "connected"
+    assert body["unmappedTails"] == []
+
+
+def test_sync_routing_matches_longer_stored_tails_by_suffix(api, client, keyed, monkeypatch):
+    monkeypatch.setitem(base.REGISTRY, ("multicard", "multicard"), MultiCardConnector)
+    main = api.default_account()
+    # stored tail longer than the 4 digits the statement shows still matches
+    other = api.account("Other card", cardTails=["55362947"])
+    cid = _connect_multicard(client, main)
+
+    body = client.post(f"/api/connections/{cid}/sync").json()
+    by_account = {r["accountId"]: r for r in body["accounts"]}
+    assert by_account[other]["inserted"] == 1
+    routed = {t["description"]: t["accountId"] for t in api.snapshot()["transactions"]}
+    assert routed["B"] == other
+
+
+def test_sync_routing_treats_duplicated_tail_as_unmapped(api, client, keyed, monkeypatch):
+    monkeypatch.setitem(base.REGISTRY, ("multicard", "multicard"), MultiCardConnector)
+    main = api.default_account()
+    api.account("One", cardTails=["2947"])
+    api.account("Two", cardTails=["2947"])
+    cid = _connect_multicard(client, main)
+
+    body = client.post(f"/api/connections/{cid}/sync").json()
+    # the twice-bound tail is ambiguous: its rows stay on the synced account
+    # and it is surfaced alongside the unbound tails
+    by_account = {r["accountId"]: r for r in body["accounts"]}
+    assert by_account[main]["inserted"] == 3
+    assert {u["tail"] for u in body["unmappedTails"]} == {"1111", "2947", "8181"}
+    routed = {t["description"]: t["accountId"] for t in api.snapshot()["transactions"]}
+    assert routed["B"] == main
