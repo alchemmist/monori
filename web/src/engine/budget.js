@@ -11,6 +11,8 @@
  * January chains from the previous year's December; the first year starts at 0.
  */
 
+import { isTransfer } from "./transfers.js";
+
 export function txKey(year, month, categoryId) {
     return `${year}-${month}-${categoryId}`;
 }
@@ -19,7 +21,10 @@ export function txKey(year, month, categoryId) {
 export function buildTxIndex(transactions) {
     const index = new Map();
     for (const t of transactions) {
-        if (t.categoryId == null) continue;
+        // a leg keeps whatever category it carried before the merge only in the
+        // transfers table, never here — but guard anyway, so no future path can
+        // let moving money between accounts spend down an envelope
+        if (t.categoryId == null || isTransfer(t)) continue;
         const year = +t.date.slice(0, 4);
         const month = +t.date.slice(5, 7);
         const key = txKey(year, month, t.categoryId);

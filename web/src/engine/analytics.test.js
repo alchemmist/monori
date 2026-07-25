@@ -600,3 +600,67 @@ describe("disciplineMatrix mechanics", () => {
         expect(d.worst).toBeNull();
     });
 });
+
+describe("transfer legs are invisible to every income/expense total", () => {
+    // a leg that carries a category is the case merging an existing pair can
+    // create; nothing downstream may count it as spending
+    const withTransfer = {
+        ...snapshot,
+        transactions: [
+            ...snapshot.transactions,
+            {
+                id: 900,
+                date: "2024-01-11",
+                amount: -50_000_00,
+                categoryId: 20,
+                accountId: 1,
+                transferId: "x",
+                description: "PYATEROCHKA 1234 MOSCOW",
+            },
+            {
+                id: 901,
+                date: "2024-01-11",
+                amount: 50_000_00,
+                categoryId: 20,
+                accountId: 2,
+                transferId: "x",
+                description: "Transfer",
+            },
+        ],
+    };
+
+    it("leaves the monthly series unchanged", () => {
+        expect(monthlySeries(withTransfer)).toEqual(monthlySeries(snapshot));
+    });
+
+    it("leaves weekday and day-of-month profiles unchanged", () => {
+        expect(weekdayProfile(withTransfer, "2024")).toEqual(weekdayProfile(snapshot, "2024"));
+        expect(dayOfMonthProfile(withTransfer, "2024")).toEqual(
+            dayOfMonthProfile(snapshot, "2024"),
+        );
+    });
+
+    it("leaves top merchants unchanged", () => {
+        expect(topMerchants(withTransfer, "2024")).toEqual(topMerchants(snapshot, "2024"));
+    });
+
+    it("leaves the expense stats unchanged", () => {
+        expect(txStats(withTransfer, "2024")).toEqual(txStats(snapshot, "2024"));
+    });
+
+    it("keeps the budget engine from spending an envelope on a transfer", () => {
+        const range = (s) => computeRange({ ...s, budgets: s.budgets ?? [] }, 2024, 2024);
+        expect(range(withTransfer)).toEqual(range(snapshot));
+    });
+
+    it("still moves the money between the two account balances", () => {
+        const accounts = [
+            { id: 1, openingBalance: 0 },
+            { id: 2, openingBalance: 0 },
+        ];
+        const balances = accountBalances({ ...withTransfer, accounts });
+        expect(balances.get(1)).toBe(-50_000_00);
+        expect(balances.get(2)).toBe(50_000_00);
+        expect(balances.get(1) + balances.get(2)).toBe(0);
+    });
+});

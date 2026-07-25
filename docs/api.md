@@ -75,6 +75,7 @@ Returns the entire state in one call — the frontend loads this on startup.
       "source": "import" }
   ],
   "budgets": [{ "categoryId": 1, "year": 2026, "month": 1, "amount": 150000 }],
+  "transfers": [],
   "transactionsTotal": 1
 }
 ```
@@ -109,15 +110,31 @@ now). An account's balance is `openingBalance` plus the sum of its transactions.
 
 ## Transfers
 
-A transfer moves money between two of your own accounts as two linked
-transactions (a negative leg on the source, a positive leg on the destination)
-sharing a `transferId`. Both legs are uncategorized, so transfers never count as
-income or expense.
+A transfer is an entity over two transactions — a negative leg on the source
+account, a positive leg on the destination — that both carry its `transferId`.
+The transactions themselves stay ordinary rows with their own ids and dedup
+hashes, so a re-sync still recognizes them and cannot duplicate them. Both legs
+are uncategorized while merged, so transfers never count as income or expense.
 
 | Method | Path | Body | Notes |
 | -------- | ------ | ------ | ------- |
-| POST | `/api/transfers` | `{fromAccountId, toAccountId, amount, date, comment?}` | `amount` must be positive; the two accounts must differ. Returns `{transferId}`. |
-| DELETE | `/api/transfers/{transferId}` | — | Deletes both legs; `404` if none. |
+| GET | `/api/transfers` | — | `{rows: [{id, outTxId, inTxId, origin, note, createdAt}]}`. `origin` is `manual` (created here or by the dialog) or `matched` (found by detection). |
+| POST | `/api/transfers` | `{fromAccountId, toAccountId, amount, date, comment?}` | Creates both legs and merges them. `amount` must be positive; the two accounts must differ. Returns `{transferId}`. |
+| POST | `/api/transfers/link` | `{outTxId, inTxId, note?}` | Merges a pair already in the ledger. `400` unless the legs are one outflow and one inflow on two different accounts, neither already in a transfer. The amounts need not match — the caller is the user, who knows about fees. Returns `{transferId}`. |
+| DELETE | `/api/transfers/{transferId}` | — | **Splits** the transfer: both transactions stay and get their pre-merge categories back. Deleting the money means deleting the two rows afterwards. `404` if unknown. |
+| GET | `/api/transfers/suggestions` | `?maxDays=5` | Pairs detection found but would not merge unasked: `{rows: [{outTxId, inTxId, amount, days, hint}], transactions: [...]}`. |
+| POST | `/api/transfers/suggestions/dismiss` | `{outTxId, inTxId}` | Remembers that this pair is not a transfer, so it is never offered again. |
+| POST | `/api/transfers/detect` | `?maxDays=5` | Scans the ledger, merges the unambiguous pairs and counts the rest. Returns `{merged: [...], suggested}`. Runs automatically after every import and bank sync. |
+
+### How a pair is detected
+
+A candidate is an outflow and an inflow that sit on two different accounts of
+the same user, have **exactly** opposite amounts, fall within `maxDays` of each
+other, are both unattached, and have not been dismissed. Candidates are matched
+greedily closest-first, and each transaction is used at most once, so the result
+does not depend on row order. Pairs a day or less apart are merged outright;
+anything looser becomes a suggestion. Unequal amounts (a transfer fee) never
+match automatically — link those by hand.
 
 ## Groups
 
@@ -220,8 +237,12 @@ trusting the client) and skips only as many occurrences of a hash as the databas
 already holds, inserting the rest with `source: "import"`.
 
 ```json
-{ "inserted": 42, "skipped": 3 }
+{ "inserted": 42, "skipped": 3, "transfersMerged": 1, "transfersSuggested": 2 }
 ```
+
+The commit also runs transfer detection over the ledger, so a statement that
+carries both legs of a transfer arrives already merged; `transfersMerged` counts
+what it linked and `transfersSuggested` what it left for the user to confirm.
 
 Committing the same batch twice inserts nothing the second time — the operation
 is idempotent. See [Importing statements](importing.md) for the dedup rules.

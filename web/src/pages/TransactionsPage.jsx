@@ -11,20 +11,34 @@ import { money, fmtDate } from "../format.js";
 import { useWindowedRows } from "../useWindowedRows.js";
 import ImportDialog from "../components/ImportDialog.jsx";
 import TransferDialog from "../components/TransferDialog.jsx";
+import TransferRow from "../components/TransferRow.jsx";
+import TransferSuggestions from "../components/TransferSuggestions.jsx";
+import { mergeTransferRows } from "../engine/transfers.js";
 import "./budget.css";
+import "./transfers.css";
 
 // td is a fixed 38px + a 1px bottom border; measured for real on mount so zoom
 // or font metrics can't let the windowing math drift over thousands of rows
 const ROW_H_FALLBACK = 39;
 
 export default function TransactionsPage() {
-    const { snapshot, txProgress, setTxCategory, setTxAccount } = useStore();
+    const {
+        snapshot,
+        txProgress,
+        setTxCategory,
+        setTxAccount,
+        splitTransfer,
+        deleteTransferWithLegs,
+        notify,
+    } = useStore();
     const [query, setQuery] = useState("");
     const [catFilter, setCatFilter] = useState("all");
     const [yearFilter, setYearFilter] = useState("all");
     const [acctFilter, setAcctFilter] = useState("all");
     const [importing, setImporting] = useState(false);
     const [transferring, setTransferring] = useState(false);
+    const [suggesting, setSuggesting] = useState(false);
+    const [expanded, setExpanded] = useState(() => new Set());
     const bodyRef = useRef(null);
     const [rowH, setRowH] = useState(ROW_H_FALLBACK);
     const [showTop, setShowTop] = useState(false);
@@ -139,19 +153,108 @@ export default function TransactionsPage() {
         return [...rows].reverse(); // newest first
     }, [snapshot.transactions, query, catFilter, yearFilter, acctFilter]);
 
+    // the two legs of a transfer are one row here; every item is still exactly
+    // one row tall, so the windowing math below stays on a fixed row height
+    const items = useMemo(
+        () => mergeTransferRows(filtered, snapshot.transactions, expanded),
+        [filtered, snapshot.transactions, expanded],
+    );
+
+    const toggleTransfer = (transferId) =>
+        setExpanded((prev) => {
+            const next = new Set(prev);
+            if (!next.delete(transferId)) next.add(transferId);
+            return next;
+        });
+
+    const runTransferAction = (action, title) => async (transferId) => {
+        try {
+            await action(transferId);
+            notify({ title, theme: "success" });
+        } catch (e) {
+            notify({ title: "Failed to update the transfer", theme: "danger", content: String(e) });
+        }
+    };
+
+    // an ordinary ledger row. `leg` marks one half of an expanded transfer: the
+    // same row, indented and muted, so it reads as belonging to the row above
+    const renderTxRow = (t, leg) => (
+        <tr key={leg ? `l${t.id}` : t.id} className={`cat-row${leg ? " tx-row_leg" : ""}`}>
+            <td style={{ textAlign: "left" }} className="num">
+                {fmtDate(t.date)}
+            </td>
+            <td
+                style={{
+                    textAlign: "left",
+                    maxWidth: 380,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                }}
+            >
+                {t.description}
+                {t.source === "adjustment" && (
+                    <Tag theme="warning" style={{ marginLeft: 8 }}>
+                        adjustment
+                    </Tag>
+                )}
+                {t.transferId != null && !leg && (
+                    <Tag theme="info" style={{ marginLeft: 8 }}>
+                        transfer
+                    </Tag>
+                )}
+            </td>
+            <td style={{ textAlign: "left", color: "var(--m-text-dim)" }}>{t.bankCategory}</td>
+            <td>
+                <span className={`money num ${t.amount > 0 ? "money_pos" : ""}`}>
+                    {money(t.amount)}
+                </span>
+            </td>
+            <td style={{ textAlign: "left" }}>
+                {t.transferId != null ? (
+                    <span style={{ color: "var(--m-text-dim)", paddingLeft: 4 }}>
+                        {acctName.get(t.accountId) ?? "—"}
+                    </span>
+                ) : (
+                    <InlineSelect
+                        small
+                        borderless
+                        value={t.accountId != null ? String(t.accountId) : null}
+                        onChange={(v) => v && setTxAccount(t.id, +v)}
+                        data={acctOptionsFor(t)}
+                    />
+                )}
+            </td>
+            <td style={{ textAlign: "left" }}>
+                {t.transferId != null ? (
+                    <span style={{ color: "var(--m-text-faint)", paddingLeft: 4 }}>—</span>
+                ) : (
+                    <InlineSelect
+                        small
+                        borderless
+                        searchable
+                        placeholder="—"
+                        value={t.categoryId != null ? String(t.categoryId) : null}
+                        onChange={(v) => setTxCategory(t.id, v ? +v : null)}
+                        data={catSectionsFor(t)}
+                    />
+                )}
+            </td>
+        </tr>
+    );
+
     // measure a real row once it's on screen so the spacer math matches the DOM
     useLayoutEffect(() => {
         const row = bodyRef.current?.querySelector("tr.cat-row");
         const h = row?.getBoundingClientRect().height;
         if (h && Math.abs(h - rowH) > 0.5) setRowH(h);
-    }, [filtered.length, rowH]);
+    }, [items.length, rowH]);
 
     const { start, end, padTop, padBottom } = useWindowedRows({
-        count: filtered.length,
+        count: items.length,
         rowHeight: rowH,
         anchorRef: bodyRef,
     });
-    const visibleRows = filtered.slice(start, end);
+    const visibleRows = items.slice(start, end);
 
     // a new filter/search jumps back to the top so you're never left staring at
     // a blank gap where you'd scrolled past the (now shorter) list
@@ -217,6 +320,14 @@ export default function TransactionsPage() {
                     Transfer
                 </Button>
                 <Button
+                    variant="default"
+                    size="m"
+                    onClick={() => setSuggesting(true)}
+                    disabled={activeAccounts.length < 2}
+                >
+                    Find transfers
+                </Button>
+                <Button
                     variant="filled"
                     size="m"
                     onClick={() => setImporting(true)}
@@ -263,81 +374,31 @@ export default function TransactionsPage() {
                                 <td colSpan={6} style={{ height: padTop, padding: 0, border: 0 }} />
                             </tr>
                         )}
-                        {visibleRows.map((t) => (
-                            <tr key={t.id} className="cat-row">
-                                <td style={{ textAlign: "left" }} className="num">
-                                    {fmtDate(t.date)}
-                                </td>
-                                <td
-                                    style={{
-                                        textAlign: "left",
-                                        maxWidth: 380,
-                                        overflow: "hidden",
-                                        textOverflow: "ellipsis",
-                                    }}
-                                >
-                                    {t.description}
-                                    {t.source === "adjustment" && (
-                                        <Tag theme="warning" style={{ marginLeft: 8 }}>
-                                            adjustment
-                                        </Tag>
-                                    )}
-                                    {t.transferId != null && (
-                                        <Tag theme="info" style={{ marginLeft: 8 }}>
-                                            transfer
-                                        </Tag>
-                                    )}
-                                </td>
-                                <td style={{ textAlign: "left", color: "var(--m-text-dim)" }}>
-                                    {t.bankCategory}
-                                </td>
-                                <td>
-                                    <span
-                                        className={`money num ${t.amount > 0 ? "money_pos" : ""}`}
-                                    >
-                                        {money(t.amount)}
-                                    </span>
-                                </td>
-                                <td style={{ textAlign: "left" }}>
-                                    {t.transferId != null ? (
-                                        <span
-                                            style={{ color: "var(--m-text-dim)", paddingLeft: 4 }}
-                                        >
-                                            {acctName.get(t.accountId) ?? "—"}
-                                        </span>
-                                    ) : (
-                                        <InlineSelect
-                                            small
-                                            borderless
-                                            value={t.accountId != null ? String(t.accountId) : null}
-                                            onChange={(v) => v && setTxAccount(t.id, +v)}
-                                            data={acctOptionsFor(t)}
-                                        />
-                                    )}
-                                </td>
-                                <td style={{ textAlign: "left" }}>
-                                    {t.transferId != null ? (
-                                        <span
-                                            style={{ color: "var(--m-text-faint)", paddingLeft: 4 }}
-                                        >
-                                            —
-                                        </span>
-                                    ) : (
-                                        <InlineSelect
-                                            small
-                                            borderless
-                                            searchable
-                                            placeholder="—"
-                                            value={
-                                                t.categoryId != null ? String(t.categoryId) : null
-                                            }
-                                            onChange={(v) => setTxCategory(t.id, v ? +v : null)}
-                                            data={catSectionsFor(t)}
-                                        />
-                                    )}
-                                </td>
-                            </tr>
-                        ))}
+                        {visibleRows.map((item) =>
+                            item.kind === "transfer" ? (
+                                <TransferRow
+                                    key={item.key}
+                                    item={item}
+                                    accountName={(id) => acctName.get(id) ?? "—"}
+                                    expanded={expanded.has(item.transferId)}
+                                    onToggle={() => toggleTransfer(item.transferId)}
+                                    onSplit={() =>
+                                        runTransferAction(
+                                            splitTransfer,
+                                            "Transfer split",
+                                        )(item.transferId)
+                                    }
+                                    onDelete={() =>
+                                        runTransferAction(
+                                            deleteTransferWithLegs,
+                                            "Transfer deleted",
+                                        )(item.transferId)
+                                    }
+                                />
+                            ) : (
+                                renderTxRow(item.tx, item.kind === "leg")
+                            ),
+                        )}
                         {padBottom > 0 && (
                             <tr aria-hidden="true">
                                 <td
@@ -386,6 +447,7 @@ export default function TransactionsPage() {
             {transferring && (
                 <TransferDialog accounts={accounts} onClose={() => setTransferring(false)} />
             )}
+            {suggesting && <TransferSuggestions onClose={() => setSuggesting(false)} />}
         </div>
     );
 }

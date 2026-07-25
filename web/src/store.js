@@ -352,7 +352,21 @@ export const useStore = create((set, get) => ({
                 comment: body.comment ?? "",
                 source: "transfer",
             }));
-            set({ snapshot: { ...snapshot, transactions: [...snapshot.transactions, ...rows] } });
+            const entity = {
+                id: transferId,
+                outTxId: rows[0].id,
+                inTxId: rows[1].id,
+                origin: "manual",
+                note: body.comment ?? "",
+                createdAt: body.date,
+            };
+            set({
+                snapshot: {
+                    ...snapshot,
+                    transactions: [...snapshot.transactions, ...rows],
+                    transfers: [...(snapshot.transfers ?? []), entity],
+                },
+            });
             return transferId;
         }
         const { transferId } = await api.createTransfer(body);
@@ -360,15 +374,93 @@ export const useStore = create((set, get) => ({
         return transferId;
     },
 
-    async deleteTransfer(transferId) {
-        if (!isDemo()) await api.deleteTransfer(transferId);
+    /** Merge two transactions the ledger already holds. Both rows stay exactly
+     * as they are — only the link is new — so the next bank sync still
+     * recognizes them and cannot bring in a duplicate. */
+    async linkTransfer(outTxId, inTxId) {
+        if (isDemo()) {
+            const { snapshot } = get();
+            const transferId = `demo-link-${outTxId}-${inTxId}`;
+            set({
+                snapshot: {
+                    ...snapshot,
+                    transactions: snapshot.transactions.map((t) =>
+                        t.id === outTxId || t.id === inTxId
+                            ? { ...t, transferId, categoryId: null }
+                            : t,
+                    ),
+                    transfers: [
+                        ...(snapshot.transfers ?? []),
+                        { id: transferId, outTxId, inTxId, origin: "manual", note: "" },
+                    ],
+                },
+            });
+            return transferId;
+        }
+        const { transferId } = await api.linkTransfer({ outTxId, inTxId });
+        await get().load();
+        return transferId;
+    },
+
+    /** Split a transfer back into two ordinary transactions. Nothing is
+     * deleted: to remove the money as well, delete the two rows afterwards. */
+    async splitTransfer(transferId) {
+        if (!isDemo()) {
+            await api.splitTransfer(transferId);
+            await get().load();
+            return;
+        }
         const { snapshot } = get();
         set({
             snapshot: {
                 ...snapshot,
-                transactions: snapshot.transactions.filter((t) => t.transferId !== transferId),
+                transactions: snapshot.transactions.map((t) =>
+                    t.transferId === transferId ? { ...t, transferId: null } : t,
+                ),
+                transfers: (snapshot.transfers ?? []).filter((x) => x.id !== transferId),
             },
         });
+    },
+
+    /** Split, then delete both rows — the one path that really removes the
+     * money. Kept separate from splitTransfer so nothing can destroy a bank's
+     * own transactions by accident. */
+    async deleteTransferWithLegs(transferId) {
+        const ids = get()
+            .snapshot.transactions.filter((t) => t.transferId === transferId)
+            .map((t) => t.id);
+        if (!isDemo()) {
+            await api.splitTransfer(transferId);
+            await Promise.all(ids.map((id) => api.deleteTx(id)));
+        }
+        const { snapshot } = get();
+        set({
+            snapshot: {
+                ...snapshot,
+                transactions: snapshot.transactions.filter((t) => !ids.includes(t.id)),
+                transfers: (snapshot.transfers ?? []).filter((x) => x.id !== transferId),
+            },
+        });
+    },
+
+    /** Pairs the server thinks are transfers but is not sure enough to merge
+     * unasked. Detection lives on the server so the rule has exactly one
+     * implementation; the demo dataset ships its transfers already merged. */
+    async transferSuggestions() {
+        if (isDemo()) return { rows: [], transactions: [] };
+        return api.transferSuggestions();
+    },
+
+    async dismissTransferSuggestion(outTxId, inTxId) {
+        if (isDemo()) return;
+        await api.dismissTransferSuggestion({ outTxId, inTxId });
+    },
+
+    async detectTransfers() {
+        if (isDemo()) return { merged: [], suggested: 0 };
+        const result = await api.detectTransfers();
+        if (result.merged.length) await get().load();
+        return result;
     },
 
     async createCategory(body) {

@@ -95,6 +95,30 @@ CREATE INDEX IF NOT EXISTS idx_tx_hash ON transactions (hash);
 CREATE INDEX IF NOT EXISTS idx_tx_category ON transactions (category_id);
 CREATE INDEX IF NOT EXISTS idx_tx_account ON transactions (account_id);
 
+-- A transfer is the entity two transactions are merged into; the rows themselves
+-- stay untouched so a re-sync still recognizes them and cannot duplicate them.
+-- UNIQUE on both legs is what guarantees a transfer has exactly two of them and
+-- that a transaction belongs to at most one transfer.
+CREATE TABLE IF NOT EXISTS transfers (
+  id TEXT PRIMARY KEY,
+  user_id INTEGER REFERENCES users (id),
+  out_tx_id INTEGER NOT NULL UNIQUE REFERENCES transactions (id) ON DELETE CASCADE,
+  in_tx_id INTEGER NOT NULL UNIQUE REFERENCES transactions (id) ON DELETE CASCADE,
+  origin TEXT NOT NULL DEFAULT 'manual' CHECK (origin IN ('manual', 'matched')),
+  out_category_id INTEGER,           -- categories the legs carried before merging,
+  in_category_id INTEGER,            -- restored when the transfer is split again
+  note TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_transfers_user ON transfers (user_id);
+
+-- pairs the user rejected, so auto-detection stops offering them forever
+CREATE TABLE IF NOT EXISTS transfer_rejections (
+  out_tx_id INTEGER NOT NULL REFERENCES transactions (id) ON DELETE CASCADE,
+  in_tx_id INTEGER NOT NULL REFERENCES transactions (id) ON DELETE CASCADE,
+  PRIMARY KEY (out_tx_id, in_tx_id)
+);
+
 CREATE TABLE IF NOT EXISTS budgets (
   category_id INTEGER NOT NULL REFERENCES categories (id) ON DELETE CASCADE,
   year INTEGER NOT NULL,
