@@ -139,8 +139,9 @@ def main():
         "budget_cells": len(parsed["budgets"]),
     }
     print(f"parsed: {counts}, markers={markers}")
-    print(f"warnings: {parsed['warnings']}")
-    print(f"errors: {parsed['errors']}")
+    # the miniature must parse spotlessly — a warning means the fixture itself
+    # drifted from what the importer expects, so fail instead of narrating
+    assert not parsed["warnings"], parsed["warnings"]
     assert not synthetic, f"cached grid does not reconcile, synthetic rows: {synthetic}"
     assert not parsed["errors"], parsed["errors"]
 
