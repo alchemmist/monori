@@ -13,6 +13,10 @@ from ..workbook.importer import WorkbookError, parse_workbook
 
 router = APIRouter(prefix="/api/import", tags=["import"])
 
+# matches the client-side statement file cap (importFile.js) so oversized
+# uploads fail the same way whether they arrive via file or paste
+MAX_STATEMENT_TEXT = 5_000_000
+
 
 class ImportBody(BaseModel):
     text: str
@@ -62,6 +66,8 @@ def _owned_account(c, account_id, uid):
 @router.post("/preview")
 def import_preview(body: ImportBody, user: Annotated[dict, Depends(current_user)]):
     uid = user["id"]
+    if len(body.text) > MAX_STATEMENT_TEXT:
+        raise HTTPException(413, "statement is too large")
     c = conn()
     try:
         rows, errors = parse_statement(body.text)

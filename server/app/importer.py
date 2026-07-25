@@ -33,6 +33,9 @@ COLUMNS = [
 
 DATE_RE = re.compile(r"^(\d{2})\.(\d{2})\.(\d{4})(?:\s+(\d{2}):(\d{2})(?::(\d{2}))?)?$")
 
+# first cell of a bank CSV export's header row — such a line is metadata, not data
+HEADER_FIRST_CELLS = {"дата операции", "op_date", "date"}
+
 
 def parse_date(raw):
     m = DATE_RE.match(raw.strip())
@@ -70,8 +73,10 @@ def tx_hash(account_id, date_iso, amount_kop, description):
 def parse_statement(text):
     """
     Returns (rows, errors). Each row: dict with date (ISO), amount (kopecks),
-    description, bank_category, mcc. Hashes are not computed here — the account
-    is not known yet; ingestion derives the account-scoped hash on insert.
+    description, bank_category, mcc. Accepts both pasted statement rows and a
+    full bank CSV export — a header row is skipped, not reported. Hashes are
+    not computed here — the account is not known yet; ingestion derives the
+    account-scoped hash on insert.
     """
     rows, errors = [], []
     for ln, line in enumerate(text.splitlines(), 1):
@@ -79,6 +84,8 @@ def parse_statement(text):
             continue
         delim = "\t" if "\t" in line else ";"
         parts = [p.strip().strip('"') for p in line.split(delim)]
+        if parts and parts[0].lower() in HEADER_FIRST_CELLS:
+            continue
         if len(parts) < 12:
             errors.append(
                 {"line": ln, "error": f"expected >=12 columns, got {len(parts)}", "raw": line[:200]}

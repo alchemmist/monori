@@ -1,5 +1,7 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { Button } from "@mantine/core";
 import { api } from "../api.js";
+import { readStatementFile } from "../importFile.js";
 import { useStore } from "../store.js";
 import { money, fmtDate } from "../format.js";
 import AppDialog from "../ui/AppDialog.jsx";
@@ -21,6 +23,7 @@ export default function ImportDialog({ onClose }) {
     const [text, setText] = useState("");
     const [preview, setPreview] = useState(null);
     const [busy, setBusy] = useState(false);
+    const fileRef = useRef(null);
     const [account, setAccount] = useState(() => {
         const last = readLastAccount();
         if (last && accounts.some((a) => String(a.id) === last)) return last;
@@ -28,14 +31,27 @@ export default function ImportDialog({ onClose }) {
     });
     const catName = new Map(snapshot.categories.map((c) => [c.id, c.name]));
 
-    const runPreview = async () => {
+    const runPreview = async (source = text) => {
         setBusy(true);
         try {
-            setPreview(await api.importPreview(text, +account));
+            setPreview(await api.importPreview(source, +account));
         } catch (e) {
             notify({ title: "Preview failed", theme: "danger", content: String(e) });
         } finally {
             setBusy(false);
+        }
+    };
+
+    const pickFile = async (file) => {
+        if (!file) return;
+        try {
+            const decoded = await readStatementFile(file);
+            setText(decoded);
+            await runPreview(decoded);
+        } catch (e) {
+            notify({ title: "Could not read the file", theme: "danger", content: String(e) });
+        } finally {
+            if (fileRef.current) fileRef.current.value = "";
         }
     };
 
@@ -65,7 +81,7 @@ export default function ImportDialog({ onClose }) {
             onClose={onClose}
             size="l"
             applyText={preview ? `Import ${fresh.length}` : "Preview"}
-            onApply={preview ? commit : runPreview}
+            onApply={preview ? commit : () => runPreview()}
             applyLoading={busy}
             applyDisabled={!account || (preview ? fresh.length === 0 : !text.trim())}
             cancelText={preview ? "Back" : "Cancel"}
@@ -86,9 +102,28 @@ export default function ImportDialog({ onClose }) {
             </div>
             {!preview ? (
                 <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                    <input
+                        ref={fileRef}
+                        type="file"
+                        accept=".csv,text/csv"
+                        style={{ display: "none" }}
+                        onChange={(e) => pickFile(e.target.files?.[0])}
+                    />
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <Button
+                            variant="default"
+                            loading={busy}
+                            onClick={() => fileRef.current?.click()}
+                        >
+                            Upload bank CSV
+                        </Button>
+                        <Txt tone="secondary" caption>
+                            the bank's CSV export, UTF-8 or windows-1251
+                        </Txt>
+                    </div>
                     <Txt tone="secondary" block>
-                        Paste statement rows exactly as you used to paste them into the sheet — tab-
-                        or semicolon-separated, dates as dd.mm.yyyy, decimal commas.
+                        …or paste statement rows exactly as you used to paste them into the sheet —
+                        tab- or semicolon-separated, dates as dd.mm.yyyy, decimal commas.
                     </Txt>
                     <FTextArea
                         value={text}
