@@ -115,6 +115,34 @@ def test_empty_and_multiple_statements_are_refused(anon, monkeypatch):
     assert "one statement" in r.json()["detail"]
 
 
+def test_a_timed_out_statement_is_refused_and_still_audited(anon, monkeypatch):
+    anon.headers.update(_make_admin(anon, monkeypatch))
+    monkeypatch.setattr("app.routers.admin_sql.QUERY_TIMEOUT_S", 0.05)
+    runaway = (
+        "WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 50000000)"
+        " SELECT COUNT(*) FROM n"
+    )
+    r = _sql(anon, runaway)
+    assert r.status_code == 400
+    assert "interrupted" in r.json()["detail"]
+
+    # the deadline must not have leaked past the query it guarded: the audit row
+    # is written on the same connection, right after the interrupt
+    monkeypatch.setattr("app.routers.admin_sql.QUERY_TIMEOUT_S", 15.0)
+    audited = _sql(anon, "SELECT detail FROM activity_events WHERE kind='admin_sql_failed'").json()[
+        "rows"
+    ]
+    assert [runaway] in audited
+
+
+def test_a_huge_text_cell_comes_back_cut(anon, monkeypatch):
+    anon.headers.update(_make_admin(anon, monkeypatch))
+    body = _sql(anon, "SELECT hex(zeroblob(50000)) AS big").json()
+    (value,) = body["rows"][0]
+    assert value.endswith(" chars)")
+    assert len(value) < 5000
+
+
 def test_every_statement_is_audited(anon, monkeypatch):
     anon.headers.update(_make_admin(anon, monkeypatch))
     _sql(anon, "SELECT 1")

@@ -31,6 +31,10 @@ QUERY_TIMEOUT_S = 15.0
 # enough to notice the deadline promptly, large enough not to dominate the query
 PROGRESS_INSTRUCTIONS = 10000
 BLOB_PREVIEW = 32
+# ROW_LIMIT alone does not bound the response: one row can hold a megabyte of
+# TEXT. The console is for reading data, not for exporting it — a cell longer
+# than this comes back cut, with the dropped length spelled out
+CELL_MAX_CHARS = 4096
 
 
 def leading_keyword(sql):
@@ -66,6 +70,8 @@ def cell(value):
     if isinstance(value, bytes):
         head = value[:BLOB_PREVIEW].hex()
         return f"x'{head}{'…' if len(value) > BLOB_PREVIEW else ''}' ({len(value)} bytes)"
+    if isinstance(value, str) and len(value) > CELL_MAX_CHARS:
+        return f"{value[:CELL_MAX_CHARS]}… (+{len(value) - CELL_MAX_CHARS} chars)"
     return value
 
 
@@ -93,16 +99,27 @@ def run_sql(body: SqlBody, admin: Annotated[dict, Depends(admin_user)]):
     # autocommit hands transaction control to us, so DDL rolls back too (under
     # the legacy mode Python only opens a transaction for DML)
     c.isolation_level = None
-    deadline = time.monotonic() + QUERY_TIMEOUT_S
-    c.set_progress_handler(lambda: 1 if time.monotonic() > deadline else 0, PROGRESS_INSTRUCTIONS)
     try:
         started = time.perf_counter()
         before = c.total_changes
+        deadline = time.monotonic() + QUERY_TIMEOUT_S
         try:
-            c.execute("BEGIN")
-            cur = c.execute(sql)
-            columns = [d[0] for d in cur.description] if cur.description else []
-            rows = [[cell(v) for v in r] for r in cur.fetchmany(ROW_LIMIT + 1)] if columns else []
+            # the deadline guards the admin's statement and nothing else: an
+            # expired handler aborts every statement that follows, so leaving it
+            # armed would take the rollback and the audit insert down with the
+            # query and a timed-out attempt would go unrecorded
+            try:
+                c.set_progress_handler(
+                    lambda: 1 if time.monotonic() > deadline else 0, PROGRESS_INSTRUCTIONS
+                )
+                c.execute("BEGIN")
+                cur = c.execute(sql)
+                columns = [d[0] for d in cur.description] if cur.description else []
+                rows = (
+                    [[cell(v) for v in r] for r in cur.fetchmany(ROW_LIMIT + 1)] if columns else []
+                )
+            finally:
+                c.set_progress_handler(None, 0)
         except sqlite3.Error as e:
             c.rollback()
             _audit(c, admin["id"], "admin_sql_failed", sql)
@@ -147,7 +164,6 @@ def run_sql(body: SqlBody, admin: Annotated[dict, Depends(admin_user)]):
             "elapsedMs": elapsed_ms,
         }
     finally:
-        c.set_progress_handler(None, 0)
         c.close()
 
 
