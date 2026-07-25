@@ -228,3 +228,49 @@ def test_transfers_list_is_scoped_to_the_user(api, client):
 
     client.headers.update(login_as(client, "stranger@example.com"))
     assert client.get("/api/transfers").json()["rows"] == []
+
+
+def test_deleting_one_leg_leaves_no_dangling_transfer_pointer(api, client):
+    a = api.default_account()
+    b = api.account("Vault")
+    transfer_id = api.transfer(a, b, 5000)
+    out_id, in_id = (t["id"] for t in sorted(legs(api, transfer_id), key=lambda t: t["amount"]))
+
+    assert client.delete(f"/api/transactions/{out_id}").status_code == 200
+
+    snap = api.snapshot()
+    assert snap["transfers"] == []
+    survivor = next(t for t in snap["transactions"] if t["id"] == in_id)
+    assert survivor["transferId"] is None
+
+
+def test_bulk_delete_of_one_leg_also_frees_the_other(api, client):
+    a = api.default_account()
+    b = api.account("Vault")
+    transfer_id = api.transfer(a, b, 5000)
+    out_id, in_id = (t["id"] for t in sorted(legs(api, transfer_id), key=lambda t: t["amount"]))
+
+    r = client.post("/api/transactions/bulk", json={"action": "delete", "ids": [out_id]})
+    assert r.status_code == 200
+
+    snap = api.snapshot()
+    assert snap["transfers"] == []
+    assert next(t for t in snap["transactions"] if t["id"] == in_id)["transferId"] is None
+
+
+def test_deleting_a_leg_restores_the_partner_category(api, client):
+    a = api.default_account()
+    b = api.account("Vault")
+    group = api.group("Daily")
+    cat = api.category("Groceries", group)
+    out_id, in_id = pair(api, a, b)
+    client.patch(f"/api/transactions/{in_id}", json={"categoryId": cat})
+    assert (
+        client.post("/api/transfers/link", json={"outTxId": out_id, "inTxId": in_id}).status_code
+        == 200
+    )
+
+    client.delete(f"/api/transactions/{out_id}")
+
+    survivor = next(t for t in api.snapshot()["transactions"] if t["id"] == in_id)
+    assert survivor["categoryId"] == cat

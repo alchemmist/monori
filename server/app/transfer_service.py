@@ -6,6 +6,7 @@ Kept out of the router so the import and sync pipelines can merge freshly
 ingested rows through exactly the same code path the UI uses.
 """
 
+import sqlite3
 import uuid
 from datetime import UTC, datetime
 
@@ -72,23 +73,29 @@ def link(c, uid, out_tx_id, in_tx_id, origin="manual", note=""):
         raise LinkError("already part of a transfer")
 
     transfer_id = uuid.uuid4().hex
-    c.execute(
-        "INSERT INTO transfers"
-        " (id, user_id, out_tx_id, in_tx_id, origin, out_category_id, in_category_id,"
-        "  note, created_at)"
-        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        (
-            transfer_id,
-            uid,
-            out_tx_id,
-            in_tx_id,
-            origin,
-            out_row["category_id"],
-            in_row["category_id"],
-            note,
-            datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S"),
-        ),
-    )
+    # the checks above race with any other writer; the UNIQUE columns are what
+    # actually enforce one transfer per transaction, so a loser here has to read
+    # as a 400 "already linked" and not as a 500
+    try:
+        c.execute(
+            "INSERT INTO transfers"
+            " (id, user_id, out_tx_id, in_tx_id, origin, out_category_id, in_category_id,"
+            "  note, created_at)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                transfer_id,
+                uid,
+                out_tx_id,
+                in_tx_id,
+                origin,
+                out_row["category_id"],
+                in_row["category_id"],
+                note,
+                datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S"),
+            ),
+        )
+    except sqlite3.IntegrityError as e:
+        raise LinkError("already part of a transfer") from e
     c.execute(
         "UPDATE transactions SET transfer_id=?, category_id=NULL WHERE id IN (?, ?)",
         (transfer_id, out_tx_id, in_tx_id),
@@ -122,6 +129,22 @@ def split(c, uid, transfer_id):
     )
     c.execute("DELETE FROM transfers WHERE id=?", (transfer_id,))
     return True
+
+
+def detach_leg(c, uid, tx_id):
+    """
+    Split whatever transfer this transaction belongs to, so it can be deleted on
+    its own. Without this the entity row cascades away while the surviving leg
+    keeps a dangling ``transfer_id`` — and a dangling pointer reads as a transfer
+    everywhere downstream, hiding a real transaction from every total.
+    """
+    row = c.execute(
+        "SELECT id FROM transfers WHERE user_id=? AND (out_tx_id=? OR in_tx_id=?)",
+        (uid, tx_id, tx_id),
+    ).fetchone()
+    if row is None:
+        return False
+    return split(c, uid, row["id"])
 
 
 def reject(c, uid, out_tx_id, in_tx_id):

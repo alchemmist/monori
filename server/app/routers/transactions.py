@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from ..auth import current_user
 from ..deps import conn, serialize_tx
 from ..importer import tx_hash
+from ..transfer_service import detach_leg
 
 router = APIRouter(prefix="/api/transactions", tags=["transactions"])
 
@@ -201,6 +202,7 @@ def delete_transaction(tx_id: int, user: Annotated[dict, Depends(current_user)])
     uid = user["id"]
     c = conn()
     try:
+        detach_leg(c, uid, tx_id)
         cur = c.execute(
             "DELETE FROM transactions WHERE id=?"
             " AND account_id IN (SELECT id FROM accounts WHERE user_id=?)",
@@ -224,6 +226,7 @@ def bulk_transactions(body: BulkBody, user: Annotated[dict, Depends(current_user
         affected = 0
         if body.action == "delete":
             for tx_id in body.ids:
+                detach_leg(c, uid, tx_id)
                 affected += c.execute(
                     "DELETE FROM transactions WHERE id=?"
                     " AND account_id IN (SELECT id FROM accounts WHERE user_id=?)",

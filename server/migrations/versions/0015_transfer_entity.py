@@ -42,12 +42,15 @@ CREATE TABLE IF NOT EXISTS transfer_rejections (
 """
 
 BACKFILL = """
-INSERT INTO transfers (id, user_id, out_tx_id, in_tx_id, origin, note, created_at)
+INSERT INTO transfers (id, user_id, out_tx_id, in_tx_id, origin,
+                       out_category_id, in_category_id, note, created_at)
 SELECT t.transfer_id,
        MIN(a.user_id),
        MIN(CASE WHEN t.amount < 0 THEN t.id END),
        MIN(CASE WHEN t.amount > 0 THEN t.id END),
        'manual',
+       MIN(CASE WHEN t.amount < 0 THEN t.category_id END),
+       MIN(CASE WHEN t.amount > 0 THEN t.category_id END),
        MIN(t.comment),
        MIN(t.date)
 FROM transactions t
