@@ -28,6 +28,10 @@ export default function ConnectionDialog({ account, connection, onClose }) {
         notify,
     } = useStore();
     const connections = useStore((s) => s.snapshot?.connections ?? []);
+    // the `account` prop is captured when the dialog opens; read the live row
+    // from the store so a saved bankRef resets the dirty check without a reopen
+    const liveAccount =
+        useStore((s) => s.snapshot?.accounts?.find((a) => a.id === account.id)) ?? account;
     const [connectors, setConnectors] = useState([]);
     const [bankKey, setBankKey] = useState(null);
     const [loginChoice, setLoginChoice] = useState(NEW_LOGIN);
@@ -130,6 +134,26 @@ export default function ConnectionDialog({ account, connection, onClose }) {
         } catch (e) {
             setError(String(e));
             setStep("error");
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    // the connector of an existing connection (the credentials-step `connector`
+    // is keyed on the bank picker, which is untouched in the ready step)
+    const readyConnector = connection
+        ? (connectors.find((c) => c.bank === connection.bank && c.kind === connection.kind) ?? null)
+        : null;
+    const refDirty = String(accountFields.account ?? "").trim() !== (liveAccount.bankRef || "");
+
+    const saveRef = async () => {
+        setBusy(true);
+        try {
+            await patchAccount(account.id, { bankRef: String(accountFields.account ?? "").trim() });
+            return true;
+        } catch (e) {
+            notify({ title: "Failed to save bank account", theme: "danger", content: String(e) });
+            return false;
         } finally {
             setBusy(false);
         }
@@ -271,10 +295,33 @@ export default function ConnectionDialog({ account, connection, onClose }) {
                         {connection.lastSync ? fmtDate(connection.lastSync) : "never"}
                     </span>
                 </div>
-                {account.bankRef && (
-                    <div style={{ display: "flex", justifyContent: "space-between" }}>
-                        <Txt tone="secondary">Bank account</Txt>
-                        <span className="num">{account.bankRef}</span>
+                {readyConnector
+                    ? readyConnector.accountParams.map((p) => (
+                          <FTextInput
+                              key={p.name}
+                              label={p.label}
+                              placeholder={p.help}
+                              title={p.help}
+                              value={accountFields[p.name] ?? ""}
+                              onChange={(e) =>
+                                  setAccountFields((prev) => ({
+                                      ...prev,
+                                      [p.name]: e.target.value,
+                                  }))
+                              }
+                          />
+                      ))
+                    : liveAccount.bankRef && (
+                          <div style={{ display: "flex", justifyContent: "space-between" }}>
+                              <Txt tone="secondary">Bank account</Txt>
+                              <span className="num">{liveAccount.bankRef}</span>
+                          </div>
+                      )}
+                {refDirty && (
+                    <div>
+                        <Button variant="subtle" size="s" onClick={saveRef} loading={busy}>
+                            Save bank account
+                        </Button>
                     </div>
                 )}
                 {connection.lastError && (
@@ -300,7 +347,10 @@ export default function ConnectionDialog({ account, connection, onClose }) {
         );
         footer = {
             apply: "Sync now",
-            onApply: () => runSync(connection.id),
+            onApply: async () => {
+                if (refDirty && !(await saveRef())) return;
+                await runSync(connection.id);
+            },
             applyProps: { loading: busy },
         };
     } else if (step === "sms") {
