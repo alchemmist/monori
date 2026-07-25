@@ -21,10 +21,17 @@ export default {
     ],
     reporters: ["clear-text", "progress"],
     concurrency: 4,
+    // the docs pages glob ../../docs/*.md, which a sandbox copy of web/ alone
+    // cannot resolve; mutating in place keeps that path real (stryker restores
+    // the originals when the run ends)
+    inPlace: true,
     // jsdom mounts are slower than the engine's pure functions, and a mutant
     // that puts a component into an infinite render loop must time out rather
     // than hang the run
     timeoutMS: 30000,
     timeoutFactor: 3,
+    // the dry run mounts every component test once under instrumentation; the
+    // 5-minute default is an engine-sized budget, not an app-sized one
+    dryRunTimeoutMinutes: 30,
     thresholds: { high: Math.min(100, threshold + 5), low: threshold, break: threshold },
 };
