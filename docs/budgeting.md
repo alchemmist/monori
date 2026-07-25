@@ -58,6 +58,12 @@ is one continuous ledger.
 A positive `available` means you still have money to hand out; a negative one
 means you have assigned more than you have.
 
+`income(m)` is not only income transactions: an account's **opening balance**
+counts as income of the month the account opened, because money that sits on an
+account before its first transaction is still money you have to budget. An
+account with no opening date (or one that predates the grid) contributes to the
+very first month of the range, so its money is never lost.
+
 ## Using the budget grid
 
 The **Budget** page renders this as a grid of categories (grouped) against

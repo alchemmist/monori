@@ -24,7 +24,8 @@ Accounts live on the **Accounts** page in the sidebar. Each one has:
 - a **currency** — a label only for now; monori is single-currency and does no
   conversion (full multi-currency is tracked in issue #29),
 - an **opening balance** — what the account held before the first recorded
-  transaction.
+  transaction. It is real money, so it also counts as income to hand out on the
+  [Budget](budgeting.md) page.
 
 From the list you can create, rename, reorder, **archive** (hide without
 deleting), and delete accounts. Deleting an account asks where its transactions

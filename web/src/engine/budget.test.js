@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
     txKey,
+    monthKey,
     buildTxIndex,
     buildBudgetIndex,
+    buildOpeningIndex,
     computeYear,
     computeRange,
     groupTotals,
@@ -40,6 +42,39 @@ describe("buildBudgetIndex", () => {
         expect(index.get(txKey(2024, 1, 20))).toBe(1000);
         expect(index.get(txKey(2024, 2, 20))).toBe(500);
         expect(index.size).toBe(2);
+    });
+});
+
+describe("buildOpeningIndex", () => {
+    it("sums opening balances into the month an account opened", () => {
+        const index = buildOpeningIndex(
+            [
+                { id: 1, openingBalance: 5000, openingDate: "2024-03-01" },
+                { id: 2, openingBalance: 700, openingDate: "2024-03-20" },
+                { id: 3, openingBalance: 100, openingDate: "2024-04-01" },
+            ],
+            2020,
+        );
+        expect(index.get(monthKey(2024, 3))).toBe(5700);
+        expect(index.get(monthKey(2024, 4))).toBe(100);
+        expect(index.size).toBe(2);
+    });
+
+    it("drops accounts opened before the range into the first month", () => {
+        const index = buildOpeningIndex(
+            [
+                { id: 1, openingBalance: 5000, openingDate: "2018-06-01" },
+                { id: 2, openingBalance: 300, openingDate: null },
+            ],
+            2020,
+        );
+        expect(index.get(monthKey(2020, 1))).toBe(5300);
+        expect(index.size).toBe(1);
+    });
+
+    it("ignores zero balances and a missing accounts list", () => {
+        expect(buildOpeningIndex([{ id: 1, openingBalance: 0 }], 2020).size).toBe(0);
+        expect(buildOpeningIndex(undefined, 2020).size).toBe(0);
     });
 });
 
@@ -146,6 +181,47 @@ describe("computeRange carry-over between years", () => {
         expect(y2024.byCategory.get(20)[0].balance).toBe(200);
         // Jan 2024 available = 1000 carried + 0 + 0 - 500 = 500
         expect(y2024.available[0]).toBe(500);
+    });
+});
+
+describe("opening balances in computeRange", () => {
+    const snapshot = (accounts) => ({
+        groups,
+        categories,
+        accounts,
+        transactions: [{ date: "2024-02-10", amount: 5000, categoryId: 10 }],
+        budgets: [{ year: 2024, month: 2, categoryId: 20, amount: 1000 }],
+    });
+
+    it("counts an opening balance as income of its opening month", () => {
+        const res = computeRange(
+            snapshot([{ id: 1, openingBalance: 3000, openingDate: "2024-02-01" }]),
+            2024,
+            2024,
+        ).get(2024);
+        expect(res.income[1]).toBe(8000); // 5000 salary + 3000 opening
+        expect(res.available[1]).toBe(7000); // 8000 - 1000 budgeted
+    });
+
+    it("carries a dateless opening balance from the first month of the range", () => {
+        const res = computeRange(
+            snapshot([{ id: 1, openingBalance: 3000, openingDate: null }]),
+            2024,
+            2024,
+        ).get(2024);
+        expect(res.income[0]).toBe(3000);
+        expect(res.available[0]).toBe(3000);
+        expect(res.available[1]).toBe(7000); // 3000 carried + 5000 - 1000
+    });
+
+    it("leaves available untouched when every account opens at zero", () => {
+        const res = computeRange(
+            snapshot([{ id: 1, openingBalance: 0, openingDate: "2024-02-01" }]),
+            2024,
+            2024,
+        ).get(2024);
+        expect(res.income[1]).toBe(5000);
+        expect(res.available[1]).toBe(4000);
     });
 });
 

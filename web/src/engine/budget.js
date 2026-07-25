@@ -8,6 +8,9 @@
  *   overspent(m)     = sum over expense categories of min(balance(cat, m), 0)
  *   available(m)     = available(m-1) + overspent(m-1) + income(m) - budgetedTotal(m)
  *
+ * income(m) counts account opening balances too — money that sits on an account
+ * before its first transaction is still money to budget.
+ *
  * January chains from the previous year's December; the first year starts at 0.
  */
 
@@ -33,6 +36,34 @@ export function buildTxIndex(transactions) {
     return index;
 }
 
+export function monthKey(year, month) {
+    return `${year}-${month}`;
+}
+
+/**
+ * Sum account opening balances into a Map keyed by year-month.
+ *
+ * An account opened before the range (or with no opening date at all) drops
+ * into the very first month, so the money lands somewhere inside the range
+ * instead of vanishing.
+ */
+export function buildOpeningIndex(accounts, firstYear) {
+    const index = new Map();
+    for (const a of accounts ?? []) {
+        const amount = a.openingBalance ?? 0;
+        if (!amount) continue;
+        let year = a.openingDate ? +a.openingDate.slice(0, 4) : firstYear;
+        let month = a.openingDate ? +a.openingDate.slice(5, 7) : 1;
+        if (!(year >= firstYear)) {
+            year = firstYear;
+            month = 1;
+        }
+        const key = monthKey(year, month);
+        index.set(key, (index.get(key) ?? 0) + amount);
+    }
+    return index;
+}
+
 /** Map 'year-month-categoryId' -> budgeted amount. */
 export function buildBudgetIndex(budgets) {
     const index = new Map();
@@ -48,7 +79,15 @@ export function buildBudgetIndex(budgets) {
  * @returns {year, byCategory: Map(catId -> months[12] of {budgeted, outflows, balance}),
  *           income[12], budgetedTotal[12], overspent[12], available[12]}
  */
-export function computeYear({ year, categories, groupKindById, txIndex, budgetIndex, prev }) {
+export function computeYear({
+    year,
+    categories,
+    groupKindById,
+    txIndex,
+    budgetIndex,
+    openingIndex,
+    prev,
+}) {
     const byCategory = new Map();
     const income = Array(12).fill(0);
     const budgetedTotal = Array(12).fill(0);
@@ -66,6 +105,10 @@ export function computeYear({ year, categories, groupKindById, txIndex, budgetIn
         for (let m = 0; m < 12; m++) {
             income[m] += txIndex.get(txKey(year, m + 1, c.id)) ?? 0;
         }
+    }
+
+    for (let m = 0; m < 12; m++) {
+        income[m] += openingIndex?.get(monthKey(year, m + 1)) ?? 0;
     }
 
     for (const c of expenseCats) {
@@ -99,6 +142,7 @@ export function computeRange(snapshot, firstYear, lastYear) {
     const groupKindById = new Map(snapshot.groups.map((g) => [g.id, g.kind]));
     const txIndex = buildTxIndex(snapshot.transactions);
     const budgetIndex = buildBudgetIndex(snapshot.budgets);
+    const openingIndex = buildOpeningIndex(snapshot.accounts, firstYear);
     const results = new Map();
     let prev = null;
     for (let year = firstYear; year <= lastYear; year++) {
@@ -108,6 +152,7 @@ export function computeRange(snapshot, firstYear, lastYear) {
             groupKindById,
             txIndex,
             budgetIndex,
+            openingIndex,
             prev,
         });
         results.set(year, res);
