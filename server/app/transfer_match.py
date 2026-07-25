@@ -84,7 +84,8 @@ def find_pairs(rows, max_days=SUGGEST_DAYS, rejected=()):
     silent ones, then by id so the order never depends on the input order.
     """
     rejected = {tuple(p) for p in rejected}
-    outs, ins = {}, {}
+    outs: dict[int, list] = {}
+    ins: dict[int, list] = {}
     for r in rows:
         if field(r, "transfer_id"):
             continue
