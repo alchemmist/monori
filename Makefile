@@ -129,9 +129,12 @@ t-medium:
 t-slow:
 	COMPOSE="$(COMPOSE)" bash scripts/e2e.sh
 
-# watch the e2e suite run in a real browser window, one test at a time
+# watch the e2e suite run in a real browser window, one test at a time and
+# slowed down enough to follow with the eyes (E2E_SLOWMO ms per action)
+E2E_SLOWMO ?= 500
+
 t-slow-headed:
-	COMPOSE="$(COMPOSE)" bash scripts/e2e.sh --headed --workers=1
+	COMPOSE="$(COMPOSE)" E2E_SLOWMO=$(E2E_SLOWMO) bash scripts/e2e.sh --headed --workers=1
 
 # playwright's interactive ui: pick tests, run on click, time-travel each step;
 # the stack stays up until the ui window is closed
