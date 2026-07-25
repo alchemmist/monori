@@ -318,10 +318,13 @@
     flex-shrink: 0;
 }
 
-/* migration side panel */
-.migrate-panel {
+/* dockable side tabs (ui/Tab.jsx): pinned to the right edge, collapsible to
+   a strip, stacking side by side; `right` is set inline per tab by the stack
+   registry so open tabs line up instead of overlapping */
+.ui-tab {
     position: fixed;
-    inset: 0 0 0 auto;
+    top: 0;
+    bottom: 0;
     width: 420px;
     max-width: 92vw;
     z-index: 120;
@@ -334,20 +337,22 @@
     box-shadow:
         -4px 0 14px rgb(0 0 0 / 4%),
         -16px 0 40px rgb(0 0 0 / 5%);
-    animation: migrate-panel-in 0.3s cubic-bezier(0.22, 0.85, 0.35, 1) both;
-    transition: width 0.25s ease;
+    animation: ui-tab-in 0.3s cubic-bezier(0.22, 0.85, 0.35, 1) both;
+    transition:
+        width 0.25s ease,
+        right 0.25s ease;
 }
 
 /* the dark canvas is painted on <body> as a literal (see theme.css) — the dark
    --m-bg token is a stale near-black nothing else uses; match the body color */
-.theme-dark .migrate-panel {
+.theme-dark .ui-tab {
     background: #221d22;
     box-shadow:
         -4px 0 14px rgb(0 0 0 / 12%),
         -16px 0 40px rgb(0 0 0 / 16%);
 }
 
-@keyframes migrate-panel-in {
+@keyframes ui-tab-in {
     from {
         transform: translateX(100%);
     }
@@ -357,19 +362,19 @@
     }
 }
 
-.migrate-panel_collapsed {
+.ui-tab_collapsed {
     width: 34px;
 }
 
 /* while the width animates the strip and inner are both "wrong" targets —
    ignore the pointer so hover styles can't flash mid-transition */
-.migrate-panel_animating {
+.ui-tab_animating {
     pointer-events: none;
 }
 
 /* overlay, not flow: the strip fades in over the fixed-width content, so the
    layout never reflows and the header text can't jump during the animation */
-.migrate-panel__strip {
+.ui-tab__strip {
     position: absolute;
     inset: 0 auto 0 0;
     width: 34px;
@@ -388,35 +393,35 @@
     z-index: 1;
 }
 
-.migrate-panel_collapsed .migrate-panel__strip {
+.ui-tab_collapsed .ui-tab__strip {
     opacity: 1;
     pointer-events: auto;
 }
 
-.migrate-panel_collapsed.migrate-panel_animating .migrate-panel__strip {
+.ui-tab_collapsed.ui-tab_animating .ui-tab__strip {
     pointer-events: none;
 }
 
-.migrate-panel__strip:hover {
+.ui-tab__strip:hover {
     background: var(--m-surface-hover);
     color: var(--m-text);
 }
 
-.migrate-panel__strip-label {
+.ui-tab__strip-label {
     writing-mode: vertical-rl;
     font-size: 12px;
     font-weight: 600;
     letter-spacing: 0.05em;
 }
 
-.migrate-panel__inner {
+.ui-tab__inner {
     flex: none;
     width: min(420px, 92vw);
     display: flex;
     flex-direction: column;
 }
 
-.migrate-panel__head {
+.ui-tab__head {
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -425,17 +430,17 @@
     border-bottom: 1px solid var(--m-border-soft);
 }
 
-.migrate-panel__title {
+.ui-tab__title {
     font-weight: var(--m-title-weight);
     white-space: nowrap;
 }
 
-.migrate-panel__head-actions {
+.ui-tab__head-actions {
     display: flex;
     gap: 4px;
 }
 
-.migrate-panel__icon-btn {
+.ui-tab__icon-btn {
     display: grid;
     place-items: center;
     width: 28px;
@@ -447,12 +452,12 @@
     color: var(--m-text-dim);
 }
 
-.migrate-panel__icon-btn:hover {
+.ui-tab__icon-btn:hover {
     background: var(--m-surface-hover);
     color: var(--m-text);
 }
 
-.migrate-panel__content {
+.ui-tab__content {
     flex: 1;
     overflow-y: auto;
     display: flex;
@@ -461,7 +466,7 @@
     padding: 16px 20px;
 }
 
-.migrate-panel__footer {
+.ui-tab__footer {
     display: flex;
     justify-content: flex-end;
     gap: 8px;
