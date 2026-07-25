@@ -662,6 +662,65 @@ def test_missing_transactions_sheet_raises():
         parse_template_workbook(_save(wb))
 
 
+def test_trailing_zero_cached_months_get_no_synthetic_rows():
+    """
+    An empty trailing block keeps cached zero balances from its formulas; the
+    reconciliation must not fabricate rows there to zero out the carry.
+    """
+    wb = Workbook()
+    wb.remove(wb.active)
+    _tx_sheet(wb, [_tx(datetime.datetime(2025, 1, 15), -300.0, "Groceries", desc="Lenta")])
+    _write_year(
+        wb.create_sheet("2025"),
+        months=[1, 2, 3],
+        rows=[("▼Daily", None), ("Groceries", {1: (1000, 300, 700), 2: (0, 0, 0), 3: (0, 0, 0)})],
+        income={1: 5000},
+        header_row=8,
+    )
+    parsed = parse_template_workbook(_save(wb))
+    assert all(t["date"] < "2025-02" for t in parsed["transactions"])
+
+
+def test_uncategorized_trailing_tx_does_not_extend_reconciliation():
+    """
+    Uncategorized transactions are ignored by the reconciliation sums, so a
+    trailing month whose only activity is one must not be reconciled — its
+    zero-cached cells would fabricate a synthetic row against the carry.
+    """
+    wb = Workbook()
+    wb.remove(wb.active)
+    _tx_sheet(
+        wb,
+        [
+            _tx(datetime.datetime(2025, 1, 15), -300.0, "Groceries", desc="Lenta"),
+            _tx(datetime.datetime(2025, 2, 10), -50.0, "", desc="Mystery"),
+        ],
+    )
+    _write_year(
+        wb.create_sheet("2025"),
+        months=[1, 2],
+        rows=[("▼Daily", None), ("Groceries", {1: (1000, 300, 700), 2: (0, 0, 0)})],
+        income={1: 5000},
+        header_row=8,
+    )
+    parsed = parse_template_workbook(_save(wb))
+    synth = [t for t in parsed["transactions"] if not t["marker"]]
+    assert all(t["date"] < "2025-02" for t in synth)
+
+
+def test_prepared_next_year_sheet_adds_no_future_rows():
+    wb = _live_year_wb()
+    _write_year(
+        wb.create_sheet("2026"),
+        months=[1, 2],
+        start_token="ЯНВ 2026",
+        rows=[("▼Daily", None), ("Groceries", {1: (0, 0, 0), 2: (0, 0, 0)})],
+        header_row=8,
+    )
+    parsed = parse_template_workbook(_save(wb))
+    assert max(t["date"] for t in parsed["transactions"]) < "2025-03"
+
+
 def test_parse_template_rejects_garbage_bytes():
     with pytest.raises(TemplateError, match="not a readable .xlsx workbook"):
         parse_template_workbook(b"nope")
