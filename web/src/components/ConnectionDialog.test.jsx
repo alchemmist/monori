@@ -166,9 +166,10 @@ describe("ConnectionDialog", () => {
             .spyOn(useStore.getState(), "syncConnection")
             .mockResolvedValueOnce({ status: "awaiting_sms" })
             .mockRejectedValueOnce(new Error("network"));
-        const sms = vi
-            .spyOn(useStore.getState(), "submitConnectionSms")
-            .mockResolvedValueOnce({ status: "awaiting_sms", message: "Wrong code" });
+        vi.spyOn(useStore.getState(), "submitConnectionSms").mockResolvedValueOnce({
+            status: "awaiting_sms",
+            message: "Wrong code",
+        });
         const cancel = vi.spyOn(useStore.getState(), "cancelConnectionSync").mockResolvedValue();
         const { user } = renderUI(<ConnectionDialog account={account} onClose={vi.fn()} />);
         await screen.findByLabelText("Login");
