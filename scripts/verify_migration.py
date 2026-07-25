@@ -3,13 +3,15 @@ End-to-end migration parity: import a workbook the way the server does, then
 check that the budget monori shows equals the one the spreadsheet cached.
 
     uv run --project server python scripts/verify_migration.py book.xlsx
+    uv run --project server python scripts/verify_migration.py book.xlsx --category Vacation
 
 Runs the real path — ``parse_workbook`` into ``apply_workbook`` against a
 throwaway database — reads the snapshot back out, replays the client's budget
 engine on it, and diffs every category/month cell (budgeted, outflows, balance)
 plus the running Available against the numbers the sheet computed for itself.
 Also reports duplicate rows and anything imported uncategorized. Exits non-zero
-when a cell disagrees, so it can guard a change to the importer.
+when a cell disagrees, so it can guard a change to the importer. ``--category``
+traces one category month by month instead, for reading a single disagreement.
 
 Nothing outside the temporary database is written; the workbook is only read.
 """
@@ -251,11 +253,31 @@ def replay(cats, tx, budgets, first_year, last_year):
     return out
 
 
+def trace(grids, replayed, name):
+    """One category, month by month, the sheet's three numbers beside ours."""
+    print(f"=== {name} ===")
+    head = ("month", "sheet bud", "sheet out", "sheet bal", "our bud", "our out", "our bal")
+    print(f"{head[0]:<9}" + "".join(f"{h:>15}" for h in head[1:]))
+    for year in sorted(grids):
+        grid = grids[year]
+        entry = grid["cats"].get(name, {"budgets": {}, "outflows": {}, "balances": {}})
+        for m in grid["months"]:
+            ours = replayed.get((year, m), {}).get("cells", {}).get(name)
+            if ours is None:
+                continue
+            sheet = [entry[k].get(m) for k in ("budgets", "outflows", "balances")]
+            mine = [ours["budgeted"], ours["outflows"], ours["balance"]]
+            if not any(sheet) and not any(mine):
+                continue
+            print(f"{year}-{m:02d}  " + "".join(f"{rub(v):>15}" for v in sheet + mine))
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("workbook")
     ap.add_argument("--report", default="", help="write the full mismatch list here")
     ap.add_argument("--limit", type=int, default=25, help="mismatches to print per section")
+    ap.add_argument("--category", default="", help="trace one category month by month instead")
     args = ap.parse_args()
 
     grids, headers = sheet_grids(args.workbook)
@@ -271,6 +293,10 @@ def main():
         [*(y for _, y, _ in tx), *(y for _, y, _ in budgets), *years] or [years[0] if years else 0]
     )
     replayed = replay(cats, tx, budgets, first_year, max(years))
+
+    if args.category:
+        trace(grids, replayed, args.category)
+        return 0
 
     lines = []
     bad_cells = []
