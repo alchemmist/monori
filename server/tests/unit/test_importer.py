@@ -57,6 +57,19 @@ def test_parse_statement():
     assert rows[1]["amount"] == -150050
 
 
+def test_parse_statement_skips_csv_header_row():
+    header = (
+        "Дата операции;Дата платежа;Номер карты;Статус;Сумма операции;Валюта операции;"
+        "Сумма платежа;Валюта платежа;Кэшбэк;Категория;MCC;Описание;Бонусы (включая кэшбэк);"
+        "Округление на инвесткопилку;Сумма операции с округлением\n"
+    )
+    line = '05.07.2026;05.07.2026;*1;OK;-20,00;RUB;-20,00;RUB;;Транспорт;4111;"Метро";0;0;-20,00\n'
+    rows, errors = parse_statement(header + line)
+    assert not errors
+    assert len(rows) == 1
+    assert rows[0]["description"] == "Метро"
+
+
 def test_parse_statement_bad_line():
     rows, errors = parse_statement("garbage line\n")
     assert not rows
@@ -70,10 +83,18 @@ def test_parse_statement_row_fields():
     assert rows[0]["description"] == "Сбербанк"
     assert rows[1]["bank_category"] == "Супермаркеты"
     assert rows[1]["mcc"] == "5411"
-    # the hash is exactly sha256 of "date|amount|description"
+    # hashes are account-scoped and derived at ingest time, not during parsing
+    assert "hash" not in rows[0]
+
+
+def test_tx_hash_is_scoped_to_the_account():
     from app.importer import tx_hash
 
-    assert rows[0]["hash"] == tx_hash("2026-07-03T19:48:24", -45000, "Сбербанк")
+    a = tx_hash(1, "2026-07-03T19:48:24", -45000, "Сбербанк")
+    b = tx_hash(2, "2026-07-03T19:48:24", -45000, "Сбербанк")
+    assert a != b
+    assert len(a) == len(b) == 64
+    assert a == tx_hash(1, "2026-07-03T19:48:24", -45000, "Сбербанк")
 
 
 def test_parse_statement_semicolon_delimiter_and_quotes():

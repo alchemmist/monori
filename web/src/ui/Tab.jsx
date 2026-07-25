@@ -1,4 +1,4 @@
-import { useEffect, useId, useState, useSyncExternalStore } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { ChevronLeft, ChevronRight, Xmark } from "@gravity-ui/icons";
 
 /**
@@ -65,20 +65,25 @@ function unregisterTab(id) {
 
 export default function Tab({ title, strip, onClose, footer, defaultCollapsed = false, children }) {
     const id = useId();
+    const ref = useRef(null);
     const [collapsed, setCollapsed] = useState(defaultCollapsed);
     const [animating, setAnimating] = useState(false);
-    const width = collapsed ? TAB_STRIP_WIDTH : TAB_WIDTH;
 
-    useEffect(() => {
-        registerTab(id, defaultCollapsed ? TAB_STRIP_WIDTH : TAB_WIDTH);
-        return () => unregisterTab(id);
-        // registration happens once per mounted tab
-        // eslint-disable-next-line react-hooks/exhaustive-deps
+    // register before paint (so co-mounting tabs never flash overlapped) with
+    // the real rendered width — CSS caps the tab at 92vw, so the 420px constant
+    // can overstate the slot on narrow viewports; a ResizeObserver keeps the
+    // slot honest through collapse/expand transitions and window resizes
+    useLayoutEffect(() => {
+        registerTab(id, ref.current?.offsetWidth ?? TAB_WIDTH);
+        const ro = new ResizeObserver(() => {
+            if (ref.current) resizeTab(id, ref.current.offsetWidth);
+        });
+        if (ref.current) ro.observe(ref.current);
+        return () => {
+            ro.disconnect();
+            unregisterTab(id);
+        };
     }, [id]);
-
-    useEffect(() => {
-        resizeTab(id, width);
-    }, [id, width]);
 
     const offset = useSyncExternalStore(subscribe, () => computeOffset(stack.tabs, id));
 
@@ -87,19 +92,33 @@ export default function Tab({ title, strip, onClose, footer, defaultCollapsed = 
         setAnimating(true);
     };
 
+    // `animating` gates pointer input; transitionend can be missed entirely
+    // (reduced motion, interrupted/overridden transition), so never leave the
+    // tab inert longer than the 0.25s transition could possibly last
+    useEffect(() => {
+        if (!animating) return undefined;
+        const t = setTimeout(() => setAnimating(false), 400);
+        return () => clearTimeout(t);
+    }, [animating]);
+
     const cls = ["ui-tab", collapsed && "ui-tab_collapsed", animating && "ui-tab_animating"]
         .filter(Boolean)
         .join(" ");
 
     return (
         <aside
+            ref={ref}
             className={cls}
             style={{ right: offset }}
             onTransitionEnd={(e) => {
                 if (e.propertyName === "width") setAnimating(false);
             }}
+            onTransitionCancel={(e) => {
+                if (e.propertyName === "width") setAnimating(false);
+            }}
         >
             <button
+                type="button"
                 className="ui-tab__strip"
                 onClick={() => toggle(false)}
                 title={`Expand ${strip || title}`}
@@ -110,11 +129,14 @@ export default function Tab({ title, strip, onClose, footer, defaultCollapsed = 
                 <ChevronLeft width={16} height={16} />
                 <span className="ui-tab__strip-label">{strip || title}</span>
             </button>
-            <div className="ui-tab__inner">
+            {/* collapsed content is only clipped visually — inert keeps keyboard
+                focus and assistive tech out of the invisible controls */}
+            <div className="ui-tab__inner" inert={collapsed || undefined}>
                 <div className="ui-tab__head">
                     <div className="ui-tab__title">{title}</div>
                     <div className="ui-tab__head-actions">
                         <button
+                            type="button"
                             className="ui-tab__icon-btn"
                             onClick={() => toggle(true)}
                             title="Collapse — the app stays usable behind the tab"
@@ -123,6 +145,7 @@ export default function Tab({ title, strip, onClose, footer, defaultCollapsed = 
                             <ChevronRight width={16} height={16} />
                         </button>
                         <button
+                            type="button"
                             className="ui-tab__icon-btn"
                             onClick={onClose}
                             title="Close"

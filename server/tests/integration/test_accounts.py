@@ -81,6 +81,16 @@ def test_delete_reassigns_transactions(api, client):
     assert api.tx_by(tx)["accountId"] == default
     assert cash not in [a["id"] for a in api.snapshot()["accounts"]]
 
+    # the moved row was re-fingerprinted for its new account: importing the
+    # same operation into the target account dedups against it
+    import app.db as dbmod
+    from app.importer import tx_hash
+
+    c = dbmod.connect()
+    stored = c.execute("SELECT hash FROM transactions WHERE id=?", (tx,)).fetchone()[0]
+    c.close()
+    assert stored == tx_hash(default, "2026-03-01T10:00:00", -1000, "")
+
 
 def test_cannot_delete_last_account(api, client):
     default = api.default_account()

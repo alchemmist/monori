@@ -6,12 +6,16 @@ from pydantic import BaseModel
 
 from ..auth import current_user
 from ..deps import conn
-from ..importer import build_rules, categorize, parse_statement
+from ..importer import build_rules, categorize, parse_statement, tx_hash
 from ..ingest import commit_rows, existing_hash_counts
 from ..workbook.apply import apply_workbook, budget_conflicts
 from ..workbook.importer import WorkbookError, parse_workbook
 
 router = APIRouter(prefix="/api/import", tags=["import"])
+
+# matches the client-side statement file cap (importFile.js) so oversized
+# uploads fail the same way whether they arrive via file or paste
+MAX_STATEMENT_TEXT = 5_000_000
 
 
 class ImportBody(BaseModel):
@@ -62,15 +66,22 @@ def _owned_account(c, account_id, uid):
 @router.post("/preview")
 def import_preview(body: ImportBody, user: Annotated[dict, Depends(current_user)]):
     uid = user["id"]
+    if len(body.text) > MAX_STATEMENT_TEXT:
+        raise HTTPException(413, "statement is too large")
     c = conn()
     try:
         rows, errors = parse_statement(body.text)
         rules = _load_user_rules(c, uid)
         account_id = body.accountId if _owned_account(c, body.accountId, uid) else None
-        existing = existing_hash_counts(c, account_id)
+        existing = existing_hash_counts(c, account_id) if account_id is not None else {}
         seen_in_batch: dict = {}
         for row in rows:
             row["categoryId"] = categorize(row["description"], row["amount"], rules)
+            if account_id is None:
+                # no account to dedup against — don't fabricate account-less hashes
+                row["duplicate"] = False
+                continue
+            row["hash"] = tx_hash(account_id, row["date"], row["amount"], row["description"])
             n_batch = seen_in_batch.get(row["hash"], 0)
             row["duplicate"] = existing.get(row["hash"], 0) > n_batch
             seen_in_batch[row["hash"]] = n_batch + 1
