@@ -8,7 +8,6 @@ rows directly with no OTP. It is registered only when this module is imported
 (tests do so explicitly) and is hidden from the bank picker.
 """
 
-from ..importer import tx_hash
 from .base import Connector, ConnectorError, SmsRequired, SyncResult, register
 
 FIXTURE_ROWS = [
@@ -30,12 +29,7 @@ FIXTURE_ROWS = [
 
 
 def _rows():
-    out = []
-    for r in FIXTURE_ROWS:
-        row = dict(r)
-        row["hash"] = tx_hash(row["date"], row["amount"], row["description"])
-        out.append(row)
-    return out
+    return [dict(r) for r in FIXTURE_ROWS]
 
 
 @register

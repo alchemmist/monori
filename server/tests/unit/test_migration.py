@@ -5,7 +5,7 @@ from alembic import command
 
 from app.db import LEGACY_REVISIONS, _alembic_config, connect
 
-HEAD = "0011"
+HEAD = "0012"
 assert LEGACY_REVISIONS[-1] == "0006"
 
 OLD_SCHEMA = """
@@ -247,6 +247,43 @@ def test_migration_0011_reports_blank_backfill(tmp_path):
         raise AssertionError("migration did not report the blank backfill")
     except Exception as exc:  # noqa: BLE001 — alembic wraps the RuntimeError
         assert "fix their address first" in str(exc)
+
+
+def test_migration_0012_rehashes_with_account_scope(tmp_path):
+    from app.importer import tx_hash
+
+    db_path = os.path.join(tmp_path, "v11.db")
+    command.upgrade(_alembic_config(db_path), "0011")
+    raw = sqlite3.connect(db_path)
+    raw.execute(
+        "INSERT INTO users (email, email_canonical, password_hash, created_at)"
+        " VALUES ('u@e.co', 'u@e.co', 'h', 't')"
+    )
+    raw.execute(
+        "INSERT INTO accounts (user_id, name, type, currency, sort) VALUES"
+        " (1, 'A', 'card', 'RUB', 1), (1, 'B', 'card', 'RUB', 2)"
+    )
+    # the same-looking operation on two accounts shared one account-less hash
+    raw.execute(
+        "INSERT INTO transactions (date, amount, description, account_id, hash) VALUES"
+        " ('2026-01-01T00:00:00', -100, 'coffee', 1, 'old'),"
+        " ('2026-01-01T00:00:00', -100, 'coffee', 2, 'old')"
+    )
+    raw.commit()
+    raw.close()
+
+    conn = connect(db_path)
+    try:
+        assert _revision(conn) == HEAD
+        rows = conn.execute(
+            "SELECT account_id, hash FROM transactions ORDER BY account_id"
+        ).fetchall()
+        hashes = {r["account_id"]: r["hash"] for r in rows}
+        assert hashes[1] == tx_hash(1, "2026-01-01T00:00:00", -100, "coffee")
+        assert hashes[2] == tx_hash(2, "2026-01-01T00:00:00", -100, "coffee")
+        assert hashes[1] != hashes[2]
+    finally:
+        conn.close()
 
 
 def test_legacy_intermediate_user_version_is_adopted(tmp_path):

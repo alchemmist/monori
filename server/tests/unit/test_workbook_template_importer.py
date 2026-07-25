@@ -176,7 +176,7 @@ def test_month_range_wraps_across_years():
     assert list(_month_range((2025, 3), (2025, 1))) == []
 
 
-def test_synthetic_shape_and_hash():
+def test_synthetic_shape():
     a = _synthetic(2025, 1, 20000, "Groceries", "Migration adjustment: Groceries")
     assert a["date"] == "2025-01-31T12:00:00"
     assert a["amount"] == 20000
@@ -184,7 +184,7 @@ def test_synthetic_shape_and_hash():
     assert a["description"] == "Migration adjustment: Groceries"
     assert a["marker"] == ""
     assert a["bank_category"] == "" and a["mcc"] == "" and a["comment"] == ""
-    assert a["hash"]
+    assert "hash" not in a
 
 
 # --- detection ------------------------------------------------------------

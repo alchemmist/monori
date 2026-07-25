@@ -10,7 +10,7 @@ from io import BytesIO
 
 from openpyxl import load_workbook
 
-from ..importer import parse_amount_kop, parse_date, tx_hash
+from ..importer import parse_amount_kop, parse_date
 from . import spec
 
 YEAR_SHEET_RE = re.compile(r"^\d{4}$")
@@ -161,7 +161,6 @@ def _parse_transactions(ws, warnings):
                 "comment": _unquote(_cell_str(col(row, "Comment"))),
                 "monori_category": _unquote(_cell_str(col(row, "Monori Category"))),
                 "marker": card or account,
-                "hash": tx_hash(date_iso, amount, description),
             }
         )
     if skipped_status:
