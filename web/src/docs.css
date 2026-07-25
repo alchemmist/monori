@@ -311,6 +311,21 @@ a {
     color: var(--m-text);
 }
 
+.md-mermaid {
+    margin: 0 0 20px;
+    padding: 18px;
+    background: var(--m-surface-raised);
+    border: 1px solid var(--m-border);
+    border-radius: var(--m-radius);
+    overflow-x: auto;
+    text-align: center;
+}
+
+.md-mermaid svg {
+    max-width: 100%;
+    height: auto;
+}
+
 .md blockquote {
     margin: 0 0 20px;
     padding: 12px 16px;
@@ -1069,6 +1084,7 @@ a {
 .theme-dark .bento__tile:not(.bento__tile_orange),
 .theme-dark .model,
 .theme-dark .md pre,
+.theme-dark .md-mermaid,
 .theme-dark .md-table-wrap {
     background: var(--glass-fill);
     border-color: var(--glass-border);

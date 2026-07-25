@@ -4,8 +4,14 @@ const raw = import.meta.glob("../../docs/*.md", {
     eager: true,
 });
 
+// react-markdown 9 has no raw-HTML pass, so an HTML comment reaches the page as
+// literal text; the docs use them as generator markers, so drop them here
+export function stripHtmlComments(text) {
+    return text.replace(/<!--[\s\S]*?-->[ \t]*\n?/g, "");
+}
+
 function md(name) {
-    return raw[`../../docs/${name}.md`] ?? "";
+    return stripHtmlComments(raw[`../../docs/${name}.md`] ?? "");
 }
 
 export const NAV = [

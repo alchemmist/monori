@@ -5,6 +5,7 @@ import remarkGfm from "remark-gfm";
 import rehypeSlug from "rehype-slug";
 import { ArrowLeft, ArrowRight } from "@gravity-ui/icons";
 import { sectionBySlug, neighbors } from "../content.js";
+import Mermaid from "./Mermaid.jsx";
 
 function toInternal(href) {
     if (!href) return null;
@@ -27,8 +28,20 @@ function MdLink({ href, children }) {
     );
 }
 
+// ```mermaid fences become diagrams; every other fence keeps the plain <pre>
+function MdPre({ children, ...props }) {
+    const code = Array.isArray(children) ? children[0] : children;
+    const className = code?.props?.className ?? "";
+    if (/(^|\s)language-mermaid(\s|$)/.test(className)) {
+        const source = String(code.props.children ?? "").replace(/\n$/, "");
+        return <Mermaid chart={source} />;
+    }
+    return <pre {...props}>{children}</pre>;
+}
+
 const COMPONENTS = {
     a: MdLink,
+    pre: MdPre,
     table: (props) => (
         <div className="md-table-wrap">
             <table {...props} />
