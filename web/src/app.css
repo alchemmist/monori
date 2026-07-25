@@ -575,3 +575,11 @@
         flex-wrap: wrap;
     }
 }
+
+/* Charts: recharts' accessibility layer makes every chart svg focusable, so a
+   mouse click painted a focus ring around the whole plot. Keep the ring for
+   keyboard focus only; a click leaves the chart visually unchanged. */
+.recharts-wrapper:focus:not(:focus-visible),
+.recharts-wrapper svg:focus:not(:focus-visible) {
+    outline: none;
+}
