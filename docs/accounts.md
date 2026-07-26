@@ -24,7 +24,11 @@ Accounts live on the **Accounts** page in the sidebar. Each one has:
 - a **currency** — a label only for now; monori is single-currency and does no
   conversion (full multi-currency is tracked in issue #29),
 - an **opening balance** — what the account held before the first recorded
-  transaction.
+  transaction. It is real money, so it also counts as income to hand out on the
+  [Budget](budgeting.md) page,
+- an **opening date** — when that balance was on the account, which decides the
+  month it lands in on the Budget page. New accounts default to today; left
+  empty, the balance follows the account's earliest transaction.
 
 From the list you can create, rename, reorder, **archive** (hide without
 deleting), and delete accounts. Deleting an account asks where its transactions

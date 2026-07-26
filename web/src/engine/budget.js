@@ -8,8 +8,10 @@
  *   overspent(m)     = sum over expense categories of min(balance(cat, m), 0)
  *   available(m)     = available(m-1) + overspent(m-1) + income(m) - budgetedTotal(m)
  *
- * January chains from the previous year's December; the first year starts with
- * the total opening balance already held across accounts.
+ * income(m) counts account opening balances too — money that sits on an account
+ * before its first transaction is still money to budget.
+ *
+ * January chains from the previous year's December; the first year starts at 0.
  */
 
 import { isTransfer } from "./transfers.js";
@@ -30,6 +32,51 @@ export function buildTxIndex(transactions) {
         const month = +t.date.slice(5, 7);
         const key = txKey(year, month, t.categoryId);
         index.set(key, (index.get(key) ?? 0) + t.amount);
+    }
+    return index;
+}
+
+export function monthKey(year, month) {
+    return `${year}-${month}`;
+}
+
+const OPENING_DATE = /^(\d{4})-(\d{1,2})(?:\D|$)/;
+
+/** Map(accountId -> date of its earliest transaction). */
+function firstTxDates(transactions) {
+    const dates = new Map();
+    for (const t of transactions ?? []) {
+        const seen = dates.get(t.accountId);
+        if (seen == null || t.date < seen) dates.set(t.accountId, t.date);
+    }
+    return dates;
+}
+
+/**
+ * Sum account opening balances into a Map keyed by year-month.
+ *
+ * An opening balance is what the account held before its first recorded
+ * transaction, so an account without an explicit opening date falls back to the
+ * month of that first transaction. An account with neither — or one opened
+ * before the range, or carrying an unparseable date — drops into the very first
+ * month, so the money lands somewhere inside the range instead of vanishing.
+ */
+export function buildOpeningIndex(accounts, firstYear, transactions) {
+    const index = new Map();
+    if (!accounts?.length) return index;
+    const firstTx = firstTxDates(transactions);
+    for (const a of accounts) {
+        const amount = a.openingBalance ?? 0;
+        if (!amount) continue;
+        const parsed = OPENING_DATE.exec(a.openingDate ?? firstTx.get(a.id) ?? "");
+        let year = firstYear;
+        let month = 1;
+        if (parsed && +parsed[1] >= firstYear && +parsed[2] >= 1 && +parsed[2] <= 12) {
+            year = +parsed[1];
+            month = +parsed[2];
+        }
+        const key = monthKey(year, month);
+        index.set(key, (index.get(key) ?? 0) + amount);
     }
     return index;
 }
@@ -55,8 +102,8 @@ export function computeYear({
     groupKindById,
     txIndex,
     budgetIndex,
+    openingIndex,
     prev,
-    openingBalance = 0,
 }) {
     const byCategory = new Map();
     const income = Array(12).fill(0);
@@ -77,6 +124,10 @@ export function computeYear({
         }
     }
 
+    for (let m = 0; m < 12; m++) {
+        income[m] += openingIndex?.get(monthKey(year, m + 1)) ?? 0;
+    }
+
     for (const c of expenseCats) {
         const months = [];
         let prevBalance = prev?.byCategory.get(c.id)?.[11]?.balance ?? 0;
@@ -92,7 +143,7 @@ export function computeYear({
         byCategory.set(c.id, months);
     }
 
-    let prevAvailable = prev ? prev.available[11] : openingBalance;
+    let prevAvailable = prev ? prev.available[11] : 0;
     let prevOverspent = prev ? prev.overspent[11] : 0;
     for (let m = 0; m < 12; m++) {
         available[m] = prevAvailable + prevOverspent + income[m] - budgetedTotal[m];
@@ -120,10 +171,7 @@ export function computeRange(snapshot, firstYear, lastYear) {
     const groupKindById = new Map(snapshot.groups.map((g) => [g.id, g.kind]));
     const txIndex = buildTxIndex(snapshot.transactions);
     const budgetIndex = buildBudgetIndex(snapshot.budgets);
-    const openingBalance = (snapshot.accounts ?? []).reduce(
-        (sum, account) => sum + (account.openingBalance ?? 0),
-        0,
-    );
+    const openingIndex = buildOpeningIndex(snapshot.accounts, firstYear, snapshot.transactions);
     const results = new Map();
     let prev = null;
     for (let year = firstYear; year <= lastYear; year++) {
@@ -133,8 +181,8 @@ export function computeRange(snapshot, firstYear, lastYear) {
             groupKindById,
             txIndex,
             budgetIndex,
+            openingIndex,
             prev,
-            openingBalance: prev ? 0 : openingBalance,
         });
         results.set(year, res);
         prev = res;
