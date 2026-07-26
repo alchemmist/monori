@@ -274,7 +274,30 @@ def _reject_currency_mismatch(c, slots, marker_map):
             )
 
 
-def _commit_workbook(data, uid, mapping, budget_policy):
+def _remember_markers(c, slots, marker_map):
+    """
+    Bind each slot's card marker to the account it was mapped onto, so the next
+    statement import or sync routes those cards without asking. Tails are only
+    appended — whatever the account already has stays, and a marker with no
+    digits (the unmarked-rows slot) binds nothing.
+    """
+    bound = 0
+    for key, slot in slots.items():
+        digits = "".join(ch for ch in slot["marker"] if ch.isdigit())
+        if not digits or len(digits) > 8:
+            continue
+        account_id = marker_map[key]
+        row = c.execute("SELECT card_tails FROM accounts WHERE id=?", (account_id,)).fetchone()
+        tails = [t for t in (row["card_tails"] or "").split(",") if t]
+        if digits in tails:
+            continue
+        tails.append(digits)
+        c.execute("UPDATE accounts SET card_tails=? WHERE id=?", (",".join(tails), account_id))
+        bound += 1
+    return bound
+
+
+def _commit_workbook(data, uid, mapping, budget_policy, remember):
     parsed = _parse_or_400(data)
     try:
         raw_mapping = json.loads(mapping)
@@ -292,6 +315,7 @@ def _commit_workbook(data, uid, mapping, budget_policy):
                 raise HTTPException(400, f"unknown account: {account_id}")
         _reject_currency_mismatch(c, slots, marker_map)
         result = apply_workbook(c, uid, parsed, marker_map, budget_policy)
+        result["cardTailsBound"] = _remember_markers(c, slots, marker_map) if remember else 0
         c.commit()
         warnings = [*parsed["warnings"], *result.pop("warnings", [])]
         return {**result, "warnings": warnings, "errors": parsed["errors"]}
@@ -318,8 +342,11 @@ async def workbook_commit(
     file: Annotated[UploadFile, File()],
     mapping: Annotated[str, Form()],
     budgetPolicy: Annotated[str, Form()] = "overwrite",
+    remember: Annotated[bool, Form()] = False,
 ):
     if budgetPolicy not in ("overwrite", "skip"):
         raise HTTPException(400, "budgetPolicy must be overwrite or skip")
     data = await _read_workbook_upload(file)
-    return await run_in_threadpool(_commit_workbook, data, user["id"], mapping, budgetPolicy)
+    return await run_in_threadpool(
+        _commit_workbook, data, user["id"], mapping, budgetPolicy, remember
+    )

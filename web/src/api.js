@@ -232,11 +232,12 @@ export const api = {
             body: JSON.stringify({ sql, confirmWrite, dryRun }),
         }).then(json),
     adminDeleteUser: (id) => apiFetch(`/api/admin/users/${id}`, { method: "DELETE" }).then(json),
-    workbookCommit: (file, mapping, budgetPolicy) => {
+    workbookCommit: (file, mapping, budgetPolicy, remember = false) => {
         const form = new FormData();
         form.append("file", file);
         form.append("mapping", JSON.stringify(mapping));
         form.append("budgetPolicy", budgetPolicy);
+        form.append("remember", remember);
         return apiFetch("/api/import/workbook/commit", { method: "POST", body: form }).then(json);
     },
 };
