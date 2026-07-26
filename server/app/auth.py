@@ -22,7 +22,9 @@ def current_user(token: Annotated[str, Depends(oauth2_scheme)]):
     c = conn()
     try:
         row = c.execute(
-            "SELECT id, email, created_at, is_admin, last_login FROM users WHERE id=?", (user_id,)
+            "SELECT id, email, created_at, is_admin, last_login, default_account_id"
+            " FROM users WHERE id=?",
+            (user_id,),
         ).fetchone()
     finally:
         c.close()

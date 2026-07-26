@@ -118,7 +118,9 @@ def user_detail(uid: int, admin: Annotated[dict, Depends(admin_user)]):
     c = conn()
     try:
         row = c.execute(
-            "SELECT id, email, created_at, is_admin, last_login FROM users WHERE id=?", (uid,)
+            "SELECT id, email, created_at, is_admin, last_login, default_account_id"
+            " FROM users WHERE id=?",
+            (uid,),
         ).fetchone()
         if row is None:
             raise HTTPException(404, "unknown user")

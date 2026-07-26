@@ -121,6 +121,12 @@ export const useStore = create((set, get) => ({
         await get().login(email, password);
     },
 
+    async patchMe(patch) {
+        const user = await api.authPatchMe(patch);
+        set({ user });
+        return user;
+    },
+
     logout() {
         localStorage.removeItem("monori_token");
         get().setTabs([]);

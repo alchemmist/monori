@@ -127,6 +127,7 @@ erDiagram
         TEXT created_at "required"
         INTEGER is_admin "required"
         TEXT last_login
+        INTEGER default_account_id FK "-> accounts.id"
     }
     activity_events {
         INTEGER id PK
@@ -158,6 +159,7 @@ erDiagram
     transactions ||--o{ transfer_rejections : "in_tx_id"
     transactions ||--o{ transfer_rejections : "out_tx_id"
     categories ||--o{ budgets : "category_id"
+    accounts |o--o{ users : "default_account_id"
     users ||--o{ activity_events : "user_id"
     users ||--o{ feature_usage : "user_id"
 ```

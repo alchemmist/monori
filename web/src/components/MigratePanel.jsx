@@ -11,6 +11,7 @@ import Txt from "../ui/Txt.jsx";
  * the chosen file and preview survive the whole time. */
 export default function MigratePanel({ onClose }) {
     const accounts = useStore((s) => s.snapshot?.accounts ?? []);
+    const user = useStore((s) => s.user);
     const load = useStore((s) => s.load);
     const notify = useStore((s) => s.notify);
     const fileRef = useRef(null);
@@ -37,7 +38,22 @@ export default function MigratePanel({ onClose }) {
             const p = await api.workbookPreview(picked);
             setFile(picked);
             setPreview(p);
-            setMapping({});
+            // the unmarked-rows slot is the one no card number can decide, which
+            // is exactly what the settings-level default account exists for
+            const preset = user?.defaultAccountId;
+            const target = live.find((a) => a.id === preset);
+            setMapping(
+                Object.fromEntries(
+                    (p.accountSlots ?? [])
+                        .filter(
+                            (s) =>
+                                !s.marker &&
+                                target &&
+                                (target.currency || "RUB").toUpperCase() === s.currency,
+                        )
+                        .map((s) => [s.key, String(preset)]),
+                ),
+            );
         } catch (e) {
             notify({ title: "Could not read workbook", theme: "danger", content: String(e) });
         } finally {

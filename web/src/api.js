@@ -203,6 +203,12 @@ export const api = {
     },
     authMe: (token) =>
         apiFetch("/api/auth/me", { headers: { Authorization: `Bearer ${token}` } }).then(json),
+    authPatchMe: (patch) =>
+        apiFetch("/api/auth/me", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(patch),
+        }).then(json),
     exportXlsx: async () => {
         const r = await apiFetch("/api/export/xlsx");
         if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);

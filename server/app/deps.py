@@ -67,6 +67,7 @@ def serialize_user(r):
         "createdAt": r["created_at"],
         "isAdmin": bool(r["is_admin"]),
         "lastLogin": r["last_login"],
+        "defaultAccountId": r["default_account_id"],
     }
 
 
