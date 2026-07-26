@@ -40,6 +40,27 @@ describe("category and group dialogs", () => {
         expect(close).toHaveBeenCalled();
     });
 
+    it("edits a category in the selected group and preserves its keyword text", async () => {
+        const patch = vi.spyOn(useStore.getState(), "patchCategory").mockResolvedValue();
+        const { user } = renderUI(
+            <CategoryEditDialog category={food} groups={groups} onClose={vi.fn()} />,
+        );
+        await user.clear(screen.getByLabelText("Name"));
+        await user.type(screen.getByLabelText("Name"), " Market ");
+        await user.click(screen.getByRole("button", { name: "GroupHome" }));
+        await user.click(screen.getByRole("option", { name: "Income" }));
+        await user.clear(screen.getByLabelText("Keywords"));
+        await user.type(screen.getByLabelText("Keywords"), "grocery|market");
+        await user.click(screen.getByRole("button", { name: "Save" }));
+        await waitFor(() =>
+            expect(patch).toHaveBeenCalledWith(2, {
+                name: "Market",
+                groupId: 1,
+                keywords: "grocery|market",
+            }),
+        );
+    });
+
     it("explains an uncategorized delete and invokes delete", async () => {
         const remove = vi.spyOn(useStore.getState(), "deleteCategory").mockResolvedValue();
         const { user } = renderUI(
@@ -73,6 +94,22 @@ describe("category and group dialogs", () => {
         expect(screen.getByText("Keywords added to Rent: shop")).toBeInTheDocument();
         await user.click(screen.getByRole("button", { name: "Delete" }));
         await waitFor(() => expect(merge).toHaveBeenCalledWith(2, 3));
+    });
+
+    it("does not offer an opposite-kind merge target", async () => {
+        const salary = { id: 4, groupId: 1, name: "Salary", keywords: "pay", sort: 1 };
+        seed({ groups, categories: [food, salary], budgets: [] });
+        const { user } = renderUI(
+            <CategoryDeleteDialog
+                category={food}
+                categories={[food, salary]}
+                txCount={0}
+                onClose={vi.fn()}
+            />,
+        );
+        await user.click(screen.getByRole("button", { name: /leave uncategorized/i }));
+        expect(screen.queryByRole("option", { name: "Salary" })).not.toBeInTheDocument();
+        expect(screen.getByText("No budget history to remove")).toBeInTheDocument();
     });
 
     it("edits groups and blocks deletion while categories remain", async () => {
