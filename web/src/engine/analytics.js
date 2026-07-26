@@ -3,11 +3,7 @@ import { isTransfer } from "./transfers.js";
 
 /**
  * Analytics helpers — pure functions over the snapshot, no I/O.
- *
- * Everything here sums across accounts, so everything here reads a transaction
- * through `reported()` — the amount in the owner's reporting currency. The one
- * exception is `accountBalances`, which is an account's own money in its own
- * currency and must not be converted.
+ * All money values are integer kopecks, mirroring the budget engine.
  * "Expense" numbers are returned positive (outflows negated) for charting.
  */
 
@@ -15,17 +11,16 @@ export function incomeGroupIdSet(groups) {
     return new Set(groups.filter((g) => g.kind === "income").map((g) => g.id));
 }
 
-/** Running balance per account = opening balance + sum of its transactions
- * (transfers included: a transfer's two legs move money between accounts).
- *
- * Deliberately the raw `amount`: this is one account's own money, and it is
- * held in one currency. Converting it would answer a question nobody asked —
- * `totalBalance` is where the accounts are made comparable.
- * Returns Map(accountId -> minor units of the account's currency). */
+/** Running balance per account = opening balance + its categorized
+ * transactions + its transfer legs + reconcile adjustments.
+ * An uncategorized row that is not a transfer is money the ledger has not
+ * accepted yet — the budget ignores it, so the balance does too, and the two
+ * views always move together. Returns Map(accountId -> kopecks). */
 export function accountBalances(snapshot) {
     const balances = new Map((snapshot.accounts ?? []).map((a) => [a.id, a.openingBalance ?? 0]));
     for (const t of snapshot.transactions) {
         if (!balances.has(t.accountId)) continue;
+        if (t.categoryId == null && !isTransfer(t) && t.source !== "adjustment") continue;
         balances.set(t.accountId, balances.get(t.accountId) + t.amount);
     }
     return balances;
@@ -108,23 +103,26 @@ export function dayOfMonthProfile(snapshot, year) {
 }
 
 /**
- * One year of expenses as a category × month matrix, ready to stack or plot.
+ * One year of categorized income or expenses as a category × month matrix,
+ * ready to stack or plot.
  * Returns [{id, name, monthly[12], total}] sorted by yearly total, biggest
  * first, with everything past `limit` folded into a single trailing
  * `{id: null, name: "Other"}` row so a long tail of small categories cannot
  * turn the chart into an unreadable pile of slivers.
  *
- * Refunds are kept as the negative amounts they are (same as monthlySeries), so
- * a category's year adds up to exactly what every other view reports for it.
+ * `kind` defaults to expenses. Refunds are kept as the negative amounts they
+ * are (same as monthlySeries), so a category's year adds up to exactly what
+ * every other view reports for it.
  */
-export function categoryYearMatrix(snapshot, year, { limit = 8 } = {}) {
+export function categoryYearMatrix(snapshot, year, { limit = 8, kind = "expense" } = {}) {
     const incomeIds = incomeGroupIdSet(snapshot.groups);
     const catById = new Map(snapshot.categories.map((c) => [c.id, c]));
     const rows = new Map();
     for (const t of snapshot.transactions) {
         if (!t.date.startsWith(year) || t.transferId != null || t.categoryId == null) continue;
         const cat = catById.get(t.categoryId);
-        if (!cat || incomeIds.has(cat.groupId)) continue;
+        if (!cat || (kind === "income" ? !incomeIds.has(cat.groupId) : incomeIds.has(cat.groupId)))
+            continue;
         let row = rows.get(cat.id);
         if (!row) {
             row = {
@@ -136,7 +134,7 @@ export function categoryYearMatrix(snapshot, year, { limit = 8 } = {}) {
             };
             rows.set(cat.id, row);
         }
-        const v = -reported(t);
+        const v = kind === "income" ? reported(t) : -reported(t);
         row.monthly[+t.date.slice(5, 7) - 1] += v;
         row.total += v;
     }
@@ -150,6 +148,30 @@ export function categoryYearMatrix(snapshot, year, { limit = 8 } = {}) {
         other.total += r.total;
     }
     return [...ranked.slice(0, limit), other];
+}
+
+/** Totals by category across the entire ledger, sorted largest first.
+ * The same categorized-only rule backs both all-time donut charts: transfers,
+ * uncategorized transactions and deleted categories do not create a slice. */
+export function categoryTotals(snapshot, { kind = "expense" } = {}) {
+    const incomeIds = incomeGroupIdSet(snapshot.groups);
+    const catById = new Map(snapshot.categories.map((c) => [c.id, c]));
+    const rows = new Map();
+    for (const t of snapshot.transactions) {
+        if (isTransfer(t) || t.categoryId == null) continue;
+        const cat = catById.get(t.categoryId);
+        if (!cat || (kind === "income" ? !incomeIds.has(cat.groupId) : incomeIds.has(cat.groupId)))
+            continue;
+        let row = rows.get(cat.id);
+        if (!row) {
+            row = { id: cat.id, groupId: cat.groupId, name: cat.name, total: 0 };
+            rows.set(cat.id, row);
+        }
+        row.total += kind === "income" ? reported(t) : -reported(t);
+    }
+    return [...rows.values()]
+        .filter((r) => r.total > 0)
+        .sort((a, b) => b.total - a.total || a.name.localeCompare(b.name));
 }
 
 /** Merchant key: strip trailing city/junk numbers, collapse whitespace, take a
@@ -188,9 +210,9 @@ export function topMerchants(snapshot, year, limit = 10) {
 }
 
 /** Expense-transaction stats for a year: count, median, largest.
- * Counts every real outflow the transactions view shows for the year —
- * uncategorized rows included — excluding transfer legs and income-group
- * rows, so the card's count matches what the user can tally by hand. */
+ * Like every other analytics card, this uses only categorized expense rows:
+ * uncategorized operations and transfer legs are not spending until they are
+ * assigned to a real expense category. */
 export function txStats(snapshot, year) {
     const incomeIds = incomeGroupIdSet(snapshot.groups);
     const catById = new Map(snapshot.categories.map((c) => [c.id, c]));
@@ -199,15 +221,36 @@ export function txStats(snapshot, year) {
     for (const t of snapshot.transactions) {
         if (!t.date.startsWith(year) || reported(t) >= 0) continue;
         if (isTransfer(t)) continue; // moving money is not spending
-        // a categoryId the snapshot can't resolve counts like an uncategorized
-        // row: the server nulls categoryId on category delete, so a dangling id
-        // is still a real outflow, not something to hide from the count
-        const cat = t.categoryId != null ? catById.get(t.categoryId) : null;
-        if (cat && incomeIds.has(cat.groupId)) continue;
+        if (t.categoryId == null) continue;
+        const cat = catById.get(t.categoryId);
+        if (!cat || incomeIds.has(cat.groupId)) continue;
         const v = -reported(t);
         amounts.push(v);
         if (!largest || v > largest.amount)
             largest = { amount: v, description: t.description, date: t.date };
+    }
+    amounts.sort((a, b) => a - b);
+    const median = amounts.length ? amounts[Math.floor(amounts.length / 2)] : 0;
+    return { count: amounts.length, median, largest };
+}
+
+/** Income-transaction stats for a year: count, median, largest.
+ * Only positive rows assigned to a real income category qualify; transfers and
+ * uncategorized deposits stay out of every income metric until categorized. */
+export function incomeStats(snapshot, year) {
+    const incomeIds = incomeGroupIdSet(snapshot.groups);
+    const catById = new Map(snapshot.categories.map((c) => [c.id, c]));
+    const amounts = [];
+    let largest = null;
+    for (const t of snapshot.transactions) {
+        if (!t.date.startsWith(year) || reported(t) <= 0 || t.categoryId == null) continue;
+        if (isTransfer(t)) continue;
+        const cat = catById.get(t.categoryId);
+        if (!cat || !incomeIds.has(cat.groupId)) continue;
+        const value = reported(t);
+        amounts.push(value);
+        if (!largest || value > largest.amount)
+            largest = { amount: value, description: t.description, date: t.date };
     }
     amounts.sort((a, b) => a - b);
     const median = amounts.length ? amounts[Math.floor(amounts.length / 2)] : 0;

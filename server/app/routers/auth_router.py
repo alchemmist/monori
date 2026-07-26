@@ -185,6 +185,7 @@ def patch_me(body: MePatch, user: Annotated[dict, Depends(current_user)]):
             " FROM users WHERE id=?",
             (uid,),
         ).fetchone()
-        return {"user": serialize_user(row), "repriced": repriced}
+        serialized = serialize_user(row)
+        return {**serialized, "user": serialized, "repriced": repriced}
     finally:
         c.close()
