@@ -256,7 +256,9 @@ export default function YearGrid({
                                                     {metric === "budgeted" ? (
                                                         <BudgetCell
                                                             value={mm.budgeted}
-                                                            onChange={(v) => setBudget(c.id, year, m + 1, v)}
+                                                            onChange={(v) =>
+                                                                setBudget(c.id, year, m + 1, v)
+                                                            }
                                                             onSelect={() =>
                                                                 onSelectBudget?.({
                                                                     categoryId: c.id,

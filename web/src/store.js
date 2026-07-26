@@ -271,10 +271,7 @@ export const useStore = create((set, get) => ({
 
         const targetMonths = new Set(cells.map((cell) => cell.month));
         const budgets = snapshot.budgets.filter(
-            (b) =>
-                b.categoryId !== categoryId ||
-                b.year !== year ||
-                !targetMonths.has(b.month),
+            (b) => b.categoryId !== categoryId || b.year !== year || !targetMonths.has(b.month),
         );
         if (amount !== 0) budgets.push(...cells);
         set({ snapshot: { ...snapshot, budgets } });
