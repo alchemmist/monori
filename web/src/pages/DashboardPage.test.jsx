@@ -136,6 +136,19 @@ describe("DashboardPage", () => {
         expect(kpi.querySelector(".kpi__sub")).toHaveTextContent(String(year));
     });
 
+    it("keeps savings rate at zero and calculates negative runway when closed history has spending but no income", () => {
+        seed({
+            accounts: [account(1, "Card", 0)],
+            transactions: [txn(1, { categoryId: 2, amount: -300_00, date: `${prevYear}-03-10` })],
+        });
+
+        renderUI(<DashboardPage firstYear={prevYear} lastYear={year} />);
+
+        expect(screen.getByText("Savings rate").closest(".kpi")).toHaveTextContent("0%");
+        expect(screen.getByText("Runway").closest(".kpi")).toHaveTextContent("-1.0 mo");
+        expect(trendRow(`${prevYear}-03`)["Savings rate %"]).toBeNull();
+    });
+
     it("restricts every chart to the picked account", async () => {
         seed({
             accounts: [account(1, "Card", 0), account(2, "Cash", 0)],
