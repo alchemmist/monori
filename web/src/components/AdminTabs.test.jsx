@@ -159,4 +159,29 @@ describe("AdminTxTab", () => {
         await user.selectOptions(screen.getByLabelText("Account"), "Cash");
         expect(screen.getByText("Salary")).toBeInTheDocument();
     });
+
+    it("loads every page and selects only the rows visible under an account filter", async () => {
+        const later = {
+            id: 3,
+            account: "Card",
+            date: "2026-01-03",
+            description: "Rent",
+            category: "Home",
+            amount: -500,
+        };
+        vi.spyOn(api, "adminUserTransactions")
+            .mockResolvedValueOnce([...rows, later])
+            .mockResolvedValueOnce([]);
+        const { user } = renderUI(
+            <AdminTxTab user={{ id: 7, email: "person@example.test" }} onClose={vi.fn()} />,
+        );
+
+        await screen.findByText("Rent");
+        await user.selectOptions(screen.getByLabelText("Account"), "Card");
+        await user.click(screen.getByLabelText("Select all visible (2)"));
+        expect(screen.getByText("2 selected")).toBeInTheDocument();
+        await user.selectOptions(screen.getByLabelText("Account"), "Cash");
+        expect(screen.getByLabelText("Select all visible (1)")).not.toBeChecked();
+        expect(screen.getByText("2 selected")).toBeInTheDocument();
+    });
 });
