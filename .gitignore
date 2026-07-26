@@ -27,3 +27,4 @@ mutants/
 web/test-results/
 web/playwright-report/
 .worktrees/
+node_modules
