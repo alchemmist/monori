@@ -61,6 +61,9 @@ window.HTMLElement.prototype.getBoundingClientRect = function () {
 afterEach(() => {
     cleanup();
     vi.restoreAllMocks();
-    // optional-chained: a suite may have swapped localStorage for its own stub
-    window.localStorage?.clear?.();
+    try {
+        window.localStorage?.clear?.();
+    } catch {
+        // Storage may be unavailable or deliberately replaced by a throwing stub.
+    }
 });

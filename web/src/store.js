@@ -895,3 +895,25 @@ export const useStore = create((set, get) => ({
         await get().load();
     },
 }));
+
+const initialStoreState = useStore.getState();
+const initialSnapshot = structuredClone(initialStoreState.snapshot);
+const initialTabs = structuredClone(initialStoreState.tabs);
+const initialNextTabId = nextTabId;
+
+export function resetStoreForTests() {
+    fillGeneration = 0;
+    hiddenEpoch = 0;
+    txPatchChain.clear();
+    nextTxFieldRevision = 0;
+    txFieldRevisions.clear();
+    nextTabId = initialNextTabId;
+    useStore.setState(
+        {
+            ...initialStoreState,
+            snapshot: structuredClone(initialSnapshot),
+            tabs: structuredClone(initialTabs),
+        },
+        true,
+    );
+}

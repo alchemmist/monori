@@ -3,7 +3,7 @@ import { Notifications } from "@mantine/notifications";
 import { render } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { demoSnapshot } from "../demo/demoData.js";
-import { useStore } from "../store.js";
+import { resetStoreForTests, useStore } from "../store.js";
 import { theme } from "../ui/theme.js";
 
 /**
@@ -18,8 +18,6 @@ import { theme } from "../ui/theme.js";
  *
  * Anything that must hit the API is tested by mocking `src/api.js` directly.
  */
-
-const initialState = useStore.getState();
 
 function Wrap({ children }) {
     return (
@@ -45,7 +43,7 @@ export function renderUI(ui, options) {
 
 /** Fresh store between tests: zustand keeps state on the module, not the tree. */
 export function resetStore() {
-    useStore.setState(initialState, true);
+    resetStoreForTests();
 }
 
 /** Put the app on a path; `isDemo()` reads window.location, not the router. */
