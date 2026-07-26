@@ -160,6 +160,40 @@ describe("CategoriesPage", () => {
         expect(moveCategory).toHaveBeenCalledWith(2, 2, [2, 3]);
     });
 
+    it("moves a category into the hovered group at the computed insertion point", () => {
+        vi.stubGlobal("requestAnimationFrame", () => 1);
+        vi.stubGlobal("cancelAnimationFrame", vi.fn());
+        seed({
+            groups: [
+                { id: 2, name: "Food", kind: "expense", sort: 1 },
+                { id: 3, name: "Home", kind: "expense", sort: 2 },
+            ],
+            categories: [
+                { id: 2, groupId: 2, name: "Groceries", keywords: "", sort: 1, archived: false },
+                { id: 3, groupId: 3, name: "Rent", keywords: "", sort: 1, archived: false },
+            ],
+        });
+        const moveCategory = vi.spyOn(useStore.getState(), "moveCategory").mockResolvedValue();
+        const { container } = renderUI(<CategoriesPage />);
+        const source = container.querySelector('[data-id="2"]');
+        const sourceGroup = container.querySelector('[data-gid="2"]');
+        const destination = container.querySelector('[data-gid="3"]');
+        const destinationCards = destination.querySelector(".kb-cards");
+        source.getBoundingClientRect = () => ({ left: 0, top: 0, width: 80, height: 30 });
+        sourceGroup.getBoundingClientRect = () => ({ left: 0, right: 80, top: 0, width: 80, height: 200 });
+        destination.getBoundingClientRect = () => ({ left: 100, right: 220, top: 0, width: 120, height: 200 });
+        destinationCards.querySelector('[data-id="3"]').getBoundingClientRect = () => ({
+            top: 50,
+            height: 30,
+        });
+
+        fireEvent.pointerDown(source, { button: 0, pointerType: "mouse", clientX: 10, clientY: 10 });
+        fireEvent.pointerMove(window, { pointerType: "mouse", clientX: 150, clientY: 100 });
+        fireEvent.pointerUp(window);
+
+        expect(moveCategory).toHaveBeenCalledWith(2, 3, [3, 2]);
+    });
+
     it("reorders a dragged group and cancels a drag with Escape", () => {
         Object.defineProperty(HTMLElement.prototype, "animate", {
             configurable: true,
