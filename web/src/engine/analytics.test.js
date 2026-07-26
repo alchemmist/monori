@@ -664,3 +664,36 @@ describe("transfer legs are invisible to every income/expense total", () => {
         expect(balances.get(1) + balances.get(2)).toBe(0);
     });
 });
+
+describe("charts vs budget table parity", () => {
+    it("categoryYearMatrix totals equal the budget engine's activity to the kopeck", () => {
+        // a category with a refund is exactly where a gross-outflow chart and
+        // the net budget table drift apart; both must report the same year
+        const snap = {
+            groups: [{ id: 2, name: "Daily", kind: "expense" }],
+            categories: [{ id: 20, groupId: 2, name: "Dating" }],
+            budgets: [],
+            transactions: [
+                {
+                    id: 1,
+                    date: "2024-03-05",
+                    amount: -433_246_00,
+                    categoryId: 20,
+                    description: "x",
+                },
+                {
+                    id: 2,
+                    date: "2024-04-02",
+                    amount: 8_470_00,
+                    categoryId: 20,
+                    description: "refund",
+                },
+            ],
+        };
+        const res = computeRange(snap, 2024, 2024).get(2024);
+        const engineYear = res.byCategory.get(20).reduce((s, m) => s + m.outflows, 0);
+        const [row] = categoryYearMatrix(snap, "2024", { limit: Infinity });
+        expect(row.total).toBe(-engineYear);
+        expect(row.total).toBe(424_776_00);
+    });
+});
