@@ -17,6 +17,10 @@ A candidate pair is an outflow and an inflow that
 
 Matching is greedy over candidates ordered by how close they are, and every
 transaction is used at most once, so the result is deterministic.
+
+A pair where one leg reads as a transfer but the other carries an unrelated
+description — a merchant purchase that merely matches the amount — is a
+mismatch: still offered as a suggestion, never merged on its own.
 """
 
 AUTO_DAYS = 1
@@ -110,20 +114,25 @@ def find_pairs(rows, max_days=SUGGEST_DAYS, rejected=()):
                 days = abs(day_number(in_row["date"]) - out_day)
                 if days > max_days:
                     continue
-                hint = has_hint(field(out_row, "description", "")) or has_hint(
-                    field(in_row, "description", "")
-                )
+                out_hint = has_hint(field(out_row, "description", ""))
+                in_hint = has_hint(field(in_row, "description", ""))
+                silent = field(in_row if out_hint else out_row, "description", "")
                 candidates.append(
                     {
                         "outTxId": out_row["id"],
                         "inTxId": in_row["id"],
                         "amount": amount,
                         "days": days,
-                        "hint": hint,
+                        "hint": out_hint or in_hint,
+                        # one leg says "transfer", the other names something else
+                        # entirely — the amount agreeing is not enough to be sure
+                        "mismatch": out_hint != in_hint and bool(str(silent).strip()),
                     }
                 )
 
-    candidates.sort(key=lambda c: (c["days"], not c["hint"], c["outTxId"], c["inTxId"]))
+    candidates.sort(
+        key=lambda c: (c["days"], c["mismatch"], not c["hint"], c["outTxId"], c["inTxId"])
+    )
     used = set()
     pairs = []
     for c in candidates:
@@ -138,8 +147,12 @@ def find_pairs(rows, max_days=SUGGEST_DAYS, rejected=()):
 def split_confident(pairs, auto_days=AUTO_DAYS):
     """
     Partition matched pairs into the ones safe to merge without asking
-    (``days <= auto_days``) and the ones worth showing as suggestions.
+    (``days <= auto_days`` and no description mismatch) and the ones worth
+    showing as suggestions.
     """
-    auto = [p for p in pairs if p["days"] <= auto_days]
-    suggested = [p for p in pairs if p["days"] > auto_days]
+    auto: list = []
+    suggested: list = []
+    for p in pairs:
+        confident = p["days"] <= auto_days and not p.get("mismatch")
+        (auto if confident else suggested).append(p)
     return auto, suggested

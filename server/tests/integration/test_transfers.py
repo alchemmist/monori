@@ -206,6 +206,26 @@ def test_dismissed_suggestions_stop_coming_back(api, client):
     assert client.post("/api/transfers/detect").json()["suggested"] == 0
 
 
+def test_detect_leaves_a_disagreeing_same_day_pair_as_a_suggestion(api, client):
+    """
+    An inflow labeled as a transfer whose true counterpart cannot pair (say,
+    both legs landed on one account) must not swallow a purchase that merely
+    matches the amount — the pair is offered, not merged.
+    """
+    a = api.default_account()
+    b = api.account("Vault")
+    out_id = api.tx("2026-03-10T09:00:00", -100000, accountId=a, description="IP Elyan A.Kh")
+    in_id = api.tx("2026-03-10T18:00:00", 100000, accountId=b, description="Между своими счетами")
+
+    result = client.post("/api/transfers/detect").json()
+    assert result["merged"] == []
+    assert result["suggested"] == 1
+
+    rows = client.get("/api/transfers/suggestions").json()
+    assert [(p["outTxId"], p["inTxId"]) for p in rows["rows"]] == [(out_id, in_id)]
+    assert rows["rows"][0]["mismatch"] is True
+
+
 def test_detect_is_idempotent(api, client):
     a = api.default_account()
     b = api.account("Vault")

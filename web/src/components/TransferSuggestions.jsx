@@ -87,6 +87,11 @@ export default function TransferSuggestions({ onClose }) {
                                 {fmtDate(out.date)} → {fmtDate(inLeg.date)} ·{" "}
                                 {pair.days === 1 ? "1 day apart" : `${pair.days} days apart`}
                             </Txt>
+                            {(out.description || inLeg.description) && (
+                                <Txt caption tone={pair.mismatch ? "danger" : "secondary"}>
+                                    {out.description || "—"} → {inLeg.description || "—"}
+                                </Txt>
+                            )}
                             <div className="tx-suggestion__actions">
                                 <Button
                                     size="xs"
