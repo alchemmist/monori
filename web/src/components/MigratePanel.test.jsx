@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, renderUI, resetStore, screen, seed, waitFor } from "../test/render.jsx";
 import { api } from "../api.js";
@@ -107,5 +108,38 @@ describe("MigratePanel", () => {
             ),
         );
         expect(screen.getByRole("button", { name: "Import" })).toBeDisabled();
+    });
+
+    it("imports a workbook without account markers and closes from its completed state", async () => {
+        const file = new File(["book"], "budget.xlsx");
+        vi.spyOn(api, "workbookPreview").mockResolvedValue({
+            groups: 0,
+            categories: 0,
+            transactions: 2,
+            budgetCells: 0,
+            errors: [],
+            warnings: [],
+            accountMarkers: [],
+            budgetConflicts: 0,
+        });
+        const commit = vi.spyOn(api, "workbookCommit").mockResolvedValue({
+            inserted: 2,
+            skipped: 0,
+            groupsCreated: 0,
+            categoriesCreated: 0,
+            budgetsWritten: 0,
+        });
+        vi.spyOn(useStore.getState(), "load").mockResolvedValue();
+        const close = vi.fn();
+        const { container, user } = renderUI(<MigratePanel onClose={close} />);
+
+        fireEvent.change(container.querySelector('input[type="file"]'), { target: { files: [file] } });
+        await screen.findByText(/0 groups, 0 categories, 2 transactions/);
+        expect(screen.getByRole("button", { name: "Import" })).toBeEnabled();
+        await user.click(screen.getByRole("button", { name: "Import" }));
+        await waitFor(() => expect(commit).toHaveBeenCalledWith(file, {}, "overwrite"));
+        expect(screen.getByRole("button", { name: "Done" })).toBeInTheDocument();
+        await user.click(screen.getByRole("button", { name: "Done" }));
+        expect(close).toHaveBeenCalledOnce();
     });
 });
