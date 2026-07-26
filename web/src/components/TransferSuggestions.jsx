@@ -21,6 +21,7 @@ export default function TransferSuggestions({ onClose }) {
     } = useStore();
     const [state, setState] = useState({ loading: true, rows: [], byId: new Map() });
     const [busy, setBusy] = useState(null);
+    const [merged, setMerged] = useState(0);
 
     const acctName = new Map((snapshot.accounts ?? []).map((a) => [a.id, a.name]));
 
@@ -40,8 +41,15 @@ export default function TransferSuggestions({ onClose }) {
     };
 
     useEffect(() => {
-        // a scan first, so anything unambiguous is merged rather than listed
-        detectTransfers().then(refresh, refresh);
+        // a scan first, so anything unambiguous is merged rather than listed —
+        // and reported, or a fruitful scan reads as "nothing found"
+        detectTransfers().then(
+            (r) => {
+                setMerged(r.merged.length);
+                return refresh();
+            },
+            () => refresh(),
+        );
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
@@ -64,10 +72,18 @@ export default function TransferSuggestions({ onClose }) {
         <AppDialog title="Possible transfers" onClose={onClose} applyText="Done" onApply={onClose}>
             <div style={{ display: "flex", flexDirection: "column", gap: 10, paddingTop: 4 }}>
                 {state.loading && <Txt caption>Looking for pairs…</Txt>}
+                {!state.loading && merged > 0 && (
+                    <Txt caption>
+                        {merged === 1
+                            ? "1 pair was merged automatically just now."
+                            : `${merged} pairs were merged automatically just now.`}
+                    </Txt>
+                )}
                 {!state.loading && state.rows.length === 0 && (
                     <Txt caption>
-                        Nothing left to confirm — matching pairs on the same day are merged
-                        automatically.
+                        {merged > 0
+                            ? "Nothing else needs confirming."
+                            : "Nothing to merge — a transfer needs its two legs on two different accounts, with opposite amounts within a few days of each other. Legs that both sit on the same account can never pair."}
                     </Txt>
                 )}
                 {state.rows.map((pair) => {
