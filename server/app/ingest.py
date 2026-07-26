@@ -62,6 +62,7 @@ def historical_day_counts(c, uid, sources=("workbook", "import", "sync", "sheets
         for r in c.execute(
             "SELECT substr(t.date, 1, 10) day, t.amount, t.description, COUNT(*) n"
             " FROM transactions t JOIN accounts a ON a.id = t.account_id"
+            # `marks` contains only generated positional placeholders, never user input.
             f" WHERE a.user_id=? AND t.source IN ({marks})"  # nosec B608
             " GROUP BY day, t.amount, t.description",
             (uid, *sources),

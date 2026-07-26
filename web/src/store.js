@@ -33,6 +33,11 @@ function chainedPatchTx(id, patch) {
     return next;
 }
 
+// Each optimistic transaction edit owns revisions for the fields it changes.
+// A failed older request must never undo a newer edit to the same field.
+let nextTxFieldRevision = 0;
+const txFieldRevisions = new Map();
+
 const now = () => (typeof performance !== "undefined" ? performance.now() : 0);
 
 /** The public /demo page runs entirely on the bundled sample dataset: no auth,
@@ -191,15 +196,17 @@ export const useStore = create((set, get) => ({
         const flush = (done) => {
             const current = get().snapshot;
             const transactions = mergeTransactions(current.transactions, pending);
+            const currentTotal = current.transactionsTotal ?? current.transactions.length;
+            const nextTotal = Math.max(total, currentTotal, transactions.length);
             pending = [];
             flushedAt = now();
             set({
                 snapshot: {
                     ...current,
                     transactions,
-                    transactionsTotal: Math.max(total, transactions.length),
+                    transactionsTotal: nextTotal,
                 },
-                txProgress: done ? null : { loaded: transactions.length, total },
+                txProgress: done ? null : { loaded: transactions.length, total: nextTotal },
             });
         };
         try {
@@ -260,6 +267,127 @@ export const useStore = create((set, get) => ({
                 },
             }),
         );
+    },
+
+    /** Record a transaction by hand. The row is merged straight into the loaded
+     * ledger instead of reloading the whole snapshot, so entering a run of them
+     * one after another never blanks the page or loses the scroll position —
+     * every derived view (budget, analytics, balances) recomputes from the
+     * snapshot anyway. Returns the created row. */
+    async addTransaction(body) {
+        const { snapshot } = get();
+        const row = {
+            date: body.date,
+            amount: body.amount,
+            description: body.description ?? "",
+            bankCategory: "",
+            mcc: "",
+            categoryId: body.categoryId ?? null,
+            accountId: body.accountId,
+            transferId: null,
+            comment: body.comment ?? "",
+            source: "manual",
+        };
+        let id;
+        if (isDemo()) {
+            id = Math.max(0, ...snapshot.transactions.map((t) => t.id)) + 1;
+        } else {
+            ({ id } = await api.createTx(body));
+        }
+        const tx = { ...row, id };
+        const current = get().snapshot;
+        set({
+            snapshot: {
+                ...current,
+                transactions: mergeTransactions(current.transactions, [tx]),
+                transactionsTotal: (current.transactionsTotal ?? current.transactions.length) + 1,
+            },
+        });
+        // Creating a row shifts every older-page offset. Restart the fill so
+        // its captured total and offsets cannot overwrite or skip this insert.
+        if (get().txProgress) get().fillTransactions((fillGeneration += 1));
+        return tx;
+    },
+
+    /** Edit a transaction's own fields — date, description, amount, comment.
+     * Optimistic like every other ledger edit, but a failed save rolls the row
+     * back: unlike a category, a wrong amount would keep every balance and
+     * budget on the page lying until the next reload. A changed date moves the
+     * row, so the ledger is re-sorted into canonical order. */
+    async updateTransaction(txId, patch) {
+        const { snapshot } = get();
+        const before = snapshot.transactions.find((t) => t.id === txId);
+        if (!before) return;
+        const revision = (nextTxFieldRevision += 1);
+        const revisions = txFieldRevisions.get(txId) ?? new Map();
+        Object.keys(patch).forEach((key) => revisions.set(key, revision));
+        txFieldRevisions.set(txId, revisions);
+        const rows = snapshot.transactions.map((t) => (t.id === txId ? { ...t, ...patch } : t));
+        if (patch.date !== undefined && patch.date !== before.date) rows.sort(compareTx);
+        set({ snapshot: { ...snapshot, transactions: rows } });
+        if (isDemo()) return;
+        try {
+            await api.patchTx(txId, patch);
+        } catch (e) {
+            const cur = get().snapshot;
+            const undo = Object.fromEntries(
+                Object.keys(patch)
+                    .filter((key) => revisions.get(key) === revision)
+                    .map((key) => [key, before[key]]),
+            );
+            const back = cur.transactions
+                .map((t) => (t.id === txId ? { ...t, ...undo } : t))
+                .sort(compareTx);
+            set({
+                snapshot: { ...cur, transactions: back },
+                toast: {
+                    title: "Failed to update transaction",
+                    theme: "danger",
+                    content: String(e),
+                },
+            });
+        } finally {
+            Object.keys(patch).forEach((key) => {
+                if (revisions.get(key) === revision) revisions.delete(key);
+            });
+            if (!revisions.size) txFieldRevisions.delete(txId);
+        }
+    },
+
+    /** Delete a transaction for good. Also rolls back on failure, for the same
+     * reason: a row that vanished from the ledger but not from the server would
+     * quietly skew every total until a reload brought it back. */
+    async deleteTransaction(txId) {
+        const { snapshot } = get();
+        const gone = snapshot.transactions.find((t) => t.id === txId);
+        if (!gone) return false;
+        set({
+            snapshot: {
+                ...snapshot,
+                transactions: snapshot.transactions.filter((t) => t.id !== txId),
+                transactionsTotal: Math.max(0, (snapshot.transactionsTotal ?? 1) - 1),
+            },
+        });
+        if (isDemo()) return true;
+        try {
+            await api.deleteTx(txId);
+            return true;
+        } catch (e) {
+            const cur = get().snapshot;
+            set({
+                snapshot: {
+                    ...cur,
+                    transactions: mergeTransactions(cur.transactions, [gone]),
+                    transactionsTotal: (cur.transactionsTotal ?? 0) + 1,
+                },
+                toast: {
+                    title: "Failed to delete transaction",
+                    theme: "danger",
+                    content: String(e),
+                },
+            });
+            return false;
+        }
     },
 
     /** Hidden transactions live outside the snapshot on purpose: nothing in
