@@ -10,7 +10,10 @@ import Txt from "../ui/Txt.jsx";
 const today = () => new Date().toISOString().slice(0, 10);
 
 export default function TransferDialog({ accounts, onClose }) {
-    const { createTransfer, notify, rates } = useStore();
+    const { createTransfer, notify } = useStore();
+    // the data, not the accessor: a rate refreshed while the dialog is open has
+    // to move the suggested amount with it
+    const rates = useStore((s) => s.snapshot?.rates);
     const active = accounts.filter((a) => !a.archived);
     const [from, setFrom] = useState(active[0] ? String(active[0].id) : "");
     const [to, setTo] = useState(active[1] ? String(active[1].id) : "");
@@ -34,7 +37,7 @@ export default function TransferDialog({ accounts, onClose }) {
     // changes, so the common case needs no typing and the odd case is one edit
     useEffect(() => {
         if (!crossCurrency || amountKop == null || amountKop <= 0) return;
-        setLanded(amountInput(convertAmount(amountKop, fromCurrency, toCurrency, rates())));
+        setLanded(amountInput(convertAmount(amountKop, fromCurrency, toCurrency, rates ?? [])));
     }, [crossCurrency, amountKop, fromCurrency, toCurrency, rates]);
 
     const valid =

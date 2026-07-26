@@ -46,7 +46,7 @@ CREATE TABLE IF NOT EXISTS exchange_rates (
 # rows; a blank currency makes an amount meaningless, so nothing may write one
 NOT_BLANK_INSERT = """
 CREATE TRIGGER IF NOT EXISTS tx_currency_not_blank
-BEFORE INSERT ON transactions WHEN new.currency = ''
+BEFORE INSERT ON transactions WHEN TRIM(new.currency) = ''
 BEGIN
 SELECT RAISE(ABORT, 'transaction currency must not be blank');
 END
@@ -54,7 +54,7 @@ END
 
 NOT_BLANK_UPDATE = """
 CREATE TRIGGER IF NOT EXISTS tx_currency_not_blank_upd
-BEFORE UPDATE ON transactions WHEN new.currency = ''
+BEFORE UPDATE ON transactions WHEN TRIM(new.currency) = ''
 BEGIN
 SELECT RAISE(ABORT, 'transaction currency must not be blank');
 END

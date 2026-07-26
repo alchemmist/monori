@@ -1,7 +1,7 @@
 # Currencies
 
 monori holds money in more than one currency, and it keeps the two questions
-that involves strictly apart:
+that raises strictly apart:
 
 - **What was this?** — every transaction records the currency it was spent in.
   A lari row says 28 ₾, always, on every screen that shows the row itself.
@@ -66,8 +66,14 @@ adds up and says so.
 **Settings → Currency** lists every rate with the day it was published and where
 it came from. *Fetch today* pulls the current publication and catches up on any
 recent days that are missing. Clicking a rate lets you type one in by hand — for
-a day a bank converted at its own rate, or a currency the feed does not carry.
-Either way, every transaction that rate priced is repriced.
+a day the feed never published, or a currency it does not carry. Either way,
+every transaction that rate priced is repriced.
+
+Reading rates is everyone's; changing them is an admin's. What a currency was
+worth on a day is one shared fact — the table has no owner column, so a
+hand-set rate moves every user's totals at once. The per-user case, *my bank
+converted at its own rate*, is recorded where it belongs: on the transfer, as
+the amount that actually arrived.
 
 ## Transfers between currencies
 
@@ -86,8 +92,10 @@ look, so a cross-currency transfer is always linked deliberately.
 ## Importing
 
 A pasted statement's currency column is read as the pair it is printed as: the
-settlement amount and the currency it settled in. A row with no currency is
-taken as the account's.
+settlement amount and the currency it settled in. A row with no currency — or
+with a code monori does not know — is taken as the account's, since nothing
+could price an unknown one and its converted value would silently be the raw
+number.
 
 Workbook migration already splits accounts by currency — a `*2947 · USD` slot
 can only be pointed at a USD account — and now records that currency on every

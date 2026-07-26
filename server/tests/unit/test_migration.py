@@ -256,6 +256,17 @@ def test_blank_transaction_currency_is_rejected(tmp_path):
                 raise AssertionError(f"{name}: a blank currency was accepted")
             except sqlite3.IntegrityError:
                 pass
+            # spaces are as meaningless as nothing at all
+            try:
+                raw.execute(
+                    "INSERT INTO transactions (date, amount, currency, description,"
+                    " account_id, hash, source)"
+                    " VALUES ('2026-01-01T00:00:00', -1, '   ', 'x', ?, 'h2', 'import')",
+                    (cur.lastrowid,),
+                )
+                raise AssertionError(f"{name}: a whitespace currency was accepted")
+            except sqlite3.IntegrityError:
+                pass
         finally:
             raw.close()
 

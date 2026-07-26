@@ -78,3 +78,14 @@ def reprice_user(c, user_id):
             c.execute("UPDATE transactions SET base_amount=? WHERE id=?", (value, r["id"]))
             changed += 1
     return changed
+
+
+def reprice_all(c):
+    """
+    Reprice every user's ledger.
+
+    Rates are one shared table — what a currency was worth on a day is not a
+    per-user fact — so a rate that moves moves everyone's totals, not just those
+    of whoever pressed the button.
+    """
+    return sum(reprice_user(c, r["id"]) for r in c.execute("SELECT id FROM users"))

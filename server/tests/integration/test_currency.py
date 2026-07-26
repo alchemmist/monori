@@ -1,15 +1,30 @@
 import httpx
 import pytest
+from conftest import login_as
 
 from app.rates import store_rates
 
 pytestmark = pytest.mark.integration
 
 RATE_DAY = "2026-07-01"
+TESTER = "tester@example.com"
 
 
-def _set_rate(client, code, rub_per_unit, day=RATE_DAY):
-    r = client.put(f"/api/rates/{code}", json={"day": day, "rubPerUnit": rub_per_unit})
+@pytest.fixture()
+def admin(client, monkeypatch):
+    """
+    The same signed-in user, now an admin.
+
+    Rates are one shared table, so setting one is an admin's job; the flag is
+    re-synced from ``MONORI_ADMIN_EMAILS`` on every login.
+    """
+    monkeypatch.setenv("MONORI_ADMIN_EMAILS", TESTER)
+    client.headers.update(login_as(client, TESTER))
+    return client
+
+
+def _set_rate(admin, code, rub_per_unit, day=RATE_DAY):
+    r = admin.put(f"/api/rates/{code}", json={"day": day, "rubPerUnit": rub_per_unit})
     assert r.status_code == 200, r.text
     return r.json()
 
@@ -44,8 +59,8 @@ def test_an_unknown_currency_is_rejected(client, api):
     assert "XYZ" in r.json()["detail"]
 
 
-def test_base_amount_is_the_row_converted_into_the_reporting_currency(client, api):
-    _set_rate(client, "GEL", 30.0)
+def test_base_amount_is_the_row_converted_into_the_reporting_currency(admin, api):
+    _set_rate(admin, "GEL", 30.0)
     lari = api.account("Lari", currency="GEL")
     tx = api.tx("2026-07-05T10:00:00", -10000, accountId=lari)
     row = api.tx_by(tx)
@@ -59,14 +74,14 @@ def test_base_amount_of_the_reporting_currency_is_the_amount_itself(api):
     assert row["baseAmount"] == row["amount"] == -12345
 
 
-def test_switching_the_reporting_currency_reprices_the_ledger(client, api):
-    _set_rate(client, "GEL", 30.0)
-    _set_rate(client, "USD", 90.0)
+def test_switching_the_reporting_currency_reprices_the_ledger(admin, api):
+    _set_rate(admin, "GEL", 30.0)
+    _set_rate(admin, "USD", 90.0)
     lari = api.account("Lari", currency="GEL")
     tx = api.tx("2026-07-05T10:00:00", -30000, accountId=lari)
     assert api.tx_by(tx)["baseAmount"] == -900000
 
-    r = client.patch("/api/auth/me", json={"baseCurrency": "USD"})
+    r = admin.patch("/api/auth/me", json={"baseCurrency": "USD"})
     assert r.status_code == 200, r.text
     assert r.json()["user"]["baseCurrency"] == "USD"
     assert r.json()["repriced"] >= 1
@@ -81,16 +96,16 @@ def test_switching_to_an_unknown_reporting_currency_is_rejected(client):
     assert client.patch("/api/auth/me", json={"baseCurrency": "XYZ"}).status_code == 400
 
 
-def test_correcting_a_rate_reprices_what_it_priced(client, api):
-    _set_rate(client, "GEL", 30.0)
+def test_correcting_a_rate_reprices_what_it_priced(admin, api):
+    _set_rate(admin, "GEL", 30.0)
     lari = api.account("Lari", currency="GEL")
     tx = api.tx("2026-07-05T10:00:00", -10000, accountId=lari)
     assert api.tx_by(tx)["baseAmount"] == -300000
-    assert _set_rate(client, "GEL", 40.0)["repriced"] == 1
+    assert _set_rate(admin, "GEL", 40.0)["repriced"] == 1
     assert api.tx_by(tx)["baseAmount"] == -400000
 
 
-def test_refresh_pulls_the_feed_and_reprices(client, api, monkeypatch):
+def test_refresh_pulls_the_feed_and_reprices(admin, api, monkeypatch):
     from app.routers import rates as rates_router
 
     lari = api.account("Lari", currency="GEL")
@@ -102,28 +117,52 @@ def test_refresh_pulls_the_feed_and_reprices(client, api, monkeypatch):
     monkeypatch.setattr(rates_router, "refresh", fake_refresh)
     monkeypatch.setattr(rates_router, "backfill", lambda c, days: days)
 
-    body = client.post("/api/rates/refresh?days=3").json()
+    body = admin.post("/api/rates/refresh?days=3").json()
     assert body["stored"] == 1
     assert body["days"] == 4
     assert body["repriced"] == 1
     assert api.tx_by(tx)["baseAmount"] == -250000
 
 
-def test_refresh_reports_an_unreachable_feed_as_a_bad_gateway(client, monkeypatch):
+def test_refresh_reports_an_unreachable_feed_as_a_bad_gateway(admin, monkeypatch):
     from app.routers import rates as rates_router
 
     def explode(c, day=None, client=None):
         raise httpx.ConnectError("offline")
 
     monkeypatch.setattr(rates_router, "refresh", explode)
-    r = client.post("/api/rates/refresh")
+    r = admin.post("/api/rates/refresh")
     assert r.status_code == 502
     assert "rate feed" in r.json()["detail"]
 
 
-def test_a_rate_may_not_be_set_for_the_pivot_itself(client):
-    r = client.put("/api/rates/RUB", json={"rubPerUnit": 2.0})
+def test_a_rate_may_not_be_set_for_the_pivot_itself(admin):
+    r = admin.put("/api/rates/RUB", json={"rubPerUnit": 2.0})
     assert r.status_code == 400
+
+
+def test_a_malformed_day_is_rejected_rather_than_sorted_wrongly(admin):
+    """
+    Rates are looked up by comparing the day as text, which only orders
+    correctly for ISO dates — a malformed one would silently return a rate from
+    the wrong day.
+    """
+    assert (
+        admin.put("/api/rates/USD", json={"day": "01/07/2026", "rubPerUnit": 80}).status_code == 400
+    )
+    assert admin.get("/api/rates?day=yesterday").status_code == 400
+
+
+def test_setting_a_rate_is_not_an_ordinary_user_business(client):
+    """
+    One shared table with no owner column: a hand-set rate moves every user's
+    totals, so it is an admin's call. The per-user case — my bank converted at
+    its own rate — is recorded on the transfer instead.
+    """
+    assert client.put("/api/rates/USD", json={"rubPerUnit": 80}).status_code == 403
+    assert client.post("/api/rates/refresh").status_code == 403
+    # reading is everyone's
+    assert client.get("/api/rates").status_code == 200
 
 
 def test_rates_endpoint_serves_the_registry_and_the_quotes(client):
@@ -167,8 +206,8 @@ def test_two_currencies_with_the_same_amount_are_not_each_other_duplicate(client
     }
 
 
-def test_a_transfer_between_two_currencies_carries_each_leg_in_its_own(client, api):
-    _set_rate(client, "GEL", 30.0)
+def test_a_transfer_between_two_currencies_carries_each_leg_in_its_own(admin, api):
+    _set_rate(admin, "GEL", 30.0)
     rubles = api.default_account()
     lari = api.account("Lari", currency="GEL")
     api.transfer(rubles, lari, 300000, date="2026-07-05T12:00:00")
@@ -182,17 +221,47 @@ def test_a_transfer_between_two_currencies_carries_each_leg_in_its_own(client, a
     assert legs[lari]["baseAmount"] == -legs[rubles]["baseAmount"]
 
 
-def test_a_stated_landing_amount_beats_the_published_rate(client, api):
+def test_a_stated_landing_amount_beats_the_published_rate(admin, api):
     """
     A bank converts at its own rate, not the central bank's. What the person saw
     arrive is the truth.
     """
-    _set_rate(client, "GEL", 30.0)
+    _set_rate(admin, "GEL", 30.0)
     rubles = api.default_account()
     lari = api.account("Lari", currency="GEL")
     api.transfer(rubles, lari, 300000, date="2026-07-05T12:00:00", toAmount=9500)
     legs = {t["accountId"]: t for t in api.snapshot()["transactions"]}
     assert legs[lari]["amount"] == 9500
+
+
+def test_a_landing_amount_is_meaningless_within_one_currency(client, api):
+    rubles = api.default_account()
+    savings = api.account("Savings", currency="RUB")
+    r = client.post(
+        "/api/transfers",
+        json={
+            "fromAccountId": rubles,
+            "toAccountId": savings,
+            "amount": 50000,
+            "toAmount": 40000,
+            "date": "2026-07-05T12:00:00",
+        },
+    )
+    assert r.status_code == 400
+    assert "two currencies" in r.json()["detail"]
+
+
+def test_an_unknown_statement_currency_falls_back_to_the_account(client, api):
+    """
+    A code nothing can price would make `base_amount` the raw number and every
+    total that included it wrong — the account's currency is the honest reading
+    of a settlement column monori does not recognize.
+    """
+    account = api.default_account()
+    rows = [{"date": "2026-07-05T10:00:00", "amount": -10000, "currency": "XYZ"}]
+    r = client.post("/api/import/commit", json={"accountId": account, "rows": rows})
+    assert r.status_code == 200, r.text
+    assert api.snapshot()["transactions"][0]["currency"] == "RUB"
 
 
 def test_same_currency_transfers_still_have_equal_legs(api):

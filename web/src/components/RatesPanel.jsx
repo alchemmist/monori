@@ -14,10 +14,9 @@ const SOURCE_LABEL = {
     bundled: "bundled fallback",
 };
 
-function RateRow({ rate, base, onSet }) {
+function RateRow({ rate, base, onSet, editable }) {
     const [draft, setDraft] = useState(null);
     const [busy, setBusy] = useState(false);
-    const editable = rate.code !== "RUB";
 
     const commit = async () => {
         const value = Number(String(draft).replace(",", "."));
@@ -57,7 +56,7 @@ function RateRow({ rate, base, onSet }) {
                         className="rates__edit"
                         disabled={!editable || busy}
                         onClick={() => setDraft(String(rate.rate))}
-                        title={editable ? "Set this rate by hand" : undefined}
+                        title={editable ? "Set today's rate by hand" : undefined}
                     >
                         {rate.rate.toFixed(4)} ₽
                     </button>
@@ -80,12 +79,16 @@ function RateRow({ rate, base, onSet }) {
  */
 export default function RatesPanel() {
     const snapshot = useStore((s) => s.snapshot);
+    const user = useStore((s) => s.user);
     const refreshRates = useStore((s) => s.refreshRates);
     const setRate = useStore((s) => s.setRate);
     const notify = useStore((s) => s.notify);
     const [busy, setBusy] = useState(false);
 
     const base = snapshot?.baseCurrency ?? "RUB";
+    // one shared table with no owner, so a hand-set rate moves everyone's
+    // totals — reading is everyone's, writing is the admin's
+    const mayWrite = Boolean(user?.isAdmin) && !isDemo();
     const known = new Set(CURRENCIES.map((c) => c.code));
     const rates = (snapshot?.rates ?? []).filter((r) => known.has(r.code));
 
@@ -124,10 +127,11 @@ export default function RatesPanel() {
         <div className="rates">
             <div className="rates__head">
                 <span className="rates__caption">
-                    Rubles per unit. Every transaction is converted at the rate for its own date, so
-                    a correction here never rewrites a day it did not apply to.
+                    Rubles per unit, as of today. Every transaction is converted at the rate for its
+                    own date, so setting one here never rewrites a day it did not apply to.
+                    {!mayWrite && " These are shared, so only an admin can change them."}
                 </span>
-                {!isDemo() && (
+                {mayWrite && (
                     <Button variant="default" size="xs" loading={busy} onClick={refresh}>
                         Fetch today
                     </Button>
@@ -136,7 +140,13 @@ export default function RatesPanel() {
             <table className="rates__table">
                 <tbody>
                     {rates.map((r) => (
-                        <RateRow key={r.code} rate={r} base={base} onSet={applyRate} />
+                        <RateRow
+                            key={r.code}
+                            rate={r}
+                            base={base}
+                            onSet={applyRate}
+                            editable={mayWrite && r.code !== "RUB"}
+                        />
                     ))}
                 </tbody>
             </table>
