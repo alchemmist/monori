@@ -5,6 +5,7 @@ import AddTxTab from "./AddTxTab.jsx";
 import AdminSqlTab from "./AdminSqlTab.jsx";
 import AdminTxTab from "./AdminTxTab.jsx";
 import MigratePanel from "./MigratePanel.jsx";
+import ImportPanel from "./ImportPanel.jsx";
 
 /**
  * Renders the store's global tab stack at the app-shell level, so open tabs
@@ -52,6 +53,9 @@ export default function TabHost() {
         }
         if (t.kind === "migrate") {
             return <MigratePanel key={t.id} onClose={close} />;
+        }
+        if (t.kind === "statement-import") {
+            return <ImportPanel key={t.id} onClose={close} />;
         }
         return <UnknownTab key={t.id} onClose={close} />;
     });

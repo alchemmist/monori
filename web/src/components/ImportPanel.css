@@ -1,0 +1,130 @@
+.import-preview {
+    container-type: inline-size;
+}
+
+.import-preview__table {
+    max-height: calc(100vh - 250px);
+    min-width: 0;
+}
+
+/* Fixed layout lets text truncate inside its own cell instead of pushing a
+   neighbouring column over it. The percentages also give the two editable
+   selects enough room at the normal tab width. */
+.import-grid {
+    width: 100%;
+    table-layout: fixed;
+}
+
+.import-col-date {
+    width: 11%;
+}
+
+.import-col-description {
+    width: 24%;
+}
+
+.import-col-amount {
+    width: 12%;
+}
+
+.import-col-card {
+    width: 8%;
+}
+
+.import-col-account {
+    width: 23%;
+}
+
+.import-col-category {
+    width: 22%;
+}
+
+.import-preview .import-grid td {
+    min-width: 0;
+    overflow: hidden;
+}
+
+/* Override the shared budget-grid's first-cell 40% width: this table starts
+   with a date, so it must retain a compact, predictable column. */
+.import-preview .import-grid td:first-child {
+    width: auto;
+}
+
+.import-date__short {
+    display: none;
+}
+
+/* First make the same columns more compact — no information is lost yet. */
+@container (width <= 820px) {
+    .import-preview .import-grid th,
+    .import-preview .import-grid td {
+        padding-right: 8px;
+        padding-left: 8px;
+    }
+
+    .import-date__full {
+        display: none;
+    }
+
+    .import-date__short {
+        display: inline;
+    }
+
+    .import-col-date {
+        width: 9%;
+    }
+
+    .import-col-description {
+        width: 27%;
+    }
+
+    .import-col-amount {
+        width: 13%;
+    }
+
+    .import-col-card {
+        width: 7%;
+    }
+
+    .import-col-account {
+        width: 24%;
+    }
+
+    .import-col-category {
+        width: 20%;
+    }
+}
+
+/* At a narrow tab the card marker and optional category are the first two
+   details to go. The description header says why there is more detail in the
+   full-width view, rather than leaving the table mysteriously sparse. */
+@container (width <= 620px) {
+    .import-card,
+    .import-category,
+    .import-col-card,
+    .import-col-category {
+        display: none;
+    }
+
+    .import-description-head::after {
+        content: " +2";
+        color: var(--m-text-faint);
+        font-weight: 500;
+    }
+
+    .import-col-date {
+        width: 15%;
+    }
+
+    .import-col-description {
+        width: 45%;
+    }
+
+    .import-col-amount {
+        width: 16%;
+    }
+
+    .import-col-account {
+        width: 24%;
+    }
+}

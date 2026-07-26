@@ -125,6 +125,28 @@ describe("updateTransaction", () => {
         expect(s.toast.theme).toBe("danger");
     });
 
+    it("rolls back only the failed fields when another edit succeeds", async () => {
+        let rejectFirst;
+        vi.spyOn(api, "patchTx")
+            .mockImplementationOnce(
+                () =>
+                    new Promise((_, reject) => {
+                        rejectFirst = reject;
+                    }),
+            )
+            .mockResolvedValueOnce({ ok: true });
+
+        const first = useStore.getState().updateTransaction(1, { amount: -5000 });
+        await useStore.getState().updateTransaction(1, { comment: "kept" });
+        rejectFirst(new Error("nope"));
+        await first;
+
+        expect(useStore.getState().snapshot.transactions.find((t) => t.id === 1)).toMatchObject({
+            amount: -100,
+            comment: "kept",
+        });
+    });
+
     it("ignores an id that is not in the ledger", async () => {
         vi.spyOn(api, "patchTx").mockResolvedValue({ ok: true });
 
@@ -139,7 +161,7 @@ describe("deleteTransaction", () => {
     it("drops the row and its count", async () => {
         vi.spyOn(api, "deleteTx").mockResolvedValue({ ok: true });
 
-        await useStore.getState().deleteTransaction(1);
+        await expect(useStore.getState().deleteTransaction(1)).resolves.toBe(true);
 
         expect(api.deleteTx).toHaveBeenCalledWith(1);
         const s = useStore.getState();
@@ -150,7 +172,7 @@ describe("deleteTransaction", () => {
     it("puts the row back in order when the server refuses", async () => {
         vi.spyOn(api, "deleteTx").mockRejectedValue(new Error("nope"));
 
-        await useStore.getState().deleteTransaction(1);
+        await expect(useStore.getState().deleteTransaction(1)).resolves.toBe(false);
 
         const s = useStore.getState();
         expect(s.snapshot.transactions.map((t) => t.id)).toEqual([1, 3]);

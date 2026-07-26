@@ -5,7 +5,7 @@ database for one user. The caller owns the connection and the commit.
 
 import datetime
 
-from ..ingest import commit_rows
+from ..ingest import commit_rows, drop_already_present, historical_day_counts
 from .parser import account_slot
 
 
@@ -102,8 +102,13 @@ def _import_transactions(c, uid, transactions, mapping, category_ids):
     where the normal import/sync pipeline applies them.
     """
     index = _category_index(c, uid)
+    # a sheet kept alongside a live sync describes the same operations the
+    # sync already delivered — often onto a different account than the sheet's
+    # card marker maps to, where the per-account hash cannot see them
+    transactions, already = drop_already_present(transactions, historical_day_counts(c, uid))
     by_account: dict[int, list] = {}
     unmatched = set()
+    blank = 0
     for tx in transactions:
         account_id = mapping[account_slot(tx)]
         named = tx["monori_category"]
@@ -113,6 +118,7 @@ def _import_transactions(c, uid, transactions, mapping, category_ids):
                 unmatched.add(named)
         else:
             category_id = None
+            blank += 1
         row = {
             "date": tx["date"],
             "amount": tx["amount"],
@@ -137,7 +143,7 @@ def _import_transactions(c, uid, transactions, mapping, category_ids):
         inserted += ins
         skipped += skip
         batches.append({"accountId": account_id, "batchId": batch_id, "inserted": ins})
-    return inserted, skipped, batches, sorted(unmatched)
+    return inserted, skipped + already, batches, sorted(unmatched), blank, already
 
 
 def _import_budgets(c, budgets, category_ids, overwrite):
@@ -192,13 +198,28 @@ def apply_workbook(c, uid, parsed, mapping, budget_policy="overwrite"):
     """
     group_ids, groups_created = _upsert_groups(c, uid, parsed["groups"])
     category_ids, categories_created = _upsert_categories(c, uid, parsed["categories"], group_ids)
-    inserted, skipped, batches, unmatched = _import_transactions(
+    inserted, skipped, batches, unmatched, blank, already = _import_transactions(
         c, uid, parsed["transactions"], mapping, category_ids
     )
     budgets_written, budgets_skipped = _import_budgets(
         c, parsed["budgets"], category_ids, budget_policy == "overwrite"
     )
     warnings = []
+    if already:
+        warnings.append(
+            f"{already} rows are already in monori — delivered by a bank sync or an"
+            " earlier import, possibly onto a different account — and were not"
+            " imported again"
+        )
+    if blank:
+        # the sheet's own totals leave these out too, so the budget is unaffected
+        # — but they are a fifth of some ledgers and turn up as a wall of
+        # uncategorized rows, which reads as a fault unless it is named
+        warnings.append(
+            f"{blank} rows carry no category in the sheet and were imported uncategorized"
+            " — typically transfers between your own accounts, which the spreadsheet"
+            " leaves out of the budget as well"
+        )
     if unmatched:
         warnings.append(
             f"{len(unmatched)} category names in the sheet match nothing in monori"

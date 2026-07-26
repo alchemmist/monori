@@ -88,13 +88,15 @@ export default function DiagramPage() {
         setDragging(true);
     };
 
+    // the offset is resolved here and not inside the updater: React replays a
+    // queued updater on later renders, and by then the ref is already null —
+    // that threw and took the whole page down mid-pan
     const onPointerMove = (e) => {
-        if (!drag.current) return;
-        setView((v) => ({
-            ...v,
-            x: drag.current.vx + (e.clientX - drag.current.x),
-            y: drag.current.vy + (e.clientY - drag.current.y),
-        }));
+        const start = drag.current;
+        if (!start) return;
+        const x = start.vx + (e.clientX - start.x);
+        const y = start.vy + (e.clientY - start.y);
+        setView((v) => (v.x === x && v.y === y ? v : { ...v, x, y }));
     };
 
     const endDrag = () => {

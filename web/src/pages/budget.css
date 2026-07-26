@@ -339,6 +339,12 @@
     opacity: 1;
 }
 
+@media (hover: none) {
+    .tx-edit_empty {
+        opacity: 0.55;
+    }
+}
+
 .tx-edit__input {
     background: var(--m-bg);
     border: 1px solid var(--m-accent);

@@ -1,6 +1,8 @@
 import { Button, SegmentedControl } from "@mantine/core";
 import { useState } from "react";
 
+import { FSelect } from "../ui/fields.jsx";
+
 import { api } from "../api.js";
 import { seedDemoData } from "../demo/seedDemo.js";
 import { isDemo, useStore } from "../store.js";
@@ -38,6 +40,7 @@ export default function SettingsPage({ theme, onToggleTheme, onMigrate }) {
     const snapshot = useStore((s) => s.snapshot);
     const load = useStore((s) => s.load);
     const notify = useStore((s) => s.notify);
+    const patchMe = useStore((s) => s.patchMe);
     const [exporting, setExporting] = useState(false);
     const [exportError, setExportError] = useState("");
     const [seedingDemo, setSeedingDemo] = useState(false);
@@ -129,6 +132,37 @@ export default function SettingsPage({ theme, onToggleTheme, onMigrate }) {
                         />
                     </Row>
                 </Section>
+
+                {!isDemo() && user && (
+                    <Section title="Imports">
+                        <Row
+                            label="Default account"
+                            hint="Where imports put transactions whose card number is missing — leave empty to assign them by hand"
+                        >
+                            <FSelect
+                                placeholder="No default — assign by hand"
+                                clearable
+                                value={
+                                    user.defaultAccountId != null
+                                        ? String(user.defaultAccountId)
+                                        : null
+                                }
+                                onChange={(v) =>
+                                    patchMe({ defaultAccountId: v ? Number(v) : null }).catch((e) =>
+                                        notify({
+                                            title: "Could not save the default account",
+                                            theme: "danger",
+                                            content: String(e),
+                                        }),
+                                    )
+                                }
+                                data={(snapshot?.accounts ?? [])
+                                    .filter((a) => !a.archived)
+                                    .map((a) => ({ value: String(a.id), label: a.name }))}
+                            />
+                        </Row>
+                    </Section>
+                )}
 
                 <Section title="Data">
                     <Row

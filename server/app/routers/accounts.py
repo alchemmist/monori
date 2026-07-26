@@ -282,6 +282,9 @@ def delete_account(
                     for r in moved
                 ],
             )
+        c.execute(
+            "UPDATE users SET default_account_id=NULL WHERE default_account_id=?", (account_id,)
+        )
         c.execute("DELETE FROM accounts WHERE id=?", (account_id,))
         c.commit()
         return {"ok": True}

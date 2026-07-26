@@ -121,6 +121,12 @@ export const useStore = create((set, get) => ({
         await get().login(email, password);
     },
 
+    async patchMe(patch) {
+        const user = await api.authPatchMe(patch);
+        set({ user });
+        return user;
+    },
+
     logout() {
         localStorage.removeItem("monori_token");
         get().setTabs([]);
@@ -185,15 +191,17 @@ export const useStore = create((set, get) => ({
         const flush = (done) => {
             const current = get().snapshot;
             const transactions = mergeTransactions(current.transactions, pending);
+            const currentTotal = current.transactionsTotal ?? current.transactions.length;
+            const nextTotal = Math.max(total, currentTotal, transactions.length);
             pending = [];
             flushedAt = now();
             set({
                 snapshot: {
                     ...current,
                     transactions,
-                    transactionsTotal: Math.max(total, transactions.length),
+                    transactionsTotal: nextTotal,
                 },
-                txProgress: done ? null : { loaded: transactions.length, total },
+                txProgress: done ? null : { loaded: transactions.length, total: nextTotal },
             });
         };
         try {
@@ -290,6 +298,9 @@ export const useStore = create((set, get) => ({
                 transactionsTotal: (current.transactionsTotal ?? current.transactions.length) + 1,
             },
         });
+        // Creating a row shifts every older-page offset. Restart the fill so
+        // its captured total and offsets cannot overwrite or skip this insert.
+        if (get().txProgress) get().fillTransactions((fillGeneration += 1));
         return tx;
     },
 
@@ -310,7 +321,10 @@ export const useStore = create((set, get) => ({
             await api.patchTx(txId, patch);
         } catch (e) {
             const cur = get().snapshot;
-            const back = cur.transactions.map((t) => (t.id === txId ? before : t)).sort(compareTx);
+            const undo = Object.fromEntries(Object.keys(patch).map((key) => [key, before[key]]));
+            const back = cur.transactions
+                .map((t) => (t.id === txId ? { ...t, ...undo } : t))
+                .sort(compareTx);
             set({
                 snapshot: { ...cur, transactions: back },
                 toast: {
@@ -328,7 +342,7 @@ export const useStore = create((set, get) => ({
     async deleteTransaction(txId) {
         const { snapshot } = get();
         const gone = snapshot.transactions.find((t) => t.id === txId);
-        if (!gone) return;
+        if (!gone) return false;
         set({
             snapshot: {
                 ...snapshot,
@@ -336,9 +350,10 @@ export const useStore = create((set, get) => ({
                 transactionsTotal: Math.max(0, (snapshot.transactionsTotal ?? 1) - 1),
             },
         });
-        if (isDemo()) return;
+        if (isDemo()) return true;
         try {
             await api.deleteTx(txId);
+            return true;
         } catch (e) {
             const cur = get().snapshot;
             set({
@@ -353,6 +368,7 @@ export const useStore = create((set, get) => ({
                     content: String(e),
                 },
             });
+            return false;
         }
     },
 
@@ -794,9 +810,9 @@ export const useStore = create((set, get) => ({
         });
     },
 
-    async commitImport(rows, accountId) {
+    async commitImport(rows) {
         if (isDemo()) return { imported: 0, skipped: 0, demo: true };
-        const res = await api.importCommit(rows, accountId);
+        const res = await api.importCommit(rows);
         await get().load();
         return res;
     },

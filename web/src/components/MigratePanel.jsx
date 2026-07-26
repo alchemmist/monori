@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { Button, Radio } from "@mantine/core";
+import { Button, Checkbox, Radio } from "@mantine/core";
 import { useStore } from "../store.js";
 import { api } from "../api.js";
 import { FSelect } from "../ui/fields.jsx";
@@ -11,6 +11,7 @@ import Txt from "../ui/Txt.jsx";
  * the chosen file and preview survive the whole time. */
 export default function MigratePanel({ onClose }) {
     const accounts = useStore((s) => s.snapshot?.accounts ?? []);
+    const user = useStore((s) => s.user);
     const load = useStore((s) => s.load);
     const notify = useStore((s) => s.notify);
     const fileRef = useRef(null);
@@ -18,6 +19,7 @@ export default function MigratePanel({ onClose }) {
     const [preview, setPreview] = useState(null);
     const [mapping, setMapping] = useState({});
     const [budgetPolicy, setBudgetPolicy] = useState("overwrite");
+    const [remember, setRemember] = useState(true);
     const [busy, setBusy] = useState(false);
     const [result, setResult] = useState(null);
 
@@ -36,7 +38,22 @@ export default function MigratePanel({ onClose }) {
             const p = await api.workbookPreview(picked);
             setFile(picked);
             setPreview(p);
-            setMapping({});
+            // the unmarked-rows slot is the one no card number can decide, which
+            // is exactly what the settings-level default account exists for
+            const preset = user?.defaultAccountId;
+            const target = live.find((a) => a.id === preset);
+            setMapping(
+                Object.fromEntries(
+                    (p.accountSlots ?? [])
+                        .filter(
+                            (s) =>
+                                !s.marker &&
+                                target &&
+                                (target.currency || "RUB").toUpperCase() === s.currency,
+                        )
+                        .map((s) => [s.key, String(preset)]),
+                ),
+            );
         } catch (e) {
             notify({ title: "Could not read workbook", theme: "danger", content: String(e) });
         } finally {
@@ -51,7 +68,7 @@ export default function MigratePanel({ onClose }) {
         setBusy(true);
         try {
             const numeric = Object.fromEntries(slots.map((s) => [s.key, Number(mapping[s.key])]));
-            const r = await api.workbookCommit(file, numeric, budgetPolicy);
+            const r = await api.workbookCommit(file, numeric, budgetPolicy, remember);
             setResult(r);
             await load();
         } catch (e) {
@@ -151,6 +168,14 @@ export default function MigratePanel({ onClose }) {
                             </div>
                         );
                     })}
+                    {slots.some((s) => /\d/.test(s.marker)) && (
+                        <Checkbox
+                            label="Remember which card belongs to which account"
+                            description="The card numbers above are saved on their accounts, so future imports and bank syncs route them automatically"
+                            checked={remember}
+                            onChange={(e) => setRemember(e.currentTarget.checked)}
+                        />
+                    )}
                     {preview.budgetConflicts > 0 && (
                         <Radio.Group
                             label={`${preview.budgetConflicts} budget cells already exist`}
@@ -170,6 +195,8 @@ export default function MigratePanel({ onClose }) {
                     Imported {result.inserted} transactions ({result.skipped} duplicates skipped),{" "}
                     {result.groupsCreated} groups and {result.categoriesCreated} categories created,{" "}
                     {result.budgetsWritten} budget cells written.
+                    {result.cardTailsBound > 0 &&
+                        ` ${result.cardTailsBound} card numbers remembered on their accounts.`}
                 </Txt>
             )}
         </Tab>

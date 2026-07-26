@@ -25,6 +25,64 @@ def test_import_preview_categorizes_and_flags_errors(api, client):
     assert len(prev["errors"]) == 1
 
 
+def test_preview_routes_each_card_and_commit_accepts_mixed_accounts(api, client):
+    first = api.default_account()
+    second = api.account("Second card", cardTails=["2947"])
+    client.patch(f"/api/accounts/{first}", json={"cardTails": ["1111"]})
+
+    def row(card, amount, description, day):
+        return (
+            "\t".join(
+                [
+                    f"0{day}.01.2026 10:00:00",
+                    f"0{day}.01.2026",
+                    card,
+                    "OK",
+                    amount,
+                    "RUB",
+                    amount,
+                    "RUB",
+                    "",
+                    "Super",
+                    "5411",
+                    description,
+                    "0",
+                    "0",
+                    amount,
+                ]
+            )
+            + "\n"
+        )
+
+    text = (
+        row("*1111", "-100,00", "First", 5)
+        + row("*2947", "-200,00", "Second", 6)
+        + row("*9999", "-300,00", "Unknown", 7)
+    )
+    rows = client.post("/api/import/preview", json={"text": text}).json()["rows"]
+    assert [row["accountId"] for row in rows] == [first, second, None]
+
+    rows[2]["accountId"] = first
+    r = client.post("/api/import/commit", json={"rows": rows})
+    assert counts(r) == {"inserted": 3, "skipped": 0}
+    tx = client.get("/api/transactions?limit=10").json()["rows"]
+    assert {row["description"]: row["accountId"] for row in tx} == {
+        "First": first,
+        "Second": second,
+        "Unknown": first,
+    }
+
+
+def test_duplicate_check_uses_the_account_selected_for_each_row(api, client):
+    other = api.account("Other")
+    rows = api.preview(api.statement)
+    api.tx(rows[0]["date"], rows[0]["amount"], accountId=other, description=rows[0]["description"])
+    rows[0]["accountId"] = other
+
+    checked = client.post("/api/import/duplicates", json={"rows": rows}).json()
+    assert checked["duplicates"] == [True, False]
+
+
 def test_import_commit_double_submit_is_idempotent(api, client):
     rows = api.preview(api.statement)
     assert commit(client, api, rows) == {"inserted": 2, "skipped": 0}

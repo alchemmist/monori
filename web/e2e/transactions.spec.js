@@ -162,7 +162,7 @@ test("editing a row in place rewrites it on the server, and delete removes it", 
     const after = (await user.api.snapshot()).transactions;
     expect(after.some((t) => t.description === "DOOMED ROW")).toBe(false);
     const fixed = after.find((t) => t.description === "FIXED ROW");
-    expect([fixed.amount, fixed.comment]).toEqual([-123450, "was a typo"]);
+    expect(fixed).toMatchObject({ amount: -123450, comment: "was a typo" });
 });
 
 test("the add-transaction tab records rows one after another without closing", async ({

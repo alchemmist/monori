@@ -54,7 +54,7 @@ export default function EditableCell({
                 onKeyDown={(e) => {
                     // the ledger listens for keys too, so keep them in here
                     e.stopPropagation();
-                    if (e.key === "Enter" || e.key === "Tab") commit();
+                    if (e.key === "Enter") commit();
                     if (e.key === "Escape") setEditing(false);
                 }}
             />

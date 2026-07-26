@@ -276,3 +276,66 @@ def test_workbook_commit_refuses_foreign_rows_on_a_ruble_account(api, client):
     r = _upload(client, "/api/import/workbook/commit", data, {"mapping": mapping})
     assert r.status_code == 200, r.text
     assert r.json()["inserted"] == 2
+
+
+def _card_book():
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Transactions"
+    ws.append(
+        ["Дата операции", "Номер карты", "Статус", "Сумма операции", "Валюта операции", "Описание"]
+    )
+    ws.append(["2026-01-05 10:00:00", "*8181", "OK", -300.0, "RUB", "Lenta"])
+    ws.append(["2026-01-06 10:00:00", "", "OK", -200.0, "RUB", "Okey"])
+    buf = BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+def test_workbook_commit_remembers_card_markers_when_asked(api, client):
+    """
+    Mapping a card to an account is knowledge worth keeping: with remember set,
+    the marker's digits land in the account's card tails, so the next statement
+    import or sync routes that card without asking. The unmarked-rows slot has
+    no digits and binds nothing.
+    """
+    acct = api.account("Card", cardTails=["1111"])
+    other = api.account("Other")
+    mapping = json.dumps({"RUB:*8181": acct, "RUB:": other})
+    r = _upload(
+        client,
+        "/api/import/workbook/commit",
+        _card_book(),
+        {"mapping": mapping, "remember": "true"},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["cardTailsBound"] == 1
+    tails = {a["name"]: a["cardTails"] for a in api.snapshot()["accounts"]}
+    assert tails["Card"] == ["1111", "8181"]
+    assert tails["Other"] == []
+
+
+def test_workbook_commit_leaves_card_tails_alone_by_default(api, client):
+    acct = api.account("Card")
+    other = api.account("Other")
+    mapping = json.dumps({"RUB:*8181": acct, "RUB:": other})
+    r = _upload(client, "/api/import/workbook/commit", _card_book(), {"mapping": mapping})
+    assert r.status_code == 200, r.text
+    assert r.json()["cardTailsBound"] == 0
+    assert all(a["cardTails"] == [] for a in api.snapshot()["accounts"])
+
+
+def test_remembering_an_already_bound_marker_changes_nothing(api, client):
+    acct = api.account("Card", cardTails=["8181"])
+    other = api.account("Other")
+    mapping = json.dumps({"RUB:*8181": acct, "RUB:": other})
+    r = _upload(
+        client,
+        "/api/import/workbook/commit",
+        _card_book(),
+        {"mapping": mapping, "remember": "true"},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["cardTailsBound"] == 0
+    tails = {a["name"]: a["cardTails"] for a in api.snapshot()["accounts"]}
+    assert tails["Card"] == ["8181"]

@@ -17,9 +17,10 @@ export default function DeleteTxDialog({ tx, onClose }) {
     const apply = async () => {
         setBusy(true);
         try {
-            await deleteTransaction(tx.id);
-            notify({ title: "Transaction deleted", theme: "success" });
-            onClose();
+            if (await deleteTransaction(tx.id)) {
+                notify({ title: "Transaction deleted", theme: "success" });
+                onClose();
+            }
         } catch (e) {
             notify({ title: "Failed to delete transaction", theme: "danger", content: String(e) });
         } finally {

@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button, SegmentedControl } from "@mantine/core";
 import { useStore } from "../store.js";
 import { orderedGroups, categoriesByGroup } from "../categoryOrder.js";
@@ -7,7 +7,11 @@ import { FSelect, FTextInput } from "../ui/fields.jsx";
 import Tab from "../ui/Tab.jsx";
 import Txt from "../ui/Txt.jsx";
 
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => {
+    const now = new Date();
+    now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+    return now.toISOString().slice(0, 10);
+};
 
 /** How many of the just-entered rows the tab echoes back, newest first. Enough
  * to see that the last few landed, short enough to never take over the panel. */
@@ -53,6 +57,14 @@ export default function AddTxTab({ onClose }) {
     const [busy, setBusy] = useState(false);
     const [recent, setRecent] = useState([]);
     const amountRef = useRef(null);
+
+    // Restored tabs can mount before the light snapshot arrives. Keep a chosen
+    // account, but select the first active one once it is available (or when a
+    // previously chosen account was archived/removed).
+    useEffect(() => {
+        if (accounts.length && (!account || !accounts.some((a) => String(a.id) === account)))
+            setAccount(String(accounts[0].id));
+    }, [account, accounts]);
 
     const amountKop = parseRub(amount);
     const valid = !!account && !!date && amountKop != null && amountKop > 0;
