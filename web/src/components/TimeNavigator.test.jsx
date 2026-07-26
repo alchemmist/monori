@@ -22,10 +22,15 @@ describe("TimeNavigator", () => {
         renderUI(<TimeNavigator items={items} range={[1, 3]} onChange={vi.fn()} />);
         expect(document.querySelector(".timenav__area")).toHaveAttribute(
             "d",
-            expect.stringContaining("C"),
+            "M 120 56 L 120 39.5 C 160 37.583333333333336, 280 31.833333333333332, 360 28 C 440 24.166666666666668, 520 15.733333333333334, 600 16.5 C 680 17.266666666666666, 760 34.51666666666666, 840 32.599999999999994 C 920 30.683333333333326, 1040 9.599999999999998, 1080 5 L 1080 56 Z",
         );
         expect(screen.getByText("2026")).toBeInTheDocument();
-        expect(document.querySelector(".timenav__window")).toHaveAttribute("width", "720");
+        const windowRect = document.querySelector(".timenav__window");
+        expect(windowRect).toHaveAttribute("x", "240");
+        expect(windowRect).toHaveAttribute("width", "720");
+        const [before, after] = document.querySelectorAll(".timenav__dim");
+        expect(before).toHaveAttribute("width", "240");
+        expect(after).toHaveAttribute("width", "240");
     });
 
     it("moves and resizes the range through pointer gestures", () => {
@@ -81,6 +86,22 @@ describe("TimeNavigator", () => {
 
         fireEvent.pointerDown(right, { pointerId: 2, clientX: 800 });
         fireEvent.pointerMove(svg, { pointerId: 2, clientX: -100 });
+        expect(onChange).toHaveBeenLastCalledWith([1, 3]);
+    });
+
+    it("resizes each edge by whole months and keeps the opposite edge fixed", () => {
+        const onChange = vi.fn();
+        renderUI(<TimeNavigator items={items} range={[1, 4]} onChange={onChange} />);
+        const svg = document.querySelector("svg");
+        const [left, right] = document.querySelectorAll(".timenav__handle");
+
+        fireEvent.pointerDown(left, { pointerId: 1, clientX: 300 });
+        fireEvent.pointerMove(svg, { pointerId: 1, clientX: 540 });
+        expect(onChange).toHaveBeenLastCalledWith([2, 4]);
+        fireEvent.pointerUp(svg, { pointerId: 1 });
+
+        fireEvent.pointerDown(right, { pointerId: 2, clientX: 900 });
+        fireEvent.pointerMove(svg, { pointerId: 2, clientX: 660 });
         expect(onChange).toHaveBeenLastCalledWith([1, 3]);
     });
 

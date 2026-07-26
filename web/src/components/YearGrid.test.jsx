@@ -43,6 +43,7 @@ function renderGrid({ first, second } = {}) {
         collapsed: {},
         setCollapsed: vi.fn(),
         setBudget: vi.fn(),
+        onSelectBudget: vi.fn(),
         onCategoryMenu: () => [],
         onAddCategory: vi.fn(),
     };
@@ -93,5 +94,39 @@ describe("YearGrid", () => {
 
         expect(props.onAddCategory).toHaveBeenCalledWith(7);
         expect(props.setCollapsed).not.toHaveBeenCalled();
+    });
+
+    it("explains January from the previous year and later months from this year", () => {
+        const { props, rerender } = renderGrid();
+        props.res.available[0] = 1_100_00;
+        props.res.available[1] = 2_200_00;
+        props.res.overspent[0] = -90_00;
+        props.res.income[0] = 700_00;
+        props.res.budgetedTotal[0] = 300_00;
+        props.res.income[1] = 800_00;
+        props.res.budgetedTotal[1] = 400_00;
+        const prevRes = {
+            available: Array(12).fill(0),
+            overspent: Array(12).fill(0),
+        };
+        prevRes.available[11] = 600_00;
+        prevRes.overspent[11] = -40_00;
+
+        rerender(<YearGrid {...props} prevRes={prevRes} />);
+
+        expect(screen.getByText("Not budgeted in Dec").previousSibling).toHaveTextContent("600");
+        expect(screen.getByText("Overspent in Dec").previousSibling).toHaveTextContent("-40");
+        expect(screen.getByText("Not budgeted in Jan").previousSibling).toHaveTextContent("1 100");
+        expect(screen.getByText("Income for Feb").previousSibling).toHaveTextContent("800");
+        expect(screen.getByText("Budgeted in Feb").previousSibling).toHaveTextContent("-400");
+    });
+
+    it("reports the selected category budget with its one-based month", async () => {
+        const { user, props } = renderGrid();
+        const row = screen.getByText("Groceries").closest("tr");
+
+        await user.click(within(row).getByRole("button", { name: "1 000" }));
+
+        expect(props.onSelectBudget).toHaveBeenCalledWith({ categoryId: 2, year, month: 1 });
     });
 });

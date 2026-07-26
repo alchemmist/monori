@@ -87,4 +87,20 @@ describe("InlineSelect", () => {
         expect(screen.getByRole("textbox")).toHaveValue("");
         expect(screen.getByRole("option", { name: "Rent" })).toBeInTheDocument();
     });
+
+    it("uses a supplied label and placeholder when the current value is absent", async () => {
+        const { user } = renderUI(
+            <InlineSelect
+                field
+                label="Account"
+                placeholder="Choose account"
+                value="removed"
+                onChange={() => {}}
+                data={[{ value: "cash", label: "Cash" }]}
+            />,
+        );
+
+        await user.click(screen.getByRole("button", { name: /accountchoose account/i }));
+        expect(screen.getByRole("option", { name: "Cash" })).toBeInTheDocument();
+    });
 });
