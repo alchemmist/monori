@@ -147,6 +147,27 @@ describe("updateTransaction", () => {
         });
     });
 
+    it("keeps a newer edit to the same field when an older request fails", async () => {
+        let rejectFirst;
+        vi.spyOn(api, "patchTx")
+            .mockImplementationOnce(
+                () =>
+                    new Promise((_, reject) => {
+                        rejectFirst = reject;
+                    }),
+            )
+            .mockResolvedValueOnce({ ok: true });
+
+        const first = useStore.getState().updateTransaction(1, { amount: -5000 });
+        await useStore.getState().updateTransaction(1, { amount: -7500 });
+        rejectFirst(new Error("nope"));
+        await first;
+
+        expect(useStore.getState().snapshot.transactions.find((t) => t.id === 1).amount).toBe(
+            -7500,
+        );
+    });
+
     it("ignores an id that is not in the ledger", async () => {
         vi.spyOn(api, "patchTx").mockResolvedValue({ ok: true });
 

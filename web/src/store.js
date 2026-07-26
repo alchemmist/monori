@@ -33,6 +33,11 @@ function chainedPatchTx(id, patch) {
     return next;
 }
 
+// Each optimistic transaction edit owns revisions for the fields it changes.
+// A failed older request must never undo a newer edit to the same field.
+let nextTxFieldRevision = 0;
+const txFieldRevisions = new Map();
+
 const now = () => (typeof performance !== "undefined" ? performance.now() : 0);
 
 /** The public /demo page runs entirely on the bundled sample dataset: no auth,
@@ -313,6 +318,10 @@ export const useStore = create((set, get) => ({
         const { snapshot } = get();
         const before = snapshot.transactions.find((t) => t.id === txId);
         if (!before) return;
+        const revision = (nextTxFieldRevision += 1);
+        const revisions = txFieldRevisions.get(txId) ?? new Map();
+        Object.keys(patch).forEach((key) => revisions.set(key, revision));
+        txFieldRevisions.set(txId, revisions);
         const rows = snapshot.transactions.map((t) => (t.id === txId ? { ...t, ...patch } : t));
         if (patch.date !== undefined && patch.date !== before.date) rows.sort(compareTx);
         set({ snapshot: { ...snapshot, transactions: rows } });
@@ -321,7 +330,11 @@ export const useStore = create((set, get) => ({
             await api.patchTx(txId, patch);
         } catch (e) {
             const cur = get().snapshot;
-            const undo = Object.fromEntries(Object.keys(patch).map((key) => [key, before[key]]));
+            const undo = Object.fromEntries(
+                Object.keys(patch)
+                    .filter((key) => revisions.get(key) === revision)
+                    .map((key) => [key, before[key]]),
+            );
             const back = cur.transactions
                 .map((t) => (t.id === txId ? { ...t, ...undo } : t))
                 .sort(compareTx);
@@ -333,6 +346,11 @@ export const useStore = create((set, get) => ({
                     content: String(e),
                 },
             });
+        } finally {
+            Object.keys(patch).forEach((key) => {
+                if (revisions.get(key) === revision) revisions.delete(key);
+            });
+            if (!revisions.size) txFieldRevisions.delete(txId);
         }
     },
 
