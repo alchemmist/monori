@@ -43,7 +43,7 @@ def existing_hash_counts(c, account_id):
     }
 
 
-def historical_day_counts(c, uid, sources=("workbook", "import", "sync")):
+def historical_day_counts(c, uid, sources=("workbook", "import", "sync", "sheets")):
     """
     ``(day, amount, description) -> count`` over every transaction the user got
     from a statement-shaped source, across all accounts. The per-account hash
@@ -52,7 +52,9 @@ def historical_day_counts(c, uid, sources=("workbook", "import", "sync")):
     overlapping feeds — because the copies land on different accounts or carry
     different times. By calendar day and without the account, the copies
     collide. Manual entries and transfer legs are left out: they are the
-    user's own words, not a bank's, and must never shadow a feed.
+    user's own words, not a bank's, and must never shadow a feed. ``sheets``
+    is the retired template importer's label — those rows are still in the
+    wild and are statement-shaped all the same.
     """
     marks = ",".join("?" * len(sources))
     return {

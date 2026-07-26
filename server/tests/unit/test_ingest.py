@@ -219,12 +219,17 @@ def test_historical_day_counts_span_accounts_and_skip_manual(tmp_path):
     c.execute(tx_sql, ("2026-07-19T14:22:00", -368000, "Kafe Lesnoj", first, "h1", "sync"))
     c.execute(tx_sql, ("2026-07-19T09:05:00", -368000, "Kafe Lesnoj", second, "h2", "sync"))
     c.execute(tx_sql, ("2026-07-19T10:00:00", -32000, "нетмонет", first, "h3", "manual"))
+    c.execute(tx_sql, ("2026-07-18T10:00:00", -50000, "Пятёрочка", first, "h4", "sheets"))
     c.commit()
 
     from app.ingest import historical_day_counts
 
     counts = historical_day_counts(c, uid)
-    assert counts == {("2026-07-19", -368000, "Kafe Lesnoj"): 2}
+    # "sheets" is the retired template importer's label, still in old ledgers
+    assert counts == {
+        ("2026-07-19", -368000, "Kafe Lesnoj"): 2,
+        ("2026-07-18", -50000, "Пятёрочка"): 1,
+    }
 
 
 def test_drop_already_present_is_count_aware():
