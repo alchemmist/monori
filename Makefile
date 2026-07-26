@@ -8,7 +8,7 @@ WEBBIN := web/node_modules/.bin
         fmt fmt-check \
         lint lint-web lint-css lint-html lint-server lint-sql lint-yaml lint-md lint-docs lint-actions lint-docker lint-shell spell \
         typecheck analyze audit audit-deps audit-deps-py audit-secrets \
-        test t-fast t-medium t-slow t-slow-ui coverage mutation \
+        test t-fast t-medium t-slow t-slow-ui coverage mutation m-front m-back \
         schema-diagram check
 
 up:
@@ -142,12 +142,18 @@ t-slow-ui:
 coverage:
 	bash scripts/coverage-tree.sh
 
-mutation:
+m-front:
 	@set +e; \
 	thr=$(MUTATION_THRESHOLD); \
 	echo "── stryker: building the per-test coverage map; mutation progress begins after this phase ──"; \
 	( cd web && MUTATION_THRESHOLD=$$thr npx stryker run ); web=$$?; \
 	node scripts/stryker-summary.mjs; \
+	echo "── frontend mutation gate (threshold $$thr%): stryker exit=$$web ──"; \
+	exit $$web
+
+m-back:
+	@set +e; \
+	thr=$(MUTATION_THRESHOLD); \
 	( cd server && mkdir -p mutants && uv run mutmut run 2>mutants/mutmut-stderr.log ); mutmut=$$?; \
 	( cd server && mkdir -p mutants && uv run mutmut export-cicd-stats ); export=$$?; \
 	if [ $$export -eq 0 ]; then \
@@ -155,9 +161,15 @@ mutation:
 	else \
 		srv=$$export; \
 	fi; \
-	node scripts/stryker-summary.mjs; \
 	if [ -s server/mutants/mutmut-stderr.log ]; then echo "── mutmut diagnostics: server/mutants/mutmut-stderr.log ──"; fi; \
-	echo "── mutation gates (threshold $$thr%): stryker exit=$$web, mutmut run exit=$$mutmut, mutmut gate exit=$$srv ──"; \
-	if [ $$web -ne 0 ] || [ $$mutmut -ne 0 ] || [ $$srv -ne 0 ]; then exit 1; fi
+	echo "── backend mutation gate (threshold $$thr%): mutmut run exit=$$mutmut, mutmut gate exit=$$srv ──"; \
+	if [ $$mutmut -ne 0 ] || [ $$srv -ne 0 ]; then exit 1; fi
+
+mutation:
+	@set +e; \
+	$(MAKE) MUTATION_THRESHOLD=$(MUTATION_THRESHOLD) m-front; front=$$?; \
+	$(MAKE) MUTATION_THRESHOLD=$(MUTATION_THRESHOLD) m-back; back=$$?; \
+	echo "── mutation gates: frontend exit=$$front, backend exit=$$back ──"; \
+	if [ $$front -ne 0 ] || [ $$back -ne 0 ]; then exit 1; fi
 
 check: fmt-check lint typecheck analyze test
