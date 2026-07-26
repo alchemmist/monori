@@ -6,12 +6,13 @@ import useAmountField from "../ui/useAmountField.js";
  * Inline-editable budget amount. Click (or focus+Enter) to edit; Enter saves,
  * Escape cancels. Recalculation happens in the same frame via the store.
  */
-export default function BudgetCell({ value, onChange, tabIndex = 0 }) {
+export default function BudgetCell({ value, onChange, onSelect, tabIndex = 0 }) {
     const [editing, setEditing] = useState(false);
     const [draft, setDraft] = useState("");
     const amount = useAmountField(setDraft);
 
     const start = () => {
+        onSelect?.();
         setDraft(amountInput(value));
         setEditing(true);
     };

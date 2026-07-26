@@ -20,7 +20,7 @@ const YEAR_DENSITY = {
 };
 
 export default function BudgetPage({ results, firstYear, lastYear }) {
-    const { snapshot, setBudget } = useStore();
+    const { snapshot, setBudget, fillBudgetForward, notify } = useStore();
     const now = new Date();
     const [year, setYear] = useState(now.getFullYear());
     const [month, setMonth] = useState(now.getMonth()); // 0-based
@@ -29,6 +29,8 @@ export default function BudgetPage({ results, firstYear, lastYear }) {
     const [collapsed, setCollapsed] = useState({});
     const [showUnused, setShowUnused] = useState(false);
     const [dialog, setDialog] = useState(null); // {type: 'edit'|'delete'|'new', category}
+    const [selectedBudgetCell, setSelectedBudgetCell] = useState(null);
+    const [fillingForward, setFillingForward] = useState(false);
 
     const res = results.get(year);
     const groups = useMemo(
@@ -83,6 +85,32 @@ export default function BudgetPage({ results, firstYear, lastYear }) {
         },
     ];
 
+    const selectedCategory = selectedBudgetCell
+        ? snapshot.categories.find((c) => c.id === selectedBudgetCell.categoryId)
+        : null;
+    const canFillForward = selectedBudgetCell?.month < 12 && selectedCategory;
+
+    const fillForward = async () => {
+        if (!canFillForward) return;
+        setFillingForward(true);
+        try {
+            const count = await fillBudgetForward(
+                selectedBudgetCell.categoryId,
+                selectedBudgetCell.year,
+                selectedBudgetCell.month,
+            );
+            notify({
+                title: "Budget filled through December",
+                content: `${selectedCategory.name}: ${count} month${count === 1 ? "" : "s"}`,
+                theme: "success",
+            });
+        } catch (e) {
+            notify({ title: "Failed to fill budget", content: String(e), theme: "danger" });
+        } finally {
+            setFillingForward(false);
+        }
+    };
+
     return (
         <div className="fade-in">
             <div className="budget-toolbar">
@@ -104,6 +132,17 @@ export default function BudgetPage({ results, firstYear, lastYear }) {
                     </div>
                 )}
                 <div style={{ flex: 1 }} />
+                {canFillForward && (
+                    <Button
+                        size="xs"
+                        variant="light"
+                        loading={fillingForward}
+                        onClick={fillForward}
+                        title={`Replace ${selectedCategory.name}'s remaining ${selectedBudgetCell.year} budgets with this value`}
+                    >
+                        Fill {selectedCategory.name} to Dec
+                    </Button>
+                )}
                 {unusedCount > 0 && (
                     <Button
                         size="xs"
@@ -282,6 +321,13 @@ export default function BudgetPage({ results, firstYear, lastYear }) {
                                                         <td>
                                                             <BudgetCell
                                                                 value={m.budgeted}
+                                                                onSelect={() =>
+                                                                    setSelectedBudgetCell({
+                                                                        categoryId: c.id,
+                                                                        year,
+                                                                        month: month + 1,
+                                                                    })
+                                                                }
                                                                 onChange={(v) =>
                                                                     setBudget(
                                                                         c.id,
@@ -338,6 +384,7 @@ export default function BudgetPage({ results, firstYear, lastYear }) {
                     collapsed={collapsed}
                     setCollapsed={setCollapsed}
                     setBudget={setBudget}
+                    onSelectBudget={setSelectedBudgetCell}
                     onAddCategory={(groupId) => setDialog({ type: "edit", category: { groupId } })}
                     onCategoryMenu={catMenu}
                 />

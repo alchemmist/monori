@@ -251,6 +251,36 @@ export const useStore = create((set, get) => ({
         );
     },
 
+    /** Copy one category's current month into every later month of the year.
+     * Unlike a display-only fill, this is one bulk request, so the resulting
+     * plan is persisted atomically before the grid updates. */
+    async fillBudgetForward(categoryId, year, month) {
+        const { snapshot } = get();
+        const amount =
+            snapshot.budgets.find(
+                (b) => b.categoryId === categoryId && b.year === year && b.month === month,
+            )?.amount ?? 0;
+        const cells = Array.from({ length: 12 - month }, (_, i) => ({
+            categoryId,
+            year,
+            month: month + i + 1,
+            amount,
+        }));
+        if (!cells.length) return 0;
+        if (!isDemo()) await api.bulkBudgets(cells);
+
+        const targetMonths = new Set(cells.map((cell) => cell.month));
+        const budgets = snapshot.budgets.filter(
+            (b) =>
+                b.categoryId !== categoryId ||
+                b.year !== year ||
+                !targetMonths.has(b.month),
+        );
+        if (amount !== 0) budgets.push(...cells);
+        set({ snapshot: { ...snapshot, budgets } });
+        return cells.length;
+    },
+
     setTxCategory(txId, categoryId) {
         const { snapshot } = get();
         const transactions = snapshot.transactions.map((t) =>
