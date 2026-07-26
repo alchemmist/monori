@@ -194,8 +194,8 @@ describe("weekdayProfile", () => {
 describe("txStats", () => {
     it("computes count, median and largest expense", () => {
         const s = txStats(snapshot, "2024");
-        // ids 2, 3, 4 plus the uncategorized cafe row; the transfer leg is out
-        expect(s.count).toBe(4);
+        // ids 2, 3 and 4; uncategorized rows and the transfer leg are out
+        expect(s.count).toBe(3);
         expect(s.median).toBe(10_000_00);
         expect(s.largest.amount).toBe(20_000_00);
     });
@@ -368,10 +368,8 @@ describe("dayOfMonthProfile", () => {
     });
 });
 
-// Rows the year-scoped chart aggregators (weekday/day-of-month/topMerchants)
-// must ignore: wrong year, an income category, a positive amount, and an
-// uncategorized row. txStats intentionally diverges — it COUNTS uncategorized
-// outflows (see its own tests below) and only shares the first three guards.
+// Rows the year-scoped chart aggregators must ignore: wrong year, an income
+// category, a positive amount, and an uncategorized row.
 const ignoredRows = [
     { id: 90, date: "2023-01-01", amount: -9_999_00, categoryId: 20, description: "LAST YEAR" },
     { id: 91, date: "2024-01-01", amount: -8_888_00, categoryId: 10, description: "INCOME LEG" },
@@ -456,7 +454,7 @@ describe("txStats keeps the first of tied-largest expenses", () => {
         expect(s.largest.description).toBe("FIRST");
     });
 
-    it("includes uncategorized outflows in the count", () => {
+    it("excludes uncategorized outflows from the count", () => {
         const withUncat = {
             ...snap,
             transactions: [
@@ -471,11 +469,11 @@ describe("txStats keeps the first of tied-largest expenses", () => {
             ],
         };
         const s = txStats(withUncat, "2024");
-        expect(s.count).toBe(4);
-        expect(s.largest.description).toBe("UNCATEGORIZED SPEND");
+        expect(s.count).toBe(3);
+        expect(s.largest.description).toBe("FIRST");
     });
 
-    it("counts an outflow whose categoryId no longer resolves as uncategorized", () => {
+    it("excludes an outflow whose categoryId no longer resolves", () => {
         const withDangling = {
             ...snap,
             transactions: [
@@ -490,8 +488,8 @@ describe("txStats keeps the first of tied-largest expenses", () => {
             ],
         };
         const s = txStats(withDangling, "2024");
-        expect(s.count).toBe(4);
-        expect(s.largest.description).toBe("X");
+        expect(s.count).toBe(3);
+        expect(s.largest.description).toBe("FIRST");
     });
 });
 

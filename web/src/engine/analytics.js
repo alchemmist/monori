@@ -179,9 +179,9 @@ export function topMerchants(snapshot, year, limit = 10) {
 }
 
 /** Expense-transaction stats for a year: count, median, largest.
- * Counts every real outflow the transactions view shows for the year —
- * uncategorized rows included — excluding transfer legs and income-group
- * rows, so the card's count matches what the user can tally by hand. */
+ * Like every other analytics card, this uses only categorized expense rows:
+ * uncategorized operations and transfer legs are not spending until they are
+ * assigned to a real expense category. */
 export function txStats(snapshot, year) {
     const incomeIds = incomeGroupIdSet(snapshot.groups);
     const catById = new Map(snapshot.categories.map((c) => [c.id, c]));
@@ -190,11 +190,9 @@ export function txStats(snapshot, year) {
     for (const t of snapshot.transactions) {
         if (!t.date.startsWith(year) || t.amount >= 0) continue;
         if (isTransfer(t)) continue; // moving money is not spending
-        // a categoryId the snapshot can't resolve counts like an uncategorized
-        // row: the server nulls categoryId on category delete, so a dangling id
-        // is still a real outflow, not something to hide from the count
-        const cat = t.categoryId != null ? catById.get(t.categoryId) : null;
-        if (cat && incomeIds.has(cat.groupId)) continue;
+        if (t.categoryId == null) continue;
+        const cat = catById.get(t.categoryId);
+        if (!cat || incomeIds.has(cat.groupId)) continue;
         const v = -t.amount;
         amounts.push(v);
         if (!largest || v > largest.amount)
