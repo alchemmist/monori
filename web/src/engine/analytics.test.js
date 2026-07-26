@@ -537,3 +537,31 @@ describe("disciplineMatrix mechanics", () => {
         expect(d.worst).toBeNull();
     });
 });
+
+describe("analytics zero-value boundaries", () => {
+    it("does not treat a zero amount as spending in profiles, merchants, or stats", () => {
+        const snap = {
+            groups: guardGroups,
+            categories: guardCategories,
+            transactions: [
+                { id: 1, date: "2024-01-15", amount: -500, categoryId: 20, description: "REAL" },
+                { id: 2, date: "2024-01-15", amount: 0, categoryId: 20, description: "ZERO" },
+            ],
+        };
+        expect(weekdayProfile(snap, "2024")[0]).toBe(500);
+        expect(dayOfMonthProfile(snap, "2024")[14]).toBe(500);
+        expect(topMerchants(snap, "2024")).toEqual([{ name: "REAL", total: 500, count: 1 }]);
+        expect(txStats(snap, "2024").count).toBe(1);
+    });
+
+    it("keeps a zero-overrun category out of the worst result", () => {
+        const months = Array.from({ length: 12 }, () => ({ budgeted: 0, outflows: 0, balance: 0 }));
+        const d = disciplineMatrix(
+            { byCategory: new Map([[20, months]]) },
+            [{ id: 20, groupId: 2, name: "Daily" }],
+            [{ id: 2, kind: "expense" }],
+        );
+        expect(d.worst).toBeNull();
+        expect(d.hitRate).toBeNull();
+    });
+});

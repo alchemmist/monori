@@ -288,6 +288,16 @@ describe("api", () => {
         expect(fetch.mock.calls[5][0]).toBe("/api/export/xlsx");
     });
 
+    it("sends explicit false admin SQL safeguards by default", async () => {
+        await api.adminSql("select 1");
+        const [, options] = fetch.mock.calls[0];
+        expect(JSON.parse(options.body)).toEqual({
+            sql: "select 1",
+            confirmWrite: false,
+            dryRun: false,
+        });
+    });
+
     it("reports an export failure by status instead of returning a blob", async () => {
         fetch.mockResolvedValueOnce({ ok: false, status: 500, statusText: "Server Error" });
         await expect(api.exportXlsx()).rejects.toThrow("500 Server Error");
@@ -302,6 +312,17 @@ describe("api", () => {
             json: vi.fn().mockResolvedValue({ detail: "Bad input" }),
         });
         await expect(api.snapshot()).rejects.toThrow("Bad input");
+    });
+
+    it("uses the status when JSON has no detail", async () => {
+        fetch.mockResolvedValueOnce({
+            ok: false,
+            status: 500,
+            statusText: "Internal Server Error",
+            url: "/api/x",
+            json: vi.fn().mockResolvedValue({ message: "hidden" }),
+        });
+        await expect(api.snapshot()).rejects.toThrow("500 Internal Server Error");
     });
 
     it("falls back to the status when the error body is unreadable", async () => {
