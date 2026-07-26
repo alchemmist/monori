@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, renderUI, resetStore, screen, seed, waitFor } from "../test/render.jsx";
 import { api } from "../api.js";
