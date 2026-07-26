@@ -147,7 +147,7 @@ mutation:
 	thr=$(MUTATION_THRESHOLD); \
 	( cd web && MUTATION_THRESHOLD=$$thr npx stryker run ); web=$$?; \
 	node scripts/stryker-summary.mjs; \
-	( cd server && uv run mutmut run ); mutmut=$$?; \
+	( cd server && mkdir -p mutants && uv run mutmut run 2>mutants/mutmut-stderr.log ); mutmut=$$?; \
 	( cd server && mkdir -p mutants && uv run mutmut export-cicd-stats ); export=$$?; \
 	if [ $$export -eq 0 ]; then \
 		python3 scripts/mutation-gate.py server/mutants/mutmut-cicd-stats.json $$thr; srv=$$?; \
@@ -155,6 +155,7 @@ mutation:
 		srv=$$export; \
 	fi; \
 	node scripts/stryker-summary.mjs; \
+	if [ -s server/mutants/mutmut-stderr.log ]; then echo "── mutmut diagnostics: server/mutants/mutmut-stderr.log ──"; fi; \
 	echo "── mutation gates (threshold $$thr%): stryker exit=$$web, mutmut run exit=$$mutmut, mutmut gate exit=$$srv ──"; \
 	if [ $$web -ne 0 ] || [ $$mutmut -ne 0 ] || [ $$srv -ne 0 ]; then exit 1; fi
 
