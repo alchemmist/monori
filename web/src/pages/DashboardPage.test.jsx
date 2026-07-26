@@ -237,4 +237,64 @@ describe("DashboardPage", () => {
         expect(donut).toHaveLength(12);
         expect(donut[11]).toMatchObject({ name: "Other", value: 300 }); // 100 + 200
     });
+
+    it("keeps the current partial month out of the trend but uses it for the monthly KPI", () => {
+        const currentMonth = `${year}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+        seed({
+            accounts: [account(1, "Card", 0)],
+            transactions: [
+                txn(1, { categoryId: 2, amount: -500_00, date: `${prevYear}-12-10` }),
+                txn(2, { categoryId: 2, amount: -250_00, date: `${currentMonth}-05` }),
+            ],
+        });
+
+        renderUI(<DashboardPage firstYear={prevYear} lastYear={year} />);
+
+        expect(trendRow(currentMonth)).toBeUndefined();
+        expect(screen.getByText("Spent this month").closest(".kpi")).toHaveTextContent("250 ₽");
+    });
+
+    it("stacks every expense group and keeps income out of the group chart", () => {
+        seed({
+            accounts: [account(1, "Card", 0)],
+            groups: [
+                { id: 1, name: "Income", kind: "income" },
+                { id: 2, name: "Food", kind: "expense" },
+                { id: 3, name: "Home", kind: "expense" },
+            ],
+            categories: [
+                { id: 1, groupId: 1, name: "Salary" },
+                { id: 2, groupId: 2, name: "Groceries" },
+                { id: 3, groupId: 3, name: "Rent" },
+            ],
+            transactions: [
+                txn(1, { categoryId: 1, amount: 900_00, date: `${year}-02-01` }),
+                txn(2, { categoryId: 2, amount: -120_00, date: `${year}-02-02` }),
+                txn(3, { categoryId: 3, amount: -450_00, date: `${year}-02-03` }),
+            ],
+        });
+
+        renderUI(<DashboardPage firstYear={prevYear} lastYear={year} />);
+
+        const groups = series("bar-chart", 2);
+        expect(groups.find((row) => row.month === "Feb")).toEqual({ month: "Feb", g2: 120, g3: 450 });
+    });
+
+    it("adds category spending to its calendar month only", () => {
+        seed({
+            accounts: [account(1, "Card", 0)],
+            transactions: [
+                txn(1, { categoryId: 2, amount: -120_00, date: `${year}-01-01` }),
+                txn(2, { categoryId: 2, amount: -80_00, date: `${year}-01-20` }),
+                txn(3, { categoryId: 2, amount: -90_00, date: `${year}-02-01` }),
+            ],
+        });
+
+        renderUI(<DashboardPage firstYear={prevYear} lastYear={year} />);
+
+        const drill = series("bar-chart");
+        expect(drill.find((row) => row.month === "Jan").Spent).toBe(200);
+        expect(drill.find((row) => row.month === "Feb").Spent).toBe(90);
+        expect(drill.find((row) => row.month === "Mar").Spent).toBe(0);
+    });
 });
