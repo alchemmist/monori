@@ -118,7 +118,9 @@ def user_detail(uid: int, admin: Annotated[dict, Depends(admin_user)]):
     c = conn()
     try:
         row = c.execute(
-            "SELECT id, email, created_at, is_admin, last_login FROM users WHERE id=?", (uid,)
+            "SELECT id, email, created_at, is_admin, last_login, default_account_id"
+            " FROM users WHERE id=?",
+            (uid,),
         ).fetchone()
         if row is None:
             raise HTTPException(404, "unknown user")
@@ -136,7 +138,9 @@ def user_detail(uid: int, admin: Annotated[dict, Depends(admin_user)]):
                 }
                 for r in c.execute(
                     "SELECT a.id, a.name, a.type, a.currency, a.archived,"
-                    " a.opening_balance + COALESCE(SUM(t.amount), 0) AS balance,"
+                    " a.opening_balance + COALESCE(SUM(CASE WHEN t.category_id IS NOT NULL"
+                    "   OR t.transfer_id IS NOT NULL OR t.source IN ('transfer', 'adjustment')"
+                    "   THEN t.amount END), 0) AS balance,"
                     " COUNT(t.id) AS tx_count"
                     " FROM accounts a LEFT JOIN transactions t ON t.account_id = a.id"
                     " WHERE a.user_id=? GROUP BY a.id ORDER BY a.sort, a.id",

@@ -32,6 +32,7 @@ export default function YearGrid({
     collapsed,
     setCollapsed,
     setBudget,
+    onSelectBudget,
     onCategoryMenu,
     onAddCategory,
 }) {
@@ -252,12 +253,22 @@ export default function YearGrid({
                                                     key={`${m}-${metric}`}
                                                     className={`${j === 0 ? "yg-cell_first" : ""} ${m === currentMonth ? "yg-cell_now" : ""}`}
                                                 >
-                                                    {metricCell(
-                                                        metric,
-                                                        mm,
-                                                        metric === "budgeted"
-                                                            ? (v) => setBudget(c.id, year, m + 1, v)
-                                                            : undefined,
+                                                    {metric === "budgeted" ? (
+                                                        <BudgetCell
+                                                            value={mm.budgeted}
+                                                            onChange={(v) =>
+                                                                setBudget(c.id, year, m + 1, v)
+                                                            }
+                                                            onSelect={() =>
+                                                                onSelectBudget?.({
+                                                                    categoryId: c.id,
+                                                                    year,
+                                                                    month: m + 1,
+                                                                })
+                                                            }
+                                                        />
+                                                    ) : (
+                                                        metricCell(metric, mm)
                                                     )}
                                                 </td>
                                             )),

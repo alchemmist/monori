@@ -5,13 +5,13 @@ import pytest
 from openpyxl import Workbook
 
 from app.workbook import spec
-from app.workbook.importer import parse_workbook
-from app.workbook.template_importer import (
+from app.workbook.parser import (
     MONTH_ABBREVS,
-    RU_HEADERS,
-    TemplateError,
+    TX_ALIASES,
+    WorkbookError,
     _find_layout,
     _kop,
+    _label_col,
     _last_day,
     _month_num,
     _month_range,
@@ -25,12 +25,13 @@ from app.workbook.template_importer import (
     _summary_value,
     _synthetic,
     _tx_header_index,
-    is_template_transactions_header,
-    looks_like_template,
-    parse_template_workbook,
+    parse_workbook,
 )
 
-TX_HEADER = list(RU_HEADERS.values())
+TX_HEADER = [
+    TX_ALIASES[f][0]
+    for f in ("date", "card", "status", "amount", "currency", "bank_category", "mcc", "description")
+]
 
 
 def _write_year(
@@ -43,7 +44,15 @@ def _write_year(
     income=None,
     available=None,
     seed=None,
+    seeds=None,
+    labels="en",
+    available_row=6,
 ):
+    carried_label, income_label, available_label = (
+        ("Not budgeted in Dec", "Income for month", "Available")
+        if labels == "en"
+        else ("Не заложено в дек", "Поступления в месяце", "Доступный остаток")
+    )
     bases = [2 + 4 * i for i in range(len(months))]
     ws.cell(row=1, column=bases[0], value=start_token)
     ws.cell(row=header_row, column=1, value="Категория")
@@ -66,21 +75,22 @@ def _write_year(
                     if balance is not None:
                         ws.cell(row=r, column=b + 2, value=balance)
         r += 1
-    if seed is not None:
-        ws.cell(row=1, column=bases[0] + 2, value="Not budgeted in Dec")
-        ws.cell(row=1, column=bases[0] + 1, value=seed)
+    for mnum, value in {**({} if seed is None else {months[0]: seed}), **(seeds or {})}.items():
+        b = bases[months.index(mnum)]
+        ws.cell(row=1, column=b + 2, value=carried_label)
+        ws.cell(row=1, column=b + 1, value=value)
     if income:
         for mi, mnum in enumerate(months):
             if mnum in income:
                 b = bases[mi]
-                ws.cell(row=2, column=b + 2, value="Income for month")
+                ws.cell(row=2, column=b + 2, value=income_label)
                 ws.cell(row=2, column=b + 1, value=income[mnum])
     if available:
         for mi, mnum in enumerate(months):
             if mnum in available:
                 b = bases[mi]
-                ws.cell(row=6, column=b + 1, value="Available")
-                ws.cell(row=5, column=b + 1, value=available[mnum])
+                ws.cell(row=available_row, column=b + 1, value=available_label)
+                ws.cell(row=available_row - 1, column=b + 1, value=available[mnum])
 
 
 def _tx_sheet(wb, tx_rows):
@@ -163,7 +173,9 @@ def test_month_num_matches_ru_and_en_and_rejects():
 def test_parse_dt_variants():
     assert _parse_dt(datetime.datetime(2025, 1, 5, 10)) == datetime.datetime(2025, 1, 5, 10)
     assert _parse_dt(datetime.date(2025, 1, 5)) == datetime.datetime(2025, 1, 5)
-    assert _parse_dt("2025-01-05") is None
+    assert _parse_dt("2025-01-05") == datetime.datetime(2025, 1, 5)
+    assert _parse_dt("05.01.2025 10:00:00") == datetime.datetime(2025, 1, 5, 10)
+    assert _parse_dt("garbage") is None
     assert _parse_dt(None) is None
 
 
@@ -189,30 +201,6 @@ def test_synthetic_shape():
 
 
 # --- detection ------------------------------------------------------------
-
-
-def test_is_template_header_detects_russian_status():
-    assert is_template_transactions_header(["Статус", "Сумма операции"]) is True
-    assert is_template_transactions_header(["Status", "Статус"]) is False
-    assert is_template_transactions_header(["Дата операции"]) is False
-
-
-def test_looks_like_template_true_and_false():
-    wb = Workbook()
-    wb.remove(wb.active)
-    _tx_sheet(wb, [])
-    assert looks_like_template(_save(wb)) is True
-
-    export = Workbook()
-    export.active.title = spec.SHEET_TRANSACTIONS
-    export.active.append(["Дата операции", "Status", "Сумма операции"])
-    assert looks_like_template(_save(export)) is False
-
-    assert looks_like_template(b"not a workbook") is False
-
-    no_tx = Workbook()
-    no_tx.active.title = "Something"
-    assert looks_like_template(_save(no_tx)) is False
 
 
 # --- layout & sections ----------------------------------------------------
@@ -259,8 +247,10 @@ def test_find_layout_label_and_month_fallbacks():
     for c, v in ((2, "Budgeted"), (3, "Outflows"), (4, "Balance"), (6, "Budgeted"), (8, "Balance")):
         ws.cell(row=5, column=c, value=v)
     ws.cell(row=5, column=7, value="Outflows")
+    ws.cell(row=6, column=1, value="▼Daily")
+    ws.cell(row=7, column=1, value="Groceries")
     layout = _find_layout(ws)
-    assert layout["label_col"] == 3
+    assert layout["label_col"] == 1
     assert layout["start_month"] == 1
 
 
@@ -339,13 +329,13 @@ def test_parse_transactions_empty_and_missing_columns():
     empty.remove(empty.active)
     empty.create_sheet(spec.SHEET_TRANSACTIONS)
     ro = load_workbook(BytesIO(_save(empty)), read_only=True, data_only=True)
-    with pytest.raises(TemplateError, match="Transactions sheet is empty"):
+    with pytest.raises(WorkbookError, match="Transactions sheet is empty"):
         _parse_transactions(ro[spec.SHEET_TRANSACTIONS], [], [])
 
     bad = Workbook()
     ws = bad.create_sheet(spec.SHEET_TRANSACTIONS)
     ws.append(["Дата операции", "Статус"])
-    with pytest.raises(TemplateError, match="missing required columns"):
+    with pytest.raises(WorkbookError, match="missing required columns"):
         _parse_transactions(ws, [], [])
 
 
@@ -371,9 +361,52 @@ def test_parse_transactions_dedup_status_currency_and_category():
     assert first["bank_category"] == "Super"
     assert first["mcc"] == "5411"
     assert errors == [{"row": 6, "error": "unparseable date or amount"}]
-    assert "Transactions: 1 duplicated rows collapsed" in warnings
+    assert (
+        "Transactions: 1 rows identical in date, amount, description and card — kept once"
+        in warnings
+    )
     assert "Transactions: 1 non-OK rows skipped" in warnings
-    assert "Transactions: 1 non-RUB rows imported with their face value" in warnings
+    assert [r["currency"] for r in rows] == ["RUB", "USD"]
+    assert "Transactions: 1 rows in USD — they need an account held in USD to land on" in (warnings)
+
+
+def test_split_operation_keeps_both_parts_with_their_own_amounts():
+    """
+    One card operation split across categories repeats the operation's full
+    amount on every part and carries each part's real share in "Сумма платежа" —
+    sometimes as a formula the user typed by hand. Reading the operation amount
+    made the parts look identical and collapsed all but the first, dropping the
+    money and the category the user assigned to it.
+    """
+    wb = Workbook()
+    wb.remove(wb.active)
+    ws = wb.create_sheet(spec.SHEET_TRANSACTIONS)
+    ws.append(TX_HEADER + ["Сумма платежа", "Валюта платежа"])
+
+    def part(pay, category):
+        row = [None] * 13
+        row[0] = datetime.datetime(2026, 5, 31, 14, 30)
+        row[1] = "*0548"
+        row[2] = "OK"
+        row[3] = -48480.0
+        row[4] = "RUB"
+        row[7] = "Brandshop"
+        row[8] = pay
+        row[11] = category
+        return row
+
+    ws.append(part("=-48480+16990", "Clothes"))
+    ws.append(part(-16990.0, "Wedding"))
+
+    warnings, errors = [], []
+    rows = _parse_transactions(ws, warnings, errors)
+    assert [(r["amount"], r["monori_category"]) for r in rows] == [
+        (-3149000, "Clothes"),
+        (-1699000, "Wedding"),
+    ]
+    assert sum(r["amount"] for r in rows) == -4848000
+    assert errors == []
+    assert not any("duplicated" in w for w in warnings)
 
 
 def test_parse_transactions_pay_amount_fallback_and_blankish_rows():
@@ -424,7 +457,8 @@ def test_parse_transactions_pay_amount_fallback_and_blankish_rows():
     assert rows[0]["monori_category"] == "Income"
     assert rows[1]["monori_category"] == "Groceries"
     assert errors == [{"row": 6, "error": "unparseable date or amount"}]
-    assert "Transactions: 1 non-RUB rows imported with their face value" in warnings
+    assert [r["currency"] for r in rows] == ["RUB", "RUB", "USD"]
+    assert "Transactions: 1 rows in USD — they need an account held in USD to land on" in (warnings)
 
 
 def test_parse_keywords_reads_side_table():
@@ -477,36 +511,37 @@ def _live_year_wb():
     return wb
 
 
-def test_live_year_keeps_its_rows_and_invents_nothing():
-    parsed = parse_template_workbook(_save(_live_year_wb()))
+def test_live_year_reconciles_rows_to_cached_totals():
+    parsed = parse_workbook(_save(_live_year_wb()))
 
     assert parsed["groups"] == [
-        {"name": "Inflow", "sort": 0, "kind": "income"},
-        {"name": "Daily", "sort": 1, "kind": "expense"},
+        {"name": "Daily", "sort": 0, "kind": "expense"},
+        {"name": "Inflow", "sort": 1, "kind": "income"},
     ]
-    assert [c["name"] for c in parsed["categories"]] == ["Income", "Groceries", "Salary"]
+    assert [c["name"] for c in parsed["categories"]] == ["Groceries", "Salary", "Income"]
 
     budgets = {(b["category"], b["year"], b["month"]): b["amount"] for b in parsed["budgets"]}
     assert budgets == {("Groceries", 2025, 1): 100000, ("Groceries", 2025, 2): 100000}
 
-    # both months carry real rows, so the cached totals never get to add one:
-    # a synthetic row here would double the month, not reconcile it
-    assert len(parsed["transactions"]) == 4
-    assert all(t["marker"] for t in parsed["transactions"])
-    assert not [t for t in parsed["transactions"] if t["date"].endswith("T12:00:00")]
+    # The grid is authoritative alongside the rows. Its January income and
+    # Groceries balance each need one explicit correction transaction.
+    synth = [t for t in parsed["transactions"] if t["date"].endswith("T12:00:00")]
+    assert len(parsed["transactions"]) == 6
+    assert {(t["description"], t["amount"]) for t in synth} == {
+        ("Salary", 100000),
+        ("Groceries", 20000),
+    }
 
-    assert (
-        "reconciliation: 3 totals in the sheet disagree with the rows of the same month"
-        " — the rows were kept as they are and nothing was invented" in parsed["warnings"]
+    assert any(
+        w == "reconciliation: 2 adjustment transactions align live months with the sheet"
+        for w in parsed["warnings"]
     )
-    assert "verify: available 2025-01 differs by 1100.00" in parsed["warnings"]
+    assert any(
+        w.startswith("verify: the sheet's own Available differs") and "100.00 (2025-01)" in w
+        for w in parsed["warnings"]
+    )
     assert "2019: unrecognized year sheet layout, ignored" in parsed["warnings"]
     assert parsed["errors"] == []
-
-
-def test_parse_workbook_dispatches_to_template_parser():
-    parsed = parse_workbook(_save(_live_year_wb()))
-    assert [c["name"] for c in parsed["categories"]] == ["Income", "Groceries", "Salary"]
 
 
 def test_archive_history_and_seam_carry():
@@ -534,14 +569,14 @@ def test_archive_history_and_seam_carry():
         rows=[("▼Daily", None), ("Groceries", {1: (None, None, 800)})],
     )
 
-    parsed = parse_template_workbook(_save(wb))
+    parsed = parse_workbook(_save(wb))
     synth = {(t["description"], t["date"]): t for t in parsed["transactions"]}
     assert synth[("Income", "2024-01-31T12:00:00")]["amount"] == 10000
     assert synth[("Groceries", "2024-01-31T12:00:00")]["amount"] == 50000
     assert synth[("Groceries", "2024-12-31T12:00:00")]["amount"] == 30000
     assert len(parsed["transactions"]) == 3
 
-    assert "history: 2 synthetic transactions rebuilt from archive sheets" in parsed["warnings"]
+    assert any(w.startswith("history: 2 transactions stand in for") for w in parsed["warnings"])
     assert "seam: 1 carry corrections at 2024-12" in parsed["warnings"]
 
 
@@ -555,7 +590,7 @@ def test_outflow_fallback_when_balance_cell_missing():
         start_token="ЯНВ 2025",
         rows=[("▼Daily", None), ("Groceries", {1: (None, None, 100), 2: (None, 200, None)})],
     )
-    parsed = parse_template_workbook(_save(wb))
+    parsed = parse_workbook(_save(wb))
     # (description, date) keys are unique here — pin cardinality so a collision
     # in a future change can't silently drop a row from the dict
     assert len(parsed["transactions"]) == 2
@@ -593,13 +628,13 @@ def test_dead_category_and_available_seed_at_seam():
         rows=[("▼Daily", None), ("Groceries", {1: (None, None, 800)})],
         seed=200,
     )
-    parsed = parse_template_workbook(_save(wb))
+    parsed = parse_workbook(_save(wb))
     synth = {(t["description"], t["date"]): t for t in parsed["transactions"]}
     assert len(synth) == len(parsed["transactions"])  # keys unique, nothing overwritten
     assert synth[("OldPhone", "2024-01-31T12:00:00")]["amount"] == 30000
     assert synth[("OldPhone", "2024-12-31T12:00:00")]["amount"] == -30000  # dead category zeroed
     assert synth[("Income", "2024-12-31T12:00:00")]["amount"] == 20000  # available seed
-    assert "history: 2 synthetic transactions rebuilt from archive sheets" in parsed["warnings"]
+    assert any(w.startswith("history: 2 transactions stand in for") for w in parsed["warnings"])
     assert "seam: 3 carry corrections at 2024-12" in parsed["warnings"]
 
 
@@ -635,32 +670,250 @@ def test_available_seed_excludes_seam_overspend():
         available={1: 100},
         header_row=8,
     )
-    parsed = parse_template_workbook(_save(wb))
+    parsed = parse_workbook(_save(wb))
     synth = {(t["description"], t["date"]): t for t in parsed["transactions"]}
     assert synth[("Groceries", "2024-12-31T12:00:00")]["amount"] == -60000
     assert synth[("Income", "2024-12-31T12:00:00")]["amount"] == 10000  # available seed
     assert not any(w.startswith("verify:") for w in parsed["warnings"])
 
 
-def test_no_live_year_sheets_raises():
+def test_russian_header_labels_are_read_like_the_english_ones():
+    """
+    The live spreadsheet labels its month headers in Russian. Every figure the
+    reconciliation leans on — income, the carried-over remainder, the running
+    Available — is found by those labels, so a sheet in Russian has to yield
+    exactly what the same sheet in English does.
+    """
+    wb = Workbook()
+    wb.remove(wb.active)
+    _tx_sheet(wb, [_tx(datetime.datetime(2025, 1, 15), -300.0, "Groceries", desc="Lenta")])
+    _write_year(
+        wb.create_sheet("2025"),
+        months=[1, 2],
+        rows=[("▼Daily", None), ("Groceries", {1: (1000, -300, 700)})],
+        income={1: 5000},
+        available={1: 5900},
+        seeds={1: 1900},
+        labels="ru",
+        header_row=8,
+    )
+    parsed = parse_workbook(_save(wb))
+    opening = next(t for t in parsed["transactions"] if t["description"] == "Opening balance")
+    assert opening["amount"] == 190000  # "Не заложено"
+    assert not any(w.startswith("verify:") for w in parsed["warnings"])  # "Доступный"
+    income = next(t for t in parsed["transactions"] if t["description"] == "Income")
+    assert income["amount"] == 500000  # "Поступления в"
+
+
+def test_available_label_is_found_wherever_the_summary_block_puts_it():
+    wb = Workbook()
+    wb.remove(wb.active)
+    _tx_sheet(wb, [_tx(datetime.datetime(2025, 1, 15), -300.0, "Groceries", desc="Lenta")])
+    _write_year(
+        wb.create_sheet("2025"),
+        months=[1, 2],
+        rows=[("▼Daily", None), ("Groceries", {1: (1000, -300, 700)})],
+        income={1: 5000},
+        available={1: 99999},
+        available_row=7,
+        header_row=8,
+    )
+    parsed = parse_workbook(_save(wb))
+    assert any(w.startswith("verify:") for w in parsed["warnings"])
+
+
+def test_summary_labels_below_the_header_block_are_not_read():
+    """
+    The summary block is the first six rows; row seven is where the grid's own
+    Budgeted/Outflows/Balance header sits on the live sheet. Reading one row
+    further would take a column heading for a figure.
+    """
+    wb = Workbook()
+    wb.remove(wb.active)
+    _tx_sheet(wb, [])
+    ws = wb.create_sheet("2025")
+    _write_year(
+        ws,
+        months=[1, 2],
+        rows=[("▼Daily", None), ("Groceries", {1: (1000, 0, 1000)})],
+        header_row=8,
+    )
+    ws.cell(row=7, column=4, value="Income for month")
+    ws.cell(row=7, column=3, value=777)
+    parsed = parse_workbook(_save(wb))
+    assert not any(t["monori_category"] == "Income" for t in parsed["transactions"])
+
+
+def test_a_sheet_running_to_december_keeps_its_last_month():
+    _, ws = _one_year_wb(
+        months=list(range(1, 13)),
+        rows=[("▼Daily", None), ("Groceries", {12: (1000, -300, 700)})],
+    )
+    parsed = _parse_year_sheet(ws, 2025, _find_layout(ws))
+    assert parsed["months"][-1] == 12
+    assert parsed["cats"]["Groceries"]["balances"][12] == 70000
+
+
+def test_history_and_adjustment_split_follows_the_rows_not_the_sheet_name():
+    """
+    A workbook can keep years of history on ordinary year sheets and never write
+    `_archive` once. What makes a correction a stand-in is that the month has no
+    rows of its own, so counting by sheet name reports hundreds of history rows
+    as live adjustments.
+    """
+    wb = Workbook()
+    wb.remove(wb.active)
+    _tx_sheet(wb, [_tx(datetime.datetime(2025, 1, 15), -300.0, "Groceries", desc="Lenta")])
+    _write_year(
+        wb.create_sheet("2024"),
+        months=[1, 2],
+        start_token="ЯНВ 2024",
+        rows=[("▼Daily", None), ("Groceries", {1: (1000, -700, 300), 2: (0, 0, 300)})],
+        header_row=8,
+    )
+    _write_year(
+        wb.create_sheet("2025"),
+        months=[1, 2],
+        start_token="ЯНВ 2025",
+        rows=[("▼Daily", None), ("Groceries", {1: (1000, -900, 400)})],
+        header_row=8,
+    )
+    parsed = parse_workbook(_save(wb))
+    # 2024 has no rows at all — its correction stands in for the whole month;
+    # 2025-01 does, so its correction only tops the month up
+    assert any(w.startswith("history: 1 transactions stand in for") for w in parsed["warnings"])
+    assert (
+        "reconciliation: 1 adjustment transactions align live months with the sheet"
+        in (parsed["warnings"])
+    )
+
+
+def test_opening_balance_is_taken_from_the_first_month_with_rows():
+    """
+    A spreadsheet is started with money already in hand, and the only place that
+    money exists is the header cell of its first real month: what was left
+    unbudgeted the month before. The earlier blocks of that year are empty
+    scaffolding, so reading the seed off the January block finds nothing.
+    """
+    wb = Workbook()
+    wb.remove(wb.active)
+    _tx_sheet(wb, [_tx(datetime.datetime(2025, 7, 15), -300.0, "Groceries", desc="Lenta")])
+    _write_year(
+        wb.create_sheet("2025"),
+        months=[6, 7],
+        start_token="ИЮН 2025",
+        rows=[("▼Daily", None), ("Groceries", {7: (1000, -300, 700)})],
+        income={7: 5000},
+        available={7: 5900},
+        seeds={6: 0, 7: 1900},
+        header_row=8,
+    )
+    parsed = parse_workbook(_save(wb))
+    synth = {(t["description"], t["date"]): t for t in parsed["transactions"]}
+    assert synth[("Opening balance", "2025-06-30T12:00:00")]["amount"] == 190000
+    assert any(w.startswith("opening balance: 1,900.00") for w in parsed["warnings"])
+    # seeded once and the sheet's own Available then agrees month for month
+    assert not any(w.startswith("verify:") for w in parsed["warnings"])
+
+
+def test_opening_balance_predating_the_sheet_is_dated_before_it():
+    """
+    When the very first month of the earliest sheet already has rows, the money
+    it started with belongs to the December before — a month no sheet covers.
+    The row still has to exist, or Available starts short by that amount.
+    """
+    wb = Workbook()
+    wb.remove(wb.active)
+    _tx_sheet(wb, [_tx(datetime.datetime(2025, 1, 15), -300.0, "Groceries", desc="Lenta")])
+    _write_year(
+        wb.create_sheet("2025"),
+        months=[1, 2],
+        rows=[("▼Daily", None), ("Groceries", {1: (1000, -300, 700)})],
+        income={1: 5000},
+        available={1: 5900},
+        seeds={1: 1900},
+        header_row=8,
+    )
+    parsed = parse_workbook(_save(wb))
+    opening = next(t for t in parsed["transactions"] if t["description"] == "Opening balance")
+    assert opening["date"] == "2024-12-31T12:00:00"
+    assert opening["amount"] == 190000
+    assert not any(w.startswith("verify:") for w in parsed["warnings"])
+
+
+def test_activity_span_reads_two_digit_months_whole():
+    """
+    A ledger that only starts in October is where a one-character month slice
+    stops being harmless: it would read 11 as 1 and seed the opening balance
+    ten months early, off the wrong header cell.
+    """
+    wb = Workbook()
+    wb.remove(wb.active)
+    _tx_sheet(wb, [_tx(datetime.datetime(2025, 11, 15), -300.0, "Groceries", desc="Lenta")])
+    _write_year(
+        wb.create_sheet("2025"),
+        months=[10, 11],
+        start_token="ОКТ 2025",
+        rows=[("▼Daily", None), ("Groceries", {11: (1000, -300, 700)})],
+        income={11: 5000},
+        seeds={10: 400, 11: 1900},
+        header_row=8,
+    )
+    parsed = parse_workbook(_save(wb))
+    opening = next(t for t in parsed["transactions"] if t["description"] == "Opening balance")
+    assert opening["date"] == "2025-10-31T12:00:00"
+    assert opening["amount"] == 190000
+
+
+def test_opening_balance_left_alone_when_the_sheet_starts_from_nothing():
+    wb = Workbook()
+    wb.remove(wb.active)
+    _tx_sheet(wb, [_tx(datetime.datetime(2025, 7, 15), -300.0, "Groceries", desc="Lenta")])
+    _write_year(
+        wb.create_sheet("2025"),
+        months=[6, 7],
+        start_token="ИЮН 2025",
+        rows=[("▼Daily", None), ("Groceries", {7: (1000, -300, 700)})],
+        income={7: 5000},
+        seeds={6: 0, 7: 0},
+        header_row=8,
+    )
+    parsed = parse_workbook(_save(wb))
+    assert not any(t["description"] == "Opening balance" for t in parsed["transactions"])
+    assert not any(w.startswith("opening balance:") for w in parsed["warnings"])
+
+
+def test_available_ignores_budget_cells_on_income_categories():
+    """
+    The budget grid only spends down expense envelopes, so a Budgeted cell on an
+    income row buys nothing and must not be subtracted from Available — which is
+    what the client computes and therefore what the verify check has to assume.
+    """
     wb = Workbook()
     wb.remove(wb.active)
     _tx_sheet(wb, [])
     _write_year(
-        wb.create_sheet("2024_archive"),
-        months=[1, 2],
-        start_token="ЯНВ 2024",
-        rows=[("▼Daily", None), ("Groceries", {1: (None, None, 500)})],
+        wb.create_sheet("2025"),
+        months=[1],
+        rows=[
+            ("▲Inflow", None),
+            ("Salary", {1: (700, None, None)}),
+            ("▼Daily", None),
+            ("Groceries", {1: (1000, -300, 700)}),
+        ],
+        income={1: 5000},
+        available={1: 4000},
+        header_row=8,
     )
-    with pytest.raises(TemplateError, match="no live year sheets found"):
-        parse_template_workbook(_save(wb))
+    parsed = parse_workbook(_save(wb))
+    assert not any(w.startswith("verify:") for w in parsed["warnings"])
 
 
 def test_missing_transactions_sheet_raises():
     wb = Workbook()
     wb.active.title = "2025"
-    with pytest.raises(TemplateError, match="missing required sheet: Transactions"):
-        parse_template_workbook(_save(wb))
+    with pytest.raises(WorkbookError, match="missing required sheet: Transactions"):
+        parse_workbook(_save(wb))
 
 
 def test_trailing_zero_cached_months_get_no_synthetic_rows():
@@ -678,16 +931,15 @@ def test_trailing_zero_cached_months_get_no_synthetic_rows():
         income={1: 5000},
         header_row=8,
     )
-    parsed = parse_template_workbook(_save(wb))
+    parsed = parse_workbook(_save(wb))
     assert all(t["date"] < "2025-02" for t in parsed["transactions"])
 
 
-def test_month_with_rows_is_never_doubled_by_a_cached_total():
+def test_month_with_blank_category_gets_an_explicit_grid_correction():
     """
-    The row is there but its category column was read as blank, so the
-    reconciliation sees an empty month and the cached total looks unmet. It must
-    still not invent the missing amount — that is how a real -450 on the 26th
-    grew a twin on the 31st and doubled the month in the analytics.
+    The historical row stays uncategorized, while the grid's category total is
+    represented by a separate correction. That preserves the source row exactly
+    and lets the imported budget balance equal the spreadsheet.
     """
     wb = Workbook()
     wb.remove(wb.active)
@@ -699,9 +951,10 @@ def test_month_with_rows_is_never_doubled_by_a_cached_total():
         income={1: 0},
         header_row=8,
     )
-    parsed = parse_template_workbook(_save(wb))
-    assert [(t["date"], t["amount"]) for t in parsed["transactions"]] == [
-        ("2025-01-26T00:00:00", -45000)
+    parsed = parse_workbook(_save(wb))
+    assert [(t["date"], t["amount"], t["monori_category"]) for t in parsed["transactions"]] == [
+        ("2025-01-26T00:00:00", -45000, ""),
+        ("2025-01-31T12:00:00", -45000, "LifeLink"),
     ]
 
 
@@ -727,7 +980,7 @@ def test_uncategorized_trailing_tx_does_not_extend_reconciliation():
         income={1: 5000},
         header_row=8,
     )
-    parsed = parse_template_workbook(_save(wb))
+    parsed = parse_workbook(_save(wb))
     synth = [t for t in parsed["transactions"] if not t["marker"]]
     assert all(t["date"] < "2025-02" for t in synth)
 
@@ -741,13 +994,13 @@ def test_prepared_next_year_sheet_adds_no_future_rows():
         rows=[("▼Daily", None), ("Groceries", {1: (0, 0, 0), 2: (0, 0, 0)})],
         header_row=8,
     )
-    parsed = parse_template_workbook(_save(wb))
+    parsed = parse_workbook(_save(wb))
     assert max(t["date"] for t in parsed["transactions"]) < "2025-03"
 
 
 def test_parse_template_rejects_garbage_bytes():
-    with pytest.raises(TemplateError, match="not a readable .xlsx workbook"):
-        parse_template_workbook(b"nope")
+    with pytest.raises(WorkbookError, match="not a readable .xlsx workbook"):
+        parse_workbook(b"nope")
 
 
 def test_live_layout_locates_category_and_keywords_by_content():
@@ -755,20 +1008,27 @@ def test_live_layout_locates_category_and_keywords_by_content():
     The live template's keyword table starts at row 1 (its cells pollute the
     header index) and the category column follows the bank headers with no
     gap column — both must be found by content, not fixed offsets.
+
+    There are two candidate columns: the keyword rules guess into the first,
+    the second carries that guess through or replaces it with a hand-written
+    category, and only the second is what the sheet's totals are built from.
+    The hand label must win and the guess must never override it.
     """
     wb = Workbook()
     wb.remove(wb.active)
     ws = wb.create_sheet(spec.SHEET_TRANSACTIONS)
     ws.append([None, *TX_HEADER, None, None, "Income", "salary|bonus"])
     row = [None, datetime.datetime(2025, 1, 1), "*1111", "OK", -100.0, "RUB", "Super", "5411"]
-    ws.append([*row, "Lenta"][:9] + ["Groceries", "stale", "МТС", "мтс|телефон"])
+    ws.append([*row, "Lenta"][:9] + ["Groceries", "Groceries", "МТС", "мтс|телефон"])
     row2 = [None, datetime.datetime(2025, 1, 2), "*1111", "OK", -50.0, "RUB", "Super", "5411"]
-    ws.append([*row2, "Okey"][:9] + ["", "stale", "Cafes", "кафе|бар"])
+    ws.append([*row2, "Okey"][:9] + ["Cafes", "Lunch", "Cafes", "кафе|бар"])
+    row3 = [None, datetime.datetime(2025, 1, 3), "*1111", "OK", -20.0, "RUB", "Super", "5411"]
+    ws.append([*row3, "Metro"][:9] + ["", "Transport"])
     idx = _tx_header_index(ws)
     warnings, errors = [], []
     rows = _parse_transactions(ws, warnings, errors)
     assert errors == []
-    assert [r["monori_category"] for r in rows] == ["Groceries", ""]
+    assert [r["monori_category"] for r in rows] == ["Groceries", "Lunch", "Transport"]
     kws = _parse_keywords(ws, idx)
     assert kws == {"Income": "salary|bonus", "МТС": "мтс|телефон", "Cafes": "кафе|бар"}
 
@@ -792,7 +1052,7 @@ def test_future_budgets_do_not_extend_reconciliation():
         income={1: 5000},
         header_row=8,
     )
-    parsed = parse_template_workbook(_save(wb))
+    parsed = parse_workbook(_save(wb))
     assert all(t["date"] < "2025-02" for t in parsed["transactions"])
     assert {(b["year"], b["month"]) for b in parsed["budgets"]} == {(2025, 1), (2025, 2)}
 
@@ -807,3 +1067,45 @@ def test_parse_keywords_falls_back_without_pipes():
     )
     idx = {name: i for i, name in enumerate(TX_HEADER)}
     assert _parse_keywords(ws, idx) == {"Cafes": "starbucks"}
+
+
+def test_label_col_picks_the_fullest_column_below_the_header():
+    """
+    The live grid never names its category column, so it is found by weight:
+    of the columns left of the first month block, the one carrying the most
+    labels — counted strictly below the header row, since the header itself and
+    whatever title sits above it are not categories.
+    """
+    wb = Workbook()
+    ws = wb.active
+    ws.cell(row=4, column=1, value="Бюджет на год")
+    ws.cell(row=5, column=1, value="Категория")
+    for r in range(6, 10):
+        ws.cell(row=r, column=1, value=f"left {r}")
+    for r in range(6, 11):
+        ws.cell(row=r, column=2, value=f"middle {r}")
+    assert _label_col(ws, 5, 4) == 2
+
+
+def test_label_col_keeps_the_leftmost_of_a_tie_and_falls_back_to_the_first():
+    wb = Workbook()
+    ws = wb.active
+    assert _label_col(ws, 5, 4) == 1  # nothing anywhere
+    for c in (1, 2):
+        for r in range(6, 9):
+            ws.cell(row=r, column=c, value=f"c{c} r{r}")
+    assert _label_col(ws, 5, 4) == 1
+
+
+def test_label_col_only_counts_the_rows_just_under_the_header():
+    """
+    A sheet carries hundreds of rows below its grid — notes, a second table,
+    leftovers. Only the band the categories live in decides the column.
+    """
+    wb = Workbook()
+    ws = wb.active
+    for r in range(6, 9):
+        ws.cell(row=r, column=1, value=f"category {r}")
+    for r in range(80, 140):
+        ws.cell(row=r, column=2, value=f"note {r}")
+    assert _label_col(ws, 5, 4) == 1

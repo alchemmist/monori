@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
     txKey,
+    monthKey,
     buildTxIndex,
     buildBudgetIndex,
+    buildOpeningIndex,
     computeYear,
     computeRange,
+    firstBudgetYear,
     groupTotals,
 } from "./budget.js";
 
@@ -40,6 +43,80 @@ describe("buildBudgetIndex", () => {
         expect(index.get(txKey(2024, 1, 20))).toBe(1000);
         expect(index.get(txKey(2024, 2, 20))).toBe(500);
         expect(index.size).toBe(2);
+    });
+});
+
+describe("buildOpeningIndex", () => {
+    it("sums opening balances into the month an account opened", () => {
+        const index = buildOpeningIndex(
+            [
+                { id: 1, openingBalance: 5000, openingDate: "2024-03-01" },
+                { id: 2, openingBalance: 700, openingDate: "2024-03-20" },
+                { id: 3, openingBalance: 100, openingDate: "2024-04-01" },
+            ],
+            2020,
+        );
+        expect(index.get(monthKey(2024, 3))).toBe(5700);
+        expect(index.get(monthKey(2024, 4))).toBe(100);
+        expect(index.size).toBe(2);
+    });
+
+    it("drops accounts opened before the range into the first month", () => {
+        const index = buildOpeningIndex(
+            [
+                { id: 1, openingBalance: 5000, openingDate: "2018-06-01" },
+                { id: 2, openingBalance: 300, openingDate: null },
+            ],
+            2020,
+        );
+        expect(index.get(monthKey(2020, 1))).toBe(5300);
+        expect(index.size).toBe(1);
+    });
+
+    it("falls back to the month of the account's earliest transaction", () => {
+        const index = buildOpeningIndex([{ id: 1, openingBalance: 5000 }], 2020, [
+            { accountId: 1, date: "2024-05-20" },
+            { accountId: 1, date: "2024-03-11" },
+            { accountId: 2, date: "2021-01-04" },
+        ]);
+        expect(index.get(monthKey(2024, 3))).toBe(5000);
+        expect(index.size).toBe(1);
+    });
+
+    it("prefers an explicit opening date over the earliest transaction", () => {
+        const index = buildOpeningIndex(
+            [{ id: 1, openingBalance: 5000, openingDate: "2022-07-01" }],
+            2020,
+            [{ accountId: 1, date: "2024-03-11" }],
+        );
+        expect(index.get(monthKey(2022, 7))).toBe(5000);
+    });
+
+    it("falls back to the first month on an unparseable or out-of-range date", () => {
+        const index = buildOpeningIndex(
+            [
+                { id: 1, openingBalance: 100, openingDate: "not a date" },
+                { id: 2, openingBalance: 200, openingDate: "2024-13-01" },
+                { id: 3, openingBalance: 400, openingDate: "2024-00-01" },
+            ],
+            2020,
+        );
+        expect(index.get(monthKey(2020, 1))).toBe(700);
+        expect(index.size).toBe(1);
+    });
+
+    it("accepts a date whose month is not zero-padded", () => {
+        const index = buildOpeningIndex(
+            [{ id: 1, openingBalance: 900, openingDate: "2024-2-01" }],
+            2020,
+        );
+        expect(index.get(monthKey(2024, 2))).toBe(900);
+    });
+
+    it("ignores zero balances and a missing accounts list", () => {
+        expect(buildOpeningIndex([{ id: 1, openingBalance: 0 }], 2020).size).toBe(0);
+        expect(buildOpeningIndex(undefined, 2020).size).toBe(0);
+        expect(buildOpeningIndex([], 2020).size).toBe(0);
     });
 });
 
@@ -149,6 +226,64 @@ describe("computeRange carry-over between years", () => {
     });
 });
 
+describe("opening balances in computeRange", () => {
+    const snapshot = (accounts) => ({
+        groups,
+        categories,
+        accounts,
+        transactions: [{ date: "2024-02-10", amount: 5000, categoryId: 10 }],
+        budgets: [{ year: 2024, month: 2, categoryId: 20, amount: 1000 }],
+    });
+
+    it("counts an opening balance as income of its opening month", () => {
+        const res = computeRange(
+            snapshot([{ id: 1, openingBalance: 3000, openingDate: "2024-02-01" }]),
+            2024,
+            2024,
+        ).get(2024);
+        expect(res.income[1]).toBe(8000); // 5000 salary + 3000 opening
+        expect(res.available[1]).toBe(7000); // 8000 - 1000 budgeted
+    });
+
+    it("carries a dateless opening balance from the first month of the range", () => {
+        const res = computeRange(
+            snapshot([{ id: 1, openingBalance: 3000, openingDate: null }]),
+            2024,
+            2024,
+        ).get(2024);
+        expect(res.income[0]).toBe(3000);
+        expect(res.available[0]).toBe(3000);
+        expect(res.available[1]).toBe(7000); // 3000 carried + 5000 - 1000
+    });
+
+    it("uses the account's first transaction when it has no opening date", () => {
+        const res = computeRange(
+            {
+                groups,
+                categories,
+                accounts: [{ id: 7, openingBalance: 3000, openingDate: null }],
+                transactions: [{ date: "2024-02-10", amount: 5000, categoryId: 10, accountId: 7 }],
+                budgets: [{ year: 2024, month: 2, categoryId: 20, amount: 1000 }],
+            },
+            2024,
+            2024,
+        ).get(2024);
+        expect(res.income[0]).toBe(0);
+        expect(res.income[1]).toBe(8000);
+        expect(res.available[1]).toBe(7000);
+    });
+
+    it("leaves available untouched when every account opens at zero", () => {
+        const res = computeRange(
+            snapshot([{ id: 1, openingBalance: 0, openingDate: "2024-02-01" }]),
+            2024,
+            2024,
+        ).get(2024);
+        expect(res.income[1]).toBe(5000);
+        expect(res.available[1]).toBe(4000);
+    });
+});
+
 describe("groupTotals", () => {
     const g = [
         { id: 1, name: "Income", kind: "income" },
@@ -194,5 +329,29 @@ describe("groupTotals", () => {
         const months = groupTotals(res, ghost, 2);
         // the ghost category has no byCategory entry and must not throw or change totals
         expect(months[0].budgeted).toBe(1100);
+    });
+});
+
+describe("firstBudgetYear", () => {
+    it("falls back to the floor with no snapshot or an empty one", () => {
+        expect(firstBudgetYear(null, 2020)).toBe(2020);
+        expect(firstBudgetYear({ transactions: [], budgets: [] }, 2020)).toBe(2020);
+    });
+
+    it("reaches back to the earliest transaction or budget a migration brought in", () => {
+        const snapshot = {
+            transactions: [{ date: "2018-07-04T00:00:00", amount: -100, categoryId: 1 }],
+            budgets: [{ year: 2019, month: 1, categoryId: 1, amount: 500 }],
+        };
+        expect(firstBudgetYear(snapshot, 2020)).toBe(2018);
+        expect(firstBudgetYear({ ...snapshot, transactions: [] }, 2020)).toBe(2019);
+    });
+
+    it("never starts later than the floor, so an empty later year is still shown", () => {
+        const snapshot = {
+            transactions: [{ date: "2026-01-01T00:00:00", amount: -100, categoryId: 1 }],
+            budgets: [{ year: 2026, month: 1, categoryId: 1, amount: 500 }],
+        };
+        expect(firstBudgetYear(snapshot, 2020)).toBe(2020);
     });
 });

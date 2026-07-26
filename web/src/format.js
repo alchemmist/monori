@@ -41,6 +41,22 @@ export function moneyCompact(kop) {
     return `${Math.round(r)}`;
 }
 
+/** typed text -> "12 345,5", grouped as you type: keeps a trailing separator
+ * and an empty fraction so the field never fights the person filling it in */
+export function groupAmount(input) {
+    const s = String(input ?? "").replace(/[^\d.,-]/g, "");
+    const sign = s.startsWith("-") ? "-" : "";
+    const [, int, sep, frac] = (sign ? s.slice(1) : s).match(/^(\d*)([.,]?)(\d*)/);
+    const grouped = int.replace(/\B(?=(\d{3})+(?!\d))/g, "\u00a0");
+    return `${sign}${grouped}${sep}${frac.slice(0, 2)}`;
+}
+
+/** kopecks -> the same text a person would type into an amount field */
+export function amountInput(kop) {
+    if (kop == null || kop === 0) return "";
+    return groupAmount(String(kop / 100).replace(".", ","));
+}
+
 /** "12 345,50" or "12345.5" -> kopecks (integer), null if invalid */
 export function parseRub(input) {
     const s = String(input).trim().replace(/\s| /g, "").replace(",", ".");

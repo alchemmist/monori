@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { Button, Radio } from "@mantine/core";
+import { Button, Checkbox, Radio } from "@mantine/core";
 import { useStore } from "../store.js";
 import { api } from "../api.js";
 import { FSelect } from "../ui/fields.jsx";
@@ -11,6 +11,7 @@ import Txt from "../ui/Txt.jsx";
  * the chosen file and preview survive the whole time. */
 export default function MigratePanel({ onClose }) {
     const accounts = useStore((s) => s.snapshot?.accounts ?? []);
+    const user = useStore((s) => s.user);
     const load = useStore((s) => s.load);
     const notify = useStore((s) => s.notify);
     const fileRef = useRef(null);
@@ -18,12 +19,15 @@ export default function MigratePanel({ onClose }) {
     const [preview, setPreview] = useState(null);
     const [mapping, setMapping] = useState({});
     const [budgetPolicy, setBudgetPolicy] = useState("overwrite");
+    const [remember, setRemember] = useState(true);
     const [busy, setBusy] = useState(false);
     const [result, setResult] = useState(null);
 
-    const accountOptions = accounts
-        .filter((a) => !a.archived)
-        .map((a) => ({ value: String(a.id), label: a.name }));
+    const live = accounts.filter((a) => !a.archived);
+    const optionsIn = (currency) =>
+        live
+            .filter((a) => (a.currency || "RUB").toUpperCase() === currency)
+            .map((a) => ({ value: String(a.id), label: a.name }));
 
     const pick = async (picked) => {
         if (!picked) return;
@@ -34,7 +38,22 @@ export default function MigratePanel({ onClose }) {
             const p = await api.workbookPreview(picked);
             setFile(picked);
             setPreview(p);
-            setMapping({});
+            // the unmarked-rows slot is the one no card number can decide, which
+            // is exactly what the settings-level default account exists for
+            const preset = user?.defaultAccountId;
+            const target = live.find((a) => a.id === preset);
+            setMapping(
+                Object.fromEntries(
+                    (p.accountSlots ?? [])
+                        .filter(
+                            (s) =>
+                                !s.marker &&
+                                target &&
+                                (target.currency || "RUB").toUpperCase() === s.currency,
+                        )
+                        .map((s) => [s.key, String(preset)]),
+                ),
+            );
         } catch (e) {
             notify({ title: "Could not read workbook", theme: "danger", content: String(e) });
         } finally {
@@ -42,14 +61,14 @@ export default function MigratePanel({ onClose }) {
         }
     };
 
-    const markers = preview?.accountMarkers ?? [];
-    const allMapped = markers.every((m) => mapping[m]);
+    const slots = preview?.accountSlots ?? [];
+    const allMapped = slots.every((s) => mapping[s.key]);
 
     const commit = async () => {
         setBusy(true);
         try {
-            const numeric = Object.fromEntries(markers.map((m) => [m, Number(mapping[m])]));
-            const r = await api.workbookCommit(file, numeric, budgetPolicy);
+            const numeric = Object.fromEntries(slots.map((s) => [s.key, Number(mapping[s.key])]));
+            const r = await api.workbookCommit(file, numeric, budgetPolicy, remember);
             setResult(r);
             await load();
         } catch (e) {
@@ -111,22 +130,52 @@ export default function MigratePanel({ onClose }) {
                             {w}
                         </Txt>
                     ))}
-                    {markers.length > 0 && (
+                    {slots.length > 0 && (
                         <Txt tone="secondary" caption>
                             Missing an account? Collapse this tab with the arrow above, create it,
                             then come back — the file stays loaded.
                         </Txt>
                     )}
-                    {markers.map((m) => (
-                        <FSelect
-                            key={m || "(default)"}
-                            label={`Account for ${m || "unmarked rows"}`}
-                            placeholder="Pick an account"
-                            value={mapping[m] ?? null}
-                            onChange={(v) => setMapping((prev) => ({ ...prev, [m]: v }))}
-                            data={accountOptions}
+                    {slots.map((s) => {
+                        const data = optionsIn(s.currency);
+                        const who = s.marker || "unmarked rows";
+                        return (
+                            <div key={s.key}>
+                                <FSelect
+                                    label={
+                                        s.currency === "RUB"
+                                            ? `Account for ${who}`
+                                            : `Account for ${who} · ${s.currency} (${s.transactions} rows)`
+                                    }
+                                    placeholder={
+                                        data.length
+                                            ? "Pick an account"
+                                            : `No ${s.currency} account yet — create one`
+                                    }
+                                    value={mapping[s.key] ?? null}
+                                    onChange={(v) =>
+                                        setMapping((prev) => ({ ...prev, [s.key]: v }))
+                                    }
+                                    data={data}
+                                />
+                                {data.length === 0 && (
+                                    <Txt tone="danger" caption>
+                                        These rows are in {s.currency}. Create an account held in{" "}
+                                        {s.currency} to import them — on an account in another
+                                        currency the amounts would be recorded at face value.
+                                    </Txt>
+                                )}
+                            </div>
+                        );
+                    })}
+                    {slots.some((s) => /\d/.test(s.marker)) && (
+                        <Checkbox
+                            label="Remember which card belongs to which account"
+                            description="The card numbers above are saved on their accounts, so future imports and bank syncs route them automatically"
+                            checked={remember}
+                            onChange={(e) => setRemember(e.currentTarget.checked)}
                         />
-                    ))}
+                    )}
                     {preview.budgetConflicts > 0 && (
                         <Radio.Group
                             label={`${preview.budgetConflicts} budget cells already exist`}
@@ -146,6 +195,8 @@ export default function MigratePanel({ onClose }) {
                     Imported {result.inserted} transactions ({result.skipped} duplicates skipped),{" "}
                     {result.groupsCreated} groups and {result.categoriesCreated} categories created,{" "}
                     {result.budgetsWritten} budget cells written.
+                    {result.cardTailsBound > 0 &&
+                        ` ${result.cardTailsBound} card numbers remembered on their accounts.`}
                 </Txt>
             )}
         </Tab>

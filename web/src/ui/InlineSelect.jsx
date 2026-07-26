@@ -30,6 +30,7 @@ export default function InlineSelect({
     placeholder = "—",
     small = false,
     borderless = false,
+    fullWidth = false,
     className = "",
     style,
 }) {
@@ -104,6 +105,7 @@ export default function InlineSelect({
                         "gsel",
                         small && "gsel_s",
                         borderless && "gsel_borderless",
+                        fullWidth && "gsel_full",
                         field && "gsel_field",
                         className,
                     ]

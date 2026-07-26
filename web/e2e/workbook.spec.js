@@ -187,7 +187,7 @@ test("a template workbook migrates in, exports back out with nothing lost", asyn
     const markerMap = { "*1111": "Cash", "*2222": "Salary card" };
     const result = await migrate(page, FIXTURE, (marker) => markerMap[marker]);
     expect(result).toContain("Imported 5 transactions (0 duplicates skipped)");
-    expect(result).toContain("2 groups and 4 categories created");
+    expect(result).toContain("2 groups and 3 categories created");
     expect(result).toContain("3 budget cells written");
 
     // the imported data is really on the pages, not only in the counters

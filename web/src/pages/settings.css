@@ -39,6 +39,13 @@
     flex-shrink: 0;
 }
 
+/* a select sitting where the buttons do: fixed width, never squeezing the
+   label column the way a full-width control would */
+.settings__control {
+    width: 280px;
+    flex-shrink: 0;
+}
+
 .settings__label {
     font-weight: 600;
     font-size: 14px;
@@ -114,6 +121,10 @@
     }
 
     .settings__row button {
+        width: 100%;
+    }
+
+    .settings__control {
         width: 100%;
     }
 }

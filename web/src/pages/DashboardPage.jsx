@@ -5,7 +5,7 @@ import TimeNavigator from "../components/TimeNavigator.jsx";
 import { Button } from "@mantine/core";
 import InlineSelect from "../ui/InlineSelect.jsx";
 import { useStore } from "../store.js";
-import { accountBalances } from "../engine/analytics.js";
+import { accountBalances, categoryTotals, categoryYearMatrix } from "../engine/analytics.js";
 import AccountBadge from "../components/AccountBadge.jsx";
 import { rub, money, MONTHS_SHORT } from "../format.js";
 import { PALETTE, SERIES, cartesian } from "./chartTheme.js";
@@ -33,6 +33,25 @@ function fmtMonthTick(key) {
     return `${MONTHS_SHORT[+key.slice(5, 7) - 1]} '${key.slice(2, 4)}`;
 }
 
+function donutDataFromRows(rows, groups) {
+    const groupName = new Map(groups.map((g) => [g.id, g.name]));
+    const nameCount = new Map();
+    for (const row of rows) nameCount.set(row.name, (nameCount.get(row.name) ?? 0) + 1);
+    const named = rows.map((row) => ({
+        ...row,
+        label:
+            nameCount.get(row.name) > 1 ? `${row.name} · ${groupName.get(row.groupId)}` : row.name,
+    }));
+    const top = named.slice(0, 11);
+    const rest = named.slice(11).reduce((sum, row) => sum + row.total, 0);
+    if (rest > 0) top.push({ id: null, label: "Other", total: rest });
+    return top.map((row, i) => ({
+        name: row.label,
+        value: Math.round(row.total / 100),
+        color: PALETTE[i % PALETTE.length],
+    }));
+}
+
 /** Analytics count "To be Budgeted" as real inflow (it holds actual money
  * injections). Internal transfers are uncategorized and thus excluded. */
 export default function DashboardPage({ firstYear, lastYear }) {
@@ -40,12 +59,14 @@ export default function DashboardPage({ firstYear, lastYear }) {
     const now = useMemo(() => new Date(), []);
     const [donutYear, setDonutYear] = useState(String(now.getFullYear()));
     const [donutActive, setDonutActive] = useState(null); // legend-hovered category name
+    const [incomeDonutActive, setIncomeDonutActive] = useState(null);
+    const [allExpenseActive, setAllExpenseActive] = useState(null);
+    const [allIncomeActive, setAllIncomeActive] = useState(null);
     const [drillCat, setDrillCat] = useState(() =>
         String(snapshot.categories.find((c) => c.name === "Groceries")?.id ?? ""),
     );
     const [drillYear, setDrillYear] = useState(String(now.getFullYear()));
     const [stackYear, setStackYear] = useState(String(now.getFullYear()));
-    const [catStackYear, setCatStackYear] = useState(String(now.getFullYear()));
     const [acctFilter, setAcctFilter] = useState("all");
 
     const accounts = snapshot.accounts ?? [];
@@ -158,40 +179,52 @@ export default function DashboardPage({ firstYear, lastYear }) {
         });
     }, [closed, trendLo, trendHi]);
 
+    // The engine's category matrix nets refunds and excludes transfer legs the
+    // same way the budget table does, so every chart built on it agrees with
+    // the budget page to the kopeck — a hand-rolled reducer here once counted
+    // gross outflows and quietly disagreed with the table it sits next to
+    const yearRows = (y) =>
+        categoryYearMatrix({ ...snapshot, transactions: txns }, y, { limit: Infinity });
+    const incomeYearRows = (y) =>
+        categoryYearMatrix({ ...snapshot, transactions: txns }, y, {
+            limit: Infinity,
+            kind: "income",
+        });
+
     // Chart 2: donut by category for a year
     const donutData = useMemo(() => {
-        const sums = new Map();
-        for (const t of txns) {
-            if (!t.date.startsWith(donutYear) || t.categoryId == null) continue;
-            const cat = catById.get(t.categoryId);
-            if (!cat || incomeGroupIds.has(cat.groupId) || excludedIds.has(t.categoryId)) continue;
-            if (t.amount >= 0) continue;
-            sums.set(cat.name, (sums.get(cat.name) ?? 0) - t.amount);
-        }
-        const sorted = [...sums.entries()].sort((a, b) => b[1] - a[1]);
-        const top = sorted.slice(0, 11);
-        const rest = sorted.slice(11).reduce((s, [, v]) => s + v, 0);
-        if (rest > 0) top.push(["Other", rest]);
-        return top.map(([name, v], i) => ({
-            name,
-            value: Math.round(v / 100),
-            color: PALETTE[i % PALETTE.length],
-        }));
-    }, [txns, donutYear, catById, incomeGroupIds, excludedIds]);
+        return donutDataFromRows(yearRows(donutYear), snapshot.groups);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [txns, donutYear, snapshot]);
+
+    const incomeDonutData = useMemo(() => {
+        return donutDataFromRows(incomeYearRows(donutYear), snapshot.groups);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [txns, donutYear, snapshot]);
+
+    const allExpenseDonutData = useMemo(() => {
+        return donutDataFromRows(
+            categoryTotals({ ...snapshot, transactions: txns }),
+            snapshot.groups,
+        );
+    }, [txns, snapshot]);
+
+    const allIncomeDonutData = useMemo(() => {
+        return donutDataFromRows(
+            categoryTotals({ ...snapshot, transactions: txns }, { kind: "income" }),
+            snapshot.groups,
+        );
+    }, [txns, snapshot]);
 
     // Chart 3: selected category by month for a year
     const drillName = drillCat ? catById.get(+drillCat)?.name : "";
     const drillData = useMemo(() => {
         const catId = drillCat ? +drillCat : null;
-        const sums = Array(12).fill(0);
-        if (catId != null) {
-            for (const t of txns) {
-                if (t.categoryId !== catId || !t.date.startsWith(drillYear)) continue;
-                sums[+t.date.slice(5, 7) - 1] += Math.abs(t.amount);
-            }
-        }
+        const row = catId != null ? yearRows(drillYear).find((r) => r.id === catId) : null;
+        const sums = row?.monthly ?? Array(12).fill(0);
         return sums.map((v, i) => ({ month: MONTHS_SHORT[i], Spent: Math.round(v / 100) }));
-    }, [txns, drillCat, drillYear]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [txns, drillCat, drillYear, snapshot]);
 
     // Chart 4: cumulative net over all history
     const cumulativeData = useMemo(() => {
@@ -206,11 +239,10 @@ export default function DashboardPage({ firstYear, lastYear }) {
     const groupStack = useMemo(() => {
         const expenseGroups = snapshot.groups.filter((g) => g.kind === "expense");
         const perGroup = new Map(expenseGroups.map((g) => [g.id, Array(12).fill(0)]));
-        for (const t of txns) {
-            if (!t.date.startsWith(stackYear) || t.categoryId == null || t.amount >= 0) continue;
-            const cat = catById.get(t.categoryId);
-            if (!cat || !perGroup.has(cat.groupId) || excludedIds.has(t.categoryId)) continue;
-            perGroup.get(cat.groupId)[+t.date.slice(5, 7) - 1] -= t.amount;
+        for (const r of yearRows(stackYear)) {
+            const months = perGroup.get(r.groupId);
+            if (!months) continue;
+            for (let m = 0; m < 12; m++) months[m] += r.monthly[m];
         }
         const data = MONTHS_SHORT.map((mo, m) => {
             const row = { month: mo };
@@ -224,40 +256,8 @@ export default function DashboardPage({ firstYear, lastYear }) {
             color: PALETTE[i % PALETTE.length],
         }));
         return { data, series };
-    }, [txns, snapshot.groups, stackYear, catById, excludedIds]);
-
-    // Spending by category, stacked by month — same top-N categories (and thus
-    // colors) as the donut, so the two views line up.
-    const catStack = useMemo(() => {
-        const perCat = new Map(); // name -> Array(12) monthly outflow totals
-        for (const t of txns) {
-            if (!t.date.startsWith(catStackYear) || t.categoryId == null || t.amount >= 0) continue;
-            const cat = catById.get(t.categoryId);
-            if (!cat || incomeGroupIds.has(cat.groupId) || excludedIds.has(t.categoryId)) continue;
-            let arr = perCat.get(cat.name);
-            if (!arr) perCat.set(cat.name, (arr = Array(12).fill(0)));
-            arr[+t.date.slice(5, 7) - 1] -= t.amount;
-        }
-        const rows = [...perCat.entries()]
-            .map(([name, arr]) => ({ name, arr, total: arr.reduce((s, v) => s + v, 0) }))
-            .sort((a, b) => b.total - a.total);
-        const top = rows.slice(0, 11);
-        const rest = rows.slice(11);
-        const names = top.map((r) => r.name);
-        const other = Array(12).fill(0);
-        if (rest.length) {
-            for (const r of rest) r.arr.forEach((v, m) => (other[m] += v));
-            names.push("Other");
-        }
-        const data = MONTHS_SHORT.map((mo, m) => {
-            const row = { month: mo };
-            top.forEach((r) => (row[r.name] = Math.round(r.arr[m] / 100)));
-            if (rest.length) row.Other = Math.round(other[m] / 100);
-            return row;
-        });
-        const series = names.map((name, i) => ({ name, color: PALETTE[i % PALETTE.length] }));
-        return { data, series };
-    }, [txns, catStackYear, catById, incomeGroupIds, excludedIds]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [txns, snapshot.groups, stackYear, snapshot]);
 
     const years = [];
     for (let y = firstYear; y <= Math.min(lastYear, now.getFullYear()); y++) years.push(String(y));
@@ -418,39 +418,56 @@ export default function DashboardPage({ firstYear, lastYear }) {
                         />
                     </div>
                     <div className="chart-card__body chart-donut">
-                        <ChartBoundary>
-                            <DonutChart
-                                data={donutData}
-                                size={196}
-                                thickness={36}
-                                paddingAngle={0}
-                                strokeWidth={0}
-                                tooltipDataSource="segment"
-                                valueFormatter={(v) => `${v.toLocaleString("ru-RU")} ₽`}
-                                cellProps={(cell) => ({
-                                    opacity: donutActive && cell.name !== donutActive ? 0.3 : 1,
-                                    style: { transition: "opacity 120ms" },
-                                })}
-                            />
-                        </ChartBoundary>
-                        <ul className="donut-legend">
-                            {donutData.map((d) => (
-                                <li
-                                    key={d.name}
-                                    data-dim={
-                                        donutActive && d.name !== donutActive ? "" : undefined
-                                    }
-                                    onMouseEnter={() => setDonutActive(d.name)}
-                                    onMouseLeave={() => setDonutActive(null)}
-                                >
-                                    <span
-                                        className="donut-legend__dot"
-                                        style={{ background: d.color }}
-                                    />
-                                    {d.name}
-                                </li>
-                            ))}
-                        </ul>
+                        <CategoryDonut
+                            data={donutData}
+                            active={donutActive}
+                            setActive={setDonutActive}
+                        />
+                    </div>
+                </div>
+
+                <div className="card chart-card">
+                    <div className="chart-card__head">
+                        <div className="chart-card__title">Income by category</div>
+                        <InlineSelect
+                            small
+                            value={donutYear}
+                            onChange={setDonutYear}
+                            data={years}
+                        />
+                    </div>
+                    <div className="chart-card__body chart-donut">
+                        <CategoryDonut
+                            data={incomeDonutData}
+                            active={incomeDonutActive}
+                            setActive={setIncomeDonutActive}
+                        />
+                    </div>
+                </div>
+
+                <div className="card chart-card">
+                    <div className="chart-card__head">
+                        <div className="chart-card__title">Spending by category · all time</div>
+                    </div>
+                    <div className="chart-card__body chart-donut">
+                        <CategoryDonut
+                            data={allExpenseDonutData}
+                            active={allExpenseActive}
+                            setActive={setAllExpenseActive}
+                        />
+                    </div>
+                </div>
+
+                <div className="card chart-card">
+                    <div className="chart-card__head">
+                        <div className="chart-card__title">Income by category · all time</div>
+                    </div>
+                    <div className="chart-card__body chart-donut">
+                        <CategoryDonut
+                            data={allIncomeDonutData}
+                            active={allIncomeActive}
+                            setActive={setAllIncomeActive}
+                        />
                     </div>
                 </div>
 
@@ -502,31 +519,6 @@ export default function DashboardPage({ firstYear, lastYear }) {
                     </div>
                 </div>
 
-                <div className="card chart-card chart-card_wide">
-                    <div className="chart-card__head">
-                        <div className="chart-card__title">Spending by category · by month</div>
-                        <InlineSelect
-                            small
-                            value={catStackYear}
-                            onChange={setCatStackYear}
-                            data={years}
-                        />
-                    </div>
-                    <div className="chart-card__body">
-                        <ChartBoundary>
-                            <BarChart
-                                h="100%"
-                                type="stacked"
-                                data={catStack.data}
-                                dataKey="month"
-                                series={catStack.series}
-                                withLegend
-                                {...cartesian}
-                            />
-                        </ChartBoundary>
-                    </div>
-                </div>
-
                 <div className="card chart-card">
                     <div className="chart-card__head">
                         <div className="chart-card__title">Cumulative net · all time</div>
@@ -574,6 +566,42 @@ export default function DashboardPage({ firstYear, lastYear }) {
                 </div>
             </div>
         </div>
+    );
+}
+
+function CategoryDonut({ data, active, setActive }) {
+    if (!data.length) return <div className="chart-card__empty">No categorized entries yet</div>;
+    return (
+        <>
+            <ChartBoundary>
+                <DonutChart
+                    data={data}
+                    size={196}
+                    thickness={36}
+                    paddingAngle={0}
+                    strokeWidth={0}
+                    tooltipDataSource="segment"
+                    valueFormatter={(v) => `${v.toLocaleString("ru-RU")} ₽`}
+                    cellProps={(cell) => ({
+                        opacity: active && cell.name !== active ? 0.3 : 1,
+                        style: { transition: "opacity 120ms" },
+                    })}
+                />
+            </ChartBoundary>
+            <ul className="donut-legend">
+                {data.map((d) => (
+                    <li
+                        key={d.name}
+                        data-dim={active && d.name !== active ? "" : undefined}
+                        onMouseEnter={() => setActive(d.name)}
+                        onMouseLeave={() => setActive(null)}
+                    >
+                        <span className="donut-legend__dot" style={{ background: d.color }} />
+                        {d.name}
+                    </li>
+                ))}
+            </ul>
+        </>
     );
 }
 

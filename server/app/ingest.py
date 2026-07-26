@@ -43,6 +43,54 @@ def existing_hash_counts(c, account_id):
     }
 
 
+def historical_day_counts(c, uid, sources=("workbook", "import", "sync", "sheets")):
+    """
+    ``(day, amount, description) -> count`` over every transaction the user got
+    from a statement-shaped source, across all accounts. The per-account hash
+    cannot see the same bank operation arriving a second time through another
+    door — a workbook over a synced ledger, or one connection pulling
+    overlapping feeds — because the copies land on different accounts or carry
+    different times. By calendar day and without the account, the copies
+    collide. Manual entries and transfer legs are left out: they are the
+    user's own words, not a bank's, and must never shadow a feed. ``sheets``
+    is the retired template importer's label — those rows are still in the
+    wild and are statement-shaped all the same.
+    """
+    marks = ",".join("?" * len(sources))
+    return {
+        (r["day"], r["amount"], r["description"]): r["n"]
+        for r in c.execute(
+            "SELECT substr(t.date, 1, 10) day, t.amount, t.description, COUNT(*) n"
+            " FROM transactions t JOIN accounts a ON a.id = t.account_id"
+            # `marks` contains only generated positional placeholders, never user input.
+            f" WHERE a.user_id=? AND t.source IN ({marks})"  # nosec B608
+            " GROUP BY day, t.amount, t.description",
+            (uid, *sources),
+        )
+    }
+
+
+def drop_already_present(rows, counts):
+    """
+    Drop rows the ledger already holds according to ``counts``, counting
+    repeats: two genuinely identical operations in one batch survive as long
+    as the ledger holds fewer copies than the batch carries. Returns
+    ``(kept, dropped)``.
+    """
+    seen: dict = {}
+    kept = []
+    dropped = 0
+    for row in rows:
+        key = (row["date"][:10], row["amount"], row.get("description", ""))
+        n = seen.get(key, 0)
+        seen[key] = n + 1
+        if n < counts.get(key, 0):
+            dropped += 1
+            continue
+        kept.append(row)
+    return kept, dropped
+
+
 def commit_rows(c, account_id, rows, source, batch_id=None):
     """
     Insert ``rows`` (dicts with date/amount/description/bank_category/mcc and

@@ -244,3 +244,21 @@ def test_categorizer_agreement_with_sheet_history():
         if got != expected:
             mismatches.append((t["date"], t["description"][:40], expected, got))
     assert mismatches == [], f"{len(mismatches)} disagreements, first: {mismatches[:5]}"
+
+
+def test_categorize_files_a_refund_back_into_its_expense_envelope():
+    """
+    A merchant's money coming back is a refund: it must land in the envelope
+    it left, not drift to uncategorized where the budget cannot see it. Income
+    keywords still win first, so a real inflow is never mistaken for a refund.
+    """
+    groups = {1: "expense", 2: "income"}
+    cats = [
+        {"id": 10, "name": "Groceries", "keywords": "Пятёрочка", "group_id": 1},
+        {"id": 20, "name": "Cashback", "keywords": "Кэшбэк|пятёрочка кэшбэк", "group_id": 2},
+    ]
+    rules = build_rules(cats, groups)
+    assert categorize("Пятёрочка возврат", 8470, rules) == 10
+    assert categorize("Пятёрочка кэшбэк", 100, rules) == 20
+    assert categorize("Перевод от мамы", 5000, rules) is None
+    assert categorize("Пятёрочка", -100, rules) == 10

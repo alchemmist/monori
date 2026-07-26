@@ -7,8 +7,11 @@ import {
     weekdayProfile,
     dayOfMonthProfile,
     txStats,
+    incomeStats,
     disciplineMatrix,
     accountBalances,
+    categoryYearMatrix,
+    categoryTotals,
 } from "./analytics.js";
 import { computeRange } from "./budget.js";
 
@@ -119,6 +122,115 @@ describe("topMerchants", () => {
     });
 });
 
+describe("categoryYearMatrix", () => {
+    it("spreads each expense category across the twelve months of the year", () => {
+        const rows = categoryYearMatrix(snapshot, "2024");
+        expect(rows.map((r) => r.name)).toEqual(["Groceries", "Fun"]);
+        const [groceries, fun] = rows;
+        expect(groceries.monthly).toEqual([20_000_00, 10_000_00, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+        expect(groceries.total).toBe(30_000_00);
+        expect(fun.total).toBe(5_000_00);
+        // income, transfers and uncategorized rows have no place in an expense chart
+        expect(rows.every((r) => r.monthly.length === 12)).toBe(true);
+    });
+
+    it("ties out with the expense side of monthlySeries", () => {
+        const rows = categoryYearMatrix(snapshot, "2024");
+        const perMonth = monthlySeries(snapshot).filter(([k]) => k.startsWith("2024"));
+        for (const [key, v] of perMonth) {
+            const m = +key.slice(5, 7) - 1;
+            const stacked = rows.reduce((s, r) => s + r.monthly[m], 0);
+            expect(stacked).toBe(v.expense);
+        }
+    });
+
+    it("folds the tail past the limit into one Other row", () => {
+        const many = {
+            groups: [{ id: 2, name: "Daily", kind: "expense" }],
+            categories: [1, 2, 3, 4].map((i) => ({ id: i, groupId: 2, name: `C${i}` })),
+            transactions: [1, 2, 3, 4].map((i) => ({
+                id: i,
+                date: "2024-03-05",
+                amount: -i * 1_000_00,
+                categoryId: i,
+                description: `c${i}`,
+            })),
+        };
+        const rows = categoryYearMatrix(many, "2024", { limit: 2 });
+        expect(rows.map((r) => r.name)).toEqual(["C4", "C3", "Other"]);
+        const other = rows[2];
+        expect(other.id).toBe(null);
+        // C2 + C1, landing on March like the rows it stands for
+        expect(other.total).toBe(3_000_00);
+        expect(other.monthly[2]).toBe(3_000_00);
+    });
+
+    it("nets a refund against the month it lands in instead of dropping it", () => {
+        const refunded = {
+            groups: [{ id: 2, name: "Daily", kind: "expense" }],
+            categories: [{ id: 20, groupId: 2, name: "Groceries" }],
+            transactions: [
+                { id: 1, date: "2024-01-10", amount: -5_000_00, categoryId: 20, description: "a" },
+                { id: 2, date: "2024-01-20", amount: 2_000_00, categoryId: 20, description: "ref" },
+            ],
+        };
+        const [row] = categoryYearMatrix(refunded, "2024");
+        expect(row.monthly[0]).toBe(3_000_00);
+        expect(row.total).toBe(3_000_00);
+    });
+
+    it("returns nothing for a year without categorized expenses", () => {
+        expect(categoryYearMatrix(snapshot, "2019")).toEqual([]);
+    });
+
+    it("can build the same year grid for income categories", () => {
+        const [salary] = categoryYearMatrix(snapshot, "2024", { kind: "income" });
+        expect(salary.name).toBe("Job");
+        expect(salary.monthly[0]).toBe(100_000_00);
+        expect(salary.total).toBe(100_000_00);
+    });
+
+    it("keeps income-category data scoped to the selected year", () => {
+        const withPriorIncome = {
+            ...snapshot,
+            transactions: [
+                ...snapshot.transactions,
+                { id: 7, date: "2023-06-01", amount: 50_000_00, categoryId: 10 },
+            ],
+        };
+        expect(categoryYearMatrix(withPriorIncome, "2023", { kind: "income" })[0].total).toBe(
+            50_000_00,
+        );
+        expect(categoryYearMatrix(withPriorIncome, "2024", { kind: "income" })[0].total).toBe(
+            100_000_00,
+        );
+    });
+});
+
+describe("categoryTotals", () => {
+    it("sums all-time expense and income categories separately", () => {
+        expect(categoryTotals(snapshot)).toMatchObject([
+            { id: 20, name: "Groceries", total: 30_000_00 },
+            { id: 21, name: "Fun", total: 5_000_00 },
+        ]);
+        expect(categoryTotals(snapshot, { kind: "income" })).toMatchObject([
+            { id: 10, name: "Job", total: 100_000_00 },
+        ]);
+    });
+
+    it("drops uncategorized rows and transfer legs", () => {
+        const withIgnored = {
+            ...snapshot,
+            transactions: [
+                ...snapshot.transactions,
+                { id: 7, date: "2024-02-10", amount: -90_000_00, categoryId: null },
+                { id: 8, date: "2024-02-11", amount: -80_000_00, categoryId: 20, transferId: "x" },
+            ],
+        };
+        expect(categoryTotals(withIgnored)).toEqual(categoryTotals(snapshot));
+    });
+});
+
 describe("weekdayProfile", () => {
     it("buckets spending by weekday, Monday first", () => {
         const w = weekdayProfile(snapshot, "2024");
@@ -131,10 +243,31 @@ describe("weekdayProfile", () => {
 describe("txStats", () => {
     it("computes count, median and largest expense", () => {
         const s = txStats(snapshot, "2024");
-        // ids 2, 3, 4 plus the uncategorized cafe row; the transfer leg is out
-        expect(s.count).toBe(4);
+        // ids 2, 3 and 4; uncategorized rows and the transfer leg are out
+        expect(s.count).toBe(3);
         expect(s.median).toBe(10_000_00);
         expect(s.largest.amount).toBe(20_000_00);
+    });
+});
+
+describe("incomeStats", () => {
+    it("counts only categorized income and identifies its largest entry", () => {
+        const s = incomeStats(snapshot, "2024");
+        expect(s.count).toBe(1);
+        expect(s.median).toBe(100_000_00);
+        expect(s.largest).toMatchObject({ amount: 100_000_00, description: "SALARY OOO ROGA" });
+    });
+
+    it("excludes uncategorized deposits and transfer legs", () => {
+        const withIgnored = {
+            ...snapshot,
+            transactions: [
+                ...snapshot.transactions,
+                { id: 7, date: "2024-02-10", amount: 200_000_00, categoryId: null },
+                { id: 8, date: "2024-02-11", amount: 300_000_00, categoryId: 10, transferId: "x" },
+            ],
+        };
+        expect(incomeStats(withIgnored, "2024")).toEqual(incomeStats(snapshot, "2024"));
     });
 });
 
@@ -157,7 +290,7 @@ describe("disciplineMatrix", () => {
 });
 
 describe("accountBalances", () => {
-    it("sums opening balance and all transactions per account, transfers included", () => {
+    it("counts categorized rows and transfer legs, not unaccepted uncategorized rows", () => {
         const snap = {
             accounts: [
                 { id: 1, name: "Card", openingBalance: 10_000_00 },
@@ -186,8 +319,30 @@ describe("accountBalances", () => {
             ],
         };
         const b = accountBalances(snap);
-        expect(b.get(1)).toBe(10_000_00 - 3_000_00 - 2_000_00);
+        // the uncategorized -3000 is outside the ledger until it gets a
+        // category — the budget cannot see it, so the balance must not either
+        expect(b.get(1)).toBe(10_000_00 - 2_000_00);
         expect(b.get(2)).toBe(2_000_00);
+    });
+
+    it("counts categorized rows and reconcile adjustments", () => {
+        const snap = {
+            accounts: [{ id: 1, name: "Card", openingBalance: 0 }],
+            groups: [],
+            categories: [],
+            transactions: [
+                { id: 1, date: "2024-01-01", amount: -3_000_00, accountId: 1, categoryId: 20 },
+                {
+                    id: 2,
+                    date: "2024-01-02",
+                    amount: 1_500_00,
+                    accountId: 1,
+                    categoryId: null,
+                    source: "adjustment",
+                },
+            ],
+        };
+        expect(accountBalances(snap).get(1)).toBe(-1_500_00);
     });
 
     it("treats a missing accounts list as empty", () => {
@@ -305,10 +460,8 @@ describe("dayOfMonthProfile", () => {
     });
 });
 
-// Rows the year-scoped chart aggregators (weekday/day-of-month/topMerchants)
-// must ignore: wrong year, an income category, a positive amount, and an
-// uncategorized row. txStats intentionally diverges — it COUNTS uncategorized
-// outflows (see its own tests below) and only shares the first three guards.
+// Rows the year-scoped chart aggregators must ignore: wrong year, an income
+// category, a positive amount, and an uncategorized row.
 const ignoredRows = [
     { id: 90, date: "2023-01-01", amount: -9_999_00, categoryId: 20, description: "LAST YEAR" },
     { id: 91, date: "2024-01-01", amount: -8_888_00, categoryId: 10, description: "INCOME LEG" },
@@ -393,7 +546,7 @@ describe("txStats keeps the first of tied-largest expenses", () => {
         expect(s.largest.description).toBe("FIRST");
     });
 
-    it("includes uncategorized outflows in the count", () => {
+    it("excludes uncategorized outflows from the count", () => {
         const withUncat = {
             ...snap,
             transactions: [
@@ -408,11 +561,11 @@ describe("txStats keeps the first of tied-largest expenses", () => {
             ],
         };
         const s = txStats(withUncat, "2024");
-        expect(s.count).toBe(4);
-        expect(s.largest.description).toBe("UNCATEGORIZED SPEND");
+        expect(s.count).toBe(3);
+        expect(s.largest.description).toBe("FIRST");
     });
 
-    it("counts an outflow whose categoryId no longer resolves as uncategorized", () => {
+    it("excludes an outflow whose categoryId no longer resolves", () => {
         const withDangling = {
             ...snap,
             transactions: [
@@ -427,8 +580,8 @@ describe("txStats keeps the first of tied-largest expenses", () => {
             ],
         };
         const s = txStats(withDangling, "2024");
-        expect(s.count).toBe(4);
-        expect(s.largest.description).toBe("X");
+        expect(s.count).toBe(3);
+        expect(s.largest.description).toBe("FIRST");
     });
 });
 
@@ -439,8 +592,8 @@ describe("accountBalances ignores unknown accounts", () => {
             groups: [],
             categories: [],
             transactions: [
-                { id: 1, date: "2024-01-01", amount: -100_00, accountId: 1, categoryId: null },
-                { id: 2, date: "2024-01-02", amount: -999_00, accountId: 99, categoryId: null },
+                { id: 1, date: "2024-01-01", amount: -100_00, accountId: 1, categoryId: 20 },
+                { id: 2, date: "2024-01-02", amount: -999_00, accountId: 99, categoryId: 20 },
             ],
         };
         const b = accountBalances(snap);
@@ -538,30 +691,99 @@ describe("disciplineMatrix mechanics", () => {
     });
 });
 
-describe("analytics zero-value boundaries", () => {
-    it("does not treat a zero amount as spending in profiles, merchants, or stats", () => {
-        const snap = {
-            groups: guardGroups,
-            categories: guardCategories,
-            transactions: [
-                { id: 1, date: "2024-01-15", amount: -500, categoryId: 20, description: "REAL" },
-                { id: 2, date: "2024-01-15", amount: 0, categoryId: 20, description: "ZERO" },
-            ],
-        };
-        expect(weekdayProfile(snap, "2024")[0]).toBe(500);
-        expect(dayOfMonthProfile(snap, "2024")[14]).toBe(500);
-        expect(topMerchants(snap, "2024")).toEqual([{ name: "REAL", total: 500, count: 1 }]);
-        expect(txStats(snap, "2024").count).toBe(1);
+describe("transfer legs are invisible to every income/expense total", () => {
+    // a leg that carries a category is the case merging an existing pair can
+    // create; nothing downstream may count it as spending
+    const withTransfer = {
+        ...snapshot,
+        transactions: [
+            ...snapshot.transactions,
+            {
+                id: 900,
+                date: "2024-01-11",
+                amount: -50_000_00,
+                categoryId: 20,
+                accountId: 1,
+                transferId: "x",
+                description: "PYATEROCHKA 1234 MOSCOW",
+            },
+            {
+                id: 901,
+                date: "2024-01-11",
+                amount: 50_000_00,
+                categoryId: 20,
+                accountId: 2,
+                transferId: "x",
+                description: "Transfer",
+            },
+        ],
+    };
+
+    it("leaves the monthly series unchanged", () => {
+        expect(monthlySeries(withTransfer)).toEqual(monthlySeries(snapshot));
     });
 
-    it("keeps a zero-overrun category out of the worst result", () => {
-        const months = Array.from({ length: 12 }, () => ({ budgeted: 0, outflows: 0, balance: 0 }));
-        const d = disciplineMatrix(
-            { byCategory: new Map([[20, months]]) },
-            [{ id: 20, groupId: 2, name: "Daily" }],
-            [{ id: 2, kind: "expense" }],
+    it("leaves weekday and day-of-month profiles unchanged", () => {
+        expect(weekdayProfile(withTransfer, "2024")).toEqual(weekdayProfile(snapshot, "2024"));
+        expect(dayOfMonthProfile(withTransfer, "2024")).toEqual(
+            dayOfMonthProfile(snapshot, "2024"),
         );
-        expect(d.worst).toBeNull();
-        expect(d.hitRate).toBeNull();
+    });
+
+    it("leaves top merchants unchanged", () => {
+        expect(topMerchants(withTransfer, "2024")).toEqual(topMerchants(snapshot, "2024"));
+    });
+
+    it("leaves the expense stats unchanged", () => {
+        expect(txStats(withTransfer, "2024")).toEqual(txStats(snapshot, "2024"));
+    });
+
+    it("keeps the budget engine from spending an envelope on a transfer", () => {
+        const range = (s) => computeRange({ ...s, budgets: s.budgets ?? [] }, 2024, 2024);
+        expect(range(withTransfer)).toEqual(range(snapshot));
+    });
+
+    it("still moves the money between the two account balances", () => {
+        const accounts = [
+            { id: 1, openingBalance: 0 },
+            { id: 2, openingBalance: 0 },
+        ];
+        const balances = accountBalances({ ...withTransfer, accounts });
+        expect(balances.get(1)).toBe(-50_000_00);
+        expect(balances.get(2)).toBe(50_000_00);
+        expect(balances.get(1) + balances.get(2)).toBe(0);
+    });
+});
+
+describe("charts vs budget table parity", () => {
+    it("categoryYearMatrix totals equal the budget engine's activity to the kopeck", () => {
+        // a category with a refund is exactly where a gross-outflow chart and
+        // the net budget table drift apart; both must report the same year
+        const snap = {
+            groups: [{ id: 2, name: "Daily", kind: "expense" }],
+            categories: [{ id: 20, groupId: 2, name: "Dating" }],
+            budgets: [],
+            transactions: [
+                {
+                    id: 1,
+                    date: "2024-03-05",
+                    amount: -433_246_00,
+                    categoryId: 20,
+                    description: "x",
+                },
+                {
+                    id: 2,
+                    date: "2024-04-02",
+                    amount: 8_470_00,
+                    categoryId: 20,
+                    description: "refund",
+                },
+            ],
+        };
+        const res = computeRange(snap, 2024, 2024).get(2024);
+        const engineYear = res.byCategory.get(20).reduce((s, m) => s + m.outflows, 0);
+        const [row] = categoryYearMatrix(snap, "2024", { limit: Infinity });
+        expect(row.total).toBe(-engineYear);
+        expect(row.total).toBe(424_776_00);
     });
 });

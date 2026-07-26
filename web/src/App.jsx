@@ -21,7 +21,7 @@ import {
 } from "@gravity-ui/icons";
 import { useStore, isDemo } from "./store.js";
 import { showToast } from "./ui/notify.js";
-import { computeRange } from "./engine/budget.js";
+import { computeRange, firstBudgetYear } from "./engine/budget.js";
 import BudgetPage from "./pages/BudgetPage.jsx";
 
 // the whole d3/charts stack is only used here — keep it out of the entry chunk
@@ -59,7 +59,10 @@ const REPORT_BUG_URL = `https://github.com/alchemmist/monori/issues/new?labels=b
     "**What happened**\n\n\n**What I expected**\n\n\n**Steps to reproduce**\n\n1. \n",
 )}`;
 
-const FIRST_YEAR = 2020;
+// where the budget chain starts for an account with nothing in it yet; with data,
+// firstBudgetYear reads the real one off the snapshot
+
+const DEFAULT_FIRST_YEAR = 2020;
 
 export default function App({ theme, onToggleTheme }) {
     const { snapshot, loading, error, load, toast, user, authChecked, checkAuth, openTab } =
@@ -93,19 +96,24 @@ export default function App({ theme, onToggleTheme }) {
         }
     }, [user]);
 
+    const firstYear = useMemo(() => firstBudgetYear(snapshot, DEFAULT_FIRST_YEAR), [snapshot]);
+
     const lastYear = useMemo(() => {
         if (!snapshot) return new Date().getFullYear();
         const maxTx = snapshot.transactions.reduce(
             (m, t) => Math.max(m, +t.date.slice(0, 4)),
-            FIRST_YEAR,
+            DEFAULT_FIRST_YEAR,
         );
-        const maxBudget = snapshot.budgets.reduce((m, b) => Math.max(m, b.year), FIRST_YEAR);
+        const maxBudget = snapshot.budgets.reduce(
+            (m, b) => Math.max(m, b.year),
+            DEFAULT_FIRST_YEAR,
+        );
         return Math.max(maxTx, maxBudget, new Date().getFullYear()) + 1;
     }, [snapshot]);
 
     const results = useMemo(
-        () => (snapshot ? computeRange(snapshot, FIRST_YEAR, lastYear) : null),
-        [snapshot, lastYear],
+        () => (snapshot ? computeRange(snapshot, firstYear, lastYear) : null),
+        [snapshot, firstYear, lastYear],
     );
 
     if (!isDemo() && !authChecked) {
@@ -249,7 +257,7 @@ export default function App({ theme, onToggleTheme }) {
                     </div>
                 )}
                 {page === "budget" && (
-                    <BudgetPage results={results} firstYear={FIRST_YEAR} lastYear={lastYear} />
+                    <BudgetPage results={results} firstYear={firstYear} lastYear={lastYear} />
                 )}
                 {page === "dashboard" && (
                     <Suspense
@@ -259,10 +267,10 @@ export default function App({ theme, onToggleTheme }) {
                             </div>
                         }
                     >
-                        <DashboardPage firstYear={FIRST_YEAR} lastYear={lastYear} />
+                        <DashboardPage firstYear={firstYear} lastYear={lastYear} />
                         <AnalyticsPage
                             results={results}
-                            firstYear={FIRST_YEAR}
+                            firstYear={firstYear}
                             lastYear={lastYear}
                         />
                     </Suspense>

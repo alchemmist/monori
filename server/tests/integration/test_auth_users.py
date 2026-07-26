@@ -151,3 +151,42 @@ def test_me_rejects_token_of_deleted_user(anon):
     r = client.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"})
     assert r.status_code == 401
     assert r.json()["detail"] == "unknown user"
+
+
+def test_default_account_is_set_cleared_and_guarded(api, client):
+    """
+    The default account for card-less rows is a user preference: settable to an
+    owned account, clearable back to "assign by hand", and never someone
+    else's account.
+    """
+    assert client.get("/api/auth/me").json()["defaultAccountId"] is None
+    acct = api.default_account()
+
+    r = client.patch("/api/auth/me", json={"defaultAccountId": acct})
+    assert r.status_code == 200, r.text
+    assert r.json()["defaultAccountId"] == acct
+    assert client.get("/api/auth/me").json()["defaultAccountId"] == acct
+
+    r = client.patch("/api/auth/me", json={"defaultAccountId": None})
+    assert r.status_code == 200
+    assert r.json()["defaultAccountId"] is None
+
+    assert client.patch("/api/auth/me", json={"defaultAccountId": 99999}).status_code == 400
+
+    from conftest import login_as
+
+    headers = dict(client.headers)
+    client.headers.update(login_as(client, "stranger@example.com"))
+    assert client.patch("/api/auth/me", json={"defaultAccountId": acct}).status_code == 400
+    client.headers.update(headers)
+
+
+def test_deleting_the_default_account_clears_the_preference(api, client):
+    first = api.default_account()
+    second = api.account("Second")
+    r = client.patch("/api/auth/me", json={"defaultAccountId": second})
+    assert r.status_code == 200
+    r = client.delete(f"/api/accounts/{second}")
+    assert r.status_code == 200, r.text
+    assert client.get("/api/auth/me").json()["defaultAccountId"] is None
+    assert first == api.default_account()

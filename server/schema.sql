@@ -88,12 +88,37 @@ CREATE TABLE IF NOT EXISTS transactions (
   comment TEXT NOT NULL DEFAULT '',
   hash TEXT NOT NULL,                -- sha256(account_id|date|amount|description) for dedup
   source TEXT NOT NULL DEFAULT 'import',
-  batch_id INTEGER REFERENCES import_batches (id) ON DELETE SET NULL
+  batch_id INTEGER REFERENCES import_batches (id) ON DELETE SET NULL,
+  hidden INTEGER NOT NULL DEFAULT 0 -- excluded everywhere but kept for sync dedup
 );
 CREATE INDEX IF NOT EXISTS idx_tx_date ON transactions (date);
 CREATE INDEX IF NOT EXISTS idx_tx_hash ON transactions (hash);
 CREATE INDEX IF NOT EXISTS idx_tx_category ON transactions (category_id);
 CREATE INDEX IF NOT EXISTS idx_tx_account ON transactions (account_id);
+
+-- A transfer is the entity two transactions are merged into; the rows themselves
+-- stay untouched so a re-sync still recognizes them and cannot duplicate them.
+-- UNIQUE on both legs is what guarantees a transfer has exactly two of them and
+-- that a transaction belongs to at most one transfer.
+CREATE TABLE IF NOT EXISTS transfers (
+  id TEXT PRIMARY KEY,
+  user_id INTEGER REFERENCES users (id),
+  out_tx_id INTEGER NOT NULL UNIQUE REFERENCES transactions (id) ON DELETE CASCADE,
+  in_tx_id INTEGER NOT NULL UNIQUE REFERENCES transactions (id) ON DELETE CASCADE,
+  origin TEXT NOT NULL DEFAULT 'manual' CHECK (origin IN ('manual', 'matched')),
+  out_category_id INTEGER,           -- categories the legs carried before merging,
+  in_category_id INTEGER,            -- restored when the transfer is split again
+  note TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_transfers_user ON transfers (user_id);
+
+-- pairs the user rejected, so auto-detection stops offering them forever
+CREATE TABLE IF NOT EXISTS transfer_rejections (
+  out_tx_id INTEGER NOT NULL REFERENCES transactions (id) ON DELETE CASCADE,
+  in_tx_id INTEGER NOT NULL REFERENCES transactions (id) ON DELETE CASCADE,
+  PRIMARY KEY (out_tx_id, in_tx_id)
+);
 
 CREATE TABLE IF NOT EXISTS budgets (
   category_id INTEGER NOT NULL REFERENCES categories (id) ON DELETE CASCADE,
@@ -110,7 +135,10 @@ CREATE TABLE IF NOT EXISTS users (
   password_hash TEXT NOT NULL,
   created_at TEXT NOT NULL,
   is_admin INTEGER NOT NULL DEFAULT 0,
-  last_login TEXT
+  last_login TEXT,
+  -- where an import lands rows whose account cannot be told from the file
+  -- (no card number anywhere); empty means the user assigns them by hand
+  default_account_id INTEGER REFERENCES accounts (id)
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_canonical ON users (email_canonical);
 

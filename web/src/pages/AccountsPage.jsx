@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Button } from "@mantine/core";
 import RowMenu from "../ui/RowMenu.jsx";
 import Tag from "../ui/Tag.jsx";
 import { Plus, Grip } from "@gravity-ui/icons";
@@ -118,15 +117,6 @@ export default function AccountsPage() {
                 <h1 className="page-title" style={{ margin: 0 }}>
                     Accounts
                 </h1>
-                <div style={{ flex: 1 }} />
-                <Button
-                    variant="filled"
-                    size="m"
-                    onClick={() => openTab("account-edit", {}, "account-new")}
-                    leftSection={<Plus width={14} height={14} />}
-                >
-                    New account
-                </Button>
             </div>
 
             <div className="card account-list">
@@ -220,6 +210,14 @@ export default function AccountsPage() {
                         </div>
                     );
                 })}
+                <button
+                    type="button"
+                    className="account-row account-row_add"
+                    onClick={() => openTab("account-edit", {}, "account-new")}
+                >
+                    <Plus width={16} height={16} />
+                    <span>New account</span>
+                </button>
             </div>
 
             {dialog?.type === "delete" && (

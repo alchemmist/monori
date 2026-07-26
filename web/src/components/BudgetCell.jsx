@@ -1,24 +1,19 @@
-import { useEffect, useRef, useState } from "react";
-import { rub, parseRub } from "../format.js";
+import { useState } from "react";
+import { rub, parseRub, amountInput } from "../format.js";
+import useAmountField from "../ui/useAmountField.js";
 
 /**
  * Inline-editable budget amount. Click (or focus+Enter) to edit; Enter saves,
  * Escape cancels. Recalculation happens in the same frame via the store.
  */
-export default function BudgetCell({ value, onChange, tabIndex = 0 }) {
+export default function BudgetCell({ value, onChange, onSelect, tabIndex = 0 }) {
     const [editing, setEditing] = useState(false);
     const [draft, setDraft] = useState("");
-    const inputRef = useRef(null);
-
-    useEffect(() => {
-        if (editing) {
-            inputRef.current?.focus();
-            inputRef.current?.select();
-        }
-    }, [editing]);
+    const amount = useAmountField(setDraft);
 
     const start = () => {
-        setDraft(value ? String(value / 100) : "");
+        onSelect?.();
+        setDraft(amountInput(value));
         setEditing(true);
     };
 
@@ -31,10 +26,11 @@ export default function BudgetCell({ value, onChange, tabIndex = 0 }) {
     if (editing) {
         return (
             <input
-                ref={inputRef}
+                {...amount}
                 className="budget-cell__input"
                 value={draft}
-                onChange={(e) => setDraft(e.target.value)}
+                autoFocus
+                onFocus={(e) => e.target.select()}
                 onBlur={commit}
                 onKeyDown={(e) => {
                     if (e.key === "Enter") commit();

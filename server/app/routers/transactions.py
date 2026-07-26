@@ -6,12 +6,14 @@ from pydantic import BaseModel
 from ..auth import current_user
 from ..deps import conn, serialize_tx
 from ..importer import tx_hash
+from ..transfer_service import detach_leg
 
 router = APIRouter(prefix="/api/transactions", tags=["transactions"])
 
 _COUNT_TX = (
     "SELECT COUNT(*) FROM transactions"
     " WHERE account_id IN (SELECT id FROM accounts WHERE user_id=:uid)"
+    " AND hidden = :hidden"
     " AND (:from IS NULL OR date(date) >= date(:from))"
     " AND (:to IS NULL OR date(date) <= date(:to))"
     " AND (:uncat = 0 OR category_id IS NULL)"
@@ -22,6 +24,7 @@ _COUNT_TX = (
 _LIST_TX = (
     "SELECT * FROM transactions"
     " WHERE account_id IN (SELECT id FROM accounts WHERE user_id=:uid)"
+    " AND hidden = :hidden"
     " AND (:from IS NULL OR date(date) >= date(:from))"
     " AND (:to IS NULL OR date(date) <= date(:to))"
     " AND (:uncat = 0 OR category_id IS NULL)"
@@ -52,6 +55,7 @@ class TxPatch(BaseModel):
     mcc: str | None = None
     categoryId: int | None = None
     comment: str | None = None
+    hidden: bool | None = None
 
 
 class BulkBody(BaseModel):
@@ -60,18 +64,28 @@ class BulkBody(BaseModel):
     categoryId: int | None = None
 
 
-def _resolve_category(c, category_id, uid):
+def _validate_category_kind(kind, amount):
+    if amount < 0 and kind != "expense":
+        raise HTTPException(400, "expense transaction requires an expense category")
+    if amount > 0 and kind != "income":
+        raise HTTPException(400, "income transaction requires an income category")
+
+
+def _resolve_category(c, category_id, uid, amount=None):
     """
     0 (or None handled by caller) means uncategorized; else must exist.
     """
     if category_id in (None, 0):
         return None
-    if not c.execute(
-        "SELECT c.id FROM categories c JOIN category_groups g ON g.id = c.group_id"
+    category = c.execute(
+        "SELECT c.id, g.kind FROM categories c JOIN category_groups g ON g.id = c.group_id"
         " WHERE c.id=? AND g.user_id=?",
         (category_id, uid),
-    ).fetchone():
+    ).fetchone()
+    if not category:
         raise HTTPException(400, "unknown category")
+    if amount is not None:
+        _validate_category_kind(category["kind"], amount)
     return category_id
 
 
@@ -91,6 +105,7 @@ def list_transactions(
     categoryId: int | None = None,
     accountId: int | None = None,
     uncategorized: bool = False,
+    hidden: bool = False,
     q: str | None = None,
     limit: int = Query(default=100, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
@@ -101,6 +116,7 @@ def list_transactions(
         "from": from_,
         "to": to,
         "uncat": 1 if uncategorized else 0,
+        "hidden": 1 if hidden else 0,
         "cat": categoryId,
         "acct": accountId,
         "q": f"%{q.lower()}%" if q else None,
@@ -121,7 +137,7 @@ def create_transaction(body: TxCreate, user: Annotated[dict, Depends(current_use
     uid = user["id"]
     c = conn()
     try:
-        category = _resolve_category(c, body.categoryId, uid)
+        category = _resolve_category(c, body.categoryId, uid, body.amount)
         account = _resolve_account(c, body.accountId, uid)
         cur = c.execute(
             """INSERT INTO transactions
@@ -168,14 +184,17 @@ def patch_transaction(tx_id: int, patch: TxPatch, user: Annotated[dict, Depends(
         comment = patch.comment if patch.comment is not None else row["comment"]
         category = row["category_id"]
         if patch.categoryId is not None:
-            category = _resolve_category(c, patch.categoryId, uid)
+            category = _resolve_category(c, patch.categoryId, uid, amount)
+        elif patch.amount is not None and category is not None:
+            _resolve_category(c, category, uid, amount)
         account = row["account_id"]
         if patch.accountId is not None:
             account = _resolve_account(c, patch.accountId, uid)
+        hidden = int(patch.hidden) if patch.hidden is not None else row["hidden"]
         c.execute(
             """UPDATE transactions
                SET date=?, amount=?, description=?, bank_category=?, mcc=?, category_id=?,
-                   account_id=?, comment=?, hash=?
+                   account_id=?, comment=?, hidden=?, hash=?
                WHERE id=?""",
             (
                 date,
@@ -186,6 +205,7 @@ def patch_transaction(tx_id: int, patch: TxPatch, user: Annotated[dict, Depends(
                 category,
                 account,
                 comment,
+                hidden,
                 tx_hash(account, date, amount, description),
                 tx_id,
             ),
@@ -201,6 +221,7 @@ def delete_transaction(tx_id: int, user: Annotated[dict, Depends(current_user)])
     uid = user["id"]
     c = conn()
     try:
+        detach_leg(c, uid, tx_id)
         cur = c.execute(
             "DELETE FROM transactions WHERE id=?"
             " AND account_id IN (SELECT id FROM accounts WHERE user_id=?)",
@@ -224,6 +245,7 @@ def bulk_transactions(body: BulkBody, user: Annotated[dict, Depends(current_user
         affected = 0
         if body.action == "delete":
             for tx_id in body.ids:
+                detach_leg(c, uid, tx_id)
                 affected += c.execute(
                     "DELETE FROM transactions WHERE id=?"
                     " AND account_id IN (SELECT id FROM accounts WHERE user_id=?)",
@@ -231,6 +253,17 @@ def bulk_transactions(body: BulkBody, user: Annotated[dict, Depends(current_user
                 ).rowcount
         else:
             category = _resolve_category(c, body.categoryId, uid)
+            # Validate the complete selection before updating anything. This
+            # keeps a mixed bulk selection atomic when one row has the other
+            # direction.
+            for tx_id in body.ids:
+                row = c.execute(
+                    "SELECT t.amount FROM transactions t JOIN accounts a ON a.id = t.account_id"
+                    " WHERE t.id=? AND a.user_id=?",
+                    (tx_id, uid),
+                ).fetchone()
+                if row is not None and category is not None:
+                    _resolve_category(c, category, uid, row["amount"])
             for tx_id in body.ids:
                 affected += c.execute(
                     "UPDATE transactions SET category_id=? WHERE id=?"

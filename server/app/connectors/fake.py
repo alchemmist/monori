@@ -28,8 +28,17 @@ FIXTURE_ROWS = [
 ]
 
 
-def _rows():
-    return [dict(r) for r in FIXTURE_ROWS]
+def _rows(account_ref=None):
+    """
+    A real bank scopes the feed to the requested account; the fixture mimics
+    that by stamping the ref into the description, so two accounts on one
+    connection deliver distinct operations rather than one feed twice.
+    """
+    rows = [dict(r) for r in FIXTURE_ROWS]
+    if account_ref:
+        for r in rows:
+            r["description"] = f"{r['description']} {account_ref}"
+    return rows
 
 
 @register
@@ -42,7 +51,7 @@ class FakeConnector(Connector):
         if not self.credentials.get("phone"):
             raise ConnectorError("missing phone")
         if self.session and self.session.get("token"):
-            return SyncResult(_rows(), session=self.session)
+            return SyncResult(_rows(self.account_ref), session=self.session)
         self._pending = True
         raise SmsRequired("code sent")
 
@@ -51,4 +60,4 @@ class FakeConnector(Connector):
             raise ConnectorError("no login in progress")
         if code != "0000":
             raise ConnectorError("invalid code")
-        return SyncResult(_rows(), session={"token": "ok"})
+        return SyncResult(_rows(self.account_ref), session={"token": "ok"})

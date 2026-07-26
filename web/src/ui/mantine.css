@@ -61,12 +61,17 @@ meter {
     margin-inline-end: 8px;
 }
 
-.mantine-Button-root[data-variant="filled"] {
+/* Mantine renders its default variant without a data-variant attribute, so the
+   brand fill has to match that case too — otherwise a plain <Button> falls back
+   to Mantine's own blue. */
+.mantine-Button-root[data-variant="filled"],
+.mantine-Button-root:not([data-variant]) {
     background: var(--g-color-base-brand);
     color: var(--g-color-text-brand-contrast);
 }
 
-.mantine-Button-root[data-variant="filled"]:hover {
+.mantine-Button-root[data-variant="filled"]:hover,
+.mantine-Button-root:not([data-variant]):hover {
     background: var(--g-color-base-brand-hover);
 }
 
@@ -255,9 +260,16 @@ textarea.mi-input__field {
     width: 100%;
 }
 
-.gsel_field .gsel__text {
+.gsel_field .gsel__text,
+.gsel_full .gsel__text {
     flex: 1;
     text-align: left;
+}
+
+.gsel_full {
+    display: flex;
+    width: 100%;
+    min-width: 0;
 }
 
 .gsel__label {

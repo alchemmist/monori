@@ -1,4 +1,5 @@
 from . import db as dbmod
+from .transfer_service import list_transfers
 
 
 def conn():
@@ -52,6 +53,7 @@ def serialize_tx(r):
         "transferId": r["transfer_id"],
         "comment": r["comment"],
         "source": r["source"],
+        "hidden": bool(r["hidden"]),
     }
 
 
@@ -65,6 +67,7 @@ def serialize_user(r):
         "createdAt": r["created_at"],
         "isAdmin": bool(r["is_admin"]),
         "lastLogin": r["last_login"],
+        "defaultAccountId": r["default_account_id"],
     }
 
 
@@ -98,8 +101,9 @@ LIGHT_SNAPSHOT_TX_LIMIT = 500
 
 TX_COLUMNS = (
     "SELECT t.id, t.date, t.amount, t.description, t.bank_category, t.mcc,"
-    " t.category_id, t.account_id, t.transfer_id, t.comment, t.source"
-    " FROM transactions t JOIN accounts a ON a.id = t.account_id WHERE a.user_id=?"
+    " t.category_id, t.account_id, t.transfer_id, t.comment, t.source, t.hidden"
+    " FROM transactions t JOIN accounts a ON a.id = t.account_id"
+    " WHERE a.user_id=? AND t.hidden = 0"
 )
 
 
@@ -124,7 +128,7 @@ def snapshot(c, user_id, tx_limit=None):
         if tx_limit is None or len(transactions) < tx_limit
         else cur.execute(
             "SELECT COUNT(*) FROM transactions t JOIN accounts a ON a.id = t.account_id"
-            " WHERE a.user_id=?",
+            " WHERE a.user_id=? AND t.hidden = 0",
             uid,
         ).fetchone()[0]
     )
@@ -157,6 +161,7 @@ def snapshot(c, user_id, tx_limit=None):
         ],
         "transactions": transactions,
         "transactionsTotal": transactions_total,
+        "transfers": list_transfers(cur, user_id),
         "budgets": [
             serialize_budget(r)
             for r in cur.execute(

@@ -121,6 +121,32 @@
     text-overflow: ellipsis;
 }
 
+/* hidden rows only appear behind the "Hidden" toggle; wash them out and tint
+   the row so they never read as part of the real ledger */
+.tx-hidden-row td {
+    background: color-mix(in srgb, var(--m-warning, #e8a33d) 7%, transparent);
+    color: var(--m-text-dim);
+}
+
+.tx-hidden-row .money {
+    color: var(--m-text-dim);
+    text-decoration: line-through;
+}
+
+/* the hide control stays out of the way until the row is pointed at (always
+   visible on hidden rows, or the way back would be invisible too) */
+.tx-row-action {
+    text-align: center;
+}
+
+.tx-grid tr:not(:hover, .tx-hidden-row) .tx-row-action button {
+    opacity: 0;
+}
+
+.tx-row-action button:focus-visible {
+    opacity: 1 !important;
+}
+
 .tx-table {
     /* full-bleed (radius 0), so nothing needs clipping here — and an overflow
        clip would make it a scroll container, breaking the header's
@@ -274,6 +300,62 @@
 .balance-pill_zero {
     background: transparent;
     color: var(--m-text-faint);
+}
+
+/* click-to-edit ledger cell: reads as plain text until pointed at, so a page of
+   them doesn't look like a form */
+.tx-edit {
+    cursor: text;
+    display: inline-block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    vertical-align: bottom;
+    border-radius: var(--m-radius-sm);
+    padding: 2px 6px;
+    margin: -2px -6px;
+    transition:
+        background 0.12s ease,
+        box-shadow 0.12s ease;
+}
+
+.tx-edit:hover,
+.tx-edit:focus-visible {
+    background: var(--m-accent-soft);
+    box-shadow: inset 0 0 0 1px var(--m-accent);
+    outline: none;
+}
+
+/* an empty comment shows its placeholder only while the row is pointed at, so
+   the column stays quiet over thousands of rows that have none */
+.tx-edit_empty {
+    color: var(--m-text-faint);
+    opacity: 0;
+}
+
+.tx-grid tr:hover .tx-edit_empty,
+.tx-edit_empty:focus-visible {
+    opacity: 1;
+}
+
+@media (hover: none) {
+    .tx-edit_empty {
+        opacity: 0.55;
+    }
+}
+
+.tx-edit__input {
+    background: var(--m-bg);
+    border: 1px solid var(--m-accent);
+    border-radius: var(--m-radius-sm);
+    color: var(--m-text);
+    font: inherit;
+    font-variant-numeric: tabular-nums;
+    max-width: 100%;
+    padding: 2px 6px;
+    outline: none;
+    box-shadow: 0 0 0 3px var(--m-accent-soft);
 }
 
 .budget-cell {

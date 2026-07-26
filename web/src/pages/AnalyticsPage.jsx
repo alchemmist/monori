@@ -12,7 +12,9 @@ import {
     dayOfMonthProfile,
     topMerchants,
     txStats,
+    incomeStats,
     disciplineMatrix,
+    categoryYearMatrix,
 } from "../engine/analytics.js";
 import { PALETTE, SERIES, cartesian } from "./chartTheme.js";
 import "./dashboard.css";
@@ -20,10 +22,49 @@ import "./analytics.css";
 
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
+// how many categories the year-by-category chart names before the rest are
+// folded into a neutral "Other" — one per palette hue, so no two stacked bands
+// of a month can share a color and the legend stays a lookup table
+const CATEGORY_LIMIT = PALETTE.length;
+
+const SHAPES = [
+    { value: "stacked", label: "Stacked" },
+    { value: "lines", label: "Lines" },
+];
+
 // per-bar color from a data-row field, so each bar's color is keyed by its own
 // row (month/day) rather than its numeric value — Mantine's getBarColor only
 // sees the value, which collides when two rows share the same amount.
 const perRowColor = (field) => (props) => <Rectangle {...props} fill={props.payload[field]} />;
+
+function categoryChartData(snapshot, year, now, kind) {
+    const rows = categoryYearMatrix(snapshot, year, { limit: CATEGORY_LIMIT, kind });
+    const groupName = new Map(snapshot.groups.map((g) => [g.id, g.name]));
+    const seen = new Map();
+    for (const r of rows) seen.set(r.name, (seen.get(r.name) ?? 0) + 1);
+    const named = rows.map((r) => ({
+        ...r,
+        key: r.id == null ? "other" : `cat-${r.id}`,
+        label:
+            r.id != null && seen.get(r.name) > 1
+                ? `${r.name} · ${groupName.get(r.groupId)}`
+                : r.name,
+    }));
+    const blankAfter = +year === now.getFullYear() ? now.getMonth() : 11;
+    const data = MONTHS_SHORT.map((mo, m) => {
+        const row = { month: mo };
+        for (const r of named) {
+            row[r.key] = m > blankAfter ? null : Math.round(r.monthly[m] / 100);
+        }
+        return row;
+    });
+    const series = named.map((r, i) => ({
+        name: r.key,
+        label: r.label,
+        color: r.id == null ? SERIES.hint : PALETTE[i % PALETTE.length],
+    }));
+    return { data, series, hasData: named.length > 0 };
+}
 
 // Middle-ellipsis so long merchant names keep both ends legible (names that share
 // a prefix — e.g. "Migration adjustment: …" — stay distinguishable by their tail).
@@ -52,6 +93,8 @@ export default function AnalyticsPage({ results, firstYear, lastYear }) {
     const { snapshot } = useStore();
     const now = useMemo(() => new Date(), []);
     const [year, setYear] = useState(String(now.getFullYear()));
+    const [catShape, setCatShape] = useState("stacked");
+    const [incomeShape, setIncomeShape] = useState("stacked");
 
     const years = [];
     for (let y = firstYear; y <= Math.min(lastYear, now.getFullYear()); y++) years.push(String(y));
@@ -59,6 +102,7 @@ export default function AnalyticsPage({ results, firstYear, lastYear }) {
     const monthly = useMemo(() => monthlySeries(snapshot), [snapshot]);
     const perYear = useMemo(() => yearTotals(monthly), [monthly]);
     const thisYear = perYear.find((r) => r.year === year);
+    const incomeMonths = +year === now.getFullYear() ? now.getMonth() + 1 : 12;
 
     const discipline = useMemo(() => {
         const res = results.get(+year);
@@ -104,6 +148,32 @@ export default function AnalyticsPage({ results, firstYear, lastYear }) {
         return { data, series, current: String(+year) };
     }, [monthly, year, firstYear]);
 
+    const incomeYoy = useMemo(() => {
+        const yrs = [+year - 2, +year - 1, +year].filter((y) => y >= firstYear);
+        const dims = [SERIES.hint, SERIES.secondary, SERIES.income];
+        const data = MONTHS_SHORT.map((mo, m) => {
+            const row = { month: mo };
+            for (const y of yrs) {
+                const v = monthly.find(([k]) => k === `${y}-${String(m + 1).padStart(2, "0")}`);
+                row[String(y)] = v ? Math.round(v[1].income / 100) : null;
+            }
+            return row;
+        });
+        const series = yrs.map((y, i) => ({
+            name: String(y),
+            color: dims[i + (3 - yrs.length)],
+        }));
+        return { data, series, current: String(+year) };
+    }, [monthly, year, firstYear]);
+
+    const byCategory = useMemo(() => {
+        return categoryChartData(snapshot, year, now, "expense");
+    }, [snapshot, year, now]);
+
+    const incomeByCategory = useMemo(() => {
+        return categoryChartData(snapshot, year, now, "income");
+    }, [snapshot, year, now]);
+
     const weekdayData = useMemo(() => {
         const sums = weekdayProfile(snapshot, year);
         const total = sums.reduce((s, v) => s + v, 0) || 1;
@@ -126,6 +196,7 @@ export default function AnalyticsPage({ results, firstYear, lastYear }) {
     );
 
     const stats = useMemo(() => txStats(snapshot, year), [snapshot, year]);
+    const income = useMemo(() => incomeStats(snapshot, year), [snapshot, year]);
 
     return (
         <div className="fade-in dash-section">
@@ -136,6 +207,12 @@ export default function AnalyticsPage({ results, firstYear, lastYear }) {
 
             <div className="kpi-row">
                 <Kpi label="Income" value={`${rub(thisYear?.income ?? 0)} ₽`} sub={year} />
+                <Kpi
+                    label="Avg income / month"
+                    value={`${rub(Math.round((thisYear?.income ?? 0) / incomeMonths))} ₽`}
+                    color="var(--m-income)"
+                    sub={`${incomeMonths} month${incomeMonths === 1 ? "" : "s"}`}
+                />
                 <Kpi label="Expenses" value={`${rub(thisYear?.expense ?? 0)} ₽`} sub={year} />
                 <Kpi
                     label="Net saved"
@@ -207,6 +284,99 @@ export default function AnalyticsPage({ results, firstYear, lastYear }) {
                 <div className="card chart-card chart-card_wide">
                     <div className="chart-card__head">
                         <div className="chart-card__title">
+                            Categories through the year · {year}
+                            <span className="chart-card__hint">
+                                {" "}
+                                · every month, top {CATEGORY_LIMIT} categories
+                            </span>
+                        </div>
+                        <InlineSelect small value={catShape} onChange={setCatShape} data={SHAPES} />
+                    </div>
+                    <div className="chart-card__body chart-card__body_tall">
+                        {byCategory.hasData ? (
+                            <ChartBoundary>
+                                {catShape === "stacked" ? (
+                                    <BarChart
+                                        h="100%"
+                                        data={byCategory.data}
+                                        dataKey="month"
+                                        series={byCategory.series}
+                                        type="stacked"
+                                        withLegend
+                                        {...cartesian}
+                                    />
+                                ) : (
+                                    <LineChart
+                                        h="100%"
+                                        data={byCategory.data}
+                                        dataKey="month"
+                                        series={byCategory.series}
+                                        withDots={false}
+                                        connectNulls={false}
+                                        withLegend
+                                        {...cartesian}
+                                    />
+                                )}
+                            </ChartBoundary>
+                        ) : (
+                            <div className="chart-card__empty">
+                                No categorized expenses in {year}
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                <div className="card chart-card chart-card_wide">
+                    <div className="chart-card__head">
+                        <div className="chart-card__title">
+                            Income sources through the year · {year}
+                            <span className="chart-card__hint">
+                                {" "}
+                                · every month, top {CATEGORY_LIMIT} sources
+                            </span>
+                        </div>
+                        <InlineSelect
+                            small
+                            value={incomeShape}
+                            onChange={setIncomeShape}
+                            data={SHAPES}
+                        />
+                    </div>
+                    <div className="chart-card__body chart-card__body_tall">
+                        {incomeByCategory.hasData ? (
+                            <ChartBoundary>
+                                {incomeShape === "stacked" ? (
+                                    <BarChart
+                                        h="100%"
+                                        data={incomeByCategory.data}
+                                        dataKey="month"
+                                        series={incomeByCategory.series}
+                                        type="stacked"
+                                        withLegend
+                                        {...cartesian}
+                                    />
+                                ) : (
+                                    <LineChart
+                                        h="100%"
+                                        data={incomeByCategory.data}
+                                        dataKey="month"
+                                        series={incomeByCategory.series}
+                                        withDots={false}
+                                        connectNulls={false}
+                                        withLegend
+                                        {...cartesian}
+                                    />
+                                )}
+                            </ChartBoundary>
+                        ) : (
+                            <div className="chart-card__empty">No categorized income in {year}</div>
+                        )}
+                    </div>
+                </div>
+
+                <div className="card chart-card chart-card_wide">
+                    <div className="chart-card__head">
+                        <div className="chart-card__title">
                             Budget discipline · {year}
                             <span className="chart-card__hint">
                                 {" "}
@@ -246,6 +416,28 @@ export default function AnalyticsPage({ results, firstYear, lastYear }) {
                                 connectNulls={false}
                                 lineProps={(s) => ({
                                     strokeWidth: s.name === yoy.current ? 2 : 1.5,
+                                })}
+                                {...cartesian}
+                            />
+                        </ChartBoundary>
+                    </div>
+                </div>
+
+                <div className="card chart-card">
+                    <div className="chart-card__head">
+                        <div className="chart-card__title">Income year over year</div>
+                    </div>
+                    <div className="chart-card__body">
+                        <ChartBoundary>
+                            <LineChart
+                                h="100%"
+                                data={incomeYoy.data}
+                                dataKey="month"
+                                series={incomeYoy.series}
+                                withDots={false}
+                                connectNulls={false}
+                                lineProps={(s) => ({
+                                    strokeWidth: s.name === incomeYoy.current ? 2 : 1.5,
                                 })}
                                 {...cartesian}
                             />
@@ -396,6 +588,42 @@ export default function AnalyticsPage({ results, firstYear, lastYear }) {
                                     </span>
                                     <span className="num" style={{ color: "var(--m-expense)" }}>
                                         {money(stats.largest.amount)}
+                                    </span>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+
+                <div className="card chart-card">
+                    <div className="chart-card__head">
+                        <div className="chart-card__title">Income stats · {year}</div>
+                    </div>
+                    <div className="chart-card__body chart-card__body_auto">
+                        <div className="stat-list">
+                            <div className="stat-list__row">
+                                <span>Income transactions</span>
+                                <span className="num">{income.count}</span>
+                            </div>
+                            <div className="stat-list__row">
+                                <span>Median income</span>
+                                <span className="num">{money(income.median)}</span>
+                            </div>
+                            <div className="stat-list__row">
+                                <span>Per month</span>
+                                <span className="num">{(income.count / 12).toFixed(0)}</span>
+                            </div>
+                            {income.largest && (
+                                <div className="stat-list__row stat-list__row_tall">
+                                    <span>
+                                        Largest income
+                                        <div className="stat-list__hint">
+                                            {income.largest.description.slice(0, 48)} ·{" "}
+                                            {fmtDate(income.largest.date)}
+                                        </div>
+                                    </span>
+                                    <span className="num" style={{ color: "var(--m-income)" }}>
+                                        {money(income.largest.amount)}
                                     </span>
                                 </div>
                             )}

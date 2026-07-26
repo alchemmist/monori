@@ -19,8 +19,9 @@ const readLastAccount = () => {
 };
 
 export default function ImportDialog({ onClose }) {
-    const { snapshot, commitImport, patchAccount, notify } = useStore();
+    const { snapshot, user, commitImport, patchAccount, notify } = useStore();
     const accounts = (snapshot.accounts ?? []).filter((a) => !a.archived);
+    const preset = user?.defaultAccountId;
     const [text, setText] = useState("");
     const [preview, setPreview] = useState(null);
     const [busy, setBusy] = useState(false);
@@ -28,6 +29,9 @@ export default function ImportDialog({ onClose }) {
     const [rememberTail, setRememberTail] = useState(true);
     const fileRef = useRef(null);
     const [account, setAccount] = useState(() => {
+        // the settings-level default wins over the last manual pick: it exists
+        // for the statements whose account nothing in the file can tell
+        if (preset != null && accounts.some((a) => a.id === preset)) return String(preset);
         const last = readLastAccount();
         if (last && accounts.some((a) => String(a.id) === last)) return last;
         return accounts[0] ? String(accounts[0].id) : "";

@@ -24,7 +24,11 @@ Accounts live on the **Accounts** page in the sidebar. Each one has:
 - a **currency** — a label only for now; monori is single-currency and does no
   conversion (full multi-currency is tracked in issue #29),
 - an **opening balance** — what the account held before the first recorded
-  transaction.
+  transaction. It is real money, so it also counts as income to hand out on the
+  [Budget](budgeting.md) page,
+- an **opening date** — when that balance was on the account, which decides the
+  month it lands in on the Budget page. New accounts default to today; left
+  empty, the balance follows the account's earliest transaction.
 
 From the list you can create, rename, reorder, **archive** (hide without
 deleting), and delete accounts. Deleting an account asks where its transactions
@@ -34,10 +38,13 @@ without choosing a target, and you cannot delete the last remaining account.
 
 ### Balances
 
-An account's **running balance** is its opening balance plus the sum of every
-transaction on it — transfers included. Balances show as cards on the
-[Dashboard](dashboard-analytics.md), and the dashboard's account filter narrows
-every chart to a single account.
+An account's **running balance** is its opening balance plus its categorized
+transactions, its transfer legs and its reconcile adjustments. An uncategorized
+row that is not part of a transfer is money the ledger has not accepted yet:
+the budget ignores it, and so does the balance — assigning or clearing a
+category moves both views together, never one without the other. Balances show
+as cards on the [Dashboard](dashboard-analytics.md), and the dashboard's
+account filter narrows every chart to a single account.
 
 ## Transfers
 
@@ -45,11 +52,33 @@ Moving money between two of your own accounts is a **transfer**, not spending.
 Use the **Transfer** button on the Transactions page: pick the source and
 destination accounts, an amount, and a date.
 
-Under the hood a transfer is two linked rows — money out of the source, the same
-amount into the destination — sharing a transfer id and shown with a **transfer**
-badge. Both legs are deliberately uncategorized, so a transfer never counts as
-income or expense: your budget and analytics stay honest by construction, not by
-remembering to exclude it. Deleting a transfer removes both legs together.
+Under the hood a transfer is two rows — money out of the source, the same amount
+into the destination — merged into one transfer entity. **Both rows stay real
+transactions**, which is the point: the bank sends them itself, and keeping them
+means a re-sync recognizes them instead of importing them again. Both legs are
+uncategorized while merged, so a transfer never counts as income or expense —
+your budget and analytics stay honest by construction, not by remembering to
+exclude it. Net worth is unchanged, since the two legs cancel out.
+
+### Transfers monori finds for you
+
+Most transfers are never created by hand: the bank delivers both legs and monori
+pairs them up. After every import and every sync it looks for an outflow and an
+inflow of exactly the same amount on two different accounts. A pair a day or
+less apart is merged straight away; a looser match is offered under **Find
+transfers** on the Transactions page, where it can be confirmed or dismissed —
+and a dismissed pair is never offered again.
+
+A transfer with a fee (1000 out, 995 in) is never matched automatically, because
+guessing which difference is a fee and which is a coincidence is not something
+worth being wrong about. Merge those yourself from **Find transfers**.
+
+### Splitting one apart
+
+**Split into two transactions** in the transfer's row menu undoes the merge:
+both transactions stay in the ledger and get back whatever categories they
+carried before. Removing the money as well is **Delete both transactions**,
+which is deliberately a separate action.
 
 ## Reconcile
 

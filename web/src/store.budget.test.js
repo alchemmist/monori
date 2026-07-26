@@ -1,0 +1,76 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { api } from "./api.js";
+import { useStore } from "./store.js";
+
+beforeEach(() => {
+    useStore.setState({
+        snapshot: {
+            accounts: [],
+            groups: [],
+            categories: [{ id: 7, name: "Groceries" }],
+            budgets: [
+                { categoryId: 7, year: 2027, month: 3, amount: 25_000 },
+                { categoryId: 7, year: 2027, month: 4, amount: 10_000 },
+                { categoryId: 8, year: 2027, month: 4, amount: 5_000 },
+            ],
+            connections: [],
+            transactions: [],
+            transactionsTotal: 0,
+        },
+        toast: null,
+    });
+});
+
+afterEach(() => {
+    vi.restoreAllMocks();
+});
+
+describe("fillBudgetForward", () => {
+    it("persists one category's amount into every later month of the year", async () => {
+        vi.spyOn(api, "bulkBudgets").mockResolvedValue({ set: 9 });
+
+        const count = await useStore.getState().fillBudgetForward(7, 2027, 3);
+
+        const cells = Array.from({ length: 9 }, (_, i) => ({
+            categoryId: 7,
+            year: 2027,
+            month: i + 4,
+            amount: 25_000,
+        }));
+        expect(count).toBe(9);
+        expect(api.bulkBudgets).toHaveBeenCalledWith(cells);
+        expect(
+            useStore
+                .getState()
+                .snapshot.budgets.filter((b) => b.categoryId === 7 && b.year === 2027)
+                .sort((a, b) => a.month - b.month),
+        ).toEqual([{ categoryId: 7, year: 2027, month: 3, amount: 25_000 }, ...cells]);
+        expect(useStore.getState().snapshot.budgets).toContainEqual({
+            categoryId: 8,
+            year: 2027,
+            month: 4,
+            amount: 5_000,
+        });
+    });
+
+    it("clears later months when the selected source amount is zero", async () => {
+        vi.spyOn(api, "bulkBudgets").mockResolvedValue({ set: 9 });
+
+        useStore.setState((state) => ({
+            snapshot: {
+                ...state.snapshot,
+                budgets: state.snapshot.budgets.filter(
+                    (b) => !(b.categoryId === 7 && b.year === 2027 && b.month === 3),
+                ),
+            },
+        }));
+
+        await useStore.getState().fillBudgetForward(7, 2027, 3);
+
+        expect(
+            useStore
+                .getState()
+                .snapshot.budgets.filter((b) => b.categoryId === 7 && b.year === 2027),
+        ).toEqual([]);
+    });
+});

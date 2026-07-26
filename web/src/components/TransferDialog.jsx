@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useStore } from "../store.js";
 import { parseRub } from "../format.js";
 import AppDialog from "../ui/AppDialog.jsx";
-import { FSelect, FTextInput } from "../ui/fields.jsx";
+import { FAmountInput, FSelect, FTextInput } from "../ui/fields.jsx";
 import Txt from "../ui/Txt.jsx";
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -54,12 +54,7 @@ export default function TransferDialog({ accounts, onClose }) {
             <div style={{ display: "flex", flexDirection: "column", gap: 12, paddingTop: 4 }}>
                 <FSelect label="From" value={from || null} onChange={setFrom} data={options} />
                 <FSelect label="To" value={to || null} onChange={setTo} data={options} />
-                <FTextInput
-                    label="Amount"
-                    value={amount}
-                    onChange={(e) => setAmount(e.target.value)}
-                    autoFocus
-                />
+                <FAmountInput label="Amount" value={amount} onChange={setAmount} autoFocus />
                 <FTextInput
                     label="Date"
                     type="date"

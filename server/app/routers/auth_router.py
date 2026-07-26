@@ -84,7 +84,9 @@ def create_user(c, raw_email, password):
         )
     c.commit()
     row = c.execute(
-        "SELECT id, email, created_at, is_admin, last_login FROM users WHERE id=?", (uid,)
+        "SELECT id, email, created_at, is_admin, last_login, default_account_id"
+        " FROM users WHERE id=?",
+        (uid,),
     ).fetchone()
     return serialize_user(row)
 
@@ -139,3 +141,36 @@ def token(form: Annotated[OAuth2PasswordRequestForm, Depends()]):
 @router.get("/me")
 def me(user: Annotated[dict, Depends(current_user)]):
     return user
+
+
+class MePatch(BaseModel):
+    defaultAccountId: int | None = None
+
+
+@router.patch("/me")
+def patch_me(body: MePatch, user: Annotated[dict, Depends(current_user)]):
+    """
+    User-level preferences. ``defaultAccountId`` is where imports land rows no
+    card number can route; null clears it and those rows go back to being
+    assigned by hand.
+    """
+    uid = user["id"]
+    c = conn()
+    try:
+        if (
+            body.defaultAccountId is not None
+            and not c.execute(
+                "SELECT id FROM accounts WHERE id=? AND user_id=?", (body.defaultAccountId, uid)
+            ).fetchone()
+        ):
+            raise HTTPException(400, "unknown account")
+        c.execute("UPDATE users SET default_account_id=? WHERE id=?", (body.defaultAccountId, uid))
+        c.commit()
+        row = c.execute(
+            "SELECT id, email, created_at, is_admin, last_login, default_account_id"
+            " FROM users WHERE id=?",
+            (uid,),
+        ).fetchone()
+        return serialize_user(row)
+    finally:
+        c.close()

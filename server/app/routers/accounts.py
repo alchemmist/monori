@@ -282,6 +282,9 @@ def delete_account(
                     for r in moved
                 ],
             )
+        c.execute(
+            "UPDATE users SET default_account_id=NULL WHERE default_account_id=?", (account_id,)
+        )
         c.execute("DELETE FROM accounts WHERE id=?", (account_id,))
         c.commit()
         return {"ok": True}
@@ -305,8 +308,15 @@ def reconcile_account(
         ).fetchone()
         if not acc:
             raise HTTPException(404, "account not found")
+        # the same rows the account pages count: categorized, transfer legs and
+        # earlier adjustments — an unaccepted uncategorized row is outside the
+        # balance, so reconciling must not fold it in either
         total = c.execute(
-            "SELECT COALESCE(SUM(amount),0) FROM transactions WHERE account_id=?", (account_id,)
+            "SELECT COALESCE(SUM(amount),0) FROM transactions"
+            " WHERE account_id=? AND hidden = 0"
+            " AND (category_id IS NOT NULL OR transfer_id IS NOT NULL"
+            "      OR source IN ('transfer', 'adjustment'))",
+            (account_id,),
         ).fetchone()[0]
         current = acc["opening_balance"] + total
         delta = body.actualBalance - current

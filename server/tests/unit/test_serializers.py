@@ -113,6 +113,7 @@ def test_serialize_tx():
         "transfer_id": None,
         "comment": "note",
         "source": "import",
+        "hidden": 0,
     }
     assert serialize_tx(row) == {
         "id": 11,
@@ -126,6 +127,7 @@ def test_serialize_tx():
         "transferId": None,
         "comment": "note",
         "source": "import",
+        "hidden": False,
     }
 
 
