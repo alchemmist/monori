@@ -167,7 +167,7 @@ describe("DashboardPage", () => {
 
         expect(screen.getByRole("button", { name: "Card" })).toBeInTheDocument();
         expect(trendRow(`${prevYear}-04`).Expenses).toBe(700);
-        expect(series("donut-chart")).toEqual([]); // the donut year defaults to now
+        expect(series("donut-chart")).toEqual([{ name: "Groceries", value: 700, color: "#ef5a17" }]);
     });
 
     it("widens the trend window from the default 36 months to all history", async () => {
@@ -226,7 +226,7 @@ describe("DashboardPage", () => {
         expect(screen.getByText("Pick a category to see its monthly spending")).toBeInTheDocument();
         // runway is undefined with no spending at all
         expect(screen.getByText("Runway").closest(".kpi")).toHaveTextContent("—");
-        expect(series("donut-chart")).toEqual([]);
+        expect(screen.queryByTestId("donut-chart")).not.toBeInTheDocument();
         expect(series("area-chart")).toEqual([]);
     });
 
@@ -289,7 +289,7 @@ describe("DashboardPage", () => {
 
         renderUI(<DashboardPage firstYear={prevYear} lastYear={year} />);
 
-        const groups = series("bar-chart", 2);
+        const groups = series("bar-chart", 1);
         expect(groups.find((row) => row.month === "Feb")).toEqual({ month: "Feb", g2: 120, g3: 450 });
     });
 
@@ -309,5 +309,66 @@ describe("DashboardPage", () => {
         expect(drill.find((row) => row.month === "Jan").Spent).toBe(200);
         expect(drill.find((row) => row.month === "Feb").Spent).toBe(90);
         expect(drill.find((row) => row.month === "Mar").Spent).toBe(0);
+    });
+
+    it("uses the current year's closed months for the YTD trend preset", async () => {
+        const lastYearMonth = `${prevYear}-12`;
+        const january = `${year}-01`;
+        const february = `${year}-02`;
+        seed({
+            accounts: [account(1, "Card", 0)],
+            transactions: [
+                txn(1, { amount: -100_00, date: `${lastYearMonth}-10` }),
+                txn(2, { amount: -200_00, date: `${january}-10` }),
+                txn(3, { amount: -300_00, date: `${february}-10` }),
+            ],
+        });
+
+        const { user } = renderUI(<DashboardPage firstYear={prevYear} lastYear={year} />);
+        await user.click(screen.getByRole("button", { name: "YTD" }));
+
+        const keys = series("composite-chart").map((row) => row.x);
+        expect(keys).toContain(january);
+        if (now.getMonth() > 1) expect(keys).toContain(february);
+        expect(keys).not.toContain(lastYearMonth);
+    });
+
+    it("calculates current pace and last-twelve-month savings from exact amounts", () => {
+        const currentMonth = `${year}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+        const previous = new Date(year, now.getMonth() - 1, 1);
+        const previousMonth = `${previous.getFullYear()}-${String(previous.getMonth() + 1).padStart(2, "0")}`;
+        seed({
+            accounts: [account(1, "Card", 0)],
+            transactions: [
+                txn(1, { categoryId: 1, amount: 1000_00, date: `${prevYear}-06-10` }),
+                txn(2, { categoryId: 2, amount: -400_00, date: `${prevYear}-06-11` }),
+                txn(3, { categoryId: 2, amount: -310_00, date: `${currentMonth}-01` }),
+                txn(4, { categoryId: 2, amount: -90_00, date: `${previousMonth}-10` }),
+            ],
+        });
+
+        renderUI(<DashboardPage firstYear={prevYear} lastYear={year} />);
+
+        expect(screen.getByText("Saved").closest(".kpi")).toHaveTextContent("510 ₽");
+        expect(screen.getByText("Spent this month").closest(".kpi")).toHaveTextContent("310 ₽");
+        expect(screen.getByText("Spent this month").closest(".kpi")).toHaveTextContent(
+            "vs 90 ₽ last month",
+        );
+    });
+
+    it("keeps income and expense separated in the all-time category charts", () => {
+        seed({
+            accounts: [account(1, "Card", 0)],
+            transactions: [
+                txn(1, { categoryId: 1, amount: 700_00, date: `${prevYear}-02-10` }),
+                txn(2, { categoryId: 2, amount: -250_00, date: `${prevYear}-02-11` }),
+            ],
+        });
+
+        renderUI(<DashboardPage firstYear={prevYear} lastYear={year} />);
+
+        const donuts = screen.getAllByTestId("donut-chart").map((node) => JSON.parse(node.dataset.series));
+        expect(donuts[0]).toEqual([{ name: "Groceries", value: 250, color: expect.any(String) }]);
+        expect(donuts[1]).toEqual([{ name: "Salary", value: 700, color: expect.any(String) }]);
     });
 });
