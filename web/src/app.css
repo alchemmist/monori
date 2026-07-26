@@ -495,6 +495,31 @@
     border-top: 1px solid var(--m-border-soft);
 }
 
+/* the running echo of what the add-transaction tab has just entered */
+.addtx-recent {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-top: 4px;
+    padding-top: 10px;
+    border-top: 1px solid var(--m-border-soft);
+}
+
+.addtx-recent__row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    font-size: 13px;
+}
+
+.addtx-recent__desc {
+    overflow: hidden;
+    color: var(--m-text-dim);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 .fade-in {
     animation: fadeIn 0.25s ease;
 }

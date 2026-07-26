@@ -52,6 +52,12 @@ export const api = {
         }).then(json),
     hiddenTx: (offset = 0) =>
         apiFetch(`/api/transactions?hidden=true&limit=1000&offset=${offset}`).then(json),
+    createTx: (body) =>
+        apiFetch("/api/transactions", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+        }).then(json),
     patchTx: (id, patch) =>
         apiFetch(`/api/transactions/${id}`, {
             method: "PATCH",
