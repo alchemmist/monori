@@ -52,6 +52,38 @@ describe("TimeNavigator", () => {
         expect(onChange).toHaveBeenCalledWith([2, 4]);
     });
 
+    it("clamps a moved window to both ends while preserving its inclusive span", () => {
+        const onChange = vi.fn();
+        renderUI(<TimeNavigator items={items} range={[1, 3]} onChange={onChange} />);
+        const svg = document.querySelector("svg");
+        const windowRect = document.querySelector(".timenav__window");
+
+        fireEvent.pointerDown(windowRect, { pointerId: 1, clientX: 500 });
+        fireEvent.pointerMove(svg, { pointerId: 1, clientX: -500 });
+        expect(onChange).toHaveBeenLastCalledWith([0, 2]);
+        fireEvent.pointerUp(svg, { pointerId: 1 });
+
+        fireEvent.pointerDown(windowRect, { pointerId: 2, clientX: 500 });
+        fireEvent.pointerMove(svg, { pointerId: 2, clientX: 1500 });
+        expect(onChange).toHaveBeenLastCalledWith([2, 4]);
+    });
+
+    it("does not let either resize handle shrink the window below three months", () => {
+        const onChange = vi.fn();
+        renderUI(<TimeNavigator items={items} range={[1, 3]} onChange={onChange} />);
+        const svg = document.querySelector("svg");
+        const [left, right] = document.querySelectorAll(".timenav__handle");
+
+        fireEvent.pointerDown(left, { pointerId: 1, clientX: 100 });
+        fireEvent.pointerMove(svg, { pointerId: 1, clientX: 1000 });
+        expect(onChange).toHaveBeenLastCalledWith([1, 3]);
+        fireEvent.pointerUp(svg, { pointerId: 1 });
+
+        fireEvent.pointerDown(right, { pointerId: 2, clientX: 800 });
+        fireEvent.pointerMove(svg, { pointerId: 2, clientX: -100 });
+        expect(onChange).toHaveBeenLastCalledWith([1, 3]);
+    });
+
     it("does not render an SVG for an empty history", () => {
         renderUI(<TimeNavigator items={[]} range={[0, 0]} onChange={vi.fn()} />);
         expect(document.querySelector("svg")).not.toBeInTheDocument();
