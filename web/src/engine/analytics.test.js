@@ -7,6 +7,7 @@ import {
     weekdayProfile,
     dayOfMonthProfile,
     txStats,
+    incomeStats,
     disciplineMatrix,
     accountBalances,
     categoryYearMatrix,
@@ -180,6 +181,13 @@ describe("categoryYearMatrix", () => {
     it("returns nothing for a year without categorized expenses", () => {
         expect(categoryYearMatrix(snapshot, "2019")).toEqual([]);
     });
+
+    it("can build the same year grid for income categories", () => {
+        const [salary] = categoryYearMatrix(snapshot, "2024", { kind: "income" });
+        expect(salary.name).toBe("Job");
+        expect(salary.monthly[0]).toBe(100_000_00);
+        expect(salary.total).toBe(100_000_00);
+    });
 });
 
 describe("weekdayProfile", () => {
@@ -198,6 +206,27 @@ describe("txStats", () => {
         expect(s.count).toBe(3);
         expect(s.median).toBe(10_000_00);
         expect(s.largest.amount).toBe(20_000_00);
+    });
+});
+
+describe("incomeStats", () => {
+    it("counts only categorized income and identifies its largest entry", () => {
+        const s = incomeStats(snapshot, "2024");
+        expect(s.count).toBe(1);
+        expect(s.median).toBe(100_000_00);
+        expect(s.largest).toMatchObject({ amount: 100_000_00, description: "SALARY OOO ROGA" });
+    });
+
+    it("excludes uncategorized deposits and transfer legs", () => {
+        const withIgnored = {
+            ...snapshot,
+            transactions: [
+                ...snapshot.transactions,
+                { id: 7, date: "2024-02-10", amount: 200_000_00, categoryId: null },
+                { id: 8, date: "2024-02-11", amount: 300_000_00, categoryId: 10, transferId: "x" },
+            ],
+        };
+        expect(incomeStats(withIgnored, "2024")).toEqual(incomeStats(snapshot, "2024"));
     });
 });
 

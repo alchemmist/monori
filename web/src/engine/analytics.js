@@ -102,23 +102,26 @@ export function dayOfMonthProfile(snapshot, year) {
 }
 
 /**
- * One year of expenses as a category × month matrix, ready to stack or plot.
+ * One year of categorized income or expenses as a category × month matrix,
+ * ready to stack or plot.
  * Returns [{id, name, monthly[12], total}] sorted by yearly total, biggest
  * first, with everything past `limit` folded into a single trailing
  * `{id: null, name: "Other"}` row so a long tail of small categories cannot
  * turn the chart into an unreadable pile of slivers.
  *
- * Refunds are kept as the negative amounts they are (same as monthlySeries), so
- * a category's year adds up to exactly what every other view reports for it.
+ * `kind` defaults to expenses. Refunds are kept as the negative amounts they
+ * are (same as monthlySeries), so a category's year adds up to exactly what
+ * every other view reports for it.
  */
-export function categoryYearMatrix(snapshot, year, { limit = 8 } = {}) {
+export function categoryYearMatrix(snapshot, year, { limit = 8, kind = "expense" } = {}) {
     const incomeIds = incomeGroupIdSet(snapshot.groups);
     const catById = new Map(snapshot.categories.map((c) => [c.id, c]));
     const rows = new Map();
     for (const t of snapshot.transactions) {
         if (!t.date.startsWith(year) || t.transferId != null || t.categoryId == null) continue;
         const cat = catById.get(t.categoryId);
-        if (!cat || incomeIds.has(cat.groupId)) continue;
+        if (!cat || (kind === "income" ? !incomeIds.has(cat.groupId) : incomeIds.has(cat.groupId)))
+            continue;
         let row = rows.get(cat.id);
         if (!row) {
             row = {
@@ -130,7 +133,7 @@ export function categoryYearMatrix(snapshot, year, { limit = 8 } = {}) {
             };
             rows.set(cat.id, row);
         }
-        const v = -t.amount;
+        const v = kind === "income" ? t.amount : -t.amount;
         row.monthly[+t.date.slice(5, 7) - 1] += v;
         row.total += v;
     }
@@ -200,6 +203,28 @@ export function txStats(snapshot, year) {
         amounts.push(v);
         if (!largest || v > largest.amount)
             largest = { amount: v, description: t.description, date: t.date };
+    }
+    amounts.sort((a, b) => a - b);
+    const median = amounts.length ? amounts[Math.floor(amounts.length / 2)] : 0;
+    return { count: amounts.length, median, largest };
+}
+
+/** Income-transaction stats for a year: count, median, largest.
+ * Only positive rows assigned to a real income category qualify; transfers and
+ * uncategorized deposits stay out of every income metric until categorized. */
+export function incomeStats(snapshot, year) {
+    const incomeIds = incomeGroupIdSet(snapshot.groups);
+    const catById = new Map(snapshot.categories.map((c) => [c.id, c]));
+    const amounts = [];
+    let largest = null;
+    for (const t of snapshot.transactions) {
+        if (!t.date.startsWith(year) || t.amount <= 0 || t.categoryId == null) continue;
+        if (isTransfer(t)) continue;
+        const cat = catById.get(t.categoryId);
+        if (!cat || !incomeIds.has(cat.groupId)) continue;
+        amounts.push(t.amount);
+        if (!largest || t.amount > largest.amount)
+            largest = { amount: t.amount, description: t.description, date: t.date };
     }
     amounts.sort((a, b) => a - b);
     const median = amounts.length ? amounts[Math.floor(amounts.length / 2)] : 0;
