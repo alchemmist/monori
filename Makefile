@@ -146,6 +146,7 @@ mutation:
 	@set +e; \
 	thr=$(MUTATION_THRESHOLD); \
 	( cd web && MUTATION_THRESHOLD=$$thr npx stryker run ); web=$$?; \
+	node scripts/stryker-summary.mjs; \
 	( cd server && uv run mutmut run ); mutmut=$$?; \
 	( cd server && mkdir -p mutants && uv run mutmut export-cicd-stats ); export=$$?; \
 	if [ $$export -eq 0 ]; then \
@@ -153,6 +154,7 @@ mutation:
 	else \
 		srv=$$export; \
 	fi; \
+	node scripts/stryker-summary.mjs; \
 	echo "── mutation gates (threshold $$thr%): stryker exit=$$web, mutmut run exit=$$mutmut, mutmut gate exit=$$srv ──"; \
 	if [ $$web -ne 0 ] || [ $$mutmut -ne 0 ] || [ $$srv -ne 0 ]; then exit 1; fi
 
