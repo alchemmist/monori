@@ -62,4 +62,29 @@ describe("InlineSelect", () => {
         await user.type(screen.getByRole("textbox"), "zzz");
         expect(screen.getByText("Nothing found")).toBeInTheDocument();
     });
+
+    it("keeps loose options searchable and resets a search when the menu closes", async () => {
+        const { user } = renderUI(
+            <InlineSelect
+                searchable
+                value="rent"
+                onChange={() => {}}
+                data={[
+                    { value: "none", label: "Uncategorized" },
+                    { group: "Home", options: [{ value: "rent", label: "Rent" }] },
+                ]}
+            />,
+        );
+
+        await user.click(screen.getByRole("button", { name: "Rent" }));
+        const search = screen.getByRole("textbox");
+        await user.type(search, "uncat");
+        expect(screen.getByRole("option", { name: "Uncategorized" })).toBeInTheDocument();
+        expect(screen.queryByRole("option", { name: "Rent" })).not.toBeInTheDocument();
+
+        await user.click(screen.getByRole("button", { name: "Rent" }));
+        await user.click(screen.getByRole("button", { name: "Rent" }));
+        expect(screen.getByRole("textbox")).toHaveValue("");
+        expect(screen.getByRole("option", { name: "Rent" })).toBeInTheDocument();
+    });
 });
