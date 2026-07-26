@@ -294,3 +294,21 @@ def test_deleting_a_leg_restores_the_partner_category(api, client):
 
     survivor = next(t for t in api.snapshot()["transactions"] if t["id"] == in_id)
     assert survivor["categoryId"] == cat
+
+
+def test_detection_never_pairs_a_reconcile_adjustment(api, client):
+    """
+    A reconcile adjustment is bookkeeping: it exists to bend a balance to the
+    bank's figure, not because money moved anywhere. Matching it against a
+    real transaction would merge fiction with fact.
+    """
+    a = api.default_account()
+    b = api.account("Vault")
+    api.tx("2026-03-10T09:00:00", -5000, accountId=a)
+    r = client.post(f"/api/accounts/{b}/reconcile", json={"actualBalance": 5000})
+    assert r.status_code == 200 and r.json()["delta"] == 5000
+
+    result = client.post("/api/transfers/detect").json()
+    assert result["merged"] == []
+    assert result["suggested"] == 0
+    assert client.get("/api/transfers/suggestions").json()["rows"] == []
