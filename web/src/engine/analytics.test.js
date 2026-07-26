@@ -189,6 +189,22 @@ describe("categoryYearMatrix", () => {
         expect(salary.monthly[0]).toBe(100_000_00);
         expect(salary.total).toBe(100_000_00);
     });
+
+    it("keeps income-category data scoped to the selected year", () => {
+        const withPriorIncome = {
+            ...snapshot,
+            transactions: [
+                ...snapshot.transactions,
+                { id: 7, date: "2023-06-01", amount: 50_000_00, categoryId: 10 },
+            ],
+        };
+        expect(categoryYearMatrix(withPriorIncome, "2023", { kind: "income" })[0].total).toBe(
+            50_000_00,
+        );
+        expect(categoryYearMatrix(withPriorIncome, "2024", { kind: "income" })[0].total).toBe(
+            100_000_00,
+        );
+    });
 });
 
 describe("categoryTotals", () => {

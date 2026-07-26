@@ -59,6 +59,7 @@ export default function DashboardPage({ firstYear, lastYear }) {
     const now = useMemo(() => new Date(), []);
     const [donutYear, setDonutYear] = useState(String(now.getFullYear()));
     const [donutActive, setDonutActive] = useState(null); // legend-hovered category name
+    const [incomeDonutActive, setIncomeDonutActive] = useState(null);
     const [allExpenseActive, setAllExpenseActive] = useState(null);
     const [allIncomeActive, setAllIncomeActive] = useState(null);
     const [drillCat, setDrillCat] = useState(() =>
@@ -184,10 +185,20 @@ export default function DashboardPage({ firstYear, lastYear }) {
     // gross outflows and quietly disagreed with the table it sits next to
     const yearRows = (y) =>
         categoryYearMatrix({ ...snapshot, transactions: txns }, y, { limit: Infinity });
+    const incomeYearRows = (y) =>
+        categoryYearMatrix({ ...snapshot, transactions: txns }, y, {
+            limit: Infinity,
+            kind: "income",
+        });
 
     // Chart 2: donut by category for a year
     const donutData = useMemo(() => {
         return donutDataFromRows(yearRows(donutYear), snapshot.groups);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [txns, donutYear, snapshot]);
+
+    const incomeDonutData = useMemo(() => {
+        return donutDataFromRows(incomeYearRows(donutYear), snapshot.groups);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [txns, donutYear, snapshot]);
 
@@ -411,6 +422,25 @@ export default function DashboardPage({ firstYear, lastYear }) {
                             data={donutData}
                             active={donutActive}
                             setActive={setDonutActive}
+                        />
+                    </div>
+                </div>
+
+                <div className="card chart-card">
+                    <div className="chart-card__head">
+                        <div className="chart-card__title">Income by category</div>
+                        <InlineSelect
+                            small
+                            value={donutYear}
+                            onChange={setDonutYear}
+                            data={years}
+                        />
+                    </div>
+                    <div className="chart-card__body chart-donut">
+                        <CategoryDonut
+                            data={incomeDonutData}
+                            active={incomeDonutActive}
+                            setActive={setIncomeDonutActive}
                         />
                     </div>
                 </div>
