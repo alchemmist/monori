@@ -143,11 +143,17 @@ coverage:
 	bash scripts/coverage-tree.sh
 
 mutation:
-	@thr=$(MUTATION_THRESHOLD); \
+	@set +e; \
+	thr=$(MUTATION_THRESHOLD); \
 	( cd web && MUTATION_THRESHOLD=$$thr npx stryker run ); web=$$?; \
-	( cd server && { uv run mutmut run || true; } && mkdir -p mutants && uv run mutmut export-cicd-stats ); \
-	python3 scripts/mutation-gate.py server/mutants/mutmut-cicd-stats.json $$thr; srv=$$?; \
-	echo "── mutation gates (threshold $$thr%): stryker exit=$$web, mutmut gate exit=$$srv ──"; \
-	[ $$web -eq 0 ] && [ $$srv -eq 0 ]
+	( cd server && uv run mutmut run ); mutmut=$$?; \
+	( cd server && mkdir -p mutants && uv run mutmut export-cicd-stats ); export=$$?; \
+	if [ $$export -eq 0 ]; then \
+		python3 scripts/mutation-gate.py server/mutants/mutmut-cicd-stats.json $$thr; srv=$$?; \
+	else \
+		srv=$$export; \
+	fi; \
+	echo "── mutation gates (threshold $$thr%): stryker exit=$$web, mutmut run exit=$$mutmut, mutmut gate exit=$$srv ──"; \
+	if [ $$web -ne 0 ] || [ $$mutmut -ne 0 ] || [ $$srv -ne 0 ]; then exit 1; fi
 
 check: fmt-check lint typecheck analyze test
