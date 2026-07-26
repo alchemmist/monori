@@ -1,3 +1,4 @@
+// @ts-nocheck
 import "@testing-library/jest-dom/vitest";
 import { cleanup } from "@testing-library/react";
 import { afterEach, vi } from "vitest";
@@ -35,7 +36,8 @@ window.HTMLElement.prototype.scrollIntoView ??= () => {};
 window.HTMLElement.prototype.hasPointerCapture ??= () => false;
 window.HTMLElement.prototype.releasePointerCapture ??= () => {};
 window.HTMLElement.prototype.setPointerCapture ??= () => {};
-window.scrollTo ??= () => {};
+window.scrollTo = () => {};
+window.HTMLCanvasElement.prototype.getContext = () => null;
 
 // jsdom paints nothing, so every element measures 0×0 — recharts and the
 // windowed transaction list both fall back to rendering nothing at that size.
@@ -60,5 +62,5 @@ afterEach(() => {
     cleanup();
     vi.restoreAllMocks();
     // optional-chained: a suite may have swapped localStorage for its own stub
-    globalThis.localStorage?.clear?.();
+    window.localStorage?.clear?.();
 });

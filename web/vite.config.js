@@ -1,3 +1,4 @@
+// @ts-nocheck
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
@@ -24,6 +25,7 @@ export default defineConfig({
         // component tests render into jsdom; the pure-logic suites don't care
         environment: "jsdom",
         setupFiles: ["src/test/setup.js"],
+        execArgv: ["--disable-warning=ExperimentalWarning"],
         // component tests wait on real DOM updates; the default 5s holds
         // locally but not under v8 instrumentation on a loaded runner, where
         // a lazy route plus the demo dataset can take tens of seconds to mount
