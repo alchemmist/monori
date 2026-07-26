@@ -26,6 +26,11 @@ function series(testid, index = 0) {
     return JSON.parse(screen.getAllByTestId(testid)[index].dataset.series);
 }
 
+function chartSeries(title) {
+    const card = screen.getByText(new RegExp(title)).closest(".chart-card");
+    return JSON.parse(card.querySelector('[data-testid="bar-chart"]').dataset.series);
+}
+
 // ru-RU groups thousands with a non-breaking space. Expected strings below are
 // written with plain spaces throughout and only the digit groups swapped, so
 // they stay readable while matching the rendered text exactly.
@@ -264,7 +269,7 @@ describe("AnalyticsPage", () => {
                 }),
             );
 
-            const weekday = series("bar-chart", 1);
+            const weekday = chartSeries("Spending by weekday");
             expect(weekday.find((r) => r.day === "Mon").Share).toBe(75);
             expect(weekday.find((r) => r.day === "Sat").Share).toBe(25);
             expect(weekday.filter((r) => r.Share > 0)).toHaveLength(2);
@@ -281,7 +286,7 @@ describe("AnalyticsPage", () => {
                 }),
             );
 
-            const dom = series("bar-chart", 2);
+            const dom = chartSeries("Spending by day of month");
             expect(dom).toHaveLength(31);
             expect(dom.find((r) => r.day === "3").Spent).toBe(500);
             expect(dom.find((r) => r.day === "17").Spent).toBe(50);
@@ -303,7 +308,7 @@ describe("AnalyticsPage", () => {
             );
 
             // merchantKey upper-cases and strips digits, so the two OZON rows fold
-            expect(series("bar-chart", 3)).toEqual([
+            expect(chartSeries("Top merchants")).toEqual([
                 { name: "OZON", Spent: 400 },
                 { name: "PEREKRESTOK", Spent: 250 },
             ]);
@@ -312,7 +317,7 @@ describe("AnalyticsPage", () => {
         it("says so when the year has no categorized expenses", () => {
             render(seed({ transactions: [] }));
 
-            expect(screen.getByText(`No categorized expenses in ${YEAR}`)).toBeInTheDocument();
+            expect(screen.getAllByText(`No categorized expenses in ${YEAR}`)).toHaveLength(2);
         });
     });
 
