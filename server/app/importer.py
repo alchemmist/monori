@@ -135,12 +135,18 @@ def build_rules(categories, groups):
 def categorize(description, amount_kop, rules):
     """
     Returns category_id or None.
+
+    An inflow is income first — but a merchant's money coming back is a refund,
+    and a refund belongs in the envelope it left, or the category quietly reads
+    as more spent than it was. So a positive amount that matches no income
+    keyword still gets to match the expense keywords.
     """
     desc = str(description or "").lower()
     if not desc or amount_kop == 0:
         return None
-    for rule in rules["IN" if amount_kop > 0 else "OUT"]:
-        for kw in rule["keywords"]:
-            if kw in desc:
-                return rule["category_id"]
+    for side in ("IN", "OUT") if amount_kop > 0 else ("OUT",):
+        for rule in rules[side]:
+            for kw in rule["keywords"]:
+                if kw in desc:
+                    return rule["category_id"]
     return None
