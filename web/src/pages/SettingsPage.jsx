@@ -140,12 +140,12 @@ export default function SettingsPage({ theme, onToggleTheme, onMigrate }) {
                             hint="Where imports put transactions whose card number is missing — leave empty to assign them by hand"
                         >
                             <FSelect
-                                placeholder="No default — assign by hand"
-                                clearable
+                                className="settings__control"
+                                placeholder="No default"
                                 value={
                                     user.defaultAccountId != null
                                         ? String(user.defaultAccountId)
-                                        : null
+                                        : ""
                                 }
                                 onChange={(v) =>
                                     patchMe({ defaultAccountId: v ? Number(v) : null }).catch((e) =>
@@ -156,9 +156,12 @@ export default function SettingsPage({ theme, onToggleTheme, onMigrate }) {
                                         }),
                                     )
                                 }
-                                data={(snapshot?.accounts ?? [])
-                                    .filter((a) => !a.archived)
-                                    .map((a) => ({ value: String(a.id), label: a.name }))}
+                                data={[
+                                    { value: "", label: "No default" },
+                                    ...(snapshot?.accounts ?? [])
+                                        .filter((a) => !a.archived)
+                                        .map((a) => ({ value: String(a.id), label: a.name })),
+                                ]}
                             />
                         </Row>
                     </Section>
