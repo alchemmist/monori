@@ -17,7 +17,6 @@ import { orderedGroups, categoriesByGroup } from "../categoryOrder.js";
 import { money, fmtDate } from "../format.js";
 import { useWindowedRows } from "../useWindowedRows.js";
 import { compareTx } from "../mergeTransactions.js";
-import ImportDialog from "../components/ImportDialog.jsx";
 import TransferDialog from "../components/TransferDialog.jsx";
 import TransferRow from "../components/TransferRow.jsx";
 import TransferSuggestions from "../components/TransferSuggestions.jsx";
@@ -42,6 +41,7 @@ export default function TransactionsPage() {
         splitTransfer,
         deleteTransferWithLegs,
         notify,
+        openTab,
     } = useStore();
     const [query, setQuery] = useState("");
     const [catFilter, setCatFilter] = useState("all");
@@ -53,7 +53,6 @@ export default function TransactionsPage() {
     useEffect(() => {
         if (showHidden) loadHiddenTx();
     }, [showHidden, loadHiddenTx]);
-    const [importing, setImporting] = useState(false);
     const [transferring, setTransferring] = useState(false);
     const [suggesting, setSuggesting] = useState(false);
     const [expanded, setExpanded] = useState(() => new Set());
@@ -392,7 +391,7 @@ export default function TransactionsPage() {
                 <Button
                     variant="filled"
                     size="m"
-                    onClick={() => setImporting(true)}
+                    onClick={() => openTab("statement-import", {}, "statement-import")}
                     leftSection={<ArrowDownToLine width={14} height={14} />}
                 >
                     Import statement
@@ -506,7 +505,6 @@ export default function TransactionsPage() {
                 </button>
             )}
 
-            {importing && <ImportDialog onClose={() => setImporting(false)} />}
             {transferring && (
                 <TransferDialog accounts={accounts} onClose={() => setTransferring(false)} />
             )}

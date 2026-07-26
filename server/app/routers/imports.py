@@ -26,6 +26,7 @@ class ImportBody(BaseModel):
 
 
 class CommitRow(BaseModel):
+    accountId: int | None = None
     date: str
     amount: int
     description: str = ""
@@ -35,7 +36,10 @@ class CommitRow(BaseModel):
 
 
 class CommitBody(BaseModel):
-    accountId: int
+    # Kept as a fallback for older clients that send one account for the whole
+    # statement. New clients attach an account to every row, because a CSV can
+    # contain operations from several cards.
+    accountId: int | None = None
     rows: list[CommitRow]
 
 
@@ -65,6 +69,34 @@ def _owned_account(c, account_id, uid):
     )
 
 
+def _card_digits(card):
+    return "".join(ch for ch in str(card or "") if ch.isdigit())
+
+
+def _detect_row_accounts(c, uid, rows, fallback_account_id=None):
+    """Put an account on rows whose card tail belongs to exactly one account."""
+    bound: dict[str, set[int]] = {}
+    for account in c.execute(
+        "SELECT id, card_tails FROM accounts WHERE user_id=? AND archived=0", (uid,)
+    ):
+        for tail in (account["card_tails"] or "").split(","):
+            if tail:
+                bound.setdefault(tail, set()).add(account["id"])
+
+    for row in rows:
+        digits = _card_digits(row.get("card"))
+        matches = [
+            tail for tail in bound if digits and (digits.endswith(tail) or tail.endswith(digits))
+        ]
+        best = max(matches, key=len) if matches else None
+        owners = bound.get(best, set()) if best else set()
+        # A duplicate binding is deliberately left for the user: choosing an
+        # arbitrary account here could silently corrupt the ledger. The fallback
+        # only exists for the old one-account preview API; the mixed-CSV UI does
+        # not send one and therefore requires a manual choice.
+        row["accountId"] = next(iter(owners)) if len(owners) == 1 else fallback_account_id
+
+
 @router.post("/preview")
 def import_preview(body: ImportBody, user: Annotated[dict, Depends(current_user)]):
     uid = user["id"]
@@ -74,19 +106,26 @@ def import_preview(body: ImportBody, user: Annotated[dict, Depends(current_user)
     try:
         rows, errors = parse_statement(body.text)
         rules = _load_user_rules(c, uid)
-        account_id = body.accountId if _owned_account(c, body.accountId, uid) else None
-        existing = existing_hash_counts(c, account_id) if account_id is not None else {}
-        seen_in_batch: dict = {}
+        fallback_account_id = body.accountId if _owned_account(c, body.accountId, uid) else None
+        _detect_row_accounts(c, uid, rows, fallback_account_id)
+        existing_by_account: dict[int, dict] = {}
+        seen_in_batch: dict[tuple[int, str], int] = {}
         for row in rows:
             row["categoryId"] = categorize(row["description"], row["amount"], rules)
+            account_id = row["accountId"]
             if account_id is None:
                 # no account to dedup against — don't fabricate account-less hashes
                 row["duplicate"] = False
                 continue
+            existing = existing_by_account.get(account_id)
+            if existing is None:
+                existing = existing_hash_counts(c, account_id)
+                existing_by_account[account_id] = existing
             row["hash"] = tx_hash(account_id, row["date"], row["amount"], row["description"])
-            n_batch = seen_in_batch.get(row["hash"], 0)
+            key = (account_id, row["hash"])
+            n_batch = seen_in_batch.get(key, 0)
             row["duplicate"] = existing.get(row["hash"], 0) > n_batch
-            seen_in_batch[row["hash"]] = n_batch + 1
+            seen_in_batch[key] = n_batch + 1
         return {"rows": rows, "errors": errors}
     finally:
         c.close()
@@ -101,20 +140,33 @@ def import_commit(body: CommitBody, user: Annotated[dict, Depends(current_user)]
     uid = user["id"]
     c = conn()
     try:
-        if not _owned_account(c, body.accountId, uid):
+        if body.accountId is not None and not _owned_account(c, body.accountId, uid):
             raise HTTPException(400, "unknown account")
-        rows = [
-            {
-                "date": r.date,
-                "amount": r.amount,
-                "description": r.description,
-                "bank_category": r.bank_category,
-                "mcc": r.mcc,
-                "category_id": r.categoryId,
-            }
-            for r in body.rows
-        ]
-        inserted, skipped = commit_rows(c, body.accountId, rows, source="import")
+        grouped: dict[int, list[dict]] = {}
+        for r in body.rows:
+            # A body-level account is the legacy, single-account contract and
+            # intentionally takes precedence over preview metadata.
+            account_id = body.accountId if body.accountId is not None else r.accountId
+            if account_id is None:
+                raise HTTPException(400, "every import row needs an account")
+            grouped.setdefault(account_id, []).append(
+                {
+                    "date": r.date,
+                    "amount": r.amount,
+                    "description": r.description,
+                    "bank_category": r.bank_category,
+                    "mcc": r.mcc,
+                    "category_id": r.categoryId,
+                }
+            )
+        for account_id in grouped:
+            if not _owned_account(c, account_id, uid):
+                raise HTTPException(400, "unknown account")
+        inserted = skipped = 0
+        for account_id, rows in grouped.items():
+            added, ignored = commit_rows(c, account_id, rows, source="import")
+            inserted += added
+            skipped += ignored
         merged, suggested = detect(c, uid)
         c.commit()
         return {

@@ -155,17 +155,17 @@ export const api = {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ ids }),
         }).then(json),
-    importPreview: (text, accountId) =>
+    importPreview: (text) =>
         apiFetch("/api/import/preview", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ text, accountId }),
+            body: JSON.stringify({ text }),
         }).then(json),
-    importCommit: (rows, accountId) =>
+    importCommit: (rows) =>
         apiFetch("/api/import/commit", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ accountId, rows }),
+            body: JSON.stringify({ rows }),
         }).then(json),
     connectionsAvailable: () => apiFetch("/api/connections/available").then(json),
     createConnection: (body) =>

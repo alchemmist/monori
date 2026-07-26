@@ -694,9 +694,9 @@ export const useStore = create((set, get) => ({
         });
     },
 
-    async commitImport(rows, accountId) {
+    async commitImport(rows) {
         if (isDemo()) return { imported: 0, skipped: 0, demo: true };
-        const res = await api.importCommit(rows, accountId);
+        const res = await api.importCommit(rows);
         await get().load();
         return res;
     },
