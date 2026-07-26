@@ -25,5 +25,14 @@ describe("Landing", () => {
         );
         expect(screen.getByText("The whole model in three lines")).toBeInTheDocument();
         expect(screen.getByText("Run it with one command.")).toBeInTheDocument();
+        expect(screen.getAllByRole("link", { name: "GitHub" })).toHaveLength(2);
+        expect(screen.getAllByRole("link", { name: "GitHub" })[0]).toHaveAttribute(
+            "href",
+            "https://github.com/alchemmist/monori",
+        );
+        expect(screen.getByRole("link", { name: /deploy monori/i })).toHaveAttribute(
+            "href",
+            "/docs/getting-started",
+        );
     });
 });
