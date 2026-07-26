@@ -149,6 +149,30 @@ export function categoryYearMatrix(snapshot, year, { limit = 8, kind = "expense"
     return [...ranked.slice(0, limit), other];
 }
 
+/** Totals by category across the entire ledger, sorted largest first.
+ * The same categorized-only rule backs both all-time donut charts: transfers,
+ * uncategorized transactions and deleted categories do not create a slice. */
+export function categoryTotals(snapshot, { kind = "expense" } = {}) {
+    const incomeIds = incomeGroupIdSet(snapshot.groups);
+    const catById = new Map(snapshot.categories.map((c) => [c.id, c]));
+    const rows = new Map();
+    for (const t of snapshot.transactions) {
+        if (isTransfer(t) || t.categoryId == null) continue;
+        const cat = catById.get(t.categoryId);
+        if (!cat || (kind === "income" ? !incomeIds.has(cat.groupId) : incomeIds.has(cat.groupId)))
+            continue;
+        let row = rows.get(cat.id);
+        if (!row) {
+            row = { id: cat.id, groupId: cat.groupId, name: cat.name, total: 0 };
+            rows.set(cat.id, row);
+        }
+        row.total += kind === "income" ? t.amount : -t.amount;
+    }
+    return [...rows.values()]
+        .filter((r) => r.total > 0)
+        .sort((a, b) => b.total - a.total || a.name.localeCompare(b.name));
+}
+
 /** Merchant key: strip trailing city/junk numbers, collapse whitespace, take a
  * stable prefix so "OZON ... MOSCOW" and "OZON ... MOSKVA G" group together. */
 export function merchantKey(description) {

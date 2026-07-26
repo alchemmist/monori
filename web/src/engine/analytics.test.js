@@ -11,6 +11,7 @@ import {
     disciplineMatrix,
     accountBalances,
     categoryYearMatrix,
+    categoryTotals,
 } from "./analytics.js";
 import { computeRange } from "./budget.js";
 
@@ -187,6 +188,30 @@ describe("categoryYearMatrix", () => {
         expect(salary.name).toBe("Job");
         expect(salary.monthly[0]).toBe(100_000_00);
         expect(salary.total).toBe(100_000_00);
+    });
+});
+
+describe("categoryTotals", () => {
+    it("sums all-time expense and income categories separately", () => {
+        expect(categoryTotals(snapshot)).toMatchObject([
+            { id: 20, name: "Groceries", total: 30_000_00 },
+            { id: 21, name: "Fun", total: 5_000_00 },
+        ]);
+        expect(categoryTotals(snapshot, { kind: "income" })).toMatchObject([
+            { id: 10, name: "Job", total: 100_000_00 },
+        ]);
+    });
+
+    it("drops uncategorized rows and transfer legs", () => {
+        const withIgnored = {
+            ...snapshot,
+            transactions: [
+                ...snapshot.transactions,
+                { id: 7, date: "2024-02-10", amount: -90_000_00, categoryId: null },
+                { id: 8, date: "2024-02-11", amount: -80_000_00, categoryId: 20, transferId: "x" },
+            ],
+        };
+        expect(categoryTotals(withIgnored)).toEqual(categoryTotals(snapshot));
     });
 });
 
