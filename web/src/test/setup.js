@@ -35,6 +35,7 @@ window.HTMLElement.prototype.scrollIntoView ??= () => {};
 window.HTMLElement.prototype.hasPointerCapture ??= () => false;
 window.HTMLElement.prototype.releasePointerCapture ??= () => {};
 window.HTMLElement.prototype.setPointerCapture ??= () => {};
+window.HTMLElement.prototype.animate ??= () => ({ cancel: () => {} });
 window.scrollTo = () => {};
 window.HTMLCanvasElement.prototype.getContext = () => null;
 
