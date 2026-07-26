@@ -27,7 +27,10 @@ describe("MigratePanel", () => {
             budgetCells: 5,
             errors: [{ line: 3 }],
             warnings: ["Check dates"],
-            accountMarkers: ["Main", "Savings"],
+            accountSlots: [
+                { key: "Main", marker: "Main", currency: "RUB" },
+                { key: "Savings", marker: "Savings", currency: "RUB" },
+            ],
             budgetConflicts: 2,
         });
         const commit = vi.spyOn(api, "workbookCommit").mockResolvedValue({
@@ -56,7 +59,7 @@ describe("MigratePanel", () => {
         await user.click(screen.getByLabelText("Keep mine"));
         await user.click(screen.getByRole("button", { name: "Import" }));
         await waitFor(() =>
-            expect(commit).toHaveBeenCalledWith(file, { Main: 1, Savings: 2 }, "skip"),
+            expect(commit).toHaveBeenCalledWith(file, { Main: 1, Savings: 2 }, "skip", true),
         );
         expect(load).toHaveBeenCalled();
         expect(await screen.findByText(/Imported 4 transactions/)).toBeInTheDocument();
@@ -71,7 +74,7 @@ describe("MigratePanel", () => {
             budgetCells: 1,
             errors: [],
             warnings: [],
-            accountMarkers: ["Main"],
+            accountSlots: [{ key: "Main", marker: "Main", currency: "RUB" }],
             budgetConflicts: 3,
         });
         const commit = vi.spyOn(api, "workbookCommit").mockResolvedValue({
@@ -91,7 +94,7 @@ describe("MigratePanel", () => {
         await user.click(container.querySelector("button.gsel"));
         await user.click(await screen.findByText("Card"));
         await user.click(screen.getByRole("button", { name: "Import" }));
-        await waitFor(() => expect(commit).toHaveBeenCalledWith(file, { Main: 1 }, "overwrite"));
+        await waitFor(() => expect(commit).toHaveBeenCalledWith(file, { Main: 1 }, "overwrite", true));
     });
 
     it("reports a workbook preview failure without enabling import", async () => {
@@ -118,7 +121,7 @@ describe("MigratePanel", () => {
             budgetCells: 0,
             errors: [],
             warnings: [],
-            accountMarkers: [],
+            accountSlots: [],
             budgetConflicts: 0,
         });
         const commit = vi.spyOn(api, "workbookCommit").mockResolvedValue({
@@ -136,7 +139,7 @@ describe("MigratePanel", () => {
         await screen.findByText(/0 groups, 0 categories, 2 transactions/);
         expect(screen.getByRole("button", { name: "Import" })).toBeEnabled();
         await user.click(screen.getByRole("button", { name: "Import" }));
-        await waitFor(() => expect(commit).toHaveBeenCalledWith(file, {}, "overwrite"));
+        await waitFor(() => expect(commit).toHaveBeenCalledWith(file, {}, "overwrite", true));
         expect(screen.getByRole("button", { name: "Done" })).toBeInTheDocument();
         await user.click(screen.getByRole("button", { name: "Done" }));
         expect(close).toHaveBeenCalledOnce();
