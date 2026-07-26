@@ -139,7 +139,8 @@ export default function TransactionsPage() {
     // value renders and can be kept or changed.
     const catSectionsFor = (t) => {
         const cur = t.categoryId != null ? catById.get(t.categoryId) : null;
-        if (!cur || !cur.archived) return catSections;
+        const uncategorized = { value: "", label: "Leave uncategorized" };
+        if (!cur || !cur.archived) return [uncategorized, ...catSections];
         const g = groupById.get(cur.groupId);
         const opt = { value: String(cur.id), label: cur.name };
         const clone = catSections.map((s) => ({ ...s, options: [...s.options] }));
@@ -152,7 +153,7 @@ export default function TransactionsPage() {
                 kind: g?.kind,
                 options: [opt],
             });
-        return clone;
+        return [uncategorized, ...clone];
     };
 
     // merged (and sorted) once here, so typing in the search box only refilters
