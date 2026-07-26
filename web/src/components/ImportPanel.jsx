@@ -22,6 +22,8 @@ export default function ImportPanel({ onClose }) {
     const [rows, setRows] = useState(null);
     const [errors, setErrors] = useState([]);
     const [busy, setBusy] = useState(false);
+    const [checkingDuplicates, setCheckingDuplicates] = useState(false);
+    const duplicateEpoch = useRef(0);
 
     const accountOptions = accounts.map((a) => ({ value: String(a.id), label: a.name }));
     const categoryOptions = [
@@ -61,11 +63,41 @@ export default function ImportPanel({ onClose }) {
     const changeRow = (index, patch) =>
         setRows((current) => current.map((row, i) => (i === index ? { ...row, ...patch } : row)));
 
+    const refreshDuplicates = async (nextRows) => {
+        const epoch = ++duplicateEpoch.current;
+        setCheckingDuplicates(true);
+        try {
+            const { duplicates } = await api.importDuplicates(nextRows);
+            if (epoch !== duplicateEpoch.current) return;
+            setRows((current) =>
+                current.map((row, index) => ({ ...row, duplicate: duplicates[index] })),
+            );
+        } catch (e) {
+            if (epoch === duplicateEpoch.current) {
+                notify({
+                    title: "Could not check duplicates",
+                    theme: "danger",
+                    content: String(e),
+                });
+            }
+        } finally {
+            if (epoch === duplicateEpoch.current) setCheckingDuplicates(false);
+        }
+    };
+
+    const changeAccount = (index, value) => {
+        const nextRows = rows.map((row, i) =>
+            i === index ? { ...row, accountId: value ? Number(value) : null } : row,
+        );
+        setRows(nextRows);
+        refreshDuplicates(nextRows);
+    };
+
     const commit = async () => {
-        if (!allAssigned) return;
+        if (!allAssigned || checkingDuplicates) return;
         setBusy(true);
         try {
-            const { inserted } = await commitImport(rows);
+            const { inserted } = await commitImport(rows.filter((row) => !row.duplicate));
             notify({ title: `Imported ${inserted} transactions`, theme: "success" });
             onClose();
         } catch (e) {
@@ -84,7 +116,7 @@ export default function ImportPanel({ onClose }) {
                 size="l"
                 variant="filled"
                 loading={busy && !!rows}
-                disabled={!allAssigned}
+                disabled={!allAssigned || checkingDuplicates}
                 onClick={commit}
             >
                 Import {fresh}
@@ -142,6 +174,7 @@ export default function ImportPanel({ onClose }) {
                     >
                         <Tag theme="success">{fresh} new</Tag>
                         <Tag theme="warning">{rows.length - fresh} duplicates skipped</Tag>
+                        {checkingDuplicates && <Tag theme="info">checking duplicates</Tag>}
                         {unassigned > 0 && <Tag theme="danger">{unassigned} need an account</Tag>}
                         {errors.length > 0 && (
                             <Tag theme="danger">{errors.length} unparsed lines</Tag>
@@ -228,11 +261,7 @@ export default function ImportPanel({ onClose }) {
                                                         ? ""
                                                         : String(row.accountId)
                                                 }
-                                                onChange={(value) =>
-                                                    changeRow(index, {
-                                                        accountId: value ? Number(value) : null,
-                                                    })
-                                                }
+                                                onChange={(value) => changeAccount(index, value)}
                                                 data={accountOptions}
                                                 placeholder="Choose account"
                                             />

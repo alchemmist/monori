@@ -43,6 +43,10 @@ class CommitBody(BaseModel):
     rows: list[CommitRow]
 
 
+class DuplicateBody(BaseModel):
+    rows: list[CommitRow]
+
+
 def _load_user_rules(c, uid):
     groups = {
         r["id"]: r["kind"]
@@ -97,6 +101,26 @@ def _detect_row_accounts(c, uid, rows, fallback_account_id=None):
         row["accountId"] = next(iter(owners)) if len(owners) == 1 else fallback_account_id
 
 
+def _mark_duplicates(c, rows):
+    """Mark duplicate rows using each row's currently selected account."""
+    existing_by_account: dict[int, dict] = {}
+    seen_in_batch: dict[tuple[int, str], int] = {}
+    for row in rows:
+        account_id = row["accountId"]
+        if account_id is None:
+            row["duplicate"] = False
+            continue
+        existing = existing_by_account.get(account_id)
+        if existing is None:
+            existing = existing_hash_counts(c, account_id)
+            existing_by_account[account_id] = existing
+        row["hash"] = tx_hash(account_id, row["date"], row["amount"], row["description"])
+        key = (account_id, row["hash"])
+        n_batch = seen_in_batch.get(key, 0)
+        row["duplicate"] = existing.get(row["hash"], 0) > n_batch
+        seen_in_batch[key] = n_batch + 1
+
+
 @router.post("/preview")
 def import_preview(body: ImportBody, user: Annotated[dict, Depends(current_user)]):
     uid = user["id"]
@@ -108,25 +132,34 @@ def import_preview(body: ImportBody, user: Annotated[dict, Depends(current_user)
         rules = _load_user_rules(c, uid)
         fallback_account_id = body.accountId if _owned_account(c, body.accountId, uid) else None
         _detect_row_accounts(c, uid, rows, fallback_account_id)
-        existing_by_account: dict[int, dict] = {}
-        seen_in_batch: dict[tuple[int, str], int] = {}
         for row in rows:
             row["categoryId"] = categorize(row["description"], row["amount"], rules)
-            account_id = row["accountId"]
-            if account_id is None:
-                # no account to dedup against — don't fabricate account-less hashes
-                row["duplicate"] = False
-                continue
-            existing = existing_by_account.get(account_id)
-            if existing is None:
-                existing = existing_hash_counts(c, account_id)
-                existing_by_account[account_id] = existing
-            row["hash"] = tx_hash(account_id, row["date"], row["amount"], row["description"])
-            key = (account_id, row["hash"])
-            n_batch = seen_in_batch.get(key, 0)
-            row["duplicate"] = existing.get(row["hash"], 0) > n_batch
-            seen_in_batch[key] = n_batch + 1
+        _mark_duplicates(c, rows)
         return {"rows": rows, "errors": errors}
+    finally:
+        c.close()
+
+
+@router.post("/duplicates")
+def import_duplicates(body: DuplicateBody, user: Annotated[dict, Depends(current_user)]):
+    """Re-check preview rows after the user manually changes their accounts."""
+    uid = user["id"]
+    c = conn()
+    try:
+        rows = [
+            {
+                "accountId": row.accountId,
+                "date": row.date,
+                "amount": row.amount,
+                "description": row.description,
+            }
+            for row in body.rows
+        ]
+        for row in rows:
+            if row["accountId"] is not None and not _owned_account(c, row["accountId"], uid):
+                raise HTTPException(400, "unknown account")
+        _mark_duplicates(c, rows)
+        return {"duplicates": [row["duplicate"] for row in rows]}
     finally:
         c.close()
 

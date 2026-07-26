@@ -73,6 +73,16 @@ def test_preview_routes_each_card_and_commit_accepts_mixed_accounts(api, client)
     }
 
 
+def test_duplicate_check_uses_the_account_selected_for_each_row(api, client):
+    other = api.account("Other")
+    rows = api.preview(api.statement)
+    api.tx(rows[0]["date"], rows[0]["amount"], accountId=other, description=rows[0]["description"])
+    rows[0]["accountId"] = other
+
+    checked = client.post("/api/import/duplicates", json={"rows": rows}).json()
+    assert checked["duplicates"] == [True, False]
+
+
 def test_import_commit_double_submit_is_idempotent(api, client):
     rows = api.preview(api.statement)
     assert commit(client, api, rows) == {"inserted": 2, "skipped": 0}

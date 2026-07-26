@@ -161,6 +161,12 @@ export const api = {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ text }),
         }).then(json),
+    importDuplicates: (rows) =>
+        apiFetch("/api/import/duplicates", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ rows }),
+        }).then(json),
     importCommit: (rows) =>
         apiFetch("/api/import/commit", {
             method: "POST",
