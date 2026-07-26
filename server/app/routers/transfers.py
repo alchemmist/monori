@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 from ..auth import current_user
 from ..deps import conn, serialize_tx
 from ..importer import tx_hash
-from ..transfer_match import AUTO_DAYS, SUGGEST_DAYS
+from ..transfer_match import AUTO_DAYS, SUGGEST_DAYS, split_confident
 from ..transfer_service import LinkError, candidates, detect, list_transfers, reject
 from ..transfer_service import link as link_pair
 from ..transfer_service import split as split_transfer
@@ -56,14 +56,15 @@ def get_suggestions(
     maxDays: int = Query(default=SUGGEST_DAYS, ge=0, le=31),
 ):
     """
-    Pairs that look like a transfer but are not close enough in time to merge
-    unasked. The transactions themselves ride along so the UI can show both
-    sides without a second round trip.
+    Pairs that look like a transfer but that detection would not merge unasked
+    — too far apart in time, or the two descriptions disagree. The transactions
+    themselves ride along so the UI can show both sides without a second round
+    trip.
     """
     uid = user["id"]
     c = conn()
     try:
-        pairs = [p for p in candidates(c, uid, maxDays) if p["days"] > AUTO_DAYS]
+        _, pairs = split_confident(candidates(c, uid, maxDays))
         ids = sorted({p["outTxId"] for p in pairs} | {p["inTxId"] for p in pairs})
         legs = (
             [serialize_tx(r) for r in c.execute(LEGS_BY_ID, (uid, json.dumps(ids)))] if ids else []

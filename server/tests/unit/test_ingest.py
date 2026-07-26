@@ -201,3 +201,47 @@ def test_snapshot_includes_connections_without_secrets(tmp_path):
     assert conns[0]["status"] == "connected"
     assert conns[0]["hasCredentials"] is True
     assert "credentials_encrypted" not in conns[0]
+
+
+def test_historical_day_counts_span_accounts_and_skip_manual(tmp_path):
+    c = _db(tmp_path)
+    uid = _uid(c)
+    c.execute(
+        "INSERT INTO accounts (user_id, name, type, currency, sort)"
+        " VALUES (?, 'Second', 'card', 'RUB', 2)",
+        (uid,),
+    )
+    first, second = [r[0] for r in c.execute("SELECT id FROM accounts ORDER BY id")]
+    tx_sql = (
+        "INSERT INTO transactions (date, amount, description, account_id, hash, source)"
+        " VALUES (?, ?, ?, ?, ?, ?)"
+    )
+    c.execute(tx_sql, ("2026-07-19T14:22:00", -368000, "Kafe Lesnoj", first, "h1", "sync"))
+    c.execute(tx_sql, ("2026-07-19T09:05:00", -368000, "Kafe Lesnoj", second, "h2", "sync"))
+    c.execute(tx_sql, ("2026-07-19T10:00:00", -32000, "нетмонет", first, "h3", "manual"))
+    c.execute(tx_sql, ("2026-07-18T10:00:00", -50000, "Пятёрочка", first, "h4", "sheets"))
+    c.commit()
+
+    from app.ingest import historical_day_counts
+
+    counts = historical_day_counts(c, uid)
+    # "sheets" is the retired template importer's label, still in old ledgers
+    assert counts == {
+        ("2026-07-19", -368000, "Kafe Lesnoj"): 2,
+        ("2026-07-18", -50000, "Пятёрочка"): 1,
+    }
+
+
+def test_drop_already_present_is_count_aware():
+    from app.ingest import drop_already_present
+
+    rows = [
+        {"date": "2026-07-19T12:00:00", "amount": -368000, "description": "Kafe Lesnoj"},
+        {"date": "2026-07-19T18:00:00", "amount": -368000, "description": "Kafe Lesnoj"},
+        {"date": "2026-07-19T18:00:00", "amount": -100, "description": "New"},
+    ]
+    kept, dropped = drop_already_present(rows, {("2026-07-19", -368000, "Kafe Lesnoj"): 1})
+    # one copy is already in the ledger; the second in the batch is genuinely a
+    # second operation and stays
+    assert dropped == 1
+    assert [r["description"] for r in kept] == ["Kafe Lesnoj", "New"]

@@ -260,9 +260,16 @@ textarea.mi-input__field {
     width: 100%;
 }
 
-.gsel_field .gsel__text {
+.gsel_field .gsel__text,
+.gsel_full .gsel__text {
     flex: 1;
     text-align: left;
+}
+
+.gsel_full {
+    display: flex;
+    width: 100%;
+    min-width: 0;
 }
 
 .gsel__label {

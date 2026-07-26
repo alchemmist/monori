@@ -7,6 +7,7 @@ import {
     buildOpeningIndex,
     computeYear,
     computeRange,
+    firstBudgetYear,
     groupTotals,
 } from "./budget.js";
 
@@ -328,5 +329,29 @@ describe("groupTotals", () => {
         const months = groupTotals(res, ghost, 2);
         // the ghost category has no byCategory entry and must not throw or change totals
         expect(months[0].budgeted).toBe(1100);
+    });
+});
+
+describe("firstBudgetYear", () => {
+    it("falls back to the floor with no snapshot or an empty one", () => {
+        expect(firstBudgetYear(null, 2020)).toBe(2020);
+        expect(firstBudgetYear({ transactions: [], budgets: [] }, 2020)).toBe(2020);
+    });
+
+    it("reaches back to the earliest transaction or budget a migration brought in", () => {
+        const snapshot = {
+            transactions: [{ date: "2018-07-04T00:00:00", amount: -100, categoryId: 1 }],
+            budgets: [{ year: 2019, month: 1, categoryId: 1, amount: 500 }],
+        };
+        expect(firstBudgetYear(snapshot, 2020)).toBe(2018);
+        expect(firstBudgetYear({ ...snapshot, transactions: [] }, 2020)).toBe(2019);
+    });
+
+    it("never starts later than the floor, so an empty later year is still shown", () => {
+        const snapshot = {
+            transactions: [{ date: "2026-01-01T00:00:00", amount: -100, categoryId: 1 }],
+            budgets: [{ year: 2026, month: 1, categoryId: 1, amount: 500 }],
+        };
+        expect(firstBudgetYear(snapshot, 2020)).toBe(2020);
     });
 });

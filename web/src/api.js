@@ -155,17 +155,23 @@ export const api = {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ ids }),
         }).then(json),
-    importPreview: (text, accountId) =>
+    importPreview: (text) =>
         apiFetch("/api/import/preview", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ text, accountId }),
+            body: JSON.stringify({ text }),
         }).then(json),
-    importCommit: (rows, accountId) =>
+    importDuplicates: (rows) =>
+        apiFetch("/api/import/duplicates", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ rows }),
+        }).then(json),
+    importCommit: (rows) =>
         apiFetch("/api/import/commit", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ accountId, rows }),
+            body: JSON.stringify({ rows }),
         }).then(json),
     connectionsAvailable: () => apiFetch("/api/connections/available").then(json),
     createConnection: (body) =>
@@ -203,6 +209,12 @@ export const api = {
     },
     authMe: (token) =>
         apiFetch("/api/auth/me", { headers: { Authorization: `Bearer ${token}` } }).then(json),
+    authPatchMe: (patch) =>
+        apiFetch("/api/auth/me", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(patch),
+        }).then(json),
     exportXlsx: async () => {
         const r = await apiFetch("/api/export/xlsx");
         if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
@@ -232,11 +244,12 @@ export const api = {
             body: JSON.stringify({ sql, confirmWrite, dryRun }),
         }).then(json),
     adminDeleteUser: (id) => apiFetch(`/api/admin/users/${id}`, { method: "DELETE" }).then(json),
-    workbookCommit: (file, mapping, budgetPolicy) => {
+    workbookCommit: (file, mapping, budgetPolicy, remember = false) => {
         const form = new FormData();
         form.append("file", file);
         form.append("mapping", JSON.stringify(mapping));
         form.append("budgetPolicy", budgetPolicy);
+        form.append("remember", remember);
         return apiFetch("/api/import/workbook/commit", { method: "POST", body: form }).then(json);
     },
 };

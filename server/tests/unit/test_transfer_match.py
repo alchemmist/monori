@@ -21,7 +21,9 @@ def test_day_number_counts_calendar_days():
 
 def test_pairs_opposite_amounts_on_different_accounts():
     pairs = find_pairs([row(1, 10, -5000, 1), row(2, 10, 5000, 2)])
-    assert pairs == [{"outTxId": 1, "inTxId": 2, "amount": 5000, "days": 0, "hint": False}]
+    assert pairs == [
+        {"outTxId": 1, "inTxId": 2, "amount": 5000, "days": 0, "hint": False, "mismatch": False}
+    ]
 
 
 def test_same_account_is_not_a_transfer():
@@ -82,3 +84,54 @@ def test_split_confident_separates_by_distance():
     auto, suggested = split_confident([{"days": 0}, {"days": 1}, {"days": 4}], auto_days=1)
     assert auto == [{"days": 0}, {"days": 1}]
     assert suggested == [{"days": 4}]
+
+
+def test_a_purchase_matching_a_transfer_leg_is_never_merged_on_its_own():
+    """
+    A transfer's inflow whose true outflow sits on the same account (and so can
+    never pair) must not swallow an unrelated purchase that happens to match the
+    amount — one leg saying "transfer" while the other names a merchant is a
+    question for the user, not a merge.
+    """
+    rows = [
+        row(1, 10, -100000, 1, description="IP Elyan A.Kh"),
+        row(2, 10, 100000, 2, description="Между своими счетами"),
+    ]
+    pairs = find_pairs(rows)
+    assert len(pairs) == 1
+    assert pairs[0]["mismatch"] is True
+    auto, suggested = split_confident(pairs)
+    assert auto == []
+    assert suggested == pairs
+
+
+def test_a_hinted_leg_with_a_silent_partner_still_merges():
+    # banks often leave one leg's description blank; that is absence of
+    # evidence, not a contradiction
+    rows = [
+        row(1, 10, -100000, 1, description=""),
+        row(2, 10, 100000, 2, description="Перевод между своими счетами"),
+    ]
+    pairs = find_pairs(rows)
+    assert pairs[0]["mismatch"] is False
+    auto, suggested = split_confident(pairs)
+    assert auto == pairs
+    assert suggested == []
+
+
+def test_both_legs_hinted_beat_a_mismatched_pair_at_the_same_distance():
+    rows = [
+        row(1, 10, -100000, 1, description="Перевод СБП"),
+        row(2, 10, -100000, 2, description="Ресторан У Луки"),
+        row(3, 10, 100000, 3, description="Пополнение. Перевод между своими"),
+    ]
+    pairs = find_pairs(rows)
+    assert [(p["outTxId"], p["inTxId"]) for p in pairs] == [(1, 3)]
+    assert pairs[0]["mismatch"] is False
+
+
+def test_two_silent_legs_still_merge_by_amount_and_day():
+    rows = [row(1, 10, -5000, 1), row(2, 10, 5000, 2)]
+    auto, suggested = split_confident(find_pairs(rows))
+    assert len(auto) == 1
+    assert suggested == []

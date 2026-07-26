@@ -11,6 +11,7 @@ from app.workbook.parser import (
     WorkbookError,
     _find_layout,
     _kop,
+    _label_col,
     _last_day,
     _month_num,
     _month_range,
@@ -43,7 +44,15 @@ def _write_year(
     income=None,
     available=None,
     seed=None,
+    seeds=None,
+    labels="en",
+    available_row=6,
 ):
+    carried_label, income_label, available_label = (
+        ("Not budgeted in Dec", "Income for month", "Available")
+        if labels == "en"
+        else ("Не заложено в дек", "Поступления в месяце", "Доступный остаток")
+    )
     bases = [2 + 4 * i for i in range(len(months))]
     ws.cell(row=1, column=bases[0], value=start_token)
     ws.cell(row=header_row, column=1, value="Категория")
@@ -66,21 +75,22 @@ def _write_year(
                     if balance is not None:
                         ws.cell(row=r, column=b + 2, value=balance)
         r += 1
-    if seed is not None:
-        ws.cell(row=1, column=bases[0] + 2, value="Not budgeted in Dec")
-        ws.cell(row=1, column=bases[0] + 1, value=seed)
+    for mnum, value in {**({} if seed is None else {months[0]: seed}), **(seeds or {})}.items():
+        b = bases[months.index(mnum)]
+        ws.cell(row=1, column=b + 2, value=carried_label)
+        ws.cell(row=1, column=b + 1, value=value)
     if income:
         for mi, mnum in enumerate(months):
             if mnum in income:
                 b = bases[mi]
-                ws.cell(row=2, column=b + 2, value="Income for month")
+                ws.cell(row=2, column=b + 2, value=income_label)
                 ws.cell(row=2, column=b + 1, value=income[mnum])
     if available:
         for mi, mnum in enumerate(months):
             if mnum in available:
                 b = bases[mi]
-                ws.cell(row=6, column=b + 1, value="Available")
-                ws.cell(row=5, column=b + 1, value=available[mnum])
+                ws.cell(row=available_row, column=b + 1, value=available_label)
+                ws.cell(row=available_row - 1, column=b + 1, value=available[mnum])
 
 
 def _tx_sheet(wb, tx_rows):
@@ -667,6 +677,238 @@ def test_available_seed_excludes_seam_overspend():
     assert not any(w.startswith("verify:") for w in parsed["warnings"])
 
 
+def test_russian_header_labels_are_read_like_the_english_ones():
+    """
+    The live spreadsheet labels its month headers in Russian. Every figure the
+    reconciliation leans on — income, the carried-over remainder, the running
+    Available — is found by those labels, so a sheet in Russian has to yield
+    exactly what the same sheet in English does.
+    """
+    wb = Workbook()
+    wb.remove(wb.active)
+    _tx_sheet(wb, [_tx(datetime.datetime(2025, 1, 15), -300.0, "Groceries", desc="Lenta")])
+    _write_year(
+        wb.create_sheet("2025"),
+        months=[1, 2],
+        rows=[("▼Daily", None), ("Groceries", {1: (1000, -300, 700)})],
+        income={1: 5000},
+        available={1: 5900},
+        seeds={1: 1900},
+        labels="ru",
+        header_row=8,
+    )
+    parsed = parse_workbook(_save(wb))
+    opening = next(t for t in parsed["transactions"] if t["description"] == "Opening balance")
+    assert opening["amount"] == 190000  # "Не заложено"
+    assert not any(w.startswith("verify:") for w in parsed["warnings"])  # "Доступный"
+    income = next(t for t in parsed["transactions"] if t["description"] == "Income")
+    assert income["amount"] == 500000  # "Поступления в"
+
+
+def test_available_label_is_found_wherever_the_summary_block_puts_it():
+    wb = Workbook()
+    wb.remove(wb.active)
+    _tx_sheet(wb, [_tx(datetime.datetime(2025, 1, 15), -300.0, "Groceries", desc="Lenta")])
+    _write_year(
+        wb.create_sheet("2025"),
+        months=[1, 2],
+        rows=[("▼Daily", None), ("Groceries", {1: (1000, -300, 700)})],
+        income={1: 5000},
+        available={1: 99999},
+        available_row=7,
+        header_row=8,
+    )
+    parsed = parse_workbook(_save(wb))
+    assert any(w.startswith("verify:") for w in parsed["warnings"])
+
+
+def test_summary_labels_below_the_header_block_are_not_read():
+    """
+    The summary block is the first six rows; row seven is where the grid's own
+    Budgeted/Outflows/Balance header sits on the live sheet. Reading one row
+    further would take a column heading for a figure.
+    """
+    wb = Workbook()
+    wb.remove(wb.active)
+    _tx_sheet(wb, [])
+    ws = wb.create_sheet("2025")
+    _write_year(
+        ws,
+        months=[1, 2],
+        rows=[("▼Daily", None), ("Groceries", {1: (1000, 0, 1000)})],
+        header_row=8,
+    )
+    ws.cell(row=7, column=4, value="Income for month")
+    ws.cell(row=7, column=3, value=777)
+    parsed = parse_workbook(_save(wb))
+    assert not any(t["monori_category"] == "Income" for t in parsed["transactions"])
+
+
+def test_a_sheet_running_to_december_keeps_its_last_month():
+    _, ws = _one_year_wb(
+        months=list(range(1, 13)),
+        rows=[("▼Daily", None), ("Groceries", {12: (1000, -300, 700)})],
+    )
+    parsed = _parse_year_sheet(ws, 2025, _find_layout(ws))
+    assert parsed["months"][-1] == 12
+    assert parsed["cats"]["Groceries"]["balances"][12] == 70000
+
+
+def test_history_and_adjustment_split_follows_the_rows_not_the_sheet_name():
+    """
+    A workbook can keep years of history on ordinary year sheets and never write
+    `_archive` once. What makes a correction a stand-in is that the month has no
+    rows of its own, so counting by sheet name reports hundreds of history rows
+    as live adjustments.
+    """
+    wb = Workbook()
+    wb.remove(wb.active)
+    _tx_sheet(wb, [_tx(datetime.datetime(2025, 1, 15), -300.0, "Groceries", desc="Lenta")])
+    _write_year(
+        wb.create_sheet("2024"),
+        months=[1, 2],
+        start_token="ЯНВ 2024",
+        rows=[("▼Daily", None), ("Groceries", {1: (1000, -700, 300), 2: (0, 0, 300)})],
+        header_row=8,
+    )
+    _write_year(
+        wb.create_sheet("2025"),
+        months=[1, 2],
+        start_token="ЯНВ 2025",
+        rows=[("▼Daily", None), ("Groceries", {1: (1000, -900, 400)})],
+        header_row=8,
+    )
+    parsed = parse_workbook(_save(wb))
+    # 2024 has no rows at all — its correction stands in for the whole month;
+    # 2025-01 does, so its correction only tops the month up
+    assert any(w.startswith("history: 1 transactions stand in for") for w in parsed["warnings"])
+    assert (
+        "reconciliation: 1 adjustment transactions align live months with the sheet"
+        in (parsed["warnings"])
+    )
+
+
+def test_opening_balance_is_taken_from_the_first_month_with_rows():
+    """
+    A spreadsheet is started with money already in hand, and the only place that
+    money exists is the header cell of its first real month: what was left
+    unbudgeted the month before. The earlier blocks of that year are empty
+    scaffolding, so reading the seed off the January block finds nothing.
+    """
+    wb = Workbook()
+    wb.remove(wb.active)
+    _tx_sheet(wb, [_tx(datetime.datetime(2025, 7, 15), -300.0, "Groceries", desc="Lenta")])
+    _write_year(
+        wb.create_sheet("2025"),
+        months=[6, 7],
+        start_token="ИЮН 2025",
+        rows=[("▼Daily", None), ("Groceries", {7: (1000, -300, 700)})],
+        income={7: 5000},
+        available={7: 5900},
+        seeds={6: 0, 7: 1900},
+        header_row=8,
+    )
+    parsed = parse_workbook(_save(wb))
+    synth = {(t["description"], t["date"]): t for t in parsed["transactions"]}
+    assert synth[("Opening balance", "2025-06-30T12:00:00")]["amount"] == 190000
+    assert any(w.startswith("opening balance: 1,900.00") for w in parsed["warnings"])
+    # seeded once and the sheet's own Available then agrees month for month
+    assert not any(w.startswith("verify:") for w in parsed["warnings"])
+
+
+def test_opening_balance_predating_the_sheet_is_dated_before_it():
+    """
+    When the very first month of the earliest sheet already has rows, the money
+    it started with belongs to the December before — a month no sheet covers.
+    The row still has to exist, or Available starts short by that amount.
+    """
+    wb = Workbook()
+    wb.remove(wb.active)
+    _tx_sheet(wb, [_tx(datetime.datetime(2025, 1, 15), -300.0, "Groceries", desc="Lenta")])
+    _write_year(
+        wb.create_sheet("2025"),
+        months=[1, 2],
+        rows=[("▼Daily", None), ("Groceries", {1: (1000, -300, 700)})],
+        income={1: 5000},
+        available={1: 5900},
+        seeds={1: 1900},
+        header_row=8,
+    )
+    parsed = parse_workbook(_save(wb))
+    opening = next(t for t in parsed["transactions"] if t["description"] == "Opening balance")
+    assert opening["date"] == "2024-12-31T12:00:00"
+    assert opening["amount"] == 190000
+    assert not any(w.startswith("verify:") for w in parsed["warnings"])
+
+
+def test_activity_span_reads_two_digit_months_whole():
+    """
+    A ledger that only starts in October is where a one-character month slice
+    stops being harmless: it would read 11 as 1 and seed the opening balance
+    ten months early, off the wrong header cell.
+    """
+    wb = Workbook()
+    wb.remove(wb.active)
+    _tx_sheet(wb, [_tx(datetime.datetime(2025, 11, 15), -300.0, "Groceries", desc="Lenta")])
+    _write_year(
+        wb.create_sheet("2025"),
+        months=[10, 11],
+        start_token="ОКТ 2025",
+        rows=[("▼Daily", None), ("Groceries", {11: (1000, -300, 700)})],
+        income={11: 5000},
+        seeds={10: 400, 11: 1900},
+        header_row=8,
+    )
+    parsed = parse_workbook(_save(wb))
+    opening = next(t for t in parsed["transactions"] if t["description"] == "Opening balance")
+    assert opening["date"] == "2025-10-31T12:00:00"
+    assert opening["amount"] == 190000
+
+
+def test_opening_balance_left_alone_when_the_sheet_starts_from_nothing():
+    wb = Workbook()
+    wb.remove(wb.active)
+    _tx_sheet(wb, [_tx(datetime.datetime(2025, 7, 15), -300.0, "Groceries", desc="Lenta")])
+    _write_year(
+        wb.create_sheet("2025"),
+        months=[6, 7],
+        start_token="ИЮН 2025",
+        rows=[("▼Daily", None), ("Groceries", {7: (1000, -300, 700)})],
+        income={7: 5000},
+        seeds={6: 0, 7: 0},
+        header_row=8,
+    )
+    parsed = parse_workbook(_save(wb))
+    assert not any(t["description"] == "Opening balance" for t in parsed["transactions"])
+    assert not any(w.startswith("opening balance:") for w in parsed["warnings"])
+
+
+def test_available_ignores_budget_cells_on_income_categories():
+    """
+    The budget grid only spends down expense envelopes, so a Budgeted cell on an
+    income row buys nothing and must not be subtracted from Available — which is
+    what the client computes and therefore what the verify check has to assume.
+    """
+    wb = Workbook()
+    wb.remove(wb.active)
+    _tx_sheet(wb, [])
+    _write_year(
+        wb.create_sheet("2025"),
+        months=[1],
+        rows=[
+            ("▲Inflow", None),
+            ("Salary", {1: (700, None, None)}),
+            ("▼Daily", None),
+            ("Groceries", {1: (1000, -300, 700)}),
+        ],
+        income={1: 5000},
+        available={1: 4000},
+        header_row=8,
+    )
+    parsed = parse_workbook(_save(wb))
+    assert not any(w.startswith("verify:") for w in parsed["warnings"])
+
+
 def test_missing_transactions_sheet_raises():
     wb = Workbook()
     wb.active.title = "2025"
@@ -825,3 +1067,45 @@ def test_parse_keywords_falls_back_without_pipes():
     )
     idx = {name: i for i, name in enumerate(TX_HEADER)}
     assert _parse_keywords(ws, idx) == {"Cafes": "starbucks"}
+
+
+def test_label_col_picks_the_fullest_column_below_the_header():
+    """
+    The live grid never names its category column, so it is found by weight:
+    of the columns left of the first month block, the one carrying the most
+    labels — counted strictly below the header row, since the header itself and
+    whatever title sits above it are not categories.
+    """
+    wb = Workbook()
+    ws = wb.active
+    ws.cell(row=4, column=1, value="Бюджет на год")
+    ws.cell(row=5, column=1, value="Категория")
+    for r in range(6, 10):
+        ws.cell(row=r, column=1, value=f"left {r}")
+    for r in range(6, 11):
+        ws.cell(row=r, column=2, value=f"middle {r}")
+    assert _label_col(ws, 5, 4) == 2
+
+
+def test_label_col_keeps_the_leftmost_of_a_tie_and_falls_back_to_the_first():
+    wb = Workbook()
+    ws = wb.active
+    assert _label_col(ws, 5, 4) == 1  # nothing anywhere
+    for c in (1, 2):
+        for r in range(6, 9):
+            ws.cell(row=r, column=c, value=f"c{c} r{r}")
+    assert _label_col(ws, 5, 4) == 1
+
+
+def test_label_col_only_counts_the_rows_just_under_the_header():
+    """
+    A sheet carries hundreds of rows below its grid — notes, a second table,
+    leftovers. Only the band the categories live in decides the column.
+    """
+    wb = Workbook()
+    ws = wb.active
+    for r in range(6, 9):
+        ws.cell(row=r, column=1, value=f"category {r}")
+    for r in range(80, 140):
+        ws.cell(row=r, column=2, value=f"note {r}")
+    assert _label_col(ws, 5, 4) == 1

@@ -135,7 +135,10 @@ CREATE TABLE IF NOT EXISTS users (
   password_hash TEXT NOT NULL,
   created_at TEXT NOT NULL,
   is_admin INTEGER NOT NULL DEFAULT 0,
-  last_login TEXT
+  last_login TEXT,
+  -- where an import lands rows whose account cannot be told from the file
+  -- (no card number anywhere); empty means the user assigns them by hand
+  default_account_id INTEGER REFERENCES accounts (id)
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_canonical ON users (email_canonical);
 
