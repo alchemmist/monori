@@ -118,6 +118,15 @@ silent drop.
   adds a dated correction transaction for the difference. This preserves
   hand-maintained adjustments such as `+10,000` in formulas and makes the
   imported grid equal the spreadsheet without rewriting its original rows.
+- **Never doubles what a sync already delivered.** A workbook kept alongside a
+  live bank connection describes the same operations the sync imported — often
+  onto a different account than the sheet's card marker maps to, where the
+  per-account hash cannot see them. A row whose calendar day, amount and
+  description already exist among synced or imported transactions (on any
+  account) is skipped and counted in the result. Manual entries never shadow a
+  workbook row this way. The same rule guards syncs in the other direction:
+  a connection whose per-account pulls overlap does not land the same
+  operation once per account.
   Reconciliation runs month by month from the earliest sheet up to the last
   month with real activity — a row, a cached outflow, or income. Budgeted-only
   months beyond that are left alone: budgeting ahead is normal, and squaring up
@@ -148,6 +157,10 @@ something ambiguous. The ones a hand-kept workbook usually raises:
   between the archived years and the first one that still has rows: N
   corrections so every category starts the live era on the balance the
   spreadsheet says it had.
+- **`N rows are already in monori …`** — raised on the result screen: a bank
+  sync or an earlier import had already delivered these operations, possibly
+  onto a different account, so importing them again would double them. They are
+  counted as skipped.
 - **`N rows carry no category in the sheet …`** — raised on the result screen.
   These are the rows the spreadsheet never filed anywhere, usually transfers
   between your own accounts; its own totals leave them out too, so the budget is

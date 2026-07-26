@@ -26,7 +26,7 @@ from ..connectors import base as connectors
 from ..connectors.base import ConnectorError, SmsRequired
 from ..deps import conn, serialize_connection
 from ..importer import build_rules
-from ..ingest import categorize_rows, commit_rows
+from ..ingest import categorize_rows, commit_rows, drop_already_present, historical_day_counts
 from ..sync_runner import NoPendingLogin, get_runner
 from ..transfer_service import detect
 
@@ -204,7 +204,12 @@ def _finish_account(c, row, account_id, result, uid):
     """
     rules = _load_user_rules(c, uid)
     categorize_rows(result.rows, rules)
-    routed, unmapped = _route_rows(c, uid, account_id, result.rows)
+    # an overlapping feed (a credit card turning up in two pulls, or a pull
+    # repeating what a workbook already imported) re-delivers operations the
+    # ledger holds on another account, where the per-account hash cannot see
+    # them — drop those before routing gets to spread the copies around
+    rows, redelivered = drop_already_present(result.rows, historical_day_counts(c, uid))
+    routed, unmapped = _route_rows(c, uid, account_id, rows)
     # the synced account always gets its batch, even for an empty pull — the
     # incremental-sync cursor (_account_since) keys on that batch's existence
     routed.setdefault(account_id, [])
@@ -217,6 +222,8 @@ def _finish_account(c, row, account_id, result, uid):
         )
         batch_id = cur.lastrowid
         inserted, skipped = commit_rows(c, target_id, rows, source="sync", batch_id=batch_id)
+        if target_id == account_id:
+            skipped += redelivered
         c.execute(
             "UPDATE import_batches SET inserted=?, skipped=? WHERE id=?",
             (inserted, skipped, batch_id),

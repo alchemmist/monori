@@ -29,16 +29,35 @@ def test_preview_routes_each_card_and_commit_accepts_mixed_accounts(api, client)
     first = api.default_account()
     second = api.account("Second card", cardTails=["2947"])
     client.patch(f"/api/accounts/{first}", json={"cardTails": ["1111"]})
-    def row(card, amount, description, day):
-        return "\t".join(
-            [
-                f"0{day}.01.2026 10:00:00", f"0{day}.01.2026", card, "OK", amount,
-                "RUB", amount, "RUB", "", "Super", "5411", description, "0", "0", amount,
-            ]
-        ) + "\n"
 
-    text = row("*1111", "-100,00", "First", 5) + row("*2947", "-200,00", "Second", 6) + row(
-        "*9999", "-300,00", "Unknown", 7
+    def row(card, amount, description, day):
+        return (
+            "\t".join(
+                [
+                    f"0{day}.01.2026 10:00:00",
+                    f"0{day}.01.2026",
+                    card,
+                    "OK",
+                    amount,
+                    "RUB",
+                    amount,
+                    "RUB",
+                    "",
+                    "Super",
+                    "5411",
+                    description,
+                    "0",
+                    "0",
+                    amount,
+                ]
+            )
+            + "\n"
+        )
+
+    text = (
+        row("*1111", "-100,00", "First", 5)
+        + row("*2947", "-200,00", "Second", 6)
+        + row("*9999", "-300,00", "Unknown", 7)
     )
     rows = client.post("/api/import/preview", json={"text": text}).json()["rows"]
     assert [row["accountId"] for row in rows] == [first, second, None]

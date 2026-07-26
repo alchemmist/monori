@@ -380,3 +380,50 @@ def test_a_category_whose_group_is_missing_does_not_stop_the_rest(tmp_path):
     assert result["warnings"] == []
     names = [r[0] for r in c.execute("SELECT name FROM categories")]
     assert names == ["Groceries"]
+
+
+def test_apply_skips_rows_a_sync_already_delivered_to_another_account(tmp_path):
+    """
+    A sheet kept alongside a live bank sync describes operations the sync
+    already imported — and the sheet's card marker can map them to a different
+    account than the sync routed them to, where the per-account hash is blind.
+    Those rows must not be imported a second time.
+    """
+    c, uid, acct = _db(tmp_path)
+    c.execute(
+        "INSERT INTO accounts (user_id, name, type, currency, sort)"
+        " VALUES (?, 'Credit', 'card', 'RUB', 2)",
+        (uid,),
+    )
+    other = c.execute("SELECT id FROM accounts WHERE name='Credit'").fetchone()[0]
+    c.execute(
+        "INSERT INTO transactions (date, amount, description, account_id, hash, source)"
+        " VALUES ('2026-01-05T14:22:00', -12550, 'Lenta', ?, 'h-sync', 'sync')",
+        (other,),
+    )
+    c.commit()
+    result = apply_workbook(c, uid, _parsed(), {"RUB:": acct})
+    c.commit()
+    assert result["inserted"] == 1
+    assert result["skipped"] == 1
+    assert result["warnings"][0].startswith("1 rows are already in monori")
+    rows = c.execute(
+        "SELECT account_id, COUNT(*) FROM transactions WHERE description='Lenta' GROUP BY 1"
+    ).fetchall()
+    assert [tuple(r) for r in rows] == [(other, 1)]
+
+
+def test_apply_keeps_a_manual_twin_out_of_the_dedup(tmp_path):
+    # a row the user typed by hand is their own words, not a feed re-delivering
+    # the same operation — the workbook copy still lands
+    c, uid, acct = _db(tmp_path)
+    c.execute(
+        "INSERT INTO transactions (date, amount, description, account_id, hash, source)"
+        " VALUES ('2026-01-05T14:22:00', -12550, 'Lenta', ?, 'h-man', 'manual')",
+        (acct,),
+    )
+    c.commit()
+    result = apply_workbook(c, uid, _parsed(), {"RUB:": acct})
+    c.commit()
+    assert result["inserted"] == 2
+    assert result["skipped"] == 0

@@ -459,3 +459,28 @@ def test_sync_routing_treats_duplicated_tail_as_unmapped(api, client, keyed, mon
     assert {u["tail"] for u in body["unmappedTails"]} == {"1111", "2947", "8181"}
     routed = {t["description"]: t["accountId"] for t in api.snapshot()["transactions"]}
     assert routed["B"] == main
+
+
+def test_overlapping_feeds_do_not_duplicate_rows_across_accounts(api, client, keyed):
+    """
+    Two accounts on one connection whose pulls return the same feed (the fake
+    without a bank_ref does exactly that) must not land the same operations
+    twice — once per account. The second delivery is recognized by day, amount
+    and description, since the copies differ in account and so escape the
+    per-account hash.
+    """
+    a1 = api.default_account()
+    a2 = api.account("Twin")
+    cid = _connect(client, a1).json()["id"]
+    r = client.patch(f"/api/accounts/{a2}", json={"connectionId": cid})
+    assert r.status_code == 200
+
+    client.post(f"/api/connections/{cid}/sync")
+    body = client.post(f"/api/connections/{cid}/sms", json={"code": "0000"}).json()
+    assert body["status"] == "connected"
+    assert body["inserted"] == 2
+    assert body["skipped"] == 2
+
+    txs = api.snapshot()["transactions"]
+    assert len(txs) == 2
+    assert {t["accountId"] for t in txs} == {a1}

@@ -148,8 +148,12 @@ def snapshot(c, uid):
 
 
 def duplicates(c, uid):
-    """Rows a human would read as the same entry twice on one account."""
-    return [
+    """
+    Rows a human would read as the same entry twice — on one account, or the
+    same day/amount/description spread over several accounts, which is how a
+    feed delivered through two doors looks once routing has split the copies.
+    """
+    on_one = [
         (r["name"], r["date"], r["amount"], r["description"], r["n"])
         for r in c.execute(
             "SELECT a.name, t.date, t.amount, t.description, COUNT(*) n"
@@ -159,6 +163,20 @@ def duplicates(c, uid):
             (uid,),
         )
     ]
+    across = [
+        (r["names"], r["day"], r["amount"], r["description"], r["n"])
+        for r in c.execute(
+            "SELECT group_concat(DISTINCT a.name) names, substr(t.date, 1, 10) day,"
+            " t.amount, t.description, COUNT(*) n"
+            " FROM transactions t JOIN accounts a ON a.id = t.account_id"
+            " WHERE a.user_id=? AND t.amount != 0"
+            " GROUP BY day, t.amount, t.description"
+            " HAVING n > 1 AND COUNT(DISTINCT t.account_id) > 1"
+            " ORDER BY n DESC, day",
+            (uid,),
+        )
+    ]
+    return on_one, across
 
 
 def _header_adds_up(head):
@@ -285,7 +303,7 @@ def main():
         db_path = str(pathlib.Path(tmp) / "parity.db")
         c, uid, parsed, result = import_into_db(args.workbook, db_path)
         cats, tx, budgets, uncategorized = snapshot(c, uid)
-        dupes = duplicates(c, uid)
+        dupes, cross_dupes = duplicates(c, uid)
         c.close()
 
     years = sorted(grids)
@@ -350,7 +368,9 @@ def main():
     lines.append(f"budget cells written  : {result['budgetsWritten']}")
     lines.append(f"budget cells skipped  : {result['budgetsSkipped']}")
     lines.append(f"rows left uncategorized: {uncategorized}")
-    lines.append(f"duplicate row groups  : {len(dupes)}")
+    lines.append(
+        f"duplicate row groups  : {len(dupes)} on one account, {len(cross_dupes)} across accounts"
+    )
     lines.append(f"grid cells wrong      : {len(bad_cells)}")
     lines.append(f"months where the Available gap changes: {len(bad_months)}")
     lines.append("")
@@ -359,6 +379,12 @@ def main():
     if dupes:
         lines.append("\n-- duplicate rows (account, date, amount, description, count) --")
         lines += [f"  {a} {d[:10]} {rub(v):>14} {desc[:40]!r} x{n}" for a, d, v, desc, n in dupes]
+    if cross_dupes:
+        lines.append(
+            "\n-- same day/amount/description on several accounts (for review:"
+            " the sheet itself records these on distinct cards) --"
+        )
+        lines += [f"  {a} {d} {rub(v):>14} {desc[:40]!r} x{n}" for a, d, v, desc, n in cross_dupes]
     if bad_cells:
         lines.append("\n-- grid cells: sheet vs monori --")
         lines.append("   'sheet stale' = the sheet's own budgeted+outflows do not make its balance")
