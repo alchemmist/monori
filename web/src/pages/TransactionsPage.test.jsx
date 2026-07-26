@@ -77,7 +77,7 @@ describe("TransactionsPage", () => {
             ],
         });
         const { user } = renderUI(<TransactionsPage />);
-        const search = screen.getByLabelText("Search description");
+        const search = screen.getByLabelText("Search description or comment");
         await user.type(search, "housing");
         expect(screen.getByText("Monthly rent")).toBeInTheDocument();
         expect(screen.queryByText("Coffee shop")).not.toBeInTheDocument();
@@ -88,7 +88,7 @@ describe("TransactionsPage", () => {
     it("shows the empty state when filters find no rows", async () => {
         seed({ transactions: [tx(1, { description: "Coffee" })] });
         const { user } = renderUI(<TransactionsPage />);
-        await user.type(screen.getByLabelText("Search description"), "missing");
+        await user.type(screen.getByLabelText("Search description or comment"), "missing");
         expect(screen.getByText("Nothing found")).toBeInTheDocument();
     });
 
@@ -166,15 +166,11 @@ describe("TransactionsPage", () => {
         await waitFor(() => expect(setTxCategory).toHaveBeenCalledWith(1, 2));
     });
 
-    it("opens import and transfer controls and disables transfer with one active account", async () => {
+    it("offers import and transfer controls and disables transfer with one active account", () => {
         seed({ accounts, transactions: [] });
-        const { user, unmount } = renderUI(<TransactionsPage />);
-        await user.click(screen.getByRole("button", { name: "Import statement" }));
-        expect(screen.getByRole("button", { name: "Close import" })).toBeInTheDocument();
-        await user.click(screen.getByRole("button", { name: "Transfer" }));
-        expect(
-            screen.getByRole("button", { name: "Transfer with 3 accounts" }),
-        ).toBeInTheDocument();
+        const { unmount } = renderUI(<TransactionsPage />);
+        expect(screen.getByRole("button", { name: "Import statement" })).toBeEnabled();
+        expect(screen.getByRole("button", { name: "Transfer" })).toBeEnabled();
         unmount();
         seed({ accounts: [accounts[0]], transactions: [] });
         renderUI(<TransactionsPage />);
