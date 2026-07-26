@@ -30,7 +30,7 @@ export default {
     // a single test, so stryker would rerun the entire suite for each one —
     // hours of wall clock for constants no assertion is meant to pin
     ignoreStatic: true,
-    reporters: ["clear-text", "progress"],
+    reporters: ["clear-text", "progress-append-only"],
     concurrency: 4,
     // the docs pages glob ../../docs/*.md, which a sandbox copy of web/ alone
     // cannot resolve; mutating in place keeps that path real (stryker restores

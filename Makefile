@@ -145,6 +145,7 @@ coverage:
 mutation:
 	@set +e; \
 	thr=$(MUTATION_THRESHOLD); \
+	echo "── stryker: building the per-test coverage map; mutation progress begins after this phase ──"; \
 	( cd web && MUTATION_THRESHOLD=$$thr npx stryker run ); web=$$?; \
 	node scripts/stryker-summary.mjs; \
 	( cd server && mkdir -p mutants && uv run mutmut run 2>mutants/mutmut-stderr.log ); mutmut=$$?; \
