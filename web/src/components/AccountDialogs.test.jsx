@@ -154,6 +154,34 @@ describe("account dialogs", () => {
         );
     });
 
+    it("persists a changed icon, colour, opening date, and cleaned card tails", async () => {
+        seed({ accounts: [account] });
+        const patch = vi.spyOn(useStore.getState(), "patchAccount").mockResolvedValue();
+        const { user } = renderUI(
+            <AccountEditTab
+                account={{ ...account, openingDate: "2026-02-03T12:00:00", cardTails: [] }}
+                onClose={vi.fn()}
+            />,
+        );
+        await user.click(screen.getByLabelText("heart"));
+        await user.click(screen.getByLabelText("#ef4444"));
+        await user.clear(screen.getByLabelText("Opening date"));
+        await user.type(screen.getByLabelText("Opening date"), "2026-04-05");
+        await user.type(screen.getByLabelText("Card tails"), " 1111, card-2222, ");
+        await user.click(screen.getByRole("button", { name: "Save" }));
+        await waitFor(() =>
+            expect(patch).toHaveBeenCalledWith(
+                1,
+                expect.objectContaining({
+                    icon: "heart",
+                    color: "#ef4444",
+                    openingDate: "2026-04-05",
+                    cardTails: ["1111", "2222"],
+                }),
+            ),
+        );
+    });
+
     it("deletes an empty account without a target and reports deletion errors", async () => {
         seed({ accounts: [account] });
         const remove = vi.spyOn(useStore.getState(), "deleteAccount").mockResolvedValue();

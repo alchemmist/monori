@@ -158,6 +158,43 @@ describe("ConnectionDialog", () => {
         expect(screen.getByText("Pick a bank")).toBeInTheDocument();
     });
 
+    it("does not treat whitespace-only credentials or bank references as complete", async () => {
+        vi.spyOn(api, "connectionsAvailable").mockResolvedValue([connector]);
+        const { user } = renderUI(<ConnectionDialog account={account} onClose={vi.fn()} />);
+        await screen.findByLabelText("Login");
+        const connect = screen.getByRole("button", { name: "Connect & sync" });
+        await user.type(screen.getByLabelText("Login"), "   ");
+        expect(connect).toBeDisabled();
+        await user.clear(screen.getByLabelText("Login"));
+        await user.type(screen.getByLabelText("Login"), "alice");
+        expect(connect).not.toBeDisabled();
+        await user.clear(screen.getByLabelText("Bank account"));
+        await user.type(screen.getByLabelText("Bank account"), "   ");
+        expect(connect).toBeDisabled();
+    });
+
+    it("keeps a usable saved bank reference visible when its connector is unavailable", async () => {
+        seed({ accounts: [{ ...account, bankRef: "40817" }] });
+        vi.spyOn(api, "connectionsAvailable").mockResolvedValue([]);
+        renderUI(
+            <ConnectionDialog
+                account={{ ...account, bankRef: "40817" }}
+                connection={{
+                    id: 9,
+                    bank: "removed-bank",
+                    kind: "api",
+                    status: "disconnected",
+                    lastSync: null,
+                    lastError: "Connector was removed",
+                }}
+                onClose={vi.fn()}
+            />,
+        );
+        expect(await screen.findByText("40817")).toBeInTheDocument();
+        expect(screen.queryByLabelText("Bank account")).not.toBeInTheDocument();
+        expect(screen.getByText("Connector was removed")).toBeInTheDocument();
+    });
+
     it("keeps OTP open after rejection, cancels it on close, and retries sync errors", async () => {
         vi.spyOn(api, "connectionsAvailable").mockResolvedValue([connector]);
         vi.spyOn(useStore.getState(), "createConnection").mockResolvedValue({ id: 7 });
