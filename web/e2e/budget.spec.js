@@ -15,6 +15,8 @@ test("editing a budgeted cell recomputes available-to-budget and persists", asyn
     // "Plan" density leaves only the Budgeted column per month, so cell
     // positions are stable to address
     await page.getByText("Plan", { exact: true }).click();
+    // a never-touched category is hidden from every budget view until asked for
+    await page.getByText(/Show \d+ unused/).click();
 
     const row = page.locator(".yg-row", { hasText: "Groceries" });
     const june = page.locator(".yg-msum").nth(MONTH - 1);
