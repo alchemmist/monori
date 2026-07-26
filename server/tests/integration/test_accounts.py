@@ -115,7 +115,8 @@ def test_transactions_filter_by_account(api, client):
 
 def test_reconcile_posts_adjustment_for_the_delta(api, client):
     acc = api.account("Vault", openingBalance=10000)
-    api.tx("2026-03-01T10:00:00", -2500, accountId=acc)  # computed balance now 7500
+    cat = api.category("Misc", api.group("Stuff"))
+    api.tx("2026-03-01T10:00:00", -2500, accountId=acc, categoryId=cat)  # balance now 7500
 
     r = client.post(f"/api/accounts/{acc}/reconcile", json={"actualBalance": 9000})
     assert r.status_code == 200 and r.json()["delta"] == 1500
@@ -135,6 +136,19 @@ def test_reconcile_ignores_hidden_transactions(api, client):
     client.patch(f"/api/transactions/{junk}", json={"hidden": True})
 
     # the user sees 10000, so matching reality must post no adjustment
+    r = client.post(f"/api/accounts/{acc}/reconcile", json={"actualBalance": 10000})
+    assert r.status_code == 200 and r.json()["delta"] == 0
+
+
+def test_reconcile_skips_rows_the_balance_does_not_count(api, client):
+    """
+    An uncategorized row that is no transfer is money the ledger has not
+    accepted: the account pages leave it out of the balance, so reconciling
+    against the bank must not fold it in and post a phantom adjustment.
+    """
+    acc = api.account("Vault", openingBalance=10000)
+    api.tx("2026-03-01T10:00:00", -2500, accountId=acc)
+
     r = client.post(f"/api/accounts/{acc}/reconcile", json={"actualBalance": 10000})
     assert r.status_code == 200 and r.json()["delta"] == 0
 

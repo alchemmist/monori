@@ -10,13 +10,16 @@ export function incomeGroupIdSet(groups) {
     return new Set(groups.filter((g) => g.kind === "income").map((g) => g.id));
 }
 
-/** Running balance per account = opening balance + sum of its transactions
- * (transfers included: a transfer's two legs move money between accounts).
- * Returns Map(accountId -> kopecks). */
+/** Running balance per account = opening balance + its categorized
+ * transactions + its transfer legs + reconcile adjustments.
+ * An uncategorized row that is not a transfer is money the ledger has not
+ * accepted yet — the budget ignores it, so the balance does too, and the two
+ * views always move together. Returns Map(accountId -> kopecks). */
 export function accountBalances(snapshot) {
     const balances = new Map((snapshot.accounts ?? []).map((a) => [a.id, a.openingBalance ?? 0]));
     for (const t of snapshot.transactions) {
         if (!balances.has(t.accountId)) continue;
+        if (t.categoryId == null && !isTransfer(t) && t.source !== "adjustment") continue;
         balances.set(t.accountId, balances.get(t.accountId) + t.amount);
     }
     return balances;

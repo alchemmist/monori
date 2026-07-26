@@ -220,7 +220,7 @@ describe("disciplineMatrix", () => {
 });
 
 describe("accountBalances", () => {
-    it("sums opening balance and all transactions per account, transfers included", () => {
+    it("counts categorized rows and transfer legs, not unaccepted uncategorized rows", () => {
         const snap = {
             accounts: [
                 { id: 1, name: "Card", openingBalance: 10_000_00 },
@@ -249,8 +249,30 @@ describe("accountBalances", () => {
             ],
         };
         const b = accountBalances(snap);
-        expect(b.get(1)).toBe(10_000_00 - 3_000_00 - 2_000_00);
+        // the uncategorized -3000 is outside the ledger until it gets a
+        // category — the budget cannot see it, so the balance must not either
+        expect(b.get(1)).toBe(10_000_00 - 2_000_00);
         expect(b.get(2)).toBe(2_000_00);
+    });
+
+    it("counts categorized rows and reconcile adjustments", () => {
+        const snap = {
+            accounts: [{ id: 1, name: "Card", openingBalance: 0 }],
+            groups: [],
+            categories: [],
+            transactions: [
+                { id: 1, date: "2024-01-01", amount: -3_000_00, accountId: 1, categoryId: 20 },
+                {
+                    id: 2,
+                    date: "2024-01-02",
+                    amount: 1_500_00,
+                    accountId: 1,
+                    categoryId: null,
+                    source: "adjustment",
+                },
+            ],
+        };
+        expect(accountBalances(snap).get(1)).toBe(-1_500_00);
     });
 
     it("treats a missing accounts list as empty", () => {
@@ -500,8 +522,8 @@ describe("accountBalances ignores unknown accounts", () => {
             groups: [],
             categories: [],
             transactions: [
-                { id: 1, date: "2024-01-01", amount: -100_00, accountId: 1, categoryId: null },
-                { id: 2, date: "2024-01-02", amount: -999_00, accountId: 99, categoryId: null },
+                { id: 1, date: "2024-01-01", amount: -100_00, accountId: 1, categoryId: 20 },
+                { id: 2, date: "2024-01-02", amount: -999_00, accountId: 99, categoryId: 20 },
             ],
         };
         const b = accountBalances(snap);

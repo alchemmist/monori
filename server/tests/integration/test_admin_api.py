@@ -113,7 +113,9 @@ def test_user_detail_returns_accounts_transactions_and_activity(anon, monkeypatc
     body = anon.get(f"/api/admin/users/{uid}").json()
     assert body["user"]["email"] == "other@example.com"
     assert len(body["accounts"]) == 1
-    assert body["accounts"][0]["balance"] == -500
+    # the row is uncategorized, so it is counted but not in the balance —
+    # the admin view follows the same rule as the user's own account pages
+    assert body["accounts"][0]["balance"] == 0
     assert body["accounts"][0]["transactions"] == 1
     assert len(body["recentTransactions"]) == 1
     assert body["recentTransactions"][0]["amount"] == -500

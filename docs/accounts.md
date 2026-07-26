@@ -38,10 +38,13 @@ without choosing a target, and you cannot delete the last remaining account.
 
 ### Balances
 
-An account's **running balance** is its opening balance plus the sum of every
-transaction on it — transfers included. Balances show as cards on the
-[Dashboard](dashboard-analytics.md), and the dashboard's account filter narrows
-every chart to a single account.
+An account's **running balance** is its opening balance plus its categorized
+transactions, its transfer legs and its reconcile adjustments. An uncategorized
+row that is not part of a transfer is money the ledger has not accepted yet:
+the budget ignores it, and so does the balance — assigning or clearing a
+category moves both views together, never one without the other. Balances show
+as cards on the [Dashboard](dashboard-analytics.md), and the dashboard's
+account filter narrows every chart to a single account.
 
 ## Transfers
 
