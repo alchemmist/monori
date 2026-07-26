@@ -125,6 +125,35 @@ describe("account dialogs", () => {
         );
     });
 
+    it("reuses a saved account image, removes it again, and saves the selected appearance", async () => {
+        const image = "data:image/png,reusable";
+        seed({ accounts: [account, { ...account, id: 2, name: "Saved", iconImage: image }] });
+        const create = vi.spyOn(useStore.getState(), "createAccount").mockResolvedValue(3);
+        const { user } = renderUI(<AccountEditTab account={{}} onClose={vi.fn()} />);
+
+        await user.type(screen.getByLabelText("Name"), "Travel");
+        await user.click(screen.getByTitle("Reuse this image"));
+        expect(
+            screen.getByText("Using a custom image. Icon and color don't apply."),
+        ).toBeInTheDocument();
+        await user.click(screen.getByRole("button", { name: "Create" }));
+        await waitFor(() =>
+            expect(create).toHaveBeenCalledWith(expect.objectContaining({ iconImage: image })),
+        );
+
+        await user.click(screen.getByTitle("Remove custom image"));
+        expect(
+            screen.queryByText("Using a custom image. Icon and color don't apply."),
+        ).not.toBeInTheDocument();
+        await user.click(screen.getByLabelText("wallet"));
+        await user.click(screen.getByRole("button", { name: "Create" }));
+        await waitFor(() =>
+            expect(create).toHaveBeenLastCalledWith(
+                expect.objectContaining({ icon: "wallet", iconImage: "" }),
+            ),
+        );
+    });
+
     it("deletes an empty account without a target and reports deletion errors", async () => {
         seed({ accounts: [account] });
         const remove = vi.spyOn(useStore.getState(), "deleteAccount").mockResolvedValue();
