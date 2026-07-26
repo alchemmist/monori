@@ -49,7 +49,7 @@ describe("account dialogs", () => {
         const notify = vi.spyOn(useStore.getState(), "notify");
         const { user } = renderUI(<AccountEditTab account={account} onClose={vi.fn()} />);
         await user.clear(screen.getByLabelText("Opening balance"));
-        await user.type(screen.getByLabelText("Opening balance"), "nope");
+        await user.type(screen.getByLabelText("Opening balance"), "-");
         await user.click(screen.getByRole("button", { name: "Save" }));
         expect(notify).toHaveBeenCalledWith(
             expect.objectContaining({ title: "Opening balance is not a number" }),
@@ -98,7 +98,6 @@ describe("account dialogs", () => {
         const { user } = renderUI(<AccountEditTab account={account} onClose={close} />);
         await user.clear(screen.getByLabelText("Name"));
         await user.type(screen.getByLabelText("Name"), "Main card");
-        await user.clear(screen.getByLabelText("Currency"));
         await user.click(screen.getByRole("button", { name: "Save" }));
         await waitFor(() =>
             expect(patch).toHaveBeenCalledWith(
@@ -208,7 +207,7 @@ describe("account dialogs", () => {
             <AccountReconcileDialog account={account} balance={10000} onClose={vi.fn()} />,
         );
         await user.clear(screen.getByLabelText("Actual bank balance"));
-        await user.type(screen.getByLabelText("Actual bank balance"), "wat");
+        await user.type(screen.getByLabelText("Actual bank balance"), "-");
         await user.click(screen.getByRole("button", { name: "Reconcile" }));
         expect(reconcile).not.toHaveBeenCalled();
         expect(notify).toHaveBeenCalledWith({ title: "Balance is not a number", theme: "danger" });
