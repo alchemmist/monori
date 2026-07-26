@@ -50,8 +50,9 @@ describe("BudgetPage", () => {
             expect(totals).toEqual([n("-60 000"), n("-5 000")]);
         });
 
-        it("falls back to zeroes for a category the year result does not cover", () => {
-            render();
+        it("falls back to zeroes for a category the year result does not cover", async () => {
+            const { user } = render();
+            await user.click(screen.getByRole("button", { name: "Show 1 unused" }));
 
             const row = screen.getByText("Rent").closest("tr");
             expect([...row.querySelectorAll(".yg-total")].map((td) => td.textContent)).toEqual([
