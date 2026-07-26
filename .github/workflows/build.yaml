@@ -10,9 +10,8 @@ on:
 permissions:
     contents: read
 
-# a new push supersedes any still-running CI for the same ref: with the slow
-# mutation target, back-to-back merges to main otherwise pile up stale runs
-# (deploy fires off the newest successful run, so cancelling old ones is safe)
+# A new push supersedes any still-running CI for the same ref. Deploy fires off
+# the newest successful run, so cancelling old ones is safe.
 concurrency:
     group: ci-${{ github.ref }}
     cancel-in-progress: true
@@ -34,7 +33,6 @@ jobs:
                     - t-slow
                     - build
                     - coverage
-                    - mutation
                     - audit-deps
                     - audit-deps-py
         steps:
@@ -114,6 +112,39 @@ jobs:
                       web/playwright-report
                       web/test-results
                   retention-days: 7
+
+    mutation:
+        name: mutation
+        if: github.event_name == 'workflow_dispatch'
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+              with:
+                  persist-credentials: false
+
+            - name: Setup Node
+              uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+                  cache: npm
+                  cache-dependency-path: web/package.json
+
+            - name: Setup uv
+              uses: astral-sh/setup-uv@v5
+              with:
+                  enable-cache: true
+
+            - name: Install web deps
+              run: npm install --no-audit --no-fund
+              working-directory: web
+
+            - name: Install server deps
+              run: uv sync
+              working-directory: server
+
+            - name: Run mutation tests
+              run: make mutation
 
     secrets:
         name: secrets
