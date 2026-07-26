@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { ActionIcon, SegmentedControl } from "@mantine/core";
+import { ActionIcon, Button, SegmentedControl } from "@mantine/core";
 import InlineSelect from "../ui/InlineSelect.jsx";
 import RowMenu from "../ui/RowMenu.jsx";
 import { Plus, ChevronDown, EllipsisVertical } from "@gravity-ui/icons";
@@ -27,6 +27,7 @@ export default function BudgetPage({ results, firstYear, lastYear }) {
     const [mode, setMode] = useState("year");
     const [density, setDensity] = useState("full");
     const [collapsed, setCollapsed] = useState({});
+    const [showUnused, setShowUnused] = useState(false);
     const [dialog, setDialog] = useState(null); // {type: 'edit'|'delete'|'new', category}
 
     const res = results.get(year);
@@ -34,10 +35,28 @@ export default function BudgetPage({ results, firstYear, lastYear }) {
         () => orderedGroups(snapshot.groups).filter((g) => g.kind === "expense"),
         [snapshot.groups],
     );
-    const catsByGroup = useMemo(
+    const allCatsByGroup = useMemo(
         () => categoriesByGroup(snapshot.categories, groups),
         [snapshot.categories, groups],
     );
+
+    // a category the selected year never touched — nothing budgeted, nothing
+    // spent, no balance sitting in the envelope — is noise in every view; a
+    // carried balance keeps it visible, since hiding money would be worse
+    const { catsByGroup, unusedCount } = useMemo(() => {
+        const used = (c) =>
+            (res.byCategory.get(c.id) ?? []).some(
+                (m) => m.budgeted !== 0 || m.outflows !== 0 || m.balance !== 0,
+            );
+        let unused = 0;
+        const filtered = new Map();
+        for (const [gid, cats] of allCatsByGroup) {
+            const active = cats.filter(used);
+            unused += cats.length - active.length;
+            filtered.set(gid, showUnused ? cats : active);
+        }
+        return { catsByGroup: filtered, unusedCount: unused };
+    }, [allCatsByGroup, res, showUnused]);
 
     const txCountByCat = useMemo(() => {
         const m = new Map();
@@ -85,6 +104,16 @@ export default function BudgetPage({ results, firstYear, lastYear }) {
                     </div>
                 )}
                 <div style={{ flex: 1 }} />
+                {unusedCount > 0 && (
+                    <Button
+                        size="xs"
+                        variant="subtle"
+                        onClick={() => setShowUnused((v) => !v)}
+                        title="Categories with nothing budgeted, spent or held this year"
+                    >
+                        {showUnused ? "Hide unused" : `Show ${unusedCount} unused`}
+                    </Button>
+                )}
                 {mode === "year" && (
                     <SegmentedControl
                         value={density}
