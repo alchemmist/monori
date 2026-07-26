@@ -5,7 +5,7 @@ from alembic import command
 
 from app.db import LEGACY_REVISIONS, _alembic_config, connect
 
-HEAD = "0017"
+HEAD = "0018"
 assert LEGACY_REVISIONS[-1] == "0006"
 
 OLD_SCHEMA = """
@@ -185,7 +185,7 @@ def test_migration_0011_backfills_and_enforces_canonical(tmp_path):
         conn.close()
 
 
-def test_migration_0017_backfills_currency_from_the_account(tmp_path):
+def test_migration_0018_backfills_currency_from_the_account(tmp_path):
     """
     A ledger written before currencies existed was implicitly in whatever its
     accounts were held in — which is exactly what the rows must come out as.

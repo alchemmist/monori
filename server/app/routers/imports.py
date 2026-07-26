@@ -76,6 +76,25 @@ def _owned_account(c, account_id, uid):
     )
 
 
+def _validate_import_categories(c, uid, rows):
+    """Selected import categories must be owned and match transaction direction."""
+    for row in rows:
+        category_id = row.categoryId
+        if category_id is None:
+            continue
+        category = c.execute(
+            "SELECT g.kind FROM categories c JOIN category_groups g ON g.id = c.group_id"
+            " WHERE c.id=? AND g.user_id=?",
+            (category_id, uid),
+        ).fetchone()
+        if category is None:
+            raise HTTPException(400, "unknown category")
+        if row.amount < 0 and category["kind"] != "expense":
+            raise HTTPException(400, "expense transaction requires an expense category")
+        if row.amount > 0 and category["kind"] != "income":
+            raise HTTPException(400, "income transaction requires an income category")
+
+
 def _card_digits(card):
     return "".join(ch for ch in str(card or "") if ch.isdigit())
 
@@ -137,8 +156,21 @@ def import_preview(body: ImportBody, user: Annotated[dict, Depends(current_user)
         rules = _load_user_rules(c, uid)
         fallback_account_id = body.accountId if _owned_account(c, body.accountId, uid) else None
         _detect_row_accounts(c, uid, rows, fallback_account_id)
+        kinds = {
+            r["id"]: r["kind"]
+            for r in c.execute(
+                "SELECT c.id, g.kind FROM categories c"
+                " JOIN category_groups g ON g.id = c.group_id WHERE g.user_id=?",
+                (uid,),
+            )
+        }
         for row in rows:
-            row["categoryId"] = categorize(row["description"], row["amount"], rules)
+            category_id = categorize(row["description"], row["amount"], rules)
+            if category_id is not None:
+                expected = "expense" if row["amount"] < 0 else "income"
+                if kinds.get(category_id) != expected:
+                    category_id = None
+            row["categoryId"] = category_id
             account_id = row["accountId"]
             held = account_currency(c, account_id) if account_id is not None else DEFAULT_CURRENCY
             named = normalize(row.get("currency"), "")
@@ -185,6 +217,7 @@ def import_commit(body: CommitBody, user: Annotated[dict, Depends(current_user)]
     try:
         if body.accountId is not None and not _owned_account(c, body.accountId, uid):
             raise HTTPException(400, "unknown account")
+        _validate_import_categories(c, uid, body.rows)
         grouped: dict[int, list[dict]] = {}
         for r in body.rows:
             # A body-level account is the legacy, single-account contract and

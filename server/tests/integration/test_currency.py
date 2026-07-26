@@ -305,7 +305,8 @@ def test_changing_an_account_currency_leaves_its_history_alone(client, api):
 
 def test_a_reconcile_adjustment_is_posted_in_the_account_currency(client, api):
     lari = api.account("Lari", currency="GEL")
-    api.tx("2026-07-05T10:00:00", -10000, accountId=lari)
+    groceries = api.category("Groceries", api.group("Needs"))
+    api.tx("2026-07-05T10:00:00", -10000, accountId=lari, categoryId=groceries)
     r = client.post(f"/api/accounts/{lari}/reconcile", json={"actualBalance": -15000})
     assert r.status_code == 200, r.text
     adjustment = next(

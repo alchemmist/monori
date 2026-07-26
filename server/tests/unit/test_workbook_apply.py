@@ -397,8 +397,9 @@ def test_apply_skips_rows_a_sync_already_delivered_to_another_account(tmp_path):
     )
     other = c.execute("SELECT id FROM accounts WHERE name='Credit'").fetchone()[0]
     c.execute(
-        "INSERT INTO transactions (date, amount, description, account_id, hash, source)"
-        " VALUES ('2026-01-05T14:22:00', -12550, 'Lenta', ?, 'h-sync', 'sync')",
+        "INSERT INTO transactions"
+        " (date, amount, currency, base_amount, description, account_id, hash, source)"
+        " VALUES ('2026-01-05T14:22:00', -12550, 'RUB', -12550, 'Lenta', ?, 'h-sync', 'sync')",
         (other,),
     )
     c.commit()
@@ -418,8 +419,9 @@ def test_apply_keeps_a_manual_twin_out_of_the_dedup(tmp_path):
     # the same operation — the workbook copy still lands
     c, uid, acct = _db(tmp_path)
     c.execute(
-        "INSERT INTO transactions (date, amount, description, account_id, hash, source)"
-        " VALUES ('2026-01-05T14:22:00', -12550, 'Lenta', ?, 'h-man', 'manual')",
+        "INSERT INTO transactions"
+        " (date, amount, currency, base_amount, description, account_id, hash, source)"
+        " VALUES ('2026-01-05T14:22:00', -12550, 'RUB', -12550, 'Lenta', ?, 'h-man', 'manual')",
         (acct,),
     )
     c.commit()
