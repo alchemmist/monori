@@ -227,8 +227,8 @@ def test_historical_day_counts_span_accounts_and_skip_manual(tmp_path):
     counts = historical_day_counts(c, uid)
     # "sheets" is the retired template importer's label, still in old ledgers
     assert counts == {
-        ("2026-07-19", -368000, "Kafe Lesnoj"): 2,
-        ("2026-07-18", -50000, "Пятёрочка"): 1,
+        ("2026-07-19", -368000, "kafe lesnoj"): 2,
+        ("2026-07-18", -50000, "пятёрочка"): 1,
     }
 
 
@@ -240,8 +240,38 @@ def test_drop_already_present_is_count_aware():
         {"date": "2026-07-19T18:00:00", "amount": -368000, "description": "Kafe Lesnoj"},
         {"date": "2026-07-19T18:00:00", "amount": -100, "description": "New"},
     ]
-    kept, dropped = drop_already_present(rows, {("2026-07-19", -368000, "Kafe Lesnoj"): 1})
+    kept, dropped = drop_already_present(rows, {("2026-07-19", -368000, "kafe lesnoj"): 1})
     # one copy is already in the ledger; the second in the batch is genuinely a
     # second operation and stays
     assert dropped == 1
     assert [r["description"] for r in kept] == ["Kafe Lesnoj", "New"]
+
+
+def test_dedup_survives_the_bank_rewording_its_own_description(tmp_path):
+    """
+    The exact prod duplicate: one pull delivered "…организациях. YandexBank…",
+    the next pull the same operation without the dot. One character of drift
+    must not read as a new operation — even when the original leg has since
+    been merged into a transfer (its source stays 'sync').
+    """
+    c = _db(tmp_path)
+    uid = _uid(c)
+    posted = "Операция в других кредитных организациях. YandexBank_C2A g. Moskva RUS"
+    reworded = "Операция в других кредитных организациях YandexBank_C2A g. Moskva RUS"
+    c.execute(
+        "INSERT INTO transactions"
+        " (date, amount, description, account_id, hash, source, transfer_id)"
+        " VALUES ('2026-07-24T12:38:48', -284300, ?, 1, 'h1', 'sync', 'tr1')",
+        (posted,),
+    )
+    c.commit()
+
+    from app.ingest import drop_already_present, historical_day_counts
+
+    rows = [
+        {"date": "2026-07-24T12:38:48", "amount": -284300, "description": reworded},
+        {"date": "2026-07-24T12:13:27", "amount": -136300, "description": "Додо Пицца"},
+    ]
+    kept, dropped = drop_already_present(rows, historical_day_counts(c, uid))
+    assert dropped == 1
+    assert [r["description"] for r in kept] == ["Додо Пицца"]
