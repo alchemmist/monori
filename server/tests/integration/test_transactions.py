@@ -44,6 +44,46 @@ def test_transaction_partial_patch_preserves_other_fields(api, client):
     assert client.patch("/api/transactions/999", json={"amount": 1}).status_code == 404
 
 
+def test_transaction_category_must_match_amount_direction(api, client):
+    expenses = api.group("Expenses")
+    income = api.group("Income", "income")
+    food = api.category("Food", expenses)
+    salary = api.category("Salary", income)
+    account = api.default_account()
+
+    for amount, category in ((-100, salary), (100, food)):
+        response = client.post(
+            "/api/transactions",
+            json={
+                "date": "2026-02-03T10:00:00",
+                "amount": amount,
+                "accountId": account,
+                "categoryId": category,
+            },
+        )
+        assert response.status_code == 400
+
+    expense = api.tx("2026-02-03T10:00:00", -100, categoryId=food)
+    income_tx = api.tx("2026-02-03T10:00:00", 100, categoryId=salary)
+    assert (
+        client.patch(f"/api/transactions/{expense}", json={"categoryId": salary}).status_code
+        == 400
+    )
+    assert (
+        client.patch(f"/api/transactions/{income_tx}", json={"categoryId": food}).status_code
+        == 400
+    )
+    assert client.patch(f"/api/transactions/{expense}", json={"amount": 100}).status_code == 400
+
+    bulk = client.post(
+        "/api/transactions/bulk",
+        json={"action": "categorize", "ids": [expense, income_tx], "categoryId": food},
+    )
+    assert bulk.status_code == 400
+    assert api.tx_by(expense)["categoryId"] == food
+    assert api.tx_by(income_tx)["categoryId"] == salary
+
+
 def test_transaction_patch_recomputes_hash_for_dedup(api, client):
     """
     Editing date/amount/description must recompute the dedup hash: a statement

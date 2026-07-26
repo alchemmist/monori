@@ -73,6 +73,28 @@ def _owned_account(c, account_id, uid):
     )
 
 
+def _validate_import_categories(c, uid, rows):
+    """
+    Every manually selected import category must belong to the account owner
+    and match the sign of its transaction.
+    """
+    for row in rows:
+        category_id = row.categoryId
+        if category_id is None:
+            continue
+        category = c.execute(
+            "SELECT g.kind FROM categories c JOIN category_groups g ON g.id = c.group_id"
+            " WHERE c.id=? AND g.user_id=?",
+            (category_id, uid),
+        ).fetchone()
+        if category is None:
+            raise HTTPException(400, "unknown category")
+        if row.amount < 0 and category["kind"] != "expense":
+            raise HTTPException(400, "expense transaction requires an expense category")
+        if row.amount > 0 and category["kind"] != "income":
+            raise HTTPException(400, "income transaction requires an income category")
+
+
 def _card_digits(card):
     return "".join(ch for ch in str(card or "") if ch.isdigit())
 
@@ -175,6 +197,7 @@ def import_commit(body: CommitBody, user: Annotated[dict, Depends(current_user)]
     try:
         if body.accountId is not None and not _owned_account(c, body.accountId, uid):
             raise HTTPException(400, "unknown account")
+        _validate_import_categories(c, uid, body.rows)
         grouped: dict[int, list[dict]] = {}
         for r in body.rows:
             # A body-level account is the legacy, single-account contract and

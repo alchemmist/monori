@@ -140,10 +140,15 @@ export default function TransactionsPage() {
     const catSectionsFor = (t) => {
         const cur = t.categoryId != null ? catById.get(t.categoryId) : null;
         const uncategorized = { value: "", label: "Leave uncategorized" };
-        if (!cur || !cur.archived) return [uncategorized, ...catSections];
+        const kind = t.amount < 0 ? "expense" : t.amount > 0 ? "income" : null;
+        const matchingSections = kind
+            ? catSections.filter((section) => section.kind === kind)
+            : catSections;
+        if (!cur || !cur.archived) return [uncategorized, ...matchingSections];
         const g = groupById.get(cur.groupId);
         const opt = { value: String(cur.id), label: cur.name };
-        const clone = catSections.map((s) => ({ ...s, options: [...s.options] }));
+        const clone = matchingSections.map((s) => ({ ...s, options: [...s.options] }));
+        if (kind && g?.kind !== kind) return [uncategorized, ...clone];
         const sec = clone.find((s) => s.id === cur.groupId);
         if (sec) sec.options.push(opt);
         else

@@ -26,9 +26,14 @@ export default function ImportPanel({ onClose }) {
     const duplicateEpoch = useRef(0);
 
     const accountOptions = accounts.map((a) => ({ value: String(a.id), label: a.name }));
-    const categoryOptions = [
+    const categoryOptionsFor = (amount) => [
         { value: "", label: "Uncategorized" },
-        ...categories.map((c) => ({ value: String(c.id), label: c.name })),
+        ...categories
+            .filter((c) => {
+                const group = snapshot.groups?.find((g) => g.id === c.groupId);
+                return amount === 0 || group?.kind === (amount < 0 ? "expense" : "income");
+            })
+            .map((c) => ({ value: String(c.id), label: c.name })),
     ];
     const unassigned = rows?.filter((r) => r.accountId == null).length ?? 0;
     const fresh = rows?.filter((r) => !r.duplicate).length ?? 0;
@@ -284,7 +289,7 @@ export default function ImportPanel({ onClose }) {
                                                         categoryId: value ? Number(value) : null,
                                                     })
                                                 }
-                                                data={categoryOptions}
+                                                data={categoryOptionsFor(row.amount)}
                                             />
                                         </td>
                                     </tr>

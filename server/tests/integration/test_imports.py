@@ -119,6 +119,28 @@ def test_import_commit_keeps_category(api, client):
     assert imported["total"] == 1 and imported["rows"][0]["source"] == "import"
 
 
+def test_import_commit_rejects_category_with_the_wrong_direction(api, client):
+    expenses = api.group("Expenses")
+    income = api.group("Income", "income")
+    food = api.category("Groceries", expenses)
+    salary = api.category("Salary", income)
+    rows = api.preview(api.statement)
+
+    rows[0]["categoryId"] = salary
+    bad_expense = client.post(
+        "/api/import/commit", json={"accountId": api.default_account(), "rows": rows}
+    )
+    assert bad_expense.status_code == 400
+
+    rows = api.preview(api.statement)
+    rows[1]["amount"] = 100
+    rows[1]["categoryId"] = food
+    bad_income = client.post(
+        "/api/import/commit", json={"accountId": api.default_account(), "rows": rows}
+    )
+    assert bad_income.status_code == 400
+
+
 def test_commit_rejects_unknown_account(client):
     r = client.post("/api/import/commit", json={"accountId": 999, "rows": []})
     assert r.status_code == 400

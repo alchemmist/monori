@@ -57,6 +57,14 @@ export default function AddTxTab({ onClose }) {
     const [busy, setBusy] = useState(false);
     const [recent, setRecent] = useState([]);
     const amountRef = useRef(null);
+    const categoriesForDirection = useMemo(
+        () => catSections.filter((section) => section.kind === direction),
+        [catSections, direction],
+    );
+
+    useEffect(() => {
+        setCategory(null);
+    }, [direction]);
 
     // Restored tabs can mount before the light snapshot arrives. Keep a chosen
     // account, but select the first active one once it is available (or when a
@@ -157,7 +165,7 @@ export default function AddTxTab({ onClose }) {
                     placeholder="Uncategorized"
                     value={category}
                     onChange={setCategory}
-                    data={[{ value: "", label: "Uncategorized" }, ...catSections]}
+                    data={[{ value: "", label: "Uncategorized" }, ...categoriesForDirection]}
                 />
                 <FTextInput
                     label="Comment"

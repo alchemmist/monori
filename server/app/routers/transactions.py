@@ -64,18 +64,28 @@ class BulkBody(BaseModel):
     categoryId: int | None = None
 
 
-def _resolve_category(c, category_id, uid):
+def _validate_category_kind(kind, amount):
+    if amount < 0 and kind != "expense":
+        raise HTTPException(400, "expense transaction requires an expense category")
+    if amount > 0 and kind != "income":
+        raise HTTPException(400, "income transaction requires an income category")
+
+
+def _resolve_category(c, category_id, uid, amount=None):
     """
     0 (or None handled by caller) means uncategorized; else must exist.
     """
     if category_id in (None, 0):
         return None
-    if not c.execute(
-        "SELECT c.id FROM categories c JOIN category_groups g ON g.id = c.group_id"
+    category = c.execute(
+        "SELECT c.id, g.kind FROM categories c JOIN category_groups g ON g.id = c.group_id"
         " WHERE c.id=? AND g.user_id=?",
         (category_id, uid),
-    ).fetchone():
+    ).fetchone()
+    if not category:
         raise HTTPException(400, "unknown category")
+    if amount is not None:
+        _validate_category_kind(category["kind"], amount)
     return category_id
 
 
@@ -127,7 +137,7 @@ def create_transaction(body: TxCreate, user: Annotated[dict, Depends(current_use
     uid = user["id"]
     c = conn()
     try:
-        category = _resolve_category(c, body.categoryId, uid)
+        category = _resolve_category(c, body.categoryId, uid, body.amount)
         account = _resolve_account(c, body.accountId, uid)
         cur = c.execute(
             """INSERT INTO transactions
@@ -174,7 +184,9 @@ def patch_transaction(tx_id: int, patch: TxPatch, user: Annotated[dict, Depends(
         comment = patch.comment if patch.comment is not None else row["comment"]
         category = row["category_id"]
         if patch.categoryId is not None:
-            category = _resolve_category(c, patch.categoryId, uid)
+            category = _resolve_category(c, patch.categoryId, uid, amount)
+        elif patch.amount is not None and category is not None:
+            _resolve_category(c, category, uid, amount)
         account = row["account_id"]
         if patch.accountId is not None:
             account = _resolve_account(c, patch.accountId, uid)
@@ -241,6 +253,17 @@ def bulk_transactions(body: BulkBody, user: Annotated[dict, Depends(current_user
                 ).rowcount
         else:
             category = _resolve_category(c, body.categoryId, uid)
+            # Validate the complete selection before updating anything. This
+            # keeps a mixed bulk selection atomic when one row has the other
+            # direction.
+            for tx_id in body.ids:
+                row = c.execute(
+                    "SELECT t.amount FROM transactions t JOIN accounts a ON a.id = t.account_id"
+                    " WHERE t.id=? AND a.user_id=?",
+                    (tx_id, uid),
+                ).fetchone()
+                if row is not None and category is not None:
+                    _resolve_category(c, category, uid, row["amount"])
             for tx_id in body.ids:
                 affected += c.execute(
                     "UPDATE transactions SET category_id=? WHERE id=?"
