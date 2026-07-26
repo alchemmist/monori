@@ -8,7 +8,8 @@
  *   overspent(m)     = sum over expense categories of min(balance(cat, m), 0)
  *   available(m)     = available(m-1) + overspent(m-1) + income(m) - budgetedTotal(m)
  *
- * January chains from the previous year's December; the first year starts at 0.
+ * January chains from the previous year's December; the first year starts with
+ * the total opening balance already held across accounts.
  */
 
 import { isTransfer } from "./transfers.js";
@@ -48,7 +49,15 @@ export function buildBudgetIndex(budgets) {
  * @returns {year, byCategory: Map(catId -> months[12] of {budgeted, outflows, balance}),
  *           income[12], budgetedTotal[12], overspent[12], available[12]}
  */
-export function computeYear({ year, categories, groupKindById, txIndex, budgetIndex, prev }) {
+export function computeYear({
+    year,
+    categories,
+    groupKindById,
+    txIndex,
+    budgetIndex,
+    prev,
+    openingBalance = 0,
+}) {
     const byCategory = new Map();
     const income = Array(12).fill(0);
     const budgetedTotal = Array(12).fill(0);
@@ -83,7 +92,7 @@ export function computeYear({ year, categories, groupKindById, txIndex, budgetIn
         byCategory.set(c.id, months);
     }
 
-    let prevAvailable = prev ? prev.available[11] : 0;
+    let prevAvailable = prev ? prev.available[11] : openingBalance;
     let prevOverspent = prev ? prev.overspent[11] : 0;
     for (let m = 0; m < 12; m++) {
         available[m] = prevAvailable + prevOverspent + income[m] - budgetedTotal[m];
@@ -111,6 +120,10 @@ export function computeRange(snapshot, firstYear, lastYear) {
     const groupKindById = new Map(snapshot.groups.map((g) => [g.id, g.kind]));
     const txIndex = buildTxIndex(snapshot.transactions);
     const budgetIndex = buildBudgetIndex(snapshot.budgets);
+    const openingBalance = (snapshot.accounts ?? []).reduce(
+        (sum, account) => sum + (account.openingBalance ?? 0),
+        0,
+    );
     const results = new Map();
     let prev = null;
     for (let year = firstYear; year <= lastYear; year++) {
@@ -121,6 +134,7 @@ export function computeRange(snapshot, firstYear, lastYear) {
             txIndex,
             budgetIndex,
             prev,
+            openingBalance: prev ? 0 : openingBalance,
         });
         results.set(year, res);
         prev = res;
