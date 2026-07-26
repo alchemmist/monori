@@ -66,12 +66,10 @@ def test_transaction_category_must_match_amount_direction(api, client):
     expense = api.tx("2026-02-03T10:00:00", -100, categoryId=food)
     income_tx = api.tx("2026-02-03T10:00:00", 100, categoryId=salary)
     assert (
-        client.patch(f"/api/transactions/{expense}", json={"categoryId": salary}).status_code
-        == 400
+        client.patch(f"/api/transactions/{expense}", json={"categoryId": salary}).status_code == 400
     )
     assert (
-        client.patch(f"/api/transactions/{income_tx}", json={"categoryId": food}).status_code
-        == 400
+        client.patch(f"/api/transactions/{income_tx}", json={"categoryId": food}).status_code == 400
     )
     assert client.patch(f"/api/transactions/{expense}", json={"amount": 100}).status_code == 400
 

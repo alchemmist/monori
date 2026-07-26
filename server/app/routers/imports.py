@@ -154,8 +154,23 @@ def import_preview(body: ImportBody, user: Annotated[dict, Depends(current_user)
         rules = _load_user_rules(c, uid)
         fallback_account_id = body.accountId if _owned_account(c, body.accountId, uid) else None
         _detect_row_accounts(c, uid, rows, fallback_account_id)
+        # commit enforces category direction, so the preview must not propose
+        # a category the commit would then reject wholesale
+        kinds = {
+            r["id"]: r["kind"]
+            for r in c.execute(
+                "SELECT c.id, g.kind FROM categories c"
+                " JOIN category_groups g ON g.id = c.group_id WHERE g.user_id=?",
+                (uid,),
+            )
+        }
         for row in rows:
-            row["categoryId"] = categorize(row["description"], row["amount"], rules)
+            category_id = categorize(row["description"], row["amount"], rules)
+            if category_id is not None:
+                expected = "expense" if row["amount"] < 0 else "income"
+                if kinds.get(category_id) != expected:
+                    category_id = None
+            row["categoryId"] = category_id
         _mark_duplicates(c, rows)
         return {"rows": rows, "errors": errors}
     finally:

@@ -1,7 +1,11 @@
+import os
+import sqlite3
 from io import BytesIO
 
 import pytest
 from openpyxl import load_workbook
+
+from app.importer import tx_hash
 
 pytestmark = pytest.mark.integration
 
@@ -349,8 +353,22 @@ def test_export_zero_balance_is_grey(api, client):
 
 
 def test_export_dashdata_refund_reduces_expense(api, client):
+    """
+    Direction enforcement keeps the API from filing an inflow into an expense
+    category, but migrated workbooks and old synced statements carry such
+    refund rows — DashData must still net them out of the category's spend.
+    """
     cat, acct = _setup(api, client)
-    api.tx("2026-01-20T10:00:00", 2550, accountId=acct, categoryId=cat, description="Refund")
+    date, amount, desc = "2026-01-20T10:00:00", 2550, "Refund"
+    db = sqlite3.connect(os.environ["MONORI_DB"])
+    db.execute(
+        "INSERT INTO transactions"
+        " (date, amount, description, account_id, category_id, hash, source)"
+        " VALUES (?, ?, ?, ?, ?, ?, 'sync')",
+        (date, amount, desc, acct, cat, tx_hash(acct, date, amount, desc)),
+    )
+    db.commit()
+    db.close()
     ws = _export(client)["DashData"]
     row = [c.value for c in ws[2]]
     assert row[1] == 5000.0
