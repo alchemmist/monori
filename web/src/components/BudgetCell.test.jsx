@@ -19,7 +19,7 @@ describe("BudgetCell", () => {
         const { user } = renderUI(<BudgetCell value={500000} onChange={() => {}} />);
         await user.click(screen.getByRole("button"));
         const input = screen.getByRole("textbox");
-        expect(input).toHaveValue("5000");
+        expect(input).toHaveValue("5 000");
         expect(input).toHaveFocus();
     });
 

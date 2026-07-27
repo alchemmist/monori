@@ -103,7 +103,13 @@ const ENDPOINTS = [
         "POST",
         { sourceId: 1, targetId: 2 },
     ],
-    ["transferSuggestions", () => api.transferSuggestions(), "/api/transfers/suggestions", undefined, undefined],
+    [
+        "transferSuggestions",
+        () => api.transferSuggestions(),
+        "/api/transfers/suggestions",
+        undefined,
+        undefined,
+    ],
     [
         "dismissTransferSuggestion",
         () => api.dismissTransferSuggestion({ sourceId: 1, targetId: 2 }),
@@ -178,7 +184,7 @@ const ENDPOINTS = [
         () => api.importCommit([{ id: 3 }]),
         "/api/import/commit",
         "POST",
-        { rows: [{ id: 3 }] },
+        { rows: [{ id: 3 }], accountId: null },
     ],
     [
         "connectionsAvailable",

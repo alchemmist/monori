@@ -71,7 +71,7 @@ describe("store demo mutations", () => {
         expect(
             useStore.getState().snapshot.transactions.filter((t) => t.transferId === transferId),
         ).toHaveLength(2);
-        await store.deleteTransfer(transferId);
+        await store.deleteTransferWithLegs(transferId);
         expect(useStore.getState().snapshot.transactions).toHaveLength(1);
     });
 
@@ -145,7 +145,7 @@ describe("store remote mutations", () => {
 
     it("reloads after creating a transfer but deletes one locally", async () => {
         const create = vi.spyOn(api, "createTransfer").mockResolvedValue({ transferId: "t-9" });
-        const remove = vi.spyOn(api, "deleteTransfer").mockResolvedValue({});
+        const remove = vi.spyOn(api, "splitTransfer").mockResolvedValue({});
         const body = { fromAccountId: 1, toAccountId: 2, amount: 25, date: "2026-01-02" };
 
         const transferId = await useStore.getState().createTransfer(body);
@@ -153,7 +153,7 @@ describe("store remote mutations", () => {
         expect(transferId).toBe("t-9");
         expect(refreshCount()).toBe(1);
 
-        await useStore.getState().deleteTransfer("t-9");
+        await useStore.getState().deleteTransferWithLegs("t-9");
         expect(remove).toHaveBeenCalledExactlyOnceWith("t-9");
         expect(refreshCount()).toBe(1);
     });
@@ -245,8 +245,8 @@ describe("store remote mutations", () => {
     it("commits an import and reloads with the server result", async () => {
         const commit = vi.spyOn(api, "importCommit").mockResolvedValue({ inserted: 1 });
         const rows = [{ date: "2026-01-01", amount: -5 }];
-        await expect(useStore.getState().commitImport(rows, 1)).resolves.toEqual({ inserted: 1 });
-        expect(commit).toHaveBeenCalledExactlyOnceWith(rows, 1);
+        await expect(useStore.getState().commitImport(rows)).resolves.toEqual({ inserted: 1 });
+        expect(commit).toHaveBeenCalledExactlyOnceWith(rows);
         expect(refreshCount()).toBe(1);
     });
 

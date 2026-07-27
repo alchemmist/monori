@@ -144,8 +144,8 @@ describe("deletes reach the server before the snapshot is trimmed", () => {
     });
 
     it("leaves the transfer legs in place when the server refuses the delete", async () => {
-        vi.spyOn(api, "deleteTransfer").mockRejectedValue(new Error("gone"));
-        await expect(useStore.getState().deleteTransfer("t-1")).rejects.toThrow("gone");
+        vi.spyOn(api, "splitTransfer").mockRejectedValue(new Error("gone"));
+        await expect(useStore.getState().deleteTransferWithLegs("t-1")).rejects.toThrow("gone");
         expect(snap().transactions).toEqual(base().transactions);
     });
 });

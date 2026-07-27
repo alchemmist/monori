@@ -285,7 +285,7 @@ describe("createTransfer and deleteTransfer in the demo", () => {
             amount: 5,
             date: "2026-03-02",
         });
-        await useStore.getState().deleteTransfer(transferId);
+        await useStore.getState().deleteTransferWithLegs(transferId);
         expect(snap().transactions.map((t) => t.id)).toEqual([2, 7, 10, 11]);
     });
 });

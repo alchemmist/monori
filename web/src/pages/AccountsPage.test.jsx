@@ -49,14 +49,16 @@ describe("AccountsPage", () => {
         renderUI(<AccountsPage />);
 
         expect(screen.getByRole("heading", { name: "Accounts" })).toBeInTheDocument();
-        expect(document.querySelectorAll(".account-row")).toHaveLength(data.accounts.length);
+        expect(document.querySelectorAll(".account-row:not(.account-row_add)")).toHaveLength(
+            data.accounts.length,
+        );
     });
 
     it("renders no rows and still offers a new account when there are none", () => {
         seed({ accounts: [] });
         renderUI(<AccountsPage />);
 
-        expect(document.querySelectorAll(".account-row")).toHaveLength(0);
+        expect(document.querySelectorAll(".account-row:not(.account-row_add)")).toHaveLength(0);
         expect(screen.getByRole("button", { name: /New account/ })).toBeInTheDocument();
     });
 
