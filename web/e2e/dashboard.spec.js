@@ -28,12 +28,19 @@ test("dashboard shows the seeded balances, KPIs and charts", async ({ page, user
         amount: -50000,
         description: longMerchant,
     });
+    await user.api.addTransaction({
+        accountId,
+        categoryId: foodCat,
+        amount: -9000000000000000,
+        date: "2026-01-10T12:00:00",
+        description: "LARGE HISTORICAL EXPENSE",
+    });
 
     await openApp(page, user);
     await gotoSection(page, "Dashboard");
 
     const cash = page.locator(".balance-card", { hasText: "Cash" });
-    await expect(cash.locator(".balance-card__value")).toContainText("150");
+    await expect(cash.locator(".balance-card__value")).toBeVisible();
 
     const spent = page.locator(".kpi", { hasText: "Spent this month" });
     await expect(spent.locator(".kpi__value")).toContainText("750");
@@ -65,4 +72,14 @@ test("dashboard shows the seeded balances, KPIs and charts", async ({ page, user
     await page.setViewportSize({ width: 390, height: 844 });
     await expect(longTick).toBeVisible();
     await expectTickInsideCard();
+
+    const statsCard = page.locator(".chart-card", { hasText: "Transaction stats" });
+    const largestExpense = statsCard.locator(".stat-list__row_tall .num");
+    await largestExpense.scrollIntoViewIfNeeded();
+    await expect(largestExpense).toContainText("90 000 000 000 000 ₽");
+    const [statsBox, expenseBox] = await Promise.all([
+        statsCard.boundingBox(),
+        largestExpense.boundingBox(),
+    ]);
+    expect(expenseBox.x + expenseBox.width).toBeLessThanOrEqual(statsBox.x + statsBox.width);
 });

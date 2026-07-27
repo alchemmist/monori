@@ -206,9 +206,15 @@
     color: var(--m-text-dim);
 }
 
+.stat-list__row > span {
+    min-width: 0;
+}
+
 .stat-list__row .num {
+    overflow-wrap: anywhere;
     color: var(--m-text);
     font-size: 14px;
+    text-align: right;
 }
 
 .stat-list__row:last-child {
