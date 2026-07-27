@@ -187,25 +187,51 @@
     font-family: var(--g-font-family-monospace, ui-monospace, monospace);
 }
 
-/* Let the result table take its natural height. The tab content owns the
-   vertical scroll, so the editor, results and history remain one document. */
-.sql-console__scroll {
-    overflow: auto clip;
+/* The tab content owns vertical scrolling; this wrapper only handles a result
+   that is wider than the console. */
+.sql-console__results {
+    overflow-x: auto;
+    overflow-y: clip;
     border: 1px solid var(--m-border-soft);
     border-radius: var(--m-radius-sm);
+    background: var(--m-surface);
+}
+
+.sql-console__results:focus-visible {
+    outline: 2px solid var(--m-accent);
+    outline-offset: 2px;
+}
+
+.sql-console__table {
+    min-width: 100%;
+    table-layout: auto;
 }
 
 .sql-console__table td,
 .sql-console__table th {
-    max-width: 280px;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    max-width: 360px;
+    vertical-align: top;
 }
 
-.sql-console__table thead th {
+.sql-console__table th {
     position: sticky;
     top: 0;
+    z-index: 1;
     background: var(--m-surface);
+    box-shadow: 0 1px 0 var(--m-border-soft);
+}
+
+.sql-console__table td {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.sql-console__table tbody tr:nth-child(even) {
+    background: color-mix(in srgb, var(--m-surface-hover) 42%, transparent);
+}
+
+.sql-console__table tbody tr:hover {
+    background: var(--m-surface-hover);
 }
 
 .sql-console__history {

@@ -157,7 +157,12 @@ export default function AdminSqlTab({ onClose }) {
                         {result.truncated && ` · showing first ${result.rowCount} rows`}
                     </Txt>
                     {result.columns.length > 0 && (
-                        <div className="sql-console__scroll">
+                        <div
+                            className="sql-console__results"
+                            role="region"
+                            aria-label="SQL query results"
+                            tabIndex={0}
+                        >
                             <table className="admin-table admin-table_compact sql-console__table">
                                 <thead>
                                     <tr>
