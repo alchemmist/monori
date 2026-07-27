@@ -187,10 +187,11 @@
     font-family: var(--g-font-family-monospace, ui-monospace, monospace);
 }
 
-/* results scroll on their own, so editor and footer keep their place */
+/* Let the result table take its natural height. The tab content owns the
+   vertical scroll, so the editor, results and history remain one document. */
 .sql-console__scroll {
-    overflow: auto;
-    max-height: 45vh;
+    overflow-x: auto;
+    overflow-y: clip;
     border: 1px solid var(--m-border-soft);
     border-radius: var(--m-radius-sm);
 }
