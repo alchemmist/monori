@@ -325,10 +325,19 @@ export default function App({ theme, onToggleTheme }) {
 function DerivedDataLoadscreen({ progress }) {
     const percent = progress.total ? Math.round((progress.loaded / progress.total) * 100) : 0;
     return (
-        <div className="derived-loadscreen" role="status" aria-live="polite">
+        <div className="derived-loadscreen">
             <Loader size="lg" type="bars" />
             <div className="derived-loadscreen__title">Calculating your budget…</div>
-            <div className="derived-loadscreen__progress">Loading transactions · {percent}%</div>
+            <div
+                className="derived-loadscreen__progress"
+                role="progressbar"
+                aria-label="Loading transactions"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={percent}
+            >
+                Loading transactions · {percent}%
+            </div>
         </div>
     );
 }
