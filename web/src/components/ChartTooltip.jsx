@@ -2,7 +2,9 @@ import { ChartTooltip } from "@mantine/charts";
 import { chartMoneyUnit, fmtNum, trendUnit } from "../pages/chartTheme.js";
 
 function withUnit(payload, getUnit) {
-    return payload?.map((item) => ({ ...item, unit: getUnit(item.name) }));
+    return payload
+        ?.filter((item) => item.value != null)
+        .map((item) => ({ ...item, unit: getUnit(item.name) }));
 }
 
 export function MoneyChartTooltip({ label, payload, ...props }) {
