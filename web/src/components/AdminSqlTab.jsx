@@ -17,15 +17,12 @@ const renderCell = (v) => {
 const rowsLabel = (n) => `${n} ${n === 1 ? "row" : "rows"}`;
 
 const writeToastTitle = (statement, count) => {
-    const verb = statement.match(/^\s*(?:--[^\n]*\s*)*(UPDATE|INSERT|DELETE|REPLACE)\b/i)?.[1];
-    const action =
-        verb?.toLowerCase() === "update"
-            ? "updated"
-            : verb?.toLowerCase() === "insert" || verb?.toLowerCase() === "replace"
-              ? "inserted"
-              : verb?.toLowerCase() === "delete"
-                ? "deleted"
-                : "affected";
+    // Only the first token is needed for the toast. Avoid a regex that tries
+    // to consume an arbitrary number of SQL comments before the statement.
+    const verb = statement.trimStart().split(/\s+/, 1)[0]?.toLowerCase();
+    const action = { update: "updated", insert: "inserted", replace: "inserted", delete: "deleted" }[
+        verb
+    ] ?? "affected";
     return `${count} ${count === 1 ? "row" : "rows"} ${action}`;
 };
 
