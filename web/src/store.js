@@ -902,8 +902,8 @@ const initialTabs = structuredClone(initialStoreState.tabs);
 const initialNextTabId = nextTabId;
 
 export function resetStoreForTests() {
-    fillGeneration = 0;
-    hiddenEpoch = 0;
+    fillGeneration += 1;
+    hiddenEpoch += 1;
     txPatchChain.clear();
     nextTxFieldRevision = 0;
     txFieldRevisions.clear();

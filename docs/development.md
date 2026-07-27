@@ -36,38 +36,38 @@ one-to-one — there is no separate CI script to drift out of sync.
 
 ### Run
 
-| Target | Does |
-| -------- | ------ |
+| Target                  | Does                                                        |
+| ----------------------- | ----------------------------------------------------------- |
 | `make up` / `make down` | Dev stack in Docker (web on 5173, api on 8077), hot-reload. |
-| `make api` | API only: `uvicorn --reload` on `API_PORT` (default 8077). |
-| `make web` | Web dev server only, proxying the API. |
-| `make build` | `vite build`, then copy `web/dist` into `server/static`. |
+| `make api`              | API only: `uvicorn --reload` on `API_PORT` (default 8077).  |
+| `make web`              | Web dev server only, proxying the API.                      |
+| `make build`            | `vite build`, then copy `web/dist` into `server/static`.    |
 
 ### Format & lint
 
-| Target | Does |
-| -------- | ------ |
-| `make fmt` | Prettier + Ruff format/fix, and regenerates the schema diagram. |
-| `make fmt-check` | The same, check-only. |
-| `make lint` | Everything: web (Oxlint), CSS, HTML, server (Ruff), YAML, Markdown, generated docs, GitHub Actions, Dockerfile, shell, and spelling. |
-| `make schema-diagram` | Regenerates the ER diagram in [data-model.md](data-model.md) from `server/schema.sql`. `make lint` fails if it is stale. |
-| `make typecheck` | mypy on the server. |
-| `make analyze` | bandit + semgrep security scan. |
-| `make audit` | Dependency + secret scanning (`audit-deps`, `audit-deps-py`, `audit-secrets`). |
+| Target                | Does                                                                                                                                 |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `make fmt`            | Prettier + Ruff format/fix, and regenerates the schema diagram.                                                                      |
+| `make fmt-check`      | The same, check-only.                                                                                                                |
+| `make lint`           | Everything: web (Oxlint), CSS, HTML, server (Ruff), YAML, Markdown, generated docs, GitHub Actions, Dockerfile, shell, and spelling. |
+| `make schema-diagram` | Regenerates the ER diagram in [data-model.md](data-model.md) from `server/schema.sql`. `make lint` fails if it is stale.             |
+| `make typecheck`      | mypy on the server.                                                                                                                  |
+| `make analyze`        | bandit + semgrep security scan.                                                                                                      |
+| `make audit`          | Dependency + secret scanning (`audit-deps`, `audit-deps-py`, `audit-secrets`).                                                       |
 
 ### Test
 
 The suite is a testing "trophy" — heavy on integration tests that use real
 dependencies (a real temp SQLite database, the real FastAPI app), not mocks.
 
-| Target | Does |
-| -------- | ------ |
-| `make test` | The whole suite (`t-fast` + `t-medium` + `t-slow`). |
-| `make t-fast` | Unit tests: Vitest + pytest `-m "not integration"`. |
-| `make t-medium` | Integration tests: pytest `-m integration` against a real DB. |
-| `make t-slow` | Placeholder for end-to-end (Playwright), not yet wired up. |
-| `make coverage` | Coverage as a tree (root → back/front → module → file), via `scripts/coverage-tree.sh`. Fails below **80% statements and lines** in `web/src`. |
-| `make mutation` | Mutation testing: Stryker on `web/src/engine`, mutmut on `server/app`. |
+| Target          | Does                                                                                                                                           |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `make test`     | The whole suite (`t-fast` + `t-medium` + `t-slow`).                                                                                            |
+| `make t-fast`   | Unit tests: Vitest + pytest `-m "not integration"`.                                                                                            |
+| `make t-medium` | Integration tests: pytest `-m integration` against a real DB.                                                                                  |
+| `make t-slow`   | Placeholder for end-to-end (Playwright), not yet wired up.                                                                                     |
+| `make coverage` | Coverage as a tree (root → back/front → module → file), via `scripts/coverage-tree.sh`. Fails below **90% statements and lines** in `web/src`. |
+| `make mutation` | Mutation testing: Stryker on `web/src/engine`, mutmut on `server/app`.                                                                         |
 
 ### The pre-commit gate
 
@@ -83,9 +83,8 @@ points straight at the failing tool.
 - Backend integration tests use a fixture that spins up a temp SQLite file and a
   FastAPI `TestClient`, split by resource under `server/tests/integration/`; unit
   tests (e.g. the importer) live under `server/tests/unit/`.
-- Coverage is gated: pytest fails under 80% on the backend, and Vitest holds the
-  engine at 80%. The overall frontend number is honest (the UI is largely
-  untested for now), so the gate is scoped to what is meant to be covered.
+- Coverage is gated: pytest fails under 80% on the backend, and Vitest holds
+  `web/src` at 90% statements and lines, with the engine held to the same bar.
 - Mutation scores are the real quality check on the test suite; some surviving
   mutants are equivalent (e.g. SQLite's case-insensitive comparisons) and are not
   worth chasing.

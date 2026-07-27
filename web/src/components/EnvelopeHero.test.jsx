@@ -52,7 +52,6 @@ describe("EnvelopeHero", () => {
         renderUI(<EnvelopeHero />);
         expect(observe).not.toHaveBeenCalled();
         expect(context.clearRect).not.toHaveBeenCalled();
-        vi.unstubAllGlobals();
     });
 
     it("sizes, animates, pauses and cleans up when visibility changes", () => {
@@ -99,7 +98,6 @@ describe("EnvelopeHero", () => {
         unmount();
         expect(disconnect).toHaveBeenCalled();
         expect(cancel).toHaveBeenCalled();
-        vi.unstubAllGlobals();
     });
 
     it("draws spawned coins on animation frames", () => {
@@ -154,6 +152,5 @@ describe("EnvelopeHero", () => {
         // Advance the same coin through the floor: expired particles are removed
         // instead of being drawn indefinitely.
         for (let timestamp = 602; timestamp < 30000; timestamp += 301) animation(timestamp);
-        vi.unstubAllGlobals();
     });
 });

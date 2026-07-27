@@ -75,7 +75,7 @@ describe("tab registry", () => {
         expect(offsetOf("b")).toBe(TAB_WIDTH);
     });
 
-    it("reports zero for a tab that was never registered", () => {
+    it("returns the stack's total width for a tab that was never registered", () => {
         mount("a");
         expect(offsetOf("ghost")).toBe(TAB_WIDTH);
     });

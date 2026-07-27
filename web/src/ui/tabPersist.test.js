@@ -113,11 +113,20 @@ describe("dragged width", () => {
     });
 
     it("accepts only finite positive numeric widths", () => {
-        localStorage.setItem(
-            TAB_WIDTH_KEY,
-            JSON.stringify({ nan: NaN, text: "300", zero: 0, negative: -5, ok: 300 }),
-        );
+        // NaN and Infinity cannot survive JSON.stringify (they serialize to null),
+        // so route the parse through a stub to actually reach loadWidth's
+        // Number.isFinite guard with real non-finite numbers.
+        localStorage.setItem(TAB_WIDTH_KEY, "{}");
+        vi.spyOn(JSON, "parse").mockReturnValue({
+            nan: NaN,
+            infinite: Infinity,
+            text: "300",
+            zero: 0,
+            negative: -5,
+            ok: 300,
+        });
         expect(loadWidth("nan", 420)).toBe(420);
+        expect(loadWidth("infinite", 420)).toBe(420);
         expect(loadWidth("text", 420)).toBe(420);
         expect(loadWidth("zero", 420)).toBe(420);
         expect(loadWidth("negative", 420)).toBe(420);

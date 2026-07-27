@@ -61,6 +61,7 @@ window.HTMLElement.prototype.getBoundingClientRect = function () {
 afterEach(() => {
     cleanup();
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
     try {
         window.localStorage?.clear?.();
     } catch {

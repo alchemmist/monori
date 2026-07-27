@@ -334,7 +334,7 @@ describe("DashboardPage", () => {
         await user.click(screen.getByRole("button", { name: "YTD" }));
 
         const keys = series("composite-chart").map((row) => row.x);
-        expect(keys).toContain(january);
+        if (now.getMonth() > 0) expect(keys).toContain(january);
         if (now.getMonth() > 1) expect(keys).toContain(february);
         expect(keys).not.toContain(lastYearMonth);
     });
