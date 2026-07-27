@@ -10,6 +10,8 @@
         "**/node_modules",
         "**/.venv",
         "web/dist",
+        "web/test-results",
+        "web/playwright-report",
         "server/static",
         "migration",
         "**/CHANGELOG.md",
