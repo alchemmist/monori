@@ -190,8 +190,7 @@
 /* The tab content owns vertical scrolling; this wrapper only handles a result
    that is wider than the console. */
 .sql-console__results {
-    overflow-x: auto;
-    overflow-y: clip;
+    overflow: auto clip;
     border: 1px solid var(--m-border-soft);
     border-radius: var(--m-radius-sm);
     background: var(--m-surface);
