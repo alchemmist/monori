@@ -20,9 +20,9 @@ const writeToastTitle = (statement, count) => {
     // Only the first token is needed for the toast. Avoid a regex that tries
     // to consume an arbitrary number of SQL comments before the statement.
     const verb = statement.trimStart().split(/\s+/, 1)[0]?.toLowerCase();
-    const action = { update: "updated", insert: "inserted", replace: "inserted", delete: "deleted" }[
-        verb
-    ] ?? "affected";
+    const action =
+        { update: "updated", insert: "inserted", replace: "inserted", delete: "deleted" }[verb] ??
+        "affected";
     return `${count} ${count === 1 ? "row" : "rows"} ${action}`;
 };
 
