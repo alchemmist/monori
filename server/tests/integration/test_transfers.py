@@ -284,15 +284,16 @@ def test_deleting_a_leg_restores_the_partner_category(api, client):
     group = api.group("Daily")
     cat = api.category("Groceries", group)
     out_id, in_id = pair(api, a, b)
-    client.patch(f"/api/transactions/{in_id}", json={"categoryId": cat})
+    r = client.patch(f"/api/transactions/{out_id}", json={"categoryId": cat})
+    assert r.status_code == 200, r.text
     assert (
         client.post("/api/transfers/link", json={"outTxId": out_id, "inTxId": in_id}).status_code
         == 200
     )
 
-    client.delete(f"/api/transactions/{out_id}")
+    client.delete(f"/api/transactions/{in_id}")
 
-    survivor = next(t for t in api.snapshot()["transactions"] if t["id"] == in_id)
+    survivor = next(t for t in api.snapshot()["transactions"] if t["id"] == out_id)
     assert survivor["categoryId"] == cat
 
 

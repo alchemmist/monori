@@ -187,44 +187,107 @@
     font-family: var(--g-font-family-monospace, ui-monospace, monospace);
 }
 
-/* results scroll on their own, so editor and footer keep their place */
-.sql-console__scroll {
+/* The result grid scrolls on its own in both directions, so the editor and the
+   footer keep their place and the header row can stay sticky. */
+.sql-console__results {
     overflow: auto;
-    max-height: 45vh;
+    max-height: min(52vh, 520px);
     border: 1px solid var(--m-border-soft);
     border-radius: var(--m-radius-sm);
+    background: var(--m-surface);
+    overscroll-behavior: contain;
+}
+
+.sql-console__results:focus-visible {
+    outline: 2px solid var(--m-accent);
+    outline-offset: 2px;
+}
+
+/* max-content, not 100%: columns keep their natural width and the wrapper
+   scrolls sideways instead of squeezing every cell into a ragged column */
+.sql-console__table {
+    width: max-content;
+    min-width: 100%;
 }
 
 .sql-console__table td,
 .sql-console__table th {
-    max-width: 280px;
+    max-width: 320px;
+    white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
 
-.sql-console__table thead th {
+.sql-console__table th {
     position: sticky;
     top: 0;
+    z-index: 1;
     background: var(--m-surface);
+    box-shadow: inset 0 -1px 0 var(--m-border-soft);
+}
+
+.sql-console__table tbody tr:nth-child(even) {
+    background: color-mix(in srgb, var(--m-surface-hover) 42%, transparent);
+}
+
+.sql-console__table tbody tr:hover {
+    background: var(--m-surface-hover);
 }
 
 .sql-console__history {
+    border-top: 1px solid var(--m-border-soft);
+    padding-top: 6px;
+}
+
+.sql-console__history summary {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
     list-style: none;
-    margin: 0;
-    padding: 0;
+    color: var(--m-text-secondary);
     font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.sql-console__history summary::-webkit-details-marker {
+    display: none;
+}
+
+.sql-console__history summary::before {
+    content: "›";
+    display: inline-block;
+    transition: transform 0.15s ease;
+    font-size: 14px;
+    line-height: 1;
+}
+
+.sql-console__history[open] summary::before {
+    transform: rotate(90deg);
+}
+
+.sql-console__history ul {
+    list-style: none;
+    margin: 6px 0 0;
+    padding: 0;
+    max-height: 168px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
 }
 
 .sql-console__history button {
     display: block;
     width: 100%;
-    padding: 4px 0;
+    padding: 4px 6px;
     border: none;
+    border-radius: var(--m-radius-sm);
     background: none;
     text-align: left;
     cursor: pointer;
     color: var(--m-text-secondary);
     font-family: var(--g-font-family-monospace, ui-monospace, monospace);
+    font-size: 12px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -232,4 +295,5 @@
 
 .sql-console__history button:hover {
     color: var(--m-text);
+    background: var(--m-surface-hover);
 }

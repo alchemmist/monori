@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>monori — ledger check, live in-app variants</title>
+        <style>
+            :root {
+                --m-accent: #ef5a17;
+            }
+            * {
+                box-sizing: border-box;
+            }
+            body {
+                margin: 0;
+                background: #d8d8d6;
+                color: #0a0a0a;
+                font-family:
+                    "Inter",
+                    -apple-system,
+                    BlinkMacSystemFont,
+                    "Segoe UI",
+                    Roboto,
+                    sans-serif;
+                -webkit-font-smoothing: antialiased;
+            }
+            .page {
+                max-width: 1240px;
+                margin: 0 auto;
+                padding: 40px 24px 96px;
+            }
+            .page > h1 {
+                font-size: 20px;
+                font-weight: 700;
+                letter-spacing: -0.01em;
+            }
+            .page > p {
+                color: #4a4a47;
+                max-width: 780px;
+                line-height: 1.5;
+                margin-top: 4px;
+                font-size: 14px;
+            }
+            .variant {
+                margin-top: 44px;
+            }
+            .variant__label {
+                display: flex;
+                align-items: baseline;
+                gap: 10px;
+                margin-bottom: 10px;
+            }
+            .variant__num {
+                font-size: 12px;
+                font-weight: 700;
+                color: #fff;
+                background: var(--m-accent);
+                border-radius: 4px;
+                padding: 2px 7px;
+            }
+            .variant__name {
+                font-weight: 600;
+            }
+            .variant__desc {
+                color: #6a6a66;
+                font-size: 13px;
+            }
+            .shot {
+                border: 1px solid #c9c9c6;
+                border-radius: 10px;
+                overflow: hidden;
+                box-shadow: 0 12px 32px rgba(0, 0, 0, 0.1);
+            }
+            .shot img {
+                display: block;
+                width: 100%;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="page">
+            <h1>Сверка «счета = бюджет» — варианты в живом интерфейсе</h1>
+            <p>
+                Реальное приложение, реальные данные: на счетах <b>373 297 ₽</b>, к бюджетированию
+                <b>309 512 ₽</b>, в конвертах <b>60 942 ₽</b>, reconcile-поправка <b>2 843 ₽</b>,
+                необъяснённого — 0. Каждый скриншот — настоящая страница monori со вживлённым
+                вариантом сверки.
+            </p>
+
+            <div class="variant">
+                <div class="variant__label">
+                    <span class="variant__num">A</span>
+                    <span class="variant__name">Пятая hero-карта на Budget</span>
+                    <span class="variant__desc"
+                        >«Ledger check · balanced» в ряду с
+                        Available/Income/Budgeted/Overspent</span
+                    >
+                </div>
+                <div class="shot">
+                    <img src="ledger-check-live/v-A-hero-card.png" alt="hero card variant" />
+                </div>
+            </div>
+
+            <div class="variant">
+                <div class="variant__label">
+                    <span class="variant__num">B</span>
+                    <span class="variant__name">Строка-равенство между hero и таблицей</span>
+                    <span class="variant__desc"
+                        >373 297 = 309 512 + 60 942 + 2 843, чип ✓ balanced справа</span
+                    >
+                </div>
+                <div class="shot">
+                    <img src="ledger-check-live/v-B-strip.png" alt="equation strip variant" />
+                </div>
+            </div>
+
+            <div class="variant">
+                <div class="variant__label">
+                    <span class="variant__num">C</span>
+                    <span class="variant__name">Чип у заголовка + поповер</span>
+                    <span class="variant__desc"
+                        >виден только при расхождении; клик раскрывает разложение Δ</span
+                    >
+                </div>
+                <div class="shot">
+                    <img src="ledger-check-live/v-C-title-chip.png" alt="title chip variant" />
+                </div>
+            </div>
+
+            <div class="variant">
+                <div class="variant__label">
+                    <span class="variant__num">D</span>
+                    <span class="variant__name">Полоса-разложение под таблицей</span>
+                    <span class="variant__desc"
+                        >весь остаток счетов в одной stacked-полосе; красный сегмент = дыра в
+                        учёте</span
+                    >
+                </div>
+                <div class="shot">
+                    <img src="ledger-check-live/v-D-footer-bar.png" alt="footer bar variant" />
+                </div>
+            </div>
+
+            <div class="variant">
+                <div class="variant__label">
+                    <span class="variant__num">E</span>
+                    <span class="variant__name">Пункт в сайдбаре с точкой-статусом</span>
+                    <span class="variant__desc"
+                        >виден с любой страницы; зелёная/красная точка, клик — детали</span
+                    >
+                </div>
+                <div class="shot">
+                    <img src="ledger-check-live/v-E-sidebar.png" alt="sidebar variant" />
+                </div>
+            </div>
+
+            <div class="variant">
+                <div class="variant__label">
+                    <span class="variant__num">F</span>
+                    <span class="variant__name">Итог-строка на Accounts</span>
+                    <span class="variant__desc"
+                        >под списком счетов: total, что объясняет бюджет, и вердикт</span
+                    >
+                </div>
+                <div class="shot">
+                    <img
+                        src="ledger-check-live/v-F-accounts-foot.png"
+                        alt="accounts footer variant"
+                    />
+                </div>
+            </div>
+
+            <div class="variant">
+                <div class="variant__label">
+                    <span class="variant__num">G</span>
+                    <span class="variant__name">Секция-аудит в Settings</span>
+                    <span class="variant__desc"
+                        >полная двухколоночная сверка с вердиктом — отладочный экран</span
+                    >
+                </div>
+                <div class="shot">
+                    <img src="ledger-check-live/v-G-settings.png" alt="settings audit variant" />
+                </div>
+            </div>
+        </div>
+    </body>
+</html>

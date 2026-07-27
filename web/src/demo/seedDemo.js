@@ -111,7 +111,7 @@ export async function seedDemoData() {
                 categoryId: t.categoryId ? catId.get(t.categoryId) : null,
             }));
         const res = await api.importCommit(rows, accId.get(a.id));
-        imported += res.imported ?? 0;
+        imported += res.inserted ?? 0;
         skipped += res.skipped ?? 0;
     }
 

@@ -459,6 +459,14 @@ class TBankPlaywrightConnector(Connector):
 
     def _download_and_parse(self, page, since):
         page.goto(self._operations_url(), wait_until="domcontentloaded")
+        # the ?account= scope in the URL above is applied by the SPA with an
+        # async XHR *after* domcontentloaded; opening the export before that
+        # settles hands back the default all-accounts feed that rendered first,
+        # so a per-account sync would pull every account. Wait for the network
+        # to go quiet so the export reflects the single-account view, keeping a
+        # fixed floor in case the chatty SPA never fully idles.
+        with contextlib.suppress(Exception):
+            page.wait_for_load_state("networkidle", timeout=self.LOGIN_TIMEOUT_MS)
         page.wait_for_timeout(2_500)
         self._shot(page, "08-operations")
 

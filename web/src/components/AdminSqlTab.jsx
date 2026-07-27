@@ -16,6 +16,16 @@ const renderCell = (v) => {
 
 const rowsLabel = (n) => `${n} ${n === 1 ? "row" : "rows"}`;
 
+const writeToastTitle = (statement, count) => {
+    // Only the first token is needed for the toast. Avoid a regex that tries
+    // to consume an arbitrary number of SQL comments before the statement.
+    const verb = statement.trimStart().split(/\s+/, 1)[0]?.toLowerCase();
+    const action =
+        { update: "updated", insert: "inserted", replace: "inserted", delete: "deleted" }[verb] ??
+        "affected";
+    return `${count} ${count === 1 ? "row" : "rows"} ${action}`;
+};
+
 /* SQL console over the live database, docked as a Tab so the admin page stays
  * readable next to the results. Reads run straight through; a write is refused
  * once by the server (rolled back, with the row count it would have touched)
@@ -47,8 +57,7 @@ export default function AdminSqlTab({ onClose }) {
                 setHistory(remember(statement));
                 if (r.kind === "write") {
                     showToast({
-                        title: `${rowsLabel(r.rowCount)} affected`,
-                        content: statement,
+                        title: writeToastTitle(statement, r.rowCount),
                         theme: "success",
                     });
                     useStore.getState().bumpAdminTick();
@@ -157,7 +166,12 @@ export default function AdminSqlTab({ onClose }) {
                         {result.truncated && ` · showing first ${result.rowCount} rows`}
                     </Txt>
                     {result.columns.length > 0 && (
-                        <div className="sql-console__scroll">
+                        <div
+                            className="sql-console__results"
+                            role="region"
+                            aria-label="SQL query results"
+                            tabIndex={0}
+                        >
                             <table className="admin-table admin-table_compact sql-console__table">
                                 <thead>
                                     <tr>
@@ -175,6 +189,9 @@ export default function AdminSqlTab({ onClose }) {
                                                     className={
                                                         typeof v === "number" ? "num" : undefined
                                                     }
+                                                    // cells are clipped to keep columns readable,
+                                                    // so the full value lives in the tooltip
+                                                    title={v === null ? "NULL" : String(v)}
                                                 >
                                                     {v === null ? (
                                                         <span className="admin-muted">NULL</span>
@@ -203,9 +220,11 @@ export default function AdminSqlTab({ onClose }) {
             )}
 
             {history.length > 0 && (
-                <>
-                    <div className="admin-detail__title">History</div>
-                    <ul className="sql-console__history">
+                // folded away by default: the log grows fast and the results are
+                // what the console is for
+                <details className="sql-console__history">
+                    <summary>History · {history.length}</summary>
+                    <ul>
                         {history.map((h, i) => (
                             <li key={i}>
                                 <button type="button" onClick={() => setSql(h)} title={h}>
@@ -214,7 +233,7 @@ export default function AdminSqlTab({ onClose }) {
                             </li>
                         ))}
                     </ul>
-                </>
+                </details>
             )}
         </Tab>
     );

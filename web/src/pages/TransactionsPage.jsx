@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ActionIcon, Button, CloseButton } from "@mantine/core";
+import { ActionIcon, Button, CloseButton, Popover, RangeSlider } from "@mantine/core";
 import { FTextInput } from "../ui/fields.jsx";
 import EditableCell from "../ui/EditableCell.jsx";
 import InlineSelect from "../ui/InlineSelect.jsx";
@@ -14,10 +14,11 @@ import {
     EyeSlash,
     Magnifier,
     Plus,
+    Sliders,
 } from "@gravity-ui/icons";
 import { useStore } from "../store.js";
 import { orderedGroups, categoriesByGroup } from "../categoryOrder.js";
-import { money, fmtDate, parseRub } from "../format.js";
+import { money, moneyCompact, fmtDate, parseRub } from "../format.js";
 import { useWindowedRows } from "../useWindowedRows.js";
 import { compareTx } from "../mergeTransactions.js";
 import DeleteTxDialog from "../components/DeleteTxDialog.jsx";
@@ -53,6 +54,7 @@ export default function TransactionsPage() {
     const [yearFilter, setYearFilter] = useState("all");
     const [acctFilter, setAcctFilter] = useState("all");
     const [showHidden, setShowHidden] = useState(false);
+    const [amountRange, setAmountRange] = useState(null);
 
     // hidden rows are not in the snapshot at all; the first toggle fetches them
     useEffect(() => {
@@ -173,7 +175,10 @@ export default function TransactionsPage() {
         return [...s].sort().reverse();
     }, [combined]);
 
-    const filtered = useMemo(() => {
+    // Apply every existing filter first. The amount slider's bounds come from
+    // this set, so changing search/category/year/account always recalculates
+    // the available range instead of leaving stale global limits.
+    const amountSourceRows = useMemo(() => {
         const q = query.trim().toLowerCase();
         let rows = combined;
         if (yearFilter !== "all") rows = rows.filter((t) => t.date.startsWith(yearFilter));
@@ -189,6 +194,50 @@ export default function TransactionsPage() {
             );
         return [...rows].reverse(); // newest first
     }, [combined, query, catFilter, yearFilter, acctFilter]);
+
+    // signed, not absolute: income and expenses live on opposite sides of zero,
+    // and a range that ignores the sign cannot tell "-500 ₽" from "+500 ₽"
+    const amountBounds = useMemo(() => {
+        if (!amountSourceRows.length) return null;
+        let min = Infinity;
+        let max = -Infinity;
+        for (const t of amountSourceRows) {
+            min = Math.min(min, t.amount);
+            max = Math.max(max, t.amount);
+        }
+        return [min, max];
+    }, [amountSourceRows]);
+
+    // the slider works in whole roubles: a kopeck step would make the handles
+    // unreachable by keyboard and give the drag a needless 100x resolution
+    const amountStep = useMemo(() => {
+        if (!amountBounds) return 100;
+        const span = (amountBounds[1] - amountBounds[0]) / 100;
+        if (span >= 100_000) return 100_00;
+        if (span >= 10_000) return 10_00;
+        return 100;
+    }, [amountBounds]);
+
+    // An untouched slider means "no amount filter", not "the range as it looked
+    // when the page loaded" — pinning the selection to the bounds would hide
+    // every row that later moves outside them: a transaction just unhidden by
+    // the toggle, or one whose amount was edited in place.
+    const effectiveAmountRange = useMemo(() => {
+        if (!amountBounds || !amountRange) return null;
+        // a selection that no longer overlaps the filtered data stops filtering
+        if (amountRange[1] < amountBounds[0] || amountRange[0] > amountBounds[1]) return null;
+        return [
+            Math.max(amountRange[0], amountBounds[0]),
+            Math.min(amountRange[1], amountBounds[1]),
+        ];
+    }, [amountBounds, amountRange]);
+
+    const filtered = useMemo(() => {
+        if (!effectiveAmountRange) return amountSourceRows;
+        return amountSourceRows.filter(
+            (t) => t.amount >= effectiveAmountRange[0] && t.amount <= effectiveAmountRange[1],
+        );
+    }, [amountSourceRows, effectiveAmountRange]);
 
     // the two legs of a transfer are one row here; every item is still exactly
     // one row tall, so the windowing math below stays on a fixed row height
@@ -474,6 +523,78 @@ export default function TransactionsPage() {
                 >
                     Hidden
                 </Button>
+                {amountBounds && amountBounds[0] !== amountBounds[1] && (
+                    <Popover position="bottom-start" shadow="md" width={272} withinPortal>
+                        <Popover.Target>
+                            <Button
+                                variant={effectiveAmountRange ? "light" : "default"}
+                                size="m"
+                                className="tx-amount-filter__button"
+                                leftSection={<Sliders width={14} height={14} />}
+                                // compact on the button so the toolbar does not
+                                // reflow on every drag; exact figures are inside
+                                title={
+                                    effectiveAmountRange
+                                        ? `${money(effectiveAmountRange[0])} … ${money(effectiveAmountRange[1])}`
+                                        : "Filter by amount"
+                                }
+                            >
+                                {effectiveAmountRange
+                                    ? `${moneyCompact(effectiveAmountRange[0])} … ${moneyCompact(effectiveAmountRange[1])} ₽`
+                                    : "Amount"}
+                            </Button>
+                        </Popover.Target>
+                        <Popover.Dropdown className="tx-amount-filter">
+                            {/* the live selection is spelled out here instead of
+                                in drag tooltips, which would escape the panel */}
+                            <div className="tx-amount-filter__head">
+                                <span>Amount</span>
+                                <span className="tx-amount-filter__selection">
+                                    {money((effectiveAmountRange ?? amountBounds)[0])} …{" "}
+                                    {money((effectiveAmountRange ?? amountBounds)[1])}
+                                </span>
+                            </div>
+                            <RangeSlider
+                                aria-label="Amount range"
+                                min={amountBounds[0]}
+                                max={amountBounds[1]}
+                                step={amountStep}
+                                value={effectiveAmountRange ?? amountBounds}
+                                label={null}
+                                // zero is the line between spending and income:
+                                // mark it so the two halves stay legible
+                                marks={
+                                    amountBounds[0] < 0 && amountBounds[1] > 0
+                                        ? [{ value: 0, label: "0" }]
+                                        : undefined
+                                }
+                                onChange={(value) => {
+                                    window.scrollTo({ top: 0 });
+                                    setAmountRange(value);
+                                }}
+                            />
+                            {/* the reachable ends of the scale, below the track:
+                                the drag tooltips own the space above it */}
+                            <div className="tx-amount-filter__scale">
+                                <span>{money(amountBounds[0])}</span>
+                                <span>{money(amountBounds[1])}</span>
+                            </div>
+                            <div className="tx-amount-filter__foot">
+                                <span>
+                                    {filtered.length} of {amountSourceRows.length} shown
+                                </span>
+                                <Button
+                                    variant="subtle"
+                                    size="s"
+                                    disabled={!amountRange}
+                                    onClick={() => setAmountRange(null)}
+                                >
+                                    Reset
+                                </Button>
+                            </div>
+                        </Popover.Dropdown>
+                    </Popover>
+                )}
                 <div style={{ flex: 1 }} />
                 <Button
                     variant="default"
