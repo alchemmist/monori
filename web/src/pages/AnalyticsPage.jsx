@@ -33,6 +33,9 @@ const SHAPES = [
     { value: "lines", label: "Lines" },
 ];
 
+const MERCHANT_AXIS_WIDTH = 150;
+const MERCHANT_TICK_GAP = 6;
+
 // per-bar color from a data-row field, so each bar's color is keyed by its own
 // row (month/day) rather than its numeric value — Mantine's getBarColor only
 // sees the value, which collides when two rows share the same amount.
@@ -76,16 +79,23 @@ const truncateMid = (s, max = 24) => {
     return `${s.slice(0, head)}…${s.slice(s.length - tail)}`;
 };
 
-// Single-line Y-axis tick for the horizontal merchant chart: recharts wraps long
-// labels across lines when the axis width is fixed, so neighbouring ticks overlap.
-// We render one non-wrapping line, truncated, with the full name in a native title.
-function MerchantTick({ x, y, payload }) {
-    const full = String(payload.value);
+// A foreignObject gives the label a real CSS width. SVG text can paint outside its
+// axis even when Recharts reserves a fixed width, which lets wide Cyrillic names
+// escape the card and overlap the sidebar.
+function MerchantTick({ x, y, payload, titles }) {
+    const value = String(payload.value);
+    const full = titles.get(value) ?? value;
     return (
-        <text x={x} y={y} dy={4} textAnchor="end" fontSize={12} fill="var(--m-text-dim)">
-            <title>{full}</title>
-            {truncateMid(full)}
-        </text>
+        <foreignObject
+            x={x - MERCHANT_AXIS_WIDTH}
+            y={y - 10}
+            width={MERCHANT_AXIS_WIDTH - MERCHANT_TICK_GAP}
+            height={20}
+        >
+            <div className="merchant-tick" title={full}>
+                {truncateMid(value)}
+            </div>
+        </foreignObject>
     );
 }
 
@@ -191,6 +201,10 @@ export default function AnalyticsPage({ results, firstYear, lastYear }) {
     }, [snapshot, year]);
 
     const merchants = useMemo(() => topMerchants(snapshot, year, 10), [snapshot, year]);
+    const merchantTitles = useMemo(
+        () => new Map(merchants.map((merchant) => [merchant.name, merchant.fullName])),
+        [merchants],
+    );
     const merchantsData = useMemo(
         () => merchants.map((m) => ({ name: m.name, Spent: Math.round(m.total / 100) })),
         [merchants],
@@ -557,8 +571,12 @@ export default function AnalyticsPage({ results, firstYear, lastYear }) {
                                     dataKey="name"
                                     series={[{ name: "Spent", color: SERIES.accent }]}
                                     {...cartesian}
+                                    yAxisProps={{
+                                        width: MERCHANT_AXIS_WIDTH,
+                                        interval: 0,
+                                        tick: <MerchantTick titles={merchantTitles} />,
+                                    }}
                                     tooltipProps={{ content: MoneyChartTooltip }}
-                                    yAxisProps={{ width: 150, interval: 0, tick: <MerchantTick /> }}
                                 />
                             </ChartBoundary>
                         ) : (

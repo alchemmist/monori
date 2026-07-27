@@ -186,7 +186,7 @@ export function merchantKey(description) {
         .join(" ");
 }
 
-/** Top merchants by spend for a year: [{name, total, count}] desc. */
+/** Top merchants by spend for a year: [{name, fullName, total, count}] desc. */
 export function topMerchants(snapshot, year, limit = 10) {
     const incomeIds = incomeGroupIdSet(snapshot.groups);
     const catById = new Map(snapshot.categories.map((c) => [c.id, c]));
@@ -198,7 +198,7 @@ export function topMerchants(snapshot, year, limit = 10) {
         if (!cat || incomeIds.has(cat.groupId)) continue;
         const key = merchantKey(t.description) || "(no description)";
         let e = sums.get(key);
-        if (!e) sums.set(key, (e = { total: 0, count: 0 }));
+        if (!e) sums.set(key, (e = { fullName: t.description || key, total: 0, count: 0 }));
         e.total += -t.amount;
         e.count += 1;
     }
