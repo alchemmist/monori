@@ -16,6 +16,19 @@ const renderCell = (v) => {
 
 const rowsLabel = (n) => `${n} ${n === 1 ? "row" : "rows"}`;
 
+const writeToastTitle = (statement, count) => {
+    const verb = statement.match(/^\s*(?:--[^\n]*\s*)*(UPDATE|INSERT|DELETE|REPLACE)\b/i)?.[1];
+    const action =
+        verb?.toLowerCase() === "update"
+            ? "updated"
+            : verb?.toLowerCase() === "insert" || verb?.toLowerCase() === "replace"
+              ? "inserted"
+              : verb?.toLowerCase() === "delete"
+                ? "deleted"
+                : "affected";
+    return `${count} ${count === 1 ? "row" : "rows"} ${action}`;
+};
+
 /* SQL console over the live database, docked as a Tab so the admin page stays
  * readable next to the results. Reads run straight through; a write is refused
  * once by the server (rolled back, with the row count it would have touched)
@@ -47,8 +60,7 @@ export default function AdminSqlTab({ onClose }) {
                 setHistory(remember(statement));
                 if (r.kind === "write") {
                     showToast({
-                        title: `${rowsLabel(r.rowCount)} affected`,
-                        content: statement,
+                        title: writeToastTitle(statement, r.rowCount),
                         theme: "success",
                     });
                     useStore.getState().bumpAdminTick();
