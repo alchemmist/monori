@@ -28,9 +28,7 @@ test("Add demo data seeds the whole demo dataset through the API", async ({ page
     // single default Cash account) and keyed to demoSnapshot itself, so growing
     // the demo keeps the test honest: whatever the dataset holds must seed.
     expect(after.accounts.length - before.accounts.length).toBe(demoSnapshot.accounts.length);
-    expect(after.categories.length - before.categories.length).toBe(
-        demoSnapshot.categories.length,
-    );
+    expect(after.categories.length - before.categories.length).toBe(demoSnapshot.categories.length);
     expect(after.budgets.length - before.budgets.length).toBe(demoSnapshot.budgets.length);
     expect(after.transactions.length - before.transactions.length).toBe(
         demoSnapshot.transactions.length,
