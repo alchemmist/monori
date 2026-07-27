@@ -1,8 +1,7 @@
 API_PORT ?= 8077
-# podman-compose 1.6 can start services inside a pod but then fail while
-# attaching their logs on macOS ("no container with name …"). Compose networking
-# already gives services stable DNS names, so the pod adds nothing for dev.
-COMPOSE ?= $(shell command -v docker >/dev/null 2>&1 && echo "docker compose" || echo "podman compose --in-pod=false")
+DOCKER_COMPOSE_VERSION := $(shell docker compose version 2>&1)
+PODMAN_VERSION := $(shell podman --version 2>&1)
+COMPOSE ?= $(if $(findstring Docker Compose version,$(DOCKER_COMPOSE_VERSION)),docker compose,$(if $(findstring podman version,$(PODMAN_VERSION)),podman compose --in-pod=false,docker compose))
 MUTATION_THRESHOLD ?= 85
 
 WEBBIN := web/node_modules/.bin
