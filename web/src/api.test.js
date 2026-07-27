@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { api } from "./api.js";
 
 const ok = (body = {}) => ({
@@ -263,6 +263,9 @@ describe("api", () => {
         });
         fetch = vi.fn().mockResolvedValue(ok({ id: 7, transferId: "t" }));
         vi.stubGlobal("fetch", fetch);
+    });
+    afterEach(() => {
+        vi.unstubAllGlobals();
     });
 
     it.each(ENDPOINTS)(
