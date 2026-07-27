@@ -350,13 +350,13 @@ a {
     border: 1px solid var(--m-border);
     border-radius: var(--m-radius);
     text-decoration: none;
+    border-bottom: none;
     opacity: 0.55;
     transition:
         opacity 0.15s ease,
         color 0.15s ease;
 }
 
-.md-mermaid:hover .md-mermaid__open,
 .md-mermaid__open:hover,
 .md-mermaid__open:focus-visible {
     opacity: 1;
@@ -436,6 +436,8 @@ a {
     overflow: hidden;
     cursor: grab;
     touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
 }
 
 .diagram-page__stage_dragging {
