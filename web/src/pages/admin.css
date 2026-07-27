@@ -190,8 +190,7 @@
 /* Let the result table take its natural height. The tab content owns the
    vertical scroll, so the editor, results and history remain one document. */
 .sql-console__scroll {
-    overflow-x: auto;
-    overflow-y: clip;
+    overflow: auto clip;
     border: 1px solid var(--m-border-soft);
     border-radius: var(--m-radius-sm);
 }
