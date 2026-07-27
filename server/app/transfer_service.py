@@ -74,6 +74,11 @@ def link(c, uid, out_tx_id, in_tx_id, origin="manual", note=""):
         raise LinkError("both legs are on the same account")
     if out_row["transfer_id"] or in_row["transfer_id"]:
         raise LinkError("already part of a transfer")
+    if c.execute(
+        "SELECT 1 FROM transaction_splits WHERE transaction_id IN (?, ?) LIMIT 1",
+        (out_tx_id, in_tx_id),
+    ).fetchone():
+        raise LinkError("split transactions cannot be linked as a transfer")
 
     transfer_id = uuid.uuid4().hex
     # the checks above race with any other writer; the UNIQUE columns are what

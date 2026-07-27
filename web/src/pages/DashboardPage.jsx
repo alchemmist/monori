@@ -6,6 +6,7 @@ import TimeNavigator from "../components/TimeNavigator.jsx";
 import { Button } from "@mantine/core";
 import InlineSelect from "../ui/InlineSelect.jsx";
 import { useStore } from "../store.js";
+import { effectiveTransactions } from "../engine/splits.js";
 import { accountBalances, categoryTotals, categoryYearMatrix } from "../engine/analytics.js";
 import AccountBadge from "../components/AccountBadge.jsx";
 import { rub, money, MONTHS_SHORT } from "../format.js";
@@ -72,13 +73,12 @@ export default function DashboardPage({ firstYear, lastYear }) {
 
     const accounts = snapshot.accounts ?? [];
     const balances = useMemo(() => accountBalances(snapshot), [snapshot]);
-    const txns = useMemo(
-        () =>
-            acctFilter === "all"
-                ? snapshot.transactions
-                : snapshot.transactions.filter((t) => t.accountId === +acctFilter),
-        [snapshot.transactions, acctFilter],
-    );
+    const txns = useMemo(() => {
+        const transactions = effectiveTransactions(snapshot.transactions);
+        return acctFilter === "all"
+            ? transactions
+            : transactions.filter((t) => t.accountId === +acctFilter);
+    }, [snapshot.transactions, acctFilter]);
 
     const excludedIds = useMemo(() => new Set(), []);
     const incomeGroupIds = useMemo(

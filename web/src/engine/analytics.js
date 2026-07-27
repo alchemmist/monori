@@ -1,4 +1,5 @@
 import { isTransfer } from "./transfers.js";
+import { effectiveTransactions } from "./splits.js";
 
 /**
  * Analytics helpers — pure functions over the snapshot, no I/O.
@@ -17,7 +18,7 @@ export function incomeGroupIdSet(groups) {
  * views always move together. Returns Map(accountId -> kopecks). */
 export function accountBalances(snapshot) {
     const balances = new Map((snapshot.accounts ?? []).map((a) => [a.id, a.openingBalance ?? 0]));
-    for (const t of snapshot.transactions) {
+    for (const t of effectiveTransactions(snapshot.transactions)) {
         if (!balances.has(t.accountId)) continue;
         if (t.categoryId == null && !isTransfer(t) && t.source !== "adjustment") continue;
         balances.set(t.accountId, balances.get(t.accountId) + t.amount);
@@ -31,7 +32,7 @@ export function monthlySeries(snapshot) {
     const incomeIds = incomeGroupIdSet(snapshot.groups);
     const catById = new Map(snapshot.categories.map((c) => [c.id, c]));
     const map = new Map();
-    for (const t of snapshot.transactions) {
+    for (const t of effectiveTransactions(snapshot.transactions)) {
         if (isTransfer(t)) continue; // transfers never count as income/expense
         if (t.categoryId == null) continue;
         const cat = catById.get(t.categoryId);
@@ -75,7 +76,7 @@ export function weekdayProfile(snapshot, year) {
     const incomeIds = incomeGroupIdSet(snapshot.groups);
     const catById = new Map(snapshot.categories.map((c) => [c.id, c]));
     const sums = Array(7).fill(0);
-    for (const t of snapshot.transactions) {
+    for (const t of effectiveTransactions(snapshot.transactions)) {
         if (!t.date.startsWith(year) || t.categoryId == null || t.amount >= 0) continue;
         if (isTransfer(t)) continue;
         const cat = catById.get(t.categoryId);
@@ -91,7 +92,7 @@ export function dayOfMonthProfile(snapshot, year) {
     const incomeIds = incomeGroupIdSet(snapshot.groups);
     const catById = new Map(snapshot.categories.map((c) => [c.id, c]));
     const sums = Array(31).fill(0);
-    for (const t of snapshot.transactions) {
+    for (const t of effectiveTransactions(snapshot.transactions)) {
         if (!t.date.startsWith(year) || t.categoryId == null || t.amount >= 0) continue;
         if (isTransfer(t)) continue;
         const cat = catById.get(t.categoryId);
@@ -117,7 +118,7 @@ export function categoryYearMatrix(snapshot, year, { limit = 8, kind = "expense"
     const incomeIds = incomeGroupIdSet(snapshot.groups);
     const catById = new Map(snapshot.categories.map((c) => [c.id, c]));
     const rows = new Map();
-    for (const t of snapshot.transactions) {
+    for (const t of effectiveTransactions(snapshot.transactions)) {
         if (!t.date.startsWith(year) || t.transferId != null || t.categoryId == null) continue;
         const cat = catById.get(t.categoryId);
         if (!cat || (kind === "income" ? !incomeIds.has(cat.groupId) : incomeIds.has(cat.groupId)))
@@ -156,7 +157,7 @@ export function categoryTotals(snapshot, { kind = "expense" } = {}) {
     const incomeIds = incomeGroupIdSet(snapshot.groups);
     const catById = new Map(snapshot.categories.map((c) => [c.id, c]));
     const rows = new Map();
-    for (const t of snapshot.transactions) {
+    for (const t of effectiveTransactions(snapshot.transactions)) {
         if (isTransfer(t) || t.categoryId == null) continue;
         const cat = catById.get(t.categoryId);
         if (!cat || (kind === "income" ? !incomeIds.has(cat.groupId) : incomeIds.has(cat.groupId)))
@@ -191,7 +192,7 @@ export function topMerchants(snapshot, year, limit = 10) {
     const incomeIds = incomeGroupIdSet(snapshot.groups);
     const catById = new Map(snapshot.categories.map((c) => [c.id, c]));
     const sums = new Map();
-    for (const t of snapshot.transactions) {
+    for (const t of effectiveTransactions(snapshot.transactions)) {
         if (!t.date.startsWith(year) || t.categoryId == null || t.amount >= 0) continue;
         if (isTransfer(t)) continue;
         const cat = catById.get(t.categoryId);
@@ -217,7 +218,7 @@ export function txStats(snapshot, year) {
     const catById = new Map(snapshot.categories.map((c) => [c.id, c]));
     const amounts = [];
     let largest = null;
-    for (const t of snapshot.transactions) {
+    for (const t of effectiveTransactions(snapshot.transactions)) {
         if (!t.date.startsWith(year) || t.amount >= 0) continue;
         if (isTransfer(t)) continue; // moving money is not spending
         if (t.categoryId == null) continue;
@@ -241,7 +242,7 @@ export function incomeStats(snapshot, year) {
     const catById = new Map(snapshot.categories.map((c) => [c.id, c]));
     const amounts = [];
     let largest = null;
-    for (const t of snapshot.transactions) {
+    for (const t of effectiveTransactions(snapshot.transactions)) {
         if (!t.date.startsWith(year) || t.amount <= 0 || t.categoryId == null) continue;
         if (isTransfer(t)) continue;
         const cat = catById.get(t.categoryId);

@@ -40,7 +40,7 @@ def serialize_account(r):
     }
 
 
-def serialize_tx(r):
+def serialize_tx(r, splits=()):
     return {
         "id": r["id"],
         "date": r["date"],
@@ -54,7 +54,33 @@ def serialize_tx(r):
         "comment": r["comment"],
         "source": r["source"],
         "hidden": bool(r["hidden"]),
+        "splits": [
+            {
+                "id": split["id"],
+                "categoryId": split["category_id"],
+                "amount": split["amount"],
+                "comment": split["comment"],
+            }
+            for split in splits
+        ],
     }
+
+
+def serialize_transactions(cur, rows):
+    rows = list(rows)
+    if not rows:
+        return []
+    ids = [row["id"] for row in rows]
+    marks = ",".join("?" for _ in ids)
+    by_tx: dict[int, list] = {}
+    for split in cur.execute(
+        f"SELECT id, transaction_id, category_id, amount, comment"
+        f" FROM transaction_splits WHERE transaction_id IN ({marks})"
+        " ORDER BY transaction_id, sort, id",
+        ids,
+    ):
+        by_tx.setdefault(split["transaction_id"], []).append(split)
+    return [serialize_tx(row, by_tx.get(row["id"], ())) for row in rows]
 
 
 def serialize_user(r):
@@ -113,9 +139,9 @@ def _snapshot_transactions(cur, uid, tx_limit):
     ``date, id`` order the client keeps them in. ``None`` means all of them.
     """
     if tx_limit is None:
-        return [serialize_tx(r) for r in cur.execute(f"{TX_COLUMNS} ORDER BY t.date, t.id", uid)]
+        return serialize_transactions(cur, cur.execute(f"{TX_COLUMNS} ORDER BY t.date, t.id", uid))
     rows = cur.execute(f"{TX_COLUMNS} ORDER BY t.date DESC, t.id DESC LIMIT ?", (*uid, tx_limit))
-    return [serialize_tx(r) for r in reversed(list(rows))]
+    return serialize_transactions(cur, reversed(list(rows)))
 
 
 def snapshot(c, user_id, tx_limit=None):

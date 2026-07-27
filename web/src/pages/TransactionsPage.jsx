@@ -25,6 +25,7 @@ import DeleteTxDialog from "../components/DeleteTxDialog.jsx";
 import TransferDialog from "../components/TransferDialog.jsx";
 import TransferRow from "../components/TransferRow.jsx";
 import TransferSuggestions from "../components/TransferSuggestions.jsx";
+import SplitTransactionDialog from "../components/SplitTransactionDialog.jsx";
 import { mergeTransferRows } from "../engine/transfers.js";
 import "./budget.css";
 import "./transfers.css";
@@ -64,6 +65,7 @@ export default function TransactionsPage() {
     const [suggesting, setSuggesting] = useState(false);
     const [expanded, setExpanded] = useState(() => new Set());
     const [deleting, setDeleting] = useState(null);
+    const [splitting, setSplitting] = useState(null);
     const bodyRef = useRef(null);
     const [rowH, setRowH] = useState(ROW_H_FALLBACK);
     const [showTop, setShowTop] = useState(false);
@@ -183,14 +185,21 @@ export default function TransactionsPage() {
         let rows = combined;
         if (yearFilter !== "all") rows = rows.filter((t) => t.date.startsWith(yearFilter));
         if (acctFilter !== "all") rows = rows.filter((t) => t.accountId === +acctFilter);
-        if (catFilter === "none") rows = rows.filter((t) => t.categoryId == null);
-        else if (catFilter !== "all") rows = rows.filter((t) => t.categoryId === +catFilter);
+        if (catFilter === "none")
+            rows = rows.filter((t) => t.categoryId == null && !t.splits?.length);
+        else if (catFilter !== "all")
+            rows = rows.filter(
+                (t) =>
+                    t.categoryId === +catFilter ||
+                    t.splits?.some((part) => part.categoryId === +catFilter),
+            );
         if (q)
             rows = rows.filter(
                 (t) =>
                     t.description.toLowerCase().includes(q) ||
                     t.bankCategory.toLowerCase().includes(q) ||
-                    (t.comment ?? "").toLowerCase().includes(q),
+                    (t.comment ?? "").toLowerCase().includes(q) ||
+                    t.splits?.some((part) => (part.comment ?? "").toLowerCase().includes(q)),
             );
         return [...rows].reverse(); // newest first
     }, [combined, query, catFilter, yearFilter, acctFilter]);
@@ -241,15 +250,41 @@ export default function TransactionsPage() {
 
     // the two legs of a transfer are one row here; every item is still exactly
     // one row tall, so the windowing math below stays on a fixed row height
-    const items = useMemo(
-        () => mergeTransferRows(filtered, snapshot.transactions, expanded),
-        [filtered, snapshot.transactions, expanded],
-    );
+    const items = useMemo(() => {
+        const merged = mergeTransferRows(filtered, snapshot.transactions, expanded);
+        return merged.flatMap((item) => {
+            if (item.kind !== "tx" || !item.tx.splits?.length || !expanded.has(`s${item.tx.id}`))
+                return item;
+            return [
+                item,
+                ...item.tx.splits.map((part) => ({
+                    kind: "split",
+                    key: `s${part.id}`,
+                    tx: {
+                        ...item.tx,
+                        id: `${item.tx.id}:${part.id}`,
+                        amount: part.amount,
+                        categoryId: part.categoryId,
+                        comment: part.comment,
+                        splits: [],
+                    },
+                })),
+            ];
+        });
+    }, [filtered, snapshot.transactions, expanded]);
 
     const toggleTransfer = (transferId) =>
         setExpanded((prev) => {
             const next = new Set(prev);
             if (!next.delete(transferId)) next.add(transferId);
+            return next;
+        });
+
+    const toggleSplit = (txId) =>
+        setExpanded((previous) => {
+            const next = new Set(previous);
+            const key = `s${txId}`;
+            if (!next.delete(key)) next.add(key);
             return next;
         });
 
@@ -266,14 +301,14 @@ export default function TransactionsPage() {
     // same row, indented and muted, so it reads as belonging to the row above
     // Editing a leg of a transfer would desync the pair, and a hidden row lives
     // outside the snapshot the store edits — both stay read-only.
-    const isEditable = (t, leg) => t.transferId == null && !t.hidden && !leg;
+    const isEditable = (t, leg) => t.transferId == null && !t.hidden && !leg && !t.splits?.length;
 
-    const renderTxRow = (t, leg) => {
+    const renderTxRow = (t, leg, splitPart = false) => {
         const editable = isEditable(t, leg);
         return (
             <tr
                 key={leg ? `l${t.id}` : t.id}
-                className={`cat-row${leg ? " tx-row_leg" : ""}${t.hidden ? " tx-hidden-row" : ""}`}
+                className={`cat-row${leg ? " tx-row_leg" : ""}${splitPart ? " tx-row_leg" : ""}${t.hidden ? " tx-hidden-row" : ""}`}
             >
                 <td style={{ textAlign: "left" }} className="num">
                     {editable ? (
@@ -325,6 +360,16 @@ export default function TransactionsPage() {
                         <Tag theme="info" style={{ marginLeft: 8 }}>
                             transfer
                         </Tag>
+                    )}
+                    {t.splits?.length > 0 && !leg && (
+                        <Button
+                            variant="subtle"
+                            size="compact-xs"
+                            style={{ marginLeft: 8 }}
+                            onClick={() => toggleSplit(t.id)}
+                        >
+                            split · {t.splits.length}
+                        </Button>
                     )}
                     {t.hidden && <Tag style={{ marginLeft: 8 }}>hidden</Tag>}
                     {t.transferId == null && !leg && (
@@ -389,9 +434,11 @@ export default function TransactionsPage() {
                     )}
                 </td>
                 <td style={{ textAlign: "left" }}>
-                    {t.transferId != null || t.hidden ? (
+                    {t.transferId != null || t.hidden || t.splits?.length || splitPart ? (
                         <span style={{ color: "var(--m-text-faint)", paddingLeft: 4 }}>
-                            {t.hidden ? (catById.get(t.categoryId)?.name ?? "—") : "—"}
+                            {splitPart || t.hidden
+                                ? (catById.get(t.categoryId)?.name ?? "—")
+                                : "Split"}
                         </span>
                     ) : (
                         <InlineSelect
@@ -420,12 +467,18 @@ export default function TransactionsPage() {
                             {t.comment || ""}
                         </span>
                     )}
-                    {editable && (
+                    {(editable || t.splits?.length > 0) && (
                         <RowMenu
                             className="cat-row__menu"
                             label="Transaction actions"
                             items={[
-                                [{ text: "Hide transaction", action: () => hideTx(t.id) }],
+                                [
+                                    {
+                                        text: t.splits?.length ? "Edit split" : "Split transaction",
+                                        action: () => setSplitting(t),
+                                    },
+                                    { text: "Hide transaction", action: () => hideTx(t.id) },
+                                ],
                                 [
                                     {
                                         text: "Delete transaction",
@@ -693,7 +746,11 @@ export default function TransactionsPage() {
                                     }
                                 />
                             ) : (
-                                renderTxRow(item.tx, item.kind === "leg")
+                                renderTxRow(
+                                    item.tx,
+                                    item.kind === "leg" || item.kind === "split",
+                                    item.kind === "split",
+                                )
                             ),
                         )}
                         {padBottom > 0 && (
@@ -721,6 +778,7 @@ export default function TransactionsPage() {
                     </tbody>
                 </table>
             </div>
+            <SplitTransactionDialog transaction={splitting} onClose={() => setSplitting(null)} />
 
             {showTop && (
                 <button

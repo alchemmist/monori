@@ -381,6 +381,51 @@ export const useStore = create((set, get) => ({
         }
     },
 
+    async replaceTransactionSplits(txId, parts) {
+        const { snapshot } = get();
+        const before = snapshot.transactions.find((transaction) => transaction.id === txId);
+        if (!before) return;
+        const optimistic = parts.map((part, index) => ({ id: `new-${index}`, ...part }));
+        const update = (splits) =>
+            snapshot.transactions.map((transaction) =>
+                transaction.id === txId
+                    ? {
+                          ...transaction,
+                          categoryId: splits.length ? null : transaction.categoryId,
+                          splits,
+                      }
+                    : transaction,
+            );
+        set({ snapshot: { ...snapshot, transactions: update(optimistic) } });
+        if (isDemo()) return optimistic;
+        try {
+            const result = await api.replaceTxSplits(txId, parts);
+            const current = get().snapshot;
+            set({
+                snapshot: {
+                    ...current,
+                    transactions: current.transactions.map((transaction) =>
+                        transaction.id === txId
+                            ? { ...transaction, categoryId: null, splits: result.splits }
+                            : transaction,
+                    ),
+                },
+            });
+            return result.splits;
+        } catch (error) {
+            const current = get().snapshot;
+            set({
+                snapshot: {
+                    ...current,
+                    transactions: current.transactions.map((transaction) =>
+                        transaction.id === txId ? before : transaction,
+                    ),
+                },
+            });
+            throw error;
+        }
+    },
+
     /** Delete a transaction for good. Also rolls back on failure, for the same
      * reason: a row that vanished from the ledger but not from the server would
      * quietly skew every total until a reload brought it back. */

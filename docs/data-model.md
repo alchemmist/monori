@@ -98,6 +98,14 @@ erDiagram
         INTEGER batch_id FK "-> import_batches.id"
         INTEGER hidden "required"
     }
+    transaction_splits {
+        INTEGER id PK
+        INTEGER transaction_id FK "-> transactions.id, required"
+        INTEGER category_id FK "-> categories.id, required"
+        INTEGER amount "required"
+        TEXT comment "required"
+        INTEGER sort "required"
+    }
     transfers {
         TEXT id PK
         INTEGER user_id FK "-> users.id"
@@ -153,6 +161,8 @@ erDiagram
     import_batches |o--o{ transactions : "batch_id"
     accounts ||--o{ transactions : "account_id"
     categories |o--o{ transactions : "category_id"
+    categories ||--o{ transaction_splits : "category_id"
+    transactions ||--o{ transaction_splits : "transaction_id"
     transactions ||--o{ transfers : "in_tx_id"
     transactions ||--o{ transfers : "out_tx_id"
     users |o--o{ transfers : "user_id"

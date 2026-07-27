@@ -220,3 +220,55 @@ test("the add-transaction tab records rows one after another without closing", a
         ["MANUAL TWO", -5000],
     ]);
 });
+
+test("splitting a transaction assigns every kopeck and expands into category parts", async ({
+    page,
+    user,
+}) => {
+    const snap = await user.api.snapshot();
+    const { id: groupId } = await user.api.createGroup("Receipt");
+    await user.api.createCategory("Groceries", groupId);
+    await user.api.createCategory("Household", groupId);
+    await user.api.addTransaction({
+        accountId: snap.accounts[0].id,
+        amount: -100000,
+        description: "MIXED RECEIPT",
+    });
+
+    await openApp(page, user);
+    await gotoSection(page, "Transactions");
+    const row = page.locator(".tx-grid .cat-row", { hasText: "MIXED RECEIPT" });
+    await row.hover();
+    await row.getByRole("button", { name: "Transaction actions" }).click();
+    await page.getByRole("menuitem", { name: "Split transaction" }).click();
+
+    const editor = page.locator(".split-editor__parts");
+    const parts = editor.locator(".split-editor__part");
+    await parts.nth(0).locator(".gsel").click();
+    await page.locator(".gsel__drop").getByRole("option", { name: "Groceries" }).click();
+    await parts.nth(0).getByLabel("Part 1 amount").fill("-600");
+    await parts.nth(1).locator(".gsel").click();
+    await page.locator(".gsel__drop").getByRole("option", { name: "Household" }).click();
+    await page.getByRole("button", { name: "Assign remainder to last" }).click();
+    await expect(page.getByText("Fully assigned")).toBeVisible();
+
+    const saved = page.waitForResponse(
+        (response) =>
+            response.request().method() === "PUT" &&
+            response.url().includes("/splits") &&
+            response.ok(),
+    );
+    await page.getByRole("button", { name: "Save split" }).click();
+    await saved;
+
+    await expect(row.getByRole("button", { name: "split · 2" })).toBeVisible();
+    await row.getByRole("button", { name: "split · 2" }).click();
+    await expect(page.locator(".tx-grid .tx-row_leg", { hasText: "Groceries" })).toBeVisible();
+    await expect(page.locator(".tx-grid .tx-row_leg", { hasText: "Household" })).toBeVisible();
+
+    const transaction = (await user.api.snapshot()).transactions.find(
+        (candidate) => candidate.description === "MIXED RECEIPT",
+    );
+    expect(transaction.categoryId).toBeNull();
+    expect(transaction.splits.map((part) => part.amount)).toEqual([-60000, -40000]);
+});

@@ -128,6 +128,7 @@ def test_serialize_tx():
         "comment": "note",
         "source": "import",
         "hidden": False,
+        "splits": [],
     }
 
 

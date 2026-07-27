@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from ..auth import current_user
-from ..deps import conn, serialize_tx
+from ..deps import conn, serialize_transactions
 from ..importer import tx_hash
 from ..transfer_service import detach_leg
 
@@ -16,8 +16,11 @@ _COUNT_TX = (
     " AND hidden = :hidden"
     " AND (:from IS NULL OR date(date) >= date(:from))"
     " AND (:to IS NULL OR date(date) <= date(:to))"
-    " AND (:uncat = 0 OR category_id IS NULL)"
-    " AND (:uncat = 1 OR :cat IS NULL OR category_id = :cat)"
+    " AND (:uncat = 0 OR (category_id IS NULL AND NOT EXISTS"
+    " (SELECT 1 FROM transaction_splits s WHERE s.transaction_id=transactions.id)))"
+    " AND (:uncat = 1 OR :cat IS NULL OR category_id = :cat OR EXISTS"
+    " (SELECT 1 FROM transaction_splits s WHERE s.transaction_id=transactions.id"
+    " AND s.category_id=:cat))"
     " AND (:acct IS NULL OR account_id = :acct)"
     " AND (:q IS NULL OR LOWER(description) LIKE :q)"
 )
@@ -27,8 +30,11 @@ _LIST_TX = (
     " AND hidden = :hidden"
     " AND (:from IS NULL OR date(date) >= date(:from))"
     " AND (:to IS NULL OR date(date) <= date(:to))"
-    " AND (:uncat = 0 OR category_id IS NULL)"
-    " AND (:uncat = 1 OR :cat IS NULL OR category_id = :cat)"
+    " AND (:uncat = 0 OR (category_id IS NULL AND NOT EXISTS"
+    " (SELECT 1 FROM transaction_splits s WHERE s.transaction_id=transactions.id)))"
+    " AND (:uncat = 1 OR :cat IS NULL OR category_id = :cat OR EXISTS"
+    " (SELECT 1 FROM transaction_splits s WHERE s.transaction_id=transactions.id"
+    " AND s.category_id=:cat))"
     " AND (:acct IS NULL OR account_id = :acct)"
     " AND (:q IS NULL OR LOWER(description) LIKE :q)"
     " ORDER BY date DESC, id DESC LIMIT :limit OFFSET :offset"
@@ -62,6 +68,16 @@ class BulkBody(BaseModel):
     action: str
     ids: list[int]
     categoryId: int | None = None
+
+
+class SplitPart(BaseModel):
+    categoryId: int
+    amount: int
+    comment: str = ""
+
+
+class SplitBody(BaseModel):
+    parts: list[SplitPart]
 
 
 def _validate_category_kind(kind, amount):
@@ -127,7 +143,7 @@ def list_transactions(
     try:
         total = c.execute(_COUNT_TX, params).fetchone()[0]
         rows = c.execute(_LIST_TX, params)
-        return {"total": total, "rows": [serialize_tx(r) for r in rows]}
+        return {"total": total, "rows": serialize_transactions(c, rows)}
     finally:
         c.close()
 
@@ -176,6 +192,11 @@ def patch_transaction(tx_id: int, patch: TxPatch, user: Annotated[dict, Depends(
             raise HTTPException(404, "transaction not found")
         date = patch.date if patch.date is not None else row["date"]
         amount = patch.amount if patch.amount is not None else row["amount"]
+        split_total = c.execute(
+            "SELECT SUM(amount) FROM transaction_splits WHERE transaction_id=?", (tx_id,)
+        ).fetchone()[0]
+        if split_total is not None and amount != split_total:
+            raise HTTPException(400, "edit the split parts before changing the total amount")
         description = patch.description if patch.description is not None else row["description"]
         bank_category = (
             patch.bankCategory if patch.bankCategory is not None else row["bank_category"]
@@ -184,6 +205,8 @@ def patch_transaction(tx_id: int, patch: TxPatch, user: Annotated[dict, Depends(
         comment = patch.comment if patch.comment is not None else row["comment"]
         category = row["category_id"]
         if patch.categoryId is not None:
+            if split_total is not None:
+                raise HTTPException(400, "remove the split before categorizing the parent")
             category = _resolve_category(c, patch.categoryId, uid, amount)
         elif patch.amount is not None and category is not None:
             _resolve_category(c, category, uid, amount)
@@ -212,6 +235,62 @@ def patch_transaction(tx_id: int, patch: TxPatch, user: Annotated[dict, Depends(
         )
         c.commit()
         return {"ok": True}
+    finally:
+        c.close()
+
+
+@router.put("/{tx_id}/splits")
+def replace_splits(tx_id: int, body: SplitBody, user: Annotated[dict, Depends(current_user)]):
+    """Atomically replace every categorized part, or clear the split with an empty list."""
+    uid = user["id"]
+    c = conn()
+    try:
+        row = c.execute(
+            "SELECT t.* FROM transactions t JOIN accounts a ON a.id=t.account_id"
+            " WHERE t.id=? AND a.user_id=?",
+            (tx_id, uid),
+        ).fetchone()
+        if not row:
+            raise HTTPException(404, "transaction not found")
+        if row["transfer_id"] is not None:
+            raise HTTPException(400, "transfer transactions cannot be split")
+        if body.parts:
+            if len(body.parts) < 2:
+                raise HTTPException(400, "a split requires at least two parts")
+            if any(part.amount == 0 for part in body.parts):
+                raise HTTPException(400, "split amounts cannot be zero")
+            if any((part.amount > 0) != (row["amount"] > 0) for part in body.parts):
+                raise HTTPException(400, "split parts must have the transaction's sign")
+            if sum(part.amount for part in body.parts) != row["amount"]:
+                raise HTTPException(400, "split amounts must equal the transaction amount")
+            for part in body.parts:
+                _resolve_category(c, part.categoryId, uid, part.amount)
+        c.execute("DELETE FROM transaction_splits WHERE transaction_id=?", (tx_id,))
+        for sort, part in enumerate(body.parts):
+            c.execute(
+                "INSERT INTO transaction_splits"
+                " (transaction_id, category_id, amount, comment, sort) VALUES (?, ?, ?, ?, ?)",
+                (tx_id, part.categoryId, part.amount, part.comment, sort),
+            )
+        if body.parts:
+            c.execute("UPDATE transactions SET category_id=NULL WHERE id=?", (tx_id,))
+        c.commit()
+        splits = c.execute(
+            "SELECT id, category_id, amount, comment FROM transaction_splits"
+            " WHERE transaction_id=? ORDER BY sort, id",
+            (tx_id,),
+        )
+        return {
+            "splits": [
+                {
+                    "id": part["id"],
+                    "categoryId": part["category_id"],
+                    "amount": part["amount"],
+                    "comment": part["comment"],
+                }
+                for part in splits
+            ]
+        }
     finally:
         c.close()
 
@@ -258,10 +337,14 @@ def bulk_transactions(body: BulkBody, user: Annotated[dict, Depends(current_user
             # direction.
             for tx_id in body.ids:
                 row = c.execute(
-                    "SELECT t.amount FROM transactions t JOIN accounts a ON a.id = t.account_id"
+                    "SELECT t.amount, EXISTS(SELECT 1 FROM transaction_splits s"
+                    " WHERE s.transaction_id=t.id) AS is_split"
+                    " FROM transactions t JOIN accounts a ON a.id = t.account_id"
                     " WHERE t.id=? AND a.user_id=?",
                     (tx_id, uid),
                 ).fetchone()
+                if row is not None and row["is_split"]:
+                    raise HTTPException(400, "remove the split before categorizing the parent")
                 if row is not None and category is not None:
                     _resolve_category(c, category, uid, row["amount"])
             for tx_id in body.ids:

@@ -96,6 +96,18 @@ CREATE INDEX IF NOT EXISTS idx_tx_hash ON transactions (hash);
 CREATE INDEX IF NOT EXISTS idx_tx_category ON transactions (category_id);
 CREATE INDEX IF NOT EXISTS idx_tx_account ON transactions (account_id);
 
+CREATE TABLE IF NOT EXISTS transaction_splits (
+  id INTEGER PRIMARY KEY,
+  transaction_id INTEGER NOT NULL REFERENCES transactions (id) ON DELETE CASCADE,
+  category_id INTEGER NOT NULL REFERENCES categories (id) ON DELETE RESTRICT,
+  amount INTEGER NOT NULL,
+  comment TEXT NOT NULL DEFAULT '',
+  sort INTEGER NOT NULL DEFAULT 0,
+  UNIQUE (transaction_id, sort)
+);
+CREATE INDEX IF NOT EXISTS idx_splits_transaction ON transaction_splits (transaction_id);
+CREATE INDEX IF NOT EXISTS idx_splits_category ON transaction_splits (category_id);
+
 -- A transfer is the entity two transactions are merged into; the rows themselves
 -- stay untouched so a re-sync still recognizes them and cannot duplicate them.
 -- UNIQUE on both legs is what guarantees a transfer has exactly two of them and

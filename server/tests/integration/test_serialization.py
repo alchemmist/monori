@@ -64,6 +64,7 @@ def test_snapshot_serialization_contract(api, client):
             "comment": "note",
             "source": "manual",
             "hidden": False,
+            "splits": [],
         }
     ]
     assert snap["budgets"] == [{"categoryId": cat, "year": 2026, "month": 3, "amount": 5000}]

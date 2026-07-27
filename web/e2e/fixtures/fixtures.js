@@ -60,6 +60,10 @@ class Api {
         });
     }
 
+    replaceSplits(transactionId, parts) {
+        return this.put(`/api/transactions/${transactionId}/splits`, { parts });
+    }
+
     setBudget(categoryId, year, month, amount) {
         return this.put("/api/budgets", { categoryId, year, month, amount });
     }

@@ -64,6 +64,12 @@ export const api = {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(patch),
         }).then(json),
+    replaceTxSplits: (id, parts) =>
+        apiFetch(`/api/transactions/${id}/splits`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ parts }),
+        }).then(json),
     deleteTx: (id) => apiFetch(`/api/transactions/${id}`, { method: "DELETE" }).then(json),
     createAccount: (body) =>
         apiFetch("/api/accounts", {
