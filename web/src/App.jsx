@@ -65,8 +65,18 @@ const REPORT_BUG_URL = `https://github.com/alchemmist/monori/issues/new?labels=b
 const DEFAULT_FIRST_YEAR = 2020;
 
 export default function App({ theme, onToggleTheme }) {
-    const { snapshot, loading, error, load, toast, user, authChecked, checkAuth, openTab } =
-        useStore();
+    const {
+        snapshot,
+        loading,
+        txProgress,
+        error,
+        load,
+        toast,
+        user,
+        authChecked,
+        checkAuth,
+        openTab,
+    } = useStore();
     const [page, setPage] = useState("budget");
     const [collapsed, setCollapsed] = useState(
         () => localStorage.getItem("sidebar_collapsed") === "1",
@@ -111,9 +121,13 @@ export default function App({ theme, onToggleTheme }) {
         return Math.max(maxTx, maxBudget, new Date().getFullYear()) + 1;
     }, [snapshot]);
 
+    // A light snapshot is followed by progressively older transaction pages.
+    // Computing and painting the budget for every intermediate snapshot makes
+    // its balances visibly jump year by year. Keep derived pages behind a
+    // loadscreen and calculate them once, from the completed ledger.
     const results = useMemo(
-        () => (snapshot ? computeRange(snapshot, firstYear, lastYear) : null),
-        [snapshot, firstYear, lastYear],
+        () => (snapshot && !txProgress ? computeRange(snapshot, firstYear, lastYear) : null),
+        [snapshot, txProgress, firstYear, lastYear],
     );
 
     if (!isDemo() && !authChecked) {
@@ -256,10 +270,16 @@ export default function App({ theme, onToggleTheme }) {
                         </a>
                     </div>
                 )}
-                {page === "budget" && (
-                    <BudgetPage results={results} firstYear={firstYear} lastYear={lastYear} />
+                {page === "budget" &&
+                    (txProgress ? (
+                        <DerivedDataLoadscreen progress={txProgress} />
+                    ) : (
+                        <BudgetPage results={results} firstYear={firstYear} lastYear={lastYear} />
+                    ))}
+                {page === "dashboard" && txProgress && (
+                    <DerivedDataLoadscreen progress={txProgress} />
                 )}
-                {page === "dashboard" && (
+                {page === "dashboard" && !txProgress && (
                     <Suspense
                         fallback={
                             <div style={{ display: "grid", placeItems: "center", height: "60vh" }}>
@@ -298,6 +318,17 @@ export default function App({ theme, onToggleTheme }) {
                 )}
             </main>
             <TabHost />
+        </div>
+    );
+}
+
+function DerivedDataLoadscreen({ progress }) {
+    const percent = progress.total ? Math.round((progress.loaded / progress.total) * 100) : 0;
+    return (
+        <div className="derived-loadscreen" role="status" aria-live="polite">
+            <Loader size="lg" type="bars" />
+            <div className="derived-loadscreen__title">Calculating your budget…</div>
+            <div className="derived-loadscreen__progress">Loading transactions · {percent}%</div>
         </div>
     );
 }
