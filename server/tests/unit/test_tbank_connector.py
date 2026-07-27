@@ -167,6 +167,9 @@ class FakePage:
     def wait_for_timeout(self, ms):
         self.log.append(("wait", ms))
 
+    def wait_for_load_state(self, state, timeout=None):
+        self.log.append(("load_state", state))
+
     # form interaction -------------------------------------------------------
     def fill(self, selector, value):
         self.log.append(("fill", selector, value))
@@ -474,6 +477,18 @@ def test_download_and_parse_returns_rows():
     page.stage = "in"
     rows = c._download_and_parse(page, None)
     assert [r["description"] for r in rows] == ["Lenta", "Okey"]
+
+
+def test_download_waits_for_the_account_feed_to_settle_before_export():
+    # the ?account= scope is applied by an async XHR after domcontentloaded;
+    # the export must wait for the network to settle or it captures the default
+    # all-accounts feed that rendered first
+    c = _connector()
+    page = FakePage(scenario="logged_in", export_label="CSV")
+    page.stage = "in"
+    c._download_and_parse(page, None)
+    settled = [e for e in page.log if e[0] == "load_state"]
+    assert settled == [("load_state", "networkidle")]
 
 
 def test_download_without_export_option_raises():
