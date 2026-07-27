@@ -21,7 +21,6 @@ test("dashboard shows the seeded balances, KPIs and charts", async ({ page, user
         description: "GROCERY STORE",
     });
     const longMerchant = "АВИАБИЛЕТЫ В КРУГОСВЕТНЫХ ПУТЕШЕСТВИЯХ";
-    const longMerchantLabel = "АВИАБИЛЕТЫ В КРУГОСВЕТНЫХ";
     await user.api.addTransaction({
         accountId,
         categoryId: foodCat,
@@ -49,7 +48,7 @@ test("dashboard shows the seeded balances, KPIs and charts", async ({ page, user
     expect(await page.locator(".chart-card").count()).toBeGreaterThan(2);
 
     const merchantsCard = page.locator(".chart-card", { hasText: "Top merchants" });
-    const longTick = merchantsCard.locator(`.merchant-tick[title="${longMerchantLabel}"]`);
+    const longTick = merchantsCard.locator(`.merchant-tick[title="${longMerchant}"]`);
     await longTick.scrollIntoViewIfNeeded();
     await expect(longTick).toBeVisible();
 
@@ -85,5 +84,6 @@ test("dashboard shows the seeded balances, KPIs and charts", async ({ page, user
     ]);
     expect(statsBox).not.toBeNull();
     expect(expenseBox).not.toBeNull();
+    expect(expenseBox.x).toBeGreaterThanOrEqual(statsBox.x);
     expect(expenseBox.x + expenseBox.width).toBeLessThanOrEqual(statsBox.x + statsBox.width);
 });
