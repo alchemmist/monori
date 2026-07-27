@@ -6,6 +6,29 @@
     margin-bottom: 16px;
 }
 
+.tx-amount-filter {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 190px;
+    padding: 2px 4px 0;
+}
+
+.tx-amount-filter__head {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    color: var(--m-text-dim);
+    font-size: 11px;
+    line-height: 1.2;
+}
+
+.tx-amount-filter__value {
+    color: var(--m-text);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
 @media (width <= 760px) {
     .budget-toolbar {
         gap: 8px;

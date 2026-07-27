@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ActionIcon, Button, CloseButton } from "@mantine/core";
+import { ActionIcon, Button, CloseButton, RangeSlider } from "@mantine/core";
 import { FTextInput } from "../ui/fields.jsx";
 import EditableCell from "../ui/EditableCell.jsx";
 import InlineSelect from "../ui/InlineSelect.jsx";
@@ -53,6 +53,7 @@ export default function TransactionsPage() {
     const [yearFilter, setYearFilter] = useState("all");
     const [acctFilter, setAcctFilter] = useState("all");
     const [showHidden, setShowHidden] = useState(false);
+    const [amountRange, setAmountRange] = useState(null);
 
     // hidden rows are not in the snapshot at all; the first toggle fetches them
     useEffect(() => {
@@ -173,7 +174,10 @@ export default function TransactionsPage() {
         return [...s].sort().reverse();
     }, [combined]);
 
-    const filtered = useMemo(() => {
+    // Apply every existing filter first. The amount slider's bounds come from
+    // this set, so changing search/category/year/account always recalculates
+    // the available range instead of leaving stale global limits.
+    const amountSourceRows = useMemo(() => {
         const q = query.trim().toLowerCase();
         let rows = combined;
         if (yearFilter !== "all") rows = rows.filter((t) => t.date.startsWith(yearFilter));
@@ -189,6 +193,52 @@ export default function TransactionsPage() {
             );
         return [...rows].reverse(); // newest first
     }, [combined, query, catFilter, yearFilter, acctFilter]);
+
+    const amountBounds = useMemo(() => {
+        if (!amountSourceRows.length) return null;
+        let min = Infinity;
+        let max = -Infinity;
+        for (const t of amountSourceRows) {
+            const value = Math.abs(t.amount);
+            min = Math.min(min, value);
+            max = Math.max(max, value);
+        }
+        return [min, max];
+    }, [amountSourceRows]);
+
+    useEffect(() => {
+        setAmountRange((previous) => {
+            if (!amountBounds) return null;
+            if (!previous) return amountBounds;
+            // If the old selection no longer overlaps the newly filtered data,
+            // reset it to the complete dynamic range; otherwise preserve it.
+            if (previous[1] < amountBounds[0] || previous[0] > amountBounds[1])
+                return amountBounds;
+            const next = [
+                Math.max(previous[0], amountBounds[0]),
+                Math.min(previous[1], amountBounds[1]),
+            ];
+            return next[0] <= next[1] ? next : amountBounds;
+        });
+    }, [amountBounds]);
+
+    const effectiveAmountRange = useMemo(() => {
+        if (!amountBounds || !amountRange) return amountBounds;
+        if (amountRange[1] < amountBounds[0] || amountRange[0] > amountBounds[1])
+            return amountBounds;
+        return [
+            Math.max(amountRange[0], amountBounds[0]),
+            Math.min(amountRange[1], amountBounds[1]),
+        ];
+    }, [amountBounds, amountRange]);
+
+    const filtered = useMemo(() => {
+        if (!effectiveAmountRange) return amountSourceRows;
+        return amountSourceRows.filter((t) => {
+            const amount = Math.abs(t.amount);
+            return amount >= effectiveAmountRange[0] && amount <= effectiveAmountRange[1];
+        });
+    }, [amountSourceRows, effectiveAmountRange]);
 
     // the two legs of a transfer are one row here; every item is still exactly
     // one row tall, so the windowing math below stays on a fixed row height
@@ -474,6 +524,31 @@ export default function TransactionsPage() {
                 >
                     Hidden
                 </Button>
+                {amountBounds && (
+                    <div className="tx-amount-filter">
+                        <div className="tx-amount-filter__head">
+                            <span>Amount</span>
+                            <span className="tx-amount-filter__value">
+                                {money(effectiveAmountRange?.[0] ?? amountBounds[0])} – {money(
+                                    effectiveAmountRange?.[1] ?? amountBounds[1],
+                                )}
+                            </span>
+                        </div>
+                        <RangeSlider
+                            aria-label="Amount range"
+                            min={amountBounds[0]}
+                            max={amountBounds[1]}
+                            step={1}
+                            value={effectiveAmountRange ?? amountBounds}
+                            onChange={(value) => {
+                                window.scrollTo({ top: 0 });
+                                setAmountRange(value);
+                            }}
+                            disabled={amountBounds[0] === amountBounds[1]}
+                            styles={{ root: { width: 190 } }}
+                        />
+                    </div>
+                )}
                 <div style={{ flex: 1 }} />
                 <Button
                     variant="default"
