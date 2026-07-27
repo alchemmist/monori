@@ -1,7 +1,7 @@
 API_PORT ?= 8077
-DOCKER_COMPOSE_VERSION := $(shell docker compose version 2>&1)
-PODMAN_VERSION := $(shell podman --version 2>&1)
-COMPOSE ?= $(if $(findstring Docker Compose version,$(DOCKER_COMPOSE_VERSION)),docker compose,$(if $(findstring podman version,$(PODMAN_VERSION)),podman compose --in-pod=false,docker compose))
+HAVE_DOCKER_COMPOSE = $(shell docker compose version >/dev/null 2>&1 && echo 1)
+HAVE_PODMAN_COMPOSE = $(shell podman compose version >/dev/null 2>&1 && echo 1)
+COMPOSE ?= $(if $(HAVE_DOCKER_COMPOSE),docker compose,$(if $(HAVE_PODMAN_COMPOSE),podman compose --in-pod=false,docker compose))
 MUTATION_THRESHOLD ?= 85
 
 WEBBIN := web/node_modules/.bin
