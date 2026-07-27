@@ -58,6 +58,8 @@ test("dashboard shows the seeded balances, KPIs and charts", async ({ page, user
             merchantsCard.boundingBox(),
             longTick.boundingBox(),
         ]);
+        expect(cardBox).not.toBeNull();
+        expect(tickBox).not.toBeNull();
         expect(tickBox.x).toBeGreaterThanOrEqual(cardBox.x);
         expect(tickBox.x + tickBox.width).toBeLessThanOrEqual(cardBox.x + cardBox.width);
         expect(
@@ -81,5 +83,7 @@ test("dashboard shows the seeded balances, KPIs and charts", async ({ page, user
         statsCard.boundingBox(),
         largestExpense.boundingBox(),
     ]);
+    expect(statsBox).not.toBeNull();
+    expect(expenseBox).not.toBeNull();
     expect(expenseBox.x + expenseBox.width).toBeLessThanOrEqual(statsBox.x + statsBox.width);
 });
