@@ -1,5 +1,7 @@
 import { create } from "zustand";
 import { api } from "./api.js";
+import { DEFAULT_CURRENCY } from "./currencies.js";
+import { convertAmount } from "./money.js";
 import { demoSnapshot } from "./demo/demoData.js";
 import { mergeCategories } from "./mergeCategories.js";
 import { compareTx, mergeTransactions } from "./mergeTransactions.js";
@@ -49,6 +51,11 @@ export const isDemo = () => {
 };
 
 const restoredTabs = loadTabs();
+
+/** The currency every total is reported in — what a component needs to label a
+ * number that was summed across accounts. */
+export const useBaseCurrency = () =>
+    useStore((s) => s.snapshot?.baseCurrency ?? s.user?.baseCurrency ?? DEFAULT_CURRENCY);
 
 // carries on past the restored ids, so a reopened tab never collides with one
 // that came back from storage
@@ -519,6 +526,62 @@ export const useStore = create((set, get) => ({
         );
     },
 
+    /** The currency every total on screen is expressed in. */
+    baseCurrency() {
+        return get().snapshot?.baseCurrency ?? get().user?.baseCurrency ?? DEFAULT_CURRENCY;
+    },
+
+    /** Rubles per unit, as of the snapshot — what the client needs to convert
+     * the money that has no transaction behind it (opening balances). */
+    rates() {
+        return get().snapshot?.rates ?? [];
+    },
+
+    /**
+     * Report in a different currency.
+     *
+     * Every stored `baseAmount` is a function of this setting, so the server
+     * reprices the whole ledger and the snapshot is reloaded rather than
+     * patched — there is no local shortcut that would be correct.
+     */
+    async setBaseCurrency(code) {
+        if (isDemo()) {
+            // the demo has no server to reprice for it, so it does the same
+            // work locally — relabelling without reconverting would show ruble
+            // totals wearing a lari sign
+            const { snapshot } = get();
+            set({
+                snapshot: {
+                    ...snapshot,
+                    baseCurrency: code,
+                    transactions: snapshot.transactions.map((t) => ({
+                        ...t,
+                        baseAmount: convertAmount(t.amount, t.currency, code, snapshot.rates),
+                    })),
+                },
+            });
+            return;
+        }
+        const { user } = await api.patchMe({ baseCurrency: code });
+        set({ user });
+        await get().load();
+    },
+
+    /** Pull fresh rates from the central bank, optionally catching up on the
+     * last `days` of them, then reload what they repriced. */
+    async refreshRates(days = 0) {
+        const result = await api.refreshRates(days);
+        await get().load();
+        return result;
+    },
+
+    /** Correct one rate by hand — for the day a bank converted at its own. */
+    async setRate(code, rubPerUnit, day = null) {
+        const result = await api.setRate(code, { rubPerUnit, day });
+        await get().load();
+        return result;
+    },
+
     async createAccount(body) {
         const { snapshot } = get();
         const id = isDemo()
@@ -608,13 +671,28 @@ export const useStore = create((set, get) => ({
             const { snapshot } = get();
             const nextId = Math.max(0, ...snapshot.transactions.map((t) => t.id)) + 1;
             const transferId = `demo-${nextId}`;
+            const currencyOf = (id) =>
+                snapshot.accounts.find((a) => a.id === id)?.currency ?? DEFAULT_CURRENCY;
+            const base = get().baseCurrency();
             const rows = [
                 { accountId: body.fromAccountId, amount: -body.amount },
-                { accountId: body.toAccountId, amount: body.amount },
+                {
+                    accountId: body.toAccountId,
+                    amount:
+                        body.toAmount ??
+                        convertAmount(
+                            body.amount,
+                            currencyOf(body.fromAccountId),
+                            currencyOf(body.toAccountId),
+                            get().rates(),
+                        ),
+                },
             ].map((r, i) => ({
                 id: nextId + i,
                 date: body.date,
                 amount: r.amount,
+                currency: currencyOf(r.accountId),
+                baseAmount: convertAmount(r.amount, currencyOf(r.accountId), base, get().rates()),
                 description: "Transfer",
                 bankCategory: "",
                 mcc: "",

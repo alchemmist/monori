@@ -122,6 +122,7 @@ def _import_transactions(c, uid, transactions, mapping, category_ids):
         row = {
             "date": tx["date"],
             "amount": tx["amount"],
+            "currency": tx.get("currency"),
             "description": tx["description"],
             "bank_category": tx["bank_category"],
             "mcc": tx["mcc"],

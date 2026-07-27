@@ -168,8 +168,8 @@ def test_snapshot_full_shape(tmp_path):
     )
     cid = c.execute("SELECT id FROM categories").fetchone()[0]
     c.execute(
-        "INSERT INTO transactions (date, amount, description, account_id, hash, source)"
-        " VALUES ('2026-01-01T00:00:00', -100, 'x', ?, 'h', 'import')",
+        "INSERT INTO transactions (date, amount, currency, description, account_id, hash, source)"
+        " VALUES ('2026-01-01T00:00:00', -100, 'RUB', 'x', ?, 'h', 'import')",
         (acct,),
     )
     c.execute(
@@ -213,13 +213,16 @@ def test_historical_day_counts_span_accounts_and_skip_manual(tmp_path):
     )
     first, second = [r[0] for r in c.execute("SELECT id FROM accounts ORDER BY id")]
     tx_sql = (
-        "INSERT INTO transactions (date, amount, description, account_id, hash, source)"
-        " VALUES (?, ?, ?, ?, ?, ?)"
+        "INSERT INTO transactions"
+        " (date, amount, currency, base_amount, description, account_id, hash, source)"
+        " VALUES (?, ?, 'RUB', ?, ?, ?, ?, ?)"
     )
-    c.execute(tx_sql, ("2026-07-19T14:22:00", -368000, "Kafe Lesnoj", first, "h1", "sync"))
-    c.execute(tx_sql, ("2026-07-19T09:05:00", -368000, "Kafe Lesnoj", second, "h2", "sync"))
-    c.execute(tx_sql, ("2026-07-19T10:00:00", -32000, "нетмонет", first, "h3", "manual"))
-    c.execute(tx_sql, ("2026-07-18T10:00:00", -50000, "Пятёрочка", first, "h4", "sheets"))
+    c.execute(tx_sql, ("2026-07-19T14:22:00", -368000, -368000, "Kafe Lesnoj", first, "h1", "sync"))
+    c.execute(
+        tx_sql, ("2026-07-19T09:05:00", -368000, -368000, "Kafe Lesnoj", second, "h2", "sync")
+    )
+    c.execute(tx_sql, ("2026-07-19T10:00:00", -32000, -32000, "нетмонет", first, "h3", "manual"))
+    c.execute(tx_sql, ("2026-07-18T10:00:00", -50000, -50000, "Пятёрочка", first, "h4", "sheets"))
     c.commit()
 
     from app.ingest import historical_day_counts
@@ -260,8 +263,8 @@ def test_dedup_survives_the_bank_rewording_its_own_description(tmp_path):
     reworded = "Операция в других кредитных организациях YandexBank_C2A g. Moskva RUS"
     c.execute(
         "INSERT INTO transactions"
-        " (date, amount, description, account_id, hash, source, transfer_id)"
-        " VALUES ('2026-07-24T12:38:48', -284300, ?, 1, 'h1', 'sync', 'tr1')",
+        " (date, amount, currency, base_amount, description, account_id, hash, source, transfer_id)"
+        " VALUES ('2026-07-24T12:38:48', -284300, 'RUB', -284300, ?, 1, 'h1', 'sync', 'tr1')",
         (posted,),
     )
     c.commit()

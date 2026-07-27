@@ -9,8 +9,9 @@ on-demand rescan without drifting between them.
 A candidate pair is an outflow and an inflow that
 
 * sit on two different accounts of the same user,
-* have exactly opposite amounts (a fee makes the legs unequal; those are left
-  for the user to link by hand rather than guessed at),
+* have exactly opposite amounts in the same currency (a fee, or a conversion
+  between two currencies, makes the legs unequal; those are left for the user to
+  link by hand rather than guessed at),
 * fall within ``max_days`` of each other,
 * are both still unattached to any transfer, and
 * have not already been dismissed as "not a transfer".
@@ -22,6 +23,8 @@ A pair where one leg reads as a transfer but the other carries an unrelated
 description — a merchant purchase that merely matches the amount — is a
 mismatch: still offered as a suggestion, never merged on its own.
 """
+
+from .currencies import DEFAULT_CURRENCY
 
 AUTO_DAYS = 1
 SUGGEST_DAYS = 5
@@ -88,22 +91,26 @@ def find_pairs(rows, max_days=SUGGEST_DAYS, rejected=()):
     silent ones, then by id so the order never depends on the input order.
     """
     rejected = {tuple(p) for p in rejected}
-    outs: dict[int, list] = {}
-    ins: dict[int, list] = {}
+    outs: dict[tuple, list] = {}
+    ins: dict[tuple, list] = {}
     for r in rows:
         if field(r, "transfer_id"):
             continue
         amount = r["amount"]
         if amount == 0:
             continue
+        # the currency is part of the bucket key: 100 lari leaving one account
+        # and 100 rubles arriving on another are not the same money
+        key = (field(r, "currency", DEFAULT_CURRENCY), abs(amount))
         bucket = outs if amount < 0 else ins
-        bucket.setdefault(abs(amount), []).append(r)
+        bucket.setdefault(key, []).append(r)
 
     candidates = []
-    for amount, out_rows in outs.items():
-        in_rows = ins.get(amount)
+    for key, out_rows in outs.items():
+        in_rows = ins.get(key)
         if not in_rows:
             continue
+        amount = key[1]
         for out_row in out_rows:
             out_day = day_number(out_row["date"])
             for in_row in in_rows:
@@ -122,6 +129,7 @@ def find_pairs(rows, max_days=SUGGEST_DAYS, rejected=()):
                         "outTxId": out_row["id"],
                         "inTxId": in_row["id"],
                         "amount": amount,
+                        "currency": key[0],
                         "days": days,
                         "hint": out_hint or in_hint,
                         # one leg says "transfer", the other names something else

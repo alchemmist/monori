@@ -4,7 +4,10 @@ import { useState } from "react";
 import { FSelect } from "../ui/fields.jsx";
 
 import { api } from "../api.js";
+import RatesPanel from "../components/RatesPanel.jsx";
+import { DEFAULT_CURRENCY, currencyOptions } from "../currencies.js";
 import { seedDemoData } from "../demo/seedDemo.js";
+import InlineSelect from "../ui/InlineSelect.jsx";
 import { isDemo, useStore } from "../store.js";
 import { fmtDate } from "../format.js";
 import "./settings.css";
@@ -44,6 +47,26 @@ export default function SettingsPage({ theme, onToggleTheme, onMigrate }) {
     const [exporting, setExporting] = useState(false);
     const [exportError, setExportError] = useState("");
     const [seedingDemo, setSeedingDemo] = useState(false);
+    const setBaseCurrency = useStore((s) => s.setBaseCurrency);
+    const [repricing, setRepricing] = useState(false);
+    const base = snapshot?.baseCurrency ?? user?.baseCurrency ?? DEFAULT_CURRENCY;
+
+    const changeBase = async (code) => {
+        if (!code || code === base) return;
+        setRepricing(true);
+        try {
+            await setBaseCurrency(code);
+            notify({ title: `Now reporting in ${code}`, theme: "success" });
+        } catch (e) {
+            notify({
+                title: "Could not change the reporting currency",
+                theme: "danger",
+                content: String(e),
+            });
+        } finally {
+            setRepricing(false);
+        }
+    };
 
     const exportXlsx = async () => {
         setExporting(true);
@@ -116,6 +139,27 @@ export default function SettingsPage({ theme, onToggleTheme, onMigrate }) {
                         </Row>
                     </Section>
                 )}
+
+                <Section title="Currency">
+                    <Row
+                        label="Reporting currency"
+                        hint={
+                            repricing
+                                ? "Repricing the ledger…"
+                                : "What every total is expressed in. Each transaction keeps the" +
+                                  " currency it was recorded in; changing this only changes what" +
+                                  " they are added up as."
+                        }
+                    >
+                        <InlineSelect
+                            value={base}
+                            onChange={changeBase}
+                            data={currencyOptions(base)}
+                            disabled={repricing}
+                        />
+                    </Row>
+                    <RatesPanel />
+                </Section>
 
                 <Section title="Appearance">
                     <Row label="Theme" hint="Light or dark appearance">

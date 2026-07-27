@@ -5,7 +5,7 @@ from alembic import command
 
 from app.db import LEGACY_REVISIONS, _alembic_config, connect
 
-HEAD = "0017"
+HEAD = "0018"
 assert LEGACY_REVISIONS[-1] == "0006"
 
 OLD_SCHEMA = """
@@ -183,6 +183,92 @@ def test_migration_0011_backfills_and_enforces_canonical(tmp_path):
             pass
     finally:
         conn.close()
+
+
+def test_migration_0018_backfills_currency_from_the_account(tmp_path):
+    """
+    A ledger written before currencies existed was implicitly in whatever its
+    accounts were held in — which is exactly what the rows must come out as.
+    """
+    db_path = os.path.join(tmp_path, "v16.db")
+    command.upgrade(_alembic_config(db_path), "0016")
+    raw = sqlite3.connect(db_path)
+    raw.execute(
+        "INSERT INTO users (email, email_canonical, password_hash, created_at)"
+        " VALUES ('u@e.co', 'u@e.co', 'h', 't')"
+    )
+    raw.execute(
+        "INSERT INTO accounts (user_id, name, type, currency, sort)"
+        " VALUES (1, 'Rubles', 'card', 'RUB', 1), (1, 'Lari', 'card', 'GEL', 2)"
+    )
+    ids = dict(raw.execute("SELECT name, id FROM accounts"))
+    rubles, lari = ids["Rubles"], ids["Lari"]
+    raw.execute(
+        "INSERT INTO transactions (date, amount, description, account_id, hash, source)"
+        " VALUES ('2026-01-01T00:00:00', -500, 'Rent', ?, 'stale-a', 'import'),"
+        "        ('2026-01-02T00:00:00', -700, 'Cafe', ?, 'stale-b', 'import')",
+        (rubles, lari),
+    )
+    raw.commit()
+    raw.close()
+
+    conn = connect(db_path)
+    try:
+        assert _revision(conn) == HEAD
+        rows = {
+            r["description"]: r
+            for r in conn.execute(
+                "SELECT description, currency, base_amount, amount, hash FROM transactions"
+            )
+        }
+        assert rows["Rent"]["currency"] == "RUB"
+        assert rows["Cafe"]["currency"] == "GEL"
+        # single-currency history, so the reporting amount is the amount itself
+        assert all(r["base_amount"] == r["amount"] for r in rows.values())
+        # the fingerprint now covers the currency, so every row was re-stamped —
+        # leaving the old ones would have the next sync re-import the lot
+        assert not any(r["hash"].startswith("stale") for r in rows.values())
+        assert conn.execute("SELECT base_currency FROM users").fetchone()[0] == "RUB"
+    finally:
+        conn.close()
+
+
+def test_blank_transaction_currency_is_rejected(tmp_path):
+    for name, builder in (
+        ("fresh.db", lambda p: connect(p).close()),
+        ("chained.db", lambda p: command.upgrade(_alembic_config(p), "head")),
+    ):
+        path = os.path.join(tmp_path, name)
+        builder(path)
+        raw = sqlite3.connect(path)
+        try:
+            cur = raw.execute(
+                "INSERT INTO accounts (name, type, currency, sort)"
+                " VALUES ('Wallet', 'cash', 'RUB', 9)"
+            )
+            try:
+                raw.execute(
+                    "INSERT INTO transactions (date, amount, currency, description,"
+                    " account_id, hash, source)"
+                    " VALUES ('2026-01-01T00:00:00', -1, '', 'x', ?, 'h', 'import')",
+                    (cur.lastrowid,),
+                )
+                raise AssertionError(f"{name}: a blank currency was accepted")
+            except sqlite3.IntegrityError:
+                pass
+            # spaces are as meaningless as nothing at all
+            try:
+                raw.execute(
+                    "INSERT INTO transactions (date, amount, currency, description,"
+                    " account_id, hash, source)"
+                    " VALUES ('2026-01-01T00:00:00', -1, '   ', 'x', ?, 'h2', 'import')",
+                    (cur.lastrowid,),
+                )
+                raise AssertionError(f"{name}: a whitespace currency was accepted")
+            except sqlite3.IntegrityError:
+                pass
+        finally:
+            raw.close()
 
 
 def test_migration_0011_reports_canonical_collisions(tmp_path):

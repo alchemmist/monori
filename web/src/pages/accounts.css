@@ -207,3 +207,26 @@
 .theme-dark .icon-picker__item:hover {
     background: rgb(255 255 255 / 8%);
 }
+
+/* The one number the accounts page cannot read off a single row: everything
+   added up in the reporting currency. Shown only when the accounts are not all
+   held in it — otherwise it would repeat a sum the eye can already do. */
+.accounts-total {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    margin-left: auto;
+}
+
+.accounts-total__label {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--m-text-faint);
+}
+
+.accounts-total__value {
+    font-size: 18px;
+    font-weight: var(--m-num-weight);
+}

@@ -78,7 +78,11 @@ CREATE INDEX IF NOT EXISTS idx_batch_account ON import_batches (account_id);
 CREATE TABLE IF NOT EXISTS transactions (
   id INTEGER PRIMARY KEY,
   date TEXT NOT NULL,                -- ISO-8601 datetime
-  amount INTEGER NOT NULL,           -- signed kopecks; negative = expense
+  amount INTEGER NOT NULL,           -- signed minor units; negative = expense
+  currency TEXT NOT NULL DEFAULT '', -- what `amount` is denominated in
+  -- `amount` in the owner's reporting currency at the rate for `date`; the only
+  -- column that may be summed across accounts
+  base_amount INTEGER NOT NULL DEFAULT 0,
   description TEXT NOT NULL DEFAULT '',
   bank_category TEXT NOT NULL DEFAULT '',
   mcc TEXT NOT NULL DEFAULT '',
@@ -86,7 +90,8 @@ CREATE TABLE IF NOT EXISTS transactions (
   account_id INTEGER NOT NULL REFERENCES accounts (id),
   transfer_id TEXT,                  -- links the two rows of a transfer
   comment TEXT NOT NULL DEFAULT '',
-  hash TEXT NOT NULL,                -- sha256(account_id|date|amount|description) for dedup
+  -- sha256(account_id|date|amount|currency|description) for dedup
+  hash TEXT NOT NULL,
   source TEXT NOT NULL DEFAULT 'import',
   batch_id INTEGER REFERENCES import_batches (id) ON DELETE SET NULL,
   hidden INTEGER NOT NULL DEFAULT 0 -- excluded everywhere but kept for sync dedup
@@ -95,6 +100,31 @@ CREATE INDEX IF NOT EXISTS idx_tx_date ON transactions (date);
 CREATE INDEX IF NOT EXISTS idx_tx_hash ON transactions (hash);
 CREATE INDEX IF NOT EXISTS idx_tx_category ON transactions (category_id);
 CREATE INDEX IF NOT EXISTS idx_tx_account ON transactions (account_id);
+
+-- currency defaults to '' only so ALTER TABLE ADD COLUMN could backfill legacy
+-- rows; a blank currency makes an amount meaningless, so nothing may write one
+CREATE TRIGGER IF NOT EXISTS tx_currency_not_blank
+BEFORE INSERT ON transactions WHEN TRIM(new.currency) = ''
+BEGIN
+SELECT RAISE(ABORT, 'transaction currency must not be blank');
+END;
+
+CREATE TRIGGER IF NOT EXISTS tx_currency_not_blank_upd
+BEFORE UPDATE ON transactions WHEN TRIM(new.currency) = ''
+BEGIN
+SELECT RAISE(ABORT, 'transaction currency must not be blank');
+END;
+
+-- Rubles per unit of `code` on `day`, the pivot every conversion goes through.
+-- `source` is where the number came from: the CBR feed, or a hand override.
+CREATE TABLE IF NOT EXISTS exchange_rates (
+  day TEXT NOT NULL,
+  code TEXT NOT NULL,
+  rub_per_unit REAL NOT NULL,
+  source TEXT NOT NULL DEFAULT 'cbr',
+  PRIMARY KEY (day, code)
+);
+CREATE INDEX IF NOT EXISTS idx_rates_code ON exchange_rates (code, day);
 
 -- A transfer is the entity two transactions are merged into; the rows themselves
 -- stay untouched so a re-sync still recognizes them and cannot duplicate them.
@@ -136,6 +166,7 @@ CREATE TABLE IF NOT EXISTS users (
   created_at TEXT NOT NULL,
   is_admin INTEGER NOT NULL DEFAULT 0,
   last_login TEXT,
+  base_currency TEXT NOT NULL DEFAULT 'RUB',  -- what every total is reported in
   -- where an import lands rows whose account cannot be told from the file
   -- (no card number anywhere); empty means the user assigns them by hand
   default_account_id INTEGER REFERENCES accounts (id)

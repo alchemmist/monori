@@ -107,7 +107,7 @@ def _transactions_sheet(ws, snap, cat_names, acct_names, acct_currency):
     row = 2
     for tx in snap["transactions"]:
         dt = _parse_dt(tx["date"])
-        currency = acct_currency.get(tx["accountId"], "RUB")
+        currency = tx.get("currency") or acct_currency.get(tx["accountId"], "RUB")
         rub = spec.kop_to_rub(tx["amount"])
         ws.cell(row=row, column=1, value=dt.strftime("%d.%m.%Y %H:%M:%S"))
         ws.cell(row=row, column=2, value=dt.strftime("%d.%m.%Y"))
@@ -129,13 +129,23 @@ def _transactions_sheet(ws, snap, cat_names, acct_names, acct_currency):
     ws.freeze_panes = "A2"
 
 
+def _base(tx):
+    """
+    What a transaction contributes to a total: its amount in the reporting
+    currency. Only these may be added up — the per-row `amount` is whatever
+    currency it was spent in, and those are not comparable.
+    """
+    value = tx.get("baseAmount")
+    return tx["amount"] if value is None else value
+
+
 def _month_activity(snap):
     activity: defaultdict[tuple[int, int, int], int] = defaultdict(int)
     for tx in snap["transactions"]:
         if tx["categoryId"] is None:
             continue
         dt = _parse_dt(tx["date"])
-        activity[(tx["categoryId"], dt.year, dt.month)] += tx["amount"]
+        activity[(tx["categoryId"], dt.year, dt.month)] += _base(tx)
     return activity
 
 
@@ -238,9 +248,9 @@ def _dashdata_sheet(ws, snap, activity):
         dt = _parse_dt(tx["date"])
         key = (dt.year, dt.month)
         if kind == "income":
-            monthly[key][0] += tx["amount"]
+            monthly[key][0] += _base(tx)
         else:
-            monthly[key][1] -= tx["amount"]
+            monthly[key][1] -= _base(tx)
     cum_net = 0
     row = 2
     for year, month in sorted(monthly):

@@ -1,11 +1,11 @@
 import { useMemo, useState } from "react";
-import { ActionIcon, Button, SegmentedControl } from "@mantine/core";
+import { ActionIcon, SegmentedControl } from "@mantine/core";
 import InlineSelect from "../ui/InlineSelect.jsx";
 import RowMenu from "../ui/RowMenu.jsx";
 import { Plus, ChevronDown, EllipsisVertical } from "@gravity-ui/icons";
-import { useStore } from "../store.js";
+import { useBaseCurrency, useStore } from "../store.js";
 import { orderedGroups, categoriesByGroup } from "../categoryOrder.js";
-import { MONTHS_SHORT, MONTHS, rub } from "../format.js";
+import { MONTHS_SHORT, MONTHS, money } from "../format.js";
 import BudgetCell from "../components/BudgetCell.jsx";
 import { Money, BalancePill } from "../components/Money.jsx";
 import { CategoryEditDialog, CategoryDeleteDialog } from "../components/CategoryDialogs.jsx";
@@ -20,45 +20,25 @@ const YEAR_DENSITY = {
 };
 
 export default function BudgetPage({ results, firstYear, lastYear }) {
-    const { snapshot, setBudget, fillBudgetForward, notify } = useStore();
+    const { snapshot, setBudget } = useStore();
+    const base = useBaseCurrency();
     const now = new Date();
     const [year, setYear] = useState(now.getFullYear());
     const [month, setMonth] = useState(now.getMonth()); // 0-based
     const [mode, setMode] = useState("year");
     const [density, setDensity] = useState("full");
     const [collapsed, setCollapsed] = useState({});
-    const [showUnused, setShowUnused] = useState(false);
     const [dialog, setDialog] = useState(null); // {type: 'edit'|'delete'|'new', category}
-    const [selectedBudgetCell, setSelectedBudgetCell] = useState(null);
-    const [fillingForward, setFillingForward] = useState(false);
 
     const res = results.get(year);
     const groups = useMemo(
         () => orderedGroups(snapshot.groups).filter((g) => g.kind === "expense"),
         [snapshot.groups],
     );
-    const allCatsByGroup = useMemo(
+    const catsByGroup = useMemo(
         () => categoriesByGroup(snapshot.categories, groups),
         [snapshot.categories, groups],
     );
-
-    // a category the selected year never touched — nothing budgeted, nothing
-    // spent, no balance sitting in the envelope — is noise in every view; a
-    // carried balance keeps it visible, since hiding money would be worse
-    const { catsByGroup, unusedCount } = useMemo(() => {
-        const used = (c) =>
-            (res.byCategory.get(c.id) ?? []).some(
-                (m) => m.budgeted !== 0 || m.outflows !== 0 || m.balance !== 0,
-            );
-        let unused = 0;
-        const filtered = new Map();
-        for (const [gid, cats] of allCatsByGroup) {
-            const active = cats.filter(used);
-            unused += cats.length - active.length;
-            filtered.set(gid, showUnused ? cats : active);
-        }
-        return { catsByGroup: filtered, unusedCount: unused };
-    }, [allCatsByGroup, res, showUnused]);
 
     const txCountByCat = useMemo(() => {
         const m = new Map();
@@ -85,32 +65,6 @@ export default function BudgetPage({ results, firstYear, lastYear }) {
         },
     ];
 
-    const selectedCategory = selectedBudgetCell
-        ? snapshot.categories.find((c) => c.id === selectedBudgetCell.categoryId)
-        : null;
-    const canFillForward = selectedBudgetCell?.month < 12 && selectedCategory;
-
-    const fillForward = async () => {
-        if (!canFillForward) return;
-        setFillingForward(true);
-        try {
-            const count = await fillBudgetForward(
-                selectedBudgetCell.categoryId,
-                selectedBudgetCell.year,
-                selectedBudgetCell.month,
-            );
-            notify({
-                title: "Budget filled through December",
-                content: `${selectedCategory.name}: ${count} month${count === 1 ? "" : "s"}`,
-                theme: "success",
-            });
-        } catch (e) {
-            notify({ title: "Failed to fill budget", content: String(e), theme: "danger" });
-        } finally {
-            setFillingForward(false);
-        }
-    };
-
     return (
         <div className="fade-in">
             <div className="budget-toolbar">
@@ -132,27 +86,6 @@ export default function BudgetPage({ results, firstYear, lastYear }) {
                     </div>
                 )}
                 <div style={{ flex: 1 }} />
-                {canFillForward && (
-                    <Button
-                        size="xs"
-                        variant="light"
-                        loading={fillingForward}
-                        onClick={fillForward}
-                        title={`Replace ${selectedCategory.name}'s remaining ${selectedBudgetCell.year} budgets with this value`}
-                    >
-                        Fill {selectedCategory.name} to Dec
-                    </Button>
-                )}
-                {unusedCount > 0 && (
-                    <Button
-                        size="xs"
-                        variant="subtle"
-                        onClick={() => setShowUnused((v) => !v)}
-                        title="Categories with nothing budgeted, spent or held this year"
-                    >
-                        {showUnused ? "Hide unused" : `Show ${unusedCount} unused`}
-                    </Button>
-                )}
                 {mode === "year" && (
                     <SegmentedControl
                         value={density}
@@ -185,20 +118,20 @@ export default function BudgetPage({ results, firstYear, lastYear }) {
                                     color: available < 0 ? "var(--m-expense)" : "var(--m-income)",
                                 }}
                             >
-                                {rub(available)} ₽
+                                {money(available, base)}
                             </div>
                             <div className="hero-card__hint">end of {MONTHS[month]}</div>
                         </div>
                         <div className="card hero-card">
                             <div className="hero-card__label">Income</div>
-                            <div className="hero-card__value num">{rub(income)} ₽</div>
+                            <div className="hero-card__value num">{money(income, base)}</div>
                             <div className="hero-card__hint">
                                 {MONTHS[month]} {year}
                             </div>
                         </div>
                         <div className="card hero-card">
                             <div className="hero-card__label">Budgeted</div>
-                            <div className="hero-card__value num">{rub(budgetedTotal)} ₽</div>
+                            <div className="hero-card__value num">{money(budgetedTotal, base)}</div>
                             <div className="hero-card__hint">across all categories</div>
                         </div>
                         <div className="card hero-card">
@@ -210,7 +143,7 @@ export default function BudgetPage({ results, firstYear, lastYear }) {
                                         overspent < 0 ? "var(--m-expense)" : "var(--m-text-faint)",
                                 }}
                             >
-                                {rub(overspent)} ₽
+                                {money(overspent, base)}
                             </div>
                             <div className="hero-card__hint">uncovered this month</div>
                         </div>
@@ -321,13 +254,6 @@ export default function BudgetPage({ results, firstYear, lastYear }) {
                                                         <td>
                                                             <BudgetCell
                                                                 value={m.budgeted}
-                                                                onSelect={() =>
-                                                                    setSelectedBudgetCell({
-                                                                        categoryId: c.id,
-                                                                        year,
-                                                                        month: month + 1,
-                                                                    })
-                                                                }
                                                                 onChange={(v) =>
                                                                     setBudget(
                                                                         c.id,
@@ -384,7 +310,6 @@ export default function BudgetPage({ results, firstYear, lastYear }) {
                     collapsed={collapsed}
                     setCollapsed={setCollapsed}
                     setBudget={setBudget}
-                    onSelectBudget={setSelectedBudgetCell}
                     onAddCategory={(groupId) => setDialog({ type: "edit", category: { groupId } })}
                     onCategoryMenu={catMenu}
                 />

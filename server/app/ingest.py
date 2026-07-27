@@ -8,12 +8,14 @@ here and never trusted from the caller, so a re-submit or a re-sync can never
 create duplicates.
 """
 
+from .currencies import is_known, normalize
 from .importer import build_rules, categorize, tx_hash
+from .money import account_currency, base_currency_of_account, to_base
 
 INSERT_SQL = """INSERT INTO transactions
-   (date, amount, description, bank_category, mcc, category_id, account_id,
-    batch_id, hash, source)
-   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
+   (date, amount, currency, base_amount, description, bank_category, mcc, category_id,
+    account_id, batch_id, hash, source)
+   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
 
 
 def load_rules(c):
@@ -109,12 +111,22 @@ def commit_rows(c, account_id, rows, source, batch_id=None):
     an optional category_id) onto ``account_id``, skipping any whose hash is
     already present on that account or repeats within this batch. Does not commit
     — the caller owns the transaction. Returns ``(inserted, skipped)``.
+
+    A row may name its own ``currency``; without one — or with one monori does
+    not know — it is the account's, which is what a bank statement means when it
+    omits the column. Recording an unknown code would be worse than ignoring it:
+    nothing can price it, so its ``base_amount`` would silently be the raw
+    number and every total that included it would be wrong.
     """
     existing = existing_hash_counts(c, account_id)
+    held = account_currency(c, account_id)
+    base = base_currency_of_account(c, account_id)
     seen: dict = {}
     inserted = skipped = 0
     for r in rows:
-        h = tx_hash(account_id, r["date"], r["amount"], r["description"])
+        named = normalize(r.get("currency"), "")
+        currency = named if is_known(named) else held
+        h = tx_hash(account_id, r["date"], r["amount"], r["description"], currency)
         n_batch = seen.get(h, 0)
         seen[h] = n_batch + 1
         if n_batch < existing.get(h, 0):
@@ -125,6 +137,8 @@ def commit_rows(c, account_id, rows, source, batch_id=None):
             (
                 r["date"],
                 r["amount"],
+                currency,
+                to_base(c, r["amount"], currency, base, r["date"]),
                 r.get("description", ""),
                 r.get("bank_category", ""),
                 r.get("mcc", ""),

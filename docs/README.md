@@ -14,6 +14,7 @@ end, so there is no floating-point rounding anywhere.
 - [Budgeting](budgeting.md) — the envelope model, how the math works, using the grid.
 - [Transactions](transactions.md) — the ledger, filters, categorization, manual edits.
 - [Accounts & transfers](accounts.md) — multiple accounts, transfers, reconcile.
+- [Currencies](currencies.md) — per-transaction currency, the reporting currency, exchange rates.
 - [Importing statements](importing.md) — the statement format, auto-categorization, dedup.
 - [Migrating from a spreadsheet](migration.md) — one-shot import of a YNAB-style workbook.
 - [Dashboard & analytics](dashboard-analytics.md) — charts and the annual report.

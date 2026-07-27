@@ -1,3 +1,4 @@
+import { reported } from "./reported.js";
 import { isTransfer } from "./transfers.js";
 
 /**
@@ -39,8 +40,8 @@ export function monthlySeries(snapshot) {
         const key = t.date.slice(0, 7);
         let e = map.get(key);
         if (!e) map.set(key, (e = { income: 0, expense: 0 }));
-        if (incomeIds.has(cat.groupId)) e.income += t.amount;
-        else e.expense += -t.amount;
+        if (incomeIds.has(cat.groupId)) e.income += reported(t);
+        else e.expense += -reported(t);
     }
     return [...map.entries()].sort(([a], [b]) => a.localeCompare(b));
 }
@@ -76,12 +77,12 @@ export function weekdayProfile(snapshot, year) {
     const catById = new Map(snapshot.categories.map((c) => [c.id, c]));
     const sums = Array(7).fill(0);
     for (const t of snapshot.transactions) {
-        if (!t.date.startsWith(year) || t.categoryId == null || t.amount >= 0) continue;
+        if (!t.date.startsWith(year) || t.categoryId == null || reported(t) >= 0) continue;
         if (isTransfer(t)) continue;
         const cat = catById.get(t.categoryId);
         if (!cat || incomeIds.has(cat.groupId)) continue;
         const dow = (new Date(t.date).getDay() + 6) % 7; // 0 = Monday
-        sums[dow] += -t.amount;
+        sums[dow] += -reported(t);
     }
     return sums;
 }
@@ -92,11 +93,11 @@ export function dayOfMonthProfile(snapshot, year) {
     const catById = new Map(snapshot.categories.map((c) => [c.id, c]));
     const sums = Array(31).fill(0);
     for (const t of snapshot.transactions) {
-        if (!t.date.startsWith(year) || t.categoryId == null || t.amount >= 0) continue;
+        if (!t.date.startsWith(year) || t.categoryId == null || reported(t) >= 0) continue;
         if (isTransfer(t)) continue;
         const cat = catById.get(t.categoryId);
         if (!cat || incomeIds.has(cat.groupId)) continue;
-        sums[+t.date.slice(8, 10) - 1] += -t.amount;
+        sums[+t.date.slice(8, 10) - 1] += -reported(t);
     }
     return sums;
 }
@@ -133,7 +134,7 @@ export function categoryYearMatrix(snapshot, year, { limit = 8, kind = "expense"
             };
             rows.set(cat.id, row);
         }
-        const v = kind === "income" ? t.amount : -t.amount;
+        const v = kind === "income" ? reported(t) : -reported(t);
         row.monthly[+t.date.slice(5, 7) - 1] += v;
         row.total += v;
     }
@@ -166,7 +167,7 @@ export function categoryTotals(snapshot, { kind = "expense" } = {}) {
             row = { id: cat.id, groupId: cat.groupId, name: cat.name, total: 0 };
             rows.set(cat.id, row);
         }
-        row.total += kind === "income" ? t.amount : -t.amount;
+        row.total += kind === "income" ? reported(t) : -reported(t);
     }
     return [...rows.values()]
         .filter((r) => r.total > 0)
@@ -192,14 +193,14 @@ export function topMerchants(snapshot, year, limit = 10) {
     const catById = new Map(snapshot.categories.map((c) => [c.id, c]));
     const sums = new Map();
     for (const t of snapshot.transactions) {
-        if (!t.date.startsWith(year) || t.categoryId == null || t.amount >= 0) continue;
+        if (!t.date.startsWith(year) || t.categoryId == null || reported(t) >= 0) continue;
         if (isTransfer(t)) continue;
         const cat = catById.get(t.categoryId);
         if (!cat || incomeIds.has(cat.groupId)) continue;
         const key = merchantKey(t.description) || "(no description)";
         let e = sums.get(key);
         if (!e) sums.set(key, (e = { total: 0, count: 0 }));
-        e.total += -t.amount;
+        e.total += -reported(t);
         e.count += 1;
     }
     return [...sums.entries()]
@@ -218,12 +219,12 @@ export function txStats(snapshot, year) {
     const amounts = [];
     let largest = null;
     for (const t of snapshot.transactions) {
-        if (!t.date.startsWith(year) || t.amount >= 0) continue;
+        if (!t.date.startsWith(year) || reported(t) >= 0) continue;
         if (isTransfer(t)) continue; // moving money is not spending
         if (t.categoryId == null) continue;
         const cat = catById.get(t.categoryId);
         if (!cat || incomeIds.has(cat.groupId)) continue;
-        const v = -t.amount;
+        const v = -reported(t);
         amounts.push(v);
         if (!largest || v > largest.amount)
             largest = { amount: v, description: t.description, date: t.date };
@@ -242,13 +243,14 @@ export function incomeStats(snapshot, year) {
     const amounts = [];
     let largest = null;
     for (const t of snapshot.transactions) {
-        if (!t.date.startsWith(year) || t.amount <= 0 || t.categoryId == null) continue;
+        if (!t.date.startsWith(year) || reported(t) <= 0 || t.categoryId == null) continue;
         if (isTransfer(t)) continue;
         const cat = catById.get(t.categoryId);
         if (!cat || !incomeIds.has(cat.groupId)) continue;
-        amounts.push(t.amount);
-        if (!largest || t.amount > largest.amount)
-            largest = { amount: t.amount, description: t.description, date: t.date };
+        const value = reported(t);
+        amounts.push(value);
+        if (!largest || value > largest.amount)
+            largest = { amount: value, description: t.description, date: t.date };
     }
     amounts.sort((a, b) => a - b);
     const median = amounts.length ? amounts[Math.floor(amounts.length / 2)] : 0;

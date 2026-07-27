@@ -97,7 +97,9 @@ export default function TransferSuggestions({ onClose }) {
                                 <span>{acctName.get(out.accountId) ?? "—"}</span>
                                 <span aria-label="to">→</span>
                                 <span>{acctName.get(inLeg.accountId) ?? "—"}</span>
-                                <span className="money num">{money(pair.amount)}</span>
+                                <span className="money num">
+                                    {money(pair.amount, pair.currency)}
+                                </span>
                             </div>
                             <Txt caption>
                                 {fmtDate(out.date)} → {fmtDate(inLeg.date)} ·{" "}

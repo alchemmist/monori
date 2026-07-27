@@ -29,6 +29,8 @@ are public.
   `no account is registered for this email` vs `incorrect password`, so the
   sign-in form can point at it. This trades away enumeration resistance — the
   endpoint confirms which addresses are registered.
+- **`PATCH /api/auth/me`** — body `{baseCurrency}` changes the reporting
+  currency (see [Currencies](currencies.md)).
 - **`GET /api/auth/me`** — with `Authorization: Bearer <access_token>`, returns
   the current user; `401` if the token is missing, malformed, or expired.
 
@@ -70,15 +72,27 @@ Returns the entire state in one call — the frontend loads this on startup.
   ],
   "transactions": [
     { "id": 1, "date": "2026-01-05T00:00:00", "amount": -150000,
+      "currency": "RUB", "baseAmount": -150000,
       "description": "LANDLORD", "bankCategory": "Housing", "mcc": "6513",
       "categoryId": 1, "accountId": 1, "transferId": null, "comment": "",
       "source": "import" }
   ],
   "budgets": [{ "categoryId": 1, "year": 2026, "month": 1, "amount": 150000 }],
   "transfers": [],
-  "transactionsTotal": 1
+  "transactionsTotal": 1,
+  "baseCurrency": "RUB",
+  "rates": [
+    { "code": "RUB", "rate": 1.0, "day": "2026-07-25", "source": "pivot", "stale": false },
+    { "code": "GEL", "rate": 30.4, "day": "2026-07-25", "source": "cbr", "stale": false }
+  ]
 }
 ```
+
+`amount` is in `currency`; `baseAmount` is the same money in `baseCurrency`, at
+the rate for the transaction's date. Only `baseAmount` may be summed across
+accounts. `rates` are rubles per unit, enough for a client to convert the money
+that has no transaction behind it (opening balances). See
+[Currencies](currencies.md).
 
 Query parameters:
 
@@ -96,8 +110,10 @@ canonical order.
 ## Accounts
 
 Where transactions live: cards, cash, savings. `type` is one of `card`, `cash`,
-`savings`, `other`. `currency` is a label only (monori is single-currency for
-now). An account's balance is `openingBalance` plus the sum of its transactions.
+`savings`, `other`. `currency` is what money on the account is held in: new
+transactions inherit it, and the balance is reported in it. An account's balance
+is `openingBalance` plus the sum of its transactions. An unknown currency code
+gives `400`.
 
 | Method | Path | Body | Notes |
 | -------- | ------ | ------ | ------- |
@@ -119,7 +135,7 @@ are uncategorized while merged, so transfers never count as income or expense.
 | Method | Path | Body | Notes |
 | -------- | ------ | ------ | ------- |
 | GET | `/api/transfers` | — | `{rows: [{id, outTxId, inTxId, origin, note, createdAt}]}`. `origin` is `manual` (created here or by the dialog) or `matched` (found by detection). |
-| POST | `/api/transfers` | `{fromAccountId, toAccountId, amount, date, comment?}` | Creates both legs and merges them. `amount` must be positive; the two accounts must differ. Returns `{transferId}`. |
+| POST | `/api/transfers` | `{fromAccountId, toAccountId, amount, toAmount?, date, comment?}` | Creates both legs and merges them. `amount` must be positive; the two accounts must differ. Each leg is denominated in its own account's currency; when those differ, `toAmount` says what actually arrived, and without it the day's rate decides. Returns `{transferId}`. |
 | POST | `/api/transfers/link` | `{outTxId, inTxId, note?}` | Merges a pair already in the ledger. `400` unless the legs are one outflow and one inflow on two different accounts, neither already in a transfer. The amounts need not match — the caller is the user, who knows about fees. Returns `{transferId}`. |
 | DELETE | `/api/transfers/{transferId}` | — | **Splits** the transfer: both transactions stay and get their pre-merge categories back. Deleting the money means deleting the two rows afterwards. `404` if unknown. |
 | GET | `/api/transfers/suggestions` | `?maxDays=5` | Pairs detection found but would not merge unasked: `{rows: [{outTxId, inTxId, amount, days, hint}], transactions: [...]}`. |
@@ -129,7 +145,7 @@ are uncategorized while merged, so transfers never count as income or expense.
 ### How a pair is detected
 
 A candidate is an outflow and an inflow that sit on two different accounts of
-the same user, have **exactly** opposite amounts, fall within `maxDays` of each
+the same user, have **exactly** opposite amounts in the same currency, fall within `maxDays` of each
 other, are both unattached, and have not been dismissed. Candidates are matched
 greedily closest-first, and each transaction is used at most once, so the result
 does not depend on row order. Pairs a day or less apart are merged outright;
@@ -184,12 +200,27 @@ newest-first (`date DESC, id DESC`).
 
 | Method | Path | Body | Notes |
 | -------- | ------ | ------ | ------- |
-| POST | `/api/transactions` | `{date, amount, accountId, description?, bankCategory?, mcc?, categoryId?, comment?}` | Creates with `source: "manual"`; hash computed server-side. `accountId` is required and must exist. `categoryId` of `0`/`null` means uncategorized; a non-existent id gives `400`. |
-| PATCH | `/api/transactions/{id}` | any subset of the create fields (`accountId` moves the row to another account) | Recomputes the dedup hash from the resulting date/amount/description. |
+| POST | `/api/transactions` | `{date, amount, accountId, currency?, description?, bankCategory?, mcc?, categoryId?, comment?}` | Creates with `source: "manual"`; hash and `baseAmount` computed server-side. `accountId` is required and must exist. `currency` defaults to the account's; an unknown code gives `400`. `categoryId` of `0`/`null` means uncategorized; a non-existent id gives `400`. |
+| PATCH | `/api/transactions/{id}` | any subset of the create fields (`accountId` moves the row to another account) | Recomputes the dedup hash and `baseAmount`. Moving a row to another account does **not** re-denominate it — pass `currency` to change that deliberately. |
 | DELETE | `/api/transactions/{id}` | — | `404` if missing. |
 | POST | `/api/transactions/bulk` | `{action, ids, categoryId?}` | `action` is `categorize`, `move`, or `delete`. Returns `{affected}`. |
 
 `categorize` and `move` are equivalent — both set `categoryId` on every id.
+
+## Currencies and rates
+
+Rates are quoted in **rubles per unit** and stored per day, so any conversion is
+two lookups. Reading them needs only a session; **writing them needs admin
+rights** — the table has no owner column, so one hand-set rate moves every
+user's totals. Every write reprices every ledger before answering and reports
+how many rows moved. See [Currencies](currencies.md).
+
+| Method | Path | Body | Notes |
+| -------- | ------ | ------ | ------- |
+| GET | `/api/rates` | `?day=YYYY-MM-DD` (`400` if not an ISO date) | `{day, baseCurrency, currencies: [{code, name, symbol, minorUnits}], rates: [{code, rate, day, source, stale}]}`. `day` on a rate is when it was actually published; `stale` says it is older than the day asked for. `source` is `pivot`, `cbr`, `manual` or `bundled`. |
+| POST | `/api/rates/refresh` | `?days=0` | **Admin.** Fetches today from the Bank of Russia, plus the last `days` (0–90) of any days with nothing stored. Returns `{stored, days, repriced}`. `502` if the feed is unreachable. |
+| PUT | `/api/rates/{code}` | `{rubPerUnit, day?}` | **Admin.** Sets a rate by hand for `day` (today by default). `400` for an unknown code, a non-ISO `day`, or for `RUB`, which is the pivot and is always 1. Returns `{code, day, repriced}`. |
+| PATCH | `/api/auth/me` | `{baseCurrency?}` | Changes the reporting currency and reprices every transaction at the rate for its own date. Returns `{user, repriced}`. `400` for an unknown code. |
 
 ## Budgets
 

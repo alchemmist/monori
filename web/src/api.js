@@ -117,6 +117,21 @@ export const api = {
             body: JSON.stringify(body),
         }).then(json),
     detectTransfers: () => apiFetch("/api/transfers/detect", { method: "POST" }).then(json),
+    rates: (day) => apiFetch(`/api/rates${day ? `?day=${day}` : ""}`).then(json),
+    refreshRates: (days = 0) =>
+        apiFetch(`/api/rates/refresh?days=${days}`, { method: "POST" }).then(json),
+    setRate: (code, body) =>
+        apiFetch(`/api/rates/${code}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+        }).then(json),
+    patchMe: (patch) =>
+        apiFetch("/api/auth/me", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(patch),
+        }).then(json),
     createCategory: (body) =>
         apiFetch("/api/categories", {
             method: "POST",

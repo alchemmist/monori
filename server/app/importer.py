@@ -13,6 +13,8 @@ import hashlib
 import re
 from datetime import datetime
 
+from .currencies import DEFAULT_CURRENCY, normalize
+
 COLUMNS = [
     "op_date",
     "pay_date",
@@ -59,21 +61,28 @@ def parse_amount_kop(raw):
         return None
 
 
-def tx_hash(account_id, date_iso, amount_kop, description):
+def tx_hash(account_id, date_iso, amount_kop, description, currency=DEFAULT_CURRENCY):
     """
     Dedup key of a transaction. Always scoped to the account: the same
     date/amount/description legitimately occurs on two different accounts
-    (transfer legs, mirrored cards) and must not collide.
+    (transfer legs, mirrored cards) and must not collide. The currency is part
+    of the key for the same reason — 100 lari and 100 rubles are different money,
+    and on a card billed in both neither may swallow the other.
     """
+    code = normalize(currency)
     return hashlib.sha256(
-        f"{account_id}|{date_iso}|{amount_kop}|{description}".encode()
+        f"{account_id}|{date_iso}|{amount_kop}|{code}|{description}".encode()
     ).hexdigest()
 
 
 def parse_statement(text):
     """
-    Returns (rows, errors). Each row: dict with date (ISO), amount (kopecks),
-    description, bank_category, mcc. Accepts both pasted statement rows and a
+    Returns (rows, errors). Each row: dict with date (ISO), amount (minor
+    units), currency, description, bank_category, mcc. The amount and the
+    currency are read as the pair the bank prints them as — the settlement
+    column, not the one the merchant charged in.
+
+    Accepts both pasted statement rows and a
     full bank CSV export — a header row is skipped, not reported. Hashes are
     not computed here — the account is not known yet; ingestion derives the
     account-scoped hash on insert.
@@ -108,6 +117,7 @@ def parse_statement(text):
                 "bank_category": rec["bank_category"],
                 "mcc": rec["mcc"],
                 "card": rec["card"],
+                "currency": normalize(rec["currency"], ""),
             }
         )
     return rows, errors

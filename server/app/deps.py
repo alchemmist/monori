@@ -1,4 +1,6 @@
 from . import db as dbmod
+from .money import base_currency
+from .rates import rate_table
 from .transfer_service import list_transfers
 
 
@@ -45,6 +47,8 @@ def serialize_tx(r):
         "id": r["id"],
         "date": r["date"],
         "amount": r["amount"],
+        "currency": r["currency"],
+        "baseAmount": r["base_amount"],
         "description": r["description"],
         "bankCategory": r["bank_category"],
         "mcc": r["mcc"],
@@ -67,6 +71,7 @@ def serialize_user(r):
         "createdAt": r["created_at"],
         "isAdmin": bool(r["is_admin"]),
         "lastLogin": r["last_login"],
+        "baseCurrency": r["base_currency"],
         "defaultAccountId": r["default_account_id"],
     }
 
@@ -100,7 +105,8 @@ def serialize_budget(r):
 LIGHT_SNAPSHOT_TX_LIMIT = 500
 
 TX_COLUMNS = (
-    "SELECT t.id, t.date, t.amount, t.description, t.bank_category, t.mcc,"
+    "SELECT t.id, t.date, t.amount, t.currency, t.base_amount, t.description,"
+    " t.bank_category, t.mcc,"
     " t.category_id, t.account_id, t.transfer_id, t.comment, t.source, t.hidden"
     " FROM transactions t JOIN accounts a ON a.id = t.account_id"
     " WHERE a.user_id=? AND t.hidden = 0"
@@ -133,6 +139,11 @@ def snapshot(c, user_id, tx_limit=None):
         ).fetchone()[0]
     )
     return {
+        # the reporting currency and the rates in force travel with the data:
+        # the client converts opening balances and labels amounts, and a second
+        # round trip for twelve numbers would be a waste
+        "baseCurrency": base_currency(c, user_id),
+        "rates": rate_table(c),
         "accounts": [
             serialize_account(r)
             for r in cur.execute(

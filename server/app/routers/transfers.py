@@ -7,6 +7,8 @@ from pydantic import BaseModel, Field
 from ..auth import current_user
 from ..deps import conn, serialize_tx
 from ..importer import tx_hash
+from ..money import account_currency, base_currency, to_base
+from ..rates import RateUnavailable, convert
 from ..transfer_match import AUTO_DAYS, SUGGEST_DAYS, split_confident
 from ..transfer_service import LinkError, candidates, detect, list_transfers, reject
 from ..transfer_service import link as link_pair
@@ -24,6 +26,9 @@ class TransferBody(BaseModel):
     fromAccountId: int
     toAccountId: int
     amount: int = Field(gt=0)
+    # what actually landed, in the destination account's currency. Only means
+    # anything when the two accounts differ; left out, the day's rate decides.
+    toAmount: int | None = Field(default=None, gt=0)
     date: str
     comment: str = ""
 
@@ -80,6 +85,11 @@ def create_transfer(body: TransferBody, user: Annotated[dict, Depends(current_us
     A transfer is two linked transactions: a negative row on the source account
     and a positive row on the destination, merged into one ``transfers`` entity.
     Both legs stay uncategorized, so they never count as income or expense.
+
+    Each leg is denominated in its own account's currency. Across currencies the
+    two magnitudes differ, and what arrived is the caller's to state — a bank
+    converts at its own rate, not the central bank's — so ``toAmount`` wins over
+    the rate whenever it is given.
     """
     uid = user["id"]
     if body.fromAccountId == body.toAccountId:
@@ -90,23 +100,37 @@ def create_transfer(body: TransferBody, user: Annotated[dict, Depends(current_us
             c, body.toAccountId, uid
         ):
             raise HTTPException(400, "unknown account")
+        out_currency = account_currency(c, body.fromAccountId)
+        in_currency = account_currency(c, body.toAccountId)
+        if body.toAmount is not None and out_currency == in_currency:
+            # within one currency the money that left is the money that arrived;
+            # a second figure could only ever make the two legs disagree
+            raise HTTPException(400, "toAmount only applies between two currencies")
+        try:
+            landed = body.toAmount or convert(c, body.amount, out_currency, in_currency, body.date)
+        except RateUnavailable as e:
+            raise HTTPException(400, f"{e}; state the amount that arrived") from e
+        base = base_currency(c, uid)
         description = "Transfer"
         legs = []
-        for account_id, amount in (
-            (body.fromAccountId, -body.amount),
-            (body.toAccountId, body.amount),
+        for account_id, amount, currency in (
+            (body.fromAccountId, -body.amount, out_currency),
+            (body.toAccountId, landed, in_currency),
         ):
             cur = c.execute(
                 """INSERT INTO transactions
-                   (date, amount, description, account_id, comment, hash, source)
-                   VALUES (?, ?, ?, ?, ?, ?, 'transfer')""",
+                   (date, amount, currency, base_amount, description, account_id,
+                    comment, hash, source)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'transfer')""",
                 (
                     body.date,
                     amount,
+                    currency,
+                    to_base(c, amount, currency, base, body.date),
                     description,
                     account_id,
                     body.comment,
-                    tx_hash(account_id, body.date, amount, description),
+                    tx_hash(account_id, body.date, amount, description, currency),
                 ),
             )
             legs.append(cur.lastrowid)

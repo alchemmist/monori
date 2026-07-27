@@ -22,7 +22,15 @@ def test_day_number_counts_calendar_days():
 def test_pairs_opposite_amounts_on_different_accounts():
     pairs = find_pairs([row(1, 10, -5000, 1), row(2, 10, 5000, 2)])
     assert pairs == [
-        {"outTxId": 1, "inTxId": 2, "amount": 5000, "days": 0, "hint": False, "mismatch": False}
+        {
+            "outTxId": 1,
+            "inTxId": 2,
+            "amount": 5000,
+            "currency": "RUB",
+            "days": 0,
+            "hint": False,
+            "mismatch": False,
+        }
     ]
 
 

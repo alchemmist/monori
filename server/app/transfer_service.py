@@ -13,7 +13,7 @@ from datetime import UTC, datetime
 from .transfer_match import AUTO_DAYS, SUGGEST_DAYS, find_pairs, split_confident
 
 LINKABLE_COLUMNS = (
-    "SELECT t.id, t.date, t.amount, t.description, t.account_id, t.transfer_id"
+    "SELECT t.id, t.date, t.amount, t.currency, t.description, t.account_id, t.transfer_id"
     " FROM transactions t JOIN accounts a ON a.id = t.account_id"
     " WHERE a.user_id=? AND t.transfer_id IS NULL"
     # a reconcile adjustment is bookkeeping, not money moving between accounts

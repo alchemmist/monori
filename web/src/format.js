@@ -1,3 +1,5 @@
+import { DEFAULT_CURRENCY, currencySymbol } from "./currencies.js";
+
 export const MONTHS = [
     "January",
     "February",
@@ -27,9 +29,10 @@ export function rubExact(kop) {
     return nf2.format(kop / 100);
 }
 
-/** kopecks -> "12 345 ₽" */
-export function money(kop) {
-    return `${rub(kop)} ₽`;
+/** minor units + a currency -> "12 345 ₽"; the code defaults to the reporting
+ * currency, which is what an aggregate is always expressed in */
+export function money(kop, currency = DEFAULT_CURRENCY) {
+    return `${rub(kop)} ${currencySymbol(currency)}`;
 }
 
 /** compact: 1234500 kop -> "12.3k", for chart axes */

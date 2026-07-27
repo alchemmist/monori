@@ -251,8 +251,8 @@ export function AccountEditTab({ account, onClose }) {
                 />
                 <Txt tone="secondary" caption>
                     The running balance is the opening balance plus every transaction on this
-                    account. Currency is a label for now — all amounts are treated as a single
-                    currency.
+                    account, in the account&apos;s own currency. New transactions here are recorded
+                    in it; the ones already filed keep whatever they were spent in.
                 </Txt>
             </div>
         </Tab>
@@ -326,7 +326,7 @@ export function AccountReconcileDialog({ account, balance, onClose }) {
                 title:
                     res.delta === 0
                         ? "Already reconciled"
-                        : `Adjustment of ${money(res.delta)} posted`,
+                        : `Adjustment of ${money(res.delta, account.currency)} posted`,
                 theme: "success",
             });
             onClose();
@@ -348,7 +348,7 @@ export function AccountReconcileDialog({ account, balance, onClose }) {
             <div style={{ display: "flex", flexDirection: "column", gap: 12, paddingTop: 4 }}>
                 <div style={{ display: "flex", justifyContent: "space-between" }}>
                     <Txt tone="secondary">Computed balance</Txt>
-                    <span className="num">{money(balance)}</span>
+                    <span className="num">{money(balance, account.currency)}</span>
                 </div>
                 <FAmountInput
                     label="Actual bank balance"
@@ -358,8 +358,8 @@ export function AccountReconcileDialog({ account, balance, onClose }) {
                 />
                 {delta != null && delta !== 0 && (
                     <Txt tone="secondary" caption>
-                        An adjustment of {money(delta)} will be posted so the account matches your
-                        bank.
+                        An adjustment of {money(delta, account.currency)} will be posted so the
+                        account matches your bank.
                     </Txt>
                 )}
             </div>

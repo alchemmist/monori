@@ -118,7 +118,7 @@ def user_detail(uid: int, admin: Annotated[dict, Depends(admin_user)]):
     c = conn()
     try:
         row = c.execute(
-            "SELECT id, email, created_at, is_admin, last_login, default_account_id"
+            "SELECT id, email, created_at, is_admin, last_login, base_currency, default_account_id"
             " FROM users WHERE id=?",
             (uid,),
         ).fetchone()
