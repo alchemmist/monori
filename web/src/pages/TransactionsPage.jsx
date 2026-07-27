@@ -206,26 +206,14 @@ export default function TransactionsPage() {
         return [min, max];
     }, [amountSourceRows]);
 
-    useEffect(() => {
-        setAmountRange((previous) => {
-            if (!amountBounds) return null;
-            if (!previous) return amountBounds;
-            // If the old selection no longer overlaps the newly filtered data,
-            // reset it to the complete dynamic range; otherwise preserve it.
-            if (previous[1] < amountBounds[0] || previous[0] > amountBounds[1])
-                return amountBounds;
-            const next = [
-                Math.max(previous[0], amountBounds[0]),
-                Math.min(previous[1], amountBounds[1]),
-            ];
-            return next[0] <= next[1] ? next : amountBounds;
-        });
-    }, [amountBounds]);
-
+    // An untouched slider means "no amount filter", not "the range as it looked
+    // when the page loaded" — pinning the selection to the bounds would hide
+    // every row that later moves outside them: a transaction just unhidden by
+    // the toggle, or one whose amount was edited in place.
     const effectiveAmountRange = useMemo(() => {
-        if (!amountBounds || !amountRange) return amountBounds;
-        if (amountRange[1] < amountBounds[0] || amountRange[0] > amountBounds[1])
-            return amountBounds;
+        if (!amountBounds || !amountRange) return null;
+        // a selection that no longer overlaps the filtered data stops filtering
+        if (amountRange[1] < amountBounds[0] || amountRange[0] > amountBounds[1]) return null;
         return [
             Math.max(amountRange[0], amountBounds[0]),
             Math.min(amountRange[1], amountBounds[1]),
@@ -529,9 +517,8 @@ export default function TransactionsPage() {
                         <div className="tx-amount-filter__head">
                             <span>Amount</span>
                             <span className="tx-amount-filter__value">
-                                {money(effectiveAmountRange?.[0] ?? amountBounds[0])} – {money(
-                                    effectiveAmountRange?.[1] ?? amountBounds[1],
-                                )}
+                                {money(effectiveAmountRange?.[0] ?? amountBounds[0])} –{" "}
+                                {money(effectiveAmountRange?.[1] ?? amountBounds[1])}
                             </span>
                         </div>
                         <RangeSlider

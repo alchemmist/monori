@@ -220,3 +220,31 @@ test("the add-transaction tab records rows one after another without closing", a
         ["MANUAL TWO", -5000],
     ]);
 });
+
+test("the amount slider filters only once it is dragged", async ({ page, user }) => {
+    const snap = await user.api.snapshot();
+    const accountId = snap.accounts[0].id;
+    await user.api.addTransaction({ accountId, amount: -1000, description: "TINY ROW" });
+    await user.api.addTransaction({ accountId, amount: -90000, description: "BIG ROW" });
+
+    await openApp(page, user);
+    await gotoSection(page, "Transactions");
+
+    // untouched, the slider filters nothing — both ends of the ledger are here
+    const tiny = page.locator(".tx-grid .cat-row", { hasText: "TINY ROW" });
+    const big = page.locator(".tx-grid .cat-row", { hasText: "BIG ROW" });
+    await expect(tiny).toBeVisible();
+    await expect(big).toBeVisible();
+
+    // drag the lower handle to the middle of the track: the small row drops out
+    const lower = page.getByRole("slider").first();
+    const from = await lower.boundingBox();
+    const track = await page.locator(".tx-amount-filter").boundingBox();
+    await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(track.x + track.width / 2, from.y + from.height / 2, { steps: 10 });
+    await page.mouse.up();
+
+    await expect(tiny).toHaveCount(0);
+    await expect(big).toBeVisible();
+});
