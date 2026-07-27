@@ -3,6 +3,7 @@ import { BarChart, LineChart } from "@mantine/charts";
 import { Rectangle } from "recharts";
 import InlineSelect from "../ui/InlineSelect.jsx";
 import { ChartBoundary } from "../components/ChartCard.jsx";
+import { MoneyChartTooltip } from "../components/ChartTooltip.jsx";
 import { useStore } from "../store.js";
 import { rub, money, fmtDate, MONTHS_SHORT } from "../format.js";
 import {
@@ -285,6 +286,7 @@ export default function AnalyticsPage({ results, firstYear, lastYear }) {
                                         : {}
                                 }
                                 {...cartesian}
+                                tooltipProps={{ content: MoneyChartTooltip }}
                             />
                         </ChartBoundary>
                     </div>
@@ -313,6 +315,7 @@ export default function AnalyticsPage({ results, firstYear, lastYear }) {
                                         type="stacked"
                                         withLegend
                                         {...cartesian}
+                                        tooltipProps={{ content: MoneyChartTooltip }}
                                     />
                                 ) : (
                                     <LineChart
@@ -324,6 +327,7 @@ export default function AnalyticsPage({ results, firstYear, lastYear }) {
                                         connectNulls={false}
                                         withLegend
                                         {...cartesian}
+                                        tooltipProps={{ content: MoneyChartTooltip }}
                                     />
                                 )}
                             </ChartBoundary>
@@ -363,6 +367,7 @@ export default function AnalyticsPage({ results, firstYear, lastYear }) {
                                         type="stacked"
                                         withLegend
                                         {...cartesian}
+                                        tooltipProps={{ content: MoneyChartTooltip }}
                                     />
                                 ) : (
                                     <LineChart
@@ -374,6 +379,7 @@ export default function AnalyticsPage({ results, firstYear, lastYear }) {
                                         connectNulls={false}
                                         withLegend
                                         {...cartesian}
+                                        tooltipProps={{ content: MoneyChartTooltip }}
                                     />
                                 )}
                             </ChartBoundary>
@@ -427,6 +433,7 @@ export default function AnalyticsPage({ results, firstYear, lastYear }) {
                                     strokeWidth: s.name === yoy.current ? 2 : 1.5,
                                 })}
                                 {...cartesian}
+                                tooltipProps={{ content: MoneyChartTooltip }}
                             />
                         </ChartBoundary>
                     </div>
@@ -449,6 +456,7 @@ export default function AnalyticsPage({ results, firstYear, lastYear }) {
                                     strokeWidth: s.name === incomeYoy.current ? 2 : 1.5,
                                 })}
                                 {...cartesian}
+                                tooltipProps={{ content: MoneyChartTooltip }}
                             />
                         </ChartBoundary>
                     </div>
@@ -538,6 +546,7 @@ export default function AnalyticsPage({ results, firstYear, lastYear }) {
                                 series={[{ name: "Spent", color: PALETTE[0] }]}
                                 gridAxis="x"
                                 {...cartesian}
+                                tooltipProps={{ content: MoneyChartTooltip }}
                             />
                         </ChartBoundary>
                     </div>
@@ -562,6 +571,7 @@ export default function AnalyticsPage({ results, firstYear, lastYear }) {
                                         interval: 0,
                                         tick: <MerchantTick />,
                                     }}
+                                    tooltipProps={{ content: MoneyChartTooltip }}
                                 />
                             </ChartBoundary>
                         ) : (
