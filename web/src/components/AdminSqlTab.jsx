@@ -180,6 +180,9 @@ export default function AdminSqlTab({ onClose }) {
                                                     className={
                                                         typeof v === "number" ? "num" : undefined
                                                     }
+                                                    // cells are clipped to keep columns readable,
+                                                    // so the full value lives in the tooltip
+                                                    title={v === null ? "NULL" : String(v)}
                                                 >
                                                     {v === null ? (
                                                         <span className="admin-muted">NULL</span>
@@ -208,9 +211,11 @@ export default function AdminSqlTab({ onClose }) {
             )}
 
             {history.length > 0 && (
-                <>
-                    <div className="admin-detail__title">History</div>
-                    <ul className="sql-console__history">
+                // folded away by default: the log grows fast and the results are
+                // what the console is for
+                <details className="sql-console__history">
+                    <summary>History · {history.length}</summary>
+                    <ul>
                         {history.map((h, i) => (
                             <li key={i}>
                                 <button type="button" onClick={() => setSql(h)} title={h}>
@@ -219,7 +224,7 @@ export default function AdminSqlTab({ onClose }) {
                             </li>
                         ))}
                     </ul>
-                </>
+                </details>
             )}
         </Tab>
     );
