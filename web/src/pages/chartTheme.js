@@ -31,6 +31,12 @@ export const SERIES = {
 // number formatter for axis ticks and tooltip values (data is already in rubles)
 export const fmtNum = (v) => (v == null ? "" : Math.round(v).toLocaleString("ru-RU"));
 
+export const chartMoneyUnit = "\u00a0₽";
+
+export const chartMoney = (value) => `${fmtNum(value)}${chartMoneyUnit}`;
+
+export const trendUnit = (seriesName) => (seriesName === "Savings rate %" ? "%" : chartMoneyUnit);
+
 // shared props for every cartesian Mantine chart (Bar/Line/Area/Composite). The
 // grid/axis-text colors are set in CSS via --chart-grid-color/--chart-text-color
 // (see dashboard.css) rather than props: CompositeChart leaks those two props to

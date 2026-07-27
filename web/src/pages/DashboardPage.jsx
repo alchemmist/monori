@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { AreaChart, BarChart, CompositeChart, DonutChart } from "@mantine/charts";
 import { ChartBoundary } from "../components/ChartCard.jsx";
+import { MoneyChartTooltip, TrendChartTooltip } from "../components/ChartTooltip.jsx";
 import TimeNavigator from "../components/TimeNavigator.jsx";
 import { Button } from "@mantine/core";
 import InlineSelect from "../ui/InlineSelect.jsx";
@@ -8,7 +9,7 @@ import { useStore } from "../store.js";
 import { accountBalances, categoryTotals, categoryYearMatrix } from "../engine/analytics.js";
 import AccountBadge from "../components/AccountBadge.jsx";
 import { rub, money, MONTHS_SHORT } from "../format.js";
-import { PALETTE, SERIES, cartesian } from "./chartTheme.js";
+import { PALETTE, SERIES, cartesian, chartMoney } from "./chartTheme.js";
 import "./dashboard.css";
 
 const PRESETS = [
@@ -396,6 +397,7 @@ export default function DashboardPage({ firstYear, lastYear }) {
                                 withRightYAxis
                                 rightYAxisProps={{ tickFormatter: (v) => `${v}%` }}
                                 xAxisProps={{ tickFormatter: fmtMonthTick, minTickGap: 24 }}
+                                tooltipProps={{ content: TrendChartTooltip }}
                                 {...cartesian}
                             />
                         </ChartBoundary>
@@ -501,6 +503,7 @@ export default function DashboardPage({ firstYear, lastYear }) {
                                     series={[
                                         { name: "Spent", label: drillName, color: SERIES.accent },
                                     ]}
+                                    tooltipProps={{ content: MoneyChartTooltip }}
                                     {...cartesian}
                                 />
                             </ChartBoundary>
@@ -534,6 +537,7 @@ export default function DashboardPage({ firstYear, lastYear }) {
                                 fillOpacity={0.25}
                                 strokeWidth={2}
                                 xAxisProps={{ tickFormatter: fmtMonthTick, minTickGap: 24 }}
+                                tooltipProps={{ content: MoneyChartTooltip }}
                                 {...cartesian}
                             />
                         </ChartBoundary>
@@ -559,6 +563,7 @@ export default function DashboardPage({ firstYear, lastYear }) {
                                 dataKey="month"
                                 series={groupStack.series}
                                 withLegend
+                                tooltipProps={{ content: MoneyChartTooltip }}
                                 {...cartesian}
                             />
                         </ChartBoundary>
@@ -581,7 +586,7 @@ function CategoryDonut({ data, active, setActive }) {
                     paddingAngle={0}
                     strokeWidth={0}
                     tooltipDataSource="segment"
-                    valueFormatter={(v) => `${v.toLocaleString("ru-RU")} ₽`}
+                    valueFormatter={chartMoney}
                     cellProps={(cell) => ({
                         opacity: active && cell.name !== active ? 0.3 : 1,
                         style: { transition: "opacity 120ms" },
