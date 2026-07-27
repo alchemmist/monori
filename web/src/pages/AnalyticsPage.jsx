@@ -82,8 +82,9 @@ const truncateMid = (s, max = 24) => {
 // A foreignObject gives the label a real CSS width. SVG text can paint outside its
 // axis even when Recharts reserves a fixed width, which lets wide Cyrillic names
 // escape the card and overlap the sidebar.
-function MerchantTick({ x, y, payload }) {
-    const full = String(payload.value);
+function MerchantTick({ x, y, payload, titles }) {
+    const value = String(payload.value);
+    const full = titles.get(value) ?? value;
     return (
         <foreignObject
             x={x - MERCHANT_AXIS_WIDTH}
@@ -92,7 +93,7 @@ function MerchantTick({ x, y, payload }) {
             height={20}
         >
             <div className="merchant-tick" title={full}>
-                {truncateMid(full)}
+                {truncateMid(value)}
             </div>
         </foreignObject>
     );
@@ -200,6 +201,10 @@ export default function AnalyticsPage({ results, firstYear, lastYear }) {
     }, [snapshot, year]);
 
     const merchants = useMemo(() => topMerchants(snapshot, year, 10), [snapshot, year]);
+    const merchantTitles = useMemo(
+        () => new Map(merchants.map((merchant) => [merchant.name, merchant.fullName])),
+        [merchants],
+    );
     const merchantsData = useMemo(
         () => merchants.map((m) => ({ name: m.name, Spent: Math.round(m.total / 100) })),
         [merchants],
@@ -569,7 +574,7 @@ export default function AnalyticsPage({ results, firstYear, lastYear }) {
                                     yAxisProps={{
                                         width: MERCHANT_AXIS_WIDTH,
                                         interval: 0,
-                                        tick: <MerchantTick />,
+                                        tick: <MerchantTick titles={merchantTitles} />,
                                     }}
                                     tooltipProps={{ content: MoneyChartTooltip }}
                                 />

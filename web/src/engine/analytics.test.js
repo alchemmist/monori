@@ -511,7 +511,12 @@ describe("topMerchants falls back for empty keys", () => {
     it("groups the two OZON rows first, labels the empty key, and ignores non-expenses", () => {
         const top = topMerchants(snap, "2024");
         expect(top).toHaveLength(2); // only OZON and "(no description)"
-        expect(top[0]).toEqual({ name: "OZON", total: 3_000_00, count: 2 });
+        expect(top[0]).toEqual({
+            name: "OZON",
+            fullName: "OZON 123",
+            total: 3_000_00,
+            count: 2,
+        });
         const empty = top.find((m) => m.name === "(no description)");
         expect(empty.total).toBe(500_00);
     });
