@@ -397,8 +397,8 @@ export default function DashboardPage({ firstYear, lastYear }) {
                                 withRightYAxis
                                 rightYAxisProps={{ tickFormatter: (v) => `${v}%` }}
                                 xAxisProps={{ tickFormatter: fmtMonthTick, minTickGap: 24 }}
-                                tooltipProps={{ content: TrendChartTooltip }}
                                 {...cartesian}
+                                tooltipProps={{ content: TrendChartTooltip }}
                             />
                         </ChartBoundary>
                     </div>
@@ -503,8 +503,8 @@ export default function DashboardPage({ firstYear, lastYear }) {
                                     series={[
                                         { name: "Spent", label: drillName, color: SERIES.accent },
                                     ]}
-                                    tooltipProps={{ content: MoneyChartTooltip }}
                                     {...cartesian}
+                                    tooltipProps={{ content: MoneyChartTooltip }}
                                 />
                             </ChartBoundary>
                         ) : (
@@ -537,8 +537,8 @@ export default function DashboardPage({ firstYear, lastYear }) {
                                 fillOpacity={0.25}
                                 strokeWidth={2}
                                 xAxisProps={{ tickFormatter: fmtMonthTick, minTickGap: 24 }}
-                                tooltipProps={{ content: MoneyChartTooltip }}
                                 {...cartesian}
+                                tooltipProps={{ content: MoneyChartTooltip }}
                             />
                         </ChartBoundary>
                     </div>
@@ -563,8 +563,8 @@ export default function DashboardPage({ firstYear, lastYear }) {
                                 dataKey="month"
                                 series={groupStack.series}
                                 withLegend
-                                tooltipProps={{ content: MoneyChartTooltip }}
                                 {...cartesian}
+                                tooltipProps={{ content: MoneyChartTooltip }}
                             />
                         </ChartBoundary>
                     </div>
