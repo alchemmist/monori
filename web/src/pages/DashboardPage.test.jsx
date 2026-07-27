@@ -167,7 +167,9 @@ describe("DashboardPage", () => {
 
         expect(screen.getByRole("button", { name: "Card" })).toBeInTheDocument();
         expect(trendRow(`${prevYear}-04`).Expenses).toBe(700);
-        expect(series("donut-chart")).toEqual([{ name: "Groceries", value: 700, color: "#ef5a17" }]);
+        expect(series("donut-chart")).toEqual([
+            { name: "Groceries", value: 700, color: "#ef5a17" },
+        ]);
     });
 
     it("widens the trend window from the default 36 months to all history", async () => {
@@ -290,7 +292,11 @@ describe("DashboardPage", () => {
         renderUI(<DashboardPage firstYear={prevYear} lastYear={year} />);
 
         const groups = series("bar-chart", 1);
-        expect(groups.find((row) => row.month === "Feb")).toEqual({ month: "Feb", g2: 120, g3: 450 });
+        expect(groups.find((row) => row.month === "Feb")).toEqual({
+            month: "Feb",
+            g2: 120,
+            g3: 450,
+        });
     });
 
     it("adds category spending to its calendar month only", () => {
@@ -367,7 +373,9 @@ describe("DashboardPage", () => {
 
         renderUI(<DashboardPage firstYear={prevYear} lastYear={year} />);
 
-        const donuts = screen.getAllByTestId("donut-chart").map((node) => JSON.parse(node.dataset.series));
+        const donuts = screen
+            .getAllByTestId("donut-chart")
+            .map((node) => JSON.parse(node.dataset.series));
         expect(donuts[0]).toEqual([{ name: "Groceries", value: 250, color: expect.any(String) }]);
         expect(donuts[1]).toEqual([{ name: "Salary", value: 700, color: expect.any(String) }]);
     });

@@ -151,13 +151,17 @@ describe("AdminSqlTab", () => {
         await user.type(area, "update tx set amount = 0");
         await user.click(screen.getByRole("button", { name: "Dry run" }));
         expect(
-            await screen.findByText("Rolled back — nothing was written. Applying this would affect 2 rows."),
+            await screen.findByText(
+                "Rolled back — nothing was written. Applying this would affect 2 rows.",
+            ),
         ).toBeInTheDocument();
         expect(run).toHaveBeenLastCalledWith("update tx set amount = 0", false, true);
     });
 
     it("cancels a pending write when the statement changes", async () => {
-        vi.spyOn(api, "adminSql").mockRejectedValueOnce(new Error("write needs confirmation: 1 row"));
+        vi.spyOn(api, "adminSql").mockRejectedValueOnce(
+            new Error("write needs confirmation: 1 row"),
+        );
         const { user } = renderUI(<AdminSqlTab onClose={vi.fn()} />);
         const area = screen.getByLabelText("SQL statement");
         await user.type(area, "delete from tx");

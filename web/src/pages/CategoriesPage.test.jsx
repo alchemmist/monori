@@ -180,14 +180,31 @@ describe("CategoriesPage", () => {
         const destination = container.querySelector('[data-gid="3"]');
         const destinationCards = destination.querySelector(".kb-cards");
         source.getBoundingClientRect = () => ({ left: 0, top: 0, width: 80, height: 30 });
-        sourceGroup.getBoundingClientRect = () => ({ left: 0, right: 80, top: 0, width: 80, height: 200 });
-        destination.getBoundingClientRect = () => ({ left: 100, right: 220, top: 0, width: 120, height: 200 });
+        sourceGroup.getBoundingClientRect = () => ({
+            left: 0,
+            right: 80,
+            top: 0,
+            width: 80,
+            height: 200,
+        });
+        destination.getBoundingClientRect = () => ({
+            left: 100,
+            right: 220,
+            top: 0,
+            width: 120,
+            height: 200,
+        });
         destinationCards.querySelector('[data-id="3"]').getBoundingClientRect = () => ({
             top: 50,
             height: 30,
         });
 
-        fireEvent.pointerDown(source, { button: 0, pointerType: "mouse", clientX: 10, clientY: 10 });
+        fireEvent.pointerDown(source, {
+            button: 0,
+            pointerType: "mouse",
+            clientX: 10,
+            clientY: 10,
+        });
         fireEvent.pointerMove(window, { pointerType: "mouse", clientX: 150, clientY: 100 });
         fireEvent.pointerUp(window);
 
@@ -219,20 +236,31 @@ describe("CategoriesPage", () => {
             width: 80,
             height: 200,
         });
-        destination.getBoundingClientRect = () => ({ left: 100, right: 220, top: 0, width: 120, height: 200 });
+        destination.getBoundingClientRect = () => ({
+            left: 100,
+            right: 220,
+            top: 0,
+            width: 120,
+            height: 200,
+        });
         destination.querySelector('[data-id="3"]').getBoundingClientRect = () => ({
             top: 50,
             height: 30,
         });
 
-        fireEvent.pointerDown(source, { button: 0, pointerType: "mouse", clientX: 10, clientY: 10 });
+        fireEvent.pointerDown(source, {
+            button: 0,
+            pointerType: "mouse",
+            clientX: 10,
+            clientY: 10,
+        });
         fireEvent.pointerMove(window, { pointerType: "mouse", clientX: 150, clientY: 40 });
 
         await waitFor(() =>
             expect(
-                [...container.querySelector('[data-gid="3"]').querySelectorAll(".kb-card__name")].map(
-                    (card) => card.textContent,
-                ),
+                [
+                    ...container.querySelector('[data-gid="3"]').querySelectorAll(".kb-card__name"),
+                ].map((card) => card.textContent),
             ).toEqual(["Groceries", "Rent"]),
         );
         expect(container.querySelector('[data-id="2"]')).toHaveClass("kb-card_ghost");

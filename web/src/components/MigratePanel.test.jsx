@@ -94,7 +94,9 @@ describe("MigratePanel", () => {
         await user.click(container.querySelector("button.gsel"));
         await user.click(await screen.findByText("Card"));
         await user.click(screen.getByRole("button", { name: "Import" }));
-        await waitFor(() => expect(commit).toHaveBeenCalledWith(file, { Main: 1 }, "overwrite", true));
+        await waitFor(() =>
+            expect(commit).toHaveBeenCalledWith(file, { Main: 1 }, "overwrite", true),
+        );
     });
 
     it("reports a workbook preview failure without enabling import", async () => {
@@ -135,7 +137,9 @@ describe("MigratePanel", () => {
         const close = vi.fn();
         const { container, user } = renderUI(<MigratePanel onClose={close} />);
 
-        fireEvent.change(container.querySelector('input[type="file"]'), { target: { files: [file] } });
+        fireEvent.change(container.querySelector('input[type="file"]'), {
+            target: { files: [file] },
+        });
         await screen.findByText(/0 groups, 0 categories, 2 transactions/);
         expect(screen.getByRole("button", { name: "Import" })).toBeEnabled();
         await user.click(screen.getByRole("button", { name: "Import" }));
