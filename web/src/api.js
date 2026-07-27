@@ -173,11 +173,11 @@ export const api = {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ rows }),
         }).then(json),
-    importCommit: (rows) =>
+    importCommit: (rows, accountId = null) =>
         apiFetch("/api/import/commit", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ rows }),
+            body: JSON.stringify({ rows, accountId }),
         }).then(json),
     connectionsAvailable: () => apiFetch("/api/connections/available").then(json),
     createConnection: (body) =>
