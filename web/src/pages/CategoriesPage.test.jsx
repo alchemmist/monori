@@ -301,4 +301,331 @@ describe("CategoriesPage", () => {
         fireEvent.keyDown(window, { key: "Escape" });
         expect(document.body).not.toHaveClass("kb-grabbing");
     });
+
+    it("colours each group tag by its kind and counts its categories", () => {
+        seed({
+            groups: [
+                { id: 1, name: "Income", kind: "income", sort: 1 },
+                { id: 2, name: "Spending", kind: "expense", sort: 2 },
+                { id: 3, name: "Goals", kind: "goal", sort: 3 },
+            ],
+            categories: [
+                { id: 1, groupId: 1, name: "Salary", keywords: "", sort: 1, archived: false },
+                { id: 2, groupId: 2, name: "Food", keywords: "", sort: 1, archived: false },
+                { id: 3, groupId: 2, name: "Rent", keywords: "", sort: 2, archived: false },
+            ],
+        });
+        const { container } = renderUI(<CategoriesPage />);
+
+        const tagOf = (gid) => container.querySelector(`[data-gid="${gid}"] .kb-col__head .tag`);
+        expect(tagOf(1)).toHaveTextContent("income");
+        expect(tagOf(1)).toHaveClass("tag_success");
+        expect(tagOf(2)).toHaveTextContent("expense");
+        expect(tagOf(2)).toHaveClass("tag_danger");
+        expect(tagOf(3)).toHaveTextContent("goal");
+        expect(tagOf(3)).toHaveClass("tag_info");
+
+        const countOf = (gid) =>
+            container.querySelector(`[data-gid="${gid}"] .kb-col__count`).textContent;
+        expect(countOf(1)).toBe("1");
+        expect(countOf(2)).toBe("2");
+        expect(countOf(3)).toBe("0");
+    });
+
+    it("labels the add-card button by group kind", () => {
+        seed({
+            groups: [
+                { id: 2, name: "Spending", kind: "expense", sort: 1 },
+                { id: 3, name: "Goals", kind: "goal", sort: 2 },
+            ],
+            categories: [],
+        });
+        const { container } = renderUI(<CategoriesPage />);
+        expect(
+            container.querySelector('[data-gid="2"] .kb-add-card').textContent,
+        ).toContain("Add category");
+        expect(
+            container.querySelector('[data-gid="3"] .kb-add-card').textContent,
+        ).toContain("Add goal");
+    });
+
+    it("renders a goal card with open/closed tag and formatted target", () => {
+        seed({
+            groups: [{ id: 3, name: "Goals", kind: "goal", sort: 1 }],
+            categories: [
+                {
+                    id: 5,
+                    groupId: 3,
+                    name: "Car",
+                    keywords: "",
+                    sort: 1,
+                    archived: false,
+                    goalTarget: 150000000,
+                    goalStatus: "active",
+                    goalTargetDate: "2027-01-01",
+                },
+                {
+                    id: 6,
+                    groupId: 3,
+                    name: "Trip",
+                    keywords: "",
+                    sort: 2,
+                    archived: true,
+                    goalTarget: 5000,
+                    goalStatus: "archived",
+                    goalTargetDate: null,
+                },
+            ],
+        });
+        const { container } = renderUI(<CategoriesPage />);
+
+        const car = container.querySelector('[data-id="5"]');
+        expect(car.querySelector(".kb-card__top .tag")).toHaveTextContent("open");
+        expect(car.querySelector(".kb-card__top .tag")).toHaveClass("tag_success");
+        expect(car.querySelector(".kb-card__goal").textContent).toMatch(
+            /^Target\s1 500 000\s₽\s·\s2027-01-01$/,
+        );
+
+        const trip = container.querySelector('[data-id="6"]');
+        expect(trip.querySelector(".kb-card__top .tag")).toHaveTextContent("closed");
+        expect(trip.querySelector(".kb-card__top .tag")).toHaveClass("tag_warning");
+        expect(trip.querySelector(".kb-card__goal").textContent).toBe("Target 50 ₽");
+        expect(trip.querySelector(".kb-card__goal").textContent).not.toContain("·");
+    });
+
+    it("shows a New goal button only when a goal group exists and preselects it", async () => {
+        seed({
+            groups: [
+                { id: 2, name: "Spending", kind: "expense", sort: 1 },
+                { id: 3, name: "Goals", kind: "goal", sort: 2 },
+            ],
+            categories: [],
+        });
+        const { user } = renderUI(<CategoriesPage />);
+        await user.click(screen.getByRole("button", { name: /new goal/i }));
+        expect(screen.getByRole("dialog")).toHaveTextContent("New category");
+        expect(screen.getByRole("button", { name: "GroupGoals" })).toBeInTheDocument();
+    });
+
+    it("hides the New goal button without any goal group", () => {
+        seed({ groups, categories: [] });
+        renderUI(<CategoriesPage />);
+        expect(screen.queryByRole("button", { name: /new goal/i })).not.toBeInTheDocument();
+    });
+
+    it("preselects the first group when adding a category from the toolbar", async () => {
+        seed({ groups, categories: [] });
+        const { user } = renderUI(<CategoriesPage />);
+        await user.click(screen.getByRole("button", { name: /new category/i }));
+        expect(screen.getByRole("button", { name: "GroupIncome" })).toBeInTheDocument();
+    });
+
+    it("closes a goal through its row menu via archiveGoal", async () => {
+        seed({
+            groups: [{ id: 3, name: "Goals", kind: "goal", sort: 1 }],
+            categories: [
+                {
+                    id: 5,
+                    groupId: 3,
+                    name: "Car",
+                    keywords: "",
+                    sort: 1,
+                    archived: false,
+                    goalTarget: 100000,
+                    goalStatus: "active",
+                },
+            ],
+        });
+        const archiveGoal = vi.spyOn(useStore.getState(), "archiveGoal").mockResolvedValue();
+        const { user } = renderUI(<CategoriesPage />);
+        const card = document.querySelector('[data-id="5"]');
+        await user.click(card.querySelector(".kb-card__menu button"));
+        expect(screen.queryByRole("menuitem", { name: "Archive" })).not.toBeInTheDocument();
+        await user.click(await screen.findByRole("menuitem", { name: "Close goal" }));
+        await waitFor(() => expect(archiveGoal).toHaveBeenCalledExactlyOnceWith(5));
+    });
+
+    it("reopens a closed goal through its row menu, restoring active status", async () => {
+        seed({
+            groups: [{ id: 3, name: "Goals", kind: "goal", sort: 1 }],
+            categories: [
+                {
+                    id: 5,
+                    groupId: 3,
+                    name: "Car",
+                    keywords: "",
+                    sort: 1,
+                    archived: true,
+                    goalTarget: 100000,
+                    goalStatus: "archived",
+                },
+            ],
+        });
+        const patchCategory = vi.spyOn(useStore.getState(), "patchCategory").mockResolvedValue();
+        const { user } = renderUI(<CategoriesPage />);
+        const card = document.querySelector('[data-id="5"]');
+        await user.click(card.querySelector(".kb-card__menu button"));
+        expect(screen.queryByRole("menuitem", { name: "Close goal" })).not.toBeInTheDocument();
+        await user.click(await screen.findByRole("menuitem", { name: "Open goal" }));
+        await waitFor(() =>
+            expect(patchCategory).toHaveBeenCalledExactlyOnceWith(5, {
+                archived: false,
+                goalStatus: "active",
+            }),
+        );
+    });
+
+    it("opens the category edit form from the Edit row menu item", async () => {
+        seed({
+            groups,
+            categories: [
+                { id: 2, groupId: 2, name: "Food", keywords: "", sort: 1, archived: false },
+            ],
+        });
+        const { user } = renderUI(<CategoriesPage />);
+        const card = document.querySelector('[data-id="2"]');
+        await user.click(card.querySelector(".kb-card__menu button"));
+        await user.click(await screen.findByRole("menuitem", { name: "Edit" }));
+        expect(screen.getByRole("dialog")).toHaveTextContent("Edit Food");
+    });
+
+    it("opens the group rename form from the group row menu", async () => {
+        seed({ groups, categories: [] });
+        const { user } = renderUI(<CategoriesPage />);
+        const group = document.querySelector('[data-gid="2"]');
+        await user.click(group.querySelector(".kb-col__head button"));
+        await user.click(await screen.findByRole("menuitem", { name: "Rename & kind" }));
+        expect(screen.getByRole("dialog")).toBeInTheDocument();
+    });
+
+    it("renders comma-joined keywords and drops empty segments", () => {
+        seed({
+            groups: [{ id: 2, name: "Spending", kind: "expense", sort: 1 }],
+            categories: [
+                {
+                    id: 2,
+                    groupId: 2,
+                    name: "Food",
+                    keywords: "market||cafe|",
+                    sort: 1,
+                    archived: false,
+                },
+                { id: 3, groupId: 2, name: "Rent", keywords: "", sort: 2, archived: false },
+            ],
+        });
+        const { container } = renderUI(<CategoriesPage />);
+        expect(container.querySelector('[data-id="2"] .kb-card__kw').textContent).toBe(
+            "market, cafe",
+        );
+        expect(container.querySelector('[data-id="3"] .kb-card__kw')).toBeNull();
+    });
+
+    it("shows the transaction usage count and its title on a non-goal card", () => {
+        seed({
+            groups: [{ id: 2, name: "Spending", kind: "expense", sort: 1 }],
+            categories: [
+                { id: 2, groupId: 2, name: "Food", keywords: "", sort: 1, archived: false },
+            ],
+            transactions: [
+                { id: 1, categoryId: 2 },
+                { id: 2, categoryId: 2 },
+                { id: 3, categoryId: 2 },
+                { id: 4, categoryId: null },
+            ],
+        });
+        const { container } = renderUI(<CategoriesPage />);
+        const usage = container.querySelector('[data-id="2"] .kb-card__usage');
+        expect(usage.textContent).toBe("3");
+        expect(usage).toHaveAttribute("title", "3 transactions");
+        expect(container.querySelector('[data-id="2"] .kb-card__top .tag')).toBeNull();
+    });
+
+    it("renders income, expense and goal halves in both new-group controls", () => {
+        seed({ groups, categories: [] });
+        const { container } = renderUI(<CategoriesPage />);
+        expect(
+            [...container.querySelectorAll(".kb-newgroup__half")].map((b) => b.textContent),
+        ).toEqual(["Income", "Expense", "Goals"]);
+        expect(
+            [...container.querySelectorAll(".kb-col_add__half")].map((b) => b.textContent.trim()),
+        ).toEqual(["Income group", "Expense group", "Goals group"]);
+    });
+
+    it("starts a goal group from the new-group column goal half", async () => {
+        seed({ groups, categories: [] });
+        const { user, container } = renderUI(<CategoriesPage />);
+        await user.click(container.querySelector(".kb-col_add__half_goal"));
+        expect(screen.getByRole("dialog")).toHaveTextContent("New group");
+    });
+
+    it("marks only the dragged card as a ghost and shows a clone with its usage count", () => {
+        vi.stubGlobal("requestAnimationFrame", () => 1);
+        vi.stubGlobal("cancelAnimationFrame", vi.fn());
+        seed({
+            groups: [{ id: 2, name: "Spending", kind: "expense", sort: 1 }],
+            categories: [
+                { id: 2, groupId: 2, name: "Food", keywords: "", sort: 1, archived: false },
+                { id: 3, groupId: 2, name: "Rent", keywords: "", sort: 2, archived: false },
+            ],
+            transactions: [
+                { id: 1, categoryId: 2 },
+                { id: 2, categoryId: 2 },
+            ],
+        });
+        const { container } = renderUI(<CategoriesPage />);
+        const card = container.querySelector('[data-id="2"]');
+        card.getBoundingClientRect = () => ({ left: 0, top: 0, width: 80, height: 30 });
+        container.querySelector('[data-gid="2"]').getBoundingClientRect = () => ({
+            left: 0,
+            right: 80,
+            top: 0,
+            width: 80,
+            height: 200,
+        });
+        fireEvent.pointerDown(card, { button: 0, pointerType: "mouse", clientX: 10, clientY: 10 });
+        fireEvent.pointerMove(window, { pointerType: "mouse", clientX: 40, clientY: 40 });
+
+        expect(container.querySelector('[data-id="2"]')).toHaveClass("kb-card_ghost");
+        expect(container.querySelector('[data-id="3"]')).not.toHaveClass("kb-card_ghost");
+        const clone = container.querySelector(".kb-card_clone");
+        expect(clone).toHaveTextContent("Food");
+        expect(clone.querySelector(".kb-card__usage").textContent).toBe("2");
+        fireEvent.pointerUp(window);
+    });
+
+    it("does not start a drag from a non-primary button", () => {
+        seed({
+            groups: [{ id: 2, name: "Spending", kind: "expense", sort: 1 }],
+            categories: [
+                { id: 2, groupId: 2, name: "Food", keywords: "", sort: 1, archived: false },
+                { id: 3, groupId: 2, name: "Rent", keywords: "", sort: 2, archived: false },
+            ],
+        });
+        const moveCategory = vi.spyOn(useStore.getState(), "moveCategory").mockResolvedValue();
+        const { container } = renderUI(<CategoriesPage />);
+        const card = container.querySelector('[data-id="2"]');
+        fireEvent.pointerDown(card, { button: 1, pointerType: "mouse", clientX: 10, clientY: 10 });
+        fireEvent.pointerMove(window, { pointerType: "mouse", clientX: 40, clientY: 40 });
+        fireEvent.pointerUp(window);
+        expect(moveCategory).not.toHaveBeenCalled();
+        expect(container.querySelector('[data-id="2"]')).not.toHaveClass("kb-card_ghost");
+    });
+
+    it("ignores a tiny pointer movement below the drag threshold", () => {
+        seed({
+            groups: [{ id: 2, name: "Spending", kind: "expense", sort: 1 }],
+            categories: [
+                { id: 2, groupId: 2, name: "Food", keywords: "", sort: 1, archived: false },
+                { id: 3, groupId: 2, name: "Rent", keywords: "", sort: 2, archived: false },
+            ],
+        });
+        const moveCategory = vi.spyOn(useStore.getState(), "moveCategory").mockResolvedValue();
+        const { container } = renderUI(<CategoriesPage />);
+        const card = container.querySelector('[data-id="2"]');
+        fireEvent.pointerDown(card, { button: 0, pointerType: "mouse", clientX: 10, clientY: 10 });
+        fireEvent.pointerMove(window, { pointerType: "mouse", clientX: 12, clientY: 12 });
+        fireEvent.pointerUp(window);
+        expect(moveCategory).not.toHaveBeenCalled();
+        expect(container.querySelector('[data-id="2"]')).not.toHaveClass("kb-card_ghost");
+    });
 });
