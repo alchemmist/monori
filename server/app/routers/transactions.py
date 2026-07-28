@@ -65,7 +65,7 @@ class BulkBody(BaseModel):
 
 
 def _validate_category_kind(kind, amount):
-    if amount < 0 and kind != "expense":
+    if amount < 0 and kind not in ("expense", "goal"):
         raise HTTPException(400, "expense transaction requires an expense category")
     if amount > 0 and kind != "income":
         raise HTTPException(400, "income transaction requires an income category")

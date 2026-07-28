@@ -11,6 +11,7 @@ def serialize_group(r):
 
 
 def serialize_category(r):
+    keys = r.keys()
     return {
         "id": r["id"],
         "groupId": r["group_id"],
@@ -18,6 +19,9 @@ def serialize_category(r):
         "keywords": r["keywords"],
         "sort": r["sort"],
         "archived": bool(r["archived"]),
+        "goalTarget": r["goal_target"] if "goal_target" in keys else None,
+        "goalStatus": r["goal_status"] if "goal_status" in keys else None,
+        "goalTargetDate": r["goal_target_date"] if "goal_target_date" in keys else None,
     }
 
 
@@ -153,7 +157,8 @@ def snapshot(c, user_id, tx_limit=None):
         "categories": [
             serialize_category(r)
             for r in cur.execute(
-                "SELECT c.id, c.group_id, c.name, c.keywords, c.sort, c.archived"
+                "SELECT c.id, c.group_id, c.name, c.keywords, c.sort, c.archived,"
+                " c.goal_target, c.goal_status, c.goal_target_date"
                 " FROM categories c JOIN category_groups g ON g.id = c.group_id"
                 " WHERE g.user_id=? ORDER BY c.sort, c.id",
                 uid,

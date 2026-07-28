@@ -10,6 +10,10 @@ import BudgetCell from "../components/BudgetCell.jsx";
 import { Money, BalancePill } from "../components/Money.jsx";
 import { CategoryEditDialog, CategoryDeleteDialog } from "../components/CategoryDialogs.jsx";
 import YearGrid from "../components/YearGrid.jsx";
+import AppDialog from "../ui/AppDialog.jsx";
+import { FTextInput } from "../ui/fields.jsx";
+import { goalProgress } from "../engine/goals.js";
+import GoalCategoryLabel from "../components/GoalCategoryLabel.jsx";
 import "../components/yeargrid.css";
 import "./budget.css";
 
@@ -20,8 +24,18 @@ const YEAR_DENSITY = {
 };
 
 export default function BudgetPage({ results, firstYear, lastYear }) {
-    const { snapshot, setBudget, fillBudgetForward, notify } = useStore();
+    const {
+        snapshot,
+        setBudget,
+        setBudgets,
+        fillBudgetForward,
+        archiveGoal,
+        patchCategory,
+        notify,
+    } = useStore();
     const now = new Date();
+    const todayYear = now.getFullYear();
+    const todayMonth = now.getMonth() + 1;
     const [year, setYear] = useState(now.getFullYear());
     const [month, setMonth] = useState(now.getMonth()); // 0-based
     const [mode, setMode] = useState("year");
@@ -34,7 +48,10 @@ export default function BudgetPage({ results, firstYear, lastYear }) {
 
     const res = results.get(year);
     const groups = useMemo(
-        () => orderedGroups(snapshot.groups).filter((g) => g.kind === "expense"),
+        () => [
+            ...orderedGroups(snapshot.groups).filter((g) => g.kind === "expense"),
+            ...orderedGroups(snapshot.groups).filter((g) => g.kind === "goal"),
+        ],
         [snapshot.groups],
     );
     const allCatsByGroup = useMemo(
@@ -52,13 +69,27 @@ export default function BudgetPage({ results, firstYear, lastYear }) {
             );
         let unused = 0;
         const filtered = new Map();
+        const kinds = new Map(groups.map((g) => [g.id, g.kind]));
         for (const [gid, cats] of allCatsByGroup) {
-            const active = cats.filter(used);
+            if (kinds.get(gid) === "goal") {
+                const current = cats.filter(
+                    (c) =>
+                        goalProgress(c, snapshot.budgets, todayYear, todayMonth).status ===
+                        "active",
+                );
+                unused += cats.length - current.length;
+                filtered.set(gid, showUnused ? cats : current);
+                continue;
+            }
+            const active = cats.filter((c) => {
+                if (c.archived) return false;
+                return used(c);
+            });
             unused += cats.length - active.length;
-            filtered.set(gid, showUnused ? cats : active);
+            filtered.set(gid, showUnused ? cats.filter((c) => !c.archived) : active);
         }
         return { catsByGroup: filtered, unusedCount: unused };
-    }, [allCatsByGroup, res, showUnused]);
+    }, [allCatsByGroup, groups, res, showUnused, snapshot.budgets, todayMonth, todayYear]);
 
     const txCountByCat = useMemo(() => {
         const m = new Map();
@@ -76,14 +107,44 @@ export default function BudgetPage({ results, firstYear, lastYear }) {
     const income = res.income[month];
     const budgetedTotal = res.budgetedTotal[month];
 
-    const catMenu = (c) => [
-        { action: () => setDialog({ type: "edit", category: c }), text: "Edit" },
-        {
-            action: () => setDialog({ type: "delete", category: c }),
-            text: "Delete",
-            theme: "danger",
-        },
-    ];
+    const catMenu = (c) => {
+        const goal = groups.find((g) => g.id === c.groupId)?.kind === "goal";
+        const toggleGoal = async () => {
+            try {
+                if (c.archived) {
+                    await patchCategory(c.id, { archived: false, goalStatus: "active" });
+                } else {
+                    await archiveGoal(c.id);
+                }
+            } catch (e) {
+                notify({ title: "Failed to update goal", content: String(e), theme: "danger" });
+            }
+        };
+        return [
+            { action: () => setDialog({ type: "edit", category: c }), text: "Edit" },
+            ...(goal
+                ? [
+                      {
+                          action: () =>
+                              setDialog({
+                                  type: c.goalTarget > 0 ? "distribute" : "edit",
+                                  category: c,
+                              }),
+                          text: c.goalTarget > 0 ? "Distribute across months" : "Set target first",
+                      },
+                      {
+                          action: toggleGoal,
+                          text: c.archived ? "Open goal" : "Close goal",
+                      },
+                  ]
+                : []),
+            {
+                action: () => setDialog({ type: "delete", category: c }),
+                text: "Delete",
+                theme: "danger",
+            },
+        ];
+    };
 
     const selectedCategory = selectedBudgetCell
         ? snapshot.categories.find((c) => c.id === selectedBudgetCell.categoryId)
@@ -256,6 +317,9 @@ export default function BudgetPage({ results, firstYear, lastYear }) {
                                                     <ChevronDown width={14} height={14} />
                                                 </span>
                                                 {g.name}
+                                                {g.kind === "goal" && (
+                                                    <span className="goal-group-badge">Goals</span>
+                                                )}
                                                 <span className="group-row__count">
                                                     {cats.length}
                                                 </span>
@@ -293,6 +357,15 @@ export default function BudgetPage({ results, firstYear, lastYear }) {
                                                     outflows: 0,
                                                     balance: 0,
                                                 };
+                                                const progress =
+                                                    g.kind === "goal"
+                                                        ? goalProgress(
+                                                              c,
+                                                              snapshot.budgets,
+                                                              todayYear,
+                                                              todayMonth,
+                                                          )
+                                                        : null;
                                                 const spentRatio =
                                                     m.budgeted > 0
                                                         ? Math.min(1, -m.outflows / m.budgeted)
@@ -301,21 +374,49 @@ export default function BudgetPage({ results, firstYear, lastYear }) {
                                                           : 0;
                                                 return (
                                                     <tr key={c.id} className="cat-row">
-                                                        <td>
+                                                        <td
+                                                            className={
+                                                                progress
+                                                                    ? "goal-category-cell"
+                                                                    : undefined
+                                                            }
+                                                            style={
+                                                                progress
+                                                                    ? {
+                                                                          "--goal-progress": `${progress.percent}%`,
+                                                                      }
+                                                                    : undefined
+                                                            }
+                                                        >
                                                             <span className="cat-row__name">
-                                                                {c.name}
-                                                                <span className="cat-progress">
-                                                                    <span
-                                                                        className="cat-progress__fill"
-                                                                        style={{
-                                                                            width: `${spentRatio * 100}%`,
-                                                                            background:
-                                                                                m.balance < 0
-                                                                                    ? "var(--m-expense)"
-                                                                                    : "var(--m-accent)",
-                                                                        }}
-                                                                    />
-                                                                </span>
+                                                                <GoalCategoryLabel
+                                                                    name={c.name}
+                                                                    progress={progress}
+                                                                    urgency={
+                                                                        progress ? (
+                                                                            <GoalUrgency
+                                                                                goal={c}
+                                                                                funded={
+                                                                                    progress.funded
+                                                                                }
+                                                                            />
+                                                                        ) : null
+                                                                    }
+                                                                />
+                                                                {!progress && (
+                                                                    <span className="cat-progress">
+                                                                        <span
+                                                                            className="cat-progress__fill"
+                                                                            style={{
+                                                                                width: `${spentRatio * 100}%`,
+                                                                                background:
+                                                                                    m.balance < 0
+                                                                                        ? "var(--m-expense)"
+                                                                                        : "var(--m-accent)",
+                                                                            }}
+                                                                        />
+                                                                    </span>
+                                                                )}
                                                             </span>
                                                         </td>
                                                         <td>
@@ -387,6 +488,11 @@ export default function BudgetPage({ results, firstYear, lastYear }) {
                     onSelectBudget={setSelectedBudgetCell}
                     onAddCategory={(groupId) => setDialog({ type: "edit", category: { groupId } })}
                     onCategoryMenu={catMenu}
+                    goalProgressFor={(c) =>
+                        groups.find((g) => g.id === c.groupId)?.kind === "goal"
+                            ? goalProgress(c, snapshot.budgets, todayYear, todayMonth)
+                            : null
+                    }
                 />
             )}
 
@@ -405,6 +511,109 @@ export default function BudgetPage({ results, firstYear, lastYear }) {
                     onClose={() => setDialog(null)}
                 />
             )}
+            {dialog?.type === "distribute" && (
+                <DistributeGoalDialog
+                    goal={dialog.category}
+                    budgets={snapshot.budgets}
+                    startYear={year}
+                    startMonth={mode === "month" ? month + 1 : now.getMonth() + 1}
+                    setBudgets={setBudgets}
+                    notify={notify}
+                    onClose={() => setDialog(null)}
+                />
+            )}
         </div>
+    );
+}
+
+function GoalUrgency({ goal, funded }) {
+    if (!goal.goalTargetDate || funded >= goal.goalTarget) return null;
+    const days = Math.ceil((new Date(`${goal.goalTargetDate}T23:59:59`) - new Date()) / 86_400_000);
+    if (days > 60) return null;
+    const overdue = days < 0;
+    return (
+        <span className={`goal-urgency ${overdue ? "goal-urgency_overdue" : ""}`}>
+            {overdue ? " · overdue" : ` · 🔥 ${days}d left`}
+        </span>
+    );
+}
+
+function DistributeGoalDialog({
+    goal,
+    budgets,
+    startYear,
+    startMonth,
+    setBudgets,
+    notify,
+    onClose,
+}) {
+    const suggestedMonths = (() => {
+        if (!goal.goalTargetDate) return "";
+        const match = /^(\d{4})-(\d{2})/.exec(goal.goalTargetDate);
+        if (!match) return "";
+        const count = (+match[1] - startYear) * 12 + (+match[2] - startMonth) + 1;
+        return String(Math.max(1, Math.min(120, count)));
+    })();
+    const [months, setMonths] = useState(suggestedMonths);
+    const [busy, setBusy] = useState(false);
+    const count = Number.parseInt(months, 10);
+    const apply = async () => {
+        if (!(count > 0 && count <= 120 && goal.goalTarget > 0)) return;
+        setBusy(true);
+        try {
+            const before = budgets.reduce((sum, b) => {
+                if (b.categoryId !== goal.id) return sum;
+                if (b.year < startYear || (b.year === startYear && b.month < startMonth)) {
+                    return sum + b.amount;
+                }
+                return sum;
+            }, 0);
+            const remaining = Math.max(0, goal.goalTarget - before);
+            const base = Math.floor(remaining / count);
+            const remainder = remaining - base * count;
+            const cells = Array.from({ length: count }, (_, i) => {
+                const offset = startMonth - 1 + i;
+                return {
+                    categoryId: goal.id,
+                    year: startYear + Math.floor(offset / 12),
+                    month: (offset % 12) + 1,
+                    amount: base + (i < remainder ? 1 : 0),
+                };
+            });
+            const planned = new Set(cells.map((c) => `${c.year}-${c.month}`));
+            for (const b of budgets) {
+                const future =
+                    b.categoryId === goal.id &&
+                    (b.year > startYear || (b.year === startYear && b.month >= startMonth));
+                if (future && !planned.has(`${b.year}-${b.month}`)) cells.push({ ...b, amount: 0 });
+            }
+            await setBudgets(cells);
+            onClose();
+        } catch (e) {
+            notify({ title: "Failed to distribute goal", content: String(e), theme: "danger" });
+        } finally {
+            setBusy(false);
+        }
+    };
+    return (
+        <AppDialog
+            title={`Distribute ${goal.name}`}
+            onClose={onClose}
+            onApply={apply}
+            applyText="Distribute"
+            applyLoading={busy}
+            applyDisabled={!(count > 0 && count <= 120 && goal.goalTarget > 0)}
+        >
+            <div className="goal-distribute-prompt">Number of months</div>
+            <FTextInput
+                type="number"
+                min={1}
+                max={120}
+                value={months}
+                onChange={(e) => setMonths(e.target.value)}
+                placeholder="For example, 6"
+                autoFocus
+            />
+        </AppDialog>
     );
 }

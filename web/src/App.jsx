@@ -10,7 +10,6 @@ import {
     Gear,
     Wallet,
     ChartLine,
-    Target,
     Receipt,
     ChartPie,
     ClockArrowRotateLeft,
@@ -46,7 +45,6 @@ const NAV = [
 // planned destinations from the roadmap — shown disabled until their issue ships
 const SOON = [
     { title: "Net worth", icon: ChartLine, issue: 19 },
-    { title: "Goals", icon: Target, issue: 15 },
     { title: "Debts & loans", icon: Receipt, issue: 20 },
     { title: "Reports", icon: ChartPie, issue: 18 },
     { title: "Import history", icon: ClockArrowRotateLeft, issue: 22 },

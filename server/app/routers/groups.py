@@ -8,7 +8,7 @@ from ..deps import conn, serialize_group
 
 router = APIRouter(prefix="/api/groups", tags=["groups"])
 
-KINDS = ("income", "expense")
+KINDS = ("income", "expense", "goal")
 
 
 class GroupBody(BaseModel):
@@ -47,7 +47,7 @@ def create_group(body: GroupBody, user: Annotated[dict, Depends(current_user)]):
     c = conn()
     try:
         if body.kind not in KINDS:
-            raise HTTPException(400, "kind must be 'income' or 'expense'")
+            raise HTTPException(400, "kind must be 'income', 'expense', or 'goal'")
         if c.execute(
             "SELECT id FROM category_groups WHERE user_id=? AND name=?", (uid, body.name)
         ).fetchone():
@@ -84,7 +84,7 @@ def patch_group(group_id: int, patch: GroupPatch, user: Annotated[dict, Depends(
             c.execute("UPDATE category_groups SET name=? WHERE id=?", (patch.name, group_id))
         if patch.kind is not None:
             if patch.kind not in KINDS:
-                raise HTTPException(400, "kind must be 'income' or 'expense'")
+                raise HTTPException(400, "kind must be 'income', 'expense', or 'goal'")
             c.execute("UPDATE category_groups SET kind=? WHERE id=?", (patch.kind, group_id))
         c.commit()
         return {"ok": True}

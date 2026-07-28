@@ -278,6 +278,19 @@ export const useStore = create((set, get) => ({
         return cells.length;
     },
 
+    /** Persist an explicit set of ordinary budget cells atomically. */
+    async setBudgets(cells) {
+        if (!cells.length) return;
+        if (!isDemo()) await api.bulkBudgets(cells);
+        const { snapshot } = get();
+        const keys = new Set(cells.map((c) => `${c.categoryId}-${c.year}-${c.month}`));
+        const budgets = snapshot.budgets.filter(
+            (b) => !keys.has(`${b.categoryId}-${b.year}-${b.month}`),
+        );
+        budgets.push(...cells.filter((c) => c.amount !== 0));
+        set({ snapshot: { ...snapshot, budgets } });
+    },
+
     setTxCategory(txId, categoryId) {
         const { snapshot } = get();
         const transactions = snapshot.transactions.map((t) =>
@@ -536,6 +549,9 @@ export const useStore = create((set, get) => ({
                 currency: body.currency ?? "RUB",
                 sort: 1e9,
                 archived: false,
+                goalTarget: body.goalTarget ?? null,
+                goalStatus: body.goalTarget != null ? "active" : null,
+                goalTargetDate: body.goalTargetDate ?? null,
                 openingBalance: body.openingBalance ?? 0,
                 openingDate: body.openingDate ?? null,
             },
@@ -766,8 +782,22 @@ export const useStore = create((set, get) => ({
                       ...(patch.groupId != null ? { groupId: patch.groupId } : {}),
                       ...(patch.keywords != null ? { keywords: patch.keywords } : {}),
                       ...(patch.archived != null ? { archived: patch.archived } : {}),
+                      ...(patch.goalTarget != null ? { goalTarget: patch.goalTarget } : {}),
+                      ...(patch.goalTargetDate != null
+                          ? { goalTargetDate: patch.goalTargetDate }
+                          : {}),
+                      ...(patch.goalStatus != null ? { goalStatus: patch.goalStatus } : {}),
                   }
                 : c,
+        );
+        set({ snapshot: { ...snapshot, categories } });
+    },
+
+    async archiveGoal(id) {
+        if (!isDemo()) await api.archiveGoal(id);
+        const { snapshot } = get();
+        const categories = snapshot.categories.map((c) =>
+            c.id === id ? { ...c, archived: true, goalStatus: "archived" } : c,
         );
         set({ snapshot: { ...snapshot, categories } });
     },

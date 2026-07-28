@@ -179,6 +179,19 @@ describe("computeYear", () => {
         expect(res.overspent).toEqual([-500, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
     });
 
+    it("keeps goal activity out of expense overspend", () => {
+        const goal = computeYear({
+            year: 2024,
+            categories: [{ id: 30, groupId: 3 }],
+            groupKindById: new Map([[3, "goal"]]),
+            txIndex: buildTxIndex([{ date: "2024-01-15", amount: -5_000, categoryId: 30 }]),
+            budgetIndex: buildBudgetIndex([]),
+            prev: null,
+        });
+        expect(goal.byCategory.get(30)[0].balance).toBe(-5_000);
+        expect(goal.overspent[0]).toBe(0);
+    });
+
     it("chains available-to-budget across months using prior overspent", () => {
         // Jan: 0 + 0 + 5000 - 1000 = 4000
         // Feb: 4000 + (-500 prev overspent) + 0 - 1000 = 2500
