@@ -762,9 +762,13 @@ export const useStore = create((set, get) => ({
                 keywords: body.keywords ?? "",
                 sort: 1e9,
                 archived: false,
-                goalTarget: body.goalTarget ?? null,
-                goalStatus: body.goalTarget != null ? "active" : null,
-                goalTargetDate: body.goalTargetDate ?? null,
+                ...(body.goalTarget != null
+                    ? {
+                          goalTarget: body.goalTarget,
+                          goalStatus: "active",
+                          goalTargetDate: body.goalTargetDate ?? null,
+                      }
+                    : {}),
             },
         ];
         set({ snapshot: { ...snapshot, categories } });
@@ -774,9 +778,8 @@ export const useStore = create((set, get) => ({
     async patchCategory(id, patch) {
         if (!isDemo()) await api.patchCategory(id, patch);
         const { snapshot } = get();
-        const movingToNonGoal =
-            patch.groupId != null &&
-            snapshot.groups.find((g) => g.id === patch.groupId)?.kind !== "goal";
+        const targetGroup = snapshot.groups.find((g) => g.id === patch.groupId);
+        const movingToNonGoal = targetGroup != null && targetGroup.kind !== "goal";
         const categories = snapshot.categories.map((c) =>
             c.id === id
                 ? {
@@ -790,7 +793,8 @@ export const useStore = create((set, get) => ({
                           ? { goalTargetDate: patch.goalTargetDate }
                           : {}),
                       ...(patch.goalStatus != null ? { goalStatus: patch.goalStatus } : {}),
-                      ...(movingToNonGoal
+                      ...(movingToNonGoal &&
+                      (c.goalTarget != null || c.goalTargetDate != null || c.goalStatus != null)
                           ? { goalTarget: null, goalTargetDate: null, goalStatus: null }
                           : {}),
                   }
