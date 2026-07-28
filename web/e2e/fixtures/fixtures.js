@@ -44,8 +44,8 @@ class Api {
         return this.post("/api/groups", { name, kind });
     }
 
-    createCategory(name, groupId, keywords = "") {
-        return this.post("/api/categories", { name, groupId, keywords });
+    createCategory(name, groupId, keywords = "", fields = {}) {
+        return this.post("/api/categories", { name, groupId, keywords, ...fields });
     }
 
     reorderGroups(ids) {

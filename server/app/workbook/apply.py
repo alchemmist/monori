@@ -25,7 +25,8 @@ def _upsert_groups(c, uid, groups):
             ids[g["name"]] = existing[g["name"]]
             continue
         cur = c.execute(
-            "INSERT INTO category_groups (user_id, name, sort, kind) VALUES (?, ?, ?, ?)",
+            "INSERT INTO category_groups (user_id, name, sort, type_id)"
+            " VALUES (?, ?, ?, (SELECT id FROM category_group_types WHERE type=?))",
             (uid, g["name"], g["sort"], g["kind"]),
         )
         ids[g["name"]] = cur.lastrowid

@@ -27,6 +27,7 @@
 .year-grid {
     border-collapse: separate;
     border-spacing: 0;
+    table-layout: fixed;
     font-size: 12px;
     white-space: nowrap;
 }
@@ -314,8 +315,37 @@
 }
 
 .yg-cat-label {
+    display: block;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+
+.yg-cat-content {
+    min-width: 0;
+    flex: 1;
+}
+
+.yg-name.goal-category-cell {
+    background: linear-gradient(
+        90deg,
+        color-mix(in srgb, var(--m-accent) 18%, var(--m-surface)) 0 var(--goal-progress),
+        var(--m-surface) var(--goal-progress) 100%
+    );
+}
+
+.yg-row:hover .yg-name.goal-category-cell {
+    background: linear-gradient(
+        90deg,
+        color-mix(in srgb, var(--m-accent) 26%, var(--m-surface)) 0 var(--goal-progress),
+        var(--m-surface-hover) var(--goal-progress) 100%
+    );
+}
+
+.yg-name .goal-label {
+    width: calc(100% + 24px);
+    height: 30px;
+    margin-inline: -12px;
+    padding-inline: 12px;
 }
 
 .yg-row-menu {

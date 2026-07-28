@@ -69,6 +69,24 @@ back image must be built with the `connectors` extra.
 Requirements: [`uv`](https://docs.astral.sh/uv/) for the Python side and Node 22
 for the web side.
 
+First, install everything the `make` targets need in one command:
+
+```bash
+make install   # web (npm) + server (uv) deps + external lint/analyze CLIs
+```
+
+This installs the web packages (`npm install`), the server packages (`uv sync`),
+and the standalone CLIs the lint/analyze/audit targets shell out to —
+`shellcheck`, `shfmt`, `hadolint`, `actionlint`, `semgrep`, `gitleaks`. That last
+part (`make tools`) works the same on Linux and macOS: `semgrep` and
+`shellcheck` come from `uv tool`, the rest are downloaded as pinned release
+binaries into `~/.local/bin` (override with `MONORI_TOOLS_BIN`). Any tool already
+on your `PATH` is left alone, so it is safe to rerun.
+
+Rerun `make install` whenever `web/package.json` or the server dependencies
+change — `web/package-lock.json` is not committed, so `npm ci` will not work
+here.
+
 The whole dev loop is driven by `make`. To bring up both services with
 hot-reload in containers:
 

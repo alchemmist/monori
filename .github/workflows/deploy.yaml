@@ -22,10 +22,14 @@ jobs:
     deploy:
         name: Deploy over SSH
         runs-on: ubuntu-latest
-        # Gated by the "production" environment: it requires approval from
-        # @alchemmist and only allows the main branch, so nobody else can roll
-        # out (even by dispatching a modified workflow from another branch).
-        environment: production
+        # Environment picked by trigger. A manual "make deploy"
+        # (workflow_dispatch) that bypasses CI lands in "production", which
+        # requires approval from @alchemmist. The automatic roll-out after a
+        # green CI on main (workflow_run) uses "production-auto", which needs no
+        # approval. Both environments only allow the main branch and hold the
+        # SSH_* secrets, so a modified workflow dispatched from another branch
+        # is denied the secrets and can't deploy.
+        environment: ${{ github.event_name == 'workflow_dispatch' && 'production' || 'production-auto' }}
         if: >-
             github.event_name == 'workflow_dispatch'
             || github.event.workflow_run.conclusion == 'success'

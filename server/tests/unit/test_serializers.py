@@ -35,6 +35,9 @@ def test_serialize_category():
         "keywords": "rent|landlord",
         "sort": 4,
         "archived": True,
+        "goalTarget": None,
+        "goalStatus": None,
+        "goalTargetDate": None,
     }
 
 

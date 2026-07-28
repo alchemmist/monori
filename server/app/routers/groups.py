@@ -8,8 +8,6 @@ from ..deps import conn, serialize_group
 
 router = APIRouter(prefix="/api/groups", tags=["groups"])
 
-KINDS = ("income", "expense")
-
 
 class GroupBody(BaseModel):
     name: str = Field(min_length=1, max_length=80)
@@ -33,7 +31,9 @@ def list_groups(user: Annotated[dict, Depends(current_user)]):
         return [
             serialize_group(r)
             for r in c.execute(
-                "SELECT id, name, sort, kind FROM category_groups WHERE user_id=? ORDER BY sort",
+                "SELECT g.id, g.name, g.sort, t.type AS kind FROM category_groups g"
+                " JOIN category_group_types t ON t.id=g.type_id"
+                " WHERE g.user_id=? ORDER BY g.sort",
                 (uid,),
             )
         ]
@@ -46,8 +46,11 @@ def create_group(body: GroupBody, user: Annotated[dict, Depends(current_user)]):
     uid = user["id"]
     c = conn()
     try:
-        if body.kind not in KINDS:
-            raise HTTPException(400, "kind must be 'income' or 'expense'")
+        group_type = c.execute(
+            "SELECT id FROM category_group_types WHERE type=?", (body.kind,)
+        ).fetchone()
+        if not group_type:
+            raise HTTPException(400, "kind must be 'income', 'expense', or 'goal'")
         if c.execute(
             "SELECT id FROM category_groups WHERE user_id=? AND name=?", (uid, body.name)
         ).fetchone():
@@ -56,8 +59,8 @@ def create_group(body: GroupBody, user: Annotated[dict, Depends(current_user)]):
             "SELECT COALESCE(MAX(sort),0) FROM category_groups WHERE user_id=?", (uid,)
         ).fetchone()[0]
         cur = c.execute(
-            "INSERT INTO category_groups (user_id, name, sort, kind) VALUES (?, ?, ?, ?)",
-            (uid, body.name, max_sort + 1, body.kind),
+            "INSERT INTO category_groups (user_id, name, sort, type_id) VALUES (?, ?, ?, ?)",
+            (uid, body.name, max_sort + 1, group_type["id"]),
         )
         c.commit()
         return {"id": cur.lastrowid}
@@ -83,9 +86,14 @@ def patch_group(group_id: int, patch: GroupPatch, user: Annotated[dict, Depends(
                 raise HTTPException(409, "group with this name already exists")
             c.execute("UPDATE category_groups SET name=? WHERE id=?", (patch.name, group_id))
         if patch.kind is not None:
-            if patch.kind not in KINDS:
-                raise HTTPException(400, "kind must be 'income' or 'expense'")
-            c.execute("UPDATE category_groups SET kind=? WHERE id=?", (patch.kind, group_id))
+            group_type = c.execute(
+                "SELECT id FROM category_group_types WHERE type=?", (patch.kind,)
+            ).fetchone()
+            if not group_type:
+                raise HTTPException(400, "kind must be 'income', 'expense', or 'goal'")
+            c.execute(
+                "UPDATE category_groups SET type_id=? WHERE id=?", (group_type["id"], group_id)
+            )
         c.commit()
         return {"ok": True}
     finally:

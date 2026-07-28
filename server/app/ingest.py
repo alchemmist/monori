@@ -20,7 +20,13 @@ def load_rules(c):
     """
     Build the IN/OUT categorization rules from the current categories.
     """
-    groups = {r["id"]: r["kind"] for r in c.execute("SELECT id, kind FROM category_groups")}
+    groups = {
+        r["id"]: r["kind"]
+        for r in c.execute(
+            "SELECT g.id, t.type AS kind FROM category_groups g"
+            " JOIN category_group_types t ON t.id=g.type_id"
+        )
+    }
     cats = [
         dict(r)
         for r in c.execute("SELECT id, name, keywords, group_id FROM categories ORDER BY sort")

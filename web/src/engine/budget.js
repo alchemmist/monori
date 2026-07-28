@@ -112,10 +112,10 @@ export function computeYear({
     const overspent = Array(12).fill(0);
     const available = Array(12).fill(0);
 
-    const expenseCats = [];
+    const envelopeCats = [];
     for (const c of categories) {
         if (groupKindById.get(c.groupId) === "income") continue;
-        expenseCats.push(c);
+        envelopeCats.push(c);
     }
 
     for (const c of categories) {
@@ -129,7 +129,8 @@ export function computeYear({
         income[m] += openingIndex?.get(monthKey(year, m + 1)) ?? 0;
     }
 
-    for (const c of expenseCats) {
+    for (const c of envelopeCats) {
+        const isExpense = groupKindById.get(c.groupId) === "expense";
         const months = [];
         let prevBalance = prev?.byCategory.get(c.id)?.[11]?.balance ?? 0;
         for (let m = 0; m < 12; m++) {
@@ -138,7 +139,7 @@ export function computeYear({
             const balance = Math.max(prevBalance, 0) + budgeted + outflows;
             months.push({ budgeted, outflows, balance });
             budgetedTotal[m] += budgeted;
-            if (balance < 0) overspent[m] += balance;
+            if (isExpense && balance < 0) overspent[m] += balance;
             prevBalance = balance;
         }
         byCategory.set(c.id, months);

@@ -6,12 +6,23 @@
 
 PRAGMA journal_mode = WAL;
 
+CREATE TABLE IF NOT EXISTS category_group_types (
+  id INTEGER PRIMARY KEY,
+  type TEXT NOT NULL UNIQUE,
+  transaction_sign INTEGER NOT NULL CHECK (transaction_sign IN (-1, 1)),
+  is_goal INTEGER NOT NULL DEFAULT 0
+);
+INSERT OR IGNORE INTO category_group_types (id, type, transaction_sign, is_goal) VALUES
+(1, 'income', 1, 0),
+(2, 'expense', -1, 0),
+(3, 'goal', -1, 1);
+
 CREATE TABLE IF NOT EXISTS category_groups (
   id INTEGER PRIMARY KEY,
   user_id INTEGER REFERENCES users (id),
   name TEXT NOT NULL,
   sort INTEGER NOT NULL,
-  kind TEXT NOT NULL CHECK (kind IN ('income', 'expense')),
+  type_id INTEGER NOT NULL REFERENCES category_group_types (id),
   UNIQUE (user_id, name)
 );
 CREATE INDEX IF NOT EXISTS idx_groups_user ON category_groups (user_id);
@@ -22,7 +33,10 @@ CREATE TABLE IF NOT EXISTS categories (
   name TEXT NOT NULL,
   keywords TEXT NOT NULL DEFAULT '',
   sort INTEGER NOT NULL DEFAULT 0,
-  archived INTEGER NOT NULL DEFAULT 0
+  archived INTEGER NOT NULL DEFAULT 0,
+  goal_target INTEGER,
+  goal_status TEXT CHECK (goal_status IN ('active', 'achieved', 'archived')),
+  goal_target_date TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_categories_group ON categories (group_id);
 

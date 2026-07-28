@@ -135,6 +135,12 @@ export const api = {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(patch),
         }).then(json),
+    archiveGoal: (id) =>
+        apiFetch(`/api/categories/${id}/archive-goal`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({}),
+        }).then(json),
     deleteCategory: (id) => apiFetch(`/api/categories/${id}`, { method: "DELETE" }).then(json),
     mergeCategory: (id, into) =>
         apiFetch(`/api/categories/${id}/merge`, {

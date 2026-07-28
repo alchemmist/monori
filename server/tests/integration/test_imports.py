@@ -119,6 +119,24 @@ def test_import_commit_keeps_category(api, client):
     assert imported["total"] == 1 and imported["rows"][0]["source"] == "import"
 
 
+def test_import_commit_accepts_goal_category(api, client):
+    goals = api.group("Goals", kind="goal")
+    created = client.post(
+        "/api/categories",
+        json={"name": "Camera", "groupId": goals, "goalTarget": 100_000},
+    )
+    goal = created.json()["id"]
+    rows = api.preview(api.statement)
+    rows[0]["categoryId"] = goal
+
+    response = client.post(
+        "/api/import/commit", json={"accountId": api.default_account(), "rows": rows}
+    )
+
+    assert response.status_code == 200, response.text
+    assert client.get(f"/api/transactions?categoryId={goal}").json()["total"] == 1
+
+
 def test_import_commit_rejects_category_with_the_wrong_direction(api, client):
     expenses = api.group("Expenses")
     income = api.group("Income", "income")

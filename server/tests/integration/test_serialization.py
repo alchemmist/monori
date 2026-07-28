@@ -48,6 +48,9 @@ def test_snapshot_serialization_contract(api, client):
             "keywords": "lenta|okey",
             "sort": 1,
             "archived": True,
+            "goalTarget": None,
+            "goalStatus": None,
+            "goalTargetDate": None,
         }
     ]
     assert snap["transactions"] == [
