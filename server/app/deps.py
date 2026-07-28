@@ -3,6 +3,8 @@ from itertools import batched
 from . import db as dbmod
 from .transfer_service import list_transfers
 
+SPLIT_FETCH_BATCH_SIZE = 500
+
 
 def conn():
     return dbmod.connect()
@@ -78,7 +80,7 @@ def serialize_transactions(cur, rows):
         return []
     ids = [row["id"] for row in rows]
     by_tx: dict[int, list] = {}
-    for chunk in batched(ids, 500):
+    for chunk in batched(ids, SPLIT_FETCH_BATCH_SIZE):
         marks = ",".join("?" for _ in chunk)
         for split in cur.execute(
             # `marks` contains generated positional placeholders, never user input.
