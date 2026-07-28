@@ -6,7 +6,8 @@ export function goalProgress(goal, budgets, year, month) {
         return sum + b.amount;
     }, 0);
     const target = goal.goalTarget ?? 0;
-    const percent = target > 0 ? Math.min(100, Math.round((funded / target) * 100)) : 0;
+    const percent =
+        target > 0 ? Math.max(0, Math.min(100, Math.round((funded / target) * 100))) : 0;
     const status = goal.archived
         ? "archived"
         : target > 0 && funded >= target

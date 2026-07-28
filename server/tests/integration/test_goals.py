@@ -41,3 +41,25 @@ def test_goal_requires_target(api, client):
     group = api.group("Goals", kind="goal")
     r = client.post("/api/categories", json={"name": "Trip", "groupId": group})
     assert r.status_code == 400
+
+
+def test_moving_goal_to_expense_group_clears_goal_metadata(api, client):
+    goals = api.group("Goals", kind="goal")
+    expenses = api.group("Expenses")
+    created = client.post(
+        "/api/categories",
+        json={
+            "name": "Camera",
+            "groupId": goals,
+            "goalTarget": 100_000,
+            "goalTargetDate": "2026-12-31",
+        },
+    )
+    goal = created.json()["id"]
+
+    moved = client.patch(f"/api/categories/{goal}", json={"groupId": expenses})
+    assert moved.status_code == 200, moved.text
+    category = next(c for c in api.snapshot()["categories"] if c["id"] == goal)
+    assert category["goalTarget"] is None
+    assert category["goalStatus"] is None
+    assert category["goalTargetDate"] is None

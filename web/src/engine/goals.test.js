@@ -20,17 +20,17 @@ describe("goalProgress", () => {
     });
 
     it("counts deallocations but ignores unrelated categories", () => {
-        expect(
-            goalProgress(
-                { id: 1, goalTarget: 5_000 },
-                [
-                    { categoryId: 1, year: 2026, month: 1, amount: 1_000 },
-                    { categoryId: 1, year: 2026, month: 2, amount: -800 },
-                    { categoryId: 2, year: 2026, month: 2, amount: 5_000 },
-                ],
-                2026,
-                2,
-            ).funded,
-        ).toBe(200);
+        const progress = goalProgress(
+            { id: 1, goalTarget: 5_000 },
+            [
+                { categoryId: 1, year: 2026, month: 1, amount: 1_000 },
+                { categoryId: 1, year: 2026, month: 2, amount: -1_800 },
+                { categoryId: 2, year: 2026, month: 2, amount: 5_000 },
+            ],
+            2026,
+            2,
+        );
+        expect(progress.funded).toBe(-800);
+        expect(progress.percent).toBe(0);
     });
 });

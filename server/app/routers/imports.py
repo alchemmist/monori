@@ -89,7 +89,7 @@ def _validate_import_categories(c, uid, rows):
         ).fetchone()
         if category is None:
             raise HTTPException(400, "unknown category")
-        if row.amount < 0 and category["kind"] != "expense":
+        if row.amount < 0 and category["kind"] not in ("expense", "goal"):
             raise HTTPException(400, "expense transaction requires an expense category")
         if row.amount > 0 and category["kind"] != "income":
             raise HTTPException(400, "income transaction requires an income category")

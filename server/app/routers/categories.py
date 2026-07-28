@@ -117,6 +117,7 @@ def patch_category(cat_id: int, patch: CategoryPatch, user: Annotated[dict, Depe
             if _name_taken(c, uid, patch.name, except_id=cat_id):
                 raise HTTPException(409, "category with this name already exists")
             c.execute("UPDATE categories SET name=? WHERE id=?", (patch.name, cat_id))
+        goal_fields_allowed = True
         if patch.groupId is not None:
             target_group = c.execute(
                 "SELECT id, kind FROM category_groups WHERE id=? AND user_id=?",
@@ -131,20 +132,27 @@ def patch_category(cat_id: int, patch: CategoryPatch, user: Annotated[dict, Depe
             ):
                 raise HTTPException(400, "goalTarget is required for goal categories")
             c.execute("UPDATE categories SET group_id=? WHERE id=?", (patch.groupId, cat_id))
+            if target_group["kind"] != "goal":
+                goal_fields_allowed = False
+                c.execute(
+                    "UPDATE categories SET goal_target=NULL, goal_status=NULL,"
+                    " goal_target_date=NULL WHERE id=?",
+                    (cat_id,),
+                )
         if patch.keywords is not None:
             c.execute("UPDATE categories SET keywords=? WHERE id=?", (patch.keywords, cat_id))
         if patch.archived is not None:
             c.execute(
                 "UPDATE categories SET archived=? WHERE id=?", (1 if patch.archived else 0, cat_id)
             )
-        if patch.goalTarget is not None:
+        if goal_fields_allowed and patch.goalTarget is not None:
             c.execute("UPDATE categories SET goal_target=? WHERE id=?", (patch.goalTarget, cat_id))
-        if patch.goalTargetDate is not None:
+        if goal_fields_allowed and patch.goalTargetDate is not None:
             c.execute(
                 "UPDATE categories SET goal_target_date=? WHERE id=?",
                 (patch.goalTargetDate or None, cat_id),
             )
-        if patch.goalStatus is not None:
+        if goal_fields_allowed and patch.goalStatus is not None:
             if patch.goalStatus not in ("active", "achieved"):
                 raise HTTPException(400, "goalStatus must be 'active' or 'achieved'")
             c.execute("UPDATE categories SET goal_status=? WHERE id=?", (patch.goalStatus, cat_id))

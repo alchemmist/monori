@@ -774,6 +774,9 @@ export const useStore = create((set, get) => ({
     async patchCategory(id, patch) {
         if (!isDemo()) await api.patchCategory(id, patch);
         const { snapshot } = get();
+        const movingToNonGoal =
+            patch.groupId != null &&
+            snapshot.groups.find((g) => g.id === patch.groupId)?.kind !== "goal";
         const categories = snapshot.categories.map((c) =>
             c.id === id
                 ? {
@@ -787,6 +790,9 @@ export const useStore = create((set, get) => ({
                           ? { goalTargetDate: patch.goalTargetDate }
                           : {}),
                       ...(patch.goalStatus != null ? { goalStatus: patch.goalStatus } : {}),
+                      ...(movingToNonGoal
+                          ? { goalTarget: null, goalTargetDate: null, goalStatus: null }
+                          : {}),
                   }
                 : c,
         );
