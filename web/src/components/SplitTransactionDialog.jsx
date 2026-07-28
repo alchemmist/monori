@@ -124,11 +124,6 @@ export default function SplitTransactionDialog({ transaction, onClose }) {
         setParts((current) =>
             current.map((part, i) => (i === index ? { ...part, ...patch } : part)),
         );
-    const assignRemainder = () => {
-        if (!remainder) return;
-        const index = parts.length - 1;
-        change(index, { amount: amountInput((parsed[index] ?? 0) + remainder) });
-    };
     const splitEvenly = () => {
         const amounts = evenAmounts(totalMagnitude, parts.length);
         setParts((current) =>
@@ -141,6 +136,28 @@ export default function SplitTransactionDialog({ transaction, onClose }) {
         setParts((current) =>
             current.map((part, index) => ({ ...part, amount: amountInput(amounts[index]) })),
         );
+    const addPart = () => {
+        const amounts = evenAmounts(totalMagnitude, parts.length + 1);
+        setParts((current) => [
+            ...current.map((part, index) => ({ ...part, amount: amountInput(amounts[index]) })),
+            { ...blankPart(), amount: amountInput(amounts.at(-1)) },
+        ]);
+    };
+    const removePart = (index) => {
+        const removed = parsed[index] ?? 0;
+        setParts((current) => {
+            const next = current.filter((_, partIndex) => partIndex !== index);
+            const recipient = Math.min(index, next.length - 1);
+            return next.map((part, partIndex) =>
+                partIndex === recipient
+                    ? {
+                          ...part,
+                          amount: amountInput(Math.abs(parseRub(part.amount) ?? 0) + removed),
+                      }
+                    : part,
+            );
+        });
+    };
     const save = async () => {
         setSaving(true);
         try {
@@ -223,9 +240,7 @@ export default function SplitTransactionDialog({ transaction, onClose }) {
                             variant="subtle"
                             aria-label={`Remove part ${index + 1}`}
                             disabled={parts.length <= 2}
-                            onClick={() =>
-                                setParts((current) => current.filter((_, i) => i !== index))
-                            }
+                            onClick={() => removePart(index)}
                         >
                             <TrashBin width={14} />
                         </Button>
@@ -238,22 +253,20 @@ export default function SplitTransactionDialog({ transaction, onClose }) {
                 {remainder === 0 ? "Fully assigned" : `${money(remainder)} left to assign`}
             </div>
             <div className="split-editor__actions">
-                <Button
-                    variant="default"
-                    leftSection={<Plus width={14} />}
-                    onClick={() => setParts((current) => [...current, blankPart()])}
-                >
+                <Button variant="default" leftSection={<Plus width={14} />} onClick={addPart}>
                     Add part
                 </Button>
                 <Button variant="default" onClick={splitEvenly}>
                     Split evenly
                 </Button>
-                <Button variant="default" disabled={!remainder} onClick={assignRemainder}>
-                    Assign remainder to last
-                </Button>
-                <div style={{ flex: 1 }} />
                 {transaction.splits?.length > 0 && (
-                    <Button variant="subtle" color="red" loading={saving} onClick={removeSplit}>
+                    <Button
+                        className="split-editor__remove"
+                        variant="subtle"
+                        color="red"
+                        loading={saving}
+                        onClick={removeSplit}
+                    >
                         Remove split
                     </Button>
                 )}

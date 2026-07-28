@@ -149,10 +149,11 @@
     width: 20px;
     height: 20px;
     appearance: none;
-    border: 3px solid var(--m-surface);
+    border: 1px solid var(--glass-border);
     border-radius: 50%;
-    background: var(--m-text);
-    box-shadow: 0 1px 4px rgb(0 0 0 / 25%);
+    background: var(--glass-fill);
+    backdrop-filter: blur(var(--glass-blur));
+    box-shadow: var(--glass-shadow);
     cursor: ew-resize;
     pointer-events: auto;
 }
@@ -160,10 +161,11 @@
 .split-allocation__range::-moz-range-thumb {
     width: 14px;
     height: 14px;
-    border: 3px solid var(--m-surface);
+    border: 1px solid var(--glass-border);
     border-radius: 50%;
-    background: var(--m-text);
-    box-shadow: 0 1px 4px rgb(0 0 0 / 25%);
+    background: var(--glass-fill);
+    backdrop-filter: blur(var(--glass-blur));
+    box-shadow: var(--glass-shadow);
     cursor: ew-resize;
     pointer-events: auto;
 }
@@ -187,6 +189,19 @@
 
 .split-editor__remainder_done {
     color: var(--m-income);
+}
+
+.split-editor__actions {
+    flex-wrap: wrap;
+}
+
+.split-editor__actions .mantine-Button-root {
+    flex: 0 0 auto;
+    white-space: nowrap;
+}
+
+.split-editor__remove {
+    margin-left: auto;
 }
 
 @media (width <= 700px) {

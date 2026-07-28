@@ -40,6 +40,7 @@ export default function TransactionsPage() {
         txProgress,
         setTxCategory,
         setTxAccount,
+        replaceTransactionSplits,
         updateTransaction,
         hiddenTx,
         loadHiddenTx,
@@ -263,6 +264,8 @@ export default function TransactionsPage() {
                     tx: {
                         ...item.tx,
                         id: `${item.tx.id}:${part.id}`,
+                        parentId: item.tx.id,
+                        splitId: part.id,
                         amount: part.amount,
                         categoryId: part.categoryId,
                         comment: part.comment,
@@ -303,8 +306,29 @@ export default function TransactionsPage() {
     // outside the snapshot the store edits — both stay read-only.
     const isEditable = (t, leg) => t.transferId == null && !t.hidden && !leg && !t.splits?.length;
 
+    const setSplitCategory = async (t, categoryId) => {
+        const parent = snapshot.transactions.find((transaction) => transaction.id === t.parentId);
+        if (!parent) return;
+        try {
+            await replaceTransactionSplits(
+                parent.id,
+                parent.splits.map((part) => ({
+                    categoryId: part.id === t.splitId ? categoryId : part.categoryId,
+                    amount: part.amount,
+                    comment: part.comment ?? "",
+                })),
+            );
+        } catch (error) {
+            notify({
+                title: "Failed to update split category",
+                content: String(error),
+                theme: "danger",
+            });
+        }
+    };
+
     const renderTxRow = (t, leg, splitPart = false) => {
-        const editable = isEditable(t, leg);
+        const editable = !splitPart && isEditable(t, leg);
         return (
             <tr
                 key={leg ? `l${t.id}` : t.id}
@@ -419,7 +443,7 @@ export default function TransactionsPage() {
                     )}
                 </td>
                 <td style={{ textAlign: "left" }}>
-                    {t.transferId != null || t.hidden ? (
+                    {t.transferId != null || t.hidden || splitPart ? (
                         <span style={{ color: "var(--m-text-dim)", paddingLeft: 4 }}>
                             {acctName.get(t.accountId) ?? "—"}
                         </span>
@@ -434,11 +458,19 @@ export default function TransactionsPage() {
                     )}
                 </td>
                 <td style={{ textAlign: "left" }}>
-                    {t.transferId != null || t.hidden || t.splits?.length || splitPart ? (
+                    {splitPart ? (
+                        <InlineSelect
+                            small
+                            borderless
+                            searchable
+                            placeholder="—"
+                            value={t.categoryId != null ? String(t.categoryId) : null}
+                            onChange={(value) => value && setSplitCategory(t, +value)}
+                            data={catSectionsFor(t)}
+                        />
+                    ) : t.transferId != null || t.hidden || t.splits?.length ? (
                         <span style={{ color: "var(--m-text-faint)", paddingLeft: 4 }}>
-                            {splitPart || t.hidden
-                                ? (catById.get(t.categoryId)?.name ?? "—")
-                                : "Split"}
+                            {t.hidden ? (catById.get(t.categoryId)?.name ?? "—") : "Split"}
                         </span>
                     ) : (
                         <InlineSelect
