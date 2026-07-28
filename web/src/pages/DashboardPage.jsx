@@ -73,12 +73,12 @@ export default function DashboardPage({ firstYear, lastYear }) {
 
     const accounts = snapshot.accounts ?? [];
     const balances = useMemo(() => accountBalances(snapshot), [snapshot]);
-    const txns = useMemo(() => {
-        const transactions = effectiveTransactions(snapshot.transactions);
+    const accountTransactions = useMemo(() => {
         return acctFilter === "all"
-            ? transactions
-            : transactions.filter((t) => t.accountId === +acctFilter);
+            ? snapshot.transactions
+            : snapshot.transactions.filter((transaction) => transaction.accountId === +acctFilter);
     }, [snapshot.transactions, acctFilter]);
+    const txns = useMemo(() => effectiveTransactions(accountTransactions), [accountTransactions]);
 
     const excludedIds = useMemo(() => new Set(), []);
     const incomeGroupIds = useMemo(
@@ -185,9 +185,11 @@ export default function DashboardPage({ firstYear, lastYear }) {
     // the budget page to the kopeck — a hand-rolled reducer here once counted
     // gross outflows and quietly disagreed with the table it sits next to
     const yearRows = (y) =>
-        categoryYearMatrix({ ...snapshot, transactions: txns }, y, { limit: Infinity });
+        categoryYearMatrix({ ...snapshot, transactions: accountTransactions }, y, {
+            limit: Infinity,
+        });
     const incomeYearRows = (y) =>
-        categoryYearMatrix({ ...snapshot, transactions: txns }, y, {
+        categoryYearMatrix({ ...snapshot, transactions: accountTransactions }, y, {
             limit: Infinity,
             kind: "income",
         });
@@ -196,26 +198,26 @@ export default function DashboardPage({ firstYear, lastYear }) {
     const donutData = useMemo(() => {
         return donutDataFromRows(yearRows(donutYear), snapshot.groups);
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [txns, donutYear, snapshot]);
+    }, [accountTransactions, donutYear, snapshot]);
 
     const incomeDonutData = useMemo(() => {
         return donutDataFromRows(incomeYearRows(donutYear), snapshot.groups);
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [txns, donutYear, snapshot]);
+    }, [accountTransactions, donutYear, snapshot]);
 
     const allExpenseDonutData = useMemo(() => {
         return donutDataFromRows(
-            categoryTotals({ ...snapshot, transactions: txns }),
+            categoryTotals({ ...snapshot, transactions: accountTransactions }),
             snapshot.groups,
         );
-    }, [txns, snapshot]);
+    }, [accountTransactions, snapshot]);
 
     const allIncomeDonutData = useMemo(() => {
         return donutDataFromRows(
-            categoryTotals({ ...snapshot, transactions: txns }, { kind: "income" }),
+            categoryTotals({ ...snapshot, transactions: accountTransactions }, { kind: "income" }),
             snapshot.groups,
         );
-    }, [txns, snapshot]);
+    }, [accountTransactions, snapshot]);
 
     // Chart 3: selected category by month for a year
     const drillName = drillCat ? catById.get(+drillCat)?.name : "";
@@ -225,7 +227,7 @@ export default function DashboardPage({ firstYear, lastYear }) {
         const sums = row?.monthly ?? Array(12).fill(0);
         return sums.map((v, i) => ({ month: MONTHS_SHORT[i], Spent: Math.round(v / 100) }));
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [txns, drillCat, drillYear, snapshot]);
+    }, [accountTransactions, drillCat, drillYear, snapshot]);
 
     // Chart 4: cumulative net over all history
     const cumulativeData = useMemo(() => {
@@ -258,7 +260,7 @@ export default function DashboardPage({ firstYear, lastYear }) {
         }));
         return { data, series };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [txns, snapshot.groups, stackYear, snapshot]);
+    }, [accountTransactions, snapshot.groups, stackYear, snapshot]);
 
     const years = [];
     for (let y = firstYear; y <= Math.min(lastYear, now.getFullYear()); y++) years.push(String(y));

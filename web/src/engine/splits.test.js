@@ -1,9 +1,27 @@
 import { describe, expect, it } from "vitest";
-import { effectiveTransactions } from "./splits.js";
+import { effectiveTransactions, splitPartTransaction } from "./splits.js";
 import { buildTxIndex, txKey } from "./budget.js";
 import { accountBalances, monthlySeries } from "./analytics.js";
 
 describe("effectiveTransactions", () => {
+    it("builds the shared synthetic row shape", () => {
+        expect(
+            splitPartTransaction(
+                { id: 7, accountId: 2, splits: [{ id: 1 }] },
+                { id: 1, categoryId: 10, amount: -601, comment: "food" },
+            ),
+        ).toMatchObject({
+            id: "7:1",
+            parentId: 7,
+            splitId: 1,
+            accountId: 2,
+            categoryId: 10,
+            amount: -601,
+            comment: "food",
+            splits: [],
+        });
+    });
+
     it("replaces a split container without changing the total", () => {
         const rows = effectiveTransactions([
             {

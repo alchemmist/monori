@@ -27,6 +27,7 @@ import TransferRow from "../components/TransferRow.jsx";
 import TransferSuggestions from "../components/TransferSuggestions.jsx";
 import SplitTransactionDialog from "../components/SplitTransactionDialog.jsx";
 import { mergeTransferRows } from "../engine/transfers.js";
+import { splitPartTransaction } from "../engine/splits.js";
 import "./budget.css";
 import "./transfers.css";
 
@@ -261,16 +262,7 @@ export default function TransactionsPage() {
                 ...item.tx.splits.map((part) => ({
                     kind: "split",
                     key: `s${part.id}`,
-                    tx: {
-                        ...item.tx,
-                        id: `${item.tx.id}:${part.id}`,
-                        parentId: item.tx.id,
-                        splitId: part.id,
-                        amount: part.amount,
-                        categoryId: part.categoryId,
-                        comment: part.comment,
-                        splits: [],
-                    },
+                    tx: splitPartTransaction(item.tx, part),
                 })),
             ];
         });

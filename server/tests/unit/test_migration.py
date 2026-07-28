@@ -104,6 +104,7 @@ def test_fresh_db_is_created_from_schema_sql(tmp_path):
             "categories",
             "accounts",
             "transactions",
+            "transaction_splits",
             "budgets",
             "bank_connections",
             "import_batches",
