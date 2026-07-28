@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button, Modal } from "@mantine/core";
 import { Plus, TrashBin } from "@gravity-ui/icons";
 import { useStore } from "../store.js";
@@ -71,6 +71,7 @@ export default function SplitTransactionDialog({ transaction, onClose }) {
     const { snapshot, replaceTransactionSplits, notify } = useStore();
     const [parts, setParts] = useState([blankPart(), blankPart()]);
     const [saving, setSaving] = useState(false);
+    const lastValidAllocation = useRef(null);
 
     useEffect(() => {
         if (!transaction) return;
@@ -112,6 +113,13 @@ export default function SplitTransactionDialog({ transaction, onClose }) {
     const remainder = totalMagnitude - assigned;
     const allocationValid =
         remainder === 0 && parsed.every((amount) => amount != null && amount !== 0);
+    if (allocationValid) {
+        lastValidAllocation.current = { transactionId: transaction.id, amounts: parsed };
+    }
+    const barAmounts =
+        lastValidAllocation.current?.transactionId === transaction.id
+            ? lastValidAllocation.current.amounts
+            : evenAmounts(totalMagnitude, parts.length);
     const valid =
         parts.length >= 2 &&
         allocationValid &&
@@ -124,6 +132,33 @@ export default function SplitTransactionDialog({ transaction, onClose }) {
         setParts((current) =>
             current.map((part, i) => (i === index ? { ...part, ...patch } : part)),
         );
+    const changeAmount = (index, value) => {
+        const amount = parseRub(value);
+        if (amount == null || amount === 0) {
+            change(index, { amount: value });
+            return;
+        }
+        const magnitude = Math.abs(amount);
+        const recipient = index === parts.length - 1 ? index - 1 : parts.length - 1;
+        const basis =
+            lastValidAllocation.current?.transactionId === transaction.id
+                ? lastValidAllocation.current.amounts
+                : parsed;
+        const previous = basis[index] ?? 0;
+        const recipientAmount = (basis[recipient] ?? 0) - (magnitude - previous);
+        if (recipientAmount <= 0) {
+            change(index, { amount: value });
+            return;
+        }
+        setParts((current) =>
+            current.map((part, partIndex) => {
+                if (partIndex === index) return { ...part, amount: value };
+                if (partIndex === recipient)
+                    return { ...part, amount: amountInput(recipientAmount) };
+                return part;
+            }),
+        );
+    };
     const splitEvenly = () => {
         const amounts = evenAmounts(totalMagnitude, parts.length);
         setParts((current) =>
@@ -205,13 +240,11 @@ export default function SplitTransactionDialog({ transaction, onClose }) {
                 <span>Total</span>
                 <strong className="num">{money(transaction.amount)}</strong>
             </div>
-            {allocationValid && (
-                <AllocationBar
-                    amounts={parsed}
-                    total={totalMagnitude}
-                    onChange={changeAllocations}
-                />
-            )}
+            <AllocationBar
+                amounts={barAmounts}
+                total={totalMagnitude}
+                onChange={changeAllocations}
+            />
             <div className="split-editor__parts">
                 {parts.map((part, index) => (
                     <div
@@ -232,7 +265,7 @@ export default function SplitTransactionDialog({ transaction, onClose }) {
                         <FTextInput
                             aria-label={`Part ${index + 1} amount`}
                             value={part.amount}
-                            onChange={(event) => change(index, { amount: event.target.value })}
+                            onChange={(event) => changeAmount(index, event.target.value)}
                             placeholder="0.00"
                         />
                         <FTextInput
