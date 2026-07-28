@@ -19,6 +19,18 @@ def test_day_number_counts_calendar_days():
     assert day_number("2024-03-01") - day_number("2024-02-28") == 2
 
 
+def test_day_number_is_days_since_the_unix_epoch():
+    # absolute values, not just gaps: the epoch offset, the era multiplier and
+    # the year-of-era arithmetic all cancel out of a difference and only show
+    # here
+    assert day_number("1970-01-01") == 0
+    assert day_number("1970-01-02") == 1
+    assert day_number("1969-12-31") == -1
+    assert day_number("2000-01-01") == 10957
+    # a year that drives the era term negative (0000-01-01 shifts to y = -1)
+    assert day_number("0000-01-01") == -719528
+
+
 def test_pairs_opposite_amounts_on_different_accounts():
     pairs = find_pairs([row(1, 10, -5000, 1), row(2, 10, 5000, 2)])
     assert pairs == [

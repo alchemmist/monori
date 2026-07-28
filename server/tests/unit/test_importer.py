@@ -146,6 +146,24 @@ def test_parse_statement_needs_both_date_and_amount():
         assert errors[0]["error"] == "unparseable date or amount"
 
 
+def test_parse_statement_strips_only_the_surrounding_quotes():
+    # a description that itself starts with a capital letter the quote-strip set
+    # must not touch: stripping anything but the quotes eats real characters
+    line = (
+        "05.07.2026 10:00:00\t05.07.2026\t*1\tOK\t-10,00\tRUB\t-10,00\tRUB\t\t"
+        "Электроника\t5732\tXerox\n"
+    )
+    rows, errors = parse_statement(line)
+    assert not errors
+    assert rows[0]["description"] == "Xerox"
+
+
+def test_parse_statement_unparseable_error_carries_the_raw_line():
+    nodate = "NODATE\t05.07.2026\t*1\tOK\t-10,00\tRUB\t-10,00\tRUB\t\tКафе\t5812\tX"
+    _, errors = parse_statement(nodate + "\n")
+    assert errors[0]["raw"] == nodate
+
+
 def test_parse_statement_continues_after_every_kind_of_skip():
     valid = "05.07.2026 10:00:00\t05.07.2026\t*1\tOK\t-10,00\tRUB\t-10,00\tRUB\t\tКафе\t5812\tGOOD"
     failed = valid.replace("\tOK\t", "\tFAILED\t").replace("GOOD", "SKIP")
