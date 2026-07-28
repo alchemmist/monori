@@ -6,21 +6,38 @@ MUTATION_THRESHOLD ?= 85
 
 WEBBIN := web/node_modules/.bin
 
-.PHONY: install setup dev down reset-db deploy api web build \
+.PHONY: install setup tools dev down reset-db deploy api web build \
         fmt fmt-check \
         lint lint-web lint-css lint-html lint-server lint-sql lint-yaml lint-md lint-docs lint-actions lint-docker lint-shell spell \
         typecheck analyze audit audit-deps audit-deps-py audit-secrets \
         test t-fast t-medium t-slow t-slow-ui coverage mutation m-front m-back \
         schema-diagram check
 
-# One-shot dependency install for a fresh clone. web/package-lock.json is
-# gitignored, so `npm install` (not `npm ci`) is what resolves package.json —
+# One-shot install of everything the make targets need. web/package-lock.json
+# is gitignored, so `npm install` (not `npm ci`) is what resolves package.json —
 # rerun this whenever web/package.json or server deps change.
 install:
 	cd web && npm install --no-audit --no-fund
 	cd server && uv sync
+	$(MAKE) tools
 
 setup: install
+
+# Standalone CLIs the lint/analyze/audit targets shell out to, outside npm/uv.
+# macOS installs them from Homebrew; the uvx-run tools (sqlfluff, yamllint,
+# codespell) self-install on first use, so we only pre-warm their cache here.
+# CI installs the same set — see the pinned versions in build.yaml.
+tools:
+	@if command -v brew >/dev/null 2>&1; then \
+		brew install shellcheck shfmt hadolint actionlint semgrep gitleaks; \
+	else \
+		echo "Homebrew not found — install these CLIs from your package manager:"; \
+		echo "  shellcheck shfmt hadolint actionlint semgrep gitleaks"; \
+		echo "  (see .github/workflows/build.yaml for the versions CI pins)"; \
+	fi
+	uvx --from 'sqlfluff==3.4.2' sqlfluff --version >/dev/null
+	uvx yamllint --version >/dev/null
+	uvx codespell --version >/dev/null
 
 up:
 	$(COMPOSE) -f deploy/docker-compose.dev.yml up --build

@@ -66,17 +66,26 @@ back image must be built with the `connectors` extra.
 
 ## Run locally for development
 
-Requirements: [`uv`](https://docs.astral.sh/uv/) for the Python side and Node 22
-for the web side.
+Requirements: [`uv`](https://docs.astral.sh/uv/) for the Python side, Node 22 for
+the web side, and — on macOS — [Homebrew](https://brew.sh/) so the external lint
+CLIs can be installed.
 
-First, install all dependencies for both halves in one command:
+First, install everything the `make` targets need in one command:
 
 ```bash
-make install   # npm install in web/ + uv sync in server/
+make install   # web (npm) + server (uv) deps + external lint/analyze CLIs
 ```
 
-Rerun it whenever `web/package.json` or the server dependencies change —
-`web/package-lock.json` is not committed, so `npm ci` will not work here.
+This installs the web packages (`npm install`), the server packages (`uv sync`),
+and the standalone CLIs the lint/analyze/audit targets shell out to —
+`shellcheck`, `shfmt`, `hadolint`, `actionlint`, `semgrep`, `gitleaks` — via
+Homebrew on macOS (`make tools` does just this part). On Linux, install that same
+set from your package manager; the versions CI pins are in
+`.github/workflows/build.yaml`.
+
+Rerun `make install` whenever `web/package.json` or the server dependencies
+change — `web/package-lock.json` is not committed, so `npm ci` will not work
+here.
 
 The whole dev loop is driven by `make`. To bring up both services with
 hot-reload in containers:
