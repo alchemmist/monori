@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { amountInput, groupAmount, parseRub, rub } from "./format.js";
+import {
+    amountInput,
+    fmtDate,
+    groupAmount,
+    money,
+    moneyCompact,
+    parseRub,
+    rub,
+    rubExact,
+} from "./format.js";
 
 const NB = "\u00a0";
 
@@ -46,5 +55,60 @@ describe("amountInput", () => {
 describe("rub", () => {
     it("separates thousands", () => {
         expect(rub(17679400)).toBe(`176${NB}794`);
+    });
+
+    it("rounds to whole rubles", () => {
+        expect(rub(12345)).toBe("123");
+        expect(rub(12399)).toBe("124");
+    });
+});
+
+describe("rubExact", () => {
+    it("keeps two fractional digits", () => {
+        expect(rubExact(1234567)).toBe(`12${NB}345,67`);
+        expect(rubExact(0)).toBe("0,00");
+        expect(rubExact(-45050)).toBe("-450,50");
+    });
+});
+
+describe("money", () => {
+    it("appends the ruble sign to the rounded value", () => {
+        expect(money(17679400)).toBe(`176${NB}794 ₽`);
+        expect(money(0)).toBe("0 ₽");
+    });
+});
+
+describe("moneyCompact", () => {
+    it("abbreviates millions and thousands and keeps small amounts whole", () => {
+        expect(moneyCompact(150_000_000)).toBe("1.5M");
+        expect(moneyCompact(1_234_500)).toBe("12k");
+        expect(moneyCompact(45000)).toBe("450");
+        expect(moneyCompact(0)).toBe("0");
+        expect(moneyCompact(-150_000_000)).toBe("-1.5M");
+    });
+});
+
+describe("parseRub", () => {
+    it("parses grouped, comma and plain forms to kopecks", () => {
+        expect(parseRub(`12${NB}345,50`)).toBe(1234550);
+        expect(parseRub("12345.5")).toBe(1234550);
+        expect(parseRub("12 345")).toBe(1234500);
+    });
+
+    it("returns 0 for empty input and null for junk", () => {
+        expect(parseRub("")).toBe(0);
+        expect(parseRub("   ")).toBe(0);
+        expect(parseRub("abc")).toBeNull();
+    });
+
+    it("handles negatives", () => {
+        expect(parseRub("-450,50")).toBe(-45050);
+    });
+});
+
+describe("fmtDate", () => {
+    it("turns an ISO date into DD.MM.YYYY", () => {
+        expect(fmtDate("2026-03-05")).toBe("05.03.2026");
+        expect(fmtDate("2026-12-31T12:00:00")).toBe("31.12.2026");
     });
 });

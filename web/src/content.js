@@ -1,8 +1,11 @@
+// Stryker disable all: vite resolves this glob at build time, so every argument
+// has to stay a literal — an instrumented one fails to parse at all
 const raw = import.meta.glob("../../docs/*.md", {
     query: "?raw",
     import: "default",
     eager: true,
 });
+// Stryker restore all
 
 // react-markdown 9 has no raw-HTML pass, so an HTML comment reaches the page as
 // literal text; the docs use them as generator markers, so drop them here.

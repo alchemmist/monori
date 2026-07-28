@@ -42,6 +42,20 @@ describe("readStatementFile", () => {
             /larger than/,
         );
     });
+
+    it("accepts a file exactly at the stated size limit", async () => {
+        const file = {
+            size: MAX_STATEMENT_FILE_BYTES,
+            arrayBuffer: async () => new TextEncoder().encode("statement").buffer,
+        };
+        await expect(readStatementFile(file)).resolves.toBe("statement");
+    });
+
+    it("reports the configured limit in megabytes", async () => {
+        await expect(readStatementFile({ size: MAX_STATEMENT_FILE_BYTES + 1 })).rejects.toThrow(
+            "5 MB",
+        );
+    });
 });
 
 describe("tailMatches", () => {
