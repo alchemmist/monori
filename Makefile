@@ -6,12 +6,27 @@ MUTATION_THRESHOLD ?= 85
 
 WEBBIN := web/node_modules/.bin
 
-.PHONY: dev down reset-db deploy api web build \
+.DEFAULT_GOAL := up
+
+.PHONY: install setup tools dev down reset-db deploy api web build \
         fmt fmt-check \
         lint lint-web lint-css lint-html lint-server lint-sql lint-yaml lint-md lint-docs lint-actions lint-docker lint-shell spell \
         typecheck analyze audit audit-deps audit-deps-py audit-secrets \
         test t-fast t-medium t-slow t-slow-ui coverage mutation m-front m-back \
         schema-diagram check
+
+install:
+	cd web && npm install --no-audit --no-fund
+	cd server && uv sync
+	$(MAKE) tools
+
+setup: install
+
+tools:
+	bash scripts/install-tools.sh
+	uvx --from 'sqlfluff==3.4.2' sqlfluff --version >/dev/null
+	uvx yamllint --version >/dev/null
+	uvx codespell --version >/dev/null
 
 up:
 	$(COMPOSE) -f deploy/docker-compose.dev.yml up --build
@@ -80,7 +95,6 @@ lint-yaml:
 lint-md:
 	$(WEBBIN)/markdownlint-cli2
 
-# the ER diagram in docs/data-model.md is generated; fail if the schema moved on without it
 lint-docs:
 	python3 scripts/gen_schema_diagram.py --check
 
@@ -113,8 +127,6 @@ audit-deps:
 	cd web && npm install --no-audit --no-fund --silent
 	cd web && npm audit --audit-level=high --json | python3 ../scripts/npm-audit-gate.py
 
-# no pipe here: make's sh has no pipefail, and pip-audit on an empty stdin
-# reports a clean pass — a failed export must redden the check, not blank it
 audit-deps-py:
 	@req=$$(mktemp); \
 	( cd server && uv export --no-dev --no-hashes --format requirements-txt -o "$$req" \
@@ -136,8 +148,6 @@ t-medium:
 t-slow:
 	COMPOSE="$(COMPOSE)" bash scripts/e2e.sh
 
-# playwright's interactive ui: pick tests, run on click, time-travel each step;
-# the stack stays up until the ui window is closed
 t-slow-ui:
 	COMPOSE="$(COMPOSE)" bash scripts/e2e.sh --ui
 
