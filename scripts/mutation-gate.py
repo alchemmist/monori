@@ -29,6 +29,24 @@ def main():
 
     score = 100.0 * killed / considered
     status = "PASS" if score >= threshold else "FAIL"
+    total = s.get("total", considered)
+    no_tests = s.get("no_tests", 0)
+    skipped = s.get("skipped", 0)
+    segfault = s.get("segfault", 0)
+    interrupted = s.get("check_was_interrupted_by_user", 0)
+
+    print("── backend mutation summary ─────────────────────────")
+    print("status        count   included in gate")
+    print(f"killed        {killed:5}   yes")
+    print(f"survived      {survived:5}   yes")
+    print(f"timeout       {timeout:5}   yes")
+    print(f"suspicious    {suspicious:5}   yes")
+    print(f"no tests      {no_tests:5}   no")
+    print(f"skipped       {skipped:5}   no")
+    print(f"segfault      {segfault:5}   no")
+    print(f"interrupted   {interrupted:5}   no")
+    print(f"gate total    {considered:5}   killed + survived + timeout + suspicious")
+    print(f"all results   {total:5}")
     print(
         f"mutation-gate [{status}]: score {score:.2f}% "
         f"(killed {killed}/{considered}, threshold {threshold:.0f}%)"

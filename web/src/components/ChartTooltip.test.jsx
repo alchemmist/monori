@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MantineProvider } from "@mantine/core";
 import { chartMoney, trendUnit } from "../pages/chartTheme.js";
-import { TrendChartTooltip } from "./ChartTooltip.jsx";
+import { MoneyChartTooltip, TrendChartTooltip } from "./ChartTooltip.jsx";
 
 const NB = "\u00a0";
 
@@ -44,5 +44,37 @@ describe("chart tooltip formatting", () => {
         expect(html).toContain("Income");
         expect(html).toContain("12 345 ₽");
         expect(html).not.toContain("Savings rate %");
+    });
+
+    it("labels every money series with the ruble unit", () => {
+        const html = renderToStaticMarkup(
+            <MantineProvider>
+                <MoneyChartTooltip
+                    label="Jul '26"
+                    payload={[
+                        {
+                            name: "Expenses",
+                            value: 84071,
+                            color: "red",
+                            payload: { Expenses: 84071 },
+                        },
+                    ]}
+                />
+            </MantineProvider>,
+        );
+
+        expect(html).toContain("Expenses");
+        expect(html).toContain("84");
+        expect(html).toContain("₽");
+    });
+
+    it("survives a missing payload without throwing", () => {
+        const html = renderToStaticMarkup(
+            <MantineProvider>
+                <MoneyChartTooltip label="Jul '26" />
+            </MantineProvider>,
+        );
+
+        expect(html).not.toContain("₽");
     });
 });
