@@ -7,8 +7,11 @@ vi.mock("@mantine/charts", () => ({
 
 import AdminPage from "./AdminPage.jsx";
 import { api } from "../api.js";
-import { renderUI, resetStore, screen, waitFor } from "../test/render.jsx";
+import { fireEvent, renderUI, resetStore, screen, waitFor, within } from "../test/render.jsx";
 import { useStore } from "../store.js";
+
+// ru-RU grouping and the "₽" currency both use a non-breaking space (U+00A0)
+const NBSP = "\u00a0";
 
 const overview = {
     totals: { users: 2, transactions: 1234, accounts: 3, connections: 1 },
@@ -54,6 +57,11 @@ describe("AdminPage", () => {
         vi.spyOn(api, "adminActivity").mockResolvedValue(activity);
     });
     afterEach(() => vi.restoreAllMocks());
+
+    // the email also shows up in the recent-logins list, so the table row must
+    // be located via its table cell rather than a bare text match
+    const findUserRow = async (email = "person@example.test") =>
+        (await screen.findByRole("cell", { name: email })).closest("tr");
 
     it("loads the dashboard, opens SQL and shows a user detail", async () => {
         vi.spyOn(api, "adminUserDetail").mockResolvedValue(detail);
@@ -123,6 +131,329 @@ describe("AdminPage", () => {
         expect(screen.getByText("Never logged in")).toBeInTheDocument();
         expect(screen.getByText("No transactions")).toBeInTheDocument();
         expect(screen.queryByRole("button", { name: "Full" })).not.toBeInTheDocument();
+    });
+
+    it("renders every KPI with its exact value and subtitle", async () => {
+        const { container } = renderUI(<AdminPage />);
+        await screen.findByRole("heading", { name: "Admin" });
+
+        const kpis = within(container.querySelector(".admin-kpis"));
+        const kpi = (label) => kpis.getByText(label).closest(".kpi");
+        expect(within(kpi("Users")).getByText("2")).toBeInTheDocument();
+        expect(within(kpi("Users")).getByText("+1 in 30 days")).toBeInTheDocument();
+
+        const active = kpi("Active users");
+        expect(within(active).getByText("1")).toBeInTheDocument();
+        expect(within(active).getByText("last 7 days")).toBeInTheDocument();
+        expect(within(active).getByText("1")).toHaveStyle({ color: "var(--m-income)" });
+
+        expect(within(kpi("New users")).getByText("last 7 days")).toBeInTheDocument();
+
+        // transactions run through toLocaleString("ru-RU"): 1234 -> "1 234" (U+00A0)
+        expect(kpi("Transactions").querySelector(".kpi__value").textContent).toBe(`1${NBSP}234`);
+        expect(within(kpi("Transactions")).getByText("all users")).toBeInTheDocument();
+
+        expect(within(kpi("Accounts")).getByText("3")).toBeInTheDocument();
+        expect(within(kpi("Bank connections")).getByText("1")).toBeInTheDocument();
+        // 1536 bytes -> 1.5 KB (v < 1024 false at B, /1024 = 1.5 < 100 -> toFixed(1))
+        expect(within(kpi("Database")).getByText("1.5 KB")).toBeInTheDocument();
+        expect(within(kpi("Database")).getByText("on disk")).toBeInTheDocument();
+    });
+
+    it("formats byte sizes across unit and rounding boundaries", async () => {
+        vi.spyOn(api, "adminUserDetail").mockResolvedValue(detail);
+        const cases = [
+            [null, "—"],
+            [0, "0.0 B"],
+            [1023, "1023 B"],
+            [1024, "1.0 KB"],
+            [100 * 1024, "100 KB"],
+            [1536 * 1024, "1.5 MB"],
+            [5 * 1024 ** 3, "5.0 GB"],
+            [2048 * 1024 ** 3, "2048 GB"],
+        ];
+        for (const [bytes, want] of cases) {
+            api.adminOverview.mockResolvedValue({ ...overview, dbSizeBytes: bytes });
+            const { unmount } = renderUI(<AdminPage />);
+            await screen.findByRole("heading", { name: "Admin" });
+            expect(screen.getByText(want)).toBeInTheDocument();
+            unmount();
+        }
+    });
+
+    it("formats user-row dates, counts and sync badge exactly", async () => {
+        renderUI(<AdminPage />);
+        await screen.findByRole("heading", { name: "Admin" });
+        const row = screen.getByRole("cell", { name: "person@example.test" }).closest("tr");
+
+        // createdAt "2026-01-01T12:00:00" -> fmtDate slices to "2026-01-01"
+        expect(within(row).getByText("2026-01-01")).toBeInTheDocument();
+        // lastLogin -> fmtDt: first 16 chars, "T" -> " "
+        expect(within(row).getByText("2026-02-03 12:30")).toBeInTheDocument();
+        // lastTransaction already date-only
+        expect(within(row).getByText("2026-02-01")).toBeInTheDocument();
+        expect(within(row).getByText("2")).toBeInTheDocument();
+        // transactions 12 through ru-RU locale (no grouping under 1000)
+        expect(within(row).getByText("12")).toBeInTheDocument();
+        expect(within(row).getByText("3")).toBeInTheDocument();
+
+        const badge = row.querySelector(".admin-sync");
+        expect(badge).toHaveTextContent("connected");
+        // connected -> income tone dot; lastSync appended via fmtDate
+        expect(badge.querySelector(".admin-sync__dot")).toHaveStyle({
+            background: "var(--m-income)",
+        });
+        expect(badge).toHaveTextContent("· 2026-02-04");
+        // no lastError -> no title attribute value
+        expect(badge).not.toHaveAttribute("title");
+    });
+
+    it("shows an em dash for missing dates and no connection", async () => {
+        vi.spyOn(api, "adminUsers").mockResolvedValue([
+            {
+                ...user,
+                lastLogin: null,
+                createdAt: null,
+                lastTransaction: null,
+                connection: null,
+            },
+        ]);
+        renderUI(<AdminPage />);
+        const row = await findUserRow();
+        // three "—" from the three null dates, plus one from the muted no-connection badge
+        expect(within(row).getAllByText("—")).toHaveLength(4);
+        expect(row.querySelector(".admin-muted")).toHaveTextContent("—");
+    });
+
+    it("uses the warning tone for a pending sync without a last-sync date", async () => {
+        vi.spyOn(api, "adminUsers").mockResolvedValue([
+            {
+                ...user,
+                connection: { status: "pending", lastSync: null, lastError: null },
+            },
+        ]);
+        renderUI(<AdminPage />);
+        const badge = (await findUserRow())
+            .querySelector(".admin-sync");
+        expect(badge).toHaveTextContent("pending");
+        expect(badge).not.toHaveTextContent("·");
+        expect(badge.querySelector(".admin-sync__dot")).toHaveStyle({
+            background: "var(--m-warning)",
+        });
+    });
+
+    it("uses the expense tone for an errored sync", async () => {
+        vi.spyOn(api, "adminUsers").mockResolvedValue([
+            {
+                ...user,
+                connection: { status: "error", lastSync: "2026-02-04", lastError: "boom" },
+            },
+        ]);
+        renderUI(<AdminPage />);
+        const badge = (await findUserRow())
+            .querySelector(".admin-sync");
+        expect(badge.querySelector(".admin-sync__dot")).toHaveStyle({
+            background: "var(--m-expense)",
+        });
+    });
+
+    it("opens the admin-sql tab with the right key and kind", async () => {
+        const { user: events } = renderUI(<AdminPage />);
+        await events.click(await screen.findByRole("button", { name: "SQL console" }));
+        expect(useStore.getState().tabs).toEqual([
+            expect.objectContaining({ kind: "admin-sql", key: "admin-sql", props: {} }),
+        ]);
+    });
+
+    it("toggles a user detail closed when the same row is clicked again", async () => {
+        vi.spyOn(api, "adminUserDetail").mockResolvedValue(detail);
+        const { user: events } = renderUI(<AdminPage />);
+        const row = await findUserRow();
+
+        await events.click(row);
+        await screen.findByText("Recent transactions");
+        expect(api.adminUserDetail).toHaveBeenCalledExactlyOnceWith(7);
+
+        await events.click(row);
+        expect(screen.queryByText("Recent transactions")).not.toBeInTheDocument();
+        // clicking the already-open row closes it without another fetch
+        expect(api.adminUserDetail).toHaveBeenCalledTimes(1);
+    });
+
+    it("resets the delete arming when the pointer leaves the row", async () => {
+        vi.spyOn(api, "adminDeleteUser").mockResolvedValue({});
+        const { user: events } = renderUI(<AdminPage />);
+        await screen.findByRole("heading", { name: "Admin" });
+        const remove = screen.getByRole("button", { name: "Delete" });
+        await events.click(remove);
+        expect(screen.getByRole("button", { name: "Sure?" })).toBeInTheDocument();
+
+        fireEvent.mouseLeave(remove.closest("tr"));
+        expect(screen.getByRole("button", { name: "Delete" })).toBeInTheDocument();
+        expect(screen.queryByRole("button", { name: "Sure?" })).not.toBeInTheDocument();
+        expect(api.adminDeleteUser).not.toHaveBeenCalled();
+    });
+
+    it("closes the user tab by key when a user is deleted", async () => {
+        vi.spyOn(api, "adminDeleteUser").mockResolvedValue({});
+        useStore.setState({
+            tabs: [{ id: 1, key: "admin-tx:7", kind: "admin-tx", props: {} }],
+        });
+        const { user: events } = renderUI(<AdminPage />);
+        await screen.findByRole("heading", { name: "Admin" });
+        await events.click(screen.getByRole("button", { name: "Delete" }));
+        await events.click(screen.getByRole("button", { name: "Sure?" }));
+        await waitFor(() => expect(useStore.getState().tabs).toEqual([]));
+    });
+
+    it("refetches the dashboard and open detail when adminTick bumps", async () => {
+        vi.spyOn(api, "adminUserDetail").mockResolvedValue(detail);
+        const { user: events } = renderUI(<AdminPage />);
+        await events.click(await findUserRow());
+        await screen.findByText("Recent transactions");
+        expect(api.adminOverview).toHaveBeenCalledTimes(1);
+        expect(api.adminUserDetail).toHaveBeenCalledTimes(1);
+
+        await waitFor(() => useStore.getState().bumpAdminTick());
+        await waitFor(() => expect(api.adminOverview).toHaveBeenCalledTimes(2));
+        // the open detail is re-fetched for the same user id
+        await waitFor(() => expect(api.adminUserDetail).toHaveBeenCalledTimes(2));
+        expect(api.adminUserDetail).toHaveBeenLastCalledWith(7);
+    });
+
+    it("renders the detail lists, transaction preview and manage tab args", async () => {
+        vi.spyOn(api, "adminUserDetail").mockResolvedValue({
+            user,
+            accounts: [{ id: 1, name: "Card", transactions: 4, balance: 12345 }],
+            featureUsage: [{ feature: "sync", count: 1234 }],
+            recentLogins: Array.from({ length: 10 }, (_, i) => `2026-02-0${i % 9}T09:00:00`),
+            recentTransactions: [
+                { id: 1, date: "2026-02-02", description: "", category: "Food", account: "Card", amount: 500 },
+                { id: 2, date: "2026-02-03", description: "", category: "", account: "Cash", amount: -75 },
+            ],
+        });
+        const { user: events } = renderUI(<AdminPage />);
+        await events.click(await findUserRow());
+        const detailEl = (await screen.findByText("Recent transactions")).closest(".admin-detail");
+
+        // account line: name · "4 tx", balance via money() -> "123 ₽" (12345 kop)
+        expect(within(detailEl).getByText("· 4 tx")).toBeInTheDocument();
+        expect(within(detailEl).getByText("123 ₽")).toBeInTheDocument();
+        // feature count 1234 -> ru-RU "1 234"
+        expect(within(detailEl).getByText("1 234")).toBeInTheDocument();
+        // recent logins are capped at 8
+        expect(detailEl.querySelectorAll(".admin-detail__col .admin-logins")[2].children).toHaveLength(8);
+
+        // description empty -> falls back to category, then em dash
+        expect(within(detailEl).getByText("Food")).toBeInTheDocument();
+        expect(within(detailEl).getByText("—")).toBeInTheDocument();
+        // positive amount gets the income colour, negative does not
+        const pos = within(detailEl).getByText("5 ₽");
+        expect(pos).toHaveStyle({ color: "var(--m-income)" });
+        const neg = within(detailEl).getByText("-1 ₽");
+        expect(neg.getAttribute("style") || "").not.toContain("var(--m-income)");
+
+        await events.click(within(detailEl).getByRole("button", { name: "Manage" }));
+        expect(useStore.getState().tabs).toEqual([
+            expect.objectContaining({
+                kind: "admin-tx",
+                key: "admin-tx:7",
+                props: { user },
+            }),
+        ]);
+    });
+
+    it("caps the recent-transactions preview at five rows", async () => {
+        vi.spyOn(api, "adminUserDetail").mockResolvedValue({
+            user,
+            accounts: [],
+            featureUsage: [],
+            recentLogins: [],
+            recentTransactions: Array.from({ length: 8 }, (_, i) => ({
+                id: i,
+                date: "2026-02-02",
+                description: `tx ${i}`,
+                account: "Card",
+                amount: 100,
+            })),
+        });
+        const { user: events } = renderUI(<AdminPage />);
+        await events.click(await findUserRow());
+        const table = (await screen.findByText("tx 0")).closest("table");
+        expect(table.querySelectorAll("tbody tr")).toHaveLength(5);
+        expect(screen.queryByText("tx 5")).not.toBeInTheDocument();
+        expect(screen.getByText("tx 4")).toBeInTheDocument();
+    });
+
+    it("caps recent logins at twelve in the activity card", async () => {
+        vi.spyOn(api, "adminActivity").mockResolvedValue({
+            ...activity,
+            recentLogins: Array.from({ length: 15 }, (_, i) => ({
+                email: `u${i}@example.test`,
+                at: "2026-02-03T12:30:00",
+            })),
+        });
+        renderUI(<AdminPage />);
+        const list = (await screen.findByText("Recent logins")).closest(".chart-card").querySelector(".admin-logins");
+        expect(list.children).toHaveLength(12);
+        expect(screen.getByText("u11@example.test")).toBeInTheDocument();
+        expect(screen.queryByText("u12@example.test")).not.toBeInTheDocument();
+    });
+
+    it("surfaces a toast when loading a user detail fails", async () => {
+        vi.spyOn(api, "adminUserDetail").mockRejectedValue(new Error("nope"));
+        const { user: events } = renderUI(<AdminPage />);
+        await events.click(await findUserRow());
+        expect(await screen.findByText("Failed to load user")).toBeInTheDocument();
+        expect(screen.getByText("nope")).toBeInTheDocument();
+    });
+
+    it("stops before opening a popup when the detail has no recent transactions", async () => {
+        vi.spyOn(api, "adminUserDetail").mockResolvedValue({
+            user,
+            accounts: [],
+            featureUsage: [],
+            recentLogins: [],
+            recentTransactions: [],
+        });
+        const { user: events } = renderUI(<AdminPage />);
+        await events.click(await findUserRow());
+        await screen.findByText("No transactions");
+        expect(screen.queryByRole("button", { name: "Full" })).not.toBeInTheDocument();
+        expect(screen.getByText("No accounts")).toBeInTheDocument();
+    });
+
+    it("stops paging once a short transaction page comes back", async () => {
+        vi.spyOn(api, "adminUserDetail").mockResolvedValue(detail);
+        vi.spyOn(api, "adminUserTransactions").mockResolvedValueOnce([{ id: 1 }, { id: 2 }]);
+        const popup = { location: "", close: vi.fn() };
+        vi.spyOn(window, "open").mockReturnValue(popup);
+        vi.stubGlobal("URL", {
+            createObjectURL: vi.fn(() => "blob:short"),
+            revokeObjectURL: vi.fn(),
+        });
+        const { user: events } = renderUI(<AdminPage />);
+        await events.click(await findUserRow());
+        await events.click(await screen.findByRole("button", { name: "Full" }));
+        await waitFor(() => expect(popup.location).toBe("blob:short"));
+        // first page (2 < 1000) ends the loop immediately
+        expect(api.adminUserTransactions).toHaveBeenCalledExactlyOnceWith(7, {
+            limit: 1000,
+            offset: 0,
+        });
+    });
+
+    it("closes the popup and toasts when the full export fails", async () => {
+        vi.spyOn(api, "adminUserDetail").mockResolvedValue(detail);
+        vi.spyOn(api, "adminUserTransactions").mockRejectedValue(new Error("export boom"));
+        const popup = { location: "", close: vi.fn() };
+        vi.spyOn(window, "open").mockReturnValue(popup);
+        const { user: events } = renderUI(<AdminPage />);
+        await events.click(await findUserRow());
+        await events.click(await screen.findByRole("button", { name: "Full" }));
+        await waitFor(() => expect(popup.close).toHaveBeenCalledTimes(1));
+        expect(await screen.findByText("Failed to load transactions")).toBeInTheDocument();
+        expect(screen.getByText("export boom")).toBeInTheDocument();
     });
 
     it("downloads every transaction page from the detail", async () => {
