@@ -59,7 +59,10 @@ function seedWithGoal(patch = {}) {
 /** A year result that also covers the goal category (id 4). */
 function goalResult(goalMonth = () => month(30_000_00, 0)) {
     const base = result();
-    base.byCategory.set(4, Array.from({ length: 12 }, (_, m) => goalMonth(m)));
+    base.byCategory.set(
+        4,
+        Array.from({ length: 12 }, (_, m) => goalMonth(m)),
+    );
     return base;
 }
 
@@ -339,9 +342,7 @@ describe("BudgetPage", () => {
         });
 
         it("selects the cell's own month when a budget cell is focused", async () => {
-            const onSelect = vi
-                .spyOn(useStore.getState(), "setBudget")
-                .mockResolvedValue();
+            const onSelect = vi.spyOn(useStore.getState(), "setBudget").mockResolvedValue();
             const { user } = render();
             await toMonth(user);
             const row = screen.getByText("Groceries").closest("tr");
@@ -419,9 +420,7 @@ describe("BudgetPage", () => {
         });
 
         it("archives an open goal through its Close goal menu item", async () => {
-            const archiveGoal = vi
-                .spyOn(useStore.getState(), "archiveGoal")
-                .mockResolvedValue();
+            const archiveGoal = vi.spyOn(useStore.getState(), "archiveGoal").mockResolvedValue();
             seedWithGoal();
             const { user } = renderGoal();
             await toMonth(user);
@@ -469,9 +468,7 @@ describe("BudgetPage", () => {
         };
 
         it("fills through December with the exact category, year and month", async () => {
-            const fill = vi
-                .spyOn(useStore.getState(), "fillBudgetForward")
-                .mockResolvedValue(9);
+            const fill = vi.spyOn(useStore.getState(), "fillBudgetForward").mockResolvedValue(9);
             const { user } = render();
             await toMonth(user);
             await user.click(
@@ -485,9 +482,7 @@ describe("BudgetPage", () => {
 
         it("pluralizes the filled-months count and singularizes at one", async () => {
             const notify = vi.spyOn(useStore.getState(), "notify");
-            const fill = vi
-                .spyOn(useStore.getState(), "fillBudgetForward")
-                .mockResolvedValue(1);
+            const fill = vi.spyOn(useStore.getState(), "fillBudgetForward").mockResolvedValue(1);
             const { user } = render();
             await toMonth(user);
             await user.click(
@@ -619,9 +614,7 @@ describe("BudgetPage", () => {
         });
 
         it("splits the remaining target across months, front-loading the remainder", async () => {
-            const setBudgets = vi
-                .spyOn(useStore.getState(), "setBudgets")
-                .mockResolvedValue();
+            const setBudgets = vi.spyOn(useStore.getState(), "setBudgets").mockResolvedValue();
             seedWithGoal();
             const { user } = renderGoal();
             const dialog = await openDistribute(user);

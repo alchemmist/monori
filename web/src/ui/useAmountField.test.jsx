@@ -15,7 +15,9 @@ function Field({ initial = "", onValue }) {
         onValue?.(next);
     };
     const { ref, onChange, inputMode } = useAmountField(set);
-    return <input ref={ref} value={v} inputMode={inputMode} onChange={onChange} data-testid="amt" />;
+    return (
+        <input ref={ref} value={v} inputMode={inputMode} onChange={onChange} data-testid="amt" />
+    );
 }
 
 /** jsdom keeps a real value + selection on the node; drive the change the way

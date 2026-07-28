@@ -34,7 +34,10 @@ describe("goalProgress", () => {
         const goal = { id: 7, goalTarget: 0, archived: false };
         const budgets = [{ categoryId: 7, year: 2026, month: 1, amount: 5_000 }];
         // a goal without a target can never be "achieved" and never divides by it
-        expect(goalProgress(goal, budgets, 2026, 3)).toMatchObject({ percent: 0, status: "active" });
+        expect(goalProgress(goal, budgets, 2026, 3)).toMatchObject({
+            percent: 0,
+            status: "active",
+        });
         expect(goalProgress({ ...goal, goalTarget: undefined }, budgets, 2026, 3).percent).toBe(0);
     });
 

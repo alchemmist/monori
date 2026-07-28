@@ -768,7 +768,13 @@ describe("categoryYearMatrix keeps a category whose year nets to zero", () => {
             groups: [{ id: 2, name: "Daily", kind: "expense" }],
             categories: [{ id: 20, groupId: 2, name: "Electronics" }],
             transactions: [
-                { id: 1, date: "2024-01-10", amount: -5_000_00, categoryId: 20, description: "buy" },
+                {
+                    id: 1,
+                    date: "2024-01-10",
+                    amount: -5_000_00,
+                    categoryId: 20,
+                    description: "buy",
+                },
                 { id: 2, date: "2024-06-10", amount: 5_000_00, categoryId: 20, description: "ref" },
             ],
         };

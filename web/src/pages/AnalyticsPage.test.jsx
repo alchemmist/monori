@@ -440,7 +440,9 @@ describe("AnalyticsPage", () => {
         it("averages a full past year over exactly twelve months", async () => {
             const { user } = render(
                 seed({
-                    transactions: [txn(1, { categoryId: 1, amount: 120_000_00, date: `${PREV}-06-15` })],
+                    transactions: [
+                        txn(1, { categoryId: 1, amount: 120_000_00, date: `${PREV}-06-15` }),
+                    ],
                 }),
             );
 
@@ -486,9 +488,7 @@ describe("AnalyticsPage", () => {
         });
 
         it("dashes savings rate when there was no income", () => {
-            render(
-                seed({ transactions: [txn(1, { amount: -300_00, date: `${YEAR}-01-06` })] }),
-            );
+            render(seed({ transactions: [txn(1, { amount: -300_00, date: `${YEAR}-01-06` })] }));
             expect(kpiValue("Savings rate")).toBe("—");
         });
 
@@ -562,7 +562,9 @@ describe("AnalyticsPage", () => {
             render(
                 seed({
                     budgets: [{ categoryId: 2, year: YEAR, month: 1, amount: 10_000_00 }],
-                    transactions: [txn(1, { categoryId: 2, amount: -12_000_00, date: `${YEAR}-01-10` })],
+                    transactions: [
+                        txn(1, { categoryId: 2, amount: -12_000_00, date: `${YEAR}-01-10` }),
+                    ],
                 }),
             );
             expect(kpiColor("Over budget")).toBe("var(--m-expense)");
@@ -689,14 +691,16 @@ describe("AnalyticsPage", () => {
             screen
                 .getByText(categoryName)
                 .closest("tr")
-                .querySelectorAll("td")[monthIndex + 1]
-                .querySelector(".disc-cell");
+                .querySelectorAll("td")
+                [monthIndex + 1].querySelector(".disc-cell");
 
         it("marks exactly-on-budget as ok, not amber", () => {
             render(
                 seed({
                     budgets: [{ categoryId: 2, year: YEAR, month: 1, amount: 10_000_00 }],
-                    transactions: [txn(1, { categoryId: 2, amount: -10_000_00, date: `${YEAR}-01-10` })],
+                    transactions: [
+                        txn(1, { categoryId: 2, amount: -10_000_00, date: `${YEAR}-01-10` }),
+                    ],
                 }),
             );
             expect(cellFor("Groceries", 0)).toHaveClass("disc-cell_ok");
@@ -706,15 +710,14 @@ describe("AnalyticsPage", () => {
             render(
                 seed({
                     budgets: [],
-                    transactions: [txn(1, { categoryId: 2, amount: -5_000_00, date: `${YEAR}-01-10` })],
+                    transactions: [
+                        txn(1, { categoryId: 2, amount: -5_000_00, date: `${YEAR}-01-10` }),
+                    ],
                 }),
             );
             const cell = cellFor("Groceries", 0);
             expect(cell).toHaveClass("disc-cell_nobudget");
-            expect(cell).toHaveAttribute(
-                "title",
-                expect.stringContaining("no budget"),
-            );
+            expect(cell).toHaveAttribute("title", expect.stringContaining("no budget"));
         });
 
         it("marks 120% exactly as amber and just over as red", () => {

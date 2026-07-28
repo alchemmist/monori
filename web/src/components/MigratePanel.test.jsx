@@ -150,7 +150,7 @@ describe("MigratePanel", () => {
         expect(screen.queryByText("Card")).not.toBeInTheDocument();
     });
 
-    it("pre-selects the settings default account for the unmarked slot", async () => {
+    it("preselects the settings default account for the unmarked slot", async () => {
         seed({ accounts: [{ id: 1, name: "Card", archived: false, currency: "RUB" }] });
         useStore.setState({ user: { defaultAccountId: 1 } });
         vi.spyOn(api, "workbookPreview").mockResolvedValue({
@@ -177,9 +177,7 @@ describe("MigratePanel", () => {
         });
         // the unmarked slot is mapped to the default account without any pick,
         // so import is enabled straight away
-        await waitFor(() =>
-            expect(screen.getByRole("button", { name: "Import" })).toBeEnabled(),
-        );
+        await waitFor(() => expect(screen.getByRole("button", { name: "Import" })).toBeEnabled());
         await user.click(screen.getByRole("button", { name: "Import" }));
         await waitFor(() =>
             expect(commit).toHaveBeenCalledWith(

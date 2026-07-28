@@ -139,13 +139,7 @@ const ENDPOINTS = [
         "PATCH",
         { name: "Home" },
     ],
-    [
-        "archiveGoal",
-        () => api.archiveGoal(7),
-        "/api/categories/7/archive-goal",
-        "POST",
-        {},
-    ],
+    ["archiveGoal", () => api.archiveGoal(7), "/api/categories/7/archive-goal", "POST", {}],
     ["deleteCategory", () => api.deleteCategory(1), "/api/categories/1", "DELETE", undefined],
     // the merge target goes in the body, not the path — swapping them silently
     // merges the wrong way round

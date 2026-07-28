@@ -341,12 +341,12 @@ describe("CategoriesPage", () => {
             categories: [],
         });
         const { container } = renderUI(<CategoriesPage />);
-        expect(
-            container.querySelector('[data-gid="2"] .kb-add-card').textContent,
-        ).toContain("Add category");
-        expect(
-            container.querySelector('[data-gid="3"] .kb-add-card').textContent,
-        ).toContain("Add goal");
+        expect(container.querySelector('[data-gid="2"] .kb-add-card').textContent).toContain(
+            "Add category",
+        );
+        expect(container.querySelector('[data-gid="3"] .kb-add-card').textContent).toContain(
+            "Add goal",
+        );
     });
 
     it("renders a goal card with open/closed tag and formatted target", () => {

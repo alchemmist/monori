@@ -233,8 +233,7 @@ describe("AdminPage", () => {
             },
         ]);
         renderUI(<AdminPage />);
-        const badge = (await findUserRow())
-            .querySelector(".admin-sync");
+        const badge = (await findUserRow()).querySelector(".admin-sync");
         expect(badge).toHaveTextContent("pending");
         expect(badge).not.toHaveTextContent("·");
         expect(badge.querySelector(".admin-sync__dot")).toHaveStyle({
@@ -250,8 +249,7 @@ describe("AdminPage", () => {
             },
         ]);
         renderUI(<AdminPage />);
-        const badge = (await findUserRow())
-            .querySelector(".admin-sync");
+        const badge = (await findUserRow()).querySelector(".admin-sync");
         expect(badge.querySelector(".admin-sync__dot")).toHaveStyle({
             background: "var(--m-expense)",
         });
@@ -328,8 +326,22 @@ describe("AdminPage", () => {
             featureUsage: [{ feature: "sync", count: 1234 }],
             recentLogins: Array.from({ length: 10 }, (_, i) => `2026-02-0${i % 9}T09:00:00`),
             recentTransactions: [
-                { id: 1, date: "2026-02-02", description: "", category: "Food", account: "Card", amount: 500 },
-                { id: 2, date: "2026-02-03", description: "", category: "", account: "Cash", amount: -75 },
+                {
+                    id: 1,
+                    date: "2026-02-02",
+                    description: "",
+                    category: "Food",
+                    account: "Card",
+                    amount: 500,
+                },
+                {
+                    id: 2,
+                    date: "2026-02-03",
+                    description: "",
+                    category: "",
+                    account: "Cash",
+                    amount: -75,
+                },
             ],
         });
         const { user: events } = renderUI(<AdminPage />);
@@ -342,7 +354,9 @@ describe("AdminPage", () => {
         // feature count 1234 -> ru-RU "1 234"
         expect(within(detailEl).getByText("1 234")).toBeInTheDocument();
         // recent logins are capped at 8
-        expect(detailEl.querySelectorAll(".admin-detail__col .admin-logins")[2].children).toHaveLength(8);
+        expect(
+            detailEl.querySelectorAll(".admin-detail__col .admin-logins")[2].children,
+        ).toHaveLength(8);
 
         // description empty -> falls back to category, then em dash
         expect(within(detailEl).getByText("Food")).toBeInTheDocument();
@@ -394,7 +408,9 @@ describe("AdminPage", () => {
             })),
         });
         renderUI(<AdminPage />);
-        const list = (await screen.findByText("Recent logins")).closest(".chart-card").querySelector(".admin-logins");
+        const list = (await screen.findByText("Recent logins"))
+            .closest(".chart-card")
+            .querySelector(".admin-logins");
         expect(list.children).toHaveLength(12);
         expect(screen.getByText("u11@example.test")).toBeInTheDocument();
         expect(screen.queryByText("u12@example.test")).not.toBeInTheDocument();
