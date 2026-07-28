@@ -6,6 +6,30 @@
     margin-bottom: 16px;
 }
 
+.goal-group-badge {
+    margin-left: 8px;
+    color: var(--m-accent);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
+.goal-urgency {
+    color: var(--m-warning);
+}
+
+.goal-urgency_overdue {
+    color: var(--m-expense);
+    font-weight: 700;
+}
+
+.goal-distribute-prompt {
+    margin-bottom: 8px;
+    color: var(--m-text);
+    font-size: 13px;
+    font-weight: 600;
+}
+
 /* the range lives in a dropdown so the toolbar keeps one row of equal-height
    controls; the button above it carries the current selection */
 .tx-amount-filter {
@@ -279,6 +303,53 @@
 
 .cat-row:hover {
     background: var(--m-surface-hover);
+}
+
+.goal-category-cell {
+    background: linear-gradient(
+        90deg,
+        color-mix(in srgb, var(--m-accent) 18%, var(--m-surface)) 0 var(--goal-progress),
+        var(--m-surface) var(--goal-progress) 100%
+    );
+}
+
+.cat-row:hover .goal-category-cell {
+    background: linear-gradient(
+        90deg,
+        color-mix(in srgb, var(--m-accent) 26%, var(--m-surface-hover)) 0 var(--goal-progress),
+        var(--m-surface-hover) var(--goal-progress) 100%
+    );
+}
+
+.goal-label {
+    display: flex;
+    align-items: center;
+    width: calc(100% + 28px);
+    height: 38px;
+    margin-inline: -14px;
+    padding-inline: 14px;
+    cursor: help;
+}
+
+.cat-row__name .goal-label {
+    flex: 1;
+}
+
+.goal-label__popup {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.goal-tooltip {
+    padding: 6px 9px !important;
+    font-size: 11px !important;
+    font-weight: 400 !important;
+    color: var(--m-text) !important;
+    border: 1px solid var(--glass-border) !important;
+    background: color-mix(in srgb, var(--m-surface-raised) 78%, transparent) !important;
+    backdrop-filter: blur(16px) saturate(135%);
+    box-shadow: var(--glass-shadow) !important;
 }
 
 .cat-row__name {

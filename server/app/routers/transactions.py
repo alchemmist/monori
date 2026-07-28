@@ -64,10 +64,10 @@ class BulkBody(BaseModel):
     categoryId: int | None = None
 
 
-def _validate_category_kind(kind, amount):
-    if amount < 0 and kind != "expense":
+def _validate_category_type(transaction_sign, amount):
+    if amount < 0 and transaction_sign != -1:
         raise HTTPException(400, "expense transaction requires an expense category")
-    if amount > 0 and kind != "income":
+    if amount > 0 and transaction_sign != 1:
         raise HTTPException(400, "income transaction requires an income category")
 
 
@@ -78,14 +78,16 @@ def _resolve_category(c, category_id, uid, amount=None):
     if category_id in (None, 0):
         return None
     category = c.execute(
-        "SELECT c.id, g.kind FROM categories c JOIN category_groups g ON g.id = c.group_id"
+        "SELECT c.id, t.transaction_sign FROM categories c"
+        " JOIN category_groups g ON g.id = c.group_id"
+        " JOIN category_group_types t ON t.id=g.type_id"
         " WHERE c.id=? AND g.user_id=?",
         (category_id, uid),
     ).fetchone()
     if not category:
         raise HTTPException(400, "unknown category")
     if amount is not None:
-        _validate_category_kind(category["kind"], amount)
+        _validate_category_type(category["transaction_sign"], amount)
     return category_id
 
 

@@ -5,6 +5,7 @@ import { Plus, ChevronDown, EllipsisVertical } from "@gravity-ui/icons";
 import BudgetCell from "./BudgetCell.jsx";
 import { rub } from "../format.js";
 import { MONTHS_SHORT } from "../format.js";
+import GoalCategoryLabel from "./GoalCategoryLabel.jsx";
 
 const METRICS = {
     budgeted: { key: "budgeted", label: "Bud" },
@@ -35,8 +36,11 @@ export default function YearGrid({
     onSelectBudget,
     onCategoryMenu,
     onAddCategory,
+    goalProgressFor,
 }) {
     const span = cols.length;
+    const metricWidth = Math.max(82, Math.ceil(228 / span));
+    const tableWidth = 210 + 12 * span * metricWidth + 164;
     const wrapRef = useRef(null);
 
     // The wrap is its own scroll pane filling the viewport below the toolbar, so
@@ -83,7 +87,17 @@ export default function YearGrid({
 
     return (
         <div className="year-grid-wrap" ref={wrapRef}>
-            <table className="year-grid">
+            <table className="year-grid" style={{ width: tableWidth }}>
+                <colgroup>
+                    <col style={{ width: 210 }} />
+                    {MONTHS_SHORT.flatMap((m) =>
+                        cols.map((metric) => (
+                            <col key={`${m}-${metric}`} style={{ width: metricWidth }} />
+                        )),
+                    )}
+                    <col style={{ width: 82 }} />
+                    <col style={{ width: 82 }} />
+                </colgroup>
                 <thead>
                     {/* header band: the year, then the colored Available-to-budget hero per month */}
                     <tr className="yg-band">
@@ -223,13 +237,28 @@ export default function YearGrid({
 
                         if (!isCollapsed) {
                             for (const c of cats) {
+                                const goal = goalProgressFor?.(c);
                                 const months = res.byCategory.get(c.id) ?? [];
                                 const yearSpent = months.reduce((s, mm) => s + mm.outflows, 0);
                                 rows.push(
                                     <tr key={c.id} className="yg-row">
-                                        <td className="yg-name">
+                                        <td
+                                            className={`yg-name ${goal ? "goal-category-cell" : ""}`}
+                                            style={
+                                                goal
+                                                    ? { "--goal-progress": `${goal.percent}%` }
+                                                    : undefined
+                                            }
+                                        >
                                             <div className="yg-name_cat">
-                                                <span className="yg-cat-label">{c.name}</span>
+                                                <div className="yg-cat-content">
+                                                    <span className="yg-cat-label">
+                                                        <GoalCategoryLabel
+                                                            name={c.name}
+                                                            progress={goal}
+                                                        />
+                                                    </span>
+                                                </div>
                                                 <span
                                                     className="yg-row-menu"
                                                     onClick={(e) => e.stopPropagation()}

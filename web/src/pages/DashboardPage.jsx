@@ -238,7 +238,7 @@ export default function DashboardPage({ firstYear, lastYear }) {
 
     // Chart 5: expense structure by group, stacked, its own year selector
     const groupStack = useMemo(() => {
-        const expenseGroups = snapshot.groups.filter((g) => g.kind === "expense");
+        const expenseGroups = snapshot.groups.filter((g) => g.kind !== "income");
         const perGroup = new Map(expenseGroups.map((g) => [g.id, Array(12).fill(0)]));
         for (const r of yearRows(stackYear)) {
             const months = perGroup.get(r.groupId);

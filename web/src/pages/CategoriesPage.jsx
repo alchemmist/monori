@@ -90,6 +90,7 @@ export default function CategoriesPage() {
     });
 
     const groups = useMemo(() => orderedGroups(snapshot.groups), [snapshot.groups]);
+    const firstGoalGroup = groups.find((g) => g.kind === "goal");
 
     const catsByGroup = useMemo(
         () => categoriesByGroup(snapshot.categories, groups),
@@ -335,28 +336,43 @@ export default function CategoriesPage() {
 
     const notify = (t) => useStore.getState().notify(t);
 
-    const catMenu = (c) => [
-        { text: "Edit", action: () => setDialog({ type: "cat-edit", category: c }) },
-        {
-            text: c.archived ? "Unarchive" : "Archive",
-            action: () =>
-                useStore
-                    .getState()
-                    .patchCategory(c.id, { archived: !c.archived })
-                    .catch((e) =>
+    const catMenu = (c) => {
+        const isGoal = groups.find((g) => g.id === c.groupId)?.kind === "goal";
+        return [
+            { text: "Edit", action: () => setDialog({ type: "cat-edit", category: c }) },
+            {
+                text: c.archived
+                    ? isGoal
+                        ? "Open goal"
+                        : "Unarchive"
+                    : isGoal
+                      ? "Close goal"
+                      : "Archive",
+                action: () => {
+                    const action = c.archived
+                        ? useStore.getState().patchCategory(c.id, {
+                              archived: false,
+                              ...(isGoal ? { goalStatus: "active" } : {}),
+                          })
+                        : isGoal
+                          ? useStore.getState().archiveGoal(c.id)
+                          : useStore.getState().patchCategory(c.id, { archived: true });
+                    action.catch((e) =>
                         notify({
                             title: "Failed to update category",
                             theme: "danger",
                             content: String(e),
                         }),
-                    ),
-        },
-        {
-            text: "Delete",
-            theme: "danger",
-            action: () => setDialog({ type: "cat-delete", category: c }),
-        },
-    ];
+                    );
+                },
+            },
+            {
+                text: "Delete",
+                theme: "danger",
+                action: () => setDialog({ type: "cat-delete", category: c }),
+            },
+        ];
+    };
 
     const groupMenu = (g) => [
         { text: "Rename & kind", action: () => setDialog({ type: "group-edit", group: g }) },
@@ -407,6 +423,21 @@ export default function CategoriesPage() {
                 >
                     New category
                 </Button>
+                {firstGoalGroup && (
+                    <Button
+                        variant="filled"
+                        size="m"
+                        onClick={() =>
+                            setDialog({
+                                type: "cat-edit",
+                                category: { groupId: firstGoalGroup.id },
+                            })
+                        }
+                        leftSection={<Plus width={14} height={14} />}
+                    >
+                        New goal
+                    </Button>
+                )}
             </div>
 
             <div className={`kb-board${drag ? " kb-board_dragging" : ""}`} ref={boardRef}>
@@ -427,7 +458,15 @@ export default function CategoriesPage() {
                                 }
                             >
                                 <span className="kb-col__name">{g.name}</span>
-                                <Tag theme={g.kind === "income" ? "success" : "danger"}>
+                                <Tag
+                                    theme={
+                                        g.kind === "income"
+                                            ? "success"
+                                            : g.kind === "goal"
+                                              ? "info"
+                                              : "danger"
+                                    }
+                                >
                                     {g.kind}
                                 </Tag>
                                 <span className="kb-col__count">{cats.length}</span>
@@ -444,7 +483,8 @@ export default function CategoriesPage() {
                                     setDialog({ type: "cat-edit", category: { groupId: g.id } })
                                 }
                             >
-                                <Plus width={13} height={13} /> Add category
+                                <Plus width={13} height={13} />
+                                {g.kind === "goal" ? "Add goal" : "Add category"}
                             </button>
                         </div>
                     );
@@ -466,7 +506,15 @@ export default function CategoriesPage() {
                         <div className={`kb-col kb-col_clone kb-col_${dragGroup.kind}`}>
                             <div className="kb-col__head">
                                 <span className="kb-col__name">{dragGroup.name}</span>
-                                <Tag theme={dragGroup.kind === "income" ? "success" : "danger"}>
+                                <Tag
+                                    theme={
+                                        dragGroup.kind === "income"
+                                            ? "success"
+                                            : dragGroup.kind === "goal"
+                                              ? "info"
+                                              : "danger"
+                                    }
+                                >
                                     {dragGroup.kind}
                                 </Tag>
                                 <span className="kb-col__count">
@@ -515,11 +563,18 @@ export default function CategoriesPage() {
 }
 
 function CardBody({ c, count, menu }) {
+    const isGoal = c.goalTarget != null;
     return (
         <>
             <div className="kb-card__top">
                 <span className="kb-card__name">{c.name}</span>
-                {c.archived && <Tag theme="warning">arch</Tag>}
+                {isGoal ? (
+                    <Tag theme={c.archived ? "warning" : "success"}>
+                        {c.archived ? "closed" : "open"}
+                    </Tag>
+                ) : (
+                    c.archived && <Tag theme="warning">arch</Tag>
+                )}
                 <span className="kb-card__usage" title={`${count} transactions`}>
                     {count}
                 </span>
@@ -528,6 +583,12 @@ function CardBody({ c, count, menu }) {
             {c.keywords && (
                 <div className="kb-card__kw">
                     {c.keywords.split("|").filter(Boolean).join(", ")}
+                </div>
+            )}
+            {c.goalTarget != null && (
+                <div className="kb-card__goal">
+                    Target {Math.round(c.goalTarget / 100).toLocaleString("ru-RU")} ₽
+                    {c.goalTargetDate ? ` · ${c.goalTargetDate}` : ""}
                 </div>
             )}
         </>
@@ -554,6 +615,12 @@ function NewGroupControl({ onPick }) {
             >
                 Expense
             </button>
+            <button
+                className="kb-newgroup__half kb-newgroup__half_goal"
+                onClick={() => onPick("goal")}
+            >
+                Goals
+            </button>
         </div>
     );
 }
@@ -575,6 +642,12 @@ function NewGroupColumn({ onPick }) {
                 onClick={() => onPick("expense")}
             >
                 <Plus width={13} height={13} /> Expense group
+            </button>
+            <button
+                className="kb-col_add__half kb-col_add__half_goal"
+                onClick={() => onPick("goal")}
+            >
+                <Plus width={13} height={13} /> Goals group
             </button>
         </div>
     );

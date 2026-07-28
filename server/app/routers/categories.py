@@ -8,16 +8,13 @@ from ..deps import conn
 
 router = APIRouter(prefix="/api/categories", tags=["categories"])
 
-_OWNED = (
-    "SELECT c.id, c.keywords, g.kind FROM categories c"
-    " JOIN category_groups g ON g.id = c.group_id WHERE c.id=? AND g.user_id=?"
-)
-
 
 class CategoryBody(BaseModel):
     name: str = Field(min_length=1, max_length=80)
     groupId: int
     keywords: str = ""
+    goalTarget: int | None = Field(default=0, ge=0)
+    goalTargetDate: str | None = None
 
 
 class CategoryPatch(BaseModel):
@@ -25,6 +22,13 @@ class CategoryPatch(BaseModel):
     groupId: int | None = None
     keywords: str | None = None
     archived: bool | None = None
+    goalTarget: int | None = Field(default=0, ge=0)
+    goalTargetDate: str | None = None
+    goalStatus: str | None = None
+
+
+class ArchiveGoalBody(BaseModel):
+    pass
 
 
 class Reorder(BaseModel):
@@ -47,7 +51,13 @@ def _merge_keywords(a, b):
 
 
 def _owned_category(c, cat_id, uid):
-    return c.execute(_OWNED, (cat_id, uid)).fetchone()
+    return c.execute(
+        "SELECT c.id, c.keywords, c.goal_target, t.type, t.is_goal"
+        " FROM categories c JOIN category_groups g ON g.id = c.group_id"
+        " JOIN category_group_types t ON t.id = g.type_id"
+        " WHERE c.id=? AND g.user_id=?",
+        (cat_id, uid),
+    ).fetchone()
 
 
 def _name_taken(c, uid, name, except_id=None):
@@ -64,10 +74,16 @@ def create_category(body: CategoryBody, user: Annotated[dict, Depends(current_us
     uid = user["id"]
     c = conn()
     try:
-        if not c.execute(
-            "SELECT id FROM category_groups WHERE id=? AND user_id=?", (body.groupId, uid)
-        ).fetchone():
+        group = c.execute(
+            "SELECT g.id, t.is_goal FROM category_groups g"
+            " JOIN category_group_types t ON t.id=g.type_id"
+            " WHERE g.id=? AND g.user_id=?",
+            (body.groupId, uid),
+        ).fetchone()
+        if not group:
             raise HTTPException(400, "unknown group")
+        if group["is_goal"] and not body.goalTarget:
+            raise HTTPException(400, "goalTarget is required for goal categories")
         if _name_taken(c, uid, body.name):
             raise HTTPException(409, "category with this name already exists")
         max_sort = c.execute(
@@ -76,8 +92,17 @@ def create_category(body: CategoryBody, user: Annotated[dict, Depends(current_us
             (uid,),
         ).fetchone()[0]
         cur = c.execute(
-            "INSERT INTO categories (group_id, name, keywords, sort) VALUES (?, ?, ?, ?)",
-            (body.groupId, body.name, body.keywords, max_sort + 1),
+            "INSERT INTO categories (group_id, name, keywords, sort, goal_target, goal_status,"
+            " goal_target_date) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (
+                body.groupId,
+                body.name,
+                body.keywords,
+                max_sort + 1,
+                body.goalTarget if group["is_goal"] else None,
+                "active" if group["is_goal"] else None,
+                body.goalTargetDate if group["is_goal"] else None,
+            ),
         )
         c.commit()
         return {"id": cur.lastrowid}
@@ -90,24 +115,67 @@ def patch_category(cat_id: int, patch: CategoryPatch, user: Annotated[dict, Depe
     uid = user["id"]
     c = conn()
     try:
-        if not _owned_category(c, cat_id, uid):
+        category = _owned_category(c, cat_id, uid)
+        if not category:
             raise HTTPException(404, "category not found")
         if patch.name is not None:
             if _name_taken(c, uid, patch.name, except_id=cat_id):
                 raise HTTPException(409, "category with this name already exists")
             c.execute("UPDATE categories SET name=? WHERE id=?", (patch.name, cat_id))
+        goal_fields_allowed = bool(category["is_goal"])
         if patch.groupId is not None:
-            if not c.execute(
-                "SELECT id FROM category_groups WHERE id=? AND user_id=?", (patch.groupId, uid)
-            ).fetchone():
+            target_group = c.execute(
+                "SELECT g.id, t.is_goal FROM category_groups g"
+                " JOIN category_group_types t ON t.id=g.type_id"
+                " WHERE g.id=? AND g.user_id=?",
+                (patch.groupId, uid),
+            ).fetchone()
+            if not target_group:
                 raise HTTPException(400, "unknown group")
+            if target_group["is_goal"] and not patch.goalTarget and category["goal_target"] is None:
+                raise HTTPException(400, "goalTarget is required for goal categories")
+            goal_fields_allowed = bool(target_group["is_goal"])
             c.execute("UPDATE categories SET group_id=? WHERE id=?", (patch.groupId, cat_id))
+            if not target_group["is_goal"]:
+                goal_fields_allowed = False
+                c.execute(
+                    "UPDATE categories SET goal_target=NULL, goal_status=NULL,"
+                    " goal_target_date=NULL WHERE id=?",
+                    (cat_id,),
+                )
         if patch.keywords is not None:
             c.execute("UPDATE categories SET keywords=? WHERE id=?", (patch.keywords, cat_id))
         if patch.archived is not None:
             c.execute(
                 "UPDATE categories SET archived=? WHERE id=?", (1 if patch.archived else 0, cat_id)
             )
+        if goal_fields_allowed and patch.goalTarget:
+            c.execute("UPDATE categories SET goal_target=? WHERE id=?", (patch.goalTarget, cat_id))
+        if goal_fields_allowed and patch.goalTargetDate is not None:
+            c.execute(
+                "UPDATE categories SET goal_target_date=? WHERE id=?",
+                (patch.goalTargetDate or None, cat_id),
+            )
+        if goal_fields_allowed and patch.goalStatus is not None:
+            if patch.goalStatus not in ("active", "achieved"):
+                raise HTTPException(400, "goalStatus must be 'active' or 'achieved'")
+            c.execute("UPDATE categories SET goal_status=? WHERE id=?", (patch.goalStatus, cat_id))
+        c.commit()
+        return {"ok": True}
+    finally:
+        c.close()
+
+
+@router.post("/{cat_id}/archive-goal")
+def archive_goal(cat_id: int, body: ArchiveGoalBody, user: Annotated[dict, Depends(current_user)]):
+    """Close a goal without rewriting its allocations or purchase history."""
+    uid = user["id"]
+    c = conn()
+    try:
+        row = _owned_category(c, cat_id, uid)
+        if not row or not row["is_goal"]:
+            raise HTTPException(404, "goal not found")
+        c.execute("UPDATE categories SET archived=1, goal_status='archived' WHERE id=?", (cat_id,))
         c.commit()
         return {"ok": True}
     finally:
@@ -185,7 +253,7 @@ def merge_category(cat_id: int, body: MergeBody, user: Annotated[dict, Depends(c
         dst = _owned_category(c, body.into, uid)
         if not dst:
             raise HTTPException(400, "unknown merge target")
-        if src["kind"] != dst["kind"]:
+        if src["type"] != dst["type"]:
             raise HTTPException(400, "cannot merge across income and expense")
         c.execute("UPDATE transactions SET category_id=? WHERE category_id=?", (body.into, cat_id))
         c.execute(

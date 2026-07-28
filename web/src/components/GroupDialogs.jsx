@@ -60,12 +60,13 @@ export function GroupEditDialog({ group, onClose }) {
                         data={[
                             { value: "income", label: "Income" },
                             { value: "expense", label: "Expense" },
+                            { value: "goal", label: "Goals" },
                         ]}
                     />
                 </div>
                 <Txt tone="secondary" caption>
-                    Income groups collect money coming in; expense groups collect what you spend.
-                    Categories inside inherit this split for auto-categorization.
+                    Income groups collect money coming in; expense groups collect spending; goal
+                    groups track savings targets funded through budget allocations.
                 </Txt>
             </div>
         </AppDialog>

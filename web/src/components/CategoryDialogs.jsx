@@ -11,19 +11,35 @@ export function CategoryEditDialog({ category, groups, onClose }) {
     const [name, setName] = useState(category.name ?? "");
     const [groupId, setGroupId] = useState(String(category.groupId));
     const [keywords, setKeywords] = useState(category.keywords ?? "");
+    const [goalTarget, setGoalTarget] = useState(
+        category.goalTarget ? String(category.goalTarget / 100) : "",
+    );
+    const [goalTargetDate, setGoalTargetDate] = useState(category.goalTargetDate ?? "");
     const [busy, setBusy] = useState(false);
+    const goalGroup = groups.find((g) => String(g.id) === groupId)?.kind === "goal";
+    const targetKopecks = Math.round(Number(goalTarget.replace(",", ".")) * 100);
 
     const apply = async () => {
         if (!name.trim()) return;
         setBusy(true);
         try {
             if (isNew) {
-                await createCategory({ name: name.trim(), groupId: +groupId, keywords });
+                await createCategory({
+                    name: name.trim(),
+                    groupId: +groupId,
+                    keywords,
+                    ...(goalGroup
+                        ? { goalTarget: targetKopecks, goalTargetDate: goalTargetDate || null }
+                        : {}),
+                });
             } else {
                 await patchCategory(category.id, {
                     name: name.trim(),
                     groupId: +groupId,
                     keywords,
+                    ...(goalGroup
+                        ? { goalTarget: targetKopecks, goalTargetDate: goalTargetDate || "" }
+                        : {}),
                 });
             }
             onClose();
@@ -45,7 +61,7 @@ export function CategoryEditDialog({ category, groups, onClose }) {
             applyText={isNew ? "Create" : "Save"}
             onApply={apply}
             applyLoading={busy}
-            applyDisabled={!name.trim()}
+            applyDisabled={!name.trim() || (goalGroup && !(targetKopecks > 0))}
         >
             <div style={{ display: "flex", flexDirection: "column", gap: 12, paddingTop: 4 }}>
                 <FTextInput
@@ -66,6 +82,22 @@ export function CategoryEditDialog({ category, groups, onClose }) {
                     onChange={(e) => setKeywords(e.target.value)}
                     placeholder="Substring|Another substring"
                 />
+                {goalGroup && (
+                    <>
+                        <FTextInput
+                            label="Target, ₽"
+                            value={goalTarget}
+                            onChange={(e) => setGoalTarget(e.target.value)}
+                            inputMode="decimal"
+                        />
+                        <FTextInput
+                            label="Deadline (optional)"
+                            type="date"
+                            value={goalTargetDate}
+                            onChange={(e) => setGoalTargetDate(e.target.value)}
+                        />
+                    </>
+                )}
                 <Txt tone="secondary" caption>
                     Keywords are matched against transaction descriptions during import, separated
                     by |. First matching category wins.

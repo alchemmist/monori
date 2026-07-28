@@ -76,7 +76,11 @@ def _linked_accounts(c, cid, uid):
 def _load_user_rules(c, uid):
     groups = {
         r["id"]: r["kind"]
-        for r in c.execute("SELECT id, kind FROM category_groups WHERE user_id=?", (uid,))
+        for r in c.execute(
+            "SELECT g.id, t.type AS kind FROM category_groups g"
+            " JOIN category_group_types t ON t.id=g.type_id WHERE g.user_id=?",
+            (uid,),
+        )
     }
     cats = [
         dict(r)
