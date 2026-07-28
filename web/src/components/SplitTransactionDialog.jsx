@@ -4,9 +4,68 @@ import { Plus, TrashBin } from "@gravity-ui/icons";
 import { useStore } from "../store.js";
 import { FTextInput } from "../ui/fields.jsx";
 import InlineSelect from "../ui/InlineSelect.jsx";
-import { money, parseRub } from "../format.js";
+import { amountInput, money, parseRub } from "../format.js";
+import { signedSplitAmount } from "../engine/splitAmounts.js";
 
 const blankPart = () => ({ categoryId: null, amount: "", comment: "" });
+const splitColors = ["#7c5cff", "#16a3a3", "#e9a23b", "#df6679", "#5794e6", "#8cbd50"];
+
+const evenAmounts = (total, count) => {
+    const base = Math.trunc(Math.abs(total) / count);
+    return Array.from({ length: count }, (_, index) =>
+        index === count - 1 ? Math.abs(total) - base * (count - 1) : base,
+    );
+};
+
+function AllocationBar({ amounts, total, onChange }) {
+    const boundaries = amounts
+        .slice(0, -1)
+        .map((_, index) => amounts.slice(0, index + 1).reduce((sum, amount) => sum + amount, 0));
+    const stops = amounts.reduce(
+        (result, amount, index) => {
+            const from = result.position;
+            const to = from + (amount / total) * 100;
+            result.colors.push(
+                `${splitColors[index % splitColors.length]} ${from}%`,
+                `${splitColors[index % splitColors.length]} ${to}%`,
+            );
+            result.position = to;
+            return result;
+        },
+        { colors: [], position: 0 },
+    );
+
+    const moveBoundary = (index, value) => {
+        const previous = index === 0 ? 0 : boundaries[index - 1];
+        const next = index === boundaries.length - 1 ? total : boundaries[index + 1];
+        const boundary = Math.max(previous + 1, Math.min(next - 1, value));
+        const nextAmounts = [...amounts];
+        nextAmounts[index] = boundary - previous;
+        nextAmounts[index + 1] = next - boundary;
+        onChange(nextAmounts);
+    };
+
+    return (
+        <div
+            className="split-allocation"
+            style={{ background: `linear-gradient(90deg, ${stops.colors.join(", ")})` }}
+        >
+            {boundaries.map((boundary, index) => (
+                <input
+                    key={index}
+                    className="split-allocation__range"
+                    type="range"
+                    aria-label={`Boundary between parts ${index + 1} and ${index + 2}`}
+                    min={1}
+                    max={total - 1}
+                    step={1}
+                    value={boundary}
+                    onChange={(event) => moveBoundary(index, Number(event.target.value))}
+                />
+            ))}
+        </div>
+    );
+}
 
 export default function SplitTransactionDialog({ transaction, onClose }) {
     const { snapshot, replaceTransactionSplits, notify } = useStore();
@@ -19,10 +78,13 @@ export default function SplitTransactionDialog({ transaction, onClose }) {
             transaction.splits?.length
                 ? transaction.splits.map((part) => ({
                       categoryId: part.categoryId,
-                      amount: String(part.amount / 100),
+                      amount: amountInput(Math.abs(part.amount)),
                       comment: part.comment ?? "",
                   }))
-                : [blankPart(), blankPart()],
+                : evenAmounts(transaction.amount, 2).map((amount) => ({
+                      ...blankPart(),
+                      amount: amountInput(amount),
+                  })),
         );
     }, [transaction]);
 
@@ -41,18 +103,21 @@ export default function SplitTransactionDialog({ transaction, onClose }) {
     }, [snapshot.categories, snapshot.groups, transaction]);
 
     if (!transaction) return null;
-    const parsed = parts.map((part) => parseRub(part.amount));
+    const totalMagnitude = Math.abs(transaction.amount);
+    const parsed = parts.map((part) => {
+        const amount = parseRub(part.amount);
+        return amount == null ? null : Math.abs(amount);
+    });
     const assigned = parsed.reduce((sum, amount) => sum + (amount ?? 0), 0);
-    const remainder = transaction.amount - assigned;
+    const remainder = totalMagnitude - assigned;
+    const allocationValid =
+        remainder === 0 && parsed.every((amount) => amount != null && amount !== 0);
     const valid =
         parts.length >= 2 &&
-        remainder === 0 &&
+        allocationValid &&
         parts.every(
             (part, index) =>
-                part.categoryId != null &&
-                parsed[index] != null &&
-                parsed[index] !== 0 &&
-                parsed[index] > 0 === transaction.amount > 0,
+                part.categoryId != null && parsed[index] != null && parsed[index] !== 0,
         );
 
     const change = (index, patch) =>
@@ -62,19 +127,20 @@ export default function SplitTransactionDialog({ transaction, onClose }) {
     const assignRemainder = () => {
         if (!remainder) return;
         const index = parts.length - 1;
-        change(index, { amount: String(((parsed[index] ?? 0) + remainder) / 100) });
+        change(index, { amount: amountInput((parsed[index] ?? 0) + remainder) });
     };
     const splitEvenly = () => {
-        const base = Math.trunc(transaction.amount / parts.length);
-        let left = transaction.amount;
+        const amounts = evenAmounts(totalMagnitude, parts.length);
         setParts((current) =>
             current.map((part, index) => {
-                const amount = index === current.length - 1 ? left : base;
-                left -= amount;
-                return { ...part, amount: String(amount / 100) };
+                return { ...part, amount: amountInput(amounts[index]) };
             }),
         );
     };
+    const changeAllocations = (amounts) =>
+        setParts((current) =>
+            current.map((part, index) => ({ ...part, amount: amountInput(amounts[index]) })),
+        );
     const save = async () => {
         setSaving(true);
         try {
@@ -82,7 +148,7 @@ export default function SplitTransactionDialog({ transaction, onClose }) {
                 transaction.id,
                 parts.map((part, index) => ({
                     categoryId: part.categoryId,
-                    amount: parsed[index],
+                    amount: signedSplitAmount(parsed[index], transaction.amount),
                     comment: part.comment.trim(),
                 })),
             );
@@ -122,6 +188,13 @@ export default function SplitTransactionDialog({ transaction, onClose }) {
                 <span>Total</span>
                 <strong className="num">{money(transaction.amount)}</strong>
             </div>
+            {allocationValid && (
+                <AllocationBar
+                    amounts={parsed}
+                    total={totalMagnitude}
+                    onChange={changeAllocations}
+                />
+            )}
             <div className="split-editor__parts">
                 {parts.map((part, index) => (
                     <div className="split-editor__part" key={index}>
