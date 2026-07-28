@@ -760,6 +760,78 @@ describe("transfer legs are invisible to every income/expense total", () => {
     });
 });
 
+describe("categoryYearMatrix keeps a category whose year nets to zero", () => {
+    it("shows a spend fully refunded in a later month rather than hiding it", () => {
+        // total is 0 but the months are not: a purchase and its refund in
+        // different months still happened, so the row stays on the chart
+        const snap = {
+            groups: [{ id: 2, name: "Daily", kind: "expense" }],
+            categories: [{ id: 20, groupId: 2, name: "Electronics" }],
+            transactions: [
+                { id: 1, date: "2024-01-10", amount: -5_000_00, categoryId: 20, description: "buy" },
+                { id: 2, date: "2024-06-10", amount: 5_000_00, categoryId: 20, description: "ref" },
+            ],
+        };
+        const rows = categoryYearMatrix(snap, "2024");
+        expect(rows).toHaveLength(1);
+        expect(rows[0].total).toBe(0);
+        expect(rows[0].monthly[0]).toBe(5_000_00);
+        expect(rows[0].monthly[5]).toBe(-5_000_00);
+    });
+});
+
+describe("incomeStats over several deposits", () => {
+    const snap = {
+        groups: guardGroups,
+        categories: [{ id: 10, groupId: 1, name: "Job" }],
+        transactions: [
+            { id: 1, date: "2024-01-01", amount: 5_000_00, categoryId: 10, description: "A" },
+            { id: 2, date: "2024-01-02", amount: 9_000_00, categoryId: 10, description: "B" },
+            { id: 3, date: "2024-01-03", amount: 1_000_00, categoryId: 10, description: "C" },
+            { id: 4, date: "2024-01-04", amount: 9_000_00, categoryId: 10, description: "D" },
+        ],
+    };
+
+    it("takes the median from the sorted amounts and keeps the first largest on a tie", () => {
+        const s = incomeStats(snap, "2024");
+        expect(s.count).toBe(4);
+        // sorted [1000, 5000, 9000, 9000] → middle element
+        expect(s.median).toBe(9_000_00);
+        // the second 9000 must not displace the first one seen
+        expect(s.largest).toMatchObject({ amount: 9_000_00, description: "B" });
+    });
+});
+
+describe("year-scoped aggregators ignore a dangling category", () => {
+    const withDangling = (base) => ({
+        ...base,
+        transactions: [
+            ...base.transactions,
+            { id: 500, date: "2024-01-07", amount: -4_321_00, categoryId: 4242, description: "X" },
+        ],
+    });
+
+    it("dayOfMonthProfile drops an outflow whose category no longer resolves", () => {
+        const base = {
+            groups: guardGroups,
+            categories: guardCategories,
+            transactions: [{ id: 1, date: "2024-01-05", amount: -1_000_00, categoryId: 20 }],
+        };
+        expect(dayOfMonthProfile(withDangling(base), "2024")).toEqual(
+            dayOfMonthProfile(base, "2024"),
+        );
+    });
+
+    it("categoryTotals drops a row whose category no longer resolves", () => {
+        const base = {
+            groups: guardGroups,
+            categories: guardCategories,
+            transactions: [{ id: 1, date: "2024-01-05", amount: -1_000_00, categoryId: 20 }],
+        };
+        expect(categoryTotals(withDangling(base))).toEqual(categoryTotals(base));
+    });
+});
+
 describe("charts vs budget table parity", () => {
     it("categoryYearMatrix totals equal the budget engine's activity to the kopeck", () => {
         // a category with a refund is exactly where a gross-outflow chart and
