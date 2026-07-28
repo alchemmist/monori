@@ -6,8 +6,6 @@ MUTATION_THRESHOLD ?= 85
 
 WEBBIN := web/node_modules/.bin
 
-# `install` is the first target, but a bare `make` must still bring the dev
-# stack up — not run networked installs — so pin the default explicitly.
 .DEFAULT_GOAL := up
 
 .PHONY: install setup tools dev down reset-db deploy api web build \
@@ -17,9 +15,6 @@ WEBBIN := web/node_modules/.bin
         test t-fast t-medium t-slow t-slow-ui coverage mutation m-front m-back \
         schema-diagram check
 
-# One-shot install of everything the make targets need. web/package-lock.json
-# is gitignored, so `npm install` (not `npm ci`) is what resolves package.json —
-# rerun this whenever web/package.json or server deps change.
 install:
 	cd web && npm install --no-audit --no-fund
 	cd server && uv sync
@@ -27,18 +22,8 @@ install:
 
 setup: install
 
-# Standalone CLIs the lint/analyze/audit targets shell out to, outside npm/uv.
-# macOS installs them from Homebrew; the uvx-run tools (sqlfluff, yamllint,
-# codespell) self-install on first use, so we only pre-warm their cache here.
-# CI installs the same set — see the pinned versions in build.yaml.
 tools:
-	@if command -v brew >/dev/null 2>&1; then \
-		brew install shellcheck shfmt hadolint actionlint semgrep gitleaks; \
-	else \
-		echo "Homebrew not found — install these CLIs from your package manager:"; \
-		echo "  shellcheck shfmt hadolint actionlint semgrep gitleaks"; \
-		echo "  (see .github/workflows/build.yaml for the versions CI pins)"; \
-	fi
+	bash scripts/install-tools.sh
 	uvx --from 'sqlfluff==3.4.2' sqlfluff --version >/dev/null
 	uvx yamllint --version >/dev/null
 	uvx codespell --version >/dev/null
@@ -110,7 +95,6 @@ lint-yaml:
 lint-md:
 	$(WEBBIN)/markdownlint-cli2
 
-# the ER diagram in docs/data-model.md is generated; fail if the schema moved on without it
 lint-docs:
 	python3 scripts/gen_schema_diagram.py --check
 
@@ -143,8 +127,6 @@ audit-deps:
 	cd web && npm install --no-audit --no-fund --silent
 	cd web && npm audit --audit-level=high --json | python3 ../scripts/npm-audit-gate.py
 
-# no pipe here: make's sh has no pipefail, and pip-audit on an empty stdin
-# reports a clean pass — a failed export must redden the check, not blank it
 audit-deps-py:
 	@req=$$(mktemp); \
 	( cd server && uv export --no-dev --no-hashes --format requirements-txt -o "$$req" \
@@ -166,8 +148,6 @@ t-medium:
 t-slow:
 	COMPOSE="$(COMPOSE)" bash scripts/e2e.sh
 
-# playwright's interactive ui: pick tests, run on click, time-travel each step;
-# the stack stays up until the ui window is closed
 t-slow-ui:
 	COMPOSE="$(COMPOSE)" bash scripts/e2e.sh --ui
 
