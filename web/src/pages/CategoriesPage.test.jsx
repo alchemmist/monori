@@ -628,4 +628,550 @@ describe("CategoriesPage", () => {
         expect(moveCategory).not.toHaveBeenCalled();
         expect(container.querySelector('[data-id="2"]')).not.toHaveClass("kb-card_ghost");
     });
+
+    it("positions the drag-layer clone at the pointer minus the grab offset", () => {
+        vi.stubGlobal("requestAnimationFrame", () => 1);
+        vi.stubGlobal("cancelAnimationFrame", vi.fn());
+        seed({
+            groups: [{ id: 2, name: "Spending", kind: "expense", sort: 1 }],
+            categories: [
+                { id: 2, groupId: 2, name: "Food", keywords: "", sort: 1, archived: false },
+                { id: 3, groupId: 2, name: "Rent", keywords: "", sort: 2, archived: false },
+            ],
+        });
+        vi.spyOn(useStore.getState(), "moveCategory").mockResolvedValue();
+        const { container } = renderUI(<CategoriesPage />);
+        const card = container.querySelector('[data-id="2"]');
+        card.getBoundingClientRect = () => ({ left: 4, top: 7, width: 80, height: 30 });
+        container.querySelector('[data-gid="2"]').getBoundingClientRect = () => ({
+            left: 0,
+            right: 80,
+            top: 0,
+            width: 80,
+            height: 200,
+        });
+        fireEvent.pointerDown(card, { button: 0, pointerType: "mouse", clientX: 30, clientY: 25 });
+        fireEvent.pointerMove(window, { pointerType: "mouse", clientX: 100, clientY: 90 });
+
+        const layer = container.querySelector(".kb-drag-layer");
+        expect(layer.style.left).toBe("74px");
+        expect(layer.style.top).toBe("72px");
+        expect(layer.style.width).toBe("80px");
+        fireEvent.pointerUp(window);
+    });
+
+    it("drops a card after a taller target when the pointer clears its midpoint", () => {
+        vi.stubGlobal("requestAnimationFrame", () => 1);
+        vi.stubGlobal("cancelAnimationFrame", vi.fn());
+        seed({
+            groups: [
+                { id: 2, name: "Food", kind: "expense", sort: 1 },
+                { id: 3, name: "Home", kind: "expense", sort: 2 },
+            ],
+            categories: [
+                { id: 2, groupId: 2, name: "Groceries", keywords: "", sort: 1, archived: false },
+                { id: 3, groupId: 3, name: "Rent", keywords: "", sort: 1, archived: false },
+            ],
+        });
+        const moveCategory = vi.spyOn(useStore.getState(), "moveCategory").mockResolvedValue();
+        const { container } = renderUI(<CategoriesPage />);
+        const source = container.querySelector('[data-id="2"]');
+        const sourceGroup = container.querySelector('[data-gid="2"]');
+        const destination = container.querySelector('[data-gid="3"]');
+        const destinationCards = destination.querySelector(".kb-cards");
+        source.getBoundingClientRect = () => ({ left: 0, top: 0, width: 80, height: 30 });
+        sourceGroup.getBoundingClientRect = () => ({
+            left: 0,
+            right: 80,
+            top: 0,
+            width: 80,
+            height: 200,
+        });
+        destination.getBoundingClientRect = () => ({
+            left: 100,
+            right: 220,
+            top: 0,
+            width: 120,
+            height: 200,
+        });
+        destinationCards.querySelector('[data-id="3"]').getBoundingClientRect = () => ({
+            top: 50,
+            height: 30,
+        });
+
+        fireEvent.pointerDown(source, {
+            button: 0,
+            pointerType: "mouse",
+            clientX: 10,
+            clientY: 10,
+        });
+        // pointer y=70 is below Rent's midpoint (50 + 30/2 = 65), so Groceries lands after it
+        fireEvent.pointerMove(window, { pointerType: "mouse", clientX: 150, clientY: 70 });
+        fireEvent.pointerUp(window);
+
+        expect(moveCategory).toHaveBeenCalledWith(2, 3, [3, 2]);
+    });
+
+    it("drops a card before the target when the pointer is above its midpoint", () => {
+        vi.stubGlobal("requestAnimationFrame", () => 1);
+        vi.stubGlobal("cancelAnimationFrame", vi.fn());
+        seed({
+            groups: [
+                { id: 2, name: "Food", kind: "expense", sort: 1 },
+                { id: 3, name: "Home", kind: "expense", sort: 2 },
+            ],
+            categories: [
+                { id: 2, groupId: 2, name: "Groceries", keywords: "", sort: 1, archived: false },
+                { id: 3, groupId: 3, name: "Rent", keywords: "", sort: 1, archived: false },
+            ],
+        });
+        const moveCategory = vi.spyOn(useStore.getState(), "moveCategory").mockResolvedValue();
+        const { container } = renderUI(<CategoriesPage />);
+        const source = container.querySelector('[data-id="2"]');
+        const sourceGroup = container.querySelector('[data-gid="2"]');
+        const destination = container.querySelector('[data-gid="3"]');
+        const destinationCards = destination.querySelector(".kb-cards");
+        source.getBoundingClientRect = () => ({ left: 0, top: 0, width: 80, height: 30 });
+        sourceGroup.getBoundingClientRect = () => ({
+            left: 0,
+            right: 80,
+            top: 0,
+            width: 80,
+            height: 200,
+        });
+        destination.getBoundingClientRect = () => ({
+            left: 100,
+            right: 220,
+            top: 0,
+            width: 120,
+            height: 200,
+        });
+        destinationCards.querySelector('[data-id="3"]').getBoundingClientRect = () => ({
+            top: 50,
+            height: 30,
+        });
+
+        fireEvent.pointerDown(source, {
+            button: 0,
+            pointerType: "mouse",
+            clientX: 10,
+            clientY: 10,
+        });
+        // pointer y=60 is above Rent's midpoint (65), so Groceries lands before it
+        fireEvent.pointerMove(window, { pointerType: "mouse", clientX: 150, clientY: 60 });
+        fireEvent.pointerUp(window);
+
+        expect(moveCategory).toHaveBeenCalledWith(2, 3, [2, 3]);
+    });
+
+    it("picks the horizontally nearest column by edge distance", () => {
+        vi.stubGlobal("requestAnimationFrame", () => 1);
+        vi.stubGlobal("cancelAnimationFrame", vi.fn());
+        seed({
+            groups: [
+                { id: 2, name: "Food", kind: "expense", sort: 1 },
+                { id: 3, name: "Home", kind: "expense", sort: 2 },
+            ],
+            categories: [
+                { id: 2, groupId: 2, name: "Groceries", keywords: "", sort: 1, archived: false },
+                { id: 3, groupId: 3, name: "Rent", keywords: "", sort: 1, archived: false },
+            ],
+        });
+        const moveCategory = vi.spyOn(useStore.getState(), "moveCategory").mockResolvedValue();
+        const { container } = renderUI(<CategoriesPage />);
+        const source = container.querySelector('[data-id="2"]');
+        const sourceGroup = container.querySelector('[data-gid="2"]');
+        const destination = container.querySelector('[data-gid="3"]');
+        source.getBoundingClientRect = () => ({ left: 0, top: 0, width: 80, height: 30 });
+        sourceGroup.getBoundingClientRect = () => ({
+            left: 0,
+            right: 80,
+            top: 0,
+            width: 80,
+            height: 200,
+        });
+        destination.getBoundingClientRect = () => ({
+            left: 100,
+            right: 220,
+            top: 0,
+            width: 120,
+            height: 200,
+        });
+
+        fireEvent.pointerDown(source, {
+            button: 0,
+            pointerType: "mouse",
+            clientX: 10,
+            clientY: 10,
+        });
+        // x=95 is 15px right of source (right=80) and 5px left of destination (left=100):
+        // destination is nearer, so the card lands there.
+        fireEvent.pointerMove(window, { pointerType: "mouse", clientX: 95, clientY: 10 });
+        fireEvent.pointerUp(window);
+
+        expect(moveCategory).toHaveBeenCalledWith(2, 3, [2, 3]);
+    });
+
+    it("keeps a card in its own column when the pointer stays inside it", () => {
+        vi.stubGlobal("requestAnimationFrame", () => 1);
+        vi.stubGlobal("cancelAnimationFrame", vi.fn());
+        seed({
+            groups: [
+                { id: 2, name: "Food", kind: "expense", sort: 1 },
+                { id: 3, name: "Home", kind: "expense", sort: 2 },
+            ],
+            categories: [
+                { id: 2, groupId: 2, name: "Groceries", keywords: "", sort: 1, archived: false },
+                { id: 4, groupId: 2, name: "Snacks", keywords: "", sort: 2, archived: false },
+                { id: 3, groupId: 3, name: "Rent", keywords: "", sort: 1, archived: false },
+            ],
+        });
+        const moveCategory = vi.spyOn(useStore.getState(), "moveCategory").mockResolvedValue();
+        const { container } = renderUI(<CategoriesPage />);
+        const source = container.querySelector('[data-id="2"]');
+        const sourceGroup = container.querySelector('[data-gid="2"]');
+        const destination = container.querySelector('[data-gid="3"]');
+        const sourceCards = sourceGroup.querySelector(".kb-cards");
+        source.getBoundingClientRect = () => ({ left: 0, top: 0, width: 80, height: 30 });
+        sourceGroup.getBoundingClientRect = () => ({
+            left: 0,
+            right: 80,
+            top: 0,
+            width: 80,
+            height: 200,
+        });
+        destination.getBoundingClientRect = () => ({
+            left: 100,
+            right: 220,
+            top: 0,
+            width: 120,
+            height: 200,
+        });
+        sourceCards.querySelector('[data-id="4"]').getBoundingClientRect = () => ({
+            top: 50,
+            height: 30,
+        });
+
+        fireEvent.pointerDown(source, {
+            button: 0,
+            pointerType: "mouse",
+            clientX: 10,
+            clientY: 10,
+        });
+        // x=40 is inside the source column (dist 0), y=70 is below Snacks' midpoint (65)
+        fireEvent.pointerMove(window, { pointerType: "mouse", clientX: 40, clientY: 70 });
+        fireEvent.pointerUp(window);
+
+        expect(moveCategory).toHaveBeenCalledWith(2, 2, [4, 2, 3]);
+    });
+
+    it("inserts a dragged group before a target once the pointer crosses its midline", () => {
+        Object.defineProperty(HTMLElement.prototype, "animate", {
+            configurable: true,
+            value: () => ({ cancel: () => {} }),
+        });
+        seed({
+            groups: [
+                { id: 1, name: "Income", kind: "income", sort: 1 },
+                { id: 2, name: "Spending", kind: "expense", sort: 2 },
+                { id: 3, name: "Goals", kind: "goal", sort: 3 },
+            ],
+            categories: [],
+        });
+        const reorderGroups = vi.spyOn(useStore.getState(), "reorderGroups").mockResolvedValue();
+        const { container } = renderUI(<CategoriesPage />);
+        const income = container.querySelector('[data-gid="1"]');
+        const spending = container.querySelector('[data-gid="2"]');
+        const goals = container.querySelector('[data-gid="3"]');
+        income.getBoundingClientRect = () => ({
+            left: 0,
+            right: 100,
+            width: 100,
+            top: 0,
+            height: 100,
+        });
+        spending.getBoundingClientRect = () => ({
+            left: 110,
+            right: 210,
+            width: 100,
+            top: 0,
+            height: 100,
+        });
+        goals.getBoundingClientRect = () => ({
+            left: 220,
+            right: 320,
+            width: 100,
+            top: 0,
+            height: 100,
+        });
+        const head = income.querySelector(".kb-col__head");
+        fireEvent.pointerDown(head, { button: 0, pointerType: "mouse", clientX: 10, clientY: 10 });
+        // dragging Income; others are Spending [110,210] and Goals [220,320].
+        // x=270 is past Goals' midline (220 + 100/2 = 270 boundary), so Income lands last.
+        fireEvent.pointerMove(window, { pointerType: "mouse", clientX: 300, clientY: 20 });
+        fireEvent.pointerUp(window);
+        expect(reorderGroups).toHaveBeenCalledWith([2, 3, 1]);
+    });
+
+    it("inserts a dragged group between neighbours at the crossed midline", () => {
+        Object.defineProperty(HTMLElement.prototype, "animate", {
+            configurable: true,
+            value: () => ({ cancel: () => {} }),
+        });
+        seed({
+            groups: [
+                { id: 1, name: "Income", kind: "income", sort: 1 },
+                { id: 2, name: "Spending", kind: "expense", sort: 2 },
+                { id: 3, name: "Goals", kind: "goal", sort: 3 },
+            ],
+            categories: [],
+        });
+        const reorderGroups = vi.spyOn(useStore.getState(), "reorderGroups").mockResolvedValue();
+        const { container } = renderUI(<CategoriesPage />);
+        const income = container.querySelector('[data-gid="1"]');
+        const spending = container.querySelector('[data-gid="2"]');
+        const goals = container.querySelector('[data-gid="3"]');
+        income.getBoundingClientRect = () => ({
+            left: 0,
+            right: 100,
+            width: 100,
+            top: 0,
+            height: 100,
+        });
+        spending.getBoundingClientRect = () => ({
+            left: 110,
+            right: 210,
+            width: 100,
+            top: 0,
+            height: 100,
+        });
+        goals.getBoundingClientRect = () => ({
+            left: 220,
+            right: 320,
+            width: 100,
+            top: 0,
+            height: 100,
+        });
+        const head = income.querySelector(".kb-col__head");
+        fireEvent.pointerDown(head, { button: 0, pointerType: "mouse", clientX: 10, clientY: 10 });
+        // others: Spending [110,210], Goals [220,320]. x=250 is past Spending's midline (160)
+        // but before Goals' midline (270), so Income lands between them.
+        fireEvent.pointerMove(window, { pointerType: "mouse", clientX: 250, clientY: 20 });
+        fireEvent.pointerUp(window);
+        expect(reorderGroups).toHaveBeenCalledWith([2, 1, 3]);
+    });
+
+    it("does not persist a reorder when Escape aborts the group drag", () => {
+        Object.defineProperty(HTMLElement.prototype, "animate", {
+            configurable: true,
+            value: () => ({ cancel: () => {} }),
+        });
+        seed({ groups, categories: [] });
+        const reorderGroups = vi.spyOn(useStore.getState(), "reorderGroups").mockResolvedValue();
+        const { container } = renderUI(<CategoriesPage />);
+        const income = container.querySelector('[data-gid="1"]');
+        const spending = container.querySelector('[data-gid="2"]');
+        income.getBoundingClientRect = () => ({
+            left: 0,
+            right: 100,
+            width: 100,
+            top: 0,
+            height: 100,
+        });
+        spending.getBoundingClientRect = () => ({
+            left: 110,
+            right: 210,
+            width: 100,
+            top: 0,
+            height: 100,
+        });
+        const head = income.querySelector(".kb-col__head");
+        fireEvent.pointerDown(head, { button: 0, pointerType: "mouse", clientX: 10, clientY: 10 });
+        fireEvent.pointerMove(window, { pointerType: "mouse", clientX: 180, clientY: 20 });
+        expect(document.body).toHaveClass("kb-grabbing");
+        fireEvent.keyDown(window, { key: "Enter" });
+        expect(document.body).toHaveClass("kb-grabbing");
+        fireEvent.keyDown(window, { key: "Escape" });
+        expect(document.body).not.toHaveClass("kb-grabbing");
+        fireEvent.pointerUp(window);
+        expect(reorderGroups).not.toHaveBeenCalled();
+    });
+
+    it("shows only the card clone while dragging a card, not a column clone", () => {
+        vi.stubGlobal("requestAnimationFrame", () => 1);
+        vi.stubGlobal("cancelAnimationFrame", vi.fn());
+        seed({
+            groups: [{ id: 2, name: "Spending", kind: "expense", sort: 1 }],
+            categories: [
+                { id: 2, groupId: 2, name: "Food", keywords: "", sort: 1, archived: false },
+                { id: 3, groupId: 2, name: "Rent", keywords: "", sort: 2, archived: false },
+            ],
+        });
+        vi.spyOn(useStore.getState(), "moveCategory").mockResolvedValue();
+        const { container } = renderUI(<CategoriesPage />);
+        const card = container.querySelector('[data-id="2"]');
+        card.getBoundingClientRect = () => ({ left: 0, top: 0, width: 80, height: 30 });
+        container.querySelector('[data-gid="2"]').getBoundingClientRect = () => ({
+            left: 0,
+            right: 80,
+            top: 0,
+            width: 80,
+            height: 200,
+        });
+        fireEvent.pointerDown(card, { button: 0, pointerType: "mouse", clientX: 10, clientY: 10 });
+        fireEvent.pointerMove(window, { pointerType: "mouse", clientX: 40, clientY: 40 });
+
+        expect(container.querySelector(".kb-card_clone")).toBeInTheDocument();
+        expect(container.querySelector(".kb-col_clone")).toBeNull();
+        fireEvent.pointerUp(window);
+    });
+
+    it("shows only the column clone with its cards while dragging a column", () => {
+        vi.stubGlobal("requestAnimationFrame", () => 1);
+        vi.stubGlobal("cancelAnimationFrame", vi.fn());
+        Object.defineProperty(HTMLElement.prototype, "animate", {
+            configurable: true,
+            value: () => ({ cancel: () => {} }),
+        });
+        seed({
+            groups: [
+                { id: 1, name: "Income", kind: "income", sort: 1 },
+                { id: 2, name: "Spending", kind: "expense", sort: 2 },
+            ],
+            categories: [
+                { id: 1, groupId: 1, name: "Salary", keywords: "", sort: 1, archived: false },
+                { id: 2, groupId: 1, name: "Bonus", keywords: "", sort: 2, archived: false },
+            ],
+        });
+        vi.spyOn(useStore.getState(), "reorderGroups").mockResolvedValue();
+        const { container } = renderUI(<CategoriesPage />);
+        const income = container.querySelector('[data-gid="1"]');
+        const spending = container.querySelector('[data-gid="2"]');
+        income.getBoundingClientRect = () => ({
+            left: 0,
+            right: 100,
+            width: 100,
+            top: 0,
+            height: 100,
+        });
+        spending.getBoundingClientRect = () => ({
+            left: 110,
+            right: 210,
+            width: 100,
+            top: 0,
+            height: 100,
+        });
+        const head = income.querySelector(".kb-col__head");
+        fireEvent.pointerDown(head, { button: 0, pointerType: "mouse", clientX: 10, clientY: 10 });
+        fireEvent.pointerMove(window, { pointerType: "mouse", clientX: 40, clientY: 20 });
+
+        const clone = container.querySelector(".kb-col_clone");
+        expect(clone).toBeInTheDocument();
+        expect(container.querySelector(".kb-card_clone")).toBeNull();
+        // the column clone carries the group's own kind theme and category count
+        expect(clone).toHaveClass("kb-col_income");
+        expect(clone.querySelector(".kb-col__count").textContent).toBe("2");
+        expect([...clone.querySelectorAll(".kb-card__name")].map((el) => el.textContent)).toEqual([
+            "Salary",
+            "Bonus",
+        ]);
+        fireEvent.pointerUp(window);
+    });
+
+    it("colours the dragged column clone tag by its kind", () => {
+        vi.stubGlobal("requestAnimationFrame", () => 1);
+        vi.stubGlobal("cancelAnimationFrame", vi.fn());
+        Object.defineProperty(HTMLElement.prototype, "animate", {
+            configurable: true,
+            value: () => ({ cancel: () => {} }),
+        });
+        seed({
+            groups: [
+                { id: 3, name: "Goals", kind: "goal", sort: 1 },
+                { id: 2, name: "Spending", kind: "expense", sort: 2 },
+            ],
+            categories: [],
+        });
+        vi.spyOn(useStore.getState(), "reorderGroups").mockResolvedValue();
+        const { container } = renderUI(<CategoriesPage />);
+        const goals = container.querySelector('[data-gid="3"]');
+        const spending = container.querySelector('[data-gid="2"]');
+        goals.getBoundingClientRect = () => ({
+            left: 0,
+            right: 100,
+            width: 100,
+            top: 0,
+            height: 100,
+        });
+        spending.getBoundingClientRect = () => ({
+            left: 110,
+            right: 210,
+            width: 100,
+            top: 0,
+            height: 100,
+        });
+        const head = goals.querySelector(".kb-col__head");
+        fireEvent.pointerDown(head, { button: 0, pointerType: "mouse", clientX: 10, clientY: 10 });
+        fireEvent.pointerMove(window, { pointerType: "mouse", clientX: 40, clientY: 20 });
+
+        const clone = container.querySelector(".kb-col_clone");
+        expect(clone.querySelector(".tag")).toHaveTextContent("goal");
+        expect(clone.querySelector(".tag")).toHaveClass("tag_info");
+        fireEvent.pointerUp(window);
+    });
+
+    it("keeps the drop indicator anchored to the hovered slot across a jitter move", async () => {
+        vi.stubGlobal("requestAnimationFrame", () => 1);
+        vi.stubGlobal("cancelAnimationFrame", vi.fn());
+        seed({
+            groups: [
+                { id: 2, name: "Food", kind: "expense", sort: 1 },
+                { id: 3, name: "Home", kind: "expense", sort: 2 },
+            ],
+            categories: [
+                { id: 2, groupId: 2, name: "Groceries", keywords: "", sort: 1, archived: false },
+                { id: 3, groupId: 3, name: "Rent", keywords: "", sort: 1, archived: false },
+            ],
+        });
+        const { container } = renderUI(<CategoriesPage />);
+        const source = container.querySelector('[data-id="2"]');
+        const sourceGroup = container.querySelector('[data-gid="2"]');
+        const destination = container.querySelector('[data-gid="3"]');
+        source.getBoundingClientRect = () => ({ left: 0, top: 0, width: 80, height: 30 });
+        sourceGroup.getBoundingClientRect = () => ({
+            left: 0,
+            right: 80,
+            top: 0,
+            width: 80,
+            height: 200,
+        });
+        destination.getBoundingClientRect = () => ({
+            left: 100,
+            right: 220,
+            top: 0,
+            width: 120,
+            height: 200,
+        });
+        destination.querySelector('[data-id="3"]').getBoundingClientRect = () => ({
+            top: 50,
+            height: 30,
+        });
+
+        fireEvent.pointerDown(source, {
+            button: 0,
+            pointerType: "mouse",
+            clientX: 10,
+            clientY: 10,
+        });
+        // land it below Rent's midpoint so the ghost slot follows Rent
+        fireEvent.pointerMove(window, { pointerType: "mouse", clientX: 150, clientY: 70 });
+
+        await waitFor(() =>
+            expect(
+                [
+                    ...container.querySelector('[data-gid="3"]').querySelectorAll(".kb-card__name"),
+                ].map((card) => card.textContent),
+            ).toEqual(["Rent", "Groceries"]),
+        );
+    });
 });

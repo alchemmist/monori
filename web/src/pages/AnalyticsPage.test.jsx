@@ -736,5 +736,272 @@ describe("AnalyticsPage", () => {
             expect(cellFor("Groceries", 0)).toHaveClass("disc-cell_warn");
             expect(cellFor("Rent", 0)).toHaveClass("disc-cell_over");
         });
+
+        it("leaves a month with no available budget and no spend classless", () => {
+            // Jan budget 10 000 fully spent leaves zero surplus to roll into Feb,
+            // which has no budget of its own and no spend — available 0, spent 0,
+            // ratio null → no class. Pins discClass's `cell.ratio == null` guard
+            // (mutating to `!= null` would tag the empty cell) and its `return ""`.
+            render(
+                seed({
+                    budgets: [{ categoryId: 2, year: YEAR, month: 1, amount: 10_000_00 }],
+                    transactions: [
+                        txn(1, { categoryId: 2, amount: -10_000_00, date: `${YEAR}-01-10` }),
+                    ],
+                }),
+            );
+            const feb = cellFor("Groceries", 1);
+            expect(feb.classList).toHaveLength(1);
+            expect(feb).toHaveClass("disc-cell");
+            expect(feb).not.toHaveClass("disc-cell_ok");
+            expect(feb).not.toHaveClass("disc-cell_nobudget");
+            expect(feb).toHaveAttribute("title", n("Groceries · Feb: —"));
+        });
+
+        it("prints the ratio percentage and only spells carry-over when it differs", () => {
+            // January: 5 000 of a 10 000 budget = 50%; nothing rolled in, so
+            // available == budgeted and no carry-over clause. February inherits the
+            // 5 000 surplus on top of its own 10 000, so available (15 000) differs
+            // from budgeted (10 000) and the carry-over clause appears. Pins
+            // `Math.round(cell.ratio * 100)` and the `available !== budgeted` gate.
+            render(
+                seed({
+                    budgets: [
+                        { categoryId: 2, year: YEAR, month: 1, amount: 10_000_00 },
+                        { categoryId: 2, year: YEAR, month: 2, amount: 10_000_00 },
+                    ],
+                    transactions: [
+                        txn(1, { categoryId: 2, amount: -5_000_00, date: `${YEAR}-01-10` }),
+                    ],
+                }),
+            );
+            expect(cellFor("Groceries", 0)).toHaveAttribute(
+                "title",
+                n("Groceries · Jan: 5 000 / 10 000 ₽ (50%)"),
+            );
+            expect(cellFor("Groceries", 1)).toHaveAttribute(
+                "title",
+                n("Groceries · Feb: -0 / 15 000 ₽ (0%) · budgeted 10 000 + carry-over"),
+            );
+        });
+    });
+
+    describe("mutation-hardening", () => {
+        it("suffixes the group name only when two categories share a name", () => {
+            // Two distinct "Fuel" categories in different groups collide on name,
+            // so both series labels carry the group name; the unique "Groceries"
+            // label stays bare. Pins the seen-counter (`> 1`) and its arithmetic.
+            render(
+                seed({
+                    groups: [
+                        { id: 1, name: "Income", kind: "income", sort: 1 },
+                        { id: 2, name: "Car", kind: "expense", sort: 2 },
+                        { id: 3, name: "Home", kind: "expense", sort: 3 },
+                    ],
+                    categories: [
+                        { id: 1, groupId: 1, name: "Salary", sort: 1, archived: false },
+                        { id: 2, groupId: 2, name: "Fuel", sort: 1, archived: false },
+                        { id: 3, groupId: 3, name: "Fuel", sort: 2, archived: false },
+                        { id: 4, groupId: 2, name: "Groceries", sort: 3, archived: false },
+                    ],
+                    transactions: [
+                        txn(1, { categoryId: 2, amount: -100_00, date: `${YEAR}-01-10` }),
+                        txn(2, { categoryId: 3, amount: -200_00, date: `${YEAR}-01-10` }),
+                        txn(3, { categoryId: 4, amount: -300_00, date: `${YEAR}-01-10` }),
+                    ],
+                }),
+            );
+            const labels = cardChart("Categories through the year").cols.map((c) => c.label);
+            expect(labels).toContain("Fuel · Car");
+            expect(labels).toContain("Fuel · Home");
+            expect(labels).toContain("Groceries");
+            expect(labels).not.toContain("Fuel");
+        });
+
+        it("fills the current month but blanks strictly-later ones", () => {
+            // Spend in every month; the current-year chart keeps months up to and
+            // including now, and nulls only months strictly after. Pins
+            // `m > blankAfter` against `>=` (would null the current month) and
+            // `<=` (would null every earlier month).
+            const nowMonth = now.getMonth();
+            const txs = [];
+            for (let m = 0; m <= nowMonth; m++) {
+                txs.push(
+                    txn(m + 1, {
+                        categoryId: 2,
+                        amount: -100_00,
+                        date: `${YEAR}-${String(m + 1).padStart(2, "0")}-10`,
+                    }),
+                );
+            }
+            render(seed({ transactions: txs }));
+            const chart = cardChart("Categories through the year");
+            const key = chart.cols[0].name;
+            expect(chart.data[0][key]).toBe(100);
+            expect(chart.data[nowMonth][key]).toBe(100);
+            if (nowMonth < 11) {
+                expect(chart.data[nowMonth + 1][key]).toBeNull();
+                expect(chart.data[11][key]).toBeNull();
+            }
+        });
+
+        it("assigns the neutral hint color to the folded Other band", () => {
+            // More categories than the palette holds forces an "other" fold; its
+            // series uses SERIES.hint, not a palette hue. Pins the
+            // `r.id == null ? SERIES.hint : PALETTE[...]` branch.
+            const cats = [{ id: 1, groupId: 1, name: "Salary", sort: 1, archived: false }];
+            const txs = [];
+            const limit = PALETTE.length;
+            for (let i = 0; i < limit + 3; i++) {
+                const id = 100 + i;
+                cats.push({ id, groupId: 2, name: `Cat${i}`, sort: i + 1, archived: false });
+                txs.push(
+                    txn(id, {
+                        categoryId: id,
+                        amount: -(limit + 3 - i) * 100_00,
+                        date: `${YEAR}-01-10`,
+                    }),
+                );
+            }
+            render(
+                seed({
+                    groups: [
+                        { id: 1, name: "Income", kind: "income", sort: 1 },
+                        { id: 2, name: "Living", kind: "expense", sort: 2 },
+                    ],
+                    categories: cats,
+                    transactions: txs,
+                }),
+            );
+            const cols = cardChart("Categories through the year").cols;
+            const other = cols.find((c) => c.name === "other");
+            expect(other).toBeTruthy();
+            expect(other.color).toBe(SERIES.hint);
+            expect(cols.filter((c) => c.color === SERIES.hint)).toHaveLength(1);
+        });
+
+        it("dims the years right-aligned when fewer than three precede the selection", () => {
+            // firstYear = PREV, so only two years qualify: yrs.length is 2 and the
+            // offset 3-2=1 pushes the colors into secondary+accent (skipping hint).
+            // Pins `dims[i + (3 - yrs.length)]` for the offset.
+            const snap = seed({
+                transactions: [
+                    txn(1, { amount: -100_00, date: `${YEAR}-01-05` }),
+                    txn(2, { amount: -200_00, date: `${PREV}-01-05` }),
+                ],
+            });
+            const results = computeRange(snap, PREV, YEAR);
+            renderUI(<AnalyticsPage results={results} firstYear={PREV} lastYear={YEAR} />);
+
+            const yoy = cardChart("Expenses year over year");
+            expect(yoy.cols).toEqual([
+                { name: String(PREV), color: SERIES.secondary },
+                { name: String(YEAR), color: SERIES.accent },
+            ]);
+        });
+
+        it("weights the weekday shares as a percentage of the year total", () => {
+            // Mon 75, Sat 25 out of 100 → 75% and 25%. Pins `(v / total) * 100`
+            // against `v / total / 100` (would floor to 0) and the round.
+            const firstMonday = 1 + ((8 - new Date(YEAR, 0, 1).getDay()) % 7);
+            const day = (d) => String(d).padStart(2, "0");
+            render(
+                seed({
+                    transactions: [
+                        txn(1, { amount: -75_00, date: `${YEAR}-01-${day(firstMonday)}` }),
+                        txn(2, { amount: -25_00, date: `${YEAR}-01-${day(firstMonday + 5)}` }),
+                    ],
+                }),
+            );
+            const weekday = chartSeries("Spending by weekday");
+            expect(weekday.find((r) => r.day === "Mon").Share).toBe(75);
+            expect(weekday.find((r) => r.day === "Sat").Share).toBe(25);
+        });
+
+        it("labels day-of-month bars 1..31 and rounds their rubles", () => {
+            // 350 kopeck-rounded spends land on the 1st; the axis label is the
+            // 1-based day. Pins `String(i + 1)` and `Math.round(v / 100)`.
+            render(
+                seed({
+                    transactions: [txn(1, { amount: -350_00, date: `${YEAR}-01-01` })],
+                }),
+            );
+            const dom = chartSeries("Spending by day of month");
+            expect(dom[0]).toEqual({ day: "1", Spent: 350 });
+            expect(dom[30].day).toBe("31");
+        });
+
+        it("greys the over-budget KPI at exactly zero overrun", () => {
+            // A perfectly-on-budget envelope leaves totalOverrun at 0, which must
+            // read as the faint color, not red. Pins `totalOverrun > 0` against
+            // `>= 0`.
+            render(
+                seed({
+                    budgets: [{ categoryId: 2, year: YEAR, month: 1, amount: 10_000_00 }],
+                    transactions: [
+                        txn(1, { categoryId: 2, amount: -10_000_00, date: `${YEAR}-01-10` }),
+                    ],
+                }),
+            );
+            expect(kpiValue("Over budget")).toBe(n("0 ₽"));
+            expect(kpiColor("Over budget")).toBe("var(--m-text-faint)");
+        });
+
+        it("pluralizes the elapsed-month label everywhere but January", () => {
+            render(seed({ transactions: [] }));
+            const months = now.getMonth() + 1;
+            const sub = kpiSub("Avg income / month");
+            if (months === 1) {
+                expect(sub).toBe("1 month");
+            } else {
+                expect(sub).toBe(`${months} months`);
+                expect(sub).not.toBe(`${months} month`);
+            }
+        });
+
+        it("colors the report table's net column by its sign", () => {
+            // PREV net is negative (spent more than earned), YEAR net positive.
+            // Pins `r.net >= 0` per row and the current-row class on the selected
+            // year only.
+            render(
+                seed({
+                    transactions: [
+                        txn(1, { categoryId: 1, amount: 300_000_00, date: `${YEAR}-01-15` }),
+                        txn(2, { categoryId: 2, amount: -100_000_00, date: `${YEAR}-01-20` }),
+                        txn(3, { categoryId: 1, amount: 100_000_00, date: `${PREV}-03-15` }),
+                        txn(4, { categoryId: 2, amount: -150_000_00, date: `${PREV}-04-20` }),
+                    ],
+                }),
+            );
+            const rowFor = (year) =>
+                [...document.querySelectorAll(".report-table tbody tr")].find(
+                    (tr) => tr.firstChild.textContent === year,
+                );
+            const netCell = (year) => rowFor(year).querySelectorAll("td")[3];
+            expect(netCell(String(PREV)).style.color).toBe("var(--m-expense)");
+            expect(netCell(String(YEAR)).style.color).toBe("var(--m-income)");
+            expect(rowFor(String(YEAR))).toHaveClass("report-table__row_current");
+            expect(rowFor(String(PREV))).not.toHaveClass("report-table__row_current");
+        });
+
+        it("dashes the report table's rate when a year had no income", () => {
+            // PREV had only spending, so its savingsRate is null → "—"; YEAR earned
+            // and shows a percentage. Pins `r.savingsRate != null`.
+            render(
+                seed({
+                    transactions: [
+                        txn(1, { categoryId: 1, amount: 300_000_00, date: `${YEAR}-01-15` }),
+                        txn(2, { categoryId: 2, amount: -100_000_00, date: `${YEAR}-01-20` }),
+                        txn(3, { categoryId: 2, amount: -50_000_00, date: `${PREV}-04-20` }),
+                    ],
+                }),
+            );
+            const rateCell = (year) =>
+                [...document.querySelectorAll(".report-table tbody tr")]
+                    .find((tr) => tr.firstChild.textContent === year)
+                    .querySelectorAll("td")[4].textContent;
+            expect(rateCell(String(PREV))).toBe("—");
+            expect(rateCell(String(YEAR))).toBe("67%");
+        });
     });
 });

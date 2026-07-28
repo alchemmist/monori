@@ -85,6 +85,8 @@ describe("AdminPage", () => {
         const { user: events } = renderUI(<AdminPage />);
         await screen.findByRole("heading", { name: "Admin" });
         const remove = screen.getByRole("button", { name: "Delete" });
+        // the button starts idle (busy=false): not in Mantine's loading state
+        expect(remove).not.toHaveAttribute("data-loading");
         await events.click(remove);
         expect(screen.getByRole("button", { name: "Sure?" })).toBeInTheDocument();
         expect(api.adminDeleteUser).not.toHaveBeenCalled();
@@ -119,11 +121,17 @@ describe("AdminPage", () => {
         });
         const { user: events } = renderUI(<AdminPage />);
         await screen.findByText("No logins yet");
-        expect(screen.getByText("admin")).toBeInTheDocument();
+        // only the isAdmin user carries the "admin" badge; the other two do not
+        expect(screen.getAllByText("admin")).toHaveLength(1);
         expect(
             screen.getByText("failed-sync@example.test").closest("tr").querySelector(".admin-sync"),
         ).toHaveAttribute("title", "token expired");
         expect(screen.getAllByRole("button", { name: "Delete" })).toHaveLength(1);
+        // the delete action sits on the non-admin row, and the admin row has none
+        const adminRow = screen.getByText("admin@example.test").closest("tr");
+        const nonAdminRow = screen.getByText("failed-sync@example.test").closest("tr");
+        expect(within(adminRow).queryByRole("button", { name: "Delete" })).not.toBeInTheDocument();
+        expect(within(nonAdminRow).getByRole("button", { name: "Delete" })).toBeInTheDocument();
 
         await events.click(screen.getByText("admin@example.test"));
         expect(await screen.findByText("No accounts")).toBeInTheDocument();
@@ -140,7 +148,8 @@ describe("AdminPage", () => {
         const kpis = within(container.querySelector(".admin-kpis"));
         const kpi = (label) => kpis.getByText(label).closest(".kpi");
         expect(within(kpi("Users")).getByText("2")).toBeInTheDocument();
-        expect(within(kpi("Users")).getByText("+1 in 30 days")).toBeInTheDocument();
+        // the subtitle renders inside its own .kpi__sub element, not bare text
+        expect(within(kpi("Users")).getByText("+1 in 30 days")).toHaveClass("kpi__sub");
 
         const active = kpi("Active users");
         expect(within(active).getByText("1")).toBeInTheDocument();
@@ -342,12 +351,25 @@ describe("AdminPage", () => {
                     account: "Cash",
                     amount: -75,
                 },
+                {
+                    id: 3,
+                    date: "2026-02-04",
+                    description: "Zero",
+                    category: "",
+                    account: "Card",
+                    amount: 0,
+                },
             ],
         });
         const { user: events } = renderUI(<AdminPage />);
         await events.click(await findUserRow());
         const detailEl = (await screen.findByText("Recent transactions")).closest(".admin-detail");
 
+        // populated lists must not render their empty-state rows
+        expect(within(detailEl).queryByText("No accounts")).not.toBeInTheDocument();
+        expect(within(detailEl).queryByText("No API activity")).not.toBeInTheDocument();
+        expect(within(detailEl).queryByText("Never logged in")).not.toBeInTheDocument();
+        expect(within(detailEl).queryByText("No transactions")).not.toBeInTheDocument();
         // account line: name · "4 tx", balance via money() -> "123 ₽" (12345 kop)
         expect(within(detailEl).getByText("· 4 tx")).toBeInTheDocument();
         expect(within(detailEl).getByText("123 ₽")).toBeInTheDocument();
@@ -366,6 +388,9 @@ describe("AdminPage", () => {
         expect(pos).toHaveStyle({ color: "var(--m-income)" });
         const neg = within(detailEl).getByText("-1 ₽");
         expect(neg.getAttribute("style") || "").not.toContain("var(--m-income)");
+        // a zero amount is still >= 0, so it keeps the income colour (kills > 0)
+        const zero = within(detailEl).getByText("0 ₽");
+        expect(zero).toHaveStyle({ color: "var(--m-income)" });
 
         await events.click(within(detailEl).getByRole("button", { name: "Manage" }));
         expect(useStore.getState().tabs).toEqual([
@@ -414,6 +439,8 @@ describe("AdminPage", () => {
         expect(list.children).toHaveLength(12);
         expect(screen.getByText("u11@example.test")).toBeInTheDocument();
         expect(screen.queryByText("u12@example.test")).not.toBeInTheDocument();
+        // a non-empty list must not print the empty-state row
+        expect(screen.queryByText("No logins yet")).not.toBeInTheDocument();
     });
 
     it("surfaces a toast when loading a user detail fails", async () => {

@@ -407,6 +407,102 @@ describe("AccountsPage", () => {
             fireEvent.pointerUp(document);
         });
 
+        const threeAccounts = () =>
+            seed({
+                accounts: [
+                    account(1, { name: "First" }),
+                    account(2, { name: "Second" }),
+                    account(3, { name: "Third" }),
+                ],
+            });
+
+        const startDrag = (name) => {
+            const grip = row(name).querySelector(".account-row__grip");
+            vi.spyOn(grip.closest(".account-row"), "getBoundingClientRect").mockReturnValue({
+                height: 40,
+            });
+            fireEvent.pointerDown(grip, { button: 0, clientY: 100 });
+            return grip;
+        };
+
+        it("shifts the passed-over rows down when a lower row is dragged up", () => {
+            threeAccounts();
+            renderUI(<AccountsPage />);
+
+            startDrag("Third");
+            // drag the last row up two rows onto the first row's slot
+            fireEvent.pointerMove(document, { clientY: 20 });
+
+            const first = row("First");
+            const second = row("Second");
+            const third = row("Third");
+            expect(third).toHaveClass("account-row_dragging");
+            expect(first).not.toHaveClass("account-row_dragging");
+            // the two rows it passes (indices 0 and 1, both >= target 0 and < from 2) shift down
+            expect(first.style.transform).toBe("translateY(40px)");
+            expect(second.style.transform).toBe("translateY(40px)");
+            expect(third.style.transform).toBe("translateY(-80px)");
+            expect(third.style.zIndex).toBe("2");
+            expect(third.style.transition).toBe("none");
+
+            fireEvent.pointerUp(document);
+        });
+
+        it("shifts exactly the rows between source and target when dragging one row up", () => {
+            threeAccounts();
+            renderUI(<AccountsPage />);
+
+            startDrag("Third");
+            // drag the last row up a single row: only the middle row is passed over
+            fireEvent.pointerMove(document, { clientY: 60 });
+
+            expect(row("First").style.transform).toBe("translateY(0px)");
+            expect(row("Second").style.transform).toBe("translateY(40px)");
+            expect(row("Third").style.transform).toBe("translateY(-40px)");
+
+            fireEvent.pointerUp(document);
+        });
+
+        it("shifts only the rows up to the target when a middle row is dragged down", () => {
+            threeAccounts();
+            renderUI(<AccountsPage />);
+
+            startDrag("First");
+            // drag the first row down a single row onto the middle slot
+            fireEvent.pointerMove(document, { clientY: 140 });
+
+            // only the second row (i > 0 and i <= 1) shifts up; the third stays put
+            expect(row("First").style.transform).toBe("translateY(40px)");
+            expect(row("Second").style.transform).toBe("translateY(-40px)");
+            expect(row("Third").style.transform).toBe("translateY(0px)");
+
+            fireEvent.pointerUp(document);
+        });
+
+        it("clamps a lower dragged row's own transform to the bottom bound", () => {
+            threeAccounts();
+            renderUI(<AccountsPage />);
+
+            startDrag("Second");
+            // drag the middle row far past the end: its own transform clamps at one row
+            fireEvent.pointerMove(document, { clientY: 900 });
+            expect(row("Second").style.transform).toBe("translateY(40px)");
+
+            fireEvent.pointerUp(document);
+        });
+
+        it("clamps a lower dragged row's own transform to the top bound", () => {
+            threeAccounts();
+            renderUI(<AccountsPage />);
+
+            startDrag("Second");
+            // drag the middle row far past the top: its own transform clamps at minus one row
+            fireEvent.pointerMove(document, { clientY: -900 });
+            expect(row("Second").style.transform).toBe("translateY(-40px)");
+
+            fireEvent.pointerUp(document);
+        });
+
         it("gives rows no inline transform before any drag starts", () => {
             twoAccounts();
             renderUI(<AccountsPage />);
@@ -551,6 +647,22 @@ describe("AccountsPage", () => {
                 { accountId: 7 },
                 "account-edit:7",
             );
+        });
+
+        it("hands the existing connection to the connection dialog", async () => {
+            seed({
+                connections: [{ id: 1, status: "connected", lastSync: null }],
+                accounts: [account(1, { name: "Card", connectionId: 1 })],
+            });
+            const { user } = renderUI(<AccountsPage />);
+
+            await openMenu(user, "Card");
+            await user.click(await screen.findByRole("menuitem", { name: "Bank sync" }));
+
+            // with a real connection the dialog opens on the ready step, not credentials
+            const dialog = await screen.findByRole("dialog");
+            expect(dialog).toHaveTextContent("Last sync");
+            expect(dialog).not.toHaveTextContent("Connect & sync");
         });
 
         it("opens a new blank account tab with its own key", async () => {

@@ -502,6 +502,28 @@ describe("BudgetPage", () => {
             notify.mockRestore();
         });
 
+        it("adds the plural 's' for a count other than one", async () => {
+            const notify = vi.spyOn(useStore.getState(), "notify");
+            const fill = vi.spyOn(useStore.getState(), "fillBudgetForward").mockResolvedValue(9);
+            const { user } = render();
+            await toMonth(user);
+            await user.click(
+                screen.getByText("Groceries").closest("tr").querySelector(".budget-cell"),
+            );
+            await user.click(await screen.findByRole("button", { name: /Fill Groceries to Dec/ }));
+            await waitFor(() =>
+                expect(notify).toHaveBeenCalledWith(
+                    expect.objectContaining({
+                        title: "Budget filled through December",
+                        content: "Groceries: 9 months",
+                        theme: "success",
+                    }),
+                ),
+            );
+            fill.mockRestore();
+            notify.mockRestore();
+        });
+
         it("does not offer fill forward for a December cell", async () => {
             const { user } = render();
             await toMonth(user, "Dec");
@@ -570,6 +592,33 @@ describe("BudgetPage", () => {
             const { user } = renderGoal();
             const tip = await openTooltip(user);
             expect(tip.textContent).not.toMatch(/left|overdue/);
+        });
+
+        it("still shows the countdown at exactly 60 days but not at 61", async () => {
+            // 2026-09-25 is 60 days out (shows), 2026-09-26 is 61 (quiet):
+            // pins the `days > 60` threshold on both sides
+            withDate("2026-09-25");
+            const shown = renderGoal();
+            let tip = await openTooltip(shown.user);
+            expect(tip.textContent).toMatch(/🔥 60d left/);
+            shown.unmount();
+
+            resetStore();
+            withDate("2026-09-26");
+            const { user } = renderGoal();
+            tip = await openTooltip(user);
+            expect(tip.textContent).not.toMatch(/left|overdue/);
+        });
+
+        it("counts today as a live countdown, not overdue", async () => {
+            // 2026-07-27T23:59:59 is 0 days out (Math.ceil gives -0, which is not
+            // < 0): the badge reads "0d left", proving the `days < 0` cutoff is
+            // strict and does not fire at zero
+            withDate("2026-07-27");
+            const { user } = renderGoal();
+            const tip = await openTooltip(user);
+            expect(tip.textContent).toMatch(/🔥 0d left/);
+            expect(tip.textContent).not.toMatch(/overdue/);
         });
     });
 
@@ -650,6 +699,81 @@ describe("BudgetPage", () => {
             const input = within(dialog).getByRole("spinbutton");
             fireEvent.change(input, { target: { value: "121" } });
             expect(within(dialog).getByRole("button", { name: "Distribute" })).toBeDisabled();
+        });
+
+        it("counts whole years toward the suggested month span", async () => {
+            // start March 2026 (month 3), target February 2028: two full years plus
+            // (2 - 3) months plus 1 = 24 - 1 + 1 = 24 months. This exercises the
+            // year term (* 12) and both -startYear / -startMonth subtractions.
+            seedWithGoal({
+                groups: [...seed().groups, { id: 3, name: "Dreams", kind: "goal", sort: 3 }],
+                categories: [
+                    ...seed().categories,
+                    {
+                        id: 4,
+                        groupId: 3,
+                        name: "Trip",
+                        keywords: "",
+                        sort: 1,
+                        archived: false,
+                        goalTarget: 100_000_00,
+                        goalTargetDate: "2028-02-01",
+                    },
+                ],
+                budgets: [{ categoryId: 4, year: YEAR, month: 1, amount: 30_000_00 }],
+            });
+            const { user } = renderGoal();
+            const dialog = await openDistribute(user);
+            // (2028 - 2026) * 12 + (2 - 3) + 1 = 24
+            expect(within(dialog).getByRole("spinbutton")).toHaveValue(24);
+        });
+
+        it("rolls the plan into the next year and appends zeroes for orphaned future budgets", async () => {
+            const setBudgets = vi.spyOn(useStore.getState(), "setBudgets").mockResolvedValue();
+            seedWithGoal({
+                // 30 000 already parked before March lowers the remaining target to
+                // 70 000; a June-2027 budget past the planned window must be zeroed
+                // out so the goal isn't overfunded
+                budgets: [
+                    { categoryId: 4, year: YEAR, month: 1, amount: 30_000_00 },
+                    { categoryId: 4, year: YEAR + 1, month: 6, amount: 5_000_00 },
+                ],
+            });
+            const { user } = renderGoal();
+            const dialog = await openDistribute(user);
+            const input = within(dialog).getByRole("spinbutton");
+            // 12 months from March 2026 crosses into 2027 (Jan, Feb)
+            fireEvent.change(input, { target: { value: "12" } });
+            await user.click(within(dialog).getByRole("button", { name: "Distribute" }));
+
+            await waitFor(() => expect(setBudgets).toHaveBeenCalled());
+            const cells = setBudgets.mock.calls[0][0];
+            // 70 000 00 kop over 12 months: base 583 333 kop, 4 kop remainder
+            // front-loaded onto the first four cells
+            expect(cells.slice(0, 12)).toEqual([
+                { categoryId: 4, year: YEAR, month: 3, amount: 583_334 },
+                { categoryId: 4, year: YEAR, month: 4, amount: 583_334 },
+                { categoryId: 4, year: YEAR, month: 5, amount: 583_334 },
+                { categoryId: 4, year: YEAR, month: 6, amount: 583_334 },
+                { categoryId: 4, year: YEAR, month: 7, amount: 583_333 },
+                { categoryId: 4, year: YEAR, month: 8, amount: 583_333 },
+                { categoryId: 4, year: YEAR, month: 9, amount: 583_333 },
+                { categoryId: 4, year: YEAR, month: 10, amount: 583_333 },
+                { categoryId: 4, year: YEAR, month: 11, amount: 583_333 },
+                { categoryId: 4, year: YEAR, month: 12, amount: 583_333 },
+                { categoryId: 4, year: YEAR + 1, month: 1, amount: 583_333 },
+                { categoryId: 4, year: YEAR + 1, month: 2, amount: 583_333 },
+            ]);
+            // the pre-March January budget is left untouched (not in the cells),
+            // and the orphaned June-2027 budget is re-emitted at zero
+            expect(cells).toContainEqual({
+                categoryId: 4,
+                year: YEAR + 1,
+                month: 6,
+                amount: 0,
+            });
+            expect(cells.some((c) => c.year === YEAR && c.month === 1)).toBe(false);
+            setBudgets.mockRestore();
         });
     });
 });
