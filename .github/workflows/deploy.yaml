@@ -22,6 +22,10 @@ jobs:
     deploy:
         name: Deploy over SSH
         runs-on: ubuntu-latest
+        # Gated by the "production" environment: it requires approval from
+        # @alchemmist and only allows the main branch, so nobody else can roll
+        # out (even by dispatching a modified workflow from another branch).
+        environment: production
         if: >-
             github.event_name == 'workflow_dispatch'
             || github.event.workflow_run.conclusion == 'success'
