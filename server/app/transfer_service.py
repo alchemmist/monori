@@ -77,7 +77,7 @@ def link(c, uid, out_tx_id, in_tx_id, origin="manual", note=""):
     if out_row["transfer_id"] or in_row["transfer_id"]:
         raise LinkError("already part of a transfer")
     if c.execute(
-        "SELECT 1 FROM transaction_splits WHERE transaction_id IN (?, ?) LIMIT 1",
+        "SELECT 1 FROM splits WHERE transaction_id IN (?, ?) LIMIT 1",
         (out_tx_id, in_tx_id),
     ).fetchone():
         raise LinkError("split transactions cannot be linked as a transfer")

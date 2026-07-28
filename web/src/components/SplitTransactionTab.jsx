@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Button, Modal } from "@mantine/core";
+import { Button } from "@mantine/core";
 import { Plus, TrashBin } from "@gravity-ui/icons";
 import { useStore } from "../store.js";
 import { FTextInput } from "../ui/fields.jsx";
@@ -7,6 +7,8 @@ import InlineSelect from "../ui/InlineSelect.jsx";
 import { amountInput, money, parseRub } from "../format.js";
 import { signedSplitAmount } from "../engine/splitAmounts.js";
 import { PALETTE } from "../pages/chartTheme.js";
+import Tab from "../ui/Tab.jsx";
+import AllocationBar from "./AllocationBar.jsx";
 
 const blankPart = () => ({ categoryId: null, amount: "", comment: "" });
 
@@ -17,57 +19,7 @@ const evenAmounts = (total, count) => {
     );
 };
 
-function AllocationBar({ amounts, total, onChange }) {
-    const boundaries = amounts
-        .slice(0, -1)
-        .map((_, index) => amounts.slice(0, index + 1).reduce((sum, amount) => sum + amount, 0));
-    const stops = amounts.reduce(
-        (result, amount, index) => {
-            const from = result.position;
-            const to = from + (amount / total) * 100;
-            result.colors.push(
-                `${PALETTE[index % PALETTE.length]} ${from}%`,
-                `${PALETTE[index % PALETTE.length]} ${to}%`,
-            );
-            result.position = to;
-            return result;
-        },
-        { colors: [], position: 0 },
-    );
-
-    const moveBoundary = (index, value) => {
-        const previous = index === 0 ? 0 : boundaries[index - 1];
-        const next = index === boundaries.length - 1 ? total : boundaries[index + 1];
-        const boundary = Math.max(previous + 1, Math.min(next - 1, value));
-        const nextAmounts = [...amounts];
-        nextAmounts[index] = boundary - previous;
-        nextAmounts[index + 1] = next - boundary;
-        onChange(nextAmounts);
-    };
-
-    return (
-        <div
-            className="split-allocation"
-            style={{ background: `linear-gradient(90deg, ${stops.colors.join(", ")})` }}
-        >
-            {boundaries.map((boundary, index) => (
-                <input
-                    key={index}
-                    className="split-allocation__range"
-                    type="range"
-                    aria-label={`Boundary between parts ${index + 1} and ${index + 2}`}
-                    min={1}
-                    max={total - 1}
-                    step={1}
-                    value={boundary}
-                    onChange={(event) => moveBoundary(index, Number(event.target.value))}
-                />
-            ))}
-        </div>
-    );
-}
-
-export default function SplitTransactionDialog({ transaction, onClose }) {
+export default function SplitTransactionTab({ transaction, onClose }) {
     const { snapshot, replaceTransactionSplits, notify } = useStore();
     const [parts, setParts] = useState([blankPart(), blankPart()]);
     const [saving, setSaving] = useState(false);
@@ -133,18 +85,18 @@ export default function SplitTransactionDialog({ transaction, onClose }) {
 
     if (totalMagnitude < 2) {
         return (
-            <Modal
-                opened
+            <Tab
                 onClose={onClose}
                 title={`Split · ${transaction.description || "Transaction"}`}
-                size="lg"
+                strip="Split"
+                width={50}
             >
                 <div className="split-editor__summary">
                     <span>Total</span>
                     <strong className="num">{money(transaction.amount)}</strong>
                 </div>
                 <p className="muted">This transaction amount is too small to split.</p>
-            </Modal>
+            </Tab>
         );
     }
 
@@ -250,11 +202,11 @@ export default function SplitTransactionDialog({ transaction, onClose }) {
     };
 
     return (
-        <Modal
-            opened
+        <Tab
             onClose={onClose}
             title={`Split · ${transaction.description || "Transaction"}`}
-            size="lg"
+            strip="Split"
+            width={50}
         >
             <div className="split-editor__summary">
                 <span>Total</span>
@@ -263,6 +215,7 @@ export default function SplitTransactionDialog({ transaction, onClose }) {
             <AllocationBar
                 amounts={barAmounts}
                 total={totalMagnitude}
+                colors={PALETTE}
                 onChange={changeAllocations}
             />
             <div className="split-editor__parts">
@@ -332,6 +285,6 @@ export default function SplitTransactionDialog({ transaction, onClose }) {
                     Save split
                 </Button>
             </div>
-        </Modal>
+        </Tab>
     );
 }

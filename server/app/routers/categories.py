@@ -131,9 +131,7 @@ def delete_category(cat_id: int, user: Annotated[dict, Depends(current_user)]):
         c.execute("PRAGMA foreign_keys=ON")
         if not _owned_category(c, cat_id, uid):
             raise HTTPException(404, "category not found")
-        if c.execute(
-            "SELECT 1 FROM transaction_splits WHERE category_id=? LIMIT 1", (cat_id,)
-        ).fetchone():
+        if c.execute("SELECT 1 FROM splits WHERE category_id=? LIMIT 1", (cat_id,)).fetchone():
             raise HTTPException(409, "category is used by transaction splits; merge it first")
         c.execute("DELETE FROM categories WHERE id=?", (cat_id,))
         c.commit()
@@ -192,9 +190,7 @@ def merge_category(cat_id: int, body: MergeBody, user: Annotated[dict, Depends(c
         if src["kind"] != dst["kind"]:
             raise HTTPException(400, "cannot merge across income and expense")
         c.execute("UPDATE transactions SET category_id=? WHERE category_id=?", (body.into, cat_id))
-        c.execute(
-            "UPDATE transaction_splits SET category_id=? WHERE category_id=?", (body.into, cat_id)
-        )
+        c.execute("UPDATE splits SET category_id=? WHERE category_id=?", (body.into, cat_id))
         c.execute(
             "UPDATE categories SET keywords=? WHERE id=?",
             (_merge_keywords(dst["keywords"], src["keywords"]), body.into),

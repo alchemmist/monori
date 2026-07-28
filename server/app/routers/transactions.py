@@ -11,36 +11,6 @@ from ..transfer_service import detach_leg
 
 router = APIRouter(prefix="/api/transactions", tags=["transactions"])
 
-_COUNT_TX = (
-    "SELECT COUNT(*) FROM transactions"
-    " WHERE account_id IN (SELECT id FROM accounts WHERE user_id=:uid)"
-    " AND hidden = :hidden"
-    " AND (:from IS NULL OR date(date) >= date(:from))"
-    " AND (:to IS NULL OR date(date) <= date(:to))"
-    " AND (:uncat = 0 OR (category_id IS NULL AND NOT EXISTS"
-    " (SELECT 1 FROM transaction_splits s WHERE s.transaction_id=transactions.id)))"
-    " AND (:uncat = 1 OR :cat IS NULL OR category_id = :cat OR EXISTS"
-    " (SELECT 1 FROM transaction_splits s WHERE s.transaction_id=transactions.id"
-    " AND s.category_id=:cat))"
-    " AND (:acct IS NULL OR account_id = :acct)"
-    " AND (:q IS NULL OR LOWER(description) LIKE :q)"
-)
-_LIST_TX = (
-    "SELECT * FROM transactions"
-    " WHERE account_id IN (SELECT id FROM accounts WHERE user_id=:uid)"
-    " AND hidden = :hidden"
-    " AND (:from IS NULL OR date(date) >= date(:from))"
-    " AND (:to IS NULL OR date(date) <= date(:to))"
-    " AND (:uncat = 0 OR (category_id IS NULL AND NOT EXISTS"
-    " (SELECT 1 FROM transaction_splits s WHERE s.transaction_id=transactions.id)))"
-    " AND (:uncat = 1 OR :cat IS NULL OR category_id = :cat OR EXISTS"
-    " (SELECT 1 FROM transaction_splits s WHERE s.transaction_id=transactions.id"
-    " AND s.category_id=:cat))"
-    " AND (:acct IS NULL OR account_id = :acct)"
-    " AND (:q IS NULL OR LOWER(description) LIKE :q)"
-    " ORDER BY date DESC, id DESC LIMIT :limit OFFSET :offset"
-)
-
 
 class TxCreate(BaseModel):
     date: str
@@ -142,8 +112,27 @@ def list_transactions(
     }
     c = conn()
     try:
-        total = c.execute(_COUNT_TX, params).fetchone()[0]
-        rows = c.execute(_LIST_TX, params)
+        where = """
+            FROM transactions
+            WHERE account_id IN (SELECT id FROM accounts WHERE user_id=:uid)
+              AND hidden = :hidden
+              AND (:from IS NULL OR date(date) >= date(:from))
+              AND (:to IS NULL OR date(date) <= date(:to))
+              AND (:uncat = 0 OR (category_id IS NULL AND NOT EXISTS (
+                    SELECT 1 FROM splits s WHERE s.transaction_id=transactions.id
+                  )))
+              AND (:uncat = 1 OR :cat IS NULL OR category_id = :cat OR EXISTS (
+                    SELECT 1 FROM splits s
+                    WHERE s.transaction_id=transactions.id AND s.category_id=:cat
+                  ))
+              AND (:acct IS NULL OR account_id = :acct)
+              AND (:q IS NULL OR LOWER(description) LIKE :q)
+        """
+        total = c.execute("SELECT COUNT(*)" + where, params).fetchone()[0]
+        rows = c.execute(
+            "SELECT *" + where + " ORDER BY date DESC, id DESC LIMIT :limit OFFSET :offset",
+            params,
+        )
         return {"total": total, "rows": serialize_transactions(c, rows)}
     finally:
         c.close()
@@ -195,7 +184,7 @@ def patch_transaction(tx_id: int, patch: TxPatch, user: Annotated[dict, Depends(
         date = patch.date if patch.date is not None else row["date"]
         amount = patch.amount if patch.amount is not None else row["amount"]
         split_total = c.execute(
-            "SELECT SUM(amount) FROM transaction_splits WHERE transaction_id=?", (tx_id,)
+            "SELECT SUM(amount) FROM splits WHERE transaction_id=?", (tx_id,)
         ).fetchone()[0]
         if split_total is not None and amount != split_total:
             raise HTTPException(400, "edit the split parts before changing the total amount")
@@ -268,10 +257,10 @@ def replace_splits(tx_id: int, body: SplitBody, user: Annotated[dict, Depends(cu
                 raise HTTPException(400, "split amounts must equal the transaction amount")
             for part in body.parts:
                 _resolve_category(c, part.categoryId, uid, part.amount)
-        c.execute("DELETE FROM transaction_splits WHERE transaction_id=?", (tx_id,))
+        c.execute("DELETE FROM splits WHERE transaction_id=?", (tx_id,))
         for sort, part in enumerate(body.parts):
             c.execute(
-                "INSERT INTO transaction_splits"
+                "INSERT INTO splits"
                 " (transaction_id, category_id, amount, comment, sort) VALUES (?, ?, ?, ?, ?)",
                 (tx_id, part.categoryId, part.amount, part.comment, sort),
             )
@@ -279,7 +268,7 @@ def replace_splits(tx_id: int, body: SplitBody, user: Annotated[dict, Depends(cu
             c.execute("UPDATE transactions SET category_id=NULL WHERE id=?", (tx_id,))
         c.commit()
         splits = c.execute(
-            "SELECT id, category_id, amount, comment FROM transaction_splits"
+            "SELECT id, category_id, amount, comment FROM splits"
             " WHERE transaction_id=? ORDER BY sort, id",
             (tx_id,),
         )
@@ -341,7 +330,7 @@ def bulk_transactions(body: BulkBody, user: Annotated[dict, Depends(current_user
             # direction.
             for tx_id in body.ids:
                 row = c.execute(
-                    "SELECT t.amount, EXISTS(SELECT 1 FROM transaction_splits s"
+                    "SELECT t.amount, EXISTS(SELECT 1 FROM splits s"
                     " WHERE s.transaction_id=t.id) AS is_split"
                     " FROM transactions t JOIN accounts a ON a.id = t.account_id"
                     " WHERE t.id=? AND a.user_id=?",

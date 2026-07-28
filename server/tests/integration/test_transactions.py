@@ -176,7 +176,7 @@ def test_transaction_delete(api, client):
     assert client.delete(f"/api/transactions/{tx}").status_code == 404
 
 
-def test_transaction_splits_are_atomic_and_visible_in_snapshot(api, client):
+def test_splits_are_atomic_and_visible_in_snapshot(api, client):
     expenses = api.group("Expenses")
     groceries = api.category("Groceries", expenses)
     household = api.category("Household", expenses)

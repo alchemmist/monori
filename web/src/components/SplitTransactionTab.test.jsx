@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import SplitTransactionDialog from "./SplitTransactionDialog.jsx";
+import SplitTransactionTab from "./SplitTransactionTab.jsx";
 import { fireEvent, renderUI, resetStore, screen, seed, waitFor } from "../test/render.jsx";
 import { useStore } from "../store.js";
 
@@ -11,7 +11,7 @@ const expense = (patch = {}) => ({
     ...patch,
 });
 
-describe("SplitTransactionDialog", () => {
+describe("SplitTransactionTab", () => {
     beforeEach(() => {
         resetStore();
         seed();
@@ -19,7 +19,7 @@ describe("SplitTransactionDialog", () => {
 
     const renderDialog = (transaction = expense(), onClose = vi.fn()) => ({
         onClose,
-        ...renderUI(<SplitTransactionDialog transaction={transaction} onClose={onClose} />),
+        ...renderUI(<SplitTransactionTab transaction={transaction} onClose={onClose} />),
     });
 
     const chooseCategories = async (user) => {
@@ -30,7 +30,10 @@ describe("SplitTransactionDialog", () => {
     };
 
     it("keeps the allocation bar visible and balances manual amount entry", async () => {
-        const { user } = renderDialog();
+        const { user, container } = renderDialog();
+        expect(container.querySelector(".ui-tab").style.getPropertyValue("--ui-tab-w")).toBe(
+            "50vw",
+        );
         const first = screen.getByLabelText("Part 1 amount");
         const second = screen.getByLabelText("Part 2 amount");
         expect(first).toHaveValue("5");
@@ -52,7 +55,7 @@ describe("SplitTransactionDialog", () => {
         await user.clear(first);
         await user.type(first, "6");
 
-        rerender(<SplitTransactionDialog transaction={{ ...transaction }} onClose={vi.fn()} />);
+        rerender(<SplitTransactionTab transaction={{ ...transaction }} onClose={vi.fn()} />);
 
         expect(screen.getByLabelText("Part 1 amount")).toHaveValue("6");
         expect(screen.getByLabelText("Part 2 amount")).toHaveValue("4");
@@ -141,7 +144,7 @@ describe("SplitTransactionDialog", () => {
 
     it("renders nothing without a transaction", () => {
         renderDialog(null);
-        expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+        expect(screen.queryByText(/Split ·/)).not.toBeInTheDocument();
     });
 
     it("does not render allocation controls for an amount too small to split", () => {

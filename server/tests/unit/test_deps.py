@@ -1,4 +1,4 @@
-from app.deps import SQL_PARAM_CHUNK, serialize_transactions
+from app.deps import serialize_transactions
 
 
 class SplitCursor:
@@ -36,12 +36,12 @@ def test_serialize_transactions_chunks_split_lookup():
             "source": "sync",
             "hidden": 0,
         }
-        for tx_id in range(1, SQL_PARAM_CHUNK * 2 + 2)
+        for tx_id in range(1, 1002)
     ]
     cursor = SplitCursor()
 
     result = serialize_transactions(cursor, rows)
 
-    assert [len(chunk) for chunk in cursor.chunks] == [SQL_PARAM_CHUNK, SQL_PARAM_CHUNK, 1]
+    assert [len(chunk) for chunk in cursor.chunks] == [500, 500, 1]
     assert result[0]["splits"][0]["categoryId"] == 7
     assert result[-1]["splits"][0]["comment"] == "part"

@@ -25,7 +25,6 @@ import DeleteTxDialog from "../components/DeleteTxDialog.jsx";
 import TransferDialog from "../components/TransferDialog.jsx";
 import TransferRow from "../components/TransferRow.jsx";
 import TransferSuggestions from "../components/TransferSuggestions.jsx";
-import SplitTransactionDialog from "../components/SplitTransactionDialog.jsx";
 import { mergeTransferRows } from "../engine/transfers.js";
 import { splitPartTransaction } from "../engine/splits.js";
 import "./budget.css";
@@ -67,7 +66,6 @@ export default function TransactionsPage() {
     const [suggesting, setSuggesting] = useState(false);
     const [expanded, setExpanded] = useState(() => new Set());
     const [deleting, setDeleting] = useState(null);
-    const [splitting, setSplitting] = useState(null);
     const bodyRef = useRef(null);
     const [rowH, setRowH] = useState(ROW_H_FALLBACK);
     const [showTop, setShowTop] = useState(false);
@@ -507,7 +505,12 @@ export default function TransactionsPage() {
                                                   text: t.splits?.length
                                                       ? "Edit split"
                                                       : "Split transaction",
-                                                  action: () => setSplitting(t),
+                                                  action: () =>
+                                                      openTab(
+                                                          "tx-split",
+                                                          { transactionId: t.id },
+                                                          `tx-split-${t.id}`,
+                                                      ),
                                               },
                                           ]
                                         : []),
@@ -812,8 +815,6 @@ export default function TransactionsPage() {
                     </tbody>
                 </table>
             </div>
-            <SplitTransactionDialog transaction={splitting} onClose={() => setSplitting(null)} />
-
             {showTop && (
                 <button
                     type="button"

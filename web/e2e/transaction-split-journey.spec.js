@@ -100,6 +100,7 @@ test("split journey keeps allocation, budgets and dashboard visualizations consi
     await expect(parts.nth(1).getByLabel("Part 2 amount")).toHaveValue("200");
     await page.getByRole("button", { name: "Save split" }).click();
     await expect(incomeRow.getByRole("button", { name: "split · 2" })).toBeVisible();
+    await expect(page.locator(".ui-tab")).toHaveCount(0);
 
     await page.reload();
     await expect(page.locator(".sidebar")).toBeVisible();

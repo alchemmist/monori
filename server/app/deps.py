@@ -1,7 +1,7 @@
+from itertools import batched
+
 from . import db as dbmod
 from .transfer_service import list_transfers
-
-SQL_PARAM_CHUNK = 500
 
 
 def conn():
@@ -74,13 +74,12 @@ def serialize_transactions(cur, rows):
         return []
     ids = [row["id"] for row in rows]
     by_tx: dict[int, list] = {}
-    for offset in range(0, len(ids), SQL_PARAM_CHUNK):
-        chunk = ids[offset : offset + SQL_PARAM_CHUNK]
+    for chunk in batched(ids, 500):
         marks = ",".join("?" for _ in chunk)
         for split in cur.execute(
             # `marks` contains generated positional placeholders, never user input.
             f"SELECT id, transaction_id, category_id, amount, comment"  # nosec B608
-            f" FROM transaction_splits WHERE transaction_id IN ({marks})"
+            f" FROM splits WHERE transaction_id IN ({marks})"
             " ORDER BY transaction_id, sort, id",
             chunk,
         ):
