@@ -74,7 +74,8 @@ def serialize_transactions(cur, rows):
     marks = ",".join("?" for _ in ids)
     by_tx: dict[int, list] = {}
     for split in cur.execute(
-        f"SELECT id, transaction_id, category_id, amount, comment"  # nosec B608 -- placeholders only
+        # `marks` contains generated positional placeholders, never user input.
+        f"SELECT id, transaction_id, category_id, amount, comment"  # nosec B608
         f" FROM transaction_splits WHERE transaction_id IN ({marks})"
         " ORDER BY transaction_id, sort, id",
         ids,
