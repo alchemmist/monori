@@ -412,7 +412,11 @@ export const useStore = create((set, get) => ({
                     ...current,
                     transactions: current.transactions.map((transaction) =>
                         transaction.id === txId
-                            ? { ...transaction, categoryId: null, splits: result.splits }
+                            ? {
+                                  ...transaction,
+                                  categoryId: result.splits.length ? null : transaction.categoryId,
+                                  splits: result.splits,
+                              }
                             : transaction,
                     ),
                 },

@@ -205,6 +205,27 @@ describe("replaceTransactionSplits", () => {
             },
         );
     });
+
+    it("preserves the current category when the server confirms split removal", async () => {
+        useStore.setState((state) => ({
+            snapshot: {
+                ...state.snapshot,
+                transactions: state.snapshot.transactions.map((row) =>
+                    row.id === 1 ? { ...row, categoryId: 2, splits: [{ id: 9 }] } : row,
+                ),
+            },
+        }));
+        vi.spyOn(api, "replaceTxSplits").mockResolvedValue({ splits: [] });
+
+        await useStore.getState().replaceTransactionSplits(1, []);
+
+        expect(useStore.getState().snapshot.transactions.find((row) => row.id === 1)).toMatchObject(
+            {
+                categoryId: 2,
+                splits: [],
+            },
+        );
+    });
 });
 
 describe("deleteTransaction", () => {

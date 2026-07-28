@@ -336,7 +336,9 @@ user starts with a default **Cash** account.
 - Deleting a **category** sets `category_id` to `NULL` on its transactions (they
   become uncategorized) and cascade-deletes its budgets. Moving the transactions
   to another category instead is `POST /api/categories/{id}/merge` — the only
-  path that does so, and the one that enforces the income/expense invariant.
+  path that does so, and the one that enforces the income/expense invariant. If
+  the category is referenced by a split part, deletion is refused until those
+  parts are moved with that merge operation.
 - Deleting a **group** is refused while it still has categories.
 - Deleting an **account** reassigns its transactions to another account
   (`?reassignTo=`). Since every transaction must belong to an account, deleting a

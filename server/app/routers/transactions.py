@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from ..auth import current_user
+from ..db import begin_write
 from ..deps import conn, serialize_transactions
 from ..importer import tx_hash
 from ..transfer_service import detach_leg
@@ -183,6 +184,7 @@ def patch_transaction(tx_id: int, patch: TxPatch, user: Annotated[dict, Depends(
     uid = user["id"]
     c = conn()
     try:
+        begin_write(c)
         row = c.execute(
             "SELECT t.* FROM transactions t JOIN accounts a ON a.id = t.account_id"
             " WHERE t.id=? AND a.user_id=?",
@@ -245,6 +247,7 @@ def replace_splits(tx_id: int, body: SplitBody, user: Annotated[dict, Depends(cu
     uid = user["id"]
     c = conn()
     try:
+        begin_write(c)
         row = c.execute(
             "SELECT t.* FROM transactions t JOIN accounts a ON a.id=t.account_id"
             " WHERE t.id=? AND a.user_id=?",
@@ -321,6 +324,7 @@ def bulk_transactions(body: BulkBody, user: Annotated[dict, Depends(current_user
         raise HTTPException(400, "action must be 'categorize', 'move' or 'delete'")
     c = conn()
     try:
+        begin_write(c)
         affected = 0
         if body.action == "delete":
             for tx_id in body.ids:

@@ -87,7 +87,10 @@ export default function SplitTransactionDialog({ transaction, onClose }) {
                       amount: amountInput(amount),
                   })),
         );
-    }, [transaction]);
+        // A refreshed snapshot may replace the object while this dialog has an
+        // unsaved draft. Only switching to another transaction resets it.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [transaction?.id]);
 
     const categoryData = useMemo(() => {
         if (!transaction) return [];

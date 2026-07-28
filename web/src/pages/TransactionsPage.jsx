@@ -470,7 +470,11 @@ export default function TransactionsPage() {
                         />
                     ) : t.transferId != null || t.hidden || t.splits?.length ? (
                         <span style={{ color: "var(--m-text-faint)", paddingLeft: 4 }}>
-                            {t.hidden ? (catById.get(t.categoryId)?.name ?? "—") : "Split"}
+                            {t.hidden
+                                ? (catById.get(t.categoryId)?.name ?? "—")
+                                : t.splits?.length
+                                  ? "Split"
+                                  : "—"}
                         </span>
                     ) : (
                         <InlineSelect

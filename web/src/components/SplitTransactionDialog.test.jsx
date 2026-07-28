@@ -45,6 +45,19 @@ describe("SplitTransactionDialog", () => {
         expect(screen.getByText("Fully assigned")).toBeInTheDocument();
     });
 
+    it("does not reset draft amounts when the same transaction object is rebuilt", async () => {
+        const transaction = expense();
+        const { user, rerender } = renderDialog(transaction);
+        const first = screen.getByLabelText("Part 1 amount");
+        await user.clear(first);
+        await user.type(first, "6");
+
+        rerender(<SplitTransactionDialog transaction={{ ...transaction }} onClose={vi.fn()} />);
+
+        expect(screen.getByLabelText("Part 1 amount")).toHaveValue("6");
+        expect(screen.getByLabelText("Part 2 amount")).toHaveValue("4");
+    });
+
     it("updates numeric fields from the bar and manages extra parts", async () => {
         const { user } = renderDialog();
         fireEvent.change(screen.getByLabelText("Boundary between parts 1 and 2"), {

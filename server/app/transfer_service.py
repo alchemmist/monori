@@ -10,6 +10,7 @@ import sqlite3
 import uuid
 from datetime import UTC, datetime
 
+from .db import begin_write
 from .transfer_match import AUTO_DAYS, SUGGEST_DAYS, find_pairs, split_confident
 
 LINKABLE_COLUMNS = (
@@ -64,6 +65,7 @@ def link(c, uid, out_tx_id, in_tx_id, origin="manual", note=""):
     — only ``transfer_id`` is stamped and the categories are moved aside, so a
     later split restores exactly what was there.
     """
+    begin_write(c)
     out_row = owned_tx(c, uid, out_tx_id)
     in_row = owned_tx(c, uid, in_tx_id)
     if out_row is None or in_row is None:
