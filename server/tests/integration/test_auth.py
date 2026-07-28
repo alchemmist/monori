@@ -92,8 +92,9 @@ def test_first_user_claims_legacy_data(anon):
         " VALUES (NULL, 'T-Bank', 'card', 'RUB', 1)"
     )
     c.execute(
-        "INSERT INTO category_groups (user_id, name, sort, kind)"
-        " VALUES (NULL, 'Legacy', 1, 'expense')"
+        "INSERT INTO category_groups (user_id, name, sort, type_id)"
+        " VALUES (NULL, 'Legacy', 1,"
+        " (SELECT id FROM category_group_types WHERE type='expense'))"
     )
     c.commit()
     c.close()

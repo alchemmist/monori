@@ -31,15 +31,17 @@ def _uid(c):
 def _seed_categories(c):
     uid = _uid(c)
     c.execute(
-        "INSERT INTO category_groups (user_id, name, sort, kind) VALUES (?, 'Inc', 1, 'income')",
+        "INSERT INTO category_groups (user_id, name, sort, type_id)"
+        " VALUES (?, 'Inc', 1, (SELECT id FROM category_group_types WHERE type='income'))",
         (uid,),
     )
     c.execute(
-        "INSERT INTO category_groups (user_id, name, sort, kind) VALUES (?, 'Exp', 2, 'expense')",
+        "INSERT INTO category_groups (user_id, name, sort, type_id)"
+        " VALUES (?, 'Exp', 2, (SELECT id FROM category_group_types WHERE type='expense'))",
         (uid,),
     )
-    inc = c.execute("SELECT id FROM category_groups WHERE kind='income'").fetchone()[0]
-    exp = c.execute("SELECT id FROM category_groups WHERE kind='expense'").fetchone()[0]
+    inc = c.execute("SELECT id FROM category_groups WHERE name='Inc'").fetchone()[0]
+    exp = c.execute("SELECT id FROM category_groups WHERE name='Exp'").fetchone()[0]
     cat_sql = "INSERT INTO categories (group_id, name, keywords, sort) VALUES (?, ?, ?, ?)"
     c.execute(cat_sql, (inc, "Salary", "salary|wage", 1))
     c.execute(cat_sql, (exp, "Food", "lenta|okey", 2))
@@ -158,7 +160,8 @@ def test_snapshot_full_shape(tmp_path):
     c = _db(tmp_path)
     acct = c.execute("SELECT MIN(id) FROM accounts").fetchone()[0]
     c.execute(
-        "INSERT INTO category_groups (user_id, name, sort, kind) VALUES (?, 'Bills', 1, 'expense')",
+        "INSERT INTO category_groups (user_id, name, sort, type_id)"
+        " VALUES (?, 'Bills', 1, (SELECT id FROM category_group_types WHERE type='expense'))",
         (_uid(c),),
     )
     gid = c.execute("SELECT id FROM category_groups").fetchone()[0]

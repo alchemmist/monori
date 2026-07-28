@@ -149,8 +149,9 @@ def snapshot(c, user_id, tx_limit=None):
         "groups": [
             serialize_group(r)
             for r in cur.execute(
-                "SELECT id, name, sort, kind FROM category_groups WHERE user_id=?"
-                " ORDER BY sort, id",
+                "SELECT g.id, g.name, g.sort, t.type AS kind FROM category_groups g"
+                " JOIN category_group_types t ON t.id=g.type_id WHERE g.user_id=?"
+                " ORDER BY g.sort, g.id",
                 uid,
             )
         ],

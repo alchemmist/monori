@@ -81,7 +81,10 @@ def test_apply_creates_groups_categories_transactions_budgets(tmp_path):
     assert result["budgetsSkipped"] == 1
     groups = {
         r["name"]: (r["sort"], r["kind"])
-        for r in c.execute("SELECT name, sort, kind FROM category_groups")
+        for r in c.execute(
+            "SELECT g.name, g.sort, t.type AS kind FROM category_groups g"
+            " JOIN category_group_types t ON t.id=g.type_id"
+        )
     }
     assert groups == {"Daily": (1, "expense"), "Inflow": (5, "income")}
     cats = {
@@ -118,7 +121,8 @@ def test_apply_preserves_blank_categories_despite_keywords(tmp_path):
 def test_named_category_outside_the_sheet_beats_keywords(tmp_path):
     c, uid, acct = _db(tmp_path)
     c.execute(
-        "INSERT INTO category_groups (user_id, name, sort, kind) VALUES (?, 'Mine', 9, 'expense')",
+        "INSERT INTO category_groups (user_id, name, sort, type_id)"
+        " VALUES (?, 'Mine', 9, (SELECT id FROM category_group_types WHERE type='expense'))",
         (uid,),
     )
     gid = c.execute("SELECT id FROM category_groups WHERE name='Mine'").fetchone()[0]
@@ -158,7 +162,8 @@ def test_unknown_named_category_is_left_uncategorized_not_guessed(tmp_path):
 def test_apply_reuses_existing_by_name_and_keeps_keywords(tmp_path):
     c, uid, acct = _db(tmp_path)
     c.execute(
-        "INSERT INTO category_groups (user_id, name, sort, kind) VALUES (?, 'Daily', 9, 'expense')",
+        "INSERT INTO category_groups (user_id, name, sort, type_id)"
+        " VALUES (?, 'Daily', 9, (SELECT id FROM category_group_types WHERE type='expense'))",
         (uid,),
     )
     gid = c.execute("SELECT id FROM category_groups").fetchone()[0]
@@ -339,7 +344,8 @@ def test_category_names_match_across_any_spacing(tmp_path):
     """
     c, uid, acct = _db(tmp_path)
     c.execute(
-        "INSERT INTO category_groups (user_id, name, sort, kind) VALUES (?, 'Mine', 9, 'expense')",
+        "INSERT INTO category_groups (user_id, name, sort, type_id)"
+        " VALUES (?, 'Mine', 9, (SELECT id FROM category_group_types WHERE type='expense'))",
         (uid,),
     )
     gid = c.execute("SELECT id FROM category_groups WHERE name='Mine'").fetchone()[0]

@@ -50,7 +50,11 @@ class DuplicateBody(BaseModel):
 def _load_user_rules(c, uid):
     groups = {
         r["id"]: r["kind"]
-        for r in c.execute("SELECT id, kind FROM category_groups WHERE user_id=?", (uid,))
+        for r in c.execute(
+            "SELECT g.id, t.type AS kind FROM category_groups g"
+            " JOIN category_group_types t ON t.id=g.type_id WHERE g.user_id=?",
+            (uid,),
+        )
     }
     cats = [
         dict(r)
@@ -83,15 +87,17 @@ def _validate_import_categories(c, uid, rows):
         if category_id is None:
             continue
         category = c.execute(
-            "SELECT g.kind FROM categories c JOIN category_groups g ON g.id = c.group_id"
+            "SELECT t.transaction_sign FROM categories c"
+            " JOIN category_groups g ON g.id = c.group_id"
+            " JOIN category_group_types t ON t.id=g.type_id"
             " WHERE c.id=? AND g.user_id=?",
             (category_id, uid),
         ).fetchone()
         if category is None:
             raise HTTPException(400, "unknown category")
-        if row.amount < 0 and category["kind"] not in ("expense", "goal"):
+        if row.amount < 0 and category["transaction_sign"] != -1:
             raise HTTPException(400, "expense transaction requires an expense category")
-        if row.amount > 0 and category["kind"] != "income":
+        if row.amount > 0 and category["transaction_sign"] != 1:
             raise HTTPException(400, "income transaction requires an income category")
 
 
@@ -159,8 +165,9 @@ def import_preview(body: ImportBody, user: Annotated[dict, Depends(current_user)
         kinds = {
             r["id"]: r["kind"]
             for r in c.execute(
-                "SELECT c.id, g.kind FROM categories c"
-                " JOIN category_groups g ON g.id = c.group_id WHERE g.user_id=?",
+                "SELECT c.id, t.type AS kind FROM categories c"
+                " JOIN category_groups g ON g.id = c.group_id"
+                " JOIN category_group_types t ON t.id=g.type_id WHERE g.user_id=?",
                 (uid,),
             )
         }
