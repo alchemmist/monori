@@ -246,10 +246,10 @@ test("splitting a transaction assigns every kopeck and expands into category par
     const parts = editor.locator(".split-editor__part");
     await parts.nth(0).locator(".gsel").click();
     await page.locator(".gsel__drop").getByRole("option", { name: "Groceries" }).click();
-    await parts.nth(0).getByLabel("Part 1 amount").fill("-600");
+    await parts.nth(0).getByLabel("Part 1 amount").fill("600");
     await parts.nth(1).locator(".gsel").click();
     await page.locator(".gsel__drop").getByRole("option", { name: "Household" }).click();
-    await page.getByRole("button", { name: "Assign remainder to last" }).click();
+    await expect(parts.nth(1).getByLabel("Part 2 amount")).toHaveValue("400");
     await expect(page.getByText("Fully assigned")).toBeVisible();
 
     const saved = page.waitForResponse(
