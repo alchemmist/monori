@@ -27,12 +27,15 @@ if the schema changed and the diagram did not.
 
 ```mermaid
 erDiagram
+    category_kinds {
+        TEXT kind PK
+    }
     category_groups {
         INTEGER id PK
         INTEGER user_id FK "-> users.id"
         TEXT name "required"
         INTEGER sort "required"
-        TEXT kind "required"
+        TEXT kind FK "-> category_kinds.kind, required"
     }
     categories {
         INTEGER id PK
@@ -41,6 +44,9 @@ erDiagram
         TEXT keywords "required"
         INTEGER sort "required"
         INTEGER archived "required"
+        INTEGER goal_target
+        TEXT goal_status
+        TEXT goal_target_date
     }
     accounts {
         INTEGER id PK
@@ -142,6 +148,7 @@ erDiagram
         TEXT day PK
         INTEGER count "required"
     }
+    category_kinds ||--o{ category_groups : "kind"
     users |o--o{ category_groups : "user_id"
     category_groups ||--o{ categories : "group_id"
     bank_connections |o--o{ accounts : "connection_id"

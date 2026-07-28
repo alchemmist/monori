@@ -549,9 +549,6 @@ export const useStore = create((set, get) => ({
                 currency: body.currency ?? "RUB",
                 sort: 1e9,
                 archived: false,
-                goalTarget: body.goalTarget ?? null,
-                goalStatus: body.goalTarget != null ? "active" : null,
-                goalTargetDate: body.goalTargetDate ?? null,
                 openingBalance: body.openingBalance ?? 0,
                 openingDate: body.openingDate ?? null,
             },
@@ -765,6 +762,9 @@ export const useStore = create((set, get) => ({
                 keywords: body.keywords ?? "",
                 sort: 1e9,
                 archived: false,
+                goalTarget: body.goalTarget ?? null,
+                goalStatus: body.goalTarget != null ? "active" : null,
+                goalTargetDate: body.goalTargetDate ?? null,
             },
         ];
         set({ snapshot: { ...snapshot, categories } });
