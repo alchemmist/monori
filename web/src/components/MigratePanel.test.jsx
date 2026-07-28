@@ -114,6 +114,102 @@ describe("MigratePanel", () => {
         expect(screen.getByRole("button", { name: "Import" })).toBeDisabled();
     });
 
+    it("offers only same-currency accounts and flags currencies with none", async () => {
+        seed({
+            accounts: [
+                { id: 1, name: "Card", archived: false, currency: "RUB" },
+                { id: 2, name: "Dollars", archived: false, currency: "USD" },
+            ],
+        });
+        vi.spyOn(api, "workbookPreview").mockResolvedValue({
+            groups: 0,
+            categories: 0,
+            transactions: 7,
+            budgetCells: 0,
+            errors: [],
+            warnings: [],
+            accountSlots: [
+                { key: "usd", marker: "Main", currency: "USD", transactions: 5 },
+                { key: "eur", marker: "Euro", currency: "EUR", transactions: 2 },
+            ],
+            budgetConflicts: 0,
+        });
+        const { container, user } = renderUI(<MigratePanel onClose={vi.fn()} />);
+        fireEvent.change(container.querySelector('input[type="file"]'), {
+            target: { files: [new File(["x"], "book.xlsx")] },
+        });
+        // a non-RUB slot spells out its currency and row count
+        expect(await screen.findByText(/Account for Main · USD \(5 rows\)/)).toBeInTheDocument();
+        // no EUR account exists, so those rows are called out as un-importable
+        expect(screen.getByText(/Create an account held in EUR/)).toBeInTheDocument();
+        // the markers carry no card digits, so the remember checkbox stays hidden
+        expect(screen.queryByText(/Remember which card/)).not.toBeInTheDocument();
+        // the USD slot must not offer the ruble account
+        await user.click(container.querySelectorAll("button.gsel")[0]);
+        expect(await screen.findByText("Dollars")).toBeInTheDocument();
+        expect(screen.queryByText("Card")).not.toBeInTheDocument();
+    });
+
+    it("pre-selects the settings default account for the unmarked slot", async () => {
+        seed({ accounts: [{ id: 1, name: "Card", archived: false, currency: "RUB" }] });
+        useStore.setState({ user: { defaultAccountId: 1 } });
+        vi.spyOn(api, "workbookPreview").mockResolvedValue({
+            groups: 0,
+            categories: 0,
+            transactions: 3,
+            budgetCells: 0,
+            errors: [],
+            warnings: [],
+            accountSlots: [{ key: "unmarked", marker: null, currency: "RUB", transactions: 3 }],
+            budgetConflicts: 0,
+        });
+        const commit = vi.spyOn(api, "workbookCommit").mockResolvedValue({
+            inserted: 3,
+            skipped: 0,
+            groupsCreated: 0,
+            categoriesCreated: 0,
+            budgetsWritten: 0,
+        });
+        vi.spyOn(useStore.getState(), "load").mockResolvedValue();
+        const { container, user } = renderUI(<MigratePanel onClose={vi.fn()} />);
+        fireEvent.change(container.querySelector('input[type="file"]'), {
+            target: { files: [new File(["x"], "book.xlsx")] },
+        });
+        // the unmarked slot is mapped to the default account without any pick,
+        // so import is enabled straight away
+        await waitFor(() =>
+            expect(screen.getByRole("button", { name: "Import" })).toBeEnabled(),
+        );
+        await user.click(screen.getByRole("button", { name: "Import" }));
+        await waitFor(() =>
+            expect(commit).toHaveBeenCalledWith(
+                expect.anything(),
+                { unmarked: 1 },
+                "overwrite",
+                true,
+            ),
+        );
+    });
+
+    it("only offers to remember cards when a marker carries card digits", async () => {
+        seed({ accounts: [{ id: 1, name: "Card", archived: false, currency: "RUB" }] });
+        vi.spyOn(api, "workbookPreview").mockResolvedValue({
+            groups: 0,
+            categories: 0,
+            transactions: 1,
+            budgetCells: 0,
+            errors: [],
+            warnings: [],
+            accountSlots: [{ key: "card", marker: "•• 1234", currency: "RUB", transactions: 1 }],
+            budgetConflicts: 0,
+        });
+        const { container } = renderUI(<MigratePanel onClose={vi.fn()} />);
+        fireEvent.change(container.querySelector('input[type="file"]'), {
+            target: { files: [new File(["x"], "book.xlsx")] },
+        });
+        expect(await screen.findByText(/Remember which card/)).toBeInTheDocument();
+    });
+
     it("imports a workbook without account markers and closes from its completed state", async () => {
         const file = new File(["book"], "budget.xlsx");
         vi.spyOn(api, "workbookPreview").mockResolvedValue({
