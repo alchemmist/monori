@@ -130,4 +130,13 @@ describe("SplitTransactionDialog", () => {
         renderDialog(null);
         expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     });
+
+    it("does not render allocation controls for an amount too small to split", () => {
+        renderDialog(expense({ amount: 0 }));
+        expect(
+            screen.getByText("This transaction amount is too small to split."),
+        ).toBeInTheDocument();
+        expect(screen.queryByRole("slider")).not.toBeInTheDocument();
+        expect(screen.queryByRole("button", { name: "Save split" })).not.toBeInTheDocument();
+    });
 });

@@ -1,6 +1,8 @@
 from . import db as dbmod
 from .transfer_service import list_transfers
 
+SQL_PARAM_CHUNK = 500
+
 
 def conn():
     return dbmod.connect()
@@ -71,16 +73,18 @@ def serialize_transactions(cur, rows):
     if not rows:
         return []
     ids = [row["id"] for row in rows]
-    marks = ",".join("?" for _ in ids)
     by_tx: dict[int, list] = {}
-    for split in cur.execute(
-        # `marks` contains generated positional placeholders, never user input.
-        f"SELECT id, transaction_id, category_id, amount, comment"  # nosec B608
-        f" FROM transaction_splits WHERE transaction_id IN ({marks})"
-        " ORDER BY transaction_id, sort, id",
-        ids,
-    ):
-        by_tx.setdefault(split["transaction_id"], []).append(split)
+    for offset in range(0, len(ids), SQL_PARAM_CHUNK):
+        chunk = ids[offset : offset + SQL_PARAM_CHUNK]
+        marks = ",".join("?" for _ in chunk)
+        for split in cur.execute(
+            # `marks` contains generated positional placeholders, never user input.
+            f"SELECT id, transaction_id, category_id, amount, comment"  # nosec B608
+            f" FROM transaction_splits WHERE transaction_id IN ({marks})"
+            " ORDER BY transaction_id, sort, id",
+            chunk,
+        ):
+            by_tx.setdefault(split["transaction_id"], []).append(split)
     return [serialize_tx(row, by_tx.get(row["id"], ())) for row in rows]
 
 

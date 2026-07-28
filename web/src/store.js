@@ -38,6 +38,9 @@ function chainedPatchTx(id, patch) {
 let nextTxFieldRevision = 0;
 const txFieldRevisions = new Map();
 
+let nextSplitRevision = 0;
+const splitRevisions = new Map();
+
 const now = () => (typeof performance !== "undefined" ? performance.now() : 0);
 
 /** The public /demo page runs entirely on the bundled sample dataset: no auth,
@@ -398,8 +401,11 @@ export const useStore = create((set, get) => ({
             );
         set({ snapshot: { ...snapshot, transactions: update(optimistic) } });
         if (isDemo()) return optimistic;
+        const revision = ++nextSplitRevision;
+        splitRevisions.set(txId, revision);
         try {
             const result = await api.replaceTxSplits(txId, parts);
+            if (splitRevisions.get(txId) !== revision) return result.splits;
             const current = get().snapshot;
             set({
                 snapshot: {
@@ -413,16 +419,26 @@ export const useStore = create((set, get) => ({
             });
             return result.splits;
         } catch (error) {
-            const current = get().snapshot;
-            set({
-                snapshot: {
-                    ...current,
-                    transactions: current.transactions.map((transaction) =>
-                        transaction.id === txId ? before : transaction,
-                    ),
-                },
-            });
+            if (splitRevisions.get(txId) === revision) {
+                const current = get().snapshot;
+                set({
+                    snapshot: {
+                        ...current,
+                        transactions: current.transactions.map((transaction) =>
+                            transaction.id === txId
+                                ? {
+                                      ...transaction,
+                                      categoryId: before.categoryId,
+                                      splits: before.splits ?? [],
+                                  }
+                                : transaction,
+                        ),
+                    },
+                });
+            }
             throw error;
+        } finally {
+            if (splitRevisions.get(txId) === revision) splitRevisions.delete(txId);
         }
     },
 

@@ -128,6 +128,23 @@ export default function SplitTransactionDialog({ transaction, onClose }) {
                 part.categoryId != null && parsed[index] != null && parsed[index] !== 0,
         );
 
+    if (totalMagnitude < 2) {
+        return (
+            <Modal
+                opened
+                onClose={onClose}
+                title={`Split · ${transaction.description || "Transaction"}`}
+                size="lg"
+            >
+                <div className="split-editor__summary">
+                    <span>Total</span>
+                    <strong className="num">{money(transaction.amount)}</strong>
+                </div>
+                <p className="muted">This transaction amount is too small to split.</p>
+            </Modal>
+        );
+    }
+
     const change = (index, patch) =>
         setParts((current) =>
             current.map((part, i) => (i === index ? { ...part, ...patch } : part)),

@@ -505,10 +505,16 @@ export default function TransactionsPage() {
                             label="Transaction actions"
                             items={[
                                 [
-                                    {
-                                        text: t.splits?.length ? "Edit split" : "Split transaction",
-                                        action: () => setSplitting(t),
-                                    },
+                                    ...(t.amount !== 0
+                                        ? [
+                                              {
+                                                  text: t.splits?.length
+                                                      ? "Edit split"
+                                                      : "Split transaction",
+                                                  action: () => setSplitting(t),
+                                              },
+                                          ]
+                                        : []),
                                     { text: "Hide transaction", action: () => hideTx(t.id) },
                                 ],
                                 [

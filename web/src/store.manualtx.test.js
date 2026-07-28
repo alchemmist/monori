@@ -178,6 +178,35 @@ describe("updateTransaction", () => {
     });
 });
 
+describe("replaceTransactionSplits", () => {
+    it("preserves a newer transaction edit when split rollback runs", async () => {
+        let rejectSplit;
+        vi.spyOn(api, "replaceTxSplits").mockImplementation(
+            () =>
+                new Promise((_, reject) => {
+                    rejectSplit = reject;
+                }),
+        );
+        vi.spyOn(api, "patchTx").mockResolvedValue({ ok: true });
+
+        const split = useStore.getState().replaceTransactionSplits(1, [
+            { categoryId: 2, amount: -50, comment: "first" },
+            { categoryId: 3, amount: -50, comment: "second" },
+        ]);
+        await useStore.getState().updateTransaction(1, { comment: "keep me" });
+        rejectSplit(new Error("offline"));
+        await expect(split).rejects.toThrow("offline");
+
+        expect(useStore.getState().snapshot.transactions.find((row) => row.id === 1)).toMatchObject(
+            {
+                comment: "keep me",
+                categoryId: null,
+                splits: [],
+            },
+        );
+    });
+});
+
 describe("deleteTransaction", () => {
     it("drops the row and its count", async () => {
         vi.spyOn(api, "deleteTx").mockResolvedValue({ ok: true });
