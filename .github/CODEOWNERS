@@ -1,0 +1,3 @@
+# Code owners for the entire repository.
+# @alchemmist owns everything; PRs require their review before merge.
+* @alchemmist
