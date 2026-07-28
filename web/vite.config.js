@@ -34,7 +34,7 @@ export default defineConfig({
             all: true,
             include: ["src/**/*.{js,jsx}"],
             exclude: [
-                "src/**/*.test.{js,jsx}",
+                "src/**/*.{test,spec}.{js,jsx}",
                 "src/main.jsx",
                 "src/test/**",
                 // decorative-only: generative canvas art whose every frame lands
