@@ -6,6 +6,10 @@ MUTATION_THRESHOLD ?= 85
 
 WEBBIN := web/node_modules/.bin
 
+# `install` is the first target, but a bare `make` must still bring the dev
+# stack up — not run networked installs — so pin the default explicitly.
+.DEFAULT_GOAL := up
+
 .PHONY: install setup tools dev down reset-db deploy api web build \
         fmt fmt-check \
         lint lint-web lint-css lint-html lint-server lint-sql lint-yaml lint-md lint-docs lint-actions lint-docker lint-shell spell \
