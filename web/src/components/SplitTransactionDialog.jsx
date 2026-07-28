@@ -6,9 +6,9 @@ import { FTextInput } from "../ui/fields.jsx";
 import InlineSelect from "../ui/InlineSelect.jsx";
 import { amountInput, money, parseRub } from "../format.js";
 import { signedSplitAmount } from "../engine/splitAmounts.js";
+import { PALETTE } from "../pages/chartTheme.js";
 
 const blankPart = () => ({ categoryId: null, amount: "", comment: "" });
-const splitColors = ["#7c5cff", "#16a3a3", "#e9a23b", "#df6679", "#5794e6", "#8cbd50"];
 
 const evenAmounts = (total, count) => {
     const base = Math.trunc(Math.abs(total) / count);
@@ -26,8 +26,8 @@ function AllocationBar({ amounts, total, onChange }) {
             const from = result.position;
             const to = from + (amount / total) * 100;
             result.colors.push(
-                `${splitColors[index % splitColors.length]} ${from}%`,
-                `${splitColors[index % splitColors.length]} ${to}%`,
+                `${PALETTE[index % PALETTE.length]} ${from}%`,
+                `${PALETTE[index % PALETTE.length]} ${to}%`,
             );
             result.position = to;
             return result;
@@ -214,7 +214,12 @@ export default function SplitTransactionDialog({ transaction, onClose }) {
             )}
             <div className="split-editor__parts">
                 {parts.map((part, index) => (
-                    <div className="split-editor__part" key={index}>
+                    <div
+                        className="split-editor__part"
+                        key={index}
+                        style={{ "--split-color": PALETTE[index % PALETTE.length] }}
+                    >
+                        <span className="split-editor__swatch" aria-hidden="true" />
                         <InlineSelect
                             searchable
                             placeholder="Category"
