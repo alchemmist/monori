@@ -101,11 +101,28 @@ def _categories_sheet(ws, snap):
     ws.freeze_panes = "A2"
 
 
+def _effective_transactions(snap):
+    """Yield categorized split parts instead of their uncategorized container."""
+    for tx in snap["transactions"]:
+        if not tx.get("splits"):
+            yield tx
+            continue
+        for part in tx["splits"]:
+            yield {
+                **tx,
+                "id": f"{tx['id']}:{part['id']}",
+                "amount": part["amount"],
+                "categoryId": part["categoryId"],
+                "comment": part.get("comment", ""),
+                "splits": [],
+            }
+
+
 def _transactions_sheet(ws, snap, cat_names, acct_names, acct_currency):
     ws.append(spec.TRANSACTION_HEADERS)
     _style_header(ws, 1)
     row = 2
-    for tx in snap["transactions"]:
+    for tx in _effective_transactions(snap):
         dt = _parse_dt(tx["date"])
         currency = acct_currency.get(tx["accountId"], "RUB")
         rub = spec.kop_to_rub(tx["amount"])
@@ -131,7 +148,7 @@ def _transactions_sheet(ws, snap, cat_names, acct_names, acct_currency):
 
 def _month_activity(snap):
     activity: defaultdict[tuple[int, int, int], int] = defaultdict(int)
-    for tx in snap["transactions"]:
+    for tx in _effective_transactions(snap):
         if tx["categoryId"] is None:
             continue
         dt = _parse_dt(tx["date"])
@@ -229,7 +246,7 @@ def _dashdata_sheet(ws, snap, activity):
     monthly: defaultdict[tuple[int, int], list[int]] = defaultdict(lambda: [0, 0])
     kinds = {g["id"]: g["kind"] for g in snap["groups"]}
     cat_kind = {c["id"]: kinds[c["groupId"]] for c in snap["categories"]}
-    for tx in snap["transactions"]:
+    for tx in _effective_transactions(snap):
         if tx["transferId"]:
             continue
         kind = cat_kind.get(tx["categoryId"])

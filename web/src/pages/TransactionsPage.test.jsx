@@ -69,6 +69,36 @@ describe("TransactionsPage", () => {
         expect(screen.getAllByText("Savings").length).toBeGreaterThan(0);
     });
 
+    it("shows a neutral category for expanded transfer legs", async () => {
+        seed({
+            accounts,
+            groups,
+            categories,
+            transactions: [
+                tx(1, {
+                    description: "Transfer out",
+                    amount: -1000,
+                    transferId: 11,
+                    accountId: 1,
+                }),
+                tx(2, {
+                    description: "Transfer in",
+                    amount: 1000,
+                    transferId: 11,
+                    accountId: 2,
+                }),
+            ],
+        });
+        const { user } = renderUI(<TransactionsPage />);
+        await user.click(screen.getByRole("button", { name: "Show both transactions" }));
+
+        for (const description of ["Transfer out", "Transfer in"]) {
+            const row = screen.getByText(description).closest("tr");
+            expect(within(row).getByText("—")).toBeInTheDocument();
+            expect(within(row).queryByText("Split")).not.toBeInTheDocument();
+        }
+    });
+
     it("filters by free-text and clears the search", async () => {
         seed({
             transactions: [
