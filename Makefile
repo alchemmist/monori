@@ -6,12 +6,21 @@ MUTATION_THRESHOLD ?= 85
 
 WEBBIN := web/node_modules/.bin
 
-.PHONY: dev down reset-db deploy api web build \
+.PHONY: install setup dev down reset-db deploy api web build \
         fmt fmt-check \
         lint lint-web lint-css lint-html lint-server lint-sql lint-yaml lint-md lint-docs lint-actions lint-docker lint-shell spell \
         typecheck analyze audit audit-deps audit-deps-py audit-secrets \
         test t-fast t-medium t-slow t-slow-ui coverage mutation m-front m-back \
         schema-diagram check
+
+# One-shot dependency install for a fresh clone. web/package-lock.json is
+# gitignored, so `npm install` (not `npm ci`) is what resolves package.json —
+# rerun this whenever web/package.json or server deps change.
+install:
+	cd web && npm install --no-audit --no-fund
+	cd server && uv sync
+
+setup: install
 
 up:
 	$(COMPOSE) -f deploy/docker-compose.dev.yml up --build

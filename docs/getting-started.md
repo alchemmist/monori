@@ -69,6 +69,15 @@ back image must be built with the `connectors` extra.
 Requirements: [`uv`](https://docs.astral.sh/uv/) for the Python side and Node 22
 for the web side.
 
+First, install all dependencies for both halves in one command:
+
+```bash
+make install   # npm install in web/ + uv sync in server/
+```
+
+Rerun it whenever `web/package.json` or the server dependencies change —
+`web/package-lock.json` is not committed, so `npm ci` will not work here.
+
 The whole dev loop is driven by `make`. To bring up both services with
 hot-reload in containers:
 
