@@ -175,15 +175,10 @@ def test_preview_rejects_oversized_statement(api, client):
     assert r.json()["detail"] == "statement is too large"
 
 
-def test_import_preview_never_proposes_a_wrong_direction_category(api, client):
-    """
-    The refund fallback in the categorizer would happily file "Lenta +100" into
-    Groceries — but the commit rejects wrong-direction categories, so a preview
-    proposing one would make the whole statement unimportable.
-    """
+def test_import_preview_proposes_expense_category_for_refund(api, client):
     expenses = api.group("Expenses")
-    api.category("Groceries", expenses, keywords="lenta")
+    groceries = api.category("Groceries", expenses, keywords="lenta")
     refund = api.statement.splitlines()[0].replace("-100,00", "100,00") + "\n"
     rows = api.preview(refund)
     assert rows[0]["amount"] > 0
-    assert rows[0]["categoryId"] is None
+    assert rows[0]["categoryId"] == groceries

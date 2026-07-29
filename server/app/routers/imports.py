@@ -159,8 +159,8 @@ def import_preview(body: ImportBody, user: Annotated[dict, Depends(current_user)
         rules = _load_user_rules(c, uid)
         fallback_account_id = body.accountId if _owned_account(c, body.accountId, uid) else None
         _detect_row_accounts(c, uid, rows, fallback_account_id)
-        # commit enforces category direction, so the preview must not propose
-        # a category the commit would then reject wholesale
+        # Commit requires outflows to use expense categories. Positive rows may
+        # keep either an income match or an expense match for refunds.
         kinds = {
             r["id"]: r["kind"]
             for r in c.execute(
@@ -172,10 +172,12 @@ def import_preview(body: ImportBody, user: Annotated[dict, Depends(current_user)
         }
         for row in rows:
             category_id = categorize(row["description"], row["amount"], rules)
-            if category_id is not None:
-                expected = "expense" if row["amount"] < 0 else "income"
-                if kinds.get(category_id) != expected:
-                    category_id = None
+            if (
+                category_id is not None
+                and row["amount"] < 0
+                and kinds.get(category_id) != "expense"
+            ):
+                category_id = None
             row["categoryId"] = category_id
         _mark_duplicates(c, rows)
         return {"rows": rows, "errors": errors}
