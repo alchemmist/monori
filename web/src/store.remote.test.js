@@ -171,6 +171,17 @@ describe("moveCategory outside the demo", () => {
         expect(reorder).toHaveBeenCalledExactlyOnceWith([4]);
     });
 
+    it("persists target changes when the card stays in its group", async () => {
+        const patch = vi.spyOn(api, "patchCategory").mockResolvedValue({});
+        vi.spyOn(api, "reorderCategories").mockResolvedValue({});
+        const goal = { goalTarget: 750000, goalTargetDate: "2027-06-01" };
+
+        await useStore.getState().moveCategory(4, 2, [4], goal);
+
+        expect(patch).toHaveBeenCalledExactlyOnceWith(4, goal);
+        expect(snap().categories[0]).toMatchObject(goal);
+    });
+
     it("skips the group patch when the dragged id is not in the snapshot", async () => {
         const patch = vi.spyOn(api, "patchCategory").mockResolvedValue({});
         vi.spyOn(api, "reorderCategories").mockResolvedValue({});

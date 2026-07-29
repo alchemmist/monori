@@ -849,7 +849,10 @@ export const useStore = create((set, get) => ({
         set({ snapshot: { ...snapshot, categories } });
         if (isDemo()) return;
         try {
-            if (groupChanged) await api.patchCategory(id, { groupId: toGroupId, ...categoryPatch });
+            const patchBody = cat
+                ? { ...(groupChanged ? { groupId: toGroupId } : {}), ...categoryPatch }
+                : {};
+            if (Object.keys(patchBody).length > 0) await api.patchCategory(id, patchBody);
             await api.reorderCategories(orderedIds);
         } catch (e) {
             get().notify({ title: "Failed to move category", theme: "danger", content: String(e) });
