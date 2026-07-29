@@ -203,16 +203,18 @@ export default function BudgetPage({ results, firstYear, lastYear }) {
                     onChange={(v) => setYear(+v)}
                     data={years.map((y) => String(y))}
                 />
-                {year === lastYear && year > 2000 && year <= 2100 && (
-                    <Button
-                        size="xs"
-                        variant="light"
-                        loading={creatingYear}
-                        onClick={createNextYear}
-                    >
-                        Create {year}
-                    </Button>
-                )}
+                <Button
+                    className={`budget-toolbar__create ${year === lastYear && year > 2000 && year <= 2100 ? "" : "budget-toolbar__action_hidden"}`}
+                    size="xs"
+                    variant="light"
+                    loading={creatingYear}
+                    onClick={createNextYear}
+                    disabled={year !== lastYear || year <= 2000 || year > 2100}
+                    aria-hidden={year !== lastYear || year <= 2000 || year > 2100}
+                    tabIndex={year === lastYear && year > 2000 && year <= 2100 ? 0 : -1}
+                >
+                    Create {year}
+                </Button>
                 {mode === "month" && (
                     <div className="toolbar-scroll">
                         <SegmentedControl
@@ -234,16 +236,18 @@ export default function BudgetPage({ results, firstYear, lastYear }) {
                         Fill {selectedCategory.name} to Dec
                     </Button>
                 )}
-                {unusedCount > 0 && (
-                    <Button
-                        size="xs"
-                        variant="subtle"
-                        onClick={() => setShowUnused((v) => !v)}
-                        title="Categories with nothing budgeted, spent or held this year"
-                    >
-                        {showUnused ? "Hide unused" : `Show ${unusedCount} unused`}
-                    </Button>
-                )}
+                <Button
+                    className={`budget-toolbar__unused ${unusedCount > 0 ? "" : "budget-toolbar__action_hidden"}`}
+                    size="xs"
+                    variant="subtle"
+                    onClick={() => setShowUnused((v) => !v)}
+                    title="Categories with nothing budgeted, spent or held this year"
+                    disabled={unusedCount === 0}
+                    aria-hidden={unusedCount === 0}
+                    tabIndex={unusedCount > 0 ? 0 : -1}
+                >
+                    {showUnused ? "Hide unused" : `Show ${unusedCount} unused`}
+                </Button>
                 {mode === "year" && (
                     <SegmentedControl
                         value={density}
