@@ -29,6 +29,7 @@ export default function BudgetPage({ results, firstYear, lastYear }) {
         snapshot,
         setBudget,
         setBudgets,
+        copyBudgetYear,
         fillBudgetForward,
         archiveGoal,
         patchCategory,
@@ -46,6 +47,7 @@ export default function BudgetPage({ results, firstYear, lastYear }) {
     const [dialog, setDialog] = useState(null); // {type: 'edit'|'delete'|'new', category}
     const [selectedBudgetCell, setSelectedBudgetCell] = useState(null);
     const [fillingForward, setFillingForward] = useState(false);
+    const [creatingYear, setCreatingYear] = useState(false);
 
     const res = results.get(year);
     const groups = useMemo(
@@ -173,6 +175,23 @@ export default function BudgetPage({ results, firstYear, lastYear }) {
         }
     };
 
+    const createNextYear = async () => {
+        const sourceYear = year - 1;
+        setCreatingYear(true);
+        try {
+            const count = await copyBudgetYear(sourceYear, year);
+            notify({
+                title: `${year} budget created`,
+                content: `${count} budget cell${count === 1 ? "" : "s"} copied from ${sourceYear}`,
+                theme: "success",
+            });
+        } catch (e) {
+            notify({ title: "Failed to create budget year", content: String(e), theme: "danger" });
+        } finally {
+            setCreatingYear(false);
+        }
+    };
+
     return (
         <div className="fade-in">
             <div className="budget-toolbar">
@@ -184,6 +203,18 @@ export default function BudgetPage({ results, firstYear, lastYear }) {
                     onChange={(v) => setYear(+v)}
                     data={years.map((y) => String(y))}
                 />
+                <Button
+                    className={`budget-toolbar__create ${year === lastYear && year > 2000 && year <= 2100 ? "" : "budget-toolbar__action_hidden"}`}
+                    size="xs"
+                    variant="light"
+                    loading={creatingYear}
+                    onClick={createNextYear}
+                    disabled={year !== lastYear || year <= 2000 || year > 2100}
+                    aria-hidden={year !== lastYear || year <= 2000 || year > 2100}
+                    tabIndex={year === lastYear && year > 2000 && year <= 2100 ? 0 : -1}
+                >
+                    Create {year}
+                </Button>
                 {mode === "month" && (
                     <div className="toolbar-scroll">
                         <SegmentedControl
@@ -205,16 +236,18 @@ export default function BudgetPage({ results, firstYear, lastYear }) {
                         Fill {selectedCategory.name} to Dec
                     </Button>
                 )}
-                {unusedCount > 0 && (
-                    <Button
-                        size="xs"
-                        variant="subtle"
-                        onClick={() => setShowUnused((v) => !v)}
-                        title="Categories with nothing budgeted, spent or held this year"
-                    >
-                        {showUnused ? "Hide unused" : `Show ${unusedCount} unused`}
-                    </Button>
-                )}
+                <Button
+                    className={`budget-toolbar__unused ${unusedCount > 0 ? "" : "budget-toolbar__action_hidden"}`}
+                    size="xs"
+                    variant="subtle"
+                    onClick={() => setShowUnused((v) => !v)}
+                    title="Categories with nothing budgeted, spent or held this year"
+                    disabled={unusedCount === 0}
+                    aria-hidden={unusedCount === 0}
+                    tabIndex={unusedCount > 0 ? 0 : -1}
+                >
+                    {showUnused ? "Hide unused" : `Show ${unusedCount} unused`}
+                </Button>
                 {mode === "year" && (
                     <SegmentedControl
                         value={density}

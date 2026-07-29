@@ -44,6 +44,10 @@ def test_budget_bulk_and_copy_overwrites(api, client):
 
     year_copy = client.post("/api/budgets/copy", json={"fromYear": 2026, "toYear": 2027})
     assert year_copy.json()["copied"] == 2
+    assert year_copy.json()["budgets"] == [
+        {"categoryId": b, "year": 2027, "month": 1, "amount": 2000},
+        {"categoryId": b, "year": 2027, "month": 2, "amount": 2000},
+    ]
     assert len([x for x in api.snapshot()["budgets"] if x["year"] == 2027]) == 2
 
 
@@ -67,7 +71,7 @@ def test_budget_copy_validation_and_empty_source(api, client):
     empty = client.post(
         "/api/budgets/copy", json={"fromYear": 2026, "toYear": 2027, "fromMonth": 1, "toMonth": 1}
     )
-    assert empty.json()["copied"] == 0
+    assert empty.json() == {"copied": 0, "budgets": []}
     assert api.snapshot()["budgets"] == []
 
 

@@ -86,11 +86,13 @@ def copy_budgets(body: CopyBody, user: Annotated[dict, Depends(current_user)]):
         raise HTTPException(400, "give both fromMonth and toMonth, or neither")
     c = conn()
     try:
+        copied = []
         if month_mode:
             src = c.execute(
                 "SELECT category_id, amount FROM budgets WHERE year=? AND month=?"
                 " AND category_id IN (SELECT c.id FROM categories c"
-                " JOIN category_groups g ON g.id = c.group_id WHERE g.user_id=?)",
+                " JOIN category_groups g ON g.id = c.group_id WHERE g.user_id=?)"
+                " ORDER BY category_id",
                 (body.fromYear, body.fromMonth, uid),
             ).fetchall()
             c.execute(
@@ -104,11 +106,20 @@ def copy_budgets(body: CopyBody, user: Annotated[dict, Depends(current_user)]):
                     "INSERT INTO budgets (category_id, year, month, amount) VALUES (?, ?, ?, ?)",
                     (r["category_id"], body.toYear, body.toMonth, r["amount"]),
                 )
+                copied.append(
+                    {
+                        "categoryId": r["category_id"],
+                        "year": body.toYear,
+                        "month": body.toMonth,
+                        "amount": r["amount"],
+                    }
+                )
         else:
             src = c.execute(
                 "SELECT category_id, month, amount FROM budgets WHERE year=?"
                 " AND category_id IN (SELECT c.id FROM categories c"
-                " JOIN category_groups g ON g.id = c.group_id WHERE g.user_id=?)",
+                " JOIN category_groups g ON g.id = c.group_id WHERE g.user_id=?)"
+                " ORDER BY month, category_id",
                 (body.fromYear, uid),
             ).fetchall()
             c.execute(
@@ -121,7 +132,15 @@ def copy_budgets(body: CopyBody, user: Annotated[dict, Depends(current_user)]):
                     "INSERT INTO budgets (category_id, year, month, amount) VALUES (?, ?, ?, ?)",
                     (r["category_id"], body.toYear, r["month"], r["amount"]),
                 )
+                copied.append(
+                    {
+                        "categoryId": r["category_id"],
+                        "year": body.toYear,
+                        "month": r["month"],
+                        "amount": r["amount"],
+                    }
+                )
         c.commit()
-        return {"copied": len(src)}
+        return {"copied": len(copied), "budgets": copied}
     finally:
         c.close()

@@ -29,7 +29,7 @@ afterEach(() => {
 describe("optimistic edits outside the demo", () => {
     it("persists a budget cell with its exact coordinates", async () => {
         const put = vi.spyOn(api, "putBudget").mockResolvedValue({});
-        useStore.getState().setBudget(4, 2026, 1, 35);
+        await useStore.getState().setBudget(4, 2026, 1, 35);
         expect(put).toHaveBeenCalledExactlyOnceWith({
             categoryId: 4,
             year: 2026,

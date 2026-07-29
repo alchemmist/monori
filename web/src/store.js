@@ -33,6 +33,31 @@ function chainedPatchTx(id, patch) {
     return next;
 }
 
+/** Budget writes and year copies share one queue, so a copy is a true barrier:
+ * it sees every earlier edit and every later edit lands after the copy. */
+let budgetOperationTail = Promise.resolve();
+let budgetWriteFailureVersion = 0;
+let lastBudgetWriteError = null;
+let nextBudgetRevision = 0;
+const budgetRevisions = new Map();
+
+function chainedBudgetOperation(operation, trackWriteFailure = false) {
+    let result = budgetOperationTail.then(operation);
+    if (trackWriteFailure) {
+        result = result.catch((error) => {
+            budgetWriteFailureVersion += 1;
+            lastBudgetWriteError = error;
+            throw error;
+        });
+    }
+    budgetOperationTail = result.catch(() => {});
+    return result;
+}
+
+function budgetKey(categoryId, year, month) {
+    return `${categoryId}-${year}-${month}`;
+}
+
 // Each optimistic transaction edit owns revisions for the fields it changes.
 // A failed older request must never undo a newer edit to the same field.
 let nextTxFieldRevision = 0;
@@ -242,16 +267,22 @@ export const useStore = create((set, get) => ({
 
     /** Optimistic budget edit: local state changes instantly, server call follows. */
     setBudget(categoryId, year, month, amount) {
+        budgetRevisions.set(budgetKey(categoryId, year, month), ++nextBudgetRevision);
         const { snapshot } = get();
         const budgets = snapshot.budgets.filter(
             (b) => !(b.categoryId === categoryId && b.year === year && b.month === month),
         );
         if (amount !== 0) budgets.push({ categoryId, year, month, amount });
         set({ snapshot: { ...snapshot, budgets } });
-        if (isDemo()) return;
-        api.putBudget({ categoryId, year, month, amount }).catch((e) =>
+        if (isDemo()) return Promise.resolve();
+        const write = chainedBudgetOperation(
+            () => api.putBudget({ categoryId, year, month, amount }),
+            true,
+        );
+        write.catch((e) =>
             set({ toast: { title: "Failed to save budget", theme: "danger", content: String(e) } }),
         );
+        return write;
     },
 
     /** Copy one category's current month into every later month of the year.
@@ -292,6 +323,40 @@ export const useStore = create((set, get) => ({
         );
         budgets.push(...cells.filter((c) => c.amount !== 0));
         set({ snapshot: { ...snapshot, budgets } });
+    },
+
+    /** Create a new planning year as an exact copy of the preceding year. */
+    copyBudgetYear(fromYear, toYear) {
+        const failureVersion = budgetWriteFailureVersion;
+        const revision = nextBudgetRevision;
+        return chainedBudgetOperation(async () => {
+            if (budgetWriteFailureVersion !== failureVersion) throw lastBudgetWriteError;
+
+            let copied;
+            let targetBudgets;
+            if (isDemo()) {
+                targetBudgets = get()
+                    .snapshot.budgets.filter((b) => b.year === fromYear)
+                    .map((b) => ({ ...b, year: toYear }));
+                copied = targetBudgets.length;
+            } else {
+                const response = await api.copyBudgetYear(fromYear, toYear);
+                copied = response.copied;
+                targetBudgets = response.budgets;
+            }
+
+            // An edit made after copying was requested is already visible
+            // optimistically. Keep it while applying the server's copy result.
+            const changedAfterRequest = (b) =>
+                (budgetRevisions.get(budgetKey(b.categoryId, b.year, b.month)) ?? 0) > revision;
+            const { snapshot } = get();
+            const budgets = snapshot.budgets.filter(
+                (b) => b.year !== toYear || changedAfterRequest(b),
+            );
+            budgets.push(...targetBudgets.filter((b) => !changedAfterRequest(b)));
+            set({ snapshot: { ...snapshot, budgets } });
+            return copied;
+        });
     },
 
     setTxCategory(txId, categoryId) {
@@ -1012,6 +1077,11 @@ export function resetStoreForTests() {
     txPatchChain.clear();
     nextTxFieldRevision = 0;
     txFieldRevisions.clear();
+    budgetOperationTail = Promise.resolve();
+    budgetWriteFailureVersion = 0;
+    lastBudgetWriteError = null;
+    nextBudgetRevision = 0;
+    budgetRevisions.clear();
     nextTabId = initialNextTabId;
     useStore.setState(
         {
