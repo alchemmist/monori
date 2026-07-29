@@ -1,3 +1,4 @@
+import re
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -51,14 +52,18 @@ class SplitBody(BaseModel):
     parts: list[SplitPart]
 
 
-def _validate_category_type(transaction_sign, amount):
+class RefundBody(BaseModel):
+    originalId: int
+
+
+def _validate_category_type(transaction_sign, amount, is_refund=False):
     if amount < 0 and transaction_sign != -1:
         raise HTTPException(400, "expense transaction requires an expense category")
-    if amount > 0 and transaction_sign != 1:
+    if amount > 0 and transaction_sign != 1 and not is_refund:
         raise HTTPException(400, "income transaction requires an income category")
 
 
-def _resolve_category(c, category_id, uid, amount=None):
+def _resolve_category(c, category_id, uid, amount=None, is_refund=False):
     """
     0 (or None handled by caller) means uncategorized; else must exist.
     """
@@ -74,8 +79,30 @@ def _resolve_category(c, category_id, uid, amount=None):
     if not category:
         raise HTTPException(400, "unknown category")
     if amount is not None:
-        _validate_category_type(category["transaction_sign"], amount)
+        _validate_category_type(category["transaction_sign"], amount, is_refund)
     return category_id
+
+
+def _owned_transaction(c, tx_id, uid):
+    return c.execute(
+        "SELECT t.* FROM transactions t JOIN accounts a ON a.id=t.account_id"
+        " WHERE t.id=? AND a.user_id=?",
+        (tx_id, uid),
+    ).fetchone()
+
+
+def _refund_total(c, original_id, excluding=None):
+    return c.execute(
+        "SELECT COALESCE(SUM(t.amount), 0) FROM refund_links r"
+        " JOIN transactions t ON t.id=r.refund_tx_id"
+        " WHERE r.original_tx_id=? AND (? IS NULL OR r.refund_tx_id<>?)",
+        (original_id, excluding, excluding),
+    ).fetchone()[0]
+
+
+def _merchant_key(value):
+    value = re.sub(r"\b(refund|return|возврат)\b", " ", value.lower())
+    return " ".join(re.findall(r"[a-zа-яё]+", value))
 
 
 def _resolve_account(c, account_id, uid):
@@ -183,8 +210,20 @@ def patch_transaction(tx_id: int, patch: TxPatch, user: Annotated[dict, Depends(
         ).fetchone()
         if not row:
             raise HTTPException(404, "transaction not found")
+        refund_link = c.execute(
+            "SELECT original_tx_id FROM refund_links WHERE refund_tx_id=?", (tx_id,)
+        ).fetchone()
         date = patch.date if patch.date is not None else row["date"]
         amount = patch.amount if patch.amount is not None else row["amount"]
+        if refund_link:
+            if amount <= 0:
+                raise HTTPException(400, "a linked refund must remain positive")
+            original = _owned_transaction(c, refund_link["original_tx_id"], uid)
+            if _refund_total(c, original["id"], tx_id) + amount > -original["amount"]:
+                raise HTTPException(400, "refunds cannot exceed the original purchase")
+        linked_total = _refund_total(c, tx_id)
+        if linked_total and (amount >= 0 or linked_total > -amount):
+            raise HTTPException(400, "purchase amount cannot be less than its refunds")
         split_total = c.execute(
             "SELECT SUM(amount) FROM splits WHERE transaction_id=?", (tx_id,)
         ).fetchone()[0]
@@ -200,9 +239,9 @@ def patch_transaction(tx_id: int, patch: TxPatch, user: Annotated[dict, Depends(
         if patch.categoryId is not None:
             if split_total is not None:
                 raise HTTPException(400, "remove the split before categorizing the parent")
-            category = _resolve_category(c, patch.categoryId, uid, amount)
+            category = _resolve_category(c, patch.categoryId, uid, amount, bool(refund_link))
         elif patch.amount is not None and category is not None:
-            _resolve_category(c, category, uid, amount)
+            _resolve_category(c, category, uid, amount, bool(refund_link))
         account = row["account_id"]
         if patch.accountId is not None:
             account = _resolve_account(c, patch.accountId, uid)
@@ -232,6 +271,111 @@ def patch_transaction(tx_id: int, patch: TxPatch, user: Annotated[dict, Depends(
         c.close()
 
 
+@router.get("/{refund_tx_id}/refund-suggestions")
+def refund_suggestions(refund_tx_id: int, user: Annotated[dict, Depends(current_user)]):
+    uid = user["id"]
+    c = conn()
+    try:
+        refund = _owned_transaction(c, refund_tx_id, uid)
+        if not refund:
+            raise HTTPException(404, "transaction not found")
+        if refund["amount"] <= 0:
+            raise HTTPException(400, "only a positive transaction can be a refund")
+        key = _merchant_key(refund["description"])
+        current_link = c.execute(
+            "SELECT original_tx_id FROM refund_links WHERE refund_tx_id=?", (refund_tx_id,)
+        ).fetchone()
+        current_original_id = current_link["original_tx_id"] if current_link else None
+        rows = c.execute(
+            "SELECT t.* FROM transactions t JOIN accounts a ON a.id=t.account_id"
+            " WHERE a.user_id=? AND t.amount<0 AND t.date<=?"
+            " AND t.transfer_id IS NULL AND t.id<>?"
+            " ORDER BY t.date DESC, t.id DESC LIMIT 250",
+            (uid, refund["date"], refund_tx_id),
+        ).fetchall()
+        candidates = []
+        for row in rows:
+            used = _refund_total(c, row["id"], refund_tx_id)
+            remaining = -row["amount"] - used
+            if remaining < refund["amount"]:
+                continue
+            same_merchant = bool(key) and _merchant_key(row["description"]) == key
+            if (
+                row["id"] != current_original_id
+                and not same_merchant
+                and -row["amount"] != refund["amount"]
+            ):
+                continue
+            candidates.append((not same_merchant, row))
+        candidates.sort(key=lambda item: item[0])
+        return {"rows": serialize_transactions(c, [row for _, row in candidates[:20]])}
+    finally:
+        c.close()
+
+
+@router.put("/{refund_tx_id}/refund")
+def link_refund(refund_tx_id: int, body: RefundBody, user: Annotated[dict, Depends(current_user)]):
+    uid = user["id"]
+    c = conn()
+    try:
+        begin_write(c)
+        refund = _owned_transaction(c, refund_tx_id, uid)
+        original = _owned_transaction(c, body.originalId, uid)
+        if not refund or not original:
+            raise HTTPException(404, "transaction not found")
+        if refund["amount"] <= 0 or original["amount"] >= 0:
+            raise HTTPException(400, "a refund must link a positive transaction to a purchase")
+        if refund["transfer_id"] is not None or original["transfer_id"] is not None:
+            raise HTTPException(400, "transfer transactions cannot be refunds")
+        if c.execute(
+            "SELECT 1 FROM splits WHERE transaction_id IN (?, ?) LIMIT 1",
+            (refund_tx_id, body.originalId),
+        ).fetchone():
+            raise HTTPException(400, "split transactions cannot be refunds")
+        if c.execute(
+            "SELECT 1 FROM refund_links WHERE refund_tx_id=? OR original_tx_id=? LIMIT 1",
+            (body.originalId, refund_tx_id),
+        ).fetchone():
+            raise HTTPException(400, "refund links cannot be chained")
+        if _refund_total(c, body.originalId, refund_tx_id) + refund["amount"] > -original["amount"]:
+            raise HTTPException(400, "refunds cannot exceed the original purchase")
+        c.execute(
+            "INSERT INTO refund_links (refund_tx_id, original_tx_id) VALUES (?, ?)"
+            " ON CONFLICT(refund_tx_id) DO UPDATE SET original_tx_id=excluded.original_tx_id",
+            (refund_tx_id, body.originalId),
+        )
+        c.execute(
+            "UPDATE transactions SET category_id=? WHERE id=?",
+            (original["category_id"], refund_tx_id),
+        )
+        c.commit()
+        return {
+            "ok": True,
+            "refundOfId": body.originalId,
+            "categoryId": original["category_id"],
+        }
+    finally:
+        c.close()
+
+
+@router.delete("/{refund_tx_id}/refund")
+def unlink_refund(refund_tx_id: int, user: Annotated[dict, Depends(current_user)]):
+    uid = user["id"]
+    c = conn()
+    try:
+        if not _owned_transaction(c, refund_tx_id, uid):
+            raise HTTPException(404, "transaction not found")
+        deleted = c.execute(
+            "DELETE FROM refund_links WHERE refund_tx_id=?", (refund_tx_id,)
+        ).rowcount
+        c.commit()
+        if not deleted:
+            raise HTTPException(404, "refund link not found")
+        return {"ok": True}
+    finally:
+        c.close()
+
+
 @router.put("/{tx_id}/splits")
 def replace_splits(tx_id: int, body: SplitBody, user: Annotated[dict, Depends(current_user)]):
     """Atomically replace every categorized part, or clear the split with an empty list."""
@@ -249,6 +393,11 @@ def replace_splits(tx_id: int, body: SplitBody, user: Annotated[dict, Depends(cu
         if row["transfer_id"] is not None:
             raise HTTPException(400, "transfer transactions cannot be split")
         if body.parts:
+            if c.execute(
+                "SELECT 1 FROM refund_links WHERE refund_tx_id=? OR original_tx_id=? LIMIT 1",
+                (tx_id, tx_id),
+            ).fetchone():
+                raise HTTPException(400, "refund transactions cannot be split")
             if len(body.parts) < 2:
                 raise HTTPException(400, "a split requires at least two parts")
             if any(part.amount == 0 for part in body.parts):
@@ -334,6 +483,8 @@ def bulk_transactions(body: BulkBody, user: Annotated[dict, Depends(current_user
                 row = c.execute(
                     "SELECT t.amount, EXISTS(SELECT 1 FROM splits s"
                     " WHERE s.transaction_id=t.id) AS is_split"
+                    ", EXISTS(SELECT 1 FROM refund_links r"
+                    " WHERE r.refund_tx_id=t.id) AS is_refund"
                     " FROM transactions t JOIN accounts a ON a.id = t.account_id"
                     " WHERE t.id=? AND a.user_id=?",
                     (tx_id, uid),
@@ -341,7 +492,7 @@ def bulk_transactions(body: BulkBody, user: Annotated[dict, Depends(current_user
                 if row is not None and row["is_split"]:
                     raise HTTPException(400, "remove the split before categorizing the parent")
                 if row is not None and category is not None:
-                    _resolve_category(c, category, uid, row["amount"])
+                    _resolve_category(c, category, uid, row["amount"], bool(row["is_refund"]))
             for tx_id in body.ids:
                 affected += c.execute(
                     "UPDATE transactions SET category_id=? WHERE id=?"

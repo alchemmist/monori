@@ -132,6 +132,8 @@ def test_serialize_tx():
         "source": "import",
         "hidden": False,
         "splits": [],
+        "refundOfId": None,
+        "refundIds": [],
     }
 
 

@@ -13,7 +13,7 @@ import {
     categoryYearMatrix,
     categoryTotals,
 } from "./analytics.js";
-import { computeRange } from "./budget.js";
+import { buildTxIndex, computeRange, txKey } from "./budget.js";
 
 const snapshot = {
     groups: [
@@ -85,6 +85,25 @@ describe("monthlySeries", () => {
             ["2024-01", { income: 100_000_00, expense: 25_000_00 }],
             ["2024-02", { income: 0, expense: 10_000_00 }],
         ]);
+    });
+
+    it("nets a linked positive refund against its expense category in exact kopecks", () => {
+        const refunded = {
+            ...snapshot,
+            transactions: [
+                ...snapshot.transactions,
+                {
+                    id: 7,
+                    date: "2024-01-21",
+                    amount: 24_01,
+                    categoryId: 20,
+                    refundOfId: 2,
+                    description: "PYATEROCHKA REFUND",
+                },
+            ],
+        };
+        expect(monthlySeries(refunded)[0][1].expense).toBe(24_975_99);
+        expect(buildTxIndex(refunded.transactions).get(txKey(2024, 1, 20))).toBe(-19_975_99);
     });
 });
 

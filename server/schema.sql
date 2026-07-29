@@ -122,6 +122,16 @@ CREATE TABLE IF NOT EXISTS splits (
 CREATE INDEX IF NOT EXISTS idx_splits_transaction ON splits (transaction_id);
 CREATE INDEX IF NOT EXISTS idx_splits_category ON splits (category_id);
 
+-- A purchase can have several partial refunds, while each positive transaction
+-- can refund only one purchase. Amount and ownership constraints are enforced by
+-- the API because they depend on both transaction rows and existing links.
+CREATE TABLE IF NOT EXISTS refund_links (
+  refund_tx_id INTEGER PRIMARY KEY REFERENCES transactions (id) ON DELETE CASCADE,
+  original_tx_id INTEGER NOT NULL REFERENCES transactions (id) ON DELETE CASCADE,
+  CHECK (refund_tx_id <> original_tx_id)
+);
+CREATE INDEX IF NOT EXISTS idx_refund_links_original ON refund_links (original_tx_id);
+
 -- A transfer is the entity two transactions are merged into; the rows themselves
 -- stay untouched so a re-sync still recognizes them and cannot duplicate them.
 -- UNIQUE on both legs is what guarantees a transfer has exactly two of them and
