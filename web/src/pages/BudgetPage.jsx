@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ActionIcon, Button, SegmentedControl } from "@mantine/core";
 import InlineSelect from "../ui/InlineSelect.jsx";
 import RowMenu from "../ui/RowMenu.jsx";
@@ -46,6 +46,9 @@ export default function BudgetPage({ results, firstYear, lastYear }) {
     const [dialog, setDialog] = useState(null); // {type: 'edit'|'delete'|'new', category}
     const [selectedBudgetCell, setSelectedBudgetCell] = useState(null);
     const [fillingForward, setFillingForward] = useState(false);
+    const [budgetComplete, setBudgetComplete] = useState(false);
+    const celebrationArmed = useRef(true);
+    const rearmTimer = useRef(null);
 
     const res = results.get(year);
     const groups = useMemo(
@@ -107,6 +110,42 @@ export default function BudgetPage({ results, firstYear, lastYear }) {
     const overspent = res.overspent[month];
     const income = res.income[month];
     const budgetedTotal = res.budgetedTotal[month];
+
+    useEffect(() => {
+        clearTimeout(rearmTimer.current);
+        celebrationArmed.current = true;
+        setBudgetComplete(false);
+    }, [year, month]);
+
+    useEffect(() => {
+        if (available === 0) return;
+        setBudgetComplete(false);
+        clearTimeout(rearmTimer.current);
+        if (!celebrationArmed.current) {
+            rearmTimer.current = setTimeout(() => {
+                celebrationArmed.current = true;
+            }, 3000);
+        }
+        return () => clearTimeout(rearmTimer.current);
+    }, [available]);
+
+    const saveBudget = async (categoryId, targetYear, targetMonth, amount) => {
+        const target = results.get(targetYear);
+        const previous = target?.byCategory.get(categoryId)?.[targetMonth - 1]?.budgeted ?? 0;
+        const before = target?.available[targetMonth - 1];
+        const hitsZero = before !== 0 && before - (amount - previous) === 0;
+        await setBudget(categoryId, targetYear, targetMonth, amount);
+        if (
+            mode === "month" &&
+            targetYear === year &&
+            targetMonth === month + 1 &&
+            hitsZero &&
+            celebrationArmed.current
+        ) {
+            celebrationArmed.current = false;
+            setBudgetComplete(true);
+        }
+    };
 
     const catMenu = (c) => {
         const goal = groups.find((g) => g.id === c.groupId)?.kind === "goal";
@@ -239,8 +278,21 @@ export default function BudgetPage({ results, firstYear, lastYear }) {
             {mode === "month" && (
                 <>
                     <div className="budget-hero">
-                        <div className="card hero-card">
-                            <div className="hero-card__label">Available to budget</div>
+                        <div
+                            className={`card hero-card hero-card_available ${budgetComplete ? "hero-card_complete" : ""}`}
+                        >
+                            <div className="hero-card__label" role="status">
+                                {budgetComplete && (
+                                    <svg
+                                        className="hero-card__check"
+                                        viewBox="0 0 16 16"
+                                        aria-hidden="true"
+                                    >
+                                        <path d="M3 8.5 6.5 12 13 4.5" />
+                                    </svg>
+                                )}
+                                {budgetComplete ? "All money assigned" : "Available to budget"}
+                            </div>
                             <div
                                 className="hero-card__value num"
                                 style={{
@@ -431,7 +483,7 @@ export default function BudgetPage({ results, firstYear, lastYear }) {
                                                                     })
                                                                 }
                                                                 onChange={(v) =>
-                                                                    setBudget(
+                                                                    saveBudget(
                                                                         c.id,
                                                                         year,
                                                                         month + 1,
@@ -485,7 +537,7 @@ export default function BudgetPage({ results, firstYear, lastYear }) {
                     cols={YEAR_DENSITY[density]}
                     collapsed={collapsed}
                     setCollapsed={setCollapsed}
-                    setBudget={setBudget}
+                    setBudget={saveBudget}
                     onSelectBudget={setSelectedBudgetCell}
                     onAddCategory={(groupId) => setDialog({ type: "edit", category: { groupId } })}
                     onCategoryMenu={catMenu}

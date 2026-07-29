@@ -241,6 +241,53 @@ describe("BudgetPage", () => {
             await waitFor(() => expect(setBudget).toHaveBeenCalledWith(2, YEAR, 3, 300_00));
         });
 
+        it("celebrates only when a user assignment brings available to exactly zero", async () => {
+            const setBudget = vi.spyOn(useStore.getState(), "setBudget").mockResolvedValue();
+            const res = result();
+            const { user } = render(res);
+            await toMonth(user);
+
+            expect(screen.getByText("Available to budget")).toBeInTheDocument();
+            const row = screen.getByText("Groceries").closest("tr");
+            await user.click(row.querySelector(".budget-cell"));
+            const input = row.querySelector(".budget-cell__input");
+            await user.clear(input);
+            await user.type(input, "30000");
+            await user.keyboard("{Enter}");
+
+            expect(screen.getByRole("status")).toHaveTextContent("All money assigned");
+            expect(screen.getByRole("status").closest(".hero-card")).toHaveClass(
+                "hero-card_complete",
+            );
+            expect(setBudget).toHaveBeenCalledWith(2, YEAR, 3, 30_000_00);
+        });
+
+        it("does not celebrate an already-zero budget on page load", async () => {
+            const res = result();
+            res.available = Array(12).fill(0);
+            const { user } = render(res);
+            await toMonth(user);
+
+            expect(screen.getByRole("status")).toHaveTextContent("Available to budget");
+            expect(screen.queryByText("All money assigned")).not.toBeInTheDocument();
+        });
+
+        it("does not celebrate when a user assignment leaves money available", async () => {
+            vi.spyOn(useStore.getState(), "setBudget").mockResolvedValue();
+            const { user } = render(result());
+            await toMonth(user);
+
+            const row = screen.getByText("Groceries").closest("tr");
+            await user.click(row.querySelector(".budget-cell"));
+            const input = row.querySelector(".budget-cell__input");
+            await user.clear(input);
+            await user.type(input, "25000");
+            await user.keyboard("{Enter}");
+
+            expect(screen.getByRole("status")).toHaveTextContent("Available to budget");
+            expect(screen.queryByText("All money assigned")).not.toBeInTheDocument();
+        });
+
         it("caps the spent bar at the full width once the envelope is emptied", async () => {
             const { user } = render(result({ groceries: () => month(10_000_00, -30_000_00) }));
             await toMonth(user);

@@ -114,13 +114,78 @@
     min-width: 150px;
 }
 
+.hero-card_available {
+    position: relative;
+    isolation: isolate;
+}
+
+.hero-card_complete::after {
+    content: "";
+    position: absolute;
+    z-index: -1;
+    inset: -1px;
+    border: 1px solid color-mix(in srgb, var(--m-accent) 65%, transparent);
+    border-radius: inherit;
+    pointer-events: none;
+    animation: budget-complete-pulse 600ms ease-out both;
+}
+
 .hero-card__label {
+    display: flex;
+    align-items: center;
+    gap: 4px;
     font-size: 11px;
     font-weight: 600;
     letter-spacing: 0.7px;
     text-transform: uppercase;
     color: var(--m-text-faint);
     margin-bottom: 4px;
+}
+
+.hero-card__check {
+    width: 14px;
+    height: 14px;
+    fill: none;
+    stroke: var(--m-accent);
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.hero-card_complete .hero-card__check path {
+    stroke-dasharray: 14;
+    animation: budget-complete-check 360ms 100ms ease-out both;
+}
+
+@keyframes budget-complete-pulse {
+    from {
+        opacity: 0.7;
+        transform: scale(0.96);
+        box-shadow: 0 0 0 0 color-mix(in srgb, var(--m-accent) 24%, transparent);
+    }
+
+    to {
+        opacity: 0;
+        transform: scale(1.08);
+        box-shadow: 0 0 0 12px transparent;
+    }
+}
+
+@keyframes budget-complete-check {
+    from {
+        stroke-dashoffset: 14;
+    }
+
+    to {
+        stroke-dashoffset: 0;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .hero-card_complete::after,
+    .hero-card_complete .hero-card__check path {
+        animation: none;
+    }
 }
 
 .hero-card__value {
