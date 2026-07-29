@@ -86,6 +86,12 @@ describe("moneyCompact", () => {
         expect(moneyCompact(0)).toBe("0");
         expect(moneyCompact(-150_000_000)).toBe("-1.5M");
     });
+
+    it("switches suffix exactly at the million and thousand marks", () => {
+        // the boundaries are inclusive: 1M rounds to "1.0M", 1k to "1k"
+        expect(moneyCompact(100_000_000)).toBe("1.0M");
+        expect(moneyCompact(100_000)).toBe("1k");
+    });
 });
 
 describe("parseRub", () => {

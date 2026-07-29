@@ -30,6 +30,12 @@ describe("stripHtmlComments", () => {
     it("leaves ordinary text alone", () => {
         expect(stripHtmlComments("a --> b")).toBe("a --> b");
     });
+
+    it("strips a trailing comment even with no newline after it", () => {
+        // the closing newline is optional; a marker at the very end of a file
+        // still has to go
+        expect(stripHtmlComments("text <!-- marker -->")).toBe("text ");
+    });
 });
 
 describe("mermaidCharts", () => {
@@ -54,6 +60,14 @@ describe("mermaidCharts", () => {
     it("returns nothing for a page without diagrams", () => {
         expect(mermaidCharts("plain text")).toEqual([]);
         expect(mermaidCharts(undefined)).toEqual([]);
+    });
+
+    it("tolerates an info string on the fence line", () => {
+        // markdown allows text after the language tag; the body still starts on
+        // the next line, so it must not be swallowed into the info string
+        expect(mermaidCharts("```mermaid theme=dark\ngraph TD\nA-->B\n```")).toEqual([
+            "graph TD\nA-->B",
+        ]);
     });
 
     it("finds the schema diagram on the data model page", () => {

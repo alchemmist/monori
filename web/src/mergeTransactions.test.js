@@ -1,7 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { mergeTransactions } from "./mergeTransactions.js";
+import { compareTx, mergeTransactions } from "./mergeTransactions.js";
 
 const tx = (id, date, extra = {}) => ({ id, date, ...extra });
+
+describe("compareTx", () => {
+    it("orders by date, then by id, matching the server", () => {
+        expect(compareTx(tx(1, "2026-01-01"), tx(2, "2026-01-02"))).toBe(-1);
+        expect(compareTx(tx(1, "2026-01-02"), tx(2, "2026-01-01"))).toBe(1);
+        // same date falls back to the id difference (a real number, not a sign)
+        expect(compareTx(tx(3, "2026-01-01"), tx(7, "2026-01-01"))).toBe(-4);
+        expect(compareTx(tx(7, "2026-01-01"), tx(3, "2026-01-01"))).toBe(4);
+    });
+});
 
 describe("mergeTransactions", () => {
     it("keeps the canonical date, id order when an older chunk lands", () => {

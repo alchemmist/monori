@@ -5,7 +5,7 @@ from alembic import command
 
 from app.db import LEGACY_REVISIONS, _alembic_config, connect
 
-HEAD = "0018"
+HEAD = "0019"
 assert LEGACY_REVISIONS[-1] == "0006"
 
 OLD_SCHEMA = """
@@ -104,6 +104,7 @@ def test_fresh_db_is_created_from_schema_sql(tmp_path):
             "categories",
             "accounts",
             "transactions",
+            "splits",
             "budgets",
             "bank_connections",
             "import_batches",

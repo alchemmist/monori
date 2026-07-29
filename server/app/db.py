@@ -77,3 +77,9 @@ def connect(db_path=None):
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys=ON")
     return conn
+
+
+def begin_write(conn):
+    """Acquire SQLite's write reservation before correlated reads and writes."""
+    if not conn.in_transaction:
+        conn.execute("BEGIN IMMEDIATE")

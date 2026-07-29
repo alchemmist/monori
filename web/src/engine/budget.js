@@ -15,6 +15,7 @@
  */
 
 import { isTransfer } from "./transfers.js";
+import { effectiveTransactions } from "./splits.js";
 
 export function txKey(year, month, categoryId) {
     return `${year}-${month}-${categoryId}`;
@@ -23,7 +24,7 @@ export function txKey(year, month, categoryId) {
 /** Sum transaction amounts into a Map keyed by year-month-categoryId. */
 export function buildTxIndex(transactions) {
     const index = new Map();
-    for (const t of transactions) {
+    for (const t of effectiveTransactions(transactions)) {
         // a leg keeps whatever category it carried before the merge only in the
         // transfers table, never here — but guard anyway, so no future path can
         // let moving money between accounts spend down an envelope

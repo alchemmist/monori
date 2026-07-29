@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { isTransfer, mergeTransferRows } from "./transfers.js";
+import { isTransfer, mergeTransferRows, transferDates } from "./transfers.js";
 
 const tx = (id, amount, accountId, transferId = null, date = "2026-03-10") => ({
     id,
@@ -86,5 +86,31 @@ describe("mergeTransferRows", () => {
     it("does not merge a malformed group of three legs", () => {
         const rows = [tx(1, -500, 1, "x"), tx(2, 500, 2, "x"), tx(3, 500, 3, "x")];
         expect(mergeTransferRows(rows).map((i) => i.kind)).toEqual(["tx", "tx", "tx"]);
+    });
+});
+
+describe("transferDates", () => {
+    const item = (outDate, inDate) => ({
+        out: { date: outDate },
+        in: { date: inDate },
+    });
+
+    it("reports the outgoing leg's full timestamp as the row date", () => {
+        const d = transferDates(item("2026-03-10T09:30:00", "2026-03-11T21:00:00"));
+        expect(d.date).toBe("2026-03-10T09:30:00");
+    });
+
+    it("calls a same-day pair same, ignoring the time of day", () => {
+        // both legs on the 10th but hours apart: comparing the day part, not the
+        // full timestamp, is what makes this a same-day transfer
+        expect(transferDates(item("2026-03-10T09:30:00", "2026-03-10T23:15:00")).sameDay).toBe(
+            true,
+        );
+    });
+
+    it("calls legs posted on different days not same-day", () => {
+        expect(transferDates(item("2026-03-10T23:59:00", "2026-03-11T00:01:00")).sameDay).toBe(
+            false,
+        );
     });
 });

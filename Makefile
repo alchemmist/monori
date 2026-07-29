@@ -12,7 +12,7 @@ WEBBIN := web/node_modules/.bin
         fmt fmt-check \
         lint lint-web lint-css lint-html lint-server lint-sql lint-yaml lint-md lint-docs lint-actions lint-docker lint-shell spell \
         typecheck analyze audit audit-deps audit-deps-py audit-secrets \
-        test t-fast t-medium t-slow t-slow-ui coverage mutation m-front m-back \
+        test t-fast t-medium t-slow t-slow-ui coverage mutation m-front m-front-file m-back \
         schema-diagram check
 
 install:
@@ -162,6 +162,14 @@ m-front:
 	node scripts/stryker-summary.mjs; \
 	echo "── frontend mutation gate (threshold $$thr%): stryker exit=$$web ──"; \
 	exit $$web
+
+# mutate a single file for a quick, isolated read: `make m-front-file FILE=src/pages/DashboardPage.jsx`
+# a throwaway incremental cache keeps the run fresh and leaves the shared report untouched
+m-front-file:
+	@if [ -z "$(FILE)" ]; then \
+		echo "usage: make m-front-file FILE=src/pages/DashboardPage.jsx"; exit 2; \
+	fi
+	cd web && ./node_modules/.bin/stryker run --mutate "$(FILE)" --incrementalFile "$$(mktemp -u -t stryker-file.XXXXXX).json"
 
 m-back:
 	@set +e; \

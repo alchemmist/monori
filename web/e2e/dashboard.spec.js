@@ -52,21 +52,26 @@ test("dashboard shows the seeded balances, KPIs and charts", async ({ page, user
     await longTick.scrollIntoViewIfNeeded();
     await expect(longTick).toBeVisible();
 
+    // The responsive chart re-mounts its ticks when the viewport changes, so a
+    // one-shot boundingBox can land mid-remount and read null. Retry until the
+    // layout settles.
     const expectTickInsideCard = async () => {
-        const [cardBox, tickBox] = await Promise.all([
-            merchantsCard.boundingBox(),
-            longTick.boundingBox(),
-        ]);
-        expect(cardBox).not.toBeNull();
-        expect(tickBox).not.toBeNull();
-        expect(tickBox.x).toBeGreaterThanOrEqual(cardBox.x);
-        expect(tickBox.x + tickBox.width).toBeLessThanOrEqual(cardBox.x + cardBox.width);
-        expect(
-            await longTick.evaluate((el) => {
-                const style = getComputedStyle(el);
-                return [style.overflow, style.whiteSpace];
-            }),
-        ).toEqual(["hidden", "nowrap"]);
+        await expect(async () => {
+            const [cardBox, tickBox] = await Promise.all([
+                merchantsCard.boundingBox(),
+                longTick.boundingBox(),
+            ]);
+            expect(cardBox).not.toBeNull();
+            expect(tickBox).not.toBeNull();
+            expect(tickBox.x).toBeGreaterThanOrEqual(cardBox.x);
+            expect(tickBox.x + tickBox.width).toBeLessThanOrEqual(cardBox.x + cardBox.width);
+            expect(
+                await longTick.evaluate((el) => {
+                    const style = getComputedStyle(el);
+                    return [style.overflow, style.whiteSpace];
+                }),
+            ).toEqual(["hidden", "nowrap"]);
+        }).toPass();
     };
 
     await expectTickInsideCard();
@@ -78,12 +83,14 @@ test("dashboard shows the seeded balances, KPIs and charts", async ({ page, user
     const largestExpense = statsCard.locator(".stat-list__row_tall .num");
     await largestExpense.scrollIntoViewIfNeeded();
     await expect(largestExpense).toContainText("90 000 000 000 000 ₽");
-    const [statsBox, expenseBox] = await Promise.all([
-        statsCard.boundingBox(),
-        largestExpense.boundingBox(),
-    ]);
-    expect(statsBox).not.toBeNull();
-    expect(expenseBox).not.toBeNull();
-    expect(expenseBox.x).toBeGreaterThanOrEqual(statsBox.x);
-    expect(expenseBox.x + expenseBox.width).toBeLessThanOrEqual(statsBox.x + statsBox.width);
+    await expect(async () => {
+        const [statsBox, expenseBox] = await Promise.all([
+            statsCard.boundingBox(),
+            largestExpense.boundingBox(),
+        ]);
+        expect(statsBox).not.toBeNull();
+        expect(expenseBox).not.toBeNull();
+        expect(expenseBox.x).toBeGreaterThanOrEqual(statsBox.x);
+        expect(expenseBox.x + expenseBox.width).toBeLessThanOrEqual(statsBox.x + statsBox.width);
+    }).toPass();
 });

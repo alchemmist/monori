@@ -113,6 +113,32 @@ describe("buildOpeningIndex", () => {
         expect(index.get(monthKey(2024, 2))).toBe(900);
     });
 
+    it("keeps the earliest transaction when they arrive earliest-first too", () => {
+        // the fallback must pick the minimum date regardless of iteration order;
+        // an earliest-first list is the case a last-wins bug slips through
+        const index = buildOpeningIndex([{ id: 1, openingBalance: 5000 }], 2020, [
+            { accountId: 1, date: "2024-03-11" },
+            { accountId: 1, date: "2024-05-20" },
+        ]);
+        expect(index.get(monthKey(2024, 3))).toBe(5000);
+        expect(index.size).toBe(1);
+    });
+
+    it("honours the boundary months January and December of a later year", () => {
+        // month 1 and month 12 are the inclusive edges of the 1..12 range; both
+        // must stay in their own year, not fall back to the first month
+        const index = buildOpeningIndex(
+            [
+                { id: 1, openingBalance: 100, openingDate: "2024-01-15" },
+                { id: 2, openingBalance: 200, openingDate: "2024-12-05" },
+            ],
+            2020,
+        );
+        expect(index.get(monthKey(2024, 1))).toBe(100);
+        expect(index.get(monthKey(2024, 12))).toBe(200);
+        expect(index.has(monthKey(2020, 1))).toBe(false);
+    });
+
     it("ignores zero balances and a missing accounts list", () => {
         expect(buildOpeningIndex([{ id: 1, openingBalance: 0 }], 2020).size).toBe(0);
         expect(buildOpeningIndex(undefined, 2020).size).toBe(0);
