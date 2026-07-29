@@ -194,6 +194,29 @@ describe("BudgetPage", () => {
             });
         });
 
+        it("offers the next uncreated year while viewing an older year", async () => {
+            const copyBudgetYear = vi
+                .spyOn(useStore.getState(), "copyBudgetYear")
+                .mockResolvedValue(6);
+            const { user } = renderUI(
+                <BudgetPage
+                    results={
+                        new Map([
+                            [YEAR, result()],
+                            [YEAR + 1, result()],
+                            [YEAR + 2, result()],
+                        ])
+                    }
+                    firstYear={YEAR}
+                    lastYear={YEAR + 2}
+                />,
+            );
+
+            await user.click(screen.getByRole("button", { name: `Create ${YEAR + 2}` }));
+
+            await waitFor(() => expect(copyBudgetYear).toHaveBeenCalledWith(YEAR + 1, YEAR + 2));
+        });
+
         it("does not offer to overwrite an already created year", () => {
             render();
 
