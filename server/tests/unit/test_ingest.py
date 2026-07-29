@@ -168,8 +168,9 @@ def test_snapshot_full_shape(tmp_path):
     )
     cid = c.execute("SELECT id FROM categories").fetchone()[0]
     c.execute(
-        "INSERT INTO transactions (date, amount, currency, description, account_id, hash, source)"
-        " VALUES ('2026-01-01T00:00:00', -100, 'RUB', 'x', ?, 'h', 'import')",
+        "INSERT INTO transactions"
+        " (date, amount, currency, base_amount, description, account_id, hash, source)"
+        " VALUES ('2026-01-01T00:00:00', -100, 'RUB', -100, 'x', ?, 'h', 'import')",
         (acct,),
     )
     c.execute(
@@ -184,6 +185,8 @@ def test_snapshot_full_shape(tmp_path):
     assert len(snap["transactions"]) == 1
     assert snap["transactions"][0]["accountId"] == acct
     assert snap["transactions"][0]["amount"] == -100
+    assert snap["transactions"][0]["currency"] == "RUB"
+    assert snap["transactions"][0]["baseAmount"] == -100
     assert snap["budgets"][0] == {"categoryId": cid, "year": 2026, "month": 1, "amount": 5000}
 
 
@@ -230,8 +233,8 @@ def test_historical_day_counts_span_accounts_and_skip_manual(tmp_path):
     counts = historical_day_counts(c, uid)
     # "sheets" is the retired template importer's label, still in old ledgers
     assert counts == {
-        ("2026-07-19", -368000, "kafe lesnoj"): 2,
-        ("2026-07-18", -50000, "пятёрочка"): 1,
+        ("2026-07-19", -368000, "RUB", "kafe lesnoj"): 2,
+        ("2026-07-18", -50000, "RUB", "пятёрочка"): 1,
     }
 
 
@@ -243,11 +246,34 @@ def test_drop_already_present_is_count_aware():
         {"date": "2026-07-19T18:00:00", "amount": -368000, "description": "Kafe Lesnoj"},
         {"date": "2026-07-19T18:00:00", "amount": -100, "description": "New"},
     ]
-    kept, dropped = drop_already_present(rows, {("2026-07-19", -368000, "kafe lesnoj"): 1})
+    kept, dropped = drop_already_present(rows, {("2026-07-19", -368000, "RUB", "kafe lesnoj"): 1})
     # one copy is already in the ledger; the second in the batch is genuinely a
     # second operation and stays
     assert dropped == 1
     assert [r["description"] for r in kept] == ["Kafe Lesnoj", "New"]
+
+
+def test_drop_already_present_keeps_same_amount_in_another_currency():
+    from app.ingest import drop_already_present
+
+    rows = [
+        {
+            "date": "2026-07-19T12:00:00",
+            "amount": -10000,
+            "currency": "USD",
+            "description": "Cafe",
+        },
+        {
+            "date": "2026-07-19T13:00:00",
+            "amount": -10000,
+            "currency": "GEL",
+            "description": "Cafe",
+        },
+    ]
+    kept, dropped = drop_already_present(rows, {("2026-07-19", -10000, "USD", "cafe"): 1})
+
+    assert dropped == 1
+    assert [r["currency"] for r in kept] == ["GEL"]
 
 
 def test_dedup_survives_the_bank_rewording_its_own_description(tmp_path):

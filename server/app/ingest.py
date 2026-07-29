@@ -58,7 +58,7 @@ def dedup_text(description):
 
 def historical_day_counts(c, uid, sources=("workbook", "import", "sync", "sheets")):
     """
-    ``(day, amount, normalized description) -> count`` over every transaction
+    ``(day, amount, currency, normalized description) -> count`` over every transaction
     the user got from a statement-shaped source, across all accounts. The
     per-account hash cannot see the same bank operation arriving a second time
     through another door — a workbook over a synced ledger, or one connection
@@ -72,14 +72,14 @@ def historical_day_counts(c, uid, sources=("workbook", "import", "sync", "sheets
     marks = ",".join("?" * len(sources))
     counts: dict = {}
     for r in c.execute(
-        "SELECT substr(t.date, 1, 10) day, t.amount, t.description, COUNT(*) n"
+        "SELECT substr(t.date, 1, 10) day, t.amount, t.currency, t.description, COUNT(*) n"
         " FROM transactions t JOIN accounts a ON a.id = t.account_id"
         # `marks` contains only generated positional placeholders, never user input.
         f" WHERE a.user_id=? AND t.source IN ({marks})"  # nosec B608
-        " GROUP BY day, t.amount, t.description",
+        " GROUP BY day, t.amount, t.currency, t.description",
         (uid, *sources),
     ):
-        key = (r["day"], r["amount"], dedup_text(r["description"]))
+        key = (r["day"], r["amount"], normalize(r["currency"]), dedup_text(r["description"]))
         counts[key] = counts.get(key, 0) + r["n"]
     return counts
 
@@ -95,7 +95,12 @@ def drop_already_present(rows, counts):
     kept = []
     dropped = 0
     for row in rows:
-        key = (row["date"][:10], row["amount"], dedup_text(row.get("description", "")))
+        key = (
+            row["date"][:10],
+            row["amount"],
+            normalize(row.get("currency")),
+            dedup_text(row.get("description", "")),
+        )
         n = seen.get(key, 0)
         seen[key] = n + 1
         if n < counts.get(key, 0):

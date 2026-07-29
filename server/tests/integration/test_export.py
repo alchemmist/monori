@@ -363,10 +363,10 @@ def test_export_dashdata_refund_reduces_expense(api, client):
     db = sqlite3.connect(os.environ["MONORI_DB"])
     db.execute(
         "INSERT INTO transactions"
-            " (date, amount, currency, base_amount, description, account_id,"
-            " category_id, hash, source)"
-            " VALUES (?, ?, 'RUB', ?, ?, ?, ?, ?, 'sync')",
-            (date, amount, amount, desc, acct, cat, tx_hash(acct, date, amount, desc, "RUB")),
+        " (date, amount, currency, base_amount, description, account_id,"
+        " category_id, hash, source)"
+        " VALUES (?, ?, 'RUB', ?, ?, ?, ?, ?, 'sync')",
+        (date, amount, amount, desc, acct, cat, tx_hash(acct, date, amount, desc, "RUB")),
     )
     db.commit()
     db.close()

@@ -309,7 +309,9 @@ def reconcile_account(
 ):
     """
     Bring an account's computed balance to the real bank balance by posting a
-    single adjustment transaction for the difference. Returns the delta applied.
+    single adjustment transaction for the difference. A transaction-level
+    currency override is converted to the account currency at that transaction's
+    date before it contributes to the balance. Returns the delta applied.
     """
     uid = user["id"]
     c = conn()
@@ -323,13 +325,16 @@ def reconcile_account(
         # the same rows the account pages count: categorized, transfer legs and
         # earlier adjustments — an unaccepted uncategorized row is outside the
         # balance, so reconciling must not fold it in either
-        total = c.execute(
-            "SELECT COALESCE(SUM(amount),0) FROM transactions"
+        rows = c.execute(
+            "SELECT date, amount, currency FROM transactions"
             " WHERE account_id=? AND hidden = 0"
             " AND (category_id IS NOT NULL OR transfer_id IS NOT NULL"
             "      OR source IN ('transfer', 'adjustment'))",
             (account_id,),
-        ).fetchone()[0]
+        ).fetchall()
+        total = sum(
+            to_base(c, row["amount"], row["currency"], acc["currency"], row["date"]) for row in rows
+        )
         current = acc["opening_balance"] + total
         delta = body.actualBalance - current
         if delta != 0:

@@ -318,6 +318,33 @@ def test_a_reconcile_adjustment_is_posted_in_the_account_currency(client, api):
     assert adjustment["amount"] == -5000
 
 
+def test_reconcile_converts_transaction_overrides_to_account_currency(admin, api):
+    """A USD row on a GEL account contributes its GEL value, not its raw number."""
+    _set_rate(admin, "GEL", 30.0)
+    _set_rate(admin, "USD", 90.0)
+    lari = api.account("Lari", currency="GEL")
+    groceries = api.category("Groceries", api.group("Needs"))
+    api.tx(
+        "2026-07-05T10:00:00",
+        -10000,
+        accountId=lari,
+        categoryId=groceries,
+        currency="USD",
+    )
+
+    response = admin.post(f"/api/accounts/{lari}/reconcile", json={"actualBalance": -35000})
+
+    assert response.status_code == 200, response.text
+    assert response.json()["delta"] == -5000
+    adjustment = next(
+        t
+        for t in api.snapshot()["transactions"]
+        if t["accountId"] == lari and t["source"] == "adjustment"
+    )
+    assert adjustment["currency"] == "GEL"
+    assert adjustment["amount"] == -5000
+
+
 def test_an_unknown_account_currency_is_rejected(client):
     r = client.post("/api/accounts", json={"name": "Dogecoin", "currency": "DOGE"})
     assert r.status_code == 400

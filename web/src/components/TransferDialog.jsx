@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { api } from "../api.js";
 import { useStore } from "../store.js";
 import { amountInput, parseRub, rubExact } from "../format.js";
 import { currencySymbol, normalizeCurrency } from "../currencies.js";
@@ -22,6 +23,21 @@ export default function TransferDialog({ accounts, onClose }) {
     const [date, setDate] = useState(today());
     const [comment, setComment] = useState("");
     const [busy, setBusy] = useState(false);
+    const [conversionRates, setConversionRates] = useState(rates ?? []);
+
+    useEffect(() => {
+        let current = true;
+        api.rates(date)
+            .then((response) => {
+                if (current) setConversionRates(response.rates);
+            })
+            .catch(() => {
+                if (current) setConversionRates(rates ?? []);
+            });
+        return () => {
+            current = false;
+        };
+    }, [date, rates]);
 
     const byId = new Map(active.map((a) => [String(a.id), a]));
     const fromCurrency = normalizeCurrency(byId.get(from)?.currency);
@@ -37,8 +53,8 @@ export default function TransferDialog({ accounts, onClose }) {
     // changes, so the common case needs no typing and the odd case is one edit
     useEffect(() => {
         if (!crossCurrency || amountKop == null || amountKop <= 0) return;
-        setLanded(amountInput(convertAmount(amountKop, fromCurrency, toCurrency, rates ?? [])));
-    }, [crossCurrency, amountKop, fromCurrency, toCurrency, rates]);
+        setLanded(amountInput(convertAmount(amountKop, fromCurrency, toCurrency, conversionRates)));
+    }, [crossCurrency, amountKop, fromCurrency, toCurrency, conversionRates]);
 
     const valid =
         from &&
@@ -100,8 +116,8 @@ export default function TransferDialog({ accounts, onClose }) {
                             onChange={setLanded}
                         />
                         <Txt tone="secondary" caption>
-                            Filled in at today&apos;s rate — replace it with what actually arrived,
-                            since a bank converts at its own.
+                            Filled in at the selected date&apos;s rate — replace it with what
+                            actually arrived, since a bank converts at its own.
                             {amountKop > 0 && landedKop > 0 && (
                                 <>
                                     {" "}
