@@ -107,6 +107,54 @@ export function CategoryEditDialog({ category, groups, onClose }) {
     );
 }
 
+export function GoalTargetDialog({ category, onApply, onClose }) {
+    const [goalTarget, setGoalTarget] = useState("");
+    const [goalTargetDate, setGoalTargetDate] = useState("");
+    const [busy, setBusy] = useState(false);
+    const targetKopecks = Math.round(Number(goalTarget.replace(",", ".")) * 100);
+
+    const apply = async () => {
+        if (!(targetKopecks > 0)) return;
+        setBusy(true);
+        try {
+            await onApply({
+                goalTarget: targetKopecks,
+                goalTargetDate: goalTargetDate || null,
+            });
+            onClose();
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    return (
+        <AppDialog
+            title={`Set a goal for ${category.name}`}
+            onClose={onClose}
+            applyText="Move"
+            onApply={apply}
+            applyLoading={busy}
+            applyDisabled={!(targetKopecks > 0)}
+        >
+            <div style={{ display: "flex", flexDirection: "column", gap: 12, paddingTop: 4 }}>
+                <FTextInput
+                    label="Target, ₽"
+                    value={goalTarget}
+                    onChange={(e) => setGoalTarget(e.target.value)}
+                    inputMode="decimal"
+                    autoFocus
+                />
+                <FTextInput
+                    label="Deadline (optional)"
+                    type="date"
+                    value={goalTargetDate}
+                    onChange={(e) => setGoalTargetDate(e.target.value)}
+                />
+            </div>
+        </AppDialog>
+    );
+}
+
 export function CategoryDeleteDialog({ category, categories, txCount, onClose }) {
     const { deleteCategory, mergeCategory, snapshot, notify } = useStore();
     const [target, setTarget] = useState("");
