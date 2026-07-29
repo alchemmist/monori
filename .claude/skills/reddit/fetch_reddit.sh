@@ -17,14 +17,21 @@ OUT=/tmp/reddit
 mkdir -p "$OUT"
 
 build_url() {
-    case "$1" in
-        sub)  local sub="$2" sort="${3:-top}" t="${4:-all}"
-              echo "https://www.reddit.com/r/${sub}/${sort}/.rss?t=${t}" ;;
-        post) local id="$2" sort="${3:-top}"
-              echo "https://www.reddit.com/comments/${id}/.rss?sort=${sort}" ;;
-        url)  echo "$2" ;;
-        *)    echo "unknown mode: $1" >&2; exit 2 ;;
-    esac
+  case "$1" in
+  sub)
+    local sub="$2" sort="${3:-top}" t="${4:-all}"
+    echo "https://www.reddit.com/r/${sub}/${sort}/.rss?t=${t}"
+    ;;
+  post)
+    local id="$2" sort="${3:-top}"
+    echo "https://www.reddit.com/comments/${id}/.rss?sort=${sort}"
+    ;;
+  url) echo "$2" ;;
+  *)
+    echo "unknown mode: $1" >&2
+    exit 2
+    ;;
+  esac
 }
 
 url="$(build_url "$@")"
@@ -33,17 +40,17 @@ dest="$OUT/feed_$(echo "$url" | tr -c 'a-zA-Z0-9' '_' | tail -c 80).rss"
 # Reddit RSS is strictly rate limited: retry 429/5xx with exponential backoff.
 code=000
 for attempt in 1 2 3 4 5; do
-    code=$(curl -s -A "$UA" --max-time 30 -w "%{http_code}" "$url" -o "$dest" || echo 000)
-    [ "$code" = "200" ] && [ -s "$dest" ] && break
-    wait=$((attempt * 8))
-    echo "attempt $attempt: http=$code — backing off ${wait}s" >&2
-    sleep "$wait"
+  code=$(curl -s -A "$UA" --max-time 30 -w "%{http_code}" "$url" -o "$dest" || echo 000)
+  [ "$code" = "200" ] && [ -s "$dest" ] && break
+  wait=$((attempt * 8))
+  echo "attempt $attempt: http=$code — backing off ${wait}s" >&2
+  sleep "$wait"
 done
 if [ "$code" != "200" ] || [ ! -s "$dest" ]; then
-    echo "failed to fetch $url (last http=$code)" >&2
-    exit 1
+  echo "failed to fetch $url (last http=$code)" >&2
+  exit 1
 fi
-echo "saved: $dest ($(wc -c < "$dest") bytes)" >&2
+echo "saved: $dest ($(wc -c <"$dest") bytes)" >&2
 
 python3 - "$dest" <<'PY'
 import sys, re, html, xml.etree.ElementTree as ET
