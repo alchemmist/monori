@@ -2,8 +2,21 @@
     display: flex;
     align-items: center;
     gap: 12px;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     margin-bottom: 16px;
+}
+
+.budget-toolbar__create {
+    width: 92px;
+}
+
+.budget-toolbar__unused {
+    width: 116px;
+}
+
+.budget-toolbar__action_hidden {
+    visibility: hidden;
+    pointer-events: none;
 }
 
 .goal-group-badge {
@@ -89,6 +102,7 @@
 @media (width <= 760px) {
     .budget-toolbar {
         gap: 8px;
+        flex-wrap: wrap;
     }
 
     .hero-card {

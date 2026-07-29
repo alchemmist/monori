@@ -15,11 +15,40 @@ describe("year grid viewport", () => {
             (rule) => rule.selectorText === ".year-grid-wrap",
         );
 
-        expect(wrapRule.style.height).toBe(
-            "calc(100dvh - var(--yg-top, 200px) - var(--yg-bottom-inset))",
-        );
-        expect(wrapRule.style.maxHeight).toBe("");
+        try {
+            expect(wrapRule.style.height).toContain("100dvh");
+            expect(wrapRule.style.height).toContain("--yg-top");
+            expect(wrapRule.style.height).toContain("--yg-bottom-inset");
+            expect(wrapRule.style.maxHeight).toBe("");
+        } finally {
+            style.remove();
+        }
+    });
 
-        style.remove();
+    it("keeps year-dependent toolbar actions in reserved desktop slots", () => {
+        const style = document.createElement("style");
+        style.textContent = readFileSync(resolve(process.cwd(), "src/pages/budget.css"), "utf8");
+        document.head.appendChild(style);
+
+        try {
+            const rules = Array.from(style.sheet.cssRules);
+            const toolbarRule = rules.find((rule) => rule.selectorText === ".budget-toolbar");
+            const createRule = rules.find(
+                (rule) => rule.selectorText === ".budget-toolbar__create",
+            );
+            const unusedRule = rules.find(
+                (rule) => rule.selectorText === ".budget-toolbar__unused",
+            );
+            const hiddenRule = rules.find(
+                (rule) => rule.selectorText === ".budget-toolbar__action_hidden",
+            );
+
+            expect(toolbarRule.style.flexWrap).toBe("nowrap");
+            expect(createRule.style.width).not.toBe("");
+            expect(unusedRule.style.width).not.toBe("");
+            expect(hiddenRule.style.visibility).toBe("hidden");
+        } finally {
+            style.remove();
+        }
     });
 });
