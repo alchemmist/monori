@@ -66,6 +66,7 @@ fmt: schema-diagram
 	$(WEBBIN)/prettier --write .
 	cd server && uv run ruff format . && uv run ruff check . --fix
 	$(SQLFLUFF) fix -f server/schema.sql
+	$(WEBBIN)/markdownlint-cli2 --fix
 
 fmt-check:
 	$(WEBBIN)/prettier --check .
