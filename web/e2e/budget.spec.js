@@ -25,11 +25,14 @@ test("editing a budgeted cell recomputes available-to-budget and persists", asyn
 
     const displayCell = juneCell(row).locator(".budget-cell");
     await displayCell.scrollIntoViewIfNeeded();
+    await expect(displayCell).toBeVisible();
     const displayBox = await displayCell.boundingBox();
+    expect(displayBox).not.toBeNull();
     await displayCell.click();
     const input = juneCell(row).locator(".budget-cell__input");
     await expect(input).toBeVisible();
     const inputBox = await input.boundingBox();
+    expect(inputBox).not.toBeNull();
     expect(inputBox).toEqual(displayBox);
     await input.fill("500");
     await page.keyboard.press("Enter");
