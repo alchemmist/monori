@@ -29,6 +29,7 @@ export default function BudgetPage({ results, firstYear, lastYear }) {
         snapshot,
         setBudget,
         setBudgets,
+        copyBudgetYear,
         fillBudgetForward,
         archiveGoal,
         patchCategory,
@@ -46,6 +47,7 @@ export default function BudgetPage({ results, firstYear, lastYear }) {
     const [dialog, setDialog] = useState(null); // {type: 'edit'|'delete'|'new', category}
     const [selectedBudgetCell, setSelectedBudgetCell] = useState(null);
     const [fillingForward, setFillingForward] = useState(false);
+    const [creatingYear, setCreatingYear] = useState(false);
 
     const res = results.get(year);
     const groups = useMemo(
@@ -173,6 +175,24 @@ export default function BudgetPage({ results, firstYear, lastYear }) {
         }
     };
 
+    const createNextYear = async () => {
+        const nextYear = year + 1;
+        setCreatingYear(true);
+        try {
+            const count = await copyBudgetYear(year, nextYear);
+            setYear(nextYear);
+            notify({
+                title: `${nextYear} budget created`,
+                content: `${count} budget cell${count === 1 ? "" : "s"} copied from ${year}`,
+                theme: "success",
+            });
+        } catch (e) {
+            notify({ title: "Failed to create budget year", content: String(e), theme: "danger" });
+        } finally {
+            setCreatingYear(false);
+        }
+    };
+
     return (
         <div className="fade-in">
             <div className="budget-toolbar">
@@ -194,6 +214,16 @@ export default function BudgetPage({ results, firstYear, lastYear }) {
                     </div>
                 )}
                 <div style={{ flex: 1 }} />
+                {year === lastYear - 1 && year < 2100 && (
+                    <Button
+                        size="xs"
+                        variant="light"
+                        loading={creatingYear}
+                        onClick={createNextYear}
+                    >
+                        Create {year + 1}
+                    </Button>
+                )}
                 {canFillForward && (
                     <Button
                         size="xs"

@@ -50,6 +50,12 @@ export const api = {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ cells }),
         }).then(json),
+    copyBudgetYear: (fromYear, toYear) =>
+        apiFetch("/api/budgets/copy", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ fromYear, toYear }),
+        }).then(json),
     hiddenTx: (offset = 0) =>
         apiFetch(`/api/transactions?hidden=true&limit=1000&offset=${offset}`).then(json),
     createTx: (body) =>

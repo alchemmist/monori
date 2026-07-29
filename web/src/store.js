@@ -294,6 +294,19 @@ export const useStore = create((set, get) => ({
         set({ snapshot: { ...snapshot, budgets } });
     },
 
+    /** Create a new planning year as an exact copy of the preceding year. */
+    async copyBudgetYear(fromYear, toYear) {
+        if (!isDemo()) await api.copyBudgetYear(fromYear, toYear);
+        const { snapshot } = get();
+        const copied = snapshot.budgets
+            .filter((b) => b.year === fromYear)
+            .map((b) => ({ ...b, year: toYear }));
+        const budgets = snapshot.budgets.filter((b) => b.year !== toYear);
+        budgets.push(...copied);
+        set({ snapshot: { ...snapshot, budgets } });
+        return copied.length;
+    },
+
     setTxCategory(txId, categoryId) {
         const { snapshot } = get();
         const transactions = snapshot.transactions.map((t) =>

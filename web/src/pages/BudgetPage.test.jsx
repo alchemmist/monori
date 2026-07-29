@@ -165,6 +165,41 @@ describe("BudgetPage", () => {
             expect(options).toEqual([String(YEAR - 2), String(YEAR - 1), String(YEAR)]);
         });
 
+        it("creates the next year from the latest planning year", async () => {
+            const copyBudgetYear = vi
+                .spyOn(useStore.getState(), "copyBudgetYear")
+                .mockResolvedValue(24);
+            const notify = vi.spyOn(useStore.getState(), "notify");
+            const { user } = renderUI(
+                <BudgetPage
+                    results={
+                        new Map([
+                            [YEAR, result()],
+                            [YEAR + 1, result()],
+                        ])
+                    }
+                    firstYear={YEAR}
+                    lastYear={YEAR + 1}
+                />,
+            );
+
+            await user.click(screen.getByRole("button", { name: `Create ${YEAR + 1}` }));
+
+            await waitFor(() => expect(copyBudgetYear).toHaveBeenCalledWith(YEAR, YEAR + 1));
+            expect(screen.getByRole("button", { name: String(YEAR + 1) })).toBeInTheDocument();
+            expect(notify).toHaveBeenCalledWith({
+                title: `${YEAR + 1} budget created`,
+                content: `24 budget cells copied from ${YEAR}`,
+                theme: "success",
+            });
+        });
+
+        it("does not offer to overwrite an already created year", () => {
+            render();
+
+            expect(screen.queryByRole("button", { name: `Create ${YEAR + 1}` })).toBeNull();
+        });
+
         it("hides the month picker and month-only hero cards in year mode", () => {
             render();
             // "Available to budget" still labels the year grid's corner cap, so the

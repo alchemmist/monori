@@ -74,3 +74,38 @@ describe("fillBudgetForward", () => {
         ).toEqual([]);
     });
 });
+
+describe("copyBudgetYear", () => {
+    it("replaces the target year with an exact copy of the source year", async () => {
+        vi.spyOn(api, "copyBudgetYear").mockResolvedValue({ copied: 3 });
+        useStore.setState((state) => ({
+            snapshot: {
+                ...state.snapshot,
+                budgets: [
+                    ...state.snapshot.budgets,
+                    { categoryId: 7, year: 2028, month: 1, amount: 999 },
+                ],
+            },
+        }));
+
+        const count = await useStore.getState().copyBudgetYear(2027, 2028);
+
+        expect(count).toBe(3);
+        expect(api.copyBudgetYear).toHaveBeenCalledWith(2027, 2028);
+        expect(useStore.getState().snapshot.budgets.filter((b) => b.year === 2028)).toEqual([
+            { categoryId: 7, year: 2028, month: 3, amount: 25_000 },
+            { categoryId: 7, year: 2028, month: 4, amount: 10_000 },
+            { categoryId: 8, year: 2028, month: 4, amount: 5_000 },
+        ]);
+        expect(useStore.getState().snapshot.budgets.filter((b) => b.year === 2027)).toHaveLength(3);
+    });
+
+    it("keeps the local budget unchanged when persistence fails", async () => {
+        vi.spyOn(api, "copyBudgetYear").mockRejectedValue(new Error("offline"));
+        const before = useStore.getState().snapshot.budgets;
+
+        await expect(useStore.getState().copyBudgetYear(2027, 2028)).rejects.toThrow("offline");
+
+        expect(useStore.getState().snapshot.budgets).toBe(before);
+    });
+});

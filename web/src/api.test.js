@@ -32,6 +32,13 @@ const ENDPOINTS = [
         { cells: [{ categoryId: 1, month: 1 }] },
     ],
     [
+        "copyBudgetYear",
+        () => api.copyBudgetYear(2027, 2028),
+        "/api/budgets/copy",
+        "POST",
+        { fromYear: 2027, toYear: 2028 },
+    ],
+    [
         "hiddenTx",
         () => api.hiddenTx(20),
         "/api/transactions?hidden=true&limit=1000&offset=20",
