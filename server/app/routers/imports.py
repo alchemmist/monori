@@ -79,8 +79,9 @@ def _owned_account(c, account_id, uid):
 
 def _validate_import_categories(c, uid, rows):
     """
-    Every manually selected import category must belong to the account owner
-    and match the sign of its transaction.
+    Every manually selected import category must belong to the account owner.
+    Outflows require an expense category; positive rows may also be refunds
+    assigned to an expense category.
     """
     for row in rows:
         category_id = row.categoryId
@@ -97,8 +98,6 @@ def _validate_import_categories(c, uid, rows):
             raise HTTPException(400, "unknown category")
         if row.amount < 0 and category["transaction_sign"] != -1:
             raise HTTPException(400, "expense transaction requires an expense category")
-        if row.amount > 0 and category["transaction_sign"] != 1:
-            raise HTTPException(400, "income transaction requires an income category")
 
 
 def _card_digits(card):

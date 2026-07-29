@@ -196,6 +196,25 @@ describe("TransactionsPage", () => {
         await waitFor(() => expect(setTxCategory).toHaveBeenCalledWith(1, 2));
     });
 
+    it("offers expense categories for a positive refund", async () => {
+        seed({
+            accounts,
+            groups: [...groups, { id: 4, name: "Income", kind: "income", sort: 2 }],
+            categories: [
+                ...categories,
+                { id: 4, groupId: 4, name: "Salary", archived: false, sort: 1 },
+            ],
+            transactions: [tx(1, { amount: 2400, categoryId: null, accountId: 1 })],
+        });
+        const { user } = renderUI(<TransactionsPage />);
+        const row = screen.getByText("tx 1").closest("tr");
+
+        await user.click(row.querySelectorAll("button.gsel")[1]);
+
+        expect(screen.getByRole("option", { name: "Food", hidden: true })).toBeInTheDocument();
+        expect(screen.getByRole("option", { name: "Salary", hidden: true })).toBeInTheDocument();
+    });
+
     it("offers import and transfer controls and disables transfer with one active account", () => {
         seed({ accounts, transactions: [] });
         const { unmount } = renderUI(<TransactionsPage />);

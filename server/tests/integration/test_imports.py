@@ -137,7 +137,7 @@ def test_import_commit_accepts_goal_category(api, client):
     assert client.get(f"/api/transactions?categoryId={goal}").json()["total"] == 1
 
 
-def test_import_commit_rejects_category_with_the_wrong_direction(api, client):
+def test_import_commit_rejects_income_category_for_outflow_and_accepts_refund(api, client):
     expenses = api.group("Expenses")
     income = api.group("Income", "income")
     food = api.category("Groceries", expenses)
@@ -153,10 +153,11 @@ def test_import_commit_rejects_category_with_the_wrong_direction(api, client):
     rows = api.preview(api.statement)
     rows[1]["amount"] = 100
     rows[1]["categoryId"] = food
-    bad_income = client.post(
+    refund = client.post(
         "/api/import/commit", json={"accountId": api.default_account(), "rows": rows}
     )
-    assert bad_income.status_code == 400
+    assert refund.status_code == 200
+    assert client.get(f"/api/transactions?categoryId={food}").json()["total"] == 1
 
 
 def test_commit_rejects_unknown_account(client):
