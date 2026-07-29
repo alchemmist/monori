@@ -33,22 +33,29 @@ function chainedPatchTx(id, patch) {
     return next;
 }
 
-/** Budget edits are persisted in order. Year copying waits for this chain so
- * the server always copies the latest values visible in the grid. */
-let budgetWriteChain = null;
-function chainedBudgetWrite(write) {
-    let next;
-    if (budgetWriteChain) {
-        next = budgetWriteChain.catch(() => {}).then(write);
-    } else {
-        try {
-            next = Promise.resolve(write());
-        } catch (error) {
-            next = Promise.reject(error);
-        }
+/** Budget writes and year copies share one queue, so a copy is a true barrier:
+ * it sees every earlier edit and every later edit lands after the copy. */
+let budgetOperationTail = Promise.resolve();
+let budgetWriteFailureVersion = 0;
+let lastBudgetWriteError = null;
+let nextBudgetRevision = 0;
+const budgetRevisions = new Map();
+
+function chainedBudgetOperation(operation, trackWriteFailure = false) {
+    let result = budgetOperationTail.then(operation);
+    if (trackWriteFailure) {
+        result = result.catch((error) => {
+            budgetWriteFailureVersion += 1;
+            lastBudgetWriteError = error;
+            throw error;
+        });
     }
-    budgetWriteChain = next;
-    return next;
+    budgetOperationTail = result.catch(() => {});
+    return result;
+}
+
+function budgetKey(categoryId, year, month) {
+    return `${categoryId}-${year}-${month}`;
 }
 
 // Each optimistic transaction edit owns revisions for the fields it changes.
@@ -260,6 +267,7 @@ export const useStore = create((set, get) => ({
 
     /** Optimistic budget edit: local state changes instantly, server call follows. */
     setBudget(categoryId, year, month, amount) {
+        budgetRevisions.set(budgetKey(categoryId, year, month), ++nextBudgetRevision);
         const { snapshot } = get();
         const budgets = snapshot.budgets.filter(
             (b) => !(b.categoryId === categoryId && b.year === year && b.month === month),
@@ -267,7 +275,10 @@ export const useStore = create((set, get) => ({
         if (amount !== 0) budgets.push({ categoryId, year, month, amount });
         set({ snapshot: { ...snapshot, budgets } });
         if (isDemo()) return Promise.resolve();
-        const write = chainedBudgetWrite(() => api.putBudget({ categoryId, year, month, amount }));
+        const write = chainedBudgetOperation(
+            () => api.putBudget({ categoryId, year, month, amount }),
+            true,
+        );
         write.catch((e) =>
             set({ toast: { title: "Failed to save budget", theme: "danger", content: String(e) } }),
         );
@@ -315,31 +326,37 @@ export const useStore = create((set, get) => ({
     },
 
     /** Create a new planning year as an exact copy of the preceding year. */
-    async copyBudgetYear(fromYear, toYear) {
-        let copied;
-        let targetBudgets;
-        if (isDemo()) {
-            targetBudgets = get()
-                .snapshot.budgets.filter((b) => b.year === fromYear)
-                .map((b) => ({ ...b, year: toYear }));
-            copied = targetBudgets.length;
-        } else {
-            const precedingWrites = budgetWriteChain;
-            try {
-                if (precedingWrites) await precedingWrites;
-            } catch (error) {
-                if (budgetWriteChain === precedingWrites) budgetWriteChain = null;
-                throw error;
+    copyBudgetYear(fromYear, toYear) {
+        const failureVersion = budgetWriteFailureVersion;
+        const revision = nextBudgetRevision;
+        return chainedBudgetOperation(async () => {
+            if (budgetWriteFailureVersion !== failureVersion) throw lastBudgetWriteError;
+
+            let copied;
+            let targetBudgets;
+            if (isDemo()) {
+                targetBudgets = get()
+                    .snapshot.budgets.filter((b) => b.year === fromYear)
+                    .map((b) => ({ ...b, year: toYear }));
+                copied = targetBudgets.length;
+            } else {
+                const response = await api.copyBudgetYear(fromYear, toYear);
+                copied = response.copied;
+                targetBudgets = response.budgets;
             }
-            const response = await api.copyBudgetYear(fromYear, toYear);
-            copied = response.copied;
-            targetBudgets = response.budgets;
-        }
-        const { snapshot } = get();
-        const budgets = snapshot.budgets.filter((b) => b.year !== toYear);
-        budgets.push(...targetBudgets);
-        set({ snapshot: { ...snapshot, budgets } });
-        return copied;
+
+            // An edit made after copying was requested is already visible
+            // optimistically. Keep it while applying the server's copy result.
+            const changedAfterRequest = (b) =>
+                (budgetRevisions.get(budgetKey(b.categoryId, b.year, b.month)) ?? 0) > revision;
+            const { snapshot } = get();
+            const budgets = snapshot.budgets.filter(
+                (b) => b.year !== toYear || changedAfterRequest(b),
+            );
+            budgets.push(...targetBudgets.filter((b) => !changedAfterRequest(b)));
+            set({ snapshot: { ...snapshot, budgets } });
+            return copied;
+        });
     },
 
     setTxCategory(txId, categoryId) {
@@ -1060,6 +1077,11 @@ export function resetStoreForTests() {
     txPatchChain.clear();
     nextTxFieldRevision = 0;
     txFieldRevisions.clear();
+    budgetOperationTail = Promise.resolve();
+    budgetWriteFailureVersion = 0;
+    lastBudgetWriteError = null;
+    nextBudgetRevision = 0;
+    budgetRevisions.clear();
     nextTabId = initialNextTabId;
     useStore.setState(
         {

@@ -107,6 +107,52 @@ describe("copyBudgetYear", () => {
         expect(api.copyBudgetYear).not.toHaveBeenCalled();
     });
 
+    it("does not hide an earlier failed edit behind a later successful edit", async () => {
+        let rejectFirst;
+        const firstWrite = new Promise((_, reject) => {
+            rejectFirst = reject;
+        });
+        vi.spyOn(api, "putBudget").mockReturnValueOnce(firstWrite).mockResolvedValueOnce(undefined);
+        vi.spyOn(api, "copyBudgetYear").mockResolvedValue({ copied: 0, budgets: [] });
+
+        const failed = useStore.getState().setBudget(7, 2027, 3, 30_000);
+        const succeeded = useStore.getState().setBudget(7, 2027, 4, 20_000);
+        const copy = useStore.getState().copyBudgetYear(2027, 2028);
+        rejectFirst(new Error("save failed"));
+
+        await expect(failed).rejects.toThrow("save failed");
+        await succeeded;
+        await expect(copy).rejects.toThrow("save failed");
+        expect(api.copyBudgetYear).not.toHaveBeenCalled();
+    });
+
+    it("preserves an edit made after copying started", async () => {
+        let finishCopy;
+        vi.spyOn(api, "copyBudgetYear").mockReturnValue(
+            new Promise((resolve) => {
+                finishCopy = resolve;
+            }),
+        );
+        vi.spyOn(api, "putBudget").mockResolvedValue(undefined);
+
+        const copy = useStore.getState().copyBudgetYear(2027, 2028);
+        await vi.waitFor(() => expect(api.copyBudgetYear).toHaveBeenCalled());
+        const edit = useStore.getState().setBudget(7, 2028, 3, 42_000);
+        finishCopy({
+            copied: 1,
+            budgets: [{ categoryId: 7, year: 2028, month: 3, amount: 25_000 }],
+        });
+
+        await copy;
+        await edit;
+        expect(useStore.getState().snapshot.budgets).toContainEqual({
+            categoryId: 7,
+            year: 2028,
+            month: 3,
+            amount: 42_000,
+        });
+    });
+
     it("replaces the target year with an exact copy of the source year", async () => {
         const persisted = [
             { categoryId: 7, year: 2028, month: 3, amount: 25_000 },

@@ -203,7 +203,7 @@ export default function BudgetPage({ results, firstYear, lastYear }) {
                     onChange={(v) => setYear(+v)}
                     data={years.map((y) => String(y))}
                 />
-                {year === lastYear && year <= 2100 && (
+                {year === lastYear && year > 2000 && year <= 2100 && (
                     <Button
                         size="xs"
                         variant="light"
