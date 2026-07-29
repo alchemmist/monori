@@ -51,7 +51,7 @@ function categoryChartData(snapshot, year, now, kind) {
             r.id != null && seen.get(r.name) > 1
                 ? `${r.name} · ${groupName.get(r.groupId)}`
                 : r.name;
-        return { ...r, key: label, label };
+        return { ...r, key: r.id == null ? "other" : `cat-${r.id}`, label };
     });
     const blankAfter = +year === now.getFullYear() ? now.getMonth() : 11;
     const data = MONTHS_SHORT.map((mo, m) => {

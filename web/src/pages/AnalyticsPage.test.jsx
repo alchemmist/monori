@@ -178,12 +178,11 @@ describe("AnalyticsPage", () => {
             render(seedKnownYear());
 
             const config = chartSeriesConfig("Categories through the year");
-            expect(config.map((item) => item.name)).toEqual(["Groceries", "Rent"]);
+            expect(config.map((item) => item.name)).toEqual(["cat-2", "cat-3"]);
             expect(config.map((item) => item.label)).toEqual(["Groceries", "Rent"]);
 
             const january = chartSeries("Categories through the year")[0];
-            expect(january).toMatchObject({ Groceries: 60_000, Rent: 40_000 });
-            expect(january).not.toHaveProperty("cat-2");
+            expect(january).toMatchObject({ "cat-2": 60_000, "cat-3": 40_000 });
         });
     });
 
