@@ -5,8 +5,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // plan-vs-fact colors and the yearly series are assertable.
 vi.mock("@mantine/charts", () => {
     const serialize = (testid) =>
-        function Chart({ data }) {
-            return <div data-testid={testid} data-series={JSON.stringify(data)} />;
+        function Chart({ data, series }) {
+            return (
+                <div
+                    data-testid={testid}
+                    data-series={JSON.stringify(data)}
+                    data-chart-series={JSON.stringify(series)}
+                />
+            );
         };
     return { BarChart: serialize("bar-chart"), LineChart: serialize("line-chart") };
 });
@@ -29,6 +35,11 @@ function series(testid, index = 0) {
 function chartSeries(title) {
     const card = screen.getByText(new RegExp(title)).closest(".chart-card");
     return JSON.parse(card.querySelector('[data-testid="bar-chart"]').dataset.series);
+}
+
+function chartSeriesConfig(title) {
+    const card = screen.getByText(new RegExp(title)).closest(".chart-card");
+    return JSON.parse(card.querySelector('[data-testid="bar-chart"]').dataset.chartSeries);
 }
 
 // ru-RU groups thousands with a non-breaking space. Expected strings below are
@@ -159,6 +170,20 @@ describe("AnalyticsPage", () => {
             expect(kpiValue("Income")).toBe(n("80 000 ₽"));
             expect(kpiValue("Net saved")).toBe(n("60 000 ₽"));
             expect(screen.getByText(`Plan vs fact · ${PREV}`)).toBeInTheDocument();
+        });
+    });
+
+    describe("category charts", () => {
+        it("uses category names as the chart series and legend labels", () => {
+            render(seedKnownYear());
+
+            const config = chartSeriesConfig("Categories through the year");
+            expect(config.map((item) => item.name)).toEqual(["Groceries", "Rent"]);
+            expect(config.map((item) => item.label)).toEqual(["Groceries", "Rent"]);
+
+            const january = chartSeries("Categories through the year")[0];
+            expect(january).toMatchObject({ Groceries: 60_000, Rent: 40_000 });
+            expect(january).not.toHaveProperty("cat-2");
         });
     });
 
