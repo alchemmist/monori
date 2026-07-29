@@ -165,7 +165,7 @@ describe("BudgetPage", () => {
             expect(options).toEqual([String(YEAR - 2), String(YEAR - 1), String(YEAR)]);
         });
 
-        it("creates the next year from the latest planning year", async () => {
+        it("creates the selected preview year from the latest planning year", async () => {
             const copyBudgetYear = vi
                 .spyOn(useStore.getState(), "copyBudgetYear")
                 .mockResolvedValue(24);
@@ -183,10 +183,11 @@ describe("BudgetPage", () => {
                 />,
             );
 
+            await user.click(screen.getByRole("button", { name: String(YEAR) }));
+            await user.click(screen.getByRole("option", { name: String(YEAR + 1) }));
             await user.click(screen.getByRole("button", { name: `Create ${YEAR + 1}` }));
 
             await waitFor(() => expect(copyBudgetYear).toHaveBeenCalledWith(YEAR, YEAR + 1));
-            expect(screen.getByRole("button", { name: String(YEAR + 1) })).toBeInTheDocument();
             expect(notify).toHaveBeenCalledWith({
                 title: `${YEAR + 1} budget created`,
                 content: `24 budget cells copied from ${YEAR}`,
@@ -194,7 +195,7 @@ describe("BudgetPage", () => {
             });
         });
 
-        it("offers the action only on the latest created year", async () => {
+        it("offers the action only on the final preview year", async () => {
             const { user } = renderUI(
                 <BudgetPage
                     results={
@@ -212,15 +213,15 @@ describe("BudgetPage", () => {
             expect(screen.queryByRole("button", { name: `Create ${YEAR + 2}` })).toBeNull();
 
             await user.click(screen.getByRole("button", { name: String(YEAR) }));
-            await user.click(screen.getByRole("option", { name: String(YEAR + 1) }));
+            await user.click(screen.getByRole("option", { name: String(YEAR + 2) }));
 
             expect(screen.getByRole("button", { name: `Create ${YEAR + 2}` })).toBeInTheDocument();
         });
 
-        it("does not offer to overwrite an already created year", () => {
+        it("offers to create the selected preview year", () => {
             render();
 
-            expect(screen.queryByRole("button", { name: `Create ${YEAR + 1}` })).toBeNull();
+            expect(screen.getByRole("button", { name: `Create ${YEAR}` })).toBeInTheDocument();
         });
 
         it("hides the month picker and month-only hero cards in year mode", () => {

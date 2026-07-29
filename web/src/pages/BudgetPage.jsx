@@ -176,14 +176,13 @@ export default function BudgetPage({ results, firstYear, lastYear }) {
     };
 
     const createNextYear = async () => {
-        const nextYear = year + 1;
+        const sourceYear = year - 1;
         setCreatingYear(true);
         try {
-            const count = await copyBudgetYear(year, nextYear);
-            setYear(nextYear);
+            const count = await copyBudgetYear(sourceYear, year);
             notify({
-                title: `${nextYear} budget created`,
-                content: `${count} budget cell${count === 1 ? "" : "s"} copied from ${year}`,
+                title: `${year} budget created`,
+                content: `${count} budget cell${count === 1 ? "" : "s"} copied from ${sourceYear}`,
                 theme: "success",
             });
         } catch (e) {
@@ -204,14 +203,14 @@ export default function BudgetPage({ results, firstYear, lastYear }) {
                     onChange={(v) => setYear(+v)}
                     data={years.map((y) => String(y))}
                 />
-                {year === lastYear - 1 && year < 2100 && (
+                {year === lastYear && year <= 2100 && (
                     <Button
                         size="xs"
                         variant="light"
                         loading={creatingYear}
                         onClick={createNextYear}
                     >
-                        Create {year + 1}
+                        Create {year}
                     </Button>
                 )}
                 {mode === "month" && (
