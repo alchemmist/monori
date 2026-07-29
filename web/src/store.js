@@ -35,9 +35,18 @@ function chainedPatchTx(id, patch) {
 
 /** Budget edits are persisted in order. Year copying waits for this chain so
  * the server always copies the latest values visible in the grid. */
-let budgetWriteChain = Promise.resolve();
+let budgetWriteChain = null;
 function chainedBudgetWrite(write) {
-    const next = budgetWriteChain.catch(() => {}).then(write);
+    let next;
+    if (budgetWriteChain) {
+        next = budgetWriteChain.catch(() => {}).then(write);
+    } else {
+        try {
+            next = Promise.resolve(write());
+        } catch (error) {
+            next = Promise.reject(error);
+        }
+    }
     budgetWriteChain = next;
     return next;
 }
@@ -317,9 +326,9 @@ export const useStore = create((set, get) => ({
         } else {
             const precedingWrites = budgetWriteChain;
             try {
-                await precedingWrites;
+                if (precedingWrites) await precedingWrites;
             } catch (error) {
-                if (budgetWriteChain === precedingWrites) budgetWriteChain = Promise.resolve();
+                if (budgetWriteChain === precedingWrites) budgetWriteChain = null;
                 throw error;
             }
             const response = await api.copyBudgetYear(fromYear, toYear);
