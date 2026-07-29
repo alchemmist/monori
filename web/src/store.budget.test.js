@@ -77,7 +77,11 @@ describe("fillBudgetForward", () => {
 
 describe("copyBudgetYear", () => {
     it("replaces the target year with an exact copy of the source year", async () => {
-        vi.spyOn(api, "copyBudgetYear").mockResolvedValue({ copied: 3 });
+        const persisted = [
+            { categoryId: 7, year: 2028, month: 3, amount: 25_000 },
+            { categoryId: 7, year: 2028, month: 4, amount: 9_000 },
+        ];
+        vi.spyOn(api, "copyBudgetYear").mockResolvedValue({ copied: 2, budgets: persisted });
         useStore.setState((state) => ({
             snapshot: {
                 ...state.snapshot,
@@ -90,13 +94,11 @@ describe("copyBudgetYear", () => {
 
         const count = await useStore.getState().copyBudgetYear(2027, 2028);
 
-        expect(count).toBe(3);
+        expect(count).toBe(2);
         expect(api.copyBudgetYear).toHaveBeenCalledWith(2027, 2028);
-        expect(useStore.getState().snapshot.budgets.filter((b) => b.year === 2028)).toEqual([
-            { categoryId: 7, year: 2028, month: 3, amount: 25_000 },
-            { categoryId: 7, year: 2028, month: 4, amount: 10_000 },
-            { categoryId: 8, year: 2028, month: 4, amount: 5_000 },
-        ]);
+        expect(useStore.getState().snapshot.budgets.filter((b) => b.year === 2028)).toEqual(
+            persisted,
+        );
         expect(useStore.getState().snapshot.budgets.filter((b) => b.year === 2027)).toHaveLength(3);
     });
 
