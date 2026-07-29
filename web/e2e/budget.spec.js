@@ -23,8 +23,15 @@ test("editing a budgeted cell recomputes available-to-budget and persists", asyn
     await expect(row).toBeVisible();
     await expect(june.locator(".yg-msum__av")).toHaveText("0 ₽");
 
-    await juneCell(row).locator(".budget-cell").click();
-    await juneCell(row).locator(".budget-cell__input").fill("500");
+    const displayCell = juneCell(row).locator(".budget-cell");
+    await displayCell.scrollIntoViewIfNeeded();
+    const displayBox = await displayCell.boundingBox();
+    await displayCell.click();
+    const input = juneCell(row).locator(".budget-cell__input");
+    await expect(input).toBeVisible();
+    const inputBox = await input.boundingBox();
+    expect(inputBox).toEqual(displayBox);
+    await input.fill("500");
     await page.keyboard.press("Enter");
 
     // nothing funds the budget, so budgeting 500 drives June negative — the
