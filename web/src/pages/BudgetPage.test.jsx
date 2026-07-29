@@ -194,10 +194,7 @@ describe("BudgetPage", () => {
             });
         });
 
-        it("offers the next uncreated year while viewing an older year", async () => {
-            const copyBudgetYear = vi
-                .spyOn(useStore.getState(), "copyBudgetYear")
-                .mockResolvedValue(6);
+        it("offers the action only on the latest created year", async () => {
             const { user } = renderUI(
                 <BudgetPage
                     results={
@@ -212,9 +209,12 @@ describe("BudgetPage", () => {
                 />,
             );
 
-            await user.click(screen.getByRole("button", { name: `Create ${YEAR + 2}` }));
+            expect(screen.queryByRole("button", { name: `Create ${YEAR + 2}` })).toBeNull();
 
-            await waitFor(() => expect(copyBudgetYear).toHaveBeenCalledWith(YEAR + 1, YEAR + 2));
+            await user.click(screen.getByRole("button", { name: String(YEAR) }));
+            await user.click(screen.getByRole("option", { name: String(YEAR + 1) }));
+
+            expect(screen.getByRole("button", { name: `Create ${YEAR + 2}` })).toBeInTheDocument();
         });
 
         it("does not offer to overwrite an already created year", () => {
