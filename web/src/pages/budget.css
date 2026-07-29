@@ -183,8 +183,8 @@
 
 @media (prefers-reduced-motion: reduce) {
     .hero-card_complete::after,
-    .hero-card_complete .hero-card__check path {
-        animation: none;
+    .hero-card_complete .hero-card__check {
+        display: none;
     }
 }
 

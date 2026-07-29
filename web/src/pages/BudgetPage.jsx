@@ -129,12 +129,12 @@ export default function BudgetPage({ results, firstYear, lastYear }) {
         return () => clearTimeout(rearmTimer.current);
     }, [available]);
 
-    const saveBudget = async (categoryId, targetYear, targetMonth, amount) => {
+    const saveBudget = (categoryId, targetYear, targetMonth, amount) => {
         const target = results.get(targetYear);
         const previous = target?.byCategory.get(categoryId)?.[targetMonth - 1]?.budgeted ?? 0;
         const before = target?.available[targetMonth - 1];
         const hitsZero = before !== 0 && before - (amount - previous) === 0;
-        await setBudget(categoryId, targetYear, targetMonth, amount);
+        setBudget(categoryId, targetYear, targetMonth, amount);
         if (
             mode === "month" &&
             targetYear === year &&
