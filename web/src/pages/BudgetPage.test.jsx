@@ -118,6 +118,37 @@ describe("BudgetPage", () => {
             ]);
         });
 
+        it("celebrates the current month when an earlier assignment brings it to zero", async () => {
+            const setBudget = vi.spyOn(useStore.getState(), "setBudget");
+            const { user } = render();
+            const row = screen.getByText("Groceries").closest("tr");
+
+            await user.click(row.querySelectorAll(".budget-cell")[0]);
+            const input = screen.getByRole("textbox");
+            await user.clear(input);
+            await user.type(input, "30000");
+            await user.keyboard("{Enter}");
+
+            expect(document.querySelector(".yg-msum_now")).toHaveClass("yg-msum_complete");
+            expect(document.querySelector(".yg-msum_now .yg-msum__check")).toBeInTheDocument();
+            expect(setBudget).toHaveBeenCalledWith(2, YEAR, 1, 30_000_00);
+        });
+
+        it("does not celebrate the current month after editing a future month", async () => {
+            vi.spyOn(useStore.getState(), "setBudget");
+            const { user } = render();
+            const row = screen.getByText("Groceries").closest("tr");
+            const futureMonth = new Date().getMonth() + 1;
+
+            await user.click(row.querySelectorAll(".budget-cell")[futureMonth]);
+            const input = screen.getByRole("textbox");
+            await user.clear(input);
+            await user.type(input, "30000");
+            await user.keyboard("{Enter}");
+
+            expect(document.querySelector(".yg-msum_complete")).not.toBeInTheDocument();
+        });
+
         it("shows only the budgeted column in Plan density", async () => {
             const { user } = render();
 

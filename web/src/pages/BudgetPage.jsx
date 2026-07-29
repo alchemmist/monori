@@ -115,7 +115,7 @@ export default function BudgetPage({ results, firstYear, lastYear }) {
         clearTimeout(rearmTimer.current);
         celebrationArmed.current = true;
         setBudgetComplete(false);
-    }, [year, month]);
+    }, [year, month, mode]);
 
     useEffect(() => {
         if (available === 0) return;
@@ -132,13 +132,16 @@ export default function BudgetPage({ results, firstYear, lastYear }) {
     const saveBudget = (categoryId, targetYear, targetMonth, amount) => {
         const target = results.get(targetYear);
         const previous = target?.byCategory.get(categoryId)?.[targetMonth - 1]?.budgeted ?? 0;
-        const before = target?.available[targetMonth - 1];
-        const hitsZero = before !== 0 && before - (amount - previous) === 0;
+        const delta = amount - previous;
+        const watchedMonth = mode === "year" ? todayMonth : targetMonth;
+        const before = target?.available[watchedMonth - 1];
+        const hitsZero = targetMonth <= watchedMonth && before !== 0 && before - delta === 0;
         setBudget(categoryId, targetYear, targetMonth, amount);
+        const watchesEditedMonth = mode === "month" && targetMonth === month + 1;
+        const watchesCurrentMonth = mode === "year" && year === todayYear;
         if (
-            mode === "month" &&
             targetYear === year &&
-            targetMonth === month + 1 &&
+            (watchesEditedMonth || watchesCurrentMonth) &&
             hitsZero &&
             celebrationArmed.current
         ) {
@@ -534,6 +537,7 @@ export default function BudgetPage({ results, firstYear, lastYear }) {
                     catsByGroup={catsByGroup}
                     year={year}
                     currentMonth={year === now.getFullYear() ? now.getMonth() : -1}
+                    completeMonth={budgetComplete && year === todayYear ? todayMonth - 1 : -1}
                     cols={YEAR_DENSITY[density]}
                     collapsed={collapsed}
                     setCollapsed={setCollapsed}

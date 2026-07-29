@@ -55,8 +55,43 @@
 }
 
 .yg-msum {
+    position: relative;
     text-align: center;
     padding: 9px 8px 8px;
+}
+
+.yg-msum_complete::after {
+    content: "";
+    position: absolute;
+    inset: 2px;
+    border: 1px solid color-mix(in srgb, var(--m-accent) 65%, transparent);
+    border-radius: 8px;
+    pointer-events: none;
+    animation: budget-complete-pulse 600ms ease-out both;
+}
+
+.yg-msum__check {
+    width: 14px;
+    height: 14px;
+    margin-right: 4px;
+    vertical-align: -2px;
+    fill: none;
+    stroke: var(--m-accent);
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.yg-msum_complete .yg-msum__check path {
+    stroke-dasharray: 14;
+    animation: budget-complete-check 360ms 100ms ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .yg-msum_complete::after,
+    .yg-msum_complete .yg-msum__check {
+        display: none;
+    }
 }
 
 .yg-msum__mon {
