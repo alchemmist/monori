@@ -33,6 +33,15 @@ function chainedPatchTx(id, patch) {
     return next;
 }
 
+/** Budget edits are persisted in order. Year copying waits for this chain so
+ * the server always copies the latest values visible in the grid. */
+let budgetWriteChain = Promise.resolve();
+function chainedBudgetWrite(write) {
+    const next = budgetWriteChain.catch(() => {}).then(write);
+    budgetWriteChain = next;
+    return next;
+}
+
 // Each optimistic transaction edit owns revisions for the fields it changes.
 // A failed older request must never undo a newer edit to the same field.
 let nextTxFieldRevision = 0;
@@ -248,10 +257,12 @@ export const useStore = create((set, get) => ({
         );
         if (amount !== 0) budgets.push({ categoryId, year, month, amount });
         set({ snapshot: { ...snapshot, budgets } });
-        if (isDemo()) return;
-        api.putBudget({ categoryId, year, month, amount }).catch((e) =>
+        if (isDemo()) return Promise.resolve();
+        const write = chainedBudgetWrite(() => api.putBudget({ categoryId, year, month, amount }));
+        write.catch((e) =>
             set({ toast: { title: "Failed to save budget", theme: "danger", content: String(e) } }),
         );
+        return write;
     },
 
     /** Copy one category's current month into every later month of the year.
@@ -304,6 +315,13 @@ export const useStore = create((set, get) => ({
                 .map((b) => ({ ...b, year: toYear }));
             copied = targetBudgets.length;
         } else {
+            const precedingWrites = budgetWriteChain;
+            try {
+                await precedingWrites;
+            } catch (error) {
+                if (budgetWriteChain === precedingWrites) budgetWriteChain = Promise.resolve();
+                throw error;
+            }
             const response = await api.copyBudgetYear(fromYear, toYear);
             copied = response.copied;
             targetBudgets = response.budgets;

@@ -76,6 +76,37 @@ describe("fillBudgetForward", () => {
 });
 
 describe("copyBudgetYear", () => {
+    it("waits for pending budget edits before copying persisted values", async () => {
+        let finishWrite;
+        const pendingWrite = new Promise((resolve) => {
+            finishWrite = resolve;
+        });
+        vi.spyOn(api, "putBudget").mockReturnValue(pendingWrite);
+        vi.spyOn(api, "copyBudgetYear").mockResolvedValue({ copied: 0, budgets: [] });
+
+        const write = useStore.getState().setBudget(7, 2027, 3, 30_000);
+        const copy = useStore.getState().copyBudgetYear(2027, 2028);
+        await Promise.resolve();
+
+        expect(api.copyBudgetYear).not.toHaveBeenCalled();
+        finishWrite();
+        await write;
+        await copy;
+        expect(api.copyBudgetYear).toHaveBeenCalledWith(2027, 2028);
+    });
+
+    it("does not copy when a pending budget edit failed", async () => {
+        vi.spyOn(api, "putBudget").mockRejectedValue(new Error("save failed"));
+        vi.spyOn(api, "copyBudgetYear").mockResolvedValue({ copied: 0, budgets: [] });
+
+        const write = useStore.getState().setBudget(7, 2027, 3, 30_000);
+        const copy = useStore.getState().copyBudgetYear(2027, 2028);
+
+        await expect(write).rejects.toThrow("save failed");
+        await expect(copy).rejects.toThrow("save failed");
+        expect(api.copyBudgetYear).not.toHaveBeenCalled();
+    });
+
     it("replaces the target year with an exact copy of the source year", async () => {
         const persisted = [
             { categoryId: 7, year: 2028, month: 3, amount: 25_000 },
