@@ -65,6 +65,46 @@ def test_export_transactions_sheet(api, client):
     assert row[14] == "Card"
 
 
+def test_export_uses_split_parts_for_rows_and_totals(api, client):
+    expenses = api.group("Expenses")
+    groceries = api.category("Groceries", expenses)
+    household = api.category("Household", expenses)
+    account = api.account("Card")
+    tx = api.tx(
+        "2026-01-05T10:00:00",
+        -10000,
+        accountId=account,
+        description="Mixed receipt",
+    )
+    response = client.put(
+        f"/api/transactions/{tx}/splits",
+        json={
+            "parts": [
+                {"categoryId": groceries, "amount": -6000, "comment": "food"},
+                {"categoryId": household, "amount": -4000, "comment": "soap"},
+            ]
+        },
+    )
+    assert response.status_code == 200
+
+    wb = _export(client)
+    rows = [[cell.value for cell in row] for row in wb["Transactions"].iter_rows(min_row=2)]
+    assert [(row[5], row[13], row[15]) for row in rows] == [
+        (-60, "Groceries", "food"),
+        (-40, "Household", "soap"),
+    ]
+    dash = [cell.value for cell in wb["DashData"][2]]
+    assert dash[2] == 100
+
+    year = wb["2026"]
+    activity = {
+        year.cell(row=row, column=1).value: year.cell(row=row, column=3).value
+        for row in range(1, year.max_row + 1)
+    }
+    assert activity["Groceries"] == 60
+    assert activity["Household"] == 40
+
+
 def test_export_year_sheet_grid(api, client):
     _setup(api, client)
     ws = _export(client)["2026"]

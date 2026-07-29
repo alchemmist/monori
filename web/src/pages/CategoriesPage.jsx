@@ -4,6 +4,7 @@ import RowMenu from "../ui/RowMenu.jsx";
 import Tag from "../ui/Tag.jsx";
 import { Plus } from "@gravity-ui/icons";
 import { useStore } from "../store.js";
+import { effectiveTransactions } from "../engine/splits.js";
 import { orderedGroups, categoriesByGroup } from "../categoryOrder.js";
 import {
     CategoryEditDialog,
@@ -103,7 +104,7 @@ export default function CategoriesPage() {
 
     const txCountByCat = useMemo(() => {
         const m = new Map();
-        for (const t of snapshot.transactions) {
+        for (const t of effectiveTransactions(snapshot.transactions)) {
             if (t.categoryId != null) m.set(t.categoryId, (m.get(t.categoryId) ?? 0) + 1);
         }
         return m;

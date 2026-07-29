@@ -61,6 +61,14 @@ describe("mergeCategories", () => {
         expect(out.budgets.filter((b) => b.categoryId === 3)).toEqual([
             { categoryId: 3, year: 2026, month: 1, amount: 900 },
         ]);
+        // an unrelated category keeps exactly its own keywords, it is not handed
+        // the source's
+        expect(out.categories.find((c) => c.id === 3).keywords).toBe("");
+    });
+
+    it("leaves no budget behind under the source category", () => {
+        const out = mergeCategories(snap(), 2, 1);
+        expect(out.budgets.some((b) => b.categoryId === 2)).toBe(false);
     });
 
     it("does not mutate the input snapshot", () => {

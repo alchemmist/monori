@@ -1,3 +1,5 @@
+import re
+
 import pytest
 
 pytestmark = pytest.mark.integration
@@ -295,6 +297,64 @@ def test_deleting_a_leg_restores_the_partner_category(api, client):
 
     survivor = next(t for t in api.snapshot()["transactions"] if t["id"] == out_id)
     assert survivor["categoryId"] == cat
+
+
+def test_link_reports_an_unknown_transaction_by_message(api, client):
+    a = api.default_account()
+    out_id = api.tx("2026-03-10T09:00:00", -5000, accountId=a)
+    r = client.post("/api/transfers/link", json={"outTxId": out_id, "inTxId": 999999})
+    assert r.status_code == 400
+    assert r.json()["detail"] == "unknown transaction"
+
+
+def test_link_reports_two_outflows_by_message(api, client):
+    a = api.default_account()
+    b = api.account("Vault")
+    out_id = api.tx("2026-03-10T09:00:00", -5000, accountId=a)
+    in_id = api.tx("2026-03-10T18:00:00", -5000, accountId=b)
+    r = client.post("/api/transfers/link", json={"outTxId": out_id, "inTxId": in_id})
+    assert r.status_code == 400
+    assert r.json()["detail"] == "a transfer needs one outflow and one inflow"
+
+
+def test_link_reports_same_account_by_message(api, client):
+    a = api.default_account()
+    out_id = api.tx("2026-03-10T09:00:00", -5000, accountId=a)
+    in_id = api.tx("2026-03-10T18:00:00", 5000, accountId=a)
+    r = client.post("/api/transfers/link", json={"outTxId": out_id, "inTxId": in_id})
+    assert r.status_code == 400
+    assert r.json()["detail"] == "both legs are on the same account"
+
+
+def test_link_reports_an_already_linked_leg_by_message(api, client):
+    a = api.default_account()
+    b = api.account("Vault")
+    third = api.account("Pocket")
+    out_id, in_id = pair(api, a, b)
+    client.post("/api/transfers/link", json={"outTxId": out_id, "inTxId": in_id})
+    other = api.tx("2026-03-10T18:00:00", 5000, accountId=third)
+    r = client.post("/api/transfers/link", json={"outTxId": out_id, "inTxId": other})
+    assert r.status_code == 400
+    assert r.json()["detail"] == "already part of a transfer"
+
+
+def test_dismiss_reports_an_unknown_transaction_by_message(api, client):
+    a = api.default_account()
+    out_id = api.tx("2026-03-10T09:00:00", -5000, accountId=a)
+    r = client.post(
+        "/api/transfers/suggestions/dismiss", json={"outTxId": out_id, "inTxId": 999999}
+    )
+    assert r.status_code == 400
+    assert r.json()["detail"] == "unknown transaction"
+
+
+def test_transfer_created_at_is_a_full_iso_timestamp(api, client):
+    a = api.default_account()
+    b = api.account("Vault")
+    api.transfer(a, b, 5000)
+    row = client.get("/api/transfers").json()["rows"][0]
+    assert "createdAt" in row
+    assert re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}", row["createdAt"])
 
 
 def test_detection_never_pairs_a_reconcile_adjustment(api, client):

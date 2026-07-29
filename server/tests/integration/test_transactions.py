@@ -176,6 +176,63 @@ def test_transaction_delete(api, client):
     assert client.delete(f"/api/transactions/{tx}").status_code == 404
 
 
+def test_splits_are_atomic_and_visible_in_snapshot(api, client):
+    expenses = api.group("Expenses")
+    groceries = api.category("Groceries", expenses)
+    household = api.category("Household", expenses)
+    tx = api.tx("2026-01-01T00:00:00", -10_00, description="Mixed receipt")
+
+    response = client.put(
+        f"/api/transactions/{tx}/splits",
+        json={
+            "parts": [
+                {"categoryId": groceries, "amount": -6_01, "comment": "food"},
+                {"categoryId": household, "amount": -3_99, "comment": "soap"},
+            ]
+        },
+    )
+    assert response.status_code == 200
+    row = api.tx_by(tx)
+    assert row["categoryId"] is None
+    assert sum(part["amount"] for part in row["splits"]) == row["amount"]
+    assert [part["comment"] for part in row["splits"]] == ["food", "soap"]
+    assert client.get(f"/api/transactions?categoryId={groceries}").json()["total"] == 1
+    assert client.get("/api/transactions?uncategorized=true").json()["total"] == 0
+
+    bad = client.put(
+        f"/api/transactions/{tx}/splits",
+        json={
+            "parts": [
+                {"categoryId": groceries, "amount": -5_00},
+                {"categoryId": household, "amount": -4_99},
+            ]
+        },
+    )
+    assert bad.status_code == 400
+    assert api.tx_by(tx)["splits"] == row["splits"]
+    assert client.patch(f"/api/transactions/{tx}", json={"amount": -11_00}).status_code == 400
+
+    assert client.put(f"/api/transactions/{tx}/splits", json={"parts": []}).status_code == 200
+    assert api.tx_by(tx)["splits"] == []
+
+
+def test_transaction_split_validates_owner_kind_and_sign(api, client):
+    expenses = api.group("Expenses")
+    income = api.group("Income", "income")
+    food = api.category("Food", expenses)
+    salary = api.category("Salary", income)
+    tx = api.tx("2026-01-01T00:00:00", -10_00)
+
+    for parts in (
+        [{"categoryId": food, "amount": -10_00}],
+        [{"categoryId": food, "amount": -5_00}, {"categoryId": salary, "amount": -5_00}],
+        [{"categoryId": food, "amount": -11_00}, {"categoryId": food, "amount": 1_00}],
+    ):
+        assert (
+            client.put(f"/api/transactions/{tx}/splits", json={"parts": parts}).status_code == 400
+        )
+
+
 def test_hidden_transaction_disappears_from_list_and_snapshot(api, client):
     keep = api.tx("2026-01-01T00:00:00", -100, description="Keep")
     junk = api.tx("2026-01-02T00:00:00", -200, description="Junk")

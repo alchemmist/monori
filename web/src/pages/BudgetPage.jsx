@@ -16,6 +16,7 @@ import { goalProgress } from "../engine/goals.js";
 import GoalCategoryLabel from "../components/GoalCategoryLabel.jsx";
 import "../components/yeargrid.css";
 import "./budget.css";
+import { effectiveTransactions } from "../engine/splits.js";
 
 const YEAR_DENSITY = {
     full: ["budgeted", "activity", "balance"],
@@ -93,7 +94,7 @@ export default function BudgetPage({ results, firstYear, lastYear }) {
 
     const txCountByCat = useMemo(() => {
         const m = new Map();
-        for (const t of snapshot.transactions) {
+        for (const t of effectiveTransactions(snapshot.transactions)) {
             if (t.categoryId != null) m.set(t.categoryId, (m.get(t.categoryId) ?? 0) + 1);
         }
         return m;

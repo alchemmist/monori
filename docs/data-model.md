@@ -107,6 +107,14 @@ erDiagram
         INTEGER batch_id FK "-> import_batches.id"
         INTEGER hidden "required"
     }
+    splits {
+        INTEGER id PK
+        INTEGER transaction_id FK "-> transactions.id, required"
+        INTEGER category_id FK "-> categories.id, required"
+        INTEGER amount "required"
+        TEXT comment "required"
+        INTEGER sort "required"
+    }
     transfers {
         TEXT id PK
         INTEGER user_id FK "-> users.id"
@@ -163,6 +171,8 @@ erDiagram
     import_batches |o--o{ transactions : "batch_id"
     accounts ||--o{ transactions : "account_id"
     categories |o--o{ transactions : "category_id"
+    categories ||--o{ splits : "category_id"
+    transactions ||--o{ splits : "transaction_id"
     transactions ||--o{ transfers : "in_tx_id"
     transactions ||--o{ transfers : "out_tx_id"
     users |o--o{ transfers : "user_id"
@@ -336,7 +346,9 @@ user starts with a default **Cash** account.
 - Deleting a **category** sets `category_id` to `NULL` on its transactions (they
   become uncategorized) and cascade-deletes its budgets. Moving the transactions
   to another category instead is `POST /api/categories/{id}/merge` — the only
-  path that does so, and the one that enforces the income/expense invariant.
+  path that does so, and the one that enforces the income/expense invariant. If
+  the category is referenced by a split part, deletion is refused until those
+  parts are moved with that merge operation.
 - Deleting a **group** is refused while it still has categories.
 - Deleting an **account** reassigns its transactions to another account
   (`?reassignTo=`). Since every transaction must belong to an account, deleting a

@@ -38,6 +38,9 @@ function chainedPatchTx(id, patch) {
 let nextTxFieldRevision = 0;
 const txFieldRevisions = new Map();
 
+let nextSplitRevision = 0;
+const splitRevisions = new Map();
+
 const now = () => (typeof performance !== "undefined" ? performance.now() : 0);
 
 /** The public /demo page runs entirely on the bundled sample dataset: no auth,
@@ -391,6 +394,68 @@ export const useStore = create((set, get) => ({
                 if (revisions.get(key) === revision) revisions.delete(key);
             });
             if (!revisions.size) txFieldRevisions.delete(txId);
+        }
+    },
+
+    async replaceTransactionSplits(txId, parts) {
+        const { snapshot } = get();
+        const before = snapshot.transactions.find((transaction) => transaction.id === txId);
+        if (!before) return;
+        const optimistic = parts.map((part, index) => ({ id: `new-${index}`, ...part }));
+        const update = (splits) =>
+            snapshot.transactions.map((transaction) =>
+                transaction.id === txId
+                    ? {
+                          ...transaction,
+                          categoryId: splits.length ? null : transaction.categoryId,
+                          splits,
+                      }
+                    : transaction,
+            );
+        set({ snapshot: { ...snapshot, transactions: update(optimistic) } });
+        if (isDemo()) return optimistic;
+        const revision = ++nextSplitRevision;
+        splitRevisions.set(txId, revision);
+        try {
+            const result = await api.replaceTxSplits(txId, parts);
+            if (splitRevisions.get(txId) !== revision) return result.splits;
+            const current = get().snapshot;
+            set({
+                snapshot: {
+                    ...current,
+                    transactions: current.transactions.map((transaction) =>
+                        transaction.id === txId
+                            ? {
+                                  ...transaction,
+                                  categoryId: result.splits.length ? null : transaction.categoryId,
+                                  splits: result.splits,
+                              }
+                            : transaction,
+                    ),
+                },
+            });
+            return result.splits;
+        } catch (error) {
+            if (splitRevisions.get(txId) === revision) {
+                const current = get().snapshot;
+                set({
+                    snapshot: {
+                        ...current,
+                        transactions: current.transactions.map((transaction) =>
+                            transaction.id === txId
+                                ? {
+                                      ...transaction,
+                                      categoryId: before.categoryId,
+                                      splits: before.splits ?? [],
+                                  }
+                                : transaction,
+                        ),
+                    },
+                });
+            }
+            throw error;
+        } finally {
+            if (splitRevisions.get(txId) === revision) splitRevisions.delete(txId);
         }
     },
 

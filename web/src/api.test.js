@@ -52,6 +52,13 @@ const ENDPOINTS = [
         "PATCH",
         { categoryId: 2 },
     ],
+    [
+        "replaceTxSplits",
+        () => api.replaceTxSplits(1, [{ amount: 5 }, { amount: 6 }]),
+        "/api/transactions/1/splits",
+        "PUT",
+        { parts: [{ amount: 5 }, { amount: 6 }] },
+    ],
     ["deleteTx", () => api.deleteTx(1), "/api/transactions/1", "DELETE", undefined],
     [
         "createAccount",
@@ -132,6 +139,7 @@ const ENDPOINTS = [
         "PATCH",
         { name: "Home" },
     ],
+    ["archiveGoal", () => api.archiveGoal(7), "/api/categories/7/archive-goal", "POST", {}],
     ["deleteCategory", () => api.deleteCategory(1), "/api/categories/1", "DELETE", undefined],
     // the merge target goes in the body, not the path — swapping them silently
     // merges the wrong way round
@@ -240,6 +248,13 @@ const ENDPOINTS = [
         "POST",
         { ids: [2] },
     ],
+    [
+        "authPatchMe",
+        () => api.authPatchMe({ defaultAccountId: 3 }),
+        "/api/auth/me",
+        "PATCH",
+        { defaultAccountId: 3 },
+    ],
     ["adminActivity", () => api.adminActivity(), "/api/admin/activity", undefined, undefined],
     [
         "adminSql",
@@ -339,6 +354,13 @@ describe("api", () => {
         const blob = await api.exportXlsx();
         expect(blob).toBeInstanceOf(Blob);
         expect(fetch.mock.calls[5][0]).toBe("/api/export/xlsx");
+    });
+
+    it("routes an import to a chosen account instead of the null default", async () => {
+        await api.importCommit([{ id: 3 }], 8);
+        const [url, options] = fetch.mock.calls[0];
+        expect(url).toBe("/api/import/commit");
+        expect(JSON.parse(options.body)).toEqual({ rows: [{ id: 3 }], accountId: 8 });
     });
 
     it("sends explicit false admin SQL safeguards by default", async () => {

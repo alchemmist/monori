@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import TabHost from "./TabHost.jsx";
-import { renderUI, screen, waitFor, resetStore, seed } from "../test/render.jsx";
+import { renderUI, screen, waitFor, resetStore, seed, tx } from "../test/render.jsx";
 import { useStore } from "../store.js";
 
 // each stub reports the props it was handed and exposes its close callback
@@ -36,6 +36,14 @@ vi.mock("./MigratePanel.jsx", () => ({
     ),
 }));
 
+vi.mock("./SplitTransactionTab.jsx", () => ({
+    default: (props) => (
+        <div data-testid="tx-split" data-transaction={props.transaction?.description ?? ""}>
+            <button onClick={props.onClose}>close tx-split</button>
+        </div>
+    ),
+}));
+
 const openTabs = (...tabs) => useStore.setState({ tabs });
 
 describe("TabHost", () => {
@@ -65,6 +73,13 @@ describe("TabHost", () => {
         openTabs({ id: 1, kind: "admin-tx", props: { user }, key: null });
         renderUI(<TabHost />);
         expect(screen.getByTestId("admin-tx")).toHaveAttribute("data-user", "person@example.test");
+    });
+
+    it("hands the current transaction to the split tab", () => {
+        seed({ transactions: [tx(1, { description: "Coffee" })] });
+        openTabs({ id: 1, kind: "tx-split", props: { transactionId: 1 }, key: null });
+        renderUI(<TabHost />);
+        expect(screen.getByTestId("tx-split")).toHaveAttribute("data-transaction", "Coffee");
     });
 
     it("renders every open tab side by side and closes only the one asked for", async () => {
