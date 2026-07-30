@@ -16,6 +16,7 @@ router = APIRouter(prefix="/api/recurring", tags=["recurring"])
 class RecurringBody(BaseModel):
     accountId: int
     categoryId: int | None = None
+    payee: str = ""
     description: str = ""
     amount: int
     frequency: Literal["daily", "weekly", "monthly", "yearly"]
@@ -30,6 +31,7 @@ def _serialize(row):
         "id": row["id"],
         "accountId": row["account_id"],
         "categoryId": row["category_id"],
+        "payee": row["payee"],
         "description": row["description"],
         "amount": row["amount"],
         "frequency": row["frequency"],
@@ -79,6 +81,7 @@ def _validate_refs(c, uid, body):
 def _materialize(c, uid, today=None):
     today = today or date.today()
     created = []
+    reminders = []
     rows = c.execute(
         "SELECT * FROM recurring_transactions WHERE user_id=? AND active=1",
         (uid,),
@@ -94,18 +97,21 @@ def _materialize(c, uid, today=None):
                     """INSERT INTO transactions
                     (date, amount, description, bank_category, mcc, category_id, account_id,
                      comment, hash, source)
-                    VALUES (?, ?, ?, '', '', ?, ?, '', ?, 'recurring')""",
+                    VALUES (?, ?, ?, '', '', ?, ?, ?, ?, 'recurring')""",
                     (
                         timestamp,
                         row["amount"],
-                        row["description"],
+                        row["payee"],
                         row["category_id"],
                         row["account_id"],
-                        tx_hash(row["account_id"], timestamp, row["amount"], row["description"]),
+                        row["description"],
+                        tx_hash(row["account_id"], timestamp, row["amount"], row["payee"]),
                     ),
                 )
                 transaction_id = cur.lastrowid
                 created.append(transaction_id)
+            else:
+                reminders.append(row["id"])
             c.execute(
                 "INSERT OR IGNORE INTO recurring_occurrences"
                 " (recurring_id, due_date, transaction_id) VALUES (?, ?, ?)",
@@ -117,7 +123,7 @@ def _materialize(c, uid, today=None):
             "UPDATE recurring_transactions SET next_date=?, active=? WHERE id=?",
             (due.isoformat(), int(active), row["id"]),
         )
-    return created
+    return created, reminders
 
 
 @router.get("")
@@ -125,14 +131,18 @@ def list_recurring(user: Annotated[dict, Depends(current_user)]):
     c = conn()
     try:
         begin_write(c)
-        created = _materialize(c, user["id"])
+        created, reminders = _materialize(c, user["id"])
         rows = c.execute(
             "SELECT * FROM recurring_transactions WHERE user_id=?"
             " ORDER BY active DESC, next_date, id",
             (user["id"],),
         ).fetchall()
         c.commit()
-        return {"rows": [_serialize(row) for row in rows], "createdTransactionIds": created}
+        return {
+            "rows": [_serialize(row) for row in rows],
+            "createdTransactionIds": created,
+            "dueReminderIds": reminders,
+        }
     finally:
         c.close()
 
@@ -145,13 +155,14 @@ def create_recurring(body: RecurringBody, user: Annotated[dict, Depends(current_
         now = datetime.now(UTC).isoformat()
         cur = c.execute(
             """INSERT INTO recurring_transactions
-            (user_id, account_id, category_id, description, amount, frequency, interval,
+            (user_id, account_id, category_id, payee, description, amount, frequency, interval,
              start_date, next_date, end_date, auto_create, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 user["id"],
                 body.accountId,
                 body.categoryId,
+                body.payee,
                 body.description,
                 body.amount,
                 body.frequency,

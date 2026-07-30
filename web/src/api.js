@@ -71,6 +71,14 @@ export const api = {
             body: JSON.stringify({ parts }),
         }).then(json),
     deleteTx: (id) => apiFetch(`/api/transactions/${id}`, { method: "DELETE" }).then(json),
+    recurring: () => apiFetch("/api/recurring").then(json),
+    createRecurring: (body) =>
+        apiFetch("/api/recurring", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+        }).then(json),
+    deleteRecurring: (id) => apiFetch(`/api/recurring/${id}`, { method: "DELETE" }).then(json),
     createAccount: (body) =>
         apiFetch("/api/accounts", {
             method: "POST",

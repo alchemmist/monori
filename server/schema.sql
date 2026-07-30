@@ -115,6 +115,7 @@ CREATE TABLE IF NOT EXISTS recurring_transactions (
   user_id INTEGER NOT NULL REFERENCES users (id) ON DELETE CASCADE,
   account_id INTEGER NOT NULL REFERENCES accounts (id) ON DELETE CASCADE,
   category_id INTEGER REFERENCES categories (id) ON DELETE SET NULL,
+  payee TEXT NOT NULL DEFAULT '',
   description TEXT NOT NULL DEFAULT '',
   amount INTEGER NOT NULL,
   frequency TEXT NOT NULL CHECK (frequency IN ('daily', 'weekly', 'monthly', 'yearly')),

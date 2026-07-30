@@ -30,6 +30,7 @@ const AdminPage = lazy(() => import("./pages/AdminPage.jsx"));
 import TransactionsPage from "./pages/TransactionsPage.jsx";
 import AccountsPage from "./pages/AccountsPage.jsx";
 import CategoriesPage from "./pages/CategoriesPage.jsx";
+import RecurringPage from "./pages/RecurringPage.jsx";
 import SettingsPage from "./pages/SettingsPage.jsx";
 import LoginPage from "./pages/LoginPage.jsx";
 import TabHost from "./components/TabHost.jsx";
@@ -38,6 +39,7 @@ const NAV = [
     { id: "budget", title: "Budget", icon: LayoutHeaderCellsLarge },
     { id: "dashboard", title: "Dashboard", icon: ChartColumn },
     { id: "transactions", title: "Transactions", icon: ListUl },
+    { id: "recurring", title: "Recurring", icon: ClockArrowRotateLeft },
     { id: "accounts", title: "Accounts", icon: Wallet },
     { id: "categories", title: "Categories", icon: Tags },
 ];
@@ -294,6 +296,7 @@ export default function App({ theme, onToggleTheme }) {
                     </Suspense>
                 )}
                 {page === "transactions" && <TransactionsPage />}
+                {page === "recurring" && <RecurringPage />}
                 {page === "accounts" && <AccountsPage />}
                 {page === "categories" && <CategoriesPage />}
                 {page === "admin" && user?.isAdmin && (
