@@ -117,17 +117,32 @@
 .hero-card_available {
     position: relative;
     isolation: isolate;
+    overflow: hidden;
 }
 
-.hero-card_complete::after {
+/* a single warm light sweeps across the card when the month reaches zero */
+.hero-card_complete::before {
     content: "";
     position: absolute;
-    z-index: -1;
-    inset: -1px;
-    border: 1px solid color-mix(in srgb, var(--m-accent) 65%, transparent);
+    inset: 0;
+    z-index: 1;
     border-radius: inherit;
     pointer-events: none;
-    animation: budget-complete-pulse 600ms ease-out both;
+    background: linear-gradient(
+        100deg,
+        transparent 38%,
+        color-mix(in srgb, var(--m-accent) 36%, transparent) 47%,
+        color-mix(in srgb, #fff 62%, var(--m-accent)) 50%,
+        color-mix(in srgb, var(--m-accent) 36%, transparent) 53%,
+        transparent 62%
+    );
+    background-size: 220% 100%;
+    background-repeat: no-repeat;
+    animation: budget-shimmer 900ms ease-in-out both;
+}
+
+.hero-card_complete .hero-card__value {
+    animation: budget-shimmer-text 900ms ease-out both;
 }
 
 .hero-card__label {
@@ -142,49 +157,35 @@
     margin-bottom: 4px;
 }
 
-.hero-card__check {
-    width: 14px;
-    height: 14px;
-    fill: none;
-    stroke: var(--m-accent);
-    stroke-width: 2;
-    stroke-linecap: round;
-    stroke-linejoin: round;
-}
-
-.hero-card_complete .hero-card__check path {
-    stroke-dasharray: 14;
-    animation: budget-complete-check 360ms 100ms ease-out both;
-}
-
-@keyframes budget-complete-pulse {
+@keyframes budget-shimmer {
     from {
-        opacity: 0.7;
-        transform: scale(0.96);
-        box-shadow: 0 0 0 0 color-mix(in srgb, var(--m-accent) 24%, transparent);
+        background-position: 150% 0;
     }
 
     to {
-        opacity: 0;
-        transform: scale(1.08);
-        box-shadow: 0 0 0 12px transparent;
+        background-position: -70% 0;
     }
 }
 
-@keyframes budget-complete-check {
-    from {
-        stroke-dashoffset: 14;
+@keyframes budget-shimmer-text {
+    0% {
+        text-shadow: none;
     }
 
-    to {
-        stroke-dashoffset: 0;
+    45% {
+        color: var(--m-accent);
+        text-shadow: 0 0 10px color-mix(in srgb, var(--m-accent) 45%, transparent);
+    }
+
+    100% {
+        text-shadow: none;
     }
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .hero-card_complete::after,
-    .hero-card_complete .hero-card__check {
-        display: none;
+    .hero-card_complete::before,
+    .hero-card_complete .hero-card__value {
+        animation: none;
     }
 }
 

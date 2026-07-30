@@ -46,9 +46,10 @@ export default function BudgetPage({ results, firstYear, lastYear }) {
     const [dialog, setDialog] = useState(null); // {type: 'edit'|'delete'|'new', category}
     const [selectedBudgetCell, setSelectedBudgetCell] = useState(null);
     const [fillingForward, setFillingForward] = useState(false);
-    const [budgetComplete, setBudgetComplete] = useState(false);
-    const celebrationArmed = useRef(true);
-    const rearmTimer = useRef(null);
+    // 0-based index of the month whose Available just hit zero, or -1. The
+    // celebration is transient: it plays and then clears itself after the sweep.
+    const [completeMonth, setCompleteMonth] = useState(-1);
+    const celebrateTimer = useRef(null);
 
     const res = results.get(year);
     const groups = useMemo(
@@ -111,42 +112,27 @@ export default function BudgetPage({ results, firstYear, lastYear }) {
     const income = res.income[month];
     const budgetedTotal = res.budgetedTotal[month];
 
+    // any navigation cancels an in-flight celebration
     useEffect(() => {
-        clearTimeout(rearmTimer.current);
-        celebrationArmed.current = true;
-        setBudgetComplete(false);
+        clearTimeout(celebrateTimer.current);
+        setCompleteMonth(-1);
     }, [year, month, mode]);
 
-    useEffect(() => {
-        if (available === 0) return;
-        setBudgetComplete(false);
-        clearTimeout(rearmTimer.current);
-        if (!celebrationArmed.current) {
-            rearmTimer.current = setTimeout(() => {
-                celebrationArmed.current = true;
-            }, 3000);
-        }
-        return () => clearTimeout(rearmTimer.current);
-    }, [available]);
+    useEffect(() => () => clearTimeout(celebrateTimer.current), []);
 
     const saveBudget = (categoryId, targetYear, targetMonth, amount) => {
         const target = results.get(targetYear);
         const previous = target?.byCategory.get(categoryId)?.[targetMonth - 1]?.budgeted ?? 0;
         const delta = amount - previous;
-        const watchedMonth = mode === "year" ? todayMonth : targetMonth;
-        const before = target?.available[watchedMonth - 1];
-        const hitsZero = targetMonth <= watchedMonth && before !== 0 && before - delta === 0;
+        // celebrate whichever month this edit drives to exactly zero — any month,
+        // not only the current or the one on screen
+        const before = target?.available[targetMonth - 1];
+        const hitsZero = before !== 0 && before - delta === 0;
         setBudget(categoryId, targetYear, targetMonth, amount);
-        const watchesEditedMonth = mode === "month" && targetMonth === month + 1;
-        const watchesCurrentMonth = mode === "year" && year === todayYear;
-        if (
-            targetYear === year &&
-            (watchesEditedMonth || watchesCurrentMonth) &&
-            hitsZero &&
-            celebrationArmed.current
-        ) {
-            celebrationArmed.current = false;
-            setBudgetComplete(true);
+        if (targetYear === year && hitsZero) {
+            setCompleteMonth(targetMonth - 1);
+            clearTimeout(celebrateTimer.current);
+            celebrateTimer.current = setTimeout(() => setCompleteMonth(-1), 1100);
         }
     };
 
@@ -282,20 +268,9 @@ export default function BudgetPage({ results, firstYear, lastYear }) {
                 <>
                     <div className="budget-hero">
                         <div
-                            className={`card hero-card hero-card_available ${budgetComplete ? "hero-card_complete" : ""}`}
+                            className={`card hero-card hero-card_available ${completeMonth === month ? "hero-card_complete" : ""}`}
                         >
-                            <div className="hero-card__label" role="status">
-                                {budgetComplete && (
-                                    <svg
-                                        className="hero-card__check"
-                                        viewBox="0 0 16 16"
-                                        aria-hidden="true"
-                                    >
-                                        <path d="M3 8.5 6.5 12 13 4.5" />
-                                    </svg>
-                                )}
-                                {budgetComplete ? "All money assigned" : "Available to budget"}
-                            </div>
+                            <div className="hero-card__label">Available to budget</div>
                             <div
                                 className="hero-card__value num"
                                 style={{
@@ -537,7 +512,7 @@ export default function BudgetPage({ results, firstYear, lastYear }) {
                     catsByGroup={catsByGroup}
                     year={year}
                     currentMonth={year === now.getFullYear() ? now.getMonth() : -1}
-                    completeMonth={budgetComplete && year === todayYear ? todayMonth - 1 : -1}
+                    completeMonth={completeMonth}
                     cols={YEAR_DENSITY[density]}
                     collapsed={collapsed}
                     setCollapsed={setCollapsed}
