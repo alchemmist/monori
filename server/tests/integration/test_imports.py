@@ -137,7 +137,7 @@ def test_import_commit_accepts_goal_category(api, client):
     assert client.get(f"/api/transactions?categoryId={goal}").json()["total"] == 1
 
 
-def test_import_commit_rejects_category_with_the_wrong_direction(api, client):
+def test_import_commit_rejects_income_category_for_outflow_and_accepts_refund(api, client):
     expenses = api.group("Expenses")
     income = api.group("Income", "income")
     food = api.category("Groceries", expenses)
@@ -153,10 +153,11 @@ def test_import_commit_rejects_category_with_the_wrong_direction(api, client):
     rows = api.preview(api.statement)
     rows[1]["amount"] = 100
     rows[1]["categoryId"] = food
-    bad_income = client.post(
+    refund = client.post(
         "/api/import/commit", json={"accountId": api.default_account(), "rows": rows}
     )
-    assert bad_income.status_code == 400
+    assert refund.status_code == 200
+    assert client.get(f"/api/transactions?categoryId={food}").json()["total"] == 1
 
 
 def test_commit_rejects_unknown_account(client):
@@ -174,15 +175,10 @@ def test_preview_rejects_oversized_statement(api, client):
     assert r.json()["detail"] == "statement is too large"
 
 
-def test_import_preview_never_proposes_a_wrong_direction_category(api, client):
-    """
-    The refund fallback in the categorizer would happily file "Lenta +100" into
-    Groceries — but the commit rejects wrong-direction categories, so a preview
-    proposing one would make the whole statement unimportable.
-    """
+def test_import_preview_proposes_expense_category_for_refund(api, client):
     expenses = api.group("Expenses")
-    api.category("Groceries", expenses, keywords="lenta")
+    groceries = api.category("Groceries", expenses, keywords="lenta")
     refund = api.statement.splitlines()[0].replace("-100,00", "100,00") + "\n"
     rows = api.preview(refund)
     assert rows[0]["amount"] > 0
-    assert rows[0]["categoryId"] is None
+    assert rows[0]["categoryId"] == groceries

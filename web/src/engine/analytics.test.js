@@ -463,7 +463,7 @@ describe("dayOfMonthProfile", () => {
             { id: 4, date: "2024-01-05", amount: 9_999_00, categoryId: 10 },
             // wrong year → excluded
             { id: 5, date: "2023-01-05", amount: -300_00, categoryId: 20 },
-            // a positive-amount expense row (a refund) → excluded (amount >= 0)
+            // a positive-amount expense row (a refund) reduces the day's spend
             { id: 6, date: "2024-01-05", amount: 4_00, categoryId: 20 },
             // uncategorized → excluded
             { id: 7, date: "2024-01-05", amount: -8_00, categoryId: null },
@@ -473,18 +473,17 @@ describe("dayOfMonthProfile", () => {
     it("buckets a year's expenses by day of month", () => {
         const d = dayOfMonthProfile(snap, "2024");
         expect(d).toHaveLength(31);
-        expect(d[4]).toBe(1_500_00); // the 5th of Jan + the 5th of Mar
+        expect(d[4]).toBe(1_496_00); // the 5th of Jan + the 5th of Mar, less the refund
         expect(d[30]).toBe(700_00); // the 31st of Jan
-        expect(d.reduce((s, v) => s + v, 0)).toBe(2_200_00);
+        expect(d.reduce((s, v) => s + v, 0)).toBe(2_196_00);
     });
 });
 
 // Rows the year-scoped chart aggregators must ignore: wrong year, an income
-// category, a positive amount, and an uncategorized row.
+// category and an uncategorized row.
 const ignoredRows = [
     { id: 90, date: "2023-01-01", amount: -9_999_00, categoryId: 20, description: "LAST YEAR" },
     { id: 91, date: "2024-01-01", amount: -8_888_00, categoryId: 10, description: "INCOME LEG" },
-    { id: 92, date: "2024-01-01", amount: 7_777_00, categoryId: 20, description: "REFUND" },
     {
         id: 93,
         date: "2024-01-01",
@@ -549,7 +548,7 @@ describe("txStats keeps the first of tied-largest expenses", () => {
             { id: 1, date: "2024-01-01", amount: -3_000_00, categoryId: 20, description: "FIRST" },
             { id: 2, date: "2024-01-02", amount: -3_000_00, categoryId: 20, description: "SECOND" },
             { id: 3, date: "2024-01-03", amount: -1_000_00, categoryId: 20, description: "THIRD" },
-            // still ignored: wrong year, income category, refund, transfer leg
+            // still ignored: wrong year, income category, transfer leg
             ...ignoredRows.filter((r) => r.categoryId != null),
             {
                 id: 94,
@@ -858,6 +857,57 @@ describe("year-scoped aggregators ignore a dangling category", () => {
 });
 
 describe("charts vs budget table parity", () => {
+    it("nets expense-category refunds consistently across analytics widgets", () => {
+        const snap = {
+            groups: [{ id: 2, name: "Daily", kind: "expense" }],
+            categories: [{ id: 20, groupId: 2, name: "Shopping" }],
+            transactions: [
+                {
+                    id: 1,
+                    date: "2024-01-01",
+                    amount: -1_000_00,
+                    categoryId: 20,
+                    description: "SHOP 123",
+                },
+                {
+                    id: 2,
+                    date: "2024-01-02",
+                    amount: 200_00,
+                    categoryId: 20,
+                    description: "SHOP 456",
+                },
+                {
+                    id: 3,
+                    date: "2024-01-03",
+                    amount: -500_00,
+                    categoryId: 20,
+                    description: "CAFE",
+                },
+            ],
+        };
+        const yearlyExpense = yearTotals(monthlySeries(snap))[0].expense;
+
+        expect(weekdayProfile(snap, "2024").reduce((sum, value) => sum + value, 0)).toBe(
+            yearlyExpense,
+        );
+        expect(dayOfMonthProfile(snap, "2024").reduce((sum, value) => sum + value, 0)).toBe(
+            yearlyExpense,
+        );
+        expect(yearlyExpense).toBe(1_300_00);
+
+        expect(topMerchants(snap, "2024")).toContainEqual({
+            name: "SHOP",
+            fullName: "SHOP 123",
+            total: 800_00,
+            count: 2,
+        });
+        expect(txStats(snap, "2024")).toEqual({
+            count: 3,
+            median: 500_00,
+            largest: { amount: 1_000_00, description: "SHOP 123", date: "2024-01-01" },
+        });
+    });
+
     it("categoryYearMatrix totals equal the budget engine's activity to the kopeck", () => {
         // a category with a refund is exactly where a gross-outflow chart and
         // the net budget table drift apart; both must report the same year

@@ -160,7 +160,7 @@ describe("ImportPanel", () => {
         expect(screen.getByRole("button", { name: "Groceries" })).toBeInTheDocument();
     });
 
-    it("offers income categories for positive amounts", async () => {
+    it("offers income and expense categories for positive amounts", async () => {
         vi.spyOn(api, "importPreview").mockResolvedValue({
             rows: [
                 {
@@ -181,7 +181,7 @@ describe("ImportPanel", () => {
 
         await user.click(screen.getByRole("button", { name: "Uncategorized" }));
         expect(await screen.findByRole("option", { name: "Salary" })).toBeInTheDocument();
-        expect(screen.queryByRole("option", { name: "Groceries" })).not.toBeInTheDocument();
+        expect(screen.getByRole("option", { name: "Groceries" })).toBeInTheDocument();
     });
 
     it("renders unparsed lines and their per-line detail", async () => {

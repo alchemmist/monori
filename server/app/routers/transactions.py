@@ -61,8 +61,6 @@ def _validate_category_type(transaction_sign, amount, is_refund=False):
         raise HTTPException(400, "expense transaction requires an expense category")
     if is_refund and transaction_sign != -1:
         raise HTTPException(400, "refund requires an expense category")
-    if amount > 0 and transaction_sign != 1 and not is_refund:
-        raise HTTPException(400, "income transaction requires an income category")
 
 
 def _resolve_category(c, category_id, uid, amount=None, is_refund=False):
