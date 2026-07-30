@@ -19,6 +19,7 @@ import {
     PersonGear,
 } from "@gravity-ui/icons";
 import { useStore, isDemo } from "./store.js";
+import { api } from "./api.js";
 import { showToast } from "./ui/notify.js";
 import { computeRange, firstBudgetYear } from "./engine/budget.js";
 import BudgetPage from "./pages/BudgetPage.jsx";
@@ -93,7 +94,16 @@ export default function App({ theme, onToggleTheme }) {
     }, [checkAuth]);
 
     useEffect(() => {
-        if (isDemo() || user) load();
+        if (isDemo()) {
+            load();
+        } else if (user) {
+            // Materialize schedules before loading the ledger so recurring
+            // transactions appear on every page, not only after visiting Recurring.
+            Promise.resolve()
+                .then(() => api.recurring())
+                .catch(() => null)
+                .then(() => load());
+        }
     }, [load, user]);
 
     useEffect(() => {

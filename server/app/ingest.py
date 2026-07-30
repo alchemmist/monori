@@ -10,10 +10,81 @@ create duplicates.
 
 from .importer import build_rules, categorize, tx_hash
 
+RECURRING_MATCH_WINDOW_DAYS = 3
+
 INSERT_SQL = """INSERT INTO transactions
    (date, amount, description, bank_category, mcc, category_id, account_id,
     batch_id, hash, source)
    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
+
+
+def _reconcile_recurring(c, account_id, row, source, batch_id, row_hash):
+    """Replace or satisfy the closest expected occurrence with a bank row."""
+    occurrence = c.execute(
+        """SELECT o.recurring_id, o.due_date, o.transaction_id, r.category_id
+        FROM recurring_occurrences o
+        JOIN recurring_transactions r ON r.id=o.recurring_id
+        LEFT JOIN transactions t ON t.id=o.transaction_id
+        WHERE r.account_id=? AND r.amount=?
+          AND ABS(julianday(substr(?, 1, 10)) - julianday(o.due_date)) <= ?
+          AND (o.transaction_id IS NULL OR t.source='recurring')
+        ORDER BY ABS(julianday(substr(?, 1, 10)) - julianday(o.due_date)), o.due_date, r.id
+        LIMIT 1""",
+        (
+            account_id,
+            row["amount"],
+            row["date"],
+            RECURRING_MATCH_WINDOW_DAYS,
+            row["date"],
+        ),
+    ).fetchone()
+    if not occurrence:
+        return False
+
+    category_id = row.get("category_id")
+    if category_id is None:
+        category_id = occurrence["category_id"]
+    values = (
+        row["date"],
+        row.get("description", ""),
+        row.get("bank_category", ""),
+        row.get("mcc", ""),
+        category_id,
+        batch_id,
+        row_hash,
+        source,
+    )
+    transaction_id = occurrence["transaction_id"]
+    if transaction_id is None:
+        cur = c.execute(
+            INSERT_SQL,
+            (
+                row["date"],
+                row["amount"],
+                row.get("description", ""),
+                row.get("bank_category", ""),
+                row.get("mcc", ""),
+                category_id,
+                account_id,
+                batch_id,
+                row_hash,
+                source,
+            ),
+        )
+        transaction_id = cur.lastrowid
+        c.execute(
+            "UPDATE recurring_occurrences SET transaction_id=? WHERE recurring_id=? AND due_date=?",
+            (transaction_id, occurrence["recurring_id"], occurrence["due_date"]),
+        )
+    else:
+        c.execute(
+            """UPDATE transactions
+            SET date=?, description=?, bank_category=?, mcc=?,
+                category_id=COALESCE(?, category_id), batch_id=?, hash=?, source=?
+            WHERE id=?""",
+            (*values, transaction_id),
+        )
+    return True
 
 
 def load_rules(c):
@@ -125,6 +196,9 @@ def commit_rows(c, account_id, rows, source, batch_id=None):
         seen[h] = n_batch + 1
         if n_batch < existing.get(h, 0):
             skipped += 1
+            continue
+        if _reconcile_recurring(c, account_id, r, source, batch_id, h):
+            inserted += 1
             continue
         c.execute(
             INSERT_SQL,

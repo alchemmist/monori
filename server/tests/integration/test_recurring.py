@@ -36,6 +36,50 @@ def test_recurring_template_materializes_due_transaction_once(api, client):
     assert transaction["source"] == "recurring"
 
 
+def test_bank_import_reconciles_materialized_occurrence(api, client):
+    expenses = api.group("Expenses")
+    rent = api.category("Rent", expenses)
+    account = api.default_account()
+    today = date.today().isoformat()
+    client.post(
+        "/api/recurring",
+        json={
+            "accountId": account,
+            "categoryId": rent,
+            "payee": "Landlord",
+            "amount": -100_000,
+            "frequency": "monthly",
+            "startDate": today,
+            "autoCreate": True,
+        },
+    )
+    synthetic_id = client.get("/api/recurring").json()["createdTransactionIds"][0]
+
+    imported = client.post(
+        "/api/import/commit",
+        json={
+            "accountId": account,
+            "rows": [
+                {
+                    "date": f"{today}T09:34:12",
+                    "amount": -100_000,
+                    "description": "ARENDA KVARTIRY / SBP",
+                    "bank_category": "Housing",
+                    "mcc": "",
+                }
+            ],
+        },
+    )
+
+    assert imported.status_code == 200
+    assert imported.json()["inserted"] == 1
+    transaction = api.tx_by(synthetic_id)
+    assert transaction["description"] == "ARENDA KVARTIRY / SBP"
+    assert transaction["source"] == "import"
+    assert transaction["categoryId"] == rent
+    assert client.get("/api/transactions").json()["total"] == 1
+
+
 def test_recurring_template_validates_ownership_and_can_be_deleted(api, client):
     income = api.group("Income", "income")
     salary = api.category("Salary", income)
