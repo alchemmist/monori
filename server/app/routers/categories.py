@@ -150,7 +150,11 @@ def patch_category(cat_id: int, patch: CategoryPatch, user: Annotated[dict, Depe
                 "UPDATE categories SET archived=? WHERE id=?", (1 if patch.archived else 0, cat_id)
             )
         if goal_fields_allowed and patch.goalTarget:
-            c.execute("UPDATE categories SET goal_target=? WHERE id=?", (patch.goalTarget, cat_id))
+            c.execute(
+                "UPDATE categories SET goal_target=?,"
+                " goal_status=COALESCE(goal_status, 'active') WHERE id=?",
+                (patch.goalTarget, cat_id),
+            )
         if goal_fields_allowed and patch.goalTargetDate is not None:
             c.execute(
                 "UPDATE categories SET goal_target_date=? WHERE id=?",

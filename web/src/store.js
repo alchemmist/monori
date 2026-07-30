@@ -922,6 +922,7 @@ export const useStore = create((set, get) => ({
         } catch (e) {
             get().notify({ title: "Failed to move category", theme: "danger", content: String(e) });
             await get().load();
+            throw e;
         }
     },
 

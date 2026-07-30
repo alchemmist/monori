@@ -63,3 +63,26 @@ def test_moving_goal_to_expense_group_clears_goal_metadata(api, client):
     assert category["goalTarget"] is None
     assert category["goalStatus"] is None
     assert category["goalTargetDate"] is None
+
+
+def test_moving_expense_to_goal_sets_complete_goal_metadata(api, client):
+    expenses = api.group("Expenses")
+    goals = api.group("Goals", kind="goal")
+    created = client.post("/api/categories", json={"name": "Camera", "groupId": expenses})
+    category_id = created.json()["id"]
+
+    moved = client.patch(
+        f"/api/categories/{category_id}",
+        json={
+            "groupId": goals,
+            "goalTarget": 100_000,
+            "goalTargetDate": "2026-12-31",
+        },
+    )
+
+    assert moved.status_code == 200, moved.text
+    category = next(c for c in api.snapshot()["categories"] if c["id"] == category_id)
+    assert category["groupId"] == goals
+    assert category["goalTarget"] == 100_000
+    assert category["goalTargetDate"] == "2026-12-31"
+    assert category["goalStatus"] == "active"

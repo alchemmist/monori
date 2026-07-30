@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useStore } from "../store.js";
 import { orderedGroups, categoriesByGroup } from "../categoryOrder.js";
 import AppDialog from "../ui/AppDialog.jsx";
@@ -111,10 +111,13 @@ export function GoalTargetDialog({ category, onApply, onClose }) {
     const [goalTarget, setGoalTarget] = useState("");
     const [goalTargetDate, setGoalTargetDate] = useState("");
     const [busy, setBusy] = useState(false);
+    const applyingRef = useRef(false);
     const targetKopecks = Math.round(Number(goalTarget.replace(",", ".")) * 100);
+    const validTarget = targetKopecks > 0 && Number.isSafeInteger(targetKopecks);
 
     const apply = async () => {
-        if (!(targetKopecks > 0)) return;
+        if (!validTarget || applyingRef.current) return;
+        applyingRef.current = true;
         setBusy(true);
         try {
             await onApply({
@@ -122,7 +125,11 @@ export function GoalTargetDialog({ category, onApply, onClose }) {
                 goalTargetDate: goalTargetDate || null,
             });
             onClose();
+        } catch {
+            // The store reports the error; leave the dialog open so the user can retry.
+            return;
         } finally {
+            applyingRef.current = false;
             setBusy(false);
         }
     };
@@ -134,7 +141,7 @@ export function GoalTargetDialog({ category, onApply, onClose }) {
             applyText="Move"
             onApply={apply}
             applyLoading={busy}
-            applyDisabled={!(targetKopecks > 0)}
+            applyDisabled={busy || !validTarget}
         >
             <div style={{ display: "flex", flexDirection: "column", gap: 12, paddingTop: 4 }}>
                 <FTextInput

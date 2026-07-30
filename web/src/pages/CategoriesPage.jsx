@@ -309,7 +309,7 @@ export default function CategoriesPage() {
                         setDialog({
                             type: "goal-target",
                             category: moved,
-                            move: { id: d.id, groupId: ov.groupId, orderedIds },
+                            move: { id: d.id, groupId: ov.groupId, index: ov.index },
                         });
                     } else {
                         moveCategory(d.id, ov.groupId, orderedIds);
@@ -565,14 +565,34 @@ export default function CategoriesPage() {
             {dialog?.type === "goal-target" && (
                 <GoalTargetDialog
                     category={dialog.category}
-                    onApply={(goal) =>
-                        moveCategory(
-                            dialog.move.id,
-                            dialog.move.groupId,
-                            dialog.move.orderedIds,
-                            goal,
-                        )
-                    }
+                    onApply={(goal) => {
+                        const latest = useStore.getState().snapshot;
+                        const latestGroups = orderedGroups(latest.groups);
+                        const latestByGroup = categoriesByGroup(latest.categories, latestGroups);
+                        const moved = latest.categories.find((c) => c.id === dialog.move.id);
+                        const columns = new Map(
+                            latestGroups.map((g) => [
+                                g.id,
+                                (latestByGroup.get(g.id) ?? []).filter(
+                                    (c) => c.id !== dialog.move.id,
+                                ),
+                            ]),
+                        );
+                        const destination = columns.get(dialog.move.groupId);
+                        if (!moved || !destination) throw new Error("Category destination changed");
+                        destination.splice(
+                            Math.min(dialog.move.index, destination.length),
+                            0,
+                            moved,
+                        );
+                        const orderedIds = latestGroups.flatMap((g) =>
+                            columns.get(g.id).map((c) => c.id),
+                        );
+                        return moveCategory(dialog.move.id, dialog.move.groupId, orderedIds, {
+                            ...goal,
+                            goalStatus: "active",
+                        });
+                    }}
                     onClose={() => setDialog(null)}
                 />
             )}
