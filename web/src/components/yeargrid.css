@@ -55,8 +55,34 @@
 }
 
 .yg-msum {
+    position: relative;
     text-align: center;
     padding: 9px 8px 8px;
+}
+
+.yg-msum_complete::after {
+    content: "";
+    position: absolute;
+    inset: 2px;
+    border-radius: 8px;
+    pointer-events: none;
+    background: linear-gradient(
+        100deg,
+        transparent 36%,
+        color-mix(in srgb, var(--m-accent) 40%, transparent) 47%,
+        color-mix(in srgb, #fff 60%, var(--m-accent)) 50%,
+        color-mix(in srgb, var(--m-accent) 40%, transparent) 53%,
+        transparent 64%
+    );
+    background-size: 220% 100%;
+    background-repeat: no-repeat;
+    animation: budget-shimmer 900ms ease-in-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .yg-msum_complete::after {
+        animation: none;
+    }
 }
 
 .yg-msum__mon {

@@ -114,13 +114,79 @@
     min-width: 150px;
 }
 
+.hero-card_available {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+}
+
+/* a single warm light sweeps across the card when the month reaches zero */
+.hero-card_complete::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    border-radius: inherit;
+    pointer-events: none;
+    background: linear-gradient(
+        100deg,
+        transparent 38%,
+        color-mix(in srgb, var(--m-accent) 36%, transparent) 47%,
+        color-mix(in srgb, #fff 62%, var(--m-accent)) 50%,
+        color-mix(in srgb, var(--m-accent) 36%, transparent) 53%,
+        transparent 62%
+    );
+    background-size: 220% 100%;
+    background-repeat: no-repeat;
+    animation: budget-shimmer 900ms ease-in-out both;
+}
+
+.hero-card_complete .hero-card__value {
+    animation: budget-shimmer-text 900ms ease-out both;
+}
+
 .hero-card__label {
+    display: flex;
+    align-items: center;
+    gap: 4px;
     font-size: 11px;
     font-weight: 600;
     letter-spacing: 0.7px;
     text-transform: uppercase;
     color: var(--m-text-faint);
     margin-bottom: 4px;
+}
+
+@keyframes budget-shimmer {
+    from {
+        background-position: 150% 0;
+    }
+
+    to {
+        background-position: -70% 0;
+    }
+}
+
+@keyframes budget-shimmer-text {
+    0% {
+        text-shadow: none;
+    }
+
+    45% {
+        color: var(--m-accent);
+        text-shadow: 0 0 10px color-mix(in srgb, var(--m-accent) 45%, transparent);
+    }
+
+    100% {
+        text-shadow: none;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .hero-card_complete::before,
+    .hero-card_complete .hero-card__value {
+        animation: none;
+    }
 }
 
 .hero-card__value {

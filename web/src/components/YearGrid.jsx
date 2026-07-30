@@ -29,6 +29,7 @@ export default function YearGrid({
     catsByGroup,
     year,
     currentMonth,
+    completeMonth = -1,
     cols,
     collapsed,
     setCollapsed,
@@ -118,7 +119,7 @@ export default function YearGrid({
                             return (
                                 <th
                                     key={m}
-                                    className={`yg-msum ${i === currentMonth ? "yg-msum_now" : ""}`}
+                                    className={`yg-msum ${i === currentMonth ? "yg-msum_now" : ""} ${i === completeMonth ? "yg-msum_complete" : ""}`}
                                     colSpan={span}
                                 >
                                     <div className="yg-msum__mon">

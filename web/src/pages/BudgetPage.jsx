@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ActionIcon, Button, SegmentedControl } from "@mantine/core";
 import InlineSelect from "../ui/InlineSelect.jsx";
 import RowMenu from "../ui/RowMenu.jsx";
@@ -46,6 +46,10 @@ export default function BudgetPage({ results, firstYear, lastYear }) {
     const [dialog, setDialog] = useState(null); // {type: 'edit'|'delete'|'new', category}
     const [selectedBudgetCell, setSelectedBudgetCell] = useState(null);
     const [fillingForward, setFillingForward] = useState(false);
+    // 0-based index of the month whose Available just hit zero, or -1. The
+    // celebration is transient: it plays and then clears itself after the sweep.
+    const [completeMonth, setCompleteMonth] = useState(-1);
+    const celebrateTimer = useRef(null);
 
     const res = results.get(year);
     const groups = useMemo(
@@ -107,6 +111,30 @@ export default function BudgetPage({ results, firstYear, lastYear }) {
     const overspent = res.overspent[month];
     const income = res.income[month];
     const budgetedTotal = res.budgetedTotal[month];
+
+    // any navigation cancels an in-flight celebration
+    useEffect(() => {
+        clearTimeout(celebrateTimer.current);
+        setCompleteMonth(-1);
+    }, [year, month, mode]);
+
+    useEffect(() => () => clearTimeout(celebrateTimer.current), []);
+
+    const saveBudget = (categoryId, targetYear, targetMonth, amount) => {
+        const target = results.get(targetYear);
+        const previous = target?.byCategory.get(categoryId)?.[targetMonth - 1]?.budgeted ?? 0;
+        const delta = amount - previous;
+        // celebrate whichever month this edit drives to exactly zero — any month,
+        // not only the current or the one on screen
+        const before = target?.available[targetMonth - 1];
+        const hitsZero = before !== 0 && before - delta === 0;
+        setBudget(categoryId, targetYear, targetMonth, amount);
+        if (targetYear === year && hitsZero) {
+            setCompleteMonth(targetMonth - 1);
+            clearTimeout(celebrateTimer.current);
+            celebrateTimer.current = setTimeout(() => setCompleteMonth(-1), 1100);
+        }
+    };
 
     const catMenu = (c) => {
         const goal = groups.find((g) => g.id === c.groupId)?.kind === "goal";
@@ -239,7 +267,9 @@ export default function BudgetPage({ results, firstYear, lastYear }) {
             {mode === "month" && (
                 <>
                     <div className="budget-hero">
-                        <div className="card hero-card">
+                        <div
+                            className={`card hero-card hero-card_available ${completeMonth === month ? "hero-card_complete" : ""}`}
+                        >
                             <div className="hero-card__label">Available to budget</div>
                             <div
                                 className="hero-card__value num"
@@ -431,7 +461,7 @@ export default function BudgetPage({ results, firstYear, lastYear }) {
                                                                     })
                                                                 }
                                                                 onChange={(v) =>
-                                                                    setBudget(
+                                                                    saveBudget(
                                                                         c.id,
                                                                         year,
                                                                         month + 1,
@@ -482,10 +512,11 @@ export default function BudgetPage({ results, firstYear, lastYear }) {
                     catsByGroup={catsByGroup}
                     year={year}
                     currentMonth={year === now.getFullYear() ? now.getMonth() : -1}
+                    completeMonth={completeMonth}
                     cols={YEAR_DENSITY[density]}
                     collapsed={collapsed}
                     setCollapsed={setCollapsed}
-                    setBudget={setBudget}
+                    setBudget={saveBudget}
                     onSelectBudget={setSelectedBudgetCell}
                     onAddCategory={(groupId) => setDialog({ type: "edit", category: { groupId } })}
                     onCategoryMenu={catMenu}

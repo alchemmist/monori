@@ -118,6 +118,46 @@ describe("BudgetPage", () => {
             ]);
         });
 
+        it("celebrates the exact month an assignment brings to zero, not the current one", async () => {
+            const setBudget = vi.spyOn(useStore.getState(), "setBudget").mockResolvedValue();
+            const { user } = render();
+            const cells = screen
+                .getByText("Groceries")
+                .closest("tr")
+                .querySelectorAll(".budget-cell");
+
+            // budget January (index 0) up to where its Available hits exactly zero
+            await user.click(cells[0]);
+            const input = screen.getByRole("textbox");
+            await user.clear(input);
+            await user.type(input, "30000");
+            await user.keyboard("{Enter}");
+
+            const msums = document.querySelectorAll(".yg-msum");
+            expect(msums[0]).toHaveClass("yg-msum_complete");
+            // only the edited month celebrates — not the current month, not any other
+            expect(document.querySelectorAll(".yg-msum_complete")).toHaveLength(1);
+            expect(setBudget).toHaveBeenCalledWith(2, YEAR, 1, 30_000_00);
+        });
+
+        it("does not celebrate a year-grid month left with money available", async () => {
+            vi.spyOn(useStore.getState(), "setBudget").mockResolvedValue();
+            const { user } = render();
+            const cells = screen
+                .getByText("Groceries")
+                .closest("tr")
+                .querySelectorAll(".budget-cell");
+
+            // +5 000 leaves 5 000 available in that month — nothing to celebrate
+            await user.click(cells[4]);
+            const input = screen.getByRole("textbox");
+            await user.clear(input);
+            await user.type(input, "25000");
+            await user.keyboard("{Enter}");
+
+            expect(document.querySelector(".yg-msum_complete")).not.toBeInTheDocument();
+        });
+
         it("shows only the budgeted column in Plan density", async () => {
             const { user } = render();
 
@@ -239,6 +279,57 @@ describe("BudgetPage", () => {
 
             // March is month index 2, and setBudget takes 1-based months
             await waitFor(() => expect(setBudget).toHaveBeenCalledWith(2, YEAR, 3, 300_00));
+        });
+
+        it("celebrates only when a user assignment brings available to exactly zero", async () => {
+            const setBudget = vi.spyOn(useStore.getState(), "setBudget").mockResolvedValue();
+            const { user } = render();
+            await toMonth(user);
+
+            const hero = screen.getByText("Available to budget").closest(".hero-card");
+            expect(hero).not.toHaveClass("hero-card_complete");
+
+            const row = screen.getByText("Groceries").closest("tr");
+            await user.click(row.querySelector(".budget-cell"));
+            const input = row.querySelector(".budget-cell__input");
+            await user.clear(input);
+            await user.type(input, "30000");
+            await user.keyboard("{Enter}");
+
+            expect(hero).toHaveClass("hero-card_complete");
+            // the label never changes and no checkmark appears — the sweep is the whole story
+            expect(hero.querySelector(".hero-card__label")).toHaveTextContent(
+                "Available to budget",
+            );
+            expect(setBudget).toHaveBeenCalledWith(2, YEAR, 3, 30_000_00);
+        });
+
+        it("does not celebrate an already-zero budget on page load", async () => {
+            const res = result();
+            res.available = Array(12).fill(0);
+            const { user } = render(res);
+            await toMonth(user);
+
+            expect(screen.getByText("Available to budget").closest(".hero-card")).not.toHaveClass(
+                "hero-card_complete",
+            );
+        });
+
+        it("does not celebrate when a user assignment leaves money available", async () => {
+            vi.spyOn(useStore.getState(), "setBudget").mockResolvedValue();
+            const { user } = render(result());
+            await toMonth(user);
+
+            const row = screen.getByText("Groceries").closest("tr");
+            await user.click(row.querySelector(".budget-cell"));
+            const input = row.querySelector(".budget-cell__input");
+            await user.clear(input);
+            await user.type(input, "25000");
+            await user.keyboard("{Enter}");
+
+            expect(screen.getByText("Available to budget").closest(".hero-card")).not.toHaveClass(
+                "hero-card_complete",
+            );
         });
 
         it("caps the spent bar at the full width once the envelope is emptied", async () => {
