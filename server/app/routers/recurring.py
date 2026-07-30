@@ -11,6 +11,7 @@ from ..deps import conn
 from ..importer import tx_hash
 
 router = APIRouter(prefix="/api/recurring", tags=["recurring"])
+MAX_MATERIALIZED_OCCURRENCES = 200
 
 
 class RecurringBody(BaseModel):
@@ -44,7 +45,14 @@ def _serialize(row):
     }
 
 
-def _advance(value: date, frequency: str, interval: int):
+def _advance(
+    value: date,
+    frequency: str,
+    interval: int,
+    *,
+    anchor_day: int | None = None,
+    anchor_is_month_end: bool = False,
+):
     if frequency == "daily":
         return value + timedelta(days=interval)
     if frequency == "weekly":
@@ -53,7 +61,9 @@ def _advance(value: date, frequency: str, interval: int):
     index = value.year * 12 + value.month - 1 + months
     year, month_index = divmod(index, 12)
     month = month_index + 1
-    return date(year, month, min(value.day, calendar.monthrange(year, month)[1]))
+    last_day = calendar.monthrange(year, month)[1]
+    day = last_day if anchor_is_month_end else min(anchor_day or value.day, last_day)
+    return date(year, month, day)
 
 
 def _validate_refs(c, uid, body):
@@ -82,14 +92,22 @@ def _materialize(c, uid, today=None):
     today = today or date.today()
     created = []
     reminders = []
+    truncated = False
     rows = c.execute(
         "SELECT * FROM recurring_transactions WHERE user_id=? AND active=1",
         (uid,),
     ).fetchall()
     for row in rows:
         due = date.fromisoformat(row["next_date"])
+        start = date.fromisoformat(row["start_date"])
+        anchor_is_month_end = start.day == calendar.monthrange(start.year, start.month)[1]
         end = date.fromisoformat(row["end_date"]) if row["end_date"] else None
-        while due <= today and (end is None or due <= end):
+        processed = 0
+        while (
+            due <= today
+            and (end is None or due <= end)
+            and processed < MAX_MATERIALIZED_OCCURRENCES
+        ):
             transaction_id = None
             if row["auto_create"]:
                 timestamp = f"{due.isoformat()}T12:00:00"
@@ -117,13 +135,21 @@ def _materialize(c, uid, today=None):
                 " (recurring_id, due_date, transaction_id) VALUES (?, ?, ?)",
                 (row["id"], due.isoformat(), transaction_id),
             )
-            due = _advance(due, row["frequency"], row["interval"])
+            due = _advance(
+                due,
+                row["frequency"],
+                row["interval"],
+                anchor_day=start.day,
+                anchor_is_month_end=anchor_is_month_end,
+            )
+            processed += 1
+        truncated = truncated or (due <= today and (end is None or due <= end))
         active = not (end is not None and due > end)
         c.execute(
             "UPDATE recurring_transactions SET next_date=?, active=? WHERE id=?",
             (due.isoformat(), int(active), row["id"]),
         )
-    return created, reminders
+    return created, reminders, truncated
 
 
 @router.get("")
@@ -131,7 +157,7 @@ def list_recurring(user: Annotated[dict, Depends(current_user)]):
     c = conn()
     try:
         begin_write(c)
-        created, reminders = _materialize(c, user["id"])
+        created, reminders, truncated = _materialize(c, user["id"])
         rows = c.execute(
             "SELECT * FROM recurring_transactions WHERE user_id=?"
             " ORDER BY active DESC, next_date, id",
@@ -142,6 +168,7 @@ def list_recurring(user: Annotated[dict, Depends(current_user)]):
             "rows": [_serialize(row) for row in rows],
             "createdTransactionIds": created,
             "dueReminderIds": reminders,
+            "materializationTruncated": truncated,
         }
     finally:
         c.close()

@@ -1,4 +1,6 @@
-from datetime import date
+from datetime import date, timedelta
+
+from app.routers import recurring
 
 
 def test_recurring_template_materializes_due_transaction_once(api, client):
@@ -75,3 +77,36 @@ def test_manual_schedule_returns_a_due_reminder_without_creating_transaction(api
     assert first["createdTransactionIds"] == []
     assert first["dueReminderIds"] == [recurring_id]
     assert second["dueReminderIds"] == []
+
+
+def test_monthly_schedule_keeps_original_month_end_anchor():
+    due = date(2025, 1, 31)
+    due = recurring._advance(due, "monthly", 1, anchor_day=31, anchor_is_month_end=True)
+    assert due == date(2025, 2, 28)
+    assert recurring._advance(due, "monthly", 1, anchor_day=31, anchor_is_month_end=True) == date(
+        2025, 3, 31
+    )
+
+
+def test_materialization_caps_backlog_per_request(api, client, monkeypatch):
+    monkeypatch.setattr(recurring, "MAX_MATERIALIZED_OCCURRENCES", 2)
+    response = client.post(
+        "/api/recurring",
+        json={
+            "accountId": api.default_account(),
+            "description": "Daily expense",
+            "amount": -100,
+            "frequency": "daily",
+            "startDate": (date.today() - timedelta(days=3)).isoformat(),
+            "autoCreate": True,
+        },
+    )
+    assert response.status_code == 200
+
+    first = client.get("/api/recurring").json()
+    second = client.get("/api/recurring").json()
+
+    assert len(first["createdTransactionIds"]) == 2
+    assert first["materializationTruncated"] is True
+    assert len(second["createdTransactionIds"]) == 2
+    assert second["materializationTruncated"] is False

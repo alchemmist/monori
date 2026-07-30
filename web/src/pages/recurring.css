@@ -93,7 +93,7 @@
 
 @media (width <= 760px) {
     .recurring-row {
-        grid-template-columns: 1fr auto;
+        grid-template-columns: 1fr auto auto;
     }
 
     .recurring-row__schedule,

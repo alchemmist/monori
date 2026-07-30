@@ -9,7 +9,11 @@ import { FAmountInput, FSelect, FTextInput } from "../ui/fields.jsx";
 import Tag from "../ui/Tag.jsx";
 import "./recurring.css";
 
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => {
+    const now = new Date();
+    now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+    return now.toISOString().slice(0, 10);
+};
 const FREQUENCIES = ["daily", "weekly", "monthly", "yearly"].map((value) => ({
     value,
     label: value[0].toUpperCase() + value.slice(1),
@@ -155,6 +159,9 @@ function CreateScheduleDialog({ snapshot, onClose, onCreated, notify }) {
     const [autoCreate, setAutoCreate] = useState(true);
     const [busy, setBusy] = useState(false);
     const parsedAmount = parseRub(amount);
+    const parsedInterval = Number(interval);
+    const intervalValid =
+        Number.isInteger(parsedInterval) && parsedInterval >= 1 && parsedInterval <= 366;
     const incomeGroups = useMemo(
         () => new Set(snapshot.groups.filter((g) => g.kind === "income").map((g) => g.id)),
         [snapshot.groups],
@@ -178,8 +185,12 @@ function CreateScheduleDialog({ snapshot, onClose, onCreated, notify }) {
             setCategoryId(categoryOptions[0]?.value ?? "");
     }, [categoryId, categoryOptions]);
 
+    useEffect(() => {
+        if (endDate && endDate < startDate) setEndDate("");
+    }, [endDate, startDate]);
+
     const save = async () => {
-        if (parsedAmount == null || parsedAmount === 0) return;
+        if (parsedAmount == null || parsedAmount === 0 || !intervalValid) return;
         setBusy(true);
         try {
             await api.createRecurring({
@@ -189,7 +200,7 @@ function CreateScheduleDialog({ snapshot, onClose, onCreated, notify }) {
                 description: description.trim(),
                 amount: parsedAmount,
                 frequency,
-                interval: Number(interval),
+                interval: parsedInterval,
                 startDate,
                 endDate: endDate || null,
                 autoCreate,
@@ -209,7 +220,13 @@ function CreateScheduleDialog({ snapshot, onClose, onCreated, notify }) {
             applyText="Create schedule"
             onApply={save}
             applyLoading={busy}
-            applyDisabled={!accountId || !startDate || parsedAmount == null || parsedAmount === 0}
+            applyDisabled={
+                !accountId ||
+                !startDate ||
+                parsedAmount == null ||
+                parsedAmount === 0 ||
+                !intervalValid
+            }
         >
             <div className="recurring-form">
                 <FTextInput
