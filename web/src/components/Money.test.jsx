@@ -14,6 +14,11 @@ describe("Money", () => {
         rerender(<Money value={-12500} signColor />);
         expect(screen.getByText("-125")).toHaveClass("money_neg");
     });
+
+    it.each([99, -99])("treats sub-ruble amount %s as zero", (value) => {
+        renderUI(<Money value={value} signColor />);
+        expect(screen.getByText("0")).toHaveClass("money_zero");
+    });
 });
 
 describe("BalancePill", () => {
@@ -21,6 +26,8 @@ describe("BalancePill", () => {
         [100, "balance-pill_pos"],
         [-100, "balance-pill_neg"],
         [0, "balance-pill_zero"],
+        [99, "balance-pill_zero"],
+        [-99, "balance-pill_zero"],
     ])("uses the balance tone for %s", (value, cls) => {
         renderUI(<BalancePill value={value} />);
         expect(document.querySelector(".balance-pill")).toHaveClass(cls);

@@ -5,7 +5,7 @@ import RowMenu from "../ui/RowMenu.jsx";
 import { Plus, ChevronDown, EllipsisVertical } from "@gravity-ui/icons";
 import { useStore } from "../store.js";
 import { orderedGroups, categoriesByGroup } from "../categoryOrder.js";
-import { MONTHS_SHORT, MONTHS, rub } from "../format.js";
+import { MONTHS_SHORT, MONTHS, normalizeKop, rub } from "../format.js";
 import BudgetCell from "../components/BudgetCell.jsx";
 import { Money, BalancePill } from "../components/Money.jsx";
 import { CategoryEditDialog, CategoryDeleteDialog } from "../components/CategoryDialogs.jsx";
@@ -70,7 +70,10 @@ export default function BudgetPage({ results, firstYear, lastYear }) {
     const { catsByGroup, unusedCount } = useMemo(() => {
         const used = (c) =>
             (res.byCategory.get(c.id) ?? []).some(
-                (m) => m.budgeted !== 0 || m.outflows !== 0 || m.balance !== 0,
+                (m) =>
+                    normalizeKop(m.budgeted) !== 0 ||
+                    normalizeKop(m.outflows) !== 0 ||
+                    normalizeKop(m.balance) !== 0,
             );
         let unused = 0;
         const filtered = new Map();
@@ -122,12 +125,15 @@ export default function BudgetPage({ results, firstYear, lastYear }) {
 
     const saveBudget = (categoryId, targetYear, targetMonth, amount) => {
         const target = results.get(targetYear);
-        const previous = target?.byCategory.get(categoryId)?.[targetMonth - 1]?.budgeted ?? 0;
+        const previous = normalizeKop(
+            target?.byCategory.get(categoryId)?.[targetMonth - 1]?.budgeted ?? 0,
+        );
         const delta = amount - previous;
         // celebrate whichever month this edit drives to exactly zero — any month,
         // not only the current or the one on screen
-        const before = target?.available[targetMonth - 1];
-        const hitsZero = before !== 0 && before - delta === 0;
+        const before = normalizeKop(target?.available[targetMonth - 1] ?? 0);
+        const after = normalizeKop(before - delta);
+        const hitsZero = before !== 0 && after === 0;
         setBudget(categoryId, targetYear, targetMonth, amount);
         if (targetYear === year && hitsZero) {
             setCompleteMonth(targetMonth - 1);

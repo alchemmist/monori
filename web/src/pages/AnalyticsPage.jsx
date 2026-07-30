@@ -5,7 +5,7 @@ import InlineSelect from "../ui/InlineSelect.jsx";
 import { ChartBoundary } from "../components/ChartCard.jsx";
 import { MoneyChartTooltip } from "../components/ChartTooltip.jsx";
 import { useStore } from "../store.js";
-import { rub, money, fmtDate, MONTHS_SHORT } from "../format.js";
+import { rub, money, fmtDate, MONTHS_SHORT, normalizeKop } from "../format.js";
 import {
     monthlySeries,
     yearTotals,
@@ -498,7 +498,7 @@ export default function AnalyticsPage({ results, firstYear, lastYear }) {
                                             className="num"
                                             style={{
                                                 color:
-                                                    r.net >= 0
+                                                    normalizeKop(r.net) >= 0
                                                         ? "var(--m-income)"
                                                         : "var(--m-expense)",
                                             }}
@@ -712,7 +712,9 @@ function discTitle(category, cell, m) {
     // available is the envelope (this month's budget plus what carried over), so
     // spell the carry-over out whenever it differs from the plain budget line
     const carried =
-        cell.available !== cell.budgeted ? ` · budgeted ${rub(cell.budgeted)} + carry-over` : "";
+        normalizeKop(cell.available) !== normalizeKop(cell.budgeted)
+            ? ` · budgeted ${rub(cell.budgeted)} + carry-over`
+            : "";
     return `${category.name} · ${MONTHS_SHORT[m]}: ${rub(cell.spent)} / ${rub(cell.available)} ₽ (${pct})${carried}`;
 }
 

@@ -5,6 +5,7 @@ import {
     groupAmount,
     money,
     moneyCompact,
+    normalizeKop,
     parseRub,
     rub,
     rubExact,
@@ -46,9 +47,23 @@ describe("amountInput", () => {
     });
 
     it("round-trips through parseRub", () => {
-        for (const kop of [1, 999, 100000, 17679400, -450050]) {
+        for (const kop of [999, 100000, 17679400, -450050]) {
             expect(parseRub(amountInput(kop))).toBe(kop);
         }
+    });
+
+    it("renders sub-ruble amounts as zero", () => {
+        expect(amountInput(99)).toBe("");
+        expect(parseRub("0,99")).toBe(0);
+    });
+});
+
+describe("normalizeKop", () => {
+    it("zeroes both positive and negative sub-ruble amounts", () => {
+        expect(normalizeKop(99)).toBe(0);
+        expect(normalizeKop(-99)).toBe(0);
+        expect(normalizeKop(100)).toBe(100);
+        expect(normalizeKop(-100)).toBe(-100);
     });
 });
 
@@ -61,6 +76,11 @@ describe("rub", () => {
         expect(rub(12345)).toBe("123");
         expect(rub(12399)).toBe("124");
     });
+
+    it("renders positive and negative sub-ruble values as zero", () => {
+        expect(rub(99)).toBe("0");
+        expect(rub(-99)).toBe("0");
+    });
 });
 
 describe("rubExact", () => {
@@ -69,12 +89,18 @@ describe("rubExact", () => {
         expect(rubExact(0)).toBe("0,00");
         expect(rubExact(-45050)).toBe("-450,50");
     });
+
+    it("renders sub-ruble values as zero", () => {
+        expect(rubExact(99)).toBe("0,00");
+        expect(rubExact(-99)).toBe("0,00");
+    });
 });
 
 describe("money", () => {
     it("appends the ruble sign to the rounded value", () => {
         expect(money(17679400)).toBe(`176${NB}794 ₽`);
         expect(money(0)).toBe("0 ₽");
+        expect(money(99)).toBe("0 ₽");
     });
 });
 
@@ -85,6 +111,7 @@ describe("moneyCompact", () => {
         expect(moneyCompact(45000)).toBe("450");
         expect(moneyCompact(0)).toBe("0");
         expect(moneyCompact(-150_000_000)).toBe("-1.5M");
+        expect(moneyCompact(99)).toBe("0");
     });
 
     it("switches suffix exactly at the million and thousand marks", () => {

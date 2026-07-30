@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { rub, parseRub, amountInput } from "../format.js";
+import { amountInput, normalizeKop, parseRub, rub } from "../format.js";
 import useAmountField from "../ui/useAmountField.js";
 
 /**
@@ -7,20 +7,21 @@ import useAmountField from "../ui/useAmountField.js";
  * Escape cancels. Recalculation happens in the same frame via the store.
  */
 export default function BudgetCell({ value, onChange, onSelect, tabIndex = 0 }) {
+    const normalizedValue = normalizeKop(value);
     const [editing, setEditing] = useState(false);
     const [draft, setDraft] = useState("");
     const amount = useAmountField(setDraft);
 
     const start = () => {
         onSelect?.();
-        setDraft(amountInput(value));
+        setDraft(amountInput(normalizedValue));
         setEditing(true);
     };
 
     const commit = () => {
         const kop = parseRub(draft);
         setEditing(false);
-        if (kop !== null && kop !== value) onChange(kop);
+        if (kop !== null && kop !== normalizedValue) onChange(kop);
     };
 
     if (editing) {
@@ -53,7 +54,7 @@ export default function BudgetCell({ value, onChange, onSelect, tabIndex = 0 }) 
                     start();
                 }
             }}
-            style={{ color: value ? "var(--m-text)" : "var(--m-text-faint)" }}
+            style={{ color: normalizedValue ? "var(--m-text)" : "var(--m-text-faint)" }}
         >
             {rub(value)}
         </span>

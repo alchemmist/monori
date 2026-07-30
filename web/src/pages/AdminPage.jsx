@@ -3,7 +3,7 @@ import { AreaChart, BarChart } from "@mantine/charts";
 import { Button } from "@mantine/core";
 import { ChartBoundary } from "../components/ChartCard.jsx";
 import { api } from "../api.js";
-import { money } from "../format.js";
+import { money, normalizeKop } from "../format.js";
 import { SERIES, cartesian } from "./chartTheme.js";
 import { showToast } from "../ui/notify.js";
 import { useStore } from "../store.js";
@@ -423,7 +423,12 @@ function UserDetail({ detail }) {
                                 <td className="admin-muted">{t.account}</td>
                                 <td
                                     className="num"
-                                    style={{ color: t.amount >= 0 ? "var(--m-income)" : undefined }}
+                                    style={{
+                                        color:
+                                            normalizeKop(t.amount) >= 0
+                                                ? "var(--m-income)"
+                                                : undefined,
+                                    }}
                                 >
                                     {money(t.amount)}
                                 </td>

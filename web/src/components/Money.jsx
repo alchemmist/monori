@@ -1,13 +1,14 @@
-import { rub } from "../format.js";
+import { normalizeKop, rub } from "../format.js";
 
 export function Money({ value, zeroDim = true, signColor = false }) {
+    const normalized = normalizeKop(value);
     const cls =
-        value === 0 && zeroDim
+        normalized === 0 && zeroDim
             ? "money_zero"
             : signColor
-              ? value > 0
+              ? normalized > 0
                   ? "money_pos"
-                  : value < 0
+                  : normalized < 0
                     ? "money_neg"
                     : ""
               : "";
@@ -15,7 +16,12 @@ export function Money({ value, zeroDim = true, signColor = false }) {
 }
 
 export function BalancePill({ value }) {
+    const normalized = normalizeKop(value);
     const cls =
-        value > 0 ? "balance-pill_pos" : value < 0 ? "balance-pill_neg" : "balance-pill_zero";
+        normalized > 0
+            ? "balance-pill_pos"
+            : normalized < 0
+              ? "balance-pill_neg"
+              : "balance-pill_zero";
     return <span className={`balance-pill num ${cls}`}>{rub(value)}</span>;
 }

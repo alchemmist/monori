@@ -158,6 +158,26 @@ describe("BudgetPage", () => {
             expect(document.querySelector(".yg-msum_complete")).not.toBeInTheDocument();
         });
 
+        it("celebrates when the remaining amount is only sub-ruble", async () => {
+            const setBudget = vi.spyOn(useStore.getState(), "setBudget").mockResolvedValue();
+            const res = result();
+            res.available[0] = 10_001;
+            const { user } = render(res);
+            const cell = screen
+                .getByText("Groceries")
+                .closest("tr")
+                .querySelector(".budget-cell");
+
+            await user.click(cell);
+            const input = screen.getByRole("textbox");
+            await user.clear(input);
+            await user.type(input, "20100");
+            await user.keyboard("{Enter}");
+
+            expect(document.querySelector(".yg-msum_complete")).toBeInTheDocument();
+            expect(setBudget).toHaveBeenCalledWith(2, YEAR, 1, 2_010_000);
+        });
+
         it("shows only the budgeted column in Plan density", async () => {
             const { user } = render();
 
@@ -302,6 +322,24 @@ describe("BudgetPage", () => {
                 "Available to budget",
             );
             expect(setBudget).toHaveBeenCalledWith(2, YEAR, 3, 30_000_00);
+        });
+
+        it("celebrates when monthly Available ends with only sub-ruble remainder", async () => {
+            const setBudget = vi.spyOn(useStore.getState(), "setBudget").mockResolvedValue();
+            const res = result();
+            res.available[2] = 10_001;
+            const { user } = render(res);
+            await toMonth(user);
+
+            const row = screen.getByText("Groceries").closest("tr");
+            await user.click(row.querySelector(".budget-cell"));
+            const input = row.querySelector(".budget-cell__input");
+            await user.clear(input);
+            await user.type(input, "20100");
+            await user.keyboard("{Enter}");
+
+            expect(row.closest("body").querySelector(".hero-card_complete")).toBeInTheDocument();
+            expect(setBudget).toHaveBeenCalledWith(2, YEAR, 3, 2_010_000);
         });
 
         it("does not celebrate an already-zero budget on page load", async () => {

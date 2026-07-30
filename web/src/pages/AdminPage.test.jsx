@@ -386,11 +386,11 @@ describe("AdminPage", () => {
         // positive amount gets the income colour, negative does not
         const pos = within(detailEl).getByText("5 ₽");
         expect(pos).toHaveStyle({ color: "var(--m-income)" });
-        const neg = within(detailEl).getByText("-1 ₽");
-        expect(neg.getAttribute("style") || "").not.toContain("var(--m-income)");
-        // a zero amount is still >= 0, so it keeps the income colour (kills > 0)
-        const zero = within(detailEl).getByText("0 ₽");
-        expect(zero).toHaveStyle({ color: "var(--m-income)" });
+        // sub-ruble negative amounts are rendered and coloured as zero
+        const subRuble = within(detailEl).getAllByText("0 ₽");
+        expect(subRuble).toHaveLength(2);
+        expect(subRuble[0]).toHaveStyle({ color: "var(--m-income)" });
+        expect(subRuble[1]).toHaveStyle({ color: "var(--m-income)" });
 
         await events.click(within(detailEl).getByRole("button", { name: "Manage" }));
         expect(useStore.getState().tabs).toEqual([

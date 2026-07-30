@@ -781,7 +781,7 @@ describe("AnalyticsPage", () => {
             );
             expect(cellFor("Groceries", 1)).toHaveAttribute(
                 "title",
-                n("Groceries · Feb: -0 / 15 000 ₽ (0%) · budgeted 10 000 + carry-over"),
+                n("Groceries · Feb: 0 / 15 000 ₽ (0%) · budgeted 10 000 + carry-over"),
             );
         });
     });

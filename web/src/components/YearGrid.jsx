@@ -3,8 +3,7 @@ import { ActionIcon } from "@mantine/core";
 import RowMenu from "../ui/RowMenu.jsx";
 import { Plus, ChevronDown, EllipsisVertical } from "@gravity-ui/icons";
 import BudgetCell from "./BudgetCell.jsx";
-import { rub } from "../format.js";
-import { MONTHS_SHORT } from "../format.js";
+import { MONTHS_SHORT, normalizeKop, rub } from "../format.js";
 import GoalCategoryLabel from "./GoalCategoryLabel.jsx";
 
 const METRICS = {
@@ -76,13 +75,17 @@ export default function YearGrid({
         }
         if (metric === "activity") {
             return (
-                <span className={`yg-num ${outflows < 0 ? "yg-num_neg" : "yg-num_zero"}`}>
+                <span
+                    className={`yg-num ${normalizeKop(outflows) < 0 ? "yg-num_neg" : "yg-num_zero"}`}
+                >
                     {rub(outflows)}
                 </span>
             );
         }
         // balance
-        const cls = balance > 0 ? "yg-num_pos" : balance < 0 ? "yg-num_neg" : "yg-num_zero";
+        const normalized = normalizeKop(balance);
+        const cls =
+            normalized > 0 ? "yg-num_pos" : normalized < 0 ? "yg-num_neg" : "yg-num_zero";
         return <span className={`yg-num ${cls}`}>{rub(balance)}</span>;
     };
 
@@ -108,7 +111,13 @@ export default function YearGrid({
                         </th>
                         {MONTHS_SHORT.map((m, i) => {
                             const a = res.available[i];
-                            const cls = a > 0 ? "yg-num_pos" : a < 0 ? "yg-num_neg" : "yg-num_zero";
+                            const normalized = normalizeKop(a);
+                            const cls =
+                                normalized > 0
+                                    ? "yg-num_pos"
+                                    : normalized < 0
+                                      ? "yg-num_neg"
+                                      : "yg-num_zero";
                             // the pieces that sum to Available: carry-in + last month's overspend
                             // + this month's income − this month's budgeted
                             const prevName = i > 0 ? MONTHS_SHORT[i - 1] : "Dec";

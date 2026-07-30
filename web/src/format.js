@@ -17,14 +17,19 @@ export const MONTHS_SHORT = MONTHS.map((m) => m.slice(0, 3));
 const nf0 = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 });
 const nf2 = new Intl.NumberFormat("ru-RU", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
+/** Treat a sub-ruble amount as zero everywhere in the frontend. */
+export function normalizeKop(kop) {
+    return kop != null && Number.isFinite(kop) && Math.abs(kop) < 100 ? 0 : kop;
+}
+
 /** kopecks -> "12 345" (rounded rubles) */
 export function rub(kop) {
-    return nf0.format(Math.round(kop / 100));
+    return nf0.format(Math.round(normalizeKop(kop) / 100));
 }
 
 /** kopecks -> "12 345.67" */
 export function rubExact(kop) {
-    return nf2.format(kop / 100);
+    return nf2.format(normalizeKop(kop) / 100);
 }
 
 /** kopecks -> "12 345 ₽" */
@@ -34,7 +39,7 @@ export function money(kop) {
 
 /** compact: 1234500 kop -> "12.3k", for chart axes */
 export function moneyCompact(kop) {
-    const r = kop / 100;
+    const r = normalizeKop(kop) / 100;
     const abs = Math.abs(r);
     if (abs >= 1_000_000) return `${(r / 1_000_000).toFixed(1)}M`;
     if (abs >= 1_000) return `${(r / 1_000).toFixed(0)}k`;
@@ -53,8 +58,9 @@ export function groupAmount(input) {
 
 /** kopecks -> the same text a person would type into an amount field */
 export function amountInput(kop) {
-    if (kop == null || kop === 0) return "";
-    return groupAmount(String(kop / 100).replace(".", ","));
+    const normalized = normalizeKop(kop);
+    if (normalized == null || normalized === 0) return "";
+    return groupAmount(String(normalized / 100).replace(".", ","));
 }
 
 /** "12 345,50" or "12345.5" -> kopecks (integer), null if invalid */
@@ -63,7 +69,7 @@ export function parseRub(input) {
     if (!s) return 0;
     const v = Number(s);
     if (!Number.isFinite(v)) return null;
-    return Math.round(v * 100);
+    return normalizeKop(Math.round(v * 100));
 }
 
 export function fmtDate(iso) {
