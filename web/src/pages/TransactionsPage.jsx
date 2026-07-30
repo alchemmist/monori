@@ -156,11 +156,7 @@ export default function TransactionsPage() {
         const cur = t.categoryId != null ? catById.get(t.categoryId) : null;
         const uncategorized = { value: "", label: "Leave uncategorized" };
         const kind =
-            t.amount < 0 || t.refundOfId != null
-                ? "expense"
-                : t.amount > 0
-                  ? "income"
-                  : null;
+            t.amount < 0 || t.refundOfId != null ? "expense" : t.amount > 0 ? "income" : null;
         const matchingSections = kind
             ? catSections.filter((section) => section.kind === kind)
             : catSections;
@@ -198,26 +194,49 @@ export default function TransactionsPage() {
                     (refunded.get(transaction.refundOfId) ?? 0) + transaction.amount,
                 );
         }
-        const purchases = transactions.filter(
-            (transaction) => transaction.amount < 0 && transaction.transferId == null,
-        );
+        const purchasesByMerchant = new Map();
+        const purchasesByAmount = new Map();
+        for (const transaction of transactions) {
+            if (
+                transaction.amount >= 0 ||
+                transaction.transferId != null ||
+                transaction.splits?.length
+            )
+                continue;
+            const purchase = {
+                date: transaction.date,
+                remaining: -transaction.amount - (refunded.get(transaction.id) ?? 0),
+            };
+            const merchant = refundMerchantKey(transaction.description);
+            if (merchant) {
+                const matches = purchasesByMerchant.get(merchant) ?? [];
+                matches.push(purchase);
+                purchasesByMerchant.set(merchant, matches);
+            }
+            const exactMatches = purchasesByAmount.get(-transaction.amount) ?? [];
+            exactMatches.push(purchase);
+            purchasesByAmount.set(-transaction.amount, exactMatches);
+        }
+        const hasEligiblePurchase = (purchases, refund) =>
+            purchases?.some(
+                (purchase) => purchase.date <= refund.date && purchase.remaining >= refund.amount,
+            );
         return new Set(
             transactions
                 .filter(
                     (transaction) =>
                         transaction.amount > 0 &&
                         transaction.transferId == null &&
+                        !transaction.splits?.length &&
                         transaction.refundOfId == null &&
                         transaction.source !== "manual",
                 )
                 .filter((refund) => {
                     const merchant = refundMerchantKey(refund.description);
-                    return purchases.some(
-                        (purchase) =>
-                            purchase.date <= refund.date &&
-                            -purchase.amount - (refunded.get(purchase.id) ?? 0) >= refund.amount &&
-                            ((merchant && refundMerchantKey(purchase.description) === merchant) ||
-                                -purchase.amount === refund.amount),
+                    return (
+                        (merchant &&
+                            hasEligiblePurchase(purchasesByMerchant.get(merchant), refund)) ||
+                        hasEligiblePurchase(purchasesByAmount.get(refund.amount), refund)
                     );
                 })
                 .map((transaction) => transaction.id),
@@ -324,7 +343,9 @@ export default function TransactionsPage() {
         setYearFilter("all");
         setAcctFilter("all");
         setAmountRange(null);
-        setShowHidden(false);
+        setShowHidden(
+            !snapshot.transactions.some((transaction) => transaction.id === transactionId),
+        );
         setFocusTxId(transactionId);
     };
 
@@ -332,7 +353,8 @@ export default function TransactionsPage() {
         if (focusTxId == null) return;
         const index = items.findIndex((item) => item.tx?.id === focusTxId);
         if (index < 0 || !bodyRef.current) return;
-        const top = bodyRef.current.getBoundingClientRect().top + window.scrollY + index * rowH - 140;
+        const top =
+            bodyRef.current.getBoundingClientRect().top + window.scrollY + index * rowH - 140;
         window.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
         const timer = window.setTimeout(() => setFocusTxId(null), 1800);
         return () => window.clearTimeout(timer);
@@ -500,7 +522,9 @@ export default function TransactionsPage() {
                             style={{ marginLeft: 8 }}
                             onClick={() => jumpToTransaction(t.refundIds[0])}
                         >
-                            {t.refundIds.length === 1 ? "refunded ↗" : `${t.refundIds.length} refunds ↗`}
+                            {t.refundIds.length === 1
+                                ? "refunded ↗"
+                                : `${t.refundIds.length} refunds ↗`}
                         </Button>
                     )}
                     {t.hidden && <Tag style={{ marginLeft: 8 }}>hidden</Tag>}
@@ -632,7 +656,7 @@ export default function TransactionsPage() {
                                               },
                                           ]
                                         : []),
-                                    ...(t.amount > 0
+                                    ...(t.amount > 0 && !t.splits?.length
                                         ? [
                                               {
                                                   text: t.refundOfId

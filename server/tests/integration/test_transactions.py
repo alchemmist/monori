@@ -110,10 +110,25 @@ def test_partial_refunds_link_to_purchase_and_inherit_category(api, client):
 
 def test_refund_validation_suggestions_and_unlink(api, client):
     expenses = api.group("Expenses")
+    income = api.group("Income", "income")
     food = api.category("Food", expenses)
+    salary = api.category("Salary", income)
     purchase = api.tx("2026-01-01T10:00:00", -100_00, description="Shop", categoryId=food)
     other = api.tx("2026-01-02T10:00:00", -24_00, description="Another merchant")
     refund = api.tx("2026-01-03T10:00:00", 24_00, description="Shop refund")
+    split_purchase = api.tx("2026-01-02T11:00:00", -24_00, description="Split purchase")
+    assert (
+        client.put(
+            f"/api/transactions/{split_purchase}/splits",
+            json={
+                "parts": [
+                    {"categoryId": food, "amount": -12_00},
+                    {"categoryId": food, "amount": -12_00},
+                ]
+            },
+        ).status_code
+        == 200
+    )
 
     suggestions = client.get(f"/api/transactions/{refund}/refund-suggestions").json()["rows"]
     assert [row["id"] for row in suggestions] == [purchase, other]
@@ -127,9 +142,20 @@ def test_refund_validation_suggestions_and_unlink(api, client):
     )
     assert client.patch(f"/api/transactions/{refund}", json={"amount": -1}).status_code == 400
     assert client.patch(f"/api/transactions/{refund}", json={"amount": 100_01}).status_code == 400
+    assert (
+        client.patch(f"/api/transactions/{refund}", json={"categoryId": salary}).status_code == 400
+    )
+    assert (
+        client.post(
+            "/api/transactions/bulk",
+            json={"action": "categorize", "ids": [refund], "categoryId": salary},
+        ).status_code
+        == 400
+    )
 
     assert client.delete(f"/api/transactions/{refund}/refund").status_code == 200
     assert api.tx_by(refund)["refundOfId"] is None
+    assert api.tx_by(refund)["categoryId"] is None
     assert api.tx_by(purchase)["refundIds"] == []
 
 

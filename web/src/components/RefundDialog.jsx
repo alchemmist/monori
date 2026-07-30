@@ -19,7 +19,11 @@ export default function RefundDialog({ transaction, onClose }) {
         refundSuggestions(transaction.id)
             .then((suggestions) => live && setRows(suggestions))
             .catch((error) =>
-                notify({ title: "Failed to find purchases", content: String(error), theme: "danger" }),
+                notify({
+                    title: "Failed to find purchases",
+                    content: String(error),
+                    theme: "danger",
+                }),
             )
             .finally(() => live && setLoading(false));
         return () => {
@@ -69,7 +73,9 @@ export default function RefundDialog({ transaction, onClose }) {
                     disabled={loading}
                 />
                 {!loading && !options.length && (
-                    <Txt caption tone="secondary">No purchase with enough refundable amount found.</Txt>
+                    <Txt caption tone="secondary">
+                        No purchase with enough refundable amount found.
+                    </Txt>
                 )}
             </div>
         </AppDialog>

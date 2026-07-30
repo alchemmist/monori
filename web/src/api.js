@@ -70,8 +70,7 @@ export const api = {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ parts }),
         }).then(json),
-    refundSuggestions: (id) =>
-        apiFetch(`/api/transactions/${id}/refund-suggestions`).then(json),
+    refundSuggestions: (id) => apiFetch(`/api/transactions/${id}/refund-suggestions`).then(json),
     linkRefund: (id, originalId) =>
         apiFetch(`/api/transactions/${id}/refund`, {
             method: "PUT",

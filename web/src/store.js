@@ -43,6 +43,13 @@ const splitRevisions = new Map();
 
 const now = () => (typeof performance !== "undefined" ? performance.now() : 0);
 
+const refundMerchantKey = (value) =>
+    (value ?? "")
+        .toLowerCase()
+        .replace(/\b(refund|return|возврат)\b/g, " ")
+        .match(/[a-zа-яё]+/g)
+        ?.join(" ") ?? "";
+
 /** The public /demo page runs entirely on the bundled sample dataset: no auth,
  * no backend calls. Mutations still work but stay local (nothing is persisted). */
 export const isDemo = () => {
@@ -463,13 +470,27 @@ export const useStore = create((set, get) => ({
         const { snapshot } = get();
         if (!isDemo()) return (await api.refundSuggestions(txId)).rows;
         const refund = snapshot.transactions.find((transaction) => transaction.id === txId);
-        if (!refund) return [];
+        if (!refund || refund.amount <= 0 || refund.transferId != null || refund.splits?.length)
+            return [];
+        const refunded = new Map();
+        for (const transaction of snapshot.transactions) {
+            if (transaction.refundOfId != null && transaction.id !== txId)
+                refunded.set(
+                    transaction.refundOfId,
+                    (refunded.get(transaction.refundOfId) ?? 0) + transaction.amount,
+                );
+        }
+        const merchant = refundMerchantKey(refund.description);
         return snapshot.transactions
             .filter(
                 (transaction) =>
                     transaction.amount < 0 &&
+                    transaction.transferId == null &&
+                    !transaction.splits?.length &&
                     transaction.date <= refund.date &&
-                    -transaction.amount >= refund.amount,
+                    -transaction.amount - (refunded.get(transaction.id) ?? 0) >= refund.amount &&
+                    ((merchant && refundMerchantKey(transaction.description) === merchant) ||
+                        -transaction.amount === refund.amount),
             )
             .reverse()
             .slice(0, 20);
@@ -505,14 +526,14 @@ export const useStore = create((set, get) => ({
     },
 
     async unlinkRefund(txId) {
-        if (!isDemo()) await api.unlinkRefund(txId);
+        const result = isDemo() ? { categoryId: null } : await api.unlinkRefund(txId);
         const current = get().snapshot;
         set({
             snapshot: {
                 ...current,
                 transactions: current.transactions.map((transaction) =>
                     transaction.id === txId
-                        ? { ...transaction, refundOfId: null }
+                        ? { ...transaction, refundOfId: null, categoryId: result.categoryId }
                         : {
                               ...transaction,
                               refundIds: (transaction.refundIds ?? []).filter(
@@ -538,8 +559,7 @@ export const useStore = create((set, get) => ({
                     .filter((t) => t.id !== txId)
                     .map((transaction) => ({
                         ...transaction,
-                        refundOfId:
-                            transaction.refundOfId === txId ? null : transaction.refundOfId,
+                        refundOfId: transaction.refundOfId === txId ? null : transaction.refundOfId,
                         refundIds: (transaction.refundIds ?? []).filter(
                             (refundId) => refundId !== txId,
                         ),

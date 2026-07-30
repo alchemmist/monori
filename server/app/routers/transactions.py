@@ -59,6 +59,8 @@ class RefundBody(BaseModel):
 def _validate_category_type(transaction_sign, amount, is_refund=False):
     if amount < 0 and transaction_sign != -1:
         raise HTTPException(400, "expense transaction requires an expense category")
+    if is_refund and transaction_sign != -1:
+        raise HTTPException(400, "refund requires an expense category")
     if amount > 0 and transaction_sign != 1 and not is_refund:
         raise HTTPException(400, "income transaction requires an income category")
 
@@ -281,21 +283,31 @@ def refund_suggestions(refund_tx_id: int, user: Annotated[dict, Depends(current_
             raise HTTPException(404, "transaction not found")
         if refund["amount"] <= 0:
             raise HTTPException(400, "only a positive transaction can be a refund")
+        if refund["transfer_id"] is not None:
+            raise HTTPException(400, "transfer transactions cannot be refunds")
+        if c.execute(
+            "SELECT 1 FROM splits WHERE transaction_id=? LIMIT 1", (refund_tx_id,)
+        ).fetchone():
+            raise HTTPException(400, "split transactions cannot be refunds")
         key = _merchant_key(refund["description"])
         current_link = c.execute(
             "SELECT original_tx_id FROM refund_links WHERE refund_tx_id=?", (refund_tx_id,)
         ).fetchone()
         current_original_id = current_link["original_tx_id"] if current_link else None
         rows = c.execute(
-            "SELECT t.* FROM transactions t JOIN accounts a ON a.id=t.account_id"
+            "SELECT t.*, COALESCE((SELECT SUM(rt.amount) FROM refund_links rl"
+            " JOIN transactions rt ON rt.id=rl.refund_tx_id"
+            " WHERE rl.original_tx_id=t.id AND rl.refund_tx_id<>?), 0) AS used_refund"
+            " FROM transactions t JOIN accounts a ON a.id=t.account_id"
             " WHERE a.user_id=? AND t.amount<0 AND t.date<=?"
             " AND t.transfer_id IS NULL AND t.id<>?"
+            " AND NOT EXISTS (SELECT 1 FROM splits s WHERE s.transaction_id=t.id)"
             " ORDER BY t.date DESC, t.id DESC LIMIT 250",
-            (uid, refund["date"], refund_tx_id),
+            (refund_tx_id, uid, refund["date"], refund_tx_id),
         ).fetchall()
         candidates = []
         for row in rows:
-            used = _refund_total(c, row["id"], refund_tx_id)
+            used = row["used_refund"]
             remaining = -row["amount"] - used
             if remaining < refund["amount"]:
                 continue
@@ -363,15 +375,17 @@ def unlink_refund(refund_tx_id: int, user: Annotated[dict, Depends(current_user)
     uid = user["id"]
     c = conn()
     try:
+        begin_write(c)
         if not _owned_transaction(c, refund_tx_id, uid):
             raise HTTPException(404, "transaction not found")
         deleted = c.execute(
             "DELETE FROM refund_links WHERE refund_tx_id=?", (refund_tx_id,)
         ).rowcount
-        c.commit()
         if not deleted:
             raise HTTPException(404, "refund link not found")
-        return {"ok": True}
+        c.execute("UPDATE transactions SET category_id=NULL WHERE id=?", (refund_tx_id,))
+        c.commit()
+        return {"ok": True, "categoryId": None}
     finally:
         c.close()
 
