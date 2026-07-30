@@ -216,13 +216,18 @@ describe("TransactionsPage", () => {
         });
         const { user } = renderUI(<TransactionsPage />);
         const row = screen.getByText("tx 2").closest("tr");
+        const categorySelect = row.querySelectorAll("button.gsel")[1];
 
-        await user.click(row.querySelectorAll("button.gsel")[1]);
+        await user.click(categorySelect);
 
-        expect(screen.getByRole("option", { name: "Food", hidden: true })).toBeInTheDocument();
+        const food = screen.getByRole("option", { name: "Food", hidden: true });
+        const dropdown = food.closest(".gsel__drop");
+        expect(food).toBeInTheDocument();
         expect(
-            screen.queryByRole("option", { name: "Salary", hidden: true }),
+            within(dropdown).queryByRole("option", { name: "Salary", hidden: true }),
         ).not.toBeInTheDocument();
+        await user.click(categorySelect);
+        await waitFor(() => expect(food).not.toBeInTheDocument());
     });
 
     it("offers import and transfer controls and disables transfer with one active account", () => {
@@ -466,9 +471,11 @@ describe("TransactionsPage", () => {
 
         await user.click(selects[1]);
 
-        expect(screen.getByRole("option", { name: "Salary", hidden: true })).toBeInTheDocument();
+        const salary = screen.getByRole("option", { name: "Salary", hidden: true });
+        const dropdown = salary.closest(".gsel__drop");
+        expect(salary).toBeInTheDocument();
         expect(
-            screen.queryByRole("option", { name: "Food", hidden: true }),
+            within(dropdown).queryByRole("option", { name: "Food", hidden: true }),
         ).not.toBeInTheDocument();
     });
 

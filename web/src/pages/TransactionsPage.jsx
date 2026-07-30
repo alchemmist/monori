@@ -153,7 +153,7 @@ export default function TransactionsPage() {
             t.amount < 0 || t.refundOfId != null
                 ? new Set(["expense"])
                 : t.amount > 0
-                  ? new Set(["income", "expense"])
+                  ? new Set(["income"])
                   : null;
         const matchingSections = allowedKinds
             ? catSections.filter((section) => allowedKinds.has(section.kind))
