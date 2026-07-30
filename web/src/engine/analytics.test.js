@@ -874,7 +874,7 @@ describe("charts vs budget table parity", () => {
                     date: "2024-01-02",
                     amount: 200_00,
                     categoryId: 20,
-                    description: "SHOP 456",
+                    description: "SHOP 456 REFUND",
                 },
                 {
                     id: 3,

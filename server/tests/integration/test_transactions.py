@@ -157,7 +157,7 @@ def test_refund_validation_suggestions_and_unlink(api, client):
 
     assert client.delete(f"/api/transactions/{refund}/refund").status_code == 200
     assert api.tx_by(refund)["refundOfId"] is None
-    assert api.tx_by(refund)["categoryId"] is None
+    assert api.tx_by(refund)["categoryId"] == food
     assert api.tx_by(purchase)["refundIds"] == []
 
 

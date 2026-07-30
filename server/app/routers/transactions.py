@@ -101,6 +101,7 @@ def _refund_total(c, original_id, excluding=None):
 
 
 def _merchant_key(value):
+    # Keep this server-side twin in sync with web/src/engine/refunds.js.
     value = re.sub(r"\b(refund|return|возврат)\b", " ", value.lower())
     return " ".join(re.findall(r"[a-zа-яё]+", value))
 
@@ -374,16 +375,16 @@ def unlink_refund(refund_tx_id: int, user: Annotated[dict, Depends(current_user)
     c = conn()
     try:
         begin_write(c)
-        if not _owned_transaction(c, refund_tx_id, uid):
+        refund = _owned_transaction(c, refund_tx_id, uid)
+        if not refund:
             raise HTTPException(404, "transaction not found")
         deleted = c.execute(
             "DELETE FROM refund_links WHERE refund_tx_id=?", (refund_tx_id,)
         ).rowcount
         if not deleted:
             raise HTTPException(404, "refund link not found")
-        c.execute("UPDATE transactions SET category_id=NULL WHERE id=?", (refund_tx_id,))
         c.commit()
-        return {"ok": True, "categoryId": None}
+        return {"ok": True, "categoryId": refund["category_id"]}
     finally:
         c.close()
 

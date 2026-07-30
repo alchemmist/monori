@@ -3,6 +3,7 @@ import { api } from "./api.js";
 import { demoSnapshot } from "./demo/demoData.js";
 import { mergeCategories } from "./mergeCategories.js";
 import { compareTx, mergeTransactions } from "./mergeTransactions.js";
+import { refundMerchantKey } from "./engine/refunds.js";
 import { loadTabs, saveTabs } from "./ui/tabPersist.js";
 
 /** Rows per background chunk once the light snapshot has painted. */
@@ -42,13 +43,6 @@ let nextSplitRevision = 0;
 const splitRevisions = new Map();
 
 const now = () => (typeof performance !== "undefined" ? performance.now() : 0);
-
-const refundMerchantKey = (value) =>
-    (value ?? "")
-        .toLowerCase()
-        .replace(/\b(refund|return|возврат)\b/g, " ")
-        .match(/[a-zа-яё]+/g)
-        ?.join(" ") ?? "";
 
 /** The public /demo page runs entirely on the bundled sample dataset: no auth,
  * no backend calls. Mutations still work but stay local (nothing is persisted). */
@@ -526,7 +520,10 @@ export const useStore = create((set, get) => ({
     },
 
     async unlinkRefund(txId) {
-        const result = isDemo() ? { categoryId: null } : await api.unlinkRefund(txId);
+        const refund = get().snapshot.transactions.find((transaction) => transaction.id === txId);
+        const result = isDemo()
+            ? { categoryId: refund?.categoryId ?? null }
+            : await api.unlinkRefund(txId);
         const current = get().snapshot;
         set({
             snapshot: {

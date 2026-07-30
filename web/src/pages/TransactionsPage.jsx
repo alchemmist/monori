@@ -28,19 +28,13 @@ import TransferSuggestions from "../components/TransferSuggestions.jsx";
 import RefundDialog from "../components/RefundDialog.jsx";
 import { mergeTransferRows } from "../engine/transfers.js";
 import { splitPartTransaction } from "../engine/splits.js";
+import { refundMerchantKey } from "../engine/refunds.js";
 import "./budget.css";
 import "./transfers.css";
 
 // td is a fixed 38px + a 1px bottom border; measured for real on mount so zoom
 // or font metrics can't let the windowing math drift over thousands of rows
 const ROW_H_FALLBACK = 39;
-
-const refundMerchantKey = (value) =>
-    (value ?? "")
-        .toLowerCase()
-        .replace(/\b(refund|return|возврат)\b/g, " ")
-        .match(/[a-zа-яё]+/g)
-        ?.join(" ") ?? "";
 
 export default function TransactionsPage() {
     const {
@@ -221,10 +215,29 @@ export default function TransactionsPage() {
             exactMatches.push(purchase);
             purchasesByAmount.set(-transaction.amount, exactMatches);
         }
-        const hasEligiblePurchase = (purchases, refund) =>
-            purchases?.some(
-                (purchase) => purchase.date <= refund.date && purchase.remaining >= refund.amount,
-            );
+        const preparePurchases = (purchases) => {
+            purchases.sort((a, b) => a.date.localeCompare(b.date));
+            let maxRemaining = 0;
+            return purchases.map((purchase) => {
+                maxRemaining = Math.max(maxRemaining, purchase.remaining);
+                return { date: purchase.date, maxRemaining };
+            });
+        };
+        for (const [merchant, purchases] of purchasesByMerchant)
+            purchasesByMerchant.set(merchant, preparePurchases(purchases));
+        for (const [amount, purchases] of purchasesByAmount)
+            purchasesByAmount.set(amount, preparePurchases(purchases));
+        const hasEligiblePurchase = (purchases, refund) => {
+            if (!purchases?.length) return false;
+            let low = 0;
+            let high = purchases.length;
+            while (low < high) {
+                const middle = (low + high) >> 1;
+                if (purchases[middle].date <= refund.date) low = middle + 1;
+                else high = middle;
+            }
+            return low > 0 && purchases[low - 1].maxRemaining >= refund.amount;
+        };
         return new Set(
             transactions
                 .filter(

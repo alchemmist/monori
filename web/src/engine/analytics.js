@@ -1,5 +1,6 @@
 import { isTransfer } from "./transfers.js";
 import { effectiveTransactions } from "./splits.js";
+import { refundMerchantKey } from "./refunds.js";
 
 /**
  * Analytics helpers — pure functions over the snapshot, no I/O.
@@ -200,7 +201,7 @@ export function topMerchants(snapshot, year, limit = 10) {
         if (isTransfer(t)) continue;
         const cat = catById.get(t.categoryId);
         if (!cat || incomeIds.has(cat.groupId)) continue;
-        const key = merchantKey(t.description) || "(no description)";
+        const key = merchantKey(refundMerchantKey(t.description)) || "(no description)";
         let e = sums.get(key);
         if (!e) sums.set(key, (e = { fullName: t.description || key, total: 0, count: 0 }));
         e.total += -t.amount;
