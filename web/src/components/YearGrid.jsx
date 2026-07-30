@@ -84,8 +84,7 @@ export default function YearGrid({
         }
         // balance
         const normalized = normalizeKop(balance);
-        const cls =
-            normalized > 0 ? "yg-num_pos" : normalized < 0 ? "yg-num_neg" : "yg-num_zero";
+        const cls = normalized > 0 ? "yg-num_pos" : normalized < 0 ? "yg-num_neg" : "yg-num_zero";
         return <span className={`yg-num ${cls}`}>{rub(balance)}</span>;
     };
 

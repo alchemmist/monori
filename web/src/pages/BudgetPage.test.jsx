@@ -163,10 +163,7 @@ describe("BudgetPage", () => {
             const res = result();
             res.available[0] = 10_001;
             const { user } = render(res);
-            const cell = screen
-                .getByText("Groceries")
-                .closest("tr")
-                .querySelector(".budget-cell");
+            const cell = screen.getByText("Groceries").closest("tr").querySelector(".budget-cell");
 
             await user.click(cell);
             const input = screen.getByRole("textbox");
