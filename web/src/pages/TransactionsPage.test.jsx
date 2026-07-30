@@ -204,15 +204,25 @@ describe("TransactionsPage", () => {
                 ...categories,
                 { id: 4, groupId: 4, name: "Salary", archived: false, sort: 1 },
             ],
-            transactions: [tx(1, { amount: 2400, categoryId: null, accountId: 1 })],
+            transactions: [
+                tx(1, { amount: -10000, refundIds: [2] }),
+                tx(2, {
+                    amount: 2400,
+                    categoryId: 2,
+                    accountId: 1,
+                    refundOfId: 1,
+                }),
+            ],
         });
         const { user } = renderUI(<TransactionsPage />);
-        const row = screen.getByText("tx 1").closest("tr");
+        const row = screen.getByText("tx 2").closest("tr");
 
         await user.click(row.querySelectorAll("button.gsel")[1]);
 
         expect(screen.getByRole("option", { name: "Food", hidden: true })).toBeInTheDocument();
-        expect(screen.getByRole("option", { name: "Salary", hidden: true })).toBeInTheDocument();
+        expect(
+            screen.queryByRole("option", { name: "Salary", hidden: true }),
+        ).not.toBeInTheDocument();
     });
 
     it("offers import and transfer controls and disables transfer with one active account", () => {

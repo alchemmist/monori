@@ -102,7 +102,7 @@ def _refund_total(c, original_id, excluding=None):
 
 def _merchant_key(value):
     # Keep this server-side twin in sync with web/src/engine/refunds.js.
-    value = re.sub(r"\b(refund|return|возврат)\b", " ", value.lower())
+    value = re.sub(r"(?<![a-zа-яё])(refund|return|возврат)(?![a-zа-яё])", " ", value.lower())
     return " ".join(re.findall(r"[a-zа-яё]+", value))
 
 

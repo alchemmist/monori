@@ -115,9 +115,9 @@ def test_refund_validation_suggestions_and_unlink(api, client):
     income = api.group("Income", "income")
     food = api.category("Food", expenses)
     salary = api.category("Salary", income)
-    purchase = api.tx("2026-01-01T10:00:00", -100_00, description="Shop", categoryId=food)
+    purchase = api.tx("2026-01-01T10:00:00", -100_00, description="Shop 456", categoryId=food)
     other = api.tx("2026-01-02T10:00:00", -24_00, description="Another merchant")
-    refund = api.tx("2026-01-03T10:00:00", 24_00, description="Shop refund")
+    refund = api.tx("2026-01-03T10:00:00", 24_00, description="Shop RETURN100")
     split_purchase = api.tx("2026-01-02T11:00:00", -24_00, description="Split purchase")
     assert (
         client.put(
