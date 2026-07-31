@@ -16,7 +16,7 @@ from app.db import connect
 MIG_OUT = pathlib.Path(__file__).resolve().parent.parent / "migration" / "out"
 
 
-def main(db_path=None):
+def main(db_path: str | None = None) -> None:
     ref = json.loads((MIG_OUT / "reference.json").read_text())
     conn = connect(db_path)
     cur = conn.cursor()
