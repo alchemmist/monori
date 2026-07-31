@@ -110,6 +110,32 @@ CREATE INDEX IF NOT EXISTS idx_tx_hash ON transactions (hash);
 CREATE INDEX IF NOT EXISTS idx_tx_category ON transactions (category_id);
 CREATE INDEX IF NOT EXISTS idx_tx_account ON transactions (account_id);
 
+CREATE TABLE IF NOT EXISTS recurring_transactions (
+  id INTEGER PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  account_id INTEGER NOT NULL REFERENCES accounts (id) ON DELETE CASCADE,
+  category_id INTEGER REFERENCES categories (id) ON DELETE SET NULL,
+  payee TEXT NOT NULL DEFAULT '',
+  description TEXT NOT NULL DEFAULT '',
+  amount INTEGER NOT NULL,
+  frequency TEXT NOT NULL CHECK (frequency IN ('daily', 'weekly', 'monthly', 'yearly')),
+  interval INTEGER NOT NULL DEFAULT 1 CHECK (interval > 0),
+  start_date TEXT NOT NULL,
+  next_date TEXT NOT NULL,
+  end_date TEXT,
+  auto_create INTEGER NOT NULL DEFAULT 1,
+  active INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_recurring_user ON recurring_transactions (user_id);
+
+CREATE TABLE IF NOT EXISTS recurring_occurrences (
+  recurring_id INTEGER NOT NULL REFERENCES recurring_transactions (id) ON DELETE CASCADE,
+  due_date TEXT NOT NULL,
+  transaction_id INTEGER REFERENCES transactions (id) ON DELETE SET NULL,
+  PRIMARY KEY (recurring_id, due_date)
+);
+
 CREATE TABLE IF NOT EXISTS splits (
   id INTEGER PRIMARY KEY,
   transaction_id INTEGER NOT NULL REFERENCES transactions (id) ON DELETE CASCADE,

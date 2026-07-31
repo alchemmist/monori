@@ -107,6 +107,28 @@ erDiagram
         INTEGER batch_id FK "-> import_batches.id"
         INTEGER hidden "required"
     }
+    recurring_transactions {
+        INTEGER id PK
+        INTEGER user_id FK "-> users.id, required"
+        INTEGER account_id FK "-> accounts.id, required"
+        INTEGER category_id FK "-> categories.id"
+        TEXT payee "required"
+        TEXT description "required"
+        INTEGER amount "required"
+        TEXT frequency "required"
+        INTEGER interval "required"
+        TEXT start_date "required"
+        TEXT next_date "required"
+        TEXT end_date
+        INTEGER auto_create "required"
+        INTEGER active "required"
+        TEXT created_at "required"
+    }
+    recurring_occurrences {
+        INTEGER recurring_id PK, FK "-> recurring_transactions.id"
+        TEXT due_date PK
+        INTEGER transaction_id FK "-> transactions.id"
+    }
     splits {
         INTEGER id PK
         INTEGER transaction_id FK "-> transactions.id, required"
@@ -171,6 +193,11 @@ erDiagram
     import_batches |o--o{ transactions : "batch_id"
     accounts ||--o{ transactions : "account_id"
     categories |o--o{ transactions : "category_id"
+    categories |o--o{ recurring_transactions : "category_id"
+    accounts ||--o{ recurring_transactions : "account_id"
+    users ||--o{ recurring_transactions : "user_id"
+    transactions |o--o{ recurring_occurrences : "transaction_id"
+    recurring_transactions ||--o{ recurring_occurrences : "recurring_id"
     categories ||--o{ splits : "category_id"
     transactions ||--o{ splits : "transaction_id"
     transactions ||--o{ transfers : "in_tx_id"
