@@ -67,7 +67,7 @@ schema-diagram:
 fmt: schema-diagram
 	$(WEBBIN)/prettier --write .
 	cd server && uv run ruff format . && (uv run ruff check . --fix >/dev/null 2>&1 || true)
-	$(SQLFLUFF) fix -f server/schema.sql
+	$(SQLFLUFF) fix server/schema.sql
 	$(WEBBIN)/markdownlint-cli2 --fix
 	@files=$$(git ls-files '*.sh'); [ -z "$$files" ] || shfmt -w $$files
 
