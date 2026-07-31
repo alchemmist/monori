@@ -514,34 +514,34 @@ def _live_year_wb():
 def test_live_year_reconciles_rows_to_cached_totals():
     parsed = parse_workbook(_save(_live_year_wb()))
 
-    assert parsed["groups"] == [
-        {"name": "Daily", "sort": 0, "kind": "expense"},
-        {"name": "Inflow", "sort": 1, "kind": "income"},
+    assert [(group.name, group.sort, group.kind) for group in parsed.groups] == [
+        ("Daily", 0, "expense"),
+        ("Inflow", 1, "income"),
     ]
-    assert [c["name"] for c in parsed["categories"]] == ["Groceries", "Salary", "Income"]
+    assert [category.name for category in parsed.categories] == ["Groceries", "Salary", "Income"]
 
-    budgets = {(b["category"], b["year"], b["month"]): b["amount"] for b in parsed["budgets"]}
+    budgets = {(budget.category, budget.year, budget.month): budget.amount for budget in parsed.budgets}
     assert budgets == {("Groceries", 2025, 1): 100000, ("Groceries", 2025, 2): 100000}
 
     # The grid is authoritative alongside the rows. Its January income and
     # Groceries balance each need one explicit correction transaction.
-    synth = [t for t in parsed["transactions"] if t["date"].endswith("T12:00:00")]
-    assert len(parsed["transactions"]) == 6
-    assert {(t["description"], t["amount"]) for t in synth} == {
+    synth = [tx for tx in parsed.transactions if tx.date.endswith("T12:00:00")]
+    assert len(parsed.transactions) == 6
+    assert {(tx.description, tx.amount) for tx in synth} == {
         ("Salary", 100000),
         ("Groceries", 20000),
     }
 
     assert any(
         w == "reconciliation: 2 adjustment transactions align live months with the sheet"
-        for w in parsed["warnings"]
+        for w in parsed.warnings
     )
     assert any(
         w.startswith("verify: the sheet's own Available differs") and "100.00 (2025-01)" in w
-        for w in parsed["warnings"]
+        for w in parsed.warnings
     )
-    assert "2019: unrecognized year sheet layout, ignored" in parsed["warnings"]
-    assert parsed["errors"] == []
+    assert "2019: unrecognized year sheet layout, ignored" in parsed.warnings
+    assert parsed.errors == []
 
 
 def test_archive_history_and_seam_carry():
@@ -570,14 +570,14 @@ def test_archive_history_and_seam_carry():
     )
 
     parsed = parse_workbook(_save(wb))
-    synth = {(t["description"], t["date"]): t for t in parsed["transactions"]}
-    assert synth[("Income", "2024-01-31T12:00:00")]["amount"] == 10000
-    assert synth[("Groceries", "2024-01-31T12:00:00")]["amount"] == 50000
-    assert synth[("Groceries", "2024-12-31T12:00:00")]["amount"] == 30000
-    assert len(parsed["transactions"]) == 3
+    synth = {(tx.description, tx.date): tx for tx in parsed.transactions}
+    assert synth[("Income", "2024-01-31T12:00:00")].amount == 10000
+    assert synth[("Groceries", "2024-01-31T12:00:00")].amount == 50000
+    assert synth[("Groceries", "2024-12-31T12:00:00")].amount == 30000
+    assert len(parsed.transactions) == 3
 
-    assert any(w.startswith("history: 2 transactions stand in for") for w in parsed["warnings"])
-    assert "seam: 1 carry corrections at 2024-12" in parsed["warnings"]
+    assert any(w.startswith("history: 2 transactions stand in for") for w in parsed.warnings)
+    assert "seam: 1 carry corrections at 2024-12" in parsed.warnings
 
 
 def test_outflow_fallback_when_balance_cell_missing():
@@ -593,12 +593,12 @@ def test_outflow_fallback_when_balance_cell_missing():
     parsed = parse_workbook(_save(wb))
     # (description, date) keys are unique here — pin cardinality so a collision
     # in a future change can't silently drop a row from the dict
-    assert len(parsed["transactions"]) == 2
-    synth = {(t["description"], t["date"]): t for t in parsed["transactions"]}
+    assert len(parsed.transactions) == 2
+    synth = {(tx.description, tx.date): tx for tx in parsed.transactions}
     assert len(synth) == 2
     # Jan aligns balance to 100.00; Feb has no balance cell, so the outflow drives
     # the target: projected(100) - have(0) + outflow(200) = 300 -> +200.00 delta.
-    assert synth[("Groceries", "2025-02-28T12:00:00")]["amount"] == 20000
+    assert synth[("Groceries", "2025-02-28T12:00:00")].amount == 20000
 
 
 def test_dead_category_and_available_seed_at_seam():
@@ -629,13 +629,13 @@ def test_dead_category_and_available_seed_at_seam():
         seed=200,
     )
     parsed = parse_workbook(_save(wb))
-    synth = {(t["description"], t["date"]): t for t in parsed["transactions"]}
-    assert len(synth) == len(parsed["transactions"])  # keys unique, nothing overwritten
-    assert synth[("OldPhone", "2024-01-31T12:00:00")]["amount"] == 30000
-    assert synth[("OldPhone", "2024-12-31T12:00:00")]["amount"] == -30000  # dead category zeroed
-    assert synth[("Income", "2024-12-31T12:00:00")]["amount"] == 20000  # available seed
-    assert any(w.startswith("history: 2 transactions stand in for") for w in parsed["warnings"])
-    assert "seam: 3 carry corrections at 2024-12" in parsed["warnings"]
+    synth = {(tx.description, tx.date): tx for tx in parsed.transactions}
+    assert len(synth) == len(parsed.transactions)  # keys unique, nothing overwritten
+    assert synth[("OldPhone", "2024-01-31T12:00:00")].amount == 30000
+    assert synth[("OldPhone", "2024-12-31T12:00:00")].amount == -30000  # dead category zeroed
+    assert synth[("Income", "2024-12-31T12:00:00")].amount == 20000  # available seed
+    assert any(w.startswith("history: 2 transactions stand in for") for w in parsed.warnings)
+    assert "seam: 3 carry corrections at 2024-12" in parsed.warnings
 
 
 def test_available_seed_excludes_seam_overspend():
@@ -671,10 +671,10 @@ def test_available_seed_excludes_seam_overspend():
         header_row=8,
     )
     parsed = parse_workbook(_save(wb))
-    synth = {(t["description"], t["date"]): t for t in parsed["transactions"]}
-    assert synth[("Groceries", "2024-12-31T12:00:00")]["amount"] == -60000
-    assert synth[("Income", "2024-12-31T12:00:00")]["amount"] == 10000  # available seed
-    assert not any(w.startswith("verify:") for w in parsed["warnings"])
+    synth = {(tx.description, tx.date): tx for tx in parsed.transactions}
+    assert synth[("Groceries", "2024-12-31T12:00:00")].amount == -60000
+    assert synth[("Income", "2024-12-31T12:00:00")].amount == 10000  # available seed
+    assert not any(w.startswith("verify:") for w in parsed.warnings)
 
 
 def test_russian_header_labels_are_read_like_the_english_ones():
@@ -698,11 +698,11 @@ def test_russian_header_labels_are_read_like_the_english_ones():
         header_row=8,
     )
     parsed = parse_workbook(_save(wb))
-    opening = next(t for t in parsed["transactions"] if t["description"] == "Opening balance")
-    assert opening["amount"] == 190000  # "Не заложено"
-    assert not any(w.startswith("verify:") for w in parsed["warnings"])  # "Доступный"
-    income = next(t for t in parsed["transactions"] if t["description"] == "Income")
-    assert income["amount"] == 500000  # "Поступления в"
+    opening = next(tx for tx in parsed.transactions if tx.description == "Opening balance")
+    assert opening.amount == 190000  # "Не заложено"
+    assert not any(w.startswith("verify:") for w in parsed.warnings)  # "Доступный"
+    income = next(tx for tx in parsed.transactions if tx.description == "Income")
+    assert income.amount == 500000  # "Поступления в"
 
 
 def test_available_label_is_found_wherever_the_summary_block_puts_it():
@@ -719,7 +719,7 @@ def test_available_label_is_found_wherever_the_summary_block_puts_it():
         header_row=8,
     )
     parsed = parse_workbook(_save(wb))
-    assert any(w.startswith("verify:") for w in parsed["warnings"])
+    assert any(w.startswith("verify:") for w in parsed.warnings)
 
 
 def test_summary_labels_below_the_header_block_are_not_read():
@@ -741,7 +741,7 @@ def test_summary_labels_below_the_header_block_are_not_read():
     ws.cell(row=7, column=4, value="Income for month")
     ws.cell(row=7, column=3, value=777)
     parsed = parse_workbook(_save(wb))
-    assert not any(t["monori_category"] == "Income" for t in parsed["transactions"])
+    assert not any(tx.monori_category == "Income" for tx in parsed.transactions)
 
 
 def test_a_sheet_running_to_december_keeps_its_last_month():
@@ -781,10 +781,10 @@ def test_history_and_adjustment_split_follows_the_rows_not_the_sheet_name():
     parsed = parse_workbook(_save(wb))
     # 2024 has no rows at all — its correction stands in for the whole month;
     # 2025-01 does, so its correction only tops the month up
-    assert any(w.startswith("history: 1 transactions stand in for") for w in parsed["warnings"])
+    assert any(w.startswith("history: 1 transactions stand in for") for w in parsed.warnings)
     assert (
         "reconciliation: 1 adjustment transactions align live months with the sheet"
-        in (parsed["warnings"])
+        in parsed.warnings
     )
 
 
@@ -809,11 +809,11 @@ def test_opening_balance_is_taken_from_the_first_month_with_rows():
         header_row=8,
     )
     parsed = parse_workbook(_save(wb))
-    synth = {(t["description"], t["date"]): t for t in parsed["transactions"]}
-    assert synth[("Opening balance", "2025-06-30T12:00:00")]["amount"] == 190000
-    assert any(w.startswith("opening balance: 1,900.00") for w in parsed["warnings"])
+    synth = {(tx.description, tx.date): tx for tx in parsed.transactions}
+    assert synth[("Opening balance", "2025-06-30T12:00:00")].amount == 190000
+    assert any(w.startswith("opening balance: 1,900.00") for w in parsed.warnings)
     # seeded once and the sheet's own Available then agrees month for month
-    assert not any(w.startswith("verify:") for w in parsed["warnings"])
+    assert not any(w.startswith("verify:") for w in parsed.warnings)
 
 
 def test_opening_balance_predating_the_sheet_is_dated_before_it():
@@ -835,10 +835,10 @@ def test_opening_balance_predating_the_sheet_is_dated_before_it():
         header_row=8,
     )
     parsed = parse_workbook(_save(wb))
-    opening = next(t for t in parsed["transactions"] if t["description"] == "Opening balance")
-    assert opening["date"] == "2024-12-31T12:00:00"
-    assert opening["amount"] == 190000
-    assert not any(w.startswith("verify:") for w in parsed["warnings"])
+    opening = next(tx for tx in parsed.transactions if tx.description == "Opening balance")
+    assert opening.date == "2024-12-31T12:00:00"
+    assert opening.amount == 190000
+    assert not any(w.startswith("verify:") for w in parsed.warnings)
 
 
 def test_activity_span_reads_two_digit_months_whole():
@@ -860,9 +860,9 @@ def test_activity_span_reads_two_digit_months_whole():
         header_row=8,
     )
     parsed = parse_workbook(_save(wb))
-    opening = next(t for t in parsed["transactions"] if t["description"] == "Opening balance")
-    assert opening["date"] == "2025-10-31T12:00:00"
-    assert opening["amount"] == 190000
+    opening = next(tx for tx in parsed.transactions if tx.description == "Opening balance")
+    assert opening.date == "2025-10-31T12:00:00"
+    assert opening.amount == 190000
 
 
 def test_opening_balance_left_alone_when_the_sheet_starts_from_nothing():
@@ -879,8 +879,8 @@ def test_opening_balance_left_alone_when_the_sheet_starts_from_nothing():
         header_row=8,
     )
     parsed = parse_workbook(_save(wb))
-    assert not any(t["description"] == "Opening balance" for t in parsed["transactions"])
-    assert not any(w.startswith("opening balance:") for w in parsed["warnings"])
+    assert not any(tx.description == "Opening balance" for tx in parsed.transactions)
+    assert not any(w.startswith("opening balance:") for w in parsed.warnings)
 
 
 def test_available_ignores_budget_cells_on_income_categories():
@@ -906,7 +906,7 @@ def test_available_ignores_budget_cells_on_income_categories():
         header_row=8,
     )
     parsed = parse_workbook(_save(wb))
-    assert not any(w.startswith("verify:") for w in parsed["warnings"])
+    assert not any(w.startswith("verify:") for w in parsed.warnings)
 
 
 def test_missing_transactions_sheet_raises():
@@ -932,7 +932,7 @@ def test_trailing_zero_cached_months_get_no_synthetic_rows():
         header_row=8,
     )
     parsed = parse_workbook(_save(wb))
-    assert all(t["date"] < "2025-02" for t in parsed["transactions"])
+    assert all(tx.date < "2025-02" for tx in parsed.transactions)
 
 
 def test_month_with_blank_category_gets_an_explicit_grid_correction():
@@ -952,7 +952,7 @@ def test_month_with_blank_category_gets_an_explicit_grid_correction():
         header_row=8,
     )
     parsed = parse_workbook(_save(wb))
-    assert [(t["date"], t["amount"], t["monori_category"]) for t in parsed["transactions"]] == [
+    assert [(tx.date, tx.amount, tx.monori_category) for tx in parsed.transactions] == [
         ("2025-01-26T00:00:00", -45000, ""),
         ("2025-01-31T12:00:00", -45000, "LifeLink"),
     ]
@@ -981,8 +981,8 @@ def test_uncategorized_trailing_tx_does_not_extend_reconciliation():
         header_row=8,
     )
     parsed = parse_workbook(_save(wb))
-    synth = [t for t in parsed["transactions"] if not t["marker"]]
-    assert all(t["date"] < "2025-02" for t in synth)
+    synth = [tx for tx in parsed.transactions if not tx.marker]
+    assert all(tx.date < "2025-02" for tx in synth)
 
 
 def test_prepared_next_year_sheet_adds_no_future_rows():
@@ -995,7 +995,7 @@ def test_prepared_next_year_sheet_adds_no_future_rows():
         header_row=8,
     )
     parsed = parse_workbook(_save(wb))
-    assert max(t["date"] for t in parsed["transactions"]) < "2025-03"
+    assert max(tx.date for tx in parsed.transactions) < "2025-03"
 
 
 def test_parse_template_rejects_garbage_bytes():
@@ -1053,8 +1053,8 @@ def test_future_budgets_do_not_extend_reconciliation():
         header_row=8,
     )
     parsed = parse_workbook(_save(wb))
-    assert all(t["date"] < "2025-02" for t in parsed["transactions"])
-    assert {(b["year"], b["month"]) for b in parsed["budgets"]} == {(2025, 1), (2025, 2)}
+    assert all(tx.date < "2025-02" for tx in parsed.transactions)
+    assert {(budget.year, budget.month) for budget in parsed.budgets} == {(2025, 1), (2025, 2)}
 
 
 def test_parse_keywords_falls_back_without_pipes():

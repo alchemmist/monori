@@ -18,8 +18,12 @@ SAMPLE_TSV = (
 
 
 def test_parse_date() -> None:
-    assert parse_date("03.07.2026 19:48:24").isoformat() == "2026-07-03T19:48:24"
-    assert parse_date("03.07.2026").isoformat() == "2026-07-03T00:00:00"
+    with_time = parse_date("03.07.2026 19:48:24")
+    without_time = parse_date("03.07.2026")
+    assert with_time is not None
+    assert without_time is not None
+    assert with_time.isoformat() == "2026-07-03T19:48:24"
+    assert without_time.isoformat() == "2026-07-03T00:00:00"
     assert parse_date("2026-07-03") is None
 
 
@@ -86,7 +90,7 @@ def test_parse_statement_row_fields() -> None:
     # the masked card number rides along so the client can route by its tail
     assert rows[0]["card"] == "*2947"
     # hashes are account-scoped and derived at ingest time, not during parsing
-    assert "hash" not in rows[0]
+    assert rows[0].hash == ""
 
 
 def test_tx_hash_is_scoped_to_the_account() -> None:
@@ -124,7 +128,10 @@ def test_parse_statement_accepts_exactly_twelve_columns() -> None:
 def test_parse_statement_too_few_columns_reports_count_and_line() -> None:
     rows, errors = parse_statement("a;b;c\n")
     assert not rows
-    assert errors == [{"line": 1, "error": "expected >=12 columns, got 3", "raw": "a;b;c"}]
+    assert len(errors) == 1
+    assert errors[0].line == 1
+    assert errors[0].error == "expected >=12 columns, got 3"
+    assert errors[0].raw == "a;b;c"
 
 
 def test_parse_statement_error_line_numbers_are_one_based() -> None:

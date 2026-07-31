@@ -19,12 +19,14 @@ survive the move.
 
 import datetime
 import re
+from collections.abc import Iterable, Mapping
 from io import BytesIO
 
 from openpyxl import load_workbook
 
 from ..importer import parse_amount_kop, parse_date
 from . import spec
+from .models import PARSED_WORKBOOK_ADAPTER, ParsedWorkbook, WorkbookTransaction
 
 YEAR_RE = re.compile(r"^(\d{4})(_archive)?$")
 
@@ -609,7 +611,7 @@ def _synthetic(year, month, amount, category, description, marker=""):
     }
 
 
-def account_slot(tx):
+def account_slot(tx: WorkbookTransaction) -> str:
     """
     Which account a row must land on. A card marker alone is not enough: the
     same marker can carry rows in more than one currency (interest on a foreign
@@ -617,7 +619,7 @@ def account_slot(tx):
     anything on an account held in that currency. Marker and currency together
     are the unit the user maps.
     """
-    return f"{tx.get('currency') or DEFAULT_CURRENCY}:{tx['marker']}"
+    return f"{tx.currency or DEFAULT_CURRENCY}:{tx.marker}"
 
 
 def _activity_span(transactions, sources):
@@ -654,7 +656,7 @@ def _month_range(start, end):
             y, m = y + 1, 1
 
 
-def parse_workbook(data: bytes):
+def parse_workbook(data: bytes) -> ParsedWorkbook:
     """
     Returns {groups, categories, transactions, budgets, warnings, errors} for any
     budget workbook — see the module docstring for how the shape is discovered.
@@ -1039,12 +1041,24 @@ def _parse(wb):
     return _result(groups, categories, transactions + synthetic, budgets, warnings, errors)
 
 
-def _result(groups, categories, transactions, budgets, warnings, errors):
-    return {
-        "groups": [{"name": g["name"], "sort": g["sort"], "kind": g["kind"]} for g in groups],
-        "categories": categories,
-        "transactions": transactions,
-        "budgets": budgets,
-        "warnings": warnings,
-        "errors": errors,
-    }
+def _result(
+    groups: Iterable[Mapping[str, object]],
+    categories: Iterable[Mapping[str, object]],
+    transactions: Iterable[Mapping[str, object]],
+    budgets: Iterable[Mapping[str, object]],
+    warnings: list[str],
+    errors: Iterable[Mapping[str, object]],
+) -> ParsedWorkbook:
+    return PARSED_WORKBOOK_ADAPTER.validate_python(
+        {
+            "groups": [
+                {"name": group["name"], "sort": group["sort"], "kind": group["kind"]}
+                for group in groups
+            ],
+            "categories": list(categories),
+            "transactions": list(transactions),
+            "budgets": list(budgets),
+            "warnings": warnings,
+            "errors": list(errors),
+        }
+    )

@@ -1,11 +1,11 @@
-import json
 import sqlite3
 from collections.abc import Iterable, Mapping
-from typing import Annotated, Callable, cast
+from dataclasses import asdict
+from typing import Annotated, cast
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.concurrency import run_in_threadpool
-from pydantic import ConfigDict, Field
+from pydantic import ConfigDict, Field, ValidationError
 from pydantic.dataclasses import dataclass as pydantic_dataclass
 
 from ..auth import current_user
@@ -14,6 +14,12 @@ from ..importer import CategoryRule, ImportRow, build_rules, categorize, parse_s
 from ..ingest import commit_rows, existing_hash_counts
 from ..transfer_service import detect
 from ..workbook.apply import apply_workbook, budget_conflicts
+from ..workbook.models import (
+    ACCOUNT_MAPPING_ADAPTER,
+    ParsedWorkbook,
+    WorkbookAccountSlot,
+    WorkbookTransaction,
+)
 from ..workbook.parser import DEFAULT_CURRENCY, WorkbookError, account_slot, parse_workbook
 
 router = APIRouter(prefix="/api/import", tags=["import"])
@@ -21,15 +27,6 @@ router = APIRouter(prefix="/api/import", tags=["import"])
 # matches the client-side statement file cap (importFile.js) so oversized
 # uploads fail the same way whether they arrive via file or paste
 MAX_STATEMENT_TEXT = 5_000_000
-
-account_slot_typed = cast(Callable[[Mapping[str, object]], str], account_slot)
-parse_workbook_typed = cast(Callable[[bytes], dict[str, object]], parse_workbook)
-budget_conflicts_typed = cast(Callable[[sqlite3.Connection, int, list[object]], object], budget_conflicts)
-apply_workbook_typed = cast(
-    Callable[[sqlite3.Connection, int, dict[str, object], dict[str, int], str], dict[str, object]],
-    apply_workbook,
-)
-
 
 @pydantic_dataclass(config=ConfigDict(populate_by_name=True))
 class ImportBody:
@@ -135,7 +132,7 @@ def _detect_row_accounts(
     ):
         for tail in (account["card_tails"] or "").split(","):
             if tail:
-                bound.setdefault(tail, set()).add(cast(int, account["id"]))
+                bound.setdefault(tail, set()).add(cast("int", account["id"]))
 
     for row in rows:
         digits = _card_digits(row.card)
@@ -175,7 +172,7 @@ def _mark_duplicates(c: sqlite3.Connection, rows: list[ImportRow]) -> None:
 def import_preview(
     body: ImportBody, user: Annotated[dict[str, object], Depends(current_user)]
 ) -> dict[str, object]:
-    uid = cast(int, user["id"])
+    uid = cast("int", user["id"])
     if len(body.text) > MAX_STATEMENT_TEXT:
         raise HTTPException(413, "statement is too large")
     c = conn()
@@ -183,7 +180,9 @@ def import_preview(
         rows, errors = parse_statement(body.text)
         rules = _load_user_rules(c, uid)
         fallback_account_id = (
-            body.account_id if body.account_id is not None and _owned_account(c, body.account_id, uid) else None
+            body.account_id
+            if body.account_id is not None and _owned_account(c, body.account_id, uid)
+            else None
         )
         _detect_row_accounts(c, uid, rows, fallback_account_id)
         # commit enforces category direction, so the preview must not propose
@@ -205,7 +204,10 @@ def import_preview(
                     category_id = None
             row.category_id = category_id
         _mark_duplicates(c, rows)
-        return {"rows": [row.to_api_dict() for row in rows], "errors": [err.to_api_dict() for err in errors]}
+        return {
+            "rows": [row.to_api_dict() for row in rows],
+            "errors": [err.to_api_dict() for err in errors],
+        }
     finally:
         c.close()
 
@@ -215,7 +217,7 @@ def import_duplicates(
     body: DuplicateBody, user: Annotated[dict[str, object], Depends(current_user)]
 ) -> dict[str, list[bool]]:
     """Re-check preview rows after the user manually changes their accounts."""
-    uid = cast(int, user["id"])
+    uid = cast("int", user["id"])
     c = conn()
     try:
         rows = [
@@ -247,7 +249,7 @@ def import_commit(
     Server-side dedup: rows whose hash already exists — or repeats within the
     batch — are skipped, so a double-submit can't create duplicates.
     """
-    uid = cast(int, user["id"])
+    uid = cast("int", user["id"])
     c = conn()
     try:
         if body.account_id is not None and not _owned_account(c, body.account_id, uid):
@@ -297,50 +299,46 @@ async def _read_workbook_upload(file: UploadFile) -> bytes:
     return data
 
 
-def _account_slots(transactions: Iterable[Mapping[str, object]]) -> list[dict[str, object]]:
+def _account_slots(transactions: Iterable[WorkbookTransaction]) -> list[WorkbookAccountSlot]:
     """
     What the user has to map: one entry per card marker per currency. Splitting
     by currency is what makes a foreign-currency migration impossible to get
     wrong — a USD slot can only be pointed at a USD account, so a user without
     one has nothing to pick and the import stays blocked until they make it.
     """
-    slots: dict[str, dict[str, object]] = {}
+    slots: dict[str, WorkbookAccountSlot] = {}
     for row in transactions:
-        key = account_slot_typed(row)
-        slot = slots.setdefault(
-            key,
-            {
-                "key": key,
-                "marker": row["marker"],
-                "currency": row.get("currency") or DEFAULT_CURRENCY,
-                "transactions": 0,
-            },
+        key = account_slot(row)
+        previous = slots.get(key)
+        slots[key] = WorkbookAccountSlot(
+            key=key,
+            marker=row.marker,
+            currency=row.currency or DEFAULT_CURRENCY,
+            transactions=1 if previous is None else previous.transactions + 1,
         )
-        slot["transactions"] = cast(int, slot["transactions"]) + 1
-    return sorted(slots.values(), key=lambda s: (cast(str, s["currency"]), cast(str, s["marker"])))
+    return sorted(slots.values(), key=lambda slot: (slot.currency, slot.marker))
 
 
-def _workbook_preview_summary(parsed: Mapping[str, object]) -> dict[str, object]:
-    tx = cast(list[Mapping[str, object]], parsed["transactions"])
+def _workbook_preview_summary(parsed: ParsedWorkbook) -> dict[str, object]:
     by_year: dict[str, int] = {}
-    for row in tx:
-        year = cast(str, row["date"])[:4]
+    for row in parsed.transactions:
+        year = row.date[:4]
         by_year[year] = by_year.get(year, 0) + 1
     return {
-        "groups": len(cast(list[object], parsed["groups"])),
-        "categories": len(cast(list[object], parsed["categories"])),
-        "transactions": len(tx),
+        "groups": len(parsed.groups),
+        "categories": len(parsed.categories),
+        "transactions": len(parsed.transactions),
         "transactionsByYear": dict(sorted(by_year.items())),
-        "budgetCells": len(cast(list[object], parsed["budgets"])),
-        "accountSlots": _account_slots(tx),
-        "warnings": cast(list[object], parsed["warnings"]),
-        "errors": cast(list[object], parsed["errors"]),
+        "budgetCells": len(parsed.budgets),
+        "accountSlots": [slot.to_api_dict() for slot in _account_slots(parsed.transactions)],
+        "warnings": list(parsed.warnings),
+        "errors": [asdict(error) for error in parsed.errors],
     }
 
 
-def _parse_or_400(data: bytes) -> dict[str, object]:
+def _parse_or_400(data: bytes) -> ParsedWorkbook:
     try:
-        return parse_workbook_typed(data)
+        return parse_workbook(data)
     except WorkbookError as exc:
         raise HTTPException(400, str(exc)) from exc
 
@@ -350,7 +348,7 @@ def _preview_workbook(data: bytes, uid: int) -> dict[str, object]:
     summary = _workbook_preview_summary(parsed)
     c = conn()
     try:
-        summary["budgetConflicts"] = budget_conflicts_typed(c, uid, cast(list[object], parsed["budgets"]))
+        summary["budgetConflicts"] = budget_conflicts(c, uid, parsed.budgets)
     finally:
         c.close()
     return summary
@@ -358,7 +356,7 @@ def _preview_workbook(data: bytes, uid: int) -> dict[str, object]:
 
 def _reject_currency_mismatch(
     c: sqlite3.Connection,
-    slots: Mapping[str, Mapping[str, object]],
+    slots: Mapping[str, WorkbookAccountSlot],
     marker_map: Mapping[str, int],
 ) -> None:
     """
@@ -380,18 +378,18 @@ def _reject_currency_mismatch(
     for key, slot in slots.items():
         account_id = marker_map[key]
         currency = held.get(account_id, DEFAULT_CURRENCY)
-        if currency != slot["currency"]:
-            where = slot["marker"] or "rows with no card number"
+        if currency != slot.currency:
+            where = slot.marker or "rows with no card number"
             raise HTTPException(
                 400,
-                f"{where}: {slot['currency']} rows cannot be imported into a"
-                f" {currency} account — create an account in {slot['currency']} first",
+                f"{where}: {slot.currency} rows cannot be imported into a"
+                f" {currency} account — create an account in {slot.currency} first",
             )
 
 
 def _remember_markers(
     c: sqlite3.Connection,
-    slots: Mapping[str, Mapping[str, object]],
+    slots: Mapping[str, WorkbookAccountSlot],
     marker_map: Mapping[str, int],
 ) -> int:
     """
@@ -402,12 +400,13 @@ def _remember_markers(
     """
     bound = 0
     for key, slot in slots.items():
-        digits = "".join(ch for ch in cast(str, slot["marker"]) if ch.isdigit())
+        digits = "".join(ch for ch in slot.marker if ch.isdigit())
         if not digits or len(digits) > 8:
             continue
         account_id = marker_map[key]
         row = c.execute("SELECT card_tails FROM accounts WHERE id=?", (account_id,)).fetchone()
-        tails = [t for t in (cast(str, row["card_tails"]) if row["card_tails"] is not None else "").split(",") if t]
+        raw_tails = cast("str", row["card_tails"]) if row["card_tails"] is not None else ""
+        tails = [tail for tail in raw_tails.split(",") if tail]
         if digits in tails:
             continue
         tails.append(digits)
@@ -421,11 +420,10 @@ def _commit_workbook(
 ) -> dict[str, object]:
     parsed = _parse_or_400(data)
     try:
-        raw_mapping = json.loads(mapping)
-        marker_map = {str(k): int(v) for k, v in raw_mapping.items()}
-    except (ValueError, TypeError, AttributeError) as exc:
+        marker_map = ACCOUNT_MAPPING_ADAPTER.validate_json(mapping)
+    except ValidationError as exc:
         raise HTTPException(400, "mapping must be a JSON object of slot -> accountId") from exc
-    slots = {cast(str, s["key"]): s for s in _account_slots(cast(list[Mapping[str, object]], parsed["transactions"]))}
+    slots = {slot.key: slot for slot in _account_slots(parsed.transactions)}
     missing = sorted(k for k in slots if k not in marker_map)
     if missing:
         raise HTTPException(400, f"unmapped account slots: {missing}")
@@ -435,11 +433,13 @@ def _commit_workbook(
             if not _owned_account(c, account_id, uid):
                 raise HTTPException(400, f"unknown account: {account_id}")
         _reject_currency_mismatch(c, slots, marker_map)
-        result = apply_workbook_typed(c, uid, parsed, marker_map, budget_policy)
-        result["cardTailsBound"] = _remember_markers(c, slots, marker_map) if remember else 0
+        result = apply_workbook(c, uid, parsed, marker_map, budget_policy)
+        response = result.to_api_dict()
+        response["cardTailsBound"] = _remember_markers(c, slots, marker_map) if remember else 0
         c.commit()
-        warnings = [*cast(list[object], parsed["warnings"]), *cast(list[object], result.pop("warnings", []))]
-        return {**result, "warnings": warnings, "errors": cast(list[object], parsed["errors"])}
+        response["warnings"] = [*parsed.warnings, *result.warnings]
+        response["errors"] = [asdict(error) for error in parsed.errors]
+        return response
     finally:
         c.close()
 
@@ -454,7 +454,7 @@ async def workbook_preview(
     file: Annotated[UploadFile, File()],
 ) -> dict[str, object]:
     data = await _read_workbook_upload(file)
-    return await run_in_threadpool(_preview_workbook, data, cast(int, user["id"]))
+    return await run_in_threadpool(_preview_workbook, data, cast("int", user["id"]))
 
 
 @router.post("/workbook/commit")
@@ -469,5 +469,5 @@ async def workbook_commit(
         raise HTTPException(400, "budgetPolicy must be overwrite or skip")
     data = await _read_workbook_upload(file)
     return await run_in_threadpool(
-        _commit_workbook, data, cast(int, user["id"]), mapping, budgetPolicy, remember
+        _commit_workbook, data, cast("int", user["id"]), mapping, budgetPolicy, remember
     )

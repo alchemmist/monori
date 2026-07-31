@@ -1,30 +1,58 @@
 import pathlib
+import sqlite3
 import sys
+from dataclasses import replace
+from pathlib import Path
+from typing import TypedDict, cast
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
 
 import app.db as dbmod
-from app.workbook.apply import apply_workbook, budget_conflicts
+from app.workbook.apply import apply_workbook as _apply_workbook
+from app.workbook.apply import budget_conflicts as _budget_conflicts
+from app.workbook.models import (
+    PARSED_WORKBOOK_ADAPTER,
+    ParsedWorkbook,
+    WorkbookBudget,
+)
 
 
-def _db(tmp_path):
+class _ApplyBatch(TypedDict):
+    accountId: int
+    batchId: int
+    inserted: int
+
+
+class _ApplyResponse(TypedDict):
+    groupsCreated: int
+    categoriesCreated: int
+    inserted: int
+    skipped: int
+    batches: list[_ApplyBatch]
+    budgetsWritten: int
+    budgetsSkipped: int
+    warnings: list[str]
+
+
+def _db(tmp_path: Path) -> tuple[sqlite3.Connection, int, int]:
     c = dbmod.connect(str(tmp_path / "t.db"))
     c.execute(
         "INSERT INTO users (email, email_canonical, password_hash, created_at)"
         " VALUES ('u@e.co', 'u@e.co', 'h', 't')"
     )
-    uid = c.execute("SELECT id FROM users").fetchone()[0]
+    uid = cast("int", c.execute("SELECT id FROM users").fetchone()[0])
     c.execute(
         "INSERT INTO accounts (user_id, name, type, currency, sort)"
         " VALUES (?, 'Card', 'card', 'RUB', 1)",
         (uid,),
     )
     c.commit()
-    return c, uid, c.execute("SELECT id FROM accounts").fetchone()[0]
+    account_id = cast("int", c.execute("SELECT id FROM accounts").fetchone()[0])
+    return c, uid, account_id
 
 
-def _parsed(**over):
-    base = {
+def _parsed(**over: object) -> ParsedWorkbook:
+    base: dict[str, object] = {
         "groups": [
             {"name": "Daily", "sort": 1, "kind": "expense"},
             {"name": "Inflow", "sort": 5, "kind": "income"},
@@ -66,10 +94,27 @@ def _parsed(**over):
         "errors": [],
     }
     base.update(over)
-    return base
+    return PARSED_WORKBOOK_ADAPTER.validate_python(base)
 
 
-def test_apply_creates_groups_categories_transactions_budgets(tmp_path):
+def apply_workbook(
+    c: sqlite3.Connection,
+    uid: int,
+    parsed: ParsedWorkbook,
+    mapping: dict[str, int],
+    budget_policy: str = "overwrite",
+) -> _ApplyResponse:
+    result = _apply_workbook(c, uid, parsed, mapping, budget_policy).to_api_dict()
+    return cast("_ApplyResponse", result)
+
+
+def budget_conflicts(
+    c: sqlite3.Connection, uid: int, budgets: list[WorkbookBudget]
+) -> int:
+    return _budget_conflicts(c, uid, budgets)
+
+
+def test_apply_creates_groups_categories_transactions_budgets(tmp_path: Path) -> None:
     c, uid, acct = _db(tmp_path)
     result = apply_workbook(c, uid, _parsed(), {"RUB:": acct})
     c.commit()
@@ -96,7 +141,7 @@ def test_apply_creates_groups_categories_transactions_budgets(tmp_path):
     assert cats["Salary"] == ("", 0)
 
 
-def test_apply_preserves_blank_categories_despite_keywords(tmp_path):
+def test_apply_preserves_blank_categories_despite_keywords(tmp_path: Path) -> None:
     c, uid, acct = _db(tmp_path)
     result = apply_workbook(c, uid, _parsed(), {"RUB:": acct})
     c.commit()
@@ -118,7 +163,7 @@ def test_apply_preserves_blank_categories_despite_keywords(tmp_path):
     ]
 
 
-def test_named_category_outside_the_sheet_beats_keywords(tmp_path):
+def test_named_category_outside_the_sheet_beats_keywords(tmp_path: Path) -> None:
     c, uid, acct = _db(tmp_path)
     c.execute(
         "INSERT INTO category_groups (user_id, name, sort, type_id)"
@@ -133,7 +178,7 @@ def test_named_category_outside_the_sheet_beats_keywords(tmp_path):
     parsed = _parsed()
     # "lenta" would match the Groceries keyword; the row names Pets instead, and
     # Pets exists only in monori — never on the workbook's Categories sheet
-    parsed["transactions"][1]["monori_category"] = " PETS "
+    parsed.transactions[1] = replace(parsed.transactions[1], monori_category=" PETS ")
     result = apply_workbook(c, uid, parsed, {"RUB:": acct})
     c.commit()
     assert result["warnings"] == []
@@ -144,10 +189,10 @@ def test_named_category_outside_the_sheet_beats_keywords(tmp_path):
     assert named == "Pets"
 
 
-def test_unknown_named_category_is_left_uncategorized_not_guessed(tmp_path):
+def test_unknown_named_category_is_left_uncategorized_not_guessed(tmp_path: Path) -> None:
     c, uid, acct = _db(tmp_path)
     parsed = _parsed()
-    parsed["transactions"][1]["monori_category"] = "Nowhere"
+    parsed.transactions[1] = replace(parsed.transactions[1], monori_category="Nowhere")
     result = apply_workbook(c, uid, parsed, {"RUB:": acct})
     c.commit()
     assert (
@@ -159,7 +204,7 @@ def test_unknown_named_category_is_left_uncategorized_not_guessed(tmp_path):
     assert "Nowhere" in result["warnings"][0]
 
 
-def test_apply_reuses_existing_by_name_and_keeps_keywords(tmp_path):
+def test_apply_reuses_existing_by_name_and_keeps_keywords(tmp_path: Path) -> None:
     c, uid, acct = _db(tmp_path)
     c.execute(
         "INSERT INTO category_groups (user_id, name, sort, type_id)"
@@ -183,7 +228,7 @@ def test_apply_reuses_existing_by_name_and_keeps_keywords(tmp_path):
     assert cafes == 5
 
 
-def test_apply_budget_policies(tmp_path):
+def test_apply_budget_policies(tmp_path: Path) -> None:
     c, uid, acct = _db(tmp_path)
     apply_workbook(c, uid, _parsed(), {"RUB:": acct})
     c.commit()
@@ -203,7 +248,7 @@ def test_apply_budget_policies(tmp_path):
     )
 
 
-def test_apply_batches_per_account_with_source(tmp_path):
+def test_apply_batches_per_account_with_source(tmp_path: Path) -> None:
     c, uid, acct = _db(tmp_path)
     c.execute(
         "INSERT INTO accounts (user_id, name, type, currency, sort)"
@@ -213,7 +258,7 @@ def test_apply_batches_per_account_with_source(tmp_path):
     c.commit()
     second = c.execute("SELECT id FROM accounts WHERE name='Second'").fetchone()[0]
     parsed = _parsed()
-    parsed["transactions"][1]["marker"] = "*2"
+    parsed.transactions[1] = replace(parsed.transactions[1], marker="*2")
     result = apply_workbook(c, uid, parsed, {"RUB:": acct, "RUB:*2": second})
     c.commit()
     assert len(result["batches"]) == 2
@@ -225,7 +270,7 @@ def test_apply_batches_per_account_with_source(tmp_path):
     assert tx_sources == {"workbook"}
 
 
-def test_apply_is_idempotent_on_rerun(tmp_path):
+def test_apply_is_idempotent_on_rerun(tmp_path: Path) -> None:
     c, uid, acct = _db(tmp_path)
     apply_workbook(c, uid, _parsed(), {"RUB:": acct})
     c.commit()
@@ -238,9 +283,9 @@ def test_apply_is_idempotent_on_rerun(tmp_path):
     assert c.execute("SELECT COUNT(*) FROM transactions").fetchone()[0] == 2
 
 
-def test_budget_conflicts_counts_only_matching_cells(tmp_path):
+def test_budget_conflicts_counts_only_matching_cells(tmp_path: Path) -> None:
     c, uid, acct = _db(tmp_path)
-    cells = _parsed()["budgets"]
+    cells = _parsed().budgets
     assert budget_conflicts(c, uid, cells) == 0
 
     apply_workbook(c, uid, _parsed(), {"RUB:": acct})
@@ -250,15 +295,22 @@ def test_budget_conflicts_counts_only_matching_cells(tmp_path):
     assert budget_conflicts(c, uid, []) == 0
 
     other = [
-        {"category": "Groceries", "year": 2026, "month": 2, "amount": 1},
-        {"category": "Groceries", "year": 2027, "month": 1, "amount": 1},
-        {"category": "Cafes", "year": 2026, "month": 1, "amount": 1},
+        WorkbookBudget("Groceries", 2026, 2, 1),
+        WorkbookBudget("Groceries", 2027, 1, 1),
+        WorkbookBudget("Cafes", 2026, 1, 1),
     ]
     assert budget_conflicts(c, uid, other) == 0
 
 
-def _row(date, amount, description, category, marker="", **over):
-    row = {
+def _row(
+    date: str,
+    amount: int,
+    description: str,
+    category: str,
+    marker: str = "",
+    **over: object,
+) -> dict[str, object]:
+    row: dict[str, object] = {
         "date": date,
         "amount": amount,
         "description": description,
@@ -273,7 +325,9 @@ def _row(date, amount, description, category, marker="", **over):
     return row
 
 
-def test_every_row_lands_in_its_account_batch_with_the_bank_columns_intact(tmp_path):
+def test_every_row_lands_in_its_account_batch_with_the_bank_columns_intact(
+    tmp_path: Path,
+) -> None:
     """
     The batch is what an import is later browsed and undone by, so each row has
     to carry the id of the batch on its own account — and the bank's own
@@ -314,7 +368,7 @@ def test_every_row_lands_in_its_account_batch_with_the_bank_columns_intact(tmp_p
     assert len(set(by_account.values())) == 2
 
 
-def test_unmatched_category_names_are_listed_ten_at_a_time(tmp_path):
+def test_unmatched_category_names_are_listed_ten_at_a_time(tmp_path: Path) -> None:
     """
     The warning names what was left uncategorized so it can be fixed by hand;
     a long list is cut off rather than filling the screen.
@@ -336,7 +390,7 @@ def test_unmatched_category_names_are_listed_ten_at_a_time(tmp_path):
     ]
 
 
-def test_category_names_match_across_any_spacing(tmp_path):
+def test_category_names_match_across_any_spacing(tmp_path: Path) -> None:
     """
     A name typed with a stray double space is the same envelope to a human, so
     the whole-account fallback compares names with their inner runs of
@@ -364,7 +418,7 @@ def test_category_names_match_across_any_spacing(tmp_path):
     assert matched == "Lunch  Coffee"
 
 
-def test_a_category_whose_group_is_missing_does_not_stop_the_rest(tmp_path):
+def test_a_category_whose_group_is_missing_does_not_stop_the_rest(tmp_path: Path) -> None:
     """
     Structure and grid can disagree — a category can name a group no sheet ever
     declared. That one has nowhere to go, but the categories after it in the
@@ -388,7 +442,7 @@ def test_a_category_whose_group_is_missing_does_not_stop_the_rest(tmp_path):
     assert names == ["Groceries"]
 
 
-def test_apply_skips_rows_a_sync_already_delivered_to_another_account(tmp_path):
+def test_apply_skips_rows_a_sync_already_delivered_to_another_account(tmp_path: Path) -> None:
     """
     A sheet kept alongside a live bank sync describes operations the sync
     already imported — and the sheet's card marker can map them to a different
@@ -419,7 +473,7 @@ def test_apply_skips_rows_a_sync_already_delivered_to_another_account(tmp_path):
     assert [tuple(r) for r in rows] == [(other, 1)]
 
 
-def test_apply_keeps_a_manual_twin_out_of_the_dedup(tmp_path):
+def test_apply_keeps_a_manual_twin_out_of_the_dedup(tmp_path: Path) -> None:
     # a row the user typed by hand is their own words, not a feed re-delivering
     # the same operation — the workbook copy still lands
     c, uid, acct = _db(tmp_path)

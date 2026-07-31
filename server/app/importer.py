@@ -11,12 +11,12 @@ case-insensitive substring of the description wins.
 
 import hashlib
 import re
-from datetime import datetime
-from dataclasses import asdict
 from collections.abc import Iterable, Mapping
-from typing import Literal, overload, cast
+from dataclasses import asdict
+from datetime import datetime
+from typing import Literal, cast, overload
 
-from pydantic import ConfigDict, Field
+from pydantic import ConfigDict
 from pydantic.dataclasses import dataclass as pydantic_dataclass
 
 COLUMNS = [
@@ -66,7 +66,7 @@ class ParseError:
     def __getitem__(self, key: Literal["raw"]) -> str: ...
 
     def __getitem__(self, key: str) -> int | str:
-        return cast(int | str, getattr(self, key))
+        return cast("int | str", getattr(self, key))
 
     def to_api_dict(self) -> dict[str, object]:
         return asdict(self)
@@ -116,7 +116,7 @@ class ImportRow:
     def __getitem__(self, key: Literal["hash"]) -> str: ...
 
     def __getitem__(self, key: str) -> object:
-        return cast(object, getattr(self, _attr_name(key)))
+        return cast("object", getattr(self, _attr_name(key)))
 
     @overload
     def __setitem__(self, key: Literal["accountId"], value: int | None) -> None: ...
@@ -135,7 +135,7 @@ class ImportRow:
 
     def get(self, key: str, default: object = None) -> object:
         try:
-            return cast(object, getattr(self, _attr_name(key)))
+            return cast("object", getattr(self, _attr_name(key)))
         except AttributeError:
             return default
 
@@ -151,6 +151,17 @@ class ImportRow:
             "categoryId": self.category_id,
             "duplicate": self.duplicate,
             "hash": self.hash,
+        }
+
+    def to_ingest_dict(self) -> dict[str, object]:
+        """Serialize at the SQLite ingest boundary, which uses snake_case keys."""
+        return {
+            "date": self.date,
+            "amount": self.amount,
+            "description": self.description,
+            "bank_category": self.bank_category,
+            "mcc": self.mcc,
+            "category_id": self.category_id,
         }
 
 
@@ -170,7 +181,7 @@ class CategoryRule:
     def __getitem__(self, key: Literal["keywords"]) -> list[str]: ...
 
     def __getitem__(self, key: str) -> object:
-        return cast(object, getattr(self, _attr_name(key)))
+        return cast("object", getattr(self, _attr_name(key)))
 
 
 def parse_date(raw: str) -> datetime | None:
@@ -262,11 +273,15 @@ def build_rules(
         keywords = [k.strip().lower() for k in str(c["keywords"] or "").split("|") if k.strip()]
         if not keywords:
             continue
-        kind = groups.get(cast(int, c["group_id"]))
+        kind = groups.get(cast("int", c["group_id"]))
         if kind not in ("income", "expense"):
             continue
         rules["IN" if kind == "income" else "OUT"].append(
-            CategoryRule(category_id=cast(int, c["id"]), name=cast(str, c["name"]), keywords=keywords)
+            CategoryRule(
+                category_id=cast("int", c["id"]),
+                name=cast("str", c["name"]),
+                keywords=keywords,
+            )
         )
     return rules
 
