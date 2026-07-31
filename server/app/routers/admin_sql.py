@@ -13,11 +13,12 @@ import contextlib
 import sqlite3
 import time
 from datetime import UTC, datetime
-from typing import Annotated, TypedDict, cast
+from typing import Annotated, TypedDict
 
 from fastapi import APIRouter, Depends, HTTPException
 
 from ..admin import admin_user
+from ..auth import AuthenticatedUser
 from ..deps import conn
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
@@ -82,7 +83,7 @@ class SqlBody(TypedDict):
 
 @router.post("/sql")
 def run_sql(
-    body: SqlBody, admin: Annotated[dict[str, object], Depends(admin_user)]
+    body: SqlBody, admin: Annotated[AuthenticatedUser, Depends(admin_user)]
 ) -> dict[str, object]:
     """
     Execute one statement and return either its rows or its affected-row count.
@@ -98,7 +99,7 @@ def run_sql(
     back unconditionally — a read is answered with its rows, a write with the
     count, and nothing is ever committed.
     """
-    uid = cast("int", admin["id"])
+    uid = admin.id
     sql = body["sql"].strip()
     if not sql:
         raise HTTPException(400, "empty statement")

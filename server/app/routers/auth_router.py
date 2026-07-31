@@ -15,7 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import OAuth2PasswordRequestForm
 
 from ..admin import admin_emails
-from ..auth import current_user
+from ..auth import AuthenticatedUser, UserResponse, current_user
 from ..deps import conn, serialize_user
 from ..emails import canonical_email, normalize_email
 from ..security import create_access_token, hash_password, verify_password
@@ -138,8 +138,8 @@ def token(form: Annotated[OAuth2PasswordRequestForm, Depends()]) -> dict[str, ob
 
 
 @router.get("/me")
-def me(user: Annotated[dict[str, object], Depends(current_user)]) -> dict[str, object]:
-    return user
+def me(user: Annotated[AuthenticatedUser, Depends(current_user)]) -> UserResponse:
+    return user.to_api_dict()
 
 
 class MePatch(TypedDict, total=False):
@@ -148,14 +148,14 @@ class MePatch(TypedDict, total=False):
 
 @router.patch("/me")
 def patch_me(
-    body: MePatch, user: Annotated[dict[str, object], Depends(current_user)]
+    body: MePatch, user: Annotated[AuthenticatedUser, Depends(current_user)]
 ) -> dict[str, object]:
     """
     User-level preferences. ``defaultAccountId`` is where imports land rows no
     card number can route; null clears it and those rows go back to being
     assigned by hand.
     """
-    uid = cast("int", user["id"])
+    uid = user.id
     c = conn()
     try:
         default_account_id = body.get("defaultAccountId")

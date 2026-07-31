@@ -14,12 +14,13 @@ import tarfile
 import types
 from collections.abc import Callable
 from pathlib import Path
+from types import TracebackType
 from typing import Literal, Self
 
 import pytest
 
 from app.connectors import tbank_playwright as tbank_mod
-from app.connectors.base import ConnectorError, SmsRequired
+from app.connectors.base import ConnectorError, JsonObject, SmsRequired
 from app.connectors.tbank_playwright import TBankPlaywrightConnector as TB
 
 STATEMENT = (
@@ -27,7 +28,7 @@ STATEMENT = (
     "06.01.2026 11:00:00\t06.01.2026\t*1\tOK\t-200,00\tRUB\t-200,00\tRUB\t\tSuper\t5411\tOkey\t0\t0\t-200,00\n"  # noqa: E501
 )
 
-CREDS: dict[str, object] = {"phone": "+70000000000", "password": "pw", "code": "1234"}
+CREDS: JsonObject = {"phone": "+70000000000", "password": "pw", "code": "1234"}
 
 
 class FakeLocator:
@@ -94,7 +95,12 @@ class FakeDownloadExpectation:
     def __enter__(self) -> Self:
         return self
 
-    def __exit__(self, *exc: object) -> Literal[False]:
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> Literal[False]:
         return False
 
     @property
@@ -186,7 +192,7 @@ class FakePage:
             self.last_code = value
             self._advance()
 
-    def query_selector(self, selector: str) -> object | FakeElement | None:
+    def query_selector(self, selector: str) -> FakeElement | None:
         self.log.append(("query", selector))
         if (
             (selector == TB.SEL_PHONE and self.stage == "phone")
@@ -194,7 +200,7 @@ class FakePage:
             or (selector == TB.SEL_OTP and self.stage == "sms")
             or (selector == TB.SEL_PIN and self.stage in self.PIN_STAGES)
         ):
-            return object()
+            return FakeElement("")
         if selector == TB.SEL_FORM_TITLE and self.stage in self.TITLES:
             return FakeElement(self.TITLES[self.stage])
         return None
@@ -250,16 +256,17 @@ class FakePage:
         return FakeDownloadExpectation(self)
 
     # debug ------------------------------------------------------------------
-    def screenshot(self, path: str | None = None, full_page: bool = False) -> None:
+    def screenshot(self, *, path: str, full_page: bool = False) -> bytes:
         self.screenshots.append(path)
+        return b""
 
     def content(self) -> str:
         return "<html></html>"
 
 
 def _connector(
-    creds: dict[str, object] | None = None,
-    session: dict[str, object] | None = None,
+    creds: JsonObject | None = None,
+    session: JsonObject | None = None,
 ) -> TB:
     return TB(creds if creds is not None else dict(CREDS), session)
 
@@ -394,9 +401,9 @@ class _BlockedPage(FakePage):
     the driver must fail fast with that message, not loop re-entering the phone.
     """
 
-    def query_selector(self, selector: str) -> object | FakeElement | None:
+    def query_selector(self, selector: str) -> FakeElement | None:
         if selector == TB.SEL_ACCESS_DENIED:
-            return object()
+            return FakeElement("")
         if selector == TB.SEL_ACCESS_DENIED_TITLE:
             return FakeElement("Доступ заблокирован")
         if selector == TB.SEL_ACCESS_DENIED_DESC:
@@ -487,7 +494,7 @@ def test_download_and_parse_returns_rows() -> None:
     page = FakePage(scenario="logged_in", export_label="CSV")
     page.stage = "in"
     rows = c._download_and_parse(page, None)
-    assert [r["description"] for r in rows] == ["Lenta", "Okey"]
+    assert [row.description for row in rows] == ["Lenta", "Okey"]
 
 
 def test_download_waits_for_the_account_feed_to_settle_before_export() -> None:
@@ -627,7 +634,12 @@ def _install_fake_playwright(monkeypatch: pytest.MonkeyPatch, page: FakePage) ->
         def __enter__(self) -> FakeP:
             return FakeP()
 
-        def __exit__(self, *exc: object) -> Literal[False]:
+        def __exit__(
+            self,
+            exc_type: type[BaseException] | None,
+            exc_value: BaseException | None,
+            traceback: TracebackType | None,
+        ) -> Literal[False]:
             return False
 
     module = types.ModuleType("playwright.sync_api")
@@ -643,7 +655,7 @@ def test_run_two_phase_produces_rows_and_session(monkeypatch: pytest.MonkeyPatch
     with pytest.raises(SmsRequired):
         c.sync()
     result = c.resume_sync("5555")
-    assert [r["description"] for r in result.rows] == ["Lenta", "Okey"]
+    assert [row.description for row in result.rows] == ["Lenta", "Okey"]
     assert isinstance(result.session, dict)
     assert "profile" in result.session
     # navigations get the full login budget, not Playwright's default 30s
@@ -678,7 +690,7 @@ def test_fake_connector_rows_are_fresh_copies() -> None:
 
     rows = _rows()
     assert len(rows) == len(FIXTURE_ROWS) == 2
-    assert [r["description"] for r in rows] == ["Lenta", "Salary"]
+    assert [row.description for row in rows] == ["Lenta", "Salary"]
     assert rows[0] is not FIXTURE_ROWS[0]
 
 

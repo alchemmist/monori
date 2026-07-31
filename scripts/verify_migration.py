@@ -21,16 +21,18 @@ import pathlib
 import sqlite3
 import sys
 import tempfile
-from typing import TypedDict, cast
+from dataclasses import dataclass
+from typing import TypedDict
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / "server"))
 
 from openpyxl import load_workbook
 from openpyxl.worksheet.worksheet import Worksheet
+from pydantic import TypeAdapter
 
 from app.db import connect
 from app.workbook.apply import apply_workbook
-from app.workbook.models import ParsedWorkbook
+from app.workbook.models import ParsedWorkbook, WorkbookApplyResult
 from app.workbook.parser import (
     YEAR_RE,
     _find_layout,
@@ -42,7 +44,23 @@ from app.workbook.parser import (
 )
 
 MONEY = 100
-DuplicateRow = tuple[str, str, int, str, int]
+
+
+@dataclass(frozen=True, slots=True)
+class DuplicateRow:
+    accounts: str
+    date: str
+    amount: int
+    description: str
+    count: int
+
+
+@dataclass(frozen=True, slots=True)
+class LedgerSnapshot:
+    categories: dict[int, tuple[str, str]]
+    transactions: dict[tuple[str, int, int], int]
+    budgets: dict[tuple[str, int, int], int]
+    uncategorized: int
 
 
 class Header(TypedDict):
@@ -64,14 +82,6 @@ class YearGrid(TypedDict):
     cats: dict[str, YearCat]
 
 
-class ApplyResult(TypedDict):
-    inserted: int
-    skipped: int
-    budgetsWritten: int
-    budgetsSkipped: int
-    warnings: list[str]
-
-
 class ReplayCell(TypedDict):
     budgeted: int
     outflows: int
@@ -84,6 +94,9 @@ class ReplayMonth(TypedDict):
     overspent: int
     available: int
     cells: dict[str, ReplayCell]
+
+
+YEAR_GRID_ADAPTER: TypeAdapter[YearGrid] = TypeAdapter(YearGrid)
 
 
 def rub(kop: int | None) -> str:
@@ -107,7 +120,7 @@ def sheet_grids(path: str) -> tuple[dict[int, YearGrid], dict[tuple[int, int], H
             year = int(match.group(1))
             if match.group(2) and year in grids:
                 continue  # a plain sheet is the working copy and wins
-            grids[year] = cast("YearGrid", _parse_year_sheet(ws, year, layout))
+            grids[year] = YEAR_GRID_ADAPTER.validate_python(_parse_year_sheet(ws, year, layout))
             for i, base in enumerate(layout["bases"]):
                 month = layout["start_month"] + i
                 if month > 12:
@@ -135,7 +148,7 @@ def _available(ws: Worksheet, base: int) -> int | None:
 
 def import_into_db(
     path: str, db_path: str
-) -> tuple[sqlite3.Connection, int, ParsedWorkbook, ApplyResult]:
+) -> tuple[sqlite3.Connection, int, ParsedWorkbook, WorkbookApplyResult]:
     """The server's own path: parse, map every slot onto a matching account, apply."""
     parsed = parse_workbook(pathlib.Path(path).read_bytes())
     c = connect(db_path)
@@ -158,19 +171,12 @@ def import_into_db(
         if lastrowid is None:
             raise RuntimeError("inserted account did not return a row id")
         mapping[key] = lastrowid
-    result = cast("ApplyResult", apply_workbook(c, uid, parsed, mapping, "overwrite"))
+    result = apply_workbook(c, uid, parsed, mapping, "overwrite")
     c.commit()
     return c, uid, parsed, result
 
 
-def snapshot(
-    c: sqlite3.Connection, uid: int
-) -> tuple[
-    dict[int, tuple[str, str]],
-    dict[tuple[str, int, int], int],
-    dict[tuple[str, int, int], int],
-    int,
-]:
+def snapshot(c: sqlite3.Connection, uid: int) -> LedgerSnapshot:
     kinds = {
         r["id"]: r["kind"]
         for r in c.execute("SELECT id, kind FROM category_groups WHERE user_id=?", (uid,))
@@ -204,7 +210,7 @@ def snapshot(
         (uid,),
     ):
         budgets[(r["name"], r["year"], r["month"])] = r["amount"]
-    return cats, tx, budgets, uncategorized
+    return LedgerSnapshot(cats, tx, budgets, uncategorized)
 
 
 def duplicates(
@@ -216,7 +222,9 @@ def duplicates(
     feed delivered through two doors looks once routing has split the copies.
     """
     on_one: list[DuplicateRow] = [
-        (r["name"], r["date"], r["amount"], r["description"], r["n"])
+        DuplicateRow(
+            str(r["name"]), str(r["date"]), int(r["amount"]), str(r["description"]), int(r["n"])
+        )
         for r in c.execute(
             "SELECT a.name, t.date, t.amount, t.description, COUNT(*) n"
             " FROM transactions t JOIN accounts a ON a.id = t.account_id"
@@ -226,7 +234,9 @@ def duplicates(
         )
     ]
     across: list[DuplicateRow] = [
-        (r["names"], r["day"], r["amount"], r["description"], r["n"])
+        DuplicateRow(
+            str(r["names"]), str(r["day"]), int(r["amount"]), str(r["description"]), int(r["n"])
+        )
         for r in c.execute(
             "SELECT group_concat(DISTINCT a.name) names, substr(t.date, 1, 10) day,"
             " t.amount, t.description, COUNT(*) n"
@@ -392,15 +402,22 @@ def main() -> int:
     with tempfile.TemporaryDirectory() as tmp:
         db_path = str(pathlib.Path(tmp) / "parity.db")
         c, uid, parsed, result = import_into_db(args.workbook, db_path)
-        cats, tx, budgets, uncategorized = snapshot(c, uid)
+        ledger = snapshot(c, uid)
         dupes, cross_dupes = duplicates(c, uid)
         c.close()
 
     years = sorted(grids)
     first_year = min(
-        [*(y for _, y, _ in tx), *(y for _, y, _ in budgets), *years] or [years[0] if years else 0]
+        [
+            *(year for _, year, _ in ledger.transactions),
+            *(year for _, year, _ in ledger.budgets),
+            *years,
+        ]
+        or [years[0] if years else 0]
     )
-    replayed = replay(cats, tx, budgets, first_year, max(years))
+    replayed = replay(
+        ledger.categories, ledger.transactions, ledger.budgets, first_year, max(years)
+    )
 
     if args.category:
         trace(grids, replayed, args.category)
@@ -452,28 +469,36 @@ def main() -> int:
             bad_months.append((year, m, want, avail_ours["available"], gap - carried_gap, stale))
         carried_gap = gap
 
-    lines.append(f"transactions imported : {result['inserted']}")
-    lines.append(f"skipped as duplicate  : {result['skipped']}")
-    lines.append(f"budget cells written  : {result['budgetsWritten']}")
-    lines.append(f"budget cells skipped  : {result['budgetsSkipped']}")
-    lines.append(f"rows left uncategorized: {uncategorized}")
+    lines.append(f"transactions imported : {result.inserted}")
+    lines.append(f"skipped as duplicate  : {result.skipped}")
+    lines.append(f"budget cells written  : {result.budgets_written}")
+    lines.append(f"budget cells skipped  : {result.budgets_skipped}")
+    lines.append(f"rows left uncategorized: {ledger.uncategorized}")
     lines.append(
         f"duplicate row groups  : {len(dupes)} on one account, {len(cross_dupes)} across accounts"
     )
     lines.append(f"grid cells wrong      : {len(bad_cells)}")
     lines.append(f"months where the Available gap changes: {len(bad_months)}")
     lines.append("")
-    for w in [*parsed.warnings, *result["warnings"]]:
+    for w in [*parsed.warnings, *result.warnings]:
         lines.append(f"  warning: {w}")
     if dupes:
         lines.append("\n-- duplicate rows (account, date, amount, description, count) --")
-        lines += [f"  {a} {d[:10]} {rub(v):>14} {desc[:40]!r} x{n}" for a, d, v, desc, n in dupes]
+        lines += [
+            f"  {row.accounts} {row.date[:10]} {rub(row.amount):>14} "
+            f"{row.description[:40]!r} x{row.count}"
+            for row in dupes
+        ]
     if cross_dupes:
         lines.append(
             "\n-- same day/amount/description on several accounts (for review:"
             " the sheet itself records these on distinct cards) --"
         )
-        lines += [f"  {a} {d} {rub(v):>14} {desc[:40]!r} x{n}" for a, d, v, desc, n in cross_dupes]
+        lines += [
+            f"  {row.accounts} {row.date} {rub(row.amount):>14} "
+            f"{row.description[:40]!r} x{row.count}"
+            for row in cross_dupes
+        ]
     if bad_cells:
         lines.append("\n-- grid cells: sheet vs monori --")
         lines.append("   'sheet stale' = the sheet's own budgeted+outflows do not make its balance")
@@ -504,7 +529,7 @@ def main() -> int:
                 f"  … {len(body) - args.limit} more lines"
                 + (f" in {args.report}" if args.report else "")
             )
-    return 1 if bad_cells or bad_months or dupes or uncategorized else 0
+    return 1 if bad_cells or bad_months or dupes or ledger.uncategorized else 0
 
 
 if __name__ == "__main__":

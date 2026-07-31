@@ -7,7 +7,7 @@ from httpx2 import Response as HTTPXResponse
 
 import app.connectors.fake  # noqa: F401  (registers the FakeConnector)
 from app.connectors import base
-from app.connectors.base import SmsRequired, SyncResult
+from app.connectors.base import JsonObject, SmsRequired, SyncResult, SyncRow
 from app.routers import connections
 from tests.conftest import Api
 
@@ -158,8 +158,8 @@ class RetryOtpConnector:
 
     def __init__(
         self,
-        credentials: dict[str, object],
-        session: dict[str, object] | None = None,
+        credentials: JsonObject,
+        session: JsonObject | None = None,
         account_ref: str | None = None,
     ) -> None:
         self.credentials = credentials
@@ -333,8 +333,8 @@ class SinceRecorder:
 
     def __init__(
         self,
-        credentials: dict[str, object],
-        session: dict[str, object] | None = None,
+        credentials: JsonObject,
+        session: JsonObject | None = None,
         account_ref: str | None = None,
     ) -> None:
         self.credentials = credentials
@@ -406,13 +406,13 @@ class MultiCardConnector(base.Connector):
     kind = "multicard"
     hidden = True
     rows = [
-        {"date": "2026-03-01T09:00:00", "amount": -100, "description": "A", "card": "*8181"},
-        {"date": "2026-03-01T10:00:00", "amount": -200, "description": "B", "card": "*2947"},
-        {"date": "2026-03-01T11:00:00", "amount": -300, "description": "C", "card": "*1111"},
+        SyncRow("2026-03-01T09:00:00", -100, "A", "", "", "*8181"),
+        SyncRow("2026-03-01T10:00:00", -200, "B", "", "", "*2947"),
+        SyncRow("2026-03-01T11:00:00", -300, "C", "", "", "*1111"),
     ]
 
     def sync(self, since: str | None = None) -> SyncResult:
-        return SyncResult([dict(r) for r in self.rows], session={"token": "ok"})
+        return SyncResult(list(self.rows), session={"token": "ok"})
 
 
 def _connect_multicard(client: TestClient, account_id: int) -> int:

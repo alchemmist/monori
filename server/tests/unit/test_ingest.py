@@ -10,6 +10,7 @@ if TYPE_CHECKING:
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
 
 import app.db as dbmod
+from app.connectors.base import SyncRow
 from app.deps import snapshot
 from app.importer import CategoryRule
 from app.ingest import categorize_rows, commit_rows, existing_hash_counts, load_rules
@@ -71,17 +72,25 @@ def test_categorize_rows_assigns_by_sign_and_keyword() -> None:
         "IN": [CategoryRule(category_id=5, name="Salary", keywords=["salary"])],
         "OUT": [CategoryRule(category_id=9, name="Food", keywords=["lenta"])],
     }
-    rows: list[dict[str, object]] = [
-        {"description": "Salary June", "amount": 100000},
-        {"description": "LENTA store", "amount": -5000},
-        {"description": "unknown", "amount": -100},
+    rows = [
+        _row("2026-01-01", 100000, "Salary June"),
+        _row("2026-01-01", -5000, "LENTA store"),
+        _row("2026-01-01", -100, "unknown"),
     ]
     categorize_rows(rows, rules)
-    assert [r["category_id"] for r in rows] == [5, 9, None]
+    assert [row.category_id for row in rows] == [5, 9, None]
 
 
-def _row(date: str, amount: int, desc: str = "x", **kw: object) -> dict[str, object]:
-    return {"date": date, "amount": amount, "description": desc, **kw}
+def _row(
+    date: str,
+    amount: int,
+    desc: str = "x",
+    *,
+    bank_category: str = "",
+    mcc: str = "",
+    category_id: int | None = None,
+) -> SyncRow:
+    return SyncRow(date, amount, desc, bank_category, mcc, "", category_id=category_id)
 
 
 def test_existing_hash_counts_is_account_scoped(tmp_path: Path) -> None:
@@ -246,15 +255,15 @@ def test_drop_already_present_is_count_aware() -> None:
     from app.ingest import drop_already_present
 
     rows = [
-        {"date": "2026-07-19T12:00:00", "amount": -368000, "description": "Kafe Lesnoj"},
-        {"date": "2026-07-19T18:00:00", "amount": -368000, "description": "Kafe Lesnoj"},
-        {"date": "2026-07-19T18:00:00", "amount": -100, "description": "New"},
+        _row("2026-07-19T12:00:00", -368000, "Kafe Lesnoj"),
+        _row("2026-07-19T18:00:00", -368000, "Kafe Lesnoj"),
+        _row("2026-07-19T18:00:00", -100, "New"),
     ]
     kept, dropped = drop_already_present(rows, {("2026-07-19", -368000, "kafe lesnoj"): 1})
     # one copy is already in the ledger; the second in the batch is genuinely a
     # second operation and stays
     assert dropped == 1
-    assert [r["description"] for r in kept] == ["Kafe Lesnoj", "New"]
+    assert [row.description for row in kept] == ["Kafe Lesnoj", "New"]
 
 
 def test_dedup_survives_the_bank_rewording_its_own_description(tmp_path: Path) -> None:
@@ -279,9 +288,9 @@ def test_dedup_survives_the_bank_rewording_its_own_description(tmp_path: Path) -
     from app.ingest import drop_already_present, historical_day_counts
 
     rows = [
-        {"date": "2026-07-24T12:38:48", "amount": -284300, "description": reworded},
-        {"date": "2026-07-24T12:13:27", "amount": -136300, "description": "Додо Пицца"},
+        _row("2026-07-24T12:38:48", -284300, reworded),
+        _row("2026-07-24T12:13:27", -136300, "Додо Пицца"),
     ]
     kept, dropped = drop_already_present(rows, historical_day_counts(c, uid))
     assert dropped == 1
-    assert [r["description"] for r in kept] == ["Додо Пицца"]
+    assert [row.description for row in kept] == ["Додо Пицца"]

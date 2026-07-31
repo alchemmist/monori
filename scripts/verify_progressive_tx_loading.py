@@ -7,10 +7,11 @@ ends up complete and in order.
 
 import pathlib
 import sys
-from enum import Enum
-from typing import TypedDict, cast
+from enum import StrEnum
+from typing import TypedDict
 
 from playwright.sync_api import Browser, Page, Request, sync_playwright
+from pydantic import TypeAdapter
 
 TOKEN_FILE = pathlib.Path("/tmp/monori-token.txt")
 
@@ -54,9 +55,13 @@ class ReducedRing(TypedDict):
     svg: bool
 
 
-class ReducedMotion(str, Enum):
+class ReducedMotion(StrEnum):
     NO_PREFERENCE = "no-preference"
     REDUCE = "reduce"
+
+
+PAGE_STATE_ADAPTER: TypeAdapter[PageState] = TypeAdapter(PageState)
+REDUCED_RING_ADAPTER: TypeAdapter[ReducedRing] = TypeAdapter(ReducedRing)
 
 
 def load_token() -> str:
@@ -76,7 +81,10 @@ def open_page(
     requests: list[str] | None = None,
     reduced_motion: ReducedMotion | None = None,
 ) -> Page:
-    page = browser.new_page(viewport={"width": 1280, "height": 900}, reduced_motion=reduced_motion)
+    page = browser.new_page(
+        viewport={"width": 1280, "height": 900},
+        reduced_motion=reduced_motion.value if reduced_motion is not None else None,
+    )
     if requests is not None:
 
         def record_request(r: Request) -> None:
@@ -112,21 +120,20 @@ def main() -> None:
         requests: list[str] = []
         page = open_page(browser, token, requests=requests)
         page.wait_for_function("() => !document.querySelector('.progress-ring')", timeout=60000)
-        state = cast("PageState", page.evaluate(STATE_JS))
+        state = PAGE_STATE_ADAPTER.validate_python(page.evaluate(STATE_JS))
         print("AFTER FILL:", state)
         page.close()
 
         # prefers-reduced-motion swaps the ring for the bare percentage
         reduced = open_page(browser, token, reduced_motion=ReducedMotion.REDUCE)
         reduced.wait_for_selector(".progress-ring", timeout=15000)
-        reduced_ring = cast(
-            "ReducedRing",
+        reduced_ring = REDUCED_RING_ADAPTER.validate_python(
             reduced.evaluate(
                 """() => {
             const ring = document.querySelector('.progress-ring');
             return {text: ring.innerText.trim(), svg: !!ring.querySelector('svg')};
         }"""
-            ),
+            )
         )
         print("REDUCED MOTION:", reduced_ring)
         browser.close()

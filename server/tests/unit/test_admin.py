@@ -1,6 +1,7 @@
 import pytest
 
 from app.admin import admin_emails, admin_user, feature_from_path, user_id_from_auth_header
+from app.auth import AuthenticatedUser
 from app.security import create_access_token
 
 
@@ -18,13 +19,13 @@ def test_admin_user_rejects_non_admin() -> None:
     from fastapi import HTTPException
 
     with pytest.raises(HTTPException) as e:
-        user: dict[str, object] = {"id": 1, "isAdmin": False}
+        user = AuthenticatedUser(1, "u@example.com", "2026-01-01", False, None, None)
         admin_user(user)
     assert e.value.status_code == 403
 
 
 def test_admin_user_passes_admin_through() -> None:
-    user: dict[str, object] = {"id": 1, "isAdmin": True}
+    user = AuthenticatedUser(1, "u@example.com", "2026-01-01", True, None, None)
     assert admin_user(user) is user
 
 

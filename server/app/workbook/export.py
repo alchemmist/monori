@@ -12,7 +12,7 @@ rather than a raw dump.
 import datetime
 from collections import defaultdict
 from io import BytesIO
-from typing import TypedDict, cast
+from typing import TypedDict
 
 from openpyxl import Workbook
 from openpyxl.cell.cell import Cell
@@ -377,7 +377,10 @@ def build_workbook(snap: WorkbookSnap) -> Workbook:
     budgets = _budget_index(snap)
 
     wb = Workbook()
-    _categories_sheet(cast("Worksheet", wb.active), snap)
+    active = wb.active
+    if active is None:
+        raise RuntimeError("workbook has no active worksheet")
+    _categories_sheet(active, snap)
     _transactions_sheet(
         wb.create_sheet(spec.SHEET_TRANSACTIONS), snap, cat_names, acct_names, acct_currency
     )

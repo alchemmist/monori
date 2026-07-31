@@ -5,7 +5,14 @@ import sys
 import pytest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
-from app.importer import build_rules, categorize, parse_amount_kop, parse_date, parse_statement
+from app.importer import (
+    CategoryDefinition,
+    build_rules,
+    categorize,
+    parse_amount_kop,
+    parse_date,
+    parse_statement,
+)
 
 SAMPLE_TSV = (
     "03.07.2026 19:48:24\t03.07.2026\t*2947\tOK\t-450,00\tRUB\t-450,00\tRUB\t\t"
@@ -185,7 +192,7 @@ def test_parse_statement_continues_after_every_kind_of_skip() -> None:
 
 def test_categorize_first_rule_wins_and_sign_split() -> None:
     groups = {1: "expense", 2: "income"}
-    cats = [
+    cats: list[CategoryDefinition] = [
         {"id": 10, "name": "Groceries", "keywords": "Пятёрочка|Лента", "group_id": 1},
         {"id": 11, "name": "Entertainment", "keywords": "Лента", "group_id": 1},
         {"id": 20, "name": "Cashback", "keywords": "Кэшбэк", "group_id": 2},
@@ -200,7 +207,7 @@ def test_categorize_first_rule_wins_and_sign_split() -> None:
 
 def test_build_rules_skips_empty_bad_kind_and_null_keywords() -> None:
     groups = {1: "expense", 2: "income", 3: "other"}
-    cats = [
+    cats: list[CategoryDefinition] = [
         {"id": 1, "name": "NoKw", "keywords": "", "group_id": 1},  # empty → skipped
         {"id": 2, "name": "BadKind", "keywords": "x", "group_id": 3},  # not in/out → skipped
         {"id": 3, "name": "Groceries", "keywords": "Пят | Лента", "group_id": 1},
@@ -218,7 +225,7 @@ def test_build_rules_skips_empty_bad_kind_and_null_keywords() -> None:
 
 def test_categorize_guards_on_empty_desc_and_zero_amount() -> None:
     groups = {1: "expense", 2: "income"}
-    cats = [
+    cats: list[CategoryDefinition] = [
         {"id": 10, "name": "Cafe", "keywords": "кафе", "group_id": 1},
         {"id": 20, "name": "Salary", "keywords": "зарплата", "group_id": 2},
         {"id": 30, "name": "Decoy", "keywords": "xx", "group_id": 1},
@@ -250,7 +257,7 @@ def test_categorizer_agreement_with_sheet_history() -> None:
     for i, g in enumerate(cats_raw["groups"], 1):
         group_ids[g["name"]] = i
         groups[i] = "income" if g["type"] == "IN" else "expense"
-    cats = [
+    cats: list[CategoryDefinition] = [
         {"id": i, "name": c["name"], "keywords": c["keywords"], "group_id": group_ids[c["group"]]}
         for i, c in enumerate(cats_raw["categories"], 1)
     ]
@@ -264,7 +271,7 @@ def test_categorizer_agreement_with_sheet_history() -> None:
         if (t["date"], t["description"]) in known_stale:
             continue
         got_id = categorize(t["description"], round(t["amount"] * 100), rules)
-        got = name_by_id.get(got_id, "")
+        got = name_by_id.get(got_id, "") if got_id is not None else ""
         expected = t["auto_category"] or ""
         # The sheet's historical FIND_CATEGORIES formula left merchant refunds
         # blank, while the importer deliberately files a positive merchant
@@ -283,7 +290,7 @@ def test_categorize_files_a_refund_back_into_its_expense_envelope() -> None:
     keywords still win first, so a real inflow is never mistaken for a refund.
     """
     groups = {1: "expense", 2: "income"}
-    cats = [
+    cats: list[CategoryDefinition] = [
         {"id": 10, "name": "Groceries", "keywords": "Пятёрочка", "group_id": 1},
         {"id": 20, "name": "Cashback", "keywords": "Кэшбэк|пятёрочка кэшбэк", "group_id": 2},
     ]

@@ -14,14 +14,13 @@ the counts must match what the spec hardcodes.
 import datetime
 import pathlib
 import sys
+from collections.abc import Callable
 from io import BytesIO
 from typing import TYPE_CHECKING, Protocol
 
 from openpyxl import Workbook
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
-
     from openpyxl.worksheet.worksheet import Worksheet
 
     from app.workbook.models import ParsedWorkbook
@@ -31,11 +30,14 @@ class _SpecModule(Protocol):
     SHEET_TRANSACTIONS: str
 
 
+type ParseWorkbook = Callable[[bytes], "ParsedWorkbook"]
+
+
 REPO = pathlib.Path(__file__).resolve().parent.parent
 
 
 def _load_workbook_modules() -> tuple[
-    _SpecModule, dict[str, tuple[str, ...]], Callable[[bytes], ParsedWorkbook]
+    _SpecModule, dict[str, tuple[str, ...]], ParseWorkbook
 ]:
     sys.path.insert(0, str(REPO / "server"))
     from app.workbook import spec
@@ -61,7 +63,7 @@ def tx(
     category: str,
     *,
     card: str = "*1111",
-    desc: str = "",
+    desc: str,
     kw: tuple[str, str] | None = None,
 ) -> list[WorkbookCell]:
     row: list[WorkbookCell] = [None] * 12

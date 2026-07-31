@@ -2,14 +2,14 @@ from __future__ import annotations
 
 import re
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Annotated, NotRequired, TypedDict, cast
+from typing import TYPE_CHECKING, Annotated, NotRequired, TypedDict
 
 if TYPE_CHECKING:
     import sqlite3
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from ..auth import current_user
+from ..auth import AuthenticatedUser, current_user
 from ..deps import conn, serialize_account
 from ..importer import tx_hash
 
@@ -100,9 +100,9 @@ class ReconcileBody(TypedDict):
 
 @router.get("")
 def list_accounts(
-    user: Annotated[dict[str, object], Depends(current_user)],
+    user: Annotated[AuthenticatedUser, Depends(current_user)],
 ) -> list[dict[str, object]]:
-    uid = cast("int", user["id"])
+    uid = user.id
     c = conn()
     try:
         return [
@@ -120,9 +120,9 @@ def list_accounts(
 
 @router.post("")
 def create_account(
-    body: AccountBody, user: Annotated[dict[str, object], Depends(current_user)]
+    body: AccountBody, user: Annotated[AuthenticatedUser, Depends(current_user)]
 ) -> dict[str, object]:
-    uid = cast("int", user["id"])
+    uid = user.id
     account_type = body.get("type")
     if account_type not in TYPES:
         raise HTTPException(400, "type must be one of card, cash, savings, other")
@@ -177,9 +177,9 @@ def create_account(
 def patch_account(
     account_id: int,
     patch: AccountPatch,
-    user: Annotated[dict[str, object], Depends(current_user)],
+    user: Annotated[AuthenticatedUser, Depends(current_user)],
 ) -> dict[str, bool]:
-    uid = cast("int", user["id"])
+    uid = user.id
     c = conn()
     try:
         if not c.execute(
@@ -263,7 +263,7 @@ def patch_account(
 @router.delete("/{account_id}")
 def delete_account(
     account_id: int,
-    user: Annotated[dict[str, object], Depends(current_user)],
+    user: Annotated[AuthenticatedUser, Depends(current_user)],
     reassignTo: int | None = None,
 ) -> dict[str, bool]:
     """
@@ -271,7 +271,7 @@ def delete_account(
     transaction must always belong to an account, so a non-empty account cannot
     be deleted without a reassign target, and the last account cannot be deleted.
     """
-    uid = cast("int", user["id"])
+    uid = user.id
     c = conn()
     try:
         if not c.execute(
@@ -324,13 +324,13 @@ def delete_account(
 def reconcile_account(
     account_id: int,
     body: ReconcileBody,
-    user: Annotated[dict[str, object], Depends(current_user)],
+    user: Annotated[AuthenticatedUser, Depends(current_user)],
 ) -> dict[str, int]:
     """
     Bring an account's computed balance to the real bank balance by posting a
     single adjustment transaction for the difference. Returns the delta applied.
     """
-    uid = cast("int", user["id"])
+    uid = user.id
     c = conn()
     try:
         acc = c.execute(
@@ -367,9 +367,9 @@ def reconcile_account(
 
 @router.post("/reorder")
 def reorder_accounts(
-    body: Reorder, user: Annotated[dict[str, object], Depends(current_user)]
+    body: Reorder, user: Annotated[AuthenticatedUser, Depends(current_user)]
 ) -> dict[str, bool]:
-    uid = cast("int", user["id"])
+    uid = user.id
     c = conn()
     try:
         known = {r["id"] for r in c.execute("SELECT id FROM accounts WHERE user_id=?", (uid,))}

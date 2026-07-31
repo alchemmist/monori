@@ -4,7 +4,7 @@ from typing import Annotated, NotRequired, TypedDict, cast
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from ..auth import current_user
+from ..auth import AuthenticatedUser, current_user
 from ..deps import conn
 
 router = APIRouter(prefix="/api/categories", tags=["categories"])
@@ -75,9 +75,9 @@ def _name_taken(c: sqlite3.Connection, uid: int, name: str, except_id: int | Non
 
 @router.post("")
 def create_category(
-    body: CategoryBody, user: Annotated[dict[str, object], Depends(current_user)]
+    body: CategoryBody, user: Annotated[AuthenticatedUser, Depends(current_user)]
 ) -> dict[str, object]:
-    uid = cast("int", user["id"])
+    uid = user.id
     name = body["name"].strip()
     if not name:
         raise HTTPException(422, "name cannot be empty")
@@ -123,9 +123,9 @@ def create_category(
 
 @router.patch("/{cat_id}")
 def patch_category(
-    cat_id: int, patch: CategoryPatch, user: Annotated[dict[str, object], Depends(current_user)]
+    cat_id: int, patch: CategoryPatch, user: Annotated[AuthenticatedUser, Depends(current_user)]
 ) -> dict[str, bool]:
-    uid = cast("int", user["id"])
+    uid = user.id
     c = conn()
     try:
         category = _owned_category(c, cat_id, uid)
@@ -190,10 +190,10 @@ def patch_category(
 
 @router.post("/{cat_id}/archive-goal")
 def archive_goal(
-    cat_id: int, body: ArchiveGoalBody, user: Annotated[dict[str, object], Depends(current_user)]
+    cat_id: int, body: ArchiveGoalBody, user: Annotated[AuthenticatedUser, Depends(current_user)]
 ) -> dict[str, bool]:
     """Close a goal without rewriting its allocations or purchase history."""
-    uid = cast("int", user["id"])
+    uid = user.id
     c = conn()
     try:
         row = _owned_category(c, cat_id, uid)
@@ -208,7 +208,7 @@ def archive_goal(
 
 @router.delete("/{cat_id}")
 def delete_category(
-    cat_id: int, user: Annotated[dict[str, object], Depends(current_user)]
+    cat_id: int, user: Annotated[AuthenticatedUser, Depends(current_user)]
 ) -> dict[str, bool]:
     """
     Deleting a category never shifts anything: its transactions are left
@@ -219,7 +219,7 @@ def delete_category(
     merge enforces — so the income/expense invariant was one API call from being
     bypassed. There is now exactly one path that moves transactions.
     """
-    uid = cast("int", user["id"])
+    uid = user.id
     c = conn()
     try:
         c.execute("PRAGMA foreign_keys=ON")
@@ -236,9 +236,9 @@ def delete_category(
 
 @router.post("/reorder")
 def reorder_categories(
-    body: Reorder, user: Annotated[dict[str, object], Depends(current_user)]
+    body: Reorder, user: Annotated[AuthenticatedUser, Depends(current_user)]
 ) -> dict[str, bool]:
-    uid = cast("int", user["id"])
+    uid = user.id
     c = conn()
     try:
         known = {
@@ -261,7 +261,7 @@ def reorder_categories(
 
 @router.post("/{cat_id}/merge")
 def merge_category(
-    cat_id: int, body: MergeBody, user: Annotated[dict[str, object], Depends(current_user)]
+    cat_id: int, body: MergeBody, user: Annotated[AuthenticatedUser, Depends(current_user)]
 ) -> dict[str, bool]:
     """
     Combine a category into another: its transactions move to the target,
@@ -273,7 +273,7 @@ def merge_category(
     group kind, so a cross-kind merge would silently reinterpret the whole
     moved history.
     """
-    uid = cast("int", user["id"])
+    uid = user.id
     c = conn()
     try:
         c.execute("PRAGMA foreign_keys=ON")

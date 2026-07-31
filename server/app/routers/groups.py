@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from typing import Annotated, TypedDict, cast
+from typing import Annotated, TypedDict
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from ..auth import current_user
+from ..auth import AuthenticatedUser, current_user
 from ..deps import conn, serialize_group
 
 router = APIRouter(prefix="/api/groups", tags=["groups"])
@@ -26,9 +26,9 @@ class Reorder(TypedDict):
 
 @router.get("")
 def list_groups(
-    user: Annotated[dict[str, object], Depends(current_user)],
+    user: Annotated[AuthenticatedUser, Depends(current_user)],
 ) -> list[dict[str, object]]:
-    uid = cast("int", user["id"])
+    uid = user.id
     c = conn()
     try:
         return [
@@ -46,9 +46,9 @@ def list_groups(
 
 @router.post("")
 def create_group(
-    body: GroupBody, user: Annotated[dict[str, object], Depends(current_user)]
+    body: GroupBody, user: Annotated[AuthenticatedUser, Depends(current_user)]
 ) -> dict[str, object]:
-    uid = cast("int", user["id"])
+    uid = user.id
     name = body["name"].strip()
     if not name:
         raise HTTPException(422, "name cannot be empty")
@@ -80,9 +80,9 @@ def create_group(
 def patch_group(
     group_id: int,
     patch: GroupPatch,
-    user: Annotated[dict[str, object], Depends(current_user)],
+    user: Annotated[AuthenticatedUser, Depends(current_user)],
 ) -> dict[str, bool]:
-    uid = cast("int", user["id"])
+    uid = user.id
     c = conn()
     try:
         if not c.execute(
@@ -116,9 +116,9 @@ def patch_group(
 
 @router.delete("/{group_id}")
 def delete_group(
-    group_id: int, user: Annotated[dict[str, object], Depends(current_user)]
+    group_id: int, user: Annotated[AuthenticatedUser, Depends(current_user)]
 ) -> dict[str, bool]:
-    uid = cast("int", user["id"])
+    uid = user.id
     c = conn()
     try:
         if not c.execute(
@@ -140,9 +140,9 @@ def delete_group(
 
 @router.post("/reorder")
 def reorder_groups(
-    body: Reorder, user: Annotated[dict[str, object], Depends(current_user)]
+    body: Reorder, user: Annotated[AuthenticatedUser, Depends(current_user)]
 ) -> dict[str, bool]:
-    uid = cast("int", user["id"])
+    uid = user.id
     c = conn()
     try:
         known = {

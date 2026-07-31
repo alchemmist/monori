@@ -4,7 +4,7 @@ from typing import Annotated, NotRequired, TypedDict, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from ..auth import current_user
+from ..auth import AuthenticatedUser, current_user
 from ..deps import conn, serialize_tx
 from ..importer import tx_hash
 from ..transfer_match import AUTO_DAYS, SUGGEST_DAYS, split_confident
@@ -42,17 +42,17 @@ def account_exists(c: sqlite3.Connection, account_id: int, uid: int) -> bool:
 
 
 @router.get("")
-def get_transfers(user: Annotated[dict[str, object], Depends(current_user)]) -> dict[str, object]:
+def get_transfers(user: Annotated[AuthenticatedUser, Depends(current_user)]) -> dict[str, object]:
     c = conn()
     try:
-        return {"rows": list_transfers(c, cast("int", user["id"]))}
+        return {"rows": list_transfers(c, user.id)}
     finally:
         c.close()
 
 
 @router.get("/suggestions")
 def get_suggestions(
-    user: Annotated[dict[str, object], Depends(current_user)],
+    user: Annotated[AuthenticatedUser, Depends(current_user)],
     maxDays: int = Query(default=SUGGEST_DAYS, ge=0, le=31),
 ) -> dict[str, object]:
     """
@@ -61,7 +61,7 @@ def get_suggestions(
     themselves ride along so the UI can show both sides without a second round
     trip.
     """
-    uid = cast("int", user["id"])
+    uid = user.id
     c = conn()
     try:
         _, pairs = split_confident(candidates(c, uid, maxDays))
@@ -78,14 +78,14 @@ def get_suggestions(
 
 @router.post("")
 def create_transfer(
-    body: TransferBody, user: Annotated[dict[str, object], Depends(current_user)]
+    body: TransferBody, user: Annotated[AuthenticatedUser, Depends(current_user)]
 ) -> dict[str, str]:
     """
     A transfer is two linked transactions: a negative row on the source account
     and a positive row on the destination, merged into one ``transfers`` entity.
     Both legs stay uncategorized, so they never count as income or expense.
     """
-    uid = cast("int", user["id"])
+    uid = user.id
     if body["amount"] <= 0:
         raise HTTPException(422, "amount must be positive")
     if body["fromAccountId"] == body["toAccountId"]:
@@ -127,7 +127,7 @@ def create_transfer(
 
 @router.post("/link")
 def link_transactions(
-    body: PairBody, user: Annotated[dict[str, object], Depends(current_user)]
+    body: PairBody, user: Annotated[AuthenticatedUser, Depends(current_user)]
 ) -> dict[str, str]:
     """
     Merge a pair that is already in the ledger — the usual case for rows the
@@ -138,7 +138,7 @@ def link_transactions(
     try:
         transfer_id = link_pair(
             c,
-            cast("int", user["id"]),
+            user.id,
             body["outTxId"],
             body["inTxId"],
             note=body.get("note", ""),
@@ -153,11 +153,11 @@ def link_transactions(
 
 @router.post("/suggestions/dismiss")
 def dismiss_suggestion(
-    body: PairBody, user: Annotated[dict[str, object], Depends(current_user)]
+    body: PairBody, user: Annotated[AuthenticatedUser, Depends(current_user)]
 ) -> dict[str, bool]:
     c = conn()
     try:
-        reject(c, cast("int", user["id"]), body["outTxId"], body["inTxId"])
+        reject(c, user.id, body["outTxId"], body["inTxId"])
         c.commit()
         return {"ok": True}
     except LinkError as e:
@@ -168,7 +168,7 @@ def dismiss_suggestion(
 
 @router.post("/detect")
 def run_detection(
-    user: Annotated[dict[str, object], Depends(current_user)],
+    user: Annotated[AuthenticatedUser, Depends(current_user)],
     maxDays: int = Query(default=SUGGEST_DAYS, ge=0, le=31),
 ) -> dict[str, object]:
     """
@@ -176,7 +176,7 @@ def run_detection(
     """
     c = conn()
     try:
-        merged, suggested = detect(c, cast("int", user["id"]), AUTO_DAYS, maxDays)
+        merged, suggested = detect(c, user.id, AUTO_DAYS, maxDays)
         c.commit()
         return {"merged": merged, "suggested": len(suggested)}
     finally:
@@ -185,7 +185,7 @@ def run_detection(
 
 @router.delete("/{transfer_id}")
 def delete_transfer(
-    transfer_id: str, user: Annotated[dict[str, object], Depends(current_user)]
+    transfer_id: str, user: Annotated[AuthenticatedUser, Depends(current_user)]
 ) -> dict[str, bool]:
     """
     Split a transfer back into two ordinary transactions, categories and all.
@@ -194,7 +194,7 @@ def delete_transfer(
     """
     c = conn()
     try:
-        if not split_transfer(c, cast("int", user["id"]), str(transfer_id)):
+        if not split_transfer(c, user.id, str(transfer_id)):
             raise HTTPException(404, "transfer not found")
         c.commit()
         return {"ok": True}

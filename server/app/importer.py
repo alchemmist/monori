@@ -14,7 +14,7 @@ import re
 from collections.abc import Iterable, Mapping
 from dataclasses import asdict
 from datetime import datetime
-from typing import Literal, cast, overload
+from typing import Literal, TypedDict, overload
 
 from pydantic import ConfigDict
 from pydantic.dataclasses import dataclass as pydantic_dataclass
@@ -23,6 +23,13 @@ from .connectors.base import SyncRow
 
 ImportValue = str | int | bool | None
 RuleValue = str | list[str] | int
+
+
+class CategoryDefinition(TypedDict):
+    id: int
+    name: str
+    keywords: str | None
+    group_id: int
 
 COLUMNS = [
     "op_date",
@@ -71,7 +78,13 @@ class ParseError:
     def __getitem__(self, key: Literal["raw"]) -> str: ...
 
     def __getitem__(self, key: str) -> int | str:
-        return cast("int | str", getattr(self, key))
+        if key == "line":
+            return self.line
+        if key == "error":
+            return self.error
+        if key == "raw":
+            return self.raw
+        raise KeyError(key)
 
     def to_api_dict(self) -> dict[str, int | str]:
         return asdict(self)
@@ -121,7 +134,16 @@ class ImportRow:
     def __getitem__(self, key: Literal["hash"]) -> str: ...
 
     def __getitem__(self, key: str) -> ImportValue:
-        return cast("ImportValue", getattr(self, _attr_name(key)))
+        values: dict[str, ImportValue] = self.to_api_dict()
+        try:
+            return values[key]
+        except KeyError:
+            snake_key = _attr_name(key)
+            if snake_key == "account_id":
+                return self.account_id
+            if snake_key == "category_id":
+                return self.category_id
+            raise
 
     @overload
     def __setitem__(self, key: Literal["accountId"], value: int | None) -> None: ...
@@ -140,8 +162,9 @@ class ImportRow:
 
     def get(self, key: str, default: ImportValue = None) -> ImportValue:
         try:
-            return cast("ImportValue", getattr(self, _attr_name(key)))
-        except AttributeError:
+            values: dict[str, ImportValue] = self.to_api_dict()
+            return values[key]
+        except KeyError:
             return default
 
     def to_api_dict(self) -> dict[str, ImportValue]:
@@ -170,18 +193,18 @@ class ImportRow:
         }
 
     def to_sync_dict(self) -> SyncRow:
-        return {
-            "date": self.date,
-            "amount": self.amount,
-            "description": self.description,
-            "bank_category": self.bank_category,
-            "mcc": self.mcc,
-            "card": self.card,
-            "account_id": self.account_id,
-            "category_id": self.category_id,
-            "duplicate": self.duplicate,
-            "hash": self.hash,
-        }
+        return SyncRow(
+            date=self.date,
+            amount=self.amount,
+            description=self.description,
+            bank_category=self.bank_category,
+            mcc=self.mcc,
+            card=self.card,
+            account_id=self.account_id,
+            category_id=self.category_id,
+            duplicate=self.duplicate,
+            hash=self.hash,
+        )
 
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid"))
@@ -200,7 +223,13 @@ class CategoryRule:
     def __getitem__(self, key: Literal["keywords"]) -> list[str]: ...
 
     def __getitem__(self, key: str) -> RuleValue:
-        return cast("RuleValue", getattr(self, _attr_name(key)))
+        if key == "category_id":
+            return self.category_id
+        if key == "name":
+            return self.name
+        if key == "keywords":
+            return self.keywords
+        raise KeyError(key)
 
 
 def parse_date(raw: str) -> datetime | None:
@@ -281,7 +310,7 @@ def parse_statement(text: str) -> tuple[list[ImportRow], list[ParseError]]:
 
 
 def build_rules(
-    categories: Iterable[Mapping[str, str | int | None]], groups: Mapping[int, str]
+    categories: Iterable[CategoryDefinition], groups: Mapping[int, str]
 ) -> dict[str, list[CategoryRule]]:
     """
     categories: iterable of dicts with name/keywords/group_id;
@@ -292,13 +321,20 @@ def build_rules(
         keywords = [k.strip().lower() for k in str(c["keywords"] or "").split("|") if k.strip()]
         if not keywords:
             continue
-        kind = groups.get(cast("int", c["group_id"]))
+        group_id = c["group_id"]
+        category_id = c["id"]
+        name = c["name"]
+        if not isinstance(group_id, int) or not isinstance(category_id, int):
+            continue
+        if not isinstance(name, str):
+            continue
+        kind = groups.get(group_id)
         if kind not in ("income", "expense"):
             continue
         rules["IN" if kind == "income" else "OUT"].append(
             CategoryRule(
-                category_id=cast("int", c["id"]),
-                name=cast("str", c["name"]),
+                category_id=category_id,
+                name=name,
                 keywords=keywords,
             )
         )

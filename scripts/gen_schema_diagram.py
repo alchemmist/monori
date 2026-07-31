@@ -15,6 +15,7 @@ import argparse
 import sqlite3
 import sys
 from collections.abc import Mapping
+from dataclasses import dataclass
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -27,9 +28,25 @@ GENERATED_NOTE = (
     "run `make schema-diagram` after changing the schema -->"
 )
 
-ColumnInfo = tuple[int, str, str | None, int, str | None, int]
-ForeignKeyInfo = tuple[int, int, str, str, str, str, str, str]
-TableInfo = tuple[list[ColumnInfo], list[ForeignKeyInfo]]
+@dataclass(frozen=True, slots=True)
+class ColumnInfo:
+    name: str
+    declared_type: str | None
+    required: bool
+    primary_key: bool
+
+
+@dataclass(frozen=True, slots=True)
+class ForeignKeyInfo:
+    parent_table: str
+    child_column: str
+    parent_column: str
+
+
+@dataclass(frozen=True, slots=True)
+class TableInfo:
+    columns: list[ColumnInfo]
+    foreign_keys: list[ForeignKeyInfo]
 
 
 def introspect(
@@ -47,43 +64,60 @@ def introspect(
     ]
     out: dict[str, TableInfo] = {}
     for t in tables:
-        columns = list(db.execute(f"PRAGMA table_info({t})"))
-        fks = list(db.execute(f"PRAGMA foreign_key_list({t})"))
-        out[t] = (columns, fks)
+        columns = [
+            ColumnInfo(str(row[1]), str(row[2]) or None, bool(row[3]), bool(row[5]))
+            for row in db.execute(f"PRAGMA table_info({t})")
+        ]
+        foreign_keys = [
+            ForeignKeyInfo(str(row[2]), str(row[3]), str(row[4]))
+            for row in db.execute(f"PRAGMA foreign_key_list({t})")
+        ]
+        out[t] = TableInfo(columns, foreign_keys)
     db.close()
     return out
 
 
 def diagram(tables: Mapping[str, TableInfo]) -> str:
     lines = ["```mermaid", "erDiagram"]
-    for name, (columns, fks) in tables.items():
+    for name, table in tables.items():
         # a composite foreign key would repeat the parent per column; mermaid
         # takes one edge per pair, and the schema has none of those anyway
-        by_column = {fk[3]: (fk[2], fk[4]) for fk in fks}
+        by_column = {
+            foreign_key.child_column: (foreign_key.parent_table, foreign_key.parent_column)
+            for foreign_key in table.foreign_keys
+        }
         lines.append(f"    {name} {{")
-        for _, column, decl_type, notnull, _, pk in columns:
+        for column in table.columns:
             # mermaid takes several key markers on one attribute comma-separated
             marks = ", ".join(
-                filter(None, ["PK" if pk else "", "FK" if column in by_column else ""])
+                filter(
+                    None,
+                    [
+                        "PK" if column.primary_key else "",
+                        "FK" if column.name in by_column else "",
+                    ],
+                )
             )
             note = []
-            if column in by_column:
-                parent, parent_column = by_column[column]
+            if column.name in by_column:
+                parent, parent_column = by_column[column.name]
                 note.append(f"-> {parent}.{parent_column}")
-            if notnull and not pk:
+            if column.required and not column.primary_key:
                 note.append("required")
             comment = f' "{", ".join(note)}"' if note else ""
             lines.append(
-                f"        {decl_type or 'ANY'} {column}{f' {marks}' if marks else ''}{comment}"
+                f"        {column.declared_type or 'ANY'} {column.name}"
+                f"{f' {marks}' if marks else ''}{comment}"
             )
         lines.append("    }")
-    for name, (columns, fks) in tables.items():
-        required = {c[1] for c in columns if c[3]}
-        for fk in fks:
-            parent, column = fk[2], fk[3]
+    for name, table in tables.items():
+        required = {column.name for column in table.columns if column.required}
+        for foreign_key in table.foreign_keys:
+            parent = foreign_key.parent_table
+            child_column = foreign_key.child_column
             # a mandatory child row must have a parent; an optional one may not
-            left = "||" if column in required else "|o"
-            lines.append(f'    {parent} {left}--o{{ {name} : "{column}"')
+            left = "||" if child_column in required else "|o"
+            lines.append(f'    {parent} {left}--o{{ {name} : "{child_column}"')
     lines.append("```")
     return "\n".join(lines)
 

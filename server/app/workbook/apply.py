@@ -6,7 +6,6 @@ database for one user. The caller owns the connection and the commit.
 import datetime
 import sqlite3
 from collections.abc import Iterable, Mapping
-from typing import cast
 
 from ..importer import ImportRow
 from ..ingest import commit_rows, dedup_text, historical_day_counts
@@ -30,7 +29,7 @@ def _upsert_groups(
     c: sqlite3.Connection, uid: int, groups: Iterable[WorkbookGroup]
 ) -> tuple[dict[str, int], int]:
     existing = {
-        cast("str", r["name"]): cast("int", r["id"])
+        str(r["name"]): int(r["id"])
         for r in c.execute("SELECT id, name FROM category_groups WHERE user_id=?", (uid,))
     }
     created = 0
@@ -44,7 +43,10 @@ def _upsert_groups(
             " VALUES (?, ?, ?, (SELECT id FROM category_group_types WHERE type=?))",
             (uid, g.name, g.sort, g.kind),
         )
-        ids[g.name] = cast("int", cur.lastrowid)
+        group_id = cur.lastrowid
+        if group_id is None:
+            raise RuntimeError("inserted group did not return a row id")
+        ids[g.name] = group_id
         created += 1
     return ids, created
 
@@ -56,7 +58,7 @@ def _upsert_categories(
     group_ids: Mapping[str, int],
 ) -> tuple[dict[str, int], int]:
     existing = {
-        (cast("int", r["group_id"]), cast("str", r["name"])): cast("int", r["id"])
+        (int(r["group_id"]), str(r["name"])): int(r["id"])
         for r in c.execute(
             "SELECT c.id, c.group_id, c.name FROM categories c"
             " JOIN category_groups g ON g.id = c.group_id WHERE g.user_id=?",
@@ -64,7 +66,7 @@ def _upsert_categories(
         )
     }
     max_sort = {
-        cast("int", r["group_id"]): cast("int", r["s"])
+        int(r["group_id"]): int(r["s"])
         for r in c.execute(
             "SELECT c.group_id, MAX(c.sort) s FROM categories c"
             " JOIN category_groups g ON g.id = c.group_id WHERE g.user_id=?"
@@ -88,7 +90,10 @@ def _upsert_categories(
             "INSERT INTO categories (group_id, name, keywords, sort) VALUES (?, ?, ?, ?)",
             (gid, cat.name, cat.keywords, sort),
         )
-        ids[cat.name] = cast("int", cur.lastrowid)
+        category_id = cur.lastrowid
+        if category_id is None:
+            raise RuntimeError("inserted category did not return a row id")
+        ids[cat.name] = category_id
         created += 1
     return ids, created
 
@@ -107,7 +112,7 @@ def _category_index(c: sqlite3.Connection, uid: int) -> dict[str, int]:
         " ORDER BY c.sort, c.id",
         (uid,),
     ):
-        index.setdefault(_norm(cast("str", r["name"])), cast("int", r["id"]))
+        index.setdefault(_norm(str(r["name"])), int(r["id"]))
     return index
 
 
@@ -116,9 +121,9 @@ def _norm(name: str) -> str:
 
 
 def _drop_already_present(
-    rows: Iterable[WorkbookTransaction], counts: Mapping[tuple[str, object, str], int]
+    rows: Iterable[WorkbookTransaction], counts: Mapping[tuple[str, int, str], int]
 ) -> tuple[list[WorkbookTransaction], int]:
-    seen: dict[tuple[str, object, str], int] = {}
+    seen: dict[tuple[str, int, str], int] = {}
     kept: list[WorkbookTransaction] = []
     dropped = 0
     for row in rows:
@@ -180,11 +185,13 @@ def _import_transactions(
             "INSERT INTO import_batches (account_id, source, created_at) VALUES (?, 'workbook', ?)",
             (account_id, _now()),
         )
-        batch_id = cast("int", cur.lastrowid)
+        batch_id = cur.lastrowid
+        if batch_id is None:
+            raise RuntimeError("inserted import batch did not return a row id")
         ins, skip = commit_rows(
             c,
             account_id,
-            [row.to_ingest_dict() for row in rows],
+            [row.to_sync_dict() for row in rows],
             source="workbook",
             batch_id=batch_id,
         )

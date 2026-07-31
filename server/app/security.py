@@ -12,11 +12,12 @@ import pathlib
 import secrets
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
-from typing import cast
+from typing import TypedDict
 
 import jwt
 from argon2 import PasswordHasher
 from argon2.exceptions import Argon2Error
+from pydantic import TypeAdapter
 
 from . import db as dbmod
 
@@ -24,6 +25,15 @@ _hasher = PasswordHasher()
 
 ALGORITHM = "HS256"
 TOKEN_TTL = timedelta(days=7)
+
+
+class TokenPayload(TypedDict, total=False):
+    sub: str
+    iat: int
+    exp: int
+
+
+TOKEN_PAYLOAD_ADAPTER: TypeAdapter[TokenPayload] = TypeAdapter(TokenPayload)
 
 
 def hash_password(password: str) -> str:
@@ -94,8 +104,10 @@ def create_access_token(user_id: int) -> str:
     return jwt.encode(payload, auth_secret(), algorithm=ALGORITHM)
 
 
-def decode_access_token(token: str) -> dict[str, object]:
+def decode_access_token(token: str) -> TokenPayload:
     """
     Return the token's payload, or raise jwt.InvalidTokenError.
     """
-    return cast("dict[str, object]", jwt.decode(token, auth_secret(), algorithms=[ALGORITHM]))
+    return TOKEN_PAYLOAD_ADAPTER.validate_python(
+        jwt.decode(token, auth_secret(), algorithms=[ALGORITHM])
+    )

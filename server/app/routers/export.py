@@ -3,7 +3,7 @@ from typing import Annotated, cast
 from fastapi import APIRouter, Depends
 from fastapi.responses import Response
 
-from ..auth import current_user
+from ..auth import AuthenticatedUser, current_user
 from ..deps import conn, snapshot
 from ..workbook.export import WorkbookSnap, workbook_bytes
 
@@ -13,10 +13,10 @@ XLSX_MEDIA_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.s
 
 
 @router.get("/xlsx")
-def export_xlsx(user: Annotated[dict[str, object], Depends(current_user)]) -> Response:
+def export_xlsx(user: Annotated[AuthenticatedUser, Depends(current_user)]) -> Response:
     c = conn()
     try:
-        snap = snapshot(c, cast("int", user["id"]))
+        snap = snapshot(c, user.id)
     finally:
         c.close()
     return Response(

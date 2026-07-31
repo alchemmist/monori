@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Annotated, NotRequired, TypedDict, cast
+from typing import TYPE_CHECKING, Annotated, NotRequired, TypedDict
 
 if TYPE_CHECKING:
     import sqlite3
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from ..auth import current_user
+from ..auth import AuthenticatedUser, current_user
 from ..deps import conn
 
 router = APIRouter(prefix="/api/budgets", tags=["budgets"])
@@ -55,9 +55,9 @@ def _set_cell(c: sqlite3.Connection, cell: BudgetCell, uid: int) -> None:
 
 @router.put("")
 def put_budget(
-    cell: BudgetCell, user: Annotated[dict[str, object], Depends(current_user)]
+    cell: BudgetCell, user: Annotated[AuthenticatedUser, Depends(current_user)]
 ) -> dict[str, bool]:
-    uid = cast("int", user["id"])
+    uid = user.id
     c = conn()
     try:
         _set_cell(c, cell, uid)
@@ -69,9 +69,9 @@ def put_budget(
 
 @router.post("/bulk")
 def bulk_budgets(
-    body: BulkBody, user: Annotated[dict[str, object], Depends(current_user)]
+    body: BulkBody, user: Annotated[AuthenticatedUser, Depends(current_user)]
 ) -> dict[str, int]:
-    uid = cast("int", user["id"])
+    uid = user.id
     c = conn()
     try:
         for cell in body["cells"]:
@@ -84,14 +84,14 @@ def bulk_budgets(
 
 @router.post("/copy")
 def copy_budgets(
-    body: CopyBody, user: Annotated[dict[str, object], Depends(current_user)]
+    body: CopyBody, user: Annotated[AuthenticatedUser, Depends(current_user)]
 ) -> dict[str, int]:
     """
     Copy month->month (both months given) or a whole year->year (months
     omitted). The destination scope is cleared first, so it becomes an exact
     copy of the source.
     """
-    uid = cast("int", user["id"])
+    uid = user.id
     from_month = body.get("fromMonth")
     to_month = body.get("toMonth")
     month_mode = from_month is not None and to_month is not None

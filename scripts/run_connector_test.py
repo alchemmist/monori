@@ -12,7 +12,6 @@ import io
 import os
 import sys
 import tarfile
-from typing import cast
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "server"))
 
@@ -38,7 +37,10 @@ def main() -> None:
         "password": os.environ.get("TBANK_PASSWORD", ""),
         "code": os.environ.get("TBANK_CODE", ""),
     }
-    print(f"profile blob: {len(cast('str', session['profile']))} b64 chars")
+    profile = session["profile"]
+    if not isinstance(profile, str):
+        raise RuntimeError("profile archive is not a string")
+    print(f"profile blob: {len(profile)} b64 chars")
     print(f"headless: {TBankPlaywrightConnector._headless()}")
 
     conn = TBankPlaywrightConnector(creds, session)
@@ -54,9 +56,9 @@ def main() -> None:
     rows = result.rows
     print(f"RESULT: OK -> {len(rows)} rows parsed")
     if rows:
-        ds = sorted(r["date"] for r in rows)
+        ds = sorted(row.date for row in rows)
         print(f"  span {ds[0]} .. {ds[-1]}")
-        print(f"  session updated: {'profile' in cast('JsonObject', result.session or {})}")
+        print(f"  session updated: {'profile' in (result.session or {})}")
 
 
 if __name__ == "__main__":

@@ -14,12 +14,17 @@ when an OTP code arrives with no login waiting for it.
 
 import contextlib
 import os
-from typing import cast
 
 import httpx
 
 from .connectors import base as connectors
-from .connectors.base import ConnectorError, JsonObject, SmsRequired, SyncResult, SyncRow
+from .connectors.base import (
+    SYNC_RESULT_ADAPTER,
+    ConnectorError,
+    JsonObject,
+    SmsRequired,
+    SyncResult,
+)
 
 
 class NoPendingLogin(Exception):
@@ -91,9 +96,9 @@ class RemoteRunner:
             raise ConnectorError("sync service returned an invalid response")
         status = payload.get("status")
         if status == "done":
-            rows = cast("list[SyncRow]", payload.get("rows") or [])
-            session = cast("JsonObject | None", payload.get("session"))
-            return SyncResult(rows, session)
+            return SYNC_RESULT_ADAPTER.validate_python(
+                {"rows": payload.get("rows") or [], "session": payload.get("session")}
+            )
         if status == "awaiting_sms":
             raise SmsRequired(payload.get("message") or "code sent")
         raise ConnectorError(payload.get("message") or "sync failed")

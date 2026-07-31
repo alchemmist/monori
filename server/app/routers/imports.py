@@ -8,9 +8,18 @@ from fastapi.concurrency import run_in_threadpool
 from pydantic import ConfigDict, Field, ValidationError
 from pydantic.dataclasses import dataclass as pydantic_dataclass
 
-from ..auth import current_user
+from ..auth import AuthenticatedUser, current_user
+from ..connectors.base import SyncRow
 from ..deps import conn
-from ..importer import CategoryRule, ImportRow, build_rules, categorize, parse_statement, tx_hash
+from ..importer import (
+    CategoryDefinition,
+    CategoryRule,
+    ImportRow,
+    build_rules,
+    categorize,
+    parse_statement,
+    tx_hash,
+)
 from ..ingest import commit_rows, existing_hash_counts
 from ..transfer_service import detect
 from ..workbook.apply import apply_workbook, budget_conflicts
@@ -69,8 +78,13 @@ def _load_user_rules(c: sqlite3.Connection, uid: int) -> dict[str, list[Category
             (uid,),
         )
     }
-    cats = [
-        dict(r)
+    cats: list[CategoryDefinition] = [
+        {
+            "id": int(r["id"]),
+            "name": str(r["name"]),
+            "keywords": str(r["keywords"]) if r["keywords"] is not None else None,
+            "group_id": int(r["group_id"]),
+        }
         for r in c.execute(
             "SELECT c.id, c.name, c.keywords, c.group_id FROM categories c"
             " JOIN category_groups g ON g.id = c.group_id WHERE g.user_id=? ORDER BY c.sort",
@@ -169,9 +183,9 @@ def _mark_duplicates(c: sqlite3.Connection, rows: list[ImportRow]) -> None:
 
 @router.post("/preview")
 def import_preview(
-    body: ImportBody, user: Annotated[dict[str, object], Depends(current_user)]
+    body: ImportBody, user: Annotated[AuthenticatedUser, Depends(current_user)]
 ) -> dict[str, object]:
-    uid = cast("int", user["id"])
+    uid = user.id
     if len(body.text) > MAX_STATEMENT_TEXT:
         raise HTTPException(413, "statement is too large")
     c = conn()
@@ -213,10 +227,10 @@ def import_preview(
 
 @router.post("/duplicates")
 def import_duplicates(
-    body: DuplicateBody, user: Annotated[dict[str, object], Depends(current_user)]
+    body: DuplicateBody, user: Annotated[AuthenticatedUser, Depends(current_user)]
 ) -> dict[str, list[bool]]:
     """Re-check preview rows after the user manually changes their accounts."""
-    uid = cast("int", user["id"])
+    uid = user.id
     c = conn()
     try:
         rows = [
@@ -242,19 +256,19 @@ def import_duplicates(
 
 @router.post("/commit")
 def import_commit(
-    body: CommitBody, user: Annotated[dict[str, object], Depends(current_user)]
+    body: CommitBody, user: Annotated[AuthenticatedUser, Depends(current_user)]
 ) -> dict[str, int]:
     """
     Server-side dedup: rows whose hash already exists — or repeats within the
     batch — are skipped, so a double-submit can't create duplicates.
     """
-    uid = cast("int", user["id"])
+    uid = user.id
     c = conn()
     try:
         if body.account_id is not None and not _owned_account(c, body.account_id, uid):
             raise HTTPException(400, "unknown account")
         _validate_import_categories(c, uid, body.rows)
-        grouped: dict[int, list[dict[str, object]]] = {}
+        grouped: dict[int, list[SyncRow]] = {}
         for r in body.rows:
             # A body-level account is the legacy, single-account contract and
             # intentionally takes precedence over preview metadata.
@@ -262,14 +276,15 @@ def import_commit(
             if account_id is None:
                 raise HTTPException(400, "every import row needs an account")
             grouped.setdefault(account_id, []).append(
-                {
-                    "date": r.date,
-                    "amount": r.amount,
-                    "description": r.description,
-                    "bank_category": r.bank_category,
-                    "mcc": r.mcc,
-                    "category_id": r.category_id,
-                }
+                SyncRow(
+                    date=r.date,
+                    amount=r.amount,
+                    description=r.description,
+                    bank_category=r.bank_category,
+                    mcc=r.mcc,
+                    card="",
+                    category_id=r.category_id,
+                )
             )
         for account_id in grouped:
             if not _owned_account(c, account_id, uid):
@@ -449,16 +464,16 @@ def _commit_workbook(
 # handle belongs to the thread that created it.
 @router.post("/workbook/preview")
 async def workbook_preview(
-    user: Annotated[dict[str, object], Depends(current_user)],
+    user: Annotated[AuthenticatedUser, Depends(current_user)],
     file: Annotated[UploadFile, File()],
 ) -> dict[str, object]:
     data = await _read_workbook_upload(file)
-    return await run_in_threadpool(_preview_workbook, data, cast("int", user["id"]))
+    return await run_in_threadpool(_preview_workbook, data, user.id)
 
 
 @router.post("/workbook/commit")
 async def workbook_commit(
-    user: Annotated[dict[str, object], Depends(current_user)],
+    user: Annotated[AuthenticatedUser, Depends(current_user)],
     file: Annotated[UploadFile, File()],
     mapping: Annotated[str, Form()],
     budgetPolicy: Annotated[str, Form()] = "overwrite",
@@ -468,5 +483,5 @@ async def workbook_commit(
         raise HTTPException(400, "budgetPolicy must be overwrite or skip")
     data = await _read_workbook_upload(file)
     return await run_in_threadpool(
-        _commit_workbook, data, cast("int", user["id"]), mapping, budgetPolicy, remember
+        _commit_workbook, data, user.id, mapping, budgetPolicy, remember
     )

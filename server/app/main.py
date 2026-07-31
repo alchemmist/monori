@@ -7,7 +7,7 @@ from __future__ import annotations
 import contextlib
 import os
 import pathlib
-from typing import TYPE_CHECKING, Annotated, cast
+from typing import TYPE_CHECKING, Annotated
 
 from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse
@@ -15,7 +15,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 
 from .admin import record_api_usage
-from .auth import current_user
+from .auth import AuthenticatedUser, current_user
 from .deps import LIGHT_SNAPSHOT_TX_LIMIT, conn, snapshot
 from .routers import (
     accounts,
@@ -96,7 +96,7 @@ for _router in (
 
 @app.get("/api/snapshot")
 def get_snapshot(
-    user: Annotated[dict[str, object], Depends(current_user)],
+    user: Annotated[AuthenticatedUser, Depends(current_user)],
     light: bool = False,
     limit: int = Query(default=LIGHT_SNAPSHOT_TX_LIMIT, ge=1, le=5000),
 ) -> dict[str, object]:
@@ -109,7 +109,7 @@ def get_snapshot(
     """
     c = conn()
     try:
-        return snapshot(c, cast("int", user["id"]), tx_limit=limit if light else None)
+        return snapshot(c, user.id, tx_limit=limit if light else None)
     finally:
         c.close()
 

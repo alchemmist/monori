@@ -15,11 +15,13 @@ if TYPE_CHECKING:
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
+from .. import auth
 from ..admin import admin_user
 from ..deps import conn, serialize_user
 from .auth_router import create_user
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
+AdminContext = auth.AuthenticatedUser
 
 RECENT_TX_LIMIT = 50
 TX_PAGE_MAX = 1000
@@ -37,7 +39,7 @@ def _count(c: sqlite3.Connection, sql: str, params: tuple[object, ...] = ()) -> 
 
 
 @router.get("/overview")
-def overview(admin: Annotated[dict[str, object], Depends(admin_user)]) -> dict[str, object]:
+def overview(admin: Annotated[AdminContext, Depends(admin_user)]) -> dict[str, object]:
     c = conn()
     try:
         cutoff7, cutoff30 = _cutoff(7), _cutoff(30)
@@ -75,7 +77,9 @@ def overview(admin: Annotated[dict[str, object], Depends(admin_user)]) -> dict[s
 
 
 @router.get("/users")
-def list_users(admin: Annotated[dict[str, object], Depends(admin_user)]) -> list[dict[str, object]]:
+def list_users(
+    admin: Annotated[AdminContext, Depends(admin_user)],
+) -> list[dict[str, object]]:
     c = conn()
     try:
         connections = {}
@@ -119,7 +123,7 @@ def list_users(admin: Annotated[dict[str, object], Depends(admin_user)]) -> list
 
 @router.get("/users/{uid}")
 def user_detail(
-    uid: int, admin: Annotated[dict[str, object], Depends(admin_user)]
+    uid: int, admin: Annotated[AdminContext, Depends(admin_user)]
 ) -> dict[str, object]:
     c = conn()
     try:
@@ -195,7 +199,7 @@ def user_detail(
 @router.get("/users/{uid}/transactions")
 def user_transactions(
     uid: int,
-    admin: Annotated[dict[str, object], Depends(admin_user)],
+    admin: Annotated[AdminContext, Depends(admin_user)],
     limit: Annotated[int, Query(ge=1, le=TX_PAGE_MAX)] = TX_PAGE_MAX,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[dict[str, object]]:
@@ -243,7 +247,7 @@ class DeleteTransactionsBody(TypedDict):
 def delete_user_transactions(
     uid: int,
     body: DeleteTransactionsBody,
-    admin: Annotated[dict[str, object], Depends(admin_user)],
+    admin: Annotated[AdminContext, Depends(admin_user)],
 ) -> dict[str, int]:
     """
     Bulk-delete a selection of one user's transactions. All-or-nothing: every
@@ -287,7 +291,7 @@ class CreateUserBody(TypedDict):
 
 @router.post("/users")
 def create_user_admin(
-    body: CreateUserBody, admin: Annotated[dict[str, object], Depends(admin_user)]
+    body: CreateUserBody, admin: Annotated[AdminContext, Depends(admin_user)]
 ) -> dict[str, object]:
     c = conn()
     try:
@@ -298,9 +302,9 @@ def create_user_admin(
 
 @router.delete("/users/{uid}")
 def delete_user(
-    uid: int, admin: Annotated[dict[str, object], Depends(admin_user)]
+    uid: int, admin: Annotated[AdminContext, Depends(admin_user)]
 ) -> dict[str, bool]:
-    if uid == admin["id"]:
+    if uid == admin.id:
         raise HTTPException(400, "cannot delete yourself")
     c = conn()
     try:
@@ -330,7 +334,7 @@ def delete_user(
 
 
 @router.get("/activity")
-def activity(admin: Annotated[dict[str, object], Depends(admin_user)]) -> dict[str, object]:
+def activity(admin: Annotated[AdminContext, Depends(admin_user)]) -> dict[str, object]:
     c = conn()
     try:
         day_cutoff = _cutoff(ACTIVITY_WINDOW_DAYS)[:10]

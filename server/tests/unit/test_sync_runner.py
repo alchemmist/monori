@@ -1,19 +1,17 @@
-from typing import TYPE_CHECKING, cast
-
-if TYPE_CHECKING:
-    from collections.abc import Callable
+from typing import TypedDict
 
 import httpx
 import pytest
 from fastapi.testclient import TestClient
+from pydantic import TypeAdapter
 
 import app.connectors.fake  # noqa: F401  (registers the FakeConnector)
 from app import sync_service
 from app.connectors import base
-from app.connectors.base import ConnectorError, SmsRequired, SyncResult
+from app.connectors.base import ConnectorError, JsonObject, SmsRequired, SyncResult
 from app.sync_runner import LocalRunner, NoPendingLogin, RemoteRunner, get_runner
 
-CREDS: dict[str, object] = {"phone": "+70000000000", "password": "pw"}
+CREDS: JsonObject = {"phone": "+70000000000", "password": "pw"}
 type Runner = LocalRunner | RemoteRunner
 
 
@@ -33,11 +31,12 @@ def remote_runner() -> RemoteRunner:
     return RemoteRunner("http://sync", client=client)
 
 
-@pytest.fixture(params=[LocalRunner, remote_runner])
+@pytest.fixture(params=["local", "remote"])
 def runner(request: pytest.FixtureRequest) -> Runner:
     sync_service.PENDING.clear()
-    factory = cast("Callable[[], Runner]", request.param)
-    return factory()
+    if request.param == "local":
+        return LocalRunner()
+    return remote_runner()
 
 
 def test_otp_flow(runner: Runner) -> None:
@@ -102,9 +101,9 @@ class ClosableConnector:
 
     def __init__(
         self,
-        credentials: dict[str, object] | None,
-        session: object | None = None,
-        account_ref: object | None = None,
+        credentials: JsonObject | None,
+        session: JsonObject | None = None,
+        account_ref: str | None = None,
     ) -> None:
         self.account_ref = account_ref
         self.credentials = credentials or {}
@@ -153,9 +152,9 @@ class RecordingConnector:
 
     def __init__(
         self,
-        credentials: dict[str, object] | None,
-        session: object | None = None,
-        account_ref: object | None = None,
+        credentials: JsonObject | None,
+        session: JsonObject | None = None,
+        account_ref: str | None = None,
     ) -> None:
         self.account_ref = account_ref
         self.credentials = credentials or {}
@@ -180,9 +179,9 @@ class RetryOtpConnector:
 
     def __init__(
         self,
-        credentials: dict[str, object] | None,
-        session: object | None = None,
-        account_ref: object | None = None,
+        credentials: JsonObject | None,
+        session: JsonObject | None = None,
+        account_ref: str | None = None,
     ) -> None:
         self.account_ref = account_ref
         self.credentials = credentials or {}
@@ -310,12 +309,20 @@ def test_remote_resume_transport_failure() -> None:
         r.resume(1, "0000")
 
 
+class CapturedRequest(TypedDict, total=False):
+    path: str
+    timeout: dict[str, float]
+
+
+TIMEOUT_ADAPTER: TypeAdapter[dict[str, float]] = TypeAdapter(dict[str, float])
+
+
 def test_remote_cancel_uses_short_timeout() -> None:
-    captured: dict[str, object] = {}
+    captured: CapturedRequest = {}
 
     def handler(request: httpx.Request) -> httpx.Response:
         captured["path"] = request.url.path
-        captured["timeout"] = request.extensions.get("timeout")
+        captured["timeout"] = TIMEOUT_ADAPTER.validate_python(request.extensions.get("timeout"))
         return httpx.Response(200, json={"cancelled": 5})
 
     client = httpx.Client(transport=httpx.MockTransport(handler), base_url="http://sync")

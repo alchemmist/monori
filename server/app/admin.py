@@ -15,7 +15,7 @@ from typing import Annotated
 import jwt
 from fastapi import Depends, HTTPException
 
-from .auth import current_user
+from .auth import AuthenticatedUser, current_user
 from .deps import conn
 from .security import decode_access_token
 
@@ -29,8 +29,8 @@ def admin_emails() -> set[str]:
     return {e.strip().lower() for e in raw.split(",") if e.strip()}
 
 
-def admin_user(user: Annotated[dict[str, object], Depends(current_user)]) -> dict[str, object]:
-    if not user.get("isAdmin"):
+def admin_user(user: Annotated[AuthenticatedUser, Depends(current_user)]) -> AuthenticatedUser:
+    if not user.is_admin:
         raise HTTPException(403, "admin rights required")
     return user
 

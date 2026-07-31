@@ -8,12 +8,14 @@ raises :class:`SmsRequired`; the caller parks the live connector and later calls
 :meth:`resume_sync` with the code the user entered.
 """
 
-from dataclasses import dataclass
 from typing import NotRequired, TypedDict
 
-JsonPrimitive = str | int | float | bool | None
-JsonValue = JsonPrimitive | list[JsonPrimitive] | dict[str, JsonPrimitive]
-JsonObject = dict[str, JsonValue]
+from pydantic import TypeAdapter
+from pydantic.dataclasses import dataclass
+
+type JsonPrimitive = str | int | float | bool | None
+type JsonValue = JsonPrimitive | list[JsonValue] | dict[str, JsonValue]
+type JsonObject = dict[str, JsonValue]
 
 
 class ConnectorParam(TypedDict):
@@ -32,17 +34,18 @@ class ConnectorInfo(TypedDict):
     accountParams: list[ConnectorParam]
 
 
-class SyncRow(TypedDict):
+@dataclass(slots=True)
+class SyncRow:
     date: str
     amount: int
     description: str
     bank_category: str
     mcc: str
     card: str
-    account_id: NotRequired[int | None]
-    category_id: NotRequired[int | None]
-    duplicate: NotRequired[bool]
-    hash: NotRequired[str]
+    account_id: int | None = None
+    category_id: int | None = None
+    duplicate: bool = False
+    hash: str = ""
 
 
 class ConnectorError(Exception):
@@ -66,6 +69,10 @@ class SyncResult:
 
     rows: list[SyncRow]
     session: JsonObject | None = None
+
+
+JSON_OBJECT_ADAPTER: TypeAdapter[JsonObject] = TypeAdapter(JsonObject)
+SYNC_RESULT_ADAPTER: TypeAdapter[SyncResult] = TypeAdapter(SyncResult)
 
 
 class Connector:

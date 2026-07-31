@@ -9,7 +9,9 @@ exit code directly).
 
 import json
 import sys
-from typing import TypedDict, cast
+from typing import TypedDict
+
+from pydantic import TypeAdapter
 
 BLOCKING = {"high", "critical"}
 
@@ -33,6 +35,9 @@ class AuditPayload(TypedDict, total=False):
     error: AuditError
     vulnerabilities: dict[str, AuditNode]
 
+
+AUDIT_PAYLOAD_ADAPTER: TypeAdapter[AuditPayload] = TypeAdapter(AuditPayload)
+
 # GHSA id -> reason it is knowingly tolerated. Keep this list short and revisit
 # whenever `npm audit` output changes.
 ALLOWED = {
@@ -44,7 +49,7 @@ ALLOWED = {
 
 
 def main() -> int:
-    data = cast(AuditPayload, json.load(sys.stdin))
+    data = AUDIT_PAYLOAD_ADAPTER.validate_python(json.load(sys.stdin))
     # npm audit could not run (e.g. ENOLOCK with no lockfile) — it returns an
     # error payload with no vulnerabilities data. Fail loudly rather than let an
     # audit that never happened read as a clean pass.

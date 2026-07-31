@@ -9,16 +9,15 @@ auth secret. Provide the env var explicitly to share one key across instances or
 to rotate it.
 """
 
-from __future__ import annotations
-
 import json
 import os
 import pathlib
-from typing import cast
+from collections.abc import Mapping
 
 from cryptography.fernet import Fernet
 
 from . import db as dbmod
+from .connectors.base import JSON_OBJECT_ADAPTER, JsonObject, JsonValue
 from .security import load_or_create_secret_file
 
 
@@ -63,17 +62,17 @@ def _fernet() -> Fernet:
     return Fernet(_encryption_key().encode())
 
 
-def encrypt(data: object) -> bytes:
+def encrypt(data: Mapping[str, JsonValue]) -> bytes:
     """
     Encrypt a JSON-serializable dict to an opaque token (bytes).
     """
     return _fernet().encrypt(json.dumps(data).encode())
 
 
-def decrypt(blob: bytes | memoryview | None) -> object | None:
+def decrypt(blob: bytes | memoryview | None) -> JsonObject | None:
     """
     Decrypt a token produced by :func:`encrypt` back to its dict.
     """
     if blob is None:
         return None
-    return cast("object", json.loads(_fernet().decrypt(bytes(blob)).decode()))
+    return JSON_OBJECT_ADAPTER.validate_python(json.loads(_fernet().decrypt(bytes(blob)).decode()))

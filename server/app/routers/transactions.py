@@ -8,7 +8,7 @@ if TYPE_CHECKING:
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from ..auth import current_user
+from ..auth import AuthenticatedUser, current_user
 from ..db import begin_write
 from ..deps import conn, serialize_transactions
 from ..importer import tx_hash
@@ -112,7 +112,7 @@ def _resolve_account(c: sqlite3.Connection, account_id: int, uid: int) -> int:
 
 @router.get("")
 def list_transactions(
-    user: Annotated[dict[str, object], Depends(current_user)],
+    user: Annotated[AuthenticatedUser, Depends(current_user)],
     from_: str | None = Query(default=None, alias="from"),
     to: str | None = None,
     categoryId: int | None = None,
@@ -123,7 +123,7 @@ def list_transactions(
     limit: int = Query(default=100, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
 ) -> dict[str, object]:
-    uid = cast("int", user["id"])
+    uid = user.id
     params = {
         "uid": uid,
         "from": from_,
@@ -166,9 +166,9 @@ def list_transactions(
 
 @router.post("")
 def create_transaction(
-    body: TxCreate, user: Annotated[dict[str, object], Depends(current_user)]
+    body: TxCreate, user: Annotated[AuthenticatedUser, Depends(current_user)]
 ) -> dict[str, int]:
-    uid = cast("int", user["id"])
+    uid = user.id
     c = conn()
     try:
         category = _resolve_category(c, body.get("categoryId"), uid, body["amount"])
@@ -198,9 +198,9 @@ def create_transaction(
 
 @router.patch("/{tx_id}")
 def patch_transaction(
-    tx_id: int, patch: TxPatch, user: Annotated[dict[str, object], Depends(current_user)]
+    tx_id: int, patch: TxPatch, user: Annotated[AuthenticatedUser, Depends(current_user)]
 ) -> dict[str, bool]:
-    uid = cast("int", user["id"])
+    uid = user.id
     c = conn()
     try:
         begin_write(c)
@@ -284,10 +284,10 @@ def patch_transaction(
 
 @router.put("/{tx_id}/splits")
 def replace_splits(
-    tx_id: int, body: SplitBody, user: Annotated[dict[str, object], Depends(current_user)]
+    tx_id: int, body: SplitBody, user: Annotated[AuthenticatedUser, Depends(current_user)]
 ) -> dict[str, list[dict[str, object]]]:
     """Atomically replace every categorized part, or clear the split with an empty list."""
-    uid = cast("int", user["id"])
+    uid = user.id
     c = conn()
     try:
         begin_write(c)
@@ -347,9 +347,9 @@ def replace_splits(
 
 @router.delete("/{tx_id}")
 def delete_transaction(
-    tx_id: int, user: Annotated[dict[str, object], Depends(current_user)]
+    tx_id: int, user: Annotated[AuthenticatedUser, Depends(current_user)]
 ) -> dict[str, bool]:
-    uid = cast("int", user["id"])
+    uid = user.id
     c = conn()
     try:
         detach_leg(c, uid, tx_id)
@@ -368,9 +368,9 @@ def delete_transaction(
 
 @router.post("/bulk")
 def bulk_transactions(
-    body: BulkBody, user: Annotated[dict[str, object], Depends(current_user)]
+    body: BulkBody, user: Annotated[AuthenticatedUser, Depends(current_user)]
 ) -> dict[str, int]:
-    uid = cast("int", user["id"])
+    uid = user.id
     if body["action"] not in ("categorize", "move", "delete"):
         raise HTTPException(400, "action must be 'categorize', 'move' or 'delete'")
     c = conn()
