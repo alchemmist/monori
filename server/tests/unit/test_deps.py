@@ -1,12 +1,28 @@
+import sqlite3
+from collections.abc import Iterable
+from typing import TypedDict, cast
+
 from app.deps import serialize_transactions
 
 
-class SplitCursor:
-    def __init__(self):
-        self.chunks = []
+class _Split(TypedDict):
+    id: int
+    categoryId: int
+    amount: int
+    comment: str
 
-    def execute(self, _query, ids):
-        self.chunks.append(list(ids))
+
+class _SerializedTx(TypedDict):
+    splits: list[_Split]
+
+
+class SplitCursor:
+    def __init__(self) -> None:
+        self.chunks: list[list[int]] = []
+
+    def execute(self, _query: str, ids: Iterable[int]) -> list[dict[str, object]]:
+        chunk = list(ids)
+        self.chunks.append(chunk)
         return [
             {
                 "id": tx_id,
@@ -15,13 +31,13 @@ class SplitCursor:
                 "amount": -1,
                 "comment": "part",
             }
-            for tx_id in ids
-            if tx_id in {1, 1001}
+        for tx_id in chunk
+        if tx_id in {1, 1001}
         ]
 
 
-def test_serialize_transactions_chunks_split_lookup():
-    rows = [
+def test_serialize_transactions_chunks_split_lookup() -> None:
+    rows: list[dict[str, object]] = [
         {
             "id": tx_id,
             "date": "2026-01-01",
@@ -40,7 +56,7 @@ def test_serialize_transactions_chunks_split_lookup():
     ]
     cursor = SplitCursor()
 
-    result = serialize_transactions(cursor, rows)
+    result = cast(list[_SerializedTx], serialize_transactions(cast(sqlite3.Cursor, cursor), rows))
 
     assert [len(chunk) for chunk in cursor.chunks] == [500, 500, 1]
     assert result[0]["splits"][0]["categoryId"] == 7
