@@ -1,9 +1,14 @@
-import os
+import pathlib
 import sqlite3
+from typing import TYPE_CHECKING, cast
 
+import pytest
 from alembic import command
 
 from app.db import LEGACY_REVISIONS, _alembic_config, connect
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 HEAD = "0019"
 assert LEGACY_REVISIONS[-1] == "0006"
@@ -33,7 +38,7 @@ CREATE TABLE budgets (
 """
 
 
-def _make_old_db(path):
+def _make_old_db(path: pathlib.Path) -> None:
     old = sqlite3.connect(path)
     old.executescript(OLD_SCHEMA)
     old.execute(
@@ -45,31 +50,40 @@ def _make_old_db(path):
     old.close()
 
 
-def _revision(conn):
-    return conn.execute("SELECT version_num FROM alembic_version").fetchone()[0]
+def _row(conn: sqlite3.Connection, sql: str, params: tuple[object, ...] = ()) -> sqlite3.Row:
+    row = conn.execute(sql, params).fetchone()
+    assert row is not None
+    return cast("sqlite3.Row", row)
 
 
-def test_migration_backfills_existing_transactions(tmp_path):
-    db_path = os.path.join(tmp_path, "old.db")
+def _scalar(conn: sqlite3.Connection, sql: str, params: tuple[object, ...] = ()) -> object:
+    return _row(conn, sql, params)[0]
+
+
+def _revision(conn: sqlite3.Connection) -> str:
+    return cast("str", _scalar(conn, "SELECT version_num FROM alembic_version"))
+
+
+def test_migration_backfills_existing_transactions(tmp_path: pathlib.Path) -> None:
+    db_path = tmp_path / "old.db"
     _make_old_db(db_path)
 
     conn = connect(db_path)
     try:
         accounts = conn.execute("SELECT id, name FROM accounts").fetchall()
-        assert [a["name"] for a in accounts] == ["T-Bank"]
-        default_id = accounts[0]["id"]
+        assert [cast("str", a["name"]) for a in accounts] == ["T-Bank"]
+        default_id = cast("int", accounts[0]["id"])
 
         rows = conn.execute("SELECT id, account_id, transfer_id FROM transactions").fetchall()
         assert len(rows) == 2
-        assert all(r["account_id"] == default_id for r in rows)
+        assert all(cast("int", r["account_id"]) == default_id for r in rows)
         assert all(r["transfer_id"] is None for r in rows)
 
         cols = {r["name"]: r for r in conn.execute("PRAGMA table_info(transactions)")}
         assert cols["account_id"]["notnull"] == 1
 
-        icon = conn.execute("SELECT icon FROM accounts WHERE id=?", (default_id,)).fetchone()[
-            "icon"
-        ]
+        icon_row = _row(conn, "SELECT icon FROM accounts WHERE id=?", (default_id,))
+        icon = cast("str", icon_row["icon"])
         assert icon == "wallet"
         acct_cols = {r["name"] for r in conn.execute("PRAGMA table_info(accounts)")}
         assert {"color", "icon_image"} <= acct_cols
@@ -79,21 +93,21 @@ def test_migration_backfills_existing_transactions(tmp_path):
         conn.close()
 
 
-def test_migration_is_idempotent(tmp_path):
-    db_path = os.path.join(tmp_path, "old.db")
+def test_migration_is_idempotent(tmp_path: pathlib.Path) -> None:
+    db_path = tmp_path / "old.db"
     _make_old_db(db_path)
     connect(db_path).close()
     conn = connect(db_path)
     try:
-        assert conn.execute("SELECT COUNT(*) FROM accounts").fetchone()[0] == 1
-        assert conn.execute("SELECT COUNT(*) FROM transactions").fetchone()[0] == 2
+        assert _scalar(conn, "SELECT COUNT(*) FROM accounts") == 1
+        assert _scalar(conn, "SELECT COUNT(*) FROM transactions") == 2
         assert _revision(conn) == HEAD
     finally:
         conn.close()
 
 
-def test_fresh_db_is_created_from_schema_sql(tmp_path):
-    db_path = os.path.join(tmp_path, "fresh.db")
+def test_fresh_db_is_created_from_schema_sql(tmp_path: pathlib.Path) -> None:
+    db_path = tmp_path / "fresh.db"
     conn = connect(db_path)
     try:
         tables = {
@@ -110,7 +124,7 @@ def test_fresh_db_is_created_from_schema_sql(tmp_path):
             "import_batches",
             "users",
         } <= tables
-        assert conn.execute("SELECT COUNT(*) FROM accounts").fetchone()[0] == 0
+        assert _scalar(conn, "SELECT COUNT(*) FROM accounts") == 0
         cols = {r["name"] for r in conn.execute("PRAGMA table_info(transactions)")}
         assert {"account_id", "transfer_id", "batch_id"} <= cols
         acct_cols = {r["name"] for r in conn.execute("PRAGMA table_info(accounts)")}
@@ -120,7 +134,7 @@ def test_fresh_db_is_created_from_schema_sql(tmp_path):
         conn.close()
 
 
-def _describe(db_path):
+def _describe(db_path: pathlib.Path) -> dict[str, tuple[list[object], list[object]]]:
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     try:
@@ -129,7 +143,7 @@ def _describe(db_path):
             for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
             if r["name"] != "alembic_version" and not r["name"].startswith("sqlite_")
         )
-        shape = {}
+        shape: dict[str, tuple[list[object], list[object]]] = {}
         for t in tables:
             cols = sorted(
                 (r["name"], r["type"].upper(), r["notnull"], r["dflt_value"], bool(r["pk"]))
@@ -140,24 +154,24 @@ def _describe(db_path):
                 for r in conn.execute(f"PRAGMA index_list({t})")
                 if not r["name"].startswith("sqlite_")
             )
-            shape[t] = (cols, indexes)
+            shape[t] = (cast("list[object]", cols), cast("list[object]", indexes))
         return shape
     finally:
         conn.close()
 
 
-def test_schema_sql_matches_migration_chain(tmp_path):
-    fresh = os.path.join(tmp_path, "fresh.db")
+def test_schema_sql_matches_migration_chain(tmp_path: pathlib.Path) -> None:
+    fresh = tmp_path / "fresh.db"
     connect(fresh).close()
 
-    chained = os.path.join(tmp_path, "chained.db")
+    chained = tmp_path / "chained.db"
     command.upgrade(_alembic_config(chained), "head")
 
     assert _describe(fresh) == _describe(chained)
 
 
-def test_migration_0011_backfills_and_enforces_canonical(tmp_path):
-    db_path = os.path.join(tmp_path, "v6.db")
+def test_migration_0011_backfills_and_enforces_canonical(tmp_path: pathlib.Path) -> None:
+    db_path = tmp_path / "v6.db"
     command.upgrade(_alembic_config(db_path), "0006")
     raw = sqlite3.connect(db_path)
     raw.execute(
@@ -170,7 +184,7 @@ def test_migration_0011_backfills_and_enforces_canonical(tmp_path):
     conn = connect(db_path)
     try:
         assert _revision(conn) == HEAD
-        canon = conn.execute("SELECT email_canonical FROM users").fetchone()[0]
+        canon = cast("str", _scalar(conn, "SELECT email_canonical FROM users"))
         assert canon == "anton@gmail.com"
         # a distinct alias of the same mailbox collapses to the same canonical
         # and is rejected by the new unique index
@@ -186,8 +200,8 @@ def test_migration_0011_backfills_and_enforces_canonical(tmp_path):
         conn.close()
 
 
-def test_migration_0011_reports_canonical_collisions(tmp_path):
-    db_path = os.path.join(tmp_path, "v6.db")
+def test_migration_0011_reports_canonical_collisions(tmp_path: pathlib.Path) -> None:
+    db_path = tmp_path / "v6.db"
     command.upgrade(_alembic_config(db_path), "0006")
     raw = sqlite3.connect(db_path)
     raw.execute(
@@ -204,12 +218,15 @@ def test_migration_0011_reports_canonical_collisions(tmp_path):
         assert "merge these first" in str(exc)
 
 
-def test_blank_email_canonical_is_rejected(tmp_path):
-    for name, builder in (
-        ("fresh.db", lambda p: connect(p).close()),
-        ("chained.db", lambda p: command.upgrade(_alembic_config(p), "head")),
+def test_blank_email_canonical_is_rejected(tmp_path: pathlib.Path) -> None:
+    for name, builder in cast(
+        "tuple[tuple[str, Callable[[pathlib.Path], None]], ...]",
+        (
+            ("fresh.db", lambda p: connect(p).close()),
+            ("chained.db", lambda p: command.upgrade(_alembic_config(p), "head")),
+        ),
     ):
-        path = os.path.join(tmp_path, name)
+        path = tmp_path / name
         builder(path)
         raw = sqlite3.connect(path)
         try:
@@ -235,8 +252,8 @@ def test_blank_email_canonical_is_rejected(tmp_path):
             raw.close()
 
 
-def test_migration_0011_reports_blank_backfill(tmp_path):
-    db_path = os.path.join(tmp_path, "v6.db")
+def test_migration_0011_reports_blank_backfill(tmp_path: pathlib.Path) -> None:
+    db_path = tmp_path / "v6.db"
     command.upgrade(_alembic_config(db_path), "0006")
     raw = sqlite3.connect(db_path)
     raw.execute("INSERT INTO users (email, password_hash, created_at) VALUES ('', 'h', 't')")
@@ -250,10 +267,10 @@ def test_migration_0011_reports_blank_backfill(tmp_path):
         assert "fix their address first" in str(exc)
 
 
-def test_migration_0012_rehashes_with_account_scope(tmp_path):
+def test_migration_0012_rehashes_with_account_scope(tmp_path: pathlib.Path) -> None:
     from app.importer import tx_hash
 
-    db_path = os.path.join(tmp_path, "v11.db")
+    db_path = tmp_path / "v11.db"
     command.upgrade(_alembic_config(db_path), "0011")
     raw = sqlite3.connect(db_path)
     raw.execute(
@@ -279,7 +296,7 @@ def test_migration_0012_rehashes_with_account_scope(tmp_path):
         rows = conn.execute(
             "SELECT account_id, hash FROM transactions ORDER BY account_id"
         ).fetchall()
-        hashes = {r["account_id"]: r["hash"] for r in rows}
+        hashes = {cast("int", r["account_id"]): cast("str", r["hash"]) for r in rows}
         assert hashes[1] == tx_hash(1, "2026-01-01T00:00:00", -100, "coffee")
         assert hashes[2] == tx_hash(2, "2026-01-01T00:00:00", -100, "coffee")
         assert hashes[1] != hashes[2]
@@ -287,8 +304,8 @@ def test_migration_0012_rehashes_with_account_scope(tmp_path):
         conn.close()
 
 
-def test_legacy_intermediate_user_version_is_adopted(tmp_path):
-    db_path = os.path.join(tmp_path, "v1.db")
+def test_legacy_intermediate_user_version_is_adopted(tmp_path: pathlib.Path) -> None:
+    db_path = tmp_path / "v1.db"
     command.upgrade(_alembic_config(db_path), "0002")
     raw = sqlite3.connect(db_path)
     raw.execute("DROP TABLE alembic_version")
@@ -299,7 +316,7 @@ def test_legacy_intermediate_user_version_is_adopted(tmp_path):
     conn = connect(db_path)
     try:
         assert _revision(conn) == HEAD
-        assert conn.execute("SELECT COUNT(*) FROM accounts").fetchone()[0] == 1
+        assert _scalar(conn, "SELECT COUNT(*) FROM accounts") == 1
         acct_cols = {r["name"] for r in conn.execute("PRAGMA table_info(accounts)")}
         assert {"icon", "color", "icon_image"} <= acct_cols
         tables = {
@@ -310,8 +327,8 @@ def test_legacy_intermediate_user_version_is_adopted(tmp_path):
         conn.close()
 
 
-def test_upgrade_assigns_orphans_to_earliest_user(tmp_path):
-    db_path = os.path.join(tmp_path, "v6.db")
+def test_upgrade_assigns_orphans_to_earliest_user(tmp_path: pathlib.Path) -> None:
+    db_path = tmp_path / "v6.db"
     command.upgrade(_alembic_config(db_path), "0006")
     raw = sqlite3.connect(db_path)
     raw.execute("INSERT INTO users (email, password_hash, created_at) VALUES ('a@b.co', 'h', 't')")
@@ -324,24 +341,26 @@ def test_upgrade_assigns_orphans_to_earliest_user(tmp_path):
 
     conn = connect(db_path)
     try:
-        uid = conn.execute("SELECT MIN(id) FROM users").fetchone()[0]
-        assert conn.execute("SELECT user_id FROM accounts").fetchone()[0] == uid
-        assert conn.execute("SELECT user_id FROM category_groups").fetchone()[0] == uid
+        uid = cast("int", _scalar(conn, "SELECT MIN(id) FROM users"))
+        assert _scalar(conn, "SELECT user_id FROM accounts") == uid
+        assert _scalar(conn, "SELECT user_id FROM category_groups") == uid
     finally:
         conn.close()
 
 
-def test_concurrent_first_connects_bootstrap_once(tmp_path, monkeypatch):
+def test_concurrent_first_connects_bootstrap_once(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     import threading
     import time
 
     import app.db as dbmod
 
-    db_path = os.path.join(tmp_path, "race.db")
-    calls = []
+    db_path = tmp_path / "race.db"
+    calls: list[int] = []
     real_bootstrap = dbmod._bootstrap
 
-    def slow_bootstrap(path):
+    def slow_bootstrap(path: pathlib.Path) -> None:
         calls.append(1)
         time.sleep(0.05)
         real_bootstrap(path)
@@ -355,14 +374,15 @@ def test_concurrent_first_connects_bootstrap_once(tmp_path, monkeypatch):
     assert len(calls) == 1
 
 
-def test_default_account_fields(tmp_path):
-    db_path = os.path.join(tmp_path, "old.db")
+def test_default_account_fields(tmp_path: pathlib.Path) -> None:
+    db_path = tmp_path / "old.db"
     _make_old_db(db_path)
     conn = connect(db_path)
     try:
-        a = conn.execute(
-            "SELECT name, type, currency, sort, icon, color, icon_image FROM accounts"
-        ).fetchone()
+        a = _row(
+            conn,
+            "SELECT name, type, currency, sort, icon, color, icon_image FROM accounts",
+        )
         assert a["name"] == "T-Bank"
         assert a["type"] == "card"
         assert a["currency"] == "RUB"
@@ -374,15 +394,16 @@ def test_default_account_fields(tmp_path):
         conn.close()
 
 
-def test_new_account_gets_column_defaults(tmp_path):
-    db_path = os.path.join(tmp_path, "fresh.db")
+def test_new_account_gets_column_defaults(tmp_path: pathlib.Path) -> None:
+    db_path = tmp_path / "fresh.db"
     conn = connect(db_path)
     try:
         conn.execute("INSERT INTO accounts (name) VALUES ('Extra')")
-        a = conn.execute(
+        a = _row(
+            conn,
             "SELECT type, currency, sort, archived, opening_balance, icon, color, icon_image"
-            " FROM accounts WHERE name='Extra'"
-        ).fetchone()
+            " FROM accounts WHERE name='Extra'",
+        )
         assert a["type"] == "other"
         assert a["currency"] == "RUB"
         assert a["sort"] == 0
@@ -395,8 +416,8 @@ def test_new_account_gets_column_defaults(tmp_path):
         conn.close()
 
 
-def test_connection_conversion_to_user_level(tmp_path):
-    db_path = os.path.join(tmp_path, "conv.db")
+def test_connection_conversion_to_user_level(tmp_path: pathlib.Path) -> None:
+    db_path = tmp_path / "conv.db"
     command.upgrade(_alembic_config(db_path), "0007")
     c = sqlite3.connect(db_path)
     c.execute("INSERT INTO users (email, password_hash, created_at) VALUES ('u@e.co', 'h', 't')")
@@ -404,7 +425,7 @@ def test_connection_conversion_to_user_level(tmp_path):
         "INSERT INTO accounts (user_id, name, type, currency, sort)"
         " VALUES (1, 'Card', 'card', 'RUB', 1)"
     )
-    acct_id = c.execute("SELECT id FROM accounts WHERE name='Card'").fetchone()[0]
+    acct_id = cast("int", _scalar(c, "SELECT id FROM accounts WHERE name='Card'"))
     c.execute(
         "INSERT INTO bank_connections (account_id, bank, kind, status, created_at, updated_at)"
         f" VALUES ({acct_id}, 'tbank', 'playwright', 'connected', 't1', 't2')"
@@ -415,11 +436,11 @@ def test_connection_conversion_to_user_level(tmp_path):
     command.upgrade(_alembic_config(db_path), "head")
     c = sqlite3.connect(db_path)
     c.row_factory = sqlite3.Row
-    conn_row = c.execute("SELECT * FROM bank_connections").fetchone()
+    conn_row = _row(c, "SELECT * FROM bank_connections")
     assert conn_row["user_id"] == 1
     conn_cols = conn_row.keys()
     assert "account_id" not in conn_cols
-    acct = c.execute("SELECT connection_id, bank_ref FROM accounts WHERE name='Card'").fetchone()
+    acct = _row(c, "SELECT connection_id, bank_ref FROM accounts WHERE name='Card'")
     assert acct["connection_id"] == conn_row["id"]
     assert acct["bank_ref"] == ""
     c.close()
