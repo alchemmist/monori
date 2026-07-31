@@ -1,4 +1,5 @@
-import { Textarea, TextInput } from "@mantine/core";
+import { TextInput } from "@mantine/core";
+import { TextareaAutosize } from "../../node_modules/@mantine/core/esm/components/Textarea/Autosize.mjs";
 
 import InlineSelect from "./InlineSelect.jsx";
 import useAmountField from "./useAmountField.js";
@@ -25,7 +26,11 @@ export function FAmountInput({ value, onChange, ...props }) {
 }
 
 export function FTextArea(props) {
-    return <Textarea classNames={cls} {...props} />;
+    return (
+        <div className="mi-input">
+            <TextareaAutosize className="mi-input__field" {...props} />
+        </div>
+    );
 }
 
 /* Form-row face of the one shared select: same InlineSelect engine and the
