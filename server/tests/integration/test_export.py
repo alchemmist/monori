@@ -3,16 +3,18 @@ import sqlite3
 from io import BytesIO
 
 import pytest
-from openpyxl import load_workbook
+from fastapi.testclient import TestClient
+from openpyxl import Workbook, load_workbook
 
 from app.importer import tx_hash
+from tests.conftest import Api
 
 pytestmark = pytest.mark.integration
 
 XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 
-def _export(client):
+def _export(client: TestClient) -> Workbook:
     r = client.get("/api/export/xlsx")
     assert r.status_code == 200, r.text
     assert r.headers["content-type"].startswith(XLSX_MIME)
@@ -20,7 +22,7 @@ def _export(client):
     return load_workbook(BytesIO(r.content))
 
 
-def _setup(api, client):
+def _setup(api: Api, client: TestClient) -> tuple[int, int]:
     g_out = api.group("Daily Expenses")
     g_in = api.group("Inflow", kind="income")
     cat = api.category("Groceries", g_out, keywords="lenta|okey")
@@ -32,13 +34,13 @@ def _setup(api, client):
     return cat, acct
 
 
-def test_export_sheet_structure(api, client):
+def test_export_sheet_structure(api: Api, client: TestClient) -> None:
     _setup(api, client)
     wb = _export(client)
     assert wb.sheetnames == ["Categories", "Transactions", "2026", "DashData"]
 
 
-def test_export_categories_sheet(api, client):
+def test_export_categories_sheet(api: Api, client: TestClient) -> None:
     _setup(api, client)
     ws = _export(client)["Categories"]
     assert [c.value for c in ws[1]] == ["Sort Order", "Category Group", "Category", "Keywords"]
@@ -48,7 +50,7 @@ def test_export_categories_sheet(api, client):
     assert ["▲Inflow", 2, "IN"] in [r[:3] for r in rows]
 
 
-def test_export_transactions_sheet(api, client):
+def test_export_transactions_sheet(api: Api, client: TestClient) -> None:
     _setup(api, client)
     ws = _export(client)["Transactions"]
     headers = [c.value for c in ws[1]]
@@ -65,7 +67,7 @@ def test_export_transactions_sheet(api, client):
     assert row[14] == "Card"
 
 
-def test_export_uses_split_parts_for_rows_and_totals(api, client):
+def test_export_uses_split_parts_for_rows_and_totals(api: Api, client: TestClient) -> None:
     expenses = api.group("Expenses")
     groceries = api.category("Groceries", expenses)
     household = api.category("Household", expenses)
@@ -105,7 +107,7 @@ def test_export_uses_split_parts_for_rows_and_totals(api, client):
     assert activity["Household"] == 40
 
 
-def test_export_year_sheet_grid(api, client):
+def test_export_year_sheet_grid(api: Api, client: TestClient) -> None:
     _setup(api, client)
     ws = _export(client)["2026"]
     assert ws.cell(row=1, column=2).value == "January"
@@ -128,7 +130,7 @@ def test_export_year_sheet_grid(api, client):
     assert ws.cell(row=3, column=3).value == 125.5
 
 
-def test_export_dashdata_sheet(api, client):
+def test_export_dashdata_sheet(api: Api, client: TestClient) -> None:
     _setup(api, client)
     ws = _export(client)["DashData"]
     assert [c.value for c in ws[1]] == ["Month", "Income", "Expense", "Ratio", "CumNet"]
@@ -146,7 +148,7 @@ def test_export_dashdata_sheet(api, client):
     assert by_cat["Salary"] == 5000.0
 
 
-def test_export_excludes_transfers_from_dashdata(api, client):
+def test_export_excludes_transfers_from_dashdata(api: Api, client: TestClient) -> None:
     _setup(api, client)
     a2 = api.account("Second")
     api.transfer(api.snapshot()["accounts"][0]["id"], a2, 10000, date="2026-01-15T12:00:00")
@@ -156,7 +158,7 @@ def test_export_excludes_transfers_from_dashdata(api, client):
     assert row[2] == 125.5
 
 
-def test_export_transactions_static_columns(api, client):
+def test_export_transactions_static_columns(api: Api, client: TestClient) -> None:
     _setup(api, client)
     ws = _export(client)["Transactions"]
     row = [c.value for c in ws[2]]
@@ -168,7 +170,7 @@ def test_export_transactions_static_columns(api, client):
     assert ws.cell(row=2, column=6).number_format == "0.00"
 
 
-def test_export_categories_layout(api, client):
+def test_export_categories_layout(api: Api, client: TestClient) -> None:
     _setup(api, client)
     ws = _export(client)["Categories"]
     assert ws.freeze_panes == "A2"
@@ -180,7 +182,7 @@ def test_export_categories_layout(api, client):
     assert ws.cell(row=5, column=1).font.bold
 
 
-def test_export_year_sheet_layout(api, client):
+def test_export_year_sheet_layout(api: Api, client: TestClient) -> None:
     _setup(api, client)
     ws = _export(client)["2026"]
     assert ws.freeze_panes == "B3"
@@ -215,7 +217,7 @@ def test_export_year_sheet_layout(api, client):
     assert ws.cell(row=3, column=1).font.bold
 
 
-def test_export_year_sheet_totals(api, client):
+def test_export_year_sheet_totals(api: Api, client: TestClient) -> None:
     _setup(api, client)
     ws = _export(client)["2026"]
     groceries_row = next(
@@ -234,7 +236,7 @@ def test_export_year_sheet_totals(api, client):
     assert ws.cell(row=salary_row, column=3).value == 5000.0
 
 
-def test_export_escapes_at_prefix(api, client):
+def test_export_escapes_at_prefix(api: Api, client: TestClient) -> None:
     cat, acct = _setup(api, client)
     api.tx("2026-03-01T10:00:00", -100, accountId=acct, categoryId=cat, description="@cmd|test")
     ws = _export(client)["Transactions"]
@@ -242,14 +244,14 @@ def test_export_escapes_at_prefix(api, client):
     assert "'@cmd|test" in descriptions
 
 
-def test_export_dashdata_freeze_and_bold(api, client):
+def test_export_dashdata_freeze_and_bold(api: Api, client: TestClient) -> None:
     _setup(api, client)
     ws = _export(client)["DashData"]
     assert ws.freeze_panes == "A2"
     assert all(c.font.bold for c in ws[1])
 
 
-def test_export_amount_uses_account_currency_symbol(api, client):
+def test_export_amount_uses_account_currency_symbol(api: Api, client: TestClient) -> None:
     cat, _ = _setup(api, client)
     usd = api.account("Dollars", currency="USD")
     eur = api.account("Euros", currency="EUR")
@@ -265,7 +267,7 @@ def test_export_amount_uses_account_currency_symbol(api, client):
     assert "-100.00 CHF" in amounts
 
 
-def test_export_dashdata_skips_uncategorized(api, client):
+def test_export_dashdata_skips_uncategorized(api: Api, client: TestClient) -> None:
     _setup(api, client)
     api.tx("2026-01-25T10:00:00", -99900, description="Mystery")
     ws = _export(client)["DashData"]
@@ -274,12 +276,12 @@ def test_export_dashdata_skips_uncategorized(api, client):
     assert row[2] == 125.5
 
 
-def test_export_requires_auth(anon):
+def test_export_requires_auth(anon: TestClient) -> None:
     r = anon.get("/api/export/xlsx")
     assert r.status_code == 401
 
 
-def test_export_empty_user(client):
+def test_export_empty_user(client: TestClient) -> None:
     wb = _export(client)
     assert wb.sheetnames == ["Categories", "Transactions", "DashData"]
     assert [c.value for c in wb["Categories"][1]] == [
@@ -292,7 +294,7 @@ def test_export_empty_user(client):
     assert [c.value for c in wb["DashData"][1]] == ["Month", "Income", "Expense", "Ratio", "CumNet"]
 
 
-def test_export_escapes_formula_prefixes(api, client):
+def test_export_escapes_formula_prefixes(api: Api, client: TestClient) -> None:
     cat, acct = _setup(api, client)
     api.tx(
         "2026-02-01T10:00:00",
@@ -309,7 +311,7 @@ def test_export_escapes_formula_prefixes(api, client):
     assert "'+SUM(A1)" in comments
 
 
-def test_export_header_band_is_slate(api, client):
+def test_export_header_band_is_slate(api: Api, client: TestClient) -> None:
     _setup(api, client)
     wb = _export(client)
     for name in ("Categories", "Transactions", "DashData", "2026"):
@@ -319,7 +321,7 @@ def test_export_header_band_is_slate(api, client):
         assert head.font.bold
 
 
-def test_export_year_sheet_bands(api, client):
+def test_export_year_sheet_bands(api: Api, client: TestClient) -> None:
     _setup(api, client)
     ws = _export(client)["2026"]
     assert ws.cell(row=1, column=2).fill.fgColor.rgb == "FF3C464D"
@@ -331,7 +333,7 @@ def test_export_year_sheet_bands(api, client):
     assert ws.cell(row=group_row, column=1).fill.fgColor.rgb == "FFE6F4FB"
 
 
-def test_export_summary_balance_is_colored(api, client):
+def test_export_summary_balance_is_colored(api: Api, client: TestClient) -> None:
     _setup(api, client)
     ws = _export(client)["2026"]
     balance = ws.cell(row=3, column=4)
@@ -340,7 +342,7 @@ def test_export_summary_balance_is_colored(api, client):
     assert balance.font.color.rgb == "FF4F7A00"
 
 
-def test_export_money_cells_have_grid_border(api, client):
+def test_export_money_cells_have_grid_border(api: Api, client: TestClient) -> None:
     _setup(api, client)
     ws = _export(client)["2026"]
     groceries_row = next(
@@ -351,7 +353,7 @@ def test_export_money_cells_have_grid_border(api, client):
     assert cell.border.bottom.style == "thin"
 
 
-def test_export_positive_balance_is_green(api, client):
+def test_export_positive_balance_is_green(api: Api, client: TestClient) -> None:
     _setup(api, client)
     ws = _export(client)["2026"]
     groceries_row = next(
@@ -362,7 +364,7 @@ def test_export_positive_balance_is_green(api, client):
     assert balance.font.color.rgb == "FF4F7A00"
 
 
-def test_export_negative_balance_is_red(api, client):
+def test_export_negative_balance_is_red(api: Api, client: TestClient) -> None:
     g_out = api.group("Overspend")
     cat = api.category("Splurge", g_out)
     acct = api.account("Card")
@@ -377,7 +379,7 @@ def test_export_negative_balance_is_red(api, client):
     assert balance.font.color.rgb == "FFC0392B"
 
 
-def test_export_zero_balance_is_grey(api, client):
+def test_export_zero_balance_is_grey(api: Api, client: TestClient) -> None:
     g_out = api.group("OnBudget")
     cat = api.category("Exact", g_out)
     acct = api.account("Card")
@@ -392,7 +394,7 @@ def test_export_zero_balance_is_grey(api, client):
     assert balance.font.color.rgb == "FF434343"
 
 
-def test_export_dashdata_refund_reduces_expense(api, client):
+def test_export_dashdata_refund_reduces_expense(api: Api, client: TestClient) -> None:
     """
     Direction enforcement keeps the API from filing an inflow into an expense
     category, but migrated workbooks and old synced statements carry such
