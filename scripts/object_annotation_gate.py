@@ -1,7 +1,5 @@
 """Check changed Python annotations for uses of the overly broad ``object`` type."""
 
-from __future__ import annotations
-
 import ast
 import base64
 import difflib
@@ -18,8 +16,11 @@ from pathlib import Path
 from typing import Any
 
 BOT_MARKER = "<!-- monori-object-annotation-gate -->"
+BOT_LOGIN = "github-actions[bot]"
 STATE_RE = re.compile(r"<!-- monori-object-annotation-state: (.+?) -->")
 COMMAND_RE = re.compile(r"^/ignore-object\s+([a-z0-9]+)$")
+PATCH_HUNK_RE = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@")
+REQUEST_TIMEOUT = 30
 
 
 @dataclass(frozen=True)
@@ -29,6 +30,12 @@ class Finding:
     column: int
     annotation: str
     finding_id: str
+
+
+class GitHubAPIError(RuntimeError):
+    def __init__(self, method: str, path: str, status: int) -> None:
+        super().__init__(f"GitHub API {method} {path} failed: HTTP {status}")
+        self.status = status
 
 
 class GitHub:
@@ -52,14 +59,16 @@ class GitHub:
             },
         )
         try:
-            with urllib.request.urlopen(request) as response:
+            with urllib.request.urlopen(request, timeout=REQUEST_TIMEOUT) as response:
                 if response.status == 204:
                     return None
                 return json.loads(response.read())
         except urllib.error.HTTPError as error:
-            if error.code == 404:
+            if method == "GET" and error.code == 404:
                 return None
-            raise RuntimeError(f"GitHub API {method} {path} failed: HTTP {error.code}") from error
+            raise GitHubAPIError(method, path, error.code) from error
+        except (TimeoutError, urllib.error.URLError) as error:
+            raise RuntimeError(f"GitHub API {method} {path} failed: {error}") from error
 
     def paged(self, path: str) -> list[dict[str, Any]]:
         result: list[dict[str, Any]] = []
@@ -86,7 +95,7 @@ class GitHub:
             download_url,
             headers={"Authorization": f"Bearer {self.token}"},
         )
-        with urllib.request.urlopen(request) as result:
+        with urllib.request.urlopen(request, timeout=REQUEST_TIMEOUT) as result:
             return result.read().decode("utf-8")
 
 
@@ -99,6 +108,25 @@ def changed_lines(before: str | None, after: str) -> set[int]:
         if tag in {"insert", "replace"}:
             changed.update(range(new_start + 1, new_end + 1))
     return changed
+
+
+def added_lines_from_patch(patch: str) -> set[int]:
+    added: set[int] = set()
+    new_line = 0
+    for line in patch.splitlines():
+        if line.startswith("@@"):
+            match = PATCH_HUNK_RE.match(line)
+            if not match:
+                raise RuntimeError(f"Cannot parse diff hunk: {line}")
+            new_line = int(match.group(1))
+        elif line.startswith("+") and not line.startswith("+++"):
+            added.add(new_line)
+            new_line += 1
+        elif line.startswith("-") and not line.startswith("---"):
+            continue
+        elif new_line:
+            new_line += 1
+    return added
 
 
 def annotation_nodes(tree: ast.AST) -> list[ast.expr]:
@@ -115,11 +143,20 @@ def annotation_nodes(tree: ast.AST) -> list[ast.expr]:
     return nodes
 
 
-def contains_object(annotation: ast.expr) -> ast.Name | None:
-    return next(
-        (node for node in ast.walk(annotation) if isinstance(node, ast.Name) and node.id == "object"),
-        None,
-    )
+def contains_object(annotation: ast.expr) -> tuple[int, int] | None:
+    for node in ast.walk(annotation):
+        if isinstance(node, ast.Name) and node.id == "object":
+            return node.lineno, node.col_offset
+        if isinstance(node, ast.Attribute) and node.attr == "object":
+            return node.lineno, node.col_offset
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            try:
+                parsed = ast.parse(node.value, mode="eval")
+            except SyntaxError:
+                continue
+            if contains_object(parsed.body):
+                return node.lineno, node.col_offset
+    return None
 
 
 def scan_file(path: str, source: str, changed: set[int]) -> list[Finding]:
@@ -131,14 +168,15 @@ def scan_file(path: str, source: str, changed: set[int]) -> list[Finding]:
 
     findings: list[Finding] = []
     for annotation in annotation_nodes(tree):
-        object_node = contains_object(annotation)
-        if object_node is None or object_node.lineno not in changed:
+        object_location = contains_object(annotation)
+        if object_location is None or object_location[0] not in changed:
             continue
+        object_line, object_column = object_location
         rendered = ast.unparse(annotation)
-        raw_id = f"{path}:{object_node.lineno}:{object_node.col_offset}:{rendered}"
+        raw_id = f"{path}:{object_line}:{object_column}:{rendered}"
         finding_id = hashlib.sha256(raw_id.encode()).hexdigest()[:12]
         findings.append(
-            Finding(path, object_node.lineno, object_node.col_offset, rendered, finding_id)
+            Finding(path, object_line, object_column, rendered, finding_id)
         )
     return sorted(findings, key=lambda finding: (finding.line, finding.column, finding.annotation))
 
@@ -182,7 +220,16 @@ def comment_body(findings: list[Finding], sha: str, approved: set[str]) -> str:
 
 def find_bot_comment(github: GitHub, number: int) -> dict[str, Any] | None:
     comments = github.paged(f"/issues/{number}/comments")
-    return next((comment for comment in comments if BOT_MARKER in comment.get("body", "")), None)
+    return next(
+        (
+            comment
+            for comment in comments
+            if comment.get("user", {}).get("login") == BOT_LOGIN
+            and comment.get("user", {}).get("type") == "Bot"
+            and BOT_MARKER in (comment.get("body") or "")
+        ),
+        None,
+    )
 
 
 def update_bot_comment(github: GitHub, number: int, body: str, existing: dict[str, Any] | None) -> None:
@@ -199,7 +246,12 @@ def delete_bot_comment(github: GitHub, existing: dict[str, Any] | None) -> None:
 
 def is_admin(github: GitHub, login: str) -> bool:
     encoded = urllib.parse.quote(login, safe="")
-    permission = github.request("GET", f"/collaborators/{encoded}/permission")
+    try:
+        permission = github.request("GET", f"/collaborators/{encoded}/permission")
+    except GitHubAPIError as error:
+        if error.status == 403:
+            return False
+        raise
     return bool(permission and permission.get("permission") == "admin")
 
 
@@ -214,6 +266,10 @@ def scan_pull_request(github: GitHub, pull: dict[str, Any]) -> list[Finding]:
     head = pull["head"]
     base = pull["base"]
     files = github.paged(f"/pulls/{pull['number']}/files")
+    comparison = github.request("GET", f"/compare/{base['sha']}...{head['sha']}")
+    if not comparison or not comparison.get("merge_base_commit"):
+        raise RuntimeError(f"Cannot determine merge base for pull request #{pull['number']}")
+    merge_base = comparison["merge_base_commit"]["sha"]
     findings: list[Finding] = []
     for file in files:
         path = file["filename"]
@@ -221,11 +277,33 @@ def scan_pull_request(github: GitHub, pull: dict[str, Any]) -> list[Finding]:
             continue
         source = github.file_text(path, head["sha"])
         if source is None:
-            continue
-        before_path = file.get("previous_filename", path)
-        before = github.file_text(before_path, base["sha"])
-        findings.extend(scan_file(path, source, changed_lines(before, source)))
+            raise RuntimeError(f"Cannot read changed Python file {path} at {head['sha']}")
+        patch = file.get("patch")
+        if patch:
+            changed = added_lines_from_patch(patch)
+        else:
+            before_path = file.get("previous_filename", path)
+            before = github.file_text(before_path, merge_base)
+            changed = changed_lines(before, source)
+        findings.extend(scan_file(path, source, changed))
     return sorted(findings, key=lambda finding: (finding.path, finding.line, finding.column))
+
+
+def rerun_pull_request_gate(github: GitHub, number: int) -> None:
+    response = github.request(
+        "GET",
+        "/actions/workflows/object-annotation-gate.yaml/runs?event=pull_request_target&per_page=100",
+    )
+    runs = response.get("workflow_runs", []) if response else []
+    matching = [
+        run
+        for run in runs
+        if any(pull_request.get("number") == number for pull_request in run.get("pull_requests", []))
+    ]
+    if not matching:
+        raise RuntimeError(f"Cannot find a previous gate run for pull request #{number}")
+    latest = max(matching, key=lambda run: run.get("created_at", ""))
+    github.request("POST", f"/actions/runs/{latest['id']}/rerun")
 
 
 def main() -> int:
@@ -241,10 +319,12 @@ def main() -> int:
     findings = scan_pull_request(github, pull)
     sha = pull["head"]["sha"]
     existing = find_bot_comment(github, number)
-    approved = parse_state(existing.get("body", ""), sha) if existing else set()
+    approved = parse_state(existing.get("body") or "", sha) if existing else set()
 
-    if event.get("comment") and COMMAND_RE.fullmatch(event["comment"].get("body", "").strip()):
-        finding_id = COMMAND_RE.fullmatch(event["comment"]["body"].strip()).group(1)  # type: ignore[union-attr]
+    command = COMMAND_RE.fullmatch((event.get("comment") or {}).get("body", "").strip())
+    approval_granted = False
+    if command:
+        finding_id = command.group(1)
         author = event["comment"]["user"]["login"]
         if not is_admin(github, author):
             print(f"{author} is not a repository administrator; approval ignored")
@@ -252,6 +332,7 @@ def main() -> int:
             print(f"{finding_id} is not an active finding for {sha}; approval ignored")
         else:
             approved.add(finding_id)
+            approval_granted = True
 
     if not findings:
         delete_bot_comment(github, existing)
@@ -263,6 +344,8 @@ def main() -> int:
         for finding in unapproved:
             print(f"::error file={finding.path},line={finding.line},col={finding.column + 1}::Use a specific type instead of object")
         return 1
+    if approval_granted:
+        rerun_pull_request_gate(github, number)
     return 0
 
 

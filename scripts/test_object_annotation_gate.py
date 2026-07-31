@@ -1,6 +1,15 @@
+import contextlib
+import io
 import unittest
 
-from object_annotation_gate import changed_lines, scan_file
+from object_annotation_gate import (
+    COMMAND_RE,
+    added_lines_from_patch,
+    changed_lines,
+    parse_state,
+    scan_file,
+    state_marker,
+)
 
 
 class ObjectAnnotationGateTest(unittest.TestCase):
@@ -32,6 +41,41 @@ text = "object"
 
         self.assertEqual(scan_file("example.py", source, set(range(1, 10))), [])
 
+    def test_finds_qualified_and_string_annotations(self) -> None:
+        source = """\
+value: builtins.object
+other: "list[object]"
+"""
+
+        findings = scan_file("example.py", source, set(range(1, 10)))
+
+        self.assertEqual([(finding.line, finding.annotation) for finding in findings], [
+            (1, "builtins.object"),
+            (2, "'list[object]'"),
+        ])
+
+    def test_invalid_python_is_reported_without_raising(self) -> None:
+        output = io.StringIO()
+        with contextlib.redirect_stderr(output):
+            findings = scan_file("broken.py", "value: object =", {1})
+
+        self.assertEqual(findings, [])
+        self.assertIn("Cannot parse Python file", output.getvalue())
+
+    def test_approval_state_requires_valid_current_sha(self) -> None:
+        body = state_marker("current", {"abc123"})
+
+        self.assertEqual(parse_state(body, "current"), {"abc123"})
+        self.assertEqual(parse_state(body, "old"), set())
+        self.assertEqual(
+            parse_state("<!-- monori-object-annotation-state: not-json -->", "current"), set()
+        )
+
+    def test_approval_command_requires_exactly_one_id(self) -> None:
+        self.assertIsNotNone(COMMAND_RE.fullmatch("/ignore-object abc123"))
+        self.assertIsNone(COMMAND_RE.fullmatch("/ignore-object"))
+        self.assertIsNone(COMMAND_RE.fullmatch("/ignore-object abc123 extra"))
+
     def test_reports_only_added_lines(self) -> None:
         before = "value: object\n"
         after = "value: object\nother: object\n"
@@ -39,6 +83,16 @@ text = "object"
         self.assertEqual(changed_lines(before, after), {2})
         findings = scan_file("example.py", after, changed_lines(before, after))
         self.assertEqual([(finding.line, finding.annotation) for finding in findings], [(2, "object")])
+
+    def test_reads_added_lines_from_unified_patch(self) -> None:
+        patch = """\
+@@ -1,2 +1,3 @@
+ value: str
++other: object
+ value2: str
+"""
+
+        self.assertEqual(added_lines_from_patch(patch), {2})
 
 
 if __name__ == "__main__":
