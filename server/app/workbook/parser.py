@@ -21,12 +21,86 @@ import datetime
 import re
 from collections.abc import Iterable, Mapping
 from io import BytesIO
+from typing import TypedDict
 
-from openpyxl import load_workbook
+from openpyxl import Workbook, load_workbook
+from openpyxl.worksheet._read_only import ReadOnlyWorksheet
+from openpyxl.worksheet.worksheet import Worksheet
 
 from ..importer import parse_amount_kop, parse_date
 from . import spec
 from .models import PARSED_WORKBOOK_ADAPTER, ParsedWorkbook, WorkbookTransaction
+
+
+class WorkbookGroupRow(TypedDict):
+    name: str
+    sort: int
+    kind: str
+
+
+class WorkbookCategoryRow(TypedDict):
+    group: str
+    group_kind: str | None
+    group_sort: int
+    name: str
+    keywords: str
+
+
+class WorkbookBudgetRow(TypedDict):
+    category: str
+    year: int
+    month: int
+    amount: int
+
+
+class WorkbookTransactionRow(TypedDict):
+    date: str
+    amount: int
+    description: str
+    bank_category: str
+    mcc: str
+    comment: str
+    monori_category: str
+    marker: str
+    currency: str
+
+
+class WorkbookParseErrorRow(TypedDict):
+    row: int
+    error: str
+
+
+class YearCategoryRow(TypedDict):
+    group: str
+    budgets: dict[int, int]
+    outflows: dict[int, int]
+    balances: dict[int, int]
+
+
+class YearSheetRow(TypedDict):
+    year: int
+    months: list[int]
+    cats: dict[str, YearCategoryRow]
+    income: dict[int, int]
+    available: dict[int, int]
+    seeds: dict[int, int]
+    seed: int | None
+    sections: list["YearSection"]
+
+
+class YearSection(TypedDict):
+    name: str
+    kind: str
+    rows: list[tuple[int, str]]
+
+
+class LayoutRow(TypedDict):
+    header_row: int
+    bases: list[int]
+    out_off: int
+    bal_off: int
+    label_col: int
+    start_month: int
 
 YEAR_RE = re.compile(r"^(\d{4})(_archive)?$")
 
@@ -116,7 +190,7 @@ class WorkbookError(Exception):
     pass
 
 
-def _s(value) -> str:
+def _s(value: object) -> str:
     if value is None:
         return ""
     return str(value).strip()
@@ -125,7 +199,7 @@ def _s(value) -> str:
 SUM_FORMULA_RE = re.compile(r"^=[-+]?\d+(\.\d+)?([-+]\d+(\.\d+)?)*$")
 
 
-def _kop(value):
+def _kop(value: object) -> int | None:
     if isinstance(value, bool):
         return None
     if isinstance(value, str):
@@ -147,21 +221,21 @@ def _kop(value):
     return spec.kop_from_rub(value)
 
 
-def _last_day(year, month):
+def _last_day(year: int, month: int) -> datetime.date:
     end = datetime.date(year + 1, 1, 1) if month == 12 else datetime.date(year, month + 1, 1)
     return end - datetime.timedelta(days=1)
 
 
-def _stamp(year, month):
+def _stamp(year: int, month: int) -> str:
     return _last_day(year, month).strftime("%Y-%m-%dT12:00:00")
 
 
-def _month_num(value):
+def _month_num(value: object) -> int | None:
     abbr = _s(value).upper()[:3]
     return MONTH_ABBREVS.get(abbr)
 
 
-def _find_layout(ws):
+def _find_layout(ws: Worksheet) -> LayoutRow | None:
     """
     Locates the month blocks of a year sheet by looking for the row that repeats
     a Budgeted/Outflows/Balance header per month — which is the same grid in a
@@ -210,7 +284,7 @@ def _find_layout(ws):
     return None
 
 
-def _label_col(ws, header_row, first_base):
+def _label_col(ws: Worksheet, header_row: int, first_base: int) -> int:
     """
     The category column when the grid never names it: of the columns left of the
     first month block, the one carrying the most labels below the header.
@@ -227,19 +301,21 @@ def _label_col(ws, header_row, first_base):
     return best
 
 
-def _kind_of(group_name, groups):
+def _kind_of(group_name: str, groups: Iterable[WorkbookGroupRow]) -> str:
     return next((g["kind"] for g in groups if g["name"] == group_name), "expense")
 
 
-def _parse_categories(ws, warnings):
+def _parse_categories(
+    ws: Worksheet, warnings: list[str]
+) -> tuple[list[WorkbookGroupRow], list[WorkbookCategoryRow]]:
     """
     Reads a category sheet that states the structure outright: category rows
     (`sort | group | category | keywords`) and, when present, a group table
     (`group | sort | IN/OUT`). Groups fall back to the ones the category rows
     name so a sheet missing that table still imports.
     """
-    groups = []
-    categories = []
+    groups: list[WorkbookGroupRow] = []
+    categories: list[WorkbookCategoryRow] = []
     group_rows_seen = False
     for row in ws.iter_rows(min_row=1, values_only=True):
         cells = list(row) + [None] * (4 - len(row))
@@ -273,7 +349,7 @@ def _parse_categories(ws, warnings):
         if s1 or s2 or s3:
             warnings.append(f"Categories: unrecognized row skipped: {[s1, s2, s3][:3]}")
     if not group_rows_seen:
-        seen: dict[str, dict] = {}
+        seen: dict[str, WorkbookGroupRow] = {}
         for cat in categories:
             if str(cat["group"]) not in seen:
                 seen[str(cat["group"])] = {
@@ -287,15 +363,15 @@ def _parse_categories(ws, warnings):
     return groups, categories
 
 
-def _sheet_sections(ws, layout):
+def _sheet_sections(ws: Worksheet, layout: LayoutRow) -> list[YearSection]:
     """
     Splits the category area into (group, [(row, category), ...]) sections.
     A row whose label starts with a kind glyph opens a group; in the old
     glyph-less layout the first labelled row after a fully blank gap does.
     """
     label_col = layout["label_col"]
-    sections: list[dict] = []
-    current: dict | None = None
+    sections: list[YearSection] = []
+    current: YearSection | None = None
     in_gap = True
     for r in range(layout["header_row"] + 1, ws.max_row + 1):
         label = _s(ws.cell(r, label_col).value)
@@ -317,7 +393,7 @@ def _sheet_sections(ws, layout):
     return sections
 
 
-def _summary_value(ws, base, labels):
+def _summary_value(ws: Worksheet, base: int, labels: tuple[str, ...]) -> int | None:
     for r in range(1, 7):
         text = _s(ws.cell(r, base + 2).value)
         if any(text.startswith(lb) for lb in labels):
@@ -325,14 +401,14 @@ def _summary_value(ws, base, labels):
     return None
 
 
-def _parse_year_sheet(ws, year, layout):
-    months = []
+def _parse_year_sheet(ws: Worksheet, year: int, layout: LayoutRow) -> YearSheetRow:
+    months: list[tuple[int, int]] = []
     for i, base in enumerate(layout["bases"]):
         m = layout["start_month"] + i
         if m > 12:
             break
         months.append((m, base))
-    cats: dict[str, dict] = {}
+    cats: dict[str, YearCategoryRow] = {}
     for section in _sheet_sections(ws, layout):
         for r, name in section["rows"]:
             entry = cats.setdefault(
@@ -349,8 +425,8 @@ def _parse_year_sheet(ws, year, layout):
                     entry["outflows"][m] = o
                 if bal is not None:
                     entry["balances"][m] = bal
-    income = {}
-    available = {}
+    income: dict[int, int] = {}
+    available: dict[int, int] = {}
     for m, base in months:
         inc = _summary_value(ws, base, ("Income for", "Поступления в"))
         if inc is not None:
@@ -365,7 +441,7 @@ def _parse_year_sheet(ws, year, layout):
     # every month block carries what was left over at the end of the one before
     # it, which is the only place a sheet records money it inherited rather than
     # earned — including the balance the whole spreadsheet was started with
-    seeds = {}
+    seeds: dict[int, int] = {}
     for m, base in months:
         carried = _summary_value(ws, base, ("Not budgeted", "Не заложено"))
         if carried is not None:
@@ -382,14 +458,14 @@ def _parse_year_sheet(ws, year, layout):
     }
 
 
-def _tx_header_index(ws):
+def _tx_header_index(ws: Worksheet | ReadOnlyWorksheet) -> dict[str, int] | None:
     header = next(ws.iter_rows(min_row=1, max_row=1, values_only=True), None)
     if header is None:
         return None
     return {_s(v): i for i, v in enumerate(header) if _s(v)}
 
 
-def _parse_dt(value):
+def _parse_dt(value: object) -> datetime.datetime | None:
     if isinstance(value, datetime.datetime):
         return value
     if isinstance(value, datetime.date):
@@ -417,7 +493,7 @@ def _unquote(value: str) -> str:
     return value
 
 
-def _amount(value):
+def _amount(value: object) -> int | None:
     """Kopecks from a cell that may be a number, a formatted string, or blank."""
     kop = _kop(value)
     if kop is not None:
@@ -426,7 +502,7 @@ def _amount(value):
     return parse_amount_kop(text) if text else None
 
 
-def _tx_columns(idx):
+def _tx_columns(idx: Mapping[str, int]) -> dict[str, int | None]:
     """Which column, if any, holds each field this reader knows how to use."""
     return {
         field: next((idx[name] for name in names if name in idx), None)
@@ -434,7 +510,11 @@ def _tx_columns(idx):
     }
 
 
-def _parse_transactions(ws, warnings, errors):
+def _parse_transactions(
+    ws: Worksheet | ReadOnlyWorksheet,
+    warnings: list[str],
+    errors: list[WorkbookParseErrorRow],
+) -> list[WorkbookTransactionRow]:
     idx = _tx_header_index(ws)
     if idx is None:
         raise WorkbookError("Transactions sheet is empty")
@@ -445,19 +525,19 @@ def _parse_transactions(ws, warnings, errors):
     if missing:
         raise WorkbookError(f"Transactions sheet is missing required columns: {missing}")
 
-    def col(row, field):
+    def col(row: tuple[object, ...], field: str) -> object | None:
         i = at[field]
         return row[i] if i is not None and i < len(row) else None
 
-    def text(row, field):
+    def text(row: tuple[object, ...], field: str) -> str:
         return _unquote(_s(col(row, field)))
 
     # a workbook that spells the category out in a column of its own says so in
     # the header; the live spreadsheet leaves it unnamed and has to be found by
     # position, so only look for it when there is no named column to use
     cat_col = at["category"] if at["category"] is not None else _category_col(ws, idx)
-    rows = []
-    seen = set()
+    rows: list[WorkbookTransactionRow] = []
+    seen: set[tuple[str, int, str, str, str]] = set()
     skipped_status = 0
     foreign: dict[str, int] = {}
     dupes = 0
@@ -522,11 +602,11 @@ def _parse_transactions(ws, warnings, errors):
     return rows
 
 
-def _known_max_col(idx):
+def _known_max_col(idx: Mapping[str, int]) -> int:
     return max((i for h, i in idx.items() if h in KNOWN_TX_HEADERS), default=-1)
 
 
-def _find_keyword_block(ws, idx):
+def _find_keyword_block(ws: Worksheet | ReadOnlyWorksheet, idx: Mapping[str, int]) -> int | None:
     """
     Locates the `category name | pipe-separated keywords` side table by
     content: the column pair (right of the known bank headers) with the most
@@ -547,7 +627,7 @@ def _find_keyword_block(ws, idx):
     return max(scores, key=lambda b: (scores[b], -b))
 
 
-def _category_col(ws, idx):
+def _category_col(ws: Worksheet | ReadOnlyWorksheet, idx: Mapping[str, int]) -> int:
     """
     The per-row category lives right of the known bank headers and left of the
     keyword table — but the live template puts *two* columns there: the keyword
@@ -577,7 +657,7 @@ def _category_col(ws, idx):
     return max(filled, key=lambda c: (filled[c], c))
 
 
-def _parse_keywords(ws, idx):
+def _parse_keywords(ws: Worksheet | ReadOnlyWorksheet, idx: Mapping[str, int]) -> dict[str, str]:
     """
     Reads the keyword side table (see _find_keyword_block): category name |
     pipe-separated keywords, starting at row 1.
@@ -596,7 +676,9 @@ def _parse_keywords(ws, idx):
     return keywords
 
 
-def _synthetic(year, month, amount, category, description, marker=""):
+def _synthetic(
+    year: int, month: int, amount: int, category: str, description: str, marker: str = ""
+) -> WorkbookTransactionRow:
     date_iso = _stamp(year, month)
     return {
         "date": date_iso,
@@ -622,7 +704,10 @@ def account_slot(tx: WorkbookTransaction) -> str:
     return f"{tx.currency or DEFAULT_CURRENCY}:{tx.marker}"
 
 
-def _activity_span(transactions, sources):
+def _activity_span(
+    transactions: Iterable[WorkbookTransactionRow],
+    sources: Iterable[YearSheetRow],
+) -> tuple[tuple[int, int] | None, tuple[int, int] | None]:
     """
     First and last (year, month) showing real activity: a transaction, a nonzero
     cached outflow or income. Budgets deliberately do not count — planning months
@@ -647,7 +732,7 @@ def _activity_span(transactions, sources):
     return (min(seen), max(seen)) if seen else (None, None)
 
 
-def _month_range(start, end):
+def _month_range(start: tuple[int, int], end: tuple[int, int]) -> Iterable[tuple[int, int]]:
     y, m = start
     while (y, m) <= end:
         yield (y, m)
@@ -671,9 +756,9 @@ def parse_workbook(data: bytes) -> ParsedWorkbook:
         wb.close()
 
 
-def _parse(wb):
+def _parse(wb: Workbook) -> ParsedWorkbook:
     warnings: list[str] = []
-    errors: list[dict] = []
+    errors: list[WorkbookParseErrorRow] = []
     if spec.SHEET_TRANSACTIONS not in wb.sheetnames:
         raise WorkbookError(f"missing required sheet: {spec.SHEET_TRANSACTIONS}")
     tx_ws = wb[spec.SHEET_TRANSACTIONS]
@@ -681,9 +766,9 @@ def _parse(wb):
     transactions = _parse_transactions(tx_ws, warnings, errors)
     keywords = _parse_keywords(tx_ws, tx_idx)
 
-    archive_years = {}
-    live_years = {}
-    plain_sheets = {}
+    archive_years: dict[int, YearSheetRow] = {}
+    live_years: dict[int, YearSheetRow] = {}
+    plain_sheets: dict[int, YearSheetRow] = {}
     for name in wb.sheetnames:
         year_match = YEAR_RE.match(name)
         if not year_match:
@@ -713,18 +798,24 @@ def _parse(wb):
     seam_year = -1 if first_live is None else first_live - 1
     seam_sheet = plain_sheets.get(seam_year)
 
-    groups: list[dict] = []
-    categories: list[dict] = []
-    group_names = set()
-    cat_names = {}
+    groups: list[WorkbookGroupRow] = []
+    categories: list[WorkbookCategoryRow] = []
+    group_names: set[str] = set()
+    cat_names: dict[str, str] = {}
 
-    def add_group(name, kind, sort=None):
+    def add_group(name: str, kind: str, sort: int | None = None) -> None:
         if name in group_names:
             return
         group_names.add(name)
         groups.append({"name": name, "sort": len(groups) if sort is None else sort, "kind": kind})
 
-    def add_category(name, group, keywords_text=None, group_kind=None, group_sort=0):
+    def add_category(
+        name: str,
+        group: str,
+        keywords_text: str | None = None,
+        group_kind: str | None = None,
+        group_sort: int = 0,
+    ) -> None:
         if name in cat_names:
             return
         cat_names[name] = group
@@ -801,7 +892,7 @@ def _parse(wb):
     # A category a row names but no structure lists still exists — losing it
     # would silently uncategorize that row. It joins the income side when
     # everything filed under it came in, and the expense side otherwise.
-    named_only: dict[str, list] = {}
+    named_only: dict[str, list[int]] = {}
     for tx in transactions:
         name = tx["monori_category"]
         if name and name not in cat_names:
@@ -840,12 +931,12 @@ def _parse(wb):
         add_category(INCOME_CATEGORY, INCOME_GROUP)
         income_category = INCOME_CATEGORY
 
-    kinds = {}
-    group_kind = {g["name"]: g["kind"] for g in groups}
+    kinds: dict[str, str] = {}
+    group_kind: dict[str, str] = {g["name"]: g["kind"] for g in groups}
     for cat in categories:
         kinds[cat["name"]] = group_kind.get(cat["group"], "expense")
 
-    budgets = []
+    budgets: list[WorkbookBudgetRow] = []
     for source in list(archive_years.values()) + list(live_years.values()):
         for name, entry in source["cats"].items():
             if name not in cat_names:
@@ -856,8 +947,8 @@ def _parse(wb):
                         {"category": name, "year": source["year"], "month": m, "amount": amount}
                     )
 
-    tx_sums: dict[tuple, int] = {}
-    income_sums: dict[tuple, int] = {}
+    tx_sums: dict[tuple[str, int, int], int] = {}
+    income_sums: dict[tuple[int, int], int] = {}
     for tx in transactions:
         cat = tx["monori_category"]
         if not cat:
@@ -873,14 +964,14 @@ def _parse(wb):
     # follows from whether any row is dated there — not from what its sheet is
     # called. A workbook can keep years of history on plain sheets and never
     # write `_archive` once.
-    months_with_rows = {
+    months_with_rows: set[tuple[int, int]] = {
         (int(tx["date"][:4]), int(tx["date"][5:7])) for tx in transactions if tx["monori_category"]
     }
 
-    synthetic = []
+    synthetic: list[WorkbookTransactionRow] = []
     n_hist = n_adjust = 0
 
-    def count(y, m):
+    def count(y: int, m: int) -> None:
         nonlocal n_hist, n_adjust
         if (y, m) in months_with_rows:
             n_adjust += 1
@@ -928,7 +1019,7 @@ def _parse(wb):
                 seeds[(year, m)] = value
     opening = seeds.get(first_active) if first_active is not None else None
 
-    seam_targets = {}
+    seam_targets: dict[str, int] = {}
     if seam_sheet is not None:
         last_m = max(seam_sheet["months"])
         for name, entry in seam_sheet["cats"].items():
@@ -940,9 +1031,9 @@ def _parse(wb):
     balances: dict[str, int] = {}
     avail = 0
     prev_overspent = 0
-    avail_residuals = []
+    avail_residuals: list[tuple[int, int, int]] = []
     n_seam = 0
-    opened = None
+    opened: tuple[int, int, int] | None = None
     for y, m in _month_range(start, end):
         if (y, m) == first_active and opening is not None:
             delta = opening - avail
@@ -1042,12 +1133,12 @@ def _parse(wb):
 
 
 def _result(
-    groups: Iterable[Mapping[str, object]],
-    categories: Iterable[Mapping[str, object]],
-    transactions: Iterable[Mapping[str, object]],
-    budgets: Iterable[Mapping[str, object]],
+    groups: Iterable[WorkbookGroupRow],
+    categories: Iterable[WorkbookCategoryRow],
+    transactions: Iterable[WorkbookTransactionRow],
+    budgets: Iterable[WorkbookBudgetRow],
     warnings: list[str],
-    errors: Iterable[Mapping[str, object]],
+    errors: Iterable[WorkbookParseErrorRow],
 ) -> ParsedWorkbook:
     return PARSED_WORKBOOK_ADAPTER.validate_python(
         {
