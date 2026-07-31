@@ -17,6 +17,7 @@ import sys
 from io import BytesIO
 
 from openpyxl import Workbook
+from openpyxl.worksheet.worksheet import Worksheet
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO / "server"))
@@ -32,7 +33,15 @@ TX_HEADER = [
 ]
 
 
-def tx(date, amount, category, *, card="*1111", desc="", kw=None):
+def tx(
+    date: datetime.datetime,
+    amount: float,
+    category: str,
+    *,
+    card: str = "*1111",
+    desc: str = "",
+    kw: tuple[str, str] | None = None,
+) -> list[object]:
     row: list[object] = [None] * 12
     row[0] = date
     row[1] = card
@@ -48,11 +57,13 @@ def tx(date, amount, category, *, card="*1111", desc="", kw=None):
     return row
 
 
-def build():
+def build() -> Workbook:
     wb = Workbook()
-    wb.remove(wb.active)
+    active = wb.active
+    assert active is not None
+    wb.remove(active)
 
-    ws = wb.create_sheet(spec.SHEET_TRANSACTIONS)
+    ws: Worksheet = wb.create_sheet(spec.SHEET_TRANSACTIONS)
     ws.append(TX_HEADER)
     rows = [
         tx(
@@ -85,7 +96,7 @@ def build():
 
     # year grid: Jan+Feb 2026, cached figures consistent with the rows above
     # so the importer reconciles without synthetic adjustments
-    ys = wb.create_sheet("2026")
+    ys: Worksheet = wb.create_sheet("2026")
     header_row = 8
     bases = [2, 6]
     ys.cell(row=1, column=bases[0], value="ЯНВ 2026")
@@ -126,41 +137,42 @@ def build():
     return wb
 
 
-def main():
+def main() -> None:
     wb = build()
     buf = BytesIO()
     wb.save(buf)
     data = buf.getvalue()
 
     parsed = parse_workbook(data)
-    synthetic = [t for t in parsed["transactions"] if t.get("synthetic")]
-    markers = sorted({t["marker"] for t in parsed["transactions"]})
+    synthetic_names = {"Salary", "Groceries", "Cafe", "Opening balance"}
+    synthetic = [t for t in parsed.transactions if t.description in synthetic_names]
+    markers = sorted({t.marker for t in parsed.transactions if t.marker})
     counts = {
-        "groups": len(parsed["groups"]),
-        "categories": len(parsed["categories"]),
-        "transactions": len(parsed["transactions"]),
-        "budget_cells": len(parsed["budgets"]),
+        "groups": len(parsed.groups),
+        "categories": len(parsed.categories),
+        "transactions": len(parsed.transactions),
+        "budget_cells": len(parsed.budgets),
     }
     print(f"parsed: {counts}, markers={markers}")
     # the miniature must parse spotlessly — a warning means the fixture itself
     # drifted from what the importer expects, so fail instead of narrating
-    assert not parsed["warnings"], parsed["warnings"]
+    assert not parsed.warnings, parsed.warnings
     assert not synthetic, f"cached grid does not reconcile, synthetic rows: {synthetic}"
-    assert not parsed["errors"], parsed["errors"]
+    assert not parsed.errors, parsed.errors
 
     # counts alone would not catch a column-index slip in tx() — pin the
     # content of one row per domain as well
-    by_desc = {t["description"]: t for t in parsed["transactions"]}
+    by_desc = {t.description: t for t in parsed.transactions}
     lenta = by_desc["LENTA-101"]
-    assert lenta["amount"] == -300000, lenta
-    assert lenta["monori_category"] == "Groceries", lenta
-    assert lenta["marker"] == "*1111", lenta
-    assert by_desc["PAYROLL JAN"]["amount"] == 5000000, by_desc["PAYROLL JAN"]
-    assert by_desc["MISC SHOP"]["monori_category"] == "", by_desc["MISC SHOP"]
-    keywords = {c["name"]: c["keywords"] for c in parsed["categories"]}
+    assert lenta.amount == -300000, lenta
+    assert lenta.monori_category == "Groceries", lenta
+    assert lenta.marker == "*1111", lenta
+    assert by_desc["PAYROLL JAN"].amount == 5000000, by_desc["PAYROLL JAN"]
+    assert by_desc["MISC SHOP"].monori_category == "", by_desc["MISC SHOP"]
+    keywords = {c.name: c.keywords for c in parsed.categories}
     assert keywords["Groceries"] == "lenta|okey", keywords
-    cell = next(b for b in parsed["budgets"] if b["category"] == "Groceries" and b["month"] == 1)
-    assert (cell["year"], cell["amount"]) == (2026, 500000), cell
+    cell = next(b for b in parsed.budgets if b.category == "Groceries" and b.month == 1)
+    assert (cell.year, cell.amount) == (2026, 500000), cell
     # 3 categories, all from the grid: the workbook already has an income group,
     # so the reader has somewhere to put rebuilt income and invents nothing
     assert counts == {"groups": 2, "categories": 3, "transactions": 5, "budget_cells": 3}, counts
