@@ -53,6 +53,7 @@ fail_under = 80
 [tool.ruff]
 target-version = "py312"
 line-length = 100
+src = ["server"]
 exclude = ["web/prototypes"]
 force-exclude = true
 
