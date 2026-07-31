@@ -1,7 +1,8 @@
-from typing import Annotated
+from __future__ import annotations
+
+from typing import Annotated, TypedDict, cast
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
 
 from ..auth import current_user
 from ..deps import conn, serialize_group
@@ -9,23 +10,25 @@ from ..deps import conn, serialize_group
 router = APIRouter(prefix="/api/groups", tags=["groups"])
 
 
-class GroupBody(BaseModel):
-    name: str = Field(min_length=1, max_length=80)
+class GroupBody(TypedDict):
+    name: str
     kind: str
 
 
-class GroupPatch(BaseModel):
-    name: str | None = Field(default=None, min_length=1, max_length=80)
-    kind: str | None = None
+class GroupPatch(TypedDict, total=False):
+    name: str
+    kind: str | None
 
 
-class Reorder(BaseModel):
+class Reorder(TypedDict):
     ids: list[int]
 
 
 @router.get("")
-def list_groups(user: Annotated[dict, Depends(current_user)]):
-    uid = user["id"]
+def list_groups(
+    user: Annotated[dict[str, object], Depends(current_user)],
+) -> list[dict[str, object]]:
+    uid = cast("int", user["id"])
     c = conn()
     try:
         return [
@@ -42,17 +45,19 @@ def list_groups(user: Annotated[dict, Depends(current_user)]):
 
 
 @router.post("")
-def create_group(body: GroupBody, user: Annotated[dict, Depends(current_user)]):
-    uid = user["id"]
+def create_group(
+    body: GroupBody, user: Annotated[dict[str, object], Depends(current_user)]
+) -> dict[str, object]:
+    uid = cast("int", user["id"])
     c = conn()
     try:
         group_type = c.execute(
-            "SELECT id FROM category_group_types WHERE type=?", (body.kind,)
+            "SELECT id FROM category_group_types WHERE type=?", (body["kind"],)
         ).fetchone()
         if not group_type:
             raise HTTPException(400, "kind must be 'income', 'expense', or 'goal'")
         if c.execute(
-            "SELECT id FROM category_groups WHERE user_id=? AND name=?", (uid, body.name)
+            "SELECT id FROM category_groups WHERE user_id=? AND name=?", (uid, body["name"])
         ).fetchone():
             raise HTTPException(409, "group with this name already exists")
         max_sort = c.execute(
@@ -60,7 +65,7 @@ def create_group(body: GroupBody, user: Annotated[dict, Depends(current_user)]):
         ).fetchone()[0]
         cur = c.execute(
             "INSERT INTO category_groups (user_id, name, sort, type_id) VALUES (?, ?, ?, ?)",
-            (uid, body.name, max_sort + 1, group_type["id"]),
+            (uid, body["name"], max_sort + 1, group_type["id"]),
         )
         c.commit()
         return {"id": cur.lastrowid}
@@ -69,25 +74,31 @@ def create_group(body: GroupBody, user: Annotated[dict, Depends(current_user)]):
 
 
 @router.patch("/{group_id}")
-def patch_group(group_id: int, patch: GroupPatch, user: Annotated[dict, Depends(current_user)]):
-    uid = user["id"]
+def patch_group(
+    group_id: int,
+    patch: GroupPatch,
+    user: Annotated[dict[str, object], Depends(current_user)],
+) -> dict[str, bool]:
+    uid = cast("int", user["id"])
     c = conn()
     try:
         if not c.execute(
             "SELECT id FROM category_groups WHERE id=? AND user_id=?", (group_id, uid)
         ).fetchone():
             raise HTTPException(404, "group not found")
-        if patch.name is not None:
+        patch_name = patch.get("name")
+        if patch_name is not None:
             dup = c.execute(
                 "SELECT id FROM category_groups WHERE user_id=? AND name=? AND id<>?",
-                (uid, patch.name, group_id),
+                (uid, patch_name, group_id),
             ).fetchone()
             if dup:
                 raise HTTPException(409, "group with this name already exists")
-            c.execute("UPDATE category_groups SET name=? WHERE id=?", (patch.name, group_id))
-        if patch.kind is not None:
+            c.execute("UPDATE category_groups SET name=? WHERE id=?", (patch_name, group_id))
+        patch_kind = patch.get("kind")
+        if patch_kind is not None:
             group_type = c.execute(
-                "SELECT id FROM category_group_types WHERE type=?", (patch.kind,)
+                "SELECT id FROM category_group_types WHERE type=?", (patch_kind,)
             ).fetchone()
             if not group_type:
                 raise HTTPException(400, "kind must be 'income', 'expense', or 'goal'")
@@ -101,8 +112,10 @@ def patch_group(group_id: int, patch: GroupPatch, user: Annotated[dict, Depends(
 
 
 @router.delete("/{group_id}")
-def delete_group(group_id: int, user: Annotated[dict, Depends(current_user)]):
-    uid = user["id"]
+def delete_group(
+    group_id: int, user: Annotated[dict[str, object], Depends(current_user)]
+) -> dict[str, bool]:
+    uid = cast("int", user["id"])
     c = conn()
     try:
         if not c.execute(
@@ -123,16 +136,18 @@ def delete_group(group_id: int, user: Annotated[dict, Depends(current_user)]):
 
 
 @router.post("/reorder")
-def reorder_groups(body: Reorder, user: Annotated[dict, Depends(current_user)]):
-    uid = user["id"]
+def reorder_groups(
+    body: Reorder, user: Annotated[dict[str, object], Depends(current_user)]
+) -> dict[str, bool]:
+    uid = cast("int", user["id"])
     c = conn()
     try:
         known = {
             r["id"] for r in c.execute("SELECT id FROM category_groups WHERE user_id=?", (uid,))
         }
-        if set(body.ids) != known:
+        if set(body["ids"]) != known:
             raise HTTPException(400, "ids must list every existing group exactly once")
-        for sort, gid in enumerate(body.ids, 1):
+        for sort, gid in enumerate(body["ids"], 1):
             c.execute("UPDATE category_groups SET sort=? WHERE id=?", (sort, gid))
         c.commit()
         return {"ok": True}

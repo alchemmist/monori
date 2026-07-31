@@ -5,11 +5,15 @@ Every route requires the ``admin_user`` dependency (403 otherwise). The admin
 sees full user data — this is the instance owner's own deployment.
 """
 
+from __future__ import annotations
+
 from datetime import UTC, datetime, timedelta
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated, TypedDict, cast
+
+if TYPE_CHECKING:
+    import sqlite3
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
 
 from ..admin import admin_user
 from ..deps import conn, serialize_user
@@ -24,16 +28,16 @@ RECENT_LOGINS_LIMIT = 50
 ACTIVITY_WINDOW_DAYS = 30
 
 
-def _cutoff(days):
+def _cutoff(days: int) -> str:
     return (datetime.now(UTC) - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%S")
 
 
-def _count(c, sql, params=()):
-    return c.execute(sql, params).fetchone()[0]
+def _count(c: sqlite3.Connection, sql: str, params: tuple[object, ...] = ()) -> int:
+    return cast("int", c.execute(sql, params).fetchone()[0])
 
 
 @router.get("/overview")
-def overview(admin: Annotated[dict, Depends(admin_user)]):
+def overview(admin: Annotated[dict[str, object], Depends(admin_user)]) -> dict[str, object]:
     c = conn()
     try:
         cutoff7, cutoff30 = _cutoff(7), _cutoff(30)
@@ -71,7 +75,7 @@ def overview(admin: Annotated[dict, Depends(admin_user)]):
 
 
 @router.get("/users")
-def list_users(admin: Annotated[dict, Depends(admin_user)]):
+def list_users(admin: Annotated[dict[str, object], Depends(admin_user)]) -> list[dict[str, object]]:
     c = conn()
     try:
         connections = {}
@@ -114,7 +118,9 @@ def list_users(admin: Annotated[dict, Depends(admin_user)]):
 
 
 @router.get("/users/{uid}")
-def user_detail(uid: int, admin: Annotated[dict, Depends(admin_user)]):
+def user_detail(
+    uid: int, admin: Annotated[dict[str, object], Depends(admin_user)]
+) -> dict[str, object]:
     c = conn()
     try:
         row = c.execute(
@@ -189,10 +195,10 @@ def user_detail(uid: int, admin: Annotated[dict, Depends(admin_user)]):
 @router.get("/users/{uid}/transactions")
 def user_transactions(
     uid: int,
-    admin: Annotated[dict, Depends(admin_user)],
+    admin: Annotated[dict[str, object], Depends(admin_user)],
     limit: Annotated[int, Query(ge=1, le=TX_PAGE_MAX)] = TX_PAGE_MAX,
     offset: Annotated[int, Query(ge=0)] = 0,
-):
+) -> list[dict[str, object]]:
     """
     A user's transactions, newest first — the full list behind the detail view's
     preview, rendered as one JSON object per line by the client. Paged (capped at
@@ -229,7 +235,7 @@ def user_transactions(
         c.close()
 
 
-class DeleteTransactionsBody(BaseModel):
+class DeleteTransactionsBody(TypedDict):
     ids: list[int]
 
 
@@ -237,14 +243,14 @@ class DeleteTransactionsBody(BaseModel):
 def delete_user_transactions(
     uid: int,
     body: DeleteTransactionsBody,
-    admin: Annotated[dict, Depends(admin_user)],
-):
+    admin: Annotated[dict[str, object], Depends(admin_user)],
+) -> dict[str, int]:
     """
     Bulk-delete a selection of one user's transactions. All-or-nothing: every
     id must belong to the target user, otherwise nothing is deleted — a stale
     selection must fail loudly rather than remove half of it.
     """
-    ids = sorted(set(body.ids))
+    ids = sorted(set(body["ids"]))
     if not ids:
         raise HTTPException(400, "no transaction ids given")
     c = conn()
@@ -274,22 +280,26 @@ def delete_user_transactions(
         c.close()
 
 
-class CreateUserBody(BaseModel):
+class CreateUserBody(TypedDict):
     email: str
     password: str
 
 
 @router.post("/users")
-def create_user_admin(body: CreateUserBody, admin: Annotated[dict, Depends(admin_user)]):
+def create_user_admin(
+    body: CreateUserBody, admin: Annotated[dict[str, object], Depends(admin_user)]
+) -> dict[str, object]:
     c = conn()
     try:
-        return create_user(c, body.email, body.password)
+        return create_user(c, body["email"], body["password"])
     finally:
         c.close()
 
 
 @router.delete("/users/{uid}")
-def delete_user(uid: int, admin: Annotated[dict, Depends(admin_user)]):
+def delete_user(
+    uid: int, admin: Annotated[dict[str, object], Depends(admin_user)]
+) -> dict[str, bool]:
     if uid == admin["id"]:
         raise HTTPException(400, "cannot delete yourself")
     c = conn()
@@ -320,7 +330,7 @@ def delete_user(uid: int, admin: Annotated[dict, Depends(admin_user)]):
 
 
 @router.get("/activity")
-def activity(admin: Annotated[dict, Depends(admin_user)]):
+def activity(admin: Annotated[dict[str, object], Depends(admin_user)]) -> dict[str, object]:
     c = conn()
     try:
         day_cutoff = _cutoff(ACTIVITY_WINDOW_DAYS)[:10]

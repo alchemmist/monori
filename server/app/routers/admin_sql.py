@@ -13,10 +13,9 @@ import contextlib
 import sqlite3
 import time
 from datetime import UTC, datetime
-from typing import Annotated
+from typing import Annotated, TypedDict, cast
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
 
 from ..admin import admin_user
 from ..deps import conn
@@ -75,10 +74,10 @@ def cell(value):
     return value
 
 
-class SqlBody(BaseModel):
-    sql: str = Field(max_length=STATEMENT_MAX_CHARS)
-    confirmWrite: bool = False  # noqa: N815 — the JSON API is camelCase
-    dryRun: bool = False  # noqa: N815
+class SqlBody(TypedDict):
+    sql: str
+    confirmWrite: bool
+    dryRun: bool
 
 
 @router.post("/sql")
@@ -97,7 +96,8 @@ def run_sql(body: SqlBody, admin: Annotated[dict, Depends(admin_user)]):
     back unconditionally — a read is answered with its rows, a write with the
     count, and nothing is ever committed.
     """
-    sql = body.sql.strip()
+    uid = cast("int", admin["id"])
+    sql = body["sql"].strip()
     if not sql:
         raise HTTPException(400, "empty statement")
 
@@ -131,7 +131,7 @@ def run_sql(body: SqlBody, admin: Annotated[dict, Depends(admin_user)]):
                 c.set_progress_handler(None, 0)
         except sqlite3.Error as e:
             c.rollback()
-            _audit(c, admin["id"], "admin_sql_failed", sql)
+            _audit(c, uid, "admin_sql_failed", sql)
             raise HTTPException(400, str(e)) from e
         elapsed_ms = round((time.perf_counter() - started) * 1000, 1)
 
@@ -139,9 +139,9 @@ def run_sql(body: SqlBody, admin: Annotated[dict, Depends(admin_user)]):
         is_write = not columns or changed > 0
         write_rows = max(changed, cur.rowcount, 0)
 
-        if body.dryRun:
+        if body["dryRun"]:
             c.rollback()
-            _audit(c, admin["id"], "admin_sql_dry_run", sql)
+            _audit(c, uid, "admin_sql_dry_run", sql)
             return {
                 "kind": "dry",
                 "wouldWrite": is_write,
@@ -152,9 +152,9 @@ def run_sql(body: SqlBody, admin: Annotated[dict, Depends(admin_user)]):
                 "elapsedMs": elapsed_ms,
             }
 
-        if is_write and not body.confirmWrite:
+        if is_write and not body["confirmWrite"]:
             c.rollback()
-            _audit(c, admin["id"], "admin_sql_rejected", sql)
+            _audit(c, uid, "admin_sql_rejected", sql)
             raise HTTPException(
                 400,
                 f"write statement ({leading_keyword(sql) or 'statement'}) needs confirmation;"
@@ -163,7 +163,7 @@ def run_sql(body: SqlBody, admin: Annotated[dict, Depends(admin_user)]):
 
         if is_write:
             c.commit()
-            _audit(c, admin["id"], "admin_sql", sql)
+            _audit(c, uid, "admin_sql", sql)
             return {
                 "kind": "write",
                 "columns": [],
@@ -176,7 +176,7 @@ def run_sql(body: SqlBody, admin: Annotated[dict, Depends(admin_user)]):
         # a read needs nothing committed; rolling back also undoes anything a
         # statement did that neither returned rows nor bumped total_changes
         c.rollback()
-        _audit(c, admin["id"], "admin_sql", sql)
+        _audit(c, uid, "admin_sql", sql)
         truncated = len(rows) > ROW_LIMIT
         return {
             "kind": "read",
