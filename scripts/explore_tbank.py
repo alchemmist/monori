@@ -19,20 +19,19 @@ Command protocol — write one line to <ctl>/cmd; the result lands in
   stop                      -> close and exit
 """
 
-import json
 import os
 import pathlib
 import re
 import time
 
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import Page, sync_playwright
 
 CTL = pathlib.Path(os.environ.get("TBANK_CTL", "/tmp/tbank-explore"))
 LOGIN = "https://www.tbank.ru/auth/login/"
 ATTR_RE = re.compile(r'(automation-id|data-qa-type|data-qa-file)="([^"]+)"')
 
 
-def dump(page):
+def dump(page: Page) -> str:
     html = page.content()
     (CTL / "page.html").write_text(f"<!-- url: {page.url} -->\n{html}", encoding="utf-8")
     seen = []
@@ -46,7 +45,7 @@ def dump(page):
     return f"dumped {len(html)} bytes, url={page.url}"
 
 
-def handle(page, line):
+def handle(page: Page, line: str) -> str:
     parts = line.split(" ", 1)
     cmd = parts[0]
     arg = parts[1].strip() if len(parts) > 1 else ""
@@ -91,7 +90,7 @@ def handle(page, line):
     return f"unknown command: {cmd}"
 
 
-def main():
+def main() -> None:
     CTL.mkdir(parents=True, exist_ok=True)
     profile = CTL / "profile"
     profile.mkdir(exist_ok=True)
