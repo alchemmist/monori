@@ -79,9 +79,18 @@ def test_same_names_allowed_across_users(anon: TestClient) -> None:
         anon.post("/api/groups", json={"name": "Bills", "kind": "expense"}, headers=b).status_code
         == 200
     )
-    assert anon.post("/api/accounts", json={"name": "Vault"}, headers=a).status_code == 200
-    assert anon.post("/api/accounts", json={"name": "Vault"}, headers=b).status_code == 200
-    assert anon.post("/api/accounts", json={"name": "Vault"}, headers=b).status_code == 409
+    body = {
+        "name": "Vault",
+        "type": "cash",
+        "icon": "wallet",
+        "color": "#5b6472",
+        "currency": "RUB",
+        "openingBalance": 0,
+        "bankRef": "",
+    }
+    assert anon.post("/api/accounts", json=body, headers=a).status_code == 200
+    assert anon.post("/api/accounts", json=body, headers=b).status_code == 200
+    assert anon.post("/api/accounts", json=body, headers=b).status_code == 409
 
 
 def test_first_user_claims_legacy_data(anon: TestClient) -> None:

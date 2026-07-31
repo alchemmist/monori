@@ -207,7 +207,17 @@ class Api:
         return cast("_IdResponse", r.json())["id"]
 
     def account(self, name: str, **kw: object) -> int:
-        r = self.client.post("/api/accounts", json={"name": name, **kw})
+        body: dict[str, object] = {
+            "name": name,
+            "type": "cash",
+            "icon": "wallet",
+            "color": "#5b6472",
+            "currency": "RUB",
+            "openingBalance": 0,
+            "bankRef": "",
+            **kw,
+        }
+        r = self.client.post("/api/accounts", json=body)
         assert r.status_code == 200, r.text
         return cast("_IdResponse", r.json())["id"]
 

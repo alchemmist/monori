@@ -20,7 +20,18 @@ def test_account_crud_and_uniqueness(api: Api, client: TestClient) -> None:
     client.patch(f"/api/accounts/{cash}", json={"icon": "sack"})
     assert api.acct(cash)["icon"] == "sack"
 
-    dup = client.post("/api/accounts", json={"name": "Vault"})
+    dup = client.post(
+        "/api/accounts",
+        json={
+            "name": "Vault",
+            "type": "cash",
+            "icon": "wallet",
+            "color": "#5b6472",
+            "currency": "RUB",
+            "openingBalance": 0,
+            "bankRef": "",
+        },
+    )
     assert dup.status_code == 409
 
     bad_type = client.post("/api/accounts", json={"name": "Weird", "type": "crypto"})

@@ -108,7 +108,18 @@ def test_workbook_roundtrip_into_fresh_user(api: Api, client: TestClient) -> Non
     data = _export_bytes(client)
 
     client.headers.update(login_as(client, "fresh@example.com"))
-    r = client.post("/api/accounts", json={"name": "Imported card"})
+    r = client.post(
+        "/api/accounts",
+        json={
+            "name": "Imported card",
+            "type": "cash",
+            "icon": "wallet",
+            "color": "#5b6472",
+            "currency": "RUB",
+            "openingBalance": 0,
+            "bankRef": "",
+        },
+    )
     assert r.status_code == 200
     target = cast("_IdResponse", r.json())["id"]
 
@@ -149,7 +160,21 @@ def test_workbook_reimport_is_idempotent(api: Api, client: TestClient) -> None:
     _seed(api, client)
     data = _export_bytes(client)
     client.headers.update(login_as(client, "again@example.com"))
-    target = cast("_IdResponse", client.post("/api/accounts", json={"name": "T"}).json())["id"]
+    target = cast(
+        "_IdResponse",
+        client.post(
+            "/api/accounts",
+            json={
+                "name": "T",
+                "type": "cash",
+                "icon": "wallet",
+                "color": "#5b6472",
+                "currency": "RUB",
+                "openingBalance": 0,
+                "bankRef": "",
+            },
+        ).json(),
+    )["id"]
     payload = {"mapping": json.dumps({"RUB:Card": target})}
     files = {"file": ("book.xlsx", data, "application/octet-stream")}
     first = client.post("/api/import/workbook/commit", files=files, data=payload).json()
@@ -167,7 +192,21 @@ def test_workbook_budget_policy_skip(api: Api, client: TestClient) -> None:
     _seed(api, client)
     data = _export_bytes(client)
     client.headers.update(login_as(client, "policy@example.com"))
-    target = cast("_IdResponse", client.post("/api/accounts", json={"name": "T"}).json())["id"]
+    target = cast(
+        "_IdResponse",
+        client.post(
+            "/api/accounts",
+            json={
+                "name": "T",
+                "type": "cash",
+                "icon": "wallet",
+                "color": "#5b6472",
+                "currency": "RUB",
+                "openingBalance": 0,
+                "bankRef": "",
+            },
+        ).json(),
+    )["id"]
     files = {"file": ("book.xlsx", data, "application/octet-stream")}
     r = client.post(
         "/api/import/workbook/commit",
@@ -223,7 +262,21 @@ def test_workbook_import_lands_as_rollbackable_batch(api: Api, client: TestClien
     _seed(api, client)
     data = _export_bytes(client)
     client.headers.update(login_as(client, "batch@example.com"))
-    target = cast("_IdResponse", client.post("/api/accounts", json={"name": "T"}).json())["id"]
+    target = cast(
+        "_IdResponse",
+        client.post(
+            "/api/accounts",
+            json={
+                "name": "T",
+                "type": "cash",
+                "icon": "wallet",
+                "color": "#5b6472",
+                "currency": "RUB",
+                "openingBalance": 0,
+                "bankRef": "",
+            },
+        ).json(),
+    )["id"]
     r = client.post(
         "/api/import/workbook/commit",
         files={"file": ("book.xlsx", data, "application/octet-stream")},
@@ -291,7 +344,18 @@ def test_workbook_commit_refuses_foreign_rows_on_a_ruble_account(
 
     usd = cast(
         "_IdResponse",
-        client.post("/api/accounts", json={"name": "Dollars", "currency": "USD"}).json(),
+        client.post(
+            "/api/accounts",
+            json={
+                "name": "Dollars",
+                "type": "cash",
+                "icon": "wallet",
+                "color": "#5b6472",
+                "currency": "USD",
+                "openingBalance": 0,
+                "bankRef": "",
+            },
+        ).json(),
     )["id"]
     mapping = json.dumps({"RUB:*1111": rub, "USD:*1111": usd})
     r = _upload(client, "/api/import/workbook/commit", data, {"mapping": mapping})
