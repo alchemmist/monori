@@ -66,7 +66,7 @@ fmt: schema-diagram
 	$(WEBBIN)/prettier --write .
 	@(uv run --project server ruff check --config server/pyproject.toml . --fix >/dev/null 2>&1 || true)
 	uv run --project server ruff format --config server/pyproject.toml .
-	$(SQLFLUFF) fix server/schema.sql
+	$(SQLFLUFF) fix .
 	@-$(WEBBIN)/markdownlint-cli2 --fix >/dev/null 2>&1
 	@files=$$(git ls-files '*.sh'); [ -z "$$files" ] || shfmt -w $$files
 
@@ -74,7 +74,7 @@ fmt-check:
 	$(WEBBIN)/prettier --check .
 	uv run --project server ruff check --config server/pyproject.toml --select I .
 	uv run --project server ruff format --config server/pyproject.toml --check .
-	$(SQLFLUFF) lint server/schema.sql
+	$(SQLFLUFF) lint .
 
 lint: lint-web lint-css lint-html lint-server lint-sql lint-yaml lint-md lint-docs lint-actions lint-docker lint-shell spell
 
@@ -91,7 +91,7 @@ lint-server:
 	uv run --project server ruff check --config server/pyproject.toml .
 
 lint-sql:
-	$(SQLFLUFF) lint server/schema.sql
+	$(SQLFLUFF) lint .
 
 lint-yaml:
 	uvx yamllint -c .yamllint.yaml .
