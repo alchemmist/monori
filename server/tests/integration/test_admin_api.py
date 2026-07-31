@@ -2,6 +2,7 @@ from typing import cast
 
 import pytest
 from fastapi.testclient import TestClient
+
 from tests.conftest import login_as
 
 pytestmark = pytest.mark.integration

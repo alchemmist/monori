@@ -1,12 +1,15 @@
-import app.connectors.fake  # noqa: F401  (registers the FakeConnector)
+from collections.abc import Callable
+from typing import TypeAlias, cast
+
 import httpx
 import pytest
+from fastapi.testclient import TestClient
+
+import app.connectors.fake  # noqa: F401  (registers the FakeConnector)
 from app import sync_service
 from app.connectors import base
 from app.connectors.base import ConnectorError, SmsRequired, SyncResult
 from app.sync_runner import LocalRunner, NoPendingLogin, RemoteRunner, get_runner
-from fastapi.testclient import TestClient
-from typing import Callable, TypeAlias, cast
 
 CREDS: dict[str, object] = {"phone": "+70000000000", "password": "pw"}
 Runner: TypeAlias = LocalRunner | RemoteRunner
@@ -31,7 +34,7 @@ def remote_runner() -> RemoteRunner:
 @pytest.fixture(params=[LocalRunner, remote_runner])
 def runner(request: pytest.FixtureRequest) -> Runner:
     sync_service.PENDING.clear()
-    factory = cast(Callable[[], Runner], request.param)
+    factory = cast("Callable[[], Runner]", request.param)
     return factory()
 
 

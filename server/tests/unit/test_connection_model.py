@@ -5,11 +5,12 @@ connector registry's parameter declarations.
 
 from typing import cast
 
-import app.connectors.fake  # noqa: F401
 import pytest
+from fastapi import HTTPException
+
+import app.connectors.fake  # noqa: F401
 from app.connectors.base import available_connectors
 from app.routers.connections import _validate_credentials
-from fastapi import HTTPException
 
 
 def test_validate_credentials_requires_declared_fields() -> None:

@@ -1,5 +1,5 @@
-import sqlite3
 import pathlib
+import sqlite3
 import sys
 from pathlib import Path
 from typing import cast
@@ -30,7 +30,7 @@ def _db(tmp_path: Path) -> sqlite3.Connection:
 
 
 def _uid(c: sqlite3.Connection) -> int:
-    return cast(int, c.execute("SELECT id FROM users").fetchone()[0])
+    return cast("int", c.execute("SELECT id FROM users").fetchone()[0])
 
 
 def _seed_categories(c: sqlite3.Connection) -> None:
@@ -45,8 +45,8 @@ def _seed_categories(c: sqlite3.Connection) -> None:
         " VALUES (?, 'Exp', 2, (SELECT id FROM category_group_types WHERE type='expense'))",
         (uid,),
     )
-    inc = cast(int, c.execute("SELECT id FROM category_groups WHERE name='Inc'").fetchone()[0])
-    exp = cast(int, c.execute("SELECT id FROM category_groups WHERE name='Exp'").fetchone()[0])
+    inc = cast("int", c.execute("SELECT id FROM category_groups WHERE name='Inc'").fetchone()[0])
+    exp = cast("int", c.execute("SELECT id FROM category_groups WHERE name='Exp'").fetchone()[0])
     cat_sql = "INSERT INTO categories (group_id, name, keywords, sort) VALUES (?, ?, ?, ?)"
     c.execute(cat_sql, (inc, "Salary", "salary|wage", 1))
     c.execute(cat_sql, (exp, "Food", "lenta|okey", 2))
@@ -84,8 +84,8 @@ def _row(date: str, amount: int, desc: str = "x", **kw: object) -> dict[str, obj
 
 def test_existing_hash_counts_is_account_scoped(tmp_path: Path) -> None:
     c = _db(tmp_path)
-    acct1 = cast(int, c.execute("SELECT MIN(id) FROM accounts").fetchone()[0])
-    acct2 = cast(int, c.execute("INSERT INTO accounts (name) VALUES ('Second')").lastrowid)
+    acct1 = cast("int", c.execute("SELECT MIN(id) FROM accounts").fetchone()[0])
+    acct2 = cast("int", c.execute("INSERT INTO accounts (name) VALUES ('Second')").lastrowid)
     commit_rows(c, acct1, [_row("2026-01-01T00:00:00", -100, "A")], source="import")
     c.commit()
     assert len(existing_hash_counts(c, acct1)) == 1
@@ -94,7 +94,7 @@ def test_existing_hash_counts_is_account_scoped(tmp_path: Path) -> None:
 
 def test_commit_rows_inserts_with_fields_and_defaults(tmp_path: Path) -> None:
     c = _db(tmp_path)
-    acct = cast(int, c.execute("SELECT MIN(id) FROM accounts").fetchone()[0])
+    acct = cast("int", c.execute("SELECT MIN(id) FROM accounts").fetchone()[0])
     bid = c.execute(
         "INSERT INTO import_batches (account_id, source, created_at) VALUES (?, 'sync', 't')",
         (acct,),
@@ -122,7 +122,7 @@ def test_commit_rows_inserts_with_fields_and_defaults(tmp_path: Path) -> None:
 
 def test_commit_rows_skips_existing_hashes(tmp_path: Path) -> None:
     c = _db(tmp_path)
-    acct = cast(int, c.execute("SELECT MIN(id) FROM accounts").fetchone()[0])
+    acct = cast("int", c.execute("SELECT MIN(id) FROM accounts").fetchone()[0])
     rows = [_row("2026-01-01T00:00:00", -100, "A")]
     assert commit_rows(c, acct, rows, source="import") == (1, 0)
     c.commit()
@@ -134,8 +134,8 @@ def test_commit_rows_skips_existing_hashes(tmp_path: Path) -> None:
 
 def test_commit_rows_dedup_is_per_account(tmp_path: Path) -> None:
     c = _db(tmp_path)
-    acct1 = cast(int, c.execute("SELECT MIN(id) FROM accounts").fetchone()[0])
-    acct2 = cast(int, c.execute("INSERT INTO accounts (name) VALUES ('Second')").lastrowid)
+    acct1 = cast("int", c.execute("SELECT MIN(id) FROM accounts").fetchone()[0])
+    acct2 = cast("int", c.execute("INSERT INTO accounts (name) VALUES ('Second')").lastrowid)
     rows = [_row("2026-01-01T00:00:00", -100, "A")]
     commit_rows(c, acct1, rows, source="import")
     c.commit()
@@ -145,7 +145,7 @@ def test_commit_rows_dedup_is_per_account(tmp_path: Path) -> None:
 
 def test_commit_rows_dedup_within_batch(tmp_path: Path) -> None:
     c = _db(tmp_path)
-    acct = cast(int, c.execute("SELECT MIN(id) FROM accounts").fetchone()[0])
+    acct = cast("int", c.execute("SELECT MIN(id) FROM accounts").fetchone()[0])
     # three identical rows on a fresh account are all genuinely new
     rows = [_row("2026-01-01T00:00:00", -100, "A")] * 3
     assert commit_rows(c, acct, rows, source="import") == (3, 0)
@@ -153,7 +153,7 @@ def test_commit_rows_dedup_within_batch(tmp_path: Path) -> None:
 
 def test_commit_rows_partial_skip_against_existing(tmp_path: Path) -> None:
     c = _db(tmp_path)
-    acct = cast(int, c.execute("SELECT MIN(id) FROM accounts").fetchone()[0])
+    acct = cast("int", c.execute("SELECT MIN(id) FROM accounts").fetchone()[0])
     row = _row("2026-01-01T00:00:00", -100, "A")
     commit_rows(c, acct, [row], source="import")  # DB now holds 1 copy
     c.commit()
@@ -163,18 +163,18 @@ def test_commit_rows_partial_skip_against_existing(tmp_path: Path) -> None:
 
 def test_snapshot_full_shape(tmp_path: Path) -> None:
     c = _db(tmp_path)
-    acct = cast(int, c.execute("SELECT MIN(id) FROM accounts").fetchone()[0])
+    acct = cast("int", c.execute("SELECT MIN(id) FROM accounts").fetchone()[0])
     c.execute(
         "INSERT INTO category_groups (user_id, name, sort, type_id)"
         " VALUES (?, 'Bills', 1, (SELECT id FROM category_group_types WHERE type='expense'))",
         (_uid(c),),
     )
-    gid = cast(int, c.execute("SELECT id FROM category_groups").fetchone()[0])
+    gid = cast("int", c.execute("SELECT id FROM category_groups").fetchone()[0])
     c.execute(
         "INSERT INTO categories (group_id, name, keywords, sort) VALUES (?, 'Rent', 'rent', 1)",
         (gid,),
     )
-    cid = cast(int, c.execute("SELECT id FROM categories").fetchone()[0])
+    cid = cast("int", c.execute("SELECT id FROM categories").fetchone()[0])
     c.execute(
         "INSERT INTO transactions (date, amount, description, account_id, hash, source)"
         " VALUES ('2026-01-01T00:00:00', -100, 'x', ?, 'h', 'import')",
@@ -184,7 +184,7 @@ def test_snapshot_full_shape(tmp_path: Path) -> None:
         "INSERT INTO budgets (category_id, year, month, amount) VALUES (?, 2026, 1, 5000)", (cid,)
     )
     c.commit()
-    snap = cast(_Snapshot, snapshot(c, _uid(c)))
+    snap = cast("_Snapshot", snapshot(c, _uid(c)))
     assert [a["name"] for a in snap["accounts"]] == ["T-Bank"]
     assert [g["name"] for g in snap["groups"]] == ["Bills"]
     assert snap["categories"][0]["name"] == "Rent"
@@ -203,7 +203,7 @@ def test_snapshot_includes_connections_without_secrets(tmp_path: Path) -> None:
         (_uid(c), b"cipher"),
     )
     c.commit()
-    conns = cast(list[dict[str, object]], cast(_Snapshot, snapshot(c, _uid(c)))["connections"])
+    conns = cast("list[dict[str, object]]", cast("_Snapshot", snapshot(c, _uid(c)))["connections"])
     assert len(conns) == 1
     assert conns[0]["bank"] == "tbank"
     assert conns[0]["status"] == "connected"
@@ -219,7 +219,7 @@ def test_historical_day_counts_span_accounts_and_skip_manual(tmp_path: Path) -> 
         " VALUES (?, 'Second', 'card', 'RUB', 2)",
         (uid,),
     )
-    first, second = [cast(int, r[0]) for r in c.execute("SELECT id FROM accounts ORDER BY id")]
+    first, second = [cast("int", r[0]) for r in c.execute("SELECT id FROM accounts ORDER BY id")]
     tx_sql = (
         "INSERT INTO transactions (date, amount, description, account_id, hash, source)"
         " VALUES (?, ?, ?, ?, ?, ?)"

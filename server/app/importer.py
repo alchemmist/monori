@@ -235,9 +235,7 @@ def parse_statement(text: str) -> tuple[list[ImportRow], list[ParseError]]:
         if parts and parts[0].lower() in HEADER_FIRST_CELLS:
             continue
         if len(parts) < 12:
-            errors.append(
-                ParseError(ln, f"expected >=12 columns, got {len(parts)}", line[:200])
-            )
+            errors.append(ParseError(ln, f"expected >=12 columns, got {len(parts)}", line[:200]))
             continue
         rec = dict(zip(COLUMNS, parts + [""] * (len(COLUMNS) - len(parts)), strict=False))
         date = parse_date(rec["op_date"])

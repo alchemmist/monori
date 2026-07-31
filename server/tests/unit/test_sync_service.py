@@ -1,7 +1,8 @@
-import app.connectors.fake  # noqa: F401  (registers the FakeConnector)
 import pytest
-from app import sync_service
 from fastapi.testclient import TestClient
+
+import app.connectors.fake  # noqa: F401  (registers the FakeConnector)
+from app import sync_service
 
 CREDS = {"phone": "+70000000000", "password": "pw"}
 

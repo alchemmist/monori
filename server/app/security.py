@@ -10,7 +10,9 @@ survive restarts without any configuration.
 import os
 import pathlib
 import secrets
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
+from typing import cast
 
 import jwt
 from argon2 import PasswordHasher
@@ -24,11 +26,11 @@ ALGORITHM = "HS256"
 TOKEN_TTL = timedelta(days=7)
 
 
-def hash_password(password):
+def hash_password(password: str) -> str:
     return _hasher.hash(password)
 
 
-def verify_password(password_hash, password):
+def verify_password(password_hash: str, password: str) -> bool:
     try:
         _hasher.verify(password_hash, password)
         return True
@@ -36,14 +38,14 @@ def verify_password(password_hash, password):
         return False
 
 
-def _secret_path():
+def _secret_path() -> pathlib.Path:
     return pathlib.Path(dbmod.DB_PATH).parent / ".auth_secret"
 
 
 _secret_cache: dict[str, str] = {}
 
 
-def auth_secret():
+def auth_secret() -> str:
     env = os.environ.get("MONORI_AUTH_SECRET")
     if env:
         return env
@@ -57,11 +59,11 @@ def auth_secret():
     return value
 
 
-def _load_or_create_secret(path):
+def _load_or_create_secret(path: pathlib.Path) -> str:
     return load_or_create_secret_file(path, lambda: secrets.token_hex(32))
 
 
-def load_or_create_secret_file(path, generate):
+def load_or_create_secret_file(path: pathlib.Path, generate: Callable[[], str]) -> str:
     """
     Read a secret from ``path``; if it is missing or empty, generate one with
     ``generate()`` and persist it owner-only. Concurrency-safe via exclusive
@@ -86,14 +88,14 @@ def load_or_create_secret_file(path, generate):
     return value
 
 
-def create_access_token(user_id):
+def create_access_token(user_id: int) -> str:
     now = datetime.now(UTC)
     payload = {"sub": str(user_id), "iat": now, "exp": now + TOKEN_TTL}
     return jwt.encode(payload, auth_secret(), algorithm=ALGORITHM)
 
 
-def decode_access_token(token):
+def decode_access_token(token: str) -> dict[str, object]:
     """
     Return the token's payload, or raise jwt.InvalidTokenError.
     """
-    return jwt.decode(token, auth_secret(), algorithms=[ALGORITHM])
+    return cast("dict[str, object]", jwt.decode(token, auth_secret(), algorithms=[ALGORITHM]))

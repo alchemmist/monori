@@ -14,6 +14,7 @@ when an OTP code arrives with no login waiting for it.
 
 import contextlib
 import os
+from typing import cast
 
 import httpx
 
@@ -28,10 +29,19 @@ class NoPendingLogin(Exception):
 
 
 class LocalRunner:
-    def __init__(self):
+    def __init__(self) -> None:
         self._pending: dict[int, connectors.Connector] = {}
 
-    def start(self, cid, bank, kind, credentials, session, since, account_ref=None):
+    def start(
+        self,
+        cid: int,
+        bank: str,
+        kind: str,
+        credentials: dict[str, object],
+        session: object | None,
+        since: str | None,
+        account_ref: object | None = None,
+    ) -> SyncResult:
         self.cancel(cid)
         cls = connectors.get_connector_class(bank, kind)
         connector = cls(credentials, session, account_ref=account_ref)
@@ -41,7 +51,7 @@ class LocalRunner:
             self._pending[cid] = connector
             raise
 
-    def resume(self, cid, code):
+    def resume(self, cid: int, code: str) -> SyncResult:
         connector = self._pending.pop(cid, None)
         if connector is None:
             raise NoPendingLogin
@@ -57,7 +67,7 @@ class LocalRunner:
                 connector.close()
             raise
 
-    def cancel(self, cid):
+    def cancel(self, cid: int) -> None:
         old = self._pending.pop(cid, None)
         if old is not None:
             with contextlib.suppress(Exception):
@@ -65,14 +75,14 @@ class LocalRunner:
 
 
 class RemoteRunner:
-    def __init__(self, base_url, client=None):
+    def __init__(self, base_url: str, client: httpx.Client | None = None) -> None:
         # browser logins are slow; the read timeout must outlive a full one
         self._client = client or httpx.Client(
             base_url=base_url, timeout=httpx.Timeout(600, connect=10)
         )
 
     @staticmethod
-    def _unpack(response):
+    def _unpack(response: httpx.Response) -> SyncResult:
         try:
             payload = response.json()
         except ValueError as e:
@@ -81,12 +91,23 @@ class RemoteRunner:
             raise ConnectorError("sync service returned an invalid response")
         status = payload.get("status")
         if status == "done":
-            return SyncResult(payload.get("rows") or [], payload.get("session"))
+            rows = cast("list[dict[str, object]]", payload.get("rows") or [])
+            session = payload.get("session")
+            return SyncResult(rows, session)
         if status == "awaiting_sms":
             raise SmsRequired(payload.get("message") or "code sent")
         raise ConnectorError(payload.get("message") or "sync failed")
 
-    def start(self, cid, bank, kind, credentials, session, since, account_ref=None):
+    def start(
+        self,
+        cid: int,
+        bank: str,
+        kind: str,
+        credentials: dict[str, object],
+        session: object | None,
+        since: str | None,
+        account_ref: object | None = None,
+    ) -> SyncResult:
         try:
             r = self._client.post(
                 f"/runs/{cid}",
@@ -104,7 +125,7 @@ class RemoteRunner:
             raise ConnectorError(f"sync service unavailable: {e}") from e
         return self._unpack(r)
 
-    def resume(self, cid, code):
+    def resume(self, cid: int, code: str) -> SyncResult:
         try:
             r = self._client.post(f"/runs/{cid}/sms", json={"code": code})
             if r.status_code == 409:
@@ -114,7 +135,7 @@ class RemoteRunner:
             raise ConnectorError(f"sync service unavailable: {e}") from e
         return self._unpack(r)
 
-    def cancel(self, cid):
+    def cancel(self, cid: int) -> None:
         # best-effort cleanup on user-facing endpoints: must fail fast (not
         # the 600 s sync timeout) and must not block deleting a connection
         # when the sync service is down
@@ -122,12 +143,12 @@ class RemoteRunner:
             self._client.post(f"/runs/{cid}/cancel", timeout=httpx.Timeout(5, connect=2))
 
 
-_runner = None
+_runner: LocalRunner | RemoteRunner | None = None
 
 
-def get_runner():
+def get_runner() -> LocalRunner | RemoteRunner:
     global _runner
     if _runner is None:
         url = os.environ.get("MONORI_SYNC_URL")
-        _runner = RemoteRunner(url) if url else LocalRunner()
+        _runner = RemoteRunner(url) if url is not None else LocalRunner()
     return _runner

@@ -18,8 +18,7 @@ from pydantic import ConfigDict
 from pydantic.dataclasses import dataclass as pydantic_dataclass
 
 from .connectors import base as connectors
-from .connectors.base import ConnectorError, SmsRequired
-from .connectors.base import SyncResult
+from .connectors.base import ConnectorError, SmsRequired, SyncResult
 
 app = FastAPI(title="monori-sync")
 

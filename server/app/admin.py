@@ -24,18 +24,18 @@ from .security import decode_access_token
 UNTRACKED_FEATURES = {"auth"}
 
 
-def admin_emails():
+def admin_emails() -> set[str]:
     raw = os.environ.get("MONORI_ADMIN_EMAILS", "")
     return {e.strip().lower() for e in raw.split(",") if e.strip()}
 
 
-def admin_user(user: Annotated[dict, Depends(current_user)]):
+def admin_user(user: Annotated[dict[str, object], Depends(current_user)]) -> dict[str, object]:
     if not user.get("isAdmin"):
         raise HTTPException(403, "admin rights required")
     return user
 
 
-def feature_from_path(path):
+def feature_from_path(path: str) -> str | None:
     """
     The usage-bucket name for an API path, or None if the request should not be
     counted (non-API paths and ``UNTRACKED_FEATURES``).
@@ -49,7 +49,7 @@ def feature_from_path(path):
     return feature
 
 
-def user_id_from_auth_header(header):
+def user_id_from_auth_header(header: str | None) -> int | None:
     if not header or not header.lower().startswith("bearer "):
         return None
     try:
@@ -62,7 +62,7 @@ def user_id_from_auth_header(header):
         return None
 
 
-def record_api_usage(path, auth_header):
+def record_api_usage(path: str, auth_header: str | None) -> None:
     feature = feature_from_path(path)
     if feature is None:
         return

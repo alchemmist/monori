@@ -36,7 +36,7 @@ BLOB_PREVIEW = 32
 CELL_MAX_CHARS = 4096
 
 
-def leading_keyword(sql):
+def leading_keyword(sql: str) -> str:
     """
     The first word of a statement, past any leading whitespace and comments —
     ``UPDATE`` in ``/* fix */ -- one row\\n update users …``. Used only to name
@@ -65,7 +65,7 @@ def leading_keyword(sql):
     return ""
 
 
-def cell(value):
+def cell(value: object) -> object:
     if isinstance(value, bytes):
         head = value[:BLOB_PREVIEW].hex()
         return f"x'{head}{'…' if len(value) > BLOB_PREVIEW else ''}' ({len(value)} bytes)"
@@ -81,7 +81,9 @@ class SqlBody(TypedDict):
 
 
 @router.post("/sql")
-def run_sql(body: SqlBody, admin: Annotated[dict, Depends(admin_user)]):
+def run_sql(
+    body: SqlBody, admin: Annotated[dict[str, object], Depends(admin_user)]
+) -> dict[str, object]:
     """
     Execute one statement and return either its rows or its affected-row count.
 
@@ -190,7 +192,7 @@ def run_sql(body: SqlBody, admin: Annotated[dict, Depends(admin_user)]):
         c.close()
 
 
-def _audit(c, uid, kind, sql):
+def _audit(c: sqlite3.Connection, uid: int, kind: str, sql: str) -> None:
     # a console statement can leave the schema unable to record itself (dropped
     # table, deleted admin row); losing the audit row must not lose the result
     with contextlib.suppress(sqlite3.Error):

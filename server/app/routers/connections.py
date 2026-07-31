@@ -14,13 +14,15 @@ now-cached session.
 
 import logging
 import secrets
+from collections.abc import Mapping
 from datetime import datetime
-from typing import TYPE_CHECKING, Annotated, Mapping, NoReturn, TypedDict, cast
+from typing import TYPE_CHECKING, Annotated, NoReturn, TypedDict, cast
 
 if TYPE_CHECKING:
     import sqlite3
 
 from fastapi import APIRouter, Depends, HTTPException
+
 from .. import crypto
 from ..auth import current_user
 from ..connectors import base as connectors
@@ -60,7 +62,7 @@ def _load(c: sqlite3.Connection, cid: int, uid: int) -> Mapping[str, object]:
     ).fetchone()
     if row is None:
         raise HTTPException(404, "unknown connection")
-    return cast(Mapping[str, object], row)
+    return cast("Mapping[str, object]", row)
 
 
 def _linked_accounts(c: sqlite3.Connection, cid: int, uid: int) -> list[dict[str, object]]:
@@ -113,9 +115,7 @@ def _validate_credentials(bank: str, kind: str, credentials: dict[str, object]) 
         raise HTTPException(400, f"missing credentials: {missing}")
 
 
-def _require_account_refs(
-    row: Mapping[str, object], accounts: list[dict[str, object]]
-) -> None:
+def _require_account_refs(row: Mapping[str, object], accounts: list[dict[str, object]]) -> None:
     """
     A connector that declares required account params cannot sync an account
     without its bank_ref — the pull would silently fall back to the default
@@ -233,7 +233,7 @@ def _finish_account(
         cur = c.execute(
             "INSERT INTO import_batches (account_id, connection_id, source, created_at)"
             " VALUES (?, ?, 'sync', ?)",
-            (target_id, cast(int, row["id"]), _now()),
+            (target_id, cast("int", row["id"]), _now()),
         )
         batch_id = cur.lastrowid
         inserted, skipped = commit_rows(c, target_id, rows, source="sync", batch_id=batch_id)
@@ -258,7 +258,7 @@ def _finish_account(
     if session:
         c.execute(
             "UPDATE bank_connections SET session_encrypted=?, updated_at=? WHERE id=?",
-            (crypto.encrypt(session), _now(), cast(int, row["id"])),
+            (crypto.encrypt(session), _now(), cast("int", row["id"])),
         )
     # a transfer arrives as two rows on two accounts, often from two different
     # pulls — merging right after ingestion is the only moment both are present
@@ -284,8 +284,8 @@ def _aggregate(
     dates_to = [str(r["dateTo"]) for r in results if r["dateTo"]]
     return {
         "status": "connected",
-        "inserted": sum(cast(int, r["inserted"]) for r in results),
-        "skipped": sum(cast(int, r["skipped"]) for r in results),
+        "inserted": sum(cast("int", r["inserted"]) for r in results),
+        "skipped": sum(cast("int", r["skipped"]) for r in results),
         "accounts": results,
         "dateFrom": min(dates_from) if dates_from else None,
         "dateTo": max(dates_to) if dates_to else None,
@@ -324,7 +324,7 @@ def _sync_accounts(
     tails); raises SmsRequired after persisting which account the parked login
     belongs to.
     """
-    cid = cast(int, row["id"])
+    cid = cast("int", row["id"])
     results: list[dict[str, object]] = []
     unmapped: dict[str, int] = {}
     for acct in accounts:
@@ -335,8 +335,10 @@ def _sync_accounts(
                 str(row["kind"]),
                 creds,
                 session,
-                _account_since(c, cid, cast(int, acct["id"]), cast(str | None, row["last_sync"])),
-                cast(str | None, acct["bank_ref"]) or None,
+                _account_since(
+                    c, cid, cast("int", acct["id"]), cast("str | None", row["last_sync"])
+                ),
+                cast("str | None", acct["bank_ref"]) or None,
             )
         except SmsRequired:
             c.execute(
@@ -346,7 +348,7 @@ def _sync_accounts(
             )
             c.commit()
             raise
-        summaries, missed = _finish_account(c, row, cast(int, acct["id"]), result, uid)
+        summaries, missed = _finish_account(c, row, cast("int", acct["id"]), result, uid)
         results.extend(summaries)
         for t, n in missed.items():
             unmapped[t] = unmapped.get(t, 0) + n
@@ -364,7 +366,7 @@ def create_connection(
     body: ConnectionBody, user: Annotated[dict[str, object], Depends(current_user)]
 ) -> dict[str, object]:
     _require_crypto()
-    uid = cast(int, user["id"])
+    uid = cast("int", user["id"])
     _validate_credentials(body["bank"], body["kind"], body["credentials"])
     c = conn()
     try:
@@ -379,7 +381,7 @@ def create_connection(
             (uid, body["bank"], body["kind"], creds, _now(), _now()),
         )
         c.commit()
-        return serialize_connection(_load(c, cast(int, cur.lastrowid), uid))
+        return serialize_connection(_load(c, cast("int", cur.lastrowid), uid))
     finally:
         c.close()
 
@@ -393,7 +395,7 @@ def update_credentials(
     cid: int, body: CredentialsPatch, user: Annotated[dict[str, object], Depends(current_user)]
 ) -> dict[str, object]:
     _require_crypto()
-    uid = cast(int, user["id"])
+    uid = cast("int", user["id"])
     c = conn()
     try:
         row = _load(c, cid, uid)
@@ -412,8 +414,10 @@ def update_credentials(
 
 
 @router.delete("/{cid}")
-def delete_connection(cid: int, user: Annotated[dict[str, object], Depends(current_user)]) -> dict[str, int]:
-    uid = cast(int, user["id"])
+def delete_connection(
+    cid: int, user: Annotated[dict[str, object], Depends(current_user)]
+) -> dict[str, int]:
+    uid = cast("int", user["id"])
     c = conn()
     try:
         _load(c, cid, uid)
@@ -427,12 +431,14 @@ def delete_connection(cid: int, user: Annotated[dict[str, object], Depends(curre
 
 
 @router.post("/{cid}/cancel")
-def cancel_sync(cid: int, user: Annotated[dict[str, object], Depends(current_user)]) -> dict[str, int]:
+def cancel_sync(
+    cid: int, user: Annotated[dict[str, object], Depends(current_user)]
+) -> dict[str, int]:
     """
     Abandon a login waiting for its OTP: close the parked connector and drop
     the connection out of the awaiting_sms state.
     """
-    uid = cast(int, user["id"])
+    uid = cast("int", user["id"])
     c = conn()
     try:
         _load(c, cid, uid)
@@ -453,7 +459,7 @@ def sync_connection(
     cid: int, user: Annotated[dict[str, object], Depends(current_user)]
 ) -> dict[str, object]:
     _require_crypto()
-    uid = cast(int, user["id"])
+    uid = cast("int", user["id"])
     c = conn()
     try:
         row = _load(c, cid, uid)
@@ -462,8 +468,8 @@ def sync_connection(
             raise HTTPException(400, "no accounts are linked to this connection")
         _require_account_refs(row, accounts)
         creds = cast(
-            dict[str, object] | None,
-            crypto.decrypt(cast(bytes | memoryview | None, row["credentials_encrypted"])),
+            "dict[str, object] | None",
+            crypto.decrypt(cast("bytes | memoryview | None", row["credentials_encrypted"])),
         )
         if not creds:
             raise HTTPException(400, "connection has no credentials")
@@ -475,8 +481,8 @@ def sync_connection(
             )
             c.commit()
         session = cast(
-            dict[str, object] | None,
-            crypto.decrypt(cast(bytes | memoryview | None, row["session_encrypted"])),
+            "dict[str, object] | None",
+            crypto.decrypt(cast("bytes | memoryview | None", row["session_encrypted"])),
         )
         try:
             results, unmapped = _sync_accounts(c, row, accounts, creds, session, uid)
@@ -495,16 +501,16 @@ def submit_sms(
     cid: int, body: SmsBody, user: Annotated[dict[str, object], Depends(current_user)]
 ) -> dict[str, object]:
     _require_crypto()
-    uid = cast(int, user["id"])
+    uid = cast("int", user["id"])
     c = conn()
     try:
         row = _load(c, cid, uid)
         accounts = _linked_accounts(c, cid, uid)
         pending_raw = row["pending_account_id"]
         pending_id = (
-            cast(int, pending_raw)
+            cast("int", pending_raw)
             if pending_raw is not None
-            else (cast(int, accounts[0]["id"]) if accounts else None)
+            else (cast("int", accounts[0]["id"]) if accounts else None)
         )
         if pending_id is None:
             raise HTTPException(400, "no accounts are linked to this connection")
@@ -517,11 +523,11 @@ def submit_sms(
         except ConnectorError as e:
             _fail(c, cid, e)
         results, unmapped = _finish_account(c, row, pending_id, result, uid)
-        session = cast(dict[str, object] | None, result.session) or cast(
-            dict[str, object] | None,
-            crypto.decrypt(cast(bytes | memoryview | None, row["session_encrypted"])),
+        session = cast("dict[str, object] | None", result.session) or cast(
+            "dict[str, object] | None",
+            crypto.decrypt(cast("bytes | memoryview | None", row["session_encrypted"])),
         )
-        ids = [cast(int, a["id"]) for a in accounts]
+        ids = [cast("int", a["id"]) for a in accounts]
         after = ids.index(pending_id) + 1 if pending_id in ids else len(ids)
         remaining = accounts[after:]
         try:
@@ -540,7 +546,7 @@ def submit_sms(
 
 
 def _creds(c: sqlite3.Connection, row: Mapping[str, object]) -> dict[str, object]:
-    creds = crypto.decrypt(cast(bytes | memoryview | None, row["credentials_encrypted"]))
+    creds = crypto.decrypt(cast("bytes | memoryview | None", row["credentials_encrypted"]))
     if not creds:
         raise HTTPException(400, "connection has no credentials")
-    return cast(dict[str, object], creds)
+    return cast("dict[str, object]", creds)

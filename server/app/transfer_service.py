@@ -8,7 +8,9 @@ ingested rows through exactly the same code path the UI uses.
 
 import sqlite3
 import uuid
+from collections.abc import Callable, Mapping
 from datetime import UTC, datetime
+from typing import cast
 
 from .db import begin_write
 from .transfer_match import AUTO_DAYS, SUGGEST_DAYS, find_pairs, split_confident
@@ -23,7 +25,7 @@ LINKABLE_COLUMNS = (
 )
 
 
-def serialize_transfer(r):
+def serialize_transfer(r: Mapping[str, object]) -> dict[str, object]:
     return {
         "id": r["id"],
         "outTxId": r["out_tx_id"],
@@ -34,7 +36,7 @@ def serialize_transfer(r):
     }
 
 
-def list_transfers(c, uid):
+def list_transfers(c: sqlite3.Connection, uid: int) -> list[dict[str, object]]:
     return [
         serialize_transfer(r)
         for r in c.execute(
@@ -45,12 +47,15 @@ def list_transfers(c, uid):
     ]
 
 
-def owned_tx(c, uid, tx_id):
-    return c.execute(
-        "SELECT t.* FROM transactions t JOIN accounts a ON a.id = t.account_id"
-        " WHERE t.id=? AND a.user_id=?",
-        (tx_id, uid),
-    ).fetchone()
+def owned_tx(c: sqlite3.Connection, uid: int, tx_id: int) -> Mapping[str, object] | None:
+    return cast(
+        "Mapping[str, object] | None",
+        c.execute(
+            "SELECT t.* FROM transactions t JOIN accounts a ON a.id = t.account_id"
+            " WHERE t.id=? AND a.user_id=?",
+            (tx_id, uid),
+        ).fetchone(),
+    )
 
 
 class LinkError(Exception):
@@ -59,7 +64,14 @@ class LinkError(Exception):
     """
 
 
-def link(c, uid, out_tx_id, in_tx_id, origin="manual", note=""):
+def link(
+    c: sqlite3.Connection,
+    uid: int,
+    out_tx_id: int,
+    in_tx_id: int,
+    origin: str = "manual",
+    note: str = "",
+) -> str:
     """
     Merge two existing transactions into a transfer. The rows are left in place
     — only ``transfer_id`` is stamped and the categories are moved aside, so a
@@ -70,7 +82,7 @@ def link(c, uid, out_tx_id, in_tx_id, origin="manual", note=""):
     in_row = owned_tx(c, uid, in_tx_id)
     if out_row is None or in_row is None:
         raise LinkError("unknown transaction")
-    if out_row["amount"] >= 0 or in_row["amount"] <= 0:
+    if cast("int", out_row["amount"]) >= 0 or cast("int", in_row["amount"]) <= 0:
         raise LinkError("a transfer needs one outflow and one inflow")
     if out_row["account_id"] == in_row["account_id"]:
         raise LinkError("both legs are on the same account")
@@ -117,7 +129,7 @@ def link(c, uid, out_tx_id, in_tx_id, origin="manual", note=""):
     return transfer_id
 
 
-def split(c, uid, transfer_id):
+def split(c: sqlite3.Connection, uid: int, transfer_id: str) -> bool:
     """
     Undo a merge: both transactions stay, get their categories back and stop
     pointing at the transfer. Returns False when the transfer is not the user's.
@@ -141,7 +153,7 @@ def split(c, uid, transfer_id):
     return True
 
 
-def detach_leg(c, uid, tx_id):
+def detach_leg(c: sqlite3.Connection, uid: int, tx_id: int) -> bool:
     """
     Split whatever transfer this transaction belongs to, so it can be deleted on
     its own. Without this the entity row cascades away while the surviving leg
@@ -157,7 +169,7 @@ def detach_leg(c, uid, tx_id):
     return split(c, uid, row["id"])
 
 
-def reject(c, uid, out_tx_id, in_tx_id):
+def reject(c: sqlite3.Connection, uid: int, out_tx_id: int, in_tx_id: int) -> None:
     """
     Remember that this pair is not a transfer, so detection stops proposing it.
     """
@@ -169,7 +181,7 @@ def reject(c, uid, out_tx_id, in_tx_id):
     )
 
 
-def rejections(c, uid):
+def rejections(c: sqlite3.Connection, uid: int) -> set[tuple[int, int]]:
     return {
         (r["out_tx_id"], r["in_tx_id"])
         for r in c.execute(
@@ -181,12 +193,27 @@ def rejections(c, uid):
     }
 
 
-def candidates(c, uid, max_days=SUGGEST_DAYS):
+FindPairsFn = Callable[
+    [list[Mapping[str, object]], int, set[tuple[int, int]]], list[dict[str, object]]
+]
+SplitConfidentFn = Callable[
+    [list[dict[str, object]], int], tuple[list[dict[str, object]], list[dict[str, object]]]
+]
+
+find_pairs_typed = cast("FindPairsFn", find_pairs)
+split_confident_typed = cast("SplitConfidentFn", split_confident)
+
+
+def candidates(
+    c: sqlite3.Connection, uid: int, max_days: int = SUGGEST_DAYS
+) -> list[dict[str, object]]:
     rows = list(c.execute(LINKABLE_COLUMNS, (uid,)))
-    return find_pairs(rows, max_days=max_days, rejected=rejections(c, uid))
+    return find_pairs_typed(rows, max_days, rejections(c, uid))
 
 
-def detect(c, uid, auto_days=AUTO_DAYS, max_days=SUGGEST_DAYS):
+def detect(
+    c: sqlite3.Connection, uid: int, auto_days: int = AUTO_DAYS, max_days: int = SUGGEST_DAYS
+) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
     """
     Scan the ledger and merge what is unambiguous. Pairs that landed on the same
     day (or one apart, since banks post the legs at different times) are merged
@@ -195,11 +222,17 @@ def detect(c, uid, auto_days=AUTO_DAYS, max_days=SUGGEST_DAYS):
     Returns ``(merged, suggestions)`` where ``merged`` carries the new transfer
     ids so the caller can offer an undo.
     """
-    auto, suggested = split_confident(candidates(c, uid, max_days), auto_days)
-    merged = []
+    auto, suggested = split_confident_typed(candidates(c, uid, max_days), auto_days)
+    merged: list[dict[str, object]] = []
     for pair in auto:
         try:
-            transfer_id = link(c, uid, pair["outTxId"], pair["inTxId"], origin="matched")
+            transfer_id = link(
+                c,
+                uid,
+                cast("int", pair["outTxId"]),
+                cast("int", pair["inTxId"]),
+                origin="matched",
+            )
         except LinkError:
             continue
         merged.append({**pair, "id": transfer_id})

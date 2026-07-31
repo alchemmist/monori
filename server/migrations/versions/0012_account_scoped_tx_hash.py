@@ -20,9 +20,7 @@ depends_on = None
 BATCH = 1000
 
 
-def _hash(
-    account_id: int, date_iso: str, amount_kop: int, description: str
-) -> str:
+def _hash(account_id: int, date_iso: str, amount_kop: int, description: str) -> str:
     return hashlib.sha256(
         f"{account_id}|{date_iso}|{amount_kop}|{description}".encode()
     ).hexdigest()

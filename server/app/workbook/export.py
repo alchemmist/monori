@@ -78,6 +78,7 @@ class WorkbookSnap(TypedDict):
     transactions: list[TransactionSnap]
     budgets: list[BudgetSnap]
 
+
 BOLD = Font(bold=True)
 CENTER = Alignment(horizontal="center")
 

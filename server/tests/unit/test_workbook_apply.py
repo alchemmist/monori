@@ -108,9 +108,7 @@ def apply_workbook(
     return cast("_ApplyResponse", result)
 
 
-def budget_conflicts(
-    c: sqlite3.Connection, uid: int, budgets: list[WorkbookBudget]
-) -> int:
+def budget_conflicts(c: sqlite3.Connection, uid: int, budgets: list[WorkbookBudget]) -> int:
     return _budget_conflicts(c, uid, budgets)
 
 

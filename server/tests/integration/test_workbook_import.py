@@ -67,9 +67,7 @@ def test_workbook_preview_summarizes(api: Api, client: TestClient) -> None:
     assert body["errors"] == []
 
 
-def test_workbook_preview_reports_no_conflicts_for_fresh_user(
-    api: Api, client: TestClient
-) -> None:
+def test_workbook_preview_reports_no_conflicts_for_fresh_user(api: Api, client: TestClient) -> None:
     _seed(api, client)
     data = _export_bytes(client)
     client.headers.update(login_as(client, "fresh@example.com"))
@@ -315,9 +313,7 @@ def _card_book() -> bytes:
     return buf.getvalue()
 
 
-def test_workbook_commit_remembers_card_markers_when_asked(
-    api: Api, client: TestClient
-) -> None:
+def test_workbook_commit_remembers_card_markers_when_asked(api: Api, client: TestClient) -> None:
     """
     Mapping a card to an account is knowledge worth keeping: with remember set,
     the marker's digits land in the account's card tails, so the next statement
@@ -340,9 +336,7 @@ def test_workbook_commit_remembers_card_markers_when_asked(
     assert tails["Other"] == []
 
 
-def test_workbook_commit_leaves_card_tails_alone_by_default(
-    api: Api, client: TestClient
-) -> None:
+def test_workbook_commit_leaves_card_tails_alone_by_default(api: Api, client: TestClient) -> None:
     acct = api.account("Card")
     other = api.account("Other")
     mapping = json.dumps({"RUB:*8181": acct, "RUB:": other})
@@ -352,9 +346,7 @@ def test_workbook_commit_leaves_card_tails_alone_by_default(
     assert all(a["cardTails"] == [] for a in api.snapshot()["accounts"])
 
 
-def test_remembering_an_already_bound_marker_changes_nothing(
-    api: Api, client: TestClient
-) -> None:
+def test_remembering_an_already_bound_marker_changes_nothing(api: Api, client: TestClient) -> None:
     acct = api.account("Card", cardTails=["8181"])
     other = api.account("Other")
     mapping = json.dumps({"RUB:*8181": acct, "RUB:": other})

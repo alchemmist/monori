@@ -28,6 +28,7 @@ router = APIRouter(prefix="/api/import", tags=["import"])
 # uploads fail the same way whether they arrive via file or paste
 MAX_STATEMENT_TEXT = 5_000_000
 
+
 @pydantic_dataclass(config=ConfigDict(populate_by_name=True))
 class ImportBody:
     text: str
@@ -89,9 +90,7 @@ def _owned_account(c: sqlite3.Connection, account_id: int | None, uid: int) -> b
     )
 
 
-def _validate_import_categories(
-    c: sqlite3.Connection, uid: int, rows: list[CommitRow]
-) -> None:
+def _validate_import_categories(c: sqlite3.Connection, uid: int, rows: list[CommitRow]) -> None:
     """
     Every manually selected import category must belong to the account owner
     and match the sign of its transaction.

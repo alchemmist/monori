@@ -9,6 +9,10 @@ exit code directly).
 
 import json
 import sys
+from collections.abc import Mapping
+
+JsonValue = object
+AuditEntry = dict[str, object]
 
 BLOCKING = {"high", "critical"}
 
@@ -22,7 +26,7 @@ ALLOWED = {
 }
 
 
-def main():
+def main() -> int:
     data = json.load(sys.stdin)
     # npm audit could not run (e.g. ENOLOCK with no lockfile) — it returns an
     # error payload with no vulnerabilities data. Fail loudly rather than let an
@@ -35,8 +39,14 @@ def main():
             file=sys.stderr,
         )
         return 1
-    blocking = []
-    for name, vuln in data.get("vulnerabilities", {}).items():
+    blocking: list[str] = []
+    vulnerabilities = data.get("vulnerabilities", {})
+    if not isinstance(vulnerabilities, dict):
+        print("npm-audit-gate [FAIL]: invalid vulnerabilities payload", file=sys.stderr)
+        return 1
+    for name, vuln in vulnerabilities.items():
+        if not isinstance(vuln, dict):
+            continue
         for via in vuln.get("via", []):
             if not isinstance(via, dict):
                 continue

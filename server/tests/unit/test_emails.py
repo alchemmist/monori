@@ -1,4 +1,5 @@
 import pytest
+
 from app.emails import canonical_email, normalize_email
 
 

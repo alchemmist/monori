@@ -1,4 +1,7 @@
+import sqlite3
+from collections.abc import Iterable, Mapping
 from itertools import batched
+from typing import cast
 
 from . import db as dbmod
 from .transfer_service import list_transfers
@@ -6,15 +9,15 @@ from .transfer_service import list_transfers
 SPLIT_FETCH_BATCH_SIZE = 500
 
 
-def conn():
+def conn() -> sqlite3.Connection:
     return dbmod.connect()
 
 
-def serialize_group(r):
+def serialize_group(r: Mapping[str, object]) -> dict[str, object]:
     return {"id": r["id"], "name": r["name"], "sort": r["sort"], "kind": r["kind"]}
 
 
-def serialize_category(r):
+def serialize_category(r: Mapping[str, object]) -> dict[str, object]:
     keys = r.keys()
     return {
         "id": r["id"],
@@ -29,7 +32,8 @@ def serialize_category(r):
     }
 
 
-def serialize_account(r):
+def serialize_account(r: Mapping[str, object]) -> dict[str, object]:
+    card_tails = str(r["card_tails"] or "")
     return {
         "id": r["id"],
         "name": r["name"],
@@ -44,11 +48,13 @@ def serialize_account(r):
         "openingDate": r["opening_date"],
         "connectionId": r["connection_id"],
         "bankRef": r["bank_ref"],
-        "cardTails": [t for t in r["card_tails"].split(",") if t],
+        "cardTails": [t for t in card_tails.split(",") if t],
     }
 
 
-def serialize_tx(r, splits=()):
+def serialize_tx(
+    r: Mapping[str, object], splits: Iterable[Mapping[str, object]] = ()
+) -> dict[str, object]:
     return {
         "id": r["id"],
         "date": r["date"],
@@ -74,12 +80,14 @@ def serialize_tx(r, splits=()):
     }
 
 
-def serialize_transactions(cur, rows):
+def serialize_transactions(
+    cur: sqlite3.Cursor, rows: Iterable[Mapping[str, object]]
+) -> list[dict[str, object]]:
     rows = list(rows)
     if not rows:
         return []
-    ids = [row["id"] for row in rows]
-    by_tx: dict[int, list] = {}
+    ids = [cast("int", row["id"]) for row in rows]
+    by_tx: dict[int, list[Mapping[str, object]]] = {}
     for chunk in batched(ids, SPLIT_FETCH_BATCH_SIZE):
         marks = ",".join("?" for _ in chunk)
         for split in cur.execute(
@@ -89,11 +97,11 @@ def serialize_transactions(cur, rows):
             " ORDER BY transaction_id, sort, id",
             chunk,
         ):
-            by_tx.setdefault(split["transaction_id"], []).append(split)
-    return [serialize_tx(row, by_tx.get(row["id"], ())) for row in rows]
+            by_tx.setdefault(cast("int", split["transaction_id"]), []).append(split)
+    return [serialize_tx(row, by_tx.get(cast("int", row["id"]), ())) for row in rows]
 
 
-def serialize_user(r):
+def serialize_user(r: Mapping[str, object]) -> dict[str, object]:
     """
     A user, without the password hash.
     """
@@ -107,7 +115,7 @@ def serialize_user(r):
     }
 
 
-def serialize_connection(r):
+def serialize_connection(r: Mapping[str, object]) -> dict[str, object]:
     """
     A bank connection, without any secret material (credentials/session).
     """
@@ -124,7 +132,7 @@ def serialize_connection(r):
     }
 
 
-def serialize_budget(r):
+def serialize_budget(r: Mapping[str, object]) -> dict[str, object]:
     return {
         "categoryId": r["category_id"],
         "year": r["year"],
@@ -143,7 +151,9 @@ TX_COLUMNS = (
 )
 
 
-def _snapshot_transactions(cur, uid, tx_limit):
+def _snapshot_transactions(
+    cur: sqlite3.Cursor, uid: tuple[int], tx_limit: int | None
+) -> list[dict[str, object]]:
     """
     The newest ``tx_limit`` transactions, handed back in the canonical
     ``date, id`` order the client keeps them in. ``None`` means all of them.
@@ -154,7 +164,7 @@ def _snapshot_transactions(cur, uid, tx_limit):
     return serialize_transactions(cur, reversed(list(rows)))
 
 
-def snapshot(c, user_id, tx_limit=None):
+def snapshot(c: sqlite3.Connection, user_id: int, tx_limit: int | None = None) -> dict[str, object]:
     cur = c.cursor()
     uid = (user_id,)
     transactions = _snapshot_transactions(cur, uid, tx_limit)
@@ -199,7 +209,7 @@ def snapshot(c, user_id, tx_limit=None):
         ],
         "transactions": transactions,
         "transactionsTotal": transactions_total,
-        "transfers": list_transfers(cur, user_id),
+        "transfers": list_transfers(c, user_id),
         "budgets": [
             serialize_budget(r)
             for r in cur.execute(

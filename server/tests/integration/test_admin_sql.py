@@ -1,6 +1,7 @@
 import pytest
 from fastapi.testclient import TestClient
 from httpx2 import Response as HTTPXResponse
+
 from tests.conftest import login_as
 
 pytestmark = pytest.mark.integration

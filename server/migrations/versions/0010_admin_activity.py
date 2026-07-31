@@ -15,7 +15,7 @@ branch_labels = None
 depends_on = None
 
 
-def upgrade():
+def upgrade() -> None:
     op.execute("ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0")
     op.execute("ALTER TABLE users ADD COLUMN last_login TEXT")
     op.execute(
@@ -38,5 +38,5 @@ def upgrade():
     op.execute("CREATE INDEX idx_usage_day ON feature_usage (day)")
 
 
-def downgrade():
+def downgrade() -> None:
     raise NotImplementedError("monori migrations are forward-only")

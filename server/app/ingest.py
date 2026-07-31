@@ -65,7 +65,9 @@ def dedup_text(description: object) -> str:
 
 
 def historical_day_counts(
-    c: sqlite3.Connection, uid: int, sources: tuple[str, ...] = ("workbook", "import", "sync", "sheets")
+    c: sqlite3.Connection,
+    uid: int,
+    sources: tuple[str, ...] = ("workbook", "import", "sync", "sheets"),
 ) -> dict[tuple[str, object, str], int]:
     """
     ``(day, amount, normalized description) -> count`` over every transaction
@@ -89,8 +91,8 @@ def historical_day_counts(
         " GROUP BY day, t.amount, t.description",
         (uid, *sources),
     ):
-        key = (cast(str, r["day"]), cast(object, r["amount"]), dedup_text(r["description"]))
-        counts[key] = counts.get(key, 0) + cast(int, r["n"])
+        key = (cast("str", r["day"]), cast("object", r["amount"]), dedup_text(r["description"]))
+        counts[key] = counts.get(key, 0) + cast("int", r["n"])
     return counts
 
 
@@ -107,7 +109,7 @@ def drop_already_present(
     kept: list[dict[str, object]] = []
     dropped = 0
     for row in rows:
-        key = (cast(str, row["date"])[:10], row["amount"], dedup_text(row.get("description", "")))
+        key = (cast("str", row["date"])[:10], row["amount"], dedup_text(row.get("description", "")))
         n = seen.get(key, 0)
         seen[key] = n + 1
         if n < counts.get(key, 0):
@@ -134,7 +136,7 @@ def commit_rows(
     seen: dict[str, int] = {}
     inserted = skipped = 0
     for r in rows:
-        h = tx_hash(account_id, cast(str, r["date"]), cast(int, r["amount"]), r["description"])
+        h = tx_hash(account_id, cast("str", r["date"]), cast("int", r["amount"]), r["description"])
         n_batch = seen.get(h, 0)
         seen[h] = n_batch + 1
         if n_batch < existing.get(h, 0):
@@ -148,7 +150,7 @@ def commit_rows(
                 r.get("description", ""),
                 r.get("bank_category", ""),
                 r.get("mcc", ""),
-            r.get("category_id"),
+                r.get("category_id"),
                 account_id,
                 batch_id,
                 h,
@@ -167,5 +169,5 @@ def categorize_rows(
     Fill ``category_id`` on each row in place using the given rules.
     """
     for r in rows:
-        r["category_id"] = categorize(r["description"], cast(int, r["amount"]), rules)
+        r["category_id"] = categorize(r["description"], cast("int", r["amount"]), rules)
     return rows

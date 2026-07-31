@@ -249,9 +249,7 @@ def test_groups_derived_when_group_table_missing() -> None:
         ]
     )
     parsed = parse_workbook(data)
-    assert (
-        "Categories: group table missing, groups derived from category rows" in parsed.warnings
-    )
+    assert "Categories: group table missing, groups derived from category rows" in parsed.warnings
     assert [(group.name, group.sort, group.kind) for group in parsed.groups] == [
         ("Daily", 3, "expense"),
         ("Inflow", 5, "income"),

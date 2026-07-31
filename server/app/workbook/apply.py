@@ -229,9 +229,7 @@ def _import_budgets(
     return written, skipped
 
 
-def budget_conflicts(
-    c: sqlite3.Connection, uid: int, budgets: Iterable[WorkbookBudget]
-) -> int:
+def budget_conflicts(c: sqlite3.Connection, uid: int, budgets: Iterable[WorkbookBudget]) -> int:
     """
     Count workbook budget cells that collide with the user's existing budgets
     (category matched by name, same year and month) — the only case where the

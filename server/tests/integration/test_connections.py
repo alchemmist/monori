@@ -1,13 +1,14 @@
 from typing import cast
 
-import app.connectors.fake  # noqa: F401  (registers the FakeConnector)
 import pytest
-from app.connectors import base
-from app.connectors.base import SmsRequired, SyncResult
-from app.routers import connections
 from cryptography.fernet import Fernet
 from fastapi.testclient import TestClient
 from httpx2 import Response as HTTPXResponse
+
+import app.connectors.fake  # noqa: F401  (registers the FakeConnector)
+from app.connectors import base
+from app.connectors.base import SmsRequired, SyncResult
+from app.routers import connections
 from tests.conftest import Api
 
 

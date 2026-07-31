@@ -15,6 +15,8 @@ import argparse
 import sqlite3
 import sys
 from pathlib import Path
+from collections.abc import Iterable, Mapping
+from typing import cast
 
 ROOT = Path(__file__).resolve().parent.parent
 SCHEMA = ROOT / "server" / "schema.sql"
@@ -27,7 +29,7 @@ GENERATED_NOTE = (
 )
 
 
-def introspect(schema_sql):
+def introspect(schema_sql: str) -> dict[str, tuple[list[tuple[object, ...]], list[tuple[object, ...]]]]:
     """Table name → (columns, foreign keys), in declaration order."""
     db = sqlite3.connect(":memory:")
     db.executescript(schema_sql)
@@ -38,7 +40,7 @@ def introspect(schema_sql):
             " AND name NOT LIKE 'sqlite_%' ORDER BY rootpage"
         )
     ]
-    out = {}
+    out: dict[str, tuple[list[tuple[object, ...]], list[tuple[object, ...]]]] = {}
     for t in tables:
         columns = list(db.execute(f"PRAGMA table_info({t})"))
         fks = list(db.execute(f"PRAGMA foreign_key_list({t})"))
@@ -47,7 +49,7 @@ def introspect(schema_sql):
     return out
 
 
-def diagram(tables):
+def diagram(tables: Mapping[str, tuple[list[tuple[object, ...]], list[tuple[object, ...]]]]) -> str:
     lines = ["```mermaid", "erDiagram"]
     for name, (columns, fks) in tables.items():
         # a composite foreign key would repeat the parent per column; mermaid
@@ -81,11 +83,11 @@ def diagram(tables):
     return "\n".join(lines)
 
 
-def render():
+def render() -> str:
     return f"{GENERATED_NOTE}\n\n{diagram(introspect(SCHEMA.read_text()))}"
 
 
-def splice(doc, block):
+def splice(doc: str, block: str) -> str:
     head, _, rest = doc.partition(START)
     if not rest:
         sys.exit(f"{DOC}: missing the {START} marker")
@@ -93,7 +95,7 @@ def splice(doc, block):
     return f"{head}{START}\n\n{block}\n\n{END}{tail}"
 
 
-def main():
+def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--check", action="store_true", help="verify without writing")
     args = ap.parse_args()

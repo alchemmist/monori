@@ -31,8 +31,8 @@ class SplitCursor:
                 "amount": -1,
                 "comment": "part",
             }
-        for tx_id in chunk
-        if tx_id in {1, 1001}
+            for tx_id in chunk
+            if tx_id in {1, 1001}
         ]
 
 
@@ -56,7 +56,9 @@ def test_serialize_transactions_chunks_split_lookup() -> None:
     ]
     cursor = SplitCursor()
 
-    result = cast(list[_SerializedTx], serialize_transactions(cast(sqlite3.Cursor, cursor), rows))
+    result = cast(
+        "list[_SerializedTx]", serialize_transactions(cast("sqlite3.Cursor", cursor), rows)
+    )
 
     assert [len(chunk) for chunk in cursor.chunks] == [500, 500, 1]
     assert result[0]["splits"][0]["categoryId"] == 7

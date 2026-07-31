@@ -26,7 +26,7 @@ MIN_PASSWORD_LEN = 8
 MAX_EMAIL_LEN = 254
 
 
-def _valid_email(email):
+def _valid_email(email: str) -> bool:
     """
     Shape check for an email: one ``@``, non-empty local part, and a dotted
     domain with no empty labels. Linear and non-backtracking (bounded by
@@ -45,7 +45,7 @@ class RegisterBody(TypedDict):
     password: str
 
 
-def create_user(c, raw_email, password):
+def create_user(c: sqlite3.Connection, raw_email: str, password: str) -> dict[str, object]:
     """
     Validate and insert a user (with a default Cash account), returning the
     serialized user. Shared by public registration and admin user creation.
@@ -70,7 +70,7 @@ def create_user(c, raw_email, password):
         c.commit()
     except sqlite3.IntegrityError:
         raise HTTPException(409, "email already registered") from None
-    uid = cur.lastrowid
+    uid = cast("int", cur.lastrowid)
     if c.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 1:
         c.execute("UPDATE accounts SET user_id=? WHERE user_id IS NULL", (uid,))
         c.execute("UPDATE category_groups SET user_id=? WHERE user_id IS NULL", (uid,))
@@ -87,11 +87,11 @@ def create_user(c, raw_email, password):
         " FROM users WHERE id=?",
         (uid,),
     ).fetchone()
-    return serialize_user(row)
+    return serialize_user(cast("dict[str, object]", row))
 
 
 @router.post("/register")
-def register(body: RegisterBody):
+def register(body: RegisterBody) -> dict[str, object]:
     c = conn()
     try:
         return create_user(c, body["email"], body["password"])
@@ -100,7 +100,7 @@ def register(body: RegisterBody):
 
 
 @router.post("/token")
-def token(form: Annotated[OAuth2PasswordRequestForm, Depends()]):
+def token(form: Annotated[OAuth2PasswordRequestForm, Depends()]) -> dict[str, object]:
     """
     OAuth2 password grant: ``username`` is the email. Returns a bearer token.
     """
@@ -116,7 +116,7 @@ def token(form: Annotated[OAuth2PasswordRequestForm, Depends()]):
         # registered (account enumeration)
         if row is None:
             raise HTTPException(401, "no account is registered for this email")
-        if not verify_password(row["password_hash"], form.password):
+        if not verify_password(cast("str", row["password_hash"]), form.password):
             raise HTTPException(401, "incorrect password")
         # MONORI_ADMIN_EMAILS is the source of truth for admin rights, so the
         # flag is (re)synced on every successful login; matched on the canonical
@@ -125,20 +125,20 @@ def token(form: Annotated[OAuth2PasswordRequestForm, Depends()]):
         admin_canon = {canonical_email(e) for e in admin_emails()}
         c.execute(
             "UPDATE users SET is_admin=?, last_login=? WHERE id=?",
-            (1 if canonical_email(email) in admin_canon else 0, now, row["id"]),
+            (1 if canonical_email(email) in admin_canon else 0, now, cast("int", row["id"])),
         )
         c.execute(
             "INSERT INTO activity_events (user_id, kind, created_at) VALUES (?, 'login', ?)",
-            (row["id"], now),
+            (cast("int", row["id"]), now),
         )
         c.commit()
     finally:
         c.close()
-    return {"access_token": create_access_token(row["id"]), "token_type": "bearer"}
+    return {"access_token": create_access_token(cast("int", row["id"])), "token_type": "bearer"}
 
 
 @router.get("/me")
-def me(user: Annotated[dict, Depends(current_user)]):
+def me(user: Annotated[dict[str, object], Depends(current_user)]) -> dict[str, object]:
     return user
 
 
@@ -147,7 +147,9 @@ class MePatch(TypedDict, total=False):
 
 
 @router.patch("/me")
-def patch_me(body: MePatch, user: Annotated[dict, Depends(current_user)]):
+def patch_me(
+    body: MePatch, user: Annotated[dict[str, object], Depends(current_user)]
+) -> dict[str, object]:
     """
     User-level preferences. ``defaultAccountId`` is where imports land rows no
     card number can route; null clears it and those rows go back to being
@@ -171,6 +173,6 @@ def patch_me(body: MePatch, user: Annotated[dict, Depends(current_user)]):
             " FROM users WHERE id=?",
             (uid,),
         ).fetchone()
-        return serialize_user(row)
+        return serialize_user(cast("dict[str, object]", row))
     finally:
         c.close()

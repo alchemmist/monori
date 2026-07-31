@@ -4,6 +4,7 @@ transactions pointing at the sync run that inserted the row.
 """
 
 from alembic import op
+from sqlalchemy.engine import Connection
 
 revision = "0005"
 down_revision = "0004"
@@ -11,11 +12,11 @@ branch_labels = None
 depends_on = None
 
 
-def _has_column(conn, table, column):
+def _has_column(conn: Connection, table: str, column: str) -> bool:
     return any(r[1] == column for r in conn.exec_driver_sql(f"PRAGMA table_info({table})"))
 
 
-def upgrade():
+def upgrade() -> None:
     conn = op.get_bind()
     conn.exec_driver_sql("""CREATE TABLE IF NOT EXISTS bank_connections (
       id INTEGER PRIMARY KEY,
@@ -53,5 +54,5 @@ def upgrade():
         )
 
 
-def downgrade():
+def downgrade() -> None:
     raise NotImplementedError("monori migrations are forward-only")

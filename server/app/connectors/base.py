@@ -27,7 +27,7 @@ class SyncResult:
     Rows pulled in one sync, plus the session to cache for next time.
     """
 
-    def __init__(self, rows, session=None):
+    def __init__(self, rows: list[dict[str, object]], session: object | None = None) -> None:
         self.rows = rows
         self.session = session
 
@@ -45,15 +45,20 @@ class Connector:
     #: account as its bank_ref
     account_params: list[dict[str, object]] = []
 
-    def __init__(self, credentials, session=None, account_ref=None):
-        self.credentials = credentials or {}
+    def __init__(
+        self,
+        credentials: dict[str, object] | None,
+        session: object | None = None,
+        account_ref: object | None = None,
+    ) -> None:
+        self.credentials: dict[str, object] = credentials or {}
         #: opaque per-connector state cached (encrypted) between syncs, e.g. a
         #: browser session; None on the first sync
-        self.session = session
+        self.session: object | None = session
         #: the bank-side locator of the one account this sync is scoped to
-        self.account_ref = account_ref or None
+        self.account_ref: object | None = account_ref or None
 
-    def sync(self, since=None):
+    def sync(self, since: str | None = None) -> SyncResult:
         """
         Pull transactions changed since ``since`` (ISO date string or None for
         a full pull). Returns a :class:`SyncResult`. Raise :class:`SmsRequired`
@@ -61,13 +66,13 @@ class Connector:
         """
         raise NotImplementedError
 
-    def resume_sync(self, code):
+    def resume_sync(self, code: str) -> SyncResult:
         """
         Continue a login that raised :class:`SmsRequired`, using the OTP code.
         """
         raise NotImplementedError
 
-    def close(self):
+    def close(self) -> None:
         """
         Release any live resources (browser, session, worker thread). Called
         when a pending login is replaced, cancelled or deleted. Safe to call more
@@ -78,19 +83,19 @@ class Connector:
 REGISTRY: dict[tuple[str, str], type[Connector]] = {}
 
 
-def register(cls):
+def register(cls: type[Connector]) -> type[Connector]:
     REGISTRY[(cls.bank, cls.kind)] = cls
     return cls
 
 
-def get_connector_class(bank, kind):
+def get_connector_class(bank: str, kind: str) -> type[Connector]:
     cls = REGISTRY.get((bank, kind))
     if cls is None:
         raise ConnectorError(f"no connector registered for {bank}/{kind}")
     return cls
 
 
-def available_connectors():
+def available_connectors() -> list[dict[str, object]]:
     """
     The connectors offered in the UI (registration order, demos excluded).
     """

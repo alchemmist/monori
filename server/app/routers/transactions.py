@@ -94,7 +94,7 @@ def _resolve_category(
     if not category:
         raise HTTPException(400, "unknown category")
     if amount is not None:
-        _validate_category_type(cast(int, category["transaction_sign"]), amount)
+        _validate_category_type(cast("int", category["transaction_sign"]), amount)
     return category_id
 
 
@@ -119,7 +119,7 @@ def list_transactions(
     limit: int = Query(default=100, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
 ) -> dict[str, object]:
-    uid = cast(int, user["id"])
+    uid = cast("int", user["id"])
     params = {
         "uid": uid,
         "from": from_,
@@ -155,7 +155,7 @@ def list_transactions(
             "SELECT *" + where + " ORDER BY date DESC, id DESC LIMIT :limit OFFSET :offset",
             params,
         )
-        return {"total": cast(int, total), "rows": serialize_transactions(c.cursor(), rows)}
+        return {"total": cast("int", total), "rows": serialize_transactions(c.cursor(), rows)}
     finally:
         c.close()
 
@@ -164,7 +164,7 @@ def list_transactions(
 def create_transaction(
     body: TxCreate, user: Annotated[dict[str, object], Depends(current_user)]
 ) -> dict[str, int]:
-    uid = cast(int, user["id"])
+    uid = cast("int", user["id"])
     c = conn()
     try:
         category = _resolve_category(c, body.get("categoryId"), uid, body["amount"])
@@ -187,7 +187,7 @@ def create_transaction(
             ),
         )
         c.commit()
-        return {"id": cast(int, cur.lastrowid)}
+        return {"id": cast("int", cur.lastrowid)}
     finally:
         c.close()
 
@@ -196,7 +196,7 @@ def create_transaction(
 def patch_transaction(
     tx_id: int, patch: TxPatch, user: Annotated[dict[str, object], Depends(current_user)]
 ) -> dict[str, bool]:
-    uid = cast(int, user["id"])
+    uid = cast("int", user["id"])
     c = conn()
     try:
         begin_write(c)
@@ -207,21 +207,37 @@ def patch_transaction(
         ).fetchone()
         if not row:
             raise HTTPException(404, "transaction not found")
-        typed_row = cast(TxRow, row)
+        typed_row = cast("TxRow", row)
         date = patch["date"] if "date" in patch and patch["date"] is not None else typed_row["date"]
-        amount = patch["amount"] if "amount" in patch and patch["amount"] is not None else typed_row["amount"]
+        amount = (
+            patch["amount"]
+            if "amount" in patch and patch["amount"] is not None
+            else typed_row["amount"]
+        )
         split_total = cast(
-            int | None,
-            c.execute(
-                "SELECT SUM(amount) FROM splits WHERE transaction_id=?", (tx_id,)
-            ).fetchone()[0],
+            "int | None",
+            c.execute("SELECT SUM(amount) FROM splits WHERE transaction_id=?", (tx_id,)).fetchone()[
+                0
+            ],
         )
         if split_total is not None and amount != split_total:
             raise HTTPException(400, "edit the split parts before changing the total amount")
-        description = patch["description"] if "description" in patch and patch["description"] is not None else typed_row["description"]
-        bank_category = patch["bankCategory"] if "bankCategory" in patch and patch["bankCategory"] is not None else typed_row["bank_category"]
+        description = (
+            patch["description"]
+            if "description" in patch and patch["description"] is not None
+            else typed_row["description"]
+        )
+        bank_category = (
+            patch["bankCategory"]
+            if "bankCategory" in patch and patch["bankCategory"] is not None
+            else typed_row["bank_category"]
+        )
         mcc = patch["mcc"] if "mcc" in patch and patch["mcc"] is not None else typed_row["mcc"]
-        comment = patch["comment"] if "comment" in patch and patch["comment"] is not None else typed_row["comment"]
+        comment = (
+            patch["comment"]
+            if "comment" in patch and patch["comment"] is not None
+            else typed_row["comment"]
+        )
         category = typed_row["category_id"]
         if "categoryId" in patch and patch["categoryId"] is not None:
             if split_total is not None:
@@ -232,7 +248,11 @@ def patch_transaction(
         account = typed_row["account_id"]
         if "accountId" in patch and patch["accountId"] is not None:
             account = _resolve_account(c, patch["accountId"], uid)
-        hidden = int(patch["hidden"]) if "hidden" in patch and patch["hidden"] is not None else typed_row["hidden"]
+        hidden = (
+            int(patch["hidden"])
+            if "hidden" in patch and patch["hidden"] is not None
+            else typed_row["hidden"]
+        )
         c.execute(
             """UPDATE transactions
                SET date=?, amount=?, description=?, bank_category=?, mcc=?, category_id=?,
@@ -263,7 +283,7 @@ def replace_splits(
     tx_id: int, body: SplitBody, user: Annotated[dict[str, object], Depends(current_user)]
 ) -> dict[str, list[dict[str, object]]]:
     """Atomically replace every categorized part, or clear the split with an empty list."""
-    uid = cast(int, user["id"])
+    uid = cast("int", user["id"])
     c = conn()
     try:
         begin_write(c)
@@ -274,7 +294,7 @@ def replace_splits(
         ).fetchone()
         if not row:
             raise HTTPException(404, "transaction not found")
-        typed_row = cast(Mapping[str, object], row)
+        typed_row = cast("Mapping[str, object]", row)
         if typed_row["transfer_id"] is not None:
             raise HTTPException(400, "transfer transactions cannot be split")
         if body["parts"]:
@@ -282,7 +302,10 @@ def replace_splits(
                 raise HTTPException(400, "a split requires at least two parts")
             if any(part["amount"] == 0 for part in body["parts"]):
                 raise HTTPException(400, "split amounts cannot be zero")
-            if any((part["amount"] > 0) != (cast(int, typed_row["amount"]) > 0) for part in body["parts"]):
+            if any(
+                (part["amount"] > 0) != (cast("int", typed_row["amount"]) > 0)
+                for part in body["parts"]
+            ):
                 raise HTTPException(400, "split parts must have the transaction's sign")
             if sum(part["amount"] for part in body["parts"]) != typed_row["amount"]:
                 raise HTTPException(400, "split amounts must equal the transaction amount")
@@ -322,7 +345,7 @@ def replace_splits(
 def delete_transaction(
     tx_id: int, user: Annotated[dict[str, object], Depends(current_user)]
 ) -> dict[str, bool]:
-    uid = cast(int, user["id"])
+    uid = cast("int", user["id"])
     c = conn()
     try:
         detach_leg(c, uid, tx_id)
@@ -343,7 +366,7 @@ def delete_transaction(
 def bulk_transactions(
     body: BulkBody, user: Annotated[dict[str, object], Depends(current_user)]
 ) -> dict[str, int]:
-    uid = cast(int, user["id"])
+    uid = cast("int", user["id"])
     if body["action"] not in ("categorize", "move", "delete"):
         raise HTTPException(400, "action must be 'categorize', 'move' or 'delete'")
     c = conn()

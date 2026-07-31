@@ -101,6 +101,7 @@ class LayoutRow(TypedDict):
     label_col: int
     start_month: int
 
+
 YEAR_RE = re.compile(r"^(\d{4})(_archive)?$")
 
 # Every name a transaction column is known to go by. A workbook exported by

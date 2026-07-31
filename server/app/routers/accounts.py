@@ -225,9 +225,7 @@ def patch_account(
             )
         opening_date = patch.get("openingDate")
         if opening_date is not None:
-            c.execute(
-                "UPDATE accounts SET opening_date=? WHERE id=?", (opening_date, account_id)
-            )
+            c.execute("UPDATE accounts SET opening_date=? WHERE id=?", (opening_date, account_id))
         archived = patch.get("archived")
         if archived is not None:
             c.execute(

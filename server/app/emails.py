@@ -12,11 +12,11 @@ it, so a degenerate address never canonicalises to a bare ``@domain``.
 GMAIL_DOMAINS = {"gmail.com", "googlemail.com"}
 
 
-def normalize_email(email):
+def normalize_email(email: str) -> str:
     return email.strip().lower()
 
 
-def canonical_email(email):
+def canonical_email(email: str) -> str:
     email = normalize_email(email)
     local, sep, domain = email.partition("@")
     if not sep:

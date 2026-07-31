@@ -8,6 +8,8 @@ rows directly with no OTP. It is registered only when this module is imported
 (tests do so explicitly) and is hidden from the bank picker.
 """
 
+from typing import cast
+
 from .base import Connector, ConnectorError, SmsRequired, SyncResult, register
 
 FIXTURE_ROWS = [
@@ -28,7 +30,7 @@ FIXTURE_ROWS = [
 ]
 
 
-def _rows(account_ref=None):
+def _rows(account_ref: object | None = None) -> list[dict[str, object]]:
     """
     A real bank scopes the feed to the requested account; the fixture mimics
     that by stamping the ref into the description, so two accounts on one
@@ -47,15 +49,16 @@ class FakeConnector(Connector):
     kind = "fake"
     hidden = True
 
-    def sync(self, since=None):
+    def sync(self, since: str | None = None) -> SyncResult:
         if not self.credentials.get("phone"):
             raise ConnectorError("missing phone")
-        if self.session and self.session.get("token"):
-            return SyncResult(_rows(self.account_ref), session=self.session)
+        session = cast("dict[str, object] | None", self.session)
+        if session and session.get("token"):
+            return SyncResult(_rows(self.account_ref), session=session)
         self._pending = True
         raise SmsRequired("code sent")
 
-    def resume_sync(self, code):
+    def resume_sync(self, code: str) -> SyncResult:
         if not getattr(self, "_pending", False):
             raise ConnectorError("no login in progress")
         if code != "0000":

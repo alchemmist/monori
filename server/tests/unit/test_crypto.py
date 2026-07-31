@@ -1,8 +1,9 @@
 from pathlib import Path
 
 import pytest
-from app import crypto
 from cryptography.fernet import Fernet
+
+from app import crypto
 
 
 def _use_tmp_db(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
