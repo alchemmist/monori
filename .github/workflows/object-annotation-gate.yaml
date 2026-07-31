@@ -1,0 +1,37 @@
+name: Python object annotation gate
+
+on:
+    pull_request_target:
+        types: [opened, reopened, synchronize]
+    issue_comment:
+        types: [created]
+
+permissions:
+    contents: read
+    issues: write
+    pull-requests: read
+
+jobs:
+    check:
+        name: Python object annotation gate
+        if: >-
+            github.event_name == 'pull_request_target'
+            || (
+              github.event_name == 'issue_comment'
+              && github.event.issue.pull_request
+              && startsWith(github.event.comment.body, '/ignore-object ')
+            )
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout workflow code
+              uses: actions/checkout@v7
+              with:
+                  persist-credentials: false
+
+            - name: Test annotation checker
+              run: python3 -m unittest discover -s scripts -p 'test_object_annotation_gate.py'
+
+            - name: Check Python annotations
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              run: python3 scripts/object_annotation_gate.py

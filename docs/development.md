@@ -55,6 +55,13 @@ one-to-one — there is no separate CI script to drift out of sync.
 | `make analyze`        | bandit + semgrep security scan.                                                                                                      |
 | `make audit`          | Dependency + secret scanning (`audit-deps`, `audit-deps-py`, `audit-secrets`).                                                       |
 
+Pull requests also run a CI-only Python annotation gate. It rejects new uses of
+`object` as an annotation, including nested types such as `list[object]`. Use a
+specific type, a protocol, or a suitable generic instead. If a boundary truly
+requires `object`, a repository administrator can approve that finding for the
+current commit by writing `/ignore-object <finding-id>` in the bot's pull request
+comment. The approval expires when the pull request receives a new commit.
+
 ### Test
 
 The suite is a testing "trophy" — heavy on integration tests that use real
