@@ -54,6 +54,7 @@ fail_under = 80
 target-version = "py312"
 line-length = 100
 exclude = ["web/prototypes"]
+force-exclude = true
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "C4", "D209", "D213", "ANN", "TC"]
