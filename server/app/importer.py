@@ -12,6 +12,12 @@ case-insensitive substring of the description wins.
 import hashlib
 import re
 from datetime import datetime
+from dataclasses import asdict
+from collections.abc import Iterable, Mapping
+from typing import Literal, overload, cast
+
+from pydantic import ConfigDict, Field
+from pydantic.dataclasses import dataclass as pydantic_dataclass
 
 COLUMNS = [
     "op_date",
@@ -37,7 +43,137 @@ DATE_RE = re.compile(r"^(\d{2})\.(\d{2})\.(\d{4})(?:\s+(\d{2}):(\d{2})(?::(\d{2}
 HEADER_FIRST_CELLS = {"дата операции", "op_date", "date"}
 
 
-def parse_date(raw):
+def _attr_name(key: str) -> str:
+    return {
+        "accountId": "account_id",
+        "categoryId": "category_id",
+    }.get(key, key)
+
+
+@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+class ParseError:
+    line: int
+    error: str
+    raw: str
+
+    @overload
+    def __getitem__(self, key: Literal["line"]) -> int: ...
+
+    @overload
+    def __getitem__(self, key: Literal["error"]) -> str: ...
+
+    @overload
+    def __getitem__(self, key: Literal["raw"]) -> str: ...
+
+    def __getitem__(self, key: str) -> int | str:
+        return cast(int | str, getattr(self, key))
+
+    def to_api_dict(self) -> dict[str, object]:
+        return asdict(self)
+
+
+@pydantic_dataclass(config=ConfigDict(extra="forbid", validate_assignment=True))
+class ImportRow:
+    date: str
+    amount: int
+    description: str
+    bank_category: str
+    mcc: str
+    card: str
+    account_id: int | None = None
+    category_id: int | None = None
+    duplicate: bool = False
+    hash: str = ""
+
+    @overload
+    def __getitem__(self, key: Literal["date"]) -> str: ...
+
+    @overload
+    def __getitem__(self, key: Literal["amount"]) -> int: ...
+
+    @overload
+    def __getitem__(self, key: Literal["description"]) -> str: ...
+
+    @overload
+    def __getitem__(self, key: Literal["bank_category"]) -> str: ...
+
+    @overload
+    def __getitem__(self, key: Literal["mcc"]) -> str: ...
+
+    @overload
+    def __getitem__(self, key: Literal["card"]) -> str: ...
+
+    @overload
+    def __getitem__(self, key: Literal["accountId"]) -> int | None: ...
+
+    @overload
+    def __getitem__(self, key: Literal["categoryId"]) -> int | None: ...
+
+    @overload
+    def __getitem__(self, key: Literal["duplicate"]) -> bool: ...
+
+    @overload
+    def __getitem__(self, key: Literal["hash"]) -> str: ...
+
+    def __getitem__(self, key: str) -> object:
+        return cast(object, getattr(self, _attr_name(key)))
+
+    @overload
+    def __setitem__(self, key: Literal["accountId"], value: int | None) -> None: ...
+
+    @overload
+    def __setitem__(self, key: Literal["categoryId"], value: int | None) -> None: ...
+
+    @overload
+    def __setitem__(self, key: Literal["duplicate"], value: bool) -> None: ...
+
+    @overload
+    def __setitem__(self, key: Literal["hash"], value: str) -> None: ...
+
+    def __setitem__(self, key: str, value: object) -> None:
+        setattr(self, _attr_name(key), value)
+
+    def get(self, key: str, default: object = None) -> object:
+        try:
+            return cast(object, getattr(self, _attr_name(key)))
+        except AttributeError:
+            return default
+
+    def to_api_dict(self) -> dict[str, object]:
+        return {
+            "date": self.date,
+            "amount": self.amount,
+            "description": self.description,
+            "bank_category": self.bank_category,
+            "mcc": self.mcc,
+            "card": self.card,
+            "accountId": self.account_id,
+            "categoryId": self.category_id,
+            "duplicate": self.duplicate,
+            "hash": self.hash,
+        }
+
+
+@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+class CategoryRule:
+    category_id: int
+    name: str
+    keywords: list[str]
+
+    @overload
+    def __getitem__(self, key: Literal["category_id"]) -> int: ...
+
+    @overload
+    def __getitem__(self, key: Literal["name"]) -> str: ...
+
+    @overload
+    def __getitem__(self, key: Literal["keywords"]) -> list[str]: ...
+
+    def __getitem__(self, key: str) -> object:
+        return cast(object, getattr(self, _attr_name(key)))
+
+
+def parse_date(raw: str) -> datetime | None:
     m = DATE_RE.match(raw.strip())
     if not m:
         return None
@@ -45,7 +181,7 @@ def parse_date(raw):
     return datetime(int(y), int(mo), int(d), int(hh or 0), int(mm or 0), int(ss or 0))
 
 
-def parse_amount_kop(raw):
+def parse_amount_kop(raw: object) -> int | None:
     """
     '-1 500,00' -> -150000 kopecks.
     """
@@ -59,7 +195,7 @@ def parse_amount_kop(raw):
         return None
 
 
-def tx_hash(account_id, date_iso, amount_kop, description):
+def tx_hash(account_id: int, date_iso: str, amount_kop: int, description: object) -> str:
     """
     Dedup key of a transaction. Always scoped to the account: the same
     date/amount/description legitimately occurs on two different accounts
@@ -70,7 +206,7 @@ def tx_hash(account_id, date_iso, amount_kop, description):
     ).hexdigest()
 
 
-def parse_statement(text):
+def parse_statement(text: str) -> tuple[list[ImportRow], list[ParseError]]:
     """
     Returns (rows, errors). Each row: dict with date (ISO), amount (kopecks),
     description, bank_category, mcc. Accepts both pasted statement rows and a
@@ -78,7 +214,8 @@ def parse_statement(text):
     not computed here — the account is not known yet; ingestion derives the
     account-scoped hash on insert.
     """
-    rows, errors = [], []
+    rows: list[ImportRow] = []
+    errors: list[ParseError] = []
     for ln, line in enumerate(text.splitlines(), 1):
         if not line.strip():
             continue
@@ -88,51 +225,55 @@ def parse_statement(text):
             continue
         if len(parts) < 12:
             errors.append(
-                {"line": ln, "error": f"expected >=12 columns, got {len(parts)}", "raw": line[:200]}
+                ParseError(ln, f"expected >=12 columns, got {len(parts)}", line[:200])
             )
             continue
         rec = dict(zip(COLUMNS, parts + [""] * (len(COLUMNS) - len(parts)), strict=False))
         date = parse_date(rec["op_date"])
         amount = parse_amount_kop(rec["amount"])
         if date is None or amount is None:
-            errors.append({"line": ln, "error": "unparseable date or amount", "raw": line[:200]})
+            errors.append(ParseError(ln, "unparseable date or amount", line[:200]))
             continue
         if rec["status"] and rec["status"].upper() == "FAILED":
             continue
         date_iso = date.strftime("%Y-%m-%dT%H:%M:%S")
         rows.append(
-            {
-                "date": date_iso,
-                "amount": amount,
-                "description": rec["description"],
-                "bank_category": rec["bank_category"],
-                "mcc": rec["mcc"],
-                "card": rec["card"],
-            }
+            ImportRow(
+                date=date_iso,
+                amount=amount,
+                description=rec["description"],
+                bank_category=rec["bank_category"],
+                mcc=rec["mcc"],
+                card=rec["card"],
+            )
         )
     return rows, errors
 
 
-def build_rules(categories, groups):
+def build_rules(
+    categories: Iterable[Mapping[str, object]], groups: Mapping[int, str]
+) -> dict[str, list[CategoryRule]]:
     """
     categories: iterable of dicts with name/keywords/group_id;
     groups: id -> kind ('income'|'expense'). Returns {'IN': [...], 'OUT': [...]}.
     """
-    rules: dict[str, list] = {"IN": [], "OUT": []}
+    rules: dict[str, list[CategoryRule]] = {"IN": [], "OUT": []}
     for c in categories:
         keywords = [k.strip().lower() for k in str(c["keywords"] or "").split("|") if k.strip()]
         if not keywords:
             continue
-        kind = groups.get(c["group_id"])
+        kind = groups.get(cast(int, c["group_id"]))
         if kind not in ("income", "expense"):
             continue
         rules["IN" if kind == "income" else "OUT"].append(
-            {"category_id": c["id"], "name": c["name"], "keywords": keywords}
+            CategoryRule(category_id=cast(int, c["id"]), name=cast(str, c["name"]), keywords=keywords)
         )
     return rules
 
 
-def categorize(description, amount_kop, rules):
+def categorize(
+    description: object, amount_kop: int, rules: Mapping[str, list[CategoryRule]]
+) -> int | None:
     """
     Returns category_id or None.
 
@@ -146,7 +287,7 @@ def categorize(description, amount_kop, rules):
         return None
     for side in ("IN", "OUT") if amount_kop > 0 else ("OUT",):
         for rule in rules[side]:
-            for kw in rule["keywords"]:
+            for kw in rule.keywords:
                 if kw in desc:
-                    return rule["category_id"]
+                    return rule.category_id
     return None
