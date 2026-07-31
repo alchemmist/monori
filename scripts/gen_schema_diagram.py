@@ -27,10 +27,14 @@ GENERATED_NOTE = (
     "run `make schema-diagram` after changing the schema -->"
 )
 
+ColumnInfo = tuple[int, str, str | None, int, str | None, int]
+ForeignKeyInfo = tuple[int, int, str, str, str, str, str, str]
+TableInfo = tuple[list[ColumnInfo], list[ForeignKeyInfo]]
+
 
 def introspect(
     schema_sql: str,
-) -> dict[str, tuple[list[tuple[object, ...]], list[tuple[object, ...]]]]:
+) -> dict[str, TableInfo]:
     """Table name → (columns, foreign keys), in declaration order."""
     db = sqlite3.connect(":memory:")
     db.executescript(schema_sql)
@@ -41,7 +45,7 @@ def introspect(
             " AND name NOT LIKE 'sqlite_%' ORDER BY rootpage"
         )
     ]
-    out: dict[str, tuple[list[tuple[object, ...]], list[tuple[object, ...]]]] = {}
+    out: dict[str, TableInfo] = {}
     for t in tables:
         columns = list(db.execute(f"PRAGMA table_info({t})"))
         fks = list(db.execute(f"PRAGMA foreign_key_list({t})"))
@@ -50,7 +54,7 @@ def introspect(
     return out
 
 
-def diagram(tables: Mapping[str, tuple[list[tuple[object, ...]], list[tuple[object, ...]]]]) -> str:
+def diagram(tables: Mapping[str, TableInfo]) -> str:
     lines = ["```mermaid", "erDiagram"]
     for name, (columns, fks) in tables.items():
         # a composite foreign key would repeat the parent per column; mermaid

@@ -19,6 +19,11 @@ from typing import Literal, cast, overload
 from pydantic import ConfigDict
 from pydantic.dataclasses import dataclass as pydantic_dataclass
 
+from .connectors.base import SyncRow
+
+ImportValue = str | int | bool | None
+RuleValue = str | list[str] | int
+
 COLUMNS = [
     "op_date",
     "pay_date",
@@ -68,7 +73,7 @@ class ParseError:
     def __getitem__(self, key: str) -> int | str:
         return cast("int | str", getattr(self, key))
 
-    def to_api_dict(self) -> dict[str, object]:
+    def to_api_dict(self) -> dict[str, int | str]:
         return asdict(self)
 
 
@@ -115,8 +120,8 @@ class ImportRow:
     @overload
     def __getitem__(self, key: Literal["hash"]) -> str: ...
 
-    def __getitem__(self, key: str) -> object:
-        return cast("object", getattr(self, _attr_name(key)))
+    def __getitem__(self, key: str) -> ImportValue:
+        return cast("ImportValue", getattr(self, _attr_name(key)))
 
     @overload
     def __setitem__(self, key: Literal["accountId"], value: int | None) -> None: ...
@@ -130,16 +135,16 @@ class ImportRow:
     @overload
     def __setitem__(self, key: Literal["hash"], value: str) -> None: ...
 
-    def __setitem__(self, key: str, value: object) -> None:
+    def __setitem__(self, key: str, value: ImportValue) -> None:
         setattr(self, _attr_name(key), value)
 
-    def get(self, key: str, default: object = None) -> object:
+    def get(self, key: str, default: ImportValue = None) -> ImportValue:
         try:
-            return cast("object", getattr(self, _attr_name(key)))
+            return cast("ImportValue", getattr(self, _attr_name(key)))
         except AttributeError:
             return default
 
-    def to_api_dict(self) -> dict[str, object]:
+    def to_api_dict(self) -> dict[str, ImportValue]:
         return {
             "date": self.date,
             "amount": self.amount,
@@ -153,7 +158,7 @@ class ImportRow:
             "hash": self.hash,
         }
 
-    def to_ingest_dict(self) -> dict[str, object]:
+    def to_ingest_dict(self) -> dict[str, ImportValue]:
         """Serialize at the SQLite ingest boundary, which uses snake_case keys."""
         return {
             "date": self.date,
@@ -162,6 +167,20 @@ class ImportRow:
             "bank_category": self.bank_category,
             "mcc": self.mcc,
             "category_id": self.category_id,
+        }
+
+    def to_sync_dict(self) -> SyncRow:
+        return {
+            "date": self.date,
+            "amount": self.amount,
+            "description": self.description,
+            "bank_category": self.bank_category,
+            "mcc": self.mcc,
+            "card": self.card,
+            "account_id": self.account_id,
+            "category_id": self.category_id,
+            "duplicate": self.duplicate,
+            "hash": self.hash,
         }
 
 
@@ -180,8 +199,8 @@ class CategoryRule:
     @overload
     def __getitem__(self, key: Literal["keywords"]) -> list[str]: ...
 
-    def __getitem__(self, key: str) -> object:
-        return cast("object", getattr(self, _attr_name(key)))
+    def __getitem__(self, key: str) -> RuleValue:
+        return cast("RuleValue", getattr(self, _attr_name(key)))
 
 
 def parse_date(raw: str) -> datetime | None:
@@ -192,7 +211,7 @@ def parse_date(raw: str) -> datetime | None:
     return datetime(int(y), int(mo), int(d), int(hh or 0), int(mm or 0), int(ss or 0))
 
 
-def parse_amount_kop(raw: object) -> int | None:
+def parse_amount_kop(raw: str | int | float | bool | None) -> int | None:
     """
     '-1 500,00' -> -150000 kopecks.
     """
@@ -206,7 +225,9 @@ def parse_amount_kop(raw: object) -> int | None:
         return None
 
 
-def tx_hash(account_id: int, date_iso: str, amount_kop: int, description: object) -> str:
+def tx_hash(
+    account_id: int, date_iso: str, amount_kop: int, description: str | int | float | bool | None
+) -> str:
     """
     Dedup key of a transaction. Always scoped to the account: the same
     date/amount/description legitimately occurs on two different accounts
@@ -260,7 +281,7 @@ def parse_statement(text: str) -> tuple[list[ImportRow], list[ParseError]]:
 
 
 def build_rules(
-    categories: Iterable[Mapping[str, object]], groups: Mapping[int, str]
+    categories: Iterable[Mapping[str, str | int | None]], groups: Mapping[int, str]
 ) -> dict[str, list[CategoryRule]]:
     """
     categories: iterable of dicts with name/keywords/group_id;
@@ -285,7 +306,9 @@ def build_rules(
 
 
 def categorize(
-    description: object, amount_kop: int, rules: Mapping[str, list[CategoryRule]]
+    description: str | int | float | bool | None,
+    amount_kop: int,
+    rules: Mapping[str, list[CategoryRule]],
 ) -> int | None:
     """
     Returns category_id or None.

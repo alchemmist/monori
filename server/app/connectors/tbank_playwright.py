@@ -40,8 +40,8 @@ from contextlib import AbstractContextManager
 from typing import Literal, Protocol, Self, cast
 from urllib.parse import quote
 
-from ..importer import ImportRow, parse_statement
-from .base import Connector, ConnectorError, SmsRequired, SyncResult, register
+from ..importer import parse_statement
+from .base import Connector, ConnectorError, JsonObject, SmsRequired, SyncResult, SyncRow, register
 
 
 # playwright is an optional dependency (see _run); when it is installed we
@@ -198,9 +198,9 @@ class TBankPlaywrightConnector(Connector):
 
     def __init__(
         self,
-        credentials: dict[str, object] | None,
-        session: object | None = None,
-        account_ref: object | None = None,
+        credentials: JsonObject | None,
+        session: JsonObject | None = None,
+        account_ref: str | None = None,
     ) -> None:
         super().__init__(credentials, session, account_ref)
         self._worker: threading.Thread | None = None
@@ -294,16 +294,14 @@ class TBankPlaywrightConnector(Connector):
                 session = {"profile": self._archive_profile(work_dir)}
                 # SyncResult's legacy annotation still describes mapping rows;
                 # this connector keeps the parsed pydantic models intact.
-                self._from_worker.put(
-                    ("result", SyncResult(cast("list[dict[str, object]]", rows), session=session))
-                )
+                self._from_worker.put(("result", SyncResult(rows, session=session)))
         except Exception as e:  # noqa: BLE001 - surfaced to the user as a sync error
             self._from_worker.put(("error", str(e)))
         finally:
             shutil.rmtree(work_dir, ignore_errors=True)
 
     def _restore_profile(self, work_dir: str) -> None:
-        session = cast("dict[str, object] | None", self.session)
+        session = cast("JsonObject | None", self.session)
         blob = session.get("profile") if session else None
         if not blob:
             return
@@ -532,7 +530,7 @@ class TBankPlaywrightConnector(Connector):
             return f"{self.URL_OPERATIONS}?account={quote(account, safe='')}"
         return self.URL_OPERATIONS
 
-    def _download_and_parse(self, page: _Page, since: str | None) -> list[ImportRow]:
+    def _download_and_parse(self, page: _Page, since: str | None) -> list[SyncRow]:
         page.goto(self._operations_url(), wait_until="domcontentloaded")
         # the ?account= scope in the URL above is applied by the SPA with an
         # async XHR *after* domcontentloaded; opening the export before that
@@ -563,7 +561,7 @@ class TBankPlaywrightConnector(Connector):
             download.save_as(tmp.name)
             text = pathlib.Path(tmp.name).read_text(encoding="utf-8", errors="replace")
         rows, _ = parse_statement(text)
-        return rows
+        return [row.to_sync_dict() for row in rows]
 
     def _click_export_format(self, page: _Page) -> bool:
         # prefer the stable per-format hook (reliable even when a "CSV" substring

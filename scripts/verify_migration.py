@@ -42,6 +42,7 @@ from app.workbook.parser import (
 )
 
 MONEY = 100
+DuplicateRow = tuple[str, str, int, str, int]
 
 
 class Header(TypedDict):
@@ -153,8 +154,10 @@ def import_into_db(
             "INSERT INTO accounts (user_id, name, currency) VALUES (?, ?, ?)",
             (uid, key, currency),
         )
-        assert cur.lastrowid is not None
-        mapping[key] = cur.lastrowid
+        lastrowid = cur.lastrowid
+        if lastrowid is None:
+            raise RuntimeError("inserted account did not return a row id")
+        mapping[key] = lastrowid
     result = cast("ApplyResult", apply_workbook(c, uid, parsed, mapping, "overwrite"))
     c.commit()
     return c, uid, parsed, result
@@ -206,13 +209,13 @@ def snapshot(
 
 def duplicates(
     c: sqlite3.Connection, uid: int
-) -> tuple[list[tuple[str, str, int, str, int]], list[tuple[str, str, int, str, int]]]:
+) -> tuple[list[DuplicateRow], list[DuplicateRow]]:
     """
     Rows a human would read as the same entry twice — on one account, or the
     same day/amount/description spread over several accounts, which is how a
     feed delivered through two doors looks once routing has split the copies.
     """
-    on_one = [
+    on_one: list[DuplicateRow] = [
         (r["name"], r["date"], r["amount"], r["description"], r["n"])
         for r in c.execute(
             "SELECT a.name, t.date, t.amount, t.description, COUNT(*) n"
@@ -222,7 +225,7 @@ def duplicates(
             (uid,),
         )
     ]
-    across = [
+    across: list[DuplicateRow] = [
         (r["names"], r["day"], r["amount"], r["description"], r["n"])
         for r in c.execute(
             "SELECT group_concat(DISTINCT a.name) names, substr(t.date, 1, 10) day,"

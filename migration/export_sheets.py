@@ -15,13 +15,11 @@ and an OAuth token path:
 The spreadsheet id can also be passed as the first argument.
 """
 
-from __future__ import annotations
-
 import json
 import os
 import pathlib
 import sys
-from typing import TYPE_CHECKING, Protocol, cast
+from typing import TYPE_CHECKING, Protocol, TypedDict, cast
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -29,9 +27,15 @@ if TYPE_CHECKING:
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 
+SheetCell = str | int | float | bool | None
+
+
+class _ValuesPayload(TypedDict, total=False):
+    values: list[list[SheetCell]]
+
 
 class _ValuesRequest(Protocol):
-    def execute(self) -> dict[str, object]: ...
+    def execute(self) -> _ValuesPayload: ...
 
 
 class _ValuesResource(Protocol):
@@ -50,7 +54,7 @@ class _SpreadsheetsResource(Protocol):
 
 
 class _SheetsService(Protocol):
-    def spreadsheets(self) -> object: ...
+    def spreadsheets(self) -> _SpreadsheetsResource: ...
 
 
 SPREADSHEET_ID = os.environ.get("MONORI_SHEET_ID") or (sys.argv[1] if len(sys.argv) > 1 else "")
@@ -62,7 +66,7 @@ OUT_DIR = pathlib.Path(__file__).parent / "raw"
 YEAR_SHEETS = [str(y) for y in range(2020, 2028)]
 
 
-def fetch(svc: _SheetsService, rng: str, render: str) -> list[list[object]]:
+def fetch(svc: _SheetsService, rng: str, render: str) -> list[list[SheetCell]]:
     spreadsheets = cast("_SpreadsheetsResource", svc.spreadsheets())
     payload = (
         spreadsheets.values()
@@ -74,7 +78,7 @@ def fetch(svc: _SheetsService, rng: str, render: str) -> list[list[object]]:
         )
         .execute()
     )
-    return cast("list[list[object]]", payload.get("values", []))
+    return cast("list[list[SheetCell]]", payload.get("values", []))
 
 
 def main() -> None:

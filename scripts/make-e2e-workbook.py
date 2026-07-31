@@ -11,8 +11,6 @@ cached grid figures must reconcile exactly (no synthetic adjustment rows) and
 the counts must match what the spec hardcodes.
 """
 
-from __future__ import annotations
-
 import datetime
 import pathlib
 import sys
@@ -54,6 +52,7 @@ TX_HEADER = [
     TX_ALIASES[f][0]
     for f in ("date", "card", "status", "amount", "currency", "bank_category", "mcc", "description")
 ]
+WorkbookCell = datetime.datetime | float | int | str | None
 
 
 def tx(
@@ -64,8 +63,8 @@ def tx(
     card: str = "*1111",
     desc: str = "",
     kw: tuple[str, str] | None = None,
-) -> list[object]:
-    row: list[object] = [None] * 12
+) -> list[WorkbookCell]:
+    row: list[WorkbookCell] = [None] * 12
     row[0] = date
     row[1] = card
     row[2] = "OK"

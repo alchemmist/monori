@@ -10,15 +10,16 @@ rows directly with no OTP. It is registered only when this module is imported
 
 from typing import cast
 
-from .base import Connector, ConnectorError, SmsRequired, SyncResult, register
+from .base import Connector, ConnectorError, SmsRequired, SyncResult, SyncRow, register
 
-FIXTURE_ROWS = [
+FIXTURE_ROWS: list[SyncRow] = [
     {
         "date": "2026-02-01T09:00:00",
         "amount": -50000,
         "description": "Lenta",
         "bank_category": "Supermarkets",
         "mcc": "5411",
+        "card": "*1111",
     },
     {
         "date": "2026-02-02T12:30:00",
@@ -26,17 +27,18 @@ FIXTURE_ROWS = [
         "description": "Salary",
         "bank_category": "Income",
         "mcc": "",
+        "card": "*1111",
     },
 ]
 
 
-def _rows(account_ref: object | None = None) -> list[dict[str, object]]:
+def _rows(account_ref: str | None = None) -> list[SyncRow]:
     """
     A real bank scopes the feed to the requested account; the fixture mimics
     that by stamping the ref into the description, so two accounts on one
     connection deliver distinct operations rather than one feed twice.
     """
-    rows = [dict(r) for r in FIXTURE_ROWS]
+    rows = cast("list[SyncRow]", [dict(r) for r in FIXTURE_ROWS])
     if account_ref:
         for r in rows:
             r["description"] = f"{r['description']} {account_ref}"
@@ -52,7 +54,7 @@ class FakeConnector(Connector):
     def sync(self, since: str | None = None) -> SyncResult:
         if not self.credentials.get("phone"):
             raise ConnectorError("missing phone")
-        session = cast("dict[str, object] | None", self.session)
+        session = self.session
         if session and session.get("token"):
             return SyncResult(_rows(self.account_ref), session=session)
         self._pending = True

@@ -8,6 +8,42 @@ raises :class:`SmsRequired`; the caller parks the live connector and later calls
 :meth:`resume_sync` with the code the user entered.
 """
 
+from dataclasses import dataclass
+from typing import NotRequired, TypedDict
+
+JsonPrimitive = str | int | float | bool | None
+JsonValue = JsonPrimitive | list[JsonPrimitive] | dict[str, JsonPrimitive]
+JsonObject = dict[str, JsonValue]
+
+
+class ConnectorParam(TypedDict):
+    name: str
+    label: str
+    secret: bool
+    required: bool
+    help: NotRequired[str]
+
+
+class ConnectorInfo(TypedDict):
+    bank: str
+    kind: str
+    label: str
+    connectionParams: list[ConnectorParam]
+    accountParams: list[ConnectorParam]
+
+
+class SyncRow(TypedDict):
+    date: str
+    amount: int
+    description: str
+    bank_category: str
+    mcc: str
+    card: str
+    account_id: NotRequired[int | None]
+    category_id: NotRequired[int | None]
+    duplicate: NotRequired[bool]
+    hash: NotRequired[str]
+
 
 class ConnectorError(Exception):
     """
@@ -22,14 +58,14 @@ class SmsRequired(Exception):
     """
 
 
+@dataclass(slots=True)
 class SyncResult:
     """
     Rows pulled in one sync, plus the session to cache for next time.
     """
 
-    def __init__(self, rows: list[dict[str, object]], session: object | None = None) -> None:
-        self.rows = rows
-        self.session = session
+    rows: list[SyncRow]
+    session: JsonObject | None = None
 
 
 class Connector:
@@ -40,23 +76,23 @@ class Connector:
     hidden = False
     #: fields the user fills once per bank login (one form entry each:
     #: name, label, secret, required, help)
-    connection_params: list[dict[str, object]] = []
+    connection_params: list[ConnectorParam] = []
     #: fields locating one bank account within the login, stored per monori
     #: account as its bank_ref
-    account_params: list[dict[str, object]] = []
+    account_params: list[ConnectorParam] = []
 
     def __init__(
         self,
-        credentials: dict[str, object] | None,
-        session: object | None = None,
-        account_ref: object | None = None,
+        credentials: JsonObject | None,
+        session: JsonObject | None = None,
+        account_ref: str | None = None,
     ) -> None:
-        self.credentials: dict[str, object] = credentials or {}
+        self.credentials: JsonObject = credentials or {}
         #: opaque per-connector state cached (encrypted) between syncs, e.g. a
         #: browser session; None on the first sync
-        self.session: object | None = session
+        self.session: JsonObject | None = session
         #: the bank-side locator of the one account this sync is scoped to
-        self.account_ref: object | None = account_ref or None
+        self.account_ref: str | None = account_ref or None
 
     def sync(self, since: str | None = None) -> SyncResult:
         """
@@ -95,7 +131,7 @@ def get_connector_class(bank: str, kind: str) -> type[Connector]:
     return cls
 
 
-def available_connectors() -> list[dict[str, object]]:
+def available_connectors() -> list[ConnectorInfo]:
     """
     The connectors offered in the UI (registration order, demos excluded).
     """

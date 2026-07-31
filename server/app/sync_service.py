@@ -18,7 +18,7 @@ from pydantic import ConfigDict
 from pydantic.dataclasses import dataclass as pydantic_dataclass
 
 from .connectors import base as connectors
-from .connectors.base import ConnectorError, SmsRequired, SyncResult
+from .connectors.base import ConnectorError, JsonObject, SmsRequired, SyncResult
 
 app = FastAPI(title="monori-sync")
 
@@ -40,8 +40,8 @@ def _error(cid: int, error: Exception) -> dict[str, object]:
 class RunBody:
     bank: str
     kind: str
-    credentials: dict[str, object]
-    session: dict[str, object] | None = None
+    credentials: JsonObject
+    session: JsonObject | None = None
     since: str | None = None
     accountRef: str | None = None
 

@@ -16,7 +16,7 @@ from typing import cast
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "server"))
 
-from app.connectors.base import SmsRequired, SyncResult
+from app.connectors.base import JsonObject, SmsRequired, SyncResult
 from app.connectors.tbank_playwright import TBankPlaywrightConnector
 
 PROFILE_DIR = os.environ.get("PROFILE_DIR", "/tmp/tbank-explore/profile")
@@ -30,10 +30,10 @@ def archive_profile(work_dir: str) -> str:
 
 
 def main() -> None:
-    session: dict[str, object] = {"profile": archive_profile(PROFILE_DIR)}
+    session: JsonObject = {"profile": archive_profile(PROFILE_DIR)}
     # phone/password only used if the trusted session lapsed; code is the
     # quick-login pin. Fill from env if you want to exercise a full re-login.
-    creds: dict[str, object] = {
+    creds: JsonObject = {
         "phone": os.environ.get("TBANK_PHONE", ""),
         "password": os.environ.get("TBANK_PASSWORD", ""),
         "code": os.environ.get("TBANK_CODE", ""),
@@ -54,9 +54,9 @@ def main() -> None:
     rows = result.rows
     print(f"RESULT: OK -> {len(rows)} rows parsed")
     if rows:
-        ds = sorted(cast("str", r["date"]) for r in rows)
+        ds = sorted(r["date"] for r in rows)
         print(f"  span {ds[0]} .. {ds[-1]}")
-        print(f"  session updated: {'profile' in cast('dict[str, object]', result.session or {})}")
+        print(f"  session updated: {'profile' in cast('JsonObject', result.session or {})}")
 
 
 if __name__ == "__main__":

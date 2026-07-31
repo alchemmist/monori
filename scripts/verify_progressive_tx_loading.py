@@ -7,7 +7,8 @@ ends up complete and in order.
 
 import pathlib
 import sys
-from typing import Literal, TypedDict, cast
+from enum import Enum
+from typing import TypedDict, cast
 
 from playwright.sync_api import Browser, Page, Request, sync_playwright
 
@@ -53,6 +54,11 @@ class ReducedRing(TypedDict):
     svg: bool
 
 
+class ReducedMotion(str, Enum):
+    NO_PREFERENCE = "no-preference"
+    REDUCE = "reduce"
+
+
 def load_token() -> str:
     if not TOKEN_FILE.exists():
         sys.exit(
@@ -68,7 +74,7 @@ def open_page(
     browser: Browser,
     token: str,
     requests: list[str] | None = None,
-    reduced_motion: Literal["no-preference", "null", "reduce"] | None = None,
+    reduced_motion: ReducedMotion | None = None,
 ) -> Page:
     page = browser.new_page(viewport={"width": 1280, "height": 900}, reduced_motion=reduced_motion)
     if requests is not None:
@@ -111,7 +117,7 @@ def main() -> None:
         page.close()
 
         # prefers-reduced-motion swaps the ring for the bare percentage
-        reduced = open_page(browser, token, reduced_motion="reduce")
+        reduced = open_page(browser, token, reduced_motion=ReducedMotion.REDUCE)
         reduced.wait_for_selector(".progress-ring", timeout=15000)
         reduced_ring = cast(
             "ReducedRing",

@@ -19,7 +19,7 @@ from typing import cast
 import httpx
 
 from .connectors import base as connectors
-from .connectors.base import ConnectorError, SmsRequired, SyncResult
+from .connectors.base import ConnectorError, JsonObject, SmsRequired, SyncResult, SyncRow
 
 
 class NoPendingLogin(Exception):
@@ -37,10 +37,10 @@ class LocalRunner:
         cid: int,
         bank: str,
         kind: str,
-        credentials: dict[str, object],
-        session: object | None,
+        credentials: JsonObject,
+        session: JsonObject | None,
         since: str | None,
-        account_ref: object | None = None,
+        account_ref: str | None = None,
     ) -> SyncResult:
         self.cancel(cid)
         cls = connectors.get_connector_class(bank, kind)
@@ -91,8 +91,8 @@ class RemoteRunner:
             raise ConnectorError("sync service returned an invalid response")
         status = payload.get("status")
         if status == "done":
-            rows = cast("list[dict[str, object]]", payload.get("rows") or [])
-            session = payload.get("session")
+            rows = cast("list[SyncRow]", payload.get("rows") or [])
+            session = cast("JsonObject | None", payload.get("session"))
             return SyncResult(rows, session)
         if status == "awaiting_sms":
             raise SmsRequired(payload.get("message") or "code sent")
@@ -103,10 +103,10 @@ class RemoteRunner:
         cid: int,
         bank: str,
         kind: str,
-        credentials: dict[str, object],
-        session: object | None,
+        credentials: JsonObject,
+        session: JsonObject | None,
         since: str | None,
-        account_ref: object | None = None,
+        account_ref: str | None = None,
     ) -> SyncResult:
         try:
             r = self._client.post(
@@ -149,6 +149,6 @@ _runner: LocalRunner | RemoteRunner | None = None
 def get_runner() -> LocalRunner | RemoteRunner:
     global _runner
     if _runner is None:
-        url = os.environ.get("MONORI_SYNC_URL")
-        _runner = RemoteRunner(url) if url is not None else LocalRunner()
+        url = (os.environ.get("MONORI_SYNC_URL") or "").strip()
+        _runner = RemoteRunner(url) if url else LocalRunner()
     return _runner

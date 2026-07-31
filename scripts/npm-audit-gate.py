@@ -9,11 +9,29 @@ exit code directly).
 
 import json
 import sys
-
-JsonValue = object
-AuditEntry = dict[str, object]
+from typing import TypedDict, cast
 
 BLOCKING = {"high", "critical"}
+
+
+class AuditVia(TypedDict, total=False):
+    severity: str
+    url: str
+    title: str
+
+
+class AuditNode(TypedDict, total=False):
+    via: list[str | AuditVia]
+
+
+class AuditError(TypedDict, total=False):
+    code: str
+    summary: str
+
+
+class AuditPayload(TypedDict, total=False):
+    error: AuditError
+    vulnerabilities: dict[str, AuditNode]
 
 # GHSA id -> reason it is knowingly tolerated. Keep this list short and revisit
 # whenever `npm audit` output changes.
@@ -26,7 +44,7 @@ ALLOWED = {
 
 
 def main() -> int:
-    data = json.load(sys.stdin)
+    data = cast(AuditPayload, json.load(sys.stdin))
     # npm audit could not run (e.g. ENOLOCK with no lockfile) — it returns an
     # error payload with no vulnerabilities data. Fail loudly rather than let an
     # audit that never happened read as a clean pass.
@@ -40,12 +58,7 @@ def main() -> int:
         return 1
     blocking: list[str] = []
     vulnerabilities = data.get("vulnerabilities", {})
-    if not isinstance(vulnerabilities, dict):
-        print("npm-audit-gate [FAIL]: invalid vulnerabilities payload", file=sys.stderr)
-        return 1
     for name, vuln in vulnerabilities.items():
-        if not isinstance(vuln, dict):
-            continue
         for via in vuln.get("via", []):
             if not isinstance(via, dict):
                 continue
