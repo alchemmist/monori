@@ -14,12 +14,12 @@ from app.deps import (
 # Distinct sentinel values per field so a key/value mix-up cannot pass by accident.
 
 
-def test_serialize_group():
+def test_serialize_group() -> None:
     row = {"id": 1, "name": "Bills", "sort": 3, "kind": "expense"}
     assert serialize_group(row) == {"id": 1, "name": "Bills", "sort": 3, "kind": "expense"}
 
 
-def test_serialize_category():
+def test_serialize_category() -> None:
     row = {
         "id": 7,
         "group_id": 2,
@@ -41,12 +41,12 @@ def test_serialize_category():
     }
 
 
-def test_serialize_category_archived_false():
+def test_serialize_category_archived_false() -> None:
     row = {"id": 7, "group_id": 2, "name": "Rent", "keywords": "", "sort": 4, "archived": 0}
     assert serialize_category(row)["archived"] is False
 
 
-def test_serialize_account():
+def test_serialize_account() -> None:
     row = {
         "id": 5,
         "name": "T-Bank",
@@ -81,7 +81,7 @@ def test_serialize_account():
     }
 
 
-def test_serialize_account_archived_true():
+def test_serialize_account_archived_true() -> None:
     row = {
         "id": 5,
         "name": "Old",
@@ -103,7 +103,7 @@ def test_serialize_account_archived_true():
     assert out["iconImage"] == "data:image/png;base64,AAAA"
 
 
-def test_serialize_tx():
+def test_serialize_tx() -> None:
     row = {
         "id": 11,
         "date": "2026-01-05T00:00:00",
@@ -135,7 +135,7 @@ def test_serialize_tx():
     }
 
 
-def test_serialize_budget():
+def test_serialize_budget() -> None:
     row = {"category_id": 3, "year": 2026, "month": 1, "amount": 150000}
     assert serialize_budget(row) == {
         "categoryId": 3,
@@ -145,7 +145,7 @@ def test_serialize_budget():
     }
 
 
-def test_serialize_connection():
+def test_serialize_connection() -> None:
     row = {
         "id": 8,
         "bank": "tbank",
@@ -170,7 +170,7 @@ def test_serialize_connection():
     }
 
 
-def test_serialize_connection_without_credentials_and_with_error():
+def test_serialize_connection_without_credentials_and_with_error() -> None:
     row = {
         "id": 8,
         "bank": "tbank",

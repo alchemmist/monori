@@ -14,10 +14,12 @@ import contextlib
 import logging
 
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
+from pydantic import ConfigDict
+from pydantic.dataclasses import dataclass as pydantic_dataclass
 
 from .connectors import base as connectors
 from .connectors.base import ConnectorError, SmsRequired
+from .connectors.base import SyncResult
 
 app = FastAPI(title="monori-sync")
 
@@ -30,42 +32,44 @@ SYNC_FAILED = "The bank sync could not be completed."
 PENDING: dict[int, connectors.Connector] = {}
 
 
-def _error(cid, error):
+def _error(cid: int, error: Exception) -> dict[str, object]:
     log.warning("sync run %s failed: %s", cid, error)
     return {"status": "error", "message": SYNC_FAILED}
 
 
-class RunBody(BaseModel):
+@pydantic_dataclass(config=ConfigDict(populate_by_name=True))
+class RunBody:
     bank: str
     kind: str
-    credentials: dict
-    session: dict | None = None
+    credentials: dict[str, object]
+    session: dict[str, object] | None = None
     since: str | None = None
     accountRef: str | None = None
 
 
-class SmsBody(BaseModel):
+@pydantic_dataclass(config=ConfigDict(populate_by_name=True))
+class SmsBody:
     code: str
 
 
-def _close_pending(cid):
+def _close_pending(cid: int) -> None:
     old = PENDING.pop(cid, None)
     if old is not None:
         with contextlib.suppress(Exception):
             old.close()
 
 
-def _done(result):
+def _done(result: SyncResult) -> dict[str, object]:
     return {"status": "done", "rows": result.rows, "session": result.session}
 
 
 @app.get("/health")
-def health():
+def health() -> dict[str, bool]:
     return {"ok": True}
 
 
 @app.post("/runs/{cid}")
-def start_run(cid: int, body: RunBody):
+def start_run(cid: int, body: RunBody) -> dict[str, object]:
     _close_pending(cid)
     try:
         cls = connectors.get_connector_class(body.bank, body.kind)
@@ -82,7 +86,7 @@ def start_run(cid: int, body: RunBody):
 
 
 @app.post("/runs/{cid}/sms")
-def submit_sms(cid: int, body: SmsBody):
+def submit_sms(cid: int, body: SmsBody) -> dict[str, object]:
     connector = PENDING.pop(cid, None)
     if connector is None:
         raise HTTPException(409, "no login awaiting a code")
@@ -101,6 +105,6 @@ def submit_sms(cid: int, body: SmsBody):
 
 
 @app.post("/runs/{cid}/cancel")
-def cancel_run(cid: int):
+def cancel_run(cid: int) -> dict[str, int]:
     _close_pending(cid)
     return {"cancelled": cid}
