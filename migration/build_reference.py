@@ -12,6 +12,8 @@ Outputs into migration/out/:
 import json
 import pathlib
 from datetime import datetime, timedelta
+from collections.abc import Sequence
+from typing import TypedDict, cast
 
 RAW = pathlib.Path(__file__).parent / "raw"
 OUT = pathlib.Path(__file__).parent / "out"
@@ -21,51 +23,104 @@ YEARS = list(range(2020, 2028))
 GROUP_MARK = "▼▲"  # group names start with one of these
 
 
-def load(name):
-    return json.loads((RAW / f"{name}.json").read_text())
+class Group(TypedDict):
+    name: str
+    sort: int
+    type: object
 
 
-def serial_to_iso(serial):
+class Category(TypedDict):
+    name: str
+    group: object
+    keywords: str
+
+
+class CategoriesData(TypedDict):
+    groups: list[Group]
+    categories: list[Category]
+
+
+class Month(TypedDict):
+    budgeted: float
+    outflows: float
+    balance: float
+
+
+class YearRow(TypedDict):
+    category: str
+    sheet_row: int
+    months: list[Month]
+
+
+class YearGroup(TypedDict):
+    group: object
+    rows: list[YearRow]
+
+
+class Totals(TypedDict):
+    income_total: object
+    outcome_total: object
+    income_by_month: list[object]
+    available_by_month: list[object]
+
+
+class YearData(TypedDict):
+    year: int
+    totals: Totals
+    groups: list[YearGroup]
+    rows: list[YearRow]
+
+
+def load(name: str) -> dict[str, object]:
+    return cast(dict[str, object], json.loads((RAW / f"{name}.json").read_text()))
+
+
+def serial_to_iso(serial: float) -> str:
     dt = EPOCH + timedelta(days=float(serial))
     return dt.strftime("%Y-%m-%dT%H:%M:%S")
 
 
-def cell(rows, r, c, default=None):
+def cell(
+    rows: Sequence[Sequence[object]], r: int, c: int, default: object | None = None
+) -> object | None:
     if r < len(rows) and c < len(rows[r]):
         v = rows[r][c]
         return default if v == "" else v
     return default
 
 
-def build_categories():
-    rows = load("categories")["unformatted_value"]
-    groups = {}
+def build_categories() -> CategoriesData:
+    rows = cast(list[list[object]], load("categories")["unformatted_value"])
+    groups: dict[str, Group] = {}
     for r in rows[2:]:
-        name = r[5] if len(r) > 5 else ""
+        name = str(r[5]) if len(r) > 5 and r[5] != "" else ""
         if name:
             groups[name] = {
                 "name": name,
-                "sort": int(r[6]),
+                "sort": int(cast(int | float, r[6])),
                 "type": r[7],
             }
-    categories = []
+    categories: list[Category] = []
     for r in rows[2:]:
-        cat = r[2] if len(r) > 2 else ""
+        cat = str(r[2]) if len(r) > 2 and r[2] != "" else ""
         if not cat:
             continue
         categories.append(
             {
                 "name": cat,
                 "group": r[1],
-                "keywords": (r[3] if len(r) > 3 else "").strip(),
+                "keywords": str(r[3]).strip() if len(r) > 3 and r[3] != "" else "",
             }
         )
-    return {"groups": sorted(groups.values(), key=lambda g: g["sort"]), "categories": categories}
+    return {
+        "groups": sorted(groups.values(), key=lambda g: g["sort"]),
+        "categories": categories,
+    }
 
 
-def build_transactions():
-    rows = load("transactions")["unformatted_value"]
-    txs = []
+def build_transactions() -> list[dict[str, object]]:
+    rows = cast(list[list[object]], load("transactions")["unformatted_value"])
+    txs: list[dict[str, object]] = []
     for i, r in enumerate(rows[1:], start=2):
         date = r[1] if len(r) > 1 else ""
         amount = r[7] if len(r) > 7 else ""
@@ -87,16 +142,26 @@ def build_transactions():
     return txs
 
 
-def month_cols(m):  # m: 1..12 -> (budget, outflow, balance) 0-indexed cols
+def month_cols(m: int) -> tuple[int, int, int]:  # m: 1..12 -> (budget, outflow, balance)
     base = 5 + 4 * (m - 1)
     return base, base + 2, base + 3
 
 
-def build_year(year, vals):
+def build_year(year: int, vals: list[list[object]]) -> YearData:
     """
     Extract per-category monthly figures + totals for one year sheet.
     """
-    out = {"year": year, "totals": {}, "groups": [], "rows": []}
+    out: YearData = {
+        "year": year,
+        "totals": {
+            "income_total": 0,
+            "outcome_total": 0,
+            "income_by_month": [0] * 12,
+            "available_by_month": [0] * 12,
+        },
+        "groups": [],
+        "rows": [],
+    }
     out["totals"] = {
         "income_total": cell(vals, 0, 3, 0),
         "outcome_total": cell(vals, 1, 3, 0),
@@ -112,21 +177,21 @@ def build_year(year, vals):
         if isinstance(a, (int, float)) and a == int(a) and 1 <= a <= 9:
             first_rows.append(ri)
     for bi, first_cat in enumerate(first_rows):
-        gname = cell(vals, first_cat, 1)
+        gname = str(cell(vals, first_cat, 1) or "")
         end = first_rows[bi + 1] - 1 if bi + 1 < len(first_rows) else len(vals)
-        block_rows = []
+        block_rows: list[YearRow] = []
         for ri in range(first_cat, end):
             cname = cell(vals, ri, 2)
             if cname is None or str(cname).startswith("#") or str(cname)[0] in GROUP_MARK:
                 continue
-            months = []
+            months: list[Month] = []
             for m in range(1, 13):
                 bc, oc, blc = month_cols(m)
                 months.append(
                     {
-                        "budgeted": round(float(cell(vals, ri, bc, 0) or 0), 2),
-                        "outflows": round(float(cell(vals, ri, oc, 0) or 0), 2),
-                        "balance": round(float(cell(vals, ri, blc, 0) or 0), 2),
+                        "budgeted": round(float(cast(int | float, cell(vals, ri, bc, 0) or 0)), 2),
+                        "outflows": round(float(cast(int | float, cell(vals, ri, oc, 0) or 0)), 2),
+                        "balance": round(float(cast(int | float, cell(vals, ri, blc, 0) or 0)), 2),
                     }
                 )
             block_rows.append({"category": str(cname), "sheet_row": ri + 1, "months": months})
@@ -136,14 +201,14 @@ def build_year(year, vals):
     return out
 
 
-def main():
+def main() -> None:
     OUT.mkdir(exist_ok=True)
     cats = build_categories()
     txs = build_transactions()
-    reference = {}
-    budgets = []
+    reference: dict[str, YearData] = {}
+    budgets: list[dict[str, object]] = []
     for y in YEARS:
-        vals = load(f"year_{y}")["unformatted_value"]
+        vals = cast(list[list[object]], load(f"year_{y}")["unformatted_value"])
         yr = build_year(y, vals)
         reference[str(y)] = yr
         for row in yr["rows"]:
