@@ -762,7 +762,8 @@ def _parse(wb: Workbook) -> ParsedWorkbook:
     tx_ws = wb[spec.SHEET_TRANSACTIONS]
     tx_idx = _tx_header_index(tx_ws)
     transactions = _parse_transactions(tx_ws, warnings, errors)
-    assert tx_idx is not None
+    if tx_idx is None:
+        raise WorkbookError("Transactions sheet is missing required columns")
     keywords = _parse_keywords(tx_ws, tx_idx)
 
     archive_years: dict[int, YearSheetRow] = {}
@@ -1055,7 +1056,8 @@ def _parse(wb: Workbook) -> ParsedWorkbook:
         year_sheet = live_years.get(y)
         if year_sheet is None:
             year_sheet = archive_years.get(y)
-        assert year_sheet is not None
+        if year_sheet is None:
+            raise WorkbookError(f"missing year sheet: {y}")
         sheet_cats = year_sheet["cats"]
         at_seam = seam_sheet is not None and (y, m) == (seam_year, 12)
         overspent = 0

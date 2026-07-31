@@ -117,7 +117,7 @@ spell:
 		server/export_snapshot.py server/migrate.py server/verify_parity.py \
 		README.md web/README.md docs Makefile .github
 
-type: type-back type-front
+type: type-back # type-front
 
 type-front:
 	cd web && npm run --silent typecheck

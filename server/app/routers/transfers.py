@@ -113,7 +113,7 @@ def create_transfer(
                     account_id,
                     body.get("comment", ""),
                     tx_hash(account_id, body["date"], amount, description),
-                )
+                ),
             )
             legs.append(cast("int", cur.lastrowid))
         transfer_id = link_pair(c, uid, legs[0], legs[1], note=body.get("comment", ""))
