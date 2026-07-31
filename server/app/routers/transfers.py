@@ -1,6 +1,6 @@
 import json
 import sqlite3
-from typing import Annotated, TypedDict, cast
+from typing import Annotated, NotRequired, TypedDict, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
@@ -25,13 +25,13 @@ class TransferBody(TypedDict):
     toAccountId: int
     amount: int
     date: str
-    comment: str
+    comment: NotRequired[str]
 
 
 class PairBody(TypedDict):
     outTxId: int
     inTxId: int
-    note: str
+    note: NotRequired[str]
 
 
 def account_exists(c: sqlite3.Connection, account_id: int, uid: int) -> bool:
@@ -86,6 +86,8 @@ def create_transfer(
     Both legs stay uncategorized, so they never count as income or expense.
     """
     uid = cast("int", user["id"])
+    if body["amount"] <= 0:
+        raise HTTPException(422, "amount must be positive")
     if body["fromAccountId"] == body["toAccountId"]:
         raise HTTPException(400, "cannot transfer to the same account")
     c = conn()
@@ -109,12 +111,12 @@ def create_transfer(
                     amount,
                     description,
                     account_id,
-                    body["comment"],
+                    body.get("comment", ""),
                     tx_hash(account_id, body["date"], amount, description),
-                ),
+                )
             )
             legs.append(cast("int", cur.lastrowid))
-        transfer_id = link_pair(c, uid, legs[0], legs[1], note=body["comment"])
+        transfer_id = link_pair(c, uid, legs[0], legs[1], note=body.get("comment", ""))
         c.commit()
         return {"transferId": transfer_id}
     except LinkError as e:
@@ -135,7 +137,11 @@ def link_transactions(
     c = conn()
     try:
         transfer_id = link_pair(
-            c, cast("int", user["id"]), body["outTxId"], body["inTxId"], note=body["note"]
+            c,
+            cast("int", user["id"]),
+            body["outTxId"],
+            body["inTxId"],
+            note=body.get("note", ""),
         )
         c.commit()
         return {"transferId": transfer_id}
@@ -179,7 +185,7 @@ def run_detection(
 
 @router.delete("/{transfer_id}")
 def delete_transfer(
-    transfer_id: int, user: Annotated[dict[str, object], Depends(current_user)]
+    transfer_id: str, user: Annotated[dict[str, object], Depends(current_user)]
 ) -> dict[str, bool]:
     """
     Split a transfer back into two ordinary transactions, categories and all.

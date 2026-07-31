@@ -49,6 +49,9 @@ def create_group(
     body: GroupBody, user: Annotated[dict[str, object], Depends(current_user)]
 ) -> dict[str, object]:
     uid = cast("int", user["id"])
+    name = body["name"].strip()
+    if not name:
+        raise HTTPException(422, "name cannot be empty")
     c = conn()
     try:
         group_type = c.execute(
@@ -57,7 +60,7 @@ def create_group(
         if not group_type:
             raise HTTPException(400, "kind must be 'income', 'expense', or 'goal'")
         if c.execute(
-            "SELECT id FROM category_groups WHERE user_id=? AND name=?", (uid, body["name"])
+            "SELECT id FROM category_groups WHERE user_id=? AND name=?", (uid, name)
         ).fetchone():
             raise HTTPException(409, "group with this name already exists")
         max_sort = c.execute(
@@ -65,7 +68,7 @@ def create_group(
         ).fetchone()[0]
         cur = c.execute(
             "INSERT INTO category_groups (user_id, name, sort, type_id) VALUES (?, ?, ?, ?)",
-            (uid, body["name"], max_sort + 1, group_type["id"]),
+            (uid, name, max_sort + 1, group_type["id"]),
         )
         c.commit()
         return {"id": cur.lastrowid}

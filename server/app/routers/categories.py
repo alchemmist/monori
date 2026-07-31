@@ -78,6 +78,9 @@ def create_category(
     body: CategoryBody, user: Annotated[dict[str, object], Depends(current_user)]
 ) -> dict[str, object]:
     uid = cast("int", user["id"])
+    name = body["name"].strip()
+    if not name:
+        raise HTTPException(422, "name cannot be empty")
     c = conn()
     try:
         group = c.execute(
@@ -88,9 +91,11 @@ def create_category(
         ).fetchone()
         if not group:
             raise HTTPException(400, "unknown group")
-        if cast("bool", group["is_goal"]) and not body["goalTarget"]:
+        keywords = body.get("keywords", "")
+        goal_target = body.get("goalTarget")
+        if cast("bool", group["is_goal"]) and goal_target is None:
             raise HTTPException(400, "goalTarget is required for goal categories")
-        if _name_taken(c, uid, body["name"]):
+        if _name_taken(c, uid, name):
             raise HTTPException(409, "category with this name already exists")
         max_sort = c.execute(
             "SELECT COALESCE(MAX(c.sort),0) FROM categories c"
@@ -102,12 +107,12 @@ def create_category(
             " goal_target_date) VALUES (?, ?, ?, ?, ?, ?, ?)",
             (
                 body["groupId"],
-                body["name"],
-                body["keywords"],
+                name,
+                keywords,
                 max_sort + 1,
-                body["goalTarget"] if cast("bool", group["is_goal"]) else None,
+                goal_target if cast("bool", group["is_goal"]) else None,
                 "active" if cast("bool", group["is_goal"]) else None,
-                body["goalTargetDate"] if cast("bool", group["is_goal"]) else None,
+                body.get("goalTargetDate") if cast("bool", group["is_goal"]) else None,
             ),
         )
         c.commit()
