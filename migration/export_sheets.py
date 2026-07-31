@@ -19,9 +19,34 @@ import json
 import os
 import pathlib
 import sys
+from collections.abc import Callable
+from typing import Protocol, cast
 
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
+
+
+class _ValuesRequest(Protocol):
+    def execute(self) -> dict[str, object]: ...
+
+
+class _ValuesResource(Protocol):
+    def get(
+        self,
+        *,
+        spreadsheetId: str,
+        range: str,
+        valueRenderOption: str,
+        dateTimeRenderOption: str,
+    ) -> _ValuesRequest: ...
+
+
+class _SpreadsheetsResource(Protocol):
+    def values(self) -> _ValuesResource: ...
+
+
+class _SheetsService(Protocol):
+    def spreadsheets(self) -> object: ...
 
 SPREADSHEET_ID = os.environ.get("MONORI_SHEET_ID") or (sys.argv[1] if len(sys.argv) > 1 else "")
 TOKEN_PATH = pathlib.Path(
@@ -32,9 +57,10 @@ OUT_DIR = pathlib.Path(__file__).parent / "raw"
 YEAR_SHEETS = [str(y) for y in range(2020, 2028)]
 
 
-def fetch(svc, rng, render):
-    return (
-        svc.spreadsheets()
+def fetch(svc: _SheetsService, rng: str, render: str) -> list[list[object]]:
+    spreadsheets = cast("_SpreadsheetsResource", svc.spreadsheets())
+    payload = (
+        spreadsheets
         .values()
         .get(
             spreadsheetId=SPREADSHEET_ID,
@@ -43,17 +69,18 @@ def fetch(svc, rng, render):
             dateTimeRenderOption="SERIAL_NUMBER",
         )
         .execute()
-        .get("values", [])
     )
+    return cast("list[list[object]]", payload.get("values", []))
 
 
-def main():
+def main() -> None:
     if not SPREADSHEET_ID:
         sys.exit("set MONORI_SHEET_ID (or pass the spreadsheet id as the first argument)")
     if not TOKEN_PATH.exists():
         sys.exit(f"OAuth token not found at {TOKEN_PATH}; set MONORI_GSHEETS_TOKEN")
     OUT_DIR.mkdir(parents=True, exist_ok=True)
-    creds = Credentials.from_authorized_user_file(str(TOKEN_PATH))
+    load_credentials: Callable[[str], Credentials] = Credentials.from_authorized_user_file
+    creds = load_credentials(str(TOKEN_PATH))
     svc = build("sheets", "v4", credentials=creds)
 
     dumps = {
