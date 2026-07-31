@@ -24,7 +24,6 @@ from io import BytesIO
 from typing import TypedDict
 
 from openpyxl import Workbook, load_workbook
-from openpyxl.worksheet._read_only import ReadOnlyWorksheet
 from openpyxl.worksheet.worksheet import Worksheet
 
 from ..importer import parse_amount_kop, parse_date
@@ -458,7 +457,7 @@ def _parse_year_sheet(ws: Worksheet, year: int, layout: LayoutRow) -> YearSheetR
     }
 
 
-def _tx_header_index(ws: Worksheet | ReadOnlyWorksheet) -> dict[str, int] | None:
+def _tx_header_index(ws: Worksheet) -> dict[str, int] | None:
     header = next(ws.iter_rows(min_row=1, max_row=1, values_only=True), None)
     if header is None:
         return None
@@ -511,7 +510,7 @@ def _tx_columns(idx: Mapping[str, int]) -> dict[str, int | None]:
 
 
 def _parse_transactions(
-    ws: Worksheet | ReadOnlyWorksheet,
+    ws: Worksheet,
     warnings: list[str],
     errors: list[WorkbookParseErrorRow],
 ) -> list[WorkbookTransactionRow]:
@@ -606,7 +605,7 @@ def _known_max_col(idx: Mapping[str, int]) -> int:
     return max((i for h, i in idx.items() if h in KNOWN_TX_HEADERS), default=-1)
 
 
-def _find_keyword_block(ws: Worksheet | ReadOnlyWorksheet, idx: Mapping[str, int]) -> int | None:
+def _find_keyword_block(ws: Worksheet, idx: Mapping[str, int]) -> int | None:
     """
     Locates the `category name | pipe-separated keywords` side table by
     content: the column pair (right of the known bank headers) with the most
@@ -627,7 +626,7 @@ def _find_keyword_block(ws: Worksheet | ReadOnlyWorksheet, idx: Mapping[str, int
     return max(scores, key=lambda b: (scores[b], -b))
 
 
-def _category_col(ws: Worksheet | ReadOnlyWorksheet, idx: Mapping[str, int]) -> int:
+def _category_col(ws: Worksheet, idx: Mapping[str, int]) -> int:
     """
     The per-row category lives right of the known bank headers and left of the
     keyword table — but the live template puts *two* columns there: the keyword
@@ -643,13 +642,12 @@ def _category_col(ws: Worksheet | ReadOnlyWorksheet, idx: Mapping[str, int]) -> 
     """
     start = _known_max_col(idx) + 1
     stop = _find_keyword_block(ws, idx)
-    if stop is None:
-        stop = ws.max_column
+    stop_col = ws.max_column if stop is None else stop
     filled: dict[int, int] = {}
     for row in ws.iter_rows(
         min_row=2, max_row=min(ws.max_row, SIDE_TABLE_SCAN_ROWS), values_only=True
     ):
-        for c in range(start, min(stop, len(row))):
+        for c in range(start, min(stop_col, len(row))):
             if _s(row[c]):
                 filled[c] = filled.get(c, 0) + 1
     if not filled:
@@ -657,20 +655,19 @@ def _category_col(ws: Worksheet | ReadOnlyWorksheet, idx: Mapping[str, int]) -> 
     return max(filled, key=lambda c: (filled[c], c))
 
 
-def _parse_keywords(ws: Worksheet | ReadOnlyWorksheet, idx: Mapping[str, int]) -> dict[str, str]:
+def _parse_keywords(ws: Worksheet, idx: Mapping[str, int]) -> dict[str, str]:
     """
     Reads the keyword side table (see _find_keyword_block): category name |
     pipe-separated keywords, starting at row 1.
     """
     base = _find_keyword_block(ws, idx)
-    if base is None:
-        base = _known_max_col(idx) + 3
+    base_col = _known_max_col(idx) + 3 if base is None else base
     keywords: dict[str, str] = {}
     for row in ws.iter_rows(min_row=1, values_only=True):
-        if base >= len(row):
+        if base_col >= len(row):
             continue
-        name = _s(row[base])
-        kws = _s(row[base + 1]) if base + 1 < len(row) else ""
+        name = _s(row[base_col])
+        kws = _s(row[base_col + 1]) if base_col + 1 < len(row) else ""
         if name and kws and ("|" in kws or len(kws) > 1):
             keywords.setdefault(name, kws)
     return keywords
@@ -764,6 +761,7 @@ def _parse(wb: Workbook) -> ParsedWorkbook:
     tx_ws = wb[spec.SHEET_TRANSACTIONS]
     tx_idx = _tx_header_index(tx_ws)
     transactions = _parse_transactions(tx_ws, warnings, errors)
+    assert tx_idx is not None
     keywords = _parse_keywords(tx_ws, tx_idx)
 
     archive_years: dict[int, YearSheetRow] = {}
@@ -894,9 +892,9 @@ def _parse(wb: Workbook) -> ParsedWorkbook:
     # everything filed under it came in, and the expense side otherwise.
     named_only: dict[str, list[int]] = {}
     for tx in transactions:
-        name = tx["monori_category"]
-        if name and name not in cat_names:
-            named_only.setdefault(name, []).append(tx["amount"])
+        category_name = tx["monori_category"]
+        if category_name and category_name not in cat_names:
+            named_only.setdefault(category_name, []).append(tx["amount"])
     if named_only:
         income_group = next((g["name"] for g in groups if g["kind"] == "income"), None)
         expense_group = next((g["name"] for g in groups if g["kind"] != "income"), None)
@@ -950,14 +948,14 @@ def _parse(wb: Workbook) -> ParsedWorkbook:
     tx_sums: dict[tuple[str, int, int], int] = {}
     income_sums: dict[tuple[int, int], int] = {}
     for tx in transactions:
-        cat = tx["monori_category"]
-        if not cat:
+        category_name = tx["monori_category"]
+        if not category_name:
             continue
         y, m = int(tx["date"][:4]), int(tx["date"][5:7])
-        if kinds.get(cat) == "income":
+        if kinds.get(category_name) == "income":
             income_sums[(y, m)] = income_sums.get((y, m), 0) + tx["amount"]
         else:
-            tx_sums[(cat, y, m)] = tx_sums.get((cat, y, m), 0) + tx["amount"]
+            tx_sums[(category_name, y, m)] = tx_sums.get((category_name, y, m), 0) + tx["amount"]
 
     # A correction is either standing in for a month the sheet kept only as
     # totals or adjusting one that has its own rows, and which of the two it is
@@ -988,7 +986,7 @@ def _parse(wb: Workbook) -> ParsedWorkbook:
                 income_sums[(year, m)] = have + delta
                 count(year, m)
 
-    budget_map: dict[tuple, int] = {}
+    budget_map: dict[tuple[str, int, int], int] = {}
     for cell in budgets:
         key = (cell["category"], cell["year"], cell["month"])
         budget_map[key] = budget_map.get(key, 0) + cell["amount"]
@@ -1026,7 +1024,10 @@ def _parse(wb: Workbook) -> ParsedWorkbook:
             bal = entry["balances"].get(last_m)
             if bal is not None:
                 seam_targets[name] = bal
-    seam_seed = live_years[first_live]["seed"] if first_live is not None else None
+    if first_live is None:
+        seam_seed: int | None = None
+    else:
+        seam_seed = live_years[first_live]["seed"]
 
     balances: dict[str, int] = {}
     avail = 0
@@ -1050,33 +1051,36 @@ def _parse(wb: Workbook) -> ParsedWorkbook:
         budgeted_total = sum(budget_map.get((name, y, m), 0) for name in expense_cats)
         avail = avail + prev_overspent + income - budgeted_total
         live = y in live_years
-        source = live_years.get(y) or archive_years.get(y)
-        sheet_cats = source["cats"] if source is not None else {}
+        year_sheet = live_years.get(y)
+        if year_sheet is None:
+            year_sheet = archive_years.get(y)
+        assert year_sheet is not None
+        sheet_cats = year_sheet["cats"]
         at_seam = seam_sheet is not None and (y, m) == (seam_year, 12)
         overspent = 0
         for name in expense_cats:
             carry = max(balances.get(name, 0), 0)
             have = tx_sums.get((name, y, m), 0)
             projected = carry + budget_map.get((name, y, m), 0) + have
-            entry = sheet_cats.get(name)
-            target = None
+            sheet_entry = sheet_cats.get(name)
+            desired: int | None = None
             if at_seam:
                 if name in seam_targets:
-                    target = seam_targets[name]
+                    desired = seam_targets[name]
                 elif first_live is not None and name not in live_years[first_live]["cats"]:
-                    target = 0
-            elif entry is not None:
-                target = entry["balances"].get(m)
-                if target is None and m in entry["outflows"]:
-                    target = projected - have + entry["outflows"][m]
+                    desired = 0
+            elif sheet_entry is not None:
+                desired = sheet_entry["balances"].get(m)
+                if desired is None and m in sheet_entry["outflows"]:
+                    desired = projected - have + sheet_entry["outflows"][m]
             elif (
                 not live
                 and balances.get(name, 0) != 0
-                and source is not None
-                and m == max(source["months"])
+                and year_sheet is not None
+                and m == max(year_sheet["months"])
             ):
-                target = 0
-            delta = 0 if target is None else target - projected
+                desired = 0
+            delta = 0 if desired is None else desired - projected
             if abs(delta) > ADJUST_TOLERANCE_KOP:
                 if at_seam:
                     n_seam += 1

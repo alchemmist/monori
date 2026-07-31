@@ -388,7 +388,7 @@ def test_parse_transactions_empty_and_missing_columns() -> None:
     empty.create_sheet(spec.SHEET_TRANSACTIONS)
     ro = load_workbook(BytesIO(_save(empty)), read_only=True, data_only=True)
     with pytest.raises(WorkbookError, match="Transactions sheet is empty"):
-        _parse_transactions(ro[spec.SHEET_TRANSACTIONS], [], [])
+        _parse_transactions(cast("Worksheet", ro[spec.SHEET_TRANSACTIONS]), [], [])
 
     bad = _new_wb()
     ws = bad.create_sheet(spec.SHEET_TRANSACTIONS)

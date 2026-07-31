@@ -12,12 +12,71 @@ rather than a raw dump.
 import datetime
 from collections import defaultdict
 from io import BytesIO
+from typing import TypedDict, cast
 
 from openpyxl import Workbook
+from openpyxl.cell.cell import Cell
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
+from openpyxl.worksheet.worksheet import Worksheet
 
 from . import spec
+
+
+class GroupSnap(TypedDict):
+    id: int
+    name: str
+    kind: str
+    sort: int
+
+
+class CategorySnap(TypedDict):
+    id: int
+    groupId: int
+    name: str
+    keywords: str
+
+
+class AccountSnap(TypedDict):
+    id: int
+    name: str
+    currency: str
+
+
+class SplitSnap(TypedDict):
+    id: int
+    amount: int
+    categoryId: int
+    comment: str
+
+
+class TransactionSnap(TypedDict):
+    id: int | str
+    date: str
+    accountId: int
+    amount: int
+    bankCategory: str
+    mcc: str
+    description: str
+    categoryId: int | None
+    comment: str
+    transferId: int | None
+    splits: list[SplitSnap]
+
+
+class BudgetSnap(TypedDict):
+    categoryId: int
+    year: int
+    month: int
+    amount: int
+
+
+class WorkbookSnap(TypedDict):
+    categories: list[CategorySnap]
+    groups: list[GroupSnap]
+    accounts: list[AccountSnap]
+    transactions: list[TransactionSnap]
+    budgets: list[BudgetSnap]
 
 BOLD = Font(bold=True)
 CENTER = Alignment(horizontal="center")
@@ -41,26 +100,26 @@ def _parse_dt(value: str) -> datetime.datetime:
         return datetime.datetime.fromisoformat(value[:10])
 
 
-def _text(value):
+def _text(value: str) -> str:
     if isinstance(value, str) and value.startswith(("=", "+", "@")):
         return "'" + value
     return value
 
 
-def _style_header(ws, row):
+def _style_header(ws: Worksheet, row: int) -> None:
     for cell in ws[row]:
         cell.font = HEADER_FONT
         cell.fill = HEADER_FILL
 
 
-def _fill_band(ws, row, last_col, fill, font):
+def _fill_band(ws: Worksheet, row: int, last_col: int, fill: PatternFill, font: Font) -> None:
     for c in range(1, last_col + 1):
         cell = ws.cell(row=row, column=c)
         cell.fill = fill
         cell.font = font
 
 
-def _balance_font(kop: int):
+def _balance_font(kop: int) -> Font:
     if kop > 0:
         return POSITIVE_FONT
     if kop < 0:
@@ -68,7 +127,7 @@ def _balance_font(kop: int):
     return NUMBER_FONT
 
 
-def _money_cell(ws, row: int, col: int, kop: int):
+def _money_cell(ws: Worksheet, row: int, col: int, kop: int) -> Cell:
     cell = ws.cell(row=row, column=col, value=spec.kop_to_rub(kop))
     cell.number_format = spec.MONEY_FORMAT
     cell.font = NUMBER_FONT
@@ -76,7 +135,7 @@ def _money_cell(ws, row: int, col: int, kop: int):
     return cell
 
 
-def _categories_sheet(ws, snap):
+def _categories_sheet(ws: Worksheet, snap: WorkbookSnap) -> None:
     ws.title = spec.SHEET_CATEGORIES
     ws.append(spec.CATEGORY_HEADERS)
     _style_header(ws, 1)
@@ -101,24 +160,34 @@ def _categories_sheet(ws, snap):
     ws.freeze_panes = "A2"
 
 
-def _effective_transactions(snap):
+def _effective_transactions(snap: WorkbookSnap) -> list[TransactionSnap]:
     """Yield categorized split parts instead of their uncategorized container."""
+    effective: list[TransactionSnap] = []
     for tx in snap["transactions"]:
         if not tx.get("splits"):
-            yield tx
+            effective.append(tx)
             continue
         for part in tx["splits"]:
-            yield {
-                **tx,
-                "id": f"{tx['id']}:{part['id']}",
-                "amount": part["amount"],
-                "categoryId": part["categoryId"],
-                "comment": part.get("comment", ""),
-                "splits": [],
-            }
+            effective.append(
+                {
+                    **tx,
+                    "id": f"{tx['id']}:{part['id']}",
+                    "amount": part["amount"],
+                    "categoryId": part["categoryId"],
+                    "comment": part.get("comment", ""),
+                    "splits": [],
+                }
+            )
+    return effective
 
 
-def _transactions_sheet(ws, snap, cat_names, acct_names, acct_currency):
+def _transactions_sheet(
+    ws: Worksheet,
+    snap: WorkbookSnap,
+    cat_names: dict[int, str],
+    acct_names: dict[int, str],
+    acct_currency: dict[int, str],
+) -> None:
     ws.append(spec.TRANSACTION_HEADERS)
     _style_header(ws, 1)
     row = 2
@@ -139,15 +208,17 @@ def _transactions_sheet(ws, snap, cat_names, acct_names, acct_currency):
         ws.cell(row=row, column=11, value=_text(tx["bankCategory"]))
         ws.cell(row=row, column=12, value=_text(tx["mcc"]))
         ws.cell(row=row, column=13, value=_text(tx["description"]))
-        ws.cell(row=row, column=14, value=_text(cat_names.get(tx["categoryId"], "")))
+        category_id = tx["categoryId"]
+        category_name = cat_names.get(category_id, "") if category_id is not None else ""
+        ws.cell(row=row, column=14, value=_text(category_name))
         ws.cell(row=row, column=15, value=_text(acct_names.get(tx["accountId"], "")))
         ws.cell(row=row, column=16, value=_text(tx["comment"]))
         row += 1
     ws.freeze_panes = "A2"
 
 
-def _month_activity(snap):
-    activity: defaultdict[tuple[int, int, int], int] = defaultdict(int)
+def _month_activity(snap: WorkbookSnap) -> dict[tuple[int, int, int], int]:
+    activity: dict[tuple[int, int, int], int] = defaultdict(int)
     for tx in _effective_transactions(snap):
         if tx["categoryId"] is None:
             continue
@@ -156,14 +227,20 @@ def _month_activity(snap):
     return activity
 
 
-def _budget_index(snap):
-    budgets = {}
+def _budget_index(snap: WorkbookSnap) -> dict[tuple[int, int, int], int]:
+    budgets: dict[tuple[int, int, int], int] = {}
     for cell in snap["budgets"]:
         budgets[(cell["categoryId"], cell["year"], cell["month"])] = cell["amount"]
     return budgets
 
 
-def _year_sheet(ws, year, snap, activity, budgets):
+def _year_sheet(
+    ws: Worksheet,
+    year: int,
+    snap: WorkbookSnap,
+    activity: dict[tuple[int, int, int], int],
+    budgets: dict[tuple[int, int, int], int],
+) -> None:
     for m in range(12):
         col = 2 + m * 3
         head = ws.cell(row=1, column=col, value=spec.MONTHS[m])
@@ -240,7 +317,9 @@ def _year_sheet(ws, year, snap, activity, budgets):
         ws.column_dimensions[get_column_letter(c)].width = 11
 
 
-def _dashdata_sheet(ws, snap, activity):
+def _dashdata_sheet(
+    ws: Worksheet, snap: WorkbookSnap, activity: dict[tuple[int, int, int], int]
+) -> None:
     ws.append(spec.DASH_HEADERS)
     _style_header(ws, 1)
     monthly: defaultdict[tuple[int, int], list[int]] = defaultdict(lambda: [0, 0])
@@ -249,7 +328,10 @@ def _dashdata_sheet(ws, snap, activity):
     for tx in _effective_transactions(snap):
         if tx["transferId"]:
             continue
-        kind = cat_kind.get(tx["categoryId"])
+        category_id = tx["categoryId"]
+        if category_id is None:
+            continue
+        kind = cat_kind.get(category_id)
         if kind is None:
             continue
         dt = _parse_dt(tx["date"])
@@ -286,7 +368,7 @@ def _dashdata_sheet(ws, snap, activity):
     ws.freeze_panes = "A2"
 
 
-def build_workbook(snap) -> Workbook:
+def build_workbook(snap: WorkbookSnap) -> Workbook:
     cat_names = {c["id"]: c["name"] for c in snap["categories"]}
     acct_names = {a["id"]: a["name"] for a in snap["accounts"]}
     acct_currency = {a["id"]: a["currency"] for a in snap["accounts"]}
@@ -294,7 +376,7 @@ def build_workbook(snap) -> Workbook:
     budgets = _budget_index(snap)
 
     wb = Workbook()
-    _categories_sheet(wb.active, snap)
+    _categories_sheet(cast("Worksheet", wb.active), snap)
     _transactions_sheet(
         wb.create_sheet(spec.SHEET_TRANSACTIONS), snap, cat_names, acct_names, acct_currency
     )
@@ -305,7 +387,7 @@ def build_workbook(snap) -> Workbook:
     return wb
 
 
-def workbook_bytes(snap) -> bytes:
+def workbook_bytes(snap: WorkbookSnap) -> bytes:
     buf = BytesIO()
     build_workbook(snap).save(buf)
     return buf.getvalue()
