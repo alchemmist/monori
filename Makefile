@@ -5,8 +5,6 @@ COMPOSE ?= $(if $(HAVE_DOCKER_COMPOSE),docker compose,$(if $(HAVE_PODMAN_COMPOSE
 MUTATION_THRESHOLD ?= 85
 
 WEBBIN := web/node_modules/.bin
-PYTHON_TYPECHECK_TARGETS := $(shell git ls-files '*.py')
-PYTHON_RUFF_TARGETS := $(shell git ls-files '*.py')
 
 .DEFAULT_GOAL := up
 
@@ -66,16 +64,16 @@ schema-diagram:
 
 fmt: schema-diagram
 	$(WEBBIN)/prettier --write .
-	@(uv run --project server ruff check --config server/pyproject.toml $(PYTHON_RUFF_TARGETS) --fix >/dev/null 2>&1 || true)
-	uv run --project server ruff format --config server/pyproject.toml $(PYTHON_RUFF_TARGETS)
+	@(uv run --project server ruff check --config server/pyproject.toml . --fix >/dev/null 2>&1 || true)
+	uv run --project server ruff format --config server/pyproject.toml .
 	$(SQLFLUFF) fix server/schema.sql
 	@-$(WEBBIN)/markdownlint-cli2 --fix >/dev/null 2>&1
 	@files=$$(git ls-files '*.sh'); [ -z "$$files" ] || shfmt -w $$files
 
 fmt-check:
 	$(WEBBIN)/prettier --check .
-	uv run --project server ruff check --config server/pyproject.toml --select I $(PYTHON_RUFF_TARGETS)
-	uv run --project server ruff format --config server/pyproject.toml --check $(PYTHON_RUFF_TARGETS)
+	uv run --project server ruff check --config server/pyproject.toml --select I .
+	uv run --project server ruff format --config server/pyproject.toml --check .
 	$(SQLFLUFF) lint server/schema.sql
 
 lint: lint-web lint-css lint-html lint-server lint-sql lint-yaml lint-md lint-docs lint-actions lint-docker lint-shell spell
@@ -90,7 +88,7 @@ lint-html:
 	$(WEBBIN)/htmlhint web/index.html
 
 lint-server:
-	uv run --project server ruff check --config server/pyproject.toml $(PYTHON_RUFF_TARGETS)
+	uv run --project server ruff check --config server/pyproject.toml .
 
 lint-sql:
 	$(SQLFLUFF) lint server/schema.sql
@@ -126,7 +124,7 @@ type-front:
 
 type-back:
 	@set +e; \
-	MYPYPATH=server uv run --project server --extra connectors mypy --config-file server/pyproject.toml --strict $(PYTHON_TYPECHECK_TARGETS); py=$$?; \
+	MYPYPATH=server uv run --project server --extra connectors mypy --config-file server/pyproject.toml --strict .; py=$$?; \
 	echo "type-back: python=$$py"; \
 	test $$py -eq 0
 
