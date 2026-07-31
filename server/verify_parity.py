@@ -42,7 +42,7 @@ def main(db_path=None):
             "SELECT c.name FROM categories c JOIN category_groups g ON g.id = c.group_id WHERE g.kind='income'"  # noqa: E501
         )
     }
-    income = defaultdict(int)
+    income: defaultdict[tuple[int, int], int] = defaultdict(int)
     for (y, m, cat), v in outflows.items():
         if cat in income_cats:
             income[(y, m)] += v

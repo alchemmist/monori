@@ -1,9 +1,11 @@
 import pytest
+from fastapi.testclient import TestClient
+from tests.conftest import Api
 
 pytestmark = pytest.mark.integration
 
 
-def test_category_create_sort_and_conflicts(api, client):
+def test_category_create_sort_and_conflicts(api: Api, client: TestClient) -> None:
     g = api.group("Expenses")
     a = api.category("A", g)
     b = api.category("B", g)
@@ -14,7 +16,7 @@ def test_category_create_sort_and_conflicts(api, client):
     assert a != b
 
 
-def test_category_patch_move_group_and_name(api, client):
+def test_category_patch_move_group_and_name(api: Api, client: TestClient) -> None:
     g1 = api.group("Expenses", "expense")
     g2 = api.group("Income", "income")
     a = api.category("A", g1)
@@ -28,7 +30,7 @@ def test_category_patch_move_group_and_name(api, client):
     assert api.cat(a)["keywords"] == "x|y"
 
 
-def test_category_reorder_and_archive_roundtrip(api, client):
+def test_category_reorder_and_archive_roundtrip(api: Api, client: TestClient) -> None:
     g = api.group("Expenses")
     a = api.category("A", g)
     b = api.category("B", g)
@@ -42,7 +44,7 @@ def test_category_reorder_and_archive_roundtrip(api, client):
     assert api.cat(a)["archived"] is False
 
 
-def test_category_delete_never_reassigns(api, client):
+def test_category_delete_never_reassigns(api: Api, client: TestClient) -> None:
     # moving transactions is /merge's job now; delete only ever uncategorizes,
     # and a leftover reassignTo from an old client must not resurrect the move
     g = api.group("Expenses")
@@ -58,7 +60,7 @@ def test_category_delete_never_reassigns(api, client):
     assert {x["categoryId"]: x["amount"] for x in snap["budgets"]} == {b: 2000}
 
 
-def test_category_delete_without_reassign_uncategorizes(api, client):
+def test_category_delete_without_reassign_uncategorizes(api: Api, client: TestClient) -> None:
     g = api.group("Expenses")
     a = api.category("A", g)
     tx = api.tx("2026-01-01T00:00:00", -500, categoryId=a)
@@ -67,7 +69,7 @@ def test_category_delete_without_reassign_uncategorizes(api, client):
     assert client.delete("/api/categories/999").status_code == 404
 
 
-def test_category_merge_moves_tx_and_unions_keywords(api, client):
+def test_category_merge_moves_tx_and_unions_keywords(api: Api, client: TestClient) -> None:
     g = api.group("Expenses")
     src = api.category("Coffee", g, "cofix|STARBUCKS")
     dst = api.category("Cafe", g, "starbucks|shokoladnitsa")
@@ -94,7 +96,7 @@ def test_category_merge_moves_tx_and_unions_keywords(api, client):
     assert {b["categoryId"] for b in snap["budgets"]} == {dst}
 
 
-def test_merge_across_income_and_expense_is_refused(api, client):
+def test_merge_across_income_and_expense_is_refused(api: Api, client: TestClient) -> None:
     # budgeting and analytics read the sign off the group kind, so this merge
     # would reinterpret the whole moved history — the server refuses it even
     # though the picker never offers it
@@ -112,7 +114,7 @@ def test_merge_across_income_and_expense_is_refused(api, client):
     assert [(b["categoryId"], b["amount"]) for b in snap["budgets"]] == [(salary, 700)]
 
 
-def test_merge_with_empty_keywords(api, client):
+def test_merge_with_empty_keywords(api: Api, client: TestClient) -> None:
     g = api.group("Expenses")
     src = api.category("Src", g, "")
     dst = api.category("Dst", g, "coffee")

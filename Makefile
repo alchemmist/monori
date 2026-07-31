@@ -5,15 +5,15 @@ COMPOSE ?= $(if $(HAVE_DOCKER_COMPOSE),docker compose,$(if $(HAVE_PODMAN_COMPOSE
 MUTATION_THRESHOLD ?= 85
 
 WEBBIN := web/node_modules/.bin
-PYTHON_TYPECHECK_TARGETS := app tests migrations export_snapshot.py migrate.py verify_parity.py ../scripts ../migration ../web/prototypes
-PYTHON_RUFF_TARGETS := $(PYTHON_TYPECHECK_TARGETS)
+PYTHON_TYPECHECK_TARGETS := $(shell git ls-files '*.py')
+PYTHON_RUFF_TARGETS := $(shell git ls-files '*.py')
 
 .DEFAULT_GOAL := up
 
 .PHONY: install setup tools dev down reset-db deploy api web build \
         fmt fmt-check \
         lint lint-web lint-css lint-html lint-server lint-sql lint-yaml lint-md lint-docs lint-actions lint-docker lint-shell spell \
-        typecheck analyze audit audit-deps audit-deps-py audit-secrets \
+        type type-front type-back typecheck analyze audit audit-deps audit-deps-py audit-secrets \
         test t-fast t-medium t-slow t-slow-ui coverage mutation m-front m-front-file m-back \
         schema-diagram check
 
@@ -88,7 +88,7 @@ lint-html:
 	$(WEBBIN)/htmlhint web/index.html
 
 lint-server:
-	cd server && uv run ruff check --config pyproject.toml $(PYTHON_RUFF_TARGETS)
+	uv run --project server ruff check --config server/pyproject.toml $(PYTHON_RUFF_TARGETS)
 
 lint-sql:
 	$(SQLFLUFF) lint server/schema.sql
@@ -117,9 +117,18 @@ spell:
 		server/export_snapshot.py server/migrate.py server/verify_parity.py \
 		README.md web/README.md docs Makefile .github
 
-typecheck:
-	cd server && uv run mypy --strict $(PYTHON_TYPECHECK_TARGETS)
+type: type-back type-front
+
+type-front:
 	cd web && npm run --silent typecheck
+
+type-back:
+	@set +e; \
+	MYPYPATH=server uv run --project server --extra connectors mypy --config-file server/pyproject.toml --strict $(PYTHON_TYPECHECK_TARGETS); py=$$?; \
+	echo "type-back: python=$$py"; \
+	test $$py -eq 0
+
+typecheck: type
 
 analyze:
 	cd server && uv run bandit -c pyproject.toml -q -r app
@@ -197,4 +206,4 @@ mutation:
 	echo "── mutation gates: frontend exit=$$front, backend exit=$$back ──"; \
 	if [ $$front -ne 0 ] || [ $$back -ne 0 ]; then exit 1; fi
 
-check: fmt-check lint typecheck analyze test
+check: fmt-check lint type analyze test

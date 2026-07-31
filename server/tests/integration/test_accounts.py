@@ -1,15 +1,17 @@
 import pytest
+from fastapi.testclient import TestClient
+from tests.conftest import Api
 
 pytestmark = pytest.mark.integration
 
 
-def test_default_account_exists(api):
+def test_default_account_exists(api: Api) -> None:
     accounts = api.snapshot()["accounts"]
     assert [a["name"] for a in accounts] == ["Cash"]
     assert accounts[0]["type"] == "cash" and accounts[0]["currency"] == "RUB"
 
 
-def test_account_crud_and_uniqueness(api, client):
+def test_account_crud_and_uniqueness(api: Api, client: TestClient) -> None:
     cash = api.account("Vault", type="cash", icon="ruble", openingBalance=5000)
     row = api.acct(cash)
     assert row["type"] == "cash" and row["openingBalance"] == 5000 and row["icon"] == "ruble"
@@ -28,7 +30,7 @@ def test_account_crud_and_uniqueness(api, client):
     assert row["name"] == "Wallet" and row["archived"] is True
 
 
-def test_account_color_and_custom_image(api, client):
+def test_account_color_and_custom_image(api: Api, client: TestClient) -> None:
     acc = api.account("Broker", color="#2f6feb")
     assert api.acct(acc)["color"] == "#2f6feb"
 
@@ -55,7 +57,7 @@ def test_account_color_and_custom_image(api, client):
     assert not_image.status_code == 400
 
 
-def test_reorder_accounts(api, client):
+def test_reorder_accounts(api: Api, client: TestClient) -> None:
     a = api.account("A")
     b = api.account("B")
     default = api.default_account()
@@ -68,7 +70,7 @@ def test_reorder_accounts(api, client):
     assert bad.status_code == 400
 
 
-def test_delete_reassigns_transactions(api, client):
+def test_delete_reassigns_transactions(api: Api, client: TestClient) -> None:
     default = api.default_account()
     cash = api.account("Vault")
     tx = api.tx("2026-03-01T10:00:00", -1000, accountId=cash)
@@ -92,19 +94,19 @@ def test_delete_reassigns_transactions(api, client):
     assert stored == tx_hash(default, "2026-03-01T10:00:00", -1000, "")
 
 
-def test_cannot_delete_last_account(api, client):
+def test_cannot_delete_last_account(api: Api, client: TestClient) -> None:
     default = api.default_account()
     r = client.delete(f"/api/accounts/{default}")
     assert r.status_code == 400
 
 
-def test_empty_account_deletes_without_target(api, client):
+def test_empty_account_deletes_without_target(api: Api, client: TestClient) -> None:
     acc = api.account("Scratch")
     r = client.delete(f"/api/accounts/{acc}")
     assert r.status_code == 200
 
 
-def test_transactions_filter_by_account(api, client):
+def test_transactions_filter_by_account(api: Api, client: TestClient) -> None:
     default = api.default_account()
     cash = api.account("Vault")
     api.tx("2026-03-01T10:00:00", -1000, accountId=default)
@@ -113,7 +115,7 @@ def test_transactions_filter_by_account(api, client):
     assert only_cash["total"] == 1 and only_cash["rows"][0]["accountId"] == cash
 
 
-def test_reconcile_posts_adjustment_for_the_delta(api, client):
+def test_reconcile_posts_adjustment_for_the_delta(api: Api, client: TestClient) -> None:
     acc = api.account("Vault", openingBalance=10000)
     cat = api.category("Misc", api.group("Stuff"))
     api.tx("2026-03-01T10:00:00", -2500, accountId=acc, categoryId=cat)  # balance now 7500
@@ -130,7 +132,7 @@ def test_reconcile_posts_adjustment_for_the_delta(api, client):
     assert again.json()["delta"] == 0
 
 
-def test_reconcile_ignores_hidden_transactions(api, client):
+def test_reconcile_ignores_hidden_transactions(api: Api, client: TestClient) -> None:
     acc = api.account("Vault", openingBalance=10000)
     junk = api.tx("2026-03-01T10:00:00", -2500, accountId=acc)
     client.patch(f"/api/transactions/{junk}", json={"hidden": True})
@@ -140,7 +142,7 @@ def test_reconcile_ignores_hidden_transactions(api, client):
     assert r.status_code == 200 and r.json()["delta"] == 0
 
 
-def test_reconcile_skips_rows_the_balance_does_not_count(api, client):
+def test_reconcile_skips_rows_the_balance_does_not_count(api: Api, client: TestClient) -> None:
     """
     An uncategorized row that is no transfer is money the ledger has not
     accepted: the account pages leave it out of the balance, so reconciling
@@ -153,7 +155,7 @@ def test_reconcile_skips_rows_the_balance_does_not_count(api, client):
     assert r.status_code == 200 and r.json()["delta"] == 0
 
 
-def test_import_targets_account(api, client):
+def test_import_targets_account(api: Api, client: TestClient) -> None:
     cash = api.account("Vault")
     rows = api.preview(api.statement)
     client.post("/api/import/commit", json={"accountId": cash, "rows": rows})
@@ -164,7 +166,7 @@ def test_import_targets_account(api, client):
     assert bad.status_code == 400
 
 
-def test_card_tails_stored_normalized_and_validated(api, client):
+def test_card_tails_stored_normalized_and_validated(api: Api, client: TestClient) -> None:
     acc = api.account("Card", cardTails=["*8181", "8181", "29-47"])
     row = api.acct(acc)
     assert row["cardTails"] == ["8181", "2947"]

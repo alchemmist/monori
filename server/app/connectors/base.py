@@ -40,10 +40,10 @@ class Connector:
     hidden = False
     #: fields the user fills once per bank login (one form entry each:
     #: name, label, secret, required, help)
-    connection_params: list[dict] = []
+    connection_params: list[dict[str, object]] = []
     #: fields locating one bank account within the login, stored per monori
     #: account as its bank_ref
-    account_params: list[dict] = []
+    account_params: list[dict[str, object]] = []
 
     def __init__(self, credentials, session=None, account_ref=None):
         self.credentials = credentials or {}

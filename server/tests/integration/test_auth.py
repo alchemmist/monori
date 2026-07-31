@@ -1,11 +1,11 @@
 import pytest
-
+from fastapi.testclient import TestClient
 from tests.conftest import login_as
 
 pytestmark = pytest.mark.integration
 
 
-def test_data_routes_require_jwt(anon):
+def test_data_routes_require_jwt(anon: TestClient) -> None:
     assert anon.get("/api/snapshot").status_code == 401
     assert anon.get("/api/groups").status_code == 401
     assert anon.post("/api/groups", json={"name": "X", "kind": "expense"}).status_code == 401
@@ -19,7 +19,7 @@ def test_data_routes_require_jwt(anon):
     )
 
 
-def test_users_are_isolated(anon):
+def test_users_are_isolated(anon: TestClient) -> None:
     a = login_as(anon, "alice@example.com")
     b = login_as(anon, "bob@example.com")
 
@@ -67,7 +67,7 @@ def test_users_are_isolated(anon):
     assert bob_acct != alice_acct
 
 
-def test_same_names_allowed_across_users(anon):
+def test_same_names_allowed_across_users(anon: TestClient) -> None:
     a = login_as(anon, "u1@example.com")
     b = login_as(anon, "u2@example.com")
     assert (
@@ -83,7 +83,7 @@ def test_same_names_allowed_across_users(anon):
     assert anon.post("/api/accounts", json={"name": "Vault"}, headers=b).status_code == 409
 
 
-def test_first_user_claims_legacy_data(anon):
+def test_first_user_claims_legacy_data(anon: TestClient) -> None:
     import app.db as dbmod
 
     c = dbmod.connect()

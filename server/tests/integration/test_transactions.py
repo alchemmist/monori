@@ -1,9 +1,11 @@
 import pytest
+from fastapi.testclient import TestClient
+from tests.conftest import Api
 
 pytestmark = pytest.mark.integration
 
 
-def test_transaction_create_variants(api, client):
+def test_transaction_create_variants(api: Api, client: TestClient) -> None:
     g = api.group("Expenses")
     cat = api.category("Food", g)
     manual = api.tx("2026-02-03T10:00:00", -12345, description="Lenta", categoryId=cat)
@@ -24,7 +26,7 @@ def test_transaction_create_variants(api, client):
     assert bad_acct.status_code == 400 and "account" in bad_acct.json()["detail"].lower()
 
 
-def test_transaction_partial_patch_preserves_other_fields(api, client):
+def test_transaction_partial_patch_preserves_other_fields(api: Api, client: TestClient) -> None:
     g = api.group("Expenses")
     cat = api.category("Food", g)
     tx = api.tx("2026-02-03T10:00:00", -100, description="Lenta", categoryId=cat, comment="a")
@@ -44,7 +46,7 @@ def test_transaction_partial_patch_preserves_other_fields(api, client):
     assert client.patch("/api/transactions/999", json={"amount": 1}).status_code == 404
 
 
-def test_transaction_category_must_match_amount_direction(api, client):
+def test_transaction_category_must_match_amount_direction(api: Api, client: TestClient) -> None:
     expenses = api.group("Expenses")
     income = api.group("Income", "income")
     food = api.category("Food", expenses)
@@ -82,7 +84,7 @@ def test_transaction_category_must_match_amount_direction(api, client):
     assert api.tx_by(income_tx)["categoryId"] == salary
 
 
-def test_transaction_patch_recomputes_hash_for_dedup(api, client):
+def test_transaction_patch_recomputes_hash_for_dedup(api: Api, client: TestClient) -> None:
     """
     Editing date/amount/description must recompute the dedup hash: a statement
     row that matched the old content should stop being a duplicate.
@@ -94,7 +96,7 @@ def test_transaction_patch_recomputes_hash_for_dedup(api, client):
     assert api.preview(api.statement)[0]["duplicate"] is False
 
 
-def test_transaction_list_filters_combined_and_pagination(api, client):
+def test_transaction_list_filters_combined_and_pagination(api: Api, client: TestClient) -> None:
     g = api.group("Expenses")
     inc = api.group("Income", "income")
     food = api.category("Food", g)
@@ -123,7 +125,7 @@ def test_transaction_list_filters_combined_and_pagination(api, client):
     assert client.get("/api/transactions?limit=99999").status_code == 422
 
 
-def test_transaction_to_filter_covers_the_whole_boundary_day(api, client):
+def test_transaction_to_filter_covers_the_whole_boundary_day(api: Api, client: TestClient) -> None:
     api.tx("2026-02-28T23:59:59", -100)  # late on the boundary day
     api.tx("2026-03-01T00:00:00", -200)  # next day
     assert client.get("/api/transactions?to=2026-02-28").json()["total"] == 1
@@ -131,7 +133,7 @@ def test_transaction_to_filter_covers_the_whole_boundary_day(api, client):
     assert client.get("/api/transactions?from=2026-03-01").json()["total"] == 1
 
 
-def test_transaction_bulk_actions(api, client):
+def test_transaction_bulk_actions(api: Api, client: TestClient) -> None:
     g = api.group("Expenses")
     food = api.category("Food", g)
     ids = [api.tx(f"2026-01-0{i}T00:00:00", -i) for i in range(1, 4)]
@@ -170,13 +172,13 @@ def test_transaction_bulk_actions(api, client):
     assert client.get("/api/transactions").json()["total"] == 0
 
 
-def test_transaction_delete(api, client):
+def test_transaction_delete(api: Api, client: TestClient) -> None:
     tx = api.tx("2026-01-01T00:00:00", -1)
     assert client.delete(f"/api/transactions/{tx}").status_code == 200
     assert client.delete(f"/api/transactions/{tx}").status_code == 404
 
 
-def test_splits_are_atomic_and_visible_in_snapshot(api, client):
+def test_splits_are_atomic_and_visible_in_snapshot(api: Api, client: TestClient) -> None:
     expenses = api.group("Expenses")
     groceries = api.category("Groceries", expenses)
     household = api.category("Household", expenses)
@@ -216,7 +218,7 @@ def test_splits_are_atomic_and_visible_in_snapshot(api, client):
     assert api.tx_by(tx)["splits"] == []
 
 
-def test_transaction_split_validates_owner_kind_and_sign(api, client):
+def test_transaction_split_validates_owner_kind_and_sign(api: Api, client: TestClient) -> None:
     expenses = api.group("Expenses")
     income = api.group("Income", "income")
     food = api.category("Food", expenses)
@@ -233,7 +235,7 @@ def test_transaction_split_validates_owner_kind_and_sign(api, client):
         )
 
 
-def test_hidden_transaction_disappears_from_list_and_snapshot(api, client):
+def test_hidden_transaction_disappears_from_list_and_snapshot(api: Api, client: TestClient) -> None:
     keep = api.tx("2026-01-01T00:00:00", -100, description="Keep")
     junk = api.tx("2026-01-02T00:00:00", -200, description="Junk")
 
@@ -257,7 +259,7 @@ def test_hidden_transaction_disappears_from_list_and_snapshot(api, client):
     assert client.get("/api/transactions?hidden=true").json()["total"] == 0
 
 
-def test_patch_without_hidden_keeps_the_flag(api, client):
+def test_patch_without_hidden_keeps_the_flag(api: Api, client: TestClient) -> None:
     tx = api.tx("2026-01-01T00:00:00", -100, description="Junk")
     client.patch(f"/api/transactions/{tx}", json={"hidden": True})
     client.patch(f"/api/transactions/{tx}", json={"comment": "still junk"})
@@ -265,7 +267,7 @@ def test_patch_without_hidden_keeps_the_flag(api, client):
     assert hidden["total"] == 1 and hidden["rows"][0]["comment"] == "still junk"
 
 
-def test_hidden_transaction_still_blocks_reimport(api, client):
+def test_hidden_transaction_still_blocks_reimport(api: Api, client: TestClient) -> None:
     tx = api.tx("2026-01-05T10:00:00", -10000, description="Lenta")
     assert client.patch(f"/api/transactions/{tx}", json={"hidden": True}).status_code == 200
     assert client.get("/api/transactions").json()["total"] == 0

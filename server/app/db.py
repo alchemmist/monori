@@ -9,10 +9,14 @@ carry ``PRAGMA user_version`` — they are adopted by stamping the matching
 revision, then upgraded.
 """
 
+from __future__ import annotations
+
 import os
 import pathlib
 import sqlite3
 import threading
+
+from alembic.config import Config
 
 DB_PATH = os.environ.get(
     "MONORI_DB", str(pathlib.Path(__file__).resolve().parent.parent / "data" / "monori.db")
@@ -29,16 +33,14 @@ _bootstrapped: set[str] = set()
 _bootstrap_lock = threading.Lock()
 
 
-def _alembic_config(path):
-    from alembic.config import Config
-
+def _alembic_config(path: pathlib.Path) -> Config:
     cfg = Config()
     cfg.set_main_option("script_location", str(MIGRATIONS_PATH))
     cfg.set_main_option("sqlalchemy.url", f"sqlite:///{path}")
     return cfg
 
 
-def _bootstrap(path):
+def _bootstrap(path: pathlib.Path) -> None:
     from alembic import command
 
     conn = sqlite3.connect(path)
@@ -64,7 +66,7 @@ def _bootstrap(path):
         command.stamp(cfg, "head")
 
 
-def connect(db_path=None):
+def connect(db_path: str | os.PathLike[str] | None = None) -> sqlite3.Connection:
     path = pathlib.Path(db_path or DB_PATH)
     path.parent.mkdir(parents=True, exist_ok=True)
     key = str(path.resolve())
@@ -79,7 +81,7 @@ def connect(db_path=None):
     return conn
 
 
-def begin_write(conn):
+def begin_write(conn: sqlite3.Connection) -> None:
     """Acquire SQLite's write reservation before correlated reads and writes."""
     if not conn.in_transaction:
         conn.execute("BEGIN IMMEDIATE")

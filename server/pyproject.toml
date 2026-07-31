@@ -31,6 +31,11 @@ dev = [
     "httpx2>=2.5.0",
     "mutmut>=3.6.0",
     "pip-audit>=2.10.1",
+    "types-openpyxl>=3.1.5.20260724",
+    "google-api-python-client>=2.0",
+    "google-api-python-client-stubs>=1.39.0",
+    "google-auth>=2.0",
+    "google-auth-stubs>=0.2",
 ]
 
 [tool.pytest.ini_options]

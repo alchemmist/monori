@@ -1,9 +1,11 @@
 import pytest
+from fastapi.testclient import TestClient
+from tests.conftest import Api
 
 pytestmark = pytest.mark.integration
 
 
-def test_budget_put_upsert_and_delete(api, client):
+def test_budget_put_upsert_and_delete(api: Api, client: TestClient) -> None:
     g = api.group("Expenses")
     a = api.category("A", g)
     client.put("/api/budgets", json={"categoryId": a, "year": 2026, "month": 1, "amount": 1000})
@@ -16,7 +18,7 @@ def test_budget_put_upsert_and_delete(api, client):
     assert r.status_code == 422
 
 
-def test_budget_bulk_and_copy_overwrites(api, client):
+def test_budget_bulk_and_copy_overwrites(api: Api, client: TestClient) -> None:
     g = api.group("Expenses")
     a = api.category("A", g)
     b = api.category("B", g)
@@ -47,7 +49,7 @@ def test_budget_bulk_and_copy_overwrites(api, client):
     assert len([x for x in api.snapshot()["budgets"] if x["year"] == 2027]) == 2
 
 
-def test_budget_copy_validation_and_empty_source(api, client):
+def test_budget_copy_validation_and_empty_source(api: Api, client: TestClient) -> None:
     assert (
         client.post(
             "/api/budgets/copy", json={"fromYear": 2026, "toYear": 2027, "fromMonth": 1}
@@ -71,7 +73,7 @@ def test_budget_copy_validation_and_empty_source(api, client):
     assert api.snapshot()["budgets"] == []
 
 
-def test_budget_rejects_unknown_category(client):
+def test_budget_rejects_unknown_category(client: TestClient) -> None:
     r = client.put(
         "/api/budgets", json={"categoryId": 999, "year": 2026, "month": 1, "amount": 100}
     )

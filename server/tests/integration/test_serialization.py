@@ -1,9 +1,11 @@
 import pytest
+from fastapi.testclient import TestClient
+from tests.conftest import Api
 
 pytestmark = pytest.mark.integration
 
 
-def test_snapshot_serialization_contract(api, client):
+def test_snapshot_serialization_contract(api: Api, client: TestClient) -> None:
     """
     Pin the exact shape every serializer emits — API consumers depend on it.
     """
@@ -73,7 +75,7 @@ def test_snapshot_serialization_contract(api, client):
     assert snap["budgets"] == [{"categoryId": cat, "year": 2026, "month": 3, "amount": 5000}]
 
 
-def test_snapshot_ordering_is_deterministic(api):
+def test_snapshot_ordering_is_deterministic(api: Api) -> None:
     """
     Rows sharing a sort key fall back to id, so the order is stable.
     """

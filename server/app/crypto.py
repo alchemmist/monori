@@ -9,9 +9,14 @@ auth secret. Provide the env var explicitly to share one key across instances or
 to rotate it.
 """
 
+from __future__ import annotations
+
 import json
 import os
 import pathlib
+from typing import cast
+
+from cryptography.fernet import Fernet
 
 from . import db as dbmod
 from .security import load_or_create_secret_file
@@ -26,21 +31,21 @@ class CryptoUnavailable(RuntimeError):
 _key_cache: dict[str, str] = {}
 
 
-def available():
+def available() -> bool:
     return True
 
 
-def generate_key():
+def generate_key() -> str:
     from cryptography.fernet import Fernet
 
     return Fernet.generate_key().decode()
 
 
-def _key_path():
+def _key_path() -> pathlib.Path:
     return pathlib.Path(dbmod.DB_PATH).parent / ".encryption_key"
 
 
-def _encryption_key():
+def _encryption_key() -> str:
     env = os.environ.get("MONORI_ENCRYPTION_KEY")
     if env:
         return env
@@ -54,23 +59,21 @@ def _encryption_key():
     return value
 
 
-def _fernet():
-    from cryptography.fernet import Fernet
-
+def _fernet() -> Fernet:
     return Fernet(_encryption_key().encode())
 
 
-def encrypt(data):
+def encrypt(data: object) -> bytes:
     """
     Encrypt a JSON-serializable dict to an opaque token (bytes).
     """
     return _fernet().encrypt(json.dumps(data).encode())
 
 
-def decrypt(blob):
+def decrypt(blob: bytes | memoryview | None) -> object | None:
     """
     Decrypt a token produced by :func:`encrypt` back to its dict.
     """
     if blob is None:
         return None
-    return json.loads(_fernet().decrypt(bytes(blob)).decode())
+    return cast("object", json.loads(_fernet().decrypt(bytes(blob)).decode()))

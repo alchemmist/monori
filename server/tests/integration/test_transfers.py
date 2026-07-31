@@ -1,15 +1,24 @@
 import re
 
 import pytest
+from fastapi.testclient import TestClient
+from tests.conftest import Api, _SnapshotTransaction
 
 pytestmark = pytest.mark.integration
 
 
-def legs(api, transfer_id):
+def legs(api: Api, transfer_id: int) -> list[_SnapshotTransaction]:
     return [t for t in api.snapshot()["transactions"] if t["transferId"] == transfer_id]
 
 
-def pair(api, out_account, in_account, amount=5000, out_date="2026-03-10", in_date="2026-03-10"):
+def pair(
+    api: Api,
+    out_account: int,
+    in_account: int,
+    amount: int = 5000,
+    out_date: str = "2026-03-10",
+    in_date: str = "2026-03-10",
+) -> tuple[int, int]:
     """
     Two ordinary transactions that together look like a transfer, as a bank
     would deliver them: nothing links them yet.
@@ -19,7 +28,7 @@ def pair(api, out_account, in_account, amount=5000, out_date="2026-03-10", in_da
     return out_id, in_id
 
 
-def test_transfer_creates_linked_pair(api):
+def test_transfer_creates_linked_pair(api: Api) -> None:
     a = api.default_account()
     b = api.account("Vault")
     transfer_id = api.transfer(a, b, 5000, comment="move")
@@ -31,7 +40,7 @@ def test_transfer_creates_linked_pair(api):
     assert sum(t["amount"] for t in rows) == 0
 
 
-def test_transfer_shows_up_as_an_entity_in_the_snapshot(api):
+def test_transfer_shows_up_as_an_entity_in_the_snapshot(api: Api) -> None:
     a = api.default_account()
     b = api.account("Vault")
     transfer_id = api.transfer(a, b, 5000, comment="move")
@@ -44,7 +53,7 @@ def test_transfer_shows_up_as_an_entity_in_the_snapshot(api):
     assert entity["note"] == "move"
 
 
-def test_transfer_rejects_same_account(api, client):
+def test_transfer_rejects_same_account(api: Api, client: TestClient) -> None:
     a = api.default_account()
     r = client.post(
         "/api/transfers",
@@ -53,7 +62,7 @@ def test_transfer_rejects_same_account(api, client):
     assert r.status_code == 400
 
 
-def test_transfer_rejects_unknown_account(api, client):
+def test_transfer_rejects_unknown_account(api: Api, client: TestClient) -> None:
     a = api.default_account()
     r = client.post(
         "/api/transfers",
@@ -62,7 +71,7 @@ def test_transfer_rejects_unknown_account(api, client):
     assert r.status_code == 400
 
 
-def test_transfer_rejects_non_positive_amount(api, client):
+def test_transfer_rejects_non_positive_amount(api: Api, client: TestClient) -> None:
     a = api.default_account()
     b = api.account("Vault")
     r = client.post(
@@ -72,7 +81,9 @@ def test_transfer_rejects_non_positive_amount(api, client):
     assert r.status_code == 422
 
 
-def test_link_merges_an_existing_pair_without_touching_the_rows(api, client):
+def test_link_merges_an_existing_pair_without_touching_the_rows(
+    api: Api, client: TestClient
+) -> None:
     a = api.default_account()
     b = api.account("Vault")
     out_id, in_id = pair(api, a, b)
@@ -91,7 +102,9 @@ def test_link_merges_an_existing_pair_without_touching_the_rows(api, client):
     )
 
 
-def test_link_moves_categories_aside_and_split_gives_them_back(api, client):
+def test_link_moves_categories_aside_and_split_gives_them_back(
+    api: Api, client: TestClient
+) -> None:
     g = api.group("Living")
     cat = api.category("Groceries", g)
     a = api.default_account()
@@ -108,7 +121,7 @@ def test_link_moves_categories_aside_and_split_gives_them_back(api, client):
     assert api.tx_by(out_id)["categoryId"] == cat
 
 
-def test_split_keeps_both_transactions(api, client):
+def test_split_keeps_both_transactions(api: Api, client: TestClient) -> None:
     a = api.default_account()
     b = api.account("Vault")
     transfer_id = api.transfer(a, b, 5000)
@@ -124,7 +137,7 @@ def test_split_keeps_both_transactions(api, client):
     assert client.delete(f"/api/transfers/{transfer_id}").status_code == 404
 
 
-def test_split_frees_the_legs_to_be_linked_again(api, client):
+def test_split_frees_the_legs_to_be_linked_again(api: Api, client: TestClient) -> None:
     a = api.default_account()
     b = api.account("Vault")
     out_id, in_id = pair(api, a, b)
@@ -142,7 +155,9 @@ def test_split_frees_the_legs_to_be_linked_again(api, client):
         ((-5000, 5000), True),  # one account
     ],
 )
-def test_link_rejects_pairs_that_are_not_a_transfer(api, client, amounts, same_account):
+def test_link_rejects_pairs_that_are_not_a_transfer(
+    api: Api, client: TestClient, amounts: tuple[int, int], same_account: bool
+) -> None:
     a = api.default_account()
     b = a if same_account else api.account("Vault")
     out_id = api.tx("2026-03-10T09:00:00", amounts[0], accountId=a)
@@ -151,7 +166,7 @@ def test_link_rejects_pairs_that_are_not_a_transfer(api, client, amounts, same_a
     assert r.status_code == 400
 
 
-def test_link_rejects_a_leg_already_in_a_transfer(api, client):
+def test_link_rejects_a_leg_already_in_a_transfer(api: Api, client: TestClient) -> None:
     a = api.default_account()
     b = api.account("Vault")
     third = api.account("Pocket")
@@ -162,8 +177,8 @@ def test_link_rejects_a_leg_already_in_a_transfer(api, client):
     assert r.status_code == 400
 
 
-def test_link_rejects_another_users_transaction(api, client):
-    from conftest import login_as
+def test_link_rejects_another_users_transaction(api: Api, client: TestClient) -> None:
+    from tests.conftest import login_as
 
     a = api.default_account()
     b = api.account("Vault")
@@ -173,7 +188,7 @@ def test_link_rejects_another_users_transaction(api, client):
     assert r.status_code == 400
 
 
-def test_detect_merges_a_same_day_pair(api, client):
+def test_detect_merges_a_same_day_pair(api: Api, client: TestClient) -> None:
     a = api.default_account()
     b = api.account("Vault")
     out_id, in_id = pair(api, a, b)
@@ -184,7 +199,7 @@ def test_detect_merges_a_same_day_pair(api, client):
     assert next(iter(api.snapshot()["transfers"]))["origin"] == "matched"
 
 
-def test_detect_leaves_a_distant_pair_as_a_suggestion(api, client):
+def test_detect_leaves_a_distant_pair_as_a_suggestion(api: Api, client: TestClient) -> None:
     a = api.default_account()
     b = api.account("Vault")
     out_id, in_id = pair(api, a, b, out_date="2026-03-10", in_date="2026-03-13")
@@ -198,7 +213,7 @@ def test_detect_leaves_a_distant_pair_as_a_suggestion(api, client):
     assert {t["id"] for t in rows["transactions"]} == {out_id, in_id}
 
 
-def test_dismissed_suggestions_stop_coming_back(api, client):
+def test_dismissed_suggestions_stop_coming_back(api: Api, client: TestClient) -> None:
     a = api.default_account()
     b = api.account("Vault")
     out_id, in_id = pair(api, a, b, out_date="2026-03-10", in_date="2026-03-13")
@@ -208,7 +223,9 @@ def test_dismissed_suggestions_stop_coming_back(api, client):
     assert client.post("/api/transfers/detect").json()["suggested"] == 0
 
 
-def test_detect_leaves_a_disagreeing_same_day_pair_as_a_suggestion(api, client):
+def test_detect_leaves_a_disagreeing_same_day_pair_as_a_suggestion(
+    api: Api, client: TestClient
+) -> None:
     """
     An inflow labeled as a transfer whose true counterpart cannot pair (say,
     both legs landed on one account) must not swallow a purchase that merely
@@ -228,7 +245,7 @@ def test_detect_leaves_a_disagreeing_same_day_pair_as_a_suggestion(api, client):
     assert rows["rows"][0]["mismatch"] is True
 
 
-def test_detect_is_idempotent(api, client):
+def test_detect_is_idempotent(api: Api, client: TestClient) -> None:
     a = api.default_account()
     b = api.account("Vault")
     pair(api, a, b)
@@ -240,19 +257,19 @@ def test_detect_is_idempotent(api, client):
     assert len(api.snapshot()["transfers"]) == 1
 
 
-def test_transfers_list_is_scoped_to_the_user(api, client):
+def test_transfers_list_is_scoped_to_the_user(api: Api, client: TestClient) -> None:
     a = api.default_account()
     b = api.account("Vault")
     api.transfer(a, b, 5000)
     assert len(client.get("/api/transfers").json()["rows"]) == 1
 
-    from conftest import login_as
+    from tests.conftest import login_as
 
     client.headers.update(login_as(client, "stranger@example.com"))
     assert client.get("/api/transfers").json()["rows"] == []
 
 
-def test_deleting_one_leg_leaves_no_dangling_transfer_pointer(api, client):
+def test_deleting_one_leg_leaves_no_dangling_transfer_pointer(api: Api, client: TestClient) -> None:
     a = api.default_account()
     b = api.account("Vault")
     transfer_id = api.transfer(a, b, 5000)
@@ -266,7 +283,7 @@ def test_deleting_one_leg_leaves_no_dangling_transfer_pointer(api, client):
     assert survivor["transferId"] is None
 
 
-def test_bulk_delete_of_one_leg_also_frees_the_other(api, client):
+def test_bulk_delete_of_one_leg_also_frees_the_other(api: Api, client: TestClient) -> None:
     a = api.default_account()
     b = api.account("Vault")
     transfer_id = api.transfer(a, b, 5000)
@@ -280,7 +297,7 @@ def test_bulk_delete_of_one_leg_also_frees_the_other(api, client):
     assert next(t for t in snap["transactions"] if t["id"] == in_id)["transferId"] is None
 
 
-def test_deleting_a_leg_restores_the_partner_category(api, client):
+def test_deleting_a_leg_restores_the_partner_category(api: Api, client: TestClient) -> None:
     a = api.default_account()
     b = api.account("Vault")
     group = api.group("Daily")
@@ -299,7 +316,7 @@ def test_deleting_a_leg_restores_the_partner_category(api, client):
     assert survivor["categoryId"] == cat
 
 
-def test_link_reports_an_unknown_transaction_by_message(api, client):
+def test_link_reports_an_unknown_transaction_by_message(api: Api, client: TestClient) -> None:
     a = api.default_account()
     out_id = api.tx("2026-03-10T09:00:00", -5000, accountId=a)
     r = client.post("/api/transfers/link", json={"outTxId": out_id, "inTxId": 999999})
@@ -307,7 +324,7 @@ def test_link_reports_an_unknown_transaction_by_message(api, client):
     assert r.json()["detail"] == "unknown transaction"
 
 
-def test_link_reports_two_outflows_by_message(api, client):
+def test_link_reports_two_outflows_by_message(api: Api, client: TestClient) -> None:
     a = api.default_account()
     b = api.account("Vault")
     out_id = api.tx("2026-03-10T09:00:00", -5000, accountId=a)
@@ -317,7 +334,7 @@ def test_link_reports_two_outflows_by_message(api, client):
     assert r.json()["detail"] == "a transfer needs one outflow and one inflow"
 
 
-def test_link_reports_same_account_by_message(api, client):
+def test_link_reports_same_account_by_message(api: Api, client: TestClient) -> None:
     a = api.default_account()
     out_id = api.tx("2026-03-10T09:00:00", -5000, accountId=a)
     in_id = api.tx("2026-03-10T18:00:00", 5000, accountId=a)
@@ -326,7 +343,7 @@ def test_link_reports_same_account_by_message(api, client):
     assert r.json()["detail"] == "both legs are on the same account"
 
 
-def test_link_reports_an_already_linked_leg_by_message(api, client):
+def test_link_reports_an_already_linked_leg_by_message(api: Api, client: TestClient) -> None:
     a = api.default_account()
     b = api.account("Vault")
     third = api.account("Pocket")
@@ -338,7 +355,7 @@ def test_link_reports_an_already_linked_leg_by_message(api, client):
     assert r.json()["detail"] == "already part of a transfer"
 
 
-def test_dismiss_reports_an_unknown_transaction_by_message(api, client):
+def test_dismiss_reports_an_unknown_transaction_by_message(api: Api, client: TestClient) -> None:
     a = api.default_account()
     out_id = api.tx("2026-03-10T09:00:00", -5000, accountId=a)
     r = client.post(
@@ -348,7 +365,7 @@ def test_dismiss_reports_an_unknown_transaction_by_message(api, client):
     assert r.json()["detail"] == "unknown transaction"
 
 
-def test_transfer_created_at_is_a_full_iso_timestamp(api, client):
+def test_transfer_created_at_is_a_full_iso_timestamp(api: Api, client: TestClient) -> None:
     a = api.default_account()
     b = api.account("Vault")
     api.transfer(a, b, 5000)
@@ -357,7 +374,7 @@ def test_transfer_created_at_is_a_full_iso_timestamp(api, client):
     assert re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}", row["createdAt"])
 
 
-def test_detection_never_pairs_a_reconcile_adjustment(api, client):
+def test_detection_never_pairs_a_reconcile_adjustment(api: Api, client: TestClient) -> None:
     """
     A reconcile adjustment is bookkeeping: it exists to bend a balance to the
     bank's figure, not because money moved anywhere. Matching it against a

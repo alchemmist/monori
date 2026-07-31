@@ -10,7 +10,7 @@ storing a raw request log.
 
 import os
 from datetime import UTC, datetime
-from typing import Annotated
+from typing import Annotated, cast
 
 import jwt
 from fastapi import Depends, HTTPException
@@ -53,7 +53,7 @@ def user_id_from_auth_header(header):
     if not header or not header.lower().startswith("bearer "):
         return None
     try:
-        return int(decode_access_token(header[7:])["sub"])
+        return int(cast("str", decode_access_token(header[7:])["sub"]))
     except (jwt.InvalidTokenError, KeyError, ValueError):
         return None
 

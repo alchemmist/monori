@@ -3,7 +3,7 @@ import sqlite3
 from app.db import begin_write
 
 
-def test_begin_write_starts_once_and_is_idempotent():
+def test_begin_write_starts_once_and_is_idempotent() -> None:
     connection = sqlite3.connect(":memory:")
     try:
         assert not connection.in_transaction

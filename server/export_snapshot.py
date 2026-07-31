@@ -6,13 +6,14 @@ Used by the JS engine golden tests so they run against the exact migrated data.
 
 import json
 import pathlib
+import sqlite3
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).parent))
 from app.db import connect
 
 
-def build_snapshot(conn):
+def build_snapshot(conn: sqlite3.Connection) -> dict[str, object]:
     cur = conn.cursor()
     groups = [
         dict(r)

@@ -1,4 +1,13 @@
-def test_goal_crud_accepts_spending_and_archive_preserves_history(api, client):
+import pytest
+from fastapi.testclient import TestClient
+from tests.conftest import Api
+
+pytestmark = pytest.mark.integration
+
+
+def test_goal_crud_accepts_spending_and_archive_preserves_history(
+    api: Api, client: TestClient
+) -> None:
     group = api.group("Goals", kind="goal")
     created = client.post(
         "/api/categories",
@@ -37,13 +46,13 @@ def test_goal_crud_accepts_spending_and_archive_preserves_history(api, client):
     assert next(t for t in snap["transactions"] if t["id"] == purchase)["categoryId"] == goal
 
 
-def test_goal_requires_target(api, client):
+def test_goal_requires_target(api: Api, client: TestClient) -> None:
     group = api.group("Goals", kind="goal")
     r = client.post("/api/categories", json={"name": "Trip", "groupId": group})
     assert r.status_code == 400
 
 
-def test_moving_goal_to_expense_group_clears_goal_metadata(api, client):
+def test_moving_goal_to_expense_group_clears_goal_metadata(api: Api, client: TestClient) -> None:
     goals = api.group("Goals", kind="goal")
     expenses = api.group("Expenses")
     created = client.post(

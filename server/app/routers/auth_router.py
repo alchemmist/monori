@@ -9,11 +9,10 @@ a ``current_user`` dependency other routes can adopt.
 
 import sqlite3
 from datetime import UTC, datetime
-from typing import Annotated
+from typing import Annotated, TypedDict, cast
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import OAuth2PasswordRequestForm
-from pydantic import BaseModel
 
 from ..admin import admin_emails
 from ..auth import current_user
@@ -41,7 +40,7 @@ def _valid_email(email):
     return all(domain.split("."))
 
 
-class RegisterBody(BaseModel):
+class RegisterBody(TypedDict):
     email: str
     password: str
 
@@ -95,7 +94,7 @@ def create_user(c, raw_email, password):
 def register(body: RegisterBody):
     c = conn()
     try:
-        return create_user(c, body.email, body.password)
+        return create_user(c, body["email"], body["password"])
     finally:
         c.close()
 
@@ -143,8 +142,8 @@ def me(user: Annotated[dict, Depends(current_user)]):
     return user
 
 
-class MePatch(BaseModel):
-    defaultAccountId: int | None = None
+class MePatch(TypedDict, total=False):
+    defaultAccountId: int | None
 
 
 @router.patch("/me")
@@ -154,17 +153,18 @@ def patch_me(body: MePatch, user: Annotated[dict, Depends(current_user)]):
     card number can route; null clears it and those rows go back to being
     assigned by hand.
     """
-    uid = user["id"]
+    uid = cast("int", user["id"])
     c = conn()
     try:
+        default_account_id = body.get("defaultAccountId")
         if (
-            body.defaultAccountId is not None
+            default_account_id is not None
             and not c.execute(
-                "SELECT id FROM accounts WHERE id=? AND user_id=?", (body.defaultAccountId, uid)
+                "SELECT id FROM accounts WHERE id=? AND user_id=?", (default_account_id, uid)
             ).fetchone()
         ):
             raise HTTPException(400, "unknown account")
-        c.execute("UPDATE users SET default_account_id=? WHERE id=?", (body.defaultAccountId, uid))
+        c.execute("UPDATE users SET default_account_id=? WHERE id=?", (default_account_id, uid))
         c.commit()
         row = c.execute(
             "SELECT id, email, created_at, is_admin, last_login, default_account_id"

@@ -2,10 +2,12 @@
 Monori API. Money in/out of this API is integer kopecks everywhere.
 """
 
+from __future__ import annotations
+
 import contextlib
 import os
 import pathlib
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated, cast
 
 from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse
@@ -30,6 +32,12 @@ from .routers import (
     transfers,
 )
 
+if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
+
+    from starlette.requests import Request
+    from starlette.responses import Response
+
 app = FastAPI(title="monori", docs_url="/api-docs", redoc_url="/api-redoc")
 
 # authentication endpoints are public (they mint the tokens the rest would need)
@@ -41,7 +49,9 @@ app.include_router(admin_sql.router)
 
 
 @app.middleware("http")
-async def count_feature_usage(request, call_next):
+async def count_feature_usage(
+    request: Request, call_next: Callable[[Request], Awaitable[Response]]
+) -> Response:
     response = await call_next(request)
     # analytics must never break the request it observes; the sqlite write goes
     # through the threadpool so it cannot block the event loop
@@ -55,7 +65,7 @@ async def count_feature_usage(request, call_next):
 STATIC_DIR = pathlib.Path(__file__).resolve().parent.parent / "static"
 
 
-def _serve_spa(base: pathlib.Path, path: str):
+def _serve_spa(base: pathlib.Path, path: str) -> FileResponse:
     """
     Serve a file from ``base`` if the request maps to one inside it, else the
     SPA index. The untrusted path is resolved (``..`` and symlinks collapsed)
@@ -86,10 +96,10 @@ for _router in (
 
 @app.get("/api/snapshot")
 def get_snapshot(
-    user: Annotated[dict, Depends(current_user)],
+    user: Annotated[dict[str, object], Depends(current_user)],
     light: bool = False,
     limit: int = Query(default=LIGHT_SNAPSHOT_TX_LIMIT, ge=1, le=5000),
-):
+) -> dict[str, object]:
     """
     Everything the app needs to render. ``light=1`` caps the transactions at the
     newest ``limit`` rows so first paint doesn't wait on years of history; the
@@ -99,7 +109,7 @@ def get_snapshot(
     """
     c = conn()
     try:
-        return snapshot(c, user["id"], tx_limit=limit if light else None)
+        return snapshot(c, cast("int", user["id"]), tx_limit=limit if light else None)
     finally:
         c.close()
 
@@ -111,7 +121,7 @@ def get_snapshot(
     methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"],
     include_in_schema=False,
 )
-def api_not_found(path: str):
+def api_not_found(path: str) -> None:
     raise HTTPException(status_code=404, detail="Not Found")
 
 
@@ -121,5 +131,5 @@ if STATIC_DIR.is_dir():
     # one SPA serves everything: the app, the marketing landing (/welcome) and
     # the docs (/docs/*) — its client router renders by full path
     @app.get("/{path:path}")
-    def spa(path: str):
+    def spa(path: str) -> FileResponse:
         return _serve_spa(STATIC_DIR, path)

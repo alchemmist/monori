@@ -2,8 +2,8 @@ import json
 from io import BytesIO
 
 import pytest
-from conftest import login_as
 from openpyxl import Workbook
+from tests.conftest import login_as
 
 pytestmark = pytest.mark.integration
 
