@@ -12,9 +12,9 @@ branch_labels = None
 depends_on = None
 
 
-def upgrade():
+def upgrade() -> None:
     op.execute("ALTER TABLE users ADD COLUMN default_account_id INTEGER REFERENCES accounts (id)")
 
 
-def downgrade():
+def downgrade() -> None:
     raise NotImplementedError("forward-only migrations")
