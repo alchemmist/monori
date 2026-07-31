@@ -11,19 +11,31 @@ cached grid figures must reconcile exactly (no synthetic adjustment rows) and
 the counts must match what the spec hardcodes.
 """
 
+from __future__ import annotations
+
 import datetime
 import pathlib
 import sys
 from io import BytesIO
+from typing import TYPE_CHECKING
 
 from openpyxl import Workbook
-from openpyxl.worksheet.worksheet import Worksheet
+
+if TYPE_CHECKING:
+    from openpyxl.worksheet.worksheet import Worksheet
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(REPO / "server"))
 
-from app.workbook import spec
-from app.workbook.parser import TX_ALIASES, parse_workbook
+
+def _load_workbook_modules() -> tuple[object, object, object]:
+    sys.path.insert(0, str(REPO / "server"))
+    from app.workbook import spec
+    from app.workbook.parser import TX_ALIASES, parse_workbook
+
+    return spec, TX_ALIASES, parse_workbook
+
+
+spec, TX_ALIASES, parse_workbook = _load_workbook_modules()
 
 OUT = REPO / "web" / "e2e" / "fixtures" / "template-workbook.xlsx"
 

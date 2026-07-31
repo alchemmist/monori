@@ -15,12 +15,16 @@ and an OAuth token path:
 The spreadsheet id can also be passed as the first argument.
 """
 
+from __future__ import annotations
+
 import json
 import os
 import pathlib
 import sys
-from collections.abc import Callable
-from typing import Protocol, cast
+from typing import TYPE_CHECKING, Protocol, cast
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build

@@ -1,5 +1,7 @@
-from collections.abc import Callable
-from typing import TypeAlias, cast
+from typing import TYPE_CHECKING, cast
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 import httpx
 import pytest
@@ -12,7 +14,7 @@ from app.connectors.base import ConnectorError, SmsRequired, SyncResult
 from app.sync_runner import LocalRunner, NoPendingLogin, RemoteRunner, get_runner
 
 CREDS: dict[str, object] = {"phone": "+70000000000", "password": "pw"}
-Runner: TypeAlias = LocalRunner | RemoteRunner
+type Runner = LocalRunner | RemoteRunner
 
 
 def remote_runner() -> RemoteRunner:

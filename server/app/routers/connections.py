@@ -14,12 +14,10 @@ now-cached session.
 
 import logging
 import secrets
+import sqlite3
 from collections.abc import Mapping
 from datetime import datetime
-from typing import TYPE_CHECKING, Annotated, NoReturn, TypedDict, cast
-
-if TYPE_CHECKING:
-    import sqlite3
+from typing import Annotated, NoReturn, TypedDict, cast
 
 from fastapi import APIRouter, Depends, HTTPException
 

@@ -2,7 +2,10 @@ import pathlib
 import sqlite3
 import sys
 from pathlib import Path
-from typing import cast
+from typing import TYPE_CHECKING, cast
+
+if TYPE_CHECKING:
+    from tests.conftest import _Snapshot
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
 
@@ -10,7 +13,6 @@ import app.db as dbmod
 from app.deps import snapshot
 from app.importer import CategoryRule
 from app.ingest import categorize_rows, commit_rows, existing_hash_counts, load_rules
-from tests.conftest import _Snapshot
 
 
 def _db(tmp_path: Path) -> sqlite3.Connection:
