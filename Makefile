@@ -11,7 +11,7 @@ WEBBIN := web/node_modules/.bin
 .PHONY: install setup tools dev down reset-db deploy api web build \
         fmt fmt-check \
         lint lint-web lint-css lint-html lint-server lint-sql lint-yaml lint-md lint-docs lint-actions lint-docker lint-shell spell \
-        type type-front type-back typecheck analyze audit audit-deps audit-deps-py audit-secrets \
+        type type-front type-back analyze audit audit-deps audit-deps-py audit-secrets \
         test t-fast t-medium t-slow t-slow-ui coverage mutation m-front m-front-file m-back \
         schema-diagram check
 
@@ -127,8 +127,6 @@ type-back:
 	MYPYPATH=server uv run --project server --extra connectors mypy --config-file server/pyproject.toml --strict .; py=$$?; \
 	echo "type-back: python=$$py"; \
 	test $$py -eq 0
-
-typecheck: type
 
 analyze:
 	cd server && uv run bandit -c pyproject.toml -q -r app
