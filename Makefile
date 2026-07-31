@@ -72,7 +72,7 @@ fmt: schema-diagram
 
 fmt-check:
 	$(WEBBIN)/prettier --check .
-	uv run --project server ruff check --config server/pyproject.toml --select I .
+	uv run --project server ruff check --config server/pyproject.toml .
 	uv run --project server ruff format --config server/pyproject.toml --check .
 	$(SQLFLUFF) lint .
 
