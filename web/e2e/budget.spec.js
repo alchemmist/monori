@@ -23,25 +23,44 @@ test("editing a budgeted cell recomputes available-to-budget and persists", asyn
     await expect(row).toBeVisible();
     await expect(june.locator(".yg-msum__av")).toHaveText("0 ₽");
 
-    await juneCell(row).locator(".budget-cell").click();
-    await juneCell(row).locator(".budget-cell__input").fill("500");
+    const displayCell = juneCell(row).locator(".budget-cell");
+    await displayCell.scrollIntoViewIfNeeded();
+    await expect(displayCell).toBeVisible();
+    const displayBox = await displayCell.boundingBox();
+    expect(displayBox).not.toBeNull();
+    await displayCell.click();
+    const input = juneCell(row).locator(".budget-cell__input");
+    await expect(input).toBeVisible();
+    const inputBox = await input.boundingBox();
+    expect(inputBox).not.toBeNull();
+    expect(inputBox).toEqual(displayBox);
+    await input.fill("1234567");
+    const filledInputBox = await input.boundingBox();
+    expect(filledInputBox).not.toBeNull();
+    expect(filledInputBox).toEqual(displayBox);
     await page.keyboard.press("Enter");
 
-    // nothing funds the budget, so budgeting 500 drives June negative — the
-    // whole header band recomputed in the same frame
-    await expect(juneCell(row)).toHaveText("500");
-    await expect(june.locator(".yg-msum__av")).toHaveText("-500 ₽");
+    await expect(displayCell).toHaveText(/1.234.567/);
+    const committedBox = await displayCell.boundingBox();
+    expect(committedBox).not.toBeNull();
+    expect(committedBox).toEqual(displayBox);
+
+    // nothing funds the budget, so the seven-digit budget drives June negative
+    // and the whole header band recomputes in the same frame
+    await expect(june.locator(".yg-msum__av")).toHaveText(/-1.234.567 ₽/);
 
     await page.reload();
     await expect(page.locator(".sidebar")).toBeVisible();
     await page.getByText("Plan", { exact: true }).click();
-    await expect(juneCell(page.locator(".yg-row", { hasText: "Groceries" }))).toHaveText("500");
+    await expect(juneCell(page.locator(".yg-row", { hasText: "Groceries" }))).toHaveText(
+        /1.234.567/,
+    );
     await expect(
         page
             .locator(".yg-msum")
             .nth(MONTH - 1)
             .locator(".yg-msum__av"),
-    ).toHaveText("-500 ₽");
+    ).toHaveText(/-1.234.567 ₽/);
 });
 
 test("activity and balance reflect seeded transactions", async ({ page, user }) => {
