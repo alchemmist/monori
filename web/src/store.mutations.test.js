@@ -200,7 +200,7 @@ describe("store remote mutations", () => {
         vi.spyOn(api, "patchCategory").mockResolvedValue({});
         vi.spyOn(api, "reorderCategories").mockRejectedValue(new Error("offline"));
 
-        await useStore.getState().moveCategory(2, 2, [2, 1]);
+        await expect(useStore.getState().moveCategory(2, 2, [2, 1])).rejects.toThrow("offline");
         expect(useStore.getState().toast).toMatchObject({
             title: "Failed to move category",
             theme: "danger",

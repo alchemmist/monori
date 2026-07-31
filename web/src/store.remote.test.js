@@ -151,12 +151,35 @@ describe("deletes reach the server before the snapshot is trimmed", () => {
 });
 
 describe("moveCategory outside the demo", () => {
+    it("moves a category into goals with its target in one patch", async () => {
+        const patch = vi.spyOn(api, "patchCategory").mockResolvedValue({});
+        const reorder = vi.spyOn(api, "reorderCategories").mockResolvedValue({});
+        const goal = { goalTarget: 750000, goalTargetDate: "2027-06-01" };
+
+        await useStore.getState().moveCategory(4, 3, [4], goal);
+
+        expect(patch).toHaveBeenCalledExactlyOnceWith(4, { groupId: 3, ...goal });
+        expect(reorder).toHaveBeenCalledExactlyOnceWith([4]);
+        expect(snap().categories[0]).toMatchObject({ groupId: 3, ...goal });
+    });
+
     it("skips the group patch when the card stays in its group", async () => {
         const patch = vi.spyOn(api, "patchCategory").mockResolvedValue({});
         const reorder = vi.spyOn(api, "reorderCategories").mockResolvedValue({});
         await useStore.getState().moveCategory(4, 2, [4]);
         expect(patch).not.toHaveBeenCalled();
         expect(reorder).toHaveBeenCalledExactlyOnceWith([4]);
+    });
+
+    it("persists target changes when the card stays in its group", async () => {
+        const patch = vi.spyOn(api, "patchCategory").mockResolvedValue({});
+        vi.spyOn(api, "reorderCategories").mockResolvedValue({});
+        const goal = { goalTarget: 750000, goalTargetDate: "2027-06-01" };
+
+        await useStore.getState().moveCategory(4, 2, [4], goal);
+
+        expect(patch).toHaveBeenCalledExactlyOnceWith(4, goal);
+        expect(snap().categories[0]).toMatchObject(goal);
     });
 
     it("skips the group patch when the dragged id is not in the snapshot", async () => {

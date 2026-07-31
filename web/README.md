@@ -22,9 +22,9 @@ Component tests render one screen in jsdom under vitest (`environment: "jsdom"`)
 Use the helpers in `src/test/render.jsx`:
 
 - `renderUI(ui)` wraps the tree in the app's `MantineProvider` (light theme, `env="test"` to drop mount transitions) plus `Notifications`, and returns `{ user, ...result }` where `user` is a `userEvent` session with `delay: null`.
-- The zustand store in `src/store.js` is the app's only data source. Fill it two ways:
-    - `atDemo()` puts the app on `/demo`, where the store runs entirely off the bundled sample dataset and never touches the network — this is what page tests use, so they exercise the real store code paths.
-    - `seed({ ... })` writes a minimal hand-built snapshot straight into the store, for empty states and edge shapes the demo data does not contain.
+- The zustand store in `src/store.js` is the app's only data source.
+- `atDemo()` puts the app on `/demo`, where the store runs entirely off the bundled sample dataset and never touches the network — this is what page tests use, so they exercise the real store code paths.
+- `seed({ ... })` writes a minimal hand-built snapshot straight into the store, for empty states and edge shapes the demo data does not contain.
 - Anything that must hit the server is tested by mocking `src/api.js` directly (`vi.spyOn(api, "...")`), not a network layer.
 - `resetStore()` between tests, since zustand keeps state on the module, not the React tree.
 

@@ -10,6 +10,40 @@ const groups = [
     { id: 1, name: "Income", kind: "income", sort: 1 },
 ];
 
+function dragCardToGroup(container, cardId, groupId) {
+    vi.stubGlobal("requestAnimationFrame", () => 1);
+    vi.stubGlobal("cancelAnimationFrame", vi.fn());
+    const source = container.querySelector(`[data-id="${cardId}"]`);
+    const sourceGroup = source.closest("[data-gid]");
+    const destination = container.querySelector(`[data-gid="${groupId}"]`);
+    source.getBoundingClientRect = () => ({ left: 0, top: 0, width: 80, height: 30 });
+    sourceGroup.getBoundingClientRect = () => ({
+        left: 0,
+        right: 80,
+        top: 0,
+        width: 80,
+        height: 200,
+    });
+    destination.getBoundingClientRect = () => ({
+        left: 100,
+        right: 220,
+        top: 0,
+        width: 120,
+        height: 200,
+    });
+    for (const card of destination.querySelectorAll("[data-id]")) {
+        card.getBoundingClientRect = () => ({ top: 50, height: 30 });
+    }
+    fireEvent.pointerDown(source, {
+        button: 0,
+        pointerType: "mouse",
+        clientX: 10,
+        clientY: 10,
+    });
+    fireEvent.pointerMove(window, { pointerType: "mouse", clientX: 150, clientY: 100 });
+    fireEvent.pointerUp(window);
+}
+
 describe("CategoriesPage", () => {
     beforeEach(() => {
         resetStore();
@@ -209,6 +243,213 @@ describe("CategoriesPage", () => {
         fireEvent.pointerUp(window);
 
         expect(moveCategory).toHaveBeenCalledWith(2, 3, [3, 2]);
+    });
+
+    it("asks for a target before moving a category into a goals group", async () => {
+        seed({
+            groups: [
+                { id: 2, name: "Spending", kind: "expense", sort: 1 },
+                { id: 3, name: "Plans", kind: "goal", sort: 2 },
+            ],
+            categories: [
+                { id: 2, groupId: 2, name: "Vacation", keywords: "", sort: 1, archived: false },
+            ],
+        });
+        const moveCategory = vi.spyOn(useStore.getState(), "moveCategory").mockResolvedValue();
+        const { container, user } = renderUI(<CategoriesPage />);
+
+        dragCardToGroup(container, 2, 3);
+
+        expect(moveCategory).not.toHaveBeenCalled();
+        expect(screen.getByText("Set a goal for Vacation")).toBeInTheDocument();
+        await user.type(screen.getByLabelText("Target, ₽"), "7500");
+        fireEvent.change(screen.getByLabelText("Deadline (optional)"), {
+            target: { value: "2027-06-01" },
+        });
+        await user.click(screen.getByRole("button", { name: "Move" }));
+
+        expect(moveCategory).toHaveBeenCalledExactlyOnceWith(2, 3, [2], {
+            goalTarget: 750000,
+            goalTargetDate: "2027-06-01",
+            goalStatus: "active",
+        });
+    });
+
+    it("accepts a comma-decimal target without a deadline", async () => {
+        seed({
+            groups: [
+                { id: 2, name: "Spending", kind: "expense", sort: 1 },
+                { id: 3, name: "Plans", kind: "goal", sort: 2 },
+            ],
+            categories: [{ id: 2, groupId: 2, name: "Vacation", keywords: "", sort: 1 }],
+        });
+        const moveCategory = vi.spyOn(useStore.getState(), "moveCategory").mockResolvedValue();
+        const { container, user } = renderUI(<CategoriesPage />);
+        dragCardToGroup(container, 2, 3);
+
+        await user.type(screen.getByLabelText("Target, ₽"), "12,34");
+        await user.click(screen.getByRole("button", { name: "Move" }));
+
+        expect(moveCategory).toHaveBeenCalledWith(2, 3, [2], {
+            goalTarget: 1234,
+            goalTargetDate: null,
+            goalStatus: "active",
+        });
+    });
+
+    it.each([".", ",", "0", "-1", "999999999999999999999999"])(
+        "rejects invalid goal target %s",
+        async (value) => {
+            seed({
+                groups: [
+                    { id: 2, name: "Spending", kind: "expense", sort: 1 },
+                    { id: 3, name: "Plans", kind: "goal", sort: 2 },
+                ],
+                categories: [{ id: 2, groupId: 2, name: "Vacation", keywords: "", sort: 1 }],
+            });
+            const moveCategory = vi.spyOn(useStore.getState(), "moveCategory").mockResolvedValue();
+            const { container, user } = renderUI(<CategoriesPage />);
+            dragCardToGroup(container, 2, 3);
+
+            await user.type(screen.getByLabelText("Target, ₽"), value);
+
+            expect(screen.getByRole("button", { name: "Move" })).toBeDisabled();
+            expect(moveCategory).not.toHaveBeenCalled();
+        },
+    );
+
+    it("keeps the goal prompt open when persisting the move fails", async () => {
+        seed({
+            groups: [
+                { id: 2, name: "Spending", kind: "expense", sort: 1 },
+                { id: 3, name: "Plans", kind: "goal", sort: 2 },
+            ],
+            categories: [{ id: 2, groupId: 2, name: "Vacation", keywords: "", sort: 1 }],
+        });
+        vi.spyOn(useStore.getState(), "moveCategory").mockRejectedValue(new Error("offline"));
+        const { container, user } = renderUI(<CategoriesPage />);
+        dragCardToGroup(container, 2, 3);
+        await user.type(screen.getByLabelText("Target, ₽"), "100");
+        await user.click(screen.getByRole("button", { name: "Move" }));
+
+        expect(screen.getByRole("dialog")).toHaveTextContent("Set a goal for Vacation");
+    });
+
+    it("builds goal ordering from the latest category snapshot", async () => {
+        seed({
+            groups: [
+                { id: 2, name: "Spending", kind: "expense", sort: 1 },
+                { id: 3, name: "Plans", kind: "goal", sort: 2 },
+            ],
+            categories: [{ id: 2, groupId: 2, name: "Vacation", keywords: "", sort: 1 }],
+        });
+        const moveCategory = vi.spyOn(useStore.getState(), "moveCategory").mockResolvedValue();
+        const { container, user } = renderUI(<CategoriesPage />);
+        dragCardToGroup(container, 2, 3);
+        const snapshot = useStore.getState().snapshot;
+        useStore.setState({
+            snapshot: {
+                ...snapshot,
+                categories: [
+                    ...snapshot.categories,
+                    { id: 9, groupId: 3, name: "House", keywords: "", sort: 1 },
+                ],
+            },
+        });
+        await user.type(screen.getByLabelText("Target, ₽"), "100");
+        await user.click(screen.getByRole("button", { name: "Move" }));
+
+        expect(moveCategory).toHaveBeenCalledWith(2, 3, [2, 9], expect.any(Object));
+    });
+
+    it("clears goal metadata when a goal is dragged into an expense group", () => {
+        seed({
+            groups: [
+                { id: 2, name: "Spending", kind: "expense", sort: 1 },
+                { id: 3, name: "Plans", kind: "goal", sort: 2 },
+            ],
+            categories: [
+                {
+                    id: 2,
+                    groupId: 3,
+                    name: "Vacation",
+                    keywords: "",
+                    sort: 1,
+                    goalTarget: 750000,
+                    goalTargetDate: "2027-06-01",
+                    goalStatus: "active",
+                },
+            ],
+        });
+        const moveCategory = vi.spyOn(useStore.getState(), "moveCategory").mockResolvedValue();
+        const { container } = renderUI(<CategoriesPage />);
+        dragCardToGroup(container, 2, 2);
+
+        expect(moveCategory).toHaveBeenCalledWith(2, 2, [2]);
+    });
+
+    it("moves a category between expense groups without a goal prompt", () => {
+        seed({
+            groups: [
+                { id: 2, name: "Needs", kind: "expense", sort: 1 },
+                { id: 3, name: "Wants", kind: "expense", sort: 2 },
+            ],
+            categories: [{ id: 2, groupId: 2, name: "Dining", keywords: "", sort: 1 }],
+        });
+        const moveCategory = vi.spyOn(useStore.getState(), "moveCategory").mockResolvedValue();
+        const { container } = renderUI(<CategoriesPage />);
+
+        dragCardToGroup(container, 2, 3);
+
+        expect(screen.queryByText(/Set a goal for/)).not.toBeInTheDocument();
+        expect(moveCategory).toHaveBeenCalledWith(2, 3, [2]);
+    });
+
+    it("keeps the category in place when the goal prompt is cancelled", async () => {
+        seed({
+            groups: [
+                { id: 2, name: "Spending", kind: "expense", sort: 1 },
+                { id: 3, name: "Plans", kind: "goal", sort: 2 },
+            ],
+            categories: [
+                { id: 2, groupId: 2, name: "Vacation", keywords: "", sort: 1, archived: false },
+            ],
+        });
+        const moveCategory = vi.spyOn(useStore.getState(), "moveCategory").mockResolvedValue();
+        const { container, user } = renderUI(<CategoriesPage />);
+
+        dragCardToGroup(container, 2, 3);
+        await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+        expect(moveCategory).not.toHaveBeenCalled();
+        expect(container.querySelector('[data-gid="2"] [data-id="2"]')).toBeInTheDocument();
+    });
+
+    it("moves an existing goal without prompting again", () => {
+        seed({
+            groups: [
+                { id: 2, name: "Old plans", kind: "goal", sort: 1 },
+                { id: 3, name: "New plans", kind: "goal", sort: 2 },
+            ],
+            categories: [
+                {
+                    id: 2,
+                    groupId: 2,
+                    name: "Vacation",
+                    keywords: "",
+                    sort: 1,
+                    archived: false,
+                    goalTarget: 750000,
+                },
+            ],
+        });
+        const moveCategory = vi.spyOn(useStore.getState(), "moveCategory").mockResolvedValue();
+        const { container } = renderUI(<CategoriesPage />);
+
+        dragCardToGroup(container, 2, 3);
+
+        expect(screen.queryByText("Set a goal for Vacation")).not.toBeInTheDocument();
+        expect(moveCategory).toHaveBeenCalledExactlyOnceWith(2, 3, [2]);
     });
 
     it("shows the card's destination slot before dropping it", async () => {

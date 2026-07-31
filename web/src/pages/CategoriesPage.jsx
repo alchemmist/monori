@@ -6,7 +6,11 @@ import { Plus } from "@gravity-ui/icons";
 import { useStore } from "../store.js";
 import { effectiveTransactions } from "../engine/splits.js";
 import { orderedGroups, categoriesByGroup } from "../categoryOrder.js";
-import { CategoryEditDialog, CategoryDeleteDialog } from "../components/CategoryDialogs.jsx";
+import {
+    CategoryEditDialog,
+    CategoryDeleteDialog,
+    GoalTargetDialog,
+} from "../components/CategoryDialogs.jsx";
 import { GroupEditDialog, GroupDeleteDialog } from "../components/GroupDialogs.jsx";
 import "./categories.css";
 
@@ -300,7 +304,16 @@ export default function CategoriesPage() {
                 if (moved && dest) {
                     dest.splice(Math.min(ov.index, dest.length), 0, moved);
                     const orderedIds = groups.flatMap((g) => cols.get(g.id).map((c) => c.id));
-                    moveCategory(d.id, ov.groupId, orderedIds);
+                    const destination = groups.find((g) => g.id === ov.groupId);
+                    if (destination?.kind === "goal" && !(moved.goalTarget > 0)) {
+                        setDialog({
+                            type: "goal-target",
+                            category: moved,
+                            move: { id: d.id, groupId: ov.groupId, index: ov.index },
+                        });
+                    } else {
+                        moveCategory(d.id, ov.groupId, orderedIds);
+                    }
                 }
             } else {
                 const ids = groups.map((g) => g.id).filter((id) => id !== d.id);
@@ -546,6 +559,40 @@ export default function CategoriesPage() {
                     category={dialog.category}
                     categories={snapshot.categories}
                     txCount={txCountByCat.get(dialog.category.id) ?? 0}
+                    onClose={() => setDialog(null)}
+                />
+            )}
+            {dialog?.type === "goal-target" && (
+                <GoalTargetDialog
+                    category={dialog.category}
+                    onApply={(goal) => {
+                        const latest = useStore.getState().snapshot;
+                        const latestGroups = orderedGroups(latest.groups);
+                        const latestByGroup = categoriesByGroup(latest.categories, latestGroups);
+                        const moved = latest.categories.find((c) => c.id === dialog.move.id);
+                        const columns = new Map(
+                            latestGroups.map((g) => [
+                                g.id,
+                                (latestByGroup.get(g.id) ?? []).filter(
+                                    (c) => c.id !== dialog.move.id,
+                                ),
+                            ]),
+                        );
+                        const destination = columns.get(dialog.move.groupId);
+                        if (!moved || !destination) throw new Error("Category destination changed");
+                        destination.splice(
+                            Math.min(dialog.move.index, destination.length),
+                            0,
+                            moved,
+                        );
+                        const orderedIds = latestGroups.flatMap((g) =>
+                            columns.get(g.id).map((c) => c.id),
+                        );
+                        return moveCategory(dialog.move.id, dialog.move.groupId, orderedIds, {
+                            ...goal,
+                            goalStatus: "active",
+                        });
+                    }}
                     onClose={() => setDialog(null)}
                 />
             )}

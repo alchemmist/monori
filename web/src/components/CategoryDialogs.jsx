@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useStore } from "../store.js";
 import { orderedGroups, categoriesByGroup } from "../categoryOrder.js";
 import AppDialog from "../ui/AppDialog.jsx";
@@ -102,6 +102,61 @@ export function CategoryEditDialog({ category, groups, onClose }) {
                     Keywords are matched against transaction descriptions during import, separated
                     by |. First matching category wins.
                 </Txt>
+            </div>
+        </AppDialog>
+    );
+}
+
+export function GoalTargetDialog({ category, onApply, onClose }) {
+    const [goalTarget, setGoalTarget] = useState("");
+    const [goalTargetDate, setGoalTargetDate] = useState("");
+    const [busy, setBusy] = useState(false);
+    const applyingRef = useRef(false);
+    const targetKopecks = Math.round(Number(goalTarget.replace(",", ".")) * 100);
+    const validTarget = targetKopecks > 0 && Number.isSafeInteger(targetKopecks);
+
+    const apply = async () => {
+        if (!validTarget || applyingRef.current) return;
+        applyingRef.current = true;
+        setBusy(true);
+        try {
+            await onApply({
+                goalTarget: targetKopecks,
+                goalTargetDate: goalTargetDate || null,
+            });
+            onClose();
+        } catch {
+            // The store reports the error; leave the dialog open so the user can retry.
+            return;
+        } finally {
+            applyingRef.current = false;
+            setBusy(false);
+        }
+    };
+
+    return (
+        <AppDialog
+            title={`Set a goal for ${category.name}`}
+            onClose={onClose}
+            applyText="Move"
+            onApply={apply}
+            applyLoading={busy}
+            applyDisabled={busy || !validTarget}
+        >
+            <div style={{ display: "flex", flexDirection: "column", gap: 12, paddingTop: 4 }}>
+                <FTextInput
+                    label="Target, ₽"
+                    value={goalTarget}
+                    onChange={(e) => setGoalTarget(e.target.value)}
+                    inputMode="decimal"
+                    autoFocus
+                />
+                <FTextInput
+                    label="Deadline (optional)"
+                    type="date"
+                    value={goalTargetDate}
+                    onChange={(e) => setGoalTargetDate(e.target.value)}
+                />
             </div>
         </AppDialog>
     );
