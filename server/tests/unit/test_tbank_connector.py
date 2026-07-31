@@ -12,6 +12,9 @@ import pathlib
 import sys
 import tarfile
 import types
+from collections.abc import Callable
+from pathlib import Path
+from typing import Literal, Self
 
 import pytest
 
@@ -24,23 +27,28 @@ STATEMENT = (
     "06.01.2026 11:00:00\t06.01.2026\t*1\tOK\t-200,00\tRUB\t-200,00\tRUB\t\tSuper\t5411\tOkey\t0\t0\t-200,00\n"  # noqa: E501
 )
 
-CREDS = {"phone": "+70000000000", "password": "pw", "code": "1234"}
+CREDS: dict[str, object] = {"phone": "+70000000000", "password": "pw", "code": "1234"}
 
 
 class FakeLocator:
-    def __init__(self, page, present, on_click=None):
+    def __init__(
+        self,
+        page: "FakePage",
+        present: bool,
+        on_click: Callable[[], None] | None = None,
+    ) -> None:
         self.page = page
         self._present = present
         self._on_click = on_click
 
     @property
-    def first(self):
+    def first(self) -> Self:
         return self
 
-    def count(self):
+    def count(self) -> int:
         return 1 if self._present else 0
 
-    def click(self, timeout=None):
+    def click(self, timeout: int | None = None) -> None:
         # clicking a control that isn't on screen times out in real Playwright —
         # callers that treat a missing button as optional suppress exactly that
         if not self._present:
@@ -50,10 +58,10 @@ class FakeLocator:
 
 
 class FakeKeyboard:
-    def __init__(self, page):
+    def __init__(self, page: "FakePage") -> None:
         self.page = page
 
-    def type(self, text):
+    def type(self, text: str) -> None:
         self.page.log.append(("type", text))
         # every code entry (SMS, quick-login, set-code) types into the pin widget;
         # remember it (to recognize a wrong SMS code) and auto-advance as the last
@@ -64,33 +72,33 @@ class FakeKeyboard:
 
 
 class FakeElement:
-    def __init__(self, text):
+    def __init__(self, text: str) -> None:
         self._text = text
 
-    def inner_text(self):
+    def inner_text(self) -> str:
         return self._text
 
 
 class FakeDownload:
-    def __init__(self, text):
+    def __init__(self, text: str) -> None:
         self._text = text
 
-    def save_as(self, path):
+    def save_as(self, path: str) -> None:
         pathlib.Path(path).write_text(self._text, encoding="utf-8")
 
 
 class FakeDownloadExpectation:
-    def __init__(self, page):
+    def __init__(self, page: "FakePage") -> None:
         self.page = page
 
-    def __enter__(self):
+    def __enter__(self) -> Self:
         return self
 
-    def __exit__(self, *exc):
+    def __exit__(self, *exc: object) -> Literal[False]:
         return False
 
     @property
-    def value(self):
+    def value(self) -> FakeDownload:
         if not self.page.download_triggered:
             raise RuntimeError("no download happened")
         return FakeDownload(self.page.csv)
@@ -119,12 +127,12 @@ class FakePage:
     def __init__(
         self,
         *,
-        scenario="fresh",
-        export_label="CSV",
-        csv_hook=True,
-        csv=STATEMENT,
-        wrong_codes=None,
-    ):
+        scenario: str = "fresh",
+        export_label: str = "CSV",
+        csv_hook: bool = True,
+        csv: str = STATEMENT,
+        wrong_codes: set[str] | None = None,
+    ) -> None:
         self.scenario = scenario
         self.export_label = export_label
         # whether the stable per-format CSV hook is present in the opened
@@ -132,24 +140,24 @@ class FakePage:
         self.csv_hook = csv_hook
         self.csv = csv
         self.wrong_codes = wrong_codes or set()
-        self.last_code = None
+        self.last_code: str | None = None
         self.url = ""
-        self.log = []
+        self.log: list[tuple[object, ...]] = []
         self.keyboard = FakeKeyboard(self)
         self.download_triggered = False
-        self.screenshots = []
-        self.nav_timeout = None
-        self.action_timeout = None
+        self.screenshots: list[str | None] = []
+        self.nav_timeout: int | None = None
+        self.action_timeout: int | None = None
         self.stage = {"logged_in": "in", "quick": "quickcode"}.get(scenario, "start")
 
-    def set_default_navigation_timeout(self, ms):
+    def set_default_navigation_timeout(self, ms: int) -> None:
         self.nav_timeout = ms
 
-    def set_default_timeout(self, ms):
+    def set_default_timeout(self, ms: int) -> None:
         self.action_timeout = ms
 
     # navigation -------------------------------------------------------------
-    def goto(self, url, wait_until=None):
+    def goto(self, url: str, wait_until: str | None = None) -> None:
         self.log.append(("goto", url))
         if url == TB.URL_HOME:
             if self.scenario == "logged_in" or self.stage == "in":
@@ -164,21 +172,21 @@ class FakePage:
         elif url == TB.URL_OPERATIONS:
             self.stage, self.url = "ops", TB.URL_OPERATIONS
 
-    def wait_for_timeout(self, ms):
+    def wait_for_timeout(self, ms: int) -> None:
         self.log.append(("wait", ms))
 
-    def wait_for_load_state(self, state, timeout=None):
+    def wait_for_load_state(self, state: str, timeout: int | None = None) -> None:
         self.log.append(("load_state", state))
 
     # form interaction -------------------------------------------------------
-    def fill(self, selector, value):
+    def fill(self, selector: str, value: str) -> None:
         self.log.append(("fill", selector, value))
         if selector == TB.SEL_OTP and self.stage == "sms":
             # the single otp field auto-submits as the last digit lands
             self.last_code = value
             self._advance()
 
-    def query_selector(self, selector):
+    def query_selector(self, selector: str) -> object | FakeElement | None:
         self.log.append(("query", selector))
         if (
             (selector == TB.SEL_PHONE and self.stage == "phone")
@@ -191,18 +199,18 @@ class FakePage:
             return FakeElement(self.TITLES[self.stage])
         return None
 
-    def get_by_text(self, text, exact=False):
+    def get_by_text(self, text: str, exact: bool = False) -> FakeLocator:
         # the text label is the fallback path — only reachable when the stable
         # hook is absent
         present = self.stage == "export_open" and not self.csv_hook and text == self.export_label
 
-        def on_click():
+        def on_click() -> None:
             if self.stage == "export_open":
                 self.download_triggered = True
 
         return FakeLocator(self, present, on_click)
 
-    def _advance(self):
+    def _advance(self) -> None:
         if self.stage == "phone":
             self.stage = "password"
         elif self.stage == "password":
@@ -213,7 +221,7 @@ class FakePage:
         elif self.stage in ("setcode", "quickcode"):
             self.stage, self.url = "in", TB.URL_HOME
 
-    def locator(self, selector):
+    def locator(self, selector: str) -> FakeLocator:
         present = False
         on_click = None
         if selector == TB.SEL_PIN and self.stage in self.PIN_STAGES:
@@ -227,50 +235,53 @@ class FakePage:
         elif selector == TB.SEL_EXPORT_TRIGGER and self.stage == "ops":
             present = True
 
-            def on_click():
+            def on_click() -> None:
                 self.stage = "export_open"
 
         elif selector == TB.SEL_EXPORT_CSV and self.stage == "export_open" and self.csv_hook:
             present = True
 
-            def on_click():
+            def on_click() -> None:
                 self.download_triggered = True
 
         return FakeLocator(self, present, on_click)
 
-    def expect_download(self, timeout=None):
+    def expect_download(self, timeout: int | None = None) -> FakeDownloadExpectation:
         return FakeDownloadExpectation(self)
 
     # debug ------------------------------------------------------------------
-    def screenshot(self, path=None, full_page=False):
+    def screenshot(self, path: str | None = None, full_page: bool = False) -> None:
         self.screenshots.append(path)
 
-    def content(self):
+    def content(self) -> str:
         return "<html></html>"
 
 
-def _connector(creds=None, session=None):
+def _connector(
+    creds: dict[str, object] | None = None,
+    session: dict[str, object] | None = None,
+) -> TB:
     return TB(creds if creds is not None else dict(CREDS), session)
 
 
 # --- pure / logic helpers ---------------------------------------------------
 
 
-def test_headless_default_and_headed_override(monkeypatch):
+def test_headless_default_and_headed_override(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("MONORI_CONNECTOR_HEADED", raising=False)
     assert TB._headless() is True
     monkeypatch.setenv("MONORI_CONNECTOR_HEADED", "1")
     assert TB._headless() is False
 
 
-def test_debug_flag(monkeypatch):
+def test_debug_flag(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("MONORI_CONNECTOR_DEBUG", raising=False)
     assert TB._debug_on() is False
     monkeypatch.setenv("MONORI_CONNECTOR_DEBUG", "1")
     assert TB._debug_on() is True
 
 
-def test_is_logged_in_is_true_only_on_mybank():
+def test_is_logged_in_is_true_only_on_mybank() -> None:
     c = _connector()
     page = FakePage(scenario="logged_in")
     page.stage, page.url = "in", TB.URL_HOME
@@ -280,7 +291,7 @@ def test_is_logged_in_is_true_only_on_mybank():
     assert c._is_logged_in(page) is False
 
 
-def test_is_logged_in_false_when_a_code_prompt_is_reparked_over_mybank():
+def test_is_logged_in_false_when_a_code_prompt_is_reparked_over_mybank() -> None:
     c = _connector()
     page = FakePage(scenario="fresh")
     # the bank shows a pin (set/enter-code) prompt on a /mybank URL — not yet in
@@ -288,7 +299,7 @@ def test_is_logged_in_false_when_a_code_prompt_is_reparked_over_mybank():
     assert c._is_logged_in(page) is False
 
 
-def test_form_title_reads_heading_or_empty():
+def test_form_title_reads_heading_or_empty() -> None:
     c = _connector()
     page = FakePage(scenario="fresh")
     page.stage = "password"
@@ -297,7 +308,7 @@ def test_form_title_reads_heading_or_empty():
     assert c._form_title(page) == ""
 
 
-def test_click_export_format_uses_stable_hook():
+def test_click_export_format_uses_stable_hook() -> None:
     c = _connector()
     page = FakePage(csv_hook=True)
     page.stage = "export_open"
@@ -305,7 +316,7 @@ def test_click_export_format_uses_stable_hook():
     assert page.download_triggered is True
 
 
-def test_click_export_format_falls_back_to_label():
+def test_click_export_format_falls_back_to_label() -> None:
     c = _connector()
     # hook gone (markup drift) — the connector still finds CSV by its label
     page = FakePage(csv_hook=False, export_label="Скачать в CSV")
@@ -314,7 +325,7 @@ def test_click_export_format_falls_back_to_label():
     assert page.download_triggered is True
 
 
-def test_click_export_format_none_present():
+def test_click_export_format_none_present() -> None:
     c = _connector()
     page = FakePage(csv_hook=False, export_label="nope")
     page.stage = "export_open"
@@ -325,7 +336,7 @@ def test_click_export_format_none_present():
 # --- login flow -------------------------------------------------------------
 
 
-def test_already_logged_in_skips_login():
+def test_already_logged_in_skips_login() -> None:
     c = _connector()
     page = FakePage(scenario="logged_in")
     c._ensure_logged_in(page)
@@ -334,7 +345,7 @@ def test_already_logged_in_skips_login():
     assert not any(a[0] == "fill" for a in page.log)
 
 
-def test_quick_login_uses_stored_code():
+def test_quick_login_uses_stored_code() -> None:
     c = _connector()
     page = FakePage(scenario="quick")
     c._ensure_logged_in(page)
@@ -343,7 +354,7 @@ def test_quick_login_uses_stored_code():
     assert not any(a[0] == "fill" for a in page.log)
 
 
-def test_full_login_enters_phone_password_otp_then_sets_code():
+def test_full_login_enters_phone_password_otp_then_sets_code() -> None:
     c = _connector()
     c._to_worker.put(("sms", "9999"))  # the SMS code the user would submit
     page = FakePage(scenario="fresh")
@@ -358,7 +369,7 @@ def test_full_login_enters_phone_password_otp_then_sets_code():
     assert c._is_logged_in(page) is True
 
 
-def test_wrong_otp_reprompts_with_rejection_message():
+def test_wrong_otp_reprompts_with_rejection_message() -> None:
     c = _connector()
     c._to_worker.put(("sms", "1111"))
     c._to_worker.put(("sms", "2222"))
@@ -366,7 +377,7 @@ def test_wrong_otp_reprompts_with_rejection_message():
     c._ensure_logged_in(page)
     otp_fills = [a[2] for a in page.log if a[0] == "fill" and a[1] == TB.SEL_OTP]
     assert "1111" in otp_fills and "2222" in otp_fills
-    messages = []
+    messages: list[object] = []
     while not c._from_worker.empty():
         kind, payload = c._from_worker.get()
         if kind == "sms_required":
@@ -383,7 +394,7 @@ class _BlockedPage(FakePage):
     the driver must fail fast with that message, not loop re-entering the phone.
     """
 
-    def query_selector(self, selector):
+    def query_selector(self, selector: str) -> object | FakeElement | None:
         if selector == TB.SEL_ACCESS_DENIED:
             return object()
         if selector == TB.SEL_ACCESS_DENIED_TITLE:
@@ -393,7 +404,7 @@ class _BlockedPage(FakePage):
         return super().query_selector(selector)
 
 
-def test_access_denied_popup_fails_fast_with_bank_message():
+def test_access_denied_popup_fails_fast_with_bank_message() -> None:
     c = _connector()
     page = _BlockedPage(scenario="fresh")
     with pytest.raises(ConnectorError, match="blocked the login: Доступ заблокирован"):
@@ -408,24 +419,24 @@ class _SubmitClickPage:
     that _submit swallows a missing-button timeout but surfaces a real failure.
     """
 
-    def __init__(self, error):
+    def __init__(self, error: Exception) -> None:
         self._error = error
 
-    def locator(self, selector):
+    def locator(self, selector: str) -> tbank_mod._Locator:
         error = self._error
 
         class L:
             @property
-            def first(self):
+            def first(self) -> Self:
                 return self
 
-            def click(self, timeout=None):
+            def click(self, timeout: int | None = None) -> None:
                 raise error
 
         return L()
 
 
-def test_submit_skips_missing_button_timeout(monkeypatch):
+def test_submit_skips_missing_button_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
     import app.connectors.tbank_playwright as mod
 
     class FakeTimeout(Exception):
@@ -437,7 +448,7 @@ def test_submit_skips_missing_button_timeout(monkeypatch):
     _connector()._submit(_SubmitClickPage(FakeTimeout("no submit button")))
 
 
-def test_submit_propagates_real_click_error(monkeypatch):
+def test_submit_propagates_real_click_error(monkeypatch: pytest.MonkeyPatch) -> None:
     import app.connectors.tbank_playwright as mod
 
     class FakeTimeout(Exception):
@@ -453,12 +464,12 @@ def test_submit_propagates_real_click_error(monkeypatch):
 # --- download ---------------------------------------------------------------
 
 
-def test_operations_url_scopes_to_account_when_set():
+def test_operations_url_scopes_to_account_when_set() -> None:
     c = _connector({**CREDS, "account": "5858870594"})
     assert c._operations_url() == TB.URL_OPERATIONS + "?account=5858870594"
 
 
-def test_operations_url_defaults_to_all_feed_when_account_absent_or_blank():
+def test_operations_url_defaults_to_all_feed_when_account_absent_or_blank() -> None:
     assert _connector(dict(CREDS))._operations_url() == TB.URL_OPERATIONS
     assert _connector({**CREDS, "account": ""})._operations_url() == TB.URL_OPERATIONS
     # a whitespace-only id from a non-web client is not a real account
@@ -466,12 +477,12 @@ def test_operations_url_defaults_to_all_feed_when_account_absent_or_blank():
     assert _connector({**CREDS, "account": None})._operations_url() == TB.URL_OPERATIONS
 
 
-def test_operations_url_encodes_the_account():
+def test_operations_url_encodes_the_account() -> None:
     c = _connector({**CREDS, "account": "a b&x"})
     assert c._operations_url() == TB.URL_OPERATIONS + "?account=a%20b%26x"
 
 
-def test_download_and_parse_returns_rows():
+def test_download_and_parse_returns_rows() -> None:
     c = _connector()
     page = FakePage(scenario="logged_in", export_label="CSV")
     page.stage = "in"
@@ -479,7 +490,7 @@ def test_download_and_parse_returns_rows():
     assert [r["description"] for r in rows] == ["Lenta", "Okey"]
 
 
-def test_download_waits_for_the_account_feed_to_settle_before_export():
+def test_download_waits_for_the_account_feed_to_settle_before_export() -> None:
     # the ?account= scope is applied by an async XHR after domcontentloaded;
     # the export must wait for the network to settle or it captures the default
     # all-accounts feed that rendered first
@@ -491,7 +502,7 @@ def test_download_waits_for_the_account_feed_to_settle_before_export():
     assert settled == [("load_state", "networkidle")]
 
 
-def test_download_without_export_option_raises():
+def test_download_without_export_option_raises() -> None:
     c = _connector()
     # neither the stable hook nor any known CSV label is in the dropdown
     page = FakePage(scenario="logged_in", csv_hook=False, export_label="missing")
@@ -503,21 +514,21 @@ def test_download_without_export_option_raises():
 # --- OTP handshake / worker plumbing ---------------------------------------
 
 
-def test_ask_sms_returns_code_and_signals():
+def test_ask_sms_returns_code_and_signals() -> None:
     c = _connector()
     c._to_worker.put(("sms", "4321"))
     assert c._ask_sms() == "4321"
     assert c._from_worker.get()[0] == "sms_required"
 
 
-def test_ask_sms_cancel_aborts():
+def test_ask_sms_cancel_aborts() -> None:
     c = _connector()
     c._to_worker.put(("cancel", None))
     with pytest.raises(ConnectorError):
         c._ask_sms()
 
 
-def test_await_worker_dispatch():
+def test_await_worker_dispatch() -> None:
     c = _connector()
     c._from_worker.put(("error", "boom"))
     with pytest.raises(ConnectorError):
@@ -525,25 +536,27 @@ def test_await_worker_dispatch():
     c._from_worker.put(("sms_required", "x"))
     with pytest.raises(SmsRequired):
         c._await_worker()
-    sentinel = object()
+    from app.connectors.base import SyncResult
+
+    sentinel = SyncResult([])
     c._from_worker.put(("result", sentinel))
     assert c._await_worker() is sentinel
 
 
-def test_resume_sync_without_worker_errors():
+def test_resume_sync_without_worker_errors() -> None:
     c = _connector()
     with pytest.raises(ConnectorError):
         c.resume_sync("0000")
 
 
-def test_close_without_worker_is_noop():
+def test_close_without_worker_is_noop() -> None:
     _connector().close()  # must not raise
 
 
 # --- encrypted profile round-trip ------------------------------------------
 
 
-def test_profile_archive_restore_roundtrip(tmp_path):
+def test_profile_archive_restore_roundtrip(tmp_path: Path) -> None:
     src = tmp_path / "profile"
     (src / "Default").mkdir(parents=True)
     (src / "Default" / "Cookies").write_text("secret-cookie")
@@ -558,14 +571,14 @@ def test_profile_archive_restore_roundtrip(tmp_path):
     assert (dst / "Default" / "Cookies").read_text() == "secret-cookie"
 
 
-def test_restore_profile_without_session_is_noop(tmp_path):
+def test_restore_profile_without_session_is_noop(tmp_path: Path) -> None:
     dst = tmp_path / "empty"
     dst.mkdir()
     _connector(session=None)._restore_profile(str(dst))
     assert list(dst.iterdir()) == []
 
 
-def test_prune_cache_drops_junk_dirs(tmp_path):
+def test_prune_cache_drops_junk_dirs(tmp_path: Path) -> None:
     root = tmp_path / "p"
     (root / "Default" / "Cache").mkdir(parents=True)
     (root / "Default" / "Cache" / "x").write_text("junk")
@@ -577,7 +590,7 @@ def test_prune_cache_drops_junk_dirs(tmp_path):
     assert (root / "Default" / "Local Storage").exists()
 
 
-def test_archive_excludes_cache(tmp_path):
+def test_archive_excludes_cache(tmp_path: Path) -> None:
     src = tmp_path / "profile"
     (src / "Cache").mkdir(parents=True)
     (src / "Cache" / "big").write_text("x" * 100)
@@ -592,38 +605,38 @@ def test_archive_excludes_cache(tmp_path):
 # --- _run end to end via an injected fake Playwright ------------------------
 
 
-def _install_fake_playwright(monkeypatch, page):
+def _install_fake_playwright(monkeypatch: pytest.MonkeyPatch, page: FakePage) -> None:
     class FakeContext:
-        def __init__(self):
+        def __init__(self) -> None:
             self.pages = [page]
 
-        def new_page(self):
+        def new_page(self) -> FakePage:
             return page
 
-        def close(self):
+        def close(self) -> None:
             pass
 
     class FakeChromium:
-        def launch_persistent_context(self, work_dir, **kw):
+        def launch_persistent_context(self, work_dir: str, **kw: object) -> FakeContext:
             return FakeContext()
 
     class FakeP:
         chromium = FakeChromium()
 
     class FakeCtxMgr:
-        def __enter__(self):
+        def __enter__(self) -> FakeP:
             return FakeP()
 
-        def __exit__(self, *exc):
+        def __exit__(self, *exc: object) -> Literal[False]:
             return False
 
     module = types.ModuleType("playwright.sync_api")
-    module.sync_playwright = lambda: FakeCtxMgr()
+    module.__dict__["sync_playwright"] = FakeCtxMgr
     monkeypatch.setitem(sys.modules, "playwright", types.ModuleType("playwright"))
     monkeypatch.setitem(sys.modules, "playwright.sync_api", module)
 
 
-def test_run_two_phase_produces_rows_and_session(monkeypatch):
+def test_run_two_phase_produces_rows_and_session(monkeypatch: pytest.MonkeyPatch) -> None:
     page = FakePage(scenario="fresh", export_label="CSV")
     _install_fake_playwright(monkeypatch, page)
     c = _connector()
@@ -631,13 +644,14 @@ def test_run_two_phase_produces_rows_and_session(monkeypatch):
         c.sync()
     result = c.resume_sync("5555")
     assert [r["description"] for r in result.rows] == ["Lenta", "Okey"]
+    assert isinstance(result.session, dict)
     assert "profile" in result.session
     # navigations get the full login budget, not Playwright's default 30s
     assert page.nav_timeout == TB.LOGIN_TIMEOUT_MS
     assert page.action_timeout == TB.LOGIN_TIMEOUT_MS
 
 
-def test_run_missing_playwright_reports_error(monkeypatch):
+def test_run_missing_playwright_reports_error(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setitem(sys.modules, "playwright", None)
     monkeypatch.setitem(sys.modules, "playwright.sync_api", None)
     c = _connector()
@@ -646,19 +660,20 @@ def test_run_missing_playwright_reports_error(monkeypatch):
     assert "playwright" in str(e.value).lower()
 
 
-def test_shot_writes_when_debug_on(monkeypatch, tmp_path):
+def test_shot_writes_when_debug_on(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setenv("MONORI_CONNECTOR_DEBUG", "1")
     monkeypatch.chdir(tmp_path)
     page = FakePage(scenario="logged_in")
     TB._shot(page, "step")
-    assert page.screenshots and page.screenshots[0].endswith("tbank-step.png")
+    assert page.screenshots and page.screenshots[0] is not None
+    assert page.screenshots[0].endswith("tbank-step.png")
     assert (tmp_path / "data" / "tbank-step.html").exists()
 
 
 # --- connector registry / fake connector -----------------------------------
 
 
-def test_fake_connector_rows_are_fresh_copies():
+def test_fake_connector_rows_are_fresh_copies() -> None:
     from app.connectors.fake import FIXTURE_ROWS, _rows
 
     rows = _rows()
@@ -667,7 +682,7 @@ def test_fake_connector_rows_are_fresh_copies():
     assert rows[0] is not FIXTURE_ROWS[0]
 
 
-def test_get_connector_class_lookup_and_unknown():
+def test_get_connector_class_lookup_and_unknown() -> None:
     import app.connectors.fake  # noqa: F401  (registers the fake connector)
     from app.connectors.base import get_connector_class
 

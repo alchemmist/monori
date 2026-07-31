@@ -1,14 +1,25 @@
 import json
 from io import BytesIO
+from typing import TYPE_CHECKING, TypedDict, cast
 
+import httpx2
 import pytest
+from fastapi.testclient import TestClient
 from openpyxl import Workbook
-from tests.conftest import login_as
+
+from tests.conftest import Api, login_as
+
+if TYPE_CHECKING:
+    from openpyxl.worksheet.worksheet import Worksheet
 
 pytestmark = pytest.mark.integration
 
 
-def _seed(api, client):
+class _IdResponse(TypedDict):
+    id: int
+
+
+def _seed(api: Api, client: TestClient) -> int:
     g_out = api.group("Daily Expenses")
     g_in = api.group("Inflow", kind="income")
     cat = api.category("Groceries", g_out, keywords="lenta|okey")
@@ -22,18 +33,23 @@ def _seed(api, client):
     return acct
 
 
-def _export_bytes(client):
+def _export_bytes(client: TestClient) -> bytes:
     r = client.get("/api/export/xlsx")
     assert r.status_code == 200
     return r.content
 
 
-def _upload(client, path, data, extra=None):
+def _upload(
+    client: TestClient,
+    path: str,
+    data: bytes,
+    extra: dict[str, str] | None = None,
+) -> httpx2.Response:
     files = {"file": ("book.xlsx", data, "application/octet-stream")}
     return client.post(path, files=files, data=extra or {})
 
 
-def test_workbook_preview_summarizes(api, client):
+def test_workbook_preview_summarizes(api: Api, client: TestClient) -> None:
     _seed(api, client)
     data = _export_bytes(client)
     r = _upload(client, "/api/import/workbook/preview", data)
@@ -51,7 +67,9 @@ def test_workbook_preview_summarizes(api, client):
     assert body["errors"] == []
 
 
-def test_workbook_preview_reports_no_conflicts_for_fresh_user(api, client):
+def test_workbook_preview_reports_no_conflicts_for_fresh_user(
+    api: Api, client: TestClient
+) -> None:
     _seed(api, client)
     data = _export_bytes(client)
     client.headers.update(login_as(client, "fresh@example.com"))
@@ -60,13 +78,13 @@ def test_workbook_preview_reports_no_conflicts_for_fresh_user(api, client):
     assert r.json()["budgetConflicts"] == 0
 
 
-def test_workbook_preview_rejects_garbage(client):
+def test_workbook_preview_rejects_garbage(client: TestClient) -> None:
     r = _upload(client, "/api/import/workbook/preview", b"not an xlsx")
     assert r.status_code == 400
     assert "workbook" in r.json()["detail"]
 
 
-def test_workbook_commit_requires_full_mapping(api, client):
+def test_workbook_commit_requires_full_mapping(api: Api, client: TestClient) -> None:
     _seed(api, client)
     data = _export_bytes(client)
     r = _upload(client, "/api/import/workbook/commit", data, {"mapping": "{}"})
@@ -74,7 +92,7 @@ def test_workbook_commit_requires_full_mapping(api, client):
     assert "unmapped" in r.json()["detail"]
 
 
-def test_workbook_commit_rejects_foreign_account(api, client):
+def test_workbook_commit_rejects_foreign_account(api: Api, client: TestClient) -> None:
     _seed(api, client)
     data = _export_bytes(client)
     other = login_as(client, "other@example.com")
@@ -87,14 +105,14 @@ def test_workbook_commit_rejects_foreign_account(api, client):
     assert r.status_code == 400
 
 
-def test_workbook_roundtrip_into_fresh_user(api, client):
+def test_workbook_roundtrip_into_fresh_user(api: Api, client: TestClient) -> None:
     _seed(api, client)
     data = _export_bytes(client)
 
     client.headers.update(login_as(client, "fresh@example.com"))
     r = client.post("/api/accounts", json={"name": "Imported card"})
     assert r.status_code == 200
-    target = r.json()["id"]
+    target = cast("_IdResponse", r.json())["id"]
 
     r = client.post(
         "/api/import/workbook/commit",
@@ -129,11 +147,11 @@ def test_workbook_roundtrip_into_fresh_user(api, client):
     assert budgets == {1: 20000, 2: 30000}
 
 
-def test_workbook_reimport_is_idempotent(api, client):
+def test_workbook_reimport_is_idempotent(api: Api, client: TestClient) -> None:
     _seed(api, client)
     data = _export_bytes(client)
     client.headers.update(login_as(client, "again@example.com"))
-    target = client.post("/api/accounts", json={"name": "T"}).json()["id"]
+    target = cast("_IdResponse", client.post("/api/accounts", json={"name": "T"}).json())["id"]
     payload = {"mapping": json.dumps({"RUB:Card": target})}
     files = {"file": ("book.xlsx", data, "application/octet-stream")}
     first = client.post("/api/import/workbook/commit", files=files, data=payload).json()
@@ -147,11 +165,11 @@ def test_workbook_reimport_is_idempotent(api, client):
     assert len(snap["transactions"]) == 3
 
 
-def test_workbook_budget_policy_skip(api, client):
+def test_workbook_budget_policy_skip(api: Api, client: TestClient) -> None:
     _seed(api, client)
     data = _export_bytes(client)
     client.headers.update(login_as(client, "policy@example.com"))
-    target = client.post("/api/accounts", json={"name": "T"}).json()["id"]
+    target = cast("_IdResponse", client.post("/api/accounts", json={"name": "T"}).json())["id"]
     files = {"file": ("book.xlsx", data, "application/octet-stream")}
     r = client.post(
         "/api/import/workbook/commit",
@@ -188,7 +206,7 @@ def test_workbook_budget_policy_skip(api, client):
     assert jan["amount"] == 20000
 
 
-def test_workbook_commit_bad_policy_and_mapping(api, client):
+def test_workbook_commit_bad_policy_and_mapping(api: Api, client: TestClient) -> None:
     _seed(api, client)
     data = _export_bytes(client)
     r = _upload(
@@ -203,11 +221,11 @@ def test_workbook_commit_bad_policy_and_mapping(api, client):
     assert r.status_code == 400
 
 
-def test_workbook_import_lands_as_rollbackable_batch(api, client):
+def test_workbook_import_lands_as_rollbackable_batch(api: Api, client: TestClient) -> None:
     _seed(api, client)
     data = _export_bytes(client)
     client.headers.update(login_as(client, "batch@example.com"))
-    target = client.post("/api/accounts", json={"name": "T"}).json()["id"]
+    target = cast("_IdResponse", client.post("/api/accounts", json={"name": "T"}).json())["id"]
     r = client.post(
         "/api/import/workbook/commit",
         files={"file": ("book.xlsx", data, "application/octet-stream")},
@@ -218,7 +236,7 @@ def test_workbook_import_lands_as_rollbackable_batch(api, client):
     assert batch["inserted"] == 3
 
 
-def test_workbook_upload_guards(api, client):
+def test_workbook_upload_guards(api: Api, client: TestClient) -> None:
     r = client.post(
         "/api/import/workbook/preview",
         files={"file": ("book.xlsx", b"", "application/octet-stream")},
@@ -236,13 +254,13 @@ def test_workbook_upload_guards(api, client):
     assert r.json()["detail"] != "workbook is too large"
 
 
-def _mixed_currency_book():
+def _mixed_currency_book() -> bytes:
     """
     One card carrying both RUB and USD rows — the shape a foreign-currency
     balance leaves in a bank export.
     """
     wb = Workbook()
-    ws = wb.active
+    ws = cast("Worksheet", wb.active)
     ws.title = "Transactions"
     ws.append(
         ["Дата операции", "Номер карты", "Статус", "Сумма операции", "Валюта операции", "Описание"]
@@ -254,7 +272,7 @@ def _mixed_currency_book():
     return buf.getvalue()
 
 
-def test_workbook_preview_splits_a_card_by_currency(client):
+def test_workbook_preview_splits_a_card_by_currency(client: TestClient) -> None:
     r = _upload(client, "/api/import/workbook/preview", _mixed_currency_book())
     assert r.status_code == 200, r.text
     assert r.json()["accountSlots"] == [
@@ -263,7 +281,9 @@ def test_workbook_preview_splits_a_card_by_currency(client):
     ]
 
 
-def test_workbook_commit_refuses_foreign_rows_on_a_ruble_account(api, client):
+def test_workbook_commit_refuses_foreign_rows_on_a_ruble_account(
+    api: Api, client: TestClient
+) -> None:
     rub = api.account("Card")
     data = _mixed_currency_book()
     mapping = json.dumps({"RUB:*1111": rub, "USD:*1111": rub})
@@ -271,16 +291,19 @@ def test_workbook_commit_refuses_foreign_rows_on_a_ruble_account(api, client):
     assert r.status_code == 400
     assert "USD rows cannot be imported into a RUB account" in r.json()["detail"]
 
-    usd = client.post("/api/accounts", json={"name": "Dollars", "currency": "USD"}).json()["id"]
+    usd = cast(
+        "_IdResponse",
+        client.post("/api/accounts", json={"name": "Dollars", "currency": "USD"}).json(),
+    )["id"]
     mapping = json.dumps({"RUB:*1111": rub, "USD:*1111": usd})
     r = _upload(client, "/api/import/workbook/commit", data, {"mapping": mapping})
     assert r.status_code == 200, r.text
     assert r.json()["inserted"] == 2
 
 
-def _card_book():
+def _card_book() -> bytes:
     wb = Workbook()
-    ws = wb.active
+    ws = cast("Worksheet", wb.active)
     ws.title = "Transactions"
     ws.append(
         ["Дата операции", "Номер карты", "Статус", "Сумма операции", "Валюта операции", "Описание"]
@@ -292,7 +315,9 @@ def _card_book():
     return buf.getvalue()
 
 
-def test_workbook_commit_remembers_card_markers_when_asked(api, client):
+def test_workbook_commit_remembers_card_markers_when_asked(
+    api: Api, client: TestClient
+) -> None:
     """
     Mapping a card to an account is knowledge worth keeping: with remember set,
     the marker's digits land in the account's card tails, so the next statement
@@ -315,7 +340,9 @@ def test_workbook_commit_remembers_card_markers_when_asked(api, client):
     assert tails["Other"] == []
 
 
-def test_workbook_commit_leaves_card_tails_alone_by_default(api, client):
+def test_workbook_commit_leaves_card_tails_alone_by_default(
+    api: Api, client: TestClient
+) -> None:
     acct = api.account("Card")
     other = api.account("Other")
     mapping = json.dumps({"RUB:*8181": acct, "RUB:": other})
@@ -325,7 +352,9 @@ def test_workbook_commit_leaves_card_tails_alone_by_default(api, client):
     assert all(a["cardTails"] == [] for a in api.snapshot()["accounts"])
 
 
-def test_remembering_an_already_bound_marker_changes_nothing(api, client):
+def test_remembering_an_already_bound_marker_changes_nothing(
+    api: Api, client: TestClient
+) -> None:
     acct = api.account("Card", cardTails=["8181"])
     other = api.account("Other")
     mapping = json.dumps({"RUB:*8181": acct, "RUB:": other})
