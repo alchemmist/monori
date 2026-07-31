@@ -11,8 +11,8 @@ Outputs into migration/out/:
 
 import json
 import pathlib
-from datetime import datetime, timedelta
 from collections.abc import Sequence
+from datetime import datetime, timedelta
 from typing import TypedDict, cast
 
 RAW = pathlib.Path(__file__).parent / "raw"
@@ -72,7 +72,7 @@ class YearData(TypedDict):
 
 
 def load(name: str) -> dict[str, object]:
-    return cast(dict[str, object], json.loads((RAW / f"{name}.json").read_text()))
+    return cast("dict[str, object]", json.loads((RAW / f"{name}.json").read_text()))
 
 
 def serial_to_iso(serial: float) -> str:
@@ -90,14 +90,14 @@ def cell(
 
 
 def build_categories() -> CategoriesData:
-    rows = cast(list[list[object]], load("categories")["unformatted_value"])
+    rows = cast("list[list[object]]", load("categories")["unformatted_value"])
     groups: dict[str, Group] = {}
     for r in rows[2:]:
         name = str(r[5]) if len(r) > 5 and r[5] != "" else ""
         if name:
             groups[name] = {
                 "name": name,
-                "sort": int(cast(int | float, r[6])),
+                "sort": int(cast("int | float", r[6])),
                 "type": r[7],
             }
     categories: list[Category] = []
@@ -119,7 +119,7 @@ def build_categories() -> CategoriesData:
 
 
 def build_transactions() -> list[dict[str, object]]:
-    rows = cast(list[list[object]], load("transactions")["unformatted_value"])
+    rows = cast("list[list[object]]", load("transactions")["unformatted_value"])
     txs: list[dict[str, object]] = []
     for i, r in enumerate(rows[1:], start=2):
         date = r[1] if len(r) > 1 else ""
@@ -189,9 +189,15 @@ def build_year(year: int, vals: list[list[object]]) -> YearData:
                 bc, oc, blc = month_cols(m)
                 months.append(
                     {
-                        "budgeted": round(float(cast(int | float, cell(vals, ri, bc, 0) or 0)), 2),
-                        "outflows": round(float(cast(int | float, cell(vals, ri, oc, 0) or 0)), 2),
-                        "balance": round(float(cast(int | float, cell(vals, ri, blc, 0) or 0)), 2),
+                        "budgeted": round(
+                            float(cast("int | float", cell(vals, ri, bc, 0) or 0)), 2
+                        ),
+                        "outflows": round(
+                            float(cast("int | float", cell(vals, ri, oc, 0) or 0)), 2
+                        ),
+                        "balance": round(
+                            float(cast("int | float", cell(vals, ri, blc, 0) or 0)), 2
+                        ),
                     }
                 )
             block_rows.append({"category": str(cname), "sheet_row": ri + 1, "months": months})
@@ -208,14 +214,19 @@ def main() -> None:
     reference: dict[str, YearData] = {}
     budgets: list[dict[str, object]] = []
     for y in YEARS:
-        vals = cast(list[list[object]], load(f"year_{y}")["unformatted_value"])
+        vals = cast("list[list[object]]", load(f"year_{y}")["unformatted_value"])
         yr = build_year(y, vals)
         reference[str(y)] = yr
         for row in yr["rows"]:
             for m, mm in enumerate(row["months"], start=1):
                 if mm["budgeted"]:
                     budgets.append(
-                        {"year": y, "month": m, "category": row["category"], "amount": mm["budgeted"]}
+                        {
+                            "year": y,
+                            "month": m,
+                            "category": row["category"],
+                            "amount": mm["budgeted"],
+                        }
                     )
 
     (OUT / "categories.json").write_text(json.dumps(cats, ensure_ascii=False, indent=1))

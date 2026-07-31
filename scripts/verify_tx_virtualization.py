@@ -38,7 +38,7 @@ def measure(page: Page) -> Measure:
     return cast(
         "Measure",
         page.evaluate(
-        """() => {
+            """() => {
         const rows = document.querySelectorAll('tr.cat-row');
         const spacers = document.querySelectorAll('tr[aria-hidden="true"]');
         const th = document.querySelector('.budget-grid th');

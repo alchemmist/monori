@@ -22,8 +22,8 @@ from openpyxl.worksheet.worksheet import Worksheet
 REPO = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO / "server"))
 
-from app.workbook import spec  # noqa: E402
-from app.workbook.parser import TX_ALIASES, parse_workbook  # noqa: E402
+from app.workbook import spec
+from app.workbook.parser import TX_ALIASES, parse_workbook
 
 OUT = REPO / "web" / "e2e" / "fixtures" / "template-workbook.xlsx"
 

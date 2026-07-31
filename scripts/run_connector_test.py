@@ -16,8 +16,8 @@ from typing import cast
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "server"))
 
-from app.connectors.base import SmsRequired, SyncResult  # noqa: E402
-from app.connectors.tbank_playwright import TBankPlaywrightConnector  # noqa: E402
+from app.connectors.base import SmsRequired, SyncResult
+from app.connectors.tbank_playwright import TBankPlaywrightConnector
 
 PROFILE_DIR = os.environ.get("PROFILE_DIR", "/tmp/tbank-explore/profile")
 

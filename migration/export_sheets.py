@@ -48,6 +48,7 @@ class _SpreadsheetsResource(Protocol):
 class _SheetsService(Protocol):
     def spreadsheets(self) -> object: ...
 
+
 SPREADSHEET_ID = os.environ.get("MONORI_SHEET_ID") or (sys.argv[1] if len(sys.argv) > 1 else "")
 TOKEN_PATH = pathlib.Path(
     os.environ.get("MONORI_GSHEETS_TOKEN", "~/.config/monori/gsheets-token.json")
@@ -60,8 +61,7 @@ YEAR_SHEETS = [str(y) for y in range(2020, 2028)]
 def fetch(svc: _SheetsService, rng: str, render: str) -> list[list[object]]:
     spreadsheets = cast("_SpreadsheetsResource", svc.spreadsheets())
     payload = (
-        spreadsheets
-        .values()
+        spreadsheets.values()
         .get(
             spreadsheetId=SPREADSHEET_ID,
             range=rng,

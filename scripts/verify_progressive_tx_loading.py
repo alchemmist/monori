@@ -70,10 +70,9 @@ def open_page(
     requests: list[str] | None = None,
     reduced_motion: Literal["no-preference", "null", "reduce"] | None = None,
 ) -> Page:
-    page = browser.new_page(
-        viewport={"width": 1280, "height": 900}, reduced_motion=reduced_motion
-    )
+    page = browser.new_page(viewport={"width": 1280, "height": 900}, reduced_motion=reduced_motion)
     if requests is not None:
+
         def record_request(r: Request) -> None:
             if "/api/" in r.url:
                 requests.append(r.url)
@@ -107,7 +106,7 @@ def main() -> None:
         requests: list[str] = []
         page = open_page(browser, token, requests=requests)
         page.wait_for_function("() => !document.querySelector('.progress-ring')", timeout=60000)
-        state = cast(PageState, page.evaluate(STATE_JS))
+        state = cast("PageState", page.evaluate(STATE_JS))
         print("AFTER FILL:", state)
         page.close()
 
@@ -115,9 +114,9 @@ def main() -> None:
         reduced = open_page(browser, token, reduced_motion="reduce")
         reduced.wait_for_selector(".progress-ring", timeout=15000)
         reduced_ring = cast(
-            ReducedRing,
+            "ReducedRing",
             reduced.evaluate(
-            """() => {
+                """() => {
             const ring = document.querySelector('.progress-ring');
             return {text: ring.innerText.trim(), svg: !!ring.querySelector('svg')};
         }"""

@@ -17,18 +17,21 @@ Nothing outside the temporary database is written; the workbook is only read.
 """
 
 import argparse
-import sqlite3
 import pathlib
+import sqlite3
 import sys
 import tempfile
 from typing import TypedDict, cast
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / "server"))
 
-from app.db import connect  # noqa: E402
-from app.workbook.apply import apply_workbook  # noqa: E402
-from app.workbook.models import ParsedWorkbook  # noqa: E402
-from app.workbook.parser import (  # noqa: E402
+from openpyxl import load_workbook
+from openpyxl.worksheet.worksheet import Worksheet
+
+from app.db import connect
+from app.workbook.apply import apply_workbook
+from app.workbook.models import ParsedWorkbook
+from app.workbook.parser import (
     YEAR_RE,
     _find_layout,
     _parse_year_sheet,
@@ -37,8 +40,6 @@ from app.workbook.parser import (  # noqa: E402
     account_slot,
     parse_workbook,
 )
-from openpyxl import load_workbook  # noqa: E402
-from openpyxl.worksheet.worksheet import Worksheet  # noqa: E402
 
 MONEY = 100
 
@@ -105,7 +106,7 @@ def sheet_grids(path: str) -> tuple[dict[int, YearGrid], dict[tuple[int, int], H
             year = int(match.group(1))
             if match.group(2) and year in grids:
                 continue  # a plain sheet is the working copy and wins
-            grids[year] = cast(YearGrid, _parse_year_sheet(ws, year, layout))
+            grids[year] = cast("YearGrid", _parse_year_sheet(ws, year, layout))
             for i, base in enumerate(layout["bases"]):
                 month = layout["start_month"] + i
                 if month > 12:
@@ -154,14 +155,19 @@ def import_into_db(
         )
         assert cur.lastrowid is not None
         mapping[key] = cur.lastrowid
-    result = cast(ApplyResult, apply_workbook(c, uid, parsed, mapping, "overwrite"))
+    result = cast("ApplyResult", apply_workbook(c, uid, parsed, mapping, "overwrite"))
     c.commit()
     return c, uid, parsed, result
 
 
 def snapshot(
     c: sqlite3.Connection, uid: int
-) -> tuple[dict[int, tuple[str, str]], dict[tuple[str, int, int], int], dict[tuple[str, int, int], int], int]:
+) -> tuple[
+    dict[int, tuple[str, str]],
+    dict[tuple[str, int, int], int],
+    dict[tuple[str, int, int], int],
+    int,
+]:
     kinds = {
         r["id"]: r["kind"]
         for r in c.execute("SELECT id, kind FROM category_groups WHERE user_id=?", (uid,))
@@ -324,8 +330,10 @@ def replay(
             overspent = 0
             cells: dict[str, ReplayCell] = {}
             for n in expense:
-                bal = max(balances.get(n, 0), 0) + budgets.get((n, year, m), 0) + tx.get(
-                    (n, year, m), 0
+                bal = (
+                    max(balances.get(n, 0), 0)
+                    + budgets.get((n, year, m), 0)
+                    + tx.get((n, year, m), 0)
                 )
                 balances[n] = bal
                 if bal < 0:
@@ -347,7 +355,9 @@ def replay(
     return out
 
 
-def trace(grids: dict[int, YearGrid], replayed: dict[tuple[int, int], ReplayMonth], name: str) -> None:
+def trace(
+    grids: dict[int, YearGrid], replayed: dict[tuple[int, int], ReplayMonth], name: str
+) -> None:
     """One category, month by month, the sheet's three numbers beside ours."""
     print(f"=== {name} ===")
     cols = ("month", "sheet bud", "sheet out", "sheet bal", "our bud", "our out", "our bal")
@@ -385,8 +395,7 @@ def main() -> int:
 
     years = sorted(grids)
     first_year = min(
-        [*(y for _, y, _ in tx), *(y for _, y, _ in budgets), *years]
-        or [years[0] if years else 0]
+        [*(y for _, y, _ in tx), *(y for _, y, _ in budgets), *years] or [years[0] if years else 0]
     )
     replayed = replay(cats, tx, budgets, first_year, max(years))
 

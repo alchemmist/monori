@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 import json
 import sys
-from collections.abc import Mapping
 
 
 def main() -> int:

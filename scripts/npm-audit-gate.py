@@ -9,7 +9,6 @@ exit code directly).
 
 import json
 import sys
-from collections.abc import Mapping
 
 JsonValue = object
 AuditEntry = dict[str, object]

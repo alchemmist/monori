@@ -39,9 +39,7 @@ def dump(page: Page) -> str:
         key = f"{m.group(1)}={m.group(2)}"
         if key not in seen:
             seen.append(key)
-    (CTL / "summary.txt").write_text(
-        "\n".join([f"URL: {page.url}", ""] + seen), encoding="utf-8"
-    )
+    (CTL / "summary.txt").write_text("\n".join([f"URL: {page.url}", ""] + seen), encoding="utf-8")
     return f"dumped {len(html)} bytes, url={page.url}"
 
 

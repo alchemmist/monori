@@ -14,9 +14,8 @@ database actually becomes, not what a regex thought the DDL said.
 import argparse
 import sqlite3
 import sys
+from collections.abc import Mapping
 from pathlib import Path
-from collections.abc import Iterable, Mapping
-from typing import cast
 
 ROOT = Path(__file__).resolve().parent.parent
 SCHEMA = ROOT / "server" / "schema.sql"
@@ -29,7 +28,9 @@ GENERATED_NOTE = (
 )
 
 
-def introspect(schema_sql: str) -> dict[str, tuple[list[tuple[object, ...]], list[tuple[object, ...]]]]:
+def introspect(
+    schema_sql: str,
+) -> dict[str, tuple[list[tuple[object, ...]], list[tuple[object, ...]]]]:
     """Table name → (columns, foreign keys), in declaration order."""
     db = sqlite3.connect(":memory:")
     db.executescript(schema_sql)
