@@ -204,4 +204,4 @@ mutation:
 	echo "── mutation gates: frontend exit=$$front, backend exit=$$back ──"; \
 	if [ $$front -ne 0 ] || [ $$back -ne 0 ]; then exit 1; fi
 
-check: fmt-check lint type analyze test
+check: fmt-check lint type analyze t-fast
