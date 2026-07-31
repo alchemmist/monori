@@ -1,8 +1,8 @@
 import json
-from typing import Annotated
+import sqlite3
+from typing import Annotated, TypedDict, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, Field
 
 from ..auth import current_user
 from ..deps import conn, serialize_tx
@@ -20,21 +20,21 @@ LEGS_BY_ID = (
 )
 
 
-class TransferBody(BaseModel):
+class TransferBody(TypedDict):
     fromAccountId: int
     toAccountId: int
-    amount: int = Field(gt=0)
+    amount: int
     date: str
-    comment: str = ""
+    comment: str
 
 
-class PairBody(BaseModel):
+class PairBody(TypedDict):
     outTxId: int
     inTxId: int
-    note: str = ""
+    note: str
 
 
-def account_exists(c, account_id, uid):
+def account_exists(c: sqlite3.Connection, account_id: int, uid: int) -> bool:
     return (
         c.execute("SELECT id FROM accounts WHERE id=? AND user_id=?", (account_id, uid)).fetchone()
         is not None
@@ -42,30 +42,30 @@ def account_exists(c, account_id, uid):
 
 
 @router.get("")
-def get_transfers(user: Annotated[dict, Depends(current_user)]):
+def get_transfers(user: Annotated[dict[str, object], Depends(current_user)]) -> dict[str, object]:
     c = conn()
     try:
-        return {"rows": list_transfers(c, user["id"])}
+        return {"rows": list_transfers(c, cast(int, user["id"]))}
     finally:
         c.close()
 
 
 @router.get("/suggestions")
 def get_suggestions(
-    user: Annotated[dict, Depends(current_user)],
+    user: Annotated[dict[str, object], Depends(current_user)],
     maxDays: int = Query(default=SUGGEST_DAYS, ge=0, le=31),
-):
+) -> dict[str, object]:
     """
     Pairs that look like a transfer but that detection would not merge unasked
     — too far apart in time, or the two descriptions disagree. The transactions
     themselves ride along so the UI can show both sides without a second round
     trip.
     """
-    uid = user["id"]
+    uid = cast(int, user["id"])
     c = conn()
     try:
         _, pairs = split_confident(candidates(c, uid, maxDays))
-        ids = sorted({p["outTxId"] for p in pairs} | {p["inTxId"] for p in pairs})
+        ids = sorted({cast(int, p["outTxId"]) for p in pairs} | {cast(int, p["inTxId"]) for p in pairs})
         legs = (
             [serialize_tx(r) for r in c.execute(LEGS_BY_ID, (uid, json.dumps(ids)))] if ids else []
         )
@@ -75,42 +75,44 @@ def get_suggestions(
 
 
 @router.post("")
-def create_transfer(body: TransferBody, user: Annotated[dict, Depends(current_user)]):
+def create_transfer(
+    body: TransferBody, user: Annotated[dict[str, object], Depends(current_user)]
+) -> dict[str, str]:
     """
     A transfer is two linked transactions: a negative row on the source account
     and a positive row on the destination, merged into one ``transfers`` entity.
     Both legs stay uncategorized, so they never count as income or expense.
     """
-    uid = user["id"]
-    if body.fromAccountId == body.toAccountId:
+    uid = cast(int, user["id"])
+    if body["fromAccountId"] == body["toAccountId"]:
         raise HTTPException(400, "cannot transfer to the same account")
     c = conn()
     try:
-        if not account_exists(c, body.fromAccountId, uid) or not account_exists(
-            c, body.toAccountId, uid
+        if not account_exists(c, body["fromAccountId"], uid) or not account_exists(
+            c, body["toAccountId"], uid
         ):
             raise HTTPException(400, "unknown account")
         description = "Transfer"
-        legs = []
+        legs: list[int] = []
         for account_id, amount in (
-            (body.fromAccountId, -body.amount),
-            (body.toAccountId, body.amount),
+            (body["fromAccountId"], -body["amount"]),
+            (body["toAccountId"], body["amount"]),
         ):
             cur = c.execute(
                 """INSERT INTO transactions
                    (date, amount, description, account_id, comment, hash, source)
                    VALUES (?, ?, ?, ?, ?, ?, 'transfer')""",
                 (
-                    body.date,
+                    body["date"],
                     amount,
                     description,
                     account_id,
-                    body.comment,
-                    tx_hash(account_id, body.date, amount, description),
+                    body["comment"],
+                    tx_hash(account_id, body["date"], amount, description),
                 ),
             )
-            legs.append(cur.lastrowid)
-        transfer_id = link_pair(c, uid, legs[0], legs[1], note=body.comment)
+            legs.append(cast(int, cur.lastrowid))
+        transfer_id = link_pair(c, uid, legs[0], legs[1], note=body["comment"])
         c.commit()
         return {"transferId": transfer_id}
     except LinkError as e:
@@ -120,7 +122,9 @@ def create_transfer(body: TransferBody, user: Annotated[dict, Depends(current_us
 
 
 @router.post("/link")
-def link_transactions(body: PairBody, user: Annotated[dict, Depends(current_user)]):
+def link_transactions(
+    body: PairBody, user: Annotated[dict[str, object], Depends(current_user)]
+) -> dict[str, str]:
     """
     Merge a pair that is already in the ledger — the usual case for rows the
     bank sent us itself. Nothing is inserted or deleted: both transactions keep
@@ -128,7 +132,7 @@ def link_transactions(body: PairBody, user: Annotated[dict, Depends(current_user
     """
     c = conn()
     try:
-        transfer_id = link_pair(c, user["id"], body.outTxId, body.inTxId, note=body.note)
+        transfer_id = link_pair(c, cast(int, user["id"]), body["outTxId"], body["inTxId"], note=body["note"])
         c.commit()
         return {"transferId": transfer_id}
     except LinkError as e:
@@ -138,10 +142,12 @@ def link_transactions(body: PairBody, user: Annotated[dict, Depends(current_user
 
 
 @router.post("/suggestions/dismiss")
-def dismiss_suggestion(body: PairBody, user: Annotated[dict, Depends(current_user)]):
+def dismiss_suggestion(
+    body: PairBody, user: Annotated[dict[str, object], Depends(current_user)]
+) -> dict[str, bool]:
     c = conn()
     try:
-        reject(c, user["id"], body.outTxId, body.inTxId)
+        reject(c, cast(int, user["id"]), body["outTxId"], body["inTxId"])
         c.commit()
         return {"ok": True}
     except LinkError as e:
@@ -152,15 +158,15 @@ def dismiss_suggestion(body: PairBody, user: Annotated[dict, Depends(current_use
 
 @router.post("/detect")
 def run_detection(
-    user: Annotated[dict, Depends(current_user)],
+    user: Annotated[dict[str, object], Depends(current_user)],
     maxDays: int = Query(default=SUGGEST_DAYS, ge=0, le=31),
-):
+) -> dict[str, object]:
     """
     Merge the pairs that are beyond doubt and report the rest as suggestions.
     """
     c = conn()
     try:
-        merged, suggested = detect(c, user["id"], AUTO_DAYS, maxDays)
+        merged, suggested = detect(c, cast(int, user["id"]), AUTO_DAYS, maxDays)
         c.commit()
         return {"merged": merged, "suggested": len(suggested)}
     finally:
@@ -168,7 +174,7 @@ def run_detection(
 
 
 @router.delete("/{transfer_id}")
-def delete_transfer(transfer_id: str, user: Annotated[dict, Depends(current_user)]):
+def delete_transfer(transfer_id: int, user: Annotated[dict[str, object], Depends(current_user)]) -> dict[str, bool]:
     """
     Split a transfer back into two ordinary transactions, categories and all.
     The rows are never deleted here: half of them came from a bank, and deleting
@@ -176,7 +182,7 @@ def delete_transfer(transfer_id: str, user: Annotated[dict, Depends(current_user
     """
     c = conn()
     try:
-        if not split_transfer(c, user["id"], transfer_id):
+        if not split_transfer(c, cast(int, user["id"]), str(transfer_id)):
             raise HTTPException(404, "transfer not found")
         c.commit()
         return {"ok": True}
