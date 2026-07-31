@@ -26,17 +26,17 @@ MANUAL_ADJUSTMENTS = [
 ]
 
 
-def kop(rubles):
+def kop(rubles: float | int | str) -> int:
     return round(round(float(rubles), 2) * 100)
 
 
-def tx_hash(date, amount_kop, description):
+def tx_hash(date: str, amount_kop: int, description: object) -> str:
     return hashlib.sha1(
         f"{date}|{amount_kop}|{description}".encode(), usedforsecurity=False
     ).hexdigest()
 
 
-def main(db_path=None):
+def main(db_path: str | None = None) -> None:
     cats = json.loads((MIG_OUT / "categories.json").read_text())
     txs = json.loads((MIG_OUT / "transactions.json").read_text())
     budgets = json.loads((MIG_OUT / "budgets.json").read_text())
