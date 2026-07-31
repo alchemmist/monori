@@ -17,17 +17,22 @@ import datetime
 import pathlib
 import sys
 from io import BytesIO
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable, Protocol
 
 from openpyxl import Workbook
 
 if TYPE_CHECKING:
+    from app.workbook.models import ParsedWorkbook
     from openpyxl.worksheet.worksheet import Worksheet
+
+
+class _SpecModule(Protocol):
+    SHEET_TRANSACTIONS: str
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
 
 
-def _load_workbook_modules() -> tuple[object, object, object]:
+def _load_workbook_modules() -> tuple[_SpecModule, dict[str, tuple[str, ...]], Callable[[bytes], ParsedWorkbook]]:
     sys.path.insert(0, str(REPO / "server"))
     from app.workbook import spec
     from app.workbook.parser import TX_ALIASES, parse_workbook

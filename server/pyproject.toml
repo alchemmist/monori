@@ -63,6 +63,7 @@ select = ["E", "F", "I", "UP", "B", "SIM", "C4", "D209", "D213", "ANN", "TC"]
 [tool.mypy]
 python_version = "3.12"
 files = ["app"]
+exclude = ['(^|/)mutants/']
 explicit_package_bases = true
 check_untyped_defs = true
 warn_redundant_casts = true
