@@ -16,14 +16,12 @@ import pathlib
 import sys
 from collections.abc import Callable
 from io import BytesIO
-from typing import TYPE_CHECKING, Protocol
+from typing import Protocol
 
 from openpyxl import Workbook
+from openpyxl.worksheet.worksheet import Worksheet
 
-if TYPE_CHECKING:
-    from openpyxl.worksheet.worksheet import Worksheet
-
-    from app.workbook.models import ParsedWorkbook
+from app.workbook.models import ParsedWorkbook
 
 
 class _SpecModule(Protocol):
@@ -36,9 +34,7 @@ type ParseWorkbook = Callable[[bytes], "ParsedWorkbook"]
 REPO = pathlib.Path(__file__).resolve().parent.parent
 
 
-def _load_workbook_modules() -> tuple[
-    _SpecModule, dict[str, tuple[str, ...]], ParseWorkbook
-]:
+def _load_workbook_modules() -> tuple[_SpecModule, dict[str, tuple[str, ...]], ParseWorkbook]:
     sys.path.insert(0, str(REPO / "server"))
     from app.workbook import spec
     from app.workbook.parser import TX_ALIASES, parse_workbook

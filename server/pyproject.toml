@@ -58,7 +58,7 @@ exclude = ["web/prototypes"]
 force-exclude = true
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B", "SIM", "C4", "D209", "D213", "ANN", "TC"]
+select = ["E", "F", "I", "UP", "B", "SIM", "C4", "D209", "D213", "ANN"]
 
 [tool.mypy]
 python_version = "3.12"

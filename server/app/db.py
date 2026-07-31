@@ -9,8 +9,6 @@ carry ``PRAGMA user_version`` — they are adopted by stamping the matching
 revision, then upgraded.
 """
 
-from __future__ import annotations
-
 import os
 import pathlib
 import sqlite3

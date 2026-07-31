@@ -2,10 +2,9 @@ import pathlib
 import sqlite3
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING, cast
+from typing import cast
 
-if TYPE_CHECKING:
-    from tests.conftest import _Snapshot
+from tests.conftest import _Snapshot
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
 

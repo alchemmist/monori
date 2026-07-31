@@ -8,10 +8,11 @@ renamed key is caught here instead of slipping through as a survived mutant.
 import datetime
 from collections.abc import Sequence
 from io import BytesIO
-from typing import TYPE_CHECKING, cast
+from typing import cast
 
 import pytest
 from openpyxl import Workbook, load_workbook
+from openpyxl.worksheet.worksheet import Worksheet
 
 from app.workbook import spec
 from app.workbook.parser import (
@@ -32,9 +33,6 @@ from app.workbook.parser import (
     _tx_header_index,
     parse_workbook,
 )
-
-if TYPE_CHECKING:
-    from openpyxl.worksheet.worksheet import Worksheet
 
 TX_HEADER = [
     TX_ALIASES[f][0]

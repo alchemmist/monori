@@ -2,17 +2,18 @@
 Monori API. Money in/out of this API is integer kopecks everywhere.
 """
 
-from __future__ import annotations
-
 import contextlib
 import os
 import pathlib
-from typing import TYPE_CHECKING, Annotated
+from collections.abc import Awaitable, Callable
+from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
+from starlette.requests import Request
+from starlette.responses import Response
 
 from .admin import record_api_usage
 from .auth import AuthenticatedUser, current_user
@@ -31,12 +32,6 @@ from .routers import (
     transactions,
     transfers,
 )
-
-if TYPE_CHECKING:
-    from collections.abc import Awaitable, Callable
-
-    from starlette.requests import Request
-    from starlette.responses import Response
 
 app = FastAPI(title="monori", docs_url="/api-docs", redoc_url="/api-redoc")
 

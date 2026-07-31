@@ -36,16 +36,15 @@ import shutil
 import tarfile
 import tempfile
 import threading
+from collections.abc import Callable
 from contextlib import AbstractContextManager
+from datetime import timedelta
 from types import TracebackType
-from typing import TYPE_CHECKING, Literal, Protocol, Self
+from typing import Literal, Protocol, Self
 from urllib.parse import quote
 
 from ..importer import parse_statement
 from .base import Connector, ConnectorError, JsonObject, SmsRequired, SyncResult, SyncRow, register
-
-if TYPE_CHECKING:
-    from playwright.sync_api import Page
 
 
 # playwright is an optional dependency (see _run); when it is installed we
@@ -145,6 +144,54 @@ class _Page(_LocatorPage, Protocol):
     def content(self) -> str: ...
 
 
+class _NavigationResponse(Protocol):
+    pass
+
+
+class _RawPage(_LocatorPage, Protocol):
+    @property
+    def url(self) -> str: ...
+
+    @property
+    def keyboard(self) -> _Keyboard: ...
+
+    def set_default_navigation_timeout(self, timeout: float) -> None: ...
+
+    def set_default_timeout(self, timeout: float) -> None: ...
+
+    def goto(
+        self,
+        url: str,
+        *,
+        timeout: float | timedelta | None = None,
+        wait_until: _WaitUntil | None = None,
+        referer: str | None = None,
+    ) -> _NavigationResponse | None: ...
+
+    def wait_for_timeout(self, timeout: float) -> None: ...
+
+    def wait_for_load_state(
+        self, state: _LoadState = "load", *, timeout: float | timedelta | None = None
+    ) -> None: ...
+
+    def fill(self, selector: str, value: str, *, timeout: float | None = None) -> None: ...
+
+    def query_selector(self, selector: str) -> _Element | None: ...
+
+    def get_by_text(self, text: str, *, exact: bool = False) -> _Locator: ...
+
+    def expect_download(
+        self,
+        predicate: Callable[[_Download], bool] | None = None,
+        *,
+        timeout: float | timedelta | None = None,
+    ) -> _DownloadEventContext: ...
+
+    def screenshot(self, *, path: str, full_page: bool = False) -> bytes: ...
+
+    def content(self) -> str: ...
+
+
 class _DownloadExpectationAdapter(AbstractContextManager["_DownloadExpectationAdapter"]):
     def __init__(self, expectation: _DownloadEventContext) -> None:
         self._expectation = expectation
@@ -170,7 +217,7 @@ class _DownloadExpectationAdapter(AbstractContextManager["_DownloadExpectationAd
 
 
 class _PageAdapter:
-    def __init__(self, page: "Page") -> None:
+    def __init__(self, page: _RawPage) -> None:
         self._page = page
 
     @property

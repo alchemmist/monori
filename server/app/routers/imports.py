@@ -482,6 +482,4 @@ async def workbook_commit(
     if budgetPolicy not in ("overwrite", "skip"):
         raise HTTPException(400, "budgetPolicy must be overwrite or skip")
     data = await _read_workbook_upload(file)
-    return await run_in_threadpool(
-        _commit_workbook, data, user.id, mapping, budgetPolicy, remember
-    )
+    return await run_in_threadpool(_commit_workbook, data, user.id, mapping, budgetPolicy, remember)

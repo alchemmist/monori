@@ -1,16 +1,12 @@
-from __future__ import annotations
-
 import re
+import sqlite3
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Annotated, NotRequired, TypedDict
-
-if TYPE_CHECKING:
-    import sqlite3
+from typing import Annotated, NotRequired, TypedDict
 
 from fastapi import APIRouter, Depends, HTTPException
 
 from ..auth import AuthenticatedUser, current_user
-from ..deps import conn, serialize_account
+from ..deps import AccountResponse, conn, serialize_account
 from ..importer import tx_hash
 
 router = APIRouter(prefix="/api/accounts", tags=["accounts"])
@@ -50,6 +46,10 @@ class AccountPatch(TypedDict, total=False):
     connectionId: int | None
     bankRef: str | None
     cardTails: list[str] | None
+
+
+class AccountIdResponse(TypedDict):
+    id: int | None
 
 
 def _owned_connection(c: sqlite3.Connection, connection_id: int, uid: int) -> None:
@@ -101,7 +101,7 @@ class ReconcileBody(TypedDict):
 @router.get("")
 def list_accounts(
     user: Annotated[AuthenticatedUser, Depends(current_user)],
-) -> list[dict[str, object]]:
+) -> list[AccountResponse]:
     uid = user.id
     c = conn()
     try:
@@ -121,7 +121,7 @@ def list_accounts(
 @router.post("")
 def create_account(
     body: AccountBody, user: Annotated[AuthenticatedUser, Depends(current_user)]
-) -> dict[str, object]:
+) -> AccountIdResponse:
     uid = user.id
     account_type = body.get("type")
     if account_type not in TYPES:

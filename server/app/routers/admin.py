@@ -5,13 +5,9 @@ Every route requires the ``admin_user`` dependency (403 otherwise). The admin
 sees full user data — this is the instance owner's own deployment.
 """
 
-from __future__ import annotations
-
+import sqlite3
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING, Annotated, TypedDict, cast
-
-if TYPE_CHECKING:
-    import sqlite3
+from typing import Annotated, TypedDict, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
@@ -122,9 +118,7 @@ def list_users(
 
 
 @router.get("/users/{uid}")
-def user_detail(
-    uid: int, admin: Annotated[AdminContext, Depends(admin_user)]
-) -> dict[str, object]:
+def user_detail(uid: int, admin: Annotated[AdminContext, Depends(admin_user)]) -> dict[str, object]:
     c = conn()
     try:
         row = c.execute(
@@ -301,9 +295,7 @@ def create_user_admin(
 
 
 @router.delete("/users/{uid}")
-def delete_user(
-    uid: int, admin: Annotated[AdminContext, Depends(admin_user)]
-) -> dict[str, bool]:
+def delete_user(uid: int, admin: Annotated[AdminContext, Depends(admin_user)]) -> dict[str, bool]:
     if uid == admin.id:
         raise HTTPException(400, "cannot delete yourself")
     c = conn()

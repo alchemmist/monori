@@ -1,10 +1,6 @@
-from __future__ import annotations
-
-from typing import TYPE_CHECKING, Annotated, NotRequired, TypedDict, cast
-
-if TYPE_CHECKING:
-    import sqlite3
-    from collections.abc import Mapping
+import sqlite3
+from collections.abc import Mapping
+from typing import Annotated, NotRequired, TypedDict, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 

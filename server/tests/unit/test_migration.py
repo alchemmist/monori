@@ -1,14 +1,12 @@
 import pathlib
 import sqlite3
-from typing import TYPE_CHECKING, cast
+from collections.abc import Callable
+from typing import cast
 
 import pytest
 from alembic import command
 
 from app.db import LEGACY_REVISIONS, _alembic_config, connect
-
-if TYPE_CHECKING:
-    from collections.abc import Callable
 
 HEAD = "0019"
 assert LEGACY_REVISIONS[-1] == "0006"

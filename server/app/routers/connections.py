@@ -450,9 +450,7 @@ def _sync_accounts(
                 row.kind,
                 creds,
                 session,
-                _account_since(
-                    c, cid, acct.id, row.last_sync
-                ),
+                _account_since(c, cid, acct.id, row.last_sync),
                 acct.bank_ref,
             )
         except SmsRequired:
@@ -618,8 +616,10 @@ def submit_sms(
     try:
         row = _load(c, cid, uid)
         accounts = _linked_accounts(c, cid, uid)
-        pending_id = row.pending_account_id if row.pending_account_id is not None else (
-            accounts[0].id if accounts else None
+        pending_id = (
+            row.pending_account_id
+            if row.pending_account_id is not None
+            else (accounts[0].id if accounts else None)
         )
         if pending_id is None:
             raise HTTPException(400, "no accounts are linked to this connection")

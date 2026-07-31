@@ -1,9 +1,10 @@
 import datetime
 from io import BytesIO
-from typing import TYPE_CHECKING, cast
+from typing import cast
 
 import pytest
 from openpyxl import Workbook
+from openpyxl.worksheet.worksheet import Worksheet
 
 from app.workbook.parser import (
     WorkbookError,
@@ -12,9 +13,6 @@ from app.workbook.parser import (
     _unquote,
     parse_workbook,
 )
-
-if TYPE_CHECKING:
-    from openpyxl.worksheet.worksheet import Worksheet
 
 
 def _book(

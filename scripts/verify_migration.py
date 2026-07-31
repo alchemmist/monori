@@ -213,9 +213,7 @@ def snapshot(c: sqlite3.Connection, uid: int) -> LedgerSnapshot:
     return LedgerSnapshot(cats, tx, budgets, uncategorized)
 
 
-def duplicates(
-    c: sqlite3.Connection, uid: int
-) -> tuple[list[DuplicateRow], list[DuplicateRow]]:
+def duplicates(c: sqlite3.Connection, uid: int) -> tuple[list[DuplicateRow], list[DuplicateRow]]:
     """
     Rows a human would read as the same entry twice — on one account, or the
     same day/amount/description spread over several accounts, which is how a

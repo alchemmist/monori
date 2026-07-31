@@ -1,12 +1,52 @@
 import sqlite3
 from collections.abc import Iterable, Mapping
 from itertools import batched
-from typing import cast
+from typing import TypedDict, cast
 
 from . import db as dbmod
 from .transfer_service import list_transfers
 
 SPLIT_FETCH_BATCH_SIZE = 500
+
+
+class AccountResponse(TypedDict):
+    id: int
+    name: str
+    type: str
+    icon: str
+    color: str
+    iconImage: str | None
+    currency: str
+    sort: int
+    archived: bool
+    openingBalance: int
+    openingDate: str | None
+    connectionId: int | None
+    bankRef: str
+    cardTails: list[str]
+
+
+type SqliteValue = bytes | float | int | str | None
+
+
+def _account_int(value: SqliteValue) -> int:
+    if isinstance(value, int):
+        return value
+    raise TypeError("account field must be an integer")
+
+
+def _account_str(value: SqliteValue) -> str:
+    if isinstance(value, str):
+        return value
+    raise TypeError("account field must be a string")
+
+
+def _account_optional_int(value: SqliteValue) -> int | None:
+    return None if value is None else _account_int(value)
+
+
+def _account_optional_str(value: SqliteValue) -> str | None:
+    return None if value is None else _account_str(value)
 
 
 def conn() -> sqlite3.Connection:
@@ -32,22 +72,22 @@ def serialize_category(r: Mapping[str, object]) -> dict[str, object]:
     }
 
 
-def serialize_account(r: Mapping[str, object]) -> dict[str, object]:
+def serialize_account(r: Mapping[str, SqliteValue]) -> AccountResponse:
     card_tails = str(r["card_tails"] or "")
     return {
-        "id": r["id"],
-        "name": r["name"],
-        "type": r["type"],
-        "icon": r["icon"],
-        "color": r["color"],
-        "iconImage": r["icon_image"],
-        "currency": r["currency"],
-        "sort": r["sort"],
+        "id": _account_int(r["id"]),
+        "name": _account_str(r["name"]),
+        "type": _account_str(r["type"]),
+        "icon": _account_str(r["icon"]),
+        "color": _account_str(r["color"]),
+        "iconImage": _account_optional_str(r["icon_image"]),
+        "currency": _account_str(r["currency"]),
+        "sort": _account_int(r["sort"]),
         "archived": bool(r["archived"]),
-        "openingBalance": r["opening_balance"],
-        "openingDate": r["opening_date"],
-        "connectionId": r["connection_id"],
-        "bankRef": r["bank_ref"],
+        "openingBalance": _account_int(r["opening_balance"]),
+        "openingDate": _account_optional_str(r["opening_date"]),
+        "connectionId": _account_optional_int(r["connection_id"]),
+        "bankRef": _account_str(r["bank_ref"]),
         "cardTails": [t for t in card_tails.split(",") if t],
     }
 

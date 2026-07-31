@@ -3,6 +3,7 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
 from app.deps import (
+    SqliteValue,
     serialize_account,
     serialize_budget,
     serialize_category,
@@ -47,7 +48,7 @@ def test_serialize_category_archived_false() -> None:
 
 
 def test_serialize_account() -> None:
-    row = {
+    row: dict[str, SqliteValue] = {
         "id": 5,
         "name": "T-Bank",
         "type": "card",
@@ -82,7 +83,7 @@ def test_serialize_account() -> None:
 
 
 def test_serialize_account_archived_true() -> None:
-    row = {
+    row: dict[str, SqliteValue] = {
         "id": 5,
         "name": "Old",
         "type": "cash",

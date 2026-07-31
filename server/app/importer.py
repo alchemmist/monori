@@ -31,6 +31,7 @@ class CategoryDefinition(TypedDict):
     keywords: str | None
     group_id: int
 
+
 COLUMNS = [
     "op_date",
     "pay_date",

@@ -1,10 +1,6 @@
-from __future__ import annotations
-
-from typing import TYPE_CHECKING, TypedDict, cast
-
-if TYPE_CHECKING:
-    import sqlite3
-    from collections.abc import Iterable
+import sqlite3
+from collections.abc import Iterable
+from typing import TypedDict, cast
 
 from app.deps import serialize_transactions
 

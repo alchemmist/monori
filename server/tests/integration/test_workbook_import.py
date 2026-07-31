@@ -1,16 +1,14 @@
 import json
 from io import BytesIO
-from typing import TYPE_CHECKING, TypedDict, cast
+from typing import TypedDict, cast
 
 import httpx2
 import pytest
 from fastapi.testclient import TestClient
 from openpyxl import Workbook
+from openpyxl.worksheet.worksheet import Worksheet
 
 from tests.conftest import Api, login_as
-
-if TYPE_CHECKING:
-    from openpyxl.worksheet.worksheet import Worksheet
 
 pytestmark = pytest.mark.integration
 

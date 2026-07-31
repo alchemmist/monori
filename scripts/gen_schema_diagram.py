@@ -28,6 +28,7 @@ GENERATED_NOTE = (
     "run `make schema-diagram` after changing the schema -->"
 )
 
+
 @dataclass(frozen=True, slots=True)
 class ColumnInfo:
     name: str

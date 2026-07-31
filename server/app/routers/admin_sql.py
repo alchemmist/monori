@@ -13,7 +13,7 @@ import contextlib
 import sqlite3
 import time
 from datetime import UTC, datetime
-from typing import Annotated, TypedDict
+from typing import Annotated, NotRequired, TypedDict
 
 from fastapi import APIRouter, Depends, HTTPException
 
@@ -35,6 +35,9 @@ BLOB_PREVIEW = 32
 # TEXT. The console is for reading data, not for exporting it — a cell longer
 # than this comes back cut, with the dropped length spelled out
 CELL_MAX_CHARS = 4096
+
+type SqliteValue = bytes | float | int | str | None
+type SqlCell = float | int | str | None
 
 
 def leading_keyword(sql: str) -> str:
@@ -66,7 +69,7 @@ def leading_keyword(sql: str) -> str:
     return ""
 
 
-def cell(value: object) -> object:
+def cell(value: SqliteValue) -> SqlCell:
     if isinstance(value, bytes):
         head = value[:BLOB_PREVIEW].hex()
         return f"x'{head}{'…' if len(value) > BLOB_PREVIEW else ''}' ({len(value)} bytes)"
@@ -81,10 +84,18 @@ class SqlBody(TypedDict):
     dryRun: bool
 
 
+class SqlResponse(TypedDict):
+    kind: str
+    columns: list[str]
+    rows: list[list[SqlCell]]
+    rowCount: int
+    truncated: bool
+    elapsedMs: float
+    wouldWrite: NotRequired[bool]
+
+
 @router.post("/sql")
-def run_sql(
-    body: SqlBody, admin: Annotated[AuthenticatedUser, Depends(admin_user)]
-) -> dict[str, object]:
+def run_sql(body: SqlBody, admin: Annotated[AuthenticatedUser, Depends(admin_user)]) -> SqlResponse:
     """
     Execute one statement and return either its rows or its affected-row count.
 
