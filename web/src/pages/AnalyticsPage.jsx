@@ -46,14 +46,13 @@ function categoryChartData(snapshot, year, now, kind) {
     const groupName = new Map(snapshot.groups.map((g) => [g.id, g.name]));
     const seen = new Map();
     for (const r of rows) seen.set(r.name, (seen.get(r.name) ?? 0) + 1);
-    const named = rows.map((r) => ({
-        ...r,
-        key: r.id == null ? "other" : `cat-${r.id}`,
-        label:
+    const named = rows.map((r) => {
+        const label =
             r.id != null && seen.get(r.name) > 1
                 ? `${r.name} · ${groupName.get(r.groupId)}`
-                : r.name,
-    }));
+                : r.name;
+        return { ...r, key: r.id == null ? "other" : `cat-${r.id}`, label };
+    });
     const blankAfter = +year === now.getFullYear() ? now.getMonth() : 11;
     const data = MONTHS_SHORT.map((mo, m) => {
         const row = { month: mo };

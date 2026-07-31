@@ -5,13 +5,22 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // plan-vs-fact colors and the yearly series are assertable.
 vi.mock("@mantine/charts", () => {
     const serialize = (testid) =>
-        function Chart({ data, series }) {
+        function Chart({ data, series, withLegend }) {
             return (
                 <div
                     data-testid={testid}
                     data-series={JSON.stringify(data)}
+                    data-chart-series={JSON.stringify(series)}
                     data-cols={JSON.stringify(series)}
-                />
+                >
+                    {withLegend && (
+                        <div data-testid={`${testid}-legend`}>
+                            {series.map((item) => (
+                                <span key={item.name}>{item.label ?? item.name}</span>
+                            ))}
+                        </div>
+                    )}
+                </div>
             );
         };
     return { BarChart: serialize("bar-chart"), LineChart: serialize("line-chart") };
@@ -35,6 +44,11 @@ function series(testid, index = 0) {
 function chartSeries(title) {
     const card = screen.getByText(new RegExp(title)).closest(".chart-card");
     return JSON.parse(card.querySelector('[data-testid="bar-chart"]').dataset.series);
+}
+
+function chartSeriesConfig(title) {
+    const card = screen.getByText(new RegExp(title)).closest(".chart-card");
+    return JSON.parse(card.querySelector('[data-testid="bar-chart"]').dataset.chartSeries);
 }
 
 /** Whichever chart (bar or line) a card holds, parsed back to its data rows. */
@@ -182,6 +196,26 @@ describe("AnalyticsPage", () => {
         });
     });
 
+    describe("category charts", () => {
+        it("uses category names as the chart series and legend labels", () => {
+            render(seedKnownYear());
+
+            const card = screen.getByText(/Categories through the year/).closest(".chart-card");
+            const legend = within(card).getByTestId("bar-chart-legend");
+            expect(within(legend).getByText("Groceries")).toBeInTheDocument();
+            expect(within(legend).getByText("Rent")).toBeInTheDocument();
+            expect(within(legend).queryByText("cat-2")).not.toBeInTheDocument();
+            expect(within(legend).queryByText("cat-3")).not.toBeInTheDocument();
+
+            const config = chartSeriesConfig("Categories through the year");
+            expect(config.map((item) => item.name)).toEqual(["cat-2", "cat-3"]);
+            expect(config.map((item) => item.label)).toEqual(["Groceries", "Rent"]);
+
+            const january = chartSeries("Categories through the year")[0];
+            expect(january).toMatchObject({ "cat-2": 60_000, "cat-3": 40_000 });
+        });
+    });
+
     describe("plan vs fact", () => {
         it("colors a month red only once spending overshoots its budget", () => {
             render(
@@ -230,7 +264,7 @@ describe("AnalyticsPage", () => {
 
         const januaryCell = (categoryName) =>
             screen
-                .getByText(categoryName)
+                .getByText(categoryName, { selector: ".disc-grid__name" })
                 .closest("tr")
                 .querySelectorAll("td")[1]
                 .querySelector(".disc-cell");
@@ -689,7 +723,7 @@ describe("AnalyticsPage", () => {
     describe("budget discipline cell classes", () => {
         const cellFor = (categoryName, monthIndex) =>
             screen
-                .getByText(categoryName)
+                .getByText(categoryName, { selector: ".disc-grid__name" })
                 .closest("tr")
                 .querySelectorAll("td")
                 [monthIndex + 1].querySelector(".disc-cell");
