@@ -5,6 +5,8 @@ COMPOSE ?= $(if $(HAVE_DOCKER_COMPOSE),docker compose,$(if $(HAVE_PODMAN_COMPOSE
 MUTATION_THRESHOLD ?= 85
 
 WEBBIN := web/node_modules/.bin
+PYTHON_TYPECHECK_TARGETS := app tests migrations export_snapshot.py migrate.py verify_parity.py ../scripts ../migration ../web/prototypes
+PYTHON_RUFF_TARGETS := $(PYTHON_TYPECHECK_TARGETS)
 
 .DEFAULT_GOAL := up
 
@@ -86,7 +88,7 @@ lint-html:
 	$(WEBBIN)/htmlhint web/index.html
 
 lint-server:
-	cd server && uv run ruff check .
+	cd server && uv run ruff check --config pyproject.toml $(PYTHON_RUFF_TARGETS)
 
 lint-sql:
 	$(SQLFLUFF) lint server/schema.sql
@@ -116,7 +118,8 @@ spell:
 		README.md web/README.md docs Makefile .github
 
 typecheck:
-	cd server && uv run mypy
+	cd server && uv run mypy --strict $(PYTHON_TYPECHECK_TARGETS)
+	cd web && npm run --silent typecheck
 
 analyze:
 	cd server && uv run bandit -c pyproject.toml -q -r app

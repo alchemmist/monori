@@ -51,7 +51,7 @@ one-to-one — there is no separate CI script to drift out of sync.
 | `make fmt-check`      | The same, check-only.                                                                                                                |
 | `make lint`           | Everything: web (Oxlint), CSS, HTML, server (Ruff), YAML, Markdown, generated docs, GitHub Actions, Dockerfile, shell, and spelling. |
 | `make schema-diagram` | Regenerates the ER diagram in [data-model.md](data-model.md) from `server/schema.sql`. `make lint` fails if it is stale.             |
-| `make typecheck`      | mypy on the server.                                                                                                                  |
+| `make typecheck`      | Strict mypy for all tracked Python plus TypeScript compiler and type-aware Oxlint checks.                                           |
 | `make analyze`        | bandit + semgrep security scan.                                                                                                      |
 | `make audit`          | Dependency + secret scanning (`audit-deps`, `audit-deps-py`, `audit-secrets`).                                                       |
 
@@ -84,6 +84,18 @@ dependencies (a real temp SQLite database, the real FastAPI app), not mocks.
 ```bash
 make check   # fmt-check + lint + typecheck + analyze + test
 ```
+
+## Typing policy
+
+All tracked Python is checked with `mypy --strict` and Ruff annotation rules.
+Do not introduce `Any`, bare collections, untyped public functions, or broad
+per-file ignores. When a third-party API is dynamic, accept it at a small
+adapter boundary as `object` and narrow it before it reaches application code.
+
+The frontend uses strict TypeScript and type-aware Oxlint. Use `unknown` for
+untrusted JSON and narrow it; do not use `any`, `@ts-ignore`, or `@ts-nocheck`.
+An `@ts-expect-error` is only acceptable for a documented, specific third-party
+typing defect and must be removed when the upstream types are fixed.
 
 CI runs each of these leaf targets as its own separate check, so a red pipeline
 points straight at the failing tool.

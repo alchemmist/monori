@@ -1,0 +1,294 @@
+[
+    {
+        "key": "back-core",
+        "wave": 0,
+        "description": "backend foundations: database, dependencies, auth, security, crypto, email, application startup, and their unit tests",
+        "paths": [
+            "server/app/db.py",
+            "server/app/deps.py",
+            "server/app/auth.py",
+            "server/app/security.py",
+            "server/app/crypto.py",
+            "server/app/emails.py",
+            "server/app/main.py",
+            "server/app/admin.py",
+            "server/tests/unit/test_db_write_lock.py",
+            "server/tests/unit/test_deps.py",
+            "server/tests/unit/test_security.py",
+            "server/tests/unit/test_crypto.py",
+            "server/tests/unit/test_emails.py",
+            "server/tests/unit/test_admin.py"
+        ]
+    },
+    {
+        "key": "front-contracts-store",
+        "wave": 0,
+        "description": "frontend domain contracts, API client, Zustand store, and their direct tests",
+        "paths": [
+            "web/src/api.*",
+            "web/src/store.*",
+            "web/src/test/render.*",
+            "web/src/mergeCategories.*",
+            "web/src/mergeTransactions.*",
+            "web/src/importFile.*"
+        ]
+    },
+    {
+        "key": "back-transfers-import",
+        "wave": 1,
+        "description": "backend transfer matching, transfer service, ingestion, importer, and their unit tests",
+        "paths": [
+            "server/app/transfer_match.py",
+            "server/app/transfer_service.py",
+            "server/app/ingest.py",
+            "server/app/importer.py",
+            "server/tests/unit/test_transfer_match.py",
+            "server/tests/unit/test_importer.py",
+            "server/tests/unit/test_ingest.py"
+        ]
+    },
+    {
+        "key": "back-connectors-sync",
+        "wave": 1,
+        "description": "backend connector implementations, sync services, connector scripts, and their tests",
+        "paths": [
+            "server/app/connectors/**",
+            "server/app/sync_runner.py",
+            "server/app/sync_service.py",
+            "server/tests/unit/test_tbank_connector.py",
+            "server/tests/unit/test_sync_runner.py",
+            "server/tests/unit/test_sync_service.py",
+            "scripts/explore_tbank.py",
+            "scripts/run_connector_test.py"
+        ]
+    },
+    {
+        "key": "back-workbook-parser",
+        "wave": 1,
+        "description": "workbook parser and its focused tests",
+        "paths": [
+            "server/app/workbook/parser.py",
+            "server/tests/unit/test_workbook_parser.py",
+            "server/tests/unit/test_workbook_parser_mutation.py"
+        ]
+    },
+    {
+        "key": "back-workbook-io",
+        "wave": 1,
+        "description": "workbook apply, export, specification, and their focused tests",
+        "paths": [
+            "server/app/workbook/apply.py",
+            "server/app/workbook/export.py",
+            "server/app/workbook/spec.py",
+            "server/app/workbook/__init__.py",
+            "server/tests/unit/test_workbook_apply.py",
+            "server/tests/unit/test_workbook_apply_mutation.py",
+            "server/tests/unit/test_workbook_export_roundtrip.py",
+            "server/export_snapshot.py",
+            "server/verify_parity.py"
+        ]
+    },
+    {
+        "key": "back-routers-account-auth",
+        "wave": 1,
+        "description": "account, budget, and authentication routers with corresponding integration tests",
+        "paths": [
+            "server/app/routers/accounts.py",
+            "server/app/routers/budgets.py",
+            "server/app/routers/auth_router.py",
+            "server/tests/integration/test_accounts.py",
+            "server/tests/integration/test_budgets.py",
+            "server/tests/integration/test_auth.py",
+            "server/tests/integration/test_auth_users.py"
+        ]
+    },
+    {
+        "key": "back-routers-categories-transfers",
+        "wave": 1,
+        "description": "category, group, and transfer routers with corresponding integration tests",
+        "paths": [
+            "server/app/routers/categories.py",
+            "server/app/routers/groups.py",
+            "server/app/routers/transfers.py",
+            "server/tests/integration/test_categories.py",
+            "server/tests/integration/test_goals.py",
+            "server/tests/integration/test_groups.py",
+            "server/tests/integration/test_transfers.py"
+        ]
+    },
+    {
+        "key": "back-routers-transactions-imports",
+        "wave": 1,
+        "description": "transaction, import, and export routers with corresponding integration tests",
+        "paths": [
+            "server/app/routers/transactions.py",
+            "server/app/routers/imports.py",
+            "server/app/routers/export.py",
+            "server/tests/integration/test_transactions.py",
+            "server/tests/integration/test_imports.py",
+            "server/tests/integration/test_export.py",
+            "server/tests/integration/test_export_mutation.py",
+            "server/tests/integration/test_workbook_import.py"
+        ]
+    },
+    {
+        "key": "back-routers-admin-connections",
+        "wave": 1,
+        "description": "connection and administration routers with corresponding integration tests",
+        "paths": [
+            "server/app/routers/connections.py",
+            "server/app/routers/admin.py",
+            "server/app/routers/admin_sql.py",
+            "server/app/routers/__init__.py",
+            "server/tests/conftest.py",
+            "server/tests/integration/test_connections.py",
+            "server/tests/integration/test_admin_api.py",
+            "server/tests/integration/test_admin_sql.py",
+            "server/tests/integration/test_serialization.py",
+            "server/tests/integration/test_snapshot_light.py"
+        ]
+    },
+    {
+        "key": "back-scripts-migrations",
+        "wave": 1,
+        "description": "remaining migration, maintenance, and prototype Python files with their focused tests",
+        "paths": [
+            "server/migrate.py",
+            "server/migrations/**",
+            "migration/**",
+            "scripts/explore_tbank.py",
+            "scripts/gen_schema_diagram.py",
+            "scripts/make-e2e-workbook.py",
+            "scripts/mutation-gate.py",
+            "scripts/npm-audit-gate.py",
+            "scripts/run_connector_test.py",
+            "scripts/verify_migration.py",
+            "scripts/verify_progressive_tx_loading.py",
+            "scripts/verify_tx_virtualization.py",
+            "web/prototypes/**/*.py",
+            "server/tests/unit/test_account_validators.py",
+            "server/tests/unit/test_connection_model.py",
+            "server/tests/unit/test_migration.py",
+            "server/tests/unit/test_serializers.py",
+            "server/tests/unit/test_serving.py"
+        ]
+    },
+    {
+        "key": "front-engine-utils",
+        "wave": 1,
+        "description": "frontend engine, formatting, currencies, content, windowing, and their tests",
+        "paths": [
+            "web/src/engine/**",
+            "web/src/format.*",
+            "web/src/currencies.*",
+            "web/src/content.*",
+            "web/src/categoryOrder.*",
+            "web/src/useWindowedRows.*"
+        ]
+    },
+    {
+        "key": "front-shell-demo",
+        "wave": 1,
+        "description": "frontend application root, shell, demo data, and test setup",
+        "paths": [
+            "web/src/App.*",
+            "web/src/Root.*",
+            "web/src/main.*",
+            "web/src/demo/**",
+            "web/src/test/setup.*",
+            "web/src/components/Shell.*",
+            "web/src/components/Landing.*",
+            "web/src/components/Wordmark.*"
+        ]
+    },
+    {
+        "key": "front-pages-budget-transactions",
+        "wave": 1,
+        "description": "budget and transaction pages with their tests",
+        "paths": ["web/src/pages/BudgetPage.*", "web/src/pages/TransactionsPage.*"]
+    },
+    {
+        "key": "front-pages-accounts-categories",
+        "wave": 1,
+        "description": "accounts and categories pages with their tests",
+        "paths": ["web/src/pages/AccountsPage.*", "web/src/pages/CategoriesPage.*"]
+    },
+    {
+        "key": "front-pages-analytics-dashboard",
+        "wave": 1,
+        "description": "analytics and dashboard pages with their tests",
+        "paths": [
+            "web/src/pages/AnalyticsPage.*",
+            "web/src/pages/DashboardPage.*",
+            "web/src/pages/chartTheme.*"
+        ]
+    },
+    {
+        "key": "front-pages-admin-settings-login",
+        "wave": 1,
+        "description": "admin, settings, and login pages with their tests",
+        "paths": [
+            "web/src/pages/AdminPage.*",
+            "web/src/pages/SettingsPage.*",
+            "web/src/pages/LoginPage.*"
+        ]
+    },
+    {
+        "key": "front-components-finance",
+        "wave": 1,
+        "description": "financial dialogs, import, transfer, account, and administrative components with their tests",
+        "paths": [
+            "web/src/components/Account*",
+            "web/src/components/AddTxTab.*",
+            "web/src/components/Admin*",
+            "web/src/components/CategoryDialogs.*",
+            "web/src/components/ConnectionDialog.*",
+            "web/src/components/DeleteTxDialog.*",
+            "web/src/components/Import*",
+            "web/src/components/MigratePanel.*",
+            "web/src/components/SplitTransactionTab.*",
+            "web/src/components/Transfer*",
+            "web/src/components/GroupDialogs.*"
+        ]
+    },
+    {
+        "key": "front-components-display",
+        "wave": 1,
+        "description": "display, chart, navigation, documentation, and visual components with their tests",
+        "paths": [
+            "web/src/components/AllocationBar.*",
+            "web/src/components/BudgetCell.*",
+            "web/src/components/Chart*",
+            "web/src/components/DiagramPage.*",
+            "web/src/components/EnvelopeHero.*",
+            "web/src/components/GlyphFlower.*",
+            "web/src/components/GoalCategoryLabel.*",
+            "web/src/components/MarkdownPage.*",
+            "web/src/components/Meadow.*",
+            "web/src/components/Mermaid.*",
+            "web/src/components/Money.*",
+            "web/src/components/TabHost.*",
+            "web/src/components/TimeNavigator.*",
+            "web/src/components/YearGrid.*",
+            "web/src/components/useMermaidSvg.*",
+            "web/src/components/accountIcons.*",
+            "web/src/components/sqlHistory.*"
+        ]
+    },
+    {
+        "key": "front-ui-e2e-config",
+        "wave": 1,
+        "description": "UI primitives, end-to-end tests, and frontend tool configuration",
+        "paths": [
+            "web/src/ui/**",
+            "web/e2e/**",
+            "web/vite.config.*",
+            "web/playwright.config.*",
+            "web/stryker.conf.*",
+            "web/tsconfig.json",
+            "web/.oxlintrc.json",
+            "web/package.json",
+            "web/package-lock.json"
+        ]
+    }
+]

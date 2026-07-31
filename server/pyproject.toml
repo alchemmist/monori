@@ -50,7 +50,7 @@ target-version = "py312"
 line-length = 100
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B", "SIM", "C4", "D209", "D213"]
+select = ["E", "F", "I", "UP", "B", "SIM", "C4", "D209", "D213", "ANN", "TC"]
 
 [tool.mypy]
 python_version = "3.12"
@@ -60,10 +60,10 @@ check_untyped_defs = true
 warn_redundant_casts = true
 warn_unused_ignores = true
 no_implicit_optional = true
-
-[[tool.mypy.overrides]]
-module = ["playwright.*", "openpyxl.*"]
-ignore_missing_imports = true
+disallow_any_explicit = true
+disallow_any_unimported = true
+disallow_any_decorated = true
+warn_return_any = true
 
 [tool.bandit]
 exclude_dirs = ["tests"]
