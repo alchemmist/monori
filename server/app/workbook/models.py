@@ -72,23 +72,12 @@ class WorkbookAccountSlot:
     currency: str
     transactions: int
 
-    def to_api_dict(self) -> dict[str, object]:
-        return {
-            "key": self.key,
-            "marker": self.marker,
-            "currency": self.currency,
-            "transactions": self.transactions,
-        }
-
 
 @pydantic_dataclass(config=_CONFIG)
 class WorkbookBatchResult:
     account_id: int
     batch_id: int
     inserted: int
-
-    def to_api_dict(self) -> dict[str, object]:
-        return {"accountId": self.account_id, "batchId": self.batch_id, "inserted": self.inserted}
 
 
 @pydantic_dataclass(config=_CONFIG)
@@ -101,15 +90,3 @@ class WorkbookApplyResult:
     budgets_written: int
     budgets_skipped: int
     warnings: list[str]
-
-    def to_api_dict(self) -> dict[str, object]:
-        return {
-            "groupsCreated": self.groups_created,
-            "categoriesCreated": self.categories_created,
-            "inserted": self.inserted,
-            "skipped": self.skipped,
-            "batches": [batch.to_api_dict() for batch in self.batches],
-            "budgetsWritten": self.budgets_written,
-            "budgetsSkipped": self.budgets_skipped,
-            "warnings": list(self.warnings),
-        }
