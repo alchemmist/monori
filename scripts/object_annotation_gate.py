@@ -214,7 +214,7 @@ def finding_url(pr_url: str, finding: Finding) -> str:
 
 def comment_body(findings: list[Finding], sha: str, approved: set[str], pr_url: str) -> str:
     active = [finding for finding in findings if finding.finding_id not in approved]
-    status = "✔" if not active else "✗"
+    status = "✅" if not active else "❌"
     lines = [
         state_marker(sha, approved),
         f"## {status} Python <code>object</code> annotation check",
