@@ -1,0 +1,50 @@
+name: Python object annotation gate
+
+on:
+    # zizmor: ignore[dangerous-triggers]
+    # Only API-read files are parsed; pull request code is never executed.
+    pull_request_target:
+        types: [opened, reopened, synchronize]
+    issue_comment:
+        types: [created]
+
+permissions:
+    actions: write
+    contents: read
+    issues: write
+    pull-requests: write
+
+concurrency:
+    group: object-annotation-gate-${{ github.event.pull_request.number || github.event.issue.number }}
+    cancel-in-progress: false
+
+jobs:
+    check:
+        name: Python object annotation gate
+        if: >-
+            github.event_name == 'pull_request_target'
+            || (
+              github.event_name == 'issue_comment'
+              && github.event.issue.pull_request
+              && startsWith(github.event.comment.body, '/ignore-object ')
+            )
+        runs-on: ubuntu-latest
+        timeout-minutes: 10
+        steps:
+            - name: Checkout workflow code
+              uses: actions/checkout@v7
+              with:
+                  persist-credentials: false
+
+            - name: Setup Python
+              uses: actions/setup-python@v6
+              with:
+                  python-version: "3.12"
+
+            - name: Test annotation checker
+              run: python -m unittest discover -s scripts -p 'test_object_annotation_gate.py'
+
+            - name: Check Python annotations
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              run: python scripts/object_annotation_gate.py
