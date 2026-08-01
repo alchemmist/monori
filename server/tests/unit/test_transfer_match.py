@@ -1,4 +1,11 @@
-from app.transfer_match import day_number, find_pairs, has_hint, split_confident
+from app.transfer_match import (
+    TransferCandidate,
+    TransferMatchRow,
+    day_number,
+    find_pairs,
+    has_hint,
+    split_confident,
+)
 
 
 def row(
@@ -8,15 +15,15 @@ def row(
     account: int,
     description: str = "",
     transfer_id: str | None = None,
-) -> dict[str, object]:
-    return {
-        "id": tx_id,
-        "date": f"2026-03-{day:02d}T12:00:00",
-        "amount": amount,
-        "account_id": account,
-        "description": description,
-        "transfer_id": transfer_id,
-    }
+) -> TransferMatchRow:
+    return TransferMatchRow(
+        id=tx_id,
+        date=f"2026-03-{day:02d}T12:00:00",
+        amount=amount,
+        account_id=account,
+        description=description,
+        transfer_id=transfer_id,
+    )
 
 
 def test_day_number_counts_calendar_days() -> None:
@@ -41,7 +48,7 @@ def test_day_number_is_days_since_the_unix_epoch() -> None:
 def test_pairs_opposite_amounts_on_different_accounts() -> None:
     pairs = find_pairs([row(1, 10, -5000, 1), row(2, 10, 5000, 2)])
     assert pairs == [
-        {"outTxId": 1, "inTxId": 2, "amount": 5000, "days": 0, "hint": False, "mismatch": False}
+        TransferCandidate(1, 2, 5000, 0, False)
     ]
 
 
@@ -74,7 +81,7 @@ def test_each_transaction_is_used_at_most_once() -> None:
     # one outflow, two possible inflows: the closer one wins and the other is left
     rows = [row(1, 10, -5000, 1), row(2, 10, 5000, 2), row(3, 13, 5000, 3)]
     pairs = find_pairs(rows)
-    assert [(p["outTxId"], p["inTxId"]) for p in pairs] == [(1, 2)]
+    assert [(p.outTxId, p.inTxId) for p in pairs] == [(1, 2)]
 
 
 def test_a_transfer_sounding_description_breaks_the_tie() -> None:
@@ -84,8 +91,8 @@ def test_a_transfer_sounding_description_breaks_the_tie() -> None:
         row(3, 10, 5000, 3, description="Перевод между своими счетами"),
     ]
     pairs = find_pairs(rows)
-    assert [(p["outTxId"], p["inTxId"]) for p in pairs] == [(1, 3)]
-    assert pairs[0]["hint"] is True
+    assert [(p.outTxId, p.inTxId) for p in pairs] == [(1, 3)]
+    assert pairs[0].hint is True
 
 
 def test_matching_does_not_depend_on_row_order() -> None:
@@ -100,9 +107,14 @@ def test_has_hint_is_case_insensitive() -> None:
 
 
 def test_split_confident_separates_by_distance() -> None:
-    auto, suggested = split_confident([{"days": 0}, {"days": 1}, {"days": 4}], auto_days=1)
-    assert auto == [{"days": 0}, {"days": 1}]
-    assert suggested == [{"days": 4}]
+    pairs = [
+        TransferCandidate(1, 2, 1, 0, False),
+        TransferCandidate(3, 4, 1, 1, False),
+        TransferCandidate(5, 6, 1, 4, False),
+    ]
+    auto, suggested = split_confident(pairs, auto_days=1)
+    assert auto == pairs[:2]
+    assert suggested == pairs[2:]
 
 
 def test_a_purchase_matching_a_transfer_leg_is_never_merged_on_its_own() -> None:
@@ -118,7 +130,7 @@ def test_a_purchase_matching_a_transfer_leg_is_never_merged_on_its_own() -> None
     ]
     pairs = find_pairs(rows)
     assert len(pairs) == 1
-    assert pairs[0]["mismatch"] is True
+    assert pairs[0].mismatch is True
     auto, suggested = split_confident(pairs)
     assert auto == []
     assert suggested == pairs
@@ -132,7 +144,7 @@ def test_a_hinted_leg_with_a_silent_partner_still_merges() -> None:
         row(2, 10, 100000, 2, description="Перевод между своими счетами"),
     ]
     pairs = find_pairs(rows)
-    assert pairs[0]["mismatch"] is False
+    assert pairs[0].mismatch is False
     auto, suggested = split_confident(pairs)
     assert auto == pairs
     assert suggested == []
@@ -145,8 +157,8 @@ def test_both_legs_hinted_beat_a_mismatched_pair_at_the_same_distance() -> None:
         row(3, 10, 100000, 3, description="Пополнение. Перевод между своими"),
     ]
     pairs = find_pairs(rows)
-    assert [(p["outTxId"], p["inTxId"]) for p in pairs] == [(1, 3)]
-    assert pairs[0]["mismatch"] is False
+    assert [(p.outTxId, p.inTxId) for p in pairs] == [(1, 3)]
+    assert pairs[0].mismatch is False
 
 
 def test_two_silent_legs_still_merge_by_amount_and_day() -> None:

@@ -233,3 +233,41 @@ class BudgetRecord:
             month=row["month"],
             amount=row["amount"],
         )
+
+
+@dataclass(frozen=True, slots=True)
+class TransferRecord:
+    id: str
+    out_tx_id: int
+    in_tx_id: int
+    origin: str
+    note: str
+    created_at: str
+
+    @classmethod
+    def from_row(cls, row: sqlite3.Row) -> "TransferRecord":
+        return cls(
+            id=row["id"],
+            out_tx_id=row["out_tx_id"],
+            in_tx_id=row["in_tx_id"],
+            origin=row["origin"],
+            note=row["note"],
+            created_at=row["created_at"],
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class TransferSplitRecord:
+    out_tx_id: int
+    in_tx_id: int
+    out_category_id: int | None
+    in_category_id: int | None
+
+    @classmethod
+    def from_row(cls, row: sqlite3.Row) -> "TransferSplitRecord":
+        return cls(
+            out_tx_id=row["out_tx_id"],
+            in_tx_id=row["in_tx_id"],
+            out_category_id=row["out_category_id"],
+            in_category_id=row["in_category_id"],
+        )

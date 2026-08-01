@@ -8,12 +8,21 @@ ingested rows through exactly the same code path the UI uses.
 
 import sqlite3
 import uuid
-from collections.abc import Callable, Mapping
 from datetime import UTC, datetime
-from typing import cast
+
+from pydantic import ConfigDict
+from pydantic.dataclasses import dataclass as pydantic_dataclass
 
 from .db import begin_write
-from .transfer_match import AUTO_DAYS, SUGGEST_DAYS, find_pairs, split_confident
+from .db_records import TransactionRecord, TransferRecord, TransferSplitRecord
+from .transfer_match import (
+    AUTO_DAYS,
+    SUGGEST_DAYS,
+    TransferCandidate,
+    TransferMatchRow,
+    find_pairs,
+    split_confident,
+)
 
 LINKABLE_COLUMNS = (
     "SELECT t.id, t.date, t.amount, t.description, t.account_id, t.transfer_id"
@@ -25,20 +34,41 @@ LINKABLE_COLUMNS = (
 )
 
 
-def serialize_transfer(r: Mapping[str, object]) -> dict[str, object]:
-    return {
-        "id": r["id"],
-        "outTxId": r["out_tx_id"],
-        "inTxId": r["in_tx_id"],
-        "origin": r["origin"],
-        "note": r["note"],
-        "createdAt": r["created_at"],
-    }
+@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+class TransferResponse:
+    id: str
+    outTxId: int
+    inTxId: int
+    origin: str
+    note: str
+    createdAt: str
 
 
-def list_transfers(c: sqlite3.Connection, uid: int) -> list[dict[str, object]]:
+@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+class MergedTransfer:
+    id: str
+    outTxId: int
+    inTxId: int
+    amount: int
+    days: int
+    hint: bool
+    mismatch: bool
+
+
+def serialize_transfer(record: TransferRecord) -> TransferResponse:
+    return TransferResponse(
+        id=record.id,
+        outTxId=record.out_tx_id,
+        inTxId=record.in_tx_id,
+        origin=record.origin,
+        note=record.note,
+        createdAt=record.created_at,
+    )
+
+
+def list_transfers(c: sqlite3.Connection, uid: int) -> list[TransferResponse]:
     return [
-        serialize_transfer(r)
+        serialize_transfer(TransferRecord.from_row(r))
         for r in c.execute(
             "SELECT id, out_tx_id, in_tx_id, origin, note, created_at FROM transfers"
             " WHERE user_id=? ORDER BY created_at DESC, id",
@@ -47,15 +77,13 @@ def list_transfers(c: sqlite3.Connection, uid: int) -> list[dict[str, object]]:
     ]
 
 
-def owned_tx(c: sqlite3.Connection, uid: int, tx_id: int) -> Mapping[str, object] | None:
-    return cast(
-        "Mapping[str, object] | None",
-        c.execute(
-            "SELECT t.* FROM transactions t JOIN accounts a ON a.id = t.account_id"
-            " WHERE t.id=? AND a.user_id=?",
-            (tx_id, uid),
-        ).fetchone(),
-    )
+def owned_tx(c: sqlite3.Connection, uid: int, tx_id: int) -> TransactionRecord | None:
+    row = c.execute(
+        "SELECT t.* FROM transactions t JOIN accounts a ON a.id = t.account_id"
+        " WHERE t.id=? AND a.user_id=?",
+        (tx_id, uid),
+    ).fetchone()
+    return TransactionRecord.from_row(row) if row is not None else None
 
 
 class LinkError(Exception):
@@ -82,11 +110,11 @@ def link(
     in_row = owned_tx(c, uid, in_tx_id)
     if out_row is None or in_row is None:
         raise LinkError("unknown transaction")
-    if cast("int", out_row["amount"]) >= 0 or cast("int", in_row["amount"]) <= 0:
+    if out_row.amount >= 0 or in_row.amount <= 0:
         raise LinkError("a transfer needs one outflow and one inflow")
-    if out_row["account_id"] == in_row["account_id"]:
+    if out_row.account_id == in_row.account_id:
         raise LinkError("both legs are on the same account")
-    if out_row["transfer_id"] or in_row["transfer_id"]:
+    if out_row.transfer_id or in_row.transfer_id:
         raise LinkError("already part of a transfer")
     if c.execute(
         "SELECT 1 FROM splits WHERE transaction_id IN (?, ?) LIMIT 1",
@@ -110,8 +138,8 @@ def link(
                 out_tx_id,
                 in_tx_id,
                 origin,
-                out_row["category_id"],
-                in_row["category_id"],
+                out_row.category_id,
+                in_row.category_id,
                 note,
                 datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S"),
             ),
@@ -134,20 +162,21 @@ def split(c: sqlite3.Connection, uid: int, transfer_id: str) -> bool:
     Undo a merge: both transactions stay, get their categories back and stop
     pointing at the transfer. Returns False when the transfer is not the user's.
     """
-    row = c.execute(
+    raw_row = c.execute(
         "SELECT out_tx_id, in_tx_id, out_category_id, in_category_id FROM transfers"
         " WHERE id=? AND user_id=?",
         (transfer_id, uid),
     ).fetchone()
-    if row is None:
+    if raw_row is None:
         return False
+    row = TransferSplitRecord.from_row(raw_row)
     c.execute(
         "UPDATE transactions SET transfer_id=NULL, category_id=? WHERE id=?",
-        (row["out_category_id"], row["out_tx_id"]),
+        (row.out_category_id, row.out_tx_id),
     )
     c.execute(
         "UPDATE transactions SET transfer_id=NULL, category_id=? WHERE id=?",
-        (row["in_category_id"], row["in_tx_id"]),
+        (row.in_category_id, row.in_tx_id),
     )
     c.execute("DELETE FROM transfers WHERE id=?", (transfer_id,))
     return True
@@ -193,27 +222,26 @@ def rejections(c: sqlite3.Connection, uid: int) -> set[tuple[int, int]]:
     }
 
 
-FindPairsFn = Callable[
-    [list[Mapping[str, object]], int, set[tuple[int, int]]], list[dict[str, object]]
-]
-SplitConfidentFn = Callable[
-    [list[dict[str, object]], int], tuple[list[dict[str, object]], list[dict[str, object]]]
-]
-
-find_pairs_typed = cast("FindPairsFn", find_pairs)
-split_confident_typed = cast("SplitConfidentFn", split_confident)
-
-
 def candidates(
     c: sqlite3.Connection, uid: int, max_days: int = SUGGEST_DAYS
-) -> list[dict[str, object]]:
-    rows = list(c.execute(LINKABLE_COLUMNS, (uid,)))
-    return find_pairs_typed(rows, max_days, rejections(c, uid))
+) -> list[TransferCandidate]:
+    rows = [
+        TransferMatchRow(
+            id=row["id"],
+            date=row["date"],
+            amount=row["amount"],
+            description=row["description"],
+            account_id=row["account_id"],
+            transfer_id=row["transfer_id"],
+        )
+        for row in c.execute(LINKABLE_COLUMNS, (uid,))
+    ]
+    return find_pairs(rows, max_days, rejections(c, uid))
 
 
 def detect(
     c: sqlite3.Connection, uid: int, auto_days: int = AUTO_DAYS, max_days: int = SUGGEST_DAYS
-) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
+) -> tuple[list[MergedTransfer], list[TransferCandidate]]:
     """
     Scan the ledger and merge what is unambiguous. Pairs that landed on the same
     day (or one apart, since banks post the legs at different times) are merged
@@ -222,18 +250,28 @@ def detect(
     Returns ``(merged, suggestions)`` where ``merged`` carries the new transfer
     ids so the caller can offer an undo.
     """
-    auto, suggested = split_confident_typed(candidates(c, uid, max_days), auto_days)
-    merged: list[dict[str, object]] = []
+    auto, suggested = split_confident(candidates(c, uid, max_days), auto_days)
+    merged: list[MergedTransfer] = []
     for pair in auto:
         try:
             transfer_id = link(
                 c,
                 uid,
-                cast("int", pair["outTxId"]),
-                cast("int", pair["inTxId"]),
+                pair.outTxId,
+                pair.inTxId,
                 origin="matched",
             )
         except LinkError:
             continue
-        merged.append({**pair, "id": transfer_id})
+        merged.append(
+            MergedTransfer(
+                id=transfer_id,
+                outTxId=pair.outTxId,
+                inTxId=pair.inTxId,
+                amount=pair.amount,
+                days=pair.days,
+                hint=pair.hint,
+                mismatch=pair.mismatch,
+            )
+        )
     return merged, suggested
