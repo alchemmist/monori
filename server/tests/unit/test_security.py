@@ -130,7 +130,7 @@ def test_auth_secret_lost_create_race_reads_winner(
     _use_tmp_db(tmp_path, monkeypatch)
     secret_file = tmp_path / ".auth_secret"
 
-    def lose_race(*args: object, **kwargs: object) -> None:
+    def lose_race(path: Path, flags: int, mode: int) -> None:
         secret_file.write_text("winner-secret")
         raise FileExistsError
 

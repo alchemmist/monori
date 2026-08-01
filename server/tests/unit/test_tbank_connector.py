@@ -384,10 +384,11 @@ def test_wrong_otp_reprompts_with_rejection_message() -> None:
     c._ensure_logged_in(page)
     otp_fills = [a[2] for a in page.log if a[0] == "fill" and a[1] == TB.SEL_OTP]
     assert "1111" in otp_fills and "2222" in otp_fills
-    messages: list[object] = []
+    messages: list[str] = []
     while not c._from_worker.empty():
         kind, payload = c._from_worker.get()
         if kind == "sms_required":
+            assert isinstance(payload, str)
             messages.append(payload)
     assert messages == [
         "enter the code sent by the bank",
@@ -624,7 +625,15 @@ def _install_fake_playwright(monkeypatch: pytest.MonkeyPatch, page: FakePage) ->
             pass
 
     class FakeChromium:
-        def launch_persistent_context(self, work_dir: str, **kw: object) -> FakeContext:
+        def launch_persistent_context(
+            self,
+            work_dir: str,
+            *,
+            headless: bool,
+            user_agent: str,
+            accept_downloads: bool,
+            args: list[str],
+        ) -> FakeContext:
             return FakeContext()
 
     class FakeP:
