@@ -20,8 +20,8 @@ from typing import Literal, Self, override
 import pytest
 
 from app.connectors import tbank_playwright as tbank_mod
-from app.connectors.base import ConnectorError, JsonObject, SmsRequired
-from app.connectors.tbank_playwright import TBankPlaywrightConnector as TB
+from app.connectors.base import ConnectorError, JsonObject, SmsRequiredError
+from app.connectors.tbank_playwright import TBankPlaywrightConnector as TB  # noqa: N814
 
 STATEMENT = (
     "05.01.2026 10:00:00\t05.01.2026\t*1\tOK\t-100,00\tRUB\t-100,00\tRUB\t\tSuper\t5411\tLenta\t0\t0\t-100,00\n"
@@ -390,7 +390,8 @@ def test_wrong_otp_reprompts_with_rejection_message() -> None:
 
 
 class _BlockedPage(FakePage):
-    """The bank shows its 'Доступ заблокирован' popup over the phone screen —
+    """The bank shows its 'Доступ заблокирован' popup over the phone screen —.
+
     the driver must fail fast with that message, not loop re-entering the phone.
     """
 
@@ -415,7 +416,8 @@ def test_access_denied_popup_fails_fast_with_bank_message() -> None:
 
 
 class _SubmitClickPage:
-    """A page whose submit-button click raises a chosen error — used to check
+    """A page whose submit-button click raises a chosen error — used to check.
+
     that _submit swallows a missing-button timeout but surfaces a real failure.
     """
 
@@ -439,21 +441,21 @@ class _SubmitClickPage:
 def test_submit_skips_missing_button_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
     import app.connectors.tbank_playwright as mod
 
-    class FakeTimeout(Exception):
+    class FakeTimeoutError(Exception):
         pass
 
-    monkeypatch.setattr(mod, "PlaywrightTimeoutError", FakeTimeout)
+    monkeypatch.setattr(mod, "PlaywrightTimeoutError", FakeTimeoutError)
 
-    _connector()._submit(_SubmitClickPage(FakeTimeout("no submit button")))
+    _connector()._submit(_SubmitClickPage(FakeTimeoutError("no submit button")))
 
 
 def test_submit_propagates_real_click_error(monkeypatch: pytest.MonkeyPatch) -> None:
     import app.connectors.tbank_playwright as mod
 
-    class FakeTimeout(Exception):
+    class FakeTimeoutError(Exception):
         pass
 
-    monkeypatch.setattr(mod, "PlaywrightTimeoutError", FakeTimeout)
+    monkeypatch.setattr(mod, "PlaywrightTimeoutError", FakeTimeoutError)
 
     with pytest.raises(RuntimeError, match="click intercepted"):
         _connector()._submit(_SubmitClickPage(RuntimeError("click intercepted")))
@@ -524,7 +526,7 @@ def test_await_worker_dispatch() -> None:
     with pytest.raises(ConnectorError):
         c._await_worker()
     c._from_worker.put(("sms_required", "x"))
-    with pytest.raises(SmsRequired):
+    with pytest.raises(SmsRequiredError):
         c._await_worker()
     from app.connectors.base import SyncResult
 
@@ -637,7 +639,7 @@ def test_run_two_phase_produces_rows_and_session(monkeypatch: pytest.MonkeyPatch
     page = FakePage(scenario="fresh", export_label="CSV")
     _install_fake_playwright(monkeypatch, page)
     c = _connector()
-    with pytest.raises(SmsRequired):
+    with pytest.raises(SmsRequiredError):
         c.sync()
     result = c.resume_sync("5555")
     assert [row.description for row in result.rows] == ["Lenta", "Okey"]

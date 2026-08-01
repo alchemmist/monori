@@ -1,4 +1,5 @@
-"""The database side of transfers: merging two transactions into one entity,
+"""The database side of transfers: merging two transactions into one entity,.
+
 splitting them apart again, and running detection over a user's ledger.
 
 Kept out of the router so the import and sync pipelines can merge freshly
@@ -33,6 +34,8 @@ LINKABLE_COLUMNS = (
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid"))
 class TransferResponse:
+    """Represent TransferResponse."""
+
     id: str
     outTxId: int
     inTxId: int
@@ -43,6 +46,8 @@ class TransferResponse:
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid"))
 class MergedTransfer:
+    """Represent MergedTransfer."""
+
     id: str
     outTxId: int
     inTxId: int
@@ -53,6 +58,7 @@ class MergedTransfer:
 
 
 def serialize_transfer(record: TransferRecord) -> TransferResponse:
+    """Handle serialize transfer."""
     return TransferResponse(
         id=record.id,
         outTxId=record.out_tx_id,
@@ -64,6 +70,7 @@ def serialize_transfer(record: TransferRecord) -> TransferResponse:
 
 
 def list_transfers(c: sqlite3.Connection, uid: int) -> list[TransferResponse]:
+    """Handle list transfers."""
     return [
         serialize_transfer(TransferRecord.from_row(r))
         for r in c.execute(
@@ -75,6 +82,7 @@ def list_transfers(c: sqlite3.Connection, uid: int) -> list[TransferResponse]:
 
 
 def owned_tx(c: sqlite3.Connection, uid: int, tx_id: int) -> TransactionRecord | None:
+    """Handle owned tx."""
     row = c.execute(
         "SELECT t.* FROM transactions t JOIN accounts a ON a.id = t.account_id"
         " WHERE t.id=? AND a.user_id=?",
@@ -87,7 +95,7 @@ class LinkError(Exception):
     """Why a pair cannot become a transfer. The router turns it into a 400."""
 
 
-def link(
+def link(  # noqa: PLR0913
     c: sqlite3.Connection,
     uid: int,
     out_tx_id: int,
@@ -95,8 +103,9 @@ def link(
     origin: str = "manual",
     note: str = "",
 ) -> str:
-    """Merge two existing transactions into a transfer. The rows are left in place
-    — only ``transfer_id`` is stamped and the categories are moved aside, so a
+    """Merge two existing transactions into a transfer. The rows are left in place.
+
+    — only ``transfer_id`` is stamped and the categories are moved aside, so a.
     later split restores exactly what was there.
     """
     begin_write(c)
@@ -156,7 +165,8 @@ def link(
 
 
 def split(c: sqlite3.Connection, uid: int, transfer_id: str) -> bool:
-    """Undo a merge: both transactions stay, get their categories back and stop
+    """Undo a merge: both transactions stay, get their categories back and stop.
+
     pointing at the transfer. Returns False when the transfer is not the user's.
     """
     raw_row = c.execute(
@@ -180,8 +190,9 @@ def split(c: sqlite3.Connection, uid: int, transfer_id: str) -> bool:
 
 
 def detach_leg(c: sqlite3.Connection, uid: int, tx_id: int) -> bool:
-    """Split whatever transfer this transaction belongs to, so it can be deleted on
-    its own. Without this the entity row cascades away while the surviving leg
+    """Split whatever transfer this transaction belongs to, so it can be deleted on.
+
+    its own. Without this the entity row cascades away while the surviving leg.
     keeps a dangling ``transfer_id`` — and a dangling pointer reads as a transfer
     everywhere downstream, hiding a real transaction from every total.
     """
@@ -206,6 +217,7 @@ def reject(c: sqlite3.Connection, uid: int, out_tx_id: int, in_tx_id: int) -> No
 
 
 def rejections(c: sqlite3.Connection, uid: int) -> set[tuple[int, int]]:
+    """Handle rejections."""
     return {
         (r["out_tx_id"], r["in_tx_id"])
         for r in c.execute(
@@ -222,6 +234,7 @@ def candidates(
     uid: int,
     max_days: int = SUGGEST_DAYS,
 ) -> list[TransferCandidate]:
+    """Handle candidates."""
     rows = [
         TransferMatchRow(
             id=row["id"],
@@ -242,8 +255,9 @@ def detect(
     auto_days: int = AUTO_DAYS,
     max_days: int = SUGGEST_DAYS,
 ) -> tuple[list[MergedTransfer], list[TransferCandidate]]:
-    """Scan the ledger and merge what is unambiguous. Pairs that landed on the same
-    day (or one apart, since banks post the legs at different times) are merged
+    """Scan the ledger and merge what is unambiguous. Pairs that landed on the same.
+
+    day (or one apart, since banks post the legs at different times) are merged.
     outright; anything looser is handed back as a suggestion for the user.
 
     Returns ``(merged, suggestions)`` where ``merged`` carries the new transfer

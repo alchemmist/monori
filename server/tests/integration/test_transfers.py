@@ -25,7 +25,8 @@ def pair(
     out_date: str = "2026-03-10",
     in_date: str = "2026-03-10",
 ) -> tuple[int, int]:
-    """Two ordinary transactions that together look like a transfer, as a bank
+    """Two ordinary transactions that together look like a transfer, as a bank.
+
     would deliver them: nothing links them yet.
     """
     out_id = api.tx(f"{out_date}T09:00:00", -amount, accountId=out_account)
@@ -248,8 +249,9 @@ def test_detect_leaves_a_disagreeing_same_day_pair_as_a_suggestion(
     api: Api,
     client: TestClient,
 ) -> None:
-    """An inflow labeled as a transfer whose true counterpart cannot pair (say,
-    both legs landed on one account) must not swallow a purchase that merely
+    """An inflow labeled as a transfer whose true counterpart cannot pair (say,.
+
+    both legs landed on one account) must not swallow a purchase that merely.
     matches the amount — the pair is offered, not merged.
     """
     a = api.default_account()
@@ -406,8 +408,9 @@ def test_transfer_created_at_is_a_full_iso_timestamp(api: Api, client: TestClien
 
 
 def test_detection_never_pairs_a_reconcile_adjustment(api: Api, client: TestClient) -> None:
-    """A reconcile adjustment is bookkeeping: it exists to bend a balance to the
-    bank's figure, not because money moved anywhere. Matching it against a
+    """A reconcile adjustment is bookkeeping: it exists to bend a balance to the.
+
+    bank's figure, not because money moved anywhere. Matching it against a.
     real transaction would merge fiction with fact.
     """
     a = api.default_account()

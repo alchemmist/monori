@@ -1,3 +1,5 @@
+"""Provide backend functionality."""
+
 import sqlite3
 from typing import Annotated
 
@@ -20,6 +22,8 @@ _CONFIG = ConfigDict(extra="forbid")
 
 @pydantic_dataclass(config=_CONFIG)
 class TxCreate:
+    """Represent TxCreate."""
+
     date: str
     amount: int
     accountId: int
@@ -32,6 +36,8 @@ class TxCreate:
 
 @pydantic_dataclass(config=_CONFIG)
 class TxPatch:
+    """Represent TxPatch."""
+
     date: str | None = None
     amount: int | None = None
     accountId: int | None = None
@@ -45,6 +51,8 @@ class TxPatch:
 
 @pydantic_dataclass(config=_CONFIG)
 class BulkBody:
+    """Represent BulkBody."""
+
     action: str
     ids: list[int]
     categoryId: int | None = None
@@ -52,6 +60,8 @@ class BulkBody:
 
 @pydantic_dataclass(config=_CONFIG)
 class SplitPart:
+    """Represent SplitPart."""
+
     categoryId: int
     amount: int
     comment: str = ""
@@ -59,27 +69,37 @@ class SplitPart:
 
 @pydantic_dataclass(config=_CONFIG)
 class SplitBody:
+    """Represent SplitBody."""
+
     parts: list[SplitPart]
 
 
 @pydantic_dataclass(config=_CONFIG)
 class TransactionListResponse:
+    """Represent TransactionListResponse."""
+
     total: int
     rows: list[TransactionResponse]
 
 
 @pydantic_dataclass(config=_CONFIG)
 class OkResponse:
+    """Represent OkResponse."""
+
     ok: bool
 
 
 @pydantic_dataclass(config=_CONFIG)
 class SplitsResponse:
+    """Represent SplitsResponse."""
+
     splits: list[SplitResponse]
 
 
 @pydantic_dataclass(config=_CONFIG)
 class BulkResponse:
+    """Represent BulkResponse."""
+
     affected: int
 
 
@@ -123,18 +143,19 @@ def _resolve_account(c: sqlite3.Connection, account_id: int, uid: int) -> int:
 
 
 @router.get("")
-def list_transactions(
+def list_transactions(  # noqa: PLR0913
     user: Annotated[AuthenticatedUser, Depends(current_user)],
     from_: Annotated[str | None, Query(alias="from")] = None,
     to: str | None = None,
     categoryId: int | None = None,
     accountId: int | None = None,
-    uncategorized: bool = False,
-    hidden: bool = False,
+    uncategorized: bool = False,  # noqa: FBT001,FBT002
+    hidden: bool = False,  # noqa: FBT001,FBT002
     q: str | None = None,
     limit: Annotated[int, Query(ge=1, le=1000)] = 100,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> TransactionListResponse:
+    """Handle list transactions."""
     uid = user.id
     params = {
         "uid": uid,
@@ -173,7 +194,7 @@ def list_transactions(
         )
         if not isinstance(total, int):
             msg = "transaction count must be an integer"
-            raise RuntimeError(msg)
+            raise RuntimeError(msg)  # noqa: TRY004
         return TransactionListResponse(total=total, rows=serialize_transactions(c.cursor(), rows))
     finally:
         c.close()
@@ -184,6 +205,7 @@ def create_transaction(
     body: TxCreate,
     user: Annotated[AuthenticatedUser, Depends(current_user)],
 ) -> IdResponse:
+    """Handle create transaction."""
     uid = user.id
     c = conn()
     try:
@@ -218,6 +240,7 @@ def patch_transaction(
     patch: TxPatch,
     user: Annotated[AuthenticatedUser, Depends(current_user)],
 ) -> OkResponse:
+    """Handle patch transaction."""
     uid = user.id
     c = conn()
     try:
@@ -286,7 +309,7 @@ def patch_transaction(
 
 
 @router.put("/{tx_id}/splits")
-def replace_splits(
+def replace_splits(  # noqa: C901
     tx_id: int,
     body: SplitBody,
     user: Annotated[AuthenticatedUser, Depends(current_user)],
@@ -307,7 +330,7 @@ def replace_splits(
         if transaction.transfer_id is not None:
             raise HTTPException(400, "transfer transactions cannot be split")
         if body.parts:
-            if len(body.parts) < 2:
+            if len(body.parts) < 2:  # noqa: PLR2004
                 raise HTTPException(400, "a split requires at least two parts")
             if any(part.amount == 0 for part in body.parts):
                 raise HTTPException(400, "split amounts cannot be zero")
@@ -352,6 +375,7 @@ def delete_transaction(
     tx_id: int,
     user: Annotated[AuthenticatedUser, Depends(current_user)],
 ) -> OkResponse:
+    """Handle delete transaction."""
     uid = user.id
     c = conn()
     try:
@@ -374,6 +398,7 @@ def bulk_transactions(
     body: BulkBody,
     user: Annotated[AuthenticatedUser, Depends(current_user)],
 ) -> BulkResponse:
+    """Handle bulk transactions."""
     uid = user.id
     if body.action not in ("categorize", "move", "delete"):
         raise HTTPException(400, "action must be 'categorize', 'move' or 'delete'")

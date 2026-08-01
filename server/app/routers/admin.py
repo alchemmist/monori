@@ -51,6 +51,8 @@ def _count_since(c: sqlite3.Connection, sql: str, since: str) -> int:
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid"))
 class AdminTotals:
+    """Represent AdminTotals."""
+
     users: int
     transactions: int
     accounts: int
@@ -59,12 +61,16 @@ class AdminTotals:
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid"))
 class RegistrationCount:
+    """Represent RegistrationCount."""
+
     month: str
     count: int
 
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid"))
 class OverviewResponse:
+    """Represent OverviewResponse."""
+
     totals: AdminTotals
     dbSizeBytes: int
     newUsers7d: int
@@ -75,6 +81,8 @@ class OverviewResponse:
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid"))
 class AdminConnectionSummary:
+    """Represent AdminConnectionSummary."""
+
     status: str
     lastSync: str | None
     lastError: str | None
@@ -82,6 +90,8 @@ class AdminConnectionSummary:
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid"))
 class AdminUserSummary:
+    """Represent AdminUserSummary."""
+
     id: int
     email: str
     createdAt: str
@@ -96,6 +106,8 @@ class AdminUserSummary:
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid"))
 class AdminAccountSummary:
+    """Represent AdminAccountSummary."""
+
     id: int
     name: str
     type: str
@@ -107,6 +119,8 @@ class AdminAccountSummary:
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid"))
 class AdminTransactionSummary:
+    """Represent AdminTransactionSummary."""
+
     id: int
     date: str
     amount: int
@@ -117,6 +131,8 @@ class AdminTransactionSummary:
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid"))
 class AdminTransactionDetail(AdminTransactionSummary):
+    """Represent AdminTransactionDetail."""
+
     mcc: str
     comment: str
     source: str
@@ -124,12 +140,16 @@ class AdminTransactionDetail(AdminTransactionSummary):
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid"))
 class FeatureCount:
+    """Represent FeatureCount."""
+
     feature: str
     count: int
 
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid"))
 class UserDetailResponse:
+    """Represent UserDetailResponse."""
+
     user: UserResponse
     accounts: list[AdminAccountSummary]
     recentTransactions: list[AdminTransactionSummary]
@@ -139,25 +159,32 @@ class UserDetailResponse:
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid"))
 class DayCount:
+    """Represent DayCount."""
+
     day: str
     count: int
 
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid"))
 class LoginEvent:
+    """Represent LoginEvent."""
+
     email: str
     at: str
 
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid"))
 class ActivityResponse:
+    """Represent ActivityResponse."""
+
     features: list[FeatureCount]
     daily: list[DayCount]
     recentLogins: list[LoginEvent]
 
 
 @router.get("/overview")
-def overview(admin: Annotated[AdminContext, Depends(admin_user)]) -> OverviewResponse:
+def overview(admin: Annotated[AdminContext, Depends(admin_user)]) -> OverviewResponse:  # noqa: ARG001
+    """Handle overview."""
     c = conn()
     try:
         cutoff7, cutoff30 = _cutoff(7), _cutoff(30)
@@ -198,8 +225,9 @@ def overview(admin: Annotated[AdminContext, Depends(admin_user)]) -> OverviewRes
 
 @router.get("/users")
 def list_users(
-    admin: Annotated[AdminContext, Depends(admin_user)],
+    admin: Annotated[AdminContext, Depends(admin_user)],  # noqa: ARG001
 ) -> list[AdminUserSummary]:
+    """Handle list users."""
     c = conn()
     try:
         connections = {}
@@ -244,8 +272,9 @@ def list_users(
 @router.get("/users/{uid}")
 def user_detail(
     uid: int,
-    admin: Annotated[AdminContext, Depends(admin_user)],
+    admin: Annotated[AdminContext, Depends(admin_user)],  # noqa: ARG001
 ) -> UserDetailResponse:
+    """Handle user detail."""
     c = conn()
     try:
         row = c.execute(
@@ -320,12 +349,13 @@ def user_detail(
 @router.get("/users/{uid}/transactions")
 def user_transactions(
     uid: int,
-    admin: Annotated[AdminContext, Depends(admin_user)],
+    admin: Annotated[AdminContext, Depends(admin_user)],  # noqa: ARG001
     limit: Annotated[int, Query(ge=1, le=TX_PAGE_MAX)] = TX_PAGE_MAX,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[AdminTransactionDetail]:
-    """A user's transactions, newest first — the full list behind the detail view's
-    preview, rendered as one JSON object per line by the client. Paged (capped at
+    """Handle A user's transactions, newest first — the full list behind the detail view's.
+
+    preview, rendered as one JSON object per line by the client. Paged (capped at.
     ``TX_PAGE_MAX`` rows) so a heavy history can't materialize one giant response;
     the client walks ``offset`` until a short page comes back.
     """
@@ -361,6 +391,8 @@ def user_transactions(
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid"))
 class DeleteTransactionsBody:
+    """Represent DeleteTransactionsBody."""
+
     ids: list[int]
 
 
@@ -368,10 +400,11 @@ class DeleteTransactionsBody:
 def delete_user_transactions(
     uid: int,
     body: DeleteTransactionsBody,
-    admin: Annotated[AdminContext, Depends(admin_user)],
+    admin: Annotated[AdminContext, Depends(admin_user)],  # noqa: ARG001
 ) -> dict[str, int]:
-    """Bulk-delete a selection of one user's transactions. All-or-nothing: every
-    id must belong to the target user, otherwise nothing is deleted — a stale
+    """Bulk-delete a selection of one user's transactions. All-or-nothing: every.
+
+    id must belong to the target user, otherwise nothing is deleted — a stale.
     selection must fail loudly rather than remove half of it.
     """
     ids = sorted(set(body.ids))
@@ -388,7 +421,7 @@ def delete_user_transactions(
             marks = ",".join("?" * len(chunk))
 
             cur = c.execute(
-                f"DELETE FROM transactions WHERE id IN ({marks})"  # nosec B608
+                f"DELETE FROM transactions WHERE id IN ({marks})"  # nosec B608  # noqa: S608
                 " AND account_id IN (SELECT id FROM accounts WHERE user_id=?)",
                 (*chunk, uid),
             )
@@ -404,6 +437,8 @@ def delete_user_transactions(
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid"))
 class CreateUserBody:
+    """Represent CreateUserBody."""
+
     email: str
     password: str
 
@@ -411,8 +446,9 @@ class CreateUserBody:
 @router.post("/users")
 def create_user_admin(
     body: CreateUserBody,
-    admin: Annotated[AdminContext, Depends(admin_user)],
+    admin: Annotated[AdminContext, Depends(admin_user)],  # noqa: ARG001
 ) -> UserResponse:
+    """Handle create user admin."""
     c = conn()
     try:
         return create_user(c, body.email, body.password)
@@ -422,6 +458,7 @@ def create_user_admin(
 
 @router.delete("/users/{uid}")
 def delete_user(uid: int, admin: Annotated[AdminContext, Depends(admin_user)]) -> dict[str, bool]:
+    """Handle delete user."""
     if uid == admin.id:
         raise HTTPException(400, "cannot delete yourself")
     c = conn()
@@ -451,7 +488,8 @@ def delete_user(uid: int, admin: Annotated[AdminContext, Depends(admin_user)]) -
 
 
 @router.get("/activity")
-def activity(admin: Annotated[AdminContext, Depends(admin_user)]) -> ActivityResponse:
+def activity(admin: Annotated[AdminContext, Depends(admin_user)]) -> ActivityResponse:  # noqa: ARG001
+    """Handle activity."""
     c = conn()
     try:
         day_cutoff = _cutoff(ACTIVITY_WINDOW_DAYS)[:10]

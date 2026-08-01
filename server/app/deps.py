@@ -1,3 +1,5 @@
+"""Provide backend functionality."""
+
 import sqlite3
 from collections.abc import Iterable
 from itertools import batched
@@ -26,6 +28,8 @@ _DTO_CONFIG = ConfigDict(extra="forbid")
 
 @pydantic_dataclass(config=_DTO_CONFIG)
 class AccountResponse:
+    """Represent AccountResponse."""
+
     id: int
     name: str
     type: str
@@ -44,6 +48,8 @@ class AccountResponse:
 
 @pydantic_dataclass(config=_DTO_CONFIG)
 class GroupResponse:
+    """Represent GroupResponse."""
+
     id: int
     name: str
     sort: int
@@ -52,6 +58,8 @@ class GroupResponse:
 
 @pydantic_dataclass(config=_DTO_CONFIG)
 class CategoryResponse:
+    """Represent CategoryResponse."""
+
     id: int
     groupId: int
     name: str
@@ -65,6 +73,8 @@ class CategoryResponse:
 
 @pydantic_dataclass(config=_DTO_CONFIG)
 class SplitResponse:
+    """Represent SplitResponse."""
+
     id: int
     categoryId: int
     amount: int
@@ -73,6 +83,8 @@ class SplitResponse:
 
 @pydantic_dataclass(config=_DTO_CONFIG)
 class TransactionResponse:
+    """Represent TransactionResponse."""
+
     id: int
     date: str
     amount: int
@@ -90,6 +102,8 @@ class TransactionResponse:
 
 @pydantic_dataclass(config=_DTO_CONFIG)
 class UserResponse:
+    """Represent UserResponse."""
+
     id: int
     email: str
     createdAt: str
@@ -100,6 +114,8 @@ class UserResponse:
 
 @pydantic_dataclass(config=_DTO_CONFIG)
 class ConnectionResponse:
+    """Represent ConnectionResponse."""
+
     id: int
     bank: str
     kind: str
@@ -113,6 +129,8 @@ class ConnectionResponse:
 
 @pydantic_dataclass(config=_DTO_CONFIG)
 class BudgetResponse:
+    """Represent BudgetResponse."""
+
     categoryId: int
     year: int
     month: int
@@ -121,11 +139,15 @@ class BudgetResponse:
 
 @pydantic_dataclass(config=_DTO_CONFIG)
 class IdResponse:
+    """Represent IdResponse."""
+
     id: int | None
 
 
 @pydantic_dataclass(config=_DTO_CONFIG)
 class SnapshotResponse:
+    """Represent SnapshotResponse."""
+
     accounts: list[AccountResponse]
     groups: list[GroupResponse]
     categories: list[CategoryResponse]
@@ -137,14 +159,17 @@ class SnapshotResponse:
 
 
 def conn() -> sqlite3.Connection:
+    """Handle conn."""
     return dbmod.connect()
 
 
 def serialize_group(group: GroupRecord) -> GroupResponse:
+    """Handle serialize group."""
     return GroupResponse(id=group.id, name=group.name, sort=group.sort, kind=group.kind)
 
 
 def serialize_category(category: CategoryRecord) -> CategoryResponse:
+    """Handle serialize category."""
     return CategoryResponse(
         id=category.id,
         groupId=category.group_id,
@@ -159,6 +184,7 @@ def serialize_category(category: CategoryRecord) -> CategoryResponse:
 
 
 def serialize_account(account: AccountRecord) -> AccountResponse:
+    """Handle serialize account."""
     return AccountResponse(
         id=account.id,
         name=account.name,
@@ -181,6 +207,7 @@ def serialize_tx(
     transaction: TransactionRecord,
     splits: Iterable[SplitRecord] = (),
 ) -> TransactionResponse:
+    """Handle serialize tx."""
     return TransactionResponse(
         id=transaction.id,
         date=transaction.date,
@@ -210,6 +237,7 @@ def serialize_transactions(
     cur: sqlite3.Cursor,
     rows: Iterable[sqlite3.Row],
 ) -> list[TransactionResponse]:
+    """Handle serialize transactions."""
     transactions = [TransactionRecord.from_row(row) for row in rows]
     if not transactions:
         return []
@@ -218,7 +246,7 @@ def serialize_transactions(
     for chunk in batched(ids, SPLIT_FETCH_BATCH_SIZE):
         marks = ",".join("?" for _ in chunk)
         for split in cur.execute(
-            f"SELECT id, transaction_id, category_id, amount, comment"  # nosec B608
+            f"SELECT id, transaction_id, category_id, amount, comment"  # nosec B608  # noqa: S608
             f" FROM splits WHERE transaction_id IN ({marks})"
             " ORDER BY transaction_id, sort, id",
             chunk,
@@ -229,7 +257,7 @@ def serialize_transactions(
 
 
 def serialize_user(user: UserRecord) -> UserResponse:
-    """A user, without the password hash."""
+    """Handle A user, without the password hash."""
     return UserResponse(
         id=user.id,
         email=user.email,
@@ -241,7 +269,7 @@ def serialize_user(user: UserRecord) -> UserResponse:
 
 
 def serialize_connection(connection: ConnectionRecord) -> ConnectionResponse:
-    """A bank connection, without any secret material (credentials/session)."""
+    """Handle A bank connection, without any secret material (credentials/session)."""
     return ConnectionResponse(
         id=connection.id,
         bank=connection.bank,
@@ -256,6 +284,7 @@ def serialize_connection(connection: ConnectionRecord) -> ConnectionResponse:
 
 
 def serialize_budget(budget: BudgetRecord) -> BudgetResponse:
+    """Handle serialize budget."""
     return BudgetResponse(
         categoryId=budget.category_id,
         year=budget.year,
@@ -279,7 +308,8 @@ def _snapshot_transactions(
     uid: tuple[int],
     tx_limit: int | None,
 ) -> list[TransactionResponse]:
-    """The newest ``tx_limit`` transactions, handed back in the canonical
+    """Handle The newest ``tx_limit`` transactions, handed back in the canonical.
+
     ``date, id`` order the client keeps them in. ``None`` means all of them.
     """
     if tx_limit is None:
@@ -289,6 +319,7 @@ def _snapshot_transactions(
 
 
 def snapshot(c: sqlite3.Connection, user_id: int, tx_limit: int | None = None) -> SnapshotResponse:
+    """Handle snapshot."""
     cur = c.cursor()
     uid = (user_id,)
     transactions = _snapshot_transactions(cur, uid, tx_limit)

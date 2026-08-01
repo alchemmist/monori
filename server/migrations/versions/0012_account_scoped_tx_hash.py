@@ -26,6 +26,7 @@ def _hash(account_id: int, date_iso: str, amount_kop: int, description: str) -> 
 
 
 def upgrade() -> None:
+    """Handle upgrade."""
     conn = op.get_bind()
     last_id = 0
     while True:
@@ -45,5 +46,6 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    """Handle downgrade."""
     msg = "account-less fingerprints are not restorable"
     raise NotImplementedError(msg)

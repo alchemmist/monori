@@ -474,7 +474,7 @@ def test_connection_conversion_to_user_level(tmp_path: pathlib.Path) -> None:
     )
     acct_id = _int_scalar(c, "SELECT id FROM accounts WHERE name='Card'")
     c.execute(
-        "INSERT INTO bank_connections (account_id, bank, kind, status, created_at, updated_at)"
+        "INSERT INTO bank_connections (account_id, bank, kind, status, created_at, updated_at)"  # noqa: S608
         f" VALUES ({acct_id}, 'tbank', 'playwright', 'connected', 't1', 't2')",
     )
     c.commit()

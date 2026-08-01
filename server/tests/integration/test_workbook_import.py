@@ -303,7 +303,8 @@ def test_workbook_upload_guards(api: Api, client: TestClient) -> None:
 
 
 def _mixed_currency_book() -> bytes:
-    """One card carrying both RUB and USD rows — the shape a foreign-currency
+    """One card carrying both RUB and USD rows — the shape a foreign-currency.
+
     balance leaves in a bank export.
     """
     wb = Workbook()
@@ -376,8 +377,9 @@ def _card_book() -> bytes:
 
 
 def test_workbook_commit_remembers_card_markers_when_asked(api: Api, client: TestClient) -> None:
-    """Mapping a card to an account is knowledge worth keeping: with remember set,
-    the marker's digits land in the account's card tails, so the next statement
+    """Mapping a card to an account is knowledge worth keeping: with remember set,.
+
+    the marker's digits land in the account's card tails, so the next statement.
     import or sync routes that card without asking. The unmarked-rows slot has
     no digits and binds nothing.
     """

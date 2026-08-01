@@ -1,3 +1,5 @@
+"""Provide backend functionality."""
+
 import sqlite3
 from typing import Annotated
 
@@ -17,6 +19,8 @@ _CONFIG = ConfigDict(extra="forbid")
 
 @pydantic_dataclass(config=_CONFIG)
 class CategoryBody:
+    """Represent CategoryBody."""
+
     name: str
     groupId: int
     keywords: str = ""
@@ -26,6 +30,8 @@ class CategoryBody:
 
 @pydantic_dataclass(config=_CONFIG)
 class CategoryPatch:
+    """Represent CategoryPatch."""
+
     name: str | None = None
     groupId: int | None = None
     keywords: str | None = None
@@ -39,6 +45,7 @@ class CategoryPatch:
     @model_validator(mode="before")
     @classmethod
     def record_presence(cls, values: dict[str, JsonValue]) -> dict[str, JsonValue]:
+        """Handle record presence."""
         values["goalTargetProvided"] = "goalTarget" in values
         values["goalTargetDateProvided"] = "goalTargetDate" in values
         return values
@@ -46,28 +53,34 @@ class CategoryPatch:
 
 @pydantic_dataclass(config=_CONFIG)
 class ArchiveGoalBody:
-    pass
+    """Represent ArchiveGoalBody."""
 
 
 @pydantic_dataclass(config=_CONFIG)
 class Reorder:
+    """Represent Reorder."""
+
     ids: list[int]
 
 
 @pydantic_dataclass(config=_CONFIG)
 class MergeBody:
+    """Represent MergeBody."""
+
     into: int
 
 
 @pydantic_dataclass(config=_CONFIG)
 class OkResponse:
+    """Represent OkResponse."""
+
     ok: bool
 
 
 def _merge_keywords(a: str, b: str) -> str:
     seen, out = set(), []
     for kw in [*str(a or "").split("|"), *str(b or "").split("|")]:
-        kw = kw.strip()
+        kw = kw.strip()  # noqa: PLW2901
         key = kw.lower()
         if kw and key not in seen:
             seen.add(key)
@@ -100,6 +113,7 @@ def create_category(
     body: CategoryBody,
     user: Annotated[AuthenticatedUser, Depends(current_user)],
 ) -> IdResponse:
+    """Handle create category."""
     uid = user.id
     name = body.name.strip()
     if not name:
@@ -146,11 +160,12 @@ def create_category(
 
 
 @router.patch("/{cat_id}")
-def patch_category(
+def patch_category(  # noqa: C901,PLR0912
     cat_id: int,
     patch: CategoryPatch,
     user: Annotated[AuthenticatedUser, Depends(current_user)],
 ) -> OkResponse:
+    """Handle patch category."""
     uid = user.id
     c = conn()
     try:
@@ -214,7 +229,7 @@ def patch_category(
 @router.post("/{cat_id}/archive-goal")
 def archive_goal(
     cat_id: int,
-    body: ArchiveGoalBody,
+    body: ArchiveGoalBody,  # noqa: ARG001
     user: Annotated[AuthenticatedUser, Depends(current_user)],
 ) -> OkResponse:
     """Close a goal without rewriting its allocations or purchase history."""
@@ -236,7 +251,8 @@ def delete_category(
     cat_id: int,
     user: Annotated[AuthenticatedUser, Depends(current_user)],
 ) -> OkResponse:
-    """Deleting a category never shifts anything: its transactions are left
+    """Handle Deleting a category never shifts anything: its transactions are left.
+
     uncategorized and its budgets are removed by FK cascade.
 
     Moving the transactions somewhere instead is what /merge is for. Delete used
@@ -264,6 +280,7 @@ def reorder_categories(
     body: Reorder,
     user: Annotated[AuthenticatedUser, Depends(current_user)],
 ) -> OkResponse:
+    """Handle reorder categories."""
     uid = user.id
     c = conn()
     try:
@@ -291,8 +308,9 @@ def merge_category(
     body: MergeBody,
     user: Annotated[AuthenticatedUser, Depends(current_user)],
 ) -> OkResponse:
-    """Combine a category into another: its transactions move to the target,
-    keywords are unioned, budgets are summed month by month, then the source
+    """Combine a category into another: its transactions move to the target,.
+
+    keywords are unioned, budgets are summed month by month, then the source.
     category is deleted. Summing matters: the spending moves across, so a
     dropped plan would read as a retroactive overspend on the target.
 

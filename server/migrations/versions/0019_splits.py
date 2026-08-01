@@ -9,6 +9,7 @@ depends_on = None
 
 
 def upgrade() -> None:
+    """Handle upgrade."""
     op.execute(
         """CREATE TABLE splits (
         id INTEGER PRIMARY KEY,
@@ -25,4 +26,5 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    """Handle downgrade."""
     op.execute("DROP TABLE splits")

@@ -26,6 +26,8 @@ type RuleValue = str | list[str] | int
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid"))
 class CategoryDefinition:
+    """Represent CategoryDefinition."""
+
     id: int
     name: str
     keywords: str | None
@@ -65,6 +67,8 @@ def _attr_name(key: str) -> str:
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid"))
 class ParseError:
+    """Represent ParseError."""
+
     line: int
     error: str
     raw: str
@@ -88,11 +92,14 @@ class ParseError:
         raise KeyError(key)
 
     def to_api_dict(self) -> dict[str, int | str]:
+        """Handle to api dict."""
         return asdict(self)
 
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid", validate_assignment=True))
 class ImportRow:
+    """Represent ImportRow."""
+
     date: str
     amount: int
     description: str
@@ -162,6 +169,7 @@ class ImportRow:
         setattr(self, _attr_name(key), value)
 
     def get(self, key: str, default: ImportValue = None) -> ImportValue:
+        """Handle get."""
         try:
             values: dict[str, ImportValue] = self.to_api_dict()
             return values[key]
@@ -169,6 +177,7 @@ class ImportRow:
             return default
 
     def to_api_dict(self) -> dict[str, ImportValue]:
+        """Handle to api dict."""
         return {
             "date": self.date,
             "amount": self.amount,
@@ -194,6 +203,7 @@ class ImportRow:
         }
 
     def to_sync_dict(self) -> SyncRow:
+        """Handle to sync dict."""
         return SyncRow(
             date=self.date,
             amount=self.amount,
@@ -210,6 +220,8 @@ class ImportRow:
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid"))
 class CategoryRule:
+    """Represent CategoryRule."""
+
     category_id: int
     name: str
     keywords: list[str]
@@ -234,11 +246,12 @@ class CategoryRule:
 
 
 def parse_date(raw: str) -> datetime | None:
+    """Handle parse date."""
     m = DATE_RE.match(raw.strip())
     if not m:
         return None
     d, mo, y, hh, mm, ss = m.groups()
-    return datetime(int(y), int(mo), int(d), int(hh or 0), int(mm or 0), int(ss or 0))
+    return datetime(int(y), int(mo), int(d), int(hh or 0), int(mm or 0), int(ss or 0))  # noqa: DTZ001
 
 
 def parse_amount_kop(raw: str) -> int | None:
@@ -253,8 +266,9 @@ def parse_amount_kop(raw: str) -> int | None:
 
 
 def tx_hash(account_id: int, date_iso: str, amount_kop: int, description: str) -> str:
-    """Dedup key of a transaction. Always scoped to the account: the same
-    date/amount/description legitimately occurs on two different accounts
+    """Dedup key of a transaction. Always scoped to the account: the same.
+
+    date/amount/description legitimately occurs on two different accounts.
     (transfer legs, mirrored cards) and must not collide.
     """
     return hashlib.sha256(
@@ -263,8 +277,9 @@ def tx_hash(account_id: int, date_iso: str, amount_kop: int, description: str) -
 
 
 def parse_statement(text: str) -> tuple[list[ImportRow], list[ParseError]]:
-    """Returns (rows, errors). Each row: dict with date (ISO), amount (kopecks),
-    description, bank_category, mcc. Accepts both pasted statement rows and a
+    """Handle Returns (rows, errors). Each row: dict with date (ISO), amount (kopecks),.
+
+    description, bank_category, mcc. Accepts both pasted statement rows and a.
     full bank CSV export — a header row is skipped, not reported. Hashes are
     not computed here — the account is not known yet; ingestion derives the
     account-scoped hash on insert.
@@ -278,7 +293,7 @@ def parse_statement(text: str) -> tuple[list[ImportRow], list[ParseError]]:
         parts = [p.strip().strip('"') for p in line.split(delim)]
         if parts and parts[0].lower() in HEADER_FIRST_CELLS:
             continue
-        if len(parts) < 12:
+        if len(parts) < 12:  # noqa: PLR2004
             errors.append(ParseError(ln, f"expected >=12 columns, got {len(parts)}", line[:200]))
             continue
         rec = dict(zip(COLUMNS, parts + [""] * (len(COLUMNS) - len(parts)), strict=False))
@@ -307,7 +322,8 @@ def build_rules(
     categories: Iterable[CategoryDefinition],
     groups: Mapping[int, str],
 ) -> dict[str, list[CategoryRule]]:
-    """categories: iterable of dicts with name/keywords/group_id;
+    """categories: iterable of dicts with name/keywords/group_id;.
+
     groups: id -> kind ('income'|'expense'). Returns {'IN': [...], 'OUT': [...]}.
     """
     rules: dict[str, list[CategoryRule]] = {"IN": [], "OUT": []}
@@ -334,7 +350,7 @@ def categorize(
     amount_kop: int,
     rules: Mapping[str, list[CategoryRule]],
 ) -> int | None:
-    """Returns category_id or None.
+    """Handle Returns category_id or None.
 
     An inflow is income first — but a merchant's money coming back is a refund,
     and a refund belongs in the envelope it left, or the category quietly reads

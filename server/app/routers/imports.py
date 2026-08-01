@@ -1,3 +1,5 @@
+"""Provide backend functionality."""
+
 import sqlite3
 from collections.abc import Iterable, Mapping
 from typing import Annotated
@@ -40,12 +42,16 @@ MAX_STATEMENT_TEXT = 5_000_000
 
 @pydantic_dataclass(config=ConfigDict(populate_by_name=True))
 class ImportBody:
+    """Represent ImportBody."""
+
     text: str
     account_id: int | None = Field(default=None, alias="accountId")
 
 
 @pydantic_dataclass(config=ConfigDict(populate_by_name=True))
 class CommitRow:
+    """Represent CommitRow."""
+
     date: str
     amount: int
     description: str = ""
@@ -57,17 +63,23 @@ class CommitRow:
 
 @pydantic_dataclass(config=ConfigDict(populate_by_name=True))
 class CommitBody:
+    """Represent CommitBody."""
+
     rows: list[CommitRow]
     account_id: int | None = Field(default=None, alias="accountId")
 
 
 @pydantic_dataclass(config=ConfigDict(populate_by_name=True))
 class DuplicateBody:
+    """Represent DuplicateBody."""
+
     rows: list[CommitRow]
 
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid"))
 class ImportRowResponse:
+    """Represent ImportRowResponse."""
+
     date: str
     amount: int
     description: str
@@ -82,6 +94,8 @@ class ImportRowResponse:
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid"))
 class ParseErrorResponse:
+    """Represent ParseErrorResponse."""
+
     line: int
     error: str
     raw: str
@@ -89,17 +103,23 @@ class ParseErrorResponse:
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid"))
 class ImportPreviewResponse:
+    """Represent ImportPreviewResponse."""
+
     rows: list[ImportRowResponse]
     errors: list[ParseErrorResponse]
 
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid"))
 class DuplicatesResponse:
+    """Represent DuplicatesResponse."""
+
     duplicates: list[bool]
 
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid"))
 class ImportCommitResponse:
+    """Represent ImportCommitResponse."""
+
     inserted: int
     skipped: int
     transfersMerged: int
@@ -108,6 +128,8 @@ class ImportCommitResponse:
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid"))
 class WorkbookAccountSlotResponse:
+    """Represent WorkbookAccountSlotResponse."""
+
     key: str
     marker: str
     currency: str
@@ -116,12 +138,16 @@ class WorkbookAccountSlotResponse:
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid"))
 class WorkbookParseErrorResponse:
+    """Represent WorkbookParseErrorResponse."""
+
     row: int
     error: str
 
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid"))
 class WorkbookPreviewResponse:
+    """Represent WorkbookPreviewResponse."""
+
     groups: int
     categories: int
     transactions: int
@@ -135,6 +161,8 @@ class WorkbookPreviewResponse:
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid"))
 class WorkbookBatchResponse:
+    """Represent WorkbookBatchResponse."""
+
     accountId: int
     batchId: int
     inserted: int
@@ -142,6 +170,8 @@ class WorkbookBatchResponse:
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid"))
 class WorkbookCommitResponse:
+    """Represent WorkbookCommitResponse."""
+
     groupsCreated: int
     categoriesCreated: int
     inserted: int
@@ -214,7 +244,8 @@ def _owned_account(c: sqlite3.Connection, account_id: int | None, uid: int) -> b
 
 
 def _validate_import_categories(c: sqlite3.Connection, uid: int, rows: list[CommitRow]) -> None:
-    """Every manually selected import category must belong to the account owner
+    """Every manually selected import category must belong to the account owner.
+
     and match the sign of its transaction.
     """
     for row in rows:
@@ -296,6 +327,7 @@ def import_preview(
     body: ImportBody,
     user: Annotated[AuthenticatedUser, Depends(current_user)],
 ) -> ImportPreviewResponse:
+    """Handle import preview."""
     uid = user.id
     if len(body.text) > MAX_STATEMENT_TEXT:
         raise HTTPException(413, "statement is too large")
@@ -370,7 +402,8 @@ def import_commit(
     body: CommitBody,
     user: Annotated[AuthenticatedUser, Depends(current_user)],
 ) -> ImportCommitResponse:
-    """Server-side dedup: rows whose hash already exists — or repeats within the
+    """Server-side dedup: rows whose hash already exists — or repeats within the.
+
     batch — are skipped, so a double-submit can't create duplicates.
     """
     uid = user.id
@@ -423,8 +456,9 @@ async def _read_workbook_upload(file: UploadFile) -> bytes:
 
 
 def _account_slots(transactions: Iterable[WorkbookTransaction]) -> list[WorkbookAccountSlot]:
-    """What the user has to map: one entry per card marker per currency. Splitting
-    by currency is what makes a foreign-currency migration impossible to get
+    """Handle What the user has to map: one entry per card marker per currency. Splitting.
+
+    by currency is what makes a foreign-currency migration impossible to get.
     wrong — a USD slot can only be pointed at a USD account, so a user without
     one has nothing to pick and the import stays blocked until they make it.
     """
@@ -492,8 +526,9 @@ def _reject_currency_mismatch(
     slots: Mapping[str, WorkbookAccountSlot],
     marker_map: Mapping[str, int],
 ) -> None:
-    """An amount is only meaningful on an account held in the same currency:
-    putting 95.78 USD on a ruble account would silently record 95 rubles 78
+    """Handle An amount is only meaningful on an account held in the same currency:.
+
+    putting 95.78 USD on a ruble account would silently record 95 rubles 78.
     kopecks. The UI already only offers matching accounts; this is the same rule
     enforced where it cannot be clicked around.
     """
@@ -502,7 +537,7 @@ def _reject_currency_mismatch(
     held = {
         r["id"]: (r["currency"] or DEFAULT_CURRENCY).upper()
         for r in c.execute(
-            f"SELECT id, currency FROM accounts WHERE id IN ({placeholders})",  # nosec B608
+            f"SELECT id, currency FROM accounts WHERE id IN ({placeholders})",  # nosec B608  # noqa: S608
             ids,
         )
     }
@@ -523,15 +558,16 @@ def _remember_markers(
     slots: Mapping[str, WorkbookAccountSlot],
     marker_map: Mapping[str, int],
 ) -> int:
-    """Bind each slot's card marker to the account it was mapped onto, so the next
-    statement import or sync routes those cards without asking. Tails are only
+    """Bind each slot's card marker to the account it was mapped onto, so the next.
+
+    statement import or sync routes those cards without asking. Tails are only.
     appended — whatever the account already has stays, and a marker with no
     digits (the unmarked-rows slot) binds nothing.
     """
     bound = 0
     for key, slot in slots.items():
         digits = "".join(ch for ch in slot.marker if ch.isdigit())
-        if not digits or len(digits) > 8:
+        if not digits or len(digits) > 8:  # noqa: PLR2004
             continue
         account_id = marker_map[key]
         row = c.execute("SELECT card_tails FROM accounts WHERE id=?", (account_id,)).fetchone()
@@ -554,7 +590,7 @@ def _commit_workbook(
     uid: int,
     mapping: str,
     budget_policy: str,
-    remember: bool,
+    remember: bool,  # noqa: FBT001
 ) -> WorkbookCommitResponse:
     parsed = _parse_or_400(data)
     try:
@@ -602,6 +638,7 @@ async def workbook_preview(
     user: Annotated[AuthenticatedUser, Depends(current_user)],
     file: Annotated[UploadFile, File()],
 ) -> WorkbookPreviewResponse:
+    """Handle workbook preview."""
     data = await _read_workbook_upload(file)
     return await run_in_threadpool(_preview_workbook, data, user.id)
 
@@ -612,8 +649,9 @@ async def workbook_commit(
     file: Annotated[UploadFile, File()],
     mapping: Annotated[str, Form()],
     budgetPolicy: Annotated[str, Form()] = "overwrite",
-    remember: Annotated[bool, Form()] = False,
+    remember: Annotated[bool, Form()] = False,  # noqa: FBT002
 ) -> WorkbookCommitResponse:
+    """Handle workbook commit."""
     if budgetPolicy not in ("overwrite", "skip"):
         raise HTTPException(400, "budgetPolicy must be overwrite or skip")
     data = await _read_workbook_upload(file)

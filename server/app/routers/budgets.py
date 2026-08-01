@@ -1,3 +1,5 @@
+"""Provide backend functionality."""
+
 import sqlite3
 from typing import Annotated
 
@@ -16,6 +18,8 @@ _CONFIG = ConfigDict(extra="forbid")
 
 @pydantic_dataclass(config=_CONFIG)
 class BudgetCell:
+    """Represent BudgetCell."""
+
     categoryId: int
     year: int
     month: int
@@ -24,11 +28,15 @@ class BudgetCell:
 
 @pydantic_dataclass(config=_CONFIG)
 class BulkBody:
+    """Represent BulkBody."""
+
     cells: list[BudgetCell]
 
 
 @pydantic_dataclass(config=_CONFIG)
 class CopyBody:
+    """Represent CopyBody."""
+
     fromYear: int
     toYear: int
     fromMonth: int | None = None
@@ -37,21 +45,27 @@ class CopyBody:
 
 @pydantic_dataclass(config=_CONFIG)
 class OkResponse:
+    """Represent OkResponse."""
+
     ok: bool
 
 
 @pydantic_dataclass(config=_CONFIG)
 class SetResponse:
+    """Represent SetResponse."""
+
     set: int
 
 
 @pydantic_dataclass(config=_CONFIG)
 class CopyResponse:
+    """Represent CopyResponse."""
+
     copied: int
 
 
 def _set_cell(c: sqlite3.Connection, cell: BudgetCell, uid: int) -> None:
-    if not 1 <= cell.month <= 12:
+    if not 1 <= cell.month <= 12:  # noqa: PLR2004
         raise HTTPException(422, "month must be between 1 and 12")
     if not c.execute(
         "SELECT c.id FROM categories c JOIN category_groups g ON g.id = c.group_id"
@@ -77,6 +91,7 @@ def put_budget(
     cell: BudgetCell,
     user: Annotated[AuthenticatedUser, Depends(current_user)],
 ) -> OkResponse:
+    """Handle put budget."""
     uid = user.id
     c = conn()
     try:
@@ -92,6 +107,7 @@ def bulk_budgets(
     body: BulkBody,
     user: Annotated[AuthenticatedUser, Depends(current_user)],
 ) -> SetResponse:
+    """Handle bulk budgets."""
     uid = user.id
     c = conn()
     try:
@@ -108,8 +124,9 @@ def copy_budgets(
     body: CopyBody,
     user: Annotated[AuthenticatedUser, Depends(current_user)],
 ) -> CopyResponse:
-    """Copy month->month (both months given) or a whole year->year (months
-    omitted). The destination scope is cleared first, so it becomes an exact
+    """Copy month->month (both months given) or a whole year->year (months.
+
+    omitted). The destination scope is cleared first, so it becomes an exact.
     copy of the source.
     """
     uid = user.id

@@ -1,4 +1,5 @@
-"""Automated import: bank connections, import batches, and a batch_id on
+"""Automated import: bank connections, import batches, and a batch_id on.
+
 transactions pointing at the sync run that inserted the row.
 """
 
@@ -16,6 +17,7 @@ def _has_column(conn: Connection, table: str, column: str) -> bool:
 
 
 def upgrade() -> None:
+    """Handle upgrade."""
     conn = op.get_bind()
     conn.exec_driver_sql("""CREATE TABLE IF NOT EXISTS bank_connections (
       id INTEGER PRIMARY KEY,
@@ -54,5 +56,6 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    """Handle downgrade."""
     msg = "monori migrations are forward-only"
     raise NotImplementedError(msg)

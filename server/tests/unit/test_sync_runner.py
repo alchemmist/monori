@@ -9,8 +9,8 @@ from pydantic import TypeAdapter
 import app.connectors.fake  # noqa: F401  (registers the FakeConnector)
 from app import sync_service
 from app.connectors import base
-from app.connectors.base import ConnectorError, JsonObject, SmsRequired, SyncResult
-from app.sync_runner import LocalRunner, NoPendingLogin, RemoteRunner, get_runner
+from app.connectors.base import ConnectorError, JsonObject, SmsRequiredError, SyncResult
+from app.sync_runner import LocalRunner, NoPendingLoginError, RemoteRunner, get_runner
 
 CREDS: JsonObject = {"phone": "+70000000000", "password": "pw"}
 type Runner = LocalRunner | RemoteRunner
@@ -41,7 +41,7 @@ def runner(request: pytest.FixtureRequest) -> Runner:
 
 
 def test_otp_flow(runner: Runner) -> None:
-    with pytest.raises(SmsRequired):
+    with pytest.raises(SmsRequiredError):
         runner.start(1, "fake", "fake", CREDS, None, None)
     result = runner.resume(1, "0000")
     assert len(result.rows) == 2
@@ -61,15 +61,15 @@ def test_connector_error(runner: Runner) -> None:
 
 
 def test_resume_without_login(runner: Runner) -> None:
-    with pytest.raises(NoPendingLogin):
+    with pytest.raises(NoPendingLoginError):
         runner.resume(7, "0000")
 
 
 def test_cancel_drops_pending(runner: Runner) -> None:
-    with pytest.raises(SmsRequired):
+    with pytest.raises(SmsRequiredError):
         runner.start(1, "fake", "fake", CREDS, None, None)
     runner.cancel(1)
-    with pytest.raises(NoPendingLogin):
+    with pytest.raises(NoPendingLoginError):
         runner.resume(1, "0000")
 
 
@@ -113,7 +113,7 @@ class ClosableConnector:
 
     def sync(self, since: str | None = None) -> SyncResult:
         msg = "code sent"
-        raise SmsRequired(msg)
+        raise SmsRequiredError(msg)
 
     def resume_sync(self, code: str) -> SyncResult:
         msg = "bad code"
@@ -127,12 +127,12 @@ def test_failed_resume_closes_connector(monkeypatch: pytest.MonkeyPatch) -> None
     monkeypatch.setitem(base.REGISTRY, ("closable", "closable"), ClosableConnector)
     ClosableConnector.closed = 0
     runner = LocalRunner()
-    with pytest.raises(SmsRequired):
+    with pytest.raises(SmsRequiredError):
         runner.start(1, "closable", "closable", CREDS, None, None)
     with pytest.raises(ConnectorError, match="bad code"):
         runner.resume(1, "0000")
     assert ClosableConnector.closed == 1
-    with pytest.raises(NoPendingLogin):
+    with pytest.raises(NoPendingLoginError):
         runner.resume(1, "0000")
 
 
@@ -194,12 +194,12 @@ class RetryOtpConnector:
 
     def sync(self, since: str | None = None) -> SyncResult:
         msg = "code sent"
-        raise SmsRequired(msg)
+        raise SmsRequiredError(msg)
 
     def resume_sync(self, code: str) -> SyncResult:
         if code != "4242":
             msg = "the bank rejected the code — check it and try again"
-            raise SmsRequired(msg)
+            raise SmsRequiredError(msg)
         return SyncResult([], session=None)
 
     def close(self) -> None:
@@ -227,9 +227,9 @@ def test_since_is_passed_through(runner: Runner, monkeypatch: pytest.MonkeyPatch
 def test_new_start_closes_previous_pending(runner: Runner, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setitem(base.REGISTRY, ("closable", "closable"), ClosableConnector)
     ClosableConnector.closed = 0
-    with pytest.raises(SmsRequired):
+    with pytest.raises(SmsRequiredError):
         runner.start(1, "closable", "closable", CREDS, None, None)
-    with pytest.raises(SmsRequired):
+    with pytest.raises(SmsRequiredError):
         runner.start(1, "closable", "closable", CREDS, None, None)
     assert ClosableConnector.closed == 1
 
@@ -237,7 +237,7 @@ def test_new_start_closes_previous_pending(runner: Runner, monkeypatch: pytest.M
 def test_cancel_closes_pending_connector(runner: Runner, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setitem(base.REGISTRY, ("closable", "closable"), ClosableConnector)
     ClosableConnector.closed = 0
-    with pytest.raises(SmsRequired):
+    with pytest.raises(SmsRequiredError):
         runner.start(1, "closable", "closable", CREDS, None, None)
     runner.cancel(1)
     assert ClosableConnector.closed == 1
@@ -249,11 +249,11 @@ def test_failing_close_never_masks_the_flow(
 ) -> None:
     monkeypatch.setitem(base.REGISTRY, ("failclose", "failclose"), FailingCloseConnector)
     FailingCloseConnector.closed = 0
-    with pytest.raises(SmsRequired):
+    with pytest.raises(SmsRequiredError):
         runner.start(1, "failclose", "failclose", CREDS, None, None)
     runner.cancel(1)
     assert FailingCloseConnector.closed == 1
-    with pytest.raises(SmsRequired):
+    with pytest.raises(SmsRequiredError):
         runner.start(2, "failclose", "failclose", CREDS, None, None)
     expected = sync_service.SYNC_FAILED if isinstance(runner, RemoteRunner) else "bad code"
     with pytest.raises(ConnectorError) as ei:
@@ -265,9 +265,9 @@ def test_failing_close_never_masks_the_flow(
 def test_rejected_code_keeps_login_alive(runner: Runner, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setitem(base.REGISTRY, ("retryotp", "retryotp"), RetryOtpConnector)
     RetryOtpConnector.closed = 0
-    with pytest.raises(SmsRequired):
+    with pytest.raises(SmsRequiredError):
         runner.start(1, "retryotp", "retryotp", CREDS, None, None)
-    with pytest.raises(SmsRequired) as ei:
+    with pytest.raises(SmsRequiredError) as ei:
         runner.resume(1, "0000")
     expected = (
         sync_service.CODE_REJECTED
@@ -304,7 +304,7 @@ def test_remote_awaiting_sms_message() -> None:
 
     client = httpx.Client(transport=httpx.MockTransport(handler), base_url="http://sync")
     r = RemoteRunner("http://sync", client=client)
-    with pytest.raises(SmsRequired) as ei:
+    with pytest.raises(SmsRequiredError) as ei:
         r.start(1, "fake", "fake", CREDS, None, None)
     assert str(ei.value) == "code sent"
 

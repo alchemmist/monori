@@ -57,7 +57,7 @@ def _bytes(wb: Workbook) -> bytes:
 
 
 def _write_year_header(ws: Worksheet, months: int = 12) -> None:
-    """The two header rows the exporter writes above a year grid."""
+    """Handle The two header rows the exporter writes above a year grid."""
     names = [
         "January",
         "February",
@@ -154,8 +154,9 @@ def test_rejects_garbage_bytes() -> None:
 
 
 def test_transactions_are_the_only_required_sheet() -> None:
-    """The category structure is read from a sheet of its own when there is one and
-    inferred from the year grids when there isn't, so only the rows themselves
+    """The category structure is read from a sheet of its own when there is one and.
+
+    inferred from the year grids when there isn't, so only the rows themselves.
     are indispensable.
     """
     wb = Workbook()
@@ -229,8 +230,9 @@ def test_categories_unrecognized_row_warns() -> None:
 
 
 def test_category_sheet_saying_nothing_defers_to_the_grids() -> None:
-    """The live spreadsheet has a sheet called Categories too, laid out nothing like
-    ours. Rather than report every row of it, the reader treats a sheet it cannot
+    """The live spreadsheet has a sheet called Categories too, laid out nothing like.
+
+    ours. Rather than report every row of it, the reader treats a sheet it cannot.
     read as absent and takes the structure from the year grids.
     """
     wb, categories, _ = _workbook()

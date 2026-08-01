@@ -466,8 +466,9 @@ def test_parse_transactions_dedup_status_currency_and_category() -> None:
 
 
 def test_split_operation_keeps_both_parts_with_their_own_amounts() -> None:
-    """One card operation split across categories repeats the operation's full
-    amount on every part and carries each part's real share in "Сумма платежа" —
+    """One card operation split across categories repeats the operation's full.
+
+    amount on every part and carries each part's real share in "Сумма платежа" —.
     sometimes as a formula the user typed by hand. Reading the operation amount
     made the parts look identical and collapsed all but the first, dropping the
     money and the category the user assigned to it.
@@ -713,8 +714,9 @@ def test_dead_category_and_available_seed_at_seam() -> None:
 
 
 def test_available_seed_excludes_seam_overspend() -> None:
-    """The template's "Not budgeted in Dec" seed is the December available BEFORE
-    overspend; the sheet adds "Overspent in Dec" separately in January. The
+    """The template's "Not budgeted in Dec" seed is the December available BEFORE.
+
+    overspend; the sheet adds "Overspent in Dec" separately in January. The.
     seed correction must therefore target avail alone, not avail + overspent.
     """
     wb = Workbook()
@@ -751,8 +753,9 @@ def test_available_seed_excludes_seam_overspend() -> None:
 
 
 def test_russian_header_labels_are_read_like_the_english_ones() -> None:
-    """The live spreadsheet labels its month headers in Russian. Every figure the
-    reconciliation leans on — income, the carried-over remainder, the running
+    """The live spreadsheet labels its month headers in Russian. Every figure the.
+
+    reconciliation leans on — income, the carried-over remainder, the running.
     Available — is found by those labels, so a sheet in Russian has to yield
     exactly what the same sheet in English does.
     """
@@ -795,8 +798,9 @@ def test_available_label_is_found_wherever_the_summary_block_puts_it() -> None:
 
 
 def test_summary_labels_below_the_header_block_are_not_read() -> None:
-    """The summary block is the first six rows; row seven is where the grid's own
-    Budgeted/Outflows/Balance header sits on the live sheet. Reading one row
+    """The summary block is the first six rows; row seven is where the grid's own.
+
+    Budgeted/Outflows/Balance header sits on the live sheet. Reading one row.
     further would take a column heading for a figure.
     """
     wb = Workbook()
@@ -828,8 +832,9 @@ def test_a_sheet_running_to_december_keeps_its_last_month() -> None:
 
 
 def test_history_and_adjustment_split_follows_the_rows_not_the_sheet_name() -> None:
-    """A workbook can keep years of history on ordinary year sheets and never write
-    `_archive` once. What makes a correction a stand-in is that the month has no
+    """A workbook can keep years of history on ordinary year sheets and never write.
+
+    `_archive` once. What makes a correction a stand-in is that the month has no.
     rows of its own, so counting by sheet name reports hundreds of history rows
     as live adjustments.
     """
@@ -860,8 +865,9 @@ def test_history_and_adjustment_split_follows_the_rows_not_the_sheet_name() -> N
 
 
 def test_opening_balance_is_taken_from_the_first_month_with_rows() -> None:
-    """A spreadsheet is started with money already in hand, and the only place that
-    money exists is the header cell of its first real month: what was left
+    """A spreadsheet is started with money already in hand, and the only place that.
+
+    money exists is the header cell of its first real month: what was left.
     unbudgeted the month before. The earlier blocks of that year are empty
     scaffolding, so reading the seed off the January block finds nothing.
     """
@@ -887,7 +893,8 @@ def test_opening_balance_is_taken_from_the_first_month_with_rows() -> None:
 
 
 def test_opening_balance_predating_the_sheet_is_dated_before_it() -> None:
-    """When the very first month of the earliest sheet already has rows, the money
+    """When the very first month of the earliest sheet already has rows, the money.
+
     it started with belongs to the December before — a month no sheet covers.
     The row still has to exist, or Available starts short by that amount.
     """
@@ -911,8 +918,9 @@ def test_opening_balance_predating_the_sheet_is_dated_before_it() -> None:
 
 
 def test_activity_span_reads_two_digit_months_whole() -> None:
-    """A ledger that only starts in October is where a one-character month slice
-    stops being harmless: it would read 11 as 1 and seed the opening balance
+    """A ledger that only starts in October is where a one-character month slice.
+
+    stops being harmless: it would read 11 as 1 and seed the opening balance.
     ten months early, off the wrong header cell.
     """
     wb = Workbook()
@@ -952,8 +960,9 @@ def test_opening_balance_left_alone_when_the_sheet_starts_from_nothing() -> None
 
 
 def test_available_ignores_budget_cells_on_income_categories() -> None:
-    """The budget grid only spends down expense envelopes, so a Budgeted cell on an
-    income row buys nothing and must not be subtracted from Available — which is
+    """The budget grid only spends down expense envelopes, so a Budgeted cell on an.
+
+    income row buys nothing and must not be subtracted from Available — which is.
     what the client computes and therefore what the verify check has to assume.
     """
     wb = Workbook()
@@ -985,7 +994,8 @@ def test_missing_transactions_sheet_raises() -> None:
 
 
 def test_trailing_zero_cached_months_get_no_synthetic_rows() -> None:
-    """An empty trailing block keeps cached zero balances from its formulas; the
+    """An empty trailing block keeps cached zero balances from its formulas; the.
+
     reconciliation must not fabricate rows there to zero out the carry.
     """
     wb = Workbook()
@@ -1003,8 +1013,9 @@ def test_trailing_zero_cached_months_get_no_synthetic_rows() -> None:
 
 
 def test_month_with_blank_category_gets_an_explicit_grid_correction() -> None:
-    """The historical row stays uncategorized, while the grid's category total is
-    represented by a separate correction. That preserves the source row exactly
+    """The historical row stays uncategorized, while the grid's category total is.
+
+    represented by a separate correction. That preserves the source row exactly.
     and lets the imported budget balance equal the spreadsheet.
     """
     wb = Workbook()
@@ -1025,8 +1036,9 @@ def test_month_with_blank_category_gets_an_explicit_grid_correction() -> None:
 
 
 def test_uncategorized_trailing_tx_does_not_extend_reconciliation() -> None:
-    """Uncategorized transactions are ignored by the reconciliation sums, so a
-    trailing month whose only activity is one must not be reconciled — its
+    """Uncategorized transactions are ignored by the reconciliation sums, so a.
+
+    trailing month whose only activity is one must not be reconciled — its.
     zero-cached cells would fabricate a synthetic row against the carry.
     """
     wb = Workbook()
@@ -1064,13 +1076,14 @@ def test_prepared_next_year_sheet_adds_no_future_rows() -> None:
 
 
 def test_parse_template_rejects_garbage_bytes() -> None:
-    with pytest.raises(WorkbookError, match="not a readable .xlsx workbook"):
+    with pytest.raises(WorkbookError, match="not a readable .xlsx workbook"):  # noqa: RUF043
         parse_workbook(b"nope")
 
 
 def test_live_layout_locates_category_and_keywords_by_content() -> None:
-    """The live template's keyword table starts at row 1 (its cells pollute the
-    header index) and the category column follows the bank headers with no
+    """The live template's keyword table starts at row 1 (its cells pollute the.
+
+    header index) and the category column follows the bank headers with no.
     gap column — both must be found by content, not fixed offsets.
 
     There are two candidate columns: the keyword rules guess into the first,
@@ -1100,8 +1113,9 @@ def test_live_layout_locates_category_and_keywords_by_content() -> None:
 
 
 def test_future_budgets_do_not_extend_reconciliation() -> None:
-    """Budget cells in future months are planning, not activity; their stale
-    cached balances must not be reconciled into future-dated synthetic rows,
+    """Budget cells in future months are planning, not activity; their stale.
+
+    cached balances must not be reconciled into future-dated synthetic rows,.
     while the budgets themselves are still imported.
     """
     wb = Workbook()
@@ -1123,7 +1137,8 @@ def test_future_budgets_do_not_extend_reconciliation() -> None:
 
 
 def test_parse_keywords_falls_back_without_pipes() -> None:
-    """No pipe anywhere -> content detection abstains and the known-header
+    """No pipe anywhere -> content detection abstains and the known-header.
+
     positional fallback (immune to side-table pollution) must still hit.
     """
     ws = _tx_only_ws(
@@ -1134,8 +1149,9 @@ def test_parse_keywords_falls_back_without_pipes() -> None:
 
 
 def test_label_col_picks_the_fullest_column_below_the_header() -> None:
-    """The live grid never names its category column, so it is found by weight:
-    of the columns left of the first month block, the one carrying the most
+    """The live grid never names its category column, so it is found by weight:.
+
+    of the columns left of the first month block, the one carrying the most.
     labels — counted strictly below the header row, since the header itself and
     whatever title sits above it are not categories.
     """
@@ -1163,7 +1179,8 @@ def test_label_col_keeps_the_leftmost_of_a_tie_and_falls_back_to_the_first() -> 
 
 
 def test_label_col_only_counts_the_rows_just_under_the_header() -> None:
-    """A sheet carries hundreds of rows below its grid — notes, a second table,
+    """A sheet carries hundreds of rows below its grid — notes, a second table,.
+
     leftovers. Only the band the categories live in decides the column.
     """
     wb = Workbook()

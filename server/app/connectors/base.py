@@ -3,9 +3,11 @@
 A connector is built from a connection's decrypted credentials and cached
 session, then asked to :meth:`sync`. Sync returns freshly parsed rows plus an
 updated session to cache. If the bank needs an interactive OTP mid-login, sync
-raises :class:`SmsRequired`; the caller parks the live connector and later calls
+raises :class:`SmsRequiredError`; the caller parks the live connector and later calls
 :meth:`resume_sync` with the code the user entered.
 """
+
+from typing import ClassVar
 
 from pydantic import JsonValue, TypeAdapter
 from pydantic.dataclasses import dataclass as pydantic_dataclass
@@ -15,6 +17,8 @@ type JsonObject = dict[str, JsonValue]
 
 @pydantic_dataclass
 class ConnectorParam:
+    """Represent ConnectorParam."""
+
     name: str
     label: str = ""
     secret: bool = False
@@ -24,6 +28,8 @@ class ConnectorParam:
 
 @pydantic_dataclass
 class ConnectorInfo:
+    """Represent ConnectorInfo."""
+
     bank: str
     kind: str
     label: str
@@ -33,6 +39,8 @@ class ConnectorInfo:
 
 @pydantic_dataclass
 class SyncRow:
+    """Represent SyncRow."""
+
     date: str
     amount: int
     description: str
@@ -49,8 +57,9 @@ class ConnectorError(Exception):
     """A sync failed for a reason the user should see (auth rejected, bank down)."""
 
 
-class SmsRequired(Exception):
-    """Login reached the OTP step. The caller must collect a code from the user
+class SmsRequiredError(Exception):
+    """Login reached the OTP step. The caller must collect a code from the user.
+
     and continue the same connector instance via :meth:`Connector.resume_sync`.
     """
 
@@ -68,15 +77,17 @@ SYNC_RESULT_ADAPTER: TypeAdapter[SyncResult] = TypeAdapter(SyncResult)
 
 
 class Connector:
+    """Represent Connector."""
+
     bank = ""
     kind = ""
     label = ""
 
     hidden = False
 
-    connection_params: list[ConnectorParam] = []
+    connection_params: ClassVar[list[ConnectorParam]] = []
 
-    account_params: list[ConnectorParam] = []
+    account_params: ClassVar[list[ConnectorParam]] = []
 
     def __init__(
         self,
@@ -84,6 +95,7 @@ class Connector:
         session: JsonObject | None = None,
         account_ref: str | None = None,
     ) -> None:
+        """Initialize the instance."""
         self.credentials: JsonObject = credentials or {}
 
         self.session: JsonObject | None = session
@@ -91,19 +103,21 @@ class Connector:
         self.account_ref: str | None = account_ref or None
 
     def sync(self, since: str | None = None) -> SyncResult:
-        """Pull transactions changed since ``since`` (ISO date string or None for
-        a full pull). Returns a :class:`SyncResult`. Raise :class:`SmsRequired`
+        """Pull transactions changed since ``since`` (ISO date string or None for.
+
+        a full pull). Returns a :class:`SyncResult`. Raise :class:`SmsRequiredError`
         to defer to :meth:`resume_sync`, or :class:`ConnectorError` on failure.
         """
         raise NotImplementedError
 
     def resume_sync(self, code: str) -> SyncResult:
-        """Continue a login that raised :class:`SmsRequired`, using the OTP code."""
+        """Continue a login that raised :class:`SmsRequiredError`, using the OTP code."""
         raise NotImplementedError
 
     def close(self) -> None:
-        """Release any live resources (browser, session, worker thread). Called
-        when a pending login is replaced, cancelled or deleted. Safe to call more
+        """Release any live resources (browser, session, worker thread). Called.
+
+        when a pending login is replaced, cancelled or deleted. Safe to call more.
         than once and on a connector that never started.
         """
 
@@ -112,11 +126,13 @@ REGISTRY: dict[tuple[str, str], type[Connector]] = {}
 
 
 def register(cls: type[Connector]) -> type[Connector]:
+    """Handle register."""
     REGISTRY[(cls.bank, cls.kind)] = cls
     return cls
 
 
 def get_connector_class(bank: str, kind: str) -> type[Connector]:
+    """Handle get connector class."""
     cls = REGISTRY.get((bank, kind))
     if cls is None:
         msg = f"no connector registered for {bank}/{kind}"
@@ -125,7 +141,7 @@ def get_connector_class(bank: str, kind: str) -> type[Connector]:
 
 
 def available_connectors() -> list[ConnectorInfo]:
-    """The connectors offered in the UI (registration order, demos excluded)."""
+    """Handle The connectors offered in the UI (registration order, demos excluded)."""
     return [
         ConnectorInfo(
             bank=cls.bank,

@@ -59,19 +59,29 @@ force-exclude = true
 [tool.ruff.lint]
 select = ["ALL"]
 ignore = [
-    # Formatter-owned or formatter-incompatible rules.
+    # The formatter owns comma insertion and line wrapping.
     "COM812",
     "E501",
-    "D205",
-    "D401",
-    # Ruff enables both sides of these mutually exclusive docstring pairs.
+    # Ruff requires one side of each mutually exclusive docstring pair to be disabled.
     "D203",
     "D213",
+]
 
-    # Existing public API and test naming conventions.
-    "A002",
-    "ARG001",
-    "ARG002",
+[tool.ruff.lint.per-file-ignores]
+"server/app/connectors/tbank_playwright.py" = ["PLC0415", "RUF001"]
+"server/app/crypto.py" = ["PLC0415"]
+"server/app/db.py" = ["PLC0415"]
+"server/app/importer.py" = ["D105", "RUF001"]
+"server/app/workbook/parser.py" = ["RUF001"]
+"server/app/connectors/base.py" = ["N815"]
+"server/app/deps.py" = ["N815"]
+"server/app/routers/*.py" = ["N803", "N815"]
+"server/app/sync_service.py" = ["N815"]
+"server/app/transfer_match.py" = ["N815"]
+"server/app/transfer_service.py" = ["N815"]
+"server/app/workbook/export.py" = ["N815"]
+"server/migrations/**/*.py" = ["INP001", "S101"]
+"server/tests/**/*.py" = [
     "D100",
     "D101",
     "D102",
@@ -79,49 +89,33 @@ ignore = [
     "D104",
     "D105",
     "D107",
+    "ARG001",
+    "ARG002",
+    "A002",
+    "DTZ001",
     "FBT001",
     "FBT002",
     "FBT003",
-    "N803",
-    "N813",
-    "N814",
-    "N815",
-    "N818",
     "INP001",
-
-    # Intentional complexity and values in application/test orchestration.
-    "C901",
-    "DTZ001",
-    "DTZ005",
-    "PERF401",
-    "PERF403",
+    "PLC0415",
+    "PLR2004",
     "PLR0912",
     "PLR0913",
     "PLR0915",
-    "PLR2004",
-    "PLW0603",
-    "PLW2901",
+    "C901",
+    "N803",
     "PT012",
     "PT017",
-    "PTH113",
-    "PTH118",
     "RUF001",
     "RUF003",
     "RUF012",
-    "RUF043",
+    "SLF001",
+    "PTH118",
     "S101",
     "S105",
     "S106",
     "S107",
-    "S608",
-    "SLF001",
-    "TRY004",
-    "TRY300",
     "TRY301",
-
-    # Required lazy imports and compatibility paths.
-    "PLC0415",
-    "TID252",
 ]
 
 [tool.mypy]

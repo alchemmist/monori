@@ -1,4 +1,5 @@
-"""Reads a budget workbook — ours or the live "Budget YNAB-Like" Google-Sheets
+"""Reads a budget workbook — ours or the live "Budget YNAB-Like" Google-Sheets.
+
 spreadsheet monori grew from — into {groups, categories, transactions, budgets}.
 
 There is one pipeline, not one per file we have seen. What a workbook happens to
@@ -53,6 +54,8 @@ from .models import (
 
 @dataclass(slots=True)
 class YearCategoryRow:
+    """Represent YearCategoryRow."""
+
     group: str
     budgets: dict[int, int] = field(default_factory=dict)
     outflows: dict[int, int] = field(default_factory=dict)
@@ -61,6 +64,8 @@ class YearCategoryRow:
 
 @dataclass(slots=True)
 class YearSheetRow:
+    """Represent YearSheetRow."""
+
     year: int
     months: list[int]
     cats: dict[str, YearCategoryRow]
@@ -73,6 +78,8 @@ class YearSheetRow:
 
 @dataclass(slots=True)
 class YearSection:
+    """Represent YearSection."""
+
     name: str
     kind: str
     rows: list[tuple[int, str]]
@@ -80,6 +87,8 @@ class YearSection:
 
 @dataclass(slots=True)
 class LayoutRow:
+    """Represent LayoutRow."""
+
     header_row: int
     bases: list[int]
     out_off: int
@@ -168,7 +177,7 @@ VERIFY_TOLERANCE_KOP = 5
 
 
 class WorkbookError(Exception):
-    pass
+    """Represent WorkbookError."""
 
 
 def _group_kind(value: str | None) -> Literal["income", "expense"] | None:
@@ -209,7 +218,7 @@ def _kop(cell: Cell | MergedCell | None) -> int | None:
 
 
 def _last_day(year: int, month: int) -> datetime.date:
-    end = datetime.date(year + 1, 1, 1) if month == 12 else datetime.date(year, month + 1, 1)
+    end = datetime.date(year + 1, 1, 1) if month == 12 else datetime.date(year, month + 1, 1)  # noqa: PLR2004
     return end - datetime.timedelta(days=1)
 
 
@@ -222,9 +231,10 @@ def _month_num(cell: Cell | MergedCell | None) -> int | None:
     return MONTH_ABBREVS.get(abbr)
 
 
-def _find_layout(ws: Worksheet) -> LayoutRow | None:
-    """Locates the month blocks of a year sheet by looking for the row that repeats
-    a Budgeted/Outflows/Balance header per month — which is the same grid in a
+def _find_layout(ws: Worksheet) -> LayoutRow | None:  # noqa: C901,PLR0912
+    """Locates the month blocks of a year sheet by looking for the row that repeats.
+
+    a Budgeted/Outflows/Balance header per month — which is the same grid in a.
     workbook we wrote and in the hand-kept spreadsheet, only sitting at a
     different row and labelled in a different language. Returns None when no
     such row exists, which is how a sheet says it is not a year grid at all.
@@ -232,7 +242,7 @@ def _find_layout(ws: Worksheet) -> LayoutRow | None:
     for r in range(1, 11):
         row = [ws.cell(r, c) for c in range(1, ws.max_column + 1)]
         bases = [i + 1 for i, v in enumerate(row) if _s(v) in BUDGET_HEADERS]
-        if len(bases) < 2:
+        if len(bases) < 2:  # noqa: PLR2004
             continue
         out_off = bal_off = None
         for i, v in enumerate(row):
@@ -271,7 +281,8 @@ def _find_layout(ws: Worksheet) -> LayoutRow | None:
 
 
 def _label_col(ws: Worksheet, header_row: int, first_base: int) -> int:
-    """The category column when the grid never names it: of the columns left of the
+    """Handle The category column when the grid never names it: of the columns left of the.
+
     first month block, the one carrying the most labels below the header.
     """
     best, best_count = 1, 0
@@ -294,8 +305,9 @@ def _parse_categories(
     ws: Worksheet,
     warnings: list[str],
 ) -> tuple[list[WorkbookGroupRow], list[WorkbookCategoryRow]]:
-    """Reads a category sheet that states the structure outright: category rows
-    (`sort | group | category | keywords`) and, when present, a group table
+    """Handle Reads a category sheet that states the structure outright: category rows.
+
+    (`sort | group | category | keywords`) and, when present, a group table.
     (`group | sort | IN/OUT`). Groups fall back to the ones the category rows
     name so a sheet missing that table still imports.
     """
@@ -351,7 +363,8 @@ def _parse_categories(
 
 
 def _sheet_sections(ws: Worksheet, layout: LayoutRow) -> list[YearSection]:
-    """Splits the category area into (group, [(row, category), ...]) sections.
+    """Handle Splits the category area into (group, [(row, category), ...]) sections.
+
     A row whose label starts with a kind glyph opens a group; in the old
     glyph-less layout the first labelled row after a fully blank gap does.
     """
@@ -387,11 +400,11 @@ def _summary_value(ws: Worksheet, base: int, labels: tuple[str, ...]) -> int | N
     return None
 
 
-def _parse_year_sheet(ws: Worksheet, year: int, layout: LayoutRow) -> YearSheetRow:
+def _parse_year_sheet(ws: Worksheet, year: int, layout: LayoutRow) -> YearSheetRow:  # noqa: C901,PLR0912
     months: list[tuple[int, int]] = []
     for i, base in enumerate(layout.bases):
         m = layout.start_month + i
-        if m > 12:
+        if m > 12:  # noqa: PLR2004
             break
         months.append((m, base))
     cats: dict[str, YearCategoryRow] = {}
@@ -454,7 +467,7 @@ def _parse_dt(cell: Cell | MergedCell | None) -> datetime.datetime | None:
     if isinstance(value, datetime.datetime):
         return value
     if isinstance(value, datetime.date):
-        return datetime.datetime(value.year, value.month, value.day)
+        return datetime.datetime(value.year, value.month, value.day)  # noqa: DTZ001
     text = _s(cell)
     if not text:
         return None
@@ -468,8 +481,9 @@ def _parse_dt(cell: Cell | MergedCell | None) -> datetime.datetime | None:
 
 
 def _unquote(value: str) -> str:
-    """Reverses our exporter's formula-escape and nothing else: a leading
-    apostrophe is stripped only when it guards a formula prefix, so a value that
+    """Reverses our exporter's formula-escape and nothing else: a leading.
+
+    apostrophe is stripped only when it guards a formula prefix, so a value that.
     legitimately starts with one survives the round-trip.
     """
     if value.startswith("'") and value[1:].startswith(("=", "+", "@")):
@@ -494,7 +508,7 @@ def _tx_columns(idx: Mapping[str, int]) -> dict[str, int | None]:
     }
 
 
-def _parse_transactions(
+def _parse_transactions(  # noqa: C901,PLR0912,PLR0915
     ws: Worksheet,
     warnings: list[str],
     errors: list[WorkbookParseErrorRow],
@@ -512,10 +526,12 @@ def _parse_transactions(
         raise WorkbookError(msg)
 
     def col(row: tuple[Cell | MergedCell, ...], field: str) -> Cell | MergedCell | None:
+        """Handle col."""
         i = at[field]
         return row[i] if i is not None and i < len(row) else None
 
     def text(row: tuple[Cell | MergedCell, ...], field: str) -> str:
+        """Handle text."""
         return _unquote(_s(col(row, field)))
 
     cat_col = at["category"] if at["category"] is not None else _category_col(ws, idx)
@@ -588,8 +604,9 @@ def _known_max_col(idx: Mapping[str, int]) -> int:
 
 
 def _find_keyword_block(ws: Worksheet, idx: Mapping[str, int]) -> int | None:
-    """Locates the `category name | pipe-separated keywords` side table by
-    content: the column pair (right of the known bank headers) with the most
+    """Locates the `category name | pipe-separated keywords` side table by.
+
+    content: the column pair (right of the known bank headers) with the most.
     rows whose second cell contains a pipe. Purely positional lookup broke on
     the live file — the table starts at row 1, so its own cells pollute the
     header index and shift any fixed offset.
@@ -606,8 +623,9 @@ def _find_keyword_block(ws: Worksheet, idx: Mapping[str, int]) -> int | None:
 
 
 def _category_col(ws: Worksheet, idx: Mapping[str, int]) -> int:
-    """The per-row category lives right of the known bank headers and left of the
-    keyword table — but the live template puts *two* columns there: the keyword
+    """Handle The per-row category lives right of the known bank headers and left of the.
+
+    keyword table — but the live template puts *two* columns there: the keyword.
     rules compute a guess in the first, and the second either carries that guess
     through or replaces it with what the user typed by hand. Only the second one
     is what the sheet's own totals are built from, so it is the truth: a hand
@@ -632,7 +650,8 @@ def _category_col(ws: Worksheet, idx: Mapping[str, int]) -> int:
 
 
 def _parse_keywords(ws: Worksheet, idx: Mapping[str, int]) -> dict[str, str]:
-    """Reads the keyword side table (see _find_keyword_block): category name |
+    """Handle Reads the keyword side table (see _find_keyword_block): category name |.
+
     pipe-separated keywords, starting at row 1.
     """
     base = _find_keyword_block(ws, idx)
@@ -648,7 +667,7 @@ def _parse_keywords(ws: Worksheet, idx: Mapping[str, int]) -> dict[str, str]:
     return keywords
 
 
-def _synthetic(
+def _synthetic(  # noqa: PLR0913
     year: int,
     month: int,
     amount: int,
@@ -668,8 +687,9 @@ def _synthetic(
 
 
 def account_slot(tx: WorkbookTransaction) -> str:
-    """Which account a row must land on. A card marker alone is not enough: the
-    same marker can carry rows in more than one currency (interest on a foreign
+    """Which account a row must land on. A card marker alone is not enough: the.
+
+    same marker can carry rows in more than one currency (interest on a foreign.
     balance arrives with no card number at all), and an amount only means
     anything on an account held in that currency. Marker and currency together
     are the unit the user maps.
@@ -681,8 +701,9 @@ def _activity_span(
     transactions: Iterable[WorkbookTransactionRow],
     sources: Iterable[YearSheetRow],
 ) -> tuple[tuple[int, int] | None, tuple[int, int] | None]:
-    """First and last (year, month) showing real activity: a transaction, a nonzero
-    cached outflow or income. Budgets deliberately do not count — planning months
+    """First and last (year, month) showing real activity: a transaction, a nonzero.
+
+    cached outflow or income. Budgets deliberately do not count — planning months.
     ahead is normal, a budget alone creates no transactions in the sheet, and
     the cached balances of those future months are pure carry residue;
     reconciling against them fabricates future-dated synthetic rows. A sheet
@@ -693,7 +714,7 @@ def _activity_span(
 
     for tx in transactions:
         if tx.monori_category:
-            seen.append((int(tx.date[:4]), int(tx.date[5:7])))
+            seen.append((int(tx.date[:4]), int(tx.date[5:7])))  # noqa: PERF401
     for source in sources:
         y = source.year
         seen.extend((y, m) for m, v in source.income.items() if v)
@@ -707,12 +728,13 @@ def _month_range(start: tuple[int, int], end: tuple[int, int]) -> Iterable[tuple
     while (y, m) <= end:
         yield (y, m)
         m += 1
-        if m > 12:
+        if m > 12:  # noqa: PLR2004
             y, m = y + 1, 1
 
 
 def parse_workbook(data: bytes) -> ParsedWorkbook:
-    """Returns {groups, categories, transactions, budgets, warnings, errors} for any
+    """Handle Returns {groups, categories, transactions, budgets, warnings, errors} for any.
+
     budget workbook — see the module docstring for how the shape is discovered.
     """
     try:
@@ -726,7 +748,7 @@ def parse_workbook(data: bytes) -> ParsedWorkbook:
         wb.close()
 
 
-def _parse(wb: Workbook) -> ParsedWorkbook:
+def _parse(wb: Workbook) -> ParsedWorkbook:  # noqa: C901,PLR0912,PLR0915
     warnings: list[str] = []
     errors: list[WorkbookParseErrorRow] = []
     if spec.SHEET_TRANSACTIONS not in wb.sheetnames:
@@ -762,11 +784,11 @@ def _parse(wb: Workbook) -> ParsedWorkbook:
             plain_sheets[year] = parsed
     for year, parsed in plain_sheets.items():
         if year not in archive_years:
-            live_years[year] = parsed
+            live_years[year] = parsed  # noqa: PERF403
     known_sheets = {spec.SHEET_CATEGORIES, spec.SHEET_TRANSACTIONS, spec.SHEET_DASHDATA}
     for name in wb.sheetnames:
         if name not in known_sheets and not YEAR_RE.match(name):
-            warnings.append(f"unknown sheet ignored: {name}")
+            warnings.append(f"unknown sheet ignored: {name}")  # noqa: PERF401
 
     first_live = min(live_years) if live_years else None
     seam_year = -1 if first_live is None else first_live - 1
@@ -778,6 +800,7 @@ def _parse(wb: Workbook) -> ParsedWorkbook:
     cat_names: dict[str, str] = {}
 
     def add_group(name: str, kind: Literal["income", "expense"], sort: int | None = None) -> None:
+        """Handle add group."""
         if name in group_names:
             return
         group_names.add(name)
@@ -792,6 +815,7 @@ def _parse(wb: Workbook) -> ParsedWorkbook:
         group_kind: Literal["income", "expense"] | None = None,
         group_sort: int = 0,
     ) -> None:
+        """Handle add category."""
         if name in cat_names:
             return
         cat_names[name] = group
@@ -923,6 +947,7 @@ def _parse(wb: Workbook) -> ParsedWorkbook:
     n_hist = n_adjust = 0
 
     def count(y: int, m: int) -> None:
+        """Handle count."""
         nonlocal n_hist, n_adjust
         if (y, m) in months_with_rows:
             n_adjust += 1
@@ -1078,7 +1103,7 @@ def _parse(wb: Workbook) -> ParsedWorkbook:
     return _result(groups, categories, transactions + synthetic, budgets, warnings, errors)
 
 
-def _result(
+def _result(  # noqa: PLR0913
     groups: Iterable[WorkbookGroupRow],
     categories: Iterable[WorkbookCategoryRow],
     transactions: Iterable[WorkbookTransactionRow],

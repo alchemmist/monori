@@ -12,10 +12,12 @@ GMAIL_DOMAINS = {"gmail.com", "googlemail.com"}
 
 
 def normalize_email(email: str) -> str:
+    """Handle normalize email."""
     return email.strip().lower()
 
 
 def canonical_email(email: str) -> str:
+    """Handle canonical email."""
     email = normalize_email(email)
     local, sep, domain = email.partition("@")
     if not sep:

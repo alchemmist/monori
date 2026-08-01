@@ -1,4 +1,5 @@
-"""Pairing rule for transfers: find the two rows that are the same money leaving
+"""Pairing rule for transfers: find the two rows that are the same money leaving.
+
 one account and arriving on another.
 
 Pure functions over transfer records — no database, no I/O — so the rule can be
@@ -46,6 +47,8 @@ TRANSFER_HINTS = (
 
 @dataclass(frozen=True, slots=True)
 class TransferMatchRow:
+    """Represent TransferMatchRow."""
+
     id: int
     date: str
     amount: int
@@ -56,6 +59,8 @@ class TransferMatchRow:
 
 @dataclass(frozen=True, slots=True)
 class TransferCandidate:
+    """Represent TransferCandidate."""
+
     outTxId: int
     inTxId: int
     amount: int
@@ -65,25 +70,27 @@ class TransferCandidate:
 
 
 def day_number(date_iso: str) -> int:
-    """Days since the epoch for an ISO date(time), by calendar day only — the
+    """Days since the epoch for an ISO date(time), by calendar day only — the.
+
     times of the two legs are irrelevant and banks disagree about them anyway.
     """
     y, m, d = (int(p) for p in date_iso[:10].split("-"))
 
-    y -= m <= 2
+    y -= m <= 2  # noqa: PLR2004
     era = (y if y >= 0 else y - 399) // 400
     yoe = y - era * 400
-    doy = (153 * (m + (-3 if m > 2 else 9)) + 2) // 5 + d - 1
+    doy = (153 * (m + (-3 if m > 2 else 9)) + 2) // 5 + d - 1  # noqa: PLR2004
     doe = yoe * 365 + yoe // 4 - yoe // 100 + doy
     return era * 146097 + doe - 719468
 
 
 def has_hint(description: str) -> bool:
+    """Handle has hint."""
     lowered = description.lower()
     return any(h in lowered for h in TRANSFER_HINTS)
 
 
-def find_pairs(
+def find_pairs(  # noqa: C901
     rows: Iterable[TransferMatchRow],
     max_days: int = SUGGEST_DAYS,
     rejected: Iterable[tuple[int, int]] = (),
@@ -151,8 +158,9 @@ def split_confident(
     pairs: Iterable[TransferCandidate],
     auto_days: int = AUTO_DAYS,
 ) -> tuple[list[TransferCandidate], list[TransferCandidate]]:
-    """Partition matched pairs into the ones safe to merge without asking
-    (``days <= auto_days`` and no description mismatch) and the ones worth
+    """Partition matched pairs into the ones safe to merge without asking.
+
+    (``days <= auto_days`` and no description mismatch) and the ones worth.
     showing as suggestions.
     """
     auto: list[TransferCandidate] = []

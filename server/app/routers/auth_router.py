@@ -30,8 +30,9 @@ MAX_EMAIL_LEN = 254
 
 
 def _valid_email(email: str) -> bool:
-    """Shape check for an email: one ``@``, non-empty local part, and a dotted
-    domain with no empty labels. Linear and non-backtracking (bounded by
+    """Shape check for an email: one ``@``, non-empty local part, and a dotted.
+
+    domain with no empty labels. Linear and non-backtracking (bounded by.
     ``MAX_EMAIL_LEN``) so it cannot be driven into a ReDoS.
     """
     if not email or len(email) > MAX_EMAIL_LEN or any(ch.isspace() for ch in email):
@@ -44,22 +45,29 @@ def _valid_email(email: str) -> bool:
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid"))
 class RegisterBody:
+    """Represent RegisterBody."""
+
     email: str
     password: str
 
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid"))
 class TokenResponse:
+    """Represent TokenResponse."""
+
     access_token: str
     token_type: "OAuthTokenType"
 
 
 class OAuthTokenType(StrEnum):
+    """Represent OAuthTokenType."""
+
     BEARER = "bearer"
 
 
 def create_user(c: sqlite3.Connection, raw_email: str, password: str) -> UserResponse:
-    """Validate and insert a user (with a default Cash account), returning the
+    """Validate and insert a user (with a default Cash account), returning the.
+
     serialized user. Shared by public registration and admin user creation.
     Raises HTTPException on invalid input or duplicate email.
 
@@ -110,6 +118,7 @@ def create_user(c: sqlite3.Connection, raw_email: str, password: str) -> UserRes
 
 @router.post("/register")
 def register(body: RegisterBody) -> UserResponse:
+    """Handle register."""
     c = conn()
     try:
         return create_user(c, body.email, body.password)
@@ -134,7 +143,7 @@ def token(form: Annotated[OAuth2PasswordRequestForm, Depends()]) -> TokenRespons
         user_id = row["id"]
         if not isinstance(password_hash, str) or not isinstance(user_id, int):
             msg = "stored user credentials have invalid types"
-            raise RuntimeError(msg)
+            raise RuntimeError(msg)  # noqa: TRY004
         if not verify_password(password_hash, form.password):
             raise HTTPException(401, "incorrect password")
 
@@ -159,11 +168,14 @@ def token(form: Annotated[OAuth2PasswordRequestForm, Depends()]) -> TokenRespons
 
 @router.get("/me")
 def me(user: Annotated[AuthenticatedUser, Depends(current_user)]) -> UserResponse:
+    """Handle me."""
     return user.to_api_dict()
 
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid"))
 class MePatch:
+    """Represent MePatch."""
+
     defaultAccountId: int | None = None
 
 
@@ -172,8 +184,9 @@ def patch_me(
     body: MePatch,
     user: Annotated[AuthenticatedUser, Depends(current_user)],
 ) -> UserResponse:
-    """User-level preferences. ``defaultAccountId`` is where imports land rows no
-    card number can route; null clears it and those rows go back to being
+    """User-level preferences. ``defaultAccountId`` is where imports land rows no.
+
+    card number can route; null clears it and those rows go back to being.
     assigned by hand.
     """
     uid = user.id

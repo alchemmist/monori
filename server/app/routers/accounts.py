@@ -1,3 +1,5 @@
+"""Provide backend functionality."""
+
 import re
 import sqlite3
 from datetime import UTC, datetime
@@ -22,6 +24,8 @@ MAX_ICON_IMAGE = 300_000
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid"))
 class AccountBody:
+    """Represent AccountBody."""
+
     name: str
     type: str | None = None
     icon: str | None = None
@@ -37,6 +41,8 @@ class AccountBody:
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid"))
 class AccountPatch:
+    """Represent AccountPatch."""
+
     name: str | None = None
     type: str | None = None
     icon: str | None = None
@@ -55,6 +61,8 @@ class AccountPatch:
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid"))
 class AccountIdResponse:
+    """Represent AccountIdResponse."""
+
     id: int | None
 
 
@@ -72,13 +80,14 @@ def _validate_color(color: str) -> None:
 
 
 def _clean_tails(tails: list[str]) -> str:
-    """Normalize card tails to the digits of the masked number ('*8181' -> '8181'),
+    """Normalize card tails to the digits of the masked number ('*8181' -> '8181'),.
+
     deduplicated in order, stored comma-separated.
     """
     cleaned = []
     for raw in tails:
         digits = "".join(ch for ch in str(raw) if ch.isdigit())
-        if not digits or len(digits) > 8:
+        if not digits or len(digits) > 8:  # noqa: PLR2004
             raise HTTPException(400, "card tail must be 1-8 digits")
         if digits not in cleaned:
             cleaned.append(digits)
@@ -86,7 +95,8 @@ def _clean_tails(tails: list[str]) -> str:
 
 
 def _validate_icon_image(image: str | None) -> None:
-    """A custom icon is optional; when present it must be an image data URL and
+    """Handle A custom icon is optional; when present it must be an image data URL and.
+
     stay within the size cap so the snapshot doesn't bloat.
     """
     if not image:
@@ -97,11 +107,15 @@ def _validate_icon_image(image: str | None) -> None:
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid"))
 class Reorder:
+    """Represent Reorder."""
+
     ids: list[int]
 
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid"))
 class ReconcileBody:
+    """Represent ReconcileBody."""
+
     actualBalance: int
 
 
@@ -109,6 +123,7 @@ class ReconcileBody:
 def list_accounts(
     user: Annotated[AuthenticatedUser, Depends(current_user)],
 ) -> list[AccountResponse]:
+    """Handle list accounts."""
     uid = user.id
     c = conn()
     try:
@@ -130,6 +145,7 @@ def create_account(
     body: AccountBody,
     user: Annotated[AuthenticatedUser, Depends(current_user)],
 ) -> AccountIdResponse:
+    """Handle create account."""
     uid = user.id
     account_type = body.type or "other"
     icon = body.icon or "wallet"
@@ -183,11 +199,12 @@ def create_account(
 
 
 @router.patch("/{account_id}")
-def patch_account(
+def patch_account(  # noqa: C901,PLR0912,PLR0915
     account_id: int,
     patch: AccountPatch,
     user: Annotated[AuthenticatedUser, Depends(current_user)],
 ) -> dict[str, bool]:
+    """Handle patch account."""
     uid = user.id
     c = conn()
     try:
@@ -276,8 +293,9 @@ def delete_account(
     user: Annotated[AuthenticatedUser, Depends(current_user)],
     reassignTo: int | None = None,
 ) -> dict[str, bool]:
-    """Deleting an account reassigns its transactions to another account. A
-    transaction must always belong to an account, so a non-empty account cannot
+    """Handle Deleting an account reassigns its transactions to another account. A.
+
+    transaction must always belong to an account, so a non-empty account cannot.
     be deleted without a reassign target, and the last account cannot be deleted.
     """
     uid = user.id
@@ -338,7 +356,8 @@ def reconcile_account(
     body: ReconcileBody,
     user: Annotated[AuthenticatedUser, Depends(current_user)],
 ) -> dict[str, int]:
-    """Bring an account's computed balance to the real bank balance by posting a
+    """Bring an account's computed balance to the real bank balance by posting a.
+
     single adjustment transaction for the difference. Returns the delta applied.
     """
     uid = user.id
@@ -380,6 +399,7 @@ def reorder_accounts(
     body: Reorder,
     user: Annotated[AuthenticatedUser, Depends(current_user)],
 ) -> dict[str, bool]:
+    """Handle reorder accounts."""
     uid = user.id
     c = conn()
     try:

@@ -1,4 +1,5 @@
-"""Writes a parsed workbook (see ``importer.parse_workbook``) into the
+"""Writes a parsed workbook (see ``importer.parse_workbook``) into the.
+
 database for one user. The caller owns the connection and the commit.
 """
 
@@ -103,8 +104,9 @@ def _upsert_categories(
 
 
 def _category_index(c: sqlite3.Connection, uid: int) -> dict[str, int]:
-    """Every category the user owns, keyed by a normalized name, so a workbook cell
-    resolves against the whole account and not just the sheet's own category
+    """Every category the user owns, keyed by a normalized name, so a workbook cell.
+
+    resolves against the whole account and not just the sheet's own category.
     table. Names that collide across groups map to the first one by sort order —
     the workbook has no group column on the transaction row to tell them apart.
     """
@@ -148,7 +150,8 @@ def _import_transactions(
     mapping: Mapping[str, int],
     category_ids: Mapping[str, int],
 ) -> tuple[int, int, list[WorkbookBatchResult], list[str], int, int]:
-    """A workbook is historical evidence, not a fresh bank feed: every category is
+    """Handle A workbook is historical evidence, not a fresh bank feed: every category is.
+
     copied exactly as it is written. In particular, a blank stays uncategorized.
     Imported keywords are retained for transactions added *after* migration,
     where the normal import/sync pipeline applies them.
@@ -211,7 +214,7 @@ def _import_budgets(
     c: sqlite3.Connection,
     budgets: Iterable[WorkbookBudget],
     category_ids: Mapping[str, int],
-    overwrite: bool,
+    overwrite: bool,  # noqa: FBT001
 ) -> tuple[int, int]:
     written = skipped = 0
     for cell in budgets:
@@ -240,8 +243,9 @@ def _import_budgets(
 
 
 def budget_conflicts(c: sqlite3.Connection, uid: int, budgets: Iterable[WorkbookBudget]) -> int:
-    """Count workbook budget cells that collide with the user's existing budgets
-    (category matched by name, same year and month) — the only case where the
+    """Count workbook budget cells that collide with the user's existing budgets.
+
+    (category matched by name, same year and month) — the only case where the.
     overwrite/skip choice makes a difference.
     """
     existing = {
@@ -263,7 +267,8 @@ def apply_workbook(
     mapping: Mapping[str, int],
     budget_policy: str = "overwrite",
 ) -> WorkbookApplyResult:
-    """``mapping``: marker -> account id (all markers must be present and owned).
+    """Handle ``mapping``: marker -> account id (all markers must be present and owned).
+
     Returns a result summary dict. Does not commit.
     """
     group_ids, groups_created = _upsert_groups(c, uid, parsed.groups)

@@ -9,6 +9,7 @@ depends_on = None
 
 
 def upgrade() -> None:
+    """Handle upgrade."""
     op.execute("""CREATE TABLE category_group_types (
       id INTEGER PRIMARY KEY,
       type TEXT NOT NULL UNIQUE,
@@ -45,5 +46,6 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    """Handle downgrade."""
     msg = "forward-only migrations"
     raise NotImplementedError(msg)

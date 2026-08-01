@@ -18,7 +18,7 @@ from pydantic.dataclasses import dataclass as pydantic_dataclass
 
 from .connectors import base as connectors
 from .connectors import tbank_playwright as _tbank_playwright  # noqa: F401
-from .connectors.base import ConnectorError, JsonObject, SmsRequired, SyncResult
+from .connectors.base import ConnectorError, JsonObject, SmsRequiredError, SyncResult
 
 app = FastAPI(title="monori-sync")
 
@@ -33,12 +33,16 @@ PENDING: dict[int, connectors.Connector] = {}
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid"))
 class RunStatusResponse:
+    """Represent RunStatusResponse."""
+
     status: str
     message: str | None = None
 
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid"))
 class RunDoneResponse:
+    """Represent RunDoneResponse."""
+
     status: str
     rows: list[connectors.SyncRow]
     session: JsonObject | None
@@ -51,6 +55,8 @@ def _error(cid: int, error: Exception) -> RunStatusResponse:
 
 @pydantic_dataclass(config=ConfigDict(populate_by_name=True))
 class RunBody:
+    """Represent RunBody."""
+
     bank: str
     kind: str
     credentials: JsonObject
@@ -61,6 +67,8 @@ class RunBody:
 
 @pydantic_dataclass(config=ConfigDict(populate_by_name=True))
 class SmsBody:
+    """Represent SmsBody."""
+
     code: str
 
 
@@ -77,11 +85,13 @@ def _done(result: SyncResult) -> RunDoneResponse:
 
 @app.get("/health")
 def health() -> dict[str, bool]:
+    """Handle health."""
     return {"ok": True}
 
 
 @app.post("/runs/{cid}")
 def start_run(cid: int, body: RunBody) -> RunDoneResponse | RunStatusResponse:
+    """Handle start run."""
     _close_pending(cid)
     try:
         cls = connectors.get_connector_class(body.bank, body.kind)
@@ -90,7 +100,7 @@ def start_run(cid: int, body: RunBody) -> RunDoneResponse | RunStatusResponse:
     connector = cls(body.credentials, body.session, account_ref=body.accountRef)
     try:
         return _done(connector.sync(body.since))
-    except SmsRequired:
+    except SmsRequiredError:
         PENDING[cid] = connector
         return RunStatusResponse(status="awaiting_sms", message=SMS_SENT)
     except ConnectorError as e:
@@ -99,12 +109,13 @@ def start_run(cid: int, body: RunBody) -> RunDoneResponse | RunStatusResponse:
 
 @app.post("/runs/{cid}/sms")
 def submit_sms(cid: int, body: SmsBody) -> RunDoneResponse | RunStatusResponse:
+    """Handle submit sms."""
     connector = PENDING.pop(cid, None)
     if connector is None:
         raise HTTPException(409, "no login awaiting a code")
     try:
         return _done(connector.resume_sync(body.code))
-    except SmsRequired:
+    except SmsRequiredError:
         PENDING[cid] = connector
         return RunStatusResponse(status="awaiting_sms", message=CODE_REJECTED)
     except ConnectorError as e:
@@ -115,5 +126,6 @@ def submit_sms(cid: int, body: SmsBody) -> RunDoneResponse | RunStatusResponse:
 
 @app.post("/runs/{cid}/cancel")
 def cancel_run(cid: int) -> dict[str, int]:
+    """Handle cancel run."""
     _close_pending(cid)
     return {"cancelled": cid}

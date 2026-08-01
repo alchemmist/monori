@@ -114,8 +114,9 @@ def test_split_confident_separates_by_distance() -> None:
 
 
 def test_a_purchase_matching_a_transfer_leg_is_never_merged_on_its_own() -> None:
-    """A transfer's inflow whose true outflow sits on the same account (and so can
-    never pair) must not swallow an unrelated purchase that happens to match the
+    """A transfer's inflow whose true outflow sits on the same account (and so can.
+
+    never pair) must not swallow an unrelated purchase that happens to match the.
     amount — one leg saying "transfer" while the other names a merchant is a
     question for the user, not a merge.
     """

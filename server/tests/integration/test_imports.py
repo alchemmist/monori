@@ -132,7 +132,8 @@ def test_import_commit_double_submit_is_idempotent(api: Api, client: TestClient)
 
 
 def test_import_commit_skips_only_the_first_n_already_stored(api: Api, client: TestClient) -> None:
-    """Skip as many identical rows as already exist in the DB, insert the rest —
+    """Skip as many identical rows as already exist in the DB, insert the rest —.
+
     a fresh statement's own repeats are legitimate, only re-imports are skipped.
     """
     r0 = api.preview(api.statement)[0]
@@ -238,8 +239,9 @@ def test_import_preview_never_proposes_a_wrong_direction_category(
     api: Api,
     client: TestClient,
 ) -> None:
-    """The refund fallback in the categorizer would happily file "Lenta +100" into
-    Groceries — but the commit rejects wrong-direction categories, so a preview
+    """The refund fallback in the categorizer would happily file "Lenta +100" into.
+
+    Groceries — but the commit rejects wrong-direction categories, so a preview.
     proposing one would make the whole statement unimportable.
     """
     expenses = api.group("Expenses")

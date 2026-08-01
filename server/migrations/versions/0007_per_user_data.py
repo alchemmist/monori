@@ -1,5 +1,6 @@
-"""Multi-tenancy: accounts and category groups gain an owning user_id, and name
-uniqueness becomes per-user. Categories lose their global unique name (they are
+"""Multi-tenancy: accounts and category groups gain an owning user_id, and name.
+
+uniqueness becomes per-user. Categories lose their global unique name (they are.
 scoped through their group's owner). Rows predating registration keep a NULL
 user_id and are claimed by the first user who registers.
 """
@@ -18,6 +19,7 @@ def _has_column(conn: Connection, table: str, column: str) -> bool:
 
 
 def upgrade() -> None:
+    """Handle upgrade."""
     conn = op.get_bind()
     if not _has_column(conn, "accounts", "user_id"):
         conn.exec_driver_sql("""CREATE TABLE accounts_new (
@@ -86,11 +88,12 @@ def upgrade() -> None:
         )
     for table in ("accounts", "category_groups"):
         conn.exec_driver_sql(
-            f"UPDATE {table} SET user_id=(SELECT MIN(id) FROM users)"
+            f"UPDATE {table} SET user_id=(SELECT MIN(id) FROM users)"  # noqa: S608
             " WHERE user_id IS NULL AND EXISTS (SELECT 1 FROM users)",
         )
 
 
 def downgrade() -> None:
+    """Handle downgrade."""
     msg = "monori migrations are forward-only"
     raise NotImplementedError(msg)

@@ -65,6 +65,7 @@ def _bootstrap(path: pathlib.Path) -> None:
 
 
 def connect(db_path: str | os.PathLike[str] | None = None) -> sqlite3.Connection:
+    """Handle connect."""
     path = pathlib.Path(db_path or DB_PATH)
     path.parent.mkdir(parents=True, exist_ok=True)
     key = str(path.resolve())

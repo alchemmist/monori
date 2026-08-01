@@ -26,6 +26,8 @@ from . import spec
 
 @dataclass(frozen=True, slots=True)
 class EffectiveTransaction:
+    """Represent EffectiveTransaction."""
+
     id: int | str
     date: str
     accountId: int
@@ -143,7 +145,7 @@ def _effective_transactions(snap: SnapshotResponse) -> list[EffectiveTransaction
             effective.append(_effective_transaction(tx))
             continue
         for part in tx.splits:
-            effective.append(
+            effective.append(  # noqa: PERF401
                 EffectiveTransaction(
                     id=f"{tx.id}:{part.id}",
                     date=tx.date,
@@ -213,7 +215,7 @@ def _budget_index(snap: SnapshotResponse) -> dict[tuple[int, int, int], int]:
     return budgets
 
 
-def _year_sheet(
+def _year_sheet(  # noqa: C901,PLR0915
     ws: Worksheet,
     year: int,
     snap: SnapshotResponse,
@@ -296,7 +298,7 @@ def _year_sheet(
         ws.column_dimensions[get_column_letter(c)].width = 11
 
 
-def _dashdata_sheet(
+def _dashdata_sheet(  # noqa: C901
     ws: Worksheet,
     snap: SnapshotResponse,
     activity: dict[tuple[int, int, int], int],
@@ -350,6 +352,7 @@ def _dashdata_sheet(
 
 
 def build_workbook(snap: SnapshotResponse) -> Workbook:
+    """Handle build workbook."""
     cat_names = {c.id: c.name for c in snap.categories}
     acct_names = {a.id: a.name for a in snap.accounts}
     acct_currency = {a.id: a.currency for a in snap.accounts}
@@ -377,6 +380,7 @@ def build_workbook(snap: SnapshotResponse) -> Workbook:
 
 
 def workbook_bytes(snap: SnapshotResponse) -> bytes:
+    """Handle workbook bytes."""
     buf = BytesIO()
     build_workbook(snap).save(buf)
     return buf.getvalue()

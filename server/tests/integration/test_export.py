@@ -395,8 +395,9 @@ def test_export_zero_balance_is_grey(api: Api, client: TestClient) -> None:
 
 
 def test_export_dashdata_refund_reduces_expense(api: Api, client: TestClient) -> None:
-    """Direction enforcement keeps the API from filing an inflow into an expense
-    category, but migrated workbooks and old synced statements carry such
+    """Direction enforcement keeps the API from filing an inflow into an expense.
+
+    category, but migrated workbooks and old synced statements carry such.
     refund rows — DashData must still net them out of the category's spend.
     """
     cat, acct = _setup(api, client)

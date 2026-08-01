@@ -1,7 +1,7 @@
 """A deterministic in-memory connector for exercising the sync path in tests.
 
 It reproduces the two-phase login: the first sync of a fresh connection raises
-:class:`SmsRequired`; supplying the code ``0000`` via :meth:`resume_sync`
+:class:`SmsRequiredError`; supplying the code ``0000`` via :meth:`resume_sync`
 "authenticates" and returns rows. Once a session is cached, later syncs return
 rows directly with no OTP. It is registered only when this module is imported
 (tests do so explicitly) and is hidden from the bank picker.
@@ -10,7 +10,7 @@ rows directly with no OTP. It is registered only when this module is imported
 from dataclasses import replace
 from typing import override
 
-from .base import Connector, ConnectorError, SmsRequired, SyncResult, SyncRow, register
+from .base import Connector, ConnectorError, SmsRequiredError, SyncResult, SyncRow, register
 
 FIXTURE_ROWS: list[SyncRow] = [
     SyncRow("2026-02-01T09:00:00", -50000, "Lenta", "Supermarkets", "5411", "*1111"),
@@ -19,8 +19,9 @@ FIXTURE_ROWS: list[SyncRow] = [
 
 
 def _rows(account_ref: str | None = None) -> list[SyncRow]:
-    """A real bank scopes the feed to the requested account; the fixture mimics
-    that by stamping the ref into the description, so two accounts on one
+    """Handle A real bank scopes the feed to the requested account; the fixture mimics.
+
+    that by stamping the ref into the description, so two accounts on one.
     connection deliver distinct operations rather than one feed twice.
     """
     return [
@@ -34,12 +35,15 @@ def _rows(account_ref: str | None = None) -> list[SyncRow]:
 
 @register
 class FakeConnector(Connector):
+    """Represent FakeConnector."""
+
     bank = "fake"
     kind = "fake"
     hidden = True
 
     @override
     def sync(self, since: str | None = None) -> SyncResult:
+        """Handle sync."""
         if not self.credentials.get("phone"):
             msg = "missing phone"
             raise ConnectorError(msg)
@@ -48,10 +52,11 @@ class FakeConnector(Connector):
             return SyncResult(_rows(self.account_ref), session=session)
         self._pending = True
         msg = "code sent"
-        raise SmsRequired(msg)
+        raise SmsRequiredError(msg)
 
     @override
     def resume_sync(self, code: str) -> SyncResult:
+        """Handle resume sync."""
         if not getattr(self, "_pending", False):
             msg = "no login in progress"
             raise ConnectorError(msg)

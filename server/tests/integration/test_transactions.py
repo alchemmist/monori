@@ -93,7 +93,8 @@ def test_transaction_category_must_match_amount_direction(api: Api, client: Test
 
 
 def test_transaction_patch_recomputes_hash_for_dedup(api: Api, client: TestClient) -> None:
-    """Editing date/amount/description must recompute the dedup hash: a statement
+    """Editing date/amount/description must recompute the dedup hash: a statement.
+
     row that matched the old content should stop being a duplicate.
     """
     tx = api.tx("2026-01-05T10:00:00", -10000, description="Lenta")

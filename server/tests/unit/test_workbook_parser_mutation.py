@@ -1,5 +1,6 @@
-"""Characterization tests aimed at the parser's least-exercised helpers. The
-end-to-end tests pin whole imports; these pin the exact return of the small
+"""Characterization tests aimed at the parser's least-exercised helpers. The.
+
+end-to-end tests pin whole imports; these pin the exact return of the small.
 functions those imports lean on, so a single flipped offset, dropped default or
 renamed key is caught here instead of slipping through as a survived mutant.
 """

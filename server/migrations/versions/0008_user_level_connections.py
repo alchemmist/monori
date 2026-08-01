@@ -1,5 +1,6 @@
-"""Bank connections become user-level: a connection is one bank login owned by
-a user, and any number of accounts link to it via accounts.connection_id plus a
+"""Bank connections become user-level: a connection is one bank login owned by.
+
+a user, and any number of accounts link to it via accounts.connection_id plus a.
 bank-specific accounts.bank_ref locator. Existing 1:1 connections are converted
 in place; the legacy account id kept inside encrypted credentials remains a
 fallback the connector still honors.
@@ -19,6 +20,7 @@ def _has_column(conn: Connection, table: str, column: str) -> bool:
 
 
 def upgrade() -> None:
+    """Handle upgrade."""
     conn = op.get_bind()
     if not _has_column(conn, "accounts", "connection_id"):
         conn.exec_driver_sql(
@@ -66,5 +68,6 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    """Handle downgrade."""
     msg = "monori migrations are forward-only"
     raise NotImplementedError(msg)

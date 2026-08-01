@@ -39,7 +39,7 @@ from collections.abc import Callable
 from contextlib import AbstractContextManager
 from datetime import timedelta
 from types import TracebackType
-from typing import Literal, Protocol, Self, override
+from typing import ClassVar, Literal, Protocol, Self, override
 from urllib.parse import quote
 
 from app.importer import parse_statement
@@ -49,7 +49,7 @@ from .base import (
     ConnectorError,
     ConnectorParam,
     JsonObject,
-    SmsRequired,
+    SmsRequiredError,
     SyncResult,
     SyncRow,
     register,
@@ -58,9 +58,9 @@ from .base import (
 
 def _timeout_error_type() -> type[Exception]:
     try:
-        from playwright.sync_api import TimeoutError as timeout_error
+        from playwright.sync_api import TimeoutError as timeout_error  # noqa: N813
 
-        return timeout_error
+        return timeout_error  # noqa: TRY300
     except ImportError:
         return Exception
 
@@ -199,6 +199,7 @@ class _RawPage(_LocatorPage, Protocol):
 
 class _DownloadExpectationAdapter(AbstractContextManager["_DownloadExpectationAdapter"]):
     def __init__(self, expectation: _DownloadEventContext) -> None:
+        """Initialize the instance."""
         self._expectation = expectation
         self._event: _DownloadEvent | None = None
 
@@ -226,6 +227,7 @@ class _DownloadExpectationAdapter(AbstractContextManager["_DownloadExpectationAd
 
 class _PageAdapter:
     def __init__(self, page: _RawPage) -> None:
+        """Initialize the instance."""
         self._page = page
 
     @property
@@ -288,14 +290,16 @@ USER_AGENT = (
 
 @register
 class TBankPlaywrightConnector(Connector):
+    """Represent TBankPlaywrightConnector."""
+
     bank = "tbank"
     kind = "playwright"
     label = "T-Bank (browser sync)"
-    connection_params = [
+    connection_params: ClassVar[list[ConnectorParam]] = [
         ConnectorParam(name="phone", label="Phone", required=True),
         ConnectorParam(name="password", label="Password", secret=True, required=True),
     ]
-    account_params = [
+    account_params: ClassVar[list[ConnectorParam]] = [
         ConnectorParam(
             name="account",
             label="T-Bank account number",
@@ -311,7 +315,7 @@ class TBankPlaywrightConnector(Connector):
     URL_OPERATIONS = "https://www.tbank.ru/mybank/operations/"
 
     SEL_PHONE = "[automation-id='phone-input']"
-    SEL_PASSWORD = "[automation-id='password-input']"
+    SEL_PASSWORD = "[automation-id='password-input']"  # noqa: S105
 
     SEL_OTP = "[automation-id='otp-input']"
     SEL_PIN = "[automation-id='pin-code-input-0']"
@@ -339,6 +343,7 @@ class TBankPlaywrightConnector(Connector):
         session: JsonObject | None = None,
         account_ref: str | None = None,
     ) -> None:
+        """Initialize the instance."""
         super().__init__(credentials, session, account_ref)
         self._worker: threading.Thread | None = None
         self._to_worker: queue.Queue[_ToWorkerMessage] = queue.Queue()
@@ -346,12 +351,14 @@ class TBankPlaywrightConnector(Connector):
 
     @override
     def sync(self, since: str | None = None) -> SyncResult:
+        """Handle sync."""
         self._worker = threading.Thread(target=self._run, args=(since,), daemon=True)
         self._worker.start()
         return self._await_worker()
 
     @override
     def resume_sync(self, code: str) -> SyncResult:
+        """Handle resume sync."""
         if self._worker is None or not self._worker.is_alive():
             msg = "no login in progress"
             raise ConnectorError(msg)
@@ -360,7 +367,7 @@ class TBankPlaywrightConnector(Connector):
 
     @override
     def close(self) -> None:
-
+        """Handle close."""
         if self._worker is not None and self._worker.is_alive():
             self._to_worker.put(("cancel", None))
             self._worker.join(timeout=10)
@@ -368,7 +375,7 @@ class TBankPlaywrightConnector(Connector):
     def _await_worker(self) -> SyncResult:
         kind, payload = self._from_worker.get()
         if kind == "sms_required":
-            raise SmsRequired(payload)
+            raise SmsRequiredError(payload)
         if kind == "error":
             raise ConnectorError(payload)
         if kind == "result":
@@ -457,7 +464,8 @@ class TBankPlaywrightConnector(Connector):
 
     @staticmethod
     def _prune_cache(work_dir: str) -> None:
-        """Drop Chromium cache dirs before archiving so the encrypted session
+        """Drop Chromium cache dirs before archiving so the encrypted session.
+
         blob stays small — only cookies/localStorage/IndexedDB matter.
         """
         junk = {
@@ -473,7 +481,7 @@ class TBankPlaywrightConnector(Connector):
         for root, dirs, _files in os.walk(work_dir):
             for d in list(dirs):
                 if d in junk:
-                    shutil.rmtree(os.path.join(root, d), ignore_errors=True)
+                    shutil.rmtree(os.path.join(root, d), ignore_errors=True)  # noqa: PTH118
                     dirs.remove(d)
 
     @staticmethod
@@ -513,7 +521,8 @@ class TBankPlaywrightConnector(Connector):
         )
 
     def _access_denied(self, page: _Page) -> str:
-        """The bank's "Доступ заблокирован" popup text when it's shown, else ''.
+        """Handle The bank's "Доступ заблокирован" popup text when it's shown, else ''.
+
         It blocks the phone screen (anti-automation / rate limit), so the driver
         checks for it first and fails fast with the bank's own wording.
         """
@@ -531,7 +540,7 @@ class TBankPlaywrightConnector(Connector):
         return ""
 
     def _form_title(self, page: _Page) -> str:
-        """The heading of the current SSO step, or '' when none is shown."""
+        """Handle The heading of the current SSO step, or '' when none is shown."""
         with contextlib.suppress(Exception):
             el = page.query_selector(self.SEL_FORM_TITLE)
             if el is not None:
@@ -539,16 +548,18 @@ class TBankPlaywrightConnector(Connector):
         return ""
 
     def _submit(self, page: _LocatorPage) -> None:
-        """Click the step's submit button. Some layouts auto-advance as the last
-        digit lands, so a genuinely-absent button times out and is skipped — but
+        """Click the step's submit button. Some layouts auto-advance as the last.
+
+        digit lands, so a genuinely-absent button times out and is skipped — but.
         a real click failure (detached node, intercepted click) still surfaces.
         """
         with contextlib.suppress(PlaywrightTimeoutError):
             page.locator(self.SEL_SUBMIT).first.click(timeout=5_000)
 
     def _type_pin(self, page: _Page, digits: str) -> None:
-        """Type into the 4-box pin widget used for both the SMS code and the
-        quick-login code. Focusing the first box and typing lets it auto-advance
+        """Type into the 4-box pin widget used for both the SMS code and the.
+
+        quick-login code. Focusing the first box and typing lets it auto-advance.
         across the boxes.
         """
         with contextlib.suppress(Exception):
@@ -585,7 +596,7 @@ class TBankPlaywrightConnector(Connector):
             msg = f"login did not reach the bank home page (stuck on: {where})"
             raise ConnectorError(msg)
 
-    def _drive_sso_login(self, page: _Page) -> None:
+    def _drive_sso_login(self, page: _Page) -> None:  # noqa: C901,PLR0912,PLR0915
         """Walk the id.tbank.ru SSO one step at a time until we reach /mybank.
 
         Each iteration reacts to whatever step is on screen — phone, password, or
@@ -654,7 +665,7 @@ class TBankPlaywrightConnector(Connector):
             return f"{self.URL_OPERATIONS}?account={quote(account, safe='')}"
         return self.URL_OPERATIONS
 
-    def _download_and_parse(self, page: _Page, since: str | None) -> list[SyncRow]:
+    def _download_and_parse(self, page: _Page, since: str | None) -> list[SyncRow]:  # noqa: ARG002
         page.goto(self._operations_url(), wait_until="domcontentloaded")
 
         with contextlib.suppress(Exception):

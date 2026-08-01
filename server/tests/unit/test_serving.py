@@ -1,4 +1,5 @@
-"""The SPA catch-all must not swallow unknown /api paths — those still 404 as
+"""The SPA catch-all must not swallow unknown /api paths — those still 404 as.
+
 JSON so typoed/removed endpoints don't silently return the app's index.html.
 """
 

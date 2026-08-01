@@ -1,3 +1,5 @@
+"""Provide backend functionality."""
+
 import json
 import sqlite3
 from typing import Annotated
@@ -33,6 +35,8 @@ LEGS_BY_ID = (
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid"))
 class TransferBody:
+    """Represent TransferBody."""
+
     fromAccountId: int
     toAccountId: int
     amount: int
@@ -42,6 +46,8 @@ class TransferBody:
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid"))
 class PairBody:
+    """Represent PairBody."""
+
     outTxId: int
     inTxId: int
     note: str = ""
@@ -49,32 +55,43 @@ class PairBody:
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid"))
 class TransfersResponse:
+    """Represent TransfersResponse."""
+
     rows: list[TransferResponse]
 
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid"))
 class SuggestionsResponse:
+    """Represent SuggestionsResponse."""
+
     rows: list[TransferCandidate]
     transactions: list[TransactionResponse]
 
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid"))
 class TransferIdResponse:
+    """Represent TransferIdResponse."""
+
     transferId: str
 
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid"))
 class DetectionResponse:
+    """Represent DetectionResponse."""
+
     merged: list[MergedTransfer]
     suggested: int
 
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid"))
 class OkResponse:
+    """Represent OkResponse."""
+
     ok: bool
 
 
 def account_exists(c: sqlite3.Connection, account_id: int, uid: int) -> bool:
+    """Handle account exists."""
     return (
         c.execute("SELECT id FROM accounts WHERE id=? AND user_id=?", (account_id, uid)).fetchone()
         is not None
@@ -83,6 +100,7 @@ def account_exists(c: sqlite3.Connection, account_id: int, uid: int) -> bool:
 
 @router.get("")
 def get_transfers(user: Annotated[AuthenticatedUser, Depends(current_user)]) -> TransfersResponse:
+    """Handle get transfers."""
     c = conn()
     try:
         return TransfersResponse(rows=list_transfers(c, user.id))
@@ -95,8 +113,9 @@ def get_suggestions(
     user: Annotated[AuthenticatedUser, Depends(current_user)],
     maxDays: Annotated[int, Query(ge=0, le=31)] = SUGGEST_DAYS,
 ) -> SuggestionsResponse:
-    """Pairs that look like a transfer but that detection would not merge unasked
-    — too far apart in time, or the two descriptions disagree. The transactions
+    """Pairs that look like a transfer but that detection would not merge unasked.
+
+    — too far apart in time, or the two descriptions disagree. The transactions.
     themselves ride along so the UI can show both sides without a second round
     trip.
     """
@@ -123,7 +142,8 @@ def create_transfer(
     body: TransferBody,
     user: Annotated[AuthenticatedUser, Depends(current_user)],
 ) -> TransferIdResponse:
-    """A transfer is two linked transactions: a negative row on the source account
+    """Handle A transfer is two linked transactions: a negative row on the source account.
+
     and a positive row on the destination, merged into one ``transfers`` entity.
     Both legs stay uncategorized, so they never count as income or expense.
     """
@@ -177,8 +197,9 @@ def link_transactions(
     body: PairBody,
     user: Annotated[AuthenticatedUser, Depends(current_user)],
 ) -> TransferIdResponse:
-    """Merge a pair that is already in the ledger — the usual case for rows the
-    bank sent us itself. Nothing is inserted or deleted: both transactions keep
+    """Merge a pair that is already in the ledger — the usual case for rows the.
+
+    bank sent us itself. Nothing is inserted or deleted: both transactions keep.
     their id and hash, so the next sync still recognizes them.
     """
     c = conn()
@@ -203,6 +224,7 @@ def dismiss_suggestion(
     body: PairBody,
     user: Annotated[AuthenticatedUser, Depends(current_user)],
 ) -> OkResponse:
+    """Handle dismiss suggestion."""
     c = conn()
     try:
         reject(c, user.id, body.outTxId, body.inTxId)
@@ -235,6 +257,7 @@ def delete_transfer(
     user: Annotated[AuthenticatedUser, Depends(current_user)],
 ) -> OkResponse:
     """Split a transfer back into two ordinary transactions, categories and all.
+
     The rows are never deleted here: half of them came from a bank, and deleting
     them would only invite the next sync to bring them back unlinked.
     """

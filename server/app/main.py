@@ -46,6 +46,7 @@ async def count_feature_usage(
     request: Request,
     call_next: Callable[[Request], Awaitable[Response]],
 ) -> Response:
+    """Handle count feature usage."""
     response = await call_next(request)
 
     with contextlib.suppress(Exception):
@@ -61,17 +62,18 @@ STATIC_DIR = pathlib.Path(__file__).resolve().parent.parent / "static"
 
 
 def _serve_spa(base: pathlib.Path, path: str) -> FileResponse:
-    """Serve a file from ``base`` if the request maps to one inside it, else the
-    SPA index. The untrusted path is resolved (``..`` and symlinks collapsed)
+    """Serve a file from ``base`` if the request maps to one inside it, else the.
+
+    SPA index. The untrusted path is resolved (``..`` and symlinks collapsed).
     and must stay strictly under ``base`` before the file is opened, so absolute
     paths or traversal escaping ``base`` are rejected.
     """
-    root = os.path.realpath(base)
+    root = pathlib.Path(os.path.realpath(base))
     if path:
-        target = os.path.realpath(os.path.join(root, path.lstrip("/")))
-        if target.startswith(root + os.sep) and os.path.isfile(target):
-            return FileResponse(target)
-    return FileResponse(os.path.join(root, "index.html"))
+        target = (root / path.lstrip("/")).resolve()
+        if target.is_relative_to(root) and target.is_file():
+            return FileResponse(str(target))
+    return FileResponse(str(root / "index.html"))
 
 
 for _router in (
@@ -91,11 +93,12 @@ for _router in (
 @app.get("/api/snapshot")
 def get_snapshot(
     user: Annotated[AuthenticatedUser, Depends(current_user)],
-    light: bool = False,
+    light: bool = False,  # noqa: FBT001,FBT002
     limit: Annotated[int, Query(ge=1, le=5000)] = LIGHT_SNAPSHOT_TX_LIMIT,
 ) -> SnapshotResponse:
-    """Everything the app needs to render. ``light=1`` caps the transactions at the
-    newest ``limit`` rows so first paint doesn't wait on years of history; the
+    """Everything the app needs to render. ``light=1`` caps the transactions at the.
+
+    newest ``limit`` rows so first paint doesn't wait on years of history; the.
     client fills the rest in the background over ``GET /api/transactions``.
     ``transactionsTotal`` always reports the full count. ``limit`` is bounds-
     checked whenever it is present, but only takes effect together with ``light``.
@@ -112,7 +115,8 @@ def get_snapshot(
     methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"],
     include_in_schema=False,
 )
-def api_not_found(path: str) -> None:
+def api_not_found(path: str) -> None:  # noqa: ARG001
+    """Handle api not found."""
     raise HTTPException(status_code=404, detail="Not Found")
 
 
@@ -121,4 +125,5 @@ if STATIC_DIR.is_dir():
 
     @app.get("/{path:path}")
     def spa(path: str) -> FileResponse:
+        """Handle spa."""
         return _serve_spa(STATIC_DIR, path)

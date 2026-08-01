@@ -278,8 +278,9 @@ def test_drop_already_present_is_count_aware() -> None:
 
 
 def test_dedup_survives_the_bank_rewording_its_own_description(tmp_path: Path) -> None:
-    """The exact prod duplicate: one pull delivered "…организациях. YandexBank…",
-    the next pull the same operation without the dot. One character of drift
+    """The exact prod duplicate: one pull delivered "…организациях. YandexBank…",.
+
+    the next pull the same operation without the dot. One character of drift.
     must not read as a new operation — even when the original leg has since
     been merged into a transfer (its source stays 'sync').
     """

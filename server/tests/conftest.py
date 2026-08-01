@@ -56,13 +56,14 @@ def _response_id(response: IdResponse) -> int:
 
 @pytest.fixture
 def anon(monkeypatch: pytest.MonkeyPatch) -> TestClient:
-    """A client with no credentials attached (the DB is fresh and empty)."""
+    """Handle A client with no credentials attached (the DB is fresh and empty)."""
     return _fresh_app_client(monkeypatch)
 
 
 @pytest.fixture
 def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
-    """A client signed in as the default test user; every request carries the
+    """Handle A client signed in as the default test user; every request carries the.
+
     bearer token via default headers.
     """
     c = _fresh_app_client(monkeypatch)
@@ -71,8 +72,9 @@ def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
 
 
 class Api:
-    """Thin helper over the HTTP client for arranging test state. Bodies that
-    should always succeed assert 200; error paths are exercised with the raw
+    """Thin helper over the HTTP client for arranging test state. Bodies that.
+
+    should always succeed assert 200; error paths are exercised with the raw.
     `client` in the tests themselves.
     """
 

@@ -168,8 +168,9 @@ def test_me_rejects_token_of_deleted_user(anon: TestClient) -> None:
 
 
 def test_default_account_is_set_cleared_and_guarded(api: Api, client: TestClient) -> None:
-    """The default account for card-less rows is a user preference: settable to an
-    owned account, clearable back to "assign by hand", and never someone
+    """The default account for card-less rows is a user preference: settable to an.
+
+    owned account, clearable back to "assign by hand", and never someone.
     else's account.
     """
     assert client.get("/api/auth/me").json()["defaultAccountId"] is None

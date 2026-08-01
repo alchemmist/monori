@@ -238,8 +238,9 @@ def test_categorize_guards_on_empty_desc_and_zero_amount() -> None:
 
 
 def test_categorize_files_a_refund_back_into_its_expense_envelope() -> None:
-    """A merchant's money coming back is a refund: it must land in the envelope
-    it left, not drift to uncategorized where the budget cannot see it. Income
+    """A merchant's money coming back is a refund: it must land in the envelope.
+
+    it left, not drift to uncategorized where the budget cannot see it. Income.
     keywords still win first, so a real inflow is never mistaken for a refund.
     """
     groups = {1: "expense", 2: "income"}

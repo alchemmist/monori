@@ -28,6 +28,8 @@ TOKEN_TTL = timedelta(days=7)
 
 @pydantic_dataclass(config=ConfigDict(extra="ignore"))
 class TokenPayload:
+    """Represent TokenPayload."""
+
     sub: str
     iat: int
     exp: int
@@ -37,13 +39,15 @@ TOKEN_PAYLOAD_ADAPTER: TypeAdapter[TokenPayload] = TypeAdapter(TokenPayload)
 
 
 def hash_password(password: str) -> str:
+    """Handle hash password."""
     return _hasher.hash(password)
 
 
 def verify_password(password_hash: str, password: str) -> bool:
+    """Handle verify password."""
     try:
         _hasher.verify(password_hash, password)
-        return True
+        return True  # noqa: TRY300
     except (Argon2Error, ValueError):
         return False
 
@@ -56,6 +60,7 @@ _secret_cache: dict[str, str] = {}
 
 
 def auth_secret() -> str:
+    """Handle auth secret."""
     env = os.environ.get("MONORI_AUTH_SECRET")
     if env:
         return env
@@ -74,8 +79,9 @@ def _load_or_create_secret(path: pathlib.Path) -> str:
 
 
 def load_or_create_secret_file(path: pathlib.Path, generate: Callable[[], str]) -> str:
-    """Read a secret from ``path``; if it is missing or empty, generate one with
-    ``generate()`` and persist it owner-only. Concurrency-safe via exclusive
+    """Read a secret from ``path``; if it is missing or empty, generate one with.
+
+    ``generate()`` and persist it owner-only. Concurrency-safe via exclusive.
     create — concurrent workers that lose the race read the winner's value.
     """
     if path.exists():
@@ -97,6 +103,7 @@ def load_or_create_secret_file(path: pathlib.Path, generate: Callable[[], str]) 
 
 
 def create_access_token(user_id: int) -> str:
+    """Handle create access token."""
     now = datetime.now(UTC)
     payload = {"sub": str(user_id), "iat": now, "exp": now + TOKEN_TTL}
     return jwt.encode(payload, auth_secret(), algorithm=ALGORITHM)

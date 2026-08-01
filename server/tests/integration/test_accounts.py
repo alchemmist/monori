@@ -175,8 +175,9 @@ def test_reconcile_ignores_hidden_transactions(api: Api, client: TestClient) -> 
 
 
 def test_reconcile_skips_rows_the_balance_does_not_count(api: Api, client: TestClient) -> None:
-    """An uncategorized row that is no transfer is money the ledger has not
-    accepted: the account pages leave it out of the balance, so reconciling
+    """An uncategorized row that is no transfer is money the ledger has not.
+
+    accepted: the account pages leave it out of the balance, so reconciling.
     against the bank must not fold it in and post a phantom adjustment.
     """
     acc = api.account("Vault", openingBalance=10000)

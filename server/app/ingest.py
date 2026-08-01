@@ -41,8 +41,9 @@ def load_rules(c: sqlite3.Connection) -> dict[str, list[CategoryRule]]:
 
 
 def existing_hash_counts(c: sqlite3.Connection, account_id: int) -> dict[str, int]:
-    """Hash → count of matching transactions on ``account_id``. Dedup is scoped
-    per account so the same date/amount/description legitimately occurring on two
+    """Hash → count of matching transactions on ``account_id``. Dedup is scoped.
+
+    per account so the same date/amount/description legitimately occurring on two.
     different accounts is not collapsed away.
     """
     return {
@@ -55,8 +56,9 @@ def existing_hash_counts(c: sqlite3.Connection, account_id: int) -> dict[str, in
 
 
 def dedup_text(description: str) -> str:
-    """The bank's own wording drifts between pulls — a pending operation can gain
-    or lose punctuation once it posts, and one character of drift is enough to
+    """Handle The bank's own wording drifts between pulls — a pending operation can gain.
+
+    or lose punctuation once it posts, and one character of drift is enough to.
     slip past an exact-text key. Case, punctuation and extra whitespace are
     cosmetic; only the letters and digits identify the operation.
     """
@@ -69,8 +71,9 @@ def historical_day_counts(
     uid: int,
     sources: tuple[str, ...] = ("workbook", "import", "sync", "sheets"),
 ) -> dict[tuple[str, int, str], int]:
-    """``(day, amount, normalized description) -> count`` over every transaction
-    the user got from a statement-shaped source, across all accounts. The
+    """``(day, amount, normalized description) -> count`` over every transaction.
+
+    the user got from a statement-shaped source, across all accounts. The.
     per-account hash cannot see the same bank operation arriving a second time
     through another door — a workbook over a synced ledger, or one connection
     pulling overlapping feeds — because the copies land on different accounts
@@ -83,7 +86,7 @@ def historical_day_counts(
     marks = ",".join("?" * len(sources))
     counts: dict[tuple[str, int, str], int] = {}
     for r in c.execute(
-        "SELECT substr(t.date, 1, 10) day, t.amount, t.description, COUNT(*) n"
+        "SELECT substr(t.date, 1, 10) day, t.amount, t.description, COUNT(*) n"  # noqa: S608
         " FROM transactions t JOIN accounts a ON a.id = t.account_id"
         f" WHERE a.user_id=? AND t.source IN ({marks})"  # nosec B608
         " GROUP BY day, t.amount, t.description",
@@ -98,8 +101,9 @@ def drop_already_present(
     rows: Iterable[SyncRow],
     counts: Mapping[tuple[str, int, str], int],
 ) -> tuple[list[SyncRow], int]:
-    """Drop rows the ledger already holds according to ``counts``, counting
-    repeats: two genuinely identical operations in one batch survive as long
+    """Drop rows the ledger already holds according to ``counts``, counting.
+
+    repeats: two genuinely identical operations in one batch survive as long.
     as the ledger holds fewer copies than the batch carries. Returns
     ``(kept, dropped)``.
     """
@@ -124,8 +128,9 @@ def commit_rows(
     source: str,
     batch_id: int | None = None,
 ) -> tuple[int, int]:
-    """Insert ``rows`` (dicts with date/amount/description/bank_category/mcc and
-    an optional category_id) onto ``account_id``, skipping any whose hash is
+    """Insert ``rows`` (dicts with date/amount/description/bank_category/mcc and.
+
+    an optional category_id) onto ``account_id``, skipping any whose hash is.
     already present on that account or repeats within this batch. Does not commit
     — the caller owns the transaction. Returns ``(inserted, skipped)``.
     """

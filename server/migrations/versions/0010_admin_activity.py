@@ -15,6 +15,7 @@ depends_on = None
 
 
 def upgrade() -> None:
+    """Handle upgrade."""
     op.execute("ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0")
     op.execute("ALTER TABLE users ADD COLUMN last_login TEXT")
     op.execute(
@@ -38,5 +39,6 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    """Handle downgrade."""
     msg = "monori migrations are forward-only"
     raise NotImplementedError(msg)

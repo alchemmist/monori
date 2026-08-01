@@ -1,3 +1,5 @@
+"""Provide backend functionality."""
+
 from typing import Annotated
 
 from fastapi import APIRouter, Depends
@@ -14,6 +16,7 @@ XLSX_MEDIA_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.s
 
 @router.get("/xlsx")
 def export_xlsx(user: Annotated[AuthenticatedUser, Depends(current_user)]) -> Response:
+    """Handle export xlsx."""
     c = conn()
     try:
         snap = snapshot(c, user.id)

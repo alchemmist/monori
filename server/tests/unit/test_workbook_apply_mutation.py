@@ -1,5 +1,6 @@
-"""Targets the parts of apply that the existing suite pins only loosely: the
-timestamp format stamped on a batch, the budget counters when more than one
+"""Targets the parts of apply that the existing suite pins only loosely: the.
+
+timestamp format stamped on a batch, the budget counters when more than one.
 cell is written, and the exact text of the "already imported" warning.
 """
 

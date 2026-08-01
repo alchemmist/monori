@@ -21,7 +21,7 @@ from .connectors.base import JSON_OBJECT_ADAPTER, JsonObject
 from .security import load_or_create_secret_file
 
 
-class CryptoUnavailable(RuntimeError):
+class CryptoUnavailableError(RuntimeError):
     """Raised when a secret must be handled but no encryption key is configured."""
 
 
@@ -29,10 +29,12 @@ _key_cache: dict[str, str] = {}
 
 
 def available() -> bool:
+    """Handle available."""
     return True
 
 
 def generate_key() -> str:
+    """Handle generate key."""
     from cryptography.fernet import Fernet
 
     return Fernet.generate_key().decode()

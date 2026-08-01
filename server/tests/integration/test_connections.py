@@ -8,7 +8,7 @@ from pydantic import TypeAdapter
 
 import app.connectors.fake  # noqa: F401  (registers the FakeConnector)
 from app.connectors import base
-from app.connectors.base import JsonObject, SmsRequired, SyncResult, SyncRow
+from app.connectors.base import JsonObject, SmsRequiredError, SyncResult, SyncRow
 from app.routers import connections
 from app.routers.connections import ConnectionResponse
 from tests.conftest import Api
@@ -169,12 +169,12 @@ class RetryOtpConnector:
 
     def sync(self, since: str | None = None) -> SyncResult:
         msg = "code sent"
-        raise SmsRequired(msg)
+        raise SmsRequiredError(msg)
 
     def resume_sync(self, code: str) -> SyncResult:
         if code != "4242":
             msg = "the bank rejected the code — check it and try again"
-            raise SmsRequired(msg)
+            raise SmsRequiredError(msg)
         return SyncResult([], session=None)
 
     def close(self) -> None:
@@ -535,8 +535,9 @@ def test_overlapping_feeds_do_not_duplicate_rows_across_accounts(
     client: TestClient,
     keyed: None,
 ) -> None:
-    """Two accounts on one connection whose pulls return the same feed (the fake
-    without a bank_ref does exactly that) must not land the same operations
+    """Two accounts on one connection whose pulls return the same feed (the fake.
+
+    without a bank_ref does exactly that) must not land the same operations.
     twice — once per account. The second delivery is recognized by day, amount
     and description, since the copies differ in account and so escape the
     per-account hash.

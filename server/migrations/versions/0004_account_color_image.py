@@ -14,6 +14,7 @@ def _has_column(conn: Connection, table: str, column: str) -> bool:
 
 
 def upgrade() -> None:
+    """Handle upgrade."""
     conn = op.get_bind()
     if not _has_column(conn, "accounts", "color"):
         conn.exec_driver_sql(
@@ -24,5 +25,6 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    """Handle downgrade."""
     msg = "monori migrations are forward-only"
     raise NotImplementedError(msg)

@@ -1,3 +1,5 @@
+"""Provide backend functionality."""
+
 import sqlite3
 from dataclasses import dataclass
 from typing import Annotated
@@ -14,6 +16,8 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/auth/token", auto_error=True)
 
 @dataclass(frozen=True, slots=True)
 class AuthenticatedUser:
+    """Represent AuthenticatedUser."""
+
     id: int
     email: str
     created_at: str
@@ -22,6 +26,7 @@ class AuthenticatedUser:
     default_account_id: int | None
 
     def to_api_dict(self) -> UserResponse:
+        """Handle to api dict."""
         return UserResponse(
             id=self.id,
             email=self.email,

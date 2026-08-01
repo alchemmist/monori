@@ -30,6 +30,7 @@ def _canonical(email: str) -> str:
 
 
 def upgrade() -> None:
+    """Handle upgrade."""
     op.execute("ALTER TABLE users ADD COLUMN email_canonical TEXT NOT NULL DEFAULT ''")
     conn = op.get_bind()
     rows = conn.exec_driver_sql("SELECT id, email FROM users").fetchall()
@@ -71,5 +72,6 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    """Handle downgrade."""
     msg = "monori migrations are forward-only"
     raise NotImplementedError(msg)

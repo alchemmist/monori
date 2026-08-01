@@ -1,8 +1,11 @@
+"""Provide backend functionality."""
+
 from alembic import context
 from sqlalchemy import create_engine
 
 
 def run_migrations() -> None:
+    """Handle run migrations."""
     url = context.config.get_main_option("sqlalchemy.url")
     if context.is_offline_mode():
         context.configure(url=url, literal_binds=True)

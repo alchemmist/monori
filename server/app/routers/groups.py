@@ -1,3 +1,5 @@
+"""Provide backend functionality."""
+
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -13,18 +15,24 @@ router = APIRouter(prefix="/api/groups", tags=["groups"])
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid"))
 class GroupBody:
+    """Represent GroupBody."""
+
     name: str
     kind: str
 
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid"))
 class GroupPatch:
+    """Represent GroupPatch."""
+
     name: str | None = None
     kind: str | None = None
 
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid"))
 class Reorder:
+    """Represent Reorder."""
+
     ids: list[int]
 
 
@@ -32,6 +40,7 @@ class Reorder:
 def list_groups(
     user: Annotated[AuthenticatedUser, Depends(current_user)],
 ) -> list[GroupResponse]:
+    """Handle list groups."""
     uid = user.id
     c = conn()
     try:
@@ -53,6 +62,7 @@ def create_group(
     body: GroupBody,
     user: Annotated[AuthenticatedUser, Depends(current_user)],
 ) -> IdResponse:
+    """Handle create group."""
     uid = user.id
     name = body.name.strip()
     if not name:
@@ -90,6 +100,7 @@ def patch_group(
     patch: GroupPatch,
     user: Annotated[AuthenticatedUser, Depends(current_user)],
 ) -> dict[str, bool]:
+    """Handle patch group."""
     uid = user.id
     c = conn()
     try:
@@ -130,6 +141,7 @@ def delete_group(
     group_id: int,
     user: Annotated[AuthenticatedUser, Depends(current_user)],
 ) -> dict[str, bool]:
+    """Handle delete group."""
     uid = user.id
     c = conn()
     try:
@@ -156,6 +168,7 @@ def reorder_groups(
     body: Reorder,
     user: Annotated[AuthenticatedUser, Depends(current_user)],
 ) -> dict[str, bool]:
+    """Handle reorder groups."""
     uid = user.id
     c = conn()
     try:

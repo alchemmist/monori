@@ -1,4 +1,5 @@
-"""First-class users that sign in to monori itself (issue #34). Passwords are
+"""First-class users that sign in to monori itself (issue #34). Passwords are.
+
 stored only as Argon2 hashes; per-user data ownership is a later phase.
 """
 
@@ -11,6 +12,7 @@ depends_on = None
 
 
 def upgrade() -> None:
+    """Handle upgrade."""
     conn = op.get_bind()
     conn.exec_driver_sql("""CREATE TABLE IF NOT EXISTS users (
       id INTEGER PRIMARY KEY,
@@ -21,5 +23,6 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    """Handle downgrade."""
     msg = "monori migrations are forward-only"
     raise NotImplementedError(msg)

@@ -41,7 +41,8 @@ type SqlCell = float | int | str | None
 
 
 def leading_keyword(sql: str) -> str:
-    r"""The first word of a statement, past any leading whitespace and comments —
+    r"""Handle The first word of a statement, past any leading whitespace and comments —.
+
     ``UPDATE`` in ``/* fix */ -- one row\\n update users …``. Used only to name
     the statement back to the admin; classification never relies on it.
 
@@ -69,6 +70,7 @@ def leading_keyword(sql: str) -> str:
 
 
 def cell(value: SqliteValue) -> SqlCell:
+    """Handle cell."""
     if isinstance(value, bytes):
         head = value[:BLOB_PREVIEW].hex()
         return f"x'{head}{'…' if len(value) > BLOB_PREVIEW else ''}' ({len(value)} bytes)"
@@ -79,6 +81,8 @@ def cell(value: SqliteValue) -> SqlCell:
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid"))
 class SqlBody:
+    """Represent SqlBody."""
+
     sql: str
     confirmWrite: bool
     dryRun: bool
@@ -86,6 +90,8 @@ class SqlBody:
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid"))
 class SqlResponse:
+    """Represent SqlResponse."""
+
     kind: str
     columns: list[str]
     rows: list[list[SqlCell]]
@@ -96,6 +102,8 @@ class SqlResponse:
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid"))
 class SqlDryResponse(SqlResponse):
+    """Represent SqlDryResponse."""
+
     wouldWrite: bool
 
 
