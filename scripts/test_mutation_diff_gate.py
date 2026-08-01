@@ -91,7 +91,7 @@ diff --git a/server/app/example.py b/server/app/example.py
                 return_value={"server/app/example.py": {("run", None)}},
             ),
         ):
-            return module.gate_backend(
+            result = module.gate_backend(
                 mutants,
                 baseline,
                 root,
@@ -99,6 +99,7 @@ diff --git a/server/app/example.py b/server/app/example.py
                 50,
                 skip_new_survivors,
             )
+        return int(result)
 
     def test_gate_backend_scores_killed_and_survived_mutants(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -132,7 +133,10 @@ diff --git a/server/app/example.py b/server/app/example.py
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
 
-            self.assertEqual(self.run_backend_gate(root, root / "missing", skip_new_survivors=True), 0)
+            self.assertEqual(
+                self.run_backend_gate(root, root / "missing", skip_new_survivors=True),
+                0,
+            )
 
     def test_load_meta_reports_missing_statuses(self) -> None:
         with tempfile.NamedTemporaryFile(mode="w+", suffix=".meta") as metadata:

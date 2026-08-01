@@ -6,6 +6,7 @@ import json
 import subprocess
 import sys
 from pathlib import Path
+from typing import override
 
 # mutmut >=3.6.0 stores pytest exit codes in .py.meta files:
 # 0 means survived, 1/3 means killed, and the remaining values below are
@@ -62,21 +63,30 @@ class ChangedFunctions(ast.NodeVisitor):
         self.classes: list[str] = []
         self.functions: set[tuple[str, str | None]] = set()
 
+    @override
     def visit_ClassDef(self, node: ast.ClassDef) -> None:
         self.classes.append(node.name)
         self.generic_visit(node)
         self.classes.pop()
 
-    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+    def _visit_function(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
         end = node.end_lineno or node.lineno
         if any(line in self.changed for line in range(node.lineno, end + 1)):
             self.functions.add((node.name, self.classes[-1] if self.classes else None))
         self.generic_visit(node)
 
-    visit_AsyncFunctionDef = visit_FunctionDef
+    @override
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+        self._visit_function(node)
+
+    @override
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+        self._visit_function(node)
 
 
-def changed_functions(root: Path, lines_by_path: dict[str, set[int]]) -> dict[str, set[tuple[str, str | None]]]:
+def changed_functions(
+    root: Path, lines_by_path: dict[str, set[int]]
+) -> dict[str, set[tuple[str, str | None]]]:
     result: dict[str, set[tuple[str, str | None]]] = {}
     for path, lines in lines_by_path.items():
         source_path = root / path
@@ -102,8 +112,10 @@ def load_meta(path: Path) -> dict[str, int | None]:
     data = json.loads(path.read_text())
     statuses = data.get("exit_code_by_key")
     if not isinstance(statuses, dict):
-        raise TypeError(f"mutation-diff: invalid mutmut metadata in {path}: missing exit_code_by_key")
-    return {key: value for key, value in statuses.items()}
+        raise TypeError(
+            f"mutation-diff: invalid mutmut metadata in {path}: missing exit_code_by_key"
+        )
+    return dict(statuses)
 
 
 def gate_backend(
