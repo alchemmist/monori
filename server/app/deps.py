@@ -1,17 +1,10 @@
 import sqlite3
 from collections.abc import Iterable, Mapping
 from itertools import batched
-from typing import TypedDict
+from typing import TypedDict, cast
 
 from . import db as dbmod
-from .transfer_service import TransferResponse, list_transfers
-from .value_types import (
-    SqliteValue,
-    sqlite_int,
-    sqlite_optional_int,
-    sqlite_optional_str,
-    sqlite_str,
-)
+from .transfer_service import list_transfers
 
 SPLIT_FETCH_BATCH_SIZE = 500
 
@@ -33,159 +26,94 @@ class AccountResponse(TypedDict):
     cardTails: list[str]
 
 
-class GroupResponse(TypedDict):
-    id: int
-    name: str
-    sort: int
-    kind: str
+type SqliteValue = bytes | float | int | str | None
 
 
-class CategoryResponse(TypedDict):
-    id: int
-    groupId: int
-    name: str
-    keywords: str
-    sort: int
-    archived: bool
-    goalTarget: int | None
-    goalStatus: str | None
-    goalTargetDate: str | None
+def _account_int(value: SqliteValue) -> int:
+    if isinstance(value, int):
+        return value
+    raise TypeError("account field must be an integer")
 
 
-class SplitResponse(TypedDict):
-    id: int
-    categoryId: int
-    amount: int
-    comment: str
+def _account_str(value: SqliteValue) -> str:
+    if isinstance(value, str):
+        return value
+    raise TypeError("account field must be a string")
 
 
-class TransactionResponse(TypedDict):
-    id: int
-    date: str
-    amount: int
-    description: str
-    bankCategory: str
-    mcc: str
-    categoryId: int | None
-    accountId: int
-    transferId: str | None
-    comment: str
-    source: str
-    hidden: bool
-    splits: list[SplitResponse]
+def _account_optional_int(value: SqliteValue) -> int | None:
+    return None if value is None else _account_int(value)
 
 
-class UserResponse(TypedDict):
-    id: int
-    email: str
-    createdAt: str
-    isAdmin: bool
-    lastLogin: str | None
-    defaultAccountId: int | None
-
-
-class ConnectionResponse(TypedDict):
-    id: int
-    bank: str
-    kind: str
-    status: str
-    lastSync: str | None
-    lastError: str | None
-    hasCredentials: bool
-    createdAt: str
-    updatedAt: str
-
-
-class BudgetResponse(TypedDict):
-    categoryId: int
-    year: int
-    month: int
-    amount: int
-
-
-class SnapshotResponse(TypedDict):
-    accounts: list[AccountResponse]
-    groups: list[GroupResponse]
-    categories: list[CategoryResponse]
-    transactions: list[TransactionResponse]
-    transactionsTotal: int
-    transfers: list[TransferResponse]
-    budgets: list[BudgetResponse]
-    connections: list[ConnectionResponse]
+def _account_optional_str(value: SqliteValue) -> str | None:
+    return None if value is None else _account_str(value)
 
 
 def conn() -> sqlite3.Connection:
     return dbmod.connect()
 
 
-def serialize_group(r: Mapping[str, SqliteValue]) -> GroupResponse:
-    return {
-        "id": sqlite_int(r["id"]),
-        "name": sqlite_str(r["name"]),
-        "sort": sqlite_int(r["sort"]),
-        "kind": sqlite_str(r["kind"]),
-    }
+def serialize_group(r: Mapping[str, object]) -> dict[str, object]:
+    return {"id": r["id"], "name": r["name"], "sort": r["sort"], "kind": r["kind"]}
 
 
-def serialize_category(r: Mapping[str, SqliteValue]) -> CategoryResponse:
+def serialize_category(r: Mapping[str, object]) -> dict[str, object]:
     keys = r.keys()
     return {
-        "id": sqlite_int(r["id"]),
-        "groupId": sqlite_int(r["group_id"]),
-        "name": sqlite_str(r["name"]),
-        "keywords": sqlite_str(r["keywords"]),
-        "sort": sqlite_int(r["sort"]),
+        "id": r["id"],
+        "groupId": r["group_id"],
+        "name": r["name"],
+        "keywords": r["keywords"],
+        "sort": r["sort"],
         "archived": bool(r["archived"]),
-        "goalTarget": sqlite_optional_int(r["goal_target"]) if "goal_target" in keys else None,
-        "goalStatus": sqlite_optional_str(r["goal_status"]) if "goal_status" in keys else None,
-        "goalTargetDate": (
-            sqlite_optional_str(r["goal_target_date"]) if "goal_target_date" in keys else None
-        ),
+        "goalTarget": r["goal_target"] if "goal_target" in keys else None,
+        "goalStatus": r["goal_status"] if "goal_status" in keys else None,
+        "goalTargetDate": r["goal_target_date"] if "goal_target_date" in keys else None,
     }
 
 
 def serialize_account(r: Mapping[str, SqliteValue]) -> AccountResponse:
     card_tails = str(r["card_tails"] or "")
     return {
-        "id": sqlite_int(r["id"]),
-        "name": sqlite_str(r["name"]),
-        "type": sqlite_str(r["type"]),
-        "icon": sqlite_str(r["icon"]),
-        "color": sqlite_str(r["color"]),
-        "iconImage": sqlite_optional_str(r["icon_image"]),
-        "currency": sqlite_str(r["currency"]),
-        "sort": sqlite_int(r["sort"]),
+        "id": _account_int(r["id"]),
+        "name": _account_str(r["name"]),
+        "type": _account_str(r["type"]),
+        "icon": _account_str(r["icon"]),
+        "color": _account_str(r["color"]),
+        "iconImage": _account_optional_str(r["icon_image"]),
+        "currency": _account_str(r["currency"]),
+        "sort": _account_int(r["sort"]),
         "archived": bool(r["archived"]),
-        "openingBalance": sqlite_int(r["opening_balance"]),
-        "openingDate": sqlite_optional_str(r["opening_date"]),
-        "connectionId": sqlite_optional_int(r["connection_id"]),
-        "bankRef": sqlite_str(r["bank_ref"]),
+        "openingBalance": _account_int(r["opening_balance"]),
+        "openingDate": _account_optional_str(r["opening_date"]),
+        "connectionId": _account_optional_int(r["connection_id"]),
+        "bankRef": _account_str(r["bank_ref"]),
         "cardTails": [t for t in card_tails.split(",") if t],
     }
 
 
 def serialize_tx(
-    r: Mapping[str, SqliteValue], splits: Iterable[Mapping[str, SqliteValue]] = ()
-) -> TransactionResponse:
+    r: Mapping[str, object], splits: Iterable[Mapping[str, object]] = ()
+) -> dict[str, object]:
     return {
-        "id": sqlite_int(r["id"]),
-        "date": sqlite_str(r["date"]),
-        "amount": sqlite_int(r["amount"]),
-        "description": sqlite_str(r["description"]),
-        "bankCategory": sqlite_str(r["bank_category"]),
-        "mcc": sqlite_str(r["mcc"]),
-        "categoryId": sqlite_optional_int(r["category_id"]),
-        "accountId": sqlite_int(r["account_id"]),
-        "transferId": sqlite_optional_str(r["transfer_id"]),
-        "comment": sqlite_str(r["comment"]),
-        "source": sqlite_str(r["source"]),
+        "id": r["id"],
+        "date": r["date"],
+        "amount": r["amount"],
+        "description": r["description"],
+        "bankCategory": r["bank_category"],
+        "mcc": r["mcc"],
+        "categoryId": r["category_id"],
+        "accountId": r["account_id"],
+        "transferId": r["transfer_id"],
+        "comment": r["comment"],
+        "source": r["source"],
         "hidden": bool(r["hidden"]),
         "splits": [
             {
-                "id": sqlite_int(split["id"]),
-                "categoryId": sqlite_int(split["category_id"]),
-                "amount": sqlite_int(split["amount"]),
-                "comment": sqlite_str(split["comment"]),
+                "id": split["id"],
+                "categoryId": split["category_id"],
+                "amount": split["amount"],
+                "comment": split["comment"],
             }
             for split in splits
         ],
@@ -193,13 +121,13 @@ def serialize_tx(
 
 
 def serialize_transactions(
-    cur: sqlite3.Cursor, rows: Iterable[Mapping[str, SqliteValue]]
-) -> list[TransactionResponse]:
+    cur: sqlite3.Cursor, rows: Iterable[Mapping[str, object]]
+) -> list[dict[str, object]]:
     rows = list(rows)
     if not rows:
         return []
-    ids = [sqlite_int(row["id"]) for row in rows]
-    by_tx: dict[int, list[Mapping[str, SqliteValue]]] = {}
+    ids = [cast("int", row["id"]) for row in rows]
+    by_tx: dict[int, list[Mapping[str, object]]] = {}
     for chunk in batched(ids, SPLIT_FETCH_BATCH_SIZE):
         marks = ",".join("?" for _ in chunk)
         for split in cur.execute(
@@ -209,47 +137,47 @@ def serialize_transactions(
             " ORDER BY transaction_id, sort, id",
             chunk,
         ):
-            by_tx.setdefault(sqlite_int(split["transaction_id"]), []).append(split)
-    return [serialize_tx(row, by_tx.get(sqlite_int(row["id"]), ())) for row in rows]
+            by_tx.setdefault(cast("int", split["transaction_id"]), []).append(split)
+    return [serialize_tx(row, by_tx.get(cast("int", row["id"]), ())) for row in rows]
 
 
-def serialize_user(r: Mapping[str, SqliteValue]) -> UserResponse:
+def serialize_user(r: Mapping[str, object]) -> dict[str, object]:
     """
     A user, without the password hash.
     """
     return {
-        "id": sqlite_int(r["id"]),
-        "email": sqlite_str(r["email"]),
-        "createdAt": sqlite_str(r["created_at"]),
+        "id": r["id"],
+        "email": r["email"],
+        "createdAt": r["created_at"],
         "isAdmin": bool(r["is_admin"]),
-        "lastLogin": sqlite_optional_str(r["last_login"]),
-        "defaultAccountId": sqlite_optional_int(r["default_account_id"]),
+        "lastLogin": r["last_login"],
+        "defaultAccountId": r["default_account_id"],
     }
 
 
-def serialize_connection(r: Mapping[str, SqliteValue]) -> ConnectionResponse:
+def serialize_connection(r: Mapping[str, object]) -> dict[str, object]:
     """
     A bank connection, without any secret material (credentials/session).
     """
     return {
-        "id": sqlite_int(r["id"]),
-        "bank": sqlite_str(r["bank"]),
-        "kind": sqlite_str(r["kind"]),
-        "status": sqlite_str(r["status"]),
-        "lastSync": sqlite_optional_str(r["last_sync"]),
-        "lastError": sqlite_optional_str(r["last_error"]),
+        "id": r["id"],
+        "bank": r["bank"],
+        "kind": r["kind"],
+        "status": r["status"],
+        "lastSync": r["last_sync"],
+        "lastError": r["last_error"],
         "hasCredentials": r["credentials_encrypted"] is not None,
-        "createdAt": sqlite_str(r["created_at"]),
-        "updatedAt": sqlite_str(r["updated_at"]),
+        "createdAt": r["created_at"],
+        "updatedAt": r["updated_at"],
     }
 
 
-def serialize_budget(r: Mapping[str, SqliteValue]) -> BudgetResponse:
+def serialize_budget(r: Mapping[str, object]) -> dict[str, object]:
     return {
-        "categoryId": sqlite_int(r["category_id"]),
-        "year": sqlite_int(r["year"]),
-        "month": sqlite_int(r["month"]),
-        "amount": sqlite_int(r["amount"]),
+        "categoryId": r["category_id"],
+        "year": r["year"],
+        "month": r["month"],
+        "amount": r["amount"],
     }
 
 
@@ -265,7 +193,7 @@ TX_COLUMNS = (
 
 def _snapshot_transactions(
     cur: sqlite3.Cursor, uid: tuple[int], tx_limit: int | None
-) -> list[TransactionResponse]:
+) -> list[dict[str, object]]:
     """
     The newest ``tx_limit`` transactions, handed back in the canonical
     ``date, id`` order the client keeps them in. ``None`` means all of them.
@@ -276,7 +204,7 @@ def _snapshot_transactions(
     return serialize_transactions(cur, reversed(list(rows)))
 
 
-def snapshot(c: sqlite3.Connection, user_id: int, tx_limit: int | None = None) -> SnapshotResponse:
+def snapshot(c: sqlite3.Connection, user_id: int, tx_limit: int | None = None) -> dict[str, object]:
     cur = c.cursor()
     uid = (user_id,)
     transactions = _snapshot_transactions(cur, uid, tx_limit)
@@ -284,13 +212,11 @@ def snapshot(c: sqlite3.Connection, user_id: int, tx_limit: int | None = None) -
     transactions_total = (
         len(transactions)
         if tx_limit is None or len(transactions) < tx_limit
-        else sqlite_int(
-            cur.execute(
-                "SELECT COUNT(*) FROM transactions t JOIN accounts a ON a.id = t.account_id"
-                " WHERE a.user_id=? AND t.hidden = 0",
-                uid,
-            ).fetchone()[0]
-        )
+        else cur.execute(
+            "SELECT COUNT(*) FROM transactions t JOIN accounts a ON a.id = t.account_id"
+            " WHERE a.user_id=? AND t.hidden = 0",
+            uid,
+        ).fetchone()[0]
     )
     return {
         "accounts": [

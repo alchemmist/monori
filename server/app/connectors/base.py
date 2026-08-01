@@ -10,10 +10,10 @@ raises :class:`SmsRequired`; the caller parks the live connector and later calls
 
 from typing import NotRequired, TypedDict
 
-from pydantic import TypeAdapter
+from pydantic import JsonValue, TypeAdapter
 from pydantic.dataclasses import dataclass
 
-from ..value_types import JsonObject
+type JsonObject = dict[str, JsonValue]
 
 
 class ConnectorParam(TypedDict):
