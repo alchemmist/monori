@@ -25,6 +25,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from .. import crypto
 from ..auth import AuthenticatedUser, current_user
 from ..connectors import base as connectors
+from ..connectors import tbank_playwright as _tbank_playwright  # noqa: F401
 from ..connectors.base import (
     ConnectorError,
     ConnectorInfo,

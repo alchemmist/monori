@@ -1,24 +1,15 @@
 import sqlite3
 from dataclasses import dataclass
-from typing import Annotated, TypedDict
+from typing import Annotated
 
 import jwt
 from fastapi import Depends, HTTPException
 from fastapi.security import OAuth2PasswordBearer
 
-from .deps import conn
+from .deps import UserResponse, conn
 from .security import decode_access_token
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/auth/token", auto_error=True)
-
-
-class UserResponse(TypedDict):
-    id: int
-    email: str
-    createdAt: str
-    isAdmin: bool
-    lastLogin: str | None
-    defaultAccountId: int | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -31,14 +22,14 @@ class AuthenticatedUser:
     default_account_id: int | None
 
     def to_api_dict(self) -> UserResponse:
-        return {
-            "id": self.id,
-            "email": self.email,
-            "createdAt": self.created_at,
-            "isAdmin": self.is_admin,
-            "lastLogin": self.last_login,
-            "defaultAccountId": self.default_account_id,
-        }
+        return UserResponse(
+            id=self.id,
+            email=self.email,
+            createdAt=self.created_at,
+            isAdmin=self.is_admin,
+            lastLogin=self.last_login,
+            defaultAccountId=self.default_account_id,
+        )
 
 
 def _user_from_row(row: sqlite3.Row) -> AuthenticatedUser:

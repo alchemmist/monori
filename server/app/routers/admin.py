@@ -13,7 +13,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from .. import auth
 from ..admin import admin_user
-from ..deps import conn, serialize_user
+from ..db_records import UserRecord
+from ..deps import UserResponse, conn, serialize_user
 from .auth_router import create_user
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
@@ -129,7 +130,7 @@ def user_detail(uid: int, admin: Annotated[AdminContext, Depends(admin_user)]) -
         if row is None:
             raise HTTPException(404, "unknown user")
         return {
-            "user": serialize_user(row),
+            "user": serialize_user(UserRecord.from_row(row)),
             "accounts": [
                 {
                     "id": r["id"],
@@ -286,7 +287,7 @@ class CreateUserBody(TypedDict):
 @router.post("/users")
 def create_user_admin(
     body: CreateUserBody, admin: Annotated[AdminContext, Depends(admin_user)]
-) -> dict[str, object]:
+) -> UserResponse:
     c = conn()
     try:
         return create_user(c, body["email"], body["password"])

@@ -5,6 +5,7 @@ from typing import Annotated, NotRequired, TypedDict, cast
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from ..auth import AuthenticatedUser, current_user
+from ..db_records import TransactionRecord
 from ..deps import conn, serialize_tx
 from ..importer import tx_hash
 from ..transfer_match import AUTO_DAYS, SUGGEST_DAYS, split_confident
@@ -69,7 +70,12 @@ def get_suggestions(
             {cast("int", p["outTxId"]) for p in pairs} | {cast("int", p["inTxId"]) for p in pairs}
         )
         legs = (
-            [serialize_tx(r) for r in c.execute(LEGS_BY_ID, (uid, json.dumps(ids)))] if ids else []
+            [
+                serialize_tx(TransactionRecord.from_row(row))
+                for row in c.execute(LEGS_BY_ID, (uid, json.dumps(ids)))
+            ]
+            if ids
+            else []
         )
         return {"rows": pairs, "transactions": legs}
     finally:
