@@ -298,6 +298,40 @@ def comment_body(findings: list[Finding], sha: str, approved: set[str], pr_url: 
     return "\n".join(lines)
 
 
+def summary_body(findings: list[Finding], approved: set[str], pr_url: str) -> str:
+    active = [finding for finding in findings if finding.finding_id not in approved]
+    status = "✅ PASS" if not active else "❌ FAIL"
+    lines = [
+        "## Python object annotation gate",
+        "",
+        "| Metric | Value |",
+        "| --- | ---: |",
+        f"| Status | {status} |",
+        f"| Findings | {len(findings)} |",
+        f"| Active | {len(active)} |",
+        f"| Approved | {len(findings) - len(active)} |",
+        "",
+        f"<details><summary>List of problems ({len(findings)})</summary>",
+        "",
+    ]
+    for finding in findings:
+        marker = "✔" if finding.finding_id in approved else "✗"
+        location = f"{finding.path}:{finding.line}"
+        lines.append(
+            f"- {marker} [`{location}`]({finding_url(pr_url, finding)}) "
+            f"— `{finding.annotation}` · `{finding.finding_id}`"
+        )
+    lines.extend(["", "</details>"])
+    return "\n".join(lines)
+
+
+def append_step_summary(body: str) -> None:
+    summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
+    if summary_path:
+        with Path(summary_path).open("a") as summary:
+            summary.write(body.rstrip() + "\n")
+
+
 def find_bot_comment(github: GitHub, number: int) -> dict[str, JsonValue] | None:
     comments = github.paged(f"/issues/{number}/comments")
     return next(
@@ -467,11 +501,12 @@ def main() -> int:
             else:
                 print(f"Invalid {command_name} command; command ignored")
 
+    pr_url = json_string(pull["html_url"], "pull request URL")
+    append_step_summary(summary_body(findings, approved, pr_url))
     if not findings:
         delete_bot_comment(github, existing)
         return 0
 
-    pr_url = json_string(pull["html_url"], "pull request URL")
     update_bot_comment(
         github,
         number,

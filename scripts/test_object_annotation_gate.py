@@ -11,6 +11,7 @@ from scripts.object_annotation_gate import (
     parse_state,
     scan_file,
     state_marker,
+    summary_body,
 )
 
 
@@ -126,6 +127,17 @@ other: "list[object]"
         )
 
         self.assertIn("## ✅ Python <code>object</code> annotation check", approved_body)
+
+    def test_summary_includes_status_and_finding_links_without_admin_commands(self) -> None:
+        finding = Finding("server/app/example.py", 7, 2, "object", "finding-1")
+
+        body = summary_body([finding], set(), "https://github.com/org/repo/pull/1")
+
+        self.assertIn("## Python object annotation gate", body)
+        self.assertIn("| Status | ❌ FAIL |", body)
+        self.assertIn("| Findings | 1 |", body)
+        self.assertIn("server/app/example.py:7", body)
+        self.assertNotIn("/ignore-all", body)
 
 
 if __name__ == "__main__":
