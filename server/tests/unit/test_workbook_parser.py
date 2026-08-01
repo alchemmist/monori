@@ -1,6 +1,6 @@
 import datetime
+from dataclasses import dataclass
 from io import BytesIO
-from typing import cast
 
 import pytest
 from openpyxl import Workbook
@@ -38,15 +38,21 @@ TX_HEADER: list[str] = [
 ]
 
 
+def _active(wb: Workbook) -> Worksheet:
+    ws = wb.active
+    assert ws is not None
+    return ws
+
+
 def _new_wb() -> Workbook:
     wb = Workbook()
-    active = cast("Worksheet", wb.active)
+    active = _active(wb)
     wb.remove(active)
     return wb
 
 
 def _drop_active_sheet(wb: Workbook) -> None:
-    active = cast("Worksheet", wb.active)
+    active = _active(wb)
     wb.remove(active)
 
 
@@ -109,17 +115,48 @@ def _write_year(
                 ws.cell(row=available_row - 1, column=b + 1, value=available[mnum])
 
 
-def _tx_sheet(wb: Workbook, tx_rows: list[list[object]]) -> Worksheet:
+@dataclass(frozen=True)
+class TransactionFixture:
+    date: datetime.datetime | str
+    amount: float
+    category: str
+    card: str = "*1111"
+    status: str = "OK"
+    currency: str = "RUB"
+    description: str = ""
+    keyword: tuple[str, str] | None = None
+
+    def append_to(self, ws: Worksheet) -> None:
+        row = ws.max_row + 1
+        ws.cell(row, 1, self.date)
+        ws.cell(row, 2, self.card)
+        ws.cell(row, 3, self.status)
+        ws.cell(row, 4, self.amount)
+        ws.cell(row, 5, self.currency)
+        ws.cell(row, 6, "Super")
+        ws.cell(row, 7, "5411")
+        ws.cell(row, 8, self.description)
+        ws.cell(row, 10, self.category)
+        if self.keyword is not None:
+            ws.cell(row, 11, self.keyword[0])
+            ws.cell(row, 12, self.keyword[1])
+
+
+def _tx_sheet(wb: Workbook, tx_rows: list[TransactionFixture | None]) -> Worksheet:
     ws = wb.create_sheet(spec.SHEET_TRANSACTIONS)
+    assert isinstance(ws, Worksheet)
     ws.append(TX_HEADER)
     for row in tx_rows:
-        ws.append(row)
-    return cast("Worksheet", ws)
+        if row is None:
+            ws.append([])
+        else:
+            row.append_to(ws)
+    return ws
 
 
 def _tx(
-    date: object,
-    amount: object,
+    date: datetime.datetime | str,
+    amount: float,
     category: str,
     *,
     card: str = "*1111",
@@ -127,20 +164,8 @@ def _tx(
     currency: str = "RUB",
     desc: str = "",
     kw: tuple[str, str] | None = None,
-) -> list[object]:
-    row: list[object] = [None] * 12
-    row[0] = date
-    row[1] = card
-    row[2] = status
-    row[3] = amount
-    row[4] = currency
-    row[5] = "Super"
-    row[6] = "5411"
-    row[7] = desc
-    row[9] = category
-    if kw:
-        row[10], row[11] = kw
-    return row
+) -> TransactionFixture:
+    return TransactionFixture(date, amount, category, card, status, currency, desc, kw)
 
 
 def _save(wb: Workbook) -> bytes:
@@ -388,7 +413,7 @@ def test_parse_year_sheet_reads_grid_income_available_seed() -> None:
 # --- transactions & keywords ---------------------------------------------
 
 
-def _tx_only_ws(tx_rows: list[list[object]]) -> Worksheet:
+def _tx_only_ws(tx_rows: list[TransactionFixture | None]) -> Worksheet:
     wb = _new_wb()
     return _tx_sheet(wb, tx_rows)
 
@@ -400,7 +425,7 @@ def test_parse_transactions_empty_and_missing_columns() -> None:
     empty.create_sheet(spec.SHEET_TRANSACTIONS)
     ro = load_workbook(BytesIO(_save(empty)), read_only=True, data_only=True)
     with pytest.raises(WorkbookError, match="Transactions sheet is empty"):
-        _parse_transactions(cast("Worksheet", ro[spec.SHEET_TRANSACTIONS]), [], [])
+        _parse_transactions(ro[spec.SHEET_TRANSACTIONS], [], [])
 
     bad = _new_wb()
     ws = bad.create_sheet(spec.SHEET_TRANSACTIONS)
@@ -418,7 +443,7 @@ def test_parse_transactions_dedup_status_currency_and_category() -> None:
             _tx(datetime.datetime(2025, 1, 16), -50.0, "Cafes", status="FAILED"),
             _tx(datetime.datetime(2025, 1, 17), -20.0, "Travel", currency="USD", desc="Abroad"),
             _tx("bad", -1.0, "X"),  # unparseable date
-            [None] * 12,  # blank
+            None,  # blank
         ]
     )
     warnings: list[str] = []
@@ -453,20 +478,16 @@ def test_split_operation_keeps_both_parts_with_their_own_amounts() -> None:
     ws = wb.create_sheet(spec.SHEET_TRANSACTIONS)
     ws.append(TX_HEADER + ["Сумма платежа", "Валюта платежа"])
 
-    def part(pay: object, category: str) -> list[object]:
-        row: list[object] = [None] * 13
-        row[0] = datetime.datetime(2026, 5, 31, 14, 30)
-        row[1] = "*0548"
-        row[2] = "OK"
-        row[3] = -48480.0
-        row[4] = "RUB"
-        row[7] = "Brandshop"
-        row[8] = pay
-        row[11] = category
-        return row
-
-    ws.append(part("=-48480+16990", "Clothes"))
-    ws.append(part(-16990.0, "Wedding"))
+    for row, category in ((2, "Clothes"), (3, "Wedding")):
+        ws.cell(row, 1, datetime.datetime(2026, 5, 31, 14, 30))
+        ws.cell(row, 2, "*0548")
+        ws.cell(row, 3, "OK")
+        ws.cell(row, 4, -48480.0)
+        ws.cell(row, 5, "RUB")
+        ws.cell(row, 8, "Brandshop")
+        ws.cell(row, 12, category)
+    ws.cell(2, 9, "=-48480+16990")
+    ws.cell(3, 9, -16990.0)
 
     warnings: list[str] = []
     errors: list[WorkbookParseErrorRow] = []
@@ -485,41 +506,30 @@ def test_parse_transactions_pay_amount_fallback_and_blankish_rows() -> None:
     ws = wb.create_sheet(spec.SHEET_TRANSACTIONS)
     ws.append(TX_HEADER + ["Сумма платежа", "Валюта платежа"])
 
-    manual: list[object] = [None] * 13
-    manual[0] = datetime.datetime(2025, 3, 1, 9)
-    manual[2] = "OK"
-    manual[4] = "RUB"
-    manual[7] = "Salary"
-    manual[8] = 47337.0
-    manual[11] = "Income"
-    ws.append(manual)
+    ws.cell(2, 1, datetime.datetime(2025, 3, 1, 9))
+    ws.cell(2, 3, "OK")
+    ws.cell(2, 5, "RUB")
+    ws.cell(2, 8, "Salary")
+    ws.cell(2, 9, 47337.0)
+    ws.cell(2, 12, "Income")
 
-    formatted: list[object] = [None] * 13
-    formatted[0] = datetime.datetime(2025, 3, 2)
-    formatted[2] = "OK"
-    formatted[7] = "Points"
-    formatted[8] = "-4 172,00"
-    formatted[9] = "RUB"
-    formatted[11] = "Groceries"
-    ws.append(formatted)
+    ws.cell(3, 1, datetime.datetime(2025, 3, 2))
+    ws.cell(3, 3, "OK")
+    ws.cell(3, 8, "Points")
+    ws.cell(3, 9, "-4 172,00")
+    ws.cell(3, 10, "RUB")
+    ws.cell(3, 12, "Groceries")
 
-    foreign: list[object] = [None] * 13
-    foreign[0] = datetime.datetime(2025, 3, 3)
-    foreign[2] = "OK"
-    foreign[7] = "Abroad"
-    foreign[8] = 10.0
-    foreign[9] = "USD"
-    foreign[11] = "Travel"
-    ws.append(foreign)
+    ws.cell(4, 1, datetime.datetime(2025, 3, 3))
+    ws.cell(4, 3, "OK")
+    ws.cell(4, 8, "Abroad")
+    ws.cell(4, 9, 10.0)
+    ws.cell(4, 10, "USD")
+    ws.cell(4, 12, "Travel")
 
-    blankish: list[object] = [None] * 13
-    blankish[11] = 0
-    ws.append(blankish)
-
-    dated_only: list[object] = [None] * 13
-    dated_only[0] = datetime.datetime(2025, 3, 4)
-    dated_only[7] = "no amount anywhere"
-    ws.append(dated_only)
+    ws.cell(5, 12, 0)
+    ws.cell(6, 1, datetime.datetime(2025, 3, 4))
+    ws.cell(6, 8, "no amount anywhere")
 
     warnings: list[str] = []
     errors: list[WorkbookParseErrorRow] = []
@@ -986,7 +996,7 @@ def test_available_ignores_budget_cells_on_income_categories() -> None:
 
 def test_missing_transactions_sheet_raises() -> None:
     wb = Workbook()
-    ws = cast("Worksheet", wb.active)
+    ws = _active(wb)
     ws.title = "2025"
     with pytest.raises(WorkbookError, match="missing required sheet: Transactions"):
         parse_workbook(_save(wb))
