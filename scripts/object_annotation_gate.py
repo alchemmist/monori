@@ -217,8 +217,12 @@ def comment_body(findings: list[Finding], sha: str, approved: set[str], pr_url: 
     status = "✔" if not active else "✗"
     lines = [
         state_marker(sha, approved),
+        f"## {status} Python <code>object</code> annotation check",
+        "This check finds newly added Python annotations that use the broad `object` type.",
+        "Please replace each finding with a specific type, or ask an administrator to approve it.",
+        "",
         "<details>",
-        f"<summary>{status} Python <code>object</code> annotation check ({len(findings)})</summary>",
+        f"<summary>List of problems ({len(findings)})</summary>",
         "",
     ]
     for finding in findings:
@@ -228,21 +232,25 @@ def comment_body(findings: list[Finding], sha: str, approved: set[str], pr_url: 
             f"- {marker} [`{location}`]({finding_url(pr_url, finding)}) "
             f"— `{finding.annotation}` · `{finding.finding_id}`"
         )
-    if findings:
-        lines.extend(
-            [
-                "",
-                "Repository administrator commands must be posted as a new comment containing exactly one command:",
-                "",
-                "```text",
-                "/ignore-object <finding-id>",
-                "/ignore-file path/to/file.py",
-                "/ignore-all",
-                "/remove-ignore <finding-id>",
-                "```",
-            ]
-        )
     lines.append("</details>")
+    lines.extend(
+        [
+            "",
+            "<details>",
+            "<summary>For admins</summary>",
+            "",
+            "Post exactly one command as a new comment to manage approvals:",
+            "",
+            "| Command | Purpose |",
+            "| --- | --- |",
+            "| `/ignore-object <finding-id>` | Approve one finding. |",
+            "| `/ignore-file path/to/file.py` | Approve all findings in a file. |",
+            "| `/ignore-all` | Approve all findings in the pull request. |",
+            "| `/remove-ignore <finding-id>` | Remove an approval. |",
+            "",
+            "</details>",
+        ]
+    )
     return "\n".join(lines)
 
 

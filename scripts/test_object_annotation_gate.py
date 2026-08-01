@@ -105,8 +105,15 @@ other: "list[object]"
 
         body = comment_body([finding], "sha", set(), "https://github.com/org/repo/pull/1")
 
-        self.assertIn("annotation check (1)", body)
+        self.assertIn("## ✗ Python <code>object</code> annotation check", body)
+        self.assertIn("List of problems (1)", body)
+        self.assertIn("<summary>For admins</summary>", body)
+        self.assertIn("| `/ignore-all` | Approve all findings in the pull request. |", body)
         self.assertIn("https://github.com/org/repo/pull/1/changes#diff-", body)
+
+        approved_body = comment_body([finding], "sha", {"finding-1"}, "https://github.com/org/repo/pull/1")
+
+        self.assertIn("## ✔ Python <code>object</code> annotation check", approved_body)
 
 
 if __name__ == "__main__":
