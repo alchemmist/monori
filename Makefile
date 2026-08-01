@@ -116,7 +116,7 @@ spell:
 	uvx codespell web/src server/app server/tests \
 		README.md web/README.md docs Makefile .github
 
-type: type-back # type-front
+type: type-back type-front
 
 type-front:
 	cd web && npm run --silent typecheck
