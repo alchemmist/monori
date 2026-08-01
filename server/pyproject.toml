@@ -10,9 +10,7 @@ dependencies = [
     "pyjwt>=2.9",
     "argon2-cffi>=23",
     "python-multipart>=0.0.9",
-    "alembic>=1.18.5",
-    "httpx[socks]>=0.27",
-    "openpyxl>=3.1",
+    "alembic>=1.18.5", "httpx[socks]>=0.27", "openpyxl>=3.1",
 ]
 
 [project.optional-dependencies]
@@ -58,7 +56,7 @@ exclude = ["web/prototypes"]
 force-exclude = true
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B", "SIM", "C4", "D209", "D213", "ANN"]
+select = ["E", "F", "I", "UP", "B", "SIM", "C4", "D209", "D213", "ANN", "PYI"]
 
 [tool.mypy]
 python_version = "3.12"
