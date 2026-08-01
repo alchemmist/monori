@@ -9,6 +9,13 @@ if (!base || !reportPath || !Number.isFinite(threshold)) {
     process.exit(2);
 }
 
+function appendStepSummary(content) {
+    const summaryPath = process.env.GITHUB_STEP_SUMMARY;
+    if (summaryPath) {
+        fs.appendFileSync(summaryPath, `${content.trim()}\n`);
+    }
+}
+
 function parseChangedLines(diff) {
     const paths = new Map();
     let current = null;
@@ -51,11 +58,15 @@ const changedFiles = new Set(changedLines.keys());
 
 if (changedFiles.size === 0) {
     console.log("mutation-diff: no changed frontend files — pass");
+    appendStepSummary("## Frontend mutation diff\n\nNo changed frontend files — **pass**.");
     process.exit(0);
 }
 
 if (!fs.existsSync(reportPath)) {
     console.log("mutation-diff: no Stryker report for changed frontend files — pass");
+    appendStepSummary(
+        "## Frontend mutation diff\n\nNo Stryker report for changed frontend files — **pass**.",
+    );
     process.exit(0);
 }
 
@@ -79,11 +90,15 @@ const considered = detected + survived + other;
 
 if (considered === 0) {
     console.log("mutation-diff: changed frontend files have no tested mutants — pass");
+    appendStepSummary(
+        "## Frontend mutation diff\n\nChanged frontend files have no tested mutants — **pass**.",
+    );
     process.exit(0);
 }
 
 const score = (detected * 100) / considered;
 const passed = score >= threshold && survived === 0;
+const status = passed ? "✅ PASS" : "❌ FAIL";
 console.log("── changed frontend mutation summary ────────────────");
 console.log(`killed             ${killed}`);
 console.log(`survived           ${survived}`);
@@ -91,4 +106,20 @@ console.log(`considered         ${considered}`);
 console.log(`score              ${score.toFixed(2)}%`);
 console.log(`threshold          ${threshold}%`);
 console.log(`mutation-diff gate ${passed ? "PASS" : "FAIL"}`);
+appendStepSummary(
+    [
+        "## Frontend mutation diff",
+        "",
+        "| Metric | Value |",
+        "| --- | ---: |",
+        `| Status | ${status} |`,
+        `| Killed | ${killed} |`,
+        `| Timed out | ${timedOut} |`,
+        `| Survived | ${survived} |`,
+        `| No coverage | ${counts.NoCoverage?.length ?? 0} |`,
+        `| Considered | ${considered} |`,
+        `| Score | ${score.toFixed(2)}% |`,
+        `| Threshold | ${threshold}% |`,
+    ].join("\n"),
+);
 process.exit(passed ? 0 : 1);
