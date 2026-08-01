@@ -22,6 +22,8 @@ def parse_changed_lines(diff: str) -> dict[str, set[int]]:
     new_line = 0
     deletion_only = False
     for line in diff.splitlines():
+        if line == r"\ No newline at end of file":
+            continue
         if line.startswith("+++ "):
             target = line[4:]
             if target == "/dev/null":

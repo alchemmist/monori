@@ -15,9 +15,11 @@ function parseChangedLines(diff) {
     let newLine = 0;
     let deletionOnly = false;
     for (const line of diff.split("\n")) {
-        if (line.startsWith("+++ ")) {
+        if (line === "\\ No newline at end of file") {
+            continue;
+        } else if (line.startsWith("+++ ")) {
             const target = line.slice(4);
-            current = target === "/dev/null" ? null : target.replace(/^b\//, "");
+            current = target === "/dev/null" ? null : normalizePath(target);
             if (current) paths.set(current, new Set());
         } else if (line.startsWith("@@")) {
             const match = line.match(/\+(\d+)(?:,(\d+))?/);
@@ -34,6 +36,10 @@ function parseChangedLines(diff) {
         }
     }
     return paths;
+}
+
+function normalizePath(path) {
+    return path.replace(/^b\//, "").replace(/^web\//, "");
 }
 
 const changedLines = parseChangedLines(
@@ -55,10 +61,10 @@ if (!fs.existsSync(reportPath)) {
 
 const report = JSON.parse(fs.readFileSync(reportPath, "utf8"));
 const mutants = Object.entries(report.files ?? {})
-    .filter(([path]) => changedFiles.has(path.replace(/^web\//, "")))
+    .filter(([path]) => changedFiles.has(normalizePath(path)))
     .flatMap(([path, file]) =>
         (file.mutants ?? []).filter((mutant) => {
-            const lines = changedLines.get(path.replace(/^web\//, ""));
+            const lines = changedLines.get(normalizePath(path));
             const line = mutant.location?.start?.line;
             return line === undefined || lines.has(line);
         }),

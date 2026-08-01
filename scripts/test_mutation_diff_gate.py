@@ -62,7 +62,9 @@ diff --git a/server/app/example.py b/server/app/example.py
 +++ b/server/app/example.py
 @@ -3 +3 @@
 -old = True
+\\ No newline at end of file
 +new = True
+\\ No newline at end of file
 """
 
         self.assertEqual(module.parse_changed_lines(diff), {"server/app/example.py": {2, 3}})
