@@ -518,9 +518,7 @@ def test_parse_workbook_reads_a_stated_category_sheet() -> None:
         cats.append(row)
     tx = wb.create_sheet(spec.SHEET_TRANSACTIONS)
     tx.append(TX_HEADER + [None, "Monori Category"])
-    _plain_tx(
-        datetime.datetime(2025, 1, 15), -300.0, "Groceries", desc="Lenta"
-    ).append_to(tx)
+    _plain_tx(datetime.datetime(2025, 1, 15), -300.0, "Groceries", desc="Lenta").append_to(tx)
     parsed = parse_workbook(_save(wb))
     assert [(group.name, group.sort, group.kind) for group in parsed.groups] == [
         ("Daily", 1, "expense")
