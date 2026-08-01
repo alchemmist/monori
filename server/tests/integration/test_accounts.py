@@ -2,7 +2,9 @@ import pytest
 from fastapi.testclient import TestClient
 from pydantic import TypeAdapter
 
+import app.db as dbmod
 from app.routers.imports import ImportRowResponse
+from app.importer import tx_hash
 from tests.conftest import Api
 
 pytestmark = pytest.mark.integration
@@ -114,9 +116,6 @@ def test_delete_reassigns_transactions(api: Api, client: TestClient) -> None:
     assert api.tx_by(tx).accountId == default
     assert cash not in [account.id for account in api.snapshot().accounts]
 
-    import app.db as dbmod
-    from app.importer import tx_hash
-
     c = dbmod.connect()
     stored = c.execute("SELECT hash FROM transactions WHERE id=?", (tx,)).fetchone()[0]
     c.close()
@@ -175,7 +174,8 @@ def test_reconcile_ignores_hidden_transactions(api: Api, client: TestClient) -> 
 
 
 def test_reconcile_skips_rows_the_balance_does_not_count(api: Api, client: TestClient) -> None:
-    """An uncategorized row that is no transfer is money the ledger has not.
+    """
+    An uncategorized row that is no transfer is money the ledger has not.
 
     accepted: the account pages leave it out of the balance, so reconciling.
     against the bank must not fold it in and post a phantom adjustment.

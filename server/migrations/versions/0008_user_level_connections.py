@@ -1,4 +1,5 @@
-"""Bank connections become user-level: a connection is one bank login owned by.
+"""
+Bank connections become user-level: a connection is one bank login owned by.
 
 a user, and any number of accounts link to it via accounts.connection_id plus a.
 bank-specific accounts.bank_ref locator. Existing 1:1 connections are converted

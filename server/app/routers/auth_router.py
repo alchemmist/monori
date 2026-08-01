@@ -1,4 +1,5 @@
-"""In-app authentication: register, obtain a token, and read the current user.
+"""
+In-app authentication: register, obtain a token, and read the current user.
 
 This is the skeleton of issue #34 — real accounts that sign in to monori itself.
 Per-user data ownership (scoping every table to a user) is a later phase; for now
@@ -30,7 +31,8 @@ MAX_EMAIL_LEN = 254
 
 
 def _valid_email(email: str) -> bool:
-    """Shape check for an email: one ``@``, non-empty local part, and a dotted.
+    """
+    Shape check for an email: one ``@``, non-empty local part, and a dotted.
 
     domain with no empty labels. Linear and non-backtracking (bounded by.
     ``MAX_EMAIL_LEN``) so it cannot be driven into a ReDoS.
@@ -66,7 +68,8 @@ class OAuthTokenType(StrEnum):
 
 
 def create_user(c: sqlite3.Connection, raw_email: str, password: str) -> UserResponse:
-    """Validate and insert a user (with a default Cash account), returning the.
+    """
+    Validate and insert a user (with a default Cash account), returning the.
 
     serialized user. Shared by public registration and admin user creation.
     Raises HTTPException on invalid input or duplicate email.
@@ -184,7 +187,8 @@ def patch_me(
     body: MePatch,
     user: Annotated[AuthenticatedUser, Depends(current_user)],
 ) -> UserResponse:
-    """User-level preferences. ``defaultAccountId`` is where imports land rows no.
+    """
+    User-level preferences. ``defaultAccountId`` is where imports land rows no.
 
     card number can route; null clears it and those rows go back to being.
     assigned by hand.

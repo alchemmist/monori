@@ -1,4 +1,5 @@
-"""A deterministic in-memory connector for exercising the sync path in tests.
+"""
+A deterministic in-memory connector for exercising the sync path in tests.
 
 It reproduces the two-phase login: the first sync of a fresh connection raises
 :class:`SmsRequiredError`; supplying the code ``0000`` via :meth:`resume_sync`
@@ -19,7 +20,8 @@ FIXTURE_ROWS: list[SyncRow] = [
 
 
 def _rows(account_ref: str | None = None) -> list[SyncRow]:
-    """Handle A real bank scopes the feed to the requested account; the fixture mimics.
+    """
+    Handle A real bank scopes the feed to the requested account; the fixture mimics.
 
     that by stamping the ref into the description, so two accounts on one.
     connection deliver distinct operations rather than one feed twice.

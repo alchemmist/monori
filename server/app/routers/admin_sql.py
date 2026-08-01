@@ -1,4 +1,5 @@
-"""Admin SQL console (issue #168): run one statement against the live database.
+"""
+Admin SQL console (issue #168): run one statement against the live database.
 
 This is deliberately unrestricted full data access — the same scope the rest of
 the admin API already has (#128), for an instance owner who would otherwise SSH
@@ -41,7 +42,8 @@ type SqlCell = float | int | str | None
 
 
 def leading_keyword(sql: str) -> str:
-    r"""Handle The first word of a statement, past any leading whitespace and comments —.
+    r"""
+    Handle The first word of a statement, past any leading whitespace and comments —.
 
     ``UPDATE`` in ``/* fix */ -- one row\\n update users …``. Used only to name
     the statement back to the admin; classification never relies on it.
@@ -112,7 +114,8 @@ def run_sql(
     body: SqlBody,
     admin: Annotated[AuthenticatedUser, Depends(admin_user)],
 ) -> SqlResponse | SqlDryResponse:
-    """Execute one statement and return either its rows or its affected-row count.
+    """
+    Execute one statement and return either its rows or its affected-row count.
 
     A statement is classified as a write by what it *did*, not by how it reads:
     anything that returned no result set or touched a row needs ``confirmWrite``,

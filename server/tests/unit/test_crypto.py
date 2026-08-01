@@ -3,15 +3,14 @@ from pathlib import Path
 import pytest
 from cryptography.fernet import Fernet
 
+import app.db as dbmod
 from app import crypto
 
 
 def _use_tmp_db(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("MONORI_ENCRYPTION_KEY", raising=False)
-    import app.db as dbmod
-
     monkeypatch.setattr(dbmod, "DB_PATH", str(tmp_path / "monori.db"))
-    crypto._key_cache.clear()
+    crypto.clear_key_cache()
 
 
 def test_round_trip_with_env_key(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -51,7 +50,7 @@ def test_persisted_key_survives_fresh_process(
 ) -> None:
     _use_tmp_db(tmp_path, monkeypatch)
     blob = crypto.encrypt({"a": 1})
-    crypto._key_cache.clear()
+    crypto.clear_key_cache()
     assert crypto.decrypt(blob) == {"a": 1}
 
 

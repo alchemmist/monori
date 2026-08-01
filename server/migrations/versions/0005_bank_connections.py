@@ -1,4 +1,5 @@
-"""Automated import: bank connections, import batches, and a batch_id on.
+"""
+Automated import: bank connections, import batches, and a batch_id on.
 
 transactions pointing at the sync run that inserted the row.
 """

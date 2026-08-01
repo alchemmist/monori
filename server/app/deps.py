@@ -308,7 +308,8 @@ def _snapshot_transactions(
     uid: tuple[int],
     tx_limit: int | None,
 ) -> list[TransactionResponse]:
-    """Handle The newest ``tx_limit`` transactions, handed back in the canonical.
+    """
+    Handle The newest ``tx_limit`` transactions, handed back in the canonical.
 
     ``date, id`` order the client keeps them in. ``None`` means all of them.
     """

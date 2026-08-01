@@ -1,6 +1,7 @@
 import pytest
 from fastapi.testclient import TestClient
 
+import app.db as dbmod
 from tests.conftest import login_as
 
 pytestmark = pytest.mark.integration
@@ -96,8 +97,6 @@ def test_same_names_allowed_across_users(anon: TestClient) -> None:
 
 
 def test_first_user_claims_legacy_data(anon: TestClient) -> None:
-    import app.db as dbmod
-
     c = dbmod.connect()
     c.execute(
         "INSERT INTO accounts (user_id, name, type, currency, sort)"

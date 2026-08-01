@@ -251,7 +251,8 @@ def delete_category(
     cat_id: int,
     user: Annotated[AuthenticatedUser, Depends(current_user)],
 ) -> OkResponse:
-    """Handle Deleting a category never shifts anything: its transactions are left.
+    """
+    Handle Deleting a category never shifts anything: its transactions are left.
 
     uncategorized and its budgets are removed by FK cascade.
 
@@ -308,7 +309,8 @@ def merge_category(
     body: MergeBody,
     user: Annotated[AuthenticatedUser, Depends(current_user)],
 ) -> OkResponse:
-    """Combine a category into another: its transactions move to the target,.
+    """
+    Combine a category into another: its transactions move to the target,.
 
     keywords are unioned, budgets are summed month by month, then the source.
     category is deleted. Summing matters: the spending moves across, so a

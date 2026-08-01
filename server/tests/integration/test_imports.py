@@ -7,6 +7,7 @@ from pydantic import TypeAdapter
 
 from app.deps import IdResponse
 from app.routers.imports import (
+    MAX_STATEMENT_TEXT,
     DuplicatesResponse,
     ImportCommitResponse,
     ImportPreviewResponse,
@@ -132,7 +133,8 @@ def test_import_commit_double_submit_is_idempotent(api: Api, client: TestClient)
 
 
 def test_import_commit_skips_only_the_first_n_already_stored(api: Api, client: TestClient) -> None:
-    """Skip as many identical rows as already exist in the DB, insert the rest —.
+    """
+    Skip as many identical rows as already exist in the DB, insert the rest —.
 
     a fresh statement's own repeats are legitimate, only re-imports are skipped.
     """
@@ -227,8 +229,6 @@ def test_commit_rejects_unknown_account(client: TestClient) -> None:
 
 
 def test_preview_rejects_oversized_statement(api: Api, client: TestClient) -> None:
-    from app.routers.imports import MAX_STATEMENT_TEXT
-
     big = "x" * (MAX_STATEMENT_TEXT + 1)
     r = client.post("/api/import/preview", json={"text": big, "accountId": api.default_account()})
     assert r.status_code == 413
@@ -237,9 +237,9 @@ def test_preview_rejects_oversized_statement(api: Api, client: TestClient) -> No
 
 def test_import_preview_never_proposes_a_wrong_direction_category(
     api: Api,
-    client: TestClient,
 ) -> None:
-    """The refund fallback in the categorizer would happily file "Lenta +100" into.
+    """
+    The refund fallback in the categorizer would happily file "Lenta +100" into.
 
     Groceries — but the commit rejects wrong-direction categories, so a preview.
     proposing one would make the whole statement unimportable.

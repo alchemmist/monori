@@ -1,4 +1,5 @@
-"""Connector interface and registry.
+"""
+Connector interface and registry.
 
 A connector is built from a connection's decrypted credentials and cached
 session, then asked to :meth:`sync`. Sync returns freshly parsed rows plus an
@@ -58,7 +59,8 @@ class ConnectorError(Exception):
 
 
 class SmsRequiredError(Exception):
-    """Login reached the OTP step. The caller must collect a code from the user.
+    """
+    Login reached the OTP step. The caller must collect a code from the user.
 
     and continue the same connector instance via :meth:`Connector.resume_sync`.
     """
@@ -103,7 +105,8 @@ class Connector:
         self.account_ref: str | None = account_ref or None
 
     def sync(self, since: str | None = None) -> SyncResult:
-        """Pull transactions changed since ``since`` (ISO date string or None for.
+        """
+        Pull transactions changed since ``since`` (ISO date string or None for.
 
         a full pull). Returns a :class:`SyncResult`. Raise :class:`SmsRequiredError`
         to defer to :meth:`resume_sync`, or :class:`ConnectorError` on failure.
@@ -115,7 +118,8 @@ class Connector:
         raise NotImplementedError
 
     def close(self) -> None:
-        """Release any live resources (browser, session, worker thread). Called.
+        """
+        Release any live resources (browser, session, worker thread). Called.
 
         when a pending login is replaced, cancelled or deleted. Safe to call more.
         than once and on a connector that never started.

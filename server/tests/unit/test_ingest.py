@@ -9,7 +9,14 @@ import app.db as dbmod
 from app.connectors.base import SyncRow
 from app.deps import snapshot
 from app.importer import CategoryRule
-from app.ingest import categorize_rows, commit_rows, existing_hash_counts, load_rules
+from app.ingest import (
+    categorize_rows,
+    commit_rows,
+    drop_already_present,
+    existing_hash_counts,
+    historical_day_counts,
+    load_rules,
+)
 
 
 def _db(tmp_path: Path) -> sqlite3.Connection:
@@ -95,11 +102,22 @@ def _row(
     amount: int,
     desc: str = "x",
     *,
-    bank_category: str = "",
-    mcc: str = "",
+    tags: tuple[str, str] = ("", ""),
     category_id: int | None = None,
 ) -> SyncRow:
+    bank_category, mcc = tags
     return SyncRow(date, amount, desc, bank_category, mcc, "", category_id=category_id)
+
+
+def _row_with_tags(
+    date: str,
+    amount: int,
+    desc: str,
+    bank_category: str,
+    mcc: str,
+    category_id: int | None = None,
+) -> SyncRow:
+    return _row(date, amount, desc, tags=(bank_category, mcc), category_id=category_id)
 
 
 def test_existing_hash_counts_is_account_scoped(tmp_path: Path) -> None:
@@ -120,7 +138,14 @@ def test_commit_rows_inserts_with_fields_and_defaults(tmp_path: Path) -> None:
         (acct,),
     ).lastrowid
     rows = [
-        _row("2026-01-01T00:00:00", -100, "A", bank_category="Cafe", mcc="5814", category_id=None),
+        _row_with_tags(
+            "2026-01-01T00:00:00",
+            -100,
+            "A",
+            "Cafe",
+            "5814",
+            category_id=None,
+        ),
         _row("2026-01-02T00:00:00", -200, "B"),
     ]
     inserted, skipped = commit_rows(c, acct, rows, source="sync", batch_id=bid)
@@ -249,23 +274,19 @@ def test_historical_day_counts_span_accounts_and_skip_manual(tmp_path: Path) -> 
     )
     c.execute(tx_sql, ("2026-07-19T14:22:00", -368000, "Kafe Lesnoj", first, "h1", "sync"))
     c.execute(tx_sql, ("2026-07-19T09:05:00", -368000, "Kafe Lesnoj", second, "h2", "sync"))
-    c.execute(tx_sql, ("2026-07-19T10:00:00", -32000, "нетмонет", first, "h3", "manual"))
-    c.execute(tx_sql, ("2026-07-18T10:00:00", -50000, "Пятёрочка", first, "h4", "sheets"))
+    c.execute(tx_sql, ("2026-07-19T10:00:00", -32000, "No coins", first, "h3", "manual"))
+    c.execute(tx_sql, ("2026-07-18T10:00:00", -50000, "Pyaterochka", first, "h4", "sheets"))
     c.commit()
-
-    from app.ingest import historical_day_counts
 
     counts = historical_day_counts(c, uid)
 
     assert counts == {
         ("2026-07-19", -368000, "kafe lesnoj"): 2,
-        ("2026-07-18", -50000, "пятёрочка"): 1,
+        ("2026-07-18", -50000, "pyaterochka"): 1,
     }
 
 
 def test_drop_already_present_is_count_aware() -> None:
-    from app.ingest import drop_already_present
-
     rows = [
         _row("2026-07-19T12:00:00", -368000, "Kafe Lesnoj"),
         _row("2026-07-19T18:00:00", -368000, "Kafe Lesnoj"),
@@ -278,7 +299,8 @@ def test_drop_already_present_is_count_aware() -> None:
 
 
 def test_dedup_survives_the_bank_rewording_its_own_description(tmp_path: Path) -> None:
-    """The exact prod duplicate: one pull delivered "…организациях. YandexBank…",.
+    """
+    The exact prod duplicate: one pull delivered "...organizations. YandexBank...".
 
     the next pull the same operation without the dot. One character of drift.
     must not read as a new operation — even when the original leg has since
@@ -286,8 +308,8 @@ def test_dedup_survives_the_bank_rewording_its_own_description(tmp_path: Path) -
     """
     c = _db(tmp_path)
     uid = _uid(c)
-    posted = "Операция в других кредитных организациях. YandexBank_C2A g. Moskva RUS"
-    reworded = "Операция в других кредитных организациях YandexBank_C2A g. Moskva RUS"
+    posted = "Operation in another bank. YandexBank_C2A g. Moskva RUS"
+    reworded = "Operation in another bank YandexBank_C2A g. Moskva RUS"
     c.execute(
         "INSERT INTO transactions"
         " (date, amount, description, account_id, hash, source, transfer_id)"
@@ -296,12 +318,10 @@ def test_dedup_survives_the_bank_rewording_its_own_description(tmp_path: Path) -
     )
     c.commit()
 
-    from app.ingest import drop_already_present, historical_day_counts
-
     rows = [
         _row("2026-07-24T12:38:48", -284300, reworded),
-        _row("2026-07-24T12:13:27", -136300, "Додо Пицца"),
+        _row("2026-07-24T12:13:27", -136300, "Dodo Pizza"),
     ]
     kept, dropped = drop_already_present(rows, historical_day_counts(c, uid))
     assert dropped == 1
-    assert [row.description for row in kept] == ["Додо Пицца"]
+    assert [row.description for row in kept] == ["Dodo Pizza"]

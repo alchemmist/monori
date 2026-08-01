@@ -124,7 +124,8 @@ def copy_budgets(
     body: CopyBody,
     user: Annotated[AuthenticatedUser, Depends(current_user)],
 ) -> CopyResponse:
-    """Copy month->month (both months given) or a whole year->year (months.
+    """
+    Copy month->month (both months given) or a whole year->year (months.
 
     omitted). The destination scope is cleared first, so it becomes an exact.
     copy of the source.

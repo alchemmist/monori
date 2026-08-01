@@ -1,4 +1,5 @@
-"""Admin panel API: instance-wide analytics and user management.
+"""
+Admin panel API: instance-wide analytics and user management.
 
 Every route requires the ``admin_user`` dependency (403 otherwise). The admin
 sees full user data — this is the instance owner's own deployment.
@@ -353,7 +354,8 @@ def user_transactions(
     limit: Annotated[int, Query(ge=1, le=TX_PAGE_MAX)] = TX_PAGE_MAX,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[AdminTransactionDetail]:
-    """Handle A user's transactions, newest first — the full list behind the detail view's.
+    """
+    Handle A user's transactions, newest first — the full list behind the detail view's.
 
     preview, rendered as one JSON object per line by the client. Paged (capped at.
     ``TX_PAGE_MAX`` rows) so a heavy history can't materialize one giant response;
@@ -402,7 +404,8 @@ def delete_user_transactions(
     body: DeleteTransactionsBody,
     admin: Annotated[AdminContext, Depends(admin_user)],  # noqa: ARG001
 ) -> dict[str, int]:
-    """Bulk-delete a selection of one user's transactions. All-or-nothing: every.
+    """
+    Bulk-delete a selection of one user's transactions. All-or-nothing: every.
 
     id must belong to the target user, otherwise nothing is deleted — a stale.
     selection must fail loudly rather than remove half of it.

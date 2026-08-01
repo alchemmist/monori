@@ -80,7 +80,8 @@ def _validate_color(color: str) -> None:
 
 
 def _clean_tails(tails: list[str]) -> str:
-    """Normalize card tails to the digits of the masked number ('*8181' -> '8181'),.
+    """
+    Normalize card tails to the digits of the masked number ('*8181' -> '8181'),.
 
     deduplicated in order, stored comma-separated.
     """
@@ -95,7 +96,8 @@ def _clean_tails(tails: list[str]) -> str:
 
 
 def _validate_icon_image(image: str | None) -> None:
-    """Handle A custom icon is optional; when present it must be an image data URL and.
+    """
+    Handle A custom icon is optional; when present it must be an image data URL and.
 
     stay within the size cap so the snapshot doesn't bloat.
     """
@@ -293,7 +295,8 @@ def delete_account(
     user: Annotated[AuthenticatedUser, Depends(current_user)],
     reassignTo: int | None = None,
 ) -> dict[str, bool]:
-    """Handle Deleting an account reassigns its transactions to another account. A.
+    """
+    Handle Deleting an account reassigns its transactions to another account. A.
 
     transaction must always belong to an account, so a non-empty account cannot.
     be deleted without a reassign target, and the last account cannot be deleted.
@@ -356,7 +359,8 @@ def reconcile_account(
     body: ReconcileBody,
     user: Annotated[AuthenticatedUser, Depends(current_user)],
 ) -> dict[str, int]:
-    """Bring an account's computed balance to the real bank balance by posting a.
+    """
+    Bring an account's computed balance to the real bank balance by posting a.
 
     single adjustment transaction for the difference. Returns the delta applied.
     """

@@ -1,4 +1,5 @@
-"""Reads a budget workbook — ours or the live "Budget YNAB-Like" Google-Sheets.
+"""
+Reads a budget workbook — ours or the live "Budget YNAB-Like" Google-Sheets.
 
 spreadsheet monori grew from — into {groups, categories, transactions, budgets}.
 
@@ -101,17 +102,17 @@ YEAR_RE = re.compile(r"^(\d{4})(_archive)?$")
 
 
 TX_ALIASES = {
-    "date": ("Дата операции", "Date"),
-    "card": ("Номер карты",),
+    "date": ("Дата операции", "Date", "Operation date"),
+    "card": ("Номер карты", "Card"),
     "account": ("Account",),
     "status": ("Статус", "Status"),
     "amount": ("Сумма операции", "Amount"),
-    "currency": ("Валюта операции",),
-    "pay_amount": ("Сумма платежа",),
-    "pay_currency": ("Валюта платежа",),
-    "bank_category": ("Категория",),
+    "currency": ("Валюта операции", "Transaction currency"),
+    "pay_amount": ("Сумма платежа", "Payment amount"),
+    "pay_currency": ("Валюта платежа", "Payment currency"),
+    "bank_category": ("Категория", "Category"),
     "mcc": ("MCC",),
-    "description": ("Описание", "Description"),
+    "description": ("Описание", "Description", "Transaction description"),
     "category": ("Monori Category",),
     "comment": ("Comment",),
 }
@@ -232,7 +233,8 @@ def _month_num(cell: Cell | MergedCell | None) -> int | None:
 
 
 def _find_layout(ws: Worksheet) -> LayoutRow | None:  # noqa: C901,PLR0912
-    """Locates the month blocks of a year sheet by looking for the row that repeats.
+    """
+    Locates the month blocks of a year sheet by looking for the row that repeats.
 
     a Budgeted/Outflows/Balance header per month — which is the same grid in a.
     workbook we wrote and in the hand-kept spreadsheet, only sitting at a
@@ -281,7 +283,8 @@ def _find_layout(ws: Worksheet) -> LayoutRow | None:  # noqa: C901,PLR0912
 
 
 def _label_col(ws: Worksheet, header_row: int, first_base: int) -> int:
-    """Handle The category column when the grid never names it: of the columns left of the.
+    """
+    Handle The category column when the grid never names it: of the columns left of the.
 
     first month block, the one carrying the most labels below the header.
     """
@@ -305,7 +308,8 @@ def _parse_categories(
     ws: Worksheet,
     warnings: list[str],
 ) -> tuple[list[WorkbookGroupRow], list[WorkbookCategoryRow]]:
-    """Handle Reads a category sheet that states the structure outright: category rows.
+    """
+    Handle Reads a category sheet that states the structure outright: category rows.
 
     (`sort | group | category | keywords`) and, when present, a group table.
     (`group | sort | IN/OUT`). Groups fall back to the ones the category rows
@@ -363,7 +367,8 @@ def _parse_categories(
 
 
 def _sheet_sections(ws: Worksheet, layout: LayoutRow) -> list[YearSection]:
-    """Handle Splits the category area into (group, [(row, category), ...]) sections.
+    """
+    Handle Splits the category area into (group, [(row, category), ...]) sections.
 
     A row whose label starts with a kind glyph opens a group; in the old
     glyph-less layout the first labelled row after a fully blank gap does.
@@ -481,7 +486,8 @@ def _parse_dt(cell: Cell | MergedCell | None) -> datetime.datetime | None:
 
 
 def _unquote(value: str) -> str:
-    """Reverses our exporter's formula-escape and nothing else: a leading.
+    """
+    Reverses our exporter's formula-escape and nothing else: a leading.
 
     apostrophe is stripped only when it guards a formula prefix, so a value that.
     legitimately starts with one survives the round-trip.
@@ -604,7 +610,8 @@ def _known_max_col(idx: Mapping[str, int]) -> int:
 
 
 def _find_keyword_block(ws: Worksheet, idx: Mapping[str, int]) -> int | None:
-    """Locates the `category name | pipe-separated keywords` side table by.
+    """
+    Locates the `category name | pipe-separated keywords` side table by.
 
     content: the column pair (right of the known bank headers) with the most.
     rows whose second cell contains a pipe. Purely positional lookup broke on
@@ -623,7 +630,8 @@ def _find_keyword_block(ws: Worksheet, idx: Mapping[str, int]) -> int | None:
 
 
 def _category_col(ws: Worksheet, idx: Mapping[str, int]) -> int:
-    """Handle The per-row category lives right of the known bank headers and left of the.
+    """
+    Handle The per-row category lives right of the known bank headers and left of the.
 
     keyword table — but the live template puts *two* columns there: the keyword.
     rules compute a guess in the first, and the second either carries that guess
@@ -650,7 +658,8 @@ def _category_col(ws: Worksheet, idx: Mapping[str, int]) -> int:
 
 
 def _parse_keywords(ws: Worksheet, idx: Mapping[str, int]) -> dict[str, str]:
-    """Handle Reads the keyword side table (see _find_keyword_block): category name |.
+    """
+    Handle Reads the keyword side table (see _find_keyword_block): category name |.
 
     pipe-separated keywords, starting at row 1.
     """
@@ -687,7 +696,8 @@ def _synthetic(  # noqa: PLR0913
 
 
 def account_slot(tx: WorkbookTransaction) -> str:
-    """Which account a row must land on. A card marker alone is not enough: the.
+    """
+    Which account a row must land on. A card marker alone is not enough: the.
 
     same marker can carry rows in more than one currency (interest on a foreign.
     balance arrives with no card number at all), and an amount only means
@@ -701,7 +711,8 @@ def _activity_span(
     transactions: Iterable[WorkbookTransactionRow],
     sources: Iterable[YearSheetRow],
 ) -> tuple[tuple[int, int] | None, tuple[int, int] | None]:
-    """First and last (year, month) showing real activity: a transaction, a nonzero.
+    """
+    First and last (year, month) showing real activity: a transaction, a nonzero.
 
     cached outflow or income. Budgets deliberately do not count — planning months.
     ahead is normal, a budget alone creates no transactions in the sheet, and
@@ -733,7 +744,8 @@ def _month_range(start: tuple[int, int], end: tuple[int, int]) -> Iterable[tuple
 
 
 def parse_workbook(data: bytes) -> ParsedWorkbook:
-    """Handle Returns {groups, categories, transactions, budgets, warnings, errors} for any.
+    """
+    Handle Returns {groups, categories, transactions, budgets, warnings, errors} for any.
 
     budget workbook — see the module docstring for how the shape is discovered.
     """

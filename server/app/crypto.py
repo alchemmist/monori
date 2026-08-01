@@ -1,4 +1,5 @@
-"""Encryption for bank-connection secrets (credentials and cached sessions).
+"""
+Encryption for bank-connection secrets (credentials and cached sessions).
 
 Secrets are encrypted at rest with a symmetric Fernet key. The key comes from
 the ``MONORI_ENCRYPTION_KEY`` environment variable or, if unset, is generated
@@ -38,6 +39,11 @@ def generate_key() -> str:
     from cryptography.fernet import Fernet
 
     return Fernet.generate_key().decode()
+
+
+def clear_key_cache() -> None:
+    """Clear cached encryption key values."""
+    _key_cache.clear()
 
 
 def _key_path() -> pathlib.Path:

@@ -1,4 +1,5 @@
-"""Export tests over a dataset with several transactions per category, more than.
+"""
+Export tests over a dataset with several transactions per category, more than.
 
 one month and a month without income. The single-row fixtures elsewhere cannot.
 tell an accumulation (`+=`) from an assignment (`=`), a three-wide month stride

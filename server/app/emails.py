@@ -1,4 +1,5 @@
-"""Email normalisation and canonicalisation.
+"""
+Email normalisation and canonicalisation.
 
 ``normalize`` yields the display form (trimmed, lower-cased). ``canonical``
 collapses a real mailbox's aliases to a single key so one inbox cannot own

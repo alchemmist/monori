@@ -1,4 +1,5 @@
-"""Transfers as a first-class entity, plus the rejections that mute auto-detection.
+"""
+Transfers as a first-class entity, plus the rejections that mute auto-detection.
 
 Until now a transfer was only a shared ``transactions.transfer_id``: nothing
 stopped a third row joining the group or a row belonging to two transfers at

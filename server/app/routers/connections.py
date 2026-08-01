@@ -1,4 +1,5 @@
-"""Bank connections: one bank login per connection, owned by the user, with any.
+"""
+Bank connections: one bank login per connection, owned by the user, with any.
 
 number of accounts linked to it (``accounts.connection_id`` + a bank-specific.
 ``accounts.bank_ref`` locator). A sync logs in once and pulls every linked
@@ -260,7 +261,8 @@ def _validate_credentials(bank: str, kind: str, credentials: JsonObject) -> None
 
 
 def _require_account_refs(row: ConnectionRow, accounts: list[LinkedAccount]) -> None:
-    """Handle A connector that declares required account params cannot sync an account.
+    """
+    Handle A connector that declares required account params cannot sync an account.
 
     without its bank_ref — the pull would silently fall back to the default.
     feed and land another account's operations here.
@@ -286,7 +288,8 @@ def _mark_error(c: sqlite3.Connection, cid: int, message: str) -> None:
 
 
 def _fail(c: sqlite3.Connection, cid: int, error: Exception) -> NoReturn:
-    """Record a failed sync and surface it to the client without leaking the raw.
+    """
+    Record a failed sync and surface it to the client without leaking the raw.
 
     connector error: the detail is logged, the user sees a fixed message.
     """
@@ -300,7 +303,8 @@ def _card_digits(card: str) -> str:
 
 
 def _match_tail(bound: Mapping[str, set[int]], digits: str) -> str | None:
-    """Handle The bound tail that identifies this card, by mutual suffix (a 4-digit.
+    """
+    Handle The bound tail that identifies this card, by mutual suffix (a 4-digit.
 
     statement tail must still match a longer stored tail and vice versa).
     The longest — most specific — matching tail wins.
@@ -315,7 +319,8 @@ def _route_rows(
     default_account_id: int,
     rows: list[SyncRow],
 ) -> tuple[dict[int, list[SyncRow]], dict[str, int]]:
-    """Split synced rows between the user's accounts by their bound card tails.
+    """
+    Split synced rows between the user's accounts by their bound card tails.
 
     (``accounts.card_tails``). Rows whose tail is not bound anywhere — or is.
     bound to several accounts, which makes routing ambiguous — stay on the
@@ -356,7 +361,8 @@ def _finish_account(
     result: SyncResult,
     uid: int,
 ) -> tuple[list[AccountSyncSummary], dict[str, int]]:
-    """Categorize, route rows to their bound accounts (falling back to the synced.
+    """
+    Categorize, route rows to their bound accounts (falling back to the synced.
 
     account), commit each slice as its own batch, cache the session. Returns.
     (per-account summaries, unmapped card tails).
@@ -438,7 +444,8 @@ def _account_since(
     account_id: int,
     last_sync: str | None,
 ) -> str | None:
-    """Handle An account newly linked to an already-synced connection still needs a.
+    """
+    Handle An account newly linked to an already-synced connection still needs a.
 
     full pull: the connection's last_sync cursor only applies to accounts that.
     have synced through it before.
@@ -461,7 +468,8 @@ def _sync_accounts(  # noqa: PLR0913
     session: JsonObject | None,
     uid: int,
 ) -> tuple[list[AccountSyncSummary], dict[str, int]]:
-    """Pull each account in order. Returns (per-account summaries, unmapped card.
+    """
+    Pull each account in order. Returns (per-account summaries, unmapped card.
 
     tails); raises SmsRequiredError after persisting which account the parked login.
     belongs to.
@@ -589,7 +597,8 @@ def cancel_sync(
     cid: int,
     user: Annotated[AuthenticatedUser, Depends(current_user)],
 ) -> dict[str, int]:
-    """Abandon a login waiting for its OTP: close the parked connector and drop.
+    """
+    Abandon a login waiting for its OTP: close the parked connector and drop.
 
     the connection out of the awaiting_sms state.
     """

@@ -1,4 +1,5 @@
-"""The database side of transfers: merging two transactions into one entity,.
+"""
+The database side of transfers: merging two transactions into one entity,.
 
 splitting them apart again, and running detection over a user's ledger.
 
@@ -103,7 +104,8 @@ def link(  # noqa: PLR0913
     origin: str = "manual",
     note: str = "",
 ) -> str:
-    """Merge two existing transactions into a transfer. The rows are left in place.
+    """
+    Merge two existing transactions into a transfer. The rows are left in place.
 
     — only ``transfer_id`` is stamped and the categories are moved aside, so a.
     later split restores exactly what was there.
@@ -165,7 +167,8 @@ def link(  # noqa: PLR0913
 
 
 def split(c: sqlite3.Connection, uid: int, transfer_id: str) -> bool:
-    """Undo a merge: both transactions stay, get their categories back and stop.
+    """
+    Undo a merge: both transactions stay, get their categories back and stop.
 
     pointing at the transfer. Returns False when the transfer is not the user's.
     """
@@ -190,7 +193,8 @@ def split(c: sqlite3.Connection, uid: int, transfer_id: str) -> bool:
 
 
 def detach_leg(c: sqlite3.Connection, uid: int, tx_id: int) -> bool:
-    """Split whatever transfer this transaction belongs to, so it can be deleted on.
+    """
+    Split whatever transfer this transaction belongs to, so it can be deleted on.
 
     its own. Without this the entity row cascades away while the surviving leg.
     keeps a dangling ``transfer_id`` — and a dangling pointer reads as a transfer
@@ -255,7 +259,8 @@ def detect(
     auto_days: int = AUTO_DAYS,
     max_days: int = SUGGEST_DAYS,
 ) -> tuple[list[MergedTransfer], list[TransferCandidate]]:
-    """Scan the ledger and merge what is unambiguous. Pairs that landed on the same.
+    """
+    Scan the ledger and merge what is unambiguous. Pairs that landed on the same.
 
     day (or one apart, since banks post the legs at different times) are merged.
     outright; anything looser is handed back as a suggestion for the user.

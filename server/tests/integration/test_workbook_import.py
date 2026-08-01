@@ -286,7 +286,7 @@ def test_workbook_import_lands_as_rollbackable_batch(api: Api, client: TestClien
     assert batch["inserted"] == 3
 
 
-def test_workbook_upload_guards(api: Api, client: TestClient) -> None:
+def test_workbook_upload_guards(client: TestClient) -> None:
     r = client.post(
         "/api/import/workbook/preview",
         files={"file": ("book.xlsx", b"", "application/octet-stream")},
@@ -303,7 +303,8 @@ def test_workbook_upload_guards(api: Api, client: TestClient) -> None:
 
 
 def _mixed_currency_book() -> bytes:
-    """One card carrying both RUB and USD rows — the shape a foreign-currency.
+    """
+    One card carrying both RUB and USD rows — the shape a foreign-currency.
 
     balance leaves in a bank export.
     """
@@ -312,7 +313,14 @@ def _mixed_currency_book() -> bytes:
     assert ws is not None
     ws.title = "Transactions"
     ws.append(
-        ["Дата операции", "Номер карты", "Статус", "Сумма операции", "Валюта операции", "Описание"],
+        [
+            "Operation date",
+            "Card",
+            "Status",
+            "Operation amount",
+            "Transaction currency",
+            "Description",
+        ],
     )
     ws.append(["2026-01-05 10:00:00", "*1111", "OK", -300.0, "RUB", "Lenta"])
     ws.append(["2026-01-06 10:00:00", "*1111", "OK", 95.78, "USD", "Interest"])
@@ -367,7 +375,14 @@ def _card_book() -> bytes:
     assert ws is not None
     ws.title = "Transactions"
     ws.append(
-        ["Дата операции", "Номер карты", "Статус", "Сумма операции", "Валюта операции", "Описание"],
+        [
+            "Operation date",
+            "Card",
+            "Status",
+            "Operation amount",
+            "Transaction currency",
+            "Description",
+        ],
     )
     ws.append(["2026-01-05 10:00:00", "*8181", "OK", -300.0, "RUB", "Lenta"])
     ws.append(["2026-01-06 10:00:00", "", "OK", -200.0, "RUB", "Okey"])
@@ -377,7 +392,8 @@ def _card_book() -> bytes:
 
 
 def test_workbook_commit_remembers_card_markers_when_asked(api: Api, client: TestClient) -> None:
-    """Mapping a card to an account is knowledge worth keeping: with remember set,.
+    """
+    Mapping a card to an account is knowledge worth keeping: with remember set,.
 
     the marker's digits land in the account's card tails, so the next statement.
     import or sync routes that card without asking. The unmarked-rows slot has

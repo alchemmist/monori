@@ -4,7 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.deps import TransactionResponse
-from tests.conftest import Api
+from tests.conftest import Api, login_as
 
 pytestmark = pytest.mark.integration
 
@@ -25,7 +25,8 @@ def pair(
     out_date: str = "2026-03-10",
     in_date: str = "2026-03-10",
 ) -> tuple[int, int]:
-    """Two ordinary transactions that together look like a transfer, as a bank.
+    """
+    Two ordinary transactions that together look like a transfer, as a bank.
 
     would deliver them: nothing links them yet.
     """
@@ -177,6 +178,7 @@ def test_link_rejects_pairs_that_are_not_a_transfer(
     api: Api,
     client: TestClient,
     amounts: tuple[int, int],
+    *,
     same_account: bool,
 ) -> None:
     a = api.default_account()
@@ -199,8 +201,6 @@ def test_link_rejects_a_leg_already_in_a_transfer(api: Api, client: TestClient) 
 
 
 def test_link_rejects_another_users_transaction(api: Api, client: TestClient) -> None:
-    from tests.conftest import login_as
-
     a = api.default_account()
     b = api.account("Vault")
     out_id, in_id = pair(api, a, b)
@@ -249,7 +249,8 @@ def test_detect_leaves_a_disagreeing_same_day_pair_as_a_suggestion(
     api: Api,
     client: TestClient,
 ) -> None:
-    """An inflow labeled as a transfer whose true counterpart cannot pair (say,.
+    """
+    An inflow labeled as a transfer whose true counterpart cannot pair (say,.
 
     both legs landed on one account) must not swallow a purchase that merely.
     matches the amount — the pair is offered, not merged.
@@ -257,7 +258,12 @@ def test_detect_leaves_a_disagreeing_same_day_pair_as_a_suggestion(
     a = api.default_account()
     b = api.account("Vault")
     out_id = api.tx("2026-03-10T09:00:00", -100000, accountId=a, description="IP Elyan A.Kh")
-    in_id = api.tx("2026-03-10T18:00:00", 100000, accountId=b, description="Между своими счетами")
+    in_id = api.tx(
+        "2026-03-10T18:00:00",
+        100000,
+        accountId=b,
+        description="Transfer between own accounts",
+    )
 
     result = client.post("/api/transfers/detect").json()
     assert result["merged"] == []
@@ -285,8 +291,6 @@ def test_transfers_list_is_scoped_to_the_user(api: Api, client: TestClient) -> N
     b = api.account("Vault")
     api.transfer(a, b, 5000)
     assert len(client.get("/api/transfers").json()["rows"]) == 1
-
-    from tests.conftest import login_as
 
     client.headers.update(login_as(client, "stranger@example.com"))
     assert client.get("/api/transfers").json()["rows"] == []
@@ -408,7 +412,8 @@ def test_transfer_created_at_is_a_full_iso_timestamp(api: Api, client: TestClien
 
 
 def test_detection_never_pairs_a_reconcile_adjustment(api: Api, client: TestClient) -> None:
-    """A reconcile adjustment is bookkeeping: it exists to bend a balance to the.
+    """
+    A reconcile adjustment is bookkeeping: it exists to bend a balance to the.
 
     bank's figure, not because money moved anywhere. Matching it against a.
     real transaction would merge fiction with fact.

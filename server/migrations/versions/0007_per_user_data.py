@@ -1,4 +1,5 @@
-"""Multi-tenancy: accounts and category groups gain an owning user_id, and name.
+"""
+Multi-tenancy: accounts and category groups gain an owning user_id, and name.
 
 uniqueness becomes per-user. Categories lose their global unique name (they are.
 scoped through their group's owner). Rows predating registration keep a NULL

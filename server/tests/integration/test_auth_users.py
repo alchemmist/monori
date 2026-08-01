@@ -2,7 +2,10 @@ import pytest
 from fastapi.testclient import TestClient
 from httpx2 import Response as HTTPXResponse
 
-from tests.conftest import Api
+from app.routers.auth_router import _valid_email
+import app.db as dbmod
+
+from tests.conftest import Api, login_as
 
 pytestmark = pytest.mark.integration
 
@@ -84,8 +87,6 @@ def test_register_validates_email_and_password(client: TestClient) -> None:
 
 @pytest.mark.parametrize("email", ["user@example.com", "a.b+c@sub.example.co"])
 def test_valid_email_accepts(email: str) -> None:
-    from app.routers.auth_router import _valid_email
-
     assert _valid_email(email)
 
 
@@ -104,8 +105,6 @@ def test_valid_email_accepts(email: str) -> None:
     ],
 )
 def test_valid_email_rejects(email: str) -> None:
-    from app.routers.auth_router import _valid_email
-
     assert not _valid_email(email)
 
 
@@ -153,8 +152,6 @@ def test_me_rejects_token_of_deleted_user(anon: TestClient) -> None:
     _register(client)
     token = _login(client).json()["access_token"]
 
-    import app.db as dbmod
-
     c = dbmod.connect()
     c.execute("DELETE FROM accounts")
     c.execute("DELETE FROM category_groups")
@@ -168,7 +165,8 @@ def test_me_rejects_token_of_deleted_user(anon: TestClient) -> None:
 
 
 def test_default_account_is_set_cleared_and_guarded(api: Api, client: TestClient) -> None:
-    """The default account for card-less rows is a user preference: settable to an.
+    """
+    The default account for card-less rows is a user preference: settable to an.
 
     owned account, clearable back to "assign by hand", and never someone.
     else's account.
@@ -186,8 +184,6 @@ def test_default_account_is_set_cleared_and_guarded(api: Api, client: TestClient
     assert r.json()["defaultAccountId"] is None
 
     assert client.patch("/api/auth/me", json={"defaultAccountId": 99999}).status_code == 400
-
-    from tests.conftest import login_as
 
     headers = dict(client.headers)
     client.headers.update(login_as(client, "stranger@example.com"))

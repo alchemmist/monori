@@ -1,4 +1,5 @@
-"""A free-form detail on activity events, for the admin SQL console (issue #168).
+"""
+A free-form detail on activity events, for the admin SQL console (issue #168).
 
 Login events carry all their meaning in ``kind``; an executed statement does
 not — the audit trail is worthless without the statement text itself.

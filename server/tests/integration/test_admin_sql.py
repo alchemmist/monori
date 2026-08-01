@@ -18,7 +18,13 @@ def _make_admin(
     return login_as(client, email)
 
 
-def _sql(client: TestClient, sql: str, confirm: bool = False, dry: bool = False) -> HTTPXResponse:
+def _sql(
+    client: TestClient,
+    sql: str,
+    *,
+    confirm: bool = False,
+    dry: bool = False,
+) -> HTTPXResponse:
     return client.post("/api/admin/sql", json={"sql": sql, "confirmWrite": confirm, "dryRun": dry})
 
 

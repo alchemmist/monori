@@ -1,4 +1,5 @@
-"""Recompute every transaction's dedup fingerprint with the account included.
+"""
+Recompute every transaction's dedup fingerprint with the account included.
 
 ``transactions.hash`` used to cover only date|amount|description, so the same
 operation on two different accounts (transfer legs, mirrored cards) collided

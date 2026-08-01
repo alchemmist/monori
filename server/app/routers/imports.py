@@ -244,7 +244,8 @@ def _owned_account(c: sqlite3.Connection, account_id: int | None, uid: int) -> b
 
 
 def _validate_import_categories(c: sqlite3.Connection, uid: int, rows: list[CommitRow]) -> None:
-    """Every manually selected import category must belong to the account owner.
+    """
+    Every manually selected import category must belong to the account owner.
 
     and match the sign of its transaction.
     """
@@ -402,7 +403,8 @@ def import_commit(
     body: CommitBody,
     user: Annotated[AuthenticatedUser, Depends(current_user)],
 ) -> ImportCommitResponse:
-    """Server-side dedup: rows whose hash already exists — or repeats within the.
+    """
+    Server-side dedup: rows whose hash already exists — or repeats within the.
 
     batch — are skipped, so a double-submit can't create duplicates.
     """
@@ -456,7 +458,8 @@ async def _read_workbook_upload(file: UploadFile) -> bytes:
 
 
 def _account_slots(transactions: Iterable[WorkbookTransaction]) -> list[WorkbookAccountSlot]:
-    """Handle What the user has to map: one entry per card marker per currency. Splitting.
+    """
+    Handle What the user has to map: one entry per card marker per currency. Splitting.
 
     by currency is what makes a foreign-currency migration impossible to get.
     wrong — a USD slot can only be pointed at a USD account, so a user without
@@ -526,7 +529,8 @@ def _reject_currency_mismatch(
     slots: Mapping[str, WorkbookAccountSlot],
     marker_map: Mapping[str, int],
 ) -> None:
-    """Handle An amount is only meaningful on an account held in the same currency:.
+    """
+    Handle An amount is only meaningful on an account held in the same currency:.
 
     putting 95.78 USD on a ruble account would silently record 95 rubles 78.
     kopecks. The UI already only offers matching accounts; this is the same rule
@@ -558,7 +562,8 @@ def _remember_markers(
     slots: Mapping[str, WorkbookAccountSlot],
     marker_map: Mapping[str, int],
 ) -> int:
-    """Bind each slot's card marker to the account it was mapped onto, so the next.
+    """
+    Bind each slot's card marker to the account it was mapped onto, so the next.
 
     statement import or sync routes those cards without asking. Tails are only.
     appended — whatever the account already has stays, and a marker with no

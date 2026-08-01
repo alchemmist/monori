@@ -1,4 +1,5 @@
-"""Pairing rule for transfers: find the two rows that are the same money leaving.
+"""
+Pairing rule for transfers: find the two rows that are the same money leaving.
 
 one account and arriving on another.
 
@@ -70,7 +71,8 @@ class TransferCandidate:
 
 
 def day_number(date_iso: str) -> int:
-    """Days since the epoch for an ISO date(time), by calendar day only — the.
+    """
+    Days since the epoch for an ISO date(time), by calendar day only — the.
 
     times of the two legs are irrelevant and banks disagree about them anyway.
     """
@@ -95,7 +97,8 @@ def find_pairs(  # noqa: C901
     max_days: int = SUGGEST_DAYS,
     rejected: Iterable[tuple[int, int]] = (),
 ) -> list[TransferCandidate]:
-    """Greedily pair ``rows`` into transfer candidates.
+    """
+    Greedily pair ``rows`` into transfer candidates.
 
     Rows already in a transfer are skipped. ``rejected`` contains pairs the
     user has dismissed. Results are sorted best-first: closest in time,
@@ -158,7 +161,8 @@ def split_confident(
     pairs: Iterable[TransferCandidate],
     auto_days: int = AUTO_DAYS,
 ) -> tuple[list[TransferCandidate], list[TransferCandidate]]:
-    """Partition matched pairs into the ones safe to merge without asking.
+    """
+    Partition matched pairs into the ones safe to merge without asking.
 
     (``days <= auto_days`` and no description mismatch) and the ones worth.
     showing as suggestions.

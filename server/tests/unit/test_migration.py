@@ -1,5 +1,7 @@
 import pathlib
 import sqlite3
+import threading
+import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -7,6 +9,7 @@ import pytest
 from alembic import command
 
 from app.db import LEGACY_REVISIONS, _alembic_config, connect
+from app.importer import tx_hash
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -249,12 +252,8 @@ def test_migration_0011_reports_canonical_collisions(tmp_path: pathlib.Path) -> 
     raw.commit()
     raw.close()
 
-    try:
+    with pytest.raises(Exception, match="merge these first"):
         connect(db_path).close()
-        msg = "migration did not report the canonical collision"
-        raise AssertionError(msg)
-    except Exception as exc:  # noqa: BLE001 — alembic wraps the RuntimeError
-        assert "merge these first" in str(exc)
 
 
 def test_blank_email_canonical_is_rejected(tmp_path: pathlib.Path) -> None:
@@ -299,17 +298,11 @@ def test_migration_0011_reports_blank_backfill(tmp_path: pathlib.Path) -> None:
     raw.commit()
     raw.close()
 
-    try:
+    with pytest.raises(Exception, match="fix their address first"):
         connect(db_path).close()
-        msg = "migration did not report the blank backfill"
-        raise AssertionError(msg)
-    except Exception as exc:  # noqa: BLE001 — alembic wraps the RuntimeError
-        assert "fix their address first" in str(exc)
 
 
 def test_migration_0012_rehashes_with_account_scope(tmp_path: pathlib.Path) -> None:
-    from app.importer import tx_hash
-
     db_path = tmp_path / "v11.db"
     command.upgrade(_alembic_config(db_path), "0011")
     raw = sqlite3.connect(db_path)
@@ -398,21 +391,16 @@ def test_concurrent_first_connects_bootstrap_once(
     tmp_path: pathlib.Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import threading
-    import time
-
-    import app.db as dbmod
-
     db_path = tmp_path / "race.db"
     calls: list[int] = []
-    real_bootstrap = dbmod._bootstrap
+    real_stamp = command.stamp
 
-    def slow_bootstrap(path: pathlib.Path) -> None:
+    def counted_bootstrap_call(cfg: object, revision: str) -> None:
         calls.append(1)
         time.sleep(0.05)
-        real_bootstrap(path)
+        real_stamp(cfg, revision)
 
-    monkeypatch.setattr(dbmod, "_bootstrap", slow_bootstrap)
+    monkeypatch.setattr(command, "stamp", counted_bootstrap_call)
     threads = [threading.Thread(target=lambda: connect(db_path).close()) for _ in range(6)]
     for t in threads:
         t.start()

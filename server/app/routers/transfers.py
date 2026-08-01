@@ -113,7 +113,8 @@ def get_suggestions(
     user: Annotated[AuthenticatedUser, Depends(current_user)],
     maxDays: Annotated[int, Query(ge=0, le=31)] = SUGGEST_DAYS,
 ) -> SuggestionsResponse:
-    """Pairs that look like a transfer but that detection would not merge unasked.
+    """
+    Pairs that look like a transfer but that detection would not merge unasked.
 
     — too far apart in time, or the two descriptions disagree. The transactions.
     themselves ride along so the UI can show both sides without a second round
@@ -142,7 +143,8 @@ def create_transfer(
     body: TransferBody,
     user: Annotated[AuthenticatedUser, Depends(current_user)],
 ) -> TransferIdResponse:
-    """Handle A transfer is two linked transactions: a negative row on the source account.
+    """
+    Handle A transfer is two linked transactions: a negative row on the source account.
 
     and a positive row on the destination, merged into one ``transfers`` entity.
     Both legs stay uncategorized, so they never count as income or expense.
@@ -197,7 +199,8 @@ def link_transactions(
     body: PairBody,
     user: Annotated[AuthenticatedUser, Depends(current_user)],
 ) -> TransferIdResponse:
-    """Merge a pair that is already in the ledger — the usual case for rows the.
+    """
+    Merge a pair that is already in the ledger — the usual case for rows the.
 
     bank sent us itself. Nothing is inserted or deleted: both transactions keep.
     their id and hash, so the next sync still recognizes them.
@@ -256,7 +259,8 @@ def delete_transfer(
     transfer_id: str,
     user: Annotated[AuthenticatedUser, Depends(current_user)],
 ) -> OkResponse:
-    """Split a transfer back into two ordinary transactions, categories and all.
+    """
+    Split a transfer back into two ordinary transactions, categories and all.
 
     The rows are never deleted here: half of them came from a bank, and deleting
     them would only invite the next sync to bring them back unlinked.

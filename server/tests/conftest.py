@@ -6,6 +6,9 @@ import tempfile
 import pytest
 from fastapi.testclient import TestClient
 from pydantic import TypeAdapter
+from app.main import app as fastapi_app
+
+import app.db as dbmod
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
@@ -21,8 +24,10 @@ from app.routers.imports import ImportPreviewResponse, ImportRowResponse
 from app.routers.transfers import TransferIdResponse
 
 STATEMENT = (
-    "05.01.2026 10:00:00\t05.01.2026\t*1\tOK\t-100,00\tRUB\t-100,00\tRUB\t\tSuper\t5411\tLenta\t0\t0\t-100,00\n"
-    "06.01.2026 11:00:00\t06.01.2026\t*1\tOK\t-200,00\tRUB\t-200,00\tRUB\t\tSuper\t5411\tOkey\t0\t0\t-200,00\n"
+    "05.01.2026 10:00:00\t05.01.2026\t*1\tOK\t-100,00\tRUB\t-100,00\tRUB\t\t"
+    "Super\t5411\tLenta\t0\t0\t-100,00\n"
+    "06.01.2026 11:00:00\t06.01.2026\t*1\tOK\t-200,00\tRUB\t-200,00\tRUB\t\t"
+    "Super\t5411\tOkey\t0\t0\t-200,00\n"
 )
 
 
@@ -30,12 +35,9 @@ def _fresh_app_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     tmp = tempfile.mkdtemp()
     db_path = os.path.join(tmp, "test.db")
     monkeypatch.setenv("MONORI_DB", db_path)
-    import app.db as dbmod
 
     monkeypatch.setattr(dbmod, "DB_PATH", db_path)
     dbmod.connect(db_path).close()
-
-    from app.main import app as fastapi_app
 
     return TestClient(fastapi_app)
 
@@ -62,7 +64,8 @@ def anon(monkeypatch: pytest.MonkeyPatch) -> TestClient:
 
 @pytest.fixture
 def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
-    """Handle A client signed in as the default test user; every request carries the.
+    """
+    Handle A client signed in as the default test user; every request carries the.
 
     bearer token via default headers.
     """
@@ -72,7 +75,8 @@ def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
 
 
 class Api:
-    """Thin helper over the HTTP client for arranging test state. Bodies that.
+    """
+    Thin helper over the HTTP client for arranging test state. Bodies that.
 
     should always succeed assert 200; error paths are exercised with the raw.
     `client` in the tests themselves.
@@ -100,23 +104,42 @@ class Api:
         self,
         name: str,
         *,
-        type: str = "cash",
+        account_type: str = "cash",
         icon: str = "wallet",
         color: str = "#5b6472",
         currency: str = "RUB",
-        openingBalance: int = 0,
-        bankRef: str = "",
-        cardTails: list[str] | None = None,
+        opening_balance: int = 0,
+        bank_ref: str = "",
+        card_tails: list[str] | None = None,
+        **legacy_kwargs: object,
     ) -> int:
+        if "type" in legacy_kwargs:
+            account_type = legacy_kwargs.pop("type")
+            if not isinstance(account_type, str):
+                raise TypeError
+        if "openingBalance" in legacy_kwargs:
+            opening_balance = legacy_kwargs.pop("openingBalance")
+            if not isinstance(opening_balance, int):
+                raise TypeError
+        if "bankRef" in legacy_kwargs:
+            bank_ref = legacy_kwargs.pop("bankRef")
+            if not isinstance(bank_ref, str):
+                raise TypeError
+        if "cardTails" in legacy_kwargs:
+            card_tails = legacy_kwargs.pop("cardTails")
+            if not isinstance(card_tails, list) and card_tails is not None:
+                raise TypeError
+        if legacy_kwargs:
+            raise TypeError
         body = {
             "name": name,
-            "type": type,
+            "type": account_type,
             "icon": icon,
             "color": color,
             "currency": currency,
-            "openingBalance": openingBalance,
-            "bankRef": bankRef,
-            "cardTails": cardTails or [],
+            "openingBalance": opening_balance,
+            "bankRef": bank_ref,
+            "cardTails": card_tails or [],
         }
         r = self.client.post("/api/accounts", json=body)
         assert r.status_code == 200, r.text
@@ -130,22 +153,35 @@ class Api:
         date: str,
         amount: int,
         *,
-        accountId: int | None = None,
-        categoryId: int | None = None,
+        account_id: int | None = None,
+        category_id: int | None = None,
         description: str = "",
-        bankCategory: str = "",
+        bank_category: str = "",
         mcc: str = "",
         comment: str = "",
+        **legacy_kwargs: object,
     ) -> int:
+        if "accountId" in legacy_kwargs:
+            account_id = legacy_kwargs.pop("accountId")
+
+        if "categoryId" in legacy_kwargs:
+            category_id = legacy_kwargs.pop("categoryId")
+
+        if "bankCategory" in legacy_kwargs:
+            bank_category = legacy_kwargs.pop("bankCategory")
+
+        if legacy_kwargs:
+            raise TypeError
+
         r = self.client.post(
             "/api/transactions",
             json={
                 "date": date,
                 "amount": amount,
-                "accountId": accountId or self.default_account(),
-                "categoryId": categoryId,
+                "accountId": account_id or self.default_account(),
+                "categoryId": category_id,
                 "description": description,
-                "bankCategory": bankCategory,
+                "bankCategory": bank_category,
                 "mcc": mcc,
                 "comment": comment,
             },

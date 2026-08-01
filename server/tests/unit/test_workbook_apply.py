@@ -296,18 +296,15 @@ def _row(
     description: str,
     category: str,
     marker: str = "",
-    bank_category: str = "Super",
-    mcc: str = "5411",
-    comment: str = "",
 ) -> WorkbookTransaction:
     return WorkbookTransaction(
         date=date,
         amount=amount,
         description=description,
         currency="RUB",
-        bank_category=bank_category,
-        mcc=mcc,
-        comment=comment,
+        bank_category="Super",
+        mcc="5411",
+        comment="",
         monori_category=category,
         marker=marker,
     )
@@ -316,7 +313,8 @@ def _row(
 def test_every_row_lands_in_its_account_batch_with_the_bank_columns_intact(
     tmp_path: Path,
 ) -> None:
-    """The batch is what an import is later browsed and undone by, so each row has.
+    """
+    The batch is what an import is later browsed and undone by, so each row has.
 
     to carry the id of the batch on its own account — and the bank's own.
     category and MCC have to survive the trip, since nothing else records them.
@@ -356,7 +354,8 @@ def test_every_row_lands_in_its_account_batch_with_the_bank_columns_intact(
 
 
 def test_unmatched_category_names_are_listed_ten_at_a_time(tmp_path: Path) -> None:
-    """The warning names what was left uncategorized so it can be fixed by hand;.
+    """
+    The warning names what was left uncategorized so it can be fixed by hand;.
 
     a long list is cut off rather than filling the screen.
     """
@@ -378,7 +377,8 @@ def test_unmatched_category_names_are_listed_ten_at_a_time(tmp_path: Path) -> No
 
 
 def test_category_names_match_across_any_spacing(tmp_path: Path) -> None:
-    """A name typed with a stray double space is the same envelope to a human, so.
+    """
+    A name typed with a stray double space is the same envelope to a human, so.
 
     the whole-account fallback compares names with their inner runs of.
     whitespace collapsed, not just their ends trimmed.
@@ -406,7 +406,8 @@ def test_category_names_match_across_any_spacing(tmp_path: Path) -> None:
 
 
 def test_a_category_whose_group_is_missing_does_not_stop_the_rest(tmp_path: Path) -> None:
-    """Structure and grid can disagree — a category can name a group no sheet ever.
+    """
+    Structure and grid can disagree — a category can name a group no sheet ever.
 
     declared. That one has nowhere to go, but the categories after it in the.
     list still do.
@@ -430,7 +431,8 @@ def test_a_category_whose_group_is_missing_does_not_stop_the_rest(tmp_path: Path
 
 
 def test_apply_skips_rows_a_sync_already_delivered_to_another_account(tmp_path: Path) -> None:
-    """A sheet kept alongside a live bank sync describes operations the sync.
+    """
+    A sheet kept alongside a live bank sync describes operations the sync.
 
     already imported — and the sheet's card marker can map them to a different.
     account than the sync routed them to, where the per-account hash is blind.

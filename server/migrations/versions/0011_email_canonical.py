@@ -1,4 +1,5 @@
-"""Canonical email so one mailbox cannot own several accounts.
+"""
+Canonical email so one mailbox cannot own several accounts.
 
 ``users.email_canonical`` collapses a real inbox's aliases to a single key: a
 ``+tag`` suffix on the local part is dropped for every domain, and dots in the

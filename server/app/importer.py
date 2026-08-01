@@ -1,4 +1,5 @@
-"""Bank statement parsing and auto-categorization.
+"""
+Bank statement parsing and auto-categorization.
 
 The paste format is the bank's statement export: one transaction per line,
 tab- or semicolon-separated, dates as dd.mm.yyyy [hh:mm:ss], decimal commas.
@@ -266,7 +267,8 @@ def parse_amount_kop(raw: str) -> int | None:
 
 
 def tx_hash(account_id: int, date_iso: str, amount_kop: int, description: str) -> str:
-    """Dedup key of a transaction. Always scoped to the account: the same.
+    """
+    Dedup key of a transaction. Always scoped to the account: the same.
 
     date/amount/description legitimately occurs on two different accounts.
     (transfer legs, mirrored cards) and must not collide.
@@ -277,7 +279,8 @@ def tx_hash(account_id: int, date_iso: str, amount_kop: int, description: str) -
 
 
 def parse_statement(text: str) -> tuple[list[ImportRow], list[ParseError]]:
-    """Handle Returns (rows, errors). Each row: dict with date (ISO), amount (kopecks),.
+    """
+    Handle Returns (rows, errors). Each row: dict with date (ISO), amount (kopecks),.
 
     description, bank_category, mcc. Accepts both pasted statement rows and a.
     full bank CSV export — a header row is skipped, not reported. Hashes are
@@ -322,7 +325,8 @@ def build_rules(
     categories: Iterable[CategoryDefinition],
     groups: Mapping[int, str],
 ) -> dict[str, list[CategoryRule]]:
-    """categories: iterable of dicts with name/keywords/group_id;.
+    """
+    categories: iterable of dicts with name/keywords/group_id;.
 
     groups: id -> kind ('income'|'expense'). Returns {'IN': [...], 'OUT': [...]}.
     """
@@ -350,7 +354,8 @@ def categorize(
     amount_kop: int,
     rules: Mapping[str, list[CategoryRule]],
 ) -> int | None:
-    """Handle Returns category_id or None.
+    """
+    Handle Returns category_id or None.
 
     An inflow is income first — but a merchant's money coming back is a refund,
     and a refund belongs in the envelope it left, or the category quietly reads

@@ -1,4 +1,5 @@
-"""Admin rights and activity accounting.
+"""
+Admin rights and activity accounting.
 
 Admin rights come from the ``MONORI_ADMIN_EMAILS`` env (comma-separated); the
 flag is synced into ``users.is_admin`` at login so the env stays the single
@@ -35,7 +36,8 @@ def admin_user(user: Annotated[AuthenticatedUser, Depends(current_user)]) -> Aut
 
 
 def feature_from_path(path: str) -> str | None:
-    """Handle The usage-bucket name for an API path, or None if the request should not be.
+    """
+    Handle The usage-bucket name for an API path, or None if the request should not be.
 
     counted (non-API paths and ``UNTRACKED_FEATURES``).
     """

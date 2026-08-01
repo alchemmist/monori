@@ -1,4 +1,5 @@
-"""Admin flag and activity tracking.
+"""
+Admin flag and activity tracking.
 
 ``users`` gains ``is_admin`` (granted via the ``MONORI_ADMIN_EMAILS`` env, synced
 at login) and ``last_login``. Two new tables back the admin panel's analytics:

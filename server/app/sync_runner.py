@@ -1,4 +1,5 @@
-"""Where bank syncs actually run.
+"""
+Where bank syncs actually run.
 
 The connections router talks to a :class:`SyncRunner` instead of driving
 connectors directly. Two implementations exist: :class:`LocalRunner` executes
