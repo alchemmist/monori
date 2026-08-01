@@ -3,8 +3,10 @@ import io
 import unittest
 
 from object_annotation_gate import (
+    Finding,
     added_lines_from_patch,
     changed_lines,
+    comment_body,
     parse_command,
     parse_state,
     scan_file,
@@ -97,6 +99,14 @@ other: "list[object]"
 """
 
         self.assertEqual(added_lines_from_patch(patch), {2})
+
+    def test_comment_includes_finding_count_and_pr_links(self) -> None:
+        finding = Finding("server/app/example.py", 7, 2, "object", "finding-1")
+
+        body = comment_body([finding], "sha", set(), "https://github.com/org/repo/pull/1")
+
+        self.assertIn("annotation check (1)", body)
+        self.assertIn("https://github.com/org/repo/pull/1/changes#diff-", body)
 
 
 if __name__ == "__main__":

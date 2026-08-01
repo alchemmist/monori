@@ -218,7 +218,7 @@ def comment_body(findings: list[Finding], sha: str, approved: set[str], pr_url: 
     lines = [
         state_marker(sha, approved),
         "<details>",
-        f"<summary>{status} Python <code>object</code> annotation check</summary>",
+        f"<summary>{status} Python <code>object</code> annotation check ({len(findings)})</summary>",
         "",
     ]
     for finding in findings:
@@ -386,7 +386,7 @@ def main() -> int:
         delete_bot_comment(github, existing)
         return 0
 
-    update_bot_comment(github, number, comment_body(findings, sha, approved), existing)
+    update_bot_comment(github, number, comment_body(findings, sha, approved, pull["html_url"]), existing)
     unapproved = [finding for finding in findings if finding.finding_id not in approved]
     if state_changed:
         rerun_pull_request_gate(github, number)
