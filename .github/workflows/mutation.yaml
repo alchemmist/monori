@@ -67,10 +67,21 @@ jobs:
                       mutation-mutmut-${{ runner.os }}-${{ hashFiles('server/pyproject.toml') }}-main-
 
             - name: Test diff mutation gate
-              run: python3 -m unittest scripts/test_mutation_diff_gate.py
+              run: env -u GITHUB_STEP_SUMMARY python3 -m unittest scripts/test_mutation_diff_gate.py
 
-            - name: Run diff-scoped mutation tests
-              run: make mutation-diff BASE=origin/main MUTATION_DIFF_THRESHOLD=90
+            - name: Run frontend diff mutation tests
+              id: mutation-front
+              continue-on-error: true
+              run: make BASE=origin/main MUTATION_DIFF_THRESHOLD=90 m-front-diff
+
+            - name: Run backend diff mutation tests
+              id: mutation-back
+              continue-on-error: true
+              run: make BASE=origin/main MUTATION_DIFF_THRESHOLD=90 m-back-diff
+
+            - name: Fail if a mutation gate failed
+              if: steps.mutation-front.outcome == 'failure' || steps.mutation-back.outcome == 'failure'
+              run: exit 1
 
     mutation-full:
         name: mutation (full sweep)
