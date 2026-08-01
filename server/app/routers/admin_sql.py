@@ -38,6 +38,9 @@ BLOB_PREVIEW = 32
 # than this comes back cut, with the dropped length spelled out
 CELL_MAX_CHARS = 4096
 
+type SqliteValue = bytes | float | int | str | None
+type SqlCell = float | int | str | None
+
 
 def leading_keyword(sql: str) -> str:
     """
@@ -68,7 +71,7 @@ def leading_keyword(sql: str) -> str:
     return ""
 
 
-def cell(value: bytes | float | int | str | None) -> float | int | str | None:
+def cell(value: SqliteValue) -> SqlCell:
     if isinstance(value, bytes):
         head = value[:BLOB_PREVIEW].hex()
         return f"x'{head}{'…' if len(value) > BLOB_PREVIEW else ''}' ({len(value)} bytes)"
@@ -88,7 +91,7 @@ class SqlBody:
 class SqlResponse:
     kind: str
     columns: list[str]
-    rows: list[list[float | int | str | None]]
+    rows: list[list[SqlCell]]
     rowCount: int
     truncated: bool
     elapsedMs: float

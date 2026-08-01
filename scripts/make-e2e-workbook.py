@@ -50,7 +50,7 @@ TX_HEADER = [
     TX_ALIASES[f][0]
     for f in ("date", "card", "status", "amount", "currency", "bank_category", "mcc", "description")
 ]
-WorkbookCell = datetime.datetime | float | int | str | None
+type WorkbookCell = datetime.datetime | float | int | str | None
 
 
 def tx(

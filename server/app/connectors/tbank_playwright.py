@@ -274,8 +274,8 @@ class _PageAdapter:
         return self._page.content()
 
 
-_ToWorkerMessage = tuple[Literal["sms"], str] | tuple[Literal["cancel"], None]
-_FromWorkerMessage = (
+type _ToWorkerMessage = tuple[Literal["sms"], str] | tuple[Literal["cancel"], None]
+type _FromWorkerMessage = (
     tuple[Literal["sms_required"], str]
     | tuple[Literal["error"], str]
     | tuple[Literal["result"], SyncResult]

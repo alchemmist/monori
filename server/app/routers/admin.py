@@ -20,7 +20,7 @@ from ..deps import UserResponse, conn, serialize_user
 from .auth_router import create_user
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
-AdminContext = auth.AuthenticatedUser
+type AdminContext = auth.AuthenticatedUser
 
 RECENT_TX_LIMIT = 50
 TX_PAGE_MAX = 1000

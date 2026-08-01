@@ -21,8 +21,8 @@ from pydantic.dataclasses import dataclass as pydantic_dataclass
 
 from .connectors.base import SyncRow
 
-ImportValue = str | int | bool | None
-RuleValue = str | list[str] | int
+type ImportValue = str | int | bool | None
+type RuleValue = str | list[str] | int
 
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid"))
