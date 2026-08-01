@@ -105,9 +105,7 @@ def get_suggestions(
     c = conn()
     try:
         _, pairs = split_confident(candidates(c, uid, maxDays))
-        ids = sorted(
-            {p.outTxId for p in pairs} | {p.inTxId for p in pairs}
-        )
+        ids = sorted({p.outTxId for p in pairs} | {p.inTxId for p in pairs})
         legs = (
             [
                 serialize_tx(TransactionRecord.from_row(row))

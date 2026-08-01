@@ -290,9 +290,7 @@ def _snapshot_transactions(
     return serialize_transactions(cur, reversed(list(rows)))
 
 
-def snapshot(
-    c: sqlite3.Connection, user_id: int, tx_limit: int | None = None
-) -> SnapshotResponse:
+def snapshot(c: sqlite3.Connection, user_id: int, tx_limit: int | None = None) -> SnapshotResponse:
     cur = c.cursor()
     uid = (user_id,)
     transactions = _snapshot_transactions(cur, uid, tx_limit)

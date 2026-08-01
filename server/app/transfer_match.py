@@ -140,9 +140,7 @@ def find_pairs(
                     )
                 )
 
-    candidates.sort(
-        key=lambda c: (c.days, c.mismatch, not c.hint, c.outTxId, c.inTxId)
-    )
+    candidates.sort(key=lambda c: (c.days, c.mismatch, not c.hint, c.outTxId, c.inTxId))
     used = set()
     pairs = []
     for c in candidates:

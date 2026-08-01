@@ -145,10 +145,16 @@ def _effective_transactions(snap: SnapshotResponse) -> list[EffectiveTransaction
         for part in tx.splits:
             effective.append(
                 EffectiveTransaction(
-                    id=f"{tx.id}:{part.id}", date=tx.date, accountId=tx.accountId,
-                    amount=part.amount, bankCategory=tx.bankCategory, mcc=tx.mcc,
-                    description=tx.description, categoryId=part.categoryId,
-                    comment=part.comment, transferId=tx.transferId,
+                    id=f"{tx.id}:{part.id}",
+                    date=tx.date,
+                    accountId=tx.accountId,
+                    amount=part.amount,
+                    bankCategory=tx.bankCategory,
+                    mcc=tx.mcc,
+                    description=tx.description,
+                    categoryId=part.categoryId,
+                    comment=part.comment,
+                    transferId=tx.transferId,
                 )
             )
     return effective

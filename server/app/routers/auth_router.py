@@ -55,9 +55,7 @@ class TokenResponse:
     token_type: str
 
 
-def create_user(
-    c: sqlite3.Connection, raw_email: str, password: str
-) -> UserResponse:
+def create_user(c: sqlite3.Connection, raw_email: str, password: str) -> UserResponse:
     """
     Validate and insert a user (with a default Cash account), returning the
     serialized user. Shared by public registration and admin user creation.

@@ -47,9 +47,7 @@ def test_day_number_is_days_since_the_unix_epoch() -> None:
 
 def test_pairs_opposite_amounts_on_different_accounts() -> None:
     pairs = find_pairs([row(1, 10, -5000, 1), row(2, 10, 5000, 2)])
-    assert pairs == [
-        TransferCandidate(1, 2, 5000, 0, False)
-    ]
+    assert pairs == [TransferCandidate(1, 2, 5000, 0, False)]
 
 
 def test_same_account_is_not_a_transfer() -> None:
