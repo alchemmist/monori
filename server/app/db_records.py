@@ -43,6 +43,35 @@ class CategoryRecord:
 
 
 @dataclass(frozen=True, slots=True)
+class CategoryOwnershipRecord:
+    id: int
+    keywords: str
+    goal_target: int | None
+    type: str
+    is_goal: bool
+
+    @classmethod
+    def from_row(cls, row: sqlite3.Row) -> "CategoryOwnershipRecord":
+        return cls(
+            id=row["id"],
+            keywords=row["keywords"],
+            goal_target=row["goal_target"],
+            type=row["type"],
+            is_goal=bool(row["is_goal"]),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class GoalGroupRecord:
+    id: int
+    is_goal: bool
+
+    @classmethod
+    def from_row(cls, row: sqlite3.Row) -> "GoalGroupRecord":
+        return cls(id=row["id"], is_goal=bool(row["is_goal"]))
+
+
+@dataclass(frozen=True, slots=True)
 class AccountRecord:
     id: int
     name: str
