@@ -15,9 +15,10 @@ import pathlib
 from collections.abc import Mapping
 
 from cryptography.fernet import Fernet
+from pydantic import JsonValue
 
 from . import db as dbmod
-from .connectors.base import JSON_OBJECT_ADAPTER, JsonObject, JsonValue
+from .connectors.base import JSON_OBJECT_ADAPTER, JsonObject
 from .security import load_or_create_secret_file
 
 
