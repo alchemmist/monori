@@ -18,9 +18,11 @@ import sqlite3
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Annotated, NoReturn, NotRequired, TypedDict
+from typing import Annotated, NoReturn
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import ConfigDict
+from pydantic.dataclasses import dataclass as pydantic_dataclass
 
 from .. import crypto
 from ..auth import AuthenticatedUser, current_user
@@ -53,13 +55,15 @@ def _now() -> str:
     return datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
 
 
-class ConnectionBody(TypedDict):
+@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+class ConnectionBody:
     bank: str
     kind: str
     credentials: JsonObject
 
 
-class SmsBody(TypedDict):
+@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+class SmsBody:
     code: str
 
 
@@ -85,7 +89,8 @@ class LinkedAccount:
     bank_ref: str | None
 
 
-class AccountSyncSummary(TypedDict):
+@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+class AccountSyncSummary:
     accountId: int
     inserted: int
     skipped: int
@@ -94,12 +99,14 @@ class AccountSyncSummary(TypedDict):
     dateTo: str | None
 
 
-class UnmappedTail(TypedDict):
+@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+class UnmappedTail:
     tail: str
     rows: int
 
 
-class SyncResponse(TypedDict):
+@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+class SyncResponse:
     status: str
     inserted: int
     skipped: int
@@ -109,12 +116,14 @@ class SyncResponse(TypedDict):
     unmappedTails: list[UnmappedTail]
 
 
-class SyncStatusResponse(TypedDict):
+@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+class SyncStatusResponse:
     status: str
-    message: NotRequired[str]
+    message: str | None = None
 
 
-class ConnectionResponse(TypedDict):
+@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+class ConnectionResponse:
     id: int
     bank: str
     kind: str
@@ -163,17 +172,17 @@ def _load(c: sqlite3.Connection, cid: int, uid: int) -> ConnectionRow:
 
 
 def _serialize_connection(row: ConnectionRow) -> ConnectionResponse:
-    return {
-        "id": row.id,
-        "bank": row.bank,
-        "kind": row.kind,
-        "status": row.status,
-        "lastSync": row.last_sync,
-        "lastError": row.last_error,
-        "hasCredentials": row.credentials_encrypted is not None,
-        "createdAt": row.created_at,
-        "updatedAt": row.updated_at,
-    }
+    return ConnectionResponse(
+        id=row.id,
+        bank=row.bank,
+        kind=row.kind,
+        status=row.status,
+        lastSync=row.last_sync,
+        lastError=row.last_error,
+        hasCredentials=row.credentials_encrypted is not None,
+        createdAt=row.created_at,
+        updatedAt=row.updated_at,
+    )
 
 
 def _linked_accounts(c: sqlite3.Connection, cid: int, uid: int) -> list[LinkedAccount]:
@@ -361,14 +370,14 @@ def _finish_account(
         )
         dates = sorted(r.date for r in rows)
         summaries.append(
-            {
-                "accountId": target_id,
-                "inserted": inserted,
-                "skipped": skipped,
-                "batchId": batch_id,
-                "dateFrom": dates[0] if dates else None,
-                "dateTo": dates[-1] if dates else None,
-            }
+            AccountSyncSummary(
+                accountId=target_id,
+                inserted=inserted,
+                skipped=skipped,
+                batchId=batch_id,
+                dateFrom=dates[0] if dates else None,
+                dateTo=dates[-1] if dates else None,
+            )
         )
     session = getattr(result, "session", None)
     if session:
@@ -396,17 +405,17 @@ def _mark_connected(c: sqlite3.Connection, cid: int) -> None:
 def _aggregate(
     results: list[AccountSyncSummary], unmapped: dict[str, int] | None = None
 ) -> SyncResponse:
-    dates_from = [value for r in results if (value := r["dateFrom"]) is not None]
-    dates_to = [value for r in results if (value := r["dateTo"]) is not None]
-    return {
-        "status": "connected",
-        "inserted": sum(r["inserted"] for r in results),
-        "skipped": sum(r["skipped"] for r in results),
-        "accounts": results,
-        "dateFrom": min(dates_from) if dates_from else None,
-        "dateTo": max(dates_to) if dates_to else None,
-        "unmappedTails": [{"tail": t, "rows": n} for t, n in sorted((unmapped or {}).items())],
-    }
+    dates_from = [r.dateFrom for r in results if r.dateFrom is not None]
+    dates_to = [r.dateTo for r in results if r.dateTo is not None]
+    return SyncResponse(
+        status="connected",
+        inserted=sum(r.inserted for r in results),
+        skipped=sum(r.skipped for r in results),
+        accounts=results,
+        dateFrom=min(dates_from) if dates_from else None,
+        dateTo=max(dates_to) if dates_to else None,
+        unmappedTails=[UnmappedTail(tail=t, rows=n) for t, n in sorted((unmapped or {}).items())],
+    )
 
 
 def _account_since(
@@ -481,10 +490,10 @@ def create_connection(
 ) -> ConnectionResponse:
     _require_crypto()
     uid = user.id
-    _validate_credentials(body["bank"], body["kind"], body["credentials"])
+    _validate_credentials(body.bank, body.kind, body.credentials)
     c = conn()
     try:
-        creds_dict = dict(body["credentials"])
+        creds_dict = dict(body.credentials)
         # a quick-login code we set on the bank's "create a code" screen after the
         # first OTP, then reuse to log in on later syncs without another SMS
         creds_dict["code"] = f"{secrets.randbelow(10000):04d}"
@@ -492,7 +501,7 @@ def create_connection(
         cur = c.execute(
             "INSERT INTO bank_connections (user_id, bank, kind, credentials_encrypted,"
             " created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
-            (uid, body["bank"], body["kind"], creds, _now(), _now()),
+            (uid, body.bank, body.kind, creds, _now(), _now()),
         )
         c.commit()
         connection_id = cur.lastrowid
@@ -503,7 +512,8 @@ def create_connection(
         c.close()
 
 
-class CredentialsPatch(TypedDict):
+@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+class CredentialsPatch:
     credentials: JsonObject
 
 
@@ -516,8 +526,8 @@ def update_credentials(
     c = conn()
     try:
         row = _load(c, cid, uid)
-        _validate_credentials(row.bank, row.kind, body["credentials"])
-        creds_dict = dict(body["credentials"])
+        _validate_credentials(row.bank, row.kind, body.credentials)
+        creds_dict = dict(body.credentials)
         creds_dict["code"] = f"{secrets.randbelow(10000):04d}"
         c.execute(
             "UPDATE bank_connections SET credentials_encrypted=?, session_encrypted=NULL,"
@@ -600,7 +610,7 @@ def sync_connection(
             _mark_connected(c, cid)
             return _aggregate(results, unmapped)
         except SmsRequired:
-            return {"status": "awaiting_sms", "message": SMS_SENT}
+            return SyncStatusResponse(status="awaiting_sms", message=SMS_SENT)
         except ConnectorError as e:
             _fail(c, cid, e)
     finally:
@@ -625,11 +635,11 @@ def submit_sms(
         if pending_id is None:
             raise HTTPException(400, "no accounts are linked to this connection")
         try:
-            result = get_runner().resume(cid, body["code"])
+            result = get_runner().resume(cid, body.code)
         except NoPendingLogin as e:
             raise HTTPException(409, "no login awaiting a code") from e
         except SmsRequired:
-            return {"status": "awaiting_sms", "message": CODE_REJECTED}
+            return SyncStatusResponse(status="awaiting_sms", message=CODE_REJECTED)
         except ConnectorError as e:
             _fail(c, cid, e)
         results, unmapped = _finish_account(c, row, pending_id, result, uid)
@@ -640,7 +650,7 @@ def submit_sms(
         try:
             more, missed = _sync_accounts(c, row, remaining, _creds(c, row), session, uid)
         except SmsRequired:
-            return {"status": "awaiting_sms", "message": SMS_SENT}
+            return SyncStatusResponse(status="awaiting_sms", message=SMS_SENT)
         except ConnectorError as e:
             _fail(c, cid, e)
         results.extend(more)

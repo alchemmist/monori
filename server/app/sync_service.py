@@ -32,9 +32,22 @@ SYNC_FAILED = "The bank sync could not be completed."
 PENDING: dict[int, connectors.Connector] = {}
 
 
-def _error(cid: int, error: Exception) -> dict[str, object]:
+@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+class RunStatusResponse:
+    status: str
+    message: str | None = None
+
+
+@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+class RunDoneResponse:
+    status: str
+    rows: list[connectors.SyncRow]
+    session: JsonObject | None
+
+
+def _error(cid: int, error: Exception) -> RunStatusResponse:
     log.warning("sync run %s failed: %s", cid, error)
-    return {"status": "error", "message": SYNC_FAILED}
+    return RunStatusResponse(status="error", message=SYNC_FAILED)
 
 
 @pydantic_dataclass(config=ConfigDict(populate_by_name=True))
@@ -59,8 +72,8 @@ def _close_pending(cid: int) -> None:
             old.close()
 
 
-def _done(result: SyncResult) -> dict[str, object]:
-    return {"status": "done", "rows": result.rows, "session": result.session}
+def _done(result: SyncResult) -> RunDoneResponse:
+    return RunDoneResponse(status="done", rows=result.rows, session=result.session)
 
 
 @app.get("/health")
@@ -69,7 +82,7 @@ def health() -> dict[str, bool]:
 
 
 @app.post("/runs/{cid}")
-def start_run(cid: int, body: RunBody) -> dict[str, object]:
+def start_run(cid: int, body: RunBody) -> RunDoneResponse | RunStatusResponse:
     _close_pending(cid)
     try:
         cls = connectors.get_connector_class(body.bank, body.kind)
@@ -80,13 +93,13 @@ def start_run(cid: int, body: RunBody) -> dict[str, object]:
         return _done(connector.sync(body.since))
     except SmsRequired:
         PENDING[cid] = connector
-        return {"status": "awaiting_sms", "message": SMS_SENT}
+        return RunStatusResponse(status="awaiting_sms", message=SMS_SENT)
     except ConnectorError as e:
         return _error(cid, e)
 
 
 @app.post("/runs/{cid}/sms")
-def submit_sms(cid: int, body: SmsBody) -> dict[str, object]:
+def submit_sms(cid: int, body: SmsBody) -> RunDoneResponse | RunStatusResponse:
     connector = PENDING.pop(cid, None)
     if connector is None:
         raise HTTPException(409, "no login awaiting a code")
@@ -95,7 +108,7 @@ def submit_sms(cid: int, body: SmsBody) -> dict[str, object]:
     except SmsRequired:
         # a rejected code keeps the login alive — re-park it and ask again
         PENDING[cid] = connector
-        return {"status": "awaiting_sms", "message": CODE_REJECTED}
+        return RunStatusResponse(status="awaiting_sms", message=CODE_REJECTED)
     except ConnectorError as e:
         # the failed login is no longer tracked, so close it here or its live
         # browser leaks
