@@ -60,7 +60,9 @@ Pull requests also run a CI-only Python annotation gate. It rejects new uses of
 specific type, a protocol, or a suitable generic instead. If a boundary truly
 requires `object`, a repository administrator can approve that finding for the
 current commit by posting a new pull request comment containing only
-`/ignore-object <finding-id>`. The approval expires when the pull request receives
+one of `/ignore-object <finding-id>`, `/ignore-file path/to/file.py`, or
+`/ignore-all`. An administrator can remove one approval with
+`/remove-ignore <finding-id>`. The approval expires when the pull request receives
 a new commit.
 
 ### Test

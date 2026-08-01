@@ -3,9 +3,9 @@ import io
 import unittest
 
 from object_annotation_gate import (
-    COMMAND_RE,
     added_lines_from_patch,
     changed_lines,
+    parse_command,
     parse_state,
     scan_file,
     state_marker,
@@ -72,9 +72,13 @@ other: "list[object]"
         )
 
     def test_approval_command_requires_exactly_one_id(self) -> None:
-        self.assertIsNotNone(COMMAND_RE.fullmatch("/ignore-object abc123"))
-        self.assertIsNone(COMMAND_RE.fullmatch("/ignore-object"))
-        self.assertIsNone(COMMAND_RE.fullmatch("/ignore-object abc123 extra"))
+        self.assertEqual(parse_command("/ignore-object abc123"), ("ignore-object", "abc123"))
+        self.assertEqual(parse_command("/ignore-file server/app.py"), ("ignore-file", "server/app.py"))
+        self.assertEqual(parse_command("/ignore-all"), ("ignore-all", None))
+        self.assertEqual(parse_command("/remove-ignore abc123"), ("remove-ignore", "abc123"))
+        self.assertIsNone(parse_command("/ignore-object"))
+        self.assertIsNone(parse_command("/ignore-object abc123 extra"))
+        self.assertIsNone(parse_command("/ignore-all extra"))
 
     def test_reports_only_added_lines(self) -> None:
         before = "value: object\n"

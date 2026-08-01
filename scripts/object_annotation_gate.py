@@ -18,9 +18,19 @@ from typing import Any
 BOT_MARKER = "<!-- monori-object-annotation-gate -->"
 BOT_LOGIN = "github-actions[bot]"
 STATE_RE = re.compile(r"<!-- monori-object-annotation-state: (.+?) -->")
-COMMAND_RE = re.compile(r"^/ignore-object\s+([a-z0-9]+)$")
+COMMAND_RE = re.compile(r"^/(ignore-all|ignore-file|ignore-object|remove-ignore)(?:\s+(\S+))?$")
 PATCH_HUNK_RE = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@")
 REQUEST_TIMEOUT = 30
+
+
+def parse_command(body: str) -> tuple[str, str | None] | None:
+    match = COMMAND_RE.fullmatch(body)
+    if not match:
+        return None
+    name, argument = match.groups()
+    if name == "ignore-all":
+        return (name, None) if argument is None else None
+    return (name, argument) if argument else None
 
 
 @dataclass(frozen=True)
@@ -197,24 +207,42 @@ def state_marker(sha: str, approved: set[str]) -> str:
     return f"{BOT_MARKER}\n<!-- monori-object-annotation-state: {state} -->"
 
 
-def comment_body(findings: list[Finding], sha: str, approved: set[str]) -> str:
+def finding_url(pr_url: str, finding: Finding) -> str:
+    diff_hash = hashlib.sha256(finding.path.encode()).hexdigest()
+    return f"{pr_url}/changes#diff-{diff_hash}R{finding.line}"
+
+
+def comment_body(findings: list[Finding], sha: str, approved: set[str], pr_url: str) -> str:
     active = [finding for finding in findings if finding.finding_id not in approved]
-    status = "✅ All findings are approved for this commit." if not active else "❌ Unapproved findings remain."
-    lines = [state_marker(sha, approved), "## Python `object` annotation check", "", status, ""]
+    status = "✔" if not active else "✗"
+    lines = [
+        state_marker(sha, approved),
+        "<details>",
+        f"<summary>{status} Python <code>object</code> annotation check</summary>",
+        "",
+    ]
     for finding in findings:
-        marker = "approved" if finding.finding_id in approved else "not approved"
-        lines.append(f"- `{finding.finding_id}` — `{finding.path}:{finding.line}` ({marker}): `{finding.annotation}`")
-    if active:
+        marker = "✔" if finding.finding_id in approved else "✗"
+        location = f"{finding.path}:{finding.line}"
+        lines.append(
+            f"- {marker} [`{location}`]({finding_url(pr_url, finding)}) "
+            f"— `{finding.annotation}` · `{finding.finding_id}`"
+        )
+    if findings:
         lines.extend(
             [
                 "",
-                "If an exception is justified, a repository administrator may approve one finding with:",
+                "Repository administrator commands must be posted as a new comment containing exactly one command:",
                 "",
                 "```text",
-                f"/ignore-object {active[0].finding_id}",
+                "/ignore-object <finding-id>",
+                "/ignore-file path/to/file.py",
+                "/ignore-all",
+                "/remove-ignore <finding-id>",
                 "```",
             ]
         )
+    lines.append("</details>")
     return "\n".join(lines)
 
 
@@ -321,18 +349,38 @@ def main() -> int:
     existing = find_bot_comment(github, number)
     approved = parse_state(existing.get("body") or "", sha) if existing else set()
 
-    command = COMMAND_RE.fullmatch((event.get("comment") or {}).get("body", "").strip())
-    approval_granted = False
+    command = parse_command((event.get("comment") or {}).get("body", "").strip())
+    state_changed = False
     if command:
-        finding_id = command.group(1)
+        command_name, command_argument = command
         author = event["comment"]["user"]["login"]
         if not is_admin(github, author):
             print(f"{author} is not a repository administrator; approval ignored")
-        elif finding_id not in {finding.finding_id for finding in findings}:
-            print(f"{finding_id} is not an active finding for {sha}; approval ignored")
         else:
-            approved.add(finding_id)
-            approval_granted = True
+            finding_ids = {finding.finding_id for finding in findings}
+            if command_name == "ignore-all" and command_argument is None:
+                approved.update(finding_ids)
+                state_changed = True
+            elif command_name == "ignore-file" and command_argument:
+                file_ids = {
+                    finding.finding_id for finding in findings if finding.path == command_argument
+                }
+                if file_ids:
+                    approved.update(file_ids)
+                    state_changed = True
+                else:
+                    print(f"{command_argument} is not an active Python file in {sha}; approval ignored")
+            elif command_name in {"ignore-object", "remove-ignore"} and command_argument:
+                if command_argument not in finding_ids:
+                    print(f"{command_argument} is not an active finding for {sha}; command ignored")
+                elif command_name == "ignore-object":
+                    approved.add(command_argument)
+                    state_changed = True
+                elif command_argument in approved:
+                    approved.remove(command_argument)
+                    state_changed = True
+            else:
+                print(f"Invalid {command_name} command; command ignored")
 
     if not findings:
         delete_bot_comment(github, existing)
@@ -340,12 +388,12 @@ def main() -> int:
 
     update_bot_comment(github, number, comment_body(findings, sha, approved), existing)
     unapproved = [finding for finding in findings if finding.finding_id not in approved]
+    if state_changed:
+        rerun_pull_request_gate(github, number)
     if unapproved:
         for finding in unapproved:
             print(f"::error file={finding.path},line={finding.line},col={finding.column + 1}::Use a specific type instead of object")
         return 1
-    if approval_granted:
-        rerun_pull_request_gate(github, number)
     return 0
 
 
