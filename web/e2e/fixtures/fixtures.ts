@@ -1,9 +1,19 @@
 import { test as base, expect } from "@playwright/test";
 import type { APIRequestContext, Page } from "@playwright/test";
+import {
+    authTokenSchema,
+    e2eMutationResponseSchema,
+    entitySchema,
+    parseJson,
+    snapshotSchema,
+    userSchema,
+} from "../../src/apiSchemas.js";
 import type { Snapshot } from "../../src/types.js";
 
 type JsonObject = Record<string, unknown>;
-type Entity = JsonObject & { id: number };
+interface Entity {
+    id: number;
+}
 
 export interface TestUser {
     email: string;
@@ -37,36 +47,38 @@ export class Api {
     async post(path: string, data: JsonObject): Promise<JsonObject> {
         const res = await this.request.post(path, { data, headers: this.headers });
         expect(res.ok(), `POST ${path} -> ${res.status()}`).toBeTruthy();
-        return (await res.json()) as JsonObject;
+        return parseJson(res, e2eMutationResponseSchema);
     }
 
     async put(path: string, data: JsonObject): Promise<JsonObject> {
         const res = await this.request.put(path, { data, headers: this.headers });
         expect(res.ok(), `PUT ${path} -> ${res.status()}`).toBeTruthy();
-        return (await res.json()) as JsonObject;
+        return parseJson(res, e2eMutationResponseSchema);
     }
 
     async snapshot(): Promise<Snapshot> {
         const res = await this.request.get("/api/snapshot", { headers: this.headers });
         expect(res.ok(), `GET /api/snapshot -> ${res.status()}`).toBeTruthy();
-        return (await res.json()) as Snapshot;
+        return parseJson(res, snapshotSchema);
     }
 
     async createAccount(fields: JsonObject = {}): Promise<Entity> {
-        return (await this.post("/api/accounts", {
-            name: "Card",
-            type: "card",
-            icon: "wallet",
-            color: "#5b6472",
-            currency: "RUB",
-            openingBalance: 0,
-            bankRef: "",
-            ...fields,
-        })) as Entity;
+        return entitySchema.parse(
+            await this.post("/api/accounts", {
+                name: "Card",
+                type: "card",
+                icon: "wallet",
+                color: "#5b6472",
+                currency: "RUB",
+                openingBalance: 0,
+                bankRef: "",
+                ...fields,
+            }),
+        );
     }
 
     async createGroup(name: string, kind = "expense"): Promise<Entity> {
-        return (await this.post("/api/groups", { name, kind })) as Entity;
+        return entitySchema.parse(await this.post("/api/groups", { name, kind }));
     }
 
     async createCategory(
@@ -75,12 +87,14 @@ export class Api {
         keywords = "",
         fields: JsonObject = {},
     ): Promise<Entity> {
-        return (await this.post("/api/categories", {
-            name,
-            groupId,
-            keywords,
-            ...fields,
-        })) as Entity;
+        return entitySchema.parse(
+            await this.post("/api/categories", {
+                name,
+                groupId,
+                keywords,
+                ...fields,
+            }),
+        );
     }
 
     reorderGroups(ids: number[]) {
@@ -88,11 +102,13 @@ export class Api {
     }
 
     async addTransaction(fields: JsonObject): Promise<Entity> {
-        return (await this.post("/api/transactions", {
-            date: `${YEAR}-06-10T12:00:00`,
-            description: "",
-            ...fields,
-        })) as Entity;
+        return entitySchema.parse(
+            await this.post("/api/transactions", {
+                date: `${YEAR}-06-10T12:00:00`,
+                description: "",
+                ...fields,
+            }),
+        );
     }
 
     replaceSplits(transactionId: number, parts: JsonObject[]) {
@@ -112,20 +128,12 @@ export async function makeUser(request: APIRequestContext, tag = "u"): Promise<T
     const password = "e2e-password-123";
     const reg = await request.post("/api/auth/register", { data: { email, password } });
     expect(reg.ok(), `register -> ${reg.status()}`).toBeTruthy();
+    await parseJson(reg, userSchema);
     const tok = await request.post("/api/auth/token", {
         form: { username: email, password },
     });
     expect(tok.ok(), `token -> ${tok.status()}`).toBeTruthy();
-    const tokenBody = (await tok.json()) as unknown;
-    if (
-        typeof tokenBody !== "object" ||
-        tokenBody === null ||
-        !("access_token" in tokenBody) ||
-        typeof tokenBody.access_token !== "string"
-    ) {
-        throw new Error("Token response has no access_token");
-    }
-    const token = tokenBody.access_token;
+    const { access_token: token } = await parseJson(tok, authTokenSchema);
     return { email, password, token, api: new Api(request, token) };
 }
 
