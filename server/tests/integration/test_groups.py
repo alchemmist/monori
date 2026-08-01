@@ -1,9 +1,12 @@
 import pytest
+from fastapi.testclient import TestClient
+
+from tests.conftest import Api
 
 pytestmark = pytest.mark.integration
 
 
-def test_groups_full_lifecycle(api, client):
+def test_groups_full_lifecycle(api: Api, client: TestClient) -> None:
     assert client.get("/api/groups").json() == []
     exp = api.group("Expenses", "expense")
     api.group("Income", "income")
@@ -18,7 +21,7 @@ def test_groups_full_lifecycle(api, client):
     assert g["name"] == "Fixed" and g["kind"] == "income"
 
 
-def test_group_validation_and_conflicts(api, client):
+def test_group_validation_and_conflicts(api: Api, client: TestClient) -> None:
     exp = api.group("Expenses", "expense")
     assert (
         client.post("/api/groups", json={"name": "Expenses", "kind": "expense"}).status_code == 409
@@ -31,7 +34,7 @@ def test_group_validation_and_conflicts(api, client):
     assert client.patch("/api/groups/999", json={"name": "x"}).status_code == 404
 
 
-def test_group_reorder_persists_and_validates(api, client):
+def test_group_reorder_persists_and_validates(api: Api, client: TestClient) -> None:
     a = api.group("A")
     b = api.group("B")
     c = api.group("C")
@@ -44,7 +47,7 @@ def test_group_reorder_persists_and_validates(api, client):
     assert client.post("/api/groups/reorder", json={"ids": [a, a, b]}).status_code == 400
 
 
-def test_group_delete_guards_non_empty(api, client):
+def test_group_delete_guards_non_empty(api: Api, client: TestClient) -> None:
     exp = api.group("Expenses", "expense")
     api.category("Groceries", exp)
     assert client.delete(f"/api/groups/{exp}").status_code == 409

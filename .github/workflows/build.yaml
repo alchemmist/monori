@@ -28,7 +28,7 @@ jobs:
                 target:
                     - fmt-check
                     - lint
-                    - typecheck
+                    - type
                     - analyze
                     - t-fast
                     - t-medium

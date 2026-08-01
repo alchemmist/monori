@@ -3,8 +3,6 @@ pass.txt
 .claude/worktrees/
 deploy/data/
 deploy/sync-debug/
-migration/raw/
-migration/out/
 server/static/
 server/data/
 web/node_modules/
@@ -27,4 +25,5 @@ mutants/
 web/test-results/
 web/playwright-report/
 .worktrees/
+.issue197/
 node_modules

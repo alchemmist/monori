@@ -8,7 +8,7 @@ branch_labels = None
 depends_on = None
 
 
-def upgrade():
+def upgrade() -> None:
     op.execute(
         """CREATE TABLE splits (
         id INTEGER PRIMARY KEY,
@@ -24,5 +24,5 @@ def upgrade():
     op.execute("CREATE INDEX idx_splits_category ON splits (category_id)")
 
 
-def downgrade():
+def downgrade() -> None:
     op.execute("DROP TABLE splits")

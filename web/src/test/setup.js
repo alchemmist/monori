@@ -38,6 +38,10 @@ window.HTMLElement.prototype.setPointerCapture ??= () => {};
 window.HTMLElement.prototype.animate ??= () => ({ cancel: () => {} });
 window.scrollTo = () => {};
 window.HTMLCanvasElement.prototype.getContext = () => null;
+window.document.fonts ??= {
+    addEventListener() {},
+    removeEventListener() {},
+};
 
 // jsdom paints nothing, so every element measures 0×0 — recharts and the
 // windowed transaction list both fall back to rendering nothing at that size.

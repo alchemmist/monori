@@ -1,12 +1,15 @@
 import re
+import sqlite3
 from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import ConfigDict
+from pydantic.dataclasses import dataclass as pydantic_dataclass
 
-from ..auth import current_user
-from ..deps import conn, serialize_account
+from ..auth import AuthenticatedUser, current_user
+from ..db_records import AccountRecord
+from ..deps import AccountResponse, conn, serialize_account
 from ..importer import tx_hash
 
 router = APIRouter(prefix="/api/accounts", tags=["accounts"])
@@ -17,50 +20,57 @@ HEX_COLOR = re.compile(r"^#[0-9a-fA-F]{6}$")
 MAX_ICON_IMAGE = 300_000
 
 
-class AccountBody(BaseModel):
-    name: str = Field(min_length=1, max_length=80)
-    type: str = "other"
-    icon: str = Field(default="wallet", min_length=1, max_length=32)
-    color: str = "#5b6472"
+@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+class AccountBody:
+    name: str
+    type: str | None = None
+    icon: str | None = None
+    color: str | None = None
     iconImage: str | None = None
-    currency: str = Field(default="RUB", min_length=1, max_length=8)
-    openingBalance: int = 0
+    currency: str | None = None
+    openingBalance: int | None = None
     openingDate: str | None = None
     connectionId: int | None = None
-    bankRef: str = Field(default="", max_length=64)
-    cardTails: list[str] = Field(default_factory=list, max_length=8)
+    bankRef: str | None = None
+    cardTails: list[str] | None = None
 
 
-class AccountPatch(BaseModel):
-    name: str | None = Field(default=None, min_length=1, max_length=80)
+@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+class AccountPatch:
+    name: str | None = None
     type: str | None = None
-    icon: str | None = Field(default=None, min_length=1, max_length=32)
+    icon: str | None = None
     color: str | None = None
     # None = leave as is, "" = clear the custom image, otherwise a new data URL
     iconImage: str | None = None
-    currency: str | None = Field(default=None, min_length=1, max_length=8)
+    currency: str | None = None
     openingBalance: int | None = None
     openingDate: str | None = None
     archived: bool | None = None
     # None = leave as is, 0 = unlink from its bank connection
     connectionId: int | None = None
-    bankRef: str | None = Field(default=None, max_length=64)
-    cardTails: list[str] | None = Field(default=None, max_length=8)
+    bankRef: str | None = None
+    cardTails: list[str] | None = None
 
 
-def _owned_connection(c, connection_id, uid):
+@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+class AccountIdResponse:
+    id: int | None
+
+
+def _owned_connection(c: sqlite3.Connection, connection_id: int, uid: int) -> None:
     if not c.execute(
         "SELECT id FROM bank_connections WHERE id=? AND user_id=?", (connection_id, uid)
     ).fetchone():
         raise HTTPException(400, "unknown connection")
 
 
-def _validate_color(color):
+def _validate_color(color: str) -> None:
     if not HEX_COLOR.match(color):
         raise HTTPException(400, "color must be a #rrggbb hex string")
 
 
-def _clean_tails(tails):
+def _clean_tails(tails: list[str]) -> str:
     """
     Normalize card tails to the digits of the masked number ('*8181' -> '8181'),
     deduplicated in order, stored comma-separated.
@@ -75,7 +85,7 @@ def _clean_tails(tails):
     return ",".join(cleaned)
 
 
-def _validate_icon_image(image):
+def _validate_icon_image(image: str | None) -> None:
     """
     A custom icon is optional; when present it must be an image data URL and
     stay within the size cap so the snapshot doesn't bloat.
@@ -86,21 +96,25 @@ def _validate_icon_image(image):
         raise HTTPException(400, "icon image must be a data URL image under the size limit")
 
 
-class Reorder(BaseModel):
+@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+class Reorder:
     ids: list[int]
 
 
-class ReconcileBody(BaseModel):
+@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+class ReconcileBody:
     actualBalance: int
 
 
 @router.get("")
-def list_accounts(user: Annotated[dict, Depends(current_user)]):
-    uid = user["id"]
+def list_accounts(
+    user: Annotated[AuthenticatedUser, Depends(current_user)],
+) -> list[AccountResponse]:
+    uid = user.id
     c = conn()
     try:
         return [
-            serialize_account(r)
+            serialize_account(AccountRecord.from_row(r))
             for r in c.execute(
                 "SELECT id, name, type, icon, color, icon_image, currency, sort, archived,"
                 " opening_balance, opening_date, connection_id, bank_ref, card_tails"
@@ -113,11 +127,17 @@ def list_accounts(user: Annotated[dict, Depends(current_user)]):
 
 
 @router.post("")
-def create_account(body: AccountBody, user: Annotated[dict, Depends(current_user)]):
-    uid = user["id"]
-    if body.type not in TYPES:
+def create_account(
+    body: AccountBody, user: Annotated[AuthenticatedUser, Depends(current_user)]
+) -> AccountIdResponse:
+    uid = user.id
+    account_type = body.type
+    if account_type not in TYPES:
         raise HTTPException(400, "type must be one of card, cash, savings, other")
-    _validate_color(body.color)
+    color = body.color
+    if color is None:
+        raise HTTPException(400, "color must be a #rrggbb hex string")
+    _validate_color(color)
     _validate_icon_image(body.iconImage)
     c = conn()
     try:
@@ -125,11 +145,15 @@ def create_account(body: AccountBody, user: Annotated[dict, Depends(current_user
             "SELECT id FROM accounts WHERE user_id=? AND name=?", (uid, body.name)
         ).fetchone():
             raise HTTPException(409, "account with this name already exists")
-        if body.connectionId:
-            _owned_connection(c, body.connectionId, uid)
+        connection_id = body.connectionId
+        if connection_id:
+            _owned_connection(c, connection_id, uid)
         max_sort = c.execute(
             "SELECT COALESCE(MAX(sort),0) FROM accounts WHERE user_id=?", (uid,)
         ).fetchone()[0]
+        bank_ref = body.bankRef
+        if bank_ref is None:
+            raise HTTPException(400, "bankRef is required")
         cur = c.execute(
             """INSERT INTO accounts
                (user_id, name, type, icon, color, icon_image, currency, opening_balance,
@@ -138,93 +162,105 @@ def create_account(body: AccountBody, user: Annotated[dict, Depends(current_user
             (
                 uid,
                 body.name,
-                body.type,
+                account_type,
                 body.icon,
-                body.color,
+                color,
                 body.iconImage or None,
                 body.currency,
                 body.openingBalance,
                 body.openingDate,
                 max_sort + 1,
-                body.connectionId or None,
-                body.bankRef.strip(),
-                _clean_tails(body.cardTails),
+                connection_id or None,
+                bank_ref.strip(),
+                _clean_tails(body.cardTails or []),
             ),
         )
         c.commit()
-        return {"id": cur.lastrowid}
+        return AccountIdResponse(id=cur.lastrowid)
     finally:
         c.close()
 
 
 @router.patch("/{account_id}")
 def patch_account(
-    account_id: int, patch: AccountPatch, user: Annotated[dict, Depends(current_user)]
-):
-    uid = user["id"]
+    account_id: int,
+    patch: AccountPatch,
+    user: Annotated[AuthenticatedUser, Depends(current_user)],
+) -> dict[str, bool]:
+    uid = user.id
     c = conn()
     try:
         if not c.execute(
             "SELECT id FROM accounts WHERE id=? AND user_id=?", (account_id, uid)
         ).fetchone():
             raise HTTPException(404, "account not found")
-        if patch.name is not None:
+        name = patch.name
+        if name is not None:
             dup = c.execute(
                 "SELECT id FROM accounts WHERE user_id=? AND name=? AND id<>?",
-                (uid, patch.name, account_id),
+                (uid, name, account_id),
             ).fetchone()
             if dup:
                 raise HTTPException(409, "account with this name already exists")
-            c.execute("UPDATE accounts SET name=? WHERE id=?", (patch.name, account_id))
-        if patch.type is not None:
-            if patch.type not in TYPES:
+            c.execute("UPDATE accounts SET name=? WHERE id=?", (name, account_id))
+        account_type = patch.type
+        if account_type is not None:
+            if account_type not in TYPES:
                 raise HTTPException(400, "type must be one of card, cash, savings, other")
-            c.execute("UPDATE accounts SET type=? WHERE id=?", (patch.type, account_id))
-        if patch.icon is not None:
-            c.execute("UPDATE accounts SET icon=? WHERE id=?", (patch.icon, account_id))
-        if patch.color is not None:
-            _validate_color(patch.color)
-            c.execute("UPDATE accounts SET color=? WHERE id=?", (patch.color, account_id))
-        if patch.iconImage is not None:
-            _validate_icon_image(patch.iconImage)
+            c.execute("UPDATE accounts SET type=? WHERE id=?", (account_type, account_id))
+        icon = patch.icon
+        if icon is not None:
+            c.execute("UPDATE accounts SET icon=? WHERE id=?", (icon, account_id))
+        color = patch.color
+        if color is not None:
+            _validate_color(color)
+            c.execute("UPDATE accounts SET color=? WHERE id=?", (color, account_id))
+        icon_image = patch.iconImage
+        if icon_image is not None:
+            _validate_icon_image(icon_image)
             c.execute(
                 "UPDATE accounts SET icon_image=? WHERE id=?",
-                (patch.iconImage or None, account_id),
+                (icon_image or None, account_id),
             )
-        if patch.currency is not None:
-            c.execute("UPDATE accounts SET currency=? WHERE id=?", (patch.currency, account_id))
-        if patch.openingBalance is not None:
+        currency = patch.currency
+        if currency is not None:
+            c.execute("UPDATE accounts SET currency=? WHERE id=?", (currency, account_id))
+        opening_balance = patch.openingBalance
+        if opening_balance is not None:
             c.execute(
                 "UPDATE accounts SET opening_balance=? WHERE id=?",
-                (patch.openingBalance, account_id),
+                (opening_balance, account_id),
             )
-        if patch.openingDate is not None:
-            c.execute(
-                "UPDATE accounts SET opening_date=? WHERE id=?", (patch.openingDate, account_id)
-            )
-        if patch.archived is not None:
+        opening_date = patch.openingDate
+        if opening_date is not None:
+            c.execute("UPDATE accounts SET opening_date=? WHERE id=?", (opening_date, account_id))
+        archived = patch.archived
+        if archived is not None:
             c.execute(
                 "UPDATE accounts SET archived=? WHERE id=?",
-                (1 if patch.archived else 0, account_id),
+                (1 if archived else 0, account_id),
             )
-        if patch.connectionId is not None:
-            if patch.connectionId == 0:
+        connection_id = patch.connectionId
+        if connection_id is not None:
+            if connection_id == 0:
                 c.execute("UPDATE accounts SET connection_id=NULL WHERE id=?", (account_id,))
             else:
-                _owned_connection(c, patch.connectionId, uid)
+                _owned_connection(c, connection_id, uid)
                 c.execute(
                     "UPDATE accounts SET connection_id=? WHERE id=?",
-                    (patch.connectionId, account_id),
+                    (connection_id, account_id),
                 )
-        if patch.bankRef is not None:
+        bank_ref = patch.bankRef
+        if bank_ref is not None:
             c.execute(
                 "UPDATE accounts SET bank_ref=? WHERE id=?",
-                (patch.bankRef.strip(), account_id),
+                (bank_ref.strip(), account_id),
             )
-        if patch.cardTails is not None:
+        card_tails = patch.cardTails
+        if card_tails is not None:
             c.execute(
                 "UPDATE accounts SET card_tails=? WHERE id=?",
-                (_clean_tails(patch.cardTails), account_id),
+                (_clean_tails(card_tails), account_id),
             )
         c.commit()
         return {"ok": True}
@@ -235,15 +271,15 @@ def patch_account(
 @router.delete("/{account_id}")
 def delete_account(
     account_id: int,
-    user: Annotated[dict, Depends(current_user)],
+    user: Annotated[AuthenticatedUser, Depends(current_user)],
     reassignTo: int | None = None,
-):
+) -> dict[str, bool]:
     """
     Deleting an account reassigns its transactions to another account. A
     transaction must always belong to an account, so a non-empty account cannot
     be deleted without a reassign target, and the last account cannot be deleted.
     """
-    uid = user["id"]
+    uid = user.id
     c = conn()
     try:
         if not c.execute(
@@ -294,13 +330,15 @@ def delete_account(
 
 @router.post("/{account_id}/reconcile")
 def reconcile_account(
-    account_id: int, body: ReconcileBody, user: Annotated[dict, Depends(current_user)]
-):
+    account_id: int,
+    body: ReconcileBody,
+    user: Annotated[AuthenticatedUser, Depends(current_user)],
+) -> dict[str, int]:
     """
     Bring an account's computed balance to the real bank balance by posting a
     single adjustment transaction for the difference. Returns the delta applied.
     """
-    uid = user["id"]
+    uid = user.id
     c = conn()
     try:
         acc = c.execute(
@@ -336,8 +374,10 @@ def reconcile_account(
 
 
 @router.post("/reorder")
-def reorder_accounts(body: Reorder, user: Annotated[dict, Depends(current_user)]):
-    uid = user["id"]
+def reorder_accounts(
+    body: Reorder, user: Annotated[AuthenticatedUser, Depends(current_user)]
+) -> dict[str, bool]:
+    uid = user.id
     c = conn()
     try:
         known = {r["id"] for r in c.execute("SELECT id FROM accounts WHERE user_id=?", (uid,))}

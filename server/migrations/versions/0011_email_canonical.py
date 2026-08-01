@@ -19,7 +19,7 @@ depends_on = None
 GMAIL_DOMAINS = {"gmail.com", "googlemail.com"}
 
 
-def _canonical(email):
+def _canonical(email: str) -> str:
     email = email.strip().lower()
     local, sep, domain = email.partition("@")
     if not sep:
@@ -30,7 +30,7 @@ def _canonical(email):
     return f"{base or local}@{domain}"
 
 
-def upgrade():
+def upgrade() -> None:
     op.execute("ALTER TABLE users ADD COLUMN email_canonical TEXT NOT NULL DEFAULT ''")
     conn = op.get_bind()
     rows = conn.exec_driver_sql("SELECT id, email FROM users").fetchall()
@@ -75,5 +75,5 @@ def upgrade():
     )
 
 
-def downgrade():
+def downgrade() -> None:
     raise NotImplementedError("monori migrations are forward-only")

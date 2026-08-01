@@ -13,7 +13,7 @@ WEBBIN := web/node_modules/.bin
 .PHONY: install setup tools dev down reset-db deploy api web build \
         fmt fmt-check \
         lint lint-web lint-css lint-html lint-server lint-sql lint-yaml lint-md lint-docs lint-actions lint-docker lint-shell spell \
-        typecheck analyze audit audit-deps audit-deps-py audit-secrets \
+        type type-front type-back analyze audit audit-deps audit-deps-py audit-secrets \
         test t-fast t-medium t-slow t-slow-ui coverage mutation mutation-diff m-front m-front-diff m-front-file m-back m-back-diff \
         schema-diagram check
 
@@ -66,15 +66,17 @@ schema-diagram:
 
 fmt: schema-diagram
 	$(WEBBIN)/prettier --write .
-	cd server && uv run ruff format . && uv run ruff check . --fix
-	$(SQLFLUFF) fix -f server/schema.sql
-	$(WEBBIN)/markdownlint-cli2 --fix
+	@(uv run --project server ruff check --config server/pyproject.toml . --fix >/dev/null 2>&1 || true)
+	uv run --project server ruff format --config server/pyproject.toml .
+	$(SQLFLUFF) fix .
+	@-$(WEBBIN)/markdownlint-cli2 --fix >/dev/null 2>&1
 	@files=$$(git ls-files '*.sh'); [ -z "$$files" ] || shfmt -w $$files
 
 fmt-check:
 	$(WEBBIN)/prettier --check .
-	cd server && uv run ruff format --check .
-	$(SQLFLUFF) lint server/schema.sql
+	uv run --project server ruff check --config server/pyproject.toml .
+	uv run --project server ruff format --config server/pyproject.toml --check .
+	$(SQLFLUFF) lint .
 
 lint: lint-web lint-css lint-html lint-server lint-sql lint-yaml lint-md lint-docs lint-actions lint-docker lint-shell spell
 
@@ -88,10 +90,10 @@ lint-html:
 	$(WEBBIN)/htmlhint web/index.html
 
 lint-server:
-	cd server && uv run ruff check .
+	uv run --project server ruff check --config server/pyproject.toml .
 
 lint-sql:
-	$(SQLFLUFF) lint server/schema.sql
+	$(SQLFLUFF) lint .
 
 lint-yaml:
 	uvx yamllint -c .yamllint.yaml .
@@ -114,11 +116,15 @@ lint-shell:
 
 spell:
 	uvx codespell web/src server/app server/tests \
-		server/export_snapshot.py server/migrate.py server/verify_parity.py \
 		README.md web/README.md docs Makefile .github
 
-typecheck:
-	cd server && uv run mypy
+type: type-back # type-front
+
+type-front:
+	cd web && npm run --silent typecheck
+
+type-back:
+	MYPYPATH=server uv run --project server --extra connectors mypy --config-file server/pyproject.toml .
 
 analyze:
 	cd server && uv run bandit -c pyproject.toml -q -r app
@@ -129,7 +135,8 @@ audit: audit-deps audit-deps-py audit-secrets
 
 audit-deps:
 	cd web && npm install --no-audit --no-fund --silent
-	cd web && npm audit --audit-level=high --json | python3 ../scripts/npm-audit-gate.py
+	(cd web && npm audit --audit-level=high --json) | \
+		uv run --project server python scripts/npm-audit-gate.py
 
 audit-deps-py:
 	@req=$$(mktemp); \
@@ -235,4 +242,4 @@ mutation:
 	echo "── mutation gates: frontend exit=$$front, backend exit=$$back ──"; \
 	if [ $$front -ne 0 ] || [ $$back -ne 0 ]; then exit 1; fi
 
-check: fmt-check lint typecheck analyze test
+check: fmt-check lint type analyze t-fast

@@ -12,8 +12,13 @@ to rotate it.
 import json
 import os
 import pathlib
+from collections.abc import Mapping
+
+from cryptography.fernet import Fernet
+from pydantic import JsonValue
 
 from . import db as dbmod
+from .connectors.base import JSON_OBJECT_ADAPTER, JsonObject
 from .security import load_or_create_secret_file
 
 
@@ -26,21 +31,21 @@ class CryptoUnavailable(RuntimeError):
 _key_cache: dict[str, str] = {}
 
 
-def available():
+def available() -> bool:
     return True
 
 
-def generate_key():
+def generate_key() -> str:
     from cryptography.fernet import Fernet
 
     return Fernet.generate_key().decode()
 
 
-def _key_path():
+def _key_path() -> pathlib.Path:
     return pathlib.Path(dbmod.DB_PATH).parent / ".encryption_key"
 
 
-def _encryption_key():
+def _encryption_key() -> str:
     env = os.environ.get("MONORI_ENCRYPTION_KEY")
     if env:
         return env
@@ -54,23 +59,21 @@ def _encryption_key():
     return value
 
 
-def _fernet():
-    from cryptography.fernet import Fernet
-
+def _fernet() -> Fernet:
     return Fernet(_encryption_key().encode())
 
 
-def encrypt(data):
+def encrypt(data: Mapping[str, JsonValue]) -> bytes:
     """
     Encrypt a JSON-serializable dict to an opaque token (bytes).
     """
     return _fernet().encrypt(json.dumps(data).encode())
 
 
-def decrypt(blob):
+def decrypt(blob: bytes | memoryview | None) -> JsonObject | None:
     """
     Decrypt a token produced by :func:`encrypt` back to its dict.
     """
     if blob is None:
         return None
-    return json.loads(_fernet().decrypt(bytes(blob)).decode())
+    return JSON_OBJECT_ADAPTER.validate_python(json.loads(_fernet().decrypt(bytes(blob)).decode()))

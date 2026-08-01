@@ -2,9 +2,11 @@ import contextlib
 import io
 import unittest
 
-from object_annotation_gate import (
+from scripts.object_annotation_gate import (
+    Finding,
     added_lines_from_patch,
     changed_lines,
+    comment_body,
     parse_command,
     parse_state,
     scan_file,
@@ -25,12 +27,15 @@ def function(value: list[object]) -> object | None:
 
         findings = scan_file("example.py", source, set(range(1, 20)))
 
-        self.assertEqual([(finding.line, finding.annotation) for finding in findings], [
-            (2, "object"),
-            (4, "list[object]"),
-            (4, "object | None"),
-            (5, "dict[str, object]"),
-        ])
+        self.assertEqual(
+            [(finding.line, finding.annotation) for finding in findings],
+            [
+                (2, "object"),
+                (4, "list[object]"),
+                (4, "object | None"),
+                (5, "dict[str, object]"),
+            ],
+        )
 
     def test_ignores_calls_strings_and_comments(self) -> None:
         source = """\
@@ -49,10 +54,13 @@ other: "list[object]"
 
         findings = scan_file("example.py", source, set(range(1, 10)))
 
-        self.assertEqual([(finding.line, finding.annotation) for finding in findings], [
-            (1, "builtins.object"),
-            (2, "'list[object]'"),
-        ])
+        self.assertEqual(
+            [(finding.line, finding.annotation) for finding in findings],
+            [
+                (1, "builtins.object"),
+                (2, "'list[object]'"),
+            ],
+        )
 
     def test_invalid_python_is_reported_without_raising(self) -> None:
         output = io.StringIO()
@@ -73,7 +81,9 @@ other: "list[object]"
 
     def test_approval_command_requires_exactly_one_id(self) -> None:
         self.assertEqual(parse_command("/ignore-object abc123"), ("ignore-object", "abc123"))
-        self.assertEqual(parse_command("/ignore-file server/app.py"), ("ignore-file", "server/app.py"))
+        self.assertEqual(
+            parse_command("/ignore-file server/app.py"), ("ignore-file", "server/app.py")
+        )
         self.assertEqual(parse_command("/ignore-all"), ("ignore-all", None))
         self.assertEqual(parse_command("/remove-ignore abc123"), ("remove-ignore", "abc123"))
         self.assertIsNone(parse_command("/ignore-object"))
@@ -86,7 +96,9 @@ other: "list[object]"
 
         self.assertEqual(changed_lines(before, after), {2})
         findings = scan_file("example.py", after, changed_lines(before, after))
-        self.assertEqual([(finding.line, finding.annotation) for finding in findings], [(2, "object")])
+        self.assertEqual(
+            [(finding.line, finding.annotation) for finding in findings], [(2, "object")]
+        )
 
     def test_reads_added_lines_from_unified_patch(self) -> None:
         patch = """\
@@ -97,6 +109,23 @@ other: "list[object]"
 """
 
         self.assertEqual(added_lines_from_patch(patch), {2})
+
+    def test_comment_includes_finding_count_and_pr_links(self) -> None:
+        finding = Finding("server/app/example.py", 7, 2, "object", "finding-1")
+
+        body = comment_body([finding], "sha", set(), "https://github.com/org/repo/pull/1")
+
+        self.assertIn("## ❌ Python <code>object</code> annotation check", body)
+        self.assertIn("List of problems (1)", body)
+        self.assertIn("<summary>For admins</summary>", body)
+        self.assertIn("| `/ignore-all` | Approve all findings in the pull request. |", body)
+        self.assertIn("https://github.com/org/repo/pull/1/changes#diff-", body)
+
+        approved_body = comment_body(
+            [finding], "sha", {"finding-1"}, "https://github.com/org/repo/pull/1"
+        )
+
+        self.assertIn("## ✅ Python <code>object</code> annotation check", approved_body)
 
 
 if __name__ == "__main__":

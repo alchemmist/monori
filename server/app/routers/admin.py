@@ -5,17 +5,22 @@ Every route requires the ``admin_user`` dependency (403 otherwise). The admin
 sees full user data — this is the instance owner's own deployment.
 """
 
+import sqlite3
 from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import ConfigDict
+from pydantic.dataclasses import dataclass as pydantic_dataclass
 
+from .. import auth
 from ..admin import admin_user
-from ..deps import conn, serialize_user
+from ..db_records import UserRecord
+from ..deps import UserResponse, conn, serialize_user
 from .auth_router import create_user
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
+type AdminContext = auth.AuthenticatedUser
 
 RECENT_TX_LIMIT = 50
 TX_PAGE_MAX = 1000
@@ -24,78 +29,196 @@ RECENT_LOGINS_LIMIT = 50
 ACTIVITY_WINDOW_DAYS = 30
 
 
-def _cutoff(days):
+def _cutoff(days: int) -> str:
     return (datetime.now(UTC) - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%S")
 
 
-def _count(c, sql, params=()):
-    return c.execute(sql, params).fetchone()[0]
+def _count(c: sqlite3.Connection, sql: str) -> int:
+    row = c.execute(sql).fetchone()
+    if row is None or not isinstance(row[0], int):
+        raise RuntimeError("count query did not return an integer")
+    return row[0]
+
+
+def _count_since(c: sqlite3.Connection, sql: str, since: str) -> int:
+    row = c.execute(sql, (since,)).fetchone()
+    if row is None or not isinstance(row[0], int):
+        raise RuntimeError("count query did not return an integer")
+    return row[0]
+
+
+@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+class AdminTotals:
+    users: int
+    transactions: int
+    accounts: int
+    connections: int
+
+
+@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+class RegistrationCount:
+    month: str
+    count: int
+
+
+@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+class OverviewResponse:
+    totals: AdminTotals
+    dbSizeBytes: int
+    newUsers7d: int
+    newUsers30d: int
+    activeUsers7d: int
+    registrations: list[RegistrationCount]
+
+
+@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+class AdminConnectionSummary:
+    status: str
+    lastSync: str | None
+    lastError: str | None
+
+
+@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+class AdminUserSummary:
+    id: int
+    email: str
+    createdAt: str
+    lastLogin: str | None
+    isAdmin: bool
+    accounts: int
+    transactions: int
+    lastTransaction: str | None
+    budgets: int
+    connection: AdminConnectionSummary | None
+
+
+@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+class AdminAccountSummary:
+    id: int
+    name: str
+    type: str
+    currency: str
+    archived: bool
+    balance: int
+    transactions: int
+
+
+@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+class AdminTransactionSummary:
+    id: int
+    date: str
+    amount: int
+    description: str
+    account: str
+    category: str | None
+
+
+@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+class AdminTransactionDetail(AdminTransactionSummary):
+    mcc: str
+    comment: str
+    source: str
+
+
+@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+class FeatureCount:
+    feature: str
+    count: int
+
+
+@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+class UserDetailResponse:
+    user: UserResponse
+    accounts: list[AdminAccountSummary]
+    recentTransactions: list[AdminTransactionSummary]
+    featureUsage: list[FeatureCount]
+    recentLogins: list[str]
+
+
+@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+class DayCount:
+    day: str
+    count: int
+
+
+@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+class LoginEvent:
+    email: str
+    at: str
+
+
+@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+class ActivityResponse:
+    features: list[FeatureCount]
+    daily: list[DayCount]
+    recentLogins: list[LoginEvent]
 
 
 @router.get("/overview")
-def overview(admin: Annotated[dict, Depends(admin_user)]):
+def overview(admin: Annotated[AdminContext, Depends(admin_user)]) -> OverviewResponse:
     c = conn()
     try:
         cutoff7, cutoff30 = _cutoff(7), _cutoff(30)
-        active = _count(
-            c,
+        active_row = c.execute(
             "SELECT COUNT(*) FROM (SELECT user_id FROM feature_usage WHERE day >= ?"
             " UNION SELECT user_id FROM activity_events WHERE created_at >= ?)",
             (cutoff7[:10], cutoff7),
-        )
-        return {
-            "totals": {
-                "users": _count(c, "SELECT COUNT(*) FROM users"),
-                "transactions": _count(c, "SELECT COUNT(*) FROM transactions"),
-                "accounts": _count(c, "SELECT COUNT(*) FROM accounts"),
-                "connections": _count(c, "SELECT COUNT(*) FROM bank_connections"),
-            },
+        ).fetchone()
+        if active_row is None or not isinstance(active_row[0], int):
+            raise RuntimeError("active user query did not return an integer")
+        return OverviewResponse(
+            totals=AdminTotals(
+                users=_count(c, "SELECT COUNT(*) FROM users"),
+                transactions=_count(c, "SELECT COUNT(*) FROM transactions"),
+                accounts=_count(c, "SELECT COUNT(*) FROM accounts"),
+                connections=_count(c, "SELECT COUNT(*) FROM bank_connections"),
+            ),
             # pragmas rather than a filesystem stat: the connection knows the
             # database regardless of where (or whether) the file lives
-            "dbSizeBytes": _count(c, "PRAGMA page_count") * _count(c, "PRAGMA page_size"),
-            "newUsers7d": _count(c, "SELECT COUNT(*) FROM users WHERE created_at >= ?", (cutoff7,)),
-            "newUsers30d": _count(
-                c, "SELECT COUNT(*) FROM users WHERE created_at >= ?", (cutoff30,)
+            dbSizeBytes=_count(c, "PRAGMA page_count") * _count(c, "PRAGMA page_size"),
+            newUsers7d=_count_since(c, "SELECT COUNT(*) FROM users WHERE created_at >= ?", cutoff7),
+            newUsers30d=_count_since(
+                c, "SELECT COUNT(*) FROM users WHERE created_at >= ?", cutoff30
             ),
-            "activeUsers7d": active,
-            "registrations": [
-                {"month": r["m"], "count": r["n"]}
+            activeUsers7d=active_row[0],
+            registrations=[
+                RegistrationCount(month=r["m"], count=r["n"])
                 for r in c.execute(
                     "SELECT substr(created_at, 1, 7) AS m, COUNT(*) AS n FROM users"
                     " GROUP BY m ORDER BY m"
                 )
             ],
-        }
+        )
     finally:
         c.close()
 
 
 @router.get("/users")
-def list_users(admin: Annotated[dict, Depends(admin_user)]):
+def list_users(
+    admin: Annotated[AdminContext, Depends(admin_user)],
+) -> list[AdminUserSummary]:
     c = conn()
     try:
         connections = {}
         for r in c.execute(
             "SELECT user_id, status, last_sync, last_error FROM bank_connections ORDER BY id"
         ):
-            connections[r["user_id"]] = {
-                "status": r["status"],
-                "lastSync": r["last_sync"],
-                "lastError": r["last_error"],
-            }
+            connections[r["user_id"]] = AdminConnectionSummary(
+                status=r["status"], lastSync=r["last_sync"], lastError=r["last_error"]
+            )
         return [
-            {
-                "id": r["id"],
-                "email": r["email"],
-                "createdAt": r["created_at"],
-                "lastLogin": r["last_login"],
-                "isAdmin": bool(r["is_admin"]),
-                "accounts": r["accounts"],
-                "transactions": r["transactions"],
-                "lastTransaction": r["last_tx"],
-                "budgets": r["budgets"],
-                "connection": connections.get(r["id"]),
-            }
+            AdminUserSummary(
+                id=r["id"],
+                email=r["email"],
+                createdAt=r["created_at"],
+                lastLogin=r["last_login"],
+                isAdmin=bool(r["is_admin"]),
+                accounts=r["accounts"],
+                transactions=r["transactions"],
+                lastTransaction=r["last_tx"],
+                budgets=r["budgets"],
+                connection=connections.get(r["id"]),
+            )
             for r in c.execute(
                 "SELECT u.id, u.email, u.created_at, u.last_login, u.is_admin,"
                 " (SELECT COUNT(*) FROM accounts a WHERE a.user_id = u.id) AS accounts,"
@@ -114,7 +237,9 @@ def list_users(admin: Annotated[dict, Depends(admin_user)]):
 
 
 @router.get("/users/{uid}")
-def user_detail(uid: int, admin: Annotated[dict, Depends(admin_user)]):
+def user_detail(
+    uid: int, admin: Annotated[AdminContext, Depends(admin_user)]
+) -> UserDetailResponse:
     c = conn()
     try:
         row = c.execute(
@@ -124,18 +249,18 @@ def user_detail(uid: int, admin: Annotated[dict, Depends(admin_user)]):
         ).fetchone()
         if row is None:
             raise HTTPException(404, "unknown user")
-        return {
-            "user": serialize_user(row),
-            "accounts": [
-                {
-                    "id": r["id"],
-                    "name": r["name"],
-                    "type": r["type"],
-                    "currency": r["currency"],
-                    "archived": bool(r["archived"]),
-                    "balance": r["balance"],
-                    "transactions": r["tx_count"],
-                }
+        return UserDetailResponse(
+            user=serialize_user(UserRecord.from_row(row)),
+            accounts=[
+                AdminAccountSummary(
+                    id=r["id"],
+                    name=r["name"],
+                    type=r["type"],
+                    currency=r["currency"],
+                    archived=bool(r["archived"]),
+                    balance=r["balance"],
+                    transactions=r["tx_count"],
+                )
                 for r in c.execute(
                     "SELECT a.id, a.name, a.type, a.currency, a.archived,"
                     " a.opening_balance + COALESCE(SUM(CASE WHEN t.category_id IS NOT NULL"
@@ -147,15 +272,15 @@ def user_detail(uid: int, admin: Annotated[dict, Depends(admin_user)]):
                     (uid,),
                 )
             ],
-            "recentTransactions": [
-                {
-                    "id": r["id"],
-                    "date": r["date"],
-                    "amount": r["amount"],
-                    "description": r["description"],
-                    "account": r["account_name"],
-                    "category": r["category_name"],
-                }
+            recentTransactions=[
+                AdminTransactionSummary(
+                    id=r["id"],
+                    date=r["date"],
+                    amount=r["amount"],
+                    description=r["description"],
+                    account=r["account_name"],
+                    category=r["category_name"],
+                )
                 for r in c.execute(
                     "SELECT t.id, t.date, t.amount, t.description,"
                     " a.name AS account_name, cat.name AS category_name"
@@ -165,15 +290,15 @@ def user_detail(uid: int, admin: Annotated[dict, Depends(admin_user)]):
                     (uid, RECENT_TX_LIMIT),
                 )
             ],
-            "featureUsage": [
-                {"feature": r["feature"], "count": r["n"]}
+            featureUsage=[
+                FeatureCount(feature=r["feature"], count=r["n"])
                 for r in c.execute(
                     "SELECT feature, SUM(count) AS n FROM feature_usage WHERE user_id=?"
                     " GROUP BY feature ORDER BY n DESC",
                     (uid,),
                 )
             ],
-            "recentLogins": [
+            recentLogins=[
                 r["created_at"]
                 for r in c.execute(
                     "SELECT created_at FROM activity_events WHERE user_id=? AND kind='login'"
@@ -181,7 +306,7 @@ def user_detail(uid: int, admin: Annotated[dict, Depends(admin_user)]):
                     (uid, RECENT_LOGINS_LIMIT),
                 )
             ],
-        }
+        )
     finally:
         c.close()
 
@@ -189,10 +314,10 @@ def user_detail(uid: int, admin: Annotated[dict, Depends(admin_user)]):
 @router.get("/users/{uid}/transactions")
 def user_transactions(
     uid: int,
-    admin: Annotated[dict, Depends(admin_user)],
+    admin: Annotated[AdminContext, Depends(admin_user)],
     limit: Annotated[int, Query(ge=1, le=TX_PAGE_MAX)] = TX_PAGE_MAX,
     offset: Annotated[int, Query(ge=0)] = 0,
-):
+) -> list[AdminTransactionDetail]:
     """
     A user's transactions, newest first — the full list behind the detail view's
     preview, rendered as one JSON object per line by the client. Paged (capped at
@@ -204,17 +329,17 @@ def user_transactions(
         if c.execute("SELECT 1 FROM users WHERE id=?", (uid,)).fetchone() is None:
             raise HTTPException(404, "unknown user")
         return [
-            {
-                "id": r["id"],
-                "date": r["date"],
-                "amount": r["amount"],
-                "description": r["description"],
-                "account": r["account_name"],
-                "category": r["category_name"],
-                "mcc": r["mcc"],
-                "comment": r["comment"],
-                "source": r["source"],
-            }
+            AdminTransactionDetail(
+                id=r["id"],
+                date=r["date"],
+                amount=r["amount"],
+                description=r["description"],
+                account=r["account_name"],
+                category=r["category_name"],
+                mcc=r["mcc"],
+                comment=r["comment"],
+                source=r["source"],
+            )
             for r in c.execute(
                 "SELECT t.id, t.date, t.amount, t.description, t.mcc, t.comment, t.source,"
                 " a.name AS account_name, cat.name AS category_name"
@@ -229,7 +354,8 @@ def user_transactions(
         c.close()
 
 
-class DeleteTransactionsBody(BaseModel):
+@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+class DeleteTransactionsBody:
     ids: list[int]
 
 
@@ -237,8 +363,8 @@ class DeleteTransactionsBody(BaseModel):
 def delete_user_transactions(
     uid: int,
     body: DeleteTransactionsBody,
-    admin: Annotated[dict, Depends(admin_user)],
-):
+    admin: Annotated[AdminContext, Depends(admin_user)],
+) -> dict[str, int]:
     """
     Bulk-delete a selection of one user's transactions. All-or-nothing: every
     id must belong to the target user, otherwise nothing is deleted — a stale
@@ -274,13 +400,16 @@ def delete_user_transactions(
         c.close()
 
 
-class CreateUserBody(BaseModel):
+@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+class CreateUserBody:
     email: str
     password: str
 
 
 @router.post("/users")
-def create_user_admin(body: CreateUserBody, admin: Annotated[dict, Depends(admin_user)]):
+def create_user_admin(
+    body: CreateUserBody, admin: Annotated[AdminContext, Depends(admin_user)]
+) -> UserResponse:
     c = conn()
     try:
         return create_user(c, body.email, body.password)
@@ -289,8 +418,8 @@ def create_user_admin(body: CreateUserBody, admin: Annotated[dict, Depends(admin
 
 
 @router.delete("/users/{uid}")
-def delete_user(uid: int, admin: Annotated[dict, Depends(admin_user)]):
-    if uid == admin["id"]:
+def delete_user(uid: int, admin: Annotated[AdminContext, Depends(admin_user)]) -> dict[str, bool]:
+    if uid == admin.id:
         raise HTTPException(400, "cannot delete yourself")
     c = conn()
     try:
@@ -320,29 +449,29 @@ def delete_user(uid: int, admin: Annotated[dict, Depends(admin_user)]):
 
 
 @router.get("/activity")
-def activity(admin: Annotated[dict, Depends(admin_user)]):
+def activity(admin: Annotated[AdminContext, Depends(admin_user)]) -> ActivityResponse:
     c = conn()
     try:
         day_cutoff = _cutoff(ACTIVITY_WINDOW_DAYS)[:10]
-        return {
-            "features": [
-                {"feature": r["feature"], "count": r["n"]}
+        return ActivityResponse(
+            features=[
+                FeatureCount(feature=r["feature"], count=r["n"])
                 for r in c.execute(
                     "SELECT feature, SUM(count) AS n FROM feature_usage WHERE day >= ?"
                     " GROUP BY feature ORDER BY n DESC",
                     (day_cutoff,),
                 )
             ],
-            "daily": [
-                {"day": r["day"], "count": r["n"]}
+            daily=[
+                DayCount(day=r["day"], count=r["n"])
                 for r in c.execute(
                     "SELECT day, SUM(count) AS n FROM feature_usage WHERE day >= ?"
                     " GROUP BY day ORDER BY day",
                     (day_cutoff,),
                 )
             ],
-            "recentLogins": [
-                {"email": r["email"], "at": r["created_at"]}
+            recentLogins=[
+                LoginEvent(email=r["email"], at=r["created_at"])
                 for r in c.execute(
                     "SELECT u.email, e.created_at FROM activity_events e"
                     " JOIN users u ON u.id = e.user_id WHERE e.kind='login'"
@@ -350,6 +479,6 @@ def activity(admin: Annotated[dict, Depends(admin_user)]):
                     (RECENT_LOGINS_LIMIT,),
                 )
             ],
-        }
+        )
     finally:
         c.close()

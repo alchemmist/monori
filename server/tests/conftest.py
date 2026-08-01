@@ -4,8 +4,21 @@ import sys
 import tempfile
 
 import pytest
+from fastapi.testclient import TestClient
+from pydantic import TypeAdapter
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
+
+from app.deps import (
+    AccountResponse,
+    CategoryResponse,
+    IdResponse,
+    SnapshotResponse,
+    TransactionResponse,
+)
+from app.routers.auth_router import TokenResponse
+from app.routers.imports import ImportPreviewResponse, ImportRowResponse
+from app.routers.transfers import TransferIdResponse
 
 STATEMENT = (
     "05.01.2026 10:00:00\t05.01.2026\t*1\tOK\t-100,00\tRUB\t-100,00\tRUB\t\tSuper\t5411\tLenta\t0\t0\t-100,00\n"  # noqa: E501
@@ -13,7 +26,7 @@ STATEMENT = (
 )
 
 
-def _fresh_app_client(monkeypatch):
+def _fresh_app_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     tmp = tempfile.mkdtemp()
     db_path = os.path.join(tmp, "test.db")
     monkeypatch.setenv("MONORI_DB", db_path)
@@ -22,25 +35,29 @@ def _fresh_app_client(monkeypatch):
     monkeypatch.setattr(dbmod, "DB_PATH", db_path)
     dbmod.connect(db_path).close()
 
-    from fastapi.testclient import TestClient
-
     from app.main import app as fastapi_app
 
     return TestClient(fastapi_app)
 
 
-def login_as(client, email, password="hunter2pw"):
+def login_as(client: TestClient, email: str, password: str = "hunter2pw") -> dict[str, str]:
     """
     Register (if needed) and sign in; returns a bearer-token header dict.
     """
     client.post("/api/auth/register", json={"email": email, "password": password})
     r = client.post("/api/auth/token", data={"username": email, "password": password})
     assert r.status_code == 200, r.text
-    return {"Authorization": f"Bearer {r.json()['access_token']}"}
+    token = TypeAdapter(TokenResponse).validate_python(r.json())
+    return {"Authorization": f"Bearer {token.access_token}"}
+
+
+def _response_id(response: IdResponse) -> int:
+    assert response.id is not None
+    return response.id
 
 
 @pytest.fixture()
-def anon(monkeypatch):
+def anon(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     """
     A client with no credentials attached (the DB is fresh and empty).
     """
@@ -48,7 +65,7 @@ def anon(monkeypatch):
 
 
 @pytest.fixture()
-def client(monkeypatch):
+def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     """
     A client signed in as the default test user; every request carries the
     bearer token via default headers.
@@ -67,36 +84,86 @@ class Api:
 
     statement = STATEMENT
 
-    def __init__(self, client):
+    def __init__(self, client: TestClient) -> None:
         self.client = client
 
-    def group(self, name, kind="expense"):
+    def group(self, name: str, kind: str = "expense") -> int:
         r = self.client.post("/api/groups", json={"name": name, "kind": kind})
         assert r.status_code == 200, r.text
-        return r.json()["id"]
+        return _response_id(TypeAdapter(IdResponse).validate_python(r.json()))
 
-    def category(self, name, group_id, keywords=""):
+    def category(self, name: str, group_id: int, keywords: str = "") -> int:
         r = self.client.post(
             "/api/categories", json={"name": name, "groupId": group_id, "keywords": keywords}
         )
         assert r.status_code == 200, r.text
-        return r.json()["id"]
+        return _response_id(TypeAdapter(IdResponse).validate_python(r.json()))
 
-    def account(self, name, **kw):
-        r = self.client.post("/api/accounts", json={"name": name, **kw})
+    def account(
+        self,
+        name: str,
+        *,
+        type: str = "cash",
+        icon: str = "wallet",
+        color: str = "#5b6472",
+        currency: str = "RUB",
+        openingBalance: int = 0,
+        bankRef: str = "",
+        cardTails: list[str] | None = None,
+    ) -> int:
+        body = {
+            "name": name,
+            "type": type,
+            "icon": icon,
+            "color": color,
+            "currency": currency,
+            "openingBalance": openingBalance,
+            "bankRef": bankRef,
+            "cardTails": cardTails or [],
+        }
+        r = self.client.post("/api/accounts", json=body)
         assert r.status_code == 200, r.text
-        return r.json()["id"]
+        return _response_id(TypeAdapter(IdResponse).validate_python(r.json()))
 
-    def default_account(self):
-        return self.snapshot()["accounts"][0]["id"]
+    def default_account(self) -> int:
+        return self.snapshot().accounts[0].id
 
-    def tx(self, date, amount, **kw):
-        kw.setdefault("accountId", self.default_account())
-        r = self.client.post("/api/transactions", json={"date": date, "amount": amount, **kw})
+    def tx(
+        self,
+        date: str,
+        amount: int,
+        *,
+        accountId: int | None = None,
+        categoryId: int | None = None,
+        description: str = "",
+        bankCategory: str = "",
+        mcc: str = "",
+        comment: str = "",
+    ) -> int:
+        r = self.client.post(
+            "/api/transactions",
+            json={
+                "date": date,
+                "amount": amount,
+                "accountId": accountId or self.default_account(),
+                "categoryId": categoryId,
+                "description": description,
+                "bankCategory": bankCategory,
+                "mcc": mcc,
+                "comment": comment,
+            },
+        )
         assert r.status_code == 200, r.text
-        return r.json()["id"]
+        return _response_id(TypeAdapter(IdResponse).validate_python(r.json()))
 
-    def transfer(self, from_account, to_account, amount, date="2026-01-10T12:00:00", **kw):
+    def transfer(
+        self,
+        from_account: int,
+        to_account: int,
+        amount: int,
+        date: str = "2026-01-10T12:00:00",
+        comment: str = "",
+    ) -> str:
         r = self.client.post(
             "/api/transfers",
             json={
@@ -104,29 +171,34 @@ class Api:
                 "toAccountId": to_account,
                 "amount": amount,
                 "date": date,
-                **kw,
+                "comment": comment,
             },
         )
         assert r.status_code == 200, r.text
-        return r.json()["transferId"]
+        return TypeAdapter(TransferIdResponse).validate_python(r.json()).transferId
 
-    def snapshot(self):
-        return self.client.get("/api/snapshot").json()
+    def snapshot(self) -> SnapshotResponse:
+        return TypeAdapter(SnapshotResponse).validate_python(
+            self.client.get("/api/snapshot").json()
+        )
 
-    def cat(self, cat_id):
-        return next(c for c in self.snapshot()["categories"] if c["id"] == cat_id)
+    def cat(self, cat_id: int) -> CategoryResponse:
+        return next(category for category in self.snapshot().categories if category.id == cat_id)
 
-    def acct(self, account_id):
-        return next(a for a in self.snapshot()["accounts"] if a["id"] == account_id)
+    def acct(self, account_id: int) -> AccountResponse:
+        return next(account for account in self.snapshot().accounts if account.id == account_id)
 
-    def tx_by(self, tx_id):
-        return next(t for t in self.snapshot()["transactions"] if t["id"] == tx_id)
+    def tx_by(self, tx_id: int) -> TransactionResponse:
+        return next(
+            transaction for transaction in self.snapshot().transactions if transaction.id == tx_id
+        )
 
-    def preview(self, text, account_id=None):
+    def preview(self, text: str, account_id: int | None = None) -> list[ImportRowResponse]:
         body = {"text": text, "accountId": account_id or self.default_account()}
-        return self.client.post("/api/import/preview", json=body).json()["rows"]
+        response = self.client.post("/api/import/preview", json=body)
+        return TypeAdapter(ImportPreviewResponse).validate_python(response.json()).rows
 
 
 @pytest.fixture()
-def api(client):
+def api(client: TestClient) -> Api:
     return Api(client)

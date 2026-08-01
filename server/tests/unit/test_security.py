@@ -3,32 +3,34 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
 
+from pathlib import Path
+
 import jwt
 import pytest
 
 from app import security
 
 
-def test_hash_and_verify_password():
+def test_hash_and_verify_password() -> None:
     h = security.hash_password("correct horse")
     assert h != "correct horse"
     assert security.verify_password(h, "correct horse") is True
     assert security.verify_password(h, "wrong") is False
 
 
-def test_verify_rejects_garbage_hash():
+def test_verify_rejects_garbage_hash() -> None:
     assert security.verify_password("not-a-hash", "anything") is False
 
 
-def test_access_token_round_trip(tmp_path, monkeypatch):
+def test_access_token_round_trip(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("MONORI_AUTH_SECRET", "x" * 40)
     token = security.create_access_token(42)
     payload = security.decode_access_token(token)
-    assert payload["sub"] == "42"
-    assert "exp" in payload
+    assert payload.sub == "42"
+    assert payload.exp > 0
 
 
-def test_decode_rejects_wrong_secret(monkeypatch):
+def test_decode_rejects_wrong_secret(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("MONORI_AUTH_SECRET", "a" * 40)
     token = security.create_access_token(1)
     monkeypatch.setenv("MONORI_AUTH_SECRET", "b" * 40)
@@ -36,14 +38,14 @@ def test_decode_rejects_wrong_secret(monkeypatch):
         security.decode_access_token(token)
 
 
-def _use_tmp_db(tmp_path, monkeypatch):
+def _use_tmp_db(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("MONORI_AUTH_SECRET", raising=False)
     import app.db as dbmod
 
     monkeypatch.setattr(dbmod, "DB_PATH", str(tmp_path / "monori.db"))
 
 
-def test_auth_secret_persists_owner_only(tmp_path, monkeypatch):
+def test_auth_secret_persists_owner_only(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _use_tmp_db(tmp_path, monkeypatch)
     first = security.auth_secret()
     assert first
@@ -54,14 +56,16 @@ def test_auth_secret_persists_owner_only(tmp_path, monkeypatch):
     assert (secret_file.stat().st_mode & 0o077) == 0  # not group/world readable
 
 
-def test_auth_secret_is_cached_in_memory(tmp_path, monkeypatch):
+def test_auth_secret_is_cached_in_memory(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _use_tmp_db(tmp_path, monkeypatch)
     first = security.auth_secret()
     (tmp_path / ".auth_secret").unlink()
     assert security.auth_secret() == first
 
 
-def test_auth_secret_fixes_loose_permissions(tmp_path, monkeypatch):
+def test_auth_secret_fixes_loose_permissions(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     _use_tmp_db(tmp_path, monkeypatch)
     secret_file = tmp_path / ".auth_secret"
     secret_file.write_text("preexisting-secret")
@@ -70,7 +74,9 @@ def test_auth_secret_fixes_loose_permissions(tmp_path, monkeypatch):
     assert (secret_file.stat().st_mode & 0o077) == 0
 
 
-def test_auth_secret_regenerates_empty_file(tmp_path, monkeypatch):
+def test_auth_secret_regenerates_empty_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     _use_tmp_db(tmp_path, monkeypatch)
     secret_file = tmp_path / ".auth_secret"
     secret_file.write_text("")
@@ -79,14 +85,18 @@ def test_auth_secret_regenerates_empty_file(tmp_path, monkeypatch):
     assert secret_file.read_text().strip() == value
 
 
-def test_auth_secret_generates_64_hex_chars(tmp_path, monkeypatch):
+def test_auth_secret_generates_64_hex_chars(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     _use_tmp_db(tmp_path, monkeypatch)
     value = security.auth_secret()
     assert len(value) == 64
     int(value, 16)
 
 
-def test_auth_secret_creates_missing_parent_dirs(tmp_path, monkeypatch):
+def test_auth_secret_creates_missing_parent_dirs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.delenv("MONORI_AUTH_SECRET", raising=False)
     import app.db as dbmod
 
@@ -95,30 +105,34 @@ def test_auth_secret_creates_missing_parent_dirs(tmp_path, monkeypatch):
     assert (tmp_path / "a" / "b" / ".auth_secret").read_text().strip() == value
 
 
-def test_auth_secret_leaves_tight_permissions_untouched(tmp_path, monkeypatch):
+def test_auth_secret_leaves_tight_permissions_untouched(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     _use_tmp_db(tmp_path, monkeypatch)
     secret_file = tmp_path / ".auth_secret"
     secret_file.write_text("already-tight")
     secret_file.chmod(0o600)
-    calls = []
+    calls: list[int] = []
     original = pathlib.Path.chmod
 
-    def spy(self, mode, **kwargs):
+    def spy(self: pathlib.Path, mode: int, follow_symlinks: bool = True) -> None:
         calls.append(mode)
-        return original(self, mode, **kwargs)
+        return original(self, mode, follow_symlinks=follow_symlinks)
 
     monkeypatch.setattr(pathlib.Path, "chmod", spy)
     assert security.auth_secret() == "already-tight"
     assert calls == []
 
 
-def test_auth_secret_lost_create_race_reads_winner(tmp_path, monkeypatch):
+def test_auth_secret_lost_create_race_reads_winner(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     _use_tmp_db(tmp_path, monkeypatch)
     secret_file = tmp_path / ".auth_secret"
 
-    def lose_race(*args, **kwargs):
+    def lose_race(path: Path, flags: int, mode: int) -> None:
         secret_file.write_text("winner-secret")
         raise FileExistsError
 
-    monkeypatch.setattr(security.os, "open", lose_race)
+    monkeypatch.setattr("app.security.os.open", lose_race)
     assert security.auth_secret() == "winner-secret"

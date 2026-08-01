@@ -8,7 +8,7 @@ branch_labels = None
 depends_on = None
 
 
-def upgrade():
+def upgrade() -> None:
     op.execute("""CREATE TABLE category_group_types (
       id INTEGER PRIMARY KEY,
       type TEXT NOT NULL UNIQUE,
@@ -46,5 +46,5 @@ def upgrade():
     op.execute("ALTER TABLE categories ADD COLUMN goal_target_date TEXT")
 
 
-def downgrade():
+def downgrade() -> None:
     raise NotImplementedError("forward-only migrations")

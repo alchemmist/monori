@@ -4,6 +4,7 @@ transfer_id; pre-existing rows are backfilled onto a default 'T-Bank' account.
 """
 
 from alembic import op
+from sqlalchemy.engine import Connection
 
 revision = "0002"
 down_revision = "0001"
@@ -11,11 +12,11 @@ branch_labels = None
 depends_on = None
 
 
-def _has_column(conn, table, column):
+def _has_column(conn: Connection, table: str, column: str) -> bool:
     return any(r[1] == column for r in conn.exec_driver_sql(f"PRAGMA table_info({table})"))
 
 
-def upgrade():
+def upgrade() -> None:
     conn = op.get_bind()
     conn.exec_driver_sql("""CREATE TABLE IF NOT EXISTS accounts (
       id INTEGER PRIMARY KEY,
@@ -31,7 +32,9 @@ def upgrade():
         conn.exec_driver_sql(
             "INSERT INTO accounts (name, type, currency, sort) VALUES ('T-Bank', 'card', 'RUB', 1)"
         )
-    default_id = conn.exec_driver_sql("SELECT MIN(id) FROM accounts").fetchone()[0]
+    row = conn.exec_driver_sql("SELECT MIN(id) FROM accounts").fetchone()
+    assert row is not None
+    default_id = row[0]
     if not _has_column(conn, "transactions", "account_id"):
         conn.exec_driver_sql("""CREATE TABLE transactions_new (
           id INTEGER PRIMARY KEY,
@@ -65,5 +68,5 @@ def upgrade():
     conn.exec_driver_sql("CREATE INDEX IF NOT EXISTS idx_tx_account ON transactions(account_id)")
 
 
-def downgrade():
+def downgrade() -> None:
     raise NotImplementedError("monori migrations are forward-only")

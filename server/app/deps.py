@@ -1,85 +1,218 @@
+import sqlite3
+from collections.abc import Iterable
 from itertools import batched
 
+from pydantic import ConfigDict
+from pydantic.dataclasses import dataclass as pydantic_dataclass
+
 from . import db as dbmod
-from .transfer_service import list_transfers
+from .db_records import (
+    AccountRecord,
+    BudgetRecord,
+    CategoryRecord,
+    ConnectionRecord,
+    GroupRecord,
+    SplitRecord,
+    TransactionRecord,
+    UserRecord,
+)
+from .transfer_service import TransferResponse, list_transfers
 
 SPLIT_FETCH_BATCH_SIZE = 500
 
 
-def conn():
+_DTO_CONFIG = ConfigDict(extra="forbid")
+
+
+@pydantic_dataclass(config=_DTO_CONFIG)
+class AccountResponse:
+    id: int
+    name: str
+    type: str
+    icon: str
+    color: str
+    iconImage: str | None
+    currency: str
+    sort: int
+    archived: bool
+    openingBalance: int
+    openingDate: str | None
+    connectionId: int | None
+    bankRef: str
+    cardTails: list[str]
+
+
+@pydantic_dataclass(config=_DTO_CONFIG)
+class GroupResponse:
+    id: int
+    name: str
+    sort: int
+    kind: str
+
+
+@pydantic_dataclass(config=_DTO_CONFIG)
+class CategoryResponse:
+    id: int
+    groupId: int
+    name: str
+    keywords: str
+    sort: int
+    archived: bool
+    goalTarget: int | None
+    goalStatus: str | None
+    goalTargetDate: str | None
+
+
+@pydantic_dataclass(config=_DTO_CONFIG)
+class SplitResponse:
+    id: int
+    categoryId: int
+    amount: int
+    comment: str
+
+
+@pydantic_dataclass(config=_DTO_CONFIG)
+class TransactionResponse:
+    id: int
+    date: str
+    amount: int
+    description: str
+    bankCategory: str
+    mcc: str
+    categoryId: int | None
+    accountId: int
+    transferId: str | None
+    comment: str
+    source: str
+    hidden: bool
+    splits: list[SplitResponse]
+
+
+@pydantic_dataclass(config=_DTO_CONFIG)
+class UserResponse:
+    id: int
+    email: str
+    createdAt: str
+    isAdmin: bool
+    lastLogin: str | None
+    defaultAccountId: int | None
+
+
+@pydantic_dataclass(config=_DTO_CONFIG)
+class ConnectionResponse:
+    id: int
+    bank: str
+    kind: str
+    status: str
+    lastSync: str | None
+    lastError: str | None
+    hasCredentials: bool
+    createdAt: str
+    updatedAt: str
+
+
+@pydantic_dataclass(config=_DTO_CONFIG)
+class BudgetResponse:
+    categoryId: int
+    year: int
+    month: int
+    amount: int
+
+
+@pydantic_dataclass(config=_DTO_CONFIG)
+class IdResponse:
+    id: int | None
+
+
+@pydantic_dataclass(config=_DTO_CONFIG)
+class SnapshotResponse:
+    accounts: list[AccountResponse]
+    groups: list[GroupResponse]
+    categories: list[CategoryResponse]
+    transactions: list[TransactionResponse]
+    transactionsTotal: int
+    transfers: list["TransferResponse"]
+    budgets: list[BudgetResponse]
+    connections: list[ConnectionResponse]
+
+
+def conn() -> sqlite3.Connection:
     return dbmod.connect()
 
 
-def serialize_group(r):
-    return {"id": r["id"], "name": r["name"], "sort": r["sort"], "kind": r["kind"]}
+def serialize_group(group: GroupRecord) -> GroupResponse:
+    return GroupResponse(id=group.id, name=group.name, sort=group.sort, kind=group.kind)
 
 
-def serialize_category(r):
-    keys = r.keys()
-    return {
-        "id": r["id"],
-        "groupId": r["group_id"],
-        "name": r["name"],
-        "keywords": r["keywords"],
-        "sort": r["sort"],
-        "archived": bool(r["archived"]),
-        "goalTarget": r["goal_target"] if "goal_target" in keys else None,
-        "goalStatus": r["goal_status"] if "goal_status" in keys else None,
-        "goalTargetDate": r["goal_target_date"] if "goal_target_date" in keys else None,
-    }
+def serialize_category(category: CategoryRecord) -> CategoryResponse:
+    return CategoryResponse(
+        id=category.id,
+        groupId=category.group_id,
+        name=category.name,
+        keywords=category.keywords,
+        sort=category.sort,
+        archived=category.archived,
+        goalTarget=category.goal_target,
+        goalStatus=category.goal_status,
+        goalTargetDate=category.goal_target_date,
+    )
 
 
-def serialize_account(r):
-    return {
-        "id": r["id"],
-        "name": r["name"],
-        "type": r["type"],
-        "icon": r["icon"],
-        "color": r["color"],
-        "iconImage": r["icon_image"],
-        "currency": r["currency"],
-        "sort": r["sort"],
-        "archived": bool(r["archived"]),
-        "openingBalance": r["opening_balance"],
-        "openingDate": r["opening_date"],
-        "connectionId": r["connection_id"],
-        "bankRef": r["bank_ref"],
-        "cardTails": [t for t in r["card_tails"].split(",") if t],
-    }
+def serialize_account(account: AccountRecord) -> AccountResponse:
+    return AccountResponse(
+        id=account.id,
+        name=account.name,
+        type=account.type,
+        icon=account.icon,
+        color=account.color,
+        iconImage=account.icon_image,
+        currency=account.currency,
+        sort=account.sort,
+        archived=account.archived,
+        openingBalance=account.opening_balance,
+        openingDate=account.opening_date,
+        connectionId=account.connection_id,
+        bankRef=account.bank_ref,
+        cardTails=[tail for tail in account.card_tails.split(",") if tail],
+    )
 
 
-def serialize_tx(r, splits=()):
-    return {
-        "id": r["id"],
-        "date": r["date"],
-        "amount": r["amount"],
-        "description": r["description"],
-        "bankCategory": r["bank_category"],
-        "mcc": r["mcc"],
-        "categoryId": r["category_id"],
-        "accountId": r["account_id"],
-        "transferId": r["transfer_id"],
-        "comment": r["comment"],
-        "source": r["source"],
-        "hidden": bool(r["hidden"]),
-        "splits": [
-            {
-                "id": split["id"],
-                "categoryId": split["category_id"],
-                "amount": split["amount"],
-                "comment": split["comment"],
-            }
+def serialize_tx(
+    transaction: TransactionRecord, splits: Iterable[SplitRecord] = ()
+) -> TransactionResponse:
+    return TransactionResponse(
+        id=transaction.id,
+        date=transaction.date,
+        amount=transaction.amount,
+        description=transaction.description,
+        bankCategory=transaction.bank_category,
+        mcc=transaction.mcc,
+        categoryId=transaction.category_id,
+        accountId=transaction.account_id,
+        transferId=transaction.transfer_id,
+        comment=transaction.comment,
+        source=transaction.source,
+        hidden=transaction.hidden,
+        splits=[
+            SplitResponse(
+                id=split.id,
+                categoryId=split.category_id,
+                amount=split.amount,
+                comment=split.comment,
+            )
             for split in splits
         ],
-    }
+    )
 
 
-def serialize_transactions(cur, rows):
-    rows = list(rows)
-    if not rows:
+def serialize_transactions(
+    cur: sqlite3.Cursor, rows: Iterable[sqlite3.Row]
+) -> list[TransactionResponse]:
+    transactions = [TransactionRecord.from_row(row) for row in rows]
+    if not transactions:
         return []
-    ids = [row["id"] for row in rows]
-    by_tx: dict[int, list] = {}
+    ids = [transaction.id for transaction in transactions]
+    by_tx: dict[int, list[SplitRecord]] = {}
     for chunk in batched(ids, SPLIT_FETCH_BATCH_SIZE):
         marks = ",".join("?" for _ in chunk)
         for split in cur.execute(
@@ -89,48 +222,49 @@ def serialize_transactions(cur, rows):
             " ORDER BY transaction_id, sort, id",
             chunk,
         ):
-            by_tx.setdefault(split["transaction_id"], []).append(split)
-    return [serialize_tx(row, by_tx.get(row["id"], ())) for row in rows]
+            record = SplitRecord.from_row(split)
+            by_tx.setdefault(record.transaction_id, []).append(record)
+    return [serialize_tx(tx, by_tx.get(tx.id, ())) for tx in transactions]
 
 
-def serialize_user(r):
+def serialize_user(user: UserRecord) -> UserResponse:
     """
     A user, without the password hash.
     """
-    return {
-        "id": r["id"],
-        "email": r["email"],
-        "createdAt": r["created_at"],
-        "isAdmin": bool(r["is_admin"]),
-        "lastLogin": r["last_login"],
-        "defaultAccountId": r["default_account_id"],
-    }
+    return UserResponse(
+        id=user.id,
+        email=user.email,
+        createdAt=user.created_at,
+        isAdmin=user.is_admin,
+        lastLogin=user.last_login,
+        defaultAccountId=user.default_account_id,
+    )
 
 
-def serialize_connection(r):
+def serialize_connection(connection: ConnectionRecord) -> ConnectionResponse:
     """
     A bank connection, without any secret material (credentials/session).
     """
-    return {
-        "id": r["id"],
-        "bank": r["bank"],
-        "kind": r["kind"],
-        "status": r["status"],
-        "lastSync": r["last_sync"],
-        "lastError": r["last_error"],
-        "hasCredentials": r["credentials_encrypted"] is not None,
-        "createdAt": r["created_at"],
-        "updatedAt": r["updated_at"],
-    }
+    return ConnectionResponse(
+        id=connection.id,
+        bank=connection.bank,
+        kind=connection.kind,
+        status=connection.status,
+        lastSync=connection.last_sync,
+        lastError=connection.last_error,
+        hasCredentials=connection.has_credentials,
+        createdAt=connection.created_at,
+        updatedAt=connection.updated_at,
+    )
 
 
-def serialize_budget(r):
-    return {
-        "categoryId": r["category_id"],
-        "year": r["year"],
-        "month": r["month"],
-        "amount": r["amount"],
-    }
+def serialize_budget(budget: BudgetRecord) -> BudgetResponse:
+    return BudgetResponse(
+        categoryId=budget.category_id,
+        year=budget.year,
+        month=budget.month,
+        amount=budget.amount,
+    )
 
 
 LIGHT_SNAPSHOT_TX_LIMIT = 500
@@ -143,7 +277,9 @@ TX_COLUMNS = (
 )
 
 
-def _snapshot_transactions(cur, uid, tx_limit):
+def _snapshot_transactions(
+    cur: sqlite3.Cursor, uid: tuple[int], tx_limit: int | None
+) -> list[TransactionResponse]:
     """
     The newest ``tx_limit`` transactions, handed back in the canonical
     ``date, id`` order the client keeps them in. ``None`` means all of them.
@@ -154,7 +290,7 @@ def _snapshot_transactions(cur, uid, tx_limit):
     return serialize_transactions(cur, reversed(list(rows)))
 
 
-def snapshot(c, user_id, tx_limit=None):
+def snapshot(c: sqlite3.Connection, user_id: int, tx_limit: int | None = None) -> SnapshotResponse:
     cur = c.cursor()
     uid = (user_id,)
     transactions = _snapshot_transactions(cur, uid, tx_limit)
@@ -168,9 +304,9 @@ def snapshot(c, user_id, tx_limit=None):
             uid,
         ).fetchone()[0]
     )
-    return {
-        "accounts": [
-            serialize_account(r)
+    return SnapshotResponse(
+        accounts=[
+            serialize_account(AccountRecord.from_row(r))
             for r in cur.execute(
                 "SELECT id, name, type, icon, color, icon_image, currency, sort, archived,"
                 " opening_balance, opening_date, connection_id, bank_ref, card_tails"
@@ -178,8 +314,8 @@ def snapshot(c, user_id, tx_limit=None):
                 uid,
             )
         ],
-        "groups": [
-            serialize_group(r)
+        groups=[
+            serialize_group(GroupRecord.from_row(r))
             for r in cur.execute(
                 "SELECT g.id, g.name, g.sort, t.type AS kind FROM category_groups g"
                 " JOIN category_group_types t ON t.id=g.type_id WHERE g.user_id=?"
@@ -187,8 +323,8 @@ def snapshot(c, user_id, tx_limit=None):
                 uid,
             )
         ],
-        "categories": [
-            serialize_category(r)
+        categories=[
+            serialize_category(CategoryRecord.from_row(r))
             for r in cur.execute(
                 "SELECT c.id, c.group_id, c.name, c.keywords, c.sort, c.archived,"
                 " c.goal_target, c.goal_status, c.goal_target_date"
@@ -197,11 +333,11 @@ def snapshot(c, user_id, tx_limit=None):
                 uid,
             )
         ],
-        "transactions": transactions,
-        "transactionsTotal": transactions_total,
-        "transfers": list_transfers(cur, user_id),
-        "budgets": [
-            serialize_budget(r)
+        transactions=transactions,
+        transactionsTotal=transactions_total,
+        transfers=list_transfers(c, user_id),
+        budgets=[
+            serialize_budget(BudgetRecord.from_row(r))
             for r in cur.execute(
                 "SELECT b.category_id, b.year, b.month, b.amount FROM budgets b"
                 " JOIN categories c ON c.id = b.category_id"
@@ -210,8 +346,8 @@ def snapshot(c, user_id, tx_limit=None):
                 uid,
             )
         ],
-        "connections": [
-            serialize_connection(r)
+        connections=[
+            serialize_connection(ConnectionRecord.from_row(r))
             for r in cur.execute(
                 "SELECT bc.id, bc.bank, bc.kind, bc.status, bc.last_sync,"
                 " bc.last_error, bc.credentials_encrypted, bc.created_at, bc.updated_at"
@@ -219,4 +355,4 @@ def snapshot(c, user_id, tx_limit=None):
                 uid,
             )
         ],
-    }
+    )

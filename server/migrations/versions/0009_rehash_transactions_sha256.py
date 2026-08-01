@@ -19,11 +19,11 @@ depends_on = None
 BATCH = 1000
 
 
-def _hash(date_iso, amount_kop, description):
+def _hash(date_iso: str, amount_kop: int, description: str) -> str:
     return hashlib.sha256(f"{date_iso}|{amount_kop}|{description}".encode()).hexdigest()
 
 
-def upgrade():
+def upgrade() -> None:
     conn = op.get_bind()
     last_id = 0
     while True:
@@ -42,5 +42,5 @@ def upgrade():
         last_id = rows[-1][0]
 
 
-def downgrade():
+def downgrade() -> None:
     raise NotImplementedError("SHA-1 fingerprints are not restorable")

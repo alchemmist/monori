@@ -10,9 +10,7 @@ dependencies = [
     "pyjwt>=2.9",
     "argon2-cffi>=23",
     "python-multipart>=0.0.9",
-    "alembic>=1.18.5",
-    "httpx[socks]>=0.27",
-    "openpyxl>=3.1",
+    "alembic>=1.18.5", "httpx[socks]>=0.27", "openpyxl>=3.1",
 ]
 
 [project.optional-dependencies]
@@ -31,6 +29,11 @@ dev = [
     "httpx2>=2.5.0",
     "mutmut>=3.6.0",
     "pip-audit>=2.10.1",
+    "types-openpyxl>=3.1.5.20260724",
+    "google-api-python-client>=2.0",
+    "google-api-python-client-stubs>=1.39.0",
+    "google-auth>=2.0",
+    "google-auth-stubs>=0.2",
 ]
 
 [tool.pytest.ini_options]
@@ -48,22 +51,39 @@ fail_under = 80
 [tool.ruff]
 target-version = "py312"
 line-length = 100
+src = ["server"]
+exclude = ["web/prototypes"]
+force-exclude = true
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B", "SIM", "C4", "D209", "D213"]
+select = ["E", "F", "I", "UP", "B", "SIM", "C4", "D209", "D213", "ANN", "PYI"]
 
 [tool.mypy]
 python_version = "3.12"
 files = ["app"]
+exclude = ['(^|/)mutants/']
+strict = true
+warn_unreachable = true
+extra_checks = true
 explicit_package_bases = true
 check_untyped_defs = true
 warn_redundant_casts = true
 warn_unused_ignores = true
 no_implicit_optional = true
-
-[[tool.mypy.overrides]]
-module = ["playwright.*", "openpyxl.*"]
-ignore_missing_imports = true
+disallow_any_explicit = true
+disallow_any_unimported = true
+disallow_any_decorated = true
+warn_return_any = true
+enable_error_code = [
+    "explicit-override",
+    "mutable-override",
+    "truthy-bool",
+    "truthy-iterable",
+    "possibly-undefined",
+    "redundant-expr",
+    "unused-awaitable",
+    "ignore-without-code",
+]
 
 [tool.bandit]
 exclude_dirs = ["tests"]
