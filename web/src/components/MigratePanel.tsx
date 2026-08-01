@@ -31,7 +31,7 @@ export default function MigratePanel({ onClose }: { onClose: () => void }) {
             .map((a) => ({ value: String(a.id), label: a.name }));
 
     const pick = async (picked?: File) => {
-        if (!picked) return;
+        if (picked == null) return;
         setBusy(true);
         setPreview(null);
         setResult(null);
@@ -45,11 +45,11 @@ export default function MigratePanel({ onClose }: { onClose: () => void }) {
             const target = live.find((a) => a.id === preset);
             setMapping(
                 Object.fromEntries(
-                    (p.accountSlots ?? [])
+                    p.accountSlots
                         .filter(
                             (s) =>
-                                !s.marker &&
-                                target &&
+                                (s.marker == null || s.marker === "") &&
+                                target != null &&
                                 (target.currency || "RUB").toUpperCase() === s.currency,
                         )
                         .map((s) => [s.key, String(preset)]),
@@ -63,10 +63,10 @@ export default function MigratePanel({ onClose }: { onClose: () => void }) {
     };
 
     const slots = preview?.accountSlots ?? [];
-    const allMapped = slots.every((s) => mapping[s.key]);
+    const allMapped = slots.every((s) => mapping[s.key] != null && mapping[s.key] !== "");
 
     const commit = async () => {
-        if (!file) return;
+        if (file == null) return;
         setBusy(true);
         try {
             const numeric = Object.fromEntries(slots.map((s) => [s.key, Number(mapping[s.key])]));
@@ -140,7 +140,8 @@ export default function MigratePanel({ onClose }: { onClose: () => void }) {
                     )}
                     {slots.map((s) => {
                         const data = optionsIn(s.currency);
-                        const who = s.marker || "unmarked rows";
+                        const who =
+                            s.marker == null || s.marker === "" ? "unmarked rows" : s.marker;
                         return (
                             <div key={s.key}>
                                 <FSelect

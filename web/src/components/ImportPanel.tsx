@@ -17,8 +17,8 @@ import type { ImportRow } from "../types.js";
 export default function ImportPanel({ onClose }: { onClose: () => void }) {
     const { snapshot, commitImport, notify } = useStore();
     if (!snapshot) throw new Error("Import requires a loaded snapshot");
-    const accounts = (snapshot.accounts ?? []).filter((a) => !a.archived);
-    const categories = (snapshot.categories ?? []).filter((c) => !c.archived);
+    const accounts = snapshot.accounts.filter((a) => !a.archived);
+    const categories = snapshot.categories.filter((c) => !c.archived);
     const fileRef = useRef<HTMLInputElement>(null);
     const [fileName, setFileName] = useState("");
     const [rows, setRows] = useState<ImportRow[] | null>(null);
@@ -32,13 +32,13 @@ export default function ImportPanel({ onClose }: { onClose: () => void }) {
         { value: "", label: "Uncategorized" },
         ...categories
             .filter((c) => {
-                const group = snapshot.groups?.find((g) => g.id === c.groupId);
+                const group = snapshot.groups.find((g) => g.id === c.groupId);
                 return amount === 0 || group?.kind === (amount < 0 ? "expense" : "income");
             })
             .map((c) => ({ value: String(c.id), label: c.name })),
     ];
     const unassigned = rows?.filter((r) => r.accountId == null).length ?? 0;
-    const fresh = rows?.filter((r) => !r.duplicate).length ?? 0;
+    const fresh = rows?.filter((r) => r.duplicate !== true).length ?? 0;
     const allAssigned = Boolean(rows?.length) && unassigned === 0;
 
     const preview = async (source: string) => {
@@ -55,7 +55,7 @@ export default function ImportPanel({ onClose }: { onClose: () => void }) {
     };
 
     const pickFile = async (file?: File) => {
-        if (!file) return;
+        if (file == null) return;
         try {
             const decoded = await readStatementFile(file);
             setFileName(file.name);
@@ -102,7 +102,9 @@ export default function ImportPanel({ onClose }: { onClose: () => void }) {
     const changeAccount = (index: number, value: string | null) => {
         if (!rows) return;
         const nextRows = rows.map((row, i) =>
-            i === index ? { ...row, accountId: value ? Number(value) : null } : row,
+            i === index
+                ? { ...row, accountId: value == null || value === "" ? null : Number(value) }
+                : row,
         );
         setRows(nextRows);
         void refreshDuplicates(nextRows);
@@ -112,7 +114,7 @@ export default function ImportPanel({ onClose }: { onClose: () => void }) {
         if (!allAssigned || checkingDuplicates || !rows) return;
         setBusy(true);
         try {
-            const { inserted } = await commitImport(rows.filter((row) => !row.duplicate));
+            const { inserted } = await commitImport(rows.filter((row) => row.duplicate !== true));
             notify({ title: `Imported ${inserted} transactions`, theme: "success" });
             onClose();
         } catch (e) {
@@ -231,7 +233,10 @@ export default function ImportPanel({ onClose }: { onClose: () => void }) {
                             </thead>
                             <tbody>
                                 {rows.map((row, index) => (
-                                    <tr key={index} style={{ opacity: row.duplicate ? 0.48 : 1 }}>
+                                    <tr
+                                        key={index}
+                                        style={{ opacity: row.duplicate === true ? 0.48 : 1 }}
+                                    >
                                         <td
                                             className="num import-date"
                                             style={{ textAlign: "left" }}
@@ -264,7 +269,7 @@ export default function ImportPanel({ onClose }: { onClose: () => void }) {
                                             className="num import-card"
                                             style={{ textAlign: "left" }}
                                         >
-                                            {row.card || "—"}
+                                            {row.card == null || row.card === "" ? "—" : row.card}
                                         </td>
                                         <td style={{ textAlign: "left" }}>
                                             <InlineSelect

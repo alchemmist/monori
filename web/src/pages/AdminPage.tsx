@@ -18,8 +18,9 @@ import type {
     Id,
 } from "../types.js";
 
-const fmtDt = (s: string | null | undefined) => (s ? s.slice(0, 16).replace("T", " ") : "—");
-const fmtDate = (s: string | null | undefined) => (s ? s.slice(0, 10) : "—");
+const fmtDt = (s: string | null | undefined) =>
+    s == null || s === "" ? "—" : s.slice(0, 16).replace("T", " ");
+const fmtDate = (s: string | null | undefined) => (s == null || s === "" ? "—" : s.slice(0, 10));
 
 const fmtBytes = (n: number | null | undefined) => {
     if (n == null) return "—";
@@ -57,10 +58,10 @@ export default function AdminPage() {
     const openTab = useStore((s) => s.openTab);
     const adminTick = useStore((s) => s.adminTick);
     useEffect(() => {
-        if (!adminTick) return;
+        if (adminTick === 0) return;
         reload();
         setDetail((d) => {
-            if (d) {
+            if (d != null) {
                 api.adminUserDetail(d.user.id)
                     .then(setDetail)
                     .catch(() => setDetail(null));
@@ -81,8 +82,9 @@ export default function AdminPage() {
             );
     };
 
-    if (error) return <div className="admin-error">Failed to load admin data: {error}</div>;
-    if (!overview || !users || !activity) return null;
+    if (error != null && error !== "")
+        return <div className="admin-error">Failed to load admin data: {error}</div>;
+    if (overview == null || users == null || activity == null) return null;
 
     return (
         <div className="fade-in">
@@ -257,16 +259,19 @@ function Kpi({
     return (
         <div className="card kpi">
             <div className="kpi__label">{label}</div>
-            <div className="kpi__value" style={color ? { color } : undefined}>
+            <div
+                className="kpi__value"
+                style={color == null || color === "" ? undefined : { color }}
+            >
                 {value}
             </div>
-            {sub && <div className="kpi__sub">{sub}</div>}
+            {sub !== "" && <div className="kpi__sub">{sub}</div>}
         </div>
     );
 }
 
 function SyncBadge({ connection }: { connection?: AdminConnectionSummary | null }) {
-    if (!connection) return <span className="admin-muted">—</span>;
+    if (connection == null) return <span className="admin-muted">—</span>;
     const tone =
         connection.status === "connected"
             ? "var(--m-income)"
@@ -277,7 +282,7 @@ function SyncBadge({ connection }: { connection?: AdminConnectionSummary | null 
         <span className="admin-sync" title={connection.lastError ?? undefined}>
             <span className="admin-sync__dot" style={{ background: tone }} />
             {connection.status}
-            {connection.lastSync && (
+            {connection.lastSync != null && connection.lastSync !== "" && (
                 <span className="admin-muted"> · {fmtDate(connection.lastSync)}</span>
             )}
         </span>
@@ -325,7 +330,7 @@ function UserRow({
         >
             <td>
                 {user.email}
-                {user.isAdmin && <span className="admin-badge">admin</span>}
+                {user.isAdmin === true && <span className="admin-badge">admin</span>}
             </td>
             <td className="num">{fmtDate(user.createdAt)}</td>
             <td className="num">{fmtDt(user.lastLogin)}</td>
@@ -339,7 +344,7 @@ function UserRow({
                 />
             </td>
             <td className="admin-actions">
-                {!user.isAdmin && (
+                {user.isAdmin !== true && (
                     <Button
                         size="xs"
                         variant="subtle"
@@ -459,7 +464,13 @@ function UserDetail({ detail }: { detail: AdminUserDetail }) {
                         {detail.recentTransactions.slice(0, TX_PREVIEW).map((t) => (
                             <tr key={t.id}>
                                 <td className="num">{fmtDate(t.date)}</td>
-                                <td>{t.description || t.category || "—"}</td>
+                                <td>
+                                    {t.description !== ""
+                                        ? t.description
+                                        : t.category !== ""
+                                          ? t.category
+                                          : "—"}
+                                </td>
                                 <td className="admin-muted">{t.account}</td>
                                 <td
                                     className="num"

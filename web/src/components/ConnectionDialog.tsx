@@ -51,15 +51,15 @@ export default function ConnectionDialog({
     // the `account` prop is captured when the dialog opens; read the live row
     // from the store so a saved bankRef resets the dirty check without a reopen
     const liveAccount =
-        useStore((s) => s.snapshot?.accounts?.find((a) => a.id === account.id)) ?? account;
+        useStore((s) => s.snapshot?.accounts.find((a) => a.id === account.id)) ?? account;
     const [connectors, setConnectors] = useState<AvailableConnector[]>([]);
     const [bankKey, setBankKey] = useState<string | null>(null);
     const [loginChoice, setLoginChoice] = useState(NEW_LOGIN);
     const [credentials, setCredentials] = useState<Record<string, string>>({});
     const [accountFields, setAccountFields] = useState<Record<string, string>>({
-        account: account.bankRef || "",
+        account: account.bankRef == null || account.bankRef === "" ? "" : account.bankRef,
     });
-    const [step, setStep] = useState<DialogStep>(connection ? "ready" : "credentials");
+    const [step, setStep] = useState<DialogStep>(connection == null ? "credentials" : "ready");
     const [code, setCode] = useState("");
     const [busy, setBusy] = useState(false);
     const [result, setResult] = useState<SyncResult | null>(null);
@@ -78,18 +78,21 @@ export default function ConnectionDialog({
     }, [notify]);
 
     const connector = connectors.find((c) => `${c.bank}/${c.kind}` === bankKey) ?? null;
-    const existingLogins = connector
-        ? connections.filter((c) => c.bank === connector.bank && c.kind === connector.kind)
-        : [];
+    const existingLogins =
+        connector != null
+            ? connections.filter((c) => c.bank === connector.bank && c.kind === connector.kind)
+            : [];
     const needsCredentials = loginChoice === NEW_LOGIN;
     const credentialsComplete =
-        connector &&
+        connector != null &&
         connector.connectionParams.every(
-            (p) => !p.required || String(credentials[p.name] ?? "").trim(),
+            (p) => !p.required || String(credentials[p.name] ?? "").trim() !== "",
         );
     const accountComplete = (c: AvailableConnector | null) =>
-        !c ||
-        c.accountParams.every((p) => !p.required || String(accountFields[p.name] ?? "").trim());
+        c == null ||
+        c.accountParams.every(
+            (p) => !p.required || String(accountFields[p.name] ?? "").trim() !== "",
+        );
 
     const runSync = async (id: Id) => {
         setBusy(true);
@@ -143,7 +146,7 @@ export default function ConnectionDialog({
     };
 
     const confirmSms = async () => {
-        if (!code.trim() || connId.current == null) return;
+        if (code.trim() === "" || connId.current == null) return;
         setBusy(true);
         setError("");
         setStep("syncing");
@@ -151,7 +154,11 @@ export default function ConnectionDialog({
             const res = await submitConnectionSms(connId.current, code.trim());
             if (res.status === "awaiting_sms") {
                 setCode("");
-                setError(res.message || "The bank rejected the code — try again.");
+                setError(
+                    res.message == null || res.message === ""
+                        ? "The bank rejected the code — try again."
+                        : res.message,
+                );
                 setStep("sms");
             } else {
                 setResult(res);
@@ -167,10 +174,14 @@ export default function ConnectionDialog({
 
     // the connector of an existing connection (the credentials-step `connector`
     // is keyed on the bank picker, which is untouched in the ready step)
-    const readyConnector = connection
-        ? (connectors.find((c) => c.bank === connection.bank && c.kind === connection.kind) ?? null)
-        : null;
-    const refDirty = String(accountFields["account"] ?? "").trim() !== (liveAccount.bankRef || "");
+    const readyConnector =
+        connection != null
+            ? (connectors.find((c) => c.bank === connection.bank && c.kind === connection.kind) ??
+              null)
+            : null;
+    const refDirty =
+        String(accountFields["account"] ?? "").trim() !==
+        (liveAccount.bankRef == null ? "" : liveAccount.bankRef);
 
     const saveRef = async () => {
         setBusy(true);
@@ -200,7 +211,7 @@ export default function ConnectionDialog({
     };
 
     const disconnect = async () => {
-        if (!connection) return;
+        if (connection == null) return;
         setBusy(true);
         try {
             await deleteConnection(connection.id);
@@ -215,7 +226,7 @@ export default function ConnectionDialog({
     // closing mid-OTP abandons the parked login on the server so its browser
     // session doesn't leak
     const handleClose = () => {
-        if (step === "sms" && connId.current) {
+        if (step === "sms" && connId.current != null) {
             cancelConnectionSync(connId.current).catch(() => {});
         }
         onClose();
@@ -226,7 +237,7 @@ export default function ConnectionDialog({
     // nothing instead of crashing on connection.status, and actively close so
     // the parent's dialog state is cleared even when the connection vanished
     // for an external reason (another tab's sync, a background refresh)
-    const gone = step === "ready" && !connection;
+    const gone = step === "ready" && connection == null;
     useEffect(() => {
         if (gone) onClose();
     }, [gone, onClose]);
@@ -260,7 +271,7 @@ export default function ConnectionDialog({
                     <FSelect
                         label="Bank login"
                         value={loginChoice}
-                        onChange={(v) => setLoginChoice(v ?? NEW_LOGIN)}
+                        onChange={setLoginChoice}
                         data={[
                             { value: NEW_LOGIN, label: "New login…" },
                             ...existingLogins.map((c) => ({
@@ -270,20 +281,20 @@ export default function ConnectionDialog({
                         ]}
                     />
                 )}
-                {connector &&
+                {connector != null &&
                     needsCredentials &&
                     connector.connectionParams.map((p) => (
                         <FTextInput
                             key={p.name}
                             label={p.label}
-                            type={p.secret ? "password" : "text"}
+                            type={p.secret === true ? "password" : "text"}
                             value={credentials[p.name] ?? ""}
                             onChange={(e) =>
                                 setCredentials((prev) => ({ ...prev, [p.name]: e.target.value }))
                             }
                         />
                     ))}
-                {connector &&
+                {connector != null &&
                     connector.accountParams.map((p) => (
                         <FTextInput
                             key={p.name}
@@ -307,13 +318,13 @@ export default function ConnectionDialog({
             applyProps: {
                 loading: busy,
                 disabled:
-                    !connector ||
+                    connector == null ||
                     (needsCredentials && !credentialsComplete) ||
                     !accountComplete(connector),
             },
         };
     } else if (step === "ready") {
-        if (!connection) return null;
+        if (connection == null) return null;
         body = (
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -325,10 +336,12 @@ export default function ConnectionDialog({
                 <div style={{ display: "flex", justifyContent: "space-between" }}>
                     <Txt tone="secondary">Last sync</Txt>
                     <span className="num">
-                        {connection.lastSync ? fmtDate(connection.lastSync) : "never"}
+                        {connection.lastSync == null || connection.lastSync === ""
+                            ? "never"
+                            : fmtDate(connection.lastSync)}
                     </span>
                 </div>
-                {readyConnector
+                {readyConnector != null
                     ? readyConnector.accountParams.map((p) => (
                           <FTextInput
                               key={p.name}
@@ -344,7 +357,8 @@ export default function ConnectionDialog({
                               }
                           />
                       ))
-                    : liveAccount.bankRef && (
+                    : liveAccount.bankRef != null &&
+                      liveAccount.bankRef !== "" && (
                           <div style={{ display: "flex", justifyContent: "space-between" }}>
                               <Txt tone="secondary">Bank account</Txt>
                               <span className="num">{liveAccount.bankRef}</span>
@@ -363,7 +377,7 @@ export default function ConnectionDialog({
                         </Button>
                     </div>
                 )}
-                {connection.lastError && (
+                {connection.lastError != null && connection.lastError !== "" && (
                     <Txt tone="danger" caption>
                         {connection.lastError}
                     </Txt>
@@ -398,7 +412,7 @@ export default function ConnectionDialog({
                 <Txt tone="secondary" caption>
                     Enter the code the bank sent to your phone.
                 </Txt>
-                {error && (
+                {error !== "" && (
                     <Txt tone="danger" caption>
                         {error}
                     </Txt>
@@ -414,28 +428,31 @@ export default function ConnectionDialog({
         footer = {
             apply: "Confirm",
             onApply: confirmSms,
-            applyProps: { loading: busy, disabled: !code.trim() },
+            applyProps: { loading: busy, disabled: code.trim() === "" },
         };
     } else if (step === "syncing") {
         body = <Txt tone="secondary">Syncing…</Txt>;
         footer = { apply: "Close", onApply: onClose, applyProps: { disabled: true } };
     } else if (step === "done") {
-        if (!result) return null;
+        if (result == null) return null;
         const unmappedTails = result.unmappedTails ?? [];
         body = (
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 <Txt block>
                     {result.inserted} new, {result.skipped} duplicates skipped
-                    {result.accounts && result.accounts.length > 1
+                    {result.accounts != null && result.accounts.length > 1
                         ? ` across ${result.accounts.length} accounts`
                         : ""}
                     .
                 </Txt>
-                {result.dateFrom && result.dateTo && (
-                    <Txt tone="secondary" caption>
-                        {fmtDate(result.dateFrom)} — {fmtDate(result.dateTo)}
-                    </Txt>
-                )}
+                {result.dateFrom != null &&
+                    result.dateFrom !== "" &&
+                    result.dateTo != null &&
+                    result.dateTo !== "" && (
+                        <Txt tone="secondary" caption>
+                            {fmtDate(result.dateFrom)} — {fmtDate(result.dateTo)}
+                        </Txt>
+                    )}
                 {unmappedTails.length > 0 && (
                     <Txt tone="warning" caption block>
                         Cards not bound to any account:{" "}
@@ -446,7 +463,7 @@ export default function ConnectionDialog({
                 )}
             </div>
         );
-    } else if (step === "error") {
+    } else {
         body = (
             <Txt tone="danger" caption>
                 {error}
@@ -454,7 +471,8 @@ export default function ConnectionDialog({
         );
         footer = {
             apply: "Retry",
-            onApply: () => (connId.current ? runSync(connId.current) : setStep("credentials")),
+            onApply: () =>
+                connId.current == null ? setStep("credentials") : runSync(connId.current),
             applyProps: { loading: busy },
         };
     }

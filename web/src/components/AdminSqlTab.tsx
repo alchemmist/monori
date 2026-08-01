@@ -97,7 +97,7 @@ export default function AdminSqlTab({ onClose }: { onClose: () => void }) {
             <Txt tone="secondary" caption style={{ marginRight: "auto", alignSelf: "center" }}>
                 ⌘/Ctrl + Enter · ⇧ for a dry run
             </Txt>
-            {pendingWrite ? (
+            {pendingWrite != null && pendingWrite !== "" ? (
                 <Button size="l" variant="subtle" onClick={() => setPendingWrite(null)}>
                     Cancel
                 </Button>
@@ -106,7 +106,7 @@ export default function AdminSqlTab({ onClose }: { onClose: () => void }) {
                     size="l"
                     variant="subtle"
                     loading={busy}
-                    disabled={!sql.trim()}
+                    disabled={sql.trim() === ""}
                     onClick={() => void run(false, true)}
                     title="Run inside a transaction and roll it back — nothing is committed"
                 >
@@ -116,12 +116,12 @@ export default function AdminSqlTab({ onClose }: { onClose: () => void }) {
             <Button
                 size="l"
                 variant="filled"
-                {...(pendingWrite ? { color: "red" } : {})}
+                {...(pendingWrite != null && pendingWrite !== "" ? { color: "red" } : {})}
                 loading={busy}
-                disabled={!sql.trim()}
+                disabled={sql.trim() === ""}
                 onClick={() => void run(Boolean(pendingWrite))}
             >
-                {pendingWrite ? "Apply write" : "Run"}
+                {pendingWrite != null && pendingWrite !== "" ? "Apply write" : "Run"}
             </Button>
         </>
     );
@@ -147,26 +147,29 @@ export default function AdminSqlTab({ onClose }: { onClose: () => void }) {
                 className="sql-console__editor"
             />
 
-            {pendingWrite && <div className="sql-console__warn">{pendingWrite}</div>}
-            {error && <div className="sql-console__error">{error}</div>}
+            {pendingWrite != null && pendingWrite !== "" && (
+                <div className="sql-console__warn">{pendingWrite}</div>
+            )}
+            {error != null && error !== "" && <div className="sql-console__error">{error}</div>}
 
             {result?.kind === "dry" && (
                 <div className="sql-console__dry">
                     Rolled back — nothing was written.{" "}
-                    {result.wouldWrite
+                    {result.wouldWrite === true
                         ? `Applying this would affect ${rowsLabel(result.rowCount)}.`
                         : `The query returned ${rowsLabel(result.rowCount)}.`}
                 </div>
             )}
 
-            {result && (
+            {result != null && (
                 <>
                     <Txt tone="secondary" caption block>
-                        {result.kind === "write" || (result.kind === "dry" && result.wouldWrite)
+                        {result.kind === "write" ||
+                        (result.kind === "dry" && result.wouldWrite === true)
                             ? `${rowsLabel(result.rowCount)} affected`
                             : rowsLabel(result.rowCount)}
                         {` · ${result.elapsedMs} ms`}
-                        {result.truncated && ` · showing first ${result.rowCount} rows`}
+                        {result.truncated === true && ` · showing first ${result.rowCount} rows`}
                     </Txt>
                     {result.columns.length > 0 && (
                         <div

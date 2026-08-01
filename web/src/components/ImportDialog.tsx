@@ -13,7 +13,7 @@ import type { ImportPreview } from "../types.js";
 
 const readLastAccount = () => {
     try {
-        return localStorage.getItem("import_last_account") || "";
+        return localStorage.getItem("import_last_account") ?? "";
     } catch {
         return "";
     }
@@ -22,7 +22,7 @@ const readLastAccount = () => {
 export default function ImportDialog({ onClose }: { onClose: () => void }) {
     const { snapshot, user, commitImport, patchAccount, notify } = useStore();
     if (!snapshot) throw new Error("Import requires a loaded snapshot");
-    const accounts = (snapshot.accounts ?? []).filter((a) => !a.archived);
+    const accounts = snapshot.accounts.filter((a) => !a.archived);
     const preset = user?.defaultAccountId;
     const [text, setText] = useState("");
     const [preview, setPreview] = useState<ImportPreview | null>(null);
@@ -35,7 +35,7 @@ export default function ImportDialog({ onClose }: { onClose: () => void }) {
         // for the statements whose account nothing in the file can tell
         if (preset != null && accounts.some((a) => a.id === preset)) return String(preset);
         const last = readLastAccount();
-        if (last && accounts.some((a) => String(a.id) === last)) return last;
+        if (last !== "" && accounts.some((a) => String(a.id) === last)) return last;
         return accounts[0] ? String(accounts[0].id) : "";
     });
     const catName = new Map(snapshot.categories.map((c) => [c.id, c.name]));
@@ -68,7 +68,7 @@ export default function ImportDialog({ onClose }: { onClose: () => void }) {
     };
 
     const pickFile = async (file?: File) => {
-        if (!file) return;
+        if (file == null) return;
         try {
             const decoded = await readStatementFile(file);
             setText(decoded);
@@ -80,20 +80,26 @@ export default function ImportDialog({ onClose }: { onClose: () => void }) {
         }
     };
 
-    const fresh = preview?.rows.filter((r) => !r.duplicate) ?? [];
+    const fresh = preview?.rows.filter((r) => r.duplicate !== true) ?? [];
     const selected = accounts.find((a) => String(a.id) === account);
     // offer to bind the tail only while NO account owns it — remembering a
     // tail that already belongs elsewhere would make future routing ambiguous
-    const tailOwners = detectedTail
-        ? accounts.filter((a) => (a.cardTails ?? []).some((t) => tailMatches(t, detectedTail)))
-        : [];
-    const offerRemember = Boolean(preview && detectedTail && selected && tailOwners.length === 0);
+    const tailOwners =
+        detectedTail != null && detectedTail !== ""
+            ? accounts.filter((a) => (a.cardTails ?? []).some((t) => tailMatches(t, detectedTail)))
+            : [];
+    const offerRemember =
+        preview != null &&
+        detectedTail != null &&
+        detectedTail !== "" &&
+        selected != null &&
+        tailOwners.length === 0;
 
     const commit = async () => {
         setBusy(true);
         try {
             const { inserted } = await commitImport(fresh);
-            if (offerRemember && rememberTail && selected && detectedTail) {
+            if (offerRemember && rememberTail) {
                 await patchAccount(+account, {
                     cardTails: [...(selected.cardTails ?? []), detectedTail],
                 }).catch(() => {});
@@ -117,19 +123,21 @@ export default function ImportDialog({ onClose }: { onClose: () => void }) {
             title="Import bank statement"
             onClose={onClose}
             size="l"
-            applyText={preview ? `Import ${fresh.length}` : "Preview"}
-            onApply={() => void (preview ? commit() : runPreview())}
+            applyText={preview == null ? "Preview" : `Import ${fresh.length}`}
+            onApply={() => void (preview == null ? runPreview() : commit())}
             applyLoading={busy}
-            applyDisabled={!account || (preview ? fresh.length === 0 : !text.trim())}
-            cancelText={preview ? "Back" : "Cancel"}
-            onCancel={preview ? () => setPreview(null) : onClose}
+            applyDisabled={
+                account === "" || (preview == null ? text.trim() === "" : fresh.length === 0)
+            }
+            cancelText={preview == null ? "Cancel" : "Back"}
+            onCancel={preview == null ? onClose : () => setPreview(null)}
         >
             <div style={{ marginBottom: 14, display: "flex", alignItems: "center", gap: 10 }}>
                 <Txt tone="secondary">Import into</Txt>
                 <FSelect
-                    value={account || null}
+                    value={account === "" ? null : account}
                     onChange={(v) => {
-                        setAccount(v ?? "");
+                        setAccount(v);
                         // duplicate flags are account-specific — force a re-preview
                         setPreview(null);
                     }}
@@ -137,7 +145,7 @@ export default function ImportDialog({ onClose }: { onClose: () => void }) {
                     style={{ width: 200 }}
                 />
             </div>
-            {!preview ? (
+            {preview == null ? (
                 <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                     <input
                         ref={fileRef}
@@ -184,7 +192,7 @@ export default function ImportDialog({ onClose }: { onClose: () => void }) {
                             <Tag theme="danger">{preview.errors.length} unparsed lines</Tag>
                         )}
                     </div>
-                    {offerRemember && selected && detectedTail && (
+                    {offerRemember && (
                         <Checkbox
                             size="sm"
                             checked={rememberTail}
@@ -204,7 +212,7 @@ export default function ImportDialog({ onClose }: { onClose: () => void }) {
                             </thead>
                             <tbody>
                                 {preview.rows.map((r, i) => (
-                                    <tr key={i} style={{ opacity: r.duplicate ? 0.4 : 1 }}>
+                                    <tr key={i} style={{ opacity: r.duplicate === true ? 0.4 : 1 }}>
                                         <td style={{ textAlign: "left" }} className="num">
                                             {fmtDate(r.date)}
                                         </td>
@@ -217,9 +225,9 @@ export default function ImportDialog({ onClose }: { onClose: () => void }) {
                                             </span>
                                         </td>
                                         <td style={{ textAlign: "left" }}>
-                                            {r.duplicate ? (
+                                            {r.duplicate === true ? (
                                                 <Txt tone="secondary">duplicate</Txt>
-                                            ) : r.categoryId ? (
+                                            ) : r.categoryId != null ? (
                                                 catName.get(r.categoryId)
                                             ) : (
                                                 <Txt tone="warning">uncategorized</Txt>
