@@ -188,11 +188,14 @@ m-front-file:
 m-front-diff:
 	@set +e; \
 	git rev-parse --verify --quiet "$(BASE)" >/dev/null || { echo "mutation-diff: BASE='$(BASE)' is not a valid revision"; exit 1; }; \
-	files=$$(git diff --diff-filter=ACMR --name-only "$(BASE)...HEAD" -- web/src | sed 's#^web/##' | paste -sd, -); \
-	if [ -z "$$files" ]; then \
-		echo "mutation-diff: no changed frontend files — pass"; exit 0; \
+	ranges=$$(git diff --diff-filter=ACMR --unified=0 "$(BASE)...HEAD" -- web/src | \
+		awk '/^diff --git / { file=$$4; sub(/^b\/web\//, "", file); next } \
+		/^@@ / { hunk=$$0; sub(/^.*\+/, "", hunk); sub(/ .*/, "", hunk); split(hunk, parts, ","); start=parts[1]; count=(parts[2] == "" ? 1 : parts[2]); if (count > 0) { end=start + count - 1; found[file] = found[file] (found[file] == "" ? "" : ",") file ":" start "-" end } } \
+		END { for (file in found) printf "%s,", found[file] }' | sed 's/,$$//'); \
+	if [ -z "$$ranges" ]; then \
+		echo "mutation-diff: no changed frontend lines — pass"; exit 0; \
 	fi; \
-	( cd web && GITHUB_STEP_SUMMARY= MUTATION_THRESHOLD=0 ./node_modules/.bin/stryker run stryker.conf.ts --incremental --mutate "$$files" ); web=$$?; \
+	( cd web && GITHUB_STEP_SUMMARY= MUTATION_THRESHOLD=0 ./node_modules/.bin/stryker run stryker.conf.ts --incremental --mutate "$$ranges" ); web=$$?; \
 	node scripts/mutation-diff-gate.mjs "$(BASE)" web/reports/stryker-incremental.json "$(MUTATION_DIFF_THRESHOLD)"; gate=$$?; \
 	if [ $$web -ne 0 ] || [ $$gate -ne 0 ]; then exit 1; fi
 

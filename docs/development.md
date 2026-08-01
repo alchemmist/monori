@@ -77,8 +77,8 @@ dependencies (a real temp SQLite database, the real FastAPI app), not mocks.
 | `make t-medium`      | Integration tests: pytest `-m integration` against a real DB.                                                                                     |
 | `make t-slow`        | Placeholder for end-to-end (Playwright), not yet wired up.                                                                                        |
 | `make coverage`      | Coverage as a tree (root → back/front → module → file), via `scripts/coverage-tree.sh`. Fails below **90% statements and lines** in `web/src`.    |
-| `make mutation`      | Full mutation sweep: Stryker on `web/src`, mutmut on `server/app`. Runs nightly, on pushes to `main`, and on manual dispatch.                     |
-| `make mutation-diff` | Diff-scoped gate for changed frontend files and backend functions. Needs full git history. Example: `BASE=origin/main`, threshold 90%.            |
+| `make mutation`      | Full mutation sweep: Stryker on `web/src`, mutmut on `server/app`. Runs nightly at 05:00 Moscow time and on manual dispatch.                      |
+| `make mutation-diff` | Diff-scoped gate for changed frontend lines and backend functions. Needs full git history. Example: `BASE=origin/main`, threshold 90%.            |
 
 ### The pre-commit gate
 
