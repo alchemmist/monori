@@ -1,5 +1,4 @@
 import time
-from typing import cast
 
 import pytest
 
@@ -38,6 +37,7 @@ def test_cell_passes_scalars_through_and_summarizes_blobs() -> None:
     assert cell(42) == 42
     assert cell("text") == "text"
     assert cell(b"\x00\x01") == "x'0001' (2 bytes)"
-    long = cast("str", cell(b"\xab" * (BLOB_PREVIEW + 10)))
+    long = cell(b"\xab" * (BLOB_PREVIEW + 10))
+    assert isinstance(long, str)
     assert long.startswith("x'ab")
     assert long.endswith(f"…' ({BLOB_PREVIEW + 10} bytes)")

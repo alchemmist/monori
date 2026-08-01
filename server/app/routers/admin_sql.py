@@ -13,9 +13,11 @@ import contextlib
 import sqlite3
 import time
 from datetime import UTC, datetime
-from typing import Annotated, NotRequired, TypedDict
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import ConfigDict
+from pydantic.dataclasses import dataclass as pydantic_dataclass
 
 from ..admin import admin_user
 from ..auth import AuthenticatedUser
@@ -35,9 +37,6 @@ BLOB_PREVIEW = 32
 # TEXT. The console is for reading data, not for exporting it — a cell longer
 # than this comes back cut, with the dropped length spelled out
 CELL_MAX_CHARS = 4096
-
-type SqliteValue = bytes | float | int | str | None
-type SqlCell = float | int | str | None
 
 
 def leading_keyword(sql: str) -> str:
@@ -69,7 +68,7 @@ def leading_keyword(sql: str) -> str:
     return ""
 
 
-def cell(value: SqliteValue) -> SqlCell:
+def cell(value: bytes | float | int | str | None) -> float | int | str | None:
     if isinstance(value, bytes):
         head = value[:BLOB_PREVIEW].hex()
         return f"x'{head}{'…' if len(value) > BLOB_PREVIEW else ''}' ({len(value)} bytes)"
@@ -78,24 +77,32 @@ def cell(value: SqliteValue) -> SqlCell:
     return value
 
 
-class SqlBody(TypedDict):
+@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+class SqlBody:
     sql: str
     confirmWrite: bool
     dryRun: bool
 
 
-class SqlResponse(TypedDict):
+@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+class SqlResponse:
     kind: str
     columns: list[str]
-    rows: list[list[SqlCell]]
+    rows: list[list[float | int | str | None]]
     rowCount: int
     truncated: bool
     elapsedMs: float
-    wouldWrite: NotRequired[bool]
+
+
+@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+class SqlDryResponse(SqlResponse):
+    wouldWrite: bool
 
 
 @router.post("/sql")
-def run_sql(body: SqlBody, admin: Annotated[AuthenticatedUser, Depends(admin_user)]) -> SqlResponse:
+def run_sql(
+    body: SqlBody, admin: Annotated[AuthenticatedUser, Depends(admin_user)]
+) -> SqlResponse | SqlDryResponse:
     """
     Execute one statement and return either its rows or its affected-row count.
 
@@ -111,7 +118,7 @@ def run_sql(body: SqlBody, admin: Annotated[AuthenticatedUser, Depends(admin_use
     count, and nothing is ever committed.
     """
     uid = admin.id
-    sql = body["sql"].strip()
+    sql = body.sql.strip()
     if not sql:
         raise HTTPException(400, "empty statement")
 
@@ -153,20 +160,20 @@ def run_sql(body: SqlBody, admin: Annotated[AuthenticatedUser, Depends(admin_use
         is_write = not columns or changed > 0
         write_rows = max(changed, cur.rowcount, 0)
 
-        if body["dryRun"]:
+        if body.dryRun:
             c.rollback()
             _audit(c, uid, "admin_sql_dry_run", sql)
-            return {
-                "kind": "dry",
-                "wouldWrite": is_write,
-                "columns": columns,
-                "rows": rows[:ROW_LIMIT],
-                "rowCount": write_rows if is_write else min(len(rows), ROW_LIMIT),
-                "truncated": not is_write and len(rows) > ROW_LIMIT,
-                "elapsedMs": elapsed_ms,
-            }
+            return SqlDryResponse(
+                kind="dry",
+                wouldWrite=is_write,
+                columns=columns,
+                rows=rows[:ROW_LIMIT],
+                rowCount=write_rows if is_write else min(len(rows), ROW_LIMIT),
+                truncated=not is_write and len(rows) > ROW_LIMIT,
+                elapsedMs=elapsed_ms,
+            )
 
-        if is_write and not body["confirmWrite"]:
+        if is_write and not body.confirmWrite:
             c.rollback()
             _audit(c, uid, "admin_sql_rejected", sql)
             raise HTTPException(
@@ -178,28 +185,28 @@ def run_sql(body: SqlBody, admin: Annotated[AuthenticatedUser, Depends(admin_use
         if is_write:
             c.commit()
             _audit(c, uid, "admin_sql", sql)
-            return {
-                "kind": "write",
-                "columns": [],
-                "rows": [],
-                "rowCount": write_rows,
-                "truncated": False,
-                "elapsedMs": elapsed_ms,
-            }
+            return SqlResponse(
+                kind="write",
+                columns=[],
+                rows=[],
+                rowCount=write_rows,
+                truncated=False,
+                elapsedMs=elapsed_ms,
+            )
 
         # a read needs nothing committed; rolling back also undoes anything a
         # statement did that neither returned rows nor bumped total_changes
         c.rollback()
         _audit(c, uid, "admin_sql", sql)
         truncated = len(rows) > ROW_LIMIT
-        return {
-            "kind": "read",
-            "columns": columns,
-            "rows": rows[:ROW_LIMIT],
-            "rowCount": min(len(rows), ROW_LIMIT),
-            "truncated": truncated,
-            "elapsedMs": elapsed_ms,
-        }
+        return SqlResponse(
+            kind="read",
+            columns=columns,
+            rows=rows[:ROW_LIMIT],
+            rowCount=min(len(rows), ROW_LIMIT),
+            truncated=truncated,
+            elapsedMs=elapsed_ms,
+        )
     finally:
         c.close()
 
