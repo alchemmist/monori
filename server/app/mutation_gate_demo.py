@@ -1,2 +1,4 @@
 def mutation_gate_demo(value: int) -> int:
-    return value + 1
+    if value > 0:
+        return value + 1
+    return value - 1
