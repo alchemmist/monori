@@ -9,11 +9,6 @@
     "scripts": {
         "dev": "vite",
         "build": "vite build",
-        "lint": "npm run --silent lint:oxlint && npm run --silent lint:eslint",
-        "lint:oxlint": "oxlint",
-        "lint:eslint": "eslint \"src/**/*.{ts,tsx}\" \"e2e/**/*.ts\" \"*.config.ts\" stryker.conf.ts",
-        "lint:types": "oxlint --type-aware --report-unused-disable-directives --ignore-pattern eslint.config.mjs",
-        "typecheck": "tsc --noEmit && npm run --silent lint:types && npm run --silent lint:eslint",
         "preview": "vite preview"
     },
     "dependencies": {

@@ -79,7 +79,8 @@ fmt-check:
 lint: lint-web lint-css lint-html lint-server lint-sql lint-yaml lint-md lint-docs lint-actions lint-docker lint-shell spell
 
 lint-web:
-	cd web && npm run --silent lint
+	cd web && ./node_modules/.bin/oxlint
+	cd web && ./node_modules/.bin/eslint "src/**/*.{ts,tsx}" "e2e/**/*.ts" "*.config.ts" stryker.conf.ts
 
 lint-css:
 	$(WEBBIN)/stylelint --config web/.stylelintrc.json "web/src/**/*.css"
@@ -119,7 +120,9 @@ spell:
 type: type-back type-front
 
 type-front:
-	cd web && npm run --silent typecheck
+	cd web && ./node_modules/.bin/tsc --noEmit
+	cd web && ./node_modules/.bin/oxlint --type-aware --report-unused-disable-directives --ignore-pattern eslint.config.mjs
+	cd web && ./node_modules/.bin/eslint "src/**/*.{ts,tsx}" "e2e/**/*.ts" "*.config.ts" stryker.conf.ts
 
 type-back:
 	MYPYPATH=server uv run --project server --extra connectors mypy --config-file server/pyproject.toml .
