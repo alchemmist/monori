@@ -1,13 +1,13 @@
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import process from "node:process";
 
 const [base, reportPath, thresholdText] = process.argv.slice(2);
 const threshold = Number(thresholdText);
 const changedFiles = new Set(
-    process
-        .execFileSync("git", ["diff", "--name-only", `${base}...HEAD`, "--", "web/src"], {
-            encoding: "utf8",
-        })
+    execFileSync("git", ["diff", "--name-only", `${base}...HEAD`, "--", "web/src"], {
+        encoding: "utf8",
+    })
         .trim()
         .split("\n")
         .filter(Boolean)

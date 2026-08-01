@@ -205,8 +205,8 @@ m-back-diff:
 	fi; \
 	baseline=$$(mktemp -d); trap 'rm -rf "$$baseline"' EXIT; \
 	if [ -d server/mutants ]; then cp -a server/mutants "$$baseline/mutants"; else mkdir -p "$$baseline/mutants"; fi; \
-	( cd server && uv run mutmut run 2>mutants/mutmut-stderr.log ); mutmut=$$?; \
-	( cd server && uv run mutmut export-cicd-stats ); export=$$?; \
+	( cd server && mkdir -p mutants && uv run mutmut run 2>mutants/mutmut-stderr.log ); mutmut=$$?; \
+	( cd server && mkdir -p mutants && uv run mutmut export-cicd-stats ); export=$$?; \
 	python3 scripts/mutation-diff-gate.py --mutants server/mutants --baseline "$$baseline/mutants" --base "$(BASE)" --threshold "$(MUTATION_DIFF_THRESHOLD)"; gate=$$?; \
 	if [ $$mutmut -ne 0 ] || [ $$export -ne 0 ] || [ $$gate -ne 0 ]; then exit 1; fi
 

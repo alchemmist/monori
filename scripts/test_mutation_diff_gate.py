@@ -37,6 +37,18 @@ class MutationDiffGateTest(unittest.TestCase):
 
         self.assertEqual(result, {"server/app/example.py": {("save", "Account")}})
 
+    def test_maps_deletion_only_hunks_to_changed_lines(self) -> None:
+        diff = """\
+diff --git a/server/app/example.py b/server/app/example.py
+--- a/server/app/example.py
++++ b/server/app/example.py
+@@ -2,2 +2 @@
+     keep = True
+-    removed = True
+"""
+
+        self.assertEqual(module.parse_changed_lines(diff), {"server/app/example.py": {2}})
+
 
 if __name__ == "__main__":
     unittest.main()

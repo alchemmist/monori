@@ -13,17 +13,11 @@ CONSIDERED = KILLED | {SURVIVED, -24, 24, 35, 36, 152, 255}
 CLASS_SEPARATOR = "ǁ"
 
 
-def changed_lines(base: str) -> dict[str, set[int]]:
-    result = subprocess.run(
-        ["git", "diff", "--unified=0", f"{base}...HEAD", "--", "server/app"],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
+def parse_changed_lines(diff: str) -> dict[str, set[int]]:
     paths: dict[str, set[int]] = {}
     current: str | None = None
     new_line = 0
-    for line in result.stdout.splitlines():
+    for line in diff.splitlines():
         if line.startswith("+++ b/"):
             current = line[6:]
             paths.setdefault(current, set())
@@ -37,10 +31,20 @@ def changed_lines(base: str) -> dict[str, set[int]]:
             paths[current].add(new_line)
             new_line += 1
         elif current and line.startswith("-") and not line.startswith("---"):
-            continue
+            paths[current].add(max(1, new_line - 1))
         elif current and new_line:
             new_line += 1
     return {path: lines for path, lines in paths.items() if lines}
+
+
+def changed_lines(base: str) -> dict[str, set[int]]:
+    result = subprocess.run(
+        ["git", "diff", "--unified=0", f"{base}...HEAD", "--", "server/app"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return parse_changed_lines(result.stdout)
 
 
 class ChangedFunctions(ast.NodeVisitor):
