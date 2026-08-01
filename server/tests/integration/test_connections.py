@@ -1,14 +1,13 @@
 from typing import cast
 
-import pytest
-from cryptography.fernet import Fernet
-from fastapi.testclient import TestClient
-from httpx2 import Response as HTTPXResponse
-
 import app.connectors.fake  # noqa: F401  (registers the FakeConnector)
+import pytest
 from app.connectors import base
 from app.connectors.base import JsonObject, SmsRequired, SyncResult, SyncRow
 from app.routers import connections
+from cryptography.fernet import Fernet
+from fastapi.testclient import TestClient
+from httpx2 import Response as HTTPXResponse
 from tests.conftest import Api
 
 
@@ -277,7 +276,7 @@ def test_one_connection_syncs_multiple_accounts(api: Api, client: TestClient, ke
     assert len([t for t in txs if t["accountId"] == a2]) == 2
 
 
-def test_sync_requires_a_linked_account(api: Api, client: TestClient, keyed: object) -> None:
+def test_sync_requires_a_linked_account(api: Api, client: TestClient, keyed: None) -> None:
     r = client.post(
         "/api/connections",
         json={
@@ -292,7 +291,7 @@ def test_sync_requires_a_linked_account(api: Api, client: TestClient, keyed: obj
     assert "linked" in r.json()["detail"]
 
 
-def test_delete_connection_unlinks_accounts(api: Api, client: TestClient, keyed: object) -> None:
+def test_delete_connection_unlinks_accounts(api: Api, client: TestClient, keyed: None) -> None:
     a1 = api.default_account()
     cid = _connect(client, a1).json()["id"]
     assert api.snapshot()["accounts"][0]["connectionId"] == cid
@@ -302,7 +301,7 @@ def test_delete_connection_unlinks_accounts(api: Api, client: TestClient, keyed:
     assert snap["accounts"][0]["connectionId"] is None
 
 
-def test_unlink_account_via_patch(api: Api, client: TestClient, keyed: object) -> None:
+def test_unlink_account_via_patch(api: Api, client: TestClient, keyed: None) -> None:
     a1 = api.default_account()
     _connect(client, a1)
     r = client.patch(f"/api/accounts/{a1}", json={"connectionId": 0})
@@ -311,12 +310,12 @@ def test_unlink_account_via_patch(api: Api, client: TestClient, keyed: object) -
     assert len(api.snapshot()["connections"]) == 1
 
 
-def test_link_rejects_unknown_connection(api: Api, client: TestClient, keyed: object) -> None:
+def test_link_rejects_unknown_connection(api: Api, client: TestClient, keyed: None) -> None:
     r = client.patch(f"/api/accounts/{api.default_account()}", json={"connectionId": 999})
     assert r.status_code == 400
 
 
-def test_missing_required_credentials_rejected(api: Api, client: TestClient, keyed: object) -> None:
+def test_missing_required_credentials_rejected(api: Api, client: TestClient, keyed: None) -> None:
     r = client.post(
         "/api/connections",
         json={"bank": "tbank", "kind": "playwright", "credentials": {"phone": "+7"}},
@@ -373,7 +372,7 @@ def test_newly_linked_account_gets_a_full_pull(
 
 
 def test_pending_account_is_persisted_and_resume_skips_synced(
-    api: Api, client: TestClient, keyed: object
+    api: Api, client: TestClient, keyed: None
 ) -> None:
     a1 = api.default_account()
     a2 = api.account("Second")
@@ -453,7 +452,7 @@ def test_sync_routes_rows_by_bound_card_tail(
 
 
 def test_single_card_feed_reports_no_unmapped_tails(
-    api: Api, client: TestClient, keyed: object
+    api: Api, client: TestClient, keyed: None
 ) -> None:
     cid = _connect(client, api.default_account()).json()["id"]
     client.post(f"/api/connections/{cid}/sync")
@@ -463,7 +462,7 @@ def test_single_card_feed_reports_no_unmapped_tails(
 
 
 def test_sync_routing_matches_longer_stored_tails_by_suffix(
-    api: Api, client: TestClient, keyed: object, monkeypatch: pytest.MonkeyPatch
+    api: Api, client: TestClient, keyed: None, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setitem(base.REGISTRY, ("multicard", "multicard"), MultiCardConnector)
     main = api.default_account()
@@ -479,7 +478,7 @@ def test_sync_routing_matches_longer_stored_tails_by_suffix(
 
 
 def test_sync_routing_treats_duplicated_tail_as_unmapped(
-    api: Api, client: TestClient, keyed: object, monkeypatch: pytest.MonkeyPatch
+    api: Api, client: TestClient, keyed: None, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setitem(base.REGISTRY, ("multicard", "multicard"), MultiCardConnector)
     main = api.default_account()
@@ -498,7 +497,7 @@ def test_sync_routing_treats_duplicated_tail_as_unmapped(
 
 
 def test_overlapping_feeds_do_not_duplicate_rows_across_accounts(
-    api: Api, client: TestClient, keyed: object
+    api: Api, client: TestClient, keyed: None
 ) -> None:
     """
     Two accounts on one connection whose pulls return the same feed (the fake

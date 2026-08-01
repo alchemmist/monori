@@ -2,25 +2,22 @@ import os
 import pathlib
 import sys
 import tempfile
-from typing import TypedDict, cast
+from typing import TypedDict
 
 import pytest
 from fastapi.testclient import TestClient
+from pydantic import TypeAdapter
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
+
+from app.deps import IdResponse
+from app.routers.auth_router import TokenResponse
+from app.routers.transfers import TransferIdResponse
 
 STATEMENT = (
     "05.01.2026 10:00:00\t05.01.2026\t*1\tOK\t-100,00\tRUB\t-100,00\tRUB\t\tSuper\t5411\tLenta\t0\t0\t-100,00\n"  # noqa: E501
     "06.01.2026 11:00:00\t06.01.2026\t*1\tOK\t-200,00\tRUB\t-200,00\tRUB\t\tSuper\t5411\tOkey\t0\t0\t-200,00\n"  # noqa: E501
 )
-
-
-class _IdResponse(TypedDict):
-    id: int
-
-
-class _TransferIdResponse(TypedDict):
-    transferId: int
 
 
 class _PreviewRow(TypedDict, total=False):
@@ -160,7 +157,13 @@ def login_as(client: TestClient, email: str, password: str = "hunter2pw") -> dic
     client.post("/api/auth/register", json={"email": email, "password": password})
     r = client.post("/api/auth/token", data={"username": email, "password": password})
     assert r.status_code == 200, r.text
-    return {"Authorization": f"Bearer {cast('dict[str, str]', r.json())['access_token']}"}
+    token = TypeAdapter(TokenResponse).validate_python(r.json())
+    return {"Authorization": f"Bearer {token.access_token}"}
+
+
+def _response_id(response: IdResponse) -> int:
+    assert response.id is not None
+    return response.id
 
 
 @pytest.fixture()
@@ -197,38 +200,67 @@ class Api:
     def group(self, name: str, kind: str = "expense") -> int:
         r = self.client.post("/api/groups", json={"name": name, "kind": kind})
         assert r.status_code == 200, r.text
-        return cast("_IdResponse", r.json())["id"]
+        return _response_id(TypeAdapter(IdResponse).validate_python(r.json()))
 
     def category(self, name: str, group_id: int, keywords: str = "") -> int:
         r = self.client.post(
             "/api/categories", json={"name": name, "groupId": group_id, "keywords": keywords}
         )
         assert r.status_code == 200, r.text
-        return cast("_IdResponse", r.json())["id"]
+        return _response_id(TypeAdapter(IdResponse).validate_python(r.json()))
 
-    def account(self, name: str, **kw: object) -> int:
-        body: dict[str, object] = {
+    def account(
+        self,
+        name: str,
+        *,
+        type: str = "cash",
+        icon: str = "wallet",
+        color: str = "#5b6472",
+        currency: str = "RUB",
+        openingBalance: int = 0,
+        bankRef: str = "",
+        cardTails: list[str] | None = None,
+    ) -> int:
+        body = {
             "name": name,
-            "type": "cash",
-            "icon": "wallet",
-            "color": "#5b6472",
-            "currency": "RUB",
-            "openingBalance": 0,
-            "bankRef": "",
-            **kw,
+            "type": type,
+            "icon": icon,
+            "color": color,
+            "currency": currency,
+            "openingBalance": openingBalance,
+            "bankRef": bankRef,
+            "cardTails": cardTails or [],
         }
         r = self.client.post("/api/accounts", json=body)
         assert r.status_code == 200, r.text
-        return cast("_IdResponse", r.json())["id"]
+        return _response_id(TypeAdapter(IdResponse).validate_python(r.json()))
 
     def default_account(self) -> int:
         return self.snapshot()["accounts"][0]["id"]
 
-    def tx(self, date: str, amount: int, **kw: object) -> int:
-        kw.setdefault("accountId", self.default_account())
-        r = self.client.post("/api/transactions", json={"date": date, "amount": amount, **kw})
+    def tx(
+        self,
+        date: str,
+        amount: int,
+        *,
+        accountId: int | None = None,
+        categoryId: int | None = None,
+        description: str = "",
+        comment: str = "",
+    ) -> int:
+        r = self.client.post(
+            "/api/transactions",
+            json={
+                "date": date,
+                "amount": amount,
+                "accountId": accountId or self.default_account(),
+                "categoryId": categoryId,
+                "description": description,
+                "comment": comment,
+            },
+        )
         assert r.status_code == 200, r.text
-        return cast("_IdResponse", r.json())["id"]
+        return _response_id(TypeAdapter(IdResponse).validate_python(r.json()))
 
     def transfer(
         self,
@@ -236,8 +268,8 @@ class Api:
         to_account: int,
         amount: int,
         date: str = "2026-01-10T12:00:00",
-        **kw: object,
-    ) -> int:
+        comment: str = "",
+    ) -> str:
         r = self.client.post(
             "/api/transfers",
             json={
@@ -245,14 +277,14 @@ class Api:
                 "toAccountId": to_account,
                 "amount": amount,
                 "date": date,
-                **kw,
+                "comment": comment,
             },
         )
         assert r.status_code == 200, r.text
-        return cast("_TransferIdResponse", r.json())["transferId"]
+        return TypeAdapter(TransferIdResponse).validate_python(r.json()).transferId
 
     def snapshot(self) -> _Snapshot:
-        return cast("_Snapshot", self.client.get("/api/snapshot").json())
+        return TypeAdapter(_Snapshot).validate_python(self.client.get("/api/snapshot").json())
 
     def cat(self, cat_id: int) -> _SnapshotCategory:
         return next(c for c in self.snapshot()["categories"] if c["id"] == cat_id)
@@ -265,9 +297,8 @@ class Api:
 
     def preview(self, text: str, account_id: int | None = None) -> list[_PreviewRow]:
         body = {"text": text, "accountId": account_id or self.default_account()}
-        return cast("_PreviewResponse", self.client.post("/api/import/preview", json=body).json())[
-            "rows"
-        ]
+        response = self.client.post("/api/import/preview", json=body)
+        return TypeAdapter(_PreviewResponse).validate_python(response.json())["rows"]
 
 
 @pytest.fixture()
