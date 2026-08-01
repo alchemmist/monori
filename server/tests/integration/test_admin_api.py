@@ -1,8 +1,8 @@
-from typing import cast
-
 import pytest
 from fastapi.testclient import TestClient
+from pydantic import TypeAdapter
 
+from app.deps import IdResponse, SnapshotResponse
 from tests.conftest import login_as
 
 pytestmark = pytest.mark.integration
@@ -17,21 +17,21 @@ def _make_admin(
     return login_as(client, email)
 
 
-def _add_tx(
-    client: TestClient, amount: int = -500, date: str = "2026-07-01T12:00:00"
-) -> dict[str, object]:
-    accounts = client.get("/api/snapshot").json()["accounts"]
+def _add_tx(client: TestClient, amount: int = -500, date: str = "2026-07-01T12:00:00") -> int:
+    snapshot = TypeAdapter(SnapshotResponse).validate_python(client.get("/api/snapshot").json())
     r = client.post(
         "/api/transactions",
         json={
-            "accountId": accounts[0]["id"],
+            "accountId": snapshot.accounts[0].id,
             "date": date,
             "amount": amount,
             "description": "coffee",
         },
     )
     assert r.status_code == 200, r.text
-    return cast("dict[str, object]", r.json())
+    response = TypeAdapter(IdResponse).validate_python(r.json())
+    assert response.id is not None
+    return response.id
 
 
 def test_admin_endpoints_reject_non_admin(client: TestClient) -> None:
@@ -272,10 +272,8 @@ def test_bulk_delete_removes_only_selected_transactions(
 ) -> None:
     other = login_as(anon, "bulk@example.com")
     anon.headers.update(other)
-    kept = _add_tx(anon, amount=-100, date="2026-07-01T12:00:00")["id"]
-    doomed = [
-        _add_tx(anon, amount=-100 * d, date=f"2026-07-0{d}T13:00:00")["id"] for d in range(2, 6)
-    ]
+    kept = _add_tx(anon, amount=-100, date="2026-07-01T12:00:00")
+    doomed = [_add_tx(anon, amount=-100 * d, date=f"2026-07-0{d}T13:00:00") for d in range(2, 6)]
     uid = anon.get("/api/auth/me").json()["id"]
     anon.headers.clear()
     anon.headers.update(_make_admin(anon, monkeypatch))
@@ -292,11 +290,11 @@ def test_bulk_delete_is_all_or_nothing_across_users(
 ) -> None:
     victim = login_as(anon, "victim2@example.com")
     anon.headers.update(victim)
-    foreign = _add_tx(anon)["id"]
+    foreign = _add_tx(anon)
     anon.headers.clear()
     owner = login_as(anon, "owner@example.com")
     anon.headers.update(owner)
-    own = _add_tx(anon)["id"]
+    own = _add_tx(anon)
     uid = anon.get("/api/auth/me").json()["id"]
     anon.headers.clear()
     anon.headers.update(_make_admin(anon, monkeypatch))

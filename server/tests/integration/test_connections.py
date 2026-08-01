@@ -1,14 +1,14 @@
-from typing import cast
-
 import pytest
 from cryptography.fernet import Fernet
 from fastapi.testclient import TestClient
 from httpx2 import Response as HTTPXResponse
+from pydantic import TypeAdapter
 
 import app.connectors.fake  # noqa: F401  (registers the FakeConnector)
 from app.connectors import base
 from app.connectors.base import JsonObject, SmsRequired, SyncResult, SyncRow
 from app.routers import connections
+from app.routers.connections import ConnectionResponse
 from tests.conftest import Api
 
 
@@ -422,7 +422,8 @@ def _connect_multicard(client: TestClient, account_id: int) -> int:
     )
     link = client.patch(f"/api/accounts/{account_id}", json={"connectionId": r.json()["id"]})
     assert link.status_code == 200, link.text
-    return cast("int", r.json()["id"])
+    response = TypeAdapter(ConnectionResponse).validate_python(r.json())
+    return response.id
 
 
 def test_sync_routes_rows_by_bound_card_tail(

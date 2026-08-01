@@ -1,4 +1,4 @@
-from typing import TypedDict
+from dataclasses import dataclass
 
 import httpx
 import pytest
@@ -309,26 +309,27 @@ def test_remote_resume_transport_failure() -> None:
         r.resume(1, "0000")
 
 
-class CapturedRequest(TypedDict, total=False):
-    path: str
-    timeout: dict[str, float]
+@dataclass
+class CapturedRequest:
+    path: str = ""
+    timeout: dict[str, float] | None = None
 
 
 TIMEOUT_ADAPTER: TypeAdapter[dict[str, float]] = TypeAdapter(dict[str, float])
 
 
 def test_remote_cancel_uses_short_timeout() -> None:
-    captured: CapturedRequest = {}
+    captured = CapturedRequest()
 
     def handler(request: httpx.Request) -> httpx.Response:
-        captured["path"] = request.url.path
-        captured["timeout"] = TIMEOUT_ADAPTER.validate_python(request.extensions.get("timeout"))
+        captured.path = request.url.path
+        captured.timeout = TIMEOUT_ADAPTER.validate_python(request.extensions.get("timeout"))
         return httpx.Response(200, json={"cancelled": 5})
 
     client = httpx.Client(transport=httpx.MockTransport(handler), base_url="http://sync")
     RemoteRunner("http://sync", client=client).cancel(5)
-    assert captured["path"] == "/runs/5/cancel"
-    assert captured["timeout"] == {"connect": 2.0, "read": 5.0, "write": 5.0, "pool": 5.0}
+    assert captured.path == "/runs/5/cancel"
+    assert captured.timeout == {"connect": 2.0, "read": 5.0, "write": 5.0, "pool": 5.0}
 
 
 def test_remote_cancel_swallows_transport_failure() -> None:
