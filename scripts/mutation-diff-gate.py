@@ -3,6 +3,7 @@
 import argparse
 import ast
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -15,6 +16,13 @@ KILLED = {1, 3}
 SURVIVED = 0
 OTHER_STATUSES = {-24, 24, 35, 36, 152, 255}
 CLASS_SEPARATOR = "ǁ"
+
+
+def append_step_summary(content: str) -> None:
+    summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
+    if summary_path:
+        with Path(summary_path).open("a") as summary:
+            summary.write(content.rstrip() + "\n")
 
 
 def parse_changed_lines(diff: str) -> dict[str, set[int]]:
@@ -130,9 +138,12 @@ def gate_backend(
     functions = changed_functions(root, line_changes)
     if not functions:
         print("mutation-diff: no changed backend functions — pass")
+        append_step_summary("## Backend mutation diff\n\nNo changed backend functions — **pass**.")
         return 0
 
     killed = survived = other = new_survivors = 0
+    survivor_keys: list[str] = []
+    no_coverage_keys: list[str] = []
     for meta_path in mutants_dir.rglob("*.py.meta"):
         relative = meta_path.relative_to(mutants_dir)
         source_path = f"server/{str(relative)[:-5]}"  # remove .meta
@@ -143,10 +154,14 @@ def gate_backend(
         baseline_path = baseline_dir / relative
         baseline = load_meta(baseline_path) if baseline_path.exists() else {}
         for key, status in current.items():
-            if mutant_function(key) not in allowed or status is None:
+            if mutant_function(key) not in allowed:
                 continue
-            if status == SURVIVED:
+            if status is None:
+                other += 1
+                no_coverage_keys.append(key)
+            elif status == SURVIVED:
                 survived += 1
+                survivor_keys.append(key)
                 if baseline.get(key) != SURVIVED:
                     new_survivors += 1
             elif status in KILLED:
@@ -157,9 +172,13 @@ def gate_backend(
     considered = killed + survived + other
     if considered == 0:
         print("mutation-diff: changed functions have no tested mutants — pass")
+        append_step_summary(
+            "## Backend mutation diff\n\nChanged functions have no tested mutants — **pass**."
+        )
         return 0
     score = 100 * killed / considered
     passed = score >= threshold and (skip_new_survivors or new_survivors == 0)
+    gate_status = "✅ PASS" if passed else "❌ FAIL"
     print("── changed backend mutation summary ─────────────────")
     print(f"killed             {killed}")
     print(f"survived           {survived}")
@@ -168,6 +187,29 @@ def gate_backend(
     print(f"score              {score:.2f}%")
     print(f"threshold          {threshold:.0f}%")
     print(f"mutation-diff gate {'PASS' if passed else 'FAIL'}")
+    summary = [
+        "## Backend mutation diff",
+        "",
+        "| Metric | Value |",
+        "| --- | ---: |",
+        f"| Status | {gate_status} |",
+        f"| Killed | {killed} |",
+        f"| Survived | {survived} |",
+        f"| No coverage | {len(no_coverage_keys)} |",
+        f"| New survivors | {new_survivors} |",
+        f"| Considered | {considered} |",
+        f"| Score | {score:.2f}% |",
+        f"| Threshold | {threshold:.0f}% |",
+    ]
+    if survivor_keys:
+        summary.extend(["", "<details>", "<summary>Surviving mutants</summary>", ""])
+        summary.extend(f"- `{key}`" for key in survivor_keys)
+        summary.extend(["", "</details>"])
+    if no_coverage_keys:
+        summary.extend(["", "<details>", "<summary>Mutants without coverage</summary>", ""])
+        summary.extend(f"- `{key}`" for key in no_coverage_keys)
+        summary.extend(["", "</details>"])
+    append_step_summary("\n".join(summary))
     return 0 if passed else 1
 
 

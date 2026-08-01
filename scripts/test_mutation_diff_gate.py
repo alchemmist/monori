@@ -70,7 +70,7 @@ diff --git a/server/app/example.py b/server/app/example.py
         self.assertEqual(module.parse_changed_lines(diff), {"server/app/example.py": {2, 3}})
 
     @staticmethod
-    def write_meta(path: Path, statuses: dict[str, int]) -> None:
+    def write_meta(path: Path, statuses: dict[str, int | None]) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps({"exit_code_by_key": statuses}))
 
@@ -100,6 +100,33 @@ diff --git a/server/app/example.py b/server/app/example.py
                 skip_new_survivors,
             )
         return int(result)
+
+    def test_gate_backend_rejects_mutants_without_coverage(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            mutants = root / "mutants"
+            self.write_meta(
+                mutants / "app/example.py.meta",
+                {"app.example.x_run__mutmut_1": None},
+            )
+            with (
+                mock.patch.object(module, "changed_lines", return_value={}),
+                mock.patch.object(
+                    module,
+                    "changed_functions",
+                    return_value={"server/app/example.py": {("run", None)}},
+                ),
+            ):
+                result = module.gate_backend(
+                    mutants,
+                    root / "baseline",
+                    root,
+                    "origin/main",
+                    90,
+                    False,
+                )
+
+        self.assertEqual(result, 1)
 
     def test_gate_backend_scores_killed_and_survived_mutants(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
