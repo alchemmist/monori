@@ -379,12 +379,15 @@ export default function BudgetPage({
                                             key={`g${g.id}`}
                                             className="group-row"
                                             onClick={() =>
-                                                setCollapsed({ ...collapsed, [g.id]: !isCollapsed })
+                                                setCollapsed({
+                                                    ...collapsed,
+                                                    [g.id]: isCollapsed !== true,
+                                                })
                                             }
                                         >
                                             <td>
                                                 <span
-                                                    className={`group-row__chevron ${isCollapsed ? "group-row__chevron_collapsed" : ""}`}
+                                                    className={`group-row__chevron ${isCollapsed === true ? "group-row__chevron_collapsed" : ""}`}
                                                 >
                                                     <ChevronDown width={14} height={14} />
                                                 </span>
@@ -422,7 +425,7 @@ export default function BudgetPage({
                                             </td>
                                             <td />
                                         </tr>,
-                                        !isCollapsed &&
+                                        isCollapsed !== true &&
                                             cats.map((c) => {
                                                 const m = res.byCategory.get(c.id)?.[month] ?? {
                                                     budgeted: 0,
@@ -600,7 +603,12 @@ export default function BudgetPage({
 }
 
 function GoalUrgency({ goal, funded }: { goal: Category; funded: number }) {
-    if (!goal.goalTargetDate || funded >= (goal.goalTarget ?? 0)) return null;
+    if (
+        goal.goalTargetDate == null ||
+        goal.goalTargetDate === "" ||
+        funded >= (goal.goalTarget ?? 0)
+    )
+        return null;
     const days = Math.ceil(
         (new Date(`${goal.goalTargetDate}T23:59:59`).getTime() - Date.now()) / 86_400_000,
     );
@@ -631,7 +639,7 @@ function DistributeGoalDialog({
     onClose: () => void;
 }) {
     const suggestedMonths = (() => {
-        if (!goal.goalTargetDate) return "";
+        if (goal.goalTargetDate == null || goal.goalTargetDate === "") return "";
         const match = /^(\d{4})-(\d{2})/.exec(goal.goalTargetDate);
         if (!match) return "";
         const count = (+match[1]! - startYear) * 12 + (+match[2]! - startMonth) + 1;

@@ -21,7 +21,7 @@ describe("naturalSize", () => {
         expect(
             naturalSize({
                 viewBox: { baseVal: DOMRect.fromRect({ width: 640, height: 320 }) },
-            } as SVGSVGElement),
+            }),
         ).toEqual({
             width: 640,
             height: 320,
@@ -29,14 +29,14 @@ describe("naturalSize", () => {
         expect(
             naturalSize({
                 viewBox: { baseVal: DOMRect.fromRect({ width: 0, height: 320 }) },
-            } as SVGSVGElement),
+            }),
         ).toBeNull();
         expect(
             naturalSize({
                 viewBox: { baseVal: DOMRect.fromRect({ width: 640, height: 0 }) },
-            } as SVGSVGElement),
+            }),
         ).toBeNull();
-        expect(naturalSize({ viewBox: {} } as SVGSVGElement)).toBeNull();
+        expect(naturalSize({ viewBox: {} })).toBeNull();
         expect(naturalSize(null)).toBeNull();
     });
 });

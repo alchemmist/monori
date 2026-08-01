@@ -14,7 +14,11 @@ function parseColor(value: string): [number, number, number] {
             v.length === 4
                 ? Array.from(v.slice(1), (character) => character.repeat(2)).join("")
                 : v.slice(1);
-        return [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16)) as [number, number, number];
+        return [
+            parseInt(hex.slice(0, 2), 16),
+            parseInt(hex.slice(2, 4), 16),
+            parseInt(hex.slice(4, 6), 16),
+        ];
     }
     const m = v.match(/(\d+)[, ]+(\d+)[, ]+(\d+)/);
     return m ? [+m[1]!, +m[2]!, +m[3]!] : [10, 10, 10];
@@ -104,10 +108,7 @@ export default function GlyphFlower() {
             for (const p of cells) {
                 const flick = t ? 0.82 + 0.18 * Math.sin(t * 0.0012 + p.tw) : 1;
                 const b = p.b * flick;
-                ctx.font =
-                    (b > 0.55 ? "700 " : "400 ") +
-                    p.cs * 0.86 +
-                    "px ui-monospace, Menlo, monospace";
+                ctx.font = `${b > 0.55 ? "700" : "400"} ${p.cs * 0.86}px ui-monospace, Menlo, monospace`;
                 if (p.core > 0.08) {
                     const g = Math.min(1, p.core * 1.4);
                     const coreAlpha = light

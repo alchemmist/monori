@@ -32,14 +32,14 @@ function comparable(snap: Snapshot) {
             .map((c) => ({
                 name: c.name,
                 group: grpName.get(c.groupId),
-                keywords: c.keywords ?? "",
+                keywords: c.keywords,
             }))
             .sort(byJson),
         transactions: snap.transactions
             .map((t) => ({
                 date: t.date.slice(0, 10),
                 amount: t.amount,
-                description: t.description ?? "",
+                description: t.description,
                 category: t.categoryId == null ? null : catName.get(t.categoryId),
                 account: accName.get(t.accountId),
             }))
@@ -172,7 +172,11 @@ test("monori data survives export and re-import into a fresh account", async ({
         "Groceries",
         "Salary",
     ]);
-    expect(a.transactions.every((t) => t.account && t.date.startsWith(`${YEAR}-`))).toBe(true);
+    expect(
+        a.transactions.every(
+            (t) => t.account != null && t.account !== "" && t.date.startsWith(`${YEAR}-`),
+        ),
+    ).toBe(true);
     expect(a.budgets).toHaveLength(3);
     expect(b).toEqual(a);
 });

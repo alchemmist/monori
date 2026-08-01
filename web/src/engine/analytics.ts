@@ -54,7 +54,7 @@ export function incomeGroupIdSet(groups: CategoryGroup[]): Set<Id> {
  * accepted yet — the budget ignores it, so the balance does too, and the two
  * views always move together. Returns Map(accountId -> kopecks). */
 export function accountBalances(snapshot: Snapshot): Map<Id, number> {
-    const balances = new Map(snapshot.accounts.map((a) => [a.id, a.openingBalance]));
+    const balances = new Map(snapshot.accounts.map((a) => [a.id, a.openingBalance ?? 0]));
     for (const t of effectiveTransactions(snapshot.transactions)) {
         if (!balances.has(t.accountId)) continue;
         if (t.categoryId == null && !isTransfer(t) && t.source !== "adjustment") continue;

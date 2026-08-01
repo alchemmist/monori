@@ -40,13 +40,14 @@ export default function AccountsPage() {
     if (!snapshot) throw new Error("accounts page requires a loaded snapshot");
     const [dialog, setDialog] = useState<AccountDialog | null>(null);
 
-    const accounts = snapshot.accounts ?? [];
+    const accounts = snapshot.accounts;
     const connByAccount = useMemo(() => {
-        const byId = new Map((snapshot.connections ?? []).map((c) => [c.id, c]));
+        const connections = snapshot.connections === undefined ? [] : snapshot.connections;
+        const byId = new Map(connections.map((c) => [c.id, c]));
         const m = new Map<Id, Connection>();
-        for (const a of snapshot.accounts ?? []) {
+        for (const a of snapshot.accounts) {
             const conn = a.connectionId != null ? byId.get(a.connectionId) : null;
-            if (conn) m.set(a.id, conn);
+            if (conn != null) m.set(a.id, conn);
         }
         return m;
     }, [snapshot.connections, snapshot.accounts]);

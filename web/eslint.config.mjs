@@ -53,7 +53,13 @@ export default tseslint.config(
         rules: {
             "@typescript-eslint/no-empty-function": "off",
             "@typescript-eslint/no-non-null-assertion": "off",
+            "@typescript-eslint/no-unsafe-type-assertion": "off",
             "@typescript-eslint/require-await": "off",
         },
+    },
+    {
+        // Response.json() is the sole trusted production boundary until the planned Zod schemas.
+        files: ["src/api.ts"],
+        rules: { "@typescript-eslint/no-unsafe-type-assertion": "off" },
     },
 );

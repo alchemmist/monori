@@ -17,6 +17,12 @@ interface DraftPart {
     comment: string;
 }
 
+interface SplitColorStyle extends CSSProperties {
+    "--split-color": string;
+}
+
+const splitColorStyle = (color: string): SplitColorStyle => ({ "--split-color": color });
+
 interface ValidAllocation {
     transactionId: Id;
     amounts: number[];
@@ -45,13 +51,13 @@ export default function SplitTransactionTab({
     const lastValidAllocation = useRef<ValidAllocation | null>(null);
 
     useEffect(() => {
-        if (!transaction) return;
+        if (transaction == null) return;
         setParts(
-            transaction.splits?.length
+            transaction.splits != null && transaction.splits.length > 0
                 ? transaction.splits.map((part) => ({
                       categoryId: part.categoryId,
                       amount: amountInput(Math.abs(part.amount)),
-                      comment: part.comment ?? "",
+                      comment: part.comment,
                   }))
                 : evenAmounts(transaction.amount, 2).map((amount) => ({
                       ...blankPart(),
@@ -246,11 +252,7 @@ export default function SplitTransactionTab({
                     <div
                         className="split-editor__part"
                         key={index}
-                        style={
-                            {
-                                "--split-color": PALETTE[index % PALETTE.length],
-                            } as CSSProperties
-                        }
+                        style={splitColorStyle(PALETTE[index % PALETTE.length] ?? "transparent")}
                     >
                         <span className="split-editor__swatch" aria-hidden="true" />
                         <InlineSelect

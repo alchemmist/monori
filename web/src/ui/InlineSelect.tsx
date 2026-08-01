@@ -93,11 +93,7 @@ export default function InlineSelect({
     const sections = grouped
         ? inputSections
               .map((s) => {
-                  const groupHit =
-                      q !== "" &&
-                      s.group != null &&
-                      s.group !== "" &&
-                      s.group.toLowerCase().includes(q);
+                  const groupHit = q !== "" && s.group !== "" && s.group.toLowerCase().includes(q);
                   const options = (groupHit ? s.options : s.options.filter(match)).map(norm);
                   return { ...s, options };
               })

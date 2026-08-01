@@ -14,6 +14,12 @@ import type { Account } from "../types.js";
 
 const today = () => new Date().toISOString().slice(0, 10);
 
+interface SwatchStyle extends CSSProperties {
+    "--swatch": string;
+}
+
+const swatchStyle = (color: string): SwatchStyle => ({ "--swatch": color });
+
 const ACCOUNT_TYPES = [
     { value: "card", label: "Card" },
     { value: "cash", label: "Cash" },
@@ -57,14 +63,14 @@ export function AccountEditTab({
 }) {
     const { snapshot, createAccount, patchAccount, notify } = useStore();
     if (!snapshot) throw new Error("Account editor requires a loaded snapshot");
-    const isNew = !account.id;
+    const isNew = account.id == null;
 
     // images already used by other accounts, so a logo can be reused without re-uploading
     const savedImages = useMemo(() => {
         const seen = new Set<string>();
         const out: string[] = [];
-        for (const a of snapshot.accounts ?? []) {
-            if (a.iconImage && !seen.has(a.iconImage)) {
+        for (const a of snapshot.accounts) {
+            if (a.iconImage != null && a.iconImage !== "" && !seen.has(a.iconImage)) {
                 seen.add(a.iconImage);
                 out.push(a.iconImage);
             }
@@ -199,7 +205,7 @@ export function AccountEditTab({
                                         key={c}
                                         type="button"
                                         className={`color-picker__item ${color === c ? "color-picker__item_active" : ""}`}
-                                        style={{ "--swatch": c } as CSSProperties}
+                                        style={swatchStyle(c)}
                                         onClick={() => setColor(c)}
                                         aria-label={c}
                                         aria-pressed={color === c}
@@ -320,8 +326,8 @@ export function AccountDeleteDialog({
                 {txCount > 0 && (
                     <FSelect
                         label="Move to"
-                        value={target || null}
-                        onChange={(v) => setTarget(v ?? "")}
+                        value={target === "" ? null : target}
+                        onChange={setTarget}
                         data={others.map((a) => ({ value: String(a.id), label: a.name }))}
                     />
                 )}

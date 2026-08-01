@@ -19,7 +19,7 @@ const store = () => (typeof localStorage === "undefined" ? null : localStorage);
 function read(key: string, fallback: unknown): unknown {
     try {
         const raw = store()?.getItem(key);
-        return raw ? (JSON.parse(raw) as unknown) : fallback;
+        return raw == null || raw === "" ? fallback : (JSON.parse(raw) as unknown);
     } catch {
         return fallback;
     }
@@ -36,25 +36,30 @@ function write(key: string, value: unknown) {
 const isPlainObject = (value: unknown): value is Record<string, unknown> =>
     typeof value === "object" && value !== null && !Array.isArray(value);
 
+type RestoredTab = {
+    id: number;
+    key?: string;
+    kind: string;
+    props: Record<string, unknown>;
+};
+
+const isRestoredTab = (value: unknown): value is RestoredTab =>
+    isPlainObject(value) &&
+    typeof value["id"] === "number" &&
+    (value["key"] === undefined || typeof value["key"] === "string") &&
+    typeof value["kind"] === "string" &&
+    isPlainObject(value["props"]);
+
 /** Restored tabs, with anything malformed dropped rather than crashing boot. */
 export function loadTabs(): TabDescriptor[] {
     const raw = read(TABS_KEY, []);
     if (!Array.isArray(raw)) return [];
-    const candidates = raw as unknown[];
-    return candidates
-        .filter(
-            (t): t is Record<string, unknown> =>
-                isPlainObject(t) &&
-                typeof t["id"] === "number" &&
-                typeof t["kind"] === "string" &&
-                isPlainObject(t["props"]),
-        )
-        .map((t) => ({
-            id: t["id"] as number,
-            key: typeof t["key"] === "string" ? t["key"] : null,
-            kind: t["kind"] as string,
-            props: t["props"] as Record<string, unknown>,
-        }));
+    return raw.filter(isRestoredTab).map((t) => ({
+        id: t.id,
+        key: t.key ?? null,
+        kind: t.kind,
+        props: t.props,
+    }));
 }
 
 export function saveTabs(tabs: TabDescriptor[]) {
@@ -85,7 +90,7 @@ export function saveWidth(key: string, width: number | null) {
     const map = read(TAB_WIDTH_KEY, {});
     const next = { ...(isPlainObject(map) ? map : {}) };
     // null resets the tab to whatever width its own props ask for
-    if (width == null) delete next[key];
+    if (width == null) Reflect.deleteProperty(next, key);
     else next[key] = Math.round(width);
     write(TAB_WIDTH_KEY, next);
 }

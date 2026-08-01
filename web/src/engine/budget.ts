@@ -56,7 +56,7 @@ export function txKey(year: number, month: number, categoryId: Id | null): strin
 export function buildTxIndex(transactions: BudgetTransaction[]): Map<string, number> {
     const index = new Map<string, number>();
     const effective = transactions.flatMap((transaction) =>
-        transaction.splits?.length
+        transaction.splits != null && transaction.splits.length > 0
             ? transaction.splits.map((part) => ({
                   ...transaction,
                   categoryId: part.categoryId,
@@ -86,7 +86,7 @@ const OPENING_DATE = /^(\d{4})-(\d{1,2})(?:\D|$)/;
 /** Map(accountId -> date of its earliest transaction). */
 function firstTxDates(transactions: AccountTransaction[]): Map<Id, string> {
     const dates = new Map<Id, string>();
-    for (const t of transactions ?? []) {
+    for (const t of transactions) {
         const seen = dates.get(t.accountId);
         if (seen == null || t.date < seen) dates.set(t.accountId, t.date);
     }
@@ -108,11 +108,11 @@ export function buildOpeningIndex(
     transactions: AccountTransaction[] = [],
 ): Map<string, number> {
     const index = new Map<string, number>();
-    if (!accounts?.length) return index;
+    if (accounts == null || accounts.length === 0) return index;
     const firstTx = firstTxDates(transactions);
     for (const a of accounts) {
         const amount = a.openingBalance ?? 0;
-        if (!amount) continue;
+        if (amount === 0) continue;
         const parsed = OPENING_DATE.exec(a.openingDate ?? firstTx.get(a.id) ?? "");
         let year = firstYear;
         let month = 1;

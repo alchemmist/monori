@@ -168,7 +168,8 @@ export default function Tab({
         .filter(Boolean)
         .join(" ");
 
-    const widthVar = dragged != null ? `${dragged}px` : width ? `${width}vw` : null;
+    const widthVar =
+        dragged != null ? `${dragged}px` : width != null && width !== 0 ? `${width}vw` : null;
 
     return (
         <aside
@@ -178,7 +179,7 @@ export default function Tab({
                 {
                     right: offset,
                     zIndex: 120 + layer,
-                    ...(widthVar ? { "--ui-tab-w": widthVar } : null),
+                    ...(widthVar == null ? null : { "--ui-tab-w": widthVar }),
                 } as TabStyle
             }
             onTransitionEnd={(e) => {
@@ -240,7 +241,9 @@ export default function Tab({
                     </div>
                 </div>
                 <div className="ui-tab__content">{children}</div>
-                {footer && <div className="ui-tab__footer">{footer}</div>}
+                {footer != null && footer !== false && (
+                    <div className="ui-tab__footer">{footer}</div>
+                )}
             </div>
         </aside>
     );

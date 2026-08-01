@@ -8,6 +8,21 @@ const ok = (body: unknown = {}) => ({
     blob: vi.fn().mockResolvedValue(new Blob(["x"])),
 });
 
+const requireString = (value: unknown): string => {
+    if (typeof value !== "string") throw new Error("expected a string request body");
+    return value;
+};
+
+const requireFormData = (value: unknown): FormData => {
+    if (!(value instanceof FormData)) throw new Error("expected a multipart request body");
+    return value;
+};
+
+const requireFile = (value: FormDataEntryValue | null): File => {
+    if (!(value instanceof File)) throw new Error("expected a file form field");
+    return value;
+};
+
 /** Every JSON endpoint, as [label, call, expected url, expected method, expected body]. */
 type Endpoint = [string, () => Promise<unknown>, string, string | undefined, unknown];
 
@@ -329,7 +344,7 @@ describe("api", () => {
                 expect(options.body).toBeUndefined();
             } else {
                 expect(options.headers["Content-Type"]).toBe("application/json");
-                expect(JSON.parse(options.body as string)).toEqual(body);
+                expect(JSON.parse(requireString(options.body))).toEqual(body);
             }
         },
     );
@@ -343,7 +358,9 @@ describe("api", () => {
         expect(options.method).toBe("POST");
         expect(options.headers["Content-Type"]).toBe("application/x-www-form-urlencoded");
         expect(options.body).toBeInstanceOf(URLSearchParams);
-        const form = options.body as URLSearchParams;
+        if (!(options.body instanceof URLSearchParams))
+            throw new Error("expected an URL-encoded request body");
+        const form = options.body;
         expect(form.get("username")).toBe("a@b.c");
         expect(form.get("password")).toBe("hunter2");
         expect([...form.keys()].sort()).toEqual(["password", "username"]);
@@ -374,14 +391,16 @@ describe("api", () => {
         const [previewUrl, previewOpts] = fetch.mock.calls[3]!;
         expect(previewUrl).toBe("/api/import/workbook/preview");
         expect(previewOpts.body).toBeInstanceOf(FormData);
-        expect((previewOpts.body as FormData).get("file")).toBeInstanceOf(File);
-        expect(((previewOpts.body as FormData).get("file") as File).name).toBe("book.xlsx");
+        const previewForm = requireFormData(previewOpts.body);
+        expect(previewForm.get("file")).toBeInstanceOf(File);
+        expect(requireFile(previewForm.get("file")).name).toBe("book.xlsx");
 
         await api.workbookCommit(new File(["x"], "book.xlsx"), { card: 1 }, "skip");
         const [commitUrl, commitOpts] = fetch.mock.calls[4]!;
         expect(commitUrl).toBe("/api/import/workbook/commit");
-        expect((commitOpts.body as FormData).get("mapping")).toBe('{"card":1}');
-        expect((commitOpts.body as FormData).get("budgetPolicy")).toBe("skip");
+        const commitForm = requireFormData(commitOpts.body);
+        expect(commitForm.get("mapping")).toBe('{"card":1}');
+        expect(commitForm.get("budgetPolicy")).toBe("skip");
 
         const blob = await api.exportXlsx();
         expect(blob).toBeInstanceOf(Blob);
@@ -392,13 +411,16 @@ describe("api", () => {
         await api.importCommit([{ id: 3 }], 8);
         const [url, options] = fetch.mock.calls[0]!;
         expect(url).toBe("/api/import/commit");
-        expect(JSON.parse(options.body as string)).toEqual({ rows: [{ id: 3 }], accountId: 8 });
+        expect(JSON.parse(requireString(options.body))).toEqual({
+            rows: [{ id: 3 }],
+            accountId: 8,
+        });
     });
 
     it("sends explicit false admin SQL safeguards by default", async () => {
         await api.adminSql("select 1");
         const [, options] = fetch.mock.calls[0]!;
-        expect(JSON.parse(options.body as string)).toEqual({
+        expect(JSON.parse(requireString(options.body))).toEqual({
             sql: "select 1",
             confirmWrite: false,
             dryRun: false,

@@ -9,6 +9,14 @@ import ImportPanel from "./ImportPanel.jsx";
 import SplitTransactionTab from "./SplitTransactionTab.jsx";
 import type { Id, User } from "../types.js";
 
+const isUser = (value: unknown): value is User =>
+    typeof value === "object" &&
+    value !== null &&
+    "id" in value &&
+    typeof value.id === "number" &&
+    "email" in value &&
+    typeof value.email === "string";
+
 /**
  * Renders the store's global tab stack at the app-shell level, so open tabs
  * survive any in-app navigation — and, since the stack is persisted, a page
@@ -26,9 +34,9 @@ function UnknownTab({ onClose }: { onClose: () => void }) {
 
 function AccountEditHost({ accountId, onClose }: { accountId?: Id; onClose: () => void }) {
     const account = useStore((s) =>
-        accountId ? (s.snapshot?.accounts ?? []).find((a) => a.id === accountId) : null,
+        accountId != null ? (s.snapshot?.accounts ?? []).find((a) => a.id === accountId) : null,
     );
-    const missing = accountId != null && !account;
+    const missing = accountId != null && account == null;
     useEffect(() => {
         if (missing) onClose();
     }, [missing, onClose]);
@@ -44,11 +52,11 @@ function TransactionSplitHost({
     onClose: () => void;
 }) {
     const transaction = useStore((s) =>
-        transactionId
+        transactionId != null
             ? (s.snapshot?.transactions ?? []).find((candidate) => candidate.id === transactionId)
             : null,
     );
-    const missing = transactionId != null && !transaction;
+    const missing = transactionId != null && transaction == null;
     useEffect(() => {
         if (missing) onClose();
     }, [missing, onClose]);
@@ -92,7 +100,8 @@ export default function TabHost() {
             );
         }
         if (t.kind === "admin-tx") {
-            const user = t.props["user"] as User;
+            const user = t.props["user"];
+            if (!isUser(user)) return <UnknownTab key={t.id} onClose={close} />;
             return <AdminTxTab key={t.id} user={user} onClose={close} />;
         }
         if (t.kind === "admin-sql") {

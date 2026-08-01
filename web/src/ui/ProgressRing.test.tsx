@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import ProgressRing from "./ProgressRing.jsx";
 import { render, renderUI, screen } from "../test/render.jsx";
 
-const realMatchMedia = window.matchMedia;
+const realMatchMedia = window.matchMedia.bind(window);
 
 /** Make `(prefers-reduced-motion: reduce)` match, leaving other queries alone. */
 function reduceMotion() {

@@ -13,7 +13,8 @@ vi.mock("./pages/AdminPage.jsx", () => ({
 }));
 
 // this Node build ships no localStorage and App reads it on mount
-if (!globalThis.localStorage) {
+const existingStorage: unknown = Reflect.get(globalThis, "localStorage");
+if (existingStorage == null) {
     const data = new Map<string, string>();
     globalThis.localStorage = {
         get length() {

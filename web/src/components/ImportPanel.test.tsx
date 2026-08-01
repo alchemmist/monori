@@ -4,6 +4,13 @@ import { api } from "../api.js";
 import { useStore } from "../store.js";
 import ImportPanel from "./ImportPanel.jsx";
 
+const clearStorage = () => {
+    const storage: unknown = Reflect.get(globalThis, "localStorage");
+    if (typeof storage !== "object" || storage === null) return;
+    const clear: unknown = Reflect.get(storage, "clear");
+    if (typeof clear === "function") Reflect.apply(clear, storage, []);
+};
+
 const csv = (name = "statement.csv") => new File(["date,amount\n"], name, { type: "text/csv" });
 
 const upload = (container: HTMLElement, file = csv()) =>
@@ -21,15 +28,9 @@ describe("ImportPanel", () => {
         resetStore();
         seed({ accounts });
         vi.clearAllMocks();
-        globalThis.localStorage?.clear?.();
+        clearStorage();
         if (!window.visualViewport) {
             Object.defineProperty(window, "visualViewport", {
-                configurable: true,
-                value: { addEventListener: () => {}, removeEventListener: () => {} },
-            });
-        }
-        if (!document.fonts) {
-            Object.defineProperty(document, "fonts", {
                 configurable: true,
                 value: { addEventListener: () => {}, removeEventListener: () => {} },
             });

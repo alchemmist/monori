@@ -79,7 +79,9 @@ describe("SettingsPage", () => {
         await user.click(screen.getByRole("button", { name: /export to excel/i }));
         await waitFor(() => expect(click).toHaveBeenCalledOnce());
         expect(create).toHaveBeenCalledExactlyOnceWith(blob);
-        const anchor = click.mock.instances[0] as HTMLAnchorElement;
+        const anchor: unknown = click.mock.instances[0];
+        expect(anchor).toBeInstanceOf(HTMLAnchorElement);
+        if (!(anchor instanceof HTMLAnchorElement)) throw new Error("expected download anchor");
         expect(anchor).toHaveAttribute("download", "monori-export.xlsx");
         expect(anchor).toHaveAttribute("href", "blob:test");
         expect(anchor.isConnected).toBe(false);

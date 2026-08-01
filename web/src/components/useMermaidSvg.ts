@@ -12,8 +12,8 @@ function loadEngine(): Promise<MermaidEngine> {
 
 // mermaid ships the svg at width="100%" with the real size only in its viewBox,
 // so anything that lays it out itself has to read the intrinsic size from there
-export function naturalSize(svg: SVGSVGElement | null) {
-    if (svg == null) return null;
+export function naturalSize(svg: unknown) {
+    if (typeof svg !== "object" || svg === null) return null;
     const viewBox: unknown = Reflect.get(svg, "viewBox");
     if (typeof viewBox !== "object" || viewBox === null) return null;
     const box: unknown = Reflect.get(viewBox, "baseVal");

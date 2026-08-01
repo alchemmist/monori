@@ -18,6 +18,10 @@ import type { CSSProperties } from "react";
 const GITHUB_URL = "https://github.com/alchemmist/monori";
 const DEMO_URL = "/demo";
 
+interface WidthStyle extends CSSProperties {
+    "--w": string;
+}
+
 const SPARK_POINTS = "0,26 8,22 16,24 24,17 32,19 40,12 48,15 56,9 64,12 72,6 80,9 88,3 100,5";
 
 function Sparkline() {
@@ -35,7 +39,7 @@ function Sparkline() {
 }
 
 function MiniRows() {
-    const width = (value: string): CSSProperties => ({ "--w": value }) as CSSProperties;
+    const width = (value: string): WidthStyle => ({ "--w": value });
     return (
         <div className="bento__rows" aria-hidden="true">
             <i style={width("70%")} />

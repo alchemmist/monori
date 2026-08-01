@@ -25,16 +25,21 @@ const edit = (input: HTMLInputElement, value: string, caret = value.length) => {
     fireEvent.change(input, { target: { value, selectionStart: caret, selectionEnd: caret } });
 };
 
+const inputElement = (element: HTMLElement): HTMLInputElement => {
+    if (!(element instanceof HTMLInputElement)) throw new Error("expected an input element");
+    return element;
+};
+
 describe("useAmountField", () => {
     it("marks the field as a decimal keypad", () => {
         const { getByTestId } = render(<Field />);
-        expect((getByTestId("amt") as HTMLInputElement).inputMode).toBe("decimal");
+        expect(inputElement(getByTestId("amt")).inputMode).toBe("decimal");
     });
 
     it("groups the digits as they are typed", () => {
         const onValue = vi.fn();
         const { getByTestId } = render(<Field onValue={onValue} />);
-        edit(getByTestId("amt") as HTMLInputElement, "1234567");
+        edit(inputElement(getByTestId("amt")), "1234567");
         // grouped with non-breaking spaces, never plain spaces
         expect(onValue).toHaveBeenCalledWith(`1${NB}234${NB}567`);
     });
@@ -42,7 +47,7 @@ describe("useAmountField", () => {
     it("keeps a negative sign and a decimal separator", () => {
         const onValue = vi.fn();
         const { getByTestId } = render(<Field onValue={onValue} />);
-        edit(getByTestId("amt") as HTMLInputElement, "-1234,5");
+        edit(inputElement(getByTestId("amt")), "-1234,5");
         expect(onValue).toHaveBeenCalledWith(`-1${NB}234,5`);
     });
 
@@ -50,7 +55,7 @@ describe("useAmountField", () => {
         // caret sits after "123"; once "1234567" becomes "1 234 567" the three
         // significant chars land it after "1 23", at raw index 4 — not 3, and
         // not thrown to the end
-        const input = render(<Field />).getByTestId("amt") as HTMLInputElement;
+        const input = inputElement(render(<Field />).getByTestId("amt"));
         edit(input, "1234567", 3);
         expect(input.value).toBe(`1${NB}234${NB}567`);
         expect(input.selectionStart).toBe(4);
@@ -59,7 +64,7 @@ describe("useAmountField", () => {
     it("counts significant characters, so the caret does not drift to the end", () => {
         // caret after the first four digits of a seven-digit amount stays on its
         // own group boundary rather than snapping to the tail
-        const input = render(<Field />).getByTestId("amt") as HTMLInputElement;
+        const input = inputElement(render(<Field />).getByTestId("amt"));
         edit(input, "1234567", 4);
         expect(input.value).toBe(`1${NB}234${NB}567`);
         // four significant chars: after "1 234", raw index 5

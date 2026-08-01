@@ -243,11 +243,13 @@ export default function YearGrid({
                             <tr
                                 key={`g${g.id}`}
                                 className="yg-group"
-                                onClick={() => setCollapsed({ ...collapsed, [g.id]: !isCollapsed })}
+                                onClick={() =>
+                                    setCollapsed({ ...collapsed, [g.id]: isCollapsed !== true })
+                                }
                             >
                                 <td className="yg-name">
                                     <span
-                                        className={`yg-chevron ${isCollapsed ? "yg-chevron_collapsed" : ""}`}
+                                        className={`yg-chevron ${isCollapsed === true ? "yg-chevron_collapsed" : ""}`}
                                     >
                                         <ChevronDown width={13} height={13} />
                                     </span>
@@ -283,7 +285,7 @@ export default function YearGrid({
                             </tr>,
                         ];
 
-                        if (!isCollapsed) {
+                        if (isCollapsed !== true) {
                             for (const c of cats) {
                                 const goal = goalProgressFor?.(c);
                                 const months = res.byCategory.get(c.id) ?? [];

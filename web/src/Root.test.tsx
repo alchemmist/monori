@@ -29,7 +29,8 @@ vi.mock("./components/Shell.jsx", async () => {
 });
 
 // Ensure localStorage is available for jsdom
-if (!globalThis.localStorage) {
+const existingStorage: unknown = Reflect.get(globalThis, "localStorage");
+if (existingStorage == null) {
     const data = new Map<string, string>();
     globalThis.localStorage = {
         get length() {

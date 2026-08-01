@@ -48,7 +48,7 @@ export async function seedDemoData() {
             icon: a.icon,
             color: a.color,
             currency: a.currency,
-            openingBalance: a.openingBalance,
+            ...(a.openingBalance === undefined ? {} : { openingBalance: a.openingBalance }),
             ...(a.openingDate === undefined ? {} : { openingDate: a.openingDate }),
             bankRef,
         };
@@ -83,7 +83,7 @@ export async function seedDemoData() {
                     await api.createCategory({
                         name: c.name,
                         groupId: grpId.get(c.groupId) ?? 0,
-                        keywords: c.keywords ?? "",
+                        keywords: c.keywords,
                     })
                 ).id,
         );
@@ -107,9 +107,9 @@ export async function seedDemoData() {
                 date: `${t.date}T12:00:00`,
                 amount: t.amount,
                 description: t.description,
-                bankCategory: t.bankCategory ?? "",
+                bankCategory: t.bankCategory,
                 mcc: t.mcc ?? "",
-                categoryId: t.categoryId ? (catId.get(t.categoryId) ?? null) : null,
+                categoryId: t.categoryId == null ? null : (catId.get(t.categoryId) ?? null),
                 accountId: accId.get(a.id) ?? null,
             }));
         const res = await api.importCommit(rows, accId.get(a.id) ?? null);
@@ -122,24 +122,25 @@ export async function seedDemoData() {
     let transfers = 0;
     const transferPairs = new Map<string, { out?: Transaction; inn?: Transaction }>();
     for (const tx of demoSnapshot.transactions) {
-        if (!tx.transferId) continue;
+        if (tx.transferId == null || tx.transferId === "") continue;
         const pair = transferPairs.get(tx.transferId) ?? {};
         pair[tx.amount < 0 ? "out" : "inn"] = tx;
         transferPairs.set(tx.transferId, pair);
     }
     const existing = await allTransactions();
     for (const { out, inn } of transferPairs.values()) {
-        if (!out || !inn) continue;
+        if (out == null || inn == null) continue;
         const fromAccountId = accId.get(out.accountId);
         const toAccountId = accId.get(inn.accountId);
         if (fromAccountId == null || toAccountId == null) continue;
         const exists = existing.some((t) => {
             if (!(
-                t.transferId &&
+                t.transferId != null &&
+                t.transferId !== "" &&
                 t.accountId === fromAccountId &&
                 t.amount === -inn.amount &&
                 t.date.slice(0, 10) === out.date &&
-                t.comment === (out.comment ?? "")
+                t.comment === out.comment
             ))
                 return false;
             return existing.some(
@@ -155,7 +156,7 @@ export async function seedDemoData() {
                 toAccountId,
                 amount: inn.amount,
                 date: `${inn.date}T12:00:00`,
-                comment: out.comment ?? "",
+                comment: out.comment,
             });
             transfers += 1;
         }

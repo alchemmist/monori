@@ -771,10 +771,13 @@ function Kpi({
     return (
         <div className="card kpi">
             <div className="kpi__label">{label}</div>
-            <div className="kpi__value" style={color ? { color } : undefined}>
+            <div
+                className="kpi__value"
+                style={color == null || color === "" ? undefined : { color }}
+            >
                 {value}
             </div>
-            {sub && <div className="kpi__sub">{sub}</div>}
+            {sub !== "" && <div className="kpi__sub">{sub}</div>}
         </div>
     );
 }

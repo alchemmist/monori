@@ -103,7 +103,7 @@ export default function DashboardPage({
     const [stackYear, setStackYear] = useState(String(now.getFullYear()));
     const [acctFilter, setAcctFilter] = useState("all");
 
-    const accounts = snapshot.accounts ?? [];
+    const accounts = snapshot.accounts;
     const balances = useMemo(() => accountBalances(snapshot), [snapshot]);
     const accountTransactions = useMemo(() => {
         return acctFilter === "all"
@@ -523,8 +523,8 @@ export default function DashboardPage({
                                 small
                                 searchable
                                 placeholder="Category"
-                                value={drillCat || null}
-                                onChange={(v) => setDrillCat(v ?? "")}
+                                value={drillCat === "" ? null : drillCat}
+                                onChange={setDrillCat}
                                 data={expenseCatOptions}
                             />
                             <InlineSelect
@@ -642,7 +642,7 @@ function CategoryDonut({
                     tooltipDataSource="segment"
                     valueFormatter={chartMoney}
                     cellProps={(cell) => ({
-                        opacity: active && cell.name !== active ? 0.3 : 1,
+                        opacity: active != null && active !== "" && cell.name !== active ? 0.3 : 1,
                         style: { transition: "opacity 120ms" },
                     })}
                 />
@@ -651,7 +651,9 @@ function CategoryDonut({
                 {data.map((d) => (
                     <li
                         key={d.name}
-                        data-dim={active && d.name !== active ? "" : undefined}
+                        data-dim={
+                            active != null && active !== "" && d.name !== active ? "" : undefined
+                        }
                         onMouseEnter={() => setActive(d.name)}
                         onMouseLeave={() => setActive(null)}
                     >
@@ -665,7 +667,7 @@ function CategoryDonut({
 }
 
 function fmtMonthKey(key: string | undefined) {
-    if (!key) return "";
+    if (key == null || key === "") return "";
     return `${MONTHS_SHORT[+key.slice(5, 7) - 1]} ${key.slice(0, 4)}`;
 }
 
@@ -683,10 +685,13 @@ function Kpi({
     return (
         <div className="card kpi">
             <div className="kpi__label">{label}</div>
-            <div className="kpi__value" style={color ? { color } : undefined}>
+            <div
+                className="kpi__value"
+                style={color == null || color === "" ? undefined : { color }}
+            >
                 {value}
             </div>
-            {sub && <div className="kpi__sub">{sub}</div>}
+            {sub !== "" && <div className="kpi__sub">{sub}</div>}
         </div>
     );
 }

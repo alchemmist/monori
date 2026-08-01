@@ -230,12 +230,12 @@ export default function Meadow() {
         const onMove = (e: MouseEvent) => {
             mx = e.clientX;
             my = e.clientY;
-            if (!raf) raf = requestAnimationFrame(apply);
+            if (raf == null) raf = requestAnimationFrame(apply);
         };
         const onLeave = () => {
             mx = -9999;
             my = -9999;
-            if (!raf) raf = requestAnimationFrame(apply);
+            if (raf == null) raf = requestAnimationFrame(apply);
         };
         window.addEventListener("mousemove", onMove);
         document.documentElement.addEventListener("mouseleave", onLeave);
@@ -244,8 +244,8 @@ export default function Meadow() {
             window.removeEventListener("resize", onResize);
             window.removeEventListener("mousemove", onMove);
             document.documentElement.removeEventListener("mouseleave", onLeave);
-            if (raf) cancelAnimationFrame(raf);
-            if (resizeTimer) clearTimeout(resizeTimer);
+            if (raf != null) cancelAnimationFrame(raf);
+            if (resizeTimer != null) clearTimeout(resizeTimer);
         };
     }, []);
 

@@ -1,11 +1,4 @@
-import {
-    Children,
-    isValidElement,
-    useEffect,
-    useMemo,
-    type ComponentPropsWithoutRef,
-    type ReactElement,
-} from "react";
+import { Children, isValidElement, useEffect, useMemo, type ComponentPropsWithoutRef } from "react";
 import { useParams, Link, useNavigate, useLocation } from "react-router-dom";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -15,7 +8,7 @@ import { sectionBySlug, neighbors, mermaidCharts } from "../content.js";
 import Mermaid from "./Mermaid.jsx";
 
 function toInternal(href?: string): string | null {
-    if (!href) return null;
+    if (href == null || href === "") return null;
     if (/^https?:\/\//.test(href) || href.startsWith("#") || href.startsWith("mailto:"))
         return null;
     let h = href.replace(/^\.?\//, "").replace(/^docs\//, "");
@@ -26,8 +19,8 @@ function toInternal(href?: string): string | null {
 
 function MdLink({ href, children }: ComponentPropsWithoutRef<"a">) {
     const internal = toInternal(href);
-    if (internal) return <Link to={internal}>{children}</Link>;
-    const external = /^https?:\/\//.test(href || "");
+    if (internal != null) return <Link to={internal}>{children}</Link>;
+    const external = /^https?:\/\//.test(href ?? "");
     return (
         <a href={href} {...(external ? { target: "_blank", rel: "noreferrer" } : {})}>
             {children}
@@ -39,8 +32,8 @@ function MdLink({ href, children }: ComponentPropsWithoutRef<"a">) {
 function makeComponents(slug: string, charts: string[]): Components {
     function MdPre({ children, ...props }: ComponentPropsWithoutRef<"pre">) {
         const code = Children.toArray(children)[0];
-        const codeElement = isValidElement(code)
-            ? (code as ReactElement<{ className?: string; children?: unknown }>)
+        const codeElement = isValidElement<{ className?: string; children?: unknown }>(code)
+            ? code
             : null;
         const className = codeElement?.props.className ?? "";
         if (/(^|\s)language-mermaid(\s|$)/.test(className)) {

@@ -5,7 +5,8 @@ import { TABS_KEY } from "./ui/tabPersist.js";
 import type { TabDescriptor } from "./types.js";
 
 // this Node build ships no localStorage, and the auth/tab paths under test read it
-if (!globalThis.localStorage) {
+const existingStorage: unknown = Reflect.get(globalThis, "localStorage");
+if (existingStorage == null) {
     const data = new Map<string, string>();
     globalThis.localStorage = {
         get length() {

@@ -11,7 +11,7 @@ export interface Account {
     currency: string;
     sort: number;
     archived: boolean;
-    openingBalance: number;
+    openingBalance?: number;
     openingDate?: string | null;
     connectionId?: Id | null;
     bankRef?: string | null;

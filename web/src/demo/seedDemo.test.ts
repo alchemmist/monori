@@ -85,7 +85,9 @@ describe("seedDemoData on an empty account", () => {
     it("creates a transfer for every demo transfer pair", async () => {
         vi.mocked(api.snapshot).mockResolvedValue(emptySnapshot());
         const pairs = new Set(
-            demoSnapshot.transactions.filter((t) => t.transferId).map((t) => t.transferId),
+            demoSnapshot.transactions
+                .filter((t) => t.transferId != null && t.transferId !== "")
+                .map((t) => t.transferId),
         );
 
         const res = await seedDemoData();
@@ -167,7 +169,7 @@ describe("seedDemoData resuming a partial run", () => {
 
         const pairs = new Map<string, { out?: Transaction; inn?: Transaction }>();
         for (const t of demoSnapshot.transactions) {
-            if (!t.transferId) continue;
+            if (t.transferId == null || t.transferId === "") continue;
             const p = pairs.get(t.transferId) ?? {};
             p[t.amount < 0 ? "out" : "inn"] = t;
             pairs.set(t.transferId, p);
@@ -181,14 +183,14 @@ describe("seedDemoData resuming a partial run", () => {
                     accountId: out.accountId,
                     amount: -inn.amount,
                     date: `${out.date}T00:00:00`,
-                    comment: out.comment ?? "",
+                    comment: out.comment,
                 }),
                 makeTx(inn.id, {
                     transferId: out.transferId,
                     accountId: inn.accountId,
                     amount: inn.amount,
                     date: `${inn.date}T00:00:00`,
-                    comment: inn.comment ?? "",
+                    comment: inn.comment,
                 }),
             );
         }

@@ -4,12 +4,18 @@ import { Ellipsis } from "@gravity-ui/icons";
 
 /* gravity icon-button sizes in px — Mantine only knows xs..xl aliases */
 const SIZES = { xs: 20, s: 24, m: 28 };
+type MenuSize = keyof typeof SIZES;
 
 export interface RowMenuItem {
     text: string;
     action: () => void;
     theme?: string;
 }
+
+const isGrouped = (items: RowMenuItem[] | RowMenuItem[][]): items is RowMenuItem[][] =>
+    items.every(Array.isArray);
+
+const isMenuSize = (size: string): size is MenuSize => Object.hasOwn(SIZES, size);
 
 interface RowMenuProps {
     items: RowMenuItem[] | RowMenuItem[][];
@@ -29,18 +35,12 @@ export default function RowMenu({
     label = "Actions",
     icon,
 }: RowMenuProps) {
-    const groups: RowMenuItem[][] = Array.isArray(items[0])
-        ? (items as RowMenuItem[][])
-        : [items as RowMenuItem[]];
+    const groups = isGrouped(items) ? items : [items];
     return (
         <Menu>
             <Menu.Target>
                 <ActionIcon
-                    size={
-                        typeof size === "string" && size in SIZES
-                            ? SIZES[size as keyof typeof SIZES]
-                            : Number(size)
-                    }
+                    size={typeof size === "string" && isMenuSize(size) ? SIZES[size] : Number(size)}
                     variant="subtle"
                     className={className}
                     aria-label={label}

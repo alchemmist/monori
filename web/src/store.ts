@@ -26,6 +26,18 @@ import type {
     User,
 } from "./types.js";
 
+const TRANSACTION_PATCH_KEYS = [
+    "date",
+    "amount",
+    "accountId",
+    "description",
+    "bankCategory",
+    "mcc",
+    "categoryId",
+    "comment",
+    "hidden",
+] satisfies ReadonlyArray<keyof TransactionPatch>;
+
 interface StoreState {
     snapshot: Snapshot | null;
     loading: boolean;
@@ -198,7 +210,7 @@ export const useStore = create<StoreState>((set, get) => ({
             return;
         }
         const token = localStorage.getItem("monori_token");
-        if (!token) {
+        if (token == null || token === "") {
             // no session — drop any restored tabs so they cannot resurface for
             // whoever signs in on this browser next
             get().setTabs([]);
@@ -461,7 +473,7 @@ export const useStore = create<StoreState>((set, get) => ({
         if (!before) return;
         const revision = (nextTxFieldRevision += 1);
         const revisions = txFieldRevisions.get(txId) ?? new Map<keyof TransactionPatch, number>();
-        const patchKeys = Object.keys(patch) as Array<keyof TransactionPatch>;
+        const patchKeys = TRANSACTION_PATCH_KEYS.filter((key) => patch[key] !== undefined);
         patchKeys.forEach((key) => revisions.set(key, revision));
         txFieldRevisions.set(txId, revisions);
         const rows = snapshot.transactions.map((t) => (t.id === txId ? { ...t, ...patch } : t));
@@ -711,7 +723,7 @@ export const useStore = create<StoreState>((set, get) => ({
                 type: body.type ?? "other",
                 icon: body.icon ?? "wallet",
                 color: body.color ?? "#5b6472",
-                iconImage: body.iconImage || null,
+                iconImage: body.iconImage == null || body.iconImage === "" ? null : body.iconImage,
                 currency: body.currency ?? "RUB",
                 sort: 1e9,
                 archived: false,
@@ -737,11 +749,12 @@ export const useStore = create<StoreState>((set, get) => ({
             snapshot: {
                 ...snapshot,
                 accounts: snapshot.accounts.filter((a) => a.id !== id),
-                transactions: reassignTo
-                    ? snapshot.transactions.map((t) =>
-                          t.accountId === id ? { ...t, accountId: reassignTo } : t,
-                      )
-                    : snapshot.transactions,
+                transactions:
+                    reassignTo != null
+                        ? snapshot.transactions.map((t) =>
+                              t.accountId === id ? { ...t, accountId: reassignTo } : t,
+                          )
+                        : snapshot.transactions,
             },
         });
     },
@@ -816,7 +829,7 @@ export const useStore = create<StoreState>((set, get) => ({
                 snapshot: {
                     ...snapshot,
                     transactions: [...snapshot.transactions, ...rows],
-                    transfers: [...(snapshot.transfers ?? []), entity],
+                    transfers: [...snapshot.transfers, entity],
                 },
             });
             return transferId;
@@ -842,7 +855,7 @@ export const useStore = create<StoreState>((set, get) => ({
                             : t,
                     ),
                     transfers: [
-                        ...(snapshot.transfers ?? []),
+                        ...snapshot.transfers,
                         { id: transferId, outTxId, inTxId, origin: "manual", note: "" },
                     ],
                 },
@@ -869,7 +882,7 @@ export const useStore = create<StoreState>((set, get) => ({
                 transactions: snapshot.transactions.map((t) =>
                     t.transferId === transferId ? { ...t, transferId: null } : t,
                 ),
-                transfers: (snapshot.transfers ?? []).filter((x) => x.id !== transferId),
+                transfers: snapshot.transfers.filter((x) => x.id !== transferId),
             },
         });
     },
@@ -890,7 +903,7 @@ export const useStore = create<StoreState>((set, get) => ({
             snapshot: {
                 ...snapshot,
                 transactions: snapshot.transactions.filter((t) => !ids.includes(t.id)),
-                transfers: (snapshot.transfers ?? []).filter((x) => x.id !== transferId),
+                transfers: snapshot.transfers.filter((x) => x.id !== transferId),
             },
         });
     },
@@ -1005,7 +1018,7 @@ export const useStore = create<StoreState>((set, get) => ({
     async moveCategory(id, toGroupId, orderedIds) {
         const snapshot = requireSnapshot(get().snapshot);
         const cat = snapshot.categories.find((c) => c.id === id);
-        const groupChanged = cat && cat.groupId !== toGroupId;
+        const groupChanged = cat != null && cat.groupId !== toGroupId;
         const sortById = new Map(orderedIds.map((cid, i) => [cid, i + 1]));
         const categories = snapshot.categories.map((c) => ({
             ...c,

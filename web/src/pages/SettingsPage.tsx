@@ -34,7 +34,7 @@ function Row({
         <div className="settings__row">
             <div>
                 <div className="settings__label">{label}</div>
-                {hint && (
+                {hint != null && hint !== "" && (
                     <div className={`settings__hint${hintBad ? " settings__hint_bad" : ""}`}>
                         {hint}
                     </div>
@@ -123,10 +123,12 @@ export default function SettingsPage({
                             <div>
                                 <div className="settings__email">{user.email}</div>
                                 <div className="settings__meta">
-                                    {user.createdAt && (
+                                    {user.createdAt != null && user.createdAt !== "" && (
                                         <span>Joined {fmtDate(user.createdAt)}</span>
                                     )}
-                                    {user.isAdmin && <span className="settings__badge">Admin</span>}
+                                    {user.isAdmin === true && (
+                                        <span className="settings__badge">Admin</span>
+                                    )}
                                 </div>
                             </div>
                         </div>
