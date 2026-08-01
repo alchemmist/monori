@@ -121,8 +121,8 @@ def sheet_grids(path: str) -> tuple[dict[int, YearGrid], dict[tuple[int, int], H
             if match.group(2) and year in grids:
                 continue  # a plain sheet is the working copy and wins
             grids[year] = YEAR_GRID_ADAPTER.validate_python(_parse_year_sheet(ws, year, layout))
-            for i, base in enumerate(layout["bases"]):
-                month = layout["start_month"] + i
+            for i, base in enumerate(layout.bases):
+                month = layout.start_month + i
                 if month > 12:
                     break
                 headers[(year, month)] = {

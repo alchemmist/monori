@@ -7,12 +7,12 @@ from openpyxl import Workbook
 from openpyxl.worksheet.worksheet import Worksheet
 
 from app.workbook import spec
+from app.workbook.models import WorkbookParseError as WorkbookParseErrorRow
 from app.workbook.parser import (
     MONTH_ABBREVS,
     TX_ALIASES,
     LayoutRow,
     WorkbookError,
-    WorkbookParseErrorRow,
     _find_layout,
     _kop,
     _label_col,

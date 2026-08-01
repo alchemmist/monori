@@ -15,10 +15,10 @@ from openpyxl import Workbook, load_workbook
 from openpyxl.worksheet.worksheet import Worksheet
 
 from app.workbook import spec
+from app.workbook.models import WorkbookGroup as WorkbookGroupRow
+from app.workbook.models import WorkbookParseError as WorkbookParseErrorRow
 from app.workbook.parser import (
     TX_ALIASES,
-    WorkbookGroupRow,
-    WorkbookParseErrorRow,
     _category_col,
     _find_keyword_block,
     _find_layout,
