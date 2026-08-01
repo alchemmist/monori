@@ -137,7 +137,8 @@ audit: audit-deps audit-deps-py audit-secrets
 
 audit-deps:
 	cd web && npm install --no-audit --no-fund --silent
-	cd web && npm audit --audit-level=high --json | python3 ../scripts/npm-audit-gate.py
+	(cd web && npm audit --audit-level=high --json) | \
+		uv run --project server python scripts/npm-audit-gate.py
 
 audit-deps-py:
 	@req=$$(mktemp); \
