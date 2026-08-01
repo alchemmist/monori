@@ -13,6 +13,7 @@ import sys
 import tarfile
 import types
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 from types import TracebackType
 from typing import Literal, Self
@@ -29,6 +30,13 @@ STATEMENT = (
 )
 
 CREDS: JsonObject = {"phone": "+70000000000", "password": "pw", "code": "1234"}
+
+
+@dataclass(frozen=True)
+class PageEvent:
+    kind: str
+    argument: str | int
+    value: str | None = None
 
 
 class FakeLocator:
@@ -63,7 +71,7 @@ class FakeKeyboard:
         self.page = page
 
     def type(self, text: str) -> None:
-        self.page.log.append(("type", text))
+        self.page.log.append(PageEvent("type", text))
         # every code entry (SMS, quick-login, set-code) types into the pin widget;
         # remember it (to recognize a wrong SMS code) and auto-advance as the last
         # digit lands, which is how the real widget submits without a button click
@@ -148,7 +156,7 @@ class FakePage:
         self.wrong_codes = wrong_codes or set()
         self.last_code: str | None = None
         self.url = ""
-        self.log: list[tuple[object, ...]] = []
+        self.log: list[PageEvent] = []
         self.keyboard = FakeKeyboard(self)
         self.download_triggered = False
         self.screenshots: list[str | None] = []
@@ -164,7 +172,7 @@ class FakePage:
 
     # navigation -------------------------------------------------------------
     def goto(self, url: str, wait_until: str | None = None) -> None:
-        self.log.append(("goto", url))
+        self.log.append(PageEvent("goto", url))
         if url == TB.URL_HOME:
             if self.scenario == "logged_in" or self.stage == "in":
                 self.stage, self.url = "in", TB.URL_HOME
@@ -179,21 +187,21 @@ class FakePage:
             self.stage, self.url = "ops", TB.URL_OPERATIONS
 
     def wait_for_timeout(self, ms: int) -> None:
-        self.log.append(("wait", ms))
+        self.log.append(PageEvent("wait", ms))
 
     def wait_for_load_state(self, state: str, timeout: int | None = None) -> None:
-        self.log.append(("load_state", state))
+        self.log.append(PageEvent("load_state", state))
 
     # form interaction -------------------------------------------------------
     def fill(self, selector: str, value: str) -> None:
-        self.log.append(("fill", selector, value))
+        self.log.append(PageEvent("fill", selector, value))
         if selector == TB.SEL_OTP and self.stage == "sms":
             # the single otp field auto-submits as the last digit lands
             self.last_code = value
             self._advance()
 
     def query_selector(self, selector: str) -> FakeElement | None:
-        self.log.append(("query", selector))
+        self.log.append(PageEvent("query", selector))
         if (
             (selector == TB.SEL_PHONE and self.stage == "phone")
             or (selector == TB.SEL_PASSWORD and self.stage == "password")
@@ -348,17 +356,17 @@ def test_already_logged_in_skips_login() -> None:
     page = FakePage(scenario="logged_in")
     c._ensure_logged_in(page)
     # went to home, found itself logged in, never drove the SSO
-    assert ("goto", TB.URL_LOGIN) not in page.log
-    assert not any(a[0] == "fill" for a in page.log)
+    assert PageEvent("goto", TB.URL_LOGIN) not in page.log
+    assert not any(event.kind == "fill" for event in page.log)
 
 
 def test_quick_login_uses_stored_code() -> None:
     c = _connector()
     page = FakePage(scenario="quick")
     c._ensure_logged_in(page)
-    assert ("type", "1234") in page.log
+    assert PageEvent("type", "1234") in page.log
     # a trusted-device quick login never fills the phone or password
-    assert not any(a[0] == "fill" for a in page.log)
+    assert not any(event.kind == "fill" for event in page.log)
 
 
 def test_full_login_enters_phone_password_otp_then_sets_code() -> None:
@@ -366,13 +374,13 @@ def test_full_login_enters_phone_password_otp_then_sets_code() -> None:
     c._to_worker.put(("sms", "9999"))  # the SMS code the user would submit
     page = FakePage(scenario="fresh")
     c._ensure_logged_in(page)
-    fills = [a for a in page.log if a[0] == "fill"]
-    assert ("fill", TB.SEL_PHONE, "+70000000000") in fills
-    assert ("fill", TB.SEL_PASSWORD, "pw") in fills
+    fills = [event for event in page.log if event.kind == "fill"]
+    assert PageEvent("fill", TB.SEL_PHONE, "+70000000000") in fills
+    assert PageEvent("fill", TB.SEL_PASSWORD, "pw") in fills
     # the user's SMS code goes into the single otp field, then our quick-login
     # code is typed into the pin widget on the "Придумайте код" screen
-    assert ("fill", TB.SEL_OTP, "9999") in fills
-    assert [a[1] for a in page.log if a[0] == "type"] == ["1234"]
+    assert PageEvent("fill", TB.SEL_OTP, "9999") in fills
+    assert [event.argument for event in page.log if event.kind == "type"] == ["1234"]
     assert c._is_logged_in(page) is True
 
 
@@ -382,7 +390,9 @@ def test_wrong_otp_reprompts_with_rejection_message() -> None:
     c._to_worker.put(("sms", "2222"))
     page = FakePage(scenario="fresh", wrong_codes={"1111"})
     c._ensure_logged_in(page)
-    otp_fills = [a[2] for a in page.log if a[0] == "fill" and a[1] == TB.SEL_OTP]
+    otp_fills = [
+        event.value for event in page.log if event.kind == "fill" and event.argument == TB.SEL_OTP
+    ]
     assert "1111" in otp_fills and "2222" in otp_fills
     messages: list[str] = []
     while not c._from_worker.empty():
@@ -418,7 +428,7 @@ def test_access_denied_popup_fails_fast_with_bank_message() -> None:
     with pytest.raises(ConnectorError, match="blocked the login: Доступ заблокирован"):
         c._ensure_logged_in(page)
     # it stopped at the block, never entering the phone in a doomed loop
-    assert not any(a[0] == "fill" for a in page.log)
+    assert not any(event.kind == "fill" for event in page.log)
 
 
 class _SubmitClickPage:
@@ -506,8 +516,8 @@ def test_download_waits_for_the_account_feed_to_settle_before_export() -> None:
     page = FakePage(scenario="logged_in", export_label="CSV")
     page.stage = "in"
     c._download_and_parse(page, None)
-    settled = [e for e in page.log if e[0] == "load_state"]
-    assert settled == [("load_state", "networkidle")]
+    settled = [event for event in page.log if event.kind == "load_state"]
+    assert settled == [PageEvent("load_state", "networkidle")]
 
 
 def test_download_without_export_option_raises() -> None:
