@@ -52,7 +52,7 @@ one-to-one — there is no separate CI script to drift out of sync.
 | `make lint`           | Everything: web (Oxlint), CSS, HTML, server (Ruff), YAML, Markdown, generated docs, GitHub Actions, Dockerfile, shell, and spelling. |
 | `make schema-diagram` | Regenerates the ER diagram in [data-model.md](data-model.md) from `server/schema.sql`. `make lint` fails if it is stale.             |
 | `make typecheck`      | Strict mypy for all tracked Python plus TypeScript compiler and type-aware Oxlint checks.                                            |
-| `make analyze`        | bandit + semgrep security scan.                                                                                                      |
+| `make analyze`        | bandit + semgrep security scans, plus Vulture for Python and Knip for JavaScript/TypeScript dead code.                               |
 | `make audit`          | Dependency + secret scanning (`audit-deps`, `audit-deps-py`, `audit-secrets`).                                                       |
 
 Pull requests also run a CI-only Python annotation gate. It rejects new uses of
@@ -64,6 +64,19 @@ one of `/ignore-object <finding-id>`, `/ignore-file path/to/file.py`, or
 `/ignore-all`. An administrator can remove one approval with
 `/remove-ignore <finding-id>`. The approval expires when the pull request receives
 a new commit.
+
+### Dead-code analysis
+
+`make analyze` runs Vulture against `server/app` and Knip against the frontend
+source, end-to-end tests, and tool configuration files. Vulture uses the
+`[tool.vulture]` section in `server/pyproject.toml`; its two ignored names are
+arguments required by Playwright-compatible protocol signatures. Knip uses
+`web/knip.config.js`: prototype experiments are outside its project globs, and packages invoked by Makefile/CI
+or imported from CSS are explicitly excluded because they are outside the
+JavaScript module graph.
+
+For a new finding, remove the dead code or add a narrowly scoped, documented
+exception only when the symbol is an intentional external entry point.
 
 ### Test
 

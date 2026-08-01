@@ -217,5 +217,4 @@ export const tx = (id: Id, patch: Partial<Transaction> = {}): Transaction => ({
     ...patch,
 });
 
-export { userEvent };
 export * from "@testing-library/react";

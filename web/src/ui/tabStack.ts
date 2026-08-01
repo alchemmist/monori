@@ -45,7 +45,7 @@ export function offsetOf(id: string | number) {
 /** Layer tabs like overlapping cards: the one nearest the right edge (mounted
  * first) stays above the tabs pushed to its left, so its left-facing shadow
  * falls onto the neighbouring card instead of disappearing beneath it. */
-export function computeLayer(tabs: StackTab[], id: string | number) {
+function computeLayer(tabs: StackTab[], id: string | number) {
     const index = tabs.findIndex((tab) => tab.id === id);
     return index < 0 ? 0 : tabs.length - index;
 }

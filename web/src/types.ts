@@ -268,7 +268,7 @@ export interface ImportResult {
     demo?: boolean;
 }
 
-export interface ConnectorParameter {
+interface ConnectorParameter {
     name: string;
     label: string;
     required: boolean;
@@ -303,7 +303,7 @@ export interface SyncResult {
     unmappedTails?: Array<{ tail: string; rows: number }>;
 }
 
-export interface WorkbookSlot {
+interface WorkbookSlot {
     key: string;
     marker: string | null;
     currency: string;
@@ -341,6 +341,3 @@ export interface TabDescriptor {
     props: Record<string, unknown>;
     width?: number;
 }
-
-export type JsonPrimitive = boolean | number | string | null;
-export type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };

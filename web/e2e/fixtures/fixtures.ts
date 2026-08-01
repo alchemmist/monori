@@ -25,7 +25,7 @@ export interface TestUser {
 // Every date-sensitive surface (current-month highlight, YTD, forecasts) reads
 // the browser clock, so the suite pins it to one instant and seeds all data
 // around it — tests stay deterministic across month/year rollover.
-export const FIXED_NOW = new Date("2026-06-15T12:00:00");
+const FIXED_NOW = new Date("2026-06-15T12:00:00");
 export const YEAR = 2026;
 export const MONTH = 6; // June, 1-based
 
@@ -34,7 +34,7 @@ let seq = 0;
 // Thin typed-ish seed builders over the real API — no mocks, the same
 // endpoints the app itself calls. Amounts are integer kopecks, expenses
 // negative.
-export class Api {
+class Api {
     private readonly headers: { authorization: string };
 
     constructor(
