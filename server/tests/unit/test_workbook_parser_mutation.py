@@ -71,32 +71,14 @@ def test_parse_categories_reads_group_table_and_rows_exactly() -> None:
     assert ws is not None
     warnings: list[str] = []
     groups, categories = _parse_categories(ws, warnings)
-    assert groups == [
-        {"name": "Daily", "sort": 2, "kind": "expense"},
-        {"name": "Inflow", "sort": 1, "kind": "income"},
+    assert [(group.name, group.sort, group.kind) for group in groups] == [
+        ("Daily", 2, "expense"),
+        ("Inflow", 1, "income"),
     ]
-    assert categories == [
-        {
-            "group": "Daily",
-            "group_kind": None,
-            "group_sort": 1,
-            "name": "Groceries",
-            "keywords": "lenta|okey",
-        },
-        {
-            "group": "Daily",
-            "group_kind": "expense",
-            "group_sort": 2,
-            "name": "Cafes",
-            "keywords": "",
-        },
-        {
-            "group": "Inflow",
-            "group_kind": None,
-            "group_sort": 1,
-            "name": "Salary",
-            "keywords": "",
-        },
+    assert [(c.group, c.group_kind, c.group_sort, c.name, c.keywords) for c in categories] == [
+        ("Daily", None, 1, "Groceries", "lenta|okey"),
+        ("Daily", "expense", 2, "Cafes", ""),
+        ("Inflow", None, 1, "Salary", ""),
     ]
     assert warnings == []
 
@@ -112,7 +94,7 @@ def test_parse_categories_skips_header_and_blank_rows() -> None:
     assert ws is not None
     warnings: list[str] = []
     groups, categories = _parse_categories(ws, warnings)
-    assert [c["name"] for c in categories] == ["Groceries"]
+    assert [c.name for c in categories] == ["Groceries"]
     assert warnings == ["Categories: group table missing, groups derived from category rows"]
 
 
@@ -127,11 +109,11 @@ def test_parse_categories_derives_groups_when_table_missing() -> None:
     assert ws is not None
     warnings: list[str] = []
     groups, categories = _parse_categories(ws, warnings)
-    assert groups == [
-        {"name": "Daily", "sort": 1, "kind": "expense"},
-        {"name": "Inflow", "sort": 3, "kind": "income"},
+    assert [(group.name, group.sort, group.kind) for group in groups] == [
+        ("Daily", 1, "expense"),
+        ("Inflow", 3, "income"),
     ]
-    assert [c["name"] for c in categories] == ["Groceries", "Cafes", "Salary"]
+    assert [c.name for c in categories] == ["Groceries", "Cafes", "Salary"]
     assert warnings == ["Categories: group table missing, groups derived from category rows"]
 
 
@@ -168,11 +150,11 @@ def test_find_layout_reads_header_on_the_first_row() -> None:
     ws.cell(row=1, column=8, value="Balance")
     layout = _find_layout(ws)
     assert layout is not None
-    assert layout["header_row"] == 1
-    assert layout["bases"] == [2, 6]
-    assert layout["out_off"] == 1
-    assert layout["bal_off"] == 2
-    assert layout["start_month"] == 1
+    assert layout.header_row == 1
+    assert layout.bases == [2, 6]
+    assert layout.out_off == 1
+    assert layout.bal_off == 2
+    assert layout.start_month == 1
 
 
 def test_find_layout_reads_the_balance_header_in_the_last_column() -> None:
@@ -185,7 +167,7 @@ def test_find_layout_reads_the_balance_header_in_the_last_column() -> None:
     ws.cell(row=5, column=8, value="Balance")
     layout = _find_layout(ws)
     assert layout is not None
-    assert layout["bal_off"] == 6
+    assert layout.bal_off == 6
 
 
 def test_find_layout_returns_none_when_balance_header_is_absent() -> None:
@@ -212,7 +194,7 @@ def test_find_layout_finds_the_label_header_one_row_below_the_grid() -> None:
         ws.cell(row=r, column=3, value=f"note {r}")
     layout = _find_layout(ws)
     assert layout is not None
-    assert layout["label_col"] == 1
+    assert layout.label_col == 1
 
 
 def test_find_layout_reads_the_start_month_from_the_second_row() -> None:
@@ -225,7 +207,7 @@ def test_find_layout_reads_the_start_month_from_the_second_row() -> None:
     ws.cell(row=2, column=2, value="ФЕВ 2025")  # FEB, only on row 2
     layout = _find_layout(ws)
     assert layout is not None
-    assert layout["start_month"] == 2
+    assert layout.start_month == 2
 
 
 def test_find_layout_reads_the_start_month_from_the_third_row() -> None:
@@ -238,7 +220,7 @@ def test_find_layout_reads_the_start_month_from_the_third_row() -> None:
     ws.cell(row=3, column=2, value="МАР 2025")  # MAR, only on row 3
     layout = _find_layout(ws)
     assert layout is not None
-    assert layout["start_month"] == 3
+    assert layout.start_month == 3
 
 
 # --- _label_col -----------------------------------------------------------
@@ -263,7 +245,7 @@ def test_label_col_counts_the_row_immediately_below_the_header() -> None:
 
 
 def test_kind_of_defaults_to_expense_for_unknown_group() -> None:
-    groups: list[WorkbookGroupRow] = [{"name": "Inflow", "kind": "income", "sort": 1}]
+    groups = [WorkbookGroupRow(name="Inflow", kind="income", sort=1)]
     assert _kind_of("Inflow", groups) == "income"
     assert _kind_of("Nowhere", groups) == "expense"
 
@@ -281,8 +263,8 @@ def test_known_max_col_defaults_to_minus_one_without_known_headers() -> None:
 
 def test_synthetic_carries_the_default_currency() -> None:
     row = _synthetic(2025, 3, -1000, "Groceries", "Groceries")
-    assert row["currency"] == "RUB"
-    assert row["marker"] == ""
+    assert row.currency == "RUB"
+    assert row.marker == ""
 
 
 # --- _parse_year_sheet ----------------------------------------------------
@@ -298,10 +280,10 @@ def test_parse_year_sheet_stops_months_at_december() -> None:
         ws.cell(row=5, column=c, value=v)
     layout = _find_layout(ws)
     assert layout is not None
-    assert layout["start_month"] == 12
+    assert layout.start_month == 12
     parsed = _parse_year_sheet(ws, 2025, layout)
-    assert parsed["months"] == [12]
-    assert isinstance(parsed["cats"], dict)
+    assert parsed.months == [12]
+    assert isinstance(parsed.cats, dict)
 
 
 def test_parse_year_sheet_reads_russian_available_label() -> None:
@@ -318,7 +300,7 @@ def test_parse_year_sheet_reads_russian_available_label() -> None:
     layout = _find_layout(ws)
     assert layout is not None
     parsed = _parse_year_sheet(ws, 2025, layout)
-    assert parsed["available"] == {1: 420000}
+    assert parsed.available == {1: 420000}
 
 
 # --- _parse_transactions --------------------------------------------------
@@ -343,7 +325,7 @@ def test_parse_transactions_uses_pay_amount_when_amount_column_is_absent() -> No
     errors: list[WorkbookParseErrorRow] = []
     rows = _parse_transactions(ws, warnings, errors)
     assert errors == []
-    assert [r["amount"] for r in rows] == [-150000]
+    assert [r.amount for r in rows] == [-150000]
 
 
 def test_parse_transactions_empty_message_is_exact() -> None:
@@ -446,7 +428,7 @@ def test_parse_transactions_keeps_reading_after_a_blank_row() -> None:
     warnings: list[str] = []
     errors: list[WorkbookParseErrorRow] = []
     rows = _parse_transactions(ws, warnings, errors)
-    assert [r["description"] for r in rows] == ["after blank"]
+    assert [r.description for r in rows] == ["after blank"]
 
 
 # --- _parse_keywords ------------------------------------------------------

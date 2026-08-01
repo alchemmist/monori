@@ -217,13 +217,13 @@ def test_month_range_wraps_across_years() -> None:
 
 def test_synthetic_shape() -> None:
     a = _synthetic(2025, 1, 20000, "Groceries", "Groceries")
-    assert a["date"] == "2025-01-31T12:00:00"
-    assert a["amount"] == 20000
-    assert a["monori_category"] == "Groceries"
-    assert a["description"] == "Groceries"
-    assert a["marker"] == ""
-    assert a["bank_category"] == "" and a["mcc"] == "" and a["comment"] == ""
-    assert "hash" not in a
+    assert a.date == "2025-01-31T12:00:00"
+    assert a.amount == 20000
+    assert a.monori_category == "Groceries"
+    assert a.description == "Groceries"
+    assert a.marker == ""
+    assert a.bank_category == "" and a.mcc == "" and a.comment == ""
+    assert not hasattr(a, "hash")
 
 
 # --- detection ------------------------------------------------------------
@@ -268,12 +268,12 @@ def test_find_layout_reads_bases_offsets_label_and_month() -> None:
     _, ws = _one_year_wb(months=[1, 2], rows=[("▼Daily", None)])
     layout = _find_layout(ws)
     assert layout is not None
-    assert layout["header_row"] == 5
-    assert layout["bases"] == [2, 6]
-    assert layout["out_off"] == 1
-    assert layout["bal_off"] == 2
-    assert layout["label_col"] == 1
-    assert layout["start_month"] == 1
+    assert layout.header_row == 5
+    assert layout.bases == [2, 6]
+    assert layout.out_off == 1
+    assert layout.bal_off == 2
+    assert layout.label_col == 1
+    assert layout.start_month == 1
 
 
 def test_find_layout_none_without_two_budget_headers() -> None:
@@ -305,15 +305,15 @@ def test_find_layout_label_and_month_fallbacks() -> None:
     ws.cell(row=7, column=1, value="Groceries")
     layout = _find_layout(ws)
     assert layout is not None
-    assert layout["label_col"] == 1
-    assert layout["start_month"] == 1
+    assert layout.label_col == 1
+    assert layout.start_month == 1
 
 
 def test_sheet_sections_glyph_groups_and_gap_rule() -> None:
     wb = Workbook()
     ws = wb.active
     assert ws is not None
-    layout = cast("LayoutRow", {"header_row": 1, "label_col": 1})
+    layout = LayoutRow(1, [], 0, 0, 1, 1)
     ws.cell(row=2, column=1, value="▼Daily")
     ws.cell(row=3, column=1, value="Groceries")
     ws.cell(row=4, column=1, value="Cafes")
@@ -323,13 +323,13 @@ def test_sheet_sections_glyph_groups_and_gap_rule() -> None:
     ws.cell(row=9, column=1, value="Salary")
     sections = _sheet_sections(ws, layout)
     daily = sections[0]
-    assert daily["name"] == "Daily" and daily["kind"] == "expense"
-    assert [name for _, name in daily["rows"]] == ["Groceries", "Cafes"]
+    assert daily.name == "Daily" and daily.kind == "expense"
+    assert [name for _, name in daily.rows] == ["Groceries", "Cafes"]
     gap_group = sections[1]
-    assert gap_group["name"] == "Rent" and gap_group["rows"] == []
+    assert gap_group.name == "Rent" and gap_group.rows == []
     inflow = sections[2]
-    assert inflow["name"] == "Inflow" and inflow["kind"] == "income"
-    assert [name for _, name in inflow["rows"]] == ["Salary"]
+    assert inflow.name == "Inflow" and inflow.kind == "income"
+    assert [name for _, name in inflow.rows] == ["Salary"]
 
 
 def test_summary_value_matches_prefix_only() -> None:
@@ -362,15 +362,15 @@ def test_parse_year_sheet_reads_grid_income_available_seed() -> None:
     assert layout is not None
     assert layout is not None
     parsed = _parse_year_sheet(ws, 2025, layout)
-    groceries = parsed["cats"]["Groceries"]
-    assert groceries["group"] == "Daily"
-    assert groceries["budgets"] == {1: 100000, 2: 100000}
-    assert groceries["outflows"] == {1: 30000, 2: 50000}
-    assert groceries["balances"] == {1: 90000, 2: 140000}
-    assert parsed["income"] == {1: 600000}
-    assert parsed["available"] == {1: 510000, 2: 400000}
-    assert parsed["seed"] == 123400
-    assert parsed["months"] == [1, 2]
+    groceries = parsed.cats["Groceries"]
+    assert groceries.group == "Daily"
+    assert groceries.budgets == {1: 100000, 2: 100000}
+    assert groceries.outflows == {1: 30000, 2: 50000}
+    assert groceries.balances == {1: 90000, 2: 140000}
+    assert parsed.income == {1: 600000}
+    assert parsed.available == {1: 510000, 2: 400000}
+    assert parsed.seed == 123400
+    assert parsed.months == [1, 2]
 
 
 # --- transactions & keywords ---------------------------------------------
@@ -412,20 +412,20 @@ def test_parse_transactions_dedup_status_currency_and_category() -> None:
     warnings: list[str] = []
     errors: list[WorkbookParseErrorRow] = []
     rows = _parse_transactions(ws, warnings, errors)
-    assert [r["monori_category"] for r in rows] == ["Groceries", "Travel"]
+    assert [r.monori_category for r in rows] == ["Groceries", "Travel"]
     first = rows[0]
-    assert first["date"] == "2025-01-15T10:00:00"
-    assert first["amount"] == -30000
-    assert first["marker"] == "*1111"
-    assert first["bank_category"] == "Super"
-    assert first["mcc"] == "5411"
-    assert errors == [{"row": 6, "error": "unparseable date or amount"}]
+    assert first.date == "2025-01-15T10:00:00"
+    assert first.amount == -30000
+    assert first.marker == "*1111"
+    assert first.bank_category == "Super"
+    assert first.mcc == "5411"
+    assert [(error.row, error.error) for error in errors] == [(6, "unparseable date or amount")]
     assert (
         "Transactions: 1 rows identical in date, amount, description and card — kept once"
         in warnings
     )
     assert "Transactions: 1 non-OK rows skipped" in warnings
-    assert [r["currency"] for r in rows] == ["RUB", "USD"]
+    assert [r.currency for r in rows] == ["RUB", "USD"]
     assert "Transactions: 1 rows in USD — they need an account held in USD to land on" in (warnings)
 
 
@@ -459,11 +459,11 @@ def test_split_operation_keeps_both_parts_with_their_own_amounts() -> None:
     warnings: list[str] = []
     errors: list[WorkbookParseErrorRow] = []
     rows = _parse_transactions(ws, warnings, errors)
-    assert [(r["amount"], r["monori_category"]) for r in rows] == [
+    assert [(r.amount, r.monori_category) for r in rows] == [
         (-3149000, "Clothes"),
         (-1699000, "Wedding"),
     ]
-    assert sum(r["amount"] for r in rows) == -4848000
+    assert sum(r.amount for r in rows) == -4848000
     assert errors == []
     assert not any("duplicated" in w for w in warnings)
 
@@ -512,11 +512,11 @@ def test_parse_transactions_pay_amount_fallback_and_blankish_rows() -> None:
     warnings: list[str] = []
     errors: list[WorkbookParseErrorRow] = []
     rows = _parse_transactions(ws, warnings, errors)
-    assert [r["amount"] for r in rows] == [4733700, -417200, 1000]
-    assert rows[0]["monori_category"] == "Income"
-    assert rows[1]["monori_category"] == "Groceries"
-    assert errors == [{"row": 6, "error": "unparseable date or amount"}]
-    assert [r["currency"] for r in rows] == ["RUB", "RUB", "USD"]
+    assert [r.amount for r in rows] == [4733700, -417200, 1000]
+    assert rows[0].monori_category == "Income"
+    assert rows[1].monori_category == "Groceries"
+    assert [(error.row, error.error) for error in errors] == [(6, "unparseable date or amount")]
+    assert [r.currency for r in rows] == ["RUB", "RUB", "USD"]
     assert "Transactions: 1 rows in USD — they need an account held in USD to land on" in (warnings)
 
 
@@ -813,8 +813,8 @@ def test_a_sheet_running_to_december_keeps_its_last_month() -> None:
     layout = _find_layout(ws)
     assert layout is not None
     parsed = _parse_year_sheet(ws, 2025, layout)
-    assert parsed["months"][-1] == 12
-    assert parsed["cats"]["Groceries"]["balances"][12] == 70000
+    assert parsed.months[-1] == 12
+    assert parsed.cats["Groceries"].balances[12] == 70000
 
 
 def test_history_and_adjustment_split_follows_the_rows_not_the_sheet_name() -> None:
@@ -1094,7 +1094,7 @@ def test_live_layout_locates_category_and_keywords_by_content() -> None:
     errors: list[WorkbookParseErrorRow] = []
     rows = _parse_transactions(ws, warnings, errors)
     assert errors == []
-    assert [r["monori_category"] for r in rows] == ["Groceries", "Lunch", "Transport"]
+    assert [r.monori_category for r in rows] == ["Groceries", "Lunch", "Transport"]
     kws = _parse_keywords(ws, idx)
     assert kws == {"Income": "salary|bonus", "МТС": "мтс|телефон", "Cafes": "кафе|бар"}
 
