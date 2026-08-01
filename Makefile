@@ -172,18 +172,18 @@ m-front:
 	@set +e; \
 	thr=$(MUTATION_THRESHOLD); \
 	echo "── stryker: building the per-test coverage map; mutation progress begins after this phase ──"; \
-	( cd web && MUTATION_THRESHOLD=$$thr npx stryker run ); web=$$?; \
+	( cd web && MUTATION_THRESHOLD=$$thr ./node_modules/.bin/stryker run stryker.conf.ts ); web=$$?; \
 	node scripts/stryker-summary.mjs; \
 	echo "── frontend mutation gate (threshold $$thr%): stryker exit=$$web ──"; \
 	exit $$web
 
-# mutate a single file for a quick, isolated read: `make m-front-file FILE=src/pages/DashboardPage.jsx`
+# mutate a single file for a quick, isolated read: `make m-front-file FILE=src/pages/DashboardPage.tsx`
 # a throwaway incremental cache keeps the run fresh and leaves the shared report untouched
 m-front-file:
 	@if [ -z "$(FILE)" ]; then \
-		echo "usage: make m-front-file FILE=src/pages/DashboardPage.jsx"; exit 2; \
+		echo "usage: make m-front-file FILE=src/pages/DashboardPage.tsx"; exit 2; \
 	fi
-	cd web && ./node_modules/.bin/stryker run --mutate "$(FILE)" --incrementalFile "$$(mktemp -u -t stryker-file.XXXXXX).json"
+	cd web && ./node_modules/.bin/stryker run stryker.conf.ts --mutate "$(FILE)" --incrementalFile "$$(mktemp -u -t stryker-file.XXXXXX).json"
 
 m-front-diff:
 	@set +e; \
@@ -192,7 +192,7 @@ m-front-diff:
 	if [ -z "$$files" ]; then \
 		echo "mutation-diff: no changed frontend files — pass"; exit 0; \
 	fi; \
-	( cd web && MUTATION_THRESHOLD=0 npx stryker run --incremental --mutate "$$files" ); web=$$?; \
+	( cd web && MUTATION_THRESHOLD=0 ./node_modules/.bin/stryker run stryker.conf.ts --incremental --mutate "$$files" ); web=$$?; \
 	node scripts/mutation-diff-gate.mjs "$(BASE)" web/reports/stryker-incremental.json "$(MUTATION_DIFF_THRESHOLD)"; gate=$$?; \
 	if [ $$web -ne 0 ] || [ $$gate -ne 0 ]; then exit 1; fi
 
