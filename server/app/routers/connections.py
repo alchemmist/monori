@@ -206,12 +206,12 @@ def _load_user_rules(c: sqlite3.Connection, uid: int) -> dict[str, list[Category
         )
     }
     cats: list[CategoryDefinition] = [
-        {
-            "id": int(r["id"]),
-            "name": str(r["name"]),
-            "keywords": str(r["keywords"]) if r["keywords"] is not None else None,
-            "group_id": int(r["group_id"]),
-        }
+        CategoryDefinition(
+            id=int(r["id"]),
+            name=str(r["name"]),
+            keywords=str(r["keywords"]) if r["keywords"] is not None else None,
+            group_id=int(r["group_id"]),
+        )
         for r in c.execute(
             "SELECT c.id, c.name, c.keywords, c.group_id FROM categories c"
             " JOIN category_groups g ON g.id = c.group_id WHERE g.user_id=? ORDER BY c.sort",

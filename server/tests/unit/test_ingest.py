@@ -194,15 +194,16 @@ def test_snapshot_full_shape(tmp_path: Path) -> None:
         "INSERT INTO budgets (category_id, year, month, amount) VALUES (?, 2026, 1, 5000)", (cid,)
     )
     c.commit()
-    snap = cast("_Snapshot", snapshot(c, _uid(c)))
-    assert [a["name"] for a in snap["accounts"]] == ["T-Bank"]
-    assert [g["name"] for g in snap["groups"]] == ["Bills"]
-    assert snap["categories"][0]["name"] == "Rent"
-    assert snap["categories"][0]["groupId"] == gid
-    assert len(snap["transactions"]) == 1
-    assert snap["transactions"][0]["accountId"] == acct
-    assert snap["transactions"][0]["amount"] == -100
-    assert snap["budgets"][0] == {"categoryId": cid, "year": 2026, "month": 1, "amount": 5000}
+    snap = snapshot(c, _uid(c))
+    assert [a.name for a in snap.accounts] == ["T-Bank"]
+    assert [g.name for g in snap.groups] == ["Bills"]
+    assert snap.categories[0].name == "Rent"
+    assert snap.categories[0].groupId == gid
+    assert len(snap.transactions) == 1
+    assert snap.transactions[0].accountId == acct
+    assert snap.transactions[0].amount == -100
+    budget = snap.budgets[0]
+    assert (budget.categoryId, budget.year, budget.month, budget.amount) == (cid, 2026, 1, 5000)
 
 
 def test_snapshot_includes_connections_without_secrets(tmp_path: Path) -> None:
@@ -213,12 +214,12 @@ def test_snapshot_includes_connections_without_secrets(tmp_path: Path) -> None:
         (_uid(c), b"cipher"),
     )
     c.commit()
-    conns = cast("list[dict[str, object]]", cast("_Snapshot", snapshot(c, _uid(c)))["connections"])
+    conns = snapshot(c, _uid(c)).connections
     assert len(conns) == 1
-    assert conns[0]["bank"] == "tbank"
-    assert conns[0]["status"] == "connected"
-    assert conns[0]["hasCredentials"] is True
-    assert "credentials_encrypted" not in conns[0]
+    assert conns[0].bank == "tbank"
+    assert conns[0].status == "connected"
+    assert conns[0].hasCredentials is True
+    assert not hasattr(conns[0], "credentials_encrypted")
 
 
 def test_historical_day_counts_span_accounts_and_skip_manual(tmp_path: Path) -> None:

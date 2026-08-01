@@ -190,9 +190,9 @@ def test_parse_statement_continues_after_every_kind_of_skip() -> None:
 def test_categorize_first_rule_wins_and_sign_split() -> None:
     groups = {1: "expense", 2: "income"}
     cats: list[CategoryDefinition] = [
-        {"id": 10, "name": "Groceries", "keywords": "Пятёрочка|Лента", "group_id": 1},
-        {"id": 11, "name": "Entertainment", "keywords": "Лента", "group_id": 1},
-        {"id": 20, "name": "Cashback", "keywords": "Кэшбэк", "group_id": 2},
+        CategoryDefinition(10, "Groceries", "Пятёрочка|Лента", 1),
+        CategoryDefinition(11, "Entertainment", "Лента", 1),
+        CategoryDefinition(20, "Cashback", "Кэшбэк", 2),
     ]
     rules = build_rules(cats, groups)
     assert categorize("Пятёрочка", -100, rules) == 10
@@ -205,27 +205,27 @@ def test_categorize_first_rule_wins_and_sign_split() -> None:
 def test_build_rules_skips_empty_bad_kind_and_null_keywords() -> None:
     groups = {1: "expense", 2: "income", 3: "other"}
     cats: list[CategoryDefinition] = [
-        {"id": 1, "name": "NoKw", "keywords": "", "group_id": 1},  # empty → skipped
-        {"id": 2, "name": "BadKind", "keywords": "x", "group_id": 3},  # not in/out → skipped
-        {"id": 3, "name": "Groceries", "keywords": "Пят | Лента", "group_id": 1},
-        {"id": 4, "name": "Salary", "keywords": "зарплата", "group_id": 2},
-        {"id": 5, "name": "NullKw", "keywords": None, "group_id": 1},  # None → skipped
+        CategoryDefinition(1, "NoKw", "", 1),
+        CategoryDefinition(2, "BadKind", "x", 3),
+        CategoryDefinition(3, "Groceries", "Пят | Лента", 1),
+        CategoryDefinition(4, "Salary", "зарплата", 2),
+        CategoryDefinition(5, "NullKw", None, 1),
     ]
     rules = build_rules(cats, groups)
     # categories before Groceries are skipped with `continue`, not `break`
-    assert [r["category_id"] for r in rules["OUT"]] == [3]
-    assert [r["category_id"] for r in rules["IN"]] == [4]
-    assert rules["OUT"][0]["name"] == "Groceries"
+    assert [r.category_id for r in rules["OUT"]] == [3]
+    assert [r.category_id for r in rules["IN"]] == [4]
+    assert rules["OUT"][0].name == "Groceries"
     # keywords are split on '|', trimmed and lowercased
-    assert rules["OUT"][0]["keywords"] == ["пят", "лента"]
+    assert rules["OUT"][0].keywords == ["пят", "лента"]
 
 
 def test_categorize_guards_on_empty_desc_and_zero_amount() -> None:
     groups = {1: "expense", 2: "income"}
     cats: list[CategoryDefinition] = [
-        {"id": 10, "name": "Cafe", "keywords": "кафе", "group_id": 1},
-        {"id": 20, "name": "Salary", "keywords": "зарплата", "group_id": 2},
-        {"id": 30, "name": "Decoy", "keywords": "xx", "group_id": 1},
+        CategoryDefinition(10, "Cafe", "кафе", 1),
+        CategoryDefinition(20, "Salary", "зарплата", 2),
+        CategoryDefinition(30, "Decoy", "xx", 1),
     ]
     rules = build_rules(cats, groups)
     assert categorize("Кафе Пушкин", -500, rules) == 10
@@ -236,7 +236,6 @@ def test_categorize_guards_on_empty_desc_and_zero_amount() -> None:
     assert categorize("Зарплата", 1, rules) == 20
     # an empty description short-circuits to None (would match the "xx" decoy otherwise)
     assert categorize("", -500, rules) is None
-    assert categorize(None, -500, rules) is None
 
 
 def test_categorize_files_a_refund_back_into_its_expense_envelope() -> None:
@@ -247,8 +246,8 @@ def test_categorize_files_a_refund_back_into_its_expense_envelope() -> None:
     """
     groups = {1: "expense", 2: "income"}
     cats: list[CategoryDefinition] = [
-        {"id": 10, "name": "Groceries", "keywords": "Пятёрочка", "group_id": 1},
-        {"id": 20, "name": "Cashback", "keywords": "Кэшбэк|пятёрочка кэшбэк", "group_id": 2},
+        CategoryDefinition(10, "Groceries", "Пятёрочка", 1),
+        CategoryDefinition(20, "Cashback", "Кэшбэк|пятёрочка кэшбэк", 2),
     ]
     rules = build_rules(cats, groups)
     assert categorize("Пятёрочка возврат", 8470, rules) == 10

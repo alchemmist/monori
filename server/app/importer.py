@@ -14,7 +14,7 @@ import re
 from collections.abc import Iterable, Mapping
 from dataclasses import asdict
 from datetime import datetime
-from typing import Literal, TypedDict, overload
+from typing import Literal, overload
 
 from pydantic import ConfigDict
 from pydantic.dataclasses import dataclass as pydantic_dataclass
@@ -25,7 +25,8 @@ ImportValue = str | int | bool | None
 RuleValue = str | list[str] | int
 
 
-class CategoryDefinition(TypedDict):
+@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+class CategoryDefinition:
     id: int
     name: str
     keywords: str | None
@@ -241,7 +242,7 @@ def parse_date(raw: str) -> datetime | None:
     return datetime(int(y), int(mo), int(d), int(hh or 0), int(mm or 0), int(ss or 0))
 
 
-def parse_amount_kop(raw: str | int | float | bool | None) -> int | None:
+def parse_amount_kop(raw: str) -> int | None:
     """
     '-1 500,00' -> -150000 kopecks.
     """
@@ -255,9 +256,7 @@ def parse_amount_kop(raw: str | int | float | bool | None) -> int | None:
         return None
 
 
-def tx_hash(
-    account_id: int, date_iso: str, amount_kop: int, description: str | int | float | bool | None
-) -> str:
+def tx_hash(account_id: int, date_iso: str, amount_kop: int, description: str) -> str:
     """
     Dedup key of a transaction. Always scoped to the account: the same
     date/amount/description legitimately occurs on two different accounts
@@ -319,23 +318,17 @@ def build_rules(
     """
     rules: dict[str, list[CategoryRule]] = {"IN": [], "OUT": []}
     for c in categories:
-        keywords = [k.strip().lower() for k in str(c["keywords"] or "").split("|") if k.strip()]
+        keywords = [k.strip().lower() for k in (c.keywords or "").split("|") if k.strip()]
         if not keywords:
             continue
-        group_id = c["group_id"]
-        category_id = c["id"]
-        name = c["name"]
-        if not isinstance(group_id, int) or not isinstance(category_id, int):
-            continue
-        if not isinstance(name, str):
-            continue
+        group_id = c.group_id
         kind = groups.get(group_id)
         if kind not in ("income", "expense"):
             continue
         rules["IN" if kind == "income" else "OUT"].append(
             CategoryRule(
-                category_id=category_id,
-                name=name,
+                category_id=c.id,
+                name=c.name,
                 keywords=keywords,
             )
         )
@@ -343,7 +336,7 @@ def build_rules(
 
 
 def categorize(
-    description: str | int | float | bool | None,
+    description: str,
     amount_kop: int,
     rules: Mapping[str, list[CategoryRule]],
 ) -> int | None:
@@ -355,7 +348,7 @@ def categorize(
     as more spent than it was. So a positive amount that matches no income
     keyword still gets to match the expense keywords.
     """
-    desc = str(description or "").lower()
+    desc = description.lower()
     if not desc or amount_kop == 0:
         return None
     for side in ("IN", "OUT") if amount_kop > 0 else ("OUT",):

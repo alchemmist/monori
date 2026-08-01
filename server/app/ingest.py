@@ -32,12 +32,12 @@ def load_rules(c: sqlite3.Connection) -> dict[str, list[CategoryRule]]:
         )
     }
     cats: list[CategoryDefinition] = [
-        {
-            "id": int(r["id"]),
-            "name": str(r["name"]),
-            "keywords": str(r["keywords"]) if r["keywords"] is not None else None,
-            "group_id": int(r["group_id"]),
-        }
+        CategoryDefinition(
+            id=int(r["id"]),
+            name=str(r["name"]),
+            keywords=str(r["keywords"]) if r["keywords"] is not None else None,
+            group_id=int(r["group_id"]),
+        )
         for r in c.execute("SELECT id, name, keywords, group_id FROM categories ORDER BY sort")
     ]
     return build_rules(cats, groups)
