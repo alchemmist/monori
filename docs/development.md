@@ -69,11 +69,14 @@ a new commit.
 
 `make analyze` runs Vulture against `server/app` and Knip against the frontend
 source, end-to-end tests, and tool configuration files. Vulture uses the
-`[tool.vulture]` section in `server/pyproject.toml`; its two ignored names are
-arguments required by Playwright-compatible protocol signatures. Knip uses
-`web/knip.config.js`: prototype experiments are outside its project globs, and packages invoked by Makefile/CI
-or imported from CSS are explicitly excluded because they are outside the
-JavaScript module graph.
+`[tool.vulture]` section in `server/pyproject.toml`. Its `min_confidence = 80`
+setting means that `make analyze` reports only findings with at least 80%
+confidence; Vulture's 60% heuristic findings are intentionally excluded until
+they can be reviewed with an allowlist. Its two ignored names are arguments
+required by Playwright-compatible protocol signatures. Knip uses
+`web/knip.config.js`: prototype experiments are outside its project globs, and
+packages invoked by Makefile/CI or imported from CSS are explicitly excluded
+because they are outside the JavaScript module graph.
 
 For a new finding, remove the dead code or add a narrowly scoped, documented
 exception only when the symbol is an intentional external entry point.
