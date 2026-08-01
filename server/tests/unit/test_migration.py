@@ -1,7 +1,7 @@
 import pathlib
 import sqlite3
 from collections.abc import Callable
-from typing import cast
+from dataclasses import dataclass
 
 import pytest
 from alembic import command
@@ -48,18 +48,31 @@ def _make_old_db(path: pathlib.Path) -> None:
     old.close()
 
 
-def _row(conn: sqlite3.Connection, sql: str, params: tuple[object, ...] = ()) -> sqlite3.Row:
-    row = conn.execute(sql, params).fetchone()
+def _row(conn: sqlite3.Connection, sql: str) -> sqlite3.Row:
+    row = conn.execute(sql).fetchone()
     assert row is not None
-    return cast("sqlite3.Row", row)
+    assert isinstance(row, sqlite3.Row)
+    return row
 
 
-def _scalar(conn: sqlite3.Connection, sql: str, params: tuple[object, ...] = ()) -> object:
-    return _row(conn, sql, params)[0]
+def _int_scalar(conn: sqlite3.Connection, sql: str) -> int:
+    row = conn.execute(sql).fetchone()
+    assert row is not None
+    value = row[0]
+    assert isinstance(value, int)
+    return value
+
+
+def _str_scalar(conn: sqlite3.Connection, sql: str) -> str:
+    row = conn.execute(sql).fetchone()
+    assert row is not None
+    value = row[0]
+    assert isinstance(value, str)
+    return value
 
 
 def _revision(conn: sqlite3.Connection) -> str:
-    return cast("str", _scalar(conn, "SELECT version_num FROM alembic_version"))
+    return _str_scalar(conn, "SELECT version_num FROM alembic_version")
 
 
 def test_migration_backfills_existing_transactions(tmp_path: pathlib.Path) -> None:
@@ -69,19 +82,22 @@ def test_migration_backfills_existing_transactions(tmp_path: pathlib.Path) -> No
     conn = connect(db_path)
     try:
         accounts = conn.execute("SELECT id, name FROM accounts").fetchall()
-        assert [cast("str", a["name"]) for a in accounts] == ["T-Bank"]
-        default_id = cast("int", accounts[0]["id"])
+        assert [a["name"] for a in accounts] == ["T-Bank"]
+        default_id = accounts[0]["id"]
+        assert isinstance(default_id, int)
 
         rows = conn.execute("SELECT id, account_id, transfer_id FROM transactions").fetchall()
         assert len(rows) == 2
-        assert all(cast("int", r["account_id"]) == default_id for r in rows)
+        assert all(r["account_id"] == default_id for r in rows)
         assert all(r["transfer_id"] is None for r in rows)
 
         cols = {r["name"]: r for r in conn.execute("PRAGMA table_info(transactions)")}
         assert cols["account_id"]["notnull"] == 1
 
-        icon_row = _row(conn, "SELECT icon FROM accounts WHERE id=?", (default_id,))
-        icon = cast("str", icon_row["icon"])
+        icon_row = conn.execute("SELECT icon FROM accounts WHERE id=?", (default_id,)).fetchone()
+        assert icon_row is not None
+        icon = icon_row["icon"]
+        assert isinstance(icon, str)
         assert icon == "wallet"
         acct_cols = {r["name"] for r in conn.execute("PRAGMA table_info(accounts)")}
         assert {"color", "icon_image"} <= acct_cols
@@ -97,8 +113,8 @@ def test_migration_is_idempotent(tmp_path: pathlib.Path) -> None:
     connect(db_path).close()
     conn = connect(db_path)
     try:
-        assert _scalar(conn, "SELECT COUNT(*) FROM accounts") == 1
-        assert _scalar(conn, "SELECT COUNT(*) FROM transactions") == 2
+        assert _int_scalar(conn, "SELECT COUNT(*) FROM accounts") == 1
+        assert _int_scalar(conn, "SELECT COUNT(*) FROM transactions") == 2
         assert _revision(conn) == HEAD
     finally:
         conn.close()
@@ -122,7 +138,7 @@ def test_fresh_db_is_created_from_schema_sql(tmp_path: pathlib.Path) -> None:
             "import_batches",
             "users",
         } <= tables
-        assert _scalar(conn, "SELECT COUNT(*) FROM accounts") == 0
+        assert _int_scalar(conn, "SELECT COUNT(*) FROM accounts") == 0
         cols = {r["name"] for r in conn.execute("PRAGMA table_info(transactions)")}
         assert {"account_id", "transfer_id", "batch_id"} <= cols
         acct_cols = {r["name"] for r in conn.execute("PRAGMA table_info(accounts)")}
@@ -132,7 +148,22 @@ def test_fresh_db_is_created_from_schema_sql(tmp_path: pathlib.Path) -> None:
         conn.close()
 
 
-def _describe(db_path: pathlib.Path) -> dict[str, tuple[list[object], list[object]]]:
+@dataclass(frozen=True, order=True)
+class SchemaColumn:
+    name: str
+    type: str
+    not_null: int
+    default: str | None
+    primary_key: bool
+
+
+@dataclass(frozen=True)
+class TableShape:
+    columns: list[SchemaColumn]
+    indexes: list[str]
+
+
+def _describe(db_path: pathlib.Path) -> dict[str, TableShape]:
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     try:
@@ -141,10 +172,16 @@ def _describe(db_path: pathlib.Path) -> dict[str, tuple[list[object], list[objec
             for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
             if r["name"] != "alembic_version" and not r["name"].startswith("sqlite_")
         )
-        shape: dict[str, tuple[list[object], list[object]]] = {}
+        shape: dict[str, TableShape] = {}
         for t in tables:
             cols = sorted(
-                (r["name"], r["type"].upper(), r["notnull"], r["dflt_value"], bool(r["pk"]))
+                SchemaColumn(
+                    name=r["name"],
+                    type=r["type"].upper(),
+                    not_null=r["notnull"],
+                    default=r["dflt_value"],
+                    primary_key=bool(r["pk"]),
+                )
                 for r in conn.execute(f"PRAGMA table_info({t})")
             )
             indexes = sorted(
@@ -152,7 +189,7 @@ def _describe(db_path: pathlib.Path) -> dict[str, tuple[list[object], list[objec
                 for r in conn.execute(f"PRAGMA index_list({t})")
                 if not r["name"].startswith("sqlite_")
             )
-            shape[t] = (cast("list[object]", cols), cast("list[object]", indexes))
+            shape[t] = TableShape(cols, indexes)
         return shape
     finally:
         conn.close()
@@ -182,7 +219,7 @@ def test_migration_0011_backfills_and_enforces_canonical(tmp_path: pathlib.Path)
     conn = connect(db_path)
     try:
         assert _revision(conn) == HEAD
-        canon = cast("str", _scalar(conn, "SELECT email_canonical FROM users"))
+        canon = _str_scalar(conn, "SELECT email_canonical FROM users")
         assert canon == "anton@gmail.com"
         # a distinct alias of the same mailbox collapses to the same canonical
         # and is rejected by the new unique index
@@ -217,13 +254,11 @@ def test_migration_0011_reports_canonical_collisions(tmp_path: pathlib.Path) -> 
 
 
 def test_blank_email_canonical_is_rejected(tmp_path: pathlib.Path) -> None:
-    for name, builder in cast(
-        "tuple[tuple[str, Callable[[pathlib.Path], None]], ...]",
-        (
-            ("fresh.db", lambda p: connect(p).close()),
-            ("chained.db", lambda p: command.upgrade(_alembic_config(p), "head")),
-        ),
-    ):
+    builders: tuple[tuple[str, Callable[[pathlib.Path], None]], ...] = (
+        ("fresh.db", lambda p: connect(p).close()),
+        ("chained.db", lambda p: command.upgrade(_alembic_config(p), "head")),
+    )
+    for name, builder in builders:
         path = tmp_path / name
         builder(path)
         raw = sqlite3.connect(path)
@@ -294,7 +329,13 @@ def test_migration_0012_rehashes_with_account_scope(tmp_path: pathlib.Path) -> N
         rows = conn.execute(
             "SELECT account_id, hash FROM transactions ORDER BY account_id"
         ).fetchall()
-        hashes = {cast("int", r["account_id"]): cast("str", r["hash"]) for r in rows}
+        hashes: dict[int, str] = {}
+        for row in rows:
+            account_id = row["account_id"]
+            row_hash = row["hash"]
+            assert isinstance(account_id, int)
+            assert isinstance(row_hash, str)
+            hashes[account_id] = row_hash
         assert hashes[1] == tx_hash(1, "2026-01-01T00:00:00", -100, "coffee")
         assert hashes[2] == tx_hash(2, "2026-01-01T00:00:00", -100, "coffee")
         assert hashes[1] != hashes[2]
@@ -314,7 +355,7 @@ def test_legacy_intermediate_user_version_is_adopted(tmp_path: pathlib.Path) -> 
     conn = connect(db_path)
     try:
         assert _revision(conn) == HEAD
-        assert _scalar(conn, "SELECT COUNT(*) FROM accounts") == 1
+        assert _int_scalar(conn, "SELECT COUNT(*) FROM accounts") == 1
         acct_cols = {r["name"] for r in conn.execute("PRAGMA table_info(accounts)")}
         assert {"icon", "color", "icon_image"} <= acct_cols
         tables = {
@@ -339,9 +380,9 @@ def test_upgrade_assigns_orphans_to_earliest_user(tmp_path: pathlib.Path) -> Non
 
     conn = connect(db_path)
     try:
-        uid = cast("int", _scalar(conn, "SELECT MIN(id) FROM users"))
-        assert _scalar(conn, "SELECT user_id FROM accounts") == uid
-        assert _scalar(conn, "SELECT user_id FROM category_groups") == uid
+        uid = _int_scalar(conn, "SELECT MIN(id) FROM users")
+        assert _int_scalar(conn, "SELECT user_id FROM accounts") == uid
+        assert _int_scalar(conn, "SELECT user_id FROM category_groups") == uid
     finally:
         conn.close()
 
@@ -423,7 +464,7 @@ def test_connection_conversion_to_user_level(tmp_path: pathlib.Path) -> None:
         "INSERT INTO accounts (user_id, name, type, currency, sort)"
         " VALUES (1, 'Card', 'card', 'RUB', 1)"
     )
-    acct_id = cast("int", _scalar(c, "SELECT id FROM accounts WHERE name='Card'"))
+    acct_id = _int_scalar(c, "SELECT id FROM accounts WHERE name='Card'")
     c.execute(
         "INSERT INTO bank_connections (account_id, bank, kind, status, created_at, updated_at)"
         f" VALUES ({acct_id}, 'tbank', 'playwright', 'connected', 't1', 't2')"
