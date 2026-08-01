@@ -5,6 +5,8 @@ on:
         branches: [main]
     push:
         branches: [main]
+    schedule:
+        - cron: "0 2 * * *"
     workflow_dispatch:
 
 permissions:
@@ -112,39 +114,6 @@ jobs:
                       web/playwright-report
                       web/test-results
                   retention-days: 7
-
-    mutation:
-        name: mutation
-        if: github.event_name == 'workflow_dispatch'
-        runs-on: ubuntu-latest
-        steps:
-            - name: Checkout
-              uses: actions/checkout@v7
-              with:
-                  persist-credentials: false
-
-            - name: Setup Node
-              uses: actions/setup-node@v7
-              with:
-                  node-version: 22
-                  cache: npm
-                  cache-dependency-path: web/package.json
-
-            - name: Setup uv
-              uses: astral-sh/setup-uv@v7
-              with:
-                  enable-cache: true
-
-            - name: Install web deps
-              run: npm install --no-audit --no-fund
-              working-directory: web
-
-            - name: Install server deps
-              run: uv sync
-              working-directory: server
-
-            - name: Run mutation tests
-              run: make mutation
 
     secrets:
         name: secrets

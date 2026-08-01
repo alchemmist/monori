@@ -3,6 +3,8 @@ HAVE_DOCKER_COMPOSE = $(shell docker compose version >/dev/null 2>&1 && echo 1)
 HAVE_PODMAN_COMPOSE = $(shell podman compose version >/dev/null 2>&1 && echo 1)
 COMPOSE ?= $(if $(HAVE_DOCKER_COMPOSE),docker compose,$(if $(HAVE_PODMAN_COMPOSE),podman compose --in-pod=false,docker compose))
 MUTATION_THRESHOLD ?= 85
+MUTATION_DIFF_THRESHOLD ?= 90
+BASE ?= origin/main
 
 WEBBIN := web/node_modules/.bin
 
@@ -12,7 +14,7 @@ WEBBIN := web/node_modules/.bin
         fmt fmt-check \
         lint lint-web lint-css lint-html lint-server lint-sql lint-yaml lint-md lint-docs lint-actions lint-docker lint-shell spell \
         type type-front type-back analyze audit audit-deps audit-deps-py audit-secrets \
-        test t-fast t-medium t-slow t-slow-ui coverage mutation m-front m-front-file m-back \
+        test t-fast t-medium t-slow t-slow-ui coverage mutation mutation-diff m-front m-front-diff m-front-file m-back m-back-diff \
         schema-diagram check
 
 install:
@@ -183,6 +185,17 @@ m-front-file:
 	fi
 	cd web && ./node_modules/.bin/stryker run --mutate "$(FILE)" --incrementalFile "$$(mktemp -u -t stryker-file.XXXXXX).json"
 
+m-front-diff:
+	@set +e; \
+	git rev-parse --verify --quiet "$(BASE)" >/dev/null || { echo "mutation-diff: BASE='$(BASE)' is not a valid revision"; exit 1; }; \
+	files=$$(git diff --diff-filter=ACMR --name-only "$(BASE)...HEAD" -- web/src | sed 's#^web/##' | paste -sd, -); \
+	if [ -z "$$files" ]; then \
+		echo "mutation-diff: no changed frontend files — pass"; exit 0; \
+	fi; \
+	( cd web && MUTATION_THRESHOLD=0 npx stryker run --incremental --mutate "$$files" ); web=$$?; \
+	node scripts/mutation-diff-gate.mjs "$(BASE)" web/reports/stryker-incremental.json "$(MUTATION_DIFF_THRESHOLD)"; gate=$$?; \
+	if [ $$web -ne 0 ] || [ $$gate -ne 0 ]; then exit 1; fi
+
 m-back:
 	@set +e; \
 	thr=$(MUTATION_THRESHOLD); \
@@ -196,6 +209,34 @@ m-back:
 	if [ -s server/mutants/mutmut-stderr.log ]; then echo "── mutmut diagnostics: server/mutants/mutmut-stderr.log ──"; fi; \
 	echo "── backend mutation gate (threshold $$thr%): mutmut run exit=$$mutmut, mutmut gate exit=$$srv ──"; \
 	if [ $$mutmut -ne 0 ] || [ $$srv -ne 0 ]; then exit 1; fi
+
+m-back-diff:
+	@set +e; \
+	git rev-parse --verify --quiet "$(BASE)" >/dev/null || { echo "mutation-diff: BASE='$(BASE)' is not a valid revision"; exit 1; }; \
+	if git diff --quiet "$(BASE)...HEAD" -- server/app; then \
+		echo "mutation-diff: no changed backend files — pass"; exit 0; \
+	fi; \
+	paths=$$(git diff --diff-filter=ACMR --name-only "$(BASE)...HEAD" -- server/app | sed -e 's#^server/##' -e 's#\.py$$##' -e 's#/#.#g' -e 's#$$#.*#' | paste -sd' ' -); \
+	if [ -z "$$paths" ]; then \
+		echo "mutation-diff: no changed backend source files — pass"; exit 0; \
+	fi; \
+	set -- $$paths; \
+	baseline=$$(mktemp -d); trap 'rm -rf "$$baseline"' EXIT; \
+	cold_start=0; if [ -d server/mutants ]; then cp -a server/mutants "$$baseline/mutants"; else mkdir -p "$$baseline/mutants"; cold_start=1; fi; \
+	( cd server && mkdir -p mutants && uv run mutmut run "$$@" 2>mutants/mutmut-stderr.log ); mutmut=$$?; \
+	args="--mutants server/mutants --baseline $$baseline/mutants --base $(BASE) --threshold $(MUTATION_DIFF_THRESHOLD)"; \
+	if [ $$cold_start -eq 1 ]; then args="$$args --skip-new-survivors"; fi; \
+	python3 scripts/mutation-diff-gate.py $$args; gate=$$?; \
+	if [ -s server/mutants/mutmut-stderr.log ]; then echo "── mutmut diagnostics: server/mutants/mutmut-stderr.log ──"; fi; \
+	echo "── backend diff mutation gate (threshold $(MUTATION_DIFF_THRESHOLD)%): mutmut run exit=$$mutmut, gate exit=$$gate ──"; \
+	if [ $$mutmut -ne 0 ] || [ $$gate -ne 0 ]; then exit 1; fi
+
+mutation-diff:
+	@set +e; \
+	$(MAKE) BASE="$(BASE)" MUTATION_DIFF_THRESHOLD=$(MUTATION_DIFF_THRESHOLD) m-front-diff; front=$$?; \
+	$(MAKE) BASE="$(BASE)" MUTATION_DIFF_THRESHOLD=$(MUTATION_DIFF_THRESHOLD) m-back-diff; back=$$?; \
+	echo "── diff mutation gates: frontend exit=$$front, backend exit=$$back ──"; \
+	if [ $$front -ne 0 ] || [ $$back -ne 0 ]; then exit 1; fi
 
 mutation:
 	@set +e; \

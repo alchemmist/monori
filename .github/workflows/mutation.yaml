@@ -1,0 +1,159 @@
+name: Mutation
+
+on:
+    pull_request:
+        branches: [main]
+    push:
+        branches: [main]
+    schedule:
+        - cron: "0 2 * * *"
+    workflow_dispatch:
+
+permissions:
+    contents: read
+
+concurrency:
+    group: mutation-${{ github.ref }}
+    cancel-in-progress: true
+
+jobs:
+    mutation-pr:
+        name: mutation (changed code)
+        if: github.event_name == 'pull_request'
+        runs-on: ubuntu-latest
+        timeout-minutes: 45
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v7
+              with:
+                  fetch-depth: 0
+                  persist-credentials: false
+
+            - name: Setup Node
+              uses: actions/setup-node@v7
+              with:
+                  node-version: 22
+                  cache: npm
+                  cache-dependency-path: web/package.json
+
+            - name: Setup uv
+              uses: astral-sh/setup-uv@v7
+              with:
+                  enable-cache: true
+
+            - name: Install web deps
+              run: npm install --no-audit --no-fund
+              working-directory: web
+
+            - name: Install server deps
+              run: uv sync
+              working-directory: server
+
+            - name: Restore Stryker cache
+              uses: actions/cache@v4
+              with:
+                  path: web/reports/stryker-incremental.json
+                  key: mutation-stryker-${{ runner.os }}-${{ hashFiles('web/package.json') }}-pr-${{ github.event.pull_request.number }}-${{ github.sha }}
+                  restore-keys: |
+                      mutation-stryker-${{ runner.os }}-${{ hashFiles('web/package.json') }}-pr-${{ github.event.pull_request.number }}-
+                      mutation-stryker-${{ runner.os }}-${{ hashFiles('web/package.json') }}-main-
+
+            - name: Restore mutmut cache
+              uses: actions/cache/restore@v4
+              with:
+                  path: server/mutants
+                  key: mutation-mutmut-${{ runner.os }}-${{ hashFiles('server/pyproject.toml') }}-main-
+                  restore-keys: |
+                      mutation-mutmut-${{ runner.os }}-${{ hashFiles('server/pyproject.toml') }}-main-
+
+            - name: Test diff mutation gate
+              run: python3 -m unittest scripts/test_mutation_diff_gate.py
+
+            - name: Run diff-scoped mutation tests
+              run: make mutation-diff BASE=origin/main MUTATION_DIFF_THRESHOLD=90
+
+    mutation-full:
+        name: mutation (full sweep)
+        if: >-
+            github.event_name == 'schedule'
+            || github.event_name == 'push'
+            || github.event_name == 'workflow_dispatch'
+        runs-on: ubuntu-latest
+        timeout-minutes: 180
+        permissions:
+            contents: read
+            issues: write
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v7
+              with:
+                  fetch-depth: 0
+                  persist-credentials: false
+
+            - name: Setup Node
+              uses: actions/setup-node@v7
+              with:
+                  node-version: 22
+                  cache: npm
+                  cache-dependency-path: web/package.json
+
+            - name: Setup uv
+              uses: astral-sh/setup-uv@v7
+              with:
+                  enable-cache: true
+
+            - name: Install web deps
+              run: npm install --no-audit --no-fund
+              working-directory: web
+
+            - name: Install server deps
+              run: uv sync
+              working-directory: server
+
+            - name: Restore Stryker cache
+              uses: actions/cache@v4
+              with:
+                  path: web/reports/stryker-incremental.json
+                  key: mutation-stryker-${{ runner.os }}-${{ hashFiles('web/package.json') }}-main-${{ github.sha }}
+                  restore-keys: |
+                      mutation-stryker-${{ runner.os }}-${{ hashFiles('web/package.json') }}-main-
+
+            - name: Restore mutmut cache
+              uses: actions/cache@v4
+              with:
+                  path: server/mutants
+                  key: mutation-mutmut-${{ runner.os }}-${{ hashFiles('server/pyproject.toml') }}-main-${{ github.sha }}
+                  restore-keys: |
+                      mutation-mutmut-${{ runner.os }}-${{ hashFiles('server/pyproject.toml') }}-main-
+
+            - name: Run full mutation tests
+              run: make mutation
+
+            - name: Report scheduled mutation failure
+              if: failure() && github.event_name == 'schedule'
+              uses: actions/github-script@v7
+              with:
+                  script: |
+                      const title = "Nightly mutation sweep failed";
+                      const { owner, repo } = context.repo;
+                      const { data: openIssues } = await github.rest.issues.listForRepo({
+                          owner,
+                          repo,
+                          state: "open",
+                      });
+                      const body = [
+                          "The scheduled full mutation sweep failed.",
+                          "",
+                          `Run: ${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`,
+                      ].join("\n");
+                      const existing = openIssues.find((issue) => issue.title === title);
+                      if (existing) {
+                          await github.rest.issues.createComment({
+                              owner,
+                              repo,
+                              issue_number: existing.number,
+                              body,
+                          });
+                      } else {
+                          await github.rest.issues.create({ owner, repo, title, body });
+                      }
