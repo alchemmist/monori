@@ -8,7 +8,7 @@ from tests.conftest import Api, _SnapshotTransaction
 pytestmark = pytest.mark.integration
 
 
-def legs(api: Api, transfer_id: int) -> list[_SnapshotTransaction]:
+def legs(api: Api, transfer_id: str) -> list[_SnapshotTransaction]:
     return [t for t in api.snapshot()["transactions"] if t["transferId"] == transfer_id]
 
 

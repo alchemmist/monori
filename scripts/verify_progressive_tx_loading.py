@@ -121,9 +121,7 @@ def main() -> None:
         browser = p.chromium.launch(headless=True)
         requests: list[str] = []
         page = open_page(browser, token, requests=requests)
-        page.wait_for_function(
-            "() => !document.querySelector('.progress-ring')", timeout=60000
-        )
+        page.wait_for_function("() => !document.querySelector('.progress-ring')", timeout=60000)
         state = PAGE_STATE_ADAPTER.validate_python(page.evaluate(STATE_JS))
         print("AFTER FILL:", state)
         page.close()

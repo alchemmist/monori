@@ -22,13 +22,11 @@ import sqlite3
 import sys
 import tempfile
 from dataclasses import dataclass
-from typing import TypedDict
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / "server"))
 
 from openpyxl import load_workbook
 from openpyxl.worksheet.worksheet import Worksheet
-from pydantic import TypeAdapter
 
 from app.db import connect
 from app.workbook.apply import apply_workbook
@@ -63,7 +61,8 @@ class LedgerSnapshot:
     uncategorized: int
 
 
-class Header(TypedDict):
+@dataclass(frozen=True, slots=True)
+class Header:
     overspent: int | None
     budgeted: int | None
     income: int | None
@@ -71,32 +70,33 @@ class Header(TypedDict):
     available: int | None
 
 
-class YearCat(TypedDict):
+@dataclass(frozen=True, slots=True)
+class YearCat:
     budgets: dict[int, int]
     outflows: dict[int, int]
     balances: dict[int, int]
 
 
-class YearGrid(TypedDict):
+@dataclass(frozen=True, slots=True)
+class YearGrid:
     months: list[int]
     cats: dict[str, YearCat]
 
 
-class ReplayCell(TypedDict):
+@dataclass(frozen=True, slots=True)
+class ReplayCell:
     budgeted: int
     outflows: int
     balance: int
 
 
-class ReplayMonth(TypedDict):
+@dataclass(frozen=True, slots=True)
+class ReplayMonth:
     income: int
     budgeted: int
     overspent: int
     available: int
     cells: dict[str, ReplayCell]
-
-
-YEAR_GRID_ADAPTER: TypeAdapter[YearGrid] = TypeAdapter(YearGrid)
 
 
 def rub(kop: int | None) -> str:
@@ -120,18 +120,25 @@ def sheet_grids(path: str) -> tuple[dict[int, YearGrid], dict[tuple[int, int], H
             year = int(match.group(1))
             if match.group(2) and year in grids:
                 continue  # a plain sheet is the working copy and wins
-            grids[year] = YEAR_GRID_ADAPTER.validate_python(_parse_year_sheet(ws, year, layout))
+            parsed_year = _parse_year_sheet(ws, year, layout)
+            grids[year] = YearGrid(
+                months=parsed_year.months,
+                cats={
+                    category: YearCat(row.budgets, row.outflows, row.balances)
+                    for category, row in parsed_year.cats.items()
+                },
+            )
             for i, base in enumerate(layout.bases):
                 month = layout.start_month + i
                 if month > 12:
                     break
-                headers[(year, month)] = {
-                    "overspent": _summary_value(ws, base, ("Overspent in", "Перерасход")),
-                    "budgeted": _summary_value(ws, base, ("Budgeted in", "Заложено")),
-                    "income": _summary_value(ws, base, ("Income for", "Поступления в")),
-                    "carried": _summary_value(ws, base, ("Not budgeted", "Не заложено")),
-                    "available": _available(ws, base),
-                }
+                headers[(year, month)] = Header(
+                    overspent=_summary_value(ws, base, ("Overspent in", "Перерасход")),
+                    budgeted=_summary_value(ws, base, ("Budgeted in", "Заложено")),
+                    income=_summary_value(ws, base, ("Income for", "Поступления в")),
+                    carried=_summary_value(ws, base, ("Not budgeted", "Не заложено")),
+                    available=_available(ws, base),
+                )
         return grids, headers
     finally:
         wb.close()
@@ -221,7 +228,11 @@ def duplicates(c: sqlite3.Connection, uid: int) -> tuple[list[DuplicateRow], lis
     """
     on_one: list[DuplicateRow] = [
         DuplicateRow(
-            str(r["name"]), str(r["date"]), int(r["amount"]), str(r["description"]), int(r["n"])
+            str(r["name"]),
+            str(r["date"]),
+            int(r["amount"]),
+            str(r["description"]),
+            int(r["n"]),
         )
         for r in c.execute(
             "SELECT a.name, t.date, t.amount, t.description, COUNT(*) n"
@@ -233,7 +244,11 @@ def duplicates(c: sqlite3.Connection, uid: int) -> tuple[list[DuplicateRow], lis
     ]
     across: list[DuplicateRow] = [
         DuplicateRow(
-            str(r["names"]), str(r["day"]), int(r["amount"]), str(r["description"]), int(r["n"])
+            str(r["names"]),
+            str(r["day"]),
+            int(r["amount"]),
+            str(r["description"]),
+            int(r["n"]),
         )
         for r in c.execute(
             "SELECT group_concat(DISTINCT a.name) names, substr(t.date, 1, 10) day,"
@@ -257,18 +272,18 @@ def _header_adds_up(head: Header) -> bool | None:
     with itself; monori applies the envelope rule to every month alike.
     """
     if (
-        head["available"] is None
-        or head["carried"] is None
-        or head["overspent"] is None
-        or head["income"] is None
-        or head["budgeted"] is None
+        head.available is None
+        or head.carried is None
+        or head.overspent is None
+        or head.income is None
+        or head.budgeted is None
     ):
         return None
-    carried = head["carried"]
-    overspent = head["overspent"]
-    income = head["income"]
-    budgeted = head["budgeted"]
-    available = head["available"]
+    carried = head.carried
+    overspent = head.overspent
+    income = head.income
+    budgeted = head.budgeted
+    available = head.available
     return abs(carried + overspent + income + budgeted - available) <= 5
 
 
@@ -280,14 +295,14 @@ def _carried_overspend(
     month's own Balance column actually adds up to. A cell whose formula was
     repointed and never recalculated keeps a figure from a different month.
     """
-    cached = head.get("overspent")
+    cached = head.overspent
     if cached is None:
         return None
     prev_year, prev_month = (year - 1, 12) if month == 1 else (year, month - 1)
     grid = grids.get(prev_year)
-    if grid is None or prev_month not in grid["months"]:
+    if grid is None or prev_month not in grid.months:
         return None
-    total = sum(min(entry["balances"].get(prev_month, 0), 0) for entry in grid["cats"].values())
+    total = sum(min(entry.balances.get(prev_month, 0), 0) for entry in grid.cats.values())
     return abs(total - cached) <= 2
 
 
@@ -298,7 +313,7 @@ def _self_consistent(grids: dict[int, YearGrid], name: str, year: int, month: in
     is a stale cache in the spreadsheet and monori follows the balance, which is
     the figure the sheet displays and carries forward.
     """
-    entry = grids[year]["cats"].get(name)
+    entry = grids[year].cats.get(name)
     if entry is None:
         return None
     prev_year, prev_month = (year - 1, 12) if month == 1 else (year, month - 1)
@@ -306,11 +321,11 @@ def _self_consistent(grids: dict[int, YearGrid], name: str, year: int, month: in
     if prev_grid is None:
         prev = None
     else:
-        prev_cat = prev_grid["cats"].get(name)
-        prev = None if prev_cat is None else prev_cat["balances"].get(prev_month)
-    budgeted = entry["budgets"].get(month)
-    outflows = entry["outflows"].get(month)
-    balance = entry["balances"].get(month)
+        prev_cat = prev_grid.cats.get(name)
+        prev = None if prev_cat is None else prev_cat.balances.get(prev_month)
+    budgeted = entry.budgets.get(month)
+    outflows = entry.outflows.get(month)
+    balance = entry.balances.get(month)
     if None in (budgeted, outflows, balance):
         return None
     assert budgeted is not None
@@ -349,20 +364,14 @@ def replay(
                 balances[n] = bal
                 if bal < 0:
                     overspent += bal
-                cells[n] = {
-                    "budgeted": budgets.get((n, year, m), 0),
-                    "outflows": tx.get((n, year, m), 0),
-                    "balance": bal,
-                }
+                cells[n] = ReplayCell(
+                    budgeted=budgets.get((n, year, m), 0),
+                    outflows=tx.get((n, year, m), 0),
+                    balance=bal,
+                )
             avail = avail + prev_overspent + income - budgeted
             prev_overspent = overspent
-            out[(year, m)] = {
-                "income": income,
-                "budgeted": budgeted,
-                "overspent": overspent,
-                "available": avail,
-                "cells": cells,
-            }
+            out[(year, m)] = ReplayMonth(income, budgeted, overspent, avail, cells)
     return out
 
 
@@ -371,18 +380,26 @@ def trace(
 ) -> None:
     """One category, month by month, the sheet's three numbers beside ours."""
     print(f"=== {name} ===")
-    cols = ("month", "sheet bud", "sheet out", "sheet bal", "our bud", "our out", "our bal")
+    cols = (
+        "month",
+        "sheet bud",
+        "sheet out",
+        "sheet bal",
+        "our bud",
+        "our out",
+        "our bal",
+    )
     print(f"{cols[0]:<9}" + "".join(f"{h:>15}" for h in cols[1:]))
     for year in sorted(grids):
         grid = grids[year]
-        entry = grid["cats"].get(name, {"budgets": {}, "outflows": {}, "balances": {}})
-        for m in grid["months"]:
+        entry = grid.cats.get(name, YearCat({}, {}, {}))
+        for m in grid.months:
             month = replayed.get((year, m))
-            ours = None if month is None else month["cells"].get(name)
+            ours = None if month is None else month.cells.get(name)
             if ours is None:
                 continue
-            sheet = [entry[k].get(m) for k in ("budgets", "outflows", "balances")]
-            mine = [ours["budgeted"], ours["outflows"], ours["balance"]]
+            sheet = [entry.budgets.get(m), entry.outflows.get(m), entry.balances.get(m)]
+            mine = [ours.budgeted, ours.outflows, ours.balance]
             if not any(sheet) and not any(mine):
                 continue
             print(f"{year}-{m:02d}  " + "".join(f"{rub(v):>15}" for v in sheet + mine))
@@ -425,15 +442,15 @@ def main() -> int:
     bad_cells = []
     for year in years:
         grid = grids[year]
-        for name, entry in grid["cats"].items():
-            for m in grid["months"]:
-                ours = replayed[(year, m)]["cells"].get(name)
+        for name, entry in grid.cats.items():
+            for m in grid.months:
+                ours = replayed[(year, m)].cells.get(name)
                 if ours is None:
                     continue  # income rows have no envelope; checked via the totals
                 for field, want, ours_value in (
-                    ("budgeted", entry["budgets"].get(m), ours["budgeted"]),
-                    ("outflows", entry["outflows"].get(m), ours["outflows"]),
-                    ("balance", entry["balances"].get(m), ours["balance"]),
+                    ("budgeted", entry.budgets.get(m), ours.budgeted),
+                    ("outflows", entry.outflows.get(m), ours.outflows),
+                    ("balance", entry.balances.get(m), ours.balance),
                 ):
                     if want is None:
                         continue
@@ -456,15 +473,15 @@ def main() -> int:
     carried_gap = 0
     for (year, m), head in sorted(headers.items()):
         avail_ours = replayed.get((year, m))
-        want = head.get("available")
+        want = head.available
         if avail_ours is None or want is None:
             continue
-        gap = want - avail_ours["available"]
+        gap = want - avail_ours.available
         if abs(gap - carried_gap) > 5:
             stale = _header_adds_up(head)
             if stale is not False and _carried_overspend(grids, head, year, m) is False:
                 stale = False
-            bad_months.append((year, m, want, avail_ours["available"], gap - carried_gap, stale))
+            bad_months.append((year, m, want, avail_ours.available, gap - carried_gap, stale))
         carried_gap = gap
 
     lines.append(f"transactions imported : {result.inserted}")

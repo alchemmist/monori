@@ -59,9 +59,10 @@ def main() -> int:
     # audit that never happened read as a clean pass.
     if data.error is not None or data.vulnerabilities is None:
         err = data.error
+        code = err.code if err else "unknown"
+        summary = err.summary if err else "missing vulnerabilities"
         print(
-            "npm-audit-gate [FAIL]: npm audit did not run — "
-            f"{err.code if err else 'unknown'}: {err.summary if err else 'missing vulnerabilities'}",
+            f"npm-audit-gate [FAIL]: npm audit did not run — {code}: {summary}",
             file=sys.stderr,
         )
         return 1

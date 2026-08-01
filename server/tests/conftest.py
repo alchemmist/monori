@@ -90,7 +90,7 @@ class _SnapshotTransaction(TypedDict):
     mcc: str
     categoryId: int | None
     accountId: int
-    transferId: int | None
+    transferId: str | None
     comment: str
     source: str
     hidden: bool
@@ -117,7 +117,7 @@ class _SnapshotConnection(TypedDict):
 
 
 class _SnapshotTransfer(TypedDict):
-    id: int
+    id: str
     outTxId: int
     inTxId: int
     origin: str
@@ -246,6 +246,8 @@ class Api:
         accountId: int | None = None,
         categoryId: int | None = None,
         description: str = "",
+        bankCategory: str = "",
+        mcc: str = "",
         comment: str = "",
     ) -> int:
         r = self.client.post(
@@ -256,6 +258,8 @@ class Api:
                 "accountId": accountId or self.default_account(),
                 "categoryId": categoryId,
                 "description": description,
+                "bankCategory": bankCategory,
+                "mcc": mcc,
                 "comment": comment,
             },
         )
