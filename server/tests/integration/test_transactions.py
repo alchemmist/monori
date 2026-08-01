@@ -11,10 +11,10 @@ def test_transaction_create_variants(api: Api, client: TestClient) -> None:
     cat = api.category("Food", g)
     manual = api.tx("2026-02-03T10:00:00", -12345, description="Lenta", categoryId=cat)
     row = api.tx_by(manual)
-    assert row["source"] == "manual" and row["amount"] == -12345 and row["categoryId"] == cat
+    assert row.source == "manual" and row.amount == -12345 and row.categoryId == cat
 
     uncat = api.tx("2026-02-04T10:00:00", -1, categoryId=0)
-    assert api.tx_by(uncat)["categoryId"] is None
+    assert api.tx_by(uncat).categoryId is None
 
     acct = api.default_account()
     bad = client.post(
@@ -33,16 +33,16 @@ def test_transaction_partial_patch_preserves_other_fields(api: Api, client: Test
     tx = api.tx("2026-02-03T10:00:00", -100, description="Lenta", categoryId=cat, comment="a")
     client.patch(f"/api/transactions/{tx}", json={"comment": "b"})
     row = api.tx_by(tx)
-    assert row["comment"] == "b"
-    assert row["amount"] == -100 and row["description"] == "Lenta" and row["categoryId"] == cat
+    assert row.comment == "b"
+    assert row.amount == -100 and row.description == "Lenta" and row.categoryId == cat
 
     client.patch(
         f"/api/transactions/{tx}",
         json={"amount": -999, "date": "2026-05-05T00:00:00", "description": "X", "categoryId": 0},
     )
     row = api.tx_by(tx)
-    assert row["amount"] == -999 and row["date"] == "2026-05-05T00:00:00"
-    assert row["categoryId"] is None
+    assert row.amount == -999 and row.date == "2026-05-05T00:00:00"
+    assert row.categoryId is None
     assert client.patch(f"/api/transactions/{tx}", json={"categoryId": 999}).status_code == 400
     assert client.patch("/api/transactions/999", json={"amount": 1}).status_code == 404
 
@@ -81,8 +81,8 @@ def test_transaction_category_must_match_amount_direction(api: Api, client: Test
         json={"action": "categorize", "ids": [expense, income_tx], "categoryId": food},
     )
     assert bulk.status_code == 400
-    assert api.tx_by(expense)["categoryId"] == food
-    assert api.tx_by(income_tx)["categoryId"] == salary
+    assert api.tx_by(expense).categoryId == food
+    assert api.tx_by(income_tx).categoryId == salary
 
 
 def test_transaction_patch_recomputes_hash_for_dedup(api: Api, client: TestClient) -> None:
@@ -196,9 +196,9 @@ def test_splits_are_atomic_and_visible_in_snapshot(api: Api, client: TestClient)
     )
     assert response.status_code == 200
     row = api.tx_by(tx)
-    assert row["categoryId"] is None
-    assert sum(part["amount"] for part in row["splits"]) == row["amount"]
-    assert [part["comment"] for part in row["splits"]] == ["food", "soap"]
+    assert row.categoryId is None
+    assert sum(part.amount for part in row.splits) == row.amount
+    assert [part.comment for part in row.splits] == ["food", "soap"]
     assert client.get(f"/api/transactions?categoryId={groceries}").json()["total"] == 1
     assert client.get("/api/transactions?uncategorized=true").json()["total"] == 0
 
@@ -212,11 +212,11 @@ def test_splits_are_atomic_and_visible_in_snapshot(api: Api, client: TestClient)
         },
     )
     assert bad.status_code == 400
-    assert api.tx_by(tx)["splits"] == row["splits"]
+    assert api.tx_by(tx).splits == row.splits
     assert client.patch(f"/api/transactions/{tx}", json={"amount": -11_00}).status_code == 400
 
     assert client.put(f"/api/transactions/{tx}/splits", json={"parts": []}).status_code == 200
-    assert api.tx_by(tx)["splits"] == []
+    assert api.tx_by(tx).splits == []
 
 
 def test_transaction_split_validates_owner_kind_and_sign(api: Api, client: TestClient) -> None:
@@ -247,8 +247,8 @@ def test_hidden_transaction_disappears_from_list_and_snapshot(api: Api, client: 
     assert [r["id"] for r in listed["rows"]] == [keep]
 
     snap = api.snapshot()
-    assert [t["id"] for t in snap["transactions"]] == [keep]
-    assert snap["transactionsTotal"] == 1
+    assert [transaction.id for transaction in snap.transactions] == [keep]
+    assert snap.transactionsTotal == 1
 
     hidden = client.get("/api/transactions?hidden=true").json()
     assert hidden["total"] == 1

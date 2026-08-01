@@ -2,7 +2,6 @@ import os
 import pathlib
 import sys
 import tempfile
-from typing import TypedDict
 
 import pytest
 from fastapi.testclient import TestClient
@@ -10,7 +9,13 @@ from pydantic import TypeAdapter
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
-from app.deps import IdResponse
+from app.deps import (
+    AccountResponse,
+    CategoryResponse,
+    IdResponse,
+    SnapshotResponse,
+    TransactionResponse,
+)
 from app.routers.auth_router import TokenResponse
 from app.routers.imports import ImportPreviewResponse, ImportRowResponse
 from app.routers.transfers import TransferIdResponse
@@ -19,104 +24,6 @@ STATEMENT = (
     "05.01.2026 10:00:00\t05.01.2026\t*1\tOK\t-100,00\tRUB\t-100,00\tRUB\t\tSuper\t5411\tLenta\t0\t0\t-100,00\n"  # noqa: E501
     "06.01.2026 11:00:00\t06.01.2026\t*1\tOK\t-200,00\tRUB\t-200,00\tRUB\t\tSuper\t5411\tOkey\t0\t0\t-200,00\n"  # noqa: E501
 )
-
-
-class _SnapshotAccount(TypedDict):
-    id: int
-    name: str
-    type: str
-    icon: str
-    color: str
-    iconImage: str | None
-    currency: str
-    sort: int
-    archived: bool
-    openingBalance: int
-    openingDate: str | None
-    connectionId: int | None
-    bankRef: str
-    cardTails: list[str]
-
-
-class _SnapshotGroup(TypedDict):
-    id: int
-    name: str
-    sort: int
-    kind: str
-
-
-class _SnapshotCategory(TypedDict):
-    id: int
-    groupId: int
-    name: str
-    keywords: str
-    sort: int
-    archived: bool
-    goalTarget: int | None
-    goalStatus: str | None
-    goalTargetDate: str | None
-
-
-class _SnapshotSplit(TypedDict):
-    id: int
-    categoryId: int
-    amount: int
-    comment: str
-
-
-class _SnapshotTransaction(TypedDict):
-    id: int
-    date: str
-    amount: int
-    description: str
-    bankCategory: str
-    mcc: str
-    categoryId: int | None
-    accountId: int
-    transferId: str | None
-    comment: str
-    source: str
-    hidden: bool
-    splits: list[_SnapshotSplit]
-
-
-class _SnapshotBudget(TypedDict):
-    categoryId: int
-    year: int
-    month: int
-    amount: int
-
-
-class _SnapshotConnection(TypedDict):
-    id: int
-    bank: str
-    kind: str
-    status: str
-    lastSync: str | None
-    lastError: str | None
-    hasCredentials: bool
-    createdAt: str
-    updatedAt: str
-
-
-class _SnapshotTransfer(TypedDict):
-    id: str
-    outTxId: int
-    inTxId: int
-    origin: str
-    note: str
-    createdAt: str
-
-
-class _Snapshot(TypedDict):
-    accounts: list[_SnapshotAccount]
-    groups: list[_SnapshotGroup]
-    categories: list[_SnapshotCategory]
-    transactions: list[_SnapshotTransaction]
-    transactionsTotal: int
-    transfers: list[_SnapshotTransfer]
-    budgets: list[_SnapshotBudget]
-    connections: list[_SnapshotConnection]
 
 
 def _fresh_app_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
@@ -219,7 +126,7 @@ class Api:
         return _response_id(TypeAdapter(IdResponse).validate_python(r.json()))
 
     def default_account(self) -> int:
-        return self.snapshot()["accounts"][0]["id"]
+        return self.snapshot().accounts[0].id
 
     def tx(
         self,
@@ -270,17 +177,21 @@ class Api:
         assert r.status_code == 200, r.text
         return TypeAdapter(TransferIdResponse).validate_python(r.json()).transferId
 
-    def snapshot(self) -> _Snapshot:
-        return TypeAdapter(_Snapshot).validate_python(self.client.get("/api/snapshot").json())
+    def snapshot(self) -> SnapshotResponse:
+        return TypeAdapter(SnapshotResponse).validate_python(
+            self.client.get("/api/snapshot").json()
+        )
 
-    def cat(self, cat_id: int) -> _SnapshotCategory:
-        return next(c for c in self.snapshot()["categories"] if c["id"] == cat_id)
+    def cat(self, cat_id: int) -> CategoryResponse:
+        return next(category for category in self.snapshot().categories if category.id == cat_id)
 
-    def acct(self, account_id: int) -> _SnapshotAccount:
-        return next(a for a in self.snapshot()["accounts"] if a["id"] == account_id)
+    def acct(self, account_id: int) -> AccountResponse:
+        return next(account for account in self.snapshot().accounts if account.id == account_id)
 
-    def tx_by(self, tx_id: int) -> _SnapshotTransaction:
-        return next(t for t in self.snapshot()["transactions"] if t["id"] == tx_id)
+    def tx_by(self, tx_id: int) -> TransactionResponse:
+        return next(
+            transaction for transaction in self.snapshot().transactions if transaction.id == tx_id
+        )
 
     def preview(self, text: str, account_id: int | None = None) -> list[ImportRowResponse]:
         body = {"text": text, "accountId": account_id or self.default_account()}

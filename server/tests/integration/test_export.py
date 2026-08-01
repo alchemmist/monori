@@ -151,7 +151,7 @@ def test_export_dashdata_sheet(api: Api, client: TestClient) -> None:
 def test_export_excludes_transfers_from_dashdata(api: Api, client: TestClient) -> None:
     _setup(api, client)
     a2 = api.account("Second")
-    api.transfer(api.snapshot()["accounts"][0]["id"], a2, 10000, date="2026-01-15T12:00:00")
+    api.transfer(api.snapshot().accounts[0].id, a2, 10000, date="2026-01-15T12:00:00")
     ws = _export(client)["DashData"]
     row = [c.value for c in ws[2]]
     assert row[1] == 5000.0

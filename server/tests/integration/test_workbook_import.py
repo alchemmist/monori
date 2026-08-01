@@ -1,20 +1,22 @@
 import json
 from io import BytesIO
-from typing import TypedDict, cast
 
 import httpx2
 import pytest
 from fastapi.testclient import TestClient
 from openpyxl import Workbook
-from openpyxl.worksheet.worksheet import Worksheet
+from pydantic import TypeAdapter
 
+from app.deps import IdResponse, SnapshotResponse
 from tests.conftest import Api, login_as
 
 pytestmark = pytest.mark.integration
 
 
-class _IdResponse(TypedDict):
-    id: int
+def _required_id(response: httpx2.Response) -> int:
+    body = TypeAdapter(IdResponse).validate_python(response.json())
+    assert body.id is not None
+    return body.id
 
 
 def _seed(api: Api, client: TestClient) -> int:
@@ -119,7 +121,7 @@ def test_workbook_roundtrip_into_fresh_user(api: Api, client: TestClient) -> Non
         },
     )
     assert r.status_code == 200
-    target = cast("_IdResponse", r.json())["id"]
+    target = _required_id(r)
 
     r = client.post(
         "/api/import/workbook/commit",
@@ -134,23 +136,25 @@ def test_workbook_roundtrip_into_fresh_user(api: Api, client: TestClient) -> Non
     assert result["skipped"] == 0
     assert result["budgetsWritten"] == 2
 
-    snap = client.get("/api/snapshot").json()
-    assert {g["name"] for g in snap["groups"]} >= {"Daily Expenses", "Inflow"}
-    kinds = {g["name"]: g["kind"] for g in snap["groups"]}
+    snap = TypeAdapter(SnapshotResponse).validate_python(client.get("/api/snapshot").json())
+    assert {group.name for group in snap.groups} >= {"Daily Expenses", "Inflow"}
+    kinds = {group.name: group.kind for group in snap.groups}
     assert kinds["Inflow"] == "income"
     assert kinds["Daily Expenses"] == "expense"
-    cats = {c["name"]: c for c in snap["categories"]}
-    assert cats["Groceries"]["keywords"] == "lenta|okey"
-    txs = sorted(snap["transactions"], key=lambda t: t["date"])
-    assert [(t["date"], t["amount"], t["description"]) for t in txs] == [
+    cats = {category.name: category for category in snap.categories}
+    assert cats["Groceries"].keywords == "lenta|okey"
+    txs = sorted(snap.transactions, key=lambda transaction: transaction.date)
+    assert [
+        (transaction.date, transaction.amount, transaction.description) for transaction in txs
+    ] == [
         ("2026-01-05T10:00:00", -12550, "Lenta"),
         ("2026-01-10T09:00:00", 500000, "Pay"),
         ("2026-02-01T12:00:00", -700, "Okey market"),
     ]
-    assert txs[0]["categoryId"] == cats["Groceries"]["id"]
-    assert txs[1]["categoryId"] == cats["Salary"]["id"]
-    assert txs[2]["categoryId"] is None
-    budgets = {(b["month"]): b["amount"] for b in snap["budgets"]}
+    assert txs[0].categoryId == cats["Groceries"].id
+    assert txs[1].categoryId == cats["Salary"].id
+    assert txs[2].categoryId is None
+    budgets = {budget.month: budget.amount for budget in snap.budgets}
     assert budgets == {1: 20000, 2: 30000}
 
 
@@ -158,8 +162,7 @@ def test_workbook_reimport_is_idempotent(api: Api, client: TestClient) -> None:
     _seed(api, client)
     data = _export_bytes(client)
     client.headers.update(login_as(client, "again@example.com"))
-    target = cast(
-        "_IdResponse",
+    target = _required_id(
         client.post(
             "/api/accounts",
             json={
@@ -171,8 +174,8 @@ def test_workbook_reimport_is_idempotent(api: Api, client: TestClient) -> None:
                 "openingBalance": 0,
                 "bankRef": "",
             },
-        ).json(),
-    )["id"]
+        )
+    )
     payload = {"mapping": json.dumps({"RUB:Card": target})}
     files = {"file": ("book.xlsx", data, "application/octet-stream")}
     first = client.post("/api/import/workbook/commit", files=files, data=payload).json()
@@ -182,16 +185,15 @@ def test_workbook_reimport_is_idempotent(api: Api, client: TestClient) -> None:
     assert second["skipped"] == 3
     assert second["groupsCreated"] == 0
     assert second["categoriesCreated"] == 0
-    snap = client.get("/api/snapshot").json()
-    assert len(snap["transactions"]) == 3
+    snap = TypeAdapter(SnapshotResponse).validate_python(client.get("/api/snapshot").json())
+    assert len(snap.transactions) == 3
 
 
 def test_workbook_budget_policy_skip(api: Api, client: TestClient) -> None:
     _seed(api, client)
     data = _export_bytes(client)
     client.headers.update(login_as(client, "policy@example.com"))
-    target = cast(
-        "_IdResponse",
+    target = _required_id(
         client.post(
             "/api/accounts",
             json={
@@ -203,8 +205,8 @@ def test_workbook_budget_policy_skip(api: Api, client: TestClient) -> None:
                 "openingBalance": 0,
                 "bankRef": "",
             },
-        ).json(),
-    )["id"]
+        )
+    )
     files = {"file": ("book.xlsx", data, "application/octet-stream")}
     r = client.post(
         "/api/import/workbook/commit",
@@ -212,11 +214,11 @@ def test_workbook_budget_policy_skip(api: Api, client: TestClient) -> None:
         data={"mapping": json.dumps({"RUB:Card": target})},
     )
     assert r.status_code == 200
-    snap = client.get("/api/snapshot").json()
-    groceries = next(c for c in snap["categories"] if c["name"] == "Groceries")
+    snap = TypeAdapter(SnapshotResponse).validate_python(client.get("/api/snapshot").json())
+    groceries = next(category for category in snap.categories if category.name == "Groceries")
     client.put(
         "/api/budgets",
-        json={"categoryId": groceries["id"], "year": 2026, "month": 1, "amount": 777},
+        json={"categoryId": groceries.id, "year": 2026, "month": 1, "amount": 777},
     )
     r = client.post(
         "/api/import/workbook/commit",
@@ -227,18 +229,18 @@ def test_workbook_budget_policy_skip(api: Api, client: TestClient) -> None:
     body = r.json()
     assert body["budgetsSkipped"] == 2
     assert body["budgetsWritten"] == 0
-    snap = client.get("/api/snapshot").json()
-    jan = next(b for b in snap["budgets"] if b["month"] == 1)
-    assert jan["amount"] == 777
+    snap = TypeAdapter(SnapshotResponse).validate_python(client.get("/api/snapshot").json())
+    jan = next(budget for budget in snap.budgets if budget.month == 1)
+    assert jan.amount == 777
     r = client.post(
         "/api/import/workbook/commit",
         files=files,
         data={"mapping": json.dumps({"RUB:Card": target}), "budgetPolicy": "overwrite"},
     )
     assert r.json()["budgetsWritten"] == 2
-    snap = client.get("/api/snapshot").json()
-    jan = next(b for b in snap["budgets"] if b["month"] == 1)
-    assert jan["amount"] == 20000
+    snap = TypeAdapter(SnapshotResponse).validate_python(client.get("/api/snapshot").json())
+    jan = next(budget for budget in snap.budgets if budget.month == 1)
+    assert jan.amount == 20000
 
 
 def test_workbook_commit_bad_policy_and_mapping(api: Api, client: TestClient) -> None:
@@ -260,8 +262,7 @@ def test_workbook_import_lands_as_rollbackable_batch(api: Api, client: TestClien
     _seed(api, client)
     data = _export_bytes(client)
     client.headers.update(login_as(client, "batch@example.com"))
-    target = cast(
-        "_IdResponse",
+    target = _required_id(
         client.post(
             "/api/accounts",
             json={
@@ -273,8 +274,8 @@ def test_workbook_import_lands_as_rollbackable_batch(api: Api, client: TestClien
                 "openingBalance": 0,
                 "bankRef": "",
             },
-        ).json(),
-    )["id"]
+        )
+    )
     r = client.post(
         "/api/import/workbook/commit",
         files={"file": ("book.xlsx", data, "application/octet-stream")},
@@ -309,7 +310,8 @@ def _mixed_currency_book() -> bytes:
     balance leaves in a bank export.
     """
     wb = Workbook()
-    ws = cast("Worksheet", wb.active)
+    ws = wb.active
+    assert ws is not None
     ws.title = "Transactions"
     ws.append(
         ["Дата операции", "Номер карты", "Статус", "Сумма операции", "Валюта операции", "Описание"]
@@ -340,8 +342,7 @@ def test_workbook_commit_refuses_foreign_rows_on_a_ruble_account(
     assert r.status_code == 400
     assert "USD rows cannot be imported into a RUB account" in r.json()["detail"]
 
-    usd = cast(
-        "_IdResponse",
+    usd = _required_id(
         client.post(
             "/api/accounts",
             json={
@@ -353,8 +354,8 @@ def test_workbook_commit_refuses_foreign_rows_on_a_ruble_account(
                 "openingBalance": 0,
                 "bankRef": "",
             },
-        ).json(),
-    )["id"]
+        )
+    )
     mapping = json.dumps({"RUB:*1111": rub, "USD:*1111": usd})
     r = _upload(client, "/api/import/workbook/commit", data, {"mapping": mapping})
     assert r.status_code == 200, r.text
@@ -363,7 +364,8 @@ def test_workbook_commit_refuses_foreign_rows_on_a_ruble_account(
 
 def _card_book() -> bytes:
     wb = Workbook()
-    ws = cast("Worksheet", wb.active)
+    ws = wb.active
+    assert ws is not None
     ws.title = "Transactions"
     ws.append(
         ["Дата операции", "Номер карты", "Статус", "Сумма операции", "Валюта операции", "Описание"]
@@ -393,7 +395,7 @@ def test_workbook_commit_remembers_card_markers_when_asked(api: Api, client: Tes
     )
     assert r.status_code == 200, r.text
     assert r.json()["cardTailsBound"] == 1
-    tails = {a["name"]: a["cardTails"] for a in api.snapshot()["accounts"]}
+    tails = {account.name: account.cardTails for account in api.snapshot().accounts}
     assert tails["Card"] == ["1111", "8181"]
     assert tails["Other"] == []
 
@@ -405,7 +407,7 @@ def test_workbook_commit_leaves_card_tails_alone_by_default(api: Api, client: Te
     r = _upload(client, "/api/import/workbook/commit", _card_book(), {"mapping": mapping})
     assert r.status_code == 200, r.text
     assert r.json()["cardTailsBound"] == 0
-    assert all(a["cardTails"] == [] for a in api.snapshot()["accounts"])
+    assert all(account.cardTails == [] for account in api.snapshot().accounts)
 
 
 def test_remembering_an_already_bound_marker_changes_nothing(api: Api, client: TestClient) -> None:
@@ -420,5 +422,5 @@ def test_remembering_an_already_bound_marker_changes_nothing(api: Api, client: T
     )
     assert r.status_code == 200, r.text
     assert r.json()["cardTailsBound"] == 0
-    tails = {a["name"]: a["cardTails"] for a in api.snapshot()["accounts"]}
+    tails = {account.name: account.cardTails for account in api.snapshot().accounts}
     assert tails["Card"] == ["8181"]

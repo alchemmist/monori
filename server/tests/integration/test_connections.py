@@ -63,9 +63,9 @@ def test_connection_appears_in_snapshot_without_secrets(
     assert body["status"] == "disconnected"
     assert body["hasCredentials"] is True
     assert "credentials" not in body and "credentials_encrypted" not in body
-    conns = api.snapshot()["connections"]
+    conns = api.snapshot().connections
     assert len(conns) == 1
-    assert conns[0]["bank"] == "fake"
+    assert conns[0].bank == "fake"
 
 
 def test_two_phase_sync_then_incremental_dedup(api: Api, client: TestClient, keyed: None) -> None:
@@ -80,12 +80,12 @@ def test_two_phase_sync_then_incremental_dedup(api: Api, client: TestClient, key
     # first sync stops at the OTP step
     r = client.post(f"/api/connections/{cid}/sync")
     assert r.json()["status"] == "awaiting_sms"
-    assert api.snapshot()["connections"][0]["status"] == "awaiting_sms"
+    assert api.snapshot().connections[0].status == "awaiting_sms"
 
     # a wrong code resumes the same pending login, fails, and clears it
     r = client.post(f"/api/connections/{cid}/sms", json={"code": "9999"})
     assert r.status_code == 502
-    assert api.snapshot()["connections"][0]["status"] == "error"
+    assert api.snapshot().connections[0].status == "error"
     # the pending login is now gone: a second code submission conflicts
     assert client.post(f"/api/connections/{cid}/sms", json={"code": "0000"}).status_code == 409
 
@@ -101,15 +101,15 @@ def test_two_phase_sync_then_incremental_dedup(api: Api, client: TestClient, key
     assert body["accounts"][0]["batchId"] is not None
 
     snap = api.snapshot()
-    synced = [t for t in snap["transactions"] if t["source"] == "sync"]
+    synced = [transaction for transaction in snap.transactions if transaction.source == "sync"]
     assert len(synced) == 2
-    assert all(t["accountId"] == acct for t in synced)
+    assert all(transaction.accountId == acct for transaction in synced)
     # the sync ran the rows through categorization
-    by_desc = {t["description"]: t for t in synced}
-    assert by_desc["Lenta"]["categoryId"] == food_cat
-    assert by_desc["Salary"]["categoryId"] == salary_cat
-    assert snap["connections"][0]["status"] == "connected"
-    assert snap["connections"][0]["lastSync"] is not None
+    by_desc = {transaction.description: transaction for transaction in synced}
+    assert by_desc["Lenta"].categoryId == food_cat
+    assert by_desc["Salary"].categoryId == salary_cat
+    assert snap.connections[0].status == "connected"
+    assert snap.connections[0].lastSync is not None
 
     # second sync reuses the cached session (no OTP) and dedups everything
     r = client.post(f"/api/connections/{cid}/sync")
@@ -129,7 +129,7 @@ def test_cancel_clears_pending_login(api: Api, client: TestClient, keyed: None) 
     cid = _connect(client, api.default_account()).json()["id"]
     assert client.post(f"/api/connections/{cid}/sync").json()["status"] == "awaiting_sms"
     assert client.post(f"/api/connections/{cid}/cancel").status_code == 200
-    assert api.snapshot()["connections"][0]["status"] == "disconnected"
+    assert api.snapshot().connections[0].status == "disconnected"
     # nothing is parked anymore
     assert client.post(f"/api/connections/{cid}/sms", json={"code": "0000"}).status_code == 409
 
@@ -148,7 +148,7 @@ def test_resync_replaces_pending_login(api: Api, client: TestClient, keyed: None
 def test_delete_connection(api: Api, client: TestClient, keyed: None) -> None:
     cid = _connect(client, api.default_account()).json()["id"]
     assert client.delete(f"/api/connections/{cid}").status_code == 200
-    assert api.snapshot()["connections"] == []
+    assert api.snapshot().connections == []
 
 
 class RetryOtpConnector:
@@ -200,7 +200,7 @@ def test_rejected_code_stays_awaiting(
     body = r.json()
     assert body["status"] == "awaiting_sms"
     assert body["message"] == connections.CODE_REJECTED
-    assert api.snapshot()["connections"][0]["status"] == "awaiting_sms"
+    assert api.snapshot().connections[0].status == "awaiting_sms"
 
     assert client.post(f"/api/connections/{cid}/sms", json={"code": "4242"}).json()["status"] == (
         "connected"
@@ -257,10 +257,10 @@ def test_one_connection_syncs_multiple_accounts(api: Api, client: TestClient, ke
     r = client.patch(f"/api/accounts/{a2}", json={"connectionId": cid, "bankRef": " 8121254731 "})
     assert r.status_code == 200
     snap = api.snapshot()
-    linked = {a["id"]: a for a in snap["accounts"]}
-    assert linked[a1]["connectionId"] == cid
-    assert linked[a2]["connectionId"] == cid
-    assert linked[a2]["bankRef"] == "8121254731"
+    linked = {account.id: account for account in snap.accounts}
+    assert linked[a1].connectionId == cid
+    assert linked[a2].connectionId == cid
+    assert linked[a2].bankRef == "8121254731"
 
     assert client.post(f"/api/connections/{cid}/sync").json()["status"] == "awaiting_sms"
     body = client.post(f"/api/connections/{cid}/sms", json={"code": "0000"}).json()
@@ -272,9 +272,9 @@ def test_one_connection_syncs_multiple_accounts(api: Api, client: TestClient, ke
     assert per_account[a1]["inserted"] == 2
     assert per_account[a2]["inserted"] == 2
     assert per_account[a1]["batchId"] != per_account[a2]["batchId"]
-    txs = api.snapshot()["transactions"]
-    assert len([t for t in txs if t["accountId"] == a1]) == 2
-    assert len([t for t in txs if t["accountId"] == a2]) == 2
+    txs = api.snapshot().transactions
+    assert len([transaction for transaction in txs if transaction.accountId == a1]) == 2
+    assert len([transaction for transaction in txs if transaction.accountId == a2]) == 2
 
 
 def test_sync_requires_a_linked_account(api: Api, client: TestClient, keyed: None) -> None:
@@ -295,11 +295,11 @@ def test_sync_requires_a_linked_account(api: Api, client: TestClient, keyed: Non
 def test_delete_connection_unlinks_accounts(api: Api, client: TestClient, keyed: None) -> None:
     a1 = api.default_account()
     cid = _connect(client, a1).json()["id"]
-    assert api.snapshot()["accounts"][0]["connectionId"] == cid
+    assert api.snapshot().accounts[0].connectionId == cid
     client.delete(f"/api/connections/{cid}")
     snap = api.snapshot()
-    assert snap["connections"] == []
-    assert snap["accounts"][0]["connectionId"] is None
+    assert snap.connections == []
+    assert snap.accounts[0].connectionId is None
 
 
 def test_unlink_account_via_patch(api: Api, client: TestClient, keyed: None) -> None:
@@ -307,8 +307,8 @@ def test_unlink_account_via_patch(api: Api, client: TestClient, keyed: None) -> 
     _connect(client, a1)
     r = client.patch(f"/api/accounts/{a1}", json={"connectionId": 0})
     assert r.status_code == 200
-    assert api.snapshot()["accounts"][0]["connectionId"] is None
-    assert len(api.snapshot()["connections"]) == 1
+    assert api.snapshot().accounts[0].connectionId is None
+    assert len(api.snapshot().connections) == 1
 
 
 def test_link_rejects_unknown_connection(api: Api, client: TestClient, keyed: None) -> None:
@@ -448,7 +448,7 @@ def test_sync_routes_rows_by_bound_card_tail(
     ]
 
     snap = api.snapshot()
-    routed = {t["description"]: t["accountId"] for t in snap["transactions"]}
+    routed = {transaction.description: transaction.accountId for transaction in snap.transactions}
     assert routed["B"] == other
     assert routed["A"] == main and routed["C"] == main
 
@@ -475,7 +475,10 @@ def test_sync_routing_matches_longer_stored_tails_by_suffix(
     body = client.post(f"/api/connections/{cid}/sync").json()
     by_account = {r["accountId"]: r for r in body["accounts"]}
     assert by_account[other]["inserted"] == 1
-    routed = {t["description"]: t["accountId"] for t in api.snapshot()["transactions"]}
+    routed = {
+        transaction.description: transaction.accountId
+        for transaction in api.snapshot().transactions
+    }
     assert routed["B"] == other
 
 
@@ -494,7 +497,10 @@ def test_sync_routing_treats_duplicated_tail_as_unmapped(
     by_account = {r["accountId"]: r for r in body["accounts"]}
     assert by_account[main]["inserted"] == 3
     assert {u["tail"] for u in body["unmappedTails"]} == {"1111", "2947", "8181"}
-    routed = {t["description"]: t["accountId"] for t in api.snapshot()["transactions"]}
+    routed = {
+        transaction.description: transaction.accountId
+        for transaction in api.snapshot().transactions
+    }
     assert routed["B"] == main
 
 
@@ -520,6 +526,6 @@ def test_overlapping_feeds_do_not_duplicate_rows_across_accounts(
     assert body["inserted"] == 2
     assert body["skipped"] == 2
 
-    txs = api.snapshot()["transactions"]
+    txs = api.snapshot().transactions
     assert len(txs) == 2
-    assert {t["accountId"] for t in txs} == {a1}
+    assert {transaction.accountId for transaction in txs} == {a1}

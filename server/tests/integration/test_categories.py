@@ -10,7 +10,7 @@ def test_category_create_sort_and_conflicts(api: Api, client: TestClient) -> Non
     g = api.group("Expenses")
     a = api.category("A", g)
     b = api.category("B", g)
-    assert [c["sort"] for c in api.snapshot()["categories"]] == [1, 2]
+    assert [category.sort for category in api.snapshot().categories] == [1, 2]
     assert client.post("/api/categories", json={"name": "A", "groupId": g}).status_code == 409
     assert client.post("/api/categories", json={"name": "X", "groupId": 999}).status_code == 400
     assert client.post("/api/categories", json={"name": "", "groupId": g}).status_code == 422
@@ -23,12 +23,12 @@ def test_category_patch_move_group_and_name(api: Api, client: TestClient) -> Non
     a = api.category("A", g1)
     api.category("B", g1)
     assert client.patch(f"/api/categories/{a}", json={"groupId": g2}).status_code == 200
-    assert api.cat(a)["groupId"] == g2
+    assert api.cat(a).groupId == g2
     assert client.patch(f"/api/categories/{a}", json={"groupId": 999}).status_code == 400
     assert client.patch(f"/api/categories/{a}", json={"name": "B"}).status_code == 409
     assert client.patch("/api/categories/999", json={"name": "z"}).status_code == 404
     assert client.patch(f"/api/categories/{a}", json={"keywords": "x|y"}).status_code == 200
-    assert api.cat(a)["keywords"] == "x|y"
+    assert api.cat(a).keywords == "x|y"
 
 
 def test_category_reorder_and_archive_roundtrip(api: Api, client: TestClient) -> None:
@@ -36,13 +36,13 @@ def test_category_reorder_and_archive_roundtrip(api: Api, client: TestClient) ->
     a = api.category("A", g)
     b = api.category("B", g)
     assert client.post("/api/categories/reorder", json={"ids": [b, a]}).status_code == 200
-    assert [c["id"] for c in api.snapshot()["categories"]] == [b, a]
+    assert [category.id for category in api.snapshot().categories] == [b, a]
     assert client.post("/api/categories/reorder", json={"ids": [a]}).status_code == 400
 
     assert client.patch(f"/api/categories/{a}", json={"archived": True}).status_code == 200
-    assert api.cat(a)["archived"] is True
+    assert api.cat(a).archived is True
     client.patch(f"/api/categories/{a}", json={"archived": False})
-    assert api.cat(a)["archived"] is False
+    assert api.cat(a).archived is False
 
 
 def test_category_delete_never_reassigns(api: Api, client: TestClient) -> None:
@@ -57,8 +57,8 @@ def test_category_delete_never_reassigns(api: Api, client: TestClient) -> None:
 
     assert client.delete(f"/api/categories/{a}?reassignTo={b}").status_code == 200
     snap = api.snapshot()
-    assert api.tx_by(tx)["categoryId"] is None
-    assert {x["categoryId"]: x["amount"] for x in snap["budgets"]} == {b: 2000}
+    assert api.tx_by(tx).categoryId is None
+    assert {budget.categoryId: budget.amount for budget in snap.budgets} == {b: 2000}
 
 
 def test_category_delete_without_reassign_uncategorizes(api: Api, client: TestClient) -> None:
@@ -66,7 +66,7 @@ def test_category_delete_without_reassign_uncategorizes(api: Api, client: TestCl
     a = api.category("A", g)
     tx = api.tx("2026-01-01T00:00:00", -500, categoryId=a)
     assert client.delete(f"/api/categories/{a}").status_code == 200
-    assert api.tx_by(tx)["categoryId"] is None
+    assert api.tx_by(tx).categoryId is None
     assert client.delete("/api/categories/999").status_code == 404
 
 
@@ -85,16 +85,16 @@ def test_category_merge_moves_tx_and_unions_keywords(api: Api, client: TestClien
 
     assert client.post(f"/api/categories/{src}/merge", json={"into": dst}).status_code == 200
     snap = api.snapshot()
-    assert [c["id"] for c in snap["categories"]] == [dst]
-    assert api.tx_by(tx)["categoryId"] == dst
-    assert api.cat(dst)["keywords"].split("|") == ["starbucks", "shokoladnitsa", "cofix"]
+    assert [category.id for category in snap.categories] == [dst]
+    assert api.tx_by(tx).categoryId == dst
+    assert api.cat(dst).keywords.split("|") == ["starbucks", "shokoladnitsa", "cofix"]
     # the spending moved across, so the plan has to move with it: overlapping
     # months are summed, months only the source had are carried over as they are
-    assert sorted((b["year"], b["month"], b["amount"]) for b in snap["budgets"]) == [
+    assert sorted((budget.year, budget.month, budget.amount) for budget in snap.budgets) == [
         (2026, 1, 1000),
         (2026, 2, 200),
     ]
-    assert {b["categoryId"] for b in snap["budgets"]} == {dst}
+    assert {budget.categoryId for budget in snap.budgets} == {dst}
 
 
 def test_merge_across_income_and_expense_is_refused(api: Api, client: TestClient) -> None:
@@ -110,9 +110,9 @@ def test_merge_across_income_and_expense_is_refused(api: Api, client: TestClient
     assert client.post(f"/api/categories/{rent}/merge", json={"into": salary}).status_code == 400
 
     snap = api.snapshot()
-    assert sorted(c["id"] for c in snap["categories"]) == sorted([salary, rent])
-    assert api.tx_by(tx)["categoryId"] == salary
-    assert [(b["categoryId"], b["amount"]) for b in snap["budgets"]] == [(salary, 700)]
+    assert sorted(category.id for category in snap.categories) == sorted([salary, rent])
+    assert api.tx_by(tx).categoryId == salary
+    assert [(budget.categoryId, budget.amount) for budget in snap.budgets] == [(salary, 700)]
 
 
 def test_merge_with_empty_keywords(api: Api, client: TestClient) -> None:
@@ -120,9 +120,9 @@ def test_merge_with_empty_keywords(api: Api, client: TestClient) -> None:
     src = api.category("Src", g, "")
     dst = api.category("Dst", g, "coffee")
     client.post(f"/api/categories/{src}/merge", json={"into": dst})
-    assert api.cat(dst)["keywords"] == "coffee"
+    assert api.cat(dst).keywords == "coffee"
 
     src2 = api.category("Src2", g, "tea")
     dst2 = api.category("Dst2", g, "")
     client.post(f"/api/categories/{src2}/merge", json={"into": dst2})
-    assert api.cat(dst2)["keywords"] == "tea"
+    assert api.cat(dst2).keywords == "tea"

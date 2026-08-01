@@ -1,6 +1,8 @@
 import pytest
 from fastapi.testclient import TestClient
+from pydantic import TypeAdapter
 
+from app.deps import SnapshotResponse
 from tests.conftest import Api
 
 pytestmark = pytest.mark.integration
@@ -24,7 +26,8 @@ def test_snapshot_serialization_contract(api: Api, client: TestClient) -> None:
     )
     client.put("/api/budgets", json={"categoryId": cat, "year": 2026, "month": 3, "amount": 5000})
     snap = api.snapshot()
-    assert snap["accounts"] == [
+    serialized = TypeAdapter(SnapshotResponse).dump_python(snap, mode="json")
+    assert serialized["accounts"] == [
         {
             "id": 1,
             "name": "Cash",
@@ -42,8 +45,8 @@ def test_snapshot_serialization_contract(api: Api, client: TestClient) -> None:
             "cardTails": [],
         }
     ]
-    assert snap["groups"] == [{"id": g, "name": "Expenses", "sort": 1, "kind": "expense"}]
-    assert snap["categories"] == [
+    assert serialized["groups"] == [{"id": g, "name": "Expenses", "sort": 1, "kind": "expense"}]
+    assert serialized["categories"] == [
         {
             "id": cat,
             "groupId": g,
@@ -56,7 +59,7 @@ def test_snapshot_serialization_contract(api: Api, client: TestClient) -> None:
             "goalTargetDate": None,
         }
     ]
-    assert snap["transactions"] == [
+    assert serialized["transactions"] == [
         {
             "id": tx,
             "date": "2026-01-05T10:00:00",
@@ -73,7 +76,7 @@ def test_snapshot_serialization_contract(api: Api, client: TestClient) -> None:
             "splits": [],
         }
     ]
-    assert snap["budgets"] == [{"categoryId": cat, "year": 2026, "month": 3, "amount": 5000}]
+    assert serialized["budgets"] == [{"categoryId": cat, "year": 2026, "month": 3, "amount": 5000}]
 
 
 def test_snapshot_ordering_is_deterministic(api: Api) -> None:
@@ -83,5 +86,5 @@ def test_snapshot_ordering_is_deterministic(api: Api) -> None:
     a = api.tx("2026-01-01T00:00:00", -1)
     b = api.tx("2026-01-01T00:00:00", -2)  # same timestamp as a
     c = api.tx("2026-01-01T00:00:00", -3)
-    ids = [t["id"] for t in api.snapshot()["transactions"]]
+    ids = [transaction.id for transaction in api.snapshot().transactions]
     assert ids == [a, b, c]
