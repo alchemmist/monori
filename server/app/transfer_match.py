@@ -24,7 +24,9 @@ mismatch: still offered as a suggestion, never merged on its own.
 """
 
 from collections.abc import Iterable, Mapping
-from typing import cast
+from typing import NotRequired, TypedDict
+
+from .value_types import SqliteValue, sqlite_int
 
 AUTO_DAYS = 1
 SUGGEST_DAYS = 5
@@ -45,6 +47,15 @@ TRANSFER_HINTS = (
 )
 
 
+class TransferCandidate(TypedDict):
+    outTxId: int
+    inTxId: int
+    amount: int
+    days: int
+    hint: bool
+    mismatch: NotRequired[bool]
+
+
 def day_number(date_iso: str) -> int:
     """
     Days since the epoch for an ISO date(time), by calendar day only — the
@@ -60,7 +71,9 @@ def day_number(date_iso: str) -> int:
     return era * 146097 + doe - 719468
 
 
-def field(row: Mapping[str, object], name: str, default: object | None = None) -> object | None:
+def field(
+    row: Mapping[str, SqliteValue], name: str, default: SqliteValue = None
+) -> SqliteValue:
     """
     Read ``name`` off a dict or a ``sqlite3.Row``, neither of which shares the
     other's accessor for a missing key.
@@ -72,16 +85,16 @@ def field(row: Mapping[str, object], name: str, default: object | None = None) -
     return default if value is None else value
 
 
-def has_hint(description: object) -> bool:
+def has_hint(description: SqliteValue) -> bool:
     lowered = str(description or "").lower()
     return any(h in lowered for h in TRANSFER_HINTS)
 
 
 def find_pairs(
-    rows: Iterable[Mapping[str, object]],
+    rows: Iterable[Mapping[str, SqliteValue]],
     max_days: int = SUGGEST_DAYS,
     rejected: Iterable[tuple[int, int]] = (),
-) -> list[dict[str, object]]:
+) -> list[TransferCandidate]:
     """
     Greedily pair ``rows`` into transfer candidates.
 
@@ -95,30 +108,39 @@ def find_pairs(
     silent ones, then by id so the order never depends on the input order.
     """
     rejected = {(int(p[0]), int(p[1])) for p in rejected}
-    outs: dict[int, list[Mapping[str, object]]] = {}
-    ins: dict[int, list[Mapping[str, object]]] = {}
+    outs: dict[int, list[Mapping[str, SqliteValue]]] = {}
+    ins: dict[int, list[Mapping[str, SqliteValue]]] = {}
     for r in rows:
         if field(r, "transfer_id"):
             continue
-        amount = cast("int", r["amount"])
+        amount_value = r["amount"]
+        if not isinstance(amount_value, int):
+            raise TypeError("transaction amount must be an integer")
+        amount = amount_value
         if amount == 0:
             continue
         bucket = outs if amount < 0 else ins
         bucket.setdefault(abs(amount), []).append(r)
 
-    candidates: list[dict[str, object]] = []
+    candidates: list[TransferCandidate] = []
     for amount, out_rows in outs.items():
         in_rows = ins.get(amount)
         if not in_rows:
             continue
         for out_row in out_rows:
-            out_day = day_number(cast("str", out_row["date"]))
+            out_date = out_row["date"]
+            if not isinstance(out_date, str):
+                raise TypeError("transaction date must be a string")
+            out_day = day_number(out_date)
             for in_row in in_rows:
                 if out_row["account_id"] == in_row["account_id"]:
                     continue
                 if (out_row["id"], in_row["id"]) in rejected:
                     continue
-                days = abs(day_number(cast("str", in_row["date"])) - out_day)
+                in_date = in_row["date"]
+                if not isinstance(in_date, str):
+                    raise TypeError("transaction date must be a string")
+                days = abs(day_number(in_date) - out_day)
                 if days > max_days:
                     continue
                 out_hint = has_hint(field(out_row, "description", ""))
@@ -126,8 +148,8 @@ def find_pairs(
                 silent = field(in_row if out_hint else out_row, "description", "")
                 candidates.append(
                     {
-                        "outTxId": cast("int", out_row["id"]),
-                        "inTxId": cast("int", in_row["id"]),
+                        "outTxId": sqlite_int(out_row["id"]),
+                        "inTxId": sqlite_int(in_row["id"]),
                         "amount": amount,
                         "days": days,
                         "hint": out_hint or in_hint,
@@ -143,25 +165,25 @@ def find_pairs(
     used = set()
     pairs = []
     for c in candidates:
-        if cast("int", c["outTxId"]) in used or cast("int", c["inTxId"]) in used:
+        if c["outTxId"] in used or c["inTxId"] in used:
             continue
-        used.add(cast("int", c["outTxId"]))
-        used.add(cast("int", c["inTxId"]))
+        used.add(c["outTxId"])
+        used.add(c["inTxId"])
         pairs.append(c)
     return pairs
 
 
 def split_confident(
-    pairs: Iterable[Mapping[str, object]], auto_days: int = AUTO_DAYS
-) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
+    pairs: Iterable[TransferCandidate], auto_days: int = AUTO_DAYS
+) -> tuple[list[TransferCandidate], list[TransferCandidate]]:
     """
     Partition matched pairs into the ones safe to merge without asking
     (``days <= auto_days`` and no description mismatch) and the ones worth
     showing as suggestions.
     """
-    auto: list[dict[str, object]] = []
-    suggested: list[dict[str, object]] = []
+    auto: list[TransferCandidate] = []
+    suggested: list[TransferCandidate] = []
     for p in pairs:
-        confident = cast("int", p["days"]) <= auto_days and not p.get("mismatch")
-        (auto if confident else suggested).append(cast("dict[str, object]", dict(p)))
+        confident = p["days"] <= auto_days and not p.get("mismatch", False)
+        (auto if confident else suggested).append(p)
     return auto, suggested
