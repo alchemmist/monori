@@ -12,7 +12,7 @@ export default function Mermaid({
 
     // until the engine lands (and if the diagram is broken) the source stays
     // readable rather than leaving a blank hole in the page
-    if (failed || !svg)
+    if (failed || svg === "")
         return (
             <pre className="md-mermaid-src">
                 <code>{chart}</code>
@@ -27,7 +27,7 @@ export default function Mermaid({
                 // nosemgrep: typescript.react.security.audit.react-dangerouslysetinnerhtml.react-dangerouslysetinnerhtml -- mermaid runs at securityLevel "strict" (its bundled dompurify sanitizes the svg) and the source is repo-authored docs, not user input
                 dangerouslySetInnerHTML={{ __html: svg }}
             />
-            {fullscreenHref && (
+            {fullscreenHref != null && fullscreenHref !== "" && (
                 <a
                     className="md-mermaid__open"
                     href={fullscreenHref}

@@ -5,9 +5,15 @@ const STROKE = 2.5;
 const R = (SIZE - STROKE) / 2;
 const CIRCUMFERENCE = 2 * Math.PI * R;
 
-const prefersReducedMotion = () =>
-    typeof window !== "undefined" &&
-    (window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches ?? false);
+const prefersReducedMotion = () => {
+    if (typeof window === "undefined") return false;
+    const matchMedia: unknown = Reflect.get(window, "matchMedia");
+    if (typeof matchMedia !== "function") return false;
+    const result: unknown = Reflect.apply(matchMedia, window, ["(prefers-reduced-motion: reduce)"]);
+    if (typeof result !== "object" || result === null) return false;
+    const matches: unknown = Reflect.get(result, "matches");
+    return typeof matches === "boolean" && matches;
+};
 
 /**
  * A small determinate ring for background work. Under `prefers-reduced-motion`

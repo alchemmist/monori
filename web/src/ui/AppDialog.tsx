@@ -2,6 +2,10 @@ import { Button, Modal } from "@mantine/core";
 import type { ReactNode } from "react";
 
 const WIDTHS = { s: 480, l: 900 };
+type DialogSize = keyof typeof WIDTHS;
+
+const isDialogSize = (size: number | string): size is DialogSize =>
+    typeof size === "string" && Object.hasOwn(WIDTHS, size);
 
 interface AppDialogProps {
     title: ReactNode;
@@ -37,10 +41,10 @@ export default function AppDialog({
             opened
             onClose={onClose}
             title={title}
-            size={size in WIDTHS ? WIDTHS[size as "s" | "l"] : size}
+            size={isDialogSize(size) ? WIDTHS[size] : size}
         >
             {children}
-            {applyText && (
+            {applyText != null && applyText !== "" && (
                 <div className="app-dialog__footer">
                     <Button size="l" variant="subtle" onClick={onCancel ?? onClose}>
                         {cancelText}

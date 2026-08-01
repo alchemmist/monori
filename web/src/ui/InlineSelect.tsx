@@ -93,7 +93,11 @@ export default function InlineSelect({
     const sections = grouped
         ? inputSections
               .map((s) => {
-                  const groupHit = q && s.group && s.group.toLowerCase().includes(q);
+                  const groupHit =
+                      q !== "" &&
+                      s.group != null &&
+                      s.group !== "" &&
+                      s.group.toLowerCase().includes(q);
                   const options = (groupHit ? s.options : s.options.filter(match)).map(norm);
                   return { ...s, options };
               })
@@ -149,7 +153,7 @@ export default function InlineSelect({
                     style={style}
                     onClick={() => combobox.toggleDropdown()}
                 >
-                    {label && <span className="gsel__label">{label}</span>}
+                    {label != null && label !== "" && <span className="gsel__label">{label}</span>}
                     <span className={`gsel__text${current ? "" : " gsel__text_empty"}`}>
                         {current?.label ?? placeholder}
                     </span>

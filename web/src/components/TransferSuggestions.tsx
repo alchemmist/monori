@@ -35,7 +35,7 @@ export default function TransferSuggestions({ onClose }: { onClose: () => void }
     const [busy, setBusy] = useState<string | null>(null);
     const [merged, setMerged] = useState(0);
 
-    const acctName = new Map((snapshot.accounts ?? []).map((a) => [a.id, a.name]));
+    const acctName = new Map(snapshot.accounts.map((a) => [a.id, a.name]));
 
     const refresh = async () => {
         setState((s) => ({ ...s, loading: true }));
@@ -115,9 +115,10 @@ export default function TransferSuggestions({ onClose }: { onClose: () => void }
                                 {fmtDate(out.date)} → {fmtDate(inLeg.date)} ·{" "}
                                 {pair.days === 1 ? "1 day apart" : `${pair.days} days apart`}
                             </Txt>
-                            {(out.description || inLeg.description) && (
-                                <Txt caption tone={pair.mismatch ? "danger" : "secondary"}>
-                                    {out.description || "—"} → {inLeg.description || "—"}
+                            {(out.description !== "" || inLeg.description !== "") && (
+                                <Txt caption tone={pair.mismatch === true ? "danger" : "secondary"}>
+                                    {out.description === "" ? "—" : out.description} →{" "}
+                                    {inLeg.description === "" ? "—" : inLeg.description}
                                 </Txt>
                             )}
                             <div className="tx-suggestion__actions">

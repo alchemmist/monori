@@ -88,7 +88,7 @@ export default function AddTxTab({ onClose }: { onClose: () => void }) {
                 amount: direction === "income" ? amountKop : -amountKop,
                 accountId: +account,
                 description: description.trim(),
-                categoryId: category ? +category : null,
+                categoryId: category == null || category === "" ? null : +category,
                 comment: comment.trim(),
             });
             setRecent((prev) => [tx, ...prev].slice(0, RECENT_SHOWN));

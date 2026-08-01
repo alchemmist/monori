@@ -115,7 +115,7 @@ export default function EnvelopeHero() {
             <canvas className="env-hero__canvas" ref={canvasRef} />
             <div className="env-hero__row">
                 {ENVELOPES.map((e) => (
-                    <div className={`env-hero__env${e.hot ? " is-hot" : ""}`} key={e.name}>
+                    <div className={`env-hero__env${e.hot === true ? " is-hot" : ""}`} key={e.name}>
                         <div className="env-hero__pocket">
                             <span className="env-hero__amt num">{e.amount}</span>
                         </div>

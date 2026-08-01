@@ -156,7 +156,7 @@ export default function App({
             </div>
         );
     }
-    if (error) {
+    if (error != null && error !== "") {
         return (
             <div
                 style={{
@@ -208,7 +208,7 @@ export default function App({
                 ))}
 
                 <div className="sidebar__bottom">
-                    {user?.isAdmin && (
+                    {user?.isAdmin === true && (
                         <button
                             className={`sidebar__item ${page === "admin" ? "sidebar__item_active" : ""}`}
                             onClick={() => setPage("admin")}
@@ -303,7 +303,7 @@ export default function App({
                 {page === "transactions" && <TransactionsPage />}
                 {page === "accounts" && <AccountsPage />}
                 {page === "categories" && <CategoriesPage />}
-                {page === "admin" && user?.isAdmin && (
+                {page === "admin" && user?.isAdmin === true && (
                     <Suspense
                         fallback={
                             <div style={{ display: "grid", placeItems: "center", height: "60vh" }}>

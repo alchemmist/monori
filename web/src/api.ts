@@ -32,14 +32,18 @@ import type {
 
 const tokenHeader = (): Record<string, string> => {
     const token = localStorage.getItem("monori_token");
-    return token ? { Authorization: `Bearer ${token}` } : {};
+    return token == null || token === "" ? {} : { Authorization: `Bearer ${token}` };
 };
 
 const apiFetch = (url: string, opts: RequestInit = {}) => {
-    const headers = {
-        ...tokenHeader(),
-        ...(opts.headers as Record<string, string> | undefined),
-    };
+    const headers = tokenHeader();
+    if (opts.headers instanceof Headers) {
+        for (const [name, value] of opts.headers.entries()) headers[name] = value;
+    } else if (Array.isArray(opts.headers)) {
+        for (const [name, value] of opts.headers) headers[name] = value;
+    } else if (opts.headers != null) {
+        Object.assign(headers, opts.headers);
+    }
     return fetch(url, { ...opts, headers });
 };
 
@@ -48,7 +52,8 @@ const json = async <T = never>(r: Response): Promise<T> => {
         if (
             r.status === 401 &&
             !r.url.includes("/api/auth/") &&
-            localStorage.getItem("monori_token")
+            localStorage.getItem("monori_token") != null &&
+            localStorage.getItem("monori_token") !== ""
         ) {
             localStorage.removeItem("monori_token");
             window.location.replace("/login");
@@ -96,9 +101,9 @@ export const api = {
     }: { light?: boolean; limit?: number } = {}): Promise<Snapshot> => {
         const qs = new URLSearchParams();
         if (light) qs.set("light", "1");
-        if (limit) qs.set("limit", String(limit));
+        if (limit != null) qs.set("limit", String(limit));
         const q = qs.toString();
-        return apiFetch(`/api/snapshot${q ? `?${q}` : ""}`).then(json);
+        return apiFetch(`/api/snapshot${q === "" ? "" : `?${q}`}`).then(json);
     },
     transactions: ({
         limit = 1000,
@@ -152,7 +157,7 @@ export const api = {
             body: JSON.stringify(patch),
         }).then(json),
     deleteAccount: (id: Id, reassignTo?: Id | null): Promise<OkResponse> =>
-        apiFetch(`/api/accounts/${id}${reassignTo ? `?reassignTo=${reassignTo}` : ""}`, {
+        apiFetch(`/api/accounts/${id}${reassignTo == null ? "" : `?reassignTo=${reassignTo}`}`, {
             method: "DELETE",
         }).then(json),
     reorderAccounts: (ids: Id[]): Promise<void> =>

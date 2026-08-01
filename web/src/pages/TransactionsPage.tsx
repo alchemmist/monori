@@ -96,11 +96,11 @@ export default function TransactionsPage() {
         window.addEventListener("scroll", onScroll, { passive: true });
         return () => {
             window.removeEventListener("scroll", onScroll);
-            if (raf) cancelAnimationFrame(raf);
+            if (raf !== 0) cancelAnimationFrame(raf);
         };
     }, []);
 
-    const accounts = useMemo(() => snapshot.accounts ?? [], [snapshot.accounts]);
+    const accounts = useMemo(() => snapshot.accounts, [snapshot.accounts]);
     const activeAccounts = useMemo(() => accounts.filter((a) => !a.archived), [accounts]);
     const acctById = useMemo(() => new Map(accounts.map((a) => [a.id, a])), [accounts]);
     const acctName = useMemo(() => new Map(accounts.map((a) => [a.id, a.name])), [accounts]);
@@ -181,7 +181,7 @@ export default function TransactionsPage() {
     // merged (and sorted) once here, so typing in the search box only refilters
     // instead of re-sorting the whole ledger on every keystroke
     const combined = useMemo(() => {
-        if (!showHidden || !hiddenTx?.length) return snapshot.transactions;
+        if (!showHidden || hiddenTx == null || hiddenTx.length === 0) return snapshot.transactions;
         return [...snapshot.transactions, ...hiddenTx].sort(compareTx);
     }, [snapshot.transactions, hiddenTx, showHidden]);
 
@@ -199,20 +199,22 @@ export default function TransactionsPage() {
         if (yearFilter !== "all") rows = rows.filter((t) => t.date.startsWith(yearFilter));
         if (acctFilter !== "all") rows = rows.filter((t) => t.accountId === +acctFilter);
         if (catFilter === "none")
-            rows = rows.filter((t) => t.categoryId == null && !t.splits?.length);
+            rows = rows.filter(
+                (t) => t.categoryId == null && (t.splits == null || t.splits.length === 0),
+            );
         else if (catFilter !== "all")
             rows = rows.filter(
                 (t) =>
                     t.categoryId === +catFilter ||
-                    t.splits?.some((part) => part.categoryId === +catFilter),
+                    (t.splits?.some((part) => part.categoryId === +catFilter) ?? false),
             );
-        if (q)
+        if (q !== "")
             rows = rows.filter(
                 (t) =>
                     t.description.toLowerCase().includes(q) ||
-                    (t.bankCategory ?? "").toLowerCase().includes(q) ||
-                    (t.comment ?? "").toLowerCase().includes(q) ||
-                    t.splits?.some((part) => (part.comment ?? "").toLowerCase().includes(q)),
+                    t.bankCategory.toLowerCase().includes(q) ||
+                    t.comment.toLowerCase().includes(q) ||
+                    (t.splits?.some((part) => part.comment.toLowerCase().includes(q)) ?? false),
             );
         return [...rows].reverse(); // newest first
     }, [combined, query, catFilter, yearFilter, acctFilter]);
@@ -268,7 +270,12 @@ export default function TransactionsPage() {
         const result: LedgerItem[] = [];
         for (const item of merged) {
             result.push(item);
-            if (item.kind !== "tx" || !item.tx.splits?.length || !expanded.has(`s${item.tx.id}`))
+            if (
+                item.kind !== "tx" ||
+                item.tx.splits == null ||
+                item.tx.splits.length === 0 ||
+                !expanded.has(`s${item.tx.id}`)
+            )
                 continue;
             result.push(
                 ...item.tx.splits.map((part): SplitTableItem => ({
@@ -316,7 +323,10 @@ export default function TransactionsPage() {
     // Editing a leg of a transfer would desync the pair, and a hidden row lives
     // outside the snapshot the store edits — both stay read-only.
     const isEditable = (t: Transaction | EffectiveTransaction, leg: boolean) =>
-        t.transferId == null && !t.hidden && !leg && !t.splits?.length;
+        t.transferId == null &&
+        t.hidden !== true &&
+        !leg &&
+        (t.splits == null || t.splits.length === 0);
 
     const setSplitCategory = async (t: EffectiveTransaction, categoryId: Id) => {
         const parent = snapshot.transactions.find((transaction) => transaction.id === t.parentId);
@@ -327,7 +337,7 @@ export default function TransactionsPage() {
                 (parent.splits ?? []).map((part) => ({
                     categoryId: part.id === t.splitId ? categoryId : part.categoryId,
                     amount: part.amount,
-                    comment: part.comment ?? "",
+                    comment: part.comment,
                 })),
             );
         } catch (error) {
@@ -355,7 +365,7 @@ export default function TransactionsPage() {
         return (
             <tr
                 key={leg ? `l${t.id}` : t.id}
-                className={`cat-row${leg ? " tx-row_leg" : ""}${splitPart ? " tx-row_leg" : ""}${t.hidden ? " tx-hidden-row" : ""}`}
+                className={`cat-row${leg ? " tx-row_leg" : ""}${splitPart ? " tx-row_leg" : ""}${t.hidden === true ? " tx-hidden-row" : ""}`}
             >
                 <td style={{ textAlign: "left" }} className="num">
                     {editable ? (
@@ -420,19 +430,21 @@ export default function TransactionsPage() {
                             split · {splits.length}
                         </Button>
                     )}
-                    {t.hidden && <Tag style={{ marginLeft: 8 }}>hidden</Tag>}
+                    {t.hidden === true && <Tag style={{ marginLeft: 8 }}>hidden</Tag>}
                     {t.transferId == null && !leg && (
                         <ActionIcon
                             className="tx-row-action"
                             size={24}
                             variant="subtle"
-                            aria-label={t.hidden ? "Unhide transaction" : "Hide transaction"}
-                            title={t.hidden ? "Unhide transaction" : "Hide transaction"}
+                            aria-label={
+                                t.hidden === true ? "Unhide transaction" : "Hide transaction"
+                            }
+                            title={t.hidden === true ? "Unhide transaction" : "Hide transaction"}
                             onClick={() =>
-                                t.hidden ? unhideTx(transactionId) : hideTx(transactionId)
+                                t.hidden === true ? unhideTx(transactionId) : hideTx(transactionId)
                             }
                         >
-                            {t.hidden ? (
+                            {t.hidden === true ? (
                                 <Eye width={14} height={14} />
                             ) : (
                                 <EyeSlash width={14} height={14} />
@@ -470,7 +482,7 @@ export default function TransactionsPage() {
                     )}
                 </td>
                 <td style={{ textAlign: "left" }}>
-                    {t.transferId != null || t.hidden || splitPart ? (
+                    {t.transferId != null || t.hidden === true || splitPart ? (
                         <span style={{ color: "var(--m-text-dim)", paddingLeft: 4 }}>
                             {acctName.get(t.accountId) ?? "—"}
                         </span>
@@ -478,8 +490,10 @@ export default function TransactionsPage() {
                         <InlineSelect
                             small
                             borderless
-                            value={t.accountId != null ? String(t.accountId) : null}
-                            onChange={(v) => v && setTxAccount(transactionId, +v)}
+                            value={String(t.accountId)}
+                            onChange={(v) => {
+                                if (v !== "") setTxAccount(transactionId, +v);
+                            }}
                             data={acctOptionsFor(t)}
                         />
                     )}
@@ -493,17 +507,19 @@ export default function TransactionsPage() {
                             placeholder="—"
                             value={t.categoryId != null ? String(t.categoryId) : null}
                             onChange={(value) => {
-                                if (value) void setSplitCategory(t, +value);
+                                if (value !== "") void setSplitCategory(t, +value);
                             }}
                             data={catSectionsFor(t)}
                         />
-                    ) : t.transferId != null || t.hidden || t.splits?.length ? (
+                    ) : t.transferId != null ||
+                      t.hidden === true ||
+                      (t.splits != null && t.splits.length > 0) ? (
                         <span style={{ color: "var(--m-text-faint)", paddingLeft: 4 }}>
-                            {t.hidden
+                            {t.hidden === true
                                 ? t.categoryId == null
                                     ? "—"
                                     : (catById.get(t.categoryId)?.name ?? "—")
-                                : splits.length
+                                : splits.length > 0
                                   ? "Split"
                                   : "—"}
                         </span>
@@ -525,13 +541,13 @@ export default function TransactionsPage() {
                             label="Comment"
                             width={130}
                             placeholder="Add a comment"
-                            draft={t.comment ?? ""}
+                            draft={t.comment}
                             display={t.comment}
                             onCommit={(v) => void updateTransaction(transactionId, { comment: v })}
                         />
                     ) : (
                         <span style={{ color: "var(--m-text-dim)", paddingLeft: 4 }}>
-                            {t.comment || ""}
+                            {t.comment}
                         </span>
                     )}
                     {(editable || splits.length > 0) && (
@@ -580,7 +596,7 @@ export default function TransactionsPage() {
     useLayoutEffect(() => {
         const row = bodyRef.current?.querySelector("tr.cat-row");
         const h = row?.getBoundingClientRect().height;
-        if (h && Math.abs(h - rowH) > 0.5) setRowH(h);
+        if (h != null && h !== 0 && Math.abs(h - rowH) > 0.5) setRowH(h);
     }, [items.length, rowH]);
 
     const { start, end, padTop, padBottom } = useWindowedRows({
@@ -868,7 +884,7 @@ export default function TransactionsPage() {
                     title="Back to top"
                     onClick={() => {
                         // honour reduced-motion: jump instantly instead of panning
-                        const reduce = window.matchMedia?.(
+                        const reduce = window.matchMedia(
                             "(prefers-reduced-motion: reduce)",
                         ).matches;
                         window.scrollTo({ top: 0, behavior: reduce ? "auto" : "smooth" });

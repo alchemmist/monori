@@ -106,7 +106,7 @@ describe("useMermaidSvg", () => {
         let rejectFirst: (reason?: unknown) => void;
         mermaid.render
             .mockReturnValueOnce(
-                new Promise((resolve, reject) => {
+                new Promise((_resolve, reject) => {
                     rejectFirst = reject;
                 }),
             )

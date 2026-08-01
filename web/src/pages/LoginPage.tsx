@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useState, type SyntheticEvent } from "react";
 import { Eye, EyeSlash } from "@gravity-ui/icons";
 import { useStore } from "../store.js";
 import Meadow from "../components/Meadow.jsx";
@@ -6,7 +6,7 @@ import "./login.css";
 
 /** Which field the server blamed, so the form can point at it. */
 const badField = (message: string | null): "email" | "password" | null => {
-    if (!message) return null;
+    if (message == null || message === "") return null;
     if (/email/i.test(message)) return "email";
     if (/password/i.test(message)) return "password";
     return null;
@@ -21,7 +21,7 @@ export default function LoginPage() {
     const [error, setError] = useState<string | null>(null);
     const [busy, setBusy] = useState(false);
 
-    const submit = async (e: FormEvent<HTMLFormElement>) => {
+    const submit = async (e: SyntheticEvent<HTMLFormElement>) => {
         e.preventDefault();
         if (busy) return;
         setBusy(true);
@@ -107,7 +107,7 @@ export default function LoginPage() {
                             )}
                         </button>
                     </div>
-                    {error && <div className="login__error">{error}</div>}
+                    {error != null && error !== "" && <div className="login__error">{error}</div>}
                     <button className="login__submit" type="submit" disabled={busy}>
                         {busy ? "…" : mode === "login" ? "Sign in" : "Create account"}
                     </button>

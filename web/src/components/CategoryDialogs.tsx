@@ -16,12 +16,14 @@ export function CategoryEditDialog({
     onClose: () => void;
 }) {
     const { patchCategory, createCategory, notify } = useStore();
-    const isNew = !category.id;
+    const isNew = category.id == null;
     const [name, setName] = useState(category.name ?? "");
     const [groupId, setGroupId] = useState(String(category.groupId));
     const [keywords, setKeywords] = useState(category.keywords ?? "");
     const [goalTarget, setGoalTarget] = useState(
-        category.goalTarget ? String(category.goalTarget / 100) : "",
+        category.goalTarget == null || category.goalTarget === 0
+            ? ""
+            : String(category.goalTarget / 100),
     );
     const [goalTargetDate, setGoalTargetDate] = useState(category.goalTargetDate ?? "");
     const [busy, setBusy] = useState(false);
@@ -29,7 +31,7 @@ export function CategoryEditDialog({
     const targetKopecks = Math.round(Number(goalTarget.replace(",", ".")) * 100);
 
     const apply = async () => {
-        if (!name.trim()) return;
+        if (name.trim() === "") return;
         setBusy(true);
         try {
             if (category.id == null) {
@@ -38,7 +40,10 @@ export function CategoryEditDialog({
                     groupId: +groupId,
                     keywords,
                     ...(goalGroup
-                        ? { goalTarget: targetKopecks, goalTargetDate: goalTargetDate || null }
+                        ? {
+                              goalTarget: targetKopecks,
+                              goalTargetDate: goalTargetDate === "" ? null : goalTargetDate,
+                          }
                         : {}),
                 });
             } else {
@@ -46,9 +51,7 @@ export function CategoryEditDialog({
                     name: name.trim(),
                     groupId: +groupId,
                     keywords,
-                    ...(goalGroup
-                        ? { goalTarget: targetKopecks, goalTargetDate: goalTargetDate || "" }
-                        : {}),
+                    ...(goalGroup ? { goalTarget: targetKopecks, goalTargetDate } : {}),
                 });
             }
             onClose();
@@ -154,33 +157,33 @@ export function CategoryDeleteDialog({
                     label: c.name,
                 })),
             }))
-            .filter((s) => s.options.length);
+            .filter((s) => s.options.length > 0);
     }, [snapshot.groups, others, category.groupId]);
 
     // the delete is irreversible, so the dialog spells out what it will do to the
     // target rather than asking for a blind confirmation
     const addedKeywords = useMemo(() => {
-        if (!into) return [];
+        if (into == null) return [];
         const have = new Set(
-            String(into.keywords ?? "")
+            into.keywords
                 .split("|")
                 .map((k) => k.trim().toLowerCase())
-                .filter(Boolean),
+                .filter((keyword) => keyword !== ""),
         );
         const seen = new Set<string>();
-        return String(category.keywords ?? "")
+        return category.keywords
             .split("|")
             .map((k) => k.trim())
             .filter((k) => {
                 const key = k.toLowerCase();
-                if (!k || have.has(key) || seen.has(key)) return false;
+                if (k === "" || have.has(key) || seen.has(key)) return false;
                 seen.add(key);
                 return true;
             });
     }, [into, category.keywords]);
 
     const budgetMonths = useMemo(
-        () => (snapshot.budgets ?? []).filter((b) => b.categoryId === category.id).length,
+        () => snapshot.budgets.filter((b) => b.categoryId === category.id).length,
         [snapshot.budgets, category.id],
     );
 
@@ -189,7 +192,7 @@ export function CategoryDeleteDialog({
     const apply = async () => {
         setBusy(true);
         try {
-            if (into) await mergeCategory(category.id, into.id);
+            if (into != null) await mergeCategory(category.id, into.id);
             else await deleteCategory(category.id);
             onClose();
         } catch (e) {
@@ -217,12 +220,12 @@ export function CategoryDeleteDialog({
                 <FSelect
                     label="Move to"
                     value={target}
-                    onChange={(v) => setTarget(v ?? "")}
+                    onChange={setTarget}
                     data={[{ value: "", label: "Leave uncategorized" }, ...sections]}
                     searchable
                 />
                 <ul className="cat-delete-plan">
-                    {into ? (
+                    {into != null ? (
                         <>
                             <li>
                                 {txCount === 1

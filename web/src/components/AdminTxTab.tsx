@@ -130,7 +130,7 @@ export default function AdminTxTab({ user, onClose }: { user: User; onClose: () 
                 label="Account"
                 value={filter}
                 onChange={(v) => {
-                    setFilter(v ?? ALL);
+                    setFilter(v);
                     setArming(false);
                 }}
                 data={[
@@ -161,7 +161,13 @@ export default function AdminTxTab({ user, onClose }: { user: User; onClose: () 
                                         />
                                     </td>
                                     <td className="num">{t.date.slice(0, 10)}</td>
-                                    <td>{t.description || t.category || "—"}</td>
+                                    <td>
+                                        {t.description !== ""
+                                            ? t.description
+                                            : t.category !== ""
+                                              ? t.category
+                                              : "—"}
+                                    </td>
                                     <td
                                         className="num"
                                         style={{

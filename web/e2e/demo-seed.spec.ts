@@ -21,7 +21,9 @@ test("Add demo data seeds the whole demo dataset through the API", async ({ page
     await expect(page.getByText("Could not add demo data")).toHaveCount(0);
 
     const after = await user.api.snapshot();
-    const expectedTransferLegs = demoSnapshot.transactions.filter((t) => t.transferId).length;
+    const expectedTransferLegs = demoSnapshot.transactions.filter(
+        (t) => t.transferId != null && t.transferId !== "",
+    ).length;
     const seededTransferLegs = after.transactions.filter((t) => t.transferId != null).length;
 
     // Measured as deltas over the empty starting point (registration ships a

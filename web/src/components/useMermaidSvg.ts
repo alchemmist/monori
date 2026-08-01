@@ -13,9 +13,16 @@ function loadEngine(): Promise<MermaidEngine> {
 // mermaid ships the svg at width="100%" with the real size only in its viewBox,
 // so anything that lays it out itself has to read the intrinsic size from there
 export function naturalSize(svg: SVGSVGElement | null) {
-    const box = svg?.viewBox?.baseVal;
-    if (!box?.width || !box?.height) return null;
-    return { width: box.width, height: box.height };
+    if (svg == null) return null;
+    const viewBox: unknown = Reflect.get(svg, "viewBox");
+    if (typeof viewBox !== "object" || viewBox === null) return null;
+    const box: unknown = Reflect.get(viewBox, "baseVal");
+    if (typeof box !== "object" || box === null) return null;
+    const width: unknown = Reflect.get(box, "width");
+    const height: unknown = Reflect.get(box, "height");
+    if (typeof width !== "number" || typeof height !== "number" || width === 0 || height === 0)
+        return null;
+    return { width, height };
 }
 
 export function useMermaidSvg(chart: string) {

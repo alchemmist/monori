@@ -58,12 +58,12 @@ interface ChartCardProps {
 
 export default function ChartCard({ title, wide, tall, controls, children }: ChartCardProps) {
     return (
-        <div className={`card chart-card ${wide ? "chart-card_wide" : ""}`}>
+        <div className={`card chart-card ${wide === true ? "chart-card_wide" : ""}`}>
             <div className="chart-card__head">
                 <div className="chart-card__title">{title}</div>
                 {controls}
             </div>
-            <div className={`chart-card__body ${tall ? "chart-card__body_tall" : ""}`}>
+            <div className={`chart-card__body ${tall === true ? "chart-card__body_tall" : ""}`}>
                 <ChartBoundary>{children}</ChartBoundary>
             </div>
         </div>

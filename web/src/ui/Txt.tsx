@@ -15,8 +15,12 @@ export default function Txt({
     ...rest
 }: TxtProps) {
     const Tag = block ? "div" : "span";
-    const classes = [tone ? `t-${tone}` : "", caption ? "t-caption" : "", className]
-        .filter(Boolean)
+    const classes = [
+        tone == null || tone === "" ? "" : `t-${tone}`,
+        caption ? "t-caption" : "",
+        className,
+    ]
+        .filter((classToken) => classToken !== "")
         .join(" ");
-    return <Tag className={classes || undefined} {...rest} />;
+    return <Tag className={classes === "" ? undefined : classes} {...rest} />;
 }

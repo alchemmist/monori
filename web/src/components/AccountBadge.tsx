@@ -13,7 +13,7 @@ export default function AccountBadge({
     size?: number;
 }) {
     const style = { width: size, height: size };
-    if (account.iconImage) {
+    if (account.iconImage != null && account.iconImage !== "") {
         return (
             <span className="acct-badge acct-badge_image" style={style}>
                 <img src={account.iconImage} alt="" />
@@ -21,7 +21,8 @@ export default function AccountBadge({
         );
     }
     const Icon = accountIcon(account.icon ?? "wallet");
-    const color = account.color || DEFAULT_ACCOUNT_COLOR;
+    const color =
+        account.color == null || account.color === "" ? DEFAULT_ACCOUNT_COLOR : account.color;
     return (
         <span
             className="acct-badge"

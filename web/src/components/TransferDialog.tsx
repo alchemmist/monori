@@ -25,7 +25,7 @@ export default function TransferDialog({
     const [busy, setBusy] = useState(false);
 
     const amountKop = parseRub(amount);
-    const valid = from && to && from !== to && amountKop != null && amountKop > 0;
+    const valid = from !== "" && to !== "" && from !== to && amountKop != null && amountKop > 0;
 
     const apply = async () => {
         if (!valid) return;
@@ -59,8 +59,13 @@ export default function TransferDialog({
             applyDisabled={!valid}
         >
             <div style={{ display: "flex", flexDirection: "column", gap: 12, paddingTop: 4 }}>
-                <FSelect label="From" value={from || null} onChange={setFrom} data={options} />
-                <FSelect label="To" value={to || null} onChange={setTo} data={options} />
+                <FSelect
+                    label="From"
+                    value={from === "" ? null : from}
+                    onChange={setFrom}
+                    data={options}
+                />
+                <FSelect label="To" value={to === "" ? null : to} onChange={setTo} data={options} />
                 <FAmountInput label="Amount" value={amount} onChange={setAmount} autoFocus />
                 <FTextInput
                     label="Date"

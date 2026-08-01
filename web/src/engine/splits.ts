@@ -25,7 +25,7 @@ export function splitPartTransaction(
 
 export function effectiveTransactions(transactions: Transaction[] = []): EffectiveTransaction[] {
     return transactions.flatMap((transaction) => {
-        if (!transaction.splits?.length) return transaction;
+        if (transaction.splits == null || transaction.splits.length === 0) return transaction;
         return transaction.splits.map((part) => splitPartTransaction(transaction, part));
     });
 }

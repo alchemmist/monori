@@ -16,7 +16,7 @@ export default defineConfig({
         // serve web/ plus ../docs only (the docs pages read markdown from
         // ../docs via import.meta.glob) — not the whole repo root
         fs: { allow: [here, path.resolve(here, "..", "docs")] },
-        ...(process.env["VITE_FORCE_POLLING"]
+        ...(process.env["VITE_FORCE_POLLING"] != null && process.env["VITE_FORCE_POLLING"] !== ""
             ? { watch: { usePolling: true, interval: 500 } }
             : {}),
     },

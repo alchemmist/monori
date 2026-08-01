@@ -27,12 +27,12 @@ export function normalizeKop(kop: number | null): number | null {
 
 /** kopecks -> "12 345" (rounded rubles) */
 export function rub(kop: number): string {
-    return nf0.format(Math.round((normalizeKop(kop) ?? 0) / 100));
+    return nf0.format(Math.round(normalizeKop(kop) / 100));
 }
 
 /** kopecks -> "12 345.67" */
 export function rubExact(kop: number): string {
-    return nf2.format((normalizeKop(kop) ?? 0) / 100);
+    return nf2.format(normalizeKop(kop) / 100);
 }
 
 /** kopecks -> "12 345 ₽" */
@@ -42,7 +42,7 @@ export function money(kop: number): string {
 
 /** compact: 1234500 kop -> "12.3k", for chart axes */
 export function moneyCompact(kop: number): string {
-    const r = (normalizeKop(kop) ?? 0) / 100;
+    const r = normalizeKop(kop) / 100;
     const abs = Math.abs(r);
     if (abs >= 1_000_000) return `${(r / 1_000_000).toFixed(1)}M`;
     if (abs >= 1_000) return `${(r / 1_000).toFixed(0)}k`;

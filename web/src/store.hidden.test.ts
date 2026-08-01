@@ -67,7 +67,7 @@ describe("hiding transactions", () => {
     it("a rapid hide then unhide reaches the server in that order", async () => {
         const calls: Array<boolean | undefined> = [];
         let releaseFirst: (value: { ok?: boolean }) => void = () => undefined;
-        vi.spyOn(api, "patchTx").mockImplementation((id, patch) => {
+        vi.spyOn(api, "patchTx").mockImplementation((_id, patch) => {
             calls.push(patch.hidden);
             if (calls.length === 1) return new Promise((r) => (releaseFirst = r));
             return Promise.resolve({});

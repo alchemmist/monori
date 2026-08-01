@@ -14,7 +14,7 @@ export function GroupEditDialog({
     onClose: () => void;
 }) {
     const { createGroup, patchGroup, notify } = useStore();
-    const isNew = !group.id;
+    const isNew = group.id == null;
     const [name, setName] = useState(group.name ?? "");
     const [kind, setKind] = useState(group.kind ?? "expense");
     const [busy, setBusy] = useState(false);

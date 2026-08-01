@@ -93,7 +93,7 @@ export default function CategoriesPage() {
     //  - the dragged element's ghost is skipped so the drop slot moves instantly.
     useLayoutEffect(() => {
         const board = boardRef.current;
-        if (!board) return;
+        if (board == null) return;
         for (const a of animsRef.current.values()) a.cancel();
         animsRef.current.clear();
         const cards = [...board.querySelectorAll<HTMLElement>(".kb-card[data-id]")];
@@ -101,12 +101,12 @@ export default function CategoriesPage() {
         const nextTops = new Map<string, number>();
         for (const el of cards) {
             const id = el.dataset["id"];
-            if (id) nextTops.set(id, el.getBoundingClientRect().top);
+            if (id != null && id !== "") nextTops.set(id, el.getBoundingClientRect().top);
         }
         const nextLefts = new Map<string, number>();
         for (const el of cols) {
             const id = el.dataset["gid"];
-            if (id) nextLefts.set(id, el.getBoundingClientRect().left);
+            if (id != null && id !== "") nextLefts.set(id, el.getBoundingClientRect().left);
         }
         const winY = window.scrollY;
         const boardX = board.scrollLeft;
@@ -115,12 +115,12 @@ export default function CategoriesPage() {
         if (drag?.type === "card") {
             for (const el of cards) {
                 const id = el.dataset["id"];
-                if (!id) continue;
+                if (id == null || id === "") continue;
                 const prev = cardTopsRef.current.get(id);
                 const top = nextTops.get(id);
                 if (prev == null || top == null || el.classList.contains("kb-card_ghost")) continue;
                 const dy = prev - top - scrollDy;
-                if (!dy) continue;
+                if (dy === 0) continue;
                 const anim = el.animate(
                     [{ transform: `translateY(${dy}px)` }, { transform: "translateY(0)" }],
                     { duration: 150, easing: "ease" },
@@ -132,12 +132,12 @@ export default function CategoriesPage() {
         if (drag?.type === "col") {
             for (const el of cols) {
                 const gid = el.dataset["gid"];
-                if (!gid) continue;
+                if (gid == null || gid === "") continue;
                 const prev = colLeftsRef.current.get(gid);
                 const left = nextLefts.get(gid);
                 if (prev == null || left == null || el.classList.contains("kb-col_ghost")) continue;
                 const dx = prev - left - scrollDx;
-                if (!dx) continue;
+                if (dx === 0) continue;
                 const anim = el.animate(
                     [{ transform: `translateX(${dx}px)` }, { transform: "translateX(0)" }],
                     { duration: 170, easing: "ease" },
@@ -330,16 +330,16 @@ export default function CategoriesPage() {
         setDrag({
             type: press.type,
             id: press.id,
-            x: e.clientX - (dragRef.current?.dx ?? 0),
-            y: e.clientY - (dragRef.current?.dy ?? 0),
+            x: e.clientX - dragRef.current.dx,
+            y: e.clientY - dragRef.current.dy,
             w: r.width,
         });
         document.body.classList.add("kb-grabbing");
-        if (dragRef.current) dragRef.current.raf = requestAnimationFrame(autoScrollTick);
+        dragRef.current.raf = requestAnimationFrame(autoScrollTick);
     };
 
     const endDrag = () => {
-        if (dragRef.current?.raf) cancelAnimationFrame(dragRef.current.raf);
+        if (dragRef.current?.raf != null) cancelAnimationFrame(dragRef.current.raf);
         pressRef.current = null;
         dragRef.current = null;
         overRef.current = null;
@@ -350,7 +350,7 @@ export default function CategoriesPage() {
 
     const onMove = (e: PointerEvent) => {
         const press = pressRef.current;
-        if (press && !dragRef.current) {
+        if (press != null && dragRef.current == null) {
             if (Math.hypot(e.clientX - press.startX, e.clientY - press.startY) < DRAG_THRESHOLD)
                 return;
             beginDrag(e);
@@ -661,17 +661,22 @@ function CardBody({ c, count, menu }: { c: Category; count: number; menu?: React
                 <span className="kb-card__usage" title={`${count} transactions`}>
                     {count}
                 </span>
-                {menu && <div className="kb-card__menu">{menu}</div>}
+                {menu != null && menu !== false && <div className="kb-card__menu">{menu}</div>}
             </div>
-            {c.keywords && (
+            {c.keywords !== "" && (
                 <div className="kb-card__kw">
-                    {c.keywords.split("|").filter(Boolean).join(", ")}
+                    {c.keywords
+                        .split("|")
+                        .filter((keyword) => keyword !== "")
+                        .join(", ")}
                 </div>
             )}
             {c.goalTarget != null && (
                 <div className="kb-card__goal">
                     Target {Math.round(c.goalTarget / 100).toLocaleString("ru-RU")} ₽
-                    {c.goalTargetDate ? ` · ${c.goalTargetDate}` : ""}
+                    {c.goalTargetDate == null || c.goalTargetDate === ""
+                        ? ""
+                        : ` · ${c.goalTargetDate}`}
                 </div>
             )}
         </>

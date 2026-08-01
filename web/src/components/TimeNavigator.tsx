@@ -107,13 +107,13 @@ export default function TimeNavigator({
 
     const onPointerMove = (e: ReactPointerEvent<SVGSVGElement>) => {
         const d = dragRef.current;
-        if (!d || !cellW) return;
+        if (d == null || cellW === 0) return;
         const di = Math.round((e.clientX - d.startX) / cellW);
         if (d.mode === "move") {
             onChange(clampRange(d.lo + di, d.hi + di));
         } else if (d.mode === "l") {
             onChange([Math.max(0, Math.min(d.lo + di, d.hi - MIN_SPAN)), d.hi]);
-        } else if (d.mode === "r") {
+        } else {
             onChange([d.lo, Math.min(n - 1, Math.max(d.hi + di, d.lo + MIN_SPAN))]);
         }
     };
