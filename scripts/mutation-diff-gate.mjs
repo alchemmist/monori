@@ -67,10 +67,7 @@ const counts = Object.groupBy(mutants, (mutant) => mutant.status);
 const killed = counts.Killed?.length ?? 0;
 const timedOut = counts.Timeout?.length ?? 0;
 const survived = counts.Survived?.length ?? 0;
-const other = ["NoCoverage"].reduce(
-    (total, status) => total + (counts[status]?.length ?? 0),
-    0,
-);
+const other = ["NoCoverage"].reduce((total, status) => total + (counts[status]?.length ?? 0), 0);
 const detected = killed + timedOut;
 const considered = detected + survived + other;
 
