@@ -569,7 +569,7 @@ def _parse_transactions(
             dupes += 1
             continue
         seen.add(key)
-        category = _unquote(_s(row[cat_col])) if cat_col is not None and cat_col < len(row) else ""
+        category = _unquote(_s(row[cat_col])) if cat_col < len(row) else ""
         rows.append(
             WorkbookTransactionRow(
                 date=date_iso,
@@ -1064,12 +1064,7 @@ def _parse(wb: Workbook) -> ParsedWorkbook:
                 desired = sheet_entry.balances.get(m)
                 if desired is None and m in sheet_entry.outflows:
                     desired = projected - have + sheet_entry.outflows[m]
-            elif (
-                not live
-                and balances.get(name, 0) != 0
-                and year_sheet is not None
-                and m == max(year_sheet.months)
-            ):
+            elif not live and balances.get(name, 0) != 0 and m == max(year_sheet.months):
                 desired = 0
             delta = 0 if desired is None else desired - projected
             if abs(delta) > ADJUST_TOLERANCE_KOP:

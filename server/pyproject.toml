@@ -64,6 +64,9 @@ select = ["E", "F", "I", "UP", "B", "SIM", "C4", "D209", "D213", "ANN"]
 python_version = "3.12"
 files = ["app"]
 exclude = ['(^|/)mutants/']
+strict = true
+warn_unreachable = true
+extra_checks = true
 explicit_package_bases = true
 check_untyped_defs = true
 warn_redundant_casts = true
@@ -73,6 +76,16 @@ disallow_any_explicit = true
 disallow_any_unimported = true
 disallow_any_decorated = true
 warn_return_any = true
+enable_error_code = [
+    "explicit-override",
+    "mutable-override",
+    "truthy-bool",
+    "truthy-iterable",
+    "possibly-undefined",
+    "redundant-expr",
+    "unused-awaitable",
+    "ignore-without-code",
+]
 
 [tool.bandit]
 exclude_dirs = ["tests"]

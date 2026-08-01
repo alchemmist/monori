@@ -1,3 +1,5 @@
+from typing import override
+
 import pytest
 from cryptography.fernet import Fernet
 from fastapi.testclient import TestClient
@@ -168,7 +170,6 @@ class RetryOtpConnector:
 
     def sync(self, since: str | None = None) -> SyncResult:
         raise SmsRequired("code sent")
-        return SyncResult([], session=None)
 
     def resume_sync(self, code: str) -> SyncResult:
         if code != "4242":
@@ -212,6 +213,7 @@ class RefRequiredConnector(RetryOtpConnector):
     kind = "refreq"
     account_params = [base.ConnectorParam(name="account", required=True)]
 
+    @override
     def sync(self, since: str | None = None) -> SyncResult:
         return SyncResult([], session=None)
 
@@ -411,6 +413,7 @@ class MultiCardConnector(base.Connector):
         SyncRow("2026-03-01T11:00:00", -300, "C", "", "", "*1111"),
     ]
 
+    @override
     def sync(self, since: str | None = None) -> SyncResult:
         return SyncResult(list(self.rows), session={"token": "ok"})
 

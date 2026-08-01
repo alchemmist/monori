@@ -122,10 +122,7 @@ type-front:
 	cd web && npm run --silent typecheck
 
 type-back:
-	@set +e; \
-	MYPYPATH=server uv run --project server --extra connectors mypy --config-file server/pyproject.toml --strict .; py=$$?; \
-	echo "type-back: python=$$py"; \
-	test $$py -eq 0
+	MYPYPATH=server uv run --project server --extra connectors mypy --config-file server/pyproject.toml .
 
 analyze:
 	cd server && uv run bandit -c pyproject.toml -q -r app

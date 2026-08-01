@@ -16,7 +16,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from types import TracebackType
-from typing import Literal, Self
+from typing import Literal, Self, override
 
 import pytest
 
@@ -412,6 +412,7 @@ class _BlockedPage(FakePage):
     the driver must fail fast with that message, not loop re-entering the phone.
     """
 
+    @override
     def query_selector(self, selector: str) -> FakeElement | None:
         if selector == TB.SEL_ACCESS_DENIED:
             return FakeElement("")

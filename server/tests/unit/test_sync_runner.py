@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from typing import override
 
 import httpx
 import pytest
@@ -203,6 +204,7 @@ class FailingCloseConnector(ClosableConnector):
     bank = "failclose"
     kind = "failclose"
 
+    @override
     def close(self) -> None:
         type(self).closed += 1
         raise RuntimeError("close blew up")

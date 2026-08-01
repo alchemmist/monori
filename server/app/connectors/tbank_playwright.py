@@ -40,7 +40,7 @@ from collections.abc import Callable
 from contextlib import AbstractContextManager
 from datetime import timedelta
 from types import TracebackType
-from typing import Literal, Protocol, Self
+from typing import Literal, Protocol, Self, override
 from urllib.parse import quote
 
 from ..importer import parse_statement
@@ -206,10 +206,12 @@ class _DownloadExpectationAdapter(AbstractContextManager["_DownloadExpectationAd
         self._expectation = expectation
         self._event: _DownloadEvent | None = None
 
+    @override
     def __enter__(self) -> Self:
         self._event = self._expectation.__enter__()
         return self
 
+    @override
     def __exit__(
         self,
         exc_type: type[BaseException] | None,
@@ -363,17 +365,20 @@ class TBankPlaywrightConnector(Connector):
         self._to_worker: queue.Queue[_ToWorkerMessage] = queue.Queue()
         self._from_worker: queue.Queue[_FromWorkerMessage] = queue.Queue()
 
+    @override
     def sync(self, since: str | None = None) -> SyncResult:
         self._worker = threading.Thread(target=self._run, args=(since,), daemon=True)
         self._worker.start()
         return self._await_worker()
 
+    @override
     def resume_sync(self, code: str) -> SyncResult:
         if self._worker is None or not self._worker.is_alive():
             raise ConnectorError("no login in progress")
         self._to_worker.put(("sms", code))
         return self._await_worker()
 
+    @override
     def close(self) -> None:
         # unblock a worker parked on the OTP prompt; it aborts the login, which
         # closes the browser as its `with` blocks unwind, then the thread exits

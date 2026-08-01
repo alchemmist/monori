@@ -9,6 +9,7 @@ rows directly with no OTP. It is registered only when this module is imported
 """
 
 from dataclasses import replace
+from typing import override
 
 from .base import Connector, ConnectorError, SmsRequired, SyncResult, SyncRow, register
 
@@ -39,6 +40,7 @@ class FakeConnector(Connector):
     kind = "fake"
     hidden = True
 
+    @override
     def sync(self, since: str | None = None) -> SyncResult:
         if not self.credentials.get("phone"):
             raise ConnectorError("missing phone")
@@ -48,6 +50,7 @@ class FakeConnector(Connector):
         self._pending = True
         raise SmsRequired("code sent")
 
+    @override
     def resume_sync(self, code: str) -> SyncResult:
         if not getattr(self, "_pending", False):
             raise ConnectorError("no login in progress")

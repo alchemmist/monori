@@ -61,7 +61,7 @@ def _parse_dt(value: str) -> datetime.datetime:
 
 
 def _text(value: str) -> str:
-    if isinstance(value, str) and value.startswith(("=", "+", "@")):
+    if value.startswith(("=", "+", "@")):
         return "'" + value
     return value
 
