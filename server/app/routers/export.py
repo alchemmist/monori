@@ -1,11 +1,11 @@
-from typing import Annotated, cast
+from typing import Annotated
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import Response
 
 from ..auth import AuthenticatedUser, current_user
 from ..deps import conn, snapshot
-from ..workbook.export import WorkbookSnap, workbook_bytes
+from ..workbook.export import workbook_bytes
 
 router = APIRouter(prefix="/api/export", tags=["export"])
 
@@ -20,7 +20,7 @@ def export_xlsx(user: Annotated[AuthenticatedUser, Depends(current_user)]) -> Re
     finally:
         c.close()
     return Response(
-        content=workbook_bytes(cast("WorkbookSnap", snap)),
+        content=workbook_bytes(snap),
         media_type=XLSX_MEDIA_TYPE,
         headers={"Content-Disposition": 'attachment; filename="monori-export.xlsx"'},
     )

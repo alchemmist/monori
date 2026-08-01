@@ -16,7 +16,7 @@ from .db_records import (
     TransactionRecord,
     UserRecord,
 )
-from .transfer_service import list_transfers
+from .transfer_service import TransferResponse, list_transfers
 
 SPLIT_FETCH_BATCH_SIZE = 500
 
@@ -122,6 +122,18 @@ class BudgetResponse:
 @pydantic_dataclass(config=_DTO_CONFIG)
 class IdResponse:
     id: int | None
+
+
+@pydantic_dataclass(config=_DTO_CONFIG)
+class SnapshotResponse:
+    accounts: list[AccountResponse]
+    groups: list[GroupResponse]
+    categories: list[CategoryResponse]
+    transactions: list[TransactionResponse]
+    transactionsTotal: int
+    transfers: list["TransferResponse"]
+    budgets: list[BudgetResponse]
+    connections: list[ConnectionResponse]
 
 
 def conn() -> sqlite3.Connection:
@@ -278,7 +290,9 @@ def _snapshot_transactions(
     return serialize_transactions(cur, reversed(list(rows)))
 
 
-def snapshot(c: sqlite3.Connection, user_id: int, tx_limit: int | None = None) -> dict[str, object]:
+def snapshot(
+    c: sqlite3.Connection, user_id: int, tx_limit: int | None = None
+) -> SnapshotResponse:
     cur = c.cursor()
     uid = (user_id,)
     transactions = _snapshot_transactions(cur, uid, tx_limit)
@@ -292,8 +306,8 @@ def snapshot(c: sqlite3.Connection, user_id: int, tx_limit: int | None = None) -
             uid,
         ).fetchone()[0]
     )
-    return {
-        "accounts": [
+    return SnapshotResponse(
+        accounts=[
             serialize_account(AccountRecord.from_row(r))
             for r in cur.execute(
                 "SELECT id, name, type, icon, color, icon_image, currency, sort, archived,"
@@ -302,7 +316,7 @@ def snapshot(c: sqlite3.Connection, user_id: int, tx_limit: int | None = None) -
                 uid,
             )
         ],
-        "groups": [
+        groups=[
             serialize_group(GroupRecord.from_row(r))
             for r in cur.execute(
                 "SELECT g.id, g.name, g.sort, t.type AS kind FROM category_groups g"
@@ -311,7 +325,7 @@ def snapshot(c: sqlite3.Connection, user_id: int, tx_limit: int | None = None) -
                 uid,
             )
         ],
-        "categories": [
+        categories=[
             serialize_category(CategoryRecord.from_row(r))
             for r in cur.execute(
                 "SELECT c.id, c.group_id, c.name, c.keywords, c.sort, c.archived,"
@@ -321,10 +335,10 @@ def snapshot(c: sqlite3.Connection, user_id: int, tx_limit: int | None = None) -
                 uid,
             )
         ],
-        "transactions": transactions,
-        "transactionsTotal": transactions_total,
-        "transfers": list_transfers(c, user_id),
-        "budgets": [
+        transactions=transactions,
+        transactionsTotal=transactions_total,
+        transfers=list_transfers(c, user_id),
+        budgets=[
             serialize_budget(BudgetRecord.from_row(r))
             for r in cur.execute(
                 "SELECT b.category_id, b.year, b.month, b.amount FROM budgets b"
@@ -334,7 +348,7 @@ def snapshot(c: sqlite3.Connection, user_id: int, tx_limit: int | None = None) -
                 uid,
             )
         ],
-        "connections": [
+        connections=[
             serialize_connection(ConnectionRecord.from_row(r))
             for r in cur.execute(
                 "SELECT bc.id, bc.bank, bc.kind, bc.status, bc.last_sync,"
@@ -343,4 +357,4 @@ def snapshot(c: sqlite3.Connection, user_id: int, tx_limit: int | None = None) -
                 uid,
             )
         ],
-    }
+    )

@@ -17,7 +17,7 @@ from starlette.responses import Response
 
 from .admin import record_api_usage
 from .auth import AuthenticatedUser, current_user
-from .deps import LIGHT_SNAPSHOT_TX_LIMIT, conn, snapshot
+from .deps import LIGHT_SNAPSHOT_TX_LIMIT, SnapshotResponse, conn, snapshot
 from .routers import (
     accounts,
     admin,
@@ -94,7 +94,7 @@ def get_snapshot(
     user: Annotated[AuthenticatedUser, Depends(current_user)],
     light: bool = False,
     limit: int = Query(default=LIGHT_SNAPSHOT_TX_LIMIT, ge=1, le=5000),
-) -> dict[str, object]:
+) -> SnapshotResponse:
     """
     Everything the app needs to render. ``light=1`` caps the transactions at the
     newest ``limit`` rows so first paint doesn't wait on years of history; the
