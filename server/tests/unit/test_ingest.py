@@ -2,7 +2,6 @@ import pathlib
 import sqlite3
 import sys
 from pathlib import Path
-from typing import cast
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
 
@@ -19,7 +18,7 @@ def _db(tmp_path: Path) -> sqlite3.Connection:
         "INSERT INTO users (email, email_canonical, password_hash, created_at)"
         " VALUES ('u@e.co', 'u@e.co', 'h', 't')"
     )
-    uid = c.execute("SELECT id FROM users").fetchone()[0]
+    uid = _required_int(c.execute("SELECT id FROM users").fetchone())
     c.execute(
         "INSERT INTO accounts (user_id, name, type, currency, sort)"
         " VALUES (?, 'T-Bank', 'card', 'RUB', 1)",
@@ -30,7 +29,20 @@ def _db(tmp_path: Path) -> sqlite3.Connection:
 
 
 def _uid(c: sqlite3.Connection) -> int:
-    return cast("int", c.execute("SELECT id FROM users").fetchone()[0])
+    return _required_int(c.execute("SELECT id FROM users").fetchone())
+
+
+def _required_int(row: sqlite3.Row | None) -> int:
+    assert row is not None
+    value = row[0]
+    assert isinstance(value, int)
+    return value
+
+
+def _inserted_id(cursor: sqlite3.Cursor) -> int:
+    value = cursor.lastrowid
+    assert value is not None
+    return value
 
 
 def _seed_categories(c: sqlite3.Connection) -> None:
@@ -45,8 +57,8 @@ def _seed_categories(c: sqlite3.Connection) -> None:
         " VALUES (?, 'Exp', 2, (SELECT id FROM category_group_types WHERE type='expense'))",
         (uid,),
     )
-    inc = cast("int", c.execute("SELECT id FROM category_groups WHERE name='Inc'").fetchone()[0])
-    exp = cast("int", c.execute("SELECT id FROM category_groups WHERE name='Exp'").fetchone()[0])
+    inc = _required_int(c.execute("SELECT id FROM category_groups WHERE name='Inc'").fetchone())
+    exp = _required_int(c.execute("SELECT id FROM category_groups WHERE name='Exp'").fetchone())
     cat_sql = "INSERT INTO categories (group_id, name, keywords, sort) VALUES (?, ?, ?, ?)"
     c.execute(cat_sql, (inc, "Salary", "salary|wage", 1))
     c.execute(cat_sql, (exp, "Food", "lenta|okey", 2))
@@ -92,8 +104,8 @@ def _row(
 
 def test_existing_hash_counts_is_account_scoped(tmp_path: Path) -> None:
     c = _db(tmp_path)
-    acct1 = cast("int", c.execute("SELECT MIN(id) FROM accounts").fetchone()[0])
-    acct2 = cast("int", c.execute("INSERT INTO accounts (name) VALUES ('Second')").lastrowid)
+    acct1 = _required_int(c.execute("SELECT MIN(id) FROM accounts").fetchone())
+    acct2 = _inserted_id(c.execute("INSERT INTO accounts (name) VALUES ('Second')"))
     commit_rows(c, acct1, [_row("2026-01-01T00:00:00", -100, "A")], source="import")
     c.commit()
     assert len(existing_hash_counts(c, acct1)) == 1
@@ -102,7 +114,7 @@ def test_existing_hash_counts_is_account_scoped(tmp_path: Path) -> None:
 
 def test_commit_rows_inserts_with_fields_and_defaults(tmp_path: Path) -> None:
     c = _db(tmp_path)
-    acct = cast("int", c.execute("SELECT MIN(id) FROM accounts").fetchone()[0])
+    acct = _required_int(c.execute("SELECT MIN(id) FROM accounts").fetchone())
     bid = c.execute(
         "INSERT INTO import_batches (account_id, source, created_at) VALUES (?, 'sync', 't')",
         (acct,),
@@ -130,7 +142,7 @@ def test_commit_rows_inserts_with_fields_and_defaults(tmp_path: Path) -> None:
 
 def test_commit_rows_skips_existing_hashes(tmp_path: Path) -> None:
     c = _db(tmp_path)
-    acct = cast("int", c.execute("SELECT MIN(id) FROM accounts").fetchone()[0])
+    acct = _required_int(c.execute("SELECT MIN(id) FROM accounts").fetchone())
     rows = [_row("2026-01-01T00:00:00", -100, "A")]
     assert commit_rows(c, acct, rows, source="import") == (1, 0)
     c.commit()
@@ -142,8 +154,8 @@ def test_commit_rows_skips_existing_hashes(tmp_path: Path) -> None:
 
 def test_commit_rows_dedup_is_per_account(tmp_path: Path) -> None:
     c = _db(tmp_path)
-    acct1 = cast("int", c.execute("SELECT MIN(id) FROM accounts").fetchone()[0])
-    acct2 = cast("int", c.execute("INSERT INTO accounts (name) VALUES ('Second')").lastrowid)
+    acct1 = _required_int(c.execute("SELECT MIN(id) FROM accounts").fetchone())
+    acct2 = _inserted_id(c.execute("INSERT INTO accounts (name) VALUES ('Second')"))
     rows = [_row("2026-01-01T00:00:00", -100, "A")]
     commit_rows(c, acct1, rows, source="import")
     c.commit()
@@ -153,7 +165,7 @@ def test_commit_rows_dedup_is_per_account(tmp_path: Path) -> None:
 
 def test_commit_rows_dedup_within_batch(tmp_path: Path) -> None:
     c = _db(tmp_path)
-    acct = cast("int", c.execute("SELECT MIN(id) FROM accounts").fetchone()[0])
+    acct = _required_int(c.execute("SELECT MIN(id) FROM accounts").fetchone())
     # three identical rows on a fresh account are all genuinely new
     rows = [_row("2026-01-01T00:00:00", -100, "A")] * 3
     assert commit_rows(c, acct, rows, source="import") == (3, 0)
@@ -161,7 +173,7 @@ def test_commit_rows_dedup_within_batch(tmp_path: Path) -> None:
 
 def test_commit_rows_partial_skip_against_existing(tmp_path: Path) -> None:
     c = _db(tmp_path)
-    acct = cast("int", c.execute("SELECT MIN(id) FROM accounts").fetchone()[0])
+    acct = _required_int(c.execute("SELECT MIN(id) FROM accounts").fetchone())
     row = _row("2026-01-01T00:00:00", -100, "A")
     commit_rows(c, acct, [row], source="import")  # DB now holds 1 copy
     c.commit()
@@ -171,18 +183,18 @@ def test_commit_rows_partial_skip_against_existing(tmp_path: Path) -> None:
 
 def test_snapshot_full_shape(tmp_path: Path) -> None:
     c = _db(tmp_path)
-    acct = cast("int", c.execute("SELECT MIN(id) FROM accounts").fetchone()[0])
+    acct = _required_int(c.execute("SELECT MIN(id) FROM accounts").fetchone())
     c.execute(
         "INSERT INTO category_groups (user_id, name, sort, type_id)"
         " VALUES (?, 'Bills', 1, (SELECT id FROM category_group_types WHERE type='expense'))",
         (_uid(c),),
     )
-    gid = cast("int", c.execute("SELECT id FROM category_groups").fetchone()[0])
+    gid = _required_int(c.execute("SELECT id FROM category_groups").fetchone())
     c.execute(
         "INSERT INTO categories (group_id, name, keywords, sort) VALUES (?, 'Rent', 'rent', 1)",
         (gid,),
     )
-    cid = cast("int", c.execute("SELECT id FROM categories").fetchone()[0])
+    cid = _required_int(c.execute("SELECT id FROM categories").fetchone())
     c.execute(
         "INSERT INTO transactions (date, amount, description, account_id, hash, source)"
         " VALUES ('2026-01-01T00:00:00', -100, 'x', ?, 'h', 'import')",
@@ -228,7 +240,8 @@ def test_historical_day_counts_span_accounts_and_skip_manual(tmp_path: Path) -> 
         " VALUES (?, 'Second', 'card', 'RUB', 2)",
         (uid,),
     )
-    first, second = [cast("int", r[0]) for r in c.execute("SELECT id FROM accounts ORDER BY id")]
+    account_rows = c.execute("SELECT id FROM accounts ORDER BY id").fetchall()
+    first, second = [_required_int(row) for row in account_rows]
     tx_sql = (
         "INSERT INTO transactions (date, amount, description, account_id, hash, source)"
         " VALUES (?, ?, ?, ?, ?, ?)"
