@@ -131,12 +131,14 @@ def create_account(
     body: AccountBody, user: Annotated[AuthenticatedUser, Depends(current_user)]
 ) -> AccountIdResponse:
     uid = user.id
-    account_type = body.type
+    account_type = body.type or "other"
+    icon = body.icon or "wallet"
+    color = body.color or "#5b6472"
+    currency = body.currency or "RUB"
+    opening_balance = body.openingBalance if body.openingBalance is not None else 0
+    bank_ref = (body.bankRef or "").strip()
     if account_type not in TYPES:
         raise HTTPException(400, "type must be one of card, cash, savings, other")
-    color = body.color
-    if color is None:
-        raise HTTPException(400, "color must be a #rrggbb hex string")
     _validate_color(color)
     _validate_icon_image(body.iconImage)
     c = conn()
@@ -151,9 +153,6 @@ def create_account(
         max_sort = c.execute(
             "SELECT COALESCE(MAX(sort),0) FROM accounts WHERE user_id=?", (uid,)
         ).fetchone()[0]
-        bank_ref = body.bankRef
-        if bank_ref is None:
-            raise HTTPException(400, "bankRef is required")
         cur = c.execute(
             """INSERT INTO accounts
                (user_id, name, type, icon, color, icon_image, currency, opening_balance,
@@ -163,15 +162,15 @@ def create_account(
                 uid,
                 body.name,
                 account_type,
-                body.icon,
+                icon,
                 color,
                 body.iconImage or None,
-                body.currency,
-                body.openingBalance,
+                currency,
+                opening_balance,
                 body.openingDate,
                 max_sort + 1,
                 connection_id or None,
-                bank_ref.strip(),
+                bank_ref,
                 _clean_tails(body.cardTails or []),
             ),
         )
