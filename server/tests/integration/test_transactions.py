@@ -91,10 +91,10 @@ def test_transaction_patch_recomputes_hash_for_dedup(api: Api, client: TestClien
     row that matched the old content should stop being a duplicate.
     """
     tx = api.tx("2026-01-05T10:00:00", -10000, description="Lenta")
-    assert api.preview(api.statement)[0]["duplicate"] is True
+    assert api.preview(api.statement)[0].duplicate is True
 
     client.patch(f"/api/transactions/{tx}", json={"description": "Something else"})
-    assert api.preview(api.statement)[0]["duplicate"] is False
+    assert api.preview(api.statement)[0].duplicate is False
 
 
 def test_transaction_list_filters_combined_and_pagination(api: Api, client: TestClient) -> None:
@@ -276,4 +276,4 @@ def test_hidden_transaction_still_blocks_reimport(api: Api, client: TestClient) 
     # the row is invisible everywhere, but a re-sync of the same statement
     # line must still see it as a duplicate — otherwise hiding is undone by
     # the next bank sync
-    assert api.preview(api.statement)[0]["duplicate"] is True
+    assert api.preview(api.statement)[0].duplicate is True

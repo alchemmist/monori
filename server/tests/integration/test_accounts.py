@@ -1,6 +1,8 @@
 import pytest
 from fastapi.testclient import TestClient
+from pydantic import TypeAdapter
 
+from app.routers.imports import ImportRowResponse
 from tests.conftest import Api
 
 pytestmark = pytest.mark.integration
@@ -170,11 +172,12 @@ def test_reconcile_skips_rows_the_balance_does_not_count(api: Api, client: TestC
 def test_import_targets_account(api: Api, client: TestClient) -> None:
     cash = api.account("Vault")
     rows = api.preview(api.statement)
-    client.post("/api/import/commit", json={"accountId": cash, "rows": rows})
+    payload = TypeAdapter(list[ImportRowResponse]).dump_python(rows, mode="json")
+    client.post("/api/import/commit", json={"accountId": cash, "rows": payload})
     imported = client.get(f"/api/transactions?accountId={cash}").json()
     assert imported["total"] == 2
 
-    bad = client.post("/api/import/commit", json={"accountId": 999, "rows": rows})
+    bad = client.post("/api/import/commit", json={"accountId": 999, "rows": payload})
     assert bad.status_code == 400
 
 

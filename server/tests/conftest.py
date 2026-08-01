@@ -12,30 +12,13 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
 from app.deps import IdResponse
 from app.routers.auth_router import TokenResponse
+from app.routers.imports import ImportPreviewResponse, ImportRowResponse
 from app.routers.transfers import TransferIdResponse
 
 STATEMENT = (
     "05.01.2026 10:00:00\t05.01.2026\t*1\tOK\t-100,00\tRUB\t-100,00\tRUB\t\tSuper\t5411\tLenta\t0\t0\t-100,00\n"  # noqa: E501
     "06.01.2026 11:00:00\t06.01.2026\t*1\tOK\t-200,00\tRUB\t-200,00\tRUB\t\tSuper\t5411\tOkey\t0\t0\t-200,00\n"  # noqa: E501
 )
-
-
-class _PreviewRow(TypedDict, total=False):
-    accountId: int | None
-    amount: int
-    bank_category: str
-    card: str
-    categoryId: int | None
-    date: str
-    description: str
-    duplicate: bool
-    hash: str
-    mcc: str
-
-
-class _PreviewResponse(TypedDict):
-    rows: list[_PreviewRow]
-    errors: list[str]
 
 
 class _SnapshotAccount(TypedDict):
@@ -299,10 +282,10 @@ class Api:
     def tx_by(self, tx_id: int) -> _SnapshotTransaction:
         return next(t for t in self.snapshot()["transactions"] if t["id"] == tx_id)
 
-    def preview(self, text: str, account_id: int | None = None) -> list[_PreviewRow]:
+    def preview(self, text: str, account_id: int | None = None) -> list[ImportRowResponse]:
         body = {"text": text, "accountId": account_id or self.default_account()}
         response = self.client.post("/api/import/preview", json=body)
-        return TypeAdapter(_PreviewResponse).validate_python(response.json())["rows"]
+        return TypeAdapter(ImportPreviewResponse).validate_python(response.json()).rows
 
 
 @pytest.fixture()

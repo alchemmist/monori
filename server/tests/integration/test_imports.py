@@ -1,41 +1,34 @@
 from collections.abc import Sequence
-from typing import Protocol, TypedDict, cast
 
 import pytest
 from fastapi.testclient import TestClient
+from httpx2 import Response
+from pydantic import TypeAdapter
 
-from tests.conftest import Api, _PreviewRow
+from app.deps import IdResponse
+from app.routers.imports import (
+    DuplicatesResponse,
+    ImportCommitResponse,
+    ImportPreviewResponse,
+    ImportRowResponse,
+)
+from app.routers.transactions import TransactionListResponse
+from tests.conftest import Api
 
 pytestmark = pytest.mark.integration
 
 
-class _CountsBody(TypedDict):
-    inserted: int
-    skipped: int
+def counts(response: Response) -> dict[str, int]:
+    body = TypeAdapter(ImportCommitResponse).validate_python(response.json())
+    return {"inserted": body.inserted, "skipped": body.skipped}
 
 
-class _ImportPreviewResponse(TypedDict):
-    rows: list[_PreviewRow]
-    errors: list[dict[str, object]]
-
-
-class _TransactionsResponse(TypedDict):
-    rows: list[dict[str, object]]
-    total: int
-
-
-class _JsonResponse(Protocol):
-    def json(self) -> object: ...
-
-
-def counts(response: _JsonResponse) -> dict[str, int]:
-    body = cast("_CountsBody", response.json())
-    return {"inserted": body["inserted"], "skipped": body["skipped"]}
-
-
-def commit(client: TestClient, api: Api, rows: Sequence[_PreviewRow]) -> dict[str, int]:
+def commit(client: TestClient, api: Api, rows: Sequence[ImportRowResponse]) -> dict[str, int]:
+    payload = TypeAdapter(list[ImportRowResponse]).dump_python(list(rows), mode="json")
     return counts(
-        client.post("/api/import/commit", json={"accountId": api.default_account(), "rows": rows})
+        client.post(
+            "/api/import/commit", json={"accountId": api.default_account(), "rows": payload}
+        )
     )
 
 
@@ -43,13 +36,13 @@ def test_import_preview_categorizes_and_flags_errors(api: Api, client: TestClien
     g = api.group("Expenses")
     api.category("Groceries", g, "Lenta")
     text = api.statement + "garbage line without enough columns\n"
-    prev = cast(
-        "_ImportPreviewResponse", client.post("/api/import/preview", json={"text": text}).json()
+    prev = TypeAdapter(ImportPreviewResponse).validate_python(
+        client.post("/api/import/preview", json={"text": text}).json()
     )
-    assert len(prev["rows"]) == 2
-    assert prev["rows"][0]["categoryId"] is not None
-    assert prev["rows"][1]["categoryId"] is None
-    assert len(prev["errors"]) == 1
+    assert len(prev.rows) == 2
+    assert prev.rows[0].categoryId is not None
+    assert prev.rows[1].categoryId is None
+    assert len(prev.errors) == 1
 
 
 def test_preview_routes_each_card_and_commit_accepts_mixed_accounts(
@@ -88,16 +81,22 @@ def test_preview_routes_each_card_and_commit_accepts_mixed_accounts(
         + row("*2947", "-200,00", "Second", 6)
         + row("*9999", "-300,00", "Unknown", 7)
     )
-    rows = cast(
-        "_ImportPreviewResponse", client.post("/api/import/preview", json={"text": text}).json()
-    )["rows"]
-    assert [row["accountId"] for row in rows] == [first, second, None]
+    preview = TypeAdapter(ImportPreviewResponse).validate_python(
+        client.post("/api/import/preview", json={"text": text}).json()
+    )
+    rows = preview.rows
+    assert [row.accountId for row in rows] == [first, second, None]
 
-    rows[2]["accountId"] = first
-    r = client.post("/api/import/commit", json={"rows": rows})
+    rows[2].accountId = first
+    payload = TypeAdapter(list[ImportRowResponse]).dump_python(rows, mode="json")
+    r = client.post("/api/import/commit", json={"rows": payload})
     assert counts(r) == {"inserted": 3, "skipped": 0}
-    tx = cast("_TransactionsResponse", client.get("/api/transactions?limit=10").json())["rows"]
-    assert {row["description"]: row["accountId"] for row in tx} == {
+    tx = (
+        TypeAdapter(TransactionListResponse)
+        .validate_python(client.get("/api/transactions?limit=10").json())
+        .rows
+    )
+    assert {row.description: row.accountId for row in tx} == {
         "First": first,
         "Second": second,
         "Unknown": first,
@@ -109,20 +108,24 @@ def test_duplicate_check_uses_the_account_selected_for_each_row(
 ) -> None:
     other = api.account("Other")
     rows = api.preview(api.statement)
-    api.tx(rows[0]["date"], rows[0]["amount"], accountId=other, description=rows[0]["description"])
-    rows[0]["accountId"] = other
+    api.tx(rows[0].date, rows[0].amount, accountId=other, description=rows[0].description)
+    rows[0].accountId = other
 
-    checked = cast(
-        "dict[str, list[bool]]", client.post("/api/import/duplicates", json={"rows": rows}).json()
+    payload = TypeAdapter(list[ImportRowResponse]).dump_python(rows, mode="json")
+    checked = TypeAdapter(DuplicatesResponse).validate_python(
+        client.post("/api/import/duplicates", json={"rows": payload}).json()
     )
-    assert checked["duplicates"] == [True, False]
+    assert checked.duplicates == [True, False]
 
 
 def test_import_commit_double_submit_is_idempotent(api: Api, client: TestClient) -> None:
     rows = api.preview(api.statement)
     assert commit(client, api, rows) == {"inserted": 2, "skipped": 0}
     assert commit(client, api, rows) == {"inserted": 0, "skipped": 2}
-    assert cast("_TransactionsResponse", client.get("/api/transactions").json())["total"] == 2
+    transactions = TypeAdapter(TransactionListResponse).validate_python(
+        client.get("/api/transactions").json()
+    )
+    assert transactions.total == 2
 
 
 def test_import_commit_skips_only_the_first_n_already_stored(api: Api, client: TestClient) -> None:
@@ -134,7 +137,10 @@ def test_import_commit_skips_only_the_first_n_already_stored(api: Api, client: T
 
     # fresh DB: three identical rows are all genuinely new
     assert commit(client, api, [r0, r0, r0]) == {"inserted": 3, "skipped": 0}
-    assert cast("_TransactionsResponse", client.get("/api/transactions").json())["total"] == 3
+    transactions = TypeAdapter(TransactionListResponse).validate_python(
+        client.get("/api/transactions").json()
+    )
+    assert transactions.total == 3
 
     # DB now holds 3; the same three are all skipped
     assert commit(client, api, [r0, r0, r0]) == {"inserted": 0, "skipped": 3}
@@ -148,12 +154,13 @@ def test_import_commit_keeps_category(api: Api, client: TestClient) -> None:
     g = api.group("Expenses")
     cat = api.category("Groceries", g)
     rows = api.preview(api.statement)
-    rows[0]["categoryId"] = cat
-    client.post("/api/import/commit", json={"accountId": api.default_account(), "rows": rows})
-    imported = cast(
-        "_TransactionsResponse", client.get(f"/api/transactions?categoryId={cat}").json()
+    rows[0].categoryId = cat
+    payload = TypeAdapter(list[ImportRowResponse]).dump_python(rows, mode="json")
+    client.post("/api/import/commit", json={"accountId": api.default_account(), "rows": payload})
+    imported = TypeAdapter(TransactionListResponse).validate_python(
+        client.get(f"/api/transactions?categoryId={cat}").json()
     )
-    assert imported["total"] == 1 and imported["rows"][0]["source"] == "import"
+    assert imported.total == 1 and imported.rows[0].source == "import"
 
 
 def test_import_commit_accepts_goal_category(api: Api, client: TestClient) -> None:
@@ -162,21 +169,25 @@ def test_import_commit_accepts_goal_category(api: Api, client: TestClient) -> No
         "/api/categories",
         json={"name": "Camera", "groupId": goals, "goalTarget": 100_000},
     )
-    goal = cast("dict[str, int]", created.json())["id"]
+    created_category = TypeAdapter(IdResponse).validate_python(created.json())
+    assert created_category.id is not None
+    goal = created_category.id
     rows = api.preview(api.statement)
-    rows[0]["categoryId"] = goal
+    rows[0].categoryId = goal
 
     response = client.post(
-        "/api/import/commit", json={"accountId": api.default_account(), "rows": rows}
+        "/api/import/commit",
+        json={
+            "accountId": api.default_account(),
+            "rows": TypeAdapter(list[ImportRowResponse]).dump_python(rows, mode="json"),
+        },
     )
 
     assert response.status_code == 200, response.text
-    assert (
-        cast("_TransactionsResponse", client.get(f"/api/transactions?categoryId={goal}").json())[
-            "total"
-        ]
-        == 1
+    imported = TypeAdapter(TransactionListResponse).validate_python(
+        client.get(f"/api/transactions?categoryId={goal}").json()
     )
+    assert imported.total == 1
 
 
 def test_import_commit_rejects_category_with_the_wrong_direction(
@@ -188,17 +199,21 @@ def test_import_commit_rejects_category_with_the_wrong_direction(
     salary = api.category("Salary", income)
     rows = api.preview(api.statement)
 
-    rows[0]["categoryId"] = salary
+    rows[0].categoryId = salary
+    payload = TypeAdapter(list[ImportRowResponse]).dump_python(rows, mode="json")
     bad_expense = client.post(
-        "/api/import/commit", json={"accountId": api.default_account(), "rows": rows}
+        "/api/import/commit",
+        json={"accountId": api.default_account(), "rows": payload},
     )
     assert bad_expense.status_code == 400
 
     rows = api.preview(api.statement)
-    rows[1]["amount"] = 100
-    rows[1]["categoryId"] = food
+    rows[1].amount = 100
+    rows[1].categoryId = food
+    payload = TypeAdapter(list[ImportRowResponse]).dump_python(rows, mode="json")
     bad_income = client.post(
-        "/api/import/commit", json={"accountId": api.default_account(), "rows": rows}
+        "/api/import/commit",
+        json={"accountId": api.default_account(), "rows": payload},
     )
     assert bad_income.status_code == 400
 
@@ -206,7 +221,7 @@ def test_import_commit_rejects_category_with_the_wrong_direction(
 def test_commit_rejects_unknown_account(client: TestClient) -> None:
     r = client.post("/api/import/commit", json={"accountId": 999, "rows": []})
     assert r.status_code == 400
-    assert cast("dict[str, str]", r.json())["detail"] == "unknown account"
+    assert r.json()["detail"] == "unknown account"
 
 
 def test_preview_rejects_oversized_statement(api: Api, client: TestClient) -> None:
@@ -215,7 +230,7 @@ def test_preview_rejects_oversized_statement(api: Api, client: TestClient) -> No
     big = "x" * (MAX_STATEMENT_TEXT + 1)
     r = client.post("/api/import/preview", json={"text": big, "accountId": api.default_account()})
     assert r.status_code == 413
-    assert cast("dict[str, str]", r.json())["detail"] == "statement is too large"
+    assert r.json()["detail"] == "statement is too large"
 
 
 def test_import_preview_never_proposes_a_wrong_direction_category(
@@ -230,5 +245,5 @@ def test_import_preview_never_proposes_a_wrong_direction_category(
     api.category("Groceries", expenses, keywords="lenta")
     refund = api.statement.splitlines()[0].replace("-100,00", "100,00") + "\n"
     rows = api.preview(refund)
-    assert rows[0]["amount"] > 0
-    assert rows[0]["categoryId"] is None
+    assert rows[0].amount > 0
+    assert rows[0].categoryId is None
