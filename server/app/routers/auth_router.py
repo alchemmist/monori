@@ -9,6 +9,7 @@ a ``current_user`` dependency other routes can adopt.
 
 import sqlite3
 from datetime import UTC, datetime
+from enum import StrEnum
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -52,7 +53,11 @@ class RegisterBody:
 @pydantic_dataclass(config=ConfigDict(extra="forbid"))
 class TokenResponse:
     access_token: str
-    token_type: str
+    token_type: "OAuthTokenType"
+
+
+class OAuthTokenType(StrEnum):
+    BEARER = "bearer"
 
 
 def create_user(c: sqlite3.Connection, raw_email: str, password: str) -> UserResponse:
@@ -152,7 +157,9 @@ def token(form: Annotated[OAuth2PasswordRequestForm, Depends()]) -> TokenRespons
         c.commit()
     finally:
         c.close()
-    return TokenResponse(access_token=create_access_token(user_id), token_type="bearer")
+    return TokenResponse(
+        access_token=create_access_token(user_id), token_type=OAuthTokenType.BEARER
+    )
 
 
 @router.get("/me")
