@@ -72,6 +72,16 @@ class GoalGroupRecord:
 
 
 @dataclass(frozen=True, slots=True)
+class CategorySignRecord:
+    id: int
+    transaction_sign: int
+
+    @classmethod
+    def from_row(cls, row: sqlite3.Row) -> "CategorySignRecord":
+        return cls(id=row["id"], transaction_sign=row["transaction_sign"])
+
+
+@dataclass(frozen=True, slots=True)
 class AccountRecord:
     id: int
     name: str
