@@ -9,31 +9,35 @@ exit code directly).
 
 import json
 import sys
-from typing import TypedDict
 
-from pydantic import TypeAdapter
+from pydantic import ConfigDict, TypeAdapter
+from pydantic.dataclasses import dataclass as pydantic_dataclass
 
 BLOCKING = {"high", "critical"}
 
 
-class AuditVia(TypedDict, total=False):
-    severity: str
-    url: str
-    title: str
+@pydantic_dataclass(config=ConfigDict(extra="ignore"))
+class AuditVia:
+    severity: str = ""
+    url: str = ""
+    title: str = ""
 
 
-class AuditNode(TypedDict, total=False):
+@pydantic_dataclass(config=ConfigDict(extra="ignore"))
+class AuditNode:
     via: list[str | AuditVia]
 
 
-class AuditError(TypedDict, total=False):
-    code: str
-    summary: str
+@pydantic_dataclass(config=ConfigDict(extra="ignore"))
+class AuditError:
+    code: str = "unknown"
+    summary: str = ""
 
 
-class AuditPayload(TypedDict, total=False):
-    error: AuditError
-    vulnerabilities: dict[str, AuditNode]
+@pydantic_dataclass(config=ConfigDict(extra="ignore"))
+class AuditPayload:
+    error: AuditError | None = None
+    vulnerabilities: dict[str, AuditNode] | None = None
 
 
 AUDIT_PAYLOAD_ADAPTER: TypeAdapter[AuditPayload] = TypeAdapter(AuditPayload)
@@ -53,28 +57,27 @@ def main() -> int:
     # npm audit could not run (e.g. ENOLOCK with no lockfile) — it returns an
     # error payload with no vulnerabilities data. Fail loudly rather than let an
     # audit that never happened read as a clean pass.
-    if "error" in data or "vulnerabilities" not in data:
-        err = data.get("error", {})
+    if data.error is not None or data.vulnerabilities is None:
+        err = data.error
         print(
             "npm-audit-gate [FAIL]: npm audit did not run — "
-            f"{err.get('code', 'unknown')}: {err.get('summary', data.keys())}",
+            f"{err.code if err else 'unknown'}: {err.summary if err else 'missing vulnerabilities'}",
             file=sys.stderr,
         )
         return 1
     blocking: list[str] = []
-    vulnerabilities = data.get("vulnerabilities", {})
-    for name, vuln in vulnerabilities.items():
-        for via in vuln.get("via", []):
-            if not isinstance(via, dict):
+    for name, vuln in data.vulnerabilities.items():
+        for via in vuln.via:
+            if isinstance(via, str):
                 continue
-            if via.get("severity") not in BLOCKING:
+            if via.severity not in BLOCKING:
                 continue
-            url = via.get("url", "")
+            url = via.url
             ghsa = url.rsplit("/", 1)[-1]
             if ghsa in ALLOWED:
                 print(f"npm-audit-gate: allowing {ghsa} ({name}) — {ALLOWED[ghsa]}")
                 continue
-            blocking.append(f"{via.get('severity')}: {name} — {via.get('title')} ({url})")
+            blocking.append(f"{via.severity}: {name} — {via.title} ({url})")
 
     if blocking:
         print("npm-audit-gate [FAIL]: blocking advisories:", file=sys.stderr)

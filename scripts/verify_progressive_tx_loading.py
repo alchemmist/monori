@@ -8,10 +8,10 @@ ends up complete and in order.
 import pathlib
 import sys
 from enum import StrEnum
-from typing import TypedDict
 
 from playwright.sync_api import Browser, Page, Request, sync_playwright
 from pydantic import TypeAdapter
+from pydantic.dataclasses import dataclass as pydantic_dataclass
 
 TOKEN_FILE = pathlib.Path("/tmp/monori-token.txt")
 
@@ -43,14 +43,16 @@ STATE_JS = """() => {
 }"""
 
 
-class PageState(TypedDict):
+@pydantic_dataclass
+class PageState:
     count: int | None
     ring: bool
     ringSeen: list[str]
     firstDates: list[str]
 
 
-class ReducedRing(TypedDict):
+@pydantic_dataclass
+class ReducedRing:
     text: str
     svg: bool
 
@@ -119,7 +121,9 @@ def main() -> None:
         browser = p.chromium.launch(headless=True)
         requests: list[str] = []
         page = open_page(browser, token, requests=requests)
-        page.wait_for_function("() => !document.querySelector('.progress-ring')", timeout=60000)
+        page.wait_for_function(
+            "() => !document.querySelector('.progress-ring')", timeout=60000
+        )
         state = PAGE_STATE_ADAPTER.validate_python(page.evaluate(STATE_JS))
         print("AFTER FILL:", state)
         page.close()
@@ -154,19 +158,19 @@ def main() -> None:
         check("first paint used the light snapshot", all("light=1" in u for u in light))
         # 500 rows arrive with the snapshot, the rest in 1000-row chunks; more
         # than that would mean a superseded fill kept running
-        count = state["count"]
+        count = state.count
         assert count is not None
         expected_chunks = -((count - 500) // 1000)
         check(
             f"the fill ran exactly once ({expected_chunks} chunks)",
             len(chunks) == expected_chunks,
         )
-        check("progress ring appeared during the fill", len(state["ringSeen"]) > 0)
-        check("ring reported a percentage", any("%" in s for s in state["ringSeen"]))
-        check("ring is gone once the fill finished", state["ring"] is False)
+        check("progress ring appeared during the fill", len(state.ringSeen) > 0)
+        check("ring reported a percentage", any("%" in s for s in state.ringSeen))
+        check("ring is gone once the fill finished", state.ring is False)
         check("ledger is fully loaded", count > 500)
-        check("reduce motion drops the ring", reduced_ring["svg"] is False)
-        check("reduce motion still shows the percentage", "%" in reduced_ring["text"])
+        check("reduce motion drops the ring", reduced_ring.svg is False)
+        check("reduce motion still shows the percentage", "%" in reduced_ring.text)
         print("\nRESULT:", "ALL PASS" if ok else "SOME FAILED")
         sys.exit(0 if ok else 1)
 

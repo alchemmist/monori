@@ -6,14 +6,16 @@ scrolling recycles the rendered rows while the sticky header stays pinned.
 
 import pathlib
 import sys
-from typing import TypedDict, cast
 
 from playwright.sync_api import Page, sync_playwright
+from pydantic import TypeAdapter
+from pydantic.dataclasses import dataclass as pydantic_dataclass
 
 TOKEN_FILE = pathlib.Path("/tmp/monori-token.txt")
 
 
-class Measure(TypedDict):
+@pydantic_dataclass
+class Measure:
     renderedRows: int
     spacers: int
     scrollHeight: int
@@ -35,8 +37,7 @@ def load_token() -> str:
 
 
 def measure(page: Page) -> Measure:
-    return cast(
-        "Measure",
+    return TypeAdapter(Measure).validate_python(
         page.evaluate(
             """() => {
         const rows = document.querySelectorAll('tr.cat-row');
@@ -56,7 +57,7 @@ def measure(page: Page) -> Measure:
             countText: countText ? countText.trim() : null,
         };
     }"""
-        ),
+        )
     )
 
 
@@ -100,18 +101,18 @@ def main() -> None:
             ok = ok and cond
             print(f"[{'PASS' if cond else 'FAIL'}] {name}")
 
-        check("count shows all 6802", top["countText"] in ("6802", "6 802"))
-        check("windowed DOM (<200 rows, not 6802)", 0 < top["renderedRows"] < 200)
-        check("tall scroll height (>200k px)", top["scrollHeight"] > 200_000)
-        check("spacers present", top["spacers"] >= 1)
-        check("mid still windowed", 0 < mid["renderedRows"] < 200)
-        check("mid recycled (date changed vs top)", mid["firstDate"] != top["firstDate"])
-        header_top = mid["headerTop"]
+        check("count shows all 6802", top.countText in ("6802", "6 802"))
+        check("windowed DOM (<200 rows, not 6802)", 0 < top.renderedRows < 200)
+        check("tall scroll height (>200k px)", top.scrollHeight > 200_000)
+        check("spacers present", top.spacers >= 1)
+        check("mid still windowed", 0 < mid.renderedRows < 200)
+        check("mid recycled (date changed vs top)", mid.firstDate != top.firstDate)
+        header_top = mid.headerTop
         assert header_top is not None
         check("sticky header pinned at mid (top≈0)", abs(header_top) <= 2)
-        check("bottom still windowed", 0 < bot["renderedRows"] < 200)
-        check("filter shrank the set", filt["countText"] not in ("6802", "6 802"))
-        check("filter reset scroll to top", filt["scrollY"] <= 2)
+        check("bottom still windowed", 0 < bot.renderedRows < 200)
+        check("filter shrank the set", filt.countText not in ("6802", "6 802"))
+        check("filter reset scroll to top", filt.scrollY <= 2)
         print("\nRESULT:", "ALL PASS" if ok else "SOME FAILED")
 
 
