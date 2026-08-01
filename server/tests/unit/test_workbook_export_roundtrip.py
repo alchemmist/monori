@@ -122,22 +122,28 @@ def test_unquote_reverses_only_the_formula_escape() -> None:
 
 
 def test_parse_dt_variants() -> None:
-    assert _parse_dt(datetime.datetime(2026, 1, 5, 10, 0)) == datetime.datetime(2026, 1, 5, 10, 0)
-    assert _parse_dt(datetime.date(2026, 1, 5)) == datetime.datetime(2026, 1, 5)
-    assert _parse_dt("05.01.2026 10:00:00") == datetime.datetime(2026, 1, 5, 10)
-    assert _parse_dt("2026-01-05T10:00:00") == datetime.datetime(2026, 1, 5, 10)
-    assert _parse_dt("") is None
-    assert _parse_dt("garbage") is None
-    assert _parse_dt(None) is None
+    ws = Workbook().active
+    assert ws is not None
+    assert _parse_dt(ws.cell(1, 1, datetime.datetime(2026, 1, 5, 10))) == datetime.datetime(
+        2026, 1, 5, 10
+    )
+    assert _parse_dt(ws.cell(1, 2, datetime.date(2026, 1, 5))) == datetime.datetime(2026, 1, 5)
+    assert _parse_dt(ws.cell(1, 3, "05.01.2026 10:00:00")) == datetime.datetime(2026, 1, 5, 10)
+    assert _parse_dt(ws.cell(1, 4, "2026-01-05T10:00:00")) == datetime.datetime(2026, 1, 5, 10)
+    assert _parse_dt(ws.cell(1, 5, "")) is None
+    assert _parse_dt(ws.cell(1, 6, "garbage")) is None
+    assert _parse_dt(ws.cell(1, 7)) is None
 
 
 def test_amount_variants() -> None:
-    assert _amount(-125.5) == -12550
-    assert _amount(500) == 50000
-    assert _amount("-1 500,00") == -150000
-    assert _amount("") is None
-    assert _amount(None) is None
-    assert _amount("abc") is None
+    ws = Workbook().active
+    assert ws is not None
+    assert _amount(ws.cell(1, 1, -125.5)) == -12550
+    assert _amount(ws.cell(1, 2, 500)) == 50000
+    assert _amount(ws.cell(1, 3, "-1 500,00")) == -150000
+    assert _amount(ws.cell(1, 4, "")) is None
+    assert _amount(ws.cell(1, 5)) is None
+    assert _amount(ws.cell(1, 6, "abc")) is None
 
 
 def test_rejects_garbage_bytes() -> None:

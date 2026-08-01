@@ -139,10 +139,10 @@ def sheet_grids(path: str) -> tuple[dict[int, YearGrid], dict[tuple[int, int], H
 
 def _available(ws: Worksheet, base: int) -> int | None:
     for r in (5, 6):
-        if _s(ws.cell(r + 1, base + 1).value).startswith(("Available", "Доступный")):
+        if _s(ws.cell(r + 1, base + 1)).startswith(("Available", "Доступный")):
             from app.workbook.parser import _kop
 
-            return _kop(ws.cell(r, base + 1).value)
+            return _kop(ws.cell(r, base + 1))
     return None
 
 

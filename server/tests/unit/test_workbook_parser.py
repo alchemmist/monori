@@ -153,26 +153,32 @@ def _save(wb: Workbook) -> bytes:
 
 
 def test_s_strips_and_handles_none() -> None:
-    assert _s(None) == ""
-    assert _s("  hi  ") == "hi"
-    assert _s(5) == "5"
+    ws = Workbook().active
+    assert ws is not None
+    assert _s(ws.cell(1, 1)) == ""
+    assert _s(ws.cell(1, 2, "  hi  ")) == "hi"
+    assert _s(ws.cell(1, 3, 5)) == "5"
 
 
 def test_kop_rejects_bool_and_non_numbers() -> None:
-    assert _kop(True) is None
-    assert _kop(False) is None
-    assert _kop(None) is None
-    assert _kop("abc") is None
-    assert _kop("   ") is None
-    assert _kop(12.5) == 1250
-    assert _kop(-3) == -300
+    ws = Workbook().active
+    assert ws is not None
+    assert _kop(ws.cell(1, 1, True)) is None
+    assert _kop(ws.cell(1, 2, False)) is None
+    assert _kop(ws.cell(1, 3)) is None
+    assert _kop(ws.cell(1, 4, "abc")) is None
+    assert _kop(ws.cell(1, 5, "   ")) is None
+    assert _kop(ws.cell(1, 6, 12.5)) == 1250
+    assert _kop(ws.cell(1, 7, -3)) == -300
 
 
 def test_kop_parses_formatted_strings() -> None:
-    assert _kop("12") == 1200
-    assert _kop("-4 172,00") == -417200
-    assert _kop("1 234,5") == 123450
-    assert _kop("2 000") == 200000
+    ws = Workbook().active
+    assert ws is not None
+    assert _kop(ws.cell(1, 1, "12")) == 1200
+    assert _kop(ws.cell(1, 2, "-4 172,00")) == -417200
+    assert _kop(ws.cell(1, 3, "1 234,5")) == 123450
+    assert _kop(ws.cell(1, 4, "2 000")) == 200000
 
 
 def test_last_day_handles_december_and_others() -> None:
@@ -188,21 +194,27 @@ def test_stamp_is_noon_on_last_day() -> None:
 
 
 def test_month_num_matches_ru_and_en_and_rejects() -> None:
-    assert _month_num("ЯНВ 2025") == 1
-    assert _month_num("мая") == 5
-    assert _month_num("DEC 2024") == 12
-    assert _month_num("garbage") is None
-    assert _month_num(None) is None
+    ws = Workbook().active
+    assert ws is not None
+    assert _month_num(ws.cell(1, 1, "ЯНВ 2025")) == 1
+    assert _month_num(ws.cell(1, 2, "мая")) == 5
+    assert _month_num(ws.cell(1, 3, "DEC 2024")) == 12
+    assert _month_num(ws.cell(1, 4, "garbage")) is None
+    assert _month_num(ws.cell(1, 5)) is None
     assert MONTH_ABBREVS["ИЮЛ"] == 7
 
 
 def test_parse_dt_variants() -> None:
-    assert _parse_dt(datetime.datetime(2025, 1, 5, 10)) == datetime.datetime(2025, 1, 5, 10)
-    assert _parse_dt(datetime.date(2025, 1, 5)) == datetime.datetime(2025, 1, 5)
-    assert _parse_dt("2025-01-05") == datetime.datetime(2025, 1, 5)
-    assert _parse_dt("05.01.2025 10:00:00") == datetime.datetime(2025, 1, 5, 10)
-    assert _parse_dt("garbage") is None
-    assert _parse_dt(None) is None
+    ws = Workbook().active
+    assert ws is not None
+    assert _parse_dt(ws.cell(1, 1, datetime.datetime(2025, 1, 5, 10))) == datetime.datetime(
+        2025, 1, 5, 10
+    )
+    assert _parse_dt(ws.cell(1, 2, datetime.date(2025, 1, 5))) == datetime.datetime(2025, 1, 5)
+    assert _parse_dt(ws.cell(1, 3, "2025-01-05")) == datetime.datetime(2025, 1, 5)
+    assert _parse_dt(ws.cell(1, 4, "05.01.2025 10:00:00")) == datetime.datetime(2025, 1, 5, 10)
+    assert _parse_dt(ws.cell(1, 5, "garbage")) is None
+    assert _parse_dt(ws.cell(1, 6)) is None
 
 
 def test_month_range_wraps_across_years() -> None:

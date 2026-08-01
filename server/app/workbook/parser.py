@@ -25,6 +25,7 @@ from io import BytesIO
 from typing import Literal
 
 from openpyxl import Workbook, load_workbook
+from openpyxl.cell.cell import Cell, MergedCell
 from openpyxl.worksheet.worksheet import Worksheet
 
 from ..importer import parse_amount_kop, parse_date
@@ -181,7 +182,8 @@ def _group_kind(value: str | None) -> Literal["income", "expense"] | None:
     return "income" if value == "income" else "expense"
 
 
-def _s(value: object) -> str:
+def _s(cell: Cell | MergedCell | None) -> str:
+    value = None if cell is None else cell.value
     if value is None:
         return ""
     return str(value).strip()
@@ -190,7 +192,8 @@ def _s(value: object) -> str:
 SUM_FORMULA_RE = re.compile(r"^=[-+]?\d+(\.\d+)?([-+]\d+(\.\d+)?)*$")
 
 
-def _kop(value: object) -> int | None:
+def _kop(cell: Cell | MergedCell | None) -> int | None:
+    value = None if cell is None else cell.value
     if isinstance(value, bool):
         return None
     if isinstance(value, str):
@@ -221,8 +224,8 @@ def _stamp(year: int, month: int) -> str:
     return _last_day(year, month).strftime("%Y-%m-%dT12:00:00")
 
 
-def _month_num(value: object) -> int | None:
-    abbr = _s(value).upper()[:3]
+def _month_num(cell: Cell | MergedCell | None) -> int | None:
+    abbr = _s(cell).upper()[:3]
     return MONTH_ABBREVS.get(abbr)
 
 
@@ -235,7 +238,7 @@ def _find_layout(ws: Worksheet) -> LayoutRow | None:
     such row exists, which is how a sheet says it is not a year grid at all.
     """
     for r in range(1, 11):
-        row = [ws.cell(r, c).value for c in range(1, ws.max_column + 1)]
+        row = [ws.cell(r, c) for c in range(1, ws.max_column + 1)]
         bases = [i + 1 for i, v in enumerate(row) if _s(v) in BUDGET_HEADERS]
         if len(bases) < 2:
             continue
@@ -253,14 +256,14 @@ def _find_layout(ws: Worksheet) -> LayoutRow | None:
         label_col = None
         for rr in (r, r + 1):
             for c in range(1, bases[0]):
-                if _s(ws.cell(rr, c).value) in LABEL_HEADERS:
+                if _s(ws.cell(rr, c)) in LABEL_HEADERS:
                     label_col = c
                     break
             if label_col:
                 break
         start_month = None
         for rr in (1, 2, 3):
-            mon = _month_num(ws.cell(rr, bases[0]).value)
+            mon = _month_num(ws.cell(rr, bases[0]))
             if mon:
                 start_month = mon
                 break
@@ -285,7 +288,7 @@ def _label_col(ws: Worksheet, header_row: int, first_base: int) -> int:
         count = sum(
             1
             for r in range(header_row + 1, min(ws.max_row, header_row + 60) + 1)
-            if _s(ws.cell(r, c).value)
+            if _s(ws.cell(r, c))
         )
         if count > best_count:
             best, best_count = c, count
@@ -308,28 +311,32 @@ def _parse_categories(
     groups: list[WorkbookGroupRow] = []
     categories: list[WorkbookCategoryRow] = []
     group_rows_seen = False
-    for row in ws.iter_rows(min_row=1, values_only=True):
+    for row in ws.iter_rows(min_row=1):
         cells = list(row) + [None] * (4 - len(row))
         c1, c2, c3, c4 = cells[:4]
         s1, s2, s3 = _s(c1), _s(c2), _s(c3)
         if s1 in ("Sort Order", "Category Group") or (not s1 and not s2):
             continue
-        if s3 in (spec.TYPE_IN, spec.TYPE_OUT) and isinstance(c2, int | float):
+        c2_value = None if c2 is None else c2.value
+        c1_value = None if c1 is None else c1.value
+        if s3 in (spec.TYPE_IN, spec.TYPE_OUT) and isinstance(c2_value, int | float):
             name, _ = spec.strip_glyph(_unquote(s1))
             groups.append(
                 WorkbookGroupRow(
-                    name=name, sort=int(c2), kind="income" if s3 == spec.TYPE_IN else "expense"
+                    name=name,
+                    sort=int(c2_value),
+                    kind="income" if s3 == spec.TYPE_IN else "expense",
                 )
             )
             group_rows_seen = True
             continue
-        if isinstance(c1, int | float) and s2 and s3:
+        if isinstance(c1_value, int | float) and s2 and s3:
             name, kind = spec.strip_glyph(_unquote(s2))
             categories.append(
                 WorkbookCategoryRow(
                     group=name,
                     group_kind=_group_kind(kind),
-                    group_sort=int(c1),
+                    group_sort=int(c1_value),
                     name=_unquote(s3),
                     keywords=_unquote(_s(c4)),
                 )
@@ -361,7 +368,7 @@ def _sheet_sections(ws: Worksheet, layout: LayoutRow) -> list[YearSection]:
     current: YearSection | None = None
     in_gap = True
     for r in range(layout.header_row + 1, ws.max_row + 1):
-        label = _s(ws.cell(r, label_col).value)
+        label = _s(ws.cell(r, label_col))
         if not label or label in SKIP_LABELS:
             in_gap = in_gap or not label
             if label in SKIP_LABELS:
@@ -382,9 +389,9 @@ def _sheet_sections(ws: Worksheet, layout: LayoutRow) -> list[YearSection]:
 
 def _summary_value(ws: Worksheet, base: int, labels: tuple[str, ...]) -> int | None:
     for r in range(1, 7):
-        text = _s(ws.cell(r, base + 2).value)
+        text = _s(ws.cell(r, base + 2))
         if any(text.startswith(lb) for lb in labels):
-            return _kop(ws.cell(r, base + 1).value)
+            return _kop(ws.cell(r, base + 1))
     return None
 
 
@@ -403,9 +410,9 @@ def _parse_year_sheet(ws: Worksheet, year: int, layout: LayoutRow) -> YearSheetR
                 YearCategoryRow(group=section.name),
             )
             for m, base in months:
-                b = _kop(ws.cell(r, base).value)
-                o = _kop(ws.cell(r, base + layout.out_off).value)
-                bal = _kop(ws.cell(r, base + layout.bal_off).value)
+                b = _kop(ws.cell(r, base))
+                o = _kop(ws.cell(r, base + layout.out_off))
+                bal = _kop(ws.cell(r, base + layout.bal_off))
                 if b is not None:
                     entry.budgets[m] = b
                 if o is not None:
@@ -419,9 +426,9 @@ def _parse_year_sheet(ws: Worksheet, year: int, layout: LayoutRow) -> YearSheetR
         if inc is not None:
             income[m] = inc
         for r in (5, 6):
-            label = _s(ws.cell(r + 1, base + 1).value)
+            label = _s(ws.cell(r + 1, base + 1))
             if label.startswith(("Available", "Доступный")):
-                av = _kop(ws.cell(r, base + 1).value)
+                av = _kop(ws.cell(r, base + 1))
                 if av is not None:
                     available[m] = av
                 break
@@ -446,18 +453,19 @@ def _parse_year_sheet(ws: Worksheet, year: int, layout: LayoutRow) -> YearSheetR
 
 
 def _tx_header_index(ws: Worksheet) -> dict[str, int] | None:
-    header = next(ws.iter_rows(min_row=1, max_row=1, values_only=True), None)
+    header = next(ws.iter_rows(min_row=1, max_row=1), None)
     if header is None:
         return None
     return {_s(v): i for i, v in enumerate(header) if _s(v)}
 
 
-def _parse_dt(value: object) -> datetime.datetime | None:
+def _parse_dt(cell: Cell | MergedCell | None) -> datetime.datetime | None:
+    value = None if cell is None else cell.value
     if isinstance(value, datetime.datetime):
         return value
     if isinstance(value, datetime.date):
         return datetime.datetime(value.year, value.month, value.day)
-    text = _s(value)
+    text = _s(cell)
     if not text:
         return None
     parsed = parse_date(text)
@@ -480,12 +488,12 @@ def _unquote(value: str) -> str:
     return value
 
 
-def _amount(value: object) -> int | None:
+def _amount(cell: Cell | MergedCell | None) -> int | None:
     """Kopecks from a cell that may be a number, a formatted string, or blank."""
-    kop = _kop(value)
+    kop = _kop(cell)
     if kop is not None:
         return kop
-    text = _s(value)
+    text = _s(cell)
     return parse_amount_kop(text) if text else None
 
 
@@ -512,11 +520,11 @@ def _parse_transactions(
     if missing:
         raise WorkbookError(f"Transactions sheet is missing required columns: {missing}")
 
-    def col(row: tuple[object, ...], field: str) -> object | None:
+    def col(row: tuple[Cell | MergedCell, ...], field: str) -> Cell | MergedCell | None:
         i = at[field]
         return row[i] if i is not None and i < len(row) else None
 
-    def text(row: tuple[object, ...], field: str) -> str:
+    def text(row: tuple[Cell | MergedCell, ...], field: str) -> str:
         return _unquote(_s(col(row, field)))
 
     # a workbook that spells the category out in a column of its own says so in
@@ -528,8 +536,8 @@ def _parse_transactions(
     skipped_status = 0
     foreign: dict[str, int] = {}
     dupes = 0
-    for n, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
-        if all(v is None or _s(v) == "" for v in row):
+    for n, row in enumerate(ws.iter_rows(min_row=2), start=2):
+        if all(_s(cell) == "" for cell in row):
             continue
         status = _s(col(row, "status")).upper()
         if status not in ("OK", ""):
@@ -603,9 +611,7 @@ def _find_keyword_block(ws: Worksheet, idx: Mapping[str, int]) -> int | None:
     """
     start = _known_max_col(idx) + 1
     scores: dict[int, int] = {}
-    for row in ws.iter_rows(
-        min_row=1, max_row=min(ws.max_row, SIDE_TABLE_SCAN_ROWS), values_only=True
-    ):
+    for row in ws.iter_rows(min_row=1, max_row=min(ws.max_row, SIDE_TABLE_SCAN_ROWS)):
         for base in range(start, len(row) - 1):
             if _s(row[base]) and "|" in _s(row[base + 1]):
                 scores[base] = scores.get(base, 0) + 1
@@ -632,9 +638,7 @@ def _category_col(ws: Worksheet, idx: Mapping[str, int]) -> int:
     stop = _find_keyword_block(ws, idx)
     stop_col = ws.max_column if stop is None else stop
     filled: dict[int, int] = {}
-    for row in ws.iter_rows(
-        min_row=2, max_row=min(ws.max_row, SIDE_TABLE_SCAN_ROWS), values_only=True
-    ):
+    for row in ws.iter_rows(min_row=2, max_row=min(ws.max_row, SIDE_TABLE_SCAN_ROWS)):
         for c in range(start, min(stop_col, len(row))):
             if _s(row[c]):
                 filled[c] = filled.get(c, 0) + 1
@@ -651,7 +655,7 @@ def _parse_keywords(ws: Worksheet, idx: Mapping[str, int]) -> dict[str, str]:
     base = _find_keyword_block(ws, idx)
     base_col = _known_max_col(idx) + 3 if base is None else base
     keywords: dict[str, str] = {}
-    for row in ws.iter_rows(min_row=1, values_only=True):
+    for row in ws.iter_rows(min_row=1):
         if base_col >= len(row):
             continue
         name = _s(row[base_col])
