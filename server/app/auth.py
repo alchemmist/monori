@@ -51,9 +51,7 @@ def current_user(token: Annotated[str, Depends(oauth2_scheme)]) -> Authenticated
     """
     try:
         payload = decode_access_token(token)
-        subject = payload["sub"]
-        if not isinstance(subject, str):
-            raise ValueError("token subject is not a string")
+        subject = payload.sub
         user_id = int(subject)
     except (jwt.InvalidTokenError, KeyError, ValueError) as e:
         raise HTTPException(401, "invalid or expired token") from e

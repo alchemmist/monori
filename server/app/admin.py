@@ -54,10 +54,7 @@ def user_id_from_auth_header(header: str | None) -> int | None:
         return None
     try:
         payload = decode_access_token(header[7:])
-        sub = payload.get("sub")
-        if not isinstance(sub, str):
-            return None
-        return int(sub)
+        return int(payload.sub)
     except (jwt.InvalidTokenError, KeyError, ValueError):
         return None
 

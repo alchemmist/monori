@@ -26,8 +26,8 @@ def test_access_token_round_trip(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     monkeypatch.setenv("MONORI_AUTH_SECRET", "x" * 40)
     token = security.create_access_token(42)
     payload = security.decode_access_token(token)
-    assert payload["sub"] == "42"
-    assert "exp" in payload
+    assert payload.sub == "42"
+    assert payload.exp > 0
 
 
 def test_decode_rejects_wrong_secret(monkeypatch: pytest.MonkeyPatch) -> None:

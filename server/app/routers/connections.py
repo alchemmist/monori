@@ -223,9 +223,9 @@ def _validate_credentials(bank: str, kind: str, credentials: JsonObject) -> None
     except ConnectorError as e:
         raise HTTPException(400, str(e)) from e
     missing = [
-        str(p["name"])
+        p.name
         for p in getattr(cls, "connection_params", [])
-        if p.get("required") and not str(credentials.get(p["name"]) or "").strip()
+        if p.required and not str(credentials.get(p.name) or "").strip()
     ]
     if missing:
         raise HTTPException(400, f"missing credentials: {missing}")
@@ -241,7 +241,7 @@ def _require_account_refs(row: ConnectionRow, accounts: list[LinkedAccount]) -> 
         cls = connectors.get_connector_class(row.bank, row.kind)
     except ConnectorError:
         return
-    if not any(p.get("required") for p in getattr(cls, "account_params", [])):
+    if not any(p.required for p in getattr(cls, "account_params", [])):
         return
     unset = [a.name for a in accounts if not (a.bank_ref or "").strip()]
     if unset:

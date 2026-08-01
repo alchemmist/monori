@@ -12,12 +12,12 @@ import pathlib
 import secrets
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
-from typing import TypedDict
 
 import jwt
 from argon2 import PasswordHasher
 from argon2.exceptions import Argon2Error
-from pydantic import TypeAdapter
+from pydantic import ConfigDict, TypeAdapter
+from pydantic.dataclasses import dataclass as pydantic_dataclass
 
 from . import db as dbmod
 
@@ -27,7 +27,8 @@ ALGORITHM = "HS256"
 TOKEN_TTL = timedelta(days=7)
 
 
-class TokenPayload(TypedDict, total=False):
+@pydantic_dataclass(config=ConfigDict(extra="ignore"))
+class TokenPayload:
     sub: str
     iat: int
     exp: int

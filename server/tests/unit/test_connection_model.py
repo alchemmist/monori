@@ -3,8 +3,6 @@ Unit tests for the connections router's credential validation and the
 connector registry's parameter declarations.
 """
 
-from typing import cast
-
 import pytest
 from fastapi import HTTPException
 
@@ -38,14 +36,12 @@ def test_validate_credentials_unknown_connector() -> None:
 
 def test_available_connectors_declare_params_and_hide_fake() -> None:
     conns = available_connectors()
-    banks = {c["bank"] for c in conns}
+    banks = {c.bank for c in conns}
     assert "fake" not in banks
-    tbank = next(c for c in conns if c["bank"] == "tbank")
-    assert tbank["label"]
-    connection_params = cast("list[dict[str, object]]", tbank["connectionParams"])
-    names = {p["name"] for p in connection_params}
+    tbank = next(c for c in conns if c.bank == "tbank")
+    assert tbank.label
+    names = {p.name for p in tbank.connectionParams}
     assert {"phone", "password"} <= names
-    secret = {p["name"]: p["secret"] for p in connection_params}
+    secret = {p.name: p.secret for p in tbank.connectionParams}
     assert secret["password"] is True
-    account_params = cast("list[dict[str, object]]", tbank["accountParams"])
-    assert [p["name"] for p in account_params] == ["account"]
+    assert [p.name for p in tbank.accountParams] == ["account"]

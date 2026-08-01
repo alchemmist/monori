@@ -210,7 +210,7 @@ def test_rejected_code_stays_awaiting(
 class RefRequiredConnector(RetryOtpConnector):
     bank = "refreq"
     kind = "refreq"
-    account_params = [{"name": "account", "required": True}]
+    account_params = [base.ConnectorParam(name="account", required=True)]
 
     def sync(self, since: str | None = None) -> SyncResult:
         return SyncResult([], session=None)

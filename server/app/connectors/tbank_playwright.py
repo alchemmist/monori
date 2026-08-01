@@ -44,7 +44,16 @@ from typing import Literal, Protocol, Self
 from urllib.parse import quote
 
 from ..importer import parse_statement
-from .base import Connector, ConnectorError, JsonObject, SmsRequired, SyncResult, SyncRow, register
+from .base import (
+    Connector,
+    ConnectorError,
+    ConnectorParam,
+    JsonObject,
+    SmsRequired,
+    SyncResult,
+    SyncRow,
+    register,
+)
 
 
 # playwright is an optional dependency (see _run); when it is installed we
@@ -284,19 +293,18 @@ class TBankPlaywrightConnector(Connector):
     kind = "playwright"
     label = "T-Bank (browser sync)"
     connection_params = [
-        {"name": "phone", "label": "Phone", "secret": False, "required": True},
-        {"name": "password", "label": "Password", "secret": True, "required": True},
+        ConnectorParam(name="phone", label="Phone", required=True),
+        ConnectorParam(name="password", label="Password", secret=True, required=True),
     ]
     account_params = [
-        {
-            "name": "account",
-            "label": "T-Bank account number",
-            "secret": False,
-            "required": True,
-            "help": "The number from the account's operations link in the cabinet"
+        ConnectorParam(
+            name="account",
+            label="T-Bank account number",
+            required=True,
+            help="The number from the account's operations link in the cabinet"
             " (/mybank/operations/?account=<id>); the sync pulls exactly that"
             " account.",
-        }
+        )
     ]
 
     URL_LOGIN = "https://www.tbank.ru/auth/login/"

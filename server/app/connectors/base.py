@@ -8,23 +8,23 @@ raises :class:`SmsRequired`; the caller parks the live connector and later calls
 :meth:`resume_sync` with the code the user entered.
 """
 
-from typing import NotRequired, TypedDict
-
 from pydantic import JsonValue, TypeAdapter
-from pydantic.dataclasses import dataclass
+from pydantic.dataclasses import dataclass as pydantic_dataclass
 
 type JsonObject = dict[str, JsonValue]
 
 
-class ConnectorParam(TypedDict):
+@pydantic_dataclass
+class ConnectorParam:
     name: str
-    label: str
-    secret: bool
-    required: bool
-    help: NotRequired[str]
+    label: str = ""
+    secret: bool = False
+    required: bool = False
+    help: str | None = None
 
 
-class ConnectorInfo(TypedDict):
+@pydantic_dataclass
+class ConnectorInfo:
     bank: str
     kind: str
     label: str
@@ -32,7 +32,7 @@ class ConnectorInfo(TypedDict):
     accountParams: list[ConnectorParam]
 
 
-@dataclass(slots=True)
+@pydantic_dataclass
 class SyncRow:
     date: str
     amount: int
@@ -59,7 +59,7 @@ class SmsRequired(Exception):
     """
 
 
-@dataclass(slots=True)
+@pydantic_dataclass
 class SyncResult:
     """
     Rows pulled in one sync, plus the session to cache for next time.
@@ -141,13 +141,13 @@ def available_connectors() -> list[ConnectorInfo]:
     The connectors offered in the UI (registration order, demos excluded).
     """
     return [
-        {
-            "bank": cls.bank,
-            "kind": cls.kind,
-            "label": cls.label or cls.bank,
-            "connectionParams": cls.connection_params,
-            "accountParams": cls.account_params,
-        }
+        ConnectorInfo(
+            bank=cls.bank,
+            kind=cls.kind,
+            label=cls.label or cls.bank,
+            connectionParams=cls.connection_params,
+            accountParams=cls.account_params,
+        )
         for cls in REGISTRY.values()
         if not cls.hidden
     ]
