@@ -14,6 +14,20 @@ def test_default_account_exists(api: Api) -> None:
     assert accounts[0].type == "cash" and accounts[0].currency == "RUB"
 
 
+def test_create_account_applies_defaults(api: Api, client: TestClient) -> None:
+    response = client.post("/api/accounts", json={"name": "Minimal"})
+
+    assert response.status_code == 200
+    account = api.acct(response.json()["id"])
+    assert account.name == "Minimal"
+    assert account.type == "other"
+    assert account.icon == "wallet"
+    assert account.color == "#5b6472"
+    assert account.currency == "RUB"
+    assert account.openingBalance == 0
+    assert account.bankRef == ""
+
+
 def test_account_crud_and_uniqueness(api: Api, client: TestClient) -> None:
     cash = api.account("Vault", type="cash", icon="ruble", openingBalance=5000)
     row = api.acct(cash)
