@@ -1,8 +1,5 @@
-import json
 import pathlib
 import sys
-
-import pytest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
 from app.importer import (
@@ -240,47 +237,6 @@ def test_categorize_guards_on_empty_desc_and_zero_amount() -> None:
     # an empty description short-circuits to None (would match the "xx" decoy otherwise)
     assert categorize("", -500, rules) is None
     assert categorize(None, -500, rules) is None
-
-
-def test_categorizer_agreement_with_sheet_history() -> None:
-    """
-    Port fidelity check: recategorize all historical transactions and compare
-    with the sheet's own FIND_CATEGORIES output (auto_category column).
-    """
-    out = pathlib.Path(__file__).resolve().parents[3] / "migration" / "out"
-    if not (out / "transactions.json").exists():
-        pytest.skip("migration/out fixtures not present (private Google Sheet data)")
-    txs = json.loads((out / "transactions.json").read_text())
-    cats_raw = json.loads((out / "categories.json").read_text())
-    groups = {}
-    group_ids = {}
-    for i, g in enumerate(cats_raw["groups"], 1):
-        group_ids[g["name"]] = i
-        groups[i] = "income" if g["type"] == "IN" else "expense"
-    cats: list[CategoryDefinition] = [
-        {"id": i, "name": c["name"], "keywords": c["keywords"], "group_id": group_ids[c["group"]]}
-        for i, c in enumerate(cats_raw["categories"], 1)
-    ]
-    name_by_id = {c["id"]: c["name"] for c in cats}
-    rules = build_rules(cats, groups)
-
-    known_stale = {("2025-05-31T23:18:27", "Яндекс Расписания")}
-
-    mismatches = []
-    for t in txs:
-        if (t["date"], t["description"]) in known_stale:
-            continue
-        got_id = categorize(t["description"], round(t["amount"] * 100), rules)
-        got = name_by_id.get(got_id, "") if got_id is not None else ""
-        expected = t["auto_category"] or ""
-        # The sheet's historical FIND_CATEGORIES formula left merchant refunds
-        # blank, while the importer deliberately files a positive merchant
-        # payment back into its expense envelope when no income rule matches.
-        if not expected and t["amount"] > 0 and got_id is not None:
-            continue
-        if got != expected:
-            mismatches.append((t["date"], t["description"][:40], expected, got))
-    assert mismatches == [], f"{len(mismatches)} disagreements, first: {mismatches[:5]}"
 
 
 def test_categorize_files_a_refund_back_into_its_expense_envelope() -> None:

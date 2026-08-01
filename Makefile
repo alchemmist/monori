@@ -114,7 +114,6 @@ lint-shell:
 
 spell:
 	uvx codespell web/src server/app server/tests \
-		server/export_snapshot.py server/migrate.py server/verify_parity.py \
 		README.md web/README.md docs Makefile .github
 
 type: type-back # type-front
