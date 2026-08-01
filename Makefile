@@ -12,7 +12,7 @@ WEBBIN := web/node_modules/.bin
 
 .PHONY: install setup tools dev down reset-db deploy api web build \
         fmt fmt-check \
-        lint lint-web lint-css lint-html lint-server lint-sql lint-yaml lint-md lint-docs lint-actions lint-docker lint-shell spell \
+        lint lint-web lint-css lint-html lint-server lint-no-comments lint-sql lint-yaml lint-md lint-docs lint-actions lint-docker lint-shell spell \
         type type-front type-back analyze analyze-python-dead-code analyze-javascript-dead-code audit audit-deps audit-deps-py audit-secrets \
         test t-fast t-medium t-slow t-slow-ui t-front t-back t-e2e t-e2e-ui coverage perf-front-diff mutation mutation-diff m-front m-front-diff m-front-file m-back m-back-diff \
         schema-diagram check
@@ -67,16 +67,16 @@ schema-diagram:
 
 fmt: schema-diagram
 	$(WEBBIN)/prettier --write .
-	@(uv run --project server ruff check --config server/pyproject.toml . --fix >/dev/null 2>&1 || true)
-	uv run --project server ruff format --config server/pyproject.toml .
+	@(uv run --project server ruff check --config server/pyproject.toml server --fix >/dev/null 2>&1 || true)
+	uv run --project server ruff format --config server/pyproject.toml server
 	$(SQLFLUFF) fix .
 	@-$(WEBBIN)/markdownlint-cli2 --fix >/dev/null 2>&1
 	@files=$$(git ls-files '*.sh'); [ -z "$$files" ] || shfmt -w $$files
 
 fmt-check:
 	$(WEBBIN)/prettier --check .
-	uv run --project server ruff check --config server/pyproject.toml .
-	uv run --project server ruff format --config server/pyproject.toml --check .
+	uv run --project server ruff check --config server/pyproject.toml server
+	uv run --project server ruff format --config server/pyproject.toml --check server
 	$(SQLFLUFF) lint .
 
 lint: lint-web lint-css lint-html lint-server lint-sql lint-yaml lint-md lint-docs lint-actions lint-docker lint-shell spell
@@ -91,8 +91,11 @@ lint-css:
 lint-html:
 	$(WEBBIN)/htmlhint web/index.html
 
-lint-server:
-	uv run --project server ruff check --config server/pyproject.toml .
+lint-server: lint-no-comments
+	uv run --project server ruff check --config server/pyproject.toml server
+
+lint-no-comments:
+	python3 scripts/no_comments.py server
 
 lint-sql:
 	$(SQLFLUFF) lint .

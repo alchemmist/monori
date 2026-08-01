@@ -1,5 +1,4 @@
-"""
-SQLite access layer. All money amounts are stored as integer kopecks.
+"""SQLite access layer. All money amounts are stored as integer kopecks.
 
 The schema has a single canonical definition in ``server/schema.sql``; its
 history lives as alembic revisions in ``server/migrations``. A fresh database
@@ -17,14 +16,15 @@ import threading
 from alembic.config import Config
 
 DB_PATH = os.environ.get(
-    "MONORI_DB", str(pathlib.Path(__file__).resolve().parent.parent / "data" / "monori.db")
+    "MONORI_DB",
+    str(pathlib.Path(__file__).resolve().parent.parent / "data" / "monori.db"),
 )
 
 SERVER_DIR = pathlib.Path(__file__).resolve().parent.parent
 SCHEMA_PATH = SERVER_DIR / "schema.sql"
 MIGRATIONS_PATH = SERVER_DIR / "migrations"
 
-# alembic revision reached after applying N legacy user_version steps
+
 LEGACY_REVISIONS = ["0001", "0002", "0003", "0004", "0005", "0006"]
 
 _bootstrapped: set[str] = set()

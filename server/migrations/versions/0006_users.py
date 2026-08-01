@@ -1,5 +1,4 @@
-"""
-First-class users that sign in to monori itself (issue #34). Passwords are
+"""First-class users that sign in to monori itself (issue #34). Passwords are
 stored only as Argon2 hashes; per-user data ownership is a later phase.
 """
 
@@ -22,4 +21,5 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    raise NotImplementedError("monori migrations are forward-only")
+    msg = "monori migrations are forward-only"
+    raise NotImplementedError(msg)

@@ -18,7 +18,7 @@ def upgrade() -> None:
         comment TEXT NOT NULL DEFAULT '',
         sort INTEGER NOT NULL DEFAULT 0,
         UNIQUE (transaction_id, sort)
-        )"""
+        )""",
     )
     op.execute("CREATE INDEX idx_splits_transaction ON splits (transaction_id)")
     op.execute("CREATE INDEX idx_splits_category ON splits (category_id)")

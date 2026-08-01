@@ -1,5 +1,4 @@
-"""
-Recompute every transaction's dedup fingerprint with SHA-256.
+"""Recompute every transaction's dedup fingerprint with SHA-256.
 
 The fingerprint (``transactions.hash``) switched from SHA-1 to SHA-256. Dedup
 compares freshly computed hashes against the stored ones, so existing rows must
@@ -43,4 +42,5 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    raise NotImplementedError("SHA-1 fingerprints are not restorable")
+    msg = "SHA-1 fingerprints are not restorable"
+    raise NotImplementedError(msg)

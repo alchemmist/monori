@@ -178,7 +178,8 @@ def serialize_account(account: AccountRecord) -> AccountResponse:
 
 
 def serialize_tx(
-    transaction: TransactionRecord, splits: Iterable[SplitRecord] = ()
+    transaction: TransactionRecord,
+    splits: Iterable[SplitRecord] = (),
 ) -> TransactionResponse:
     return TransactionResponse(
         id=transaction.id,
@@ -206,7 +207,8 @@ def serialize_tx(
 
 
 def serialize_transactions(
-    cur: sqlite3.Cursor, rows: Iterable[sqlite3.Row]
+    cur: sqlite3.Cursor,
+    rows: Iterable[sqlite3.Row],
 ) -> list[TransactionResponse]:
     transactions = [TransactionRecord.from_row(row) for row in rows]
     if not transactions:
@@ -216,7 +218,6 @@ def serialize_transactions(
     for chunk in batched(ids, SPLIT_FETCH_BATCH_SIZE):
         marks = ",".join("?" for _ in chunk)
         for split in cur.execute(
-            # `marks` contains generated positional placeholders, never user input.
             f"SELECT id, transaction_id, category_id, amount, comment"  # nosec B608
             f" FROM splits WHERE transaction_id IN ({marks})"
             " ORDER BY transaction_id, sort, id",
@@ -228,9 +229,7 @@ def serialize_transactions(
 
 
 def serialize_user(user: UserRecord) -> UserResponse:
-    """
-    A user, without the password hash.
-    """
+    """A user, without the password hash."""
     return UserResponse(
         id=user.id,
         email=user.email,
@@ -242,9 +241,7 @@ def serialize_user(user: UserRecord) -> UserResponse:
 
 
 def serialize_connection(connection: ConnectionRecord) -> ConnectionResponse:
-    """
-    A bank connection, without any secret material (credentials/session).
-    """
+    """A bank connection, without any secret material (credentials/session)."""
     return ConnectionResponse(
         id=connection.id,
         bank=connection.bank,
@@ -278,10 +275,11 @@ TX_COLUMNS = (
 
 
 def _snapshot_transactions(
-    cur: sqlite3.Cursor, uid: tuple[int], tx_limit: int | None
+    cur: sqlite3.Cursor,
+    uid: tuple[int],
+    tx_limit: int | None,
 ) -> list[TransactionResponse]:
-    """
-    The newest ``tx_limit`` transactions, handed back in the canonical
+    """The newest ``tx_limit`` transactions, handed back in the canonical
     ``date, id`` order the client keeps them in. ``None`` means all of them.
     """
     if tx_limit is None:
@@ -294,7 +292,7 @@ def snapshot(c: sqlite3.Connection, user_id: int, tx_limit: int | None = None) -
     cur = c.cursor()
     uid = (user_id,)
     transactions = _snapshot_transactions(cur, uid, tx_limit)
-    # a short read means the window covered everything, so the count is free
+
     transactions_total = (
         len(transactions)
         if tx_limit is None or len(transactions) < tx_limit

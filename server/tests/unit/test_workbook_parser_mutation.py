@@ -1,5 +1,4 @@
-"""
-Characterization tests aimed at the parser's least-exercised helpers. The
+"""Characterization tests aimed at the parser's least-exercised helpers. The
 end-to-end tests pin whole imports; these pin the exact return of the small
 functions those imports lean on, so a single flipped offset, dropped default or
 renamed key is caught here instead of slipping through as a survived mutant.
@@ -52,9 +51,6 @@ def _save(wb: Workbook) -> bytes:
     return buf.getvalue()
 
 
-# --- _parse_categories ----------------------------------------------------
-
-
 def _sheet(title: str) -> tuple[Workbook, Worksheet]:
     wb = Workbook()
     ws = _active(wb)
@@ -89,7 +85,7 @@ def test_parse_categories_skips_header_and_blank_rows() -> None:
     ws.append([None, None, None])
     ws.append([1, "Daily", "Groceries", ""])
     warnings: list[str] = []
-    groups, categories = _parse_categories(ws, warnings)
+    _groups, categories = _parse_categories(ws, warnings)
     assert [c.name for c in categories] == ["Groceries"]
     assert warnings == ["Categories: group table missing, groups derived from category rows"]
 
@@ -118,12 +114,8 @@ def test_parse_categories_warns_on_unrecognized_rows() -> None:
     assert "Categories: unrecognized row skipped: ['Note to self', '', '']" in warnings
 
 
-# --- _find_layout ---------------------------------------------------------
-
-
 def _grid_ws() -> Workbook:
-    wb = Workbook()
-    return wb
+    return Workbook()
 
 
 def test_find_layout_reads_header_on_the_first_row() -> None:
@@ -175,8 +167,7 @@ def test_find_layout_finds_the_label_header_one_row_below_the_grid() -> None:
         ws.cell(row=5, column=c, value=v)
     for c, v in ((6, "Budgeted"), (7, "Outflows"), (8, "Balance")):
         ws.cell(row=5, column=c, value=v)
-    # the label header sits on the row under the grid header, and a fuller
-    # column to its right must not win the fallback
+
     ws.cell(row=6, column=1, value="Category")
     for r in range(6, 12):
         ws.cell(row=r, column=3, value=f"note {r}")
@@ -192,7 +183,7 @@ def test_find_layout_reads_the_start_month_from_the_second_row() -> None:
         ws.cell(row=5, column=c, value=v)
     for c, v in ((6, "Budgeted"), (7, "Outflows"), (8, "Balance")):
         ws.cell(row=5, column=c, value=v)
-    ws.cell(row=2, column=2, value="ФЕВ 2025")  # FEB, only on row 2
+    ws.cell(row=2, column=2, value="ФЕВ 2025")
     layout = _find_layout(ws)
     assert layout is not None
     assert layout.start_month == 2
@@ -205,13 +196,10 @@ def test_find_layout_reads_the_start_month_from_the_third_row() -> None:
         ws.cell(row=5, column=c, value=v)
     for c, v in ((6, "Budgeted"), (7, "Outflows"), (8, "Balance")):
         ws.cell(row=5, column=c, value=v)
-    ws.cell(row=3, column=2, value="МАР 2025")  # MAR, only on row 3
+    ws.cell(row=3, column=2, value="МАР 2025")
     layout = _find_layout(ws)
     assert layout is not None
     assert layout.start_month == 3
-
-
-# --- _label_col -----------------------------------------------------------
 
 
 def test_label_col_counts_a_single_label_column() -> None:
@@ -229,24 +217,15 @@ def test_label_col_counts_the_row_immediately_below_the_header() -> None:
     assert _label_col(ws, 5, 4) == 2
 
 
-# --- _kind_of -------------------------------------------------------------
-
-
 def test_kind_of_defaults_to_expense_for_unknown_group() -> None:
     groups = [WorkbookGroupRow(name="Inflow", kind="income", sort=1)]
     assert _kind_of("Inflow", groups) == "income"
     assert _kind_of("Nowhere", groups) == "expense"
 
 
-# --- _known_max_col -------------------------------------------------------
-
-
 def test_known_max_col_defaults_to_minus_one_without_known_headers() -> None:
     assert _known_max_col({"Whatever": 0, "Else": 1}) == -1
     assert _known_max_col({"Date": 3, "Amount": 5, "Extra": 9}) == 5
-
-
-# --- _synthetic -----------------------------------------------------------
 
 
 def test_synthetic_carries_the_default_currency() -> None:
@@ -255,13 +234,10 @@ def test_synthetic_carries_the_default_currency() -> None:
     assert row.marker == ""
 
 
-# --- _parse_year_sheet ----------------------------------------------------
-
-
 def test_parse_year_sheet_stops_months_at_december() -> None:
     ws = _active(_grid_ws())
     assert ws is not None
-    ws.cell(row=1, column=2, value="ДЕК 2025")  # DEC
+    ws.cell(row=1, column=2, value="ДЕК 2025")
     for c, v in ((2, "Budgeted"), (3, "Outflows"), (4, "Balance")):
         ws.cell(row=5, column=c, value=v)
     for c, v in ((6, "Budgeted"), (7, "Outflows"), (8, "Balance")):
@@ -282,16 +258,13 @@ def test_parse_year_sheet_reads_russian_available_label() -> None:
         ws.cell(row=8, column=c, value=v)
     for c, v in ((6, "Budgeted"), (7, "Outflows"), (8, "Balance")):
         ws.cell(row=8, column=c, value=v)
-    # summary block: Russian "Available" (Доступный) label on row 6, value row 5
+
     ws.cell(row=6, column=3, value="Доступный остаток")
     ws.cell(row=5, column=3, value=4200)
     layout = _find_layout(ws)
     assert layout is not None
     parsed = _parse_year_sheet(ws, 2025, layout)
     assert parsed.available == {1: 420000}
-
-
-# --- _parse_transactions --------------------------------------------------
 
 
 @dataclass(frozen=True)
@@ -316,7 +289,8 @@ class PlainTransactionFixture:
 
 
 def _tx_ws(
-    header: Sequence[str | None], rows: Sequence[PlainTransactionFixture | None]
+    header: Sequence[str | None],
+    rows: Sequence[PlainTransactionFixture | None],
 ) -> Workbook:
     wb = Workbook()
     wb.remove(_active(wb))
@@ -371,7 +345,7 @@ def _plain_tx(
 
 def test_parse_transactions_counts_every_skipped_status_row() -> None:
     tx_wb = _tx_ws(
-        TX_HEADER + [None, "Monori Category"],
+        [*TX_HEADER, None, "Monori Category"],
         [
             _plain_tx(datetime.datetime(2025, 1, 1), -10.0, "A", status="FAILED", desc="a"),
             _plain_tx(datetime.datetime(2025, 1, 2), -20.0, "B", status="DECLINED", desc="b"),
@@ -388,7 +362,7 @@ def test_parse_transactions_counts_every_skipped_status_row() -> None:
 
 def test_parse_transactions_counts_every_foreign_currency_row() -> None:
     tx_wb = _tx_ws(
-        TX_HEADER + [None, "Monori Category"],
+        [*TX_HEADER, None, "Monori Category"],
         [
             _plain_tx(datetime.datetime(2025, 1, 1), -10.0, "A", currency="USD", desc="a"),
             _plain_tx(datetime.datetime(2025, 1, 2), -20.0, "B", currency="USD", desc="b"),
@@ -404,7 +378,7 @@ def test_parse_transactions_counts_every_foreign_currency_row() -> None:
 
 def test_parse_transactions_counts_every_duplicate_row() -> None:
     tx_wb = _tx_ws(
-        TX_HEADER + [None, "Monori Category"],
+        [*TX_HEADER, None, "Monori Category"],
         [
             _plain_tx(datetime.datetime(2025, 1, 1), -10.0, "A", desc="same"),
             _plain_tx(datetime.datetime(2025, 1, 1), -10.0, "A", desc="same"),
@@ -425,7 +399,7 @@ def test_parse_transactions_counts_every_duplicate_row() -> None:
 
 def test_parse_transactions_keeps_reading_after_a_blank_row() -> None:
     tx_wb = _tx_ws(
-        TX_HEADER + [None, "Monori Category"],
+        [*TX_HEADER, None, "Monori Category"],
         [
             None,
             _plain_tx(datetime.datetime(2025, 1, 2), -20.0, "B", desc="after blank"),
@@ -439,11 +413,8 @@ def test_parse_transactions_keeps_reading_after_a_blank_row() -> None:
     assert [r.description for r in rows] == ["after blank"]
 
 
-# --- _parse_keywords ------------------------------------------------------
-
-
 def test_parse_keywords_keeps_two_character_keywords() -> None:
-    header = TX_HEADER + [None, None, "Category", "Keywords"]
+    header = [*TX_HEADER, None, None, "Category", "Keywords"]
     wb = Workbook()
     wb.remove(_active(wb))
     ws = wb.create_sheet(spec.SHEET_TRANSACTIONS)
@@ -457,8 +428,7 @@ def test_parse_keywords_keeps_two_character_keywords() -> None:
 
 
 def test_parse_keywords_finds_the_block_by_content_not_a_fixed_offset() -> None:
-    # the keyword table sits two columns past where the positional fallback
-    # (known_max + 3) would look, so only content detection lands on it
+
     header = TX_HEADER + [None] * 6
     wb = Workbook()
     wb.remove(_active(wb))
@@ -472,16 +442,13 @@ def test_parse_keywords_finds_the_block_by_content_not_a_fixed_offset() -> None:
     assert kws == {"Groceries": "lenta|okey", "Cafes": "coffee|bar"}
 
 
-# --- _category_col --------------------------------------------------------
-
-
 def test_category_col_prefers_the_fuller_of_two_candidate_columns() -> None:
-    header = TX_HEADER + [None, None, "Category", "Keywords"]
+    header = [*TX_HEADER, None, None, "Category", "Keywords"]
     wb = Workbook()
     wb.remove(_active(wb))
     ws = wb.create_sheet(spec.SHEET_TRANSACTIONS)
     ws.append(header)
-    # first candidate column half-filled, second fully filled: the second wins
+
     ws.append([None] * 8 + ["auto", "Groceries", "Groceries", "lenta|okey"])
     ws.append([None] * 8 + [None, "Cafes", "Cafes", "coffee|bar"])
     idx = _tx_header_index(ws)
@@ -492,7 +459,7 @@ def test_category_col_prefers_the_fuller_of_two_candidate_columns() -> None:
 
 
 def test_find_keyword_block_ignores_columns_without_pipes() -> None:
-    header = TX_HEADER + [None, None, "Category", "Keywords"]
+    header = [*TX_HEADER, None, None, "Category", "Keywords"]
     wb = Workbook()
     wb.remove(_active(wb))
     ws = wb.create_sheet(spec.SHEET_TRANSACTIONS)
@@ -502,9 +469,6 @@ def test_find_keyword_block_ignores_columns_without_pipes() -> None:
     assert idx is not None
     base = _find_keyword_block(ws, idx)
     assert base == _known_max_col(idx) + 3
-
-
-# --- end to end guards ----------------------------------------------------
 
 
 def test_parse_workbook_reads_a_stated_category_sheet() -> None:
@@ -517,11 +481,11 @@ def test_parse_workbook_reads_a_stated_category_sheet() -> None:
     ):
         cats.append(row)
     tx = wb.create_sheet(spec.SHEET_TRANSACTIONS)
-    tx.append(TX_HEADER + [None, "Monori Category"])
+    tx.append([*TX_HEADER, None, "Monori Category"])
     _plain_tx(datetime.datetime(2025, 1, 15), -300.0, "Groceries", desc="Lenta").append_to(tx)
     parsed = parse_workbook(_save(wb))
     assert [(group.name, group.sort, group.kind) for group in parsed.groups] == [
-        ("Daily", 1, "expense")
+        ("Daily", 1, "expense"),
     ]
     groceries = next(category for category in parsed.categories if category.name == "Groceries")
     assert groceries.keywords == "lenta|okey"

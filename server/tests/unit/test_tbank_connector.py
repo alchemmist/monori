@@ -1,5 +1,4 @@
-"""
-Unit tests for the T-Bank Playwright connector's flow logic.
+"""Unit tests for the T-Bank Playwright connector's flow logic.
 
 The real browser is replaced by a scripted fake page/context, so the login
 sequence, selectors, quick-login-code handling, statement download and the
@@ -25,8 +24,8 @@ from app.connectors.base import ConnectorError, JsonObject, SmsRequired
 from app.connectors.tbank_playwright import TBankPlaywrightConnector as TB
 
 STATEMENT = (
-    "05.01.2026 10:00:00\t05.01.2026\t*1\tOK\t-100,00\tRUB\t-100,00\tRUB\t\tSuper\t5411\tLenta\t0\t0\t-100,00\n"  # noqa: E501
-    "06.01.2026 11:00:00\t06.01.2026\t*1\tOK\t-200,00\tRUB\t-200,00\tRUB\t\tSuper\t5411\tOkey\t0\t0\t-200,00\n"  # noqa: E501
+    "05.01.2026 10:00:00\t05.01.2026\t*1\tOK\t-100,00\tRUB\t-100,00\tRUB\t\tSuper\t5411\tLenta\t0\t0\t-100,00\n"
+    "06.01.2026 11:00:00\t06.01.2026\t*1\tOK\t-200,00\tRUB\t-200,00\tRUB\t\tSuper\t5411\tOkey\t0\t0\t-200,00\n"
 )
 
 CREDS: JsonObject = {"phone": "+70000000000", "password": "pw", "code": "1234"}
@@ -58,10 +57,10 @@ class FakeLocator:
         return 1 if self._present else 0
 
     def click(self, timeout: int | None = None) -> None:
-        # clicking a control that isn't on screen times out in real Playwright —
-        # callers that treat a missing button as optional suppress exactly that
+
         if not self._present:
-            raise tbank_mod.PlaywrightTimeoutError("locator not present")
+            msg = "locator not present"
+            raise tbank_mod.PlaywrightTimeoutError(msg)
         if self._on_click:
             self._on_click()
 
@@ -72,9 +71,7 @@ class FakeKeyboard:
 
     def type(self, text: str) -> None:
         self.page.log.append(PageEvent("type", text))
-        # every code entry (SMS, quick-login, set-code) types into the pin widget;
-        # remember it (to recognize a wrong SMS code) and auto-advance as the last
-        # digit lands, which is how the real widget submits without a button click
+
         self.page.last_code = text
         if self.page.stage in self.page.PIN_STAGES:
             self.page._advance()
@@ -114,13 +111,13 @@ class FakeDownloadExpectation:
     @property
     def value(self) -> FakeDownload:
         if not self.page.download_triggered:
-            raise RuntimeError("no download happened")
+            msg = "no download happened"
+            raise RuntimeError(msg)
         return FakeDownload(self.page.csv)
 
 
 class FakePage:
-    """
-    A scripted stand-in for a Playwright page driving the id.tbank.ru SSO.
+    """A scripted stand-in for a Playwright page driving the id.tbank.ru SSO.
 
     ``stage`` is the current step: phone → password → sms → setcode → in for a
     fresh login, ``quickcode`` for a trusted-device quick login, and in/ops/
@@ -149,8 +146,7 @@ class FakePage:
     ) -> None:
         self.scenario = scenario
         self.export_label = export_label
-        # whether the stable per-format CSV hook is present in the opened
-        # dropdown; when absent the connector falls back to a text label
+
         self.csv_hook = csv_hook
         self.csv = csv
         self.wrong_codes = wrong_codes or set()
@@ -170,7 +166,6 @@ class FakePage:
     def set_default_timeout(self, ms: int) -> None:
         self.action_timeout = ms
 
-    # navigation -------------------------------------------------------------
     def goto(self, url: str, wait_until: str | None = None) -> None:
         self.log.append(PageEvent("goto", url))
         if url == TB.URL_HOME:
@@ -179,7 +174,7 @@ class FakePage:
             elif self.scenario == "quick":
                 self.stage, self.url = "quickcode", TB.URL_LOGIN
             else:
-                self.stage, self.url = "phone", TB.URL_LOGIN  # bounces to the SSO
+                self.stage, self.url = "phone", TB.URL_LOGIN
         elif url == TB.URL_LOGIN:
             self.stage = "quickcode" if self.scenario == "quick" else "phone"
             self.url = TB.URL_LOGIN
@@ -192,11 +187,9 @@ class FakePage:
     def wait_for_load_state(self, state: str, timeout: int | None = None) -> None:
         self.log.append(PageEvent("load_state", state))
 
-    # form interaction -------------------------------------------------------
     def fill(self, selector: str, value: str) -> None:
         self.log.append(PageEvent("fill", selector, value))
         if selector == TB.SEL_OTP and self.stage == "sms":
-            # the single otp field auto-submits as the last digit lands
             self.last_code = value
             self._advance()
 
@@ -214,8 +207,7 @@ class FakePage:
         return None
 
     def get_by_text(self, text: str, exact: bool = False) -> FakeLocator:
-        # the text label is the fallback path — only reachable when the stable
-        # hook is absent
+
         present = self.stage == "export_open" and not self.csv_hook and text == self.export_label
 
         def on_click() -> None:
@@ -230,7 +222,6 @@ class FakePage:
         elif self.stage == "password":
             self.stage = "sms"
         elif self.stage == "sms":
-            # a correct OTP advances to the set-code screen; a wrong one stays put
             self.stage = "sms" if self.last_code in self.wrong_codes else "setcode"
         elif self.stage in ("setcode", "quickcode"):
             self.stage, self.url = "in", TB.URL_HOME
@@ -239,11 +230,10 @@ class FakePage:
         present = False
         on_click = None
         if selector == TB.SEL_PIN and self.stage in self.PIN_STAGES:
-            present = True  # focus target for _type_pin
+            present = True
         elif selector == TB.SEL_SUBMIT and self.stage in (*self.PIN_STAGES, "phone", "password"):
             present = True
-            # phone/password submit via the button; the pin widget already
-            # auto-advanced on the last digit, so its button click is a no-op
+
             if self.stage in ("phone", "password"):
                 on_click = self._advance
         elif selector == TB.SEL_EXPORT_TRIGGER and self.stage == "ops":
@@ -263,7 +253,6 @@ class FakePage:
     def expect_download(self, timeout: int | None = None) -> FakeDownloadExpectation:
         return FakeDownloadExpectation(self)
 
-    # debug ------------------------------------------------------------------
     def screenshot(self, *, path: str, full_page: bool = False) -> bytes:
         self.screenshots.append(path)
         return b""
@@ -277,9 +266,6 @@ def _connector(
     session: JsonObject | None = None,
 ) -> TB:
     return TB(creds if creds is not None else dict(CREDS), session)
-
-
-# --- pure / logic helpers ---------------------------------------------------
 
 
 def test_headless_default_and_headed_override(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -301,7 +287,7 @@ def test_is_logged_in_is_true_only_on_mybank() -> None:
     page = FakePage(scenario="logged_in")
     page.stage, page.url = "in", TB.URL_HOME
     assert c._is_logged_in(page) is True
-    # still on the SSO -> not logged in
+
     page.url = TB.URL_LOGIN
     assert c._is_logged_in(page) is False
 
@@ -309,7 +295,7 @@ def test_is_logged_in_is_true_only_on_mybank() -> None:
 def test_is_logged_in_false_when_a_code_prompt_is_reparked_over_mybank() -> None:
     c = _connector()
     page = FakePage(scenario="fresh")
-    # the bank shows a pin (set/enter-code) prompt on a /mybank URL — not yet in
+
     page.stage, page.url = "setcode", TB.URL_HOME
     assert c._is_logged_in(page) is False
 
@@ -319,7 +305,7 @@ def test_form_title_reads_heading_or_empty() -> None:
     page = FakePage(scenario="fresh")
     page.stage = "password"
     assert c._form_title(page) == "Введите пароль"
-    page.stage = "in"  # the app has no SSO form-title element
+    page.stage = "in"
     assert c._form_title(page) == ""
 
 
@@ -333,7 +319,7 @@ def test_click_export_format_uses_stable_hook() -> None:
 
 def test_click_export_format_falls_back_to_label() -> None:
     c = _connector()
-    # hook gone (markup drift) — the connector still finds CSV by its label
+
     page = FakePage(csv_hook=False, export_label="Скачать в CSV")
     page.stage = "export_open"
     assert c._click_export_format(page) is True
@@ -348,14 +334,11 @@ def test_click_export_format_none_present() -> None:
     assert page.download_triggered is False
 
 
-# --- login flow -------------------------------------------------------------
-
-
 def test_already_logged_in_skips_login() -> None:
     c = _connector()
     page = FakePage(scenario="logged_in")
     c._ensure_logged_in(page)
-    # went to home, found itself logged in, never drove the SSO
+
     assert PageEvent("goto", TB.URL_LOGIN) not in page.log
     assert not any(event.kind == "fill" for event in page.log)
 
@@ -365,20 +348,19 @@ def test_quick_login_uses_stored_code() -> None:
     page = FakePage(scenario="quick")
     c._ensure_logged_in(page)
     assert PageEvent("type", "1234") in page.log
-    # a trusted-device quick login never fills the phone or password
+
     assert not any(event.kind == "fill" for event in page.log)
 
 
 def test_full_login_enters_phone_password_otp_then_sets_code() -> None:
     c = _connector()
-    c._to_worker.put(("sms", "9999"))  # the SMS code the user would submit
+    c._to_worker.put(("sms", "9999"))
     page = FakePage(scenario="fresh")
     c._ensure_logged_in(page)
     fills = [event for event in page.log if event.kind == "fill"]
     assert PageEvent("fill", TB.SEL_PHONE, "+70000000000") in fills
     assert PageEvent("fill", TB.SEL_PASSWORD, "pw") in fills
-    # the user's SMS code goes into the single otp field, then our quick-login
-    # code is typed into the pin widget on the "Придумайте код" screen
+
     assert PageEvent("fill", TB.SEL_OTP, "9999") in fills
     assert [event.argument for event in page.log if event.kind == "type"] == ["1234"]
     assert c._is_logged_in(page) is True
@@ -393,7 +375,8 @@ def test_wrong_otp_reprompts_with_rejection_message() -> None:
     otp_fills = [
         event.value for event in page.log if event.kind == "fill" and event.argument == TB.SEL_OTP
     ]
-    assert "1111" in otp_fills and "2222" in otp_fills
+    assert "1111" in otp_fills
+    assert "2222" in otp_fills
     messages: list[str] = []
     while not c._from_worker.empty():
         kind, payload = c._from_worker.get()
@@ -407,8 +390,7 @@ def test_wrong_otp_reprompts_with_rejection_message() -> None:
 
 
 class _BlockedPage(FakePage):
-    """
-    The bank shows its 'Доступ заблокирован' popup over the phone screen —
+    """The bank shows its 'Доступ заблокирован' popup over the phone screen —
     the driver must fail fast with that message, not loop re-entering the phone.
     """
 
@@ -428,13 +410,12 @@ def test_access_denied_popup_fails_fast_with_bank_message() -> None:
     page = _BlockedPage(scenario="fresh")
     with pytest.raises(ConnectorError, match="blocked the login: Доступ заблокирован"):
         c._ensure_logged_in(page)
-    # it stopped at the block, never entering the phone in a doomed loop
+
     assert not any(event.kind == "fill" for event in page.log)
 
 
 class _SubmitClickPage:
-    """
-    A page whose submit-button click raises a chosen error — used to check
+    """A page whose submit-button click raises a chosen error — used to check
     that _submit swallows a missing-button timeout but surfaces a real failure.
     """
 
@@ -462,8 +443,7 @@ def test_submit_skips_missing_button_timeout(monkeypatch: pytest.MonkeyPatch) ->
         pass
 
     monkeypatch.setattr(mod, "PlaywrightTimeoutError", FakeTimeout)
-    # a missing/auto-submit button reads as a timeout: _submit swallows it so the
-    # pin widget's own auto-submit can carry the step
+
     _connector()._submit(_SubmitClickPage(FakeTimeout("no submit button")))
 
 
@@ -474,13 +454,9 @@ def test_submit_propagates_real_click_error(monkeypatch: pytest.MonkeyPatch) -> 
         pass
 
     monkeypatch.setattr(mod, "PlaywrightTimeoutError", FakeTimeout)
-    # a real interaction failure is not a timeout: it must surface, not be
-    # swallowed into a broken, silently-continuing login
+
     with pytest.raises(RuntimeError, match="click intercepted"):
         _connector()._submit(_SubmitClickPage(RuntimeError("click intercepted")))
-
-
-# --- download ---------------------------------------------------------------
 
 
 def test_operations_url_scopes_to_account_when_set() -> None:
@@ -491,7 +467,7 @@ def test_operations_url_scopes_to_account_when_set() -> None:
 def test_operations_url_defaults_to_all_feed_when_account_absent_or_blank() -> None:
     assert _connector(dict(CREDS))._operations_url() == TB.URL_OPERATIONS
     assert _connector({**CREDS, "account": ""})._operations_url() == TB.URL_OPERATIONS
-    # a whitespace-only id from a non-web client is not a real account
+
     assert _connector({**CREDS, "account": "   "})._operations_url() == TB.URL_OPERATIONS
     assert _connector({**CREDS, "account": None})._operations_url() == TB.URL_OPERATIONS
 
@@ -510,9 +486,7 @@ def test_download_and_parse_returns_rows() -> None:
 
 
 def test_download_waits_for_the_account_feed_to_settle_before_export() -> None:
-    # the ?account= scope is applied by an async XHR after domcontentloaded;
-    # the export must wait for the network to settle or it captures the default
-    # all-accounts feed that rendered first
+
     c = _connector()
     page = FakePage(scenario="logged_in", export_label="CSV")
     page.stage = "in"
@@ -523,14 +497,11 @@ def test_download_waits_for_the_account_feed_to_settle_before_export() -> None:
 
 def test_download_without_export_option_raises() -> None:
     c = _connector()
-    # neither the stable hook nor any known CSV label is in the dropdown
+
     page = FakePage(scenario="logged_in", csv_hook=False, export_label="missing")
     page.stage = "in"
     with pytest.raises(ConnectorError):
         c._download_and_parse(page, None)
-
-
-# --- OTP handshake / worker plumbing ---------------------------------------
 
 
 def test_ask_sms_returns_code_and_signals() -> None:
@@ -569,10 +540,7 @@ def test_resume_sync_without_worker_errors() -> None:
 
 
 def test_close_without_worker_is_noop() -> None:
-    _connector().close()  # must not raise
-
-
-# --- encrypted profile round-trip ------------------------------------------
+    _connector().close()
 
 
 def test_profile_archive_restore_roundtrip(tmp_path: Path) -> None:
@@ -619,9 +587,6 @@ def test_archive_excludes_cache(tmp_path: Path) -> None:
         names = tar.getnames()
     assert any(n.endswith("keep.txt") for n in names)
     assert not any("Cache" in n for n in names)
-
-
-# --- _run end to end via an injected fake Playwright ------------------------
 
 
 def _install_fake_playwright(monkeypatch: pytest.MonkeyPatch, page: FakePage) -> None:
@@ -678,7 +643,7 @@ def test_run_two_phase_produces_rows_and_session(monkeypatch: pytest.MonkeyPatch
     assert [row.description for row in result.rows] == ["Lenta", "Okey"]
     assert isinstance(result.session, dict)
     assert "profile" in result.session
-    # navigations get the full login budget, not Playwright's default 30s
+
     assert page.nav_timeout == TB.LOGIN_TIMEOUT_MS
     assert page.action_timeout == TB.LOGIN_TIMEOUT_MS
 
@@ -697,12 +662,10 @@ def test_shot_writes_when_debug_on(monkeypatch: pytest.MonkeyPatch, tmp_path: Pa
     monkeypatch.chdir(tmp_path)
     page = FakePage(scenario="logged_in")
     TB._shot(page, "step")
-    assert page.screenshots and page.screenshots[0] is not None
+    assert page.screenshots
+    assert page.screenshots[0] is not None
     assert page.screenshots[0].endswith("tbank-step.png")
     assert (tmp_path / "data" / "tbank-step.html").exists()
-
-
-# --- connector registry / fake connector -----------------------------------
 
 
 def test_fake_connector_rows_are_fresh_copies() -> None:

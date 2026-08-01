@@ -1,6 +1,4 @@
-"""
-Monori API. Money in/out of this API is integer kopecks everywhere.
-"""
+"""Monori API. Money in/out of this API is integer kopecks everywhere."""
 
 import contextlib
 import os
@@ -35,24 +33,26 @@ from .routers import (
 
 app = FastAPI(title="monori", docs_url="/api-docs", redoc_url="/api-redoc")
 
-# authentication endpoints are public (they mint the tokens the rest would need)
+
 app.include_router(auth_router.router)
 
-# admin routes carry their own guard (admin_user wraps current_user with a 403)
+
 app.include_router(admin.router)
 app.include_router(admin_sql.router)
 
 
 @app.middleware("http")
 async def count_feature_usage(
-    request: Request, call_next: Callable[[Request], Awaitable[Response]]
+    request: Request,
+    call_next: Callable[[Request], Awaitable[Response]],
 ) -> Response:
     response = await call_next(request)
-    # analytics must never break the request it observes; the sqlite write goes
-    # through the threadpool so it cannot block the event loop
+
     with contextlib.suppress(Exception):
         await run_in_threadpool(
-            record_api_usage, request.url.path, request.headers.get("authorization")
+            record_api_usage,
+            request.url.path,
+            request.headers.get("authorization"),
         )
     return response
 
@@ -61,8 +61,7 @@ STATIC_DIR = pathlib.Path(__file__).resolve().parent.parent / "static"
 
 
 def _serve_spa(base: pathlib.Path, path: str) -> FileResponse:
-    """
-    Serve a file from ``base`` if the request maps to one inside it, else the
+    """Serve a file from ``base`` if the request maps to one inside it, else the
     SPA index. The untrusted path is resolved (``..`` and symlinks collapsed)
     and must stay strictly under ``base`` before the file is opened, so absolute
     paths or traversal escaping ``base`` are rejected.
@@ -93,10 +92,9 @@ for _router in (
 def get_snapshot(
     user: Annotated[AuthenticatedUser, Depends(current_user)],
     light: bool = False,
-    limit: int = Query(default=LIGHT_SNAPSHOT_TX_LIMIT, ge=1, le=5000),
+    limit: Annotated[int, Query(ge=1, le=5000)] = LIGHT_SNAPSHOT_TX_LIMIT,
 ) -> SnapshotResponse:
-    """
-    Everything the app needs to render. ``light=1`` caps the transactions at the
+    """Everything the app needs to render. ``light=1`` caps the transactions at the
     newest ``limit`` rows so first paint doesn't wait on years of history; the
     client fills the rest in the background over ``GET /api/transactions``.
     ``transactionsTotal`` always reports the full count. ``limit`` is bounds-
@@ -109,8 +107,6 @@ def get_snapshot(
         c.close()
 
 
-# unknown /api/* paths must 404 as JSON, not fall through to the SPA index below
-# (declared after the real API routers so only unregistered paths reach it)
 @app.api_route(
     "/api/{path:path}",
     methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"],
@@ -123,8 +119,6 @@ def api_not_found(path: str) -> None:
 if STATIC_DIR.is_dir():
     app.mount("/assets", StaticFiles(directory=STATIC_DIR / "assets"), name="assets")
 
-    # one SPA serves everything: the app, the marketing landing (/welcome) and
-    # the docs (/docs/*) — its client router renders by full path
     @app.get("/{path:path}")
     def spa(path: str) -> FileResponse:
         return _serve_spa(STATIC_DIR, path)

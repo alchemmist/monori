@@ -5,12 +5,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import ConfigDict
 from pydantic.dataclasses import dataclass as pydantic_dataclass
 
-from ..auth import AuthenticatedUser, current_user
-from ..db import begin_write
-from ..db_records import CategorySignRecord, TransactionRecord
-from ..deps import IdResponse, SplitResponse, TransactionResponse, conn, serialize_transactions
-from ..importer import tx_hash
-from ..transfer_service import detach_leg
+from app.auth import AuthenticatedUser, current_user
+from app.db import begin_write
+from app.db_records import CategorySignRecord, TransactionRecord
+from app.deps import IdResponse, SplitResponse, TransactionResponse, conn, serialize_transactions
+from app.importer import tx_hash
+from app.transfer_service import detach_leg
 
 router = APIRouter(prefix="/api/transactions", tags=["transactions"])
 
@@ -96,9 +96,7 @@ def _resolve_category(
     uid: int,
     amount: int | None = None,
 ) -> int | None:
-    """
-    0 (or None handled by caller) means uncategorized; else must exist.
-    """
+    """0 (or None handled by caller) means uncategorized; else must exist."""
     if category_id in (None, 0):
         return None
     category = c.execute(
@@ -117,7 +115,8 @@ def _resolve_category(
 
 def _resolve_account(c: sqlite3.Connection, account_id: int, uid: int) -> int:
     if not c.execute(
-        "SELECT id FROM accounts WHERE id=? AND user_id=?", (account_id, uid)
+        "SELECT id FROM accounts WHERE id=? AND user_id=?",
+        (account_id, uid),
     ).fetchone():
         raise HTTPException(400, "unknown account")
     return account_id
@@ -126,15 +125,15 @@ def _resolve_account(c: sqlite3.Connection, account_id: int, uid: int) -> int:
 @router.get("")
 def list_transactions(
     user: Annotated[AuthenticatedUser, Depends(current_user)],
-    from_: str | None = Query(default=None, alias="from"),
+    from_: Annotated[str | None, Query(alias="from")] = None,
     to: str | None = None,
     categoryId: int | None = None,
     accountId: int | None = None,
     uncategorized: bool = False,
     hidden: bool = False,
     q: str | None = None,
-    limit: int = Query(default=100, ge=1, le=1000),
-    offset: int = Query(default=0, ge=0),
+    limit: Annotated[int, Query(ge=1, le=1000)] = 100,
+    offset: Annotated[int, Query(ge=0)] = 0,
 ) -> TransactionListResponse:
     uid = user.id
     params = {
@@ -173,7 +172,8 @@ def list_transactions(
             params,
         )
         if not isinstance(total, int):
-            raise RuntimeError("transaction count must be an integer")
+            msg = "transaction count must be an integer"
+            raise RuntimeError(msg)
         return TransactionListResponse(total=total, rows=serialize_transactions(c.cursor(), rows))
     finally:
         c.close()
@@ -181,7 +181,8 @@ def list_transactions(
 
 @router.post("")
 def create_transaction(
-    body: TxCreate, user: Annotated[AuthenticatedUser, Depends(current_user)]
+    body: TxCreate,
+    user: Annotated[AuthenticatedUser, Depends(current_user)],
 ) -> IdResponse:
     uid = user.id
     c = conn()
@@ -213,7 +214,9 @@ def create_transaction(
 
 @router.patch("/{tx_id}")
 def patch_transaction(
-    tx_id: int, patch: TxPatch, user: Annotated[AuthenticatedUser, Depends(current_user)]
+    tx_id: int,
+    patch: TxPatch,
+    user: Annotated[AuthenticatedUser, Depends(current_user)],
 ) -> OkResponse:
     uid = user.id
     c = conn()
@@ -230,10 +233,12 @@ def patch_transaction(
         date = patch.date if patch.date is not None else transaction.date
         amount = patch.amount if patch.amount is not None else transaction.amount
         split_total = c.execute(
-            "SELECT SUM(amount) FROM splits WHERE transaction_id=?", (tx_id,)
+            "SELECT SUM(amount) FROM splits WHERE transaction_id=?",
+            (tx_id,),
         ).fetchone()[0]
         if split_total is not None and not isinstance(split_total, int):
-            raise RuntimeError("split total must be an integer")
+            msg = "split total must be an integer"
+            raise RuntimeError(msg)
         if split_total is not None and amount != split_total:
             raise HTTPException(400, "edit the split parts before changing the total amount")
         description = (
@@ -282,7 +287,9 @@ def patch_transaction(
 
 @router.put("/{tx_id}/splits")
 def replace_splits(
-    tx_id: int, body: SplitBody, user: Annotated[AuthenticatedUser, Depends(current_user)]
+    tx_id: int,
+    body: SplitBody,
+    user: Annotated[AuthenticatedUser, Depends(current_user)],
 ) -> SplitsResponse:
     """Atomically replace every categorized part, or clear the split with an empty list."""
     uid = user.id
@@ -334,7 +341,7 @@ def replace_splits(
                     comment=part["comment"],
                 )
                 for part in splits
-            ]
+            ],
         )
     finally:
         c.close()
@@ -342,7 +349,8 @@ def replace_splits(
 
 @router.delete("/{tx_id}")
 def delete_transaction(
-    tx_id: int, user: Annotated[AuthenticatedUser, Depends(current_user)]
+    tx_id: int,
+    user: Annotated[AuthenticatedUser, Depends(current_user)],
 ) -> OkResponse:
     uid = user.id
     c = conn()
@@ -363,7 +371,8 @@ def delete_transaction(
 
 @router.post("/bulk")
 def bulk_transactions(
-    body: BulkBody, user: Annotated[AuthenticatedUser, Depends(current_user)]
+    body: BulkBody,
+    user: Annotated[AuthenticatedUser, Depends(current_user)],
 ) -> BulkResponse:
     uid = user.id
     if body.action not in ("categorize", "move", "delete"):
@@ -382,9 +391,7 @@ def bulk_transactions(
                 ).rowcount
         else:
             category = _resolve_category(c, body.categoryId, uid)
-            # Validate the complete selection before updating anything. This
-            # keeps a mixed bulk selection atomic when one row has the other
-            # direction.
+
             for tx_id in body.ids:
                 row = c.execute(
                     "SELECT t.amount, EXISTS(SELECT 1 FROM splits s"

@@ -46,9 +46,7 @@ def _user_from_row(row: sqlite3.Row) -> AuthenticatedUser:
 
 
 def current_user(token: Annotated[str, Depends(oauth2_scheme)]) -> AuthenticatedUser:
-    """
-    Resolve the signed-in user from a bearer JWT, or raise 401.
-    """
+    """Resolve the signed-in user from a bearer JWT, or raise 401."""
     try:
         payload = decode_access_token(token)
         subject = payload.sub

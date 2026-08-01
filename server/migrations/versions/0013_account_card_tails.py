@@ -1,5 +1,4 @@
-"""
-Card tails on accounts, for routing imported bank CSVs.
+"""Card tails on accounts, for routing imported bank CSVs.
 
 A bank statement carries the masked card number (``*8181``); when an account
 remembers its tail(s), the CSV import can pick the right account automatically
@@ -19,4 +18,5 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    raise NotImplementedError("forward-only migrations")
+    msg = "forward-only migrations"
+    raise NotImplementedError(msg)

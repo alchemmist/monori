@@ -3,9 +3,9 @@ from typing import Annotated
 from fastapi import APIRouter, Depends
 from fastapi.responses import Response
 
-from ..auth import AuthenticatedUser, current_user
-from ..deps import conn, snapshot
-from ..workbook.export import workbook_bytes
+from app.auth import AuthenticatedUser, current_user
+from app.deps import conn, snapshot
+from app.workbook.export import workbook_bytes
 
 router = APIRouter(prefix="/api/export", tags=["export"])
 

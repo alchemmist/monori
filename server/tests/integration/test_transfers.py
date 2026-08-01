@@ -25,8 +25,7 @@ def pair(
     out_date: str = "2026-03-10",
     in_date: str = "2026-03-10",
 ) -> tuple[int, int]:
-    """
-    Two ordinary transactions that together look like a transfer, as a bank
+    """Two ordinary transactions that together look like a transfer, as a bank
     would deliver them: nothing links them yet.
     """
     out_id = api.tx(f"{out_date}T09:00:00", -amount, accountId=out_account)
@@ -58,8 +57,10 @@ def test_transfer_shows_up_as_an_entity_in_the_snapshot(api: Api) -> None:
 
     entity = next(transfer for transfer in api.snapshot().transfers if transfer.id == transfer_id)
     out_leg, in_leg = (api.tx_by(entity.outTxId), api.tx_by(entity.inTxId))
-    assert out_leg.amount == -5000 and out_leg.accountId == a
-    assert in_leg.amount == 5000 and in_leg.accountId == b
+    assert out_leg.amount == -5000
+    assert out_leg.accountId == a
+    assert in_leg.amount == 5000
+    assert in_leg.accountId == b
     assert entity.origin == "manual"
     assert entity.note == "move"
 
@@ -93,7 +94,8 @@ def test_transfer_rejects_non_positive_amount(api: Api, client: TestClient) -> N
 
 
 def test_link_merges_an_existing_pair_without_touching_the_rows(
-    api: Api, client: TestClient
+    api: Api,
+    client: TestClient,
 ) -> None:
     a = api.default_account()
     b = api.account("Vault")
@@ -105,8 +107,7 @@ def test_link_merges_an_existing_pair_without_touching_the_rows(
     transfer_id = r.json()["transferId"]
 
     assert {transaction.id for transaction in legs(api, transfer_id)} == {out_id, in_id}
-    # both rows survive the merge unchanged, which is what keeps a re-sync from
-    # inserting them a second time
+
     assert (api.tx_by(out_id).amount, api.tx_by(in_id).amount) == before
     assert (
         next(transfer for transfer in api.snapshot().transfers if transfer.id == transfer_id).origin
@@ -115,7 +116,8 @@ def test_link_merges_an_existing_pair_without_touching_the_rows(
 
 
 def test_link_moves_categories_aside_and_split_gives_them_back(
-    api: Api, client: TestClient
+    api: Api,
+    client: TestClient,
 ) -> None:
     g = api.group("Living")
     cat = api.category("Groceries", g)
@@ -125,7 +127,8 @@ def test_link_moves_categories_aside_and_split_gives_them_back(
     client.patch(f"/api/transactions/{out_id}", json={"categoryId": cat})
 
     transfer_id = client.post(
-        "/api/transfers/link", json={"outTxId": out_id, "inTxId": in_id}
+        "/api/transfers/link",
+        json={"outTxId": out_id, "inTxId": in_id},
     ).json()["transferId"]
     assert api.tx_by(out_id).categoryId is None
 
@@ -144,7 +147,7 @@ def test_split_keeps_both_transactions(api: Api, client: TestClient) -> None:
     assert client.delete(f"/api/transfers/{transfer_id}").status_code == 200
     assert legs(api, transfer_id) == []
     assert not api.snapshot().transfers
-    # the rows themselves are still there, just ordinary again
+
     assert api.tx_by(out_id).transferId is None
     assert api.tx_by(in_id).transferId is None
 
@@ -162,15 +165,18 @@ def test_split_frees_the_legs_to_be_linked_again(api: Api, client: TestClient) -
 
 
 @pytest.mark.parametrize(
-    "amounts, same_account",
+    ("amounts", "same_account"),
     [
-        ((-5000, -5000), False),  # two outflows
-        ((5000, 5000), False),  # two inflows
-        ((-5000, 5000), True),  # one account
+        ((-5000, -5000), False),
+        ((5000, 5000), False),
+        ((-5000, 5000), True),
     ],
 )
 def test_link_rejects_pairs_that_are_not_a_transfer(
-    api: Api, client: TestClient, amounts: tuple[int, int], same_account: bool
+    api: Api,
+    client: TestClient,
+    amounts: tuple[int, int],
+    same_account: bool,
 ) -> None:
     a = api.default_account()
     b = a if same_account else api.account("Vault")
@@ -208,7 +214,8 @@ def test_detect_merges_a_same_day_pair(api: Api, client: TestClient) -> None:
     out_id, in_id = pair(api, a, b)
 
     result = client.post("/api/transfers/detect").json()
-    assert result["merged"] and result["merged"][0]["outTxId"] == out_id
+    assert result["merged"]
+    assert result["merged"][0]["outTxId"] == out_id
     assert api.tx_by(in_id).transferId == result["merged"][0]["id"]
     assert next(iter(api.snapshot().transfers)).origin == "matched"
 
@@ -238,10 +245,10 @@ def test_dismissed_suggestions_stop_coming_back(api: Api, client: TestClient) ->
 
 
 def test_detect_leaves_a_disagreeing_same_day_pair_as_a_suggestion(
-    api: Api, client: TestClient
+    api: Api,
+    client: TestClient,
 ) -> None:
-    """
-    An inflow labeled as a transfer whose true counterpart cannot pair (say,
+    """An inflow labeled as a transfer whose true counterpart cannot pair (say,
     both legs landed on one account) must not swallow a purchase that merely
     matches the amount — the pair is offered, not merged.
     """
@@ -382,7 +389,8 @@ def test_dismiss_reports_an_unknown_transaction_by_message(api: Api, client: Tes
     a = api.default_account()
     out_id = api.tx("2026-03-10T09:00:00", -5000, accountId=a)
     r = client.post(
-        "/api/transfers/suggestions/dismiss", json={"outTxId": out_id, "inTxId": 999999}
+        "/api/transfers/suggestions/dismiss",
+        json={"outTxId": out_id, "inTxId": 999999},
     )
     assert r.status_code == 400
     assert r.json()["detail"] == "unknown transaction"
@@ -398,8 +406,7 @@ def test_transfer_created_at_is_a_full_iso_timestamp(api: Api, client: TestClien
 
 
 def test_detection_never_pairs_a_reconcile_adjustment(api: Api, client: TestClient) -> None:
-    """
-    A reconcile adjustment is bookkeeping: it exists to bend a balance to the
+    """A reconcile adjustment is bookkeeping: it exists to bend a balance to the
     bank's figure, not because money moved anywhere. Matching it against a
     real transaction would merge fiction with fact.
     """
@@ -407,7 +414,8 @@ def test_detection_never_pairs_a_reconcile_adjustment(api: Api, client: TestClie
     b = api.account("Vault")
     api.tx("2026-03-10T09:00:00", -5000, accountId=a)
     r = client.post(f"/api/accounts/{b}/reconcile", json={"actualBalance": 5000})
-    assert r.status_code == 200 and r.json()["delta"] == 5000
+    assert r.status_code == 200
+    assert r.json()["delta"] == 5000
 
     result = client.post("/api/transfers/detect").json()
     assert result["merged"] == []

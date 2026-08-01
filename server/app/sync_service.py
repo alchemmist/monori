@@ -1,5 +1,4 @@
-"""
-Standalone bank-sync service.
+"""Standalone bank-sync service.
 
 Runs connectors (Playwright, Chromium) in their own container so the API stays
 slim and a browser crash cannot take the API down. Exposed only on the private
@@ -106,12 +105,9 @@ def submit_sms(cid: int, body: SmsBody) -> RunDoneResponse | RunStatusResponse:
     try:
         return _done(connector.resume_sync(body.code))
     except SmsRequired:
-        # a rejected code keeps the login alive — re-park it and ask again
         PENDING[cid] = connector
         return RunStatusResponse(status="awaiting_sms", message=CODE_REJECTED)
     except ConnectorError as e:
-        # the failed login is no longer tracked, so close it here or its live
-        # browser leaks
         with contextlib.suppress(Exception):
             connector.close()
         return _error(cid, e)

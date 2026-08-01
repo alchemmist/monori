@@ -20,8 +20,6 @@ from app.deps import (
     serialize_tx,
 )
 
-# Distinct sentinel values per field so a key/value mix-up cannot pass by accident.
-
 
 def test_serialize_group() -> None:
     row = GroupRecord(id=1, name="Bills", sort=3, kind="expense")
@@ -35,7 +33,12 @@ def test_serialize_group() -> None:
 
 def test_serialize_category() -> None:
     row = CategoryRecord(
-        id=7, group_id=2, name="Rent", keywords="rent|landlord", sort=4, archived=True
+        id=7,
+        group_id=2,
+        name="Rent",
+        keywords="rent|landlord",
+        sort=4,
+        archived=True,
     )
     assert asdict(serialize_category(row)) == {
         "id": 7,

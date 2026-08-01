@@ -1,6 +1,4 @@
-"""
-Accounts gain a display icon (a short glyph name mapped by the frontend).
-"""
+"""Accounts gain a display icon (a short glyph name mapped by the frontend)."""
 
 from alembic import op
 from sqlalchemy.engine import Connection
@@ -22,4 +20,5 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    raise NotImplementedError("monori migrations are forward-only")
+    msg = "monori migrations are forward-only"
+    raise NotImplementedError(msg)

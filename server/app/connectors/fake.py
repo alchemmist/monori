@@ -1,5 +1,4 @@
-"""
-A deterministic in-memory connector for exercising the sync path in tests.
+"""A deterministic in-memory connector for exercising the sync path in tests.
 
 It reproduces the two-phase login: the first sync of a fresh connection raises
 :class:`SmsRequired`; supplying the code ``0000`` via :meth:`resume_sync`
@@ -20,8 +19,7 @@ FIXTURE_ROWS: list[SyncRow] = [
 
 
 def _rows(account_ref: str | None = None) -> list[SyncRow]:
-    """
-    A real bank scopes the feed to the requested account; the fixture mimics
+    """A real bank scopes the feed to the requested account; the fixture mimics
     that by stamping the ref into the description, so two accounts on one
     connection deliver distinct operations rather than one feed twice.
     """
@@ -43,17 +41,21 @@ class FakeConnector(Connector):
     @override
     def sync(self, since: str | None = None) -> SyncResult:
         if not self.credentials.get("phone"):
-            raise ConnectorError("missing phone")
+            msg = "missing phone"
+            raise ConnectorError(msg)
         session = self.session
         if session and session.get("token"):
             return SyncResult(_rows(self.account_ref), session=session)
         self._pending = True
-        raise SmsRequired("code sent")
+        msg = "code sent"
+        raise SmsRequired(msg)
 
     @override
     def resume_sync(self, code: str) -> SyncResult:
         if not getattr(self, "_pending", False):
-            raise ConnectorError("no login in progress")
+            msg = "no login in progress"
+            raise ConnectorError(msg)
         if code != "0000":
-            raise ConnectorError("invalid code")
+            msg = "invalid code"
+            raise ConnectorError(msg)
         return SyncResult(_rows(self.account_ref), session={"token": "ok"})

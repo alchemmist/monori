@@ -18,7 +18,8 @@ def test_groups_full_lifecycle(api: Api, client: TestClient) -> None:
     r = client.patch(f"/api/groups/{exp}", json={"name": "Fixed", "kind": "income"})
     assert r.status_code == 200
     g = next(x for x in client.get("/api/groups").json() if x["id"] == exp)
-    assert g["name"] == "Fixed" and g["kind"] == "income"
+    assert g["name"] == "Fixed"
+    assert g["kind"] == "income"
 
 
 def test_group_validation_and_conflicts(api: Api, client: TestClient) -> None:

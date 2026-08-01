@@ -7,7 +7,7 @@ from app import sync_service
 CREDS = {"phone": "+70000000000", "password": "pw"}
 
 
-@pytest.fixture()
+@pytest.fixture
 def client() -> TestClient:
     sync_service.PENDING.clear()
     return TestClient(sync_service.app)

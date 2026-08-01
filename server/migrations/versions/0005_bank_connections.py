@@ -1,5 +1,4 @@
-"""
-Automated import: bank connections, import batches, and a batch_id on
+"""Automated import: bank connections, import batches, and a batch_id on
 transactions pointing at the sync run that inserted the row.
 """
 
@@ -33,7 +32,7 @@ def upgrade() -> None:
       updated_at TEXT NOT NULL
     )""")
     conn.exec_driver_sql(
-        "CREATE INDEX IF NOT EXISTS idx_conn_account ON bank_connections(account_id)"
+        "CREATE INDEX IF NOT EXISTS idx_conn_account ON bank_connections(account_id)",
     )
     conn.exec_driver_sql("""CREATE TABLE IF NOT EXISTS import_batches (
       id INTEGER PRIMARY KEY,
@@ -45,14 +44,15 @@ def upgrade() -> None:
       created_at TEXT NOT NULL
     )""")
     conn.exec_driver_sql(
-        "CREATE INDEX IF NOT EXISTS idx_batch_account ON import_batches(account_id)"
+        "CREATE INDEX IF NOT EXISTS idx_batch_account ON import_batches(account_id)",
     )
     if not _has_column(conn, "transactions", "batch_id"):
         conn.exec_driver_sql(
             "ALTER TABLE transactions ADD COLUMN batch_id INTEGER"
-            " REFERENCES import_batches(id) ON DELETE SET NULL"
+            " REFERENCES import_batches(id) ON DELETE SET NULL",
         )
 
 
 def downgrade() -> None:
-    raise NotImplementedError("monori migrations are forward-only")
+    msg = "monori migrations are forward-only"
+    raise NotImplementedError(msg)

@@ -5,8 +5,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import ConfigDict
 from pydantic.dataclasses import dataclass as pydantic_dataclass
 
-from ..auth import AuthenticatedUser, current_user
-from ..deps import conn
+from app.auth import AuthenticatedUser, current_user
+from app.deps import conn
 
 router = APIRouter(prefix="/api/budgets", tags=["budgets"])
 
@@ -74,7 +74,8 @@ def _set_cell(c: sqlite3.Connection, cell: BudgetCell, uid: int) -> None:
 
 @router.put("")
 def put_budget(
-    cell: BudgetCell, user: Annotated[AuthenticatedUser, Depends(current_user)]
+    cell: BudgetCell,
+    user: Annotated[AuthenticatedUser, Depends(current_user)],
 ) -> OkResponse:
     uid = user.id
     c = conn()
@@ -88,7 +89,8 @@ def put_budget(
 
 @router.post("/bulk")
 def bulk_budgets(
-    body: BulkBody, user: Annotated[AuthenticatedUser, Depends(current_user)]
+    body: BulkBody,
+    user: Annotated[AuthenticatedUser, Depends(current_user)],
 ) -> SetResponse:
     uid = user.id
     c = conn()
@@ -103,10 +105,10 @@ def bulk_budgets(
 
 @router.post("/copy")
 def copy_budgets(
-    body: CopyBody, user: Annotated[AuthenticatedUser, Depends(current_user)]
+    body: CopyBody,
+    user: Annotated[AuthenticatedUser, Depends(current_user)],
 ) -> CopyResponse:
-    """
-    Copy month->month (both months given) or a whole year->year (months
+    """Copy month->month (both months given) or a whole year->year (months
     omitted). The destination scope is cleared first, so it becomes an exact
     copy of the source.
     """

@@ -1,5 +1,4 @@
-"""
-Builds the YNAB-style export workbook from a snapshot dict.
+"""Builds the YNAB-style export workbook from a snapshot dict.
 
 The workbook layout (sheet names, glyphs, column orders) is defined in
 ``spec.py`` and shared with the future spreadsheet importer so the two
@@ -20,7 +19,8 @@ from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.worksheet import Worksheet
 
-from ..deps import SnapshotResponse, TransactionResponse
+from app.deps import SnapshotResponse, TransactionResponse
+
 from . import spec
 
 
@@ -115,7 +115,7 @@ def _categories_sheet(ws: Worksheet, snap: SnapshotResponse) -> None:
                 _text(spec.group_display(group.name, group.kind)),
                 group.sort,
                 spec.group_type(group.kind),
-            ]
+            ],
         )
     ws.freeze_panes = "A2"
 
@@ -155,7 +155,7 @@ def _effective_transactions(snap: SnapshotResponse) -> list[EffectiveTransaction
                     categoryId=part.categoryId,
                     comment=part.comment,
                     transferId=tx.transferId,
-                )
+                ),
             )
     return effective
 
@@ -297,7 +297,9 @@ def _year_sheet(
 
 
 def _dashdata_sheet(
-    ws: Worksheet, snap: SnapshotResponse, activity: dict[tuple[int, int, int], int]
+    ws: Worksheet,
+    snap: SnapshotResponse,
+    activity: dict[tuple[int, int, int], int],
 ) -> None:
     ws.append(spec.DASH_HEADERS)
     _style_header(ws, 1)
@@ -357,10 +359,15 @@ def build_workbook(snap: SnapshotResponse) -> Workbook:
     wb = Workbook()
     active = wb.active
     if active is None:
-        raise RuntimeError("workbook has no active worksheet")
+        msg = "workbook has no active worksheet"
+        raise RuntimeError(msg)
     _categories_sheet(active, snap)
     _transactions_sheet(
-        wb.create_sheet(spec.SHEET_TRANSACTIONS), snap, cat_names, acct_names, acct_currency
+        wb.create_sheet(spec.SHEET_TRANSACTIONS),
+        snap,
+        cat_names,
+        acct_names,
+        acct_currency,
     )
     years = sorted({y for (_, y, _m) in activity} | {b.year for b in snap.budgets})
     for year in years:

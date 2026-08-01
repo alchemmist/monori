@@ -1,5 +1,4 @@
-"""
-The SPA catch-all must not swallow unknown /api paths — those still 404 as
+"""The SPA catch-all must not swallow unknown /api paths — those still 404 as
 JSON so typoed/removed endpoints don't silently return the app's index.html.
 """
 
@@ -20,7 +19,7 @@ def test_unknown_api_path_404_for_write_methods(anon: TestClient) -> None:
 
 
 def test_real_api_route_is_not_shadowed_by_the_guard(anon: TestClient) -> None:
-    # a registered but auth-protected endpoint still resolves to it (401), not 404
+
     assert anon.get("/api/snapshot").status_code == 401
 
 

@@ -17,7 +17,7 @@ def test_serialize_transactions_chunks_split_lookup() -> None:
             id INTEGER PRIMARY KEY, transaction_id INTEGER, category_id INTEGER,
             amount INTEGER, comment TEXT, sort INTEGER DEFAULT 0
         );
-        """
+        """,
     )
     connection.executemany(
         "INSERT INTO transactions VALUES (?, '2026-01-01', -1, 'row', '', '',"

@@ -49,11 +49,11 @@ def test_auth_secret_persists_owner_only(tmp_path: Path, monkeypatch: pytest.Mon
     _use_tmp_db(tmp_path, monkeypatch)
     first = security.auth_secret()
     assert first
-    # a second call reuses the persisted secret
+
     assert security.auth_secret() == first
     secret_file = tmp_path / ".auth_secret"
     assert secret_file.exists()
-    assert (secret_file.stat().st_mode & 0o077) == 0  # not group/world readable
+    assert (secret_file.stat().st_mode & 0o077) == 0
 
 
 def test_auth_secret_is_cached_in_memory(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -64,7 +64,8 @@ def test_auth_secret_is_cached_in_memory(tmp_path: Path, monkeypatch: pytest.Mon
 
 
 def test_auth_secret_fixes_loose_permissions(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _use_tmp_db(tmp_path, monkeypatch)
     secret_file = tmp_path / ".auth_secret"
@@ -75,7 +76,8 @@ def test_auth_secret_fixes_loose_permissions(
 
 
 def test_auth_secret_regenerates_empty_file(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _use_tmp_db(tmp_path, monkeypatch)
     secret_file = tmp_path / ".auth_secret"
@@ -86,7 +88,8 @@ def test_auth_secret_regenerates_empty_file(
 
 
 def test_auth_secret_generates_64_hex_chars(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _use_tmp_db(tmp_path, monkeypatch)
     value = security.auth_secret()
@@ -95,7 +98,8 @@ def test_auth_secret_generates_64_hex_chars(
 
 
 def test_auth_secret_creates_missing_parent_dirs(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.delenv("MONORI_AUTH_SECRET", raising=False)
     import app.db as dbmod
@@ -106,7 +110,8 @@ def test_auth_secret_creates_missing_parent_dirs(
 
 
 def test_auth_secret_leaves_tight_permissions_untouched(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _use_tmp_db(tmp_path, monkeypatch)
     secret_file = tmp_path / ".auth_secret"
@@ -125,7 +130,8 @@ def test_auth_secret_leaves_tight_permissions_untouched(
 
 
 def test_auth_secret_lost_create_race_reads_winner(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _use_tmp_db(tmp_path, monkeypatch)
     secret_file = tmp_path / ".auth_secret"

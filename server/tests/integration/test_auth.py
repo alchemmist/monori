@@ -28,7 +28,9 @@ def test_users_are_isolated(anon: TestClient) -> None:
     assert r.status_code == 200
     gid = r.json()["id"]
     r = anon.post(
-        "/api/categories", json={"name": "Rent", "groupId": gid, "keywords": ""}, headers=a
+        "/api/categories",
+        json={"name": "Rent", "groupId": gid, "keywords": ""},
+        headers=a,
     )
     assert r.status_code == 200
     cid = r.json()["id"]
@@ -99,12 +101,12 @@ def test_first_user_claims_legacy_data(anon: TestClient) -> None:
     c = dbmod.connect()
     c.execute(
         "INSERT INTO accounts (user_id, name, type, currency, sort)"
-        " VALUES (NULL, 'T-Bank', 'card', 'RUB', 1)"
+        " VALUES (NULL, 'T-Bank', 'card', 'RUB', 1)",
     )
     c.execute(
         "INSERT INTO category_groups (user_id, name, sort, type_id)"
         " VALUES (NULL, 'Legacy', 1,"
-        " (SELECT id FROM category_group_types WHERE type='expense'))"
+        " (SELECT id FROM category_group_types WHERE type='expense'))",
     )
     c.commit()
     c.close()

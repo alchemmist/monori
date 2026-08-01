@@ -1,5 +1,4 @@
-"""
-Writes a parsed workbook (see ``importer.parse_workbook``) into the
+"""Writes a parsed workbook (see ``importer.parse_workbook``) into the
 database for one user. The caller owns the connection and the commit.
 """
 
@@ -7,8 +6,9 @@ import datetime
 import sqlite3
 from collections.abc import Iterable, Mapping
 
-from ..importer import ImportRow
-from ..ingest import commit_rows, dedup_text, historical_day_counts
+from app.importer import ImportRow
+from app.ingest import commit_rows, dedup_text, historical_day_counts
+
 from .models import (
     ParsedWorkbook,
     WorkbookApplyResult,
@@ -26,7 +26,9 @@ def _now() -> str:
 
 
 def _upsert_groups(
-    c: sqlite3.Connection, uid: int, groups: Iterable[WorkbookGroup]
+    c: sqlite3.Connection,
+    uid: int,
+    groups: Iterable[WorkbookGroup],
 ) -> tuple[dict[str, int], int]:
     existing = {
         str(r["name"]): int(r["id"])
@@ -45,7 +47,8 @@ def _upsert_groups(
         )
         group_id = cur.lastrowid
         if group_id is None:
-            raise RuntimeError("inserted group did not return a row id")
+            msg = "inserted group did not return a row id"
+            raise RuntimeError(msg)
         ids[g.name] = group_id
         created += 1
     return ids, created
@@ -92,15 +95,15 @@ def _upsert_categories(
         )
         category_id = cur.lastrowid
         if category_id is None:
-            raise RuntimeError("inserted category did not return a row id")
+            msg = "inserted category did not return a row id"
+            raise RuntimeError(msg)
         ids[cat.name] = category_id
         created += 1
     return ids, created
 
 
 def _category_index(c: sqlite3.Connection, uid: int) -> dict[str, int]:
-    """
-    Every category the user owns, keyed by a normalized name, so a workbook cell
+    """Every category the user owns, keyed by a normalized name, so a workbook cell
     resolves against the whole account and not just the sheet's own category
     table. Names that collide across groups map to the first one by sort order —
     the workbook has no group column on the transaction row to tell them apart.
@@ -121,7 +124,8 @@ def _norm(name: str) -> str:
 
 
 def _drop_already_present(
-    rows: Iterable[WorkbookTransaction], counts: Mapping[tuple[str, int, str], int]
+    rows: Iterable[WorkbookTransaction],
+    counts: Mapping[tuple[str, int, str], int],
 ) -> tuple[list[WorkbookTransaction], int]:
     seen: dict[tuple[str, int, str], int] = {}
     kept: list[WorkbookTransaction] = []
@@ -144,16 +148,13 @@ def _import_transactions(
     mapping: Mapping[str, int],
     category_ids: Mapping[str, int],
 ) -> tuple[int, int, list[WorkbookBatchResult], list[str], int, int]:
-    """
-    A workbook is historical evidence, not a fresh bank feed: every category is
+    """A workbook is historical evidence, not a fresh bank feed: every category is
     copied exactly as it is written. In particular, a blank stays uncategorized.
     Imported keywords are retained for transactions added *after* migration,
     where the normal import/sync pipeline applies them.
     """
     index = _category_index(c, uid)
-    # a sheet kept alongside a live sync describes the same operations the
-    # sync already delivered — often onto a different account than the sheet's
-    # card marker maps to, where the per-account hash cannot see them
+
     transactions, already = _drop_already_present(transactions, historical_day_counts(c, uid))
     by_account: dict[int, list[ImportRow]] = {}
     unmatched: set[str] = set()
@@ -187,7 +188,8 @@ def _import_transactions(
         )
         batch_id = cur.lastrowid
         if batch_id is None:
-            raise RuntimeError("inserted import batch did not return a row id")
+            msg = "inserted import batch did not return a row id"
+            raise RuntimeError(msg)
         ins, skip = commit_rows(
             c,
             account_id,
@@ -196,7 +198,8 @@ def _import_transactions(
             batch_id=batch_id,
         )
         c.execute(
-            "UPDATE import_batches SET inserted=?, skipped=? WHERE id=?", (ins, skip, batch_id)
+            "UPDATE import_batches SET inserted=?, skipped=? WHERE id=?",
+            (ins, skip, batch_id),
         )
         inserted += ins
         skipped += skip
@@ -237,8 +240,7 @@ def _import_budgets(
 
 
 def budget_conflicts(c: sqlite3.Connection, uid: int, budgets: Iterable[WorkbookBudget]) -> int:
-    """
-    Count workbook budget cells that collide with the user's existing budgets
+    """Count workbook budget cells that collide with the user's existing budgets
     (category matched by name, same year and month) — the only case where the
     overwrite/skip choice makes a difference.
     """
@@ -261,39 +263,42 @@ def apply_workbook(
     mapping: Mapping[str, int],
     budget_policy: str = "overwrite",
 ) -> WorkbookApplyResult:
-    """
-    ``mapping``: marker -> account id (all markers must be present and owned).
+    """``mapping``: marker -> account id (all markers must be present and owned).
     Returns a result summary dict. Does not commit.
     """
     group_ids, groups_created = _upsert_groups(c, uid, parsed.groups)
     category_ids, categories_created = _upsert_categories(c, uid, parsed.categories, group_ids)
     inserted, skipped, batches, unmatched, blank, already = _import_transactions(
-        c, uid, parsed.transactions, mapping, category_ids
+        c,
+        uid,
+        parsed.transactions,
+        mapping,
+        category_ids,
     )
     budgets_written, budgets_skipped = _import_budgets(
-        c, parsed.budgets, category_ids, budget_policy == "overwrite"
+        c,
+        parsed.budgets,
+        category_ids,
+        budget_policy == "overwrite",
     )
     warnings: list[str] = []
     if already:
         warnings.append(
             f"{already} rows are already in monori — delivered by a bank sync or an"
             " earlier import, possibly onto a different account — and were not"
-            " imported again"
+            " imported again",
         )
     if blank:
-        # the sheet's own totals leave these out too, so the budget is unaffected
-        # — but they are a fifth of some ledgers and turn up as a wall of
-        # uncategorized rows, which reads as a fault unless it is named
         warnings.append(
             f"{blank} rows carry no category in the sheet and were imported uncategorized"
             " — typically transfers between your own accounts, which the spreadsheet"
-            " leaves out of the budget as well"
+            " leaves out of the budget as well",
         )
     if unmatched:
         warnings.append(
             f"{len(unmatched)} category names in the sheet match nothing in monori"
             f" — those rows were left uncategorized rather than guessed:"
-            f" {', '.join(unmatched[:10])}"
+            f" {', '.join(unmatched[:10])}",
         )
     return WorkbookApplyResult(
         groups_created=groups_created,

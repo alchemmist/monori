@@ -60,7 +60,8 @@ def test_user_id_from_auth_header_roundtrip(monkeypatch: pytest.MonkeyPatch) -> 
     [None, "", "Basic abc", "Bearer not-a-jwt"],
 )
 def test_user_id_from_auth_header_rejects_bad_headers(
-    monkeypatch: pytest.MonkeyPatch, header: str | None
+    monkeypatch: pytest.MonkeyPatch,
+    header: str | None,
 ) -> None:
     monkeypatch.setenv("MONORI_AUTH_SECRET", "unit-test-secret-0123456789abcdef")
     assert user_id_from_auth_header(header) is None

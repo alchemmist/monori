@@ -7,7 +7,8 @@ pytestmark = pytest.mark.integration
 
 
 def test_goal_crud_accepts_spending_and_archive_preserves_history(
-    api: Api, client: TestClient
+    api: Api,
+    client: TestClient,
 ) -> None:
     group = api.group("Goals", kind="goal")
     created = client.post(

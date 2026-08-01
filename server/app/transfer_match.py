@@ -1,5 +1,4 @@
-"""
-Pairing rule for transfers: find the two rows that are the same money leaving
+"""Pairing rule for transfers: find the two rows that are the same money leaving
 one account and arriving on another.
 
 Pure functions over transfer records — no database, no I/O — so the rule can be
@@ -66,12 +65,11 @@ class TransferCandidate:
 
 
 def day_number(date_iso: str) -> int:
-    """
-    Days since the epoch for an ISO date(time), by calendar day only — the
+    """Days since the epoch for an ISO date(time), by calendar day only — the
     times of the two legs are irrelevant and banks disagree about them anyway.
     """
     y, m, d = (int(p) for p in date_iso[:10].split("-"))
-    # Howard Hinnant's days_from_civil, so no datetime import for a hot loop
+
     y -= m <= 2
     era = (y if y >= 0 else y - 399) // 400
     yoe = y - era * 400
@@ -90,8 +88,7 @@ def find_pairs(
     max_days: int = SUGGEST_DAYS,
     rejected: Iterable[tuple[int, int]] = (),
 ) -> list[TransferCandidate]:
-    """
-    Greedily pair ``rows`` into transfer candidates.
+    """Greedily pair ``rows`` into transfer candidates.
 
     Rows already in a transfer are skipped. ``rejected`` contains pairs the
     user has dismissed. Results are sorted best-first: closest in time,
@@ -134,10 +131,8 @@ def find_pairs(
                         amount=amount,
                         days=days,
                         hint=out_hint or in_hint,
-                        # one leg says "transfer", the other names something else
-                        # entirely — the amount agreeing is not enough to be sure
                         mismatch=out_hint != in_hint and bool(silent.strip()),
-                    )
+                    ),
                 )
 
     candidates.sort(key=lambda c: (c.days, c.mismatch, not c.hint, c.outTxId, c.inTxId))
@@ -153,10 +148,10 @@ def find_pairs(
 
 
 def split_confident(
-    pairs: Iterable[TransferCandidate], auto_days: int = AUTO_DAYS
+    pairs: Iterable[TransferCandidate],
+    auto_days: int = AUTO_DAYS,
 ) -> tuple[list[TransferCandidate], list[TransferCandidate]]:
-    """
-    Partition matched pairs into the ones safe to merge without asking
+    """Partition matched pairs into the ones safe to merge without asking
     (``days <= auto_days`` and no description mismatch) and the ones worth
     showing as suggestions.
     """

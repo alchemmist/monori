@@ -1,5 +1,4 @@
-"""
-Where bank syncs actually run.
+"""Where bank syncs actually run.
 
 The connections router talks to a :class:`SyncRunner` instead of driving
 connectors directly. Two implementations exist: :class:`LocalRunner` executes
@@ -28,9 +27,7 @@ from .connectors.base import (
 
 
 class NoPendingLogin(Exception):
-    """
-    An OTP code or cancel arrived but no login is parked for the connection.
-    """
+    """An OTP code or cancel arrived but no login is parked for the connection."""
 
 
 class LocalRunner:
@@ -66,8 +63,6 @@ class LocalRunner:
             self._pending[cid] = connector
             raise
         except ConnectorError:
-            # the failed login is no longer tracked, so close it here or its
-            # live browser leaks
             with contextlib.suppress(Exception):
                 connector.close()
             raise
@@ -81,9 +76,10 @@ class LocalRunner:
 
 class RemoteRunner:
     def __init__(self, base_url: str, client: httpx.Client | None = None) -> None:
-        # browser logins are slow; the read timeout must outlive a full one
+
         self._client = client or httpx.Client(
-            base_url=base_url, timeout=httpx.Timeout(600, connect=10)
+            base_url=base_url,
+            timeout=httpx.Timeout(600, connect=10),
         )
 
     @staticmethod
@@ -91,13 +87,15 @@ class RemoteRunner:
         try:
             payload = response.json()
         except ValueError as e:
-            raise ConnectorError("sync service returned an invalid response") from e
+            msg = "sync service returned an invalid response"
+            raise ConnectorError(msg) from e
         if not isinstance(payload, dict):
-            raise ConnectorError("sync service returned an invalid response")
+            msg = "sync service returned an invalid response"
+            raise ConnectorError(msg)
         status = payload.get("status")
         if status == "done":
             return SYNC_RESULT_ADAPTER.validate_python(
-                {"rows": payload.get("rows") or [], "session": payload.get("session")}
+                {"rows": payload.get("rows") or [], "session": payload.get("session")},
             )
         if status == "awaiting_sms":
             raise SmsRequired(payload.get("message") or "code sent")
@@ -127,7 +125,8 @@ class RemoteRunner:
             )
             r.raise_for_status()
         except httpx.HTTPError as e:
-            raise ConnectorError(f"sync service unavailable: {e}") from e
+            msg = f"sync service unavailable: {e}"
+            raise ConnectorError(msg) from e
         return self._unpack(r)
 
     def resume(self, cid: int, code: str) -> SyncResult:
@@ -137,13 +136,12 @@ class RemoteRunner:
                 raise NoPendingLogin
             r.raise_for_status()
         except httpx.HTTPError as e:
-            raise ConnectorError(f"sync service unavailable: {e}") from e
+            msg = f"sync service unavailable: {e}"
+            raise ConnectorError(msg) from e
         return self._unpack(r)
 
     def cancel(self, cid: int) -> None:
-        # best-effort cleanup on user-facing endpoints: must fail fast (not
-        # the 600 s sync timeout) and must not block deleting a connection
-        # when the sync service is down
+
         with contextlib.suppress(httpx.HTTPError):
             self._client.post(f"/runs/{cid}/cancel", timeout=httpx.Timeout(5, connect=2))
 

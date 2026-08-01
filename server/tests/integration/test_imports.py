@@ -27,8 +27,9 @@ def commit(client: TestClient, api: Api, rows: Sequence[ImportRowResponse]) -> d
     payload = TypeAdapter(list[ImportRowResponse]).dump_python(list(rows), mode="json")
     return counts(
         client.post(
-            "/api/import/commit", json={"accountId": api.default_account(), "rows": payload}
-        )
+            "/api/import/commit",
+            json={"accountId": api.default_account(), "rows": payload},
+        ),
     )
 
 
@@ -37,7 +38,7 @@ def test_import_preview_categorizes_and_flags_errors(api: Api, client: TestClien
     api.category("Groceries", g, "Lenta")
     text = api.statement + "garbage line without enough columns\n"
     prev = TypeAdapter(ImportPreviewResponse).validate_python(
-        client.post("/api/import/preview", json={"text": text}).json()
+        client.post("/api/import/preview", json={"text": text}).json(),
     )
     assert len(prev.rows) == 2
     assert prev.rows[0].categoryId is not None
@@ -46,7 +47,8 @@ def test_import_preview_categorizes_and_flags_errors(api: Api, client: TestClien
 
 
 def test_preview_routes_each_card_and_commit_accepts_mixed_accounts(
-    api: Api, client: TestClient
+    api: Api,
+    client: TestClient,
 ) -> None:
     first = api.default_account()
     second = api.account("Second card", cardTails=["2947"])
@@ -71,7 +73,7 @@ def test_preview_routes_each_card_and_commit_accepts_mixed_accounts(
                     "0",
                     "0",
                     amount,
-                ]
+                ],
             )
             + "\n"
         )
@@ -82,7 +84,7 @@ def test_preview_routes_each_card_and_commit_accepts_mixed_accounts(
         + row("*9999", "-300,00", "Unknown", 7)
     )
     preview = TypeAdapter(ImportPreviewResponse).validate_python(
-        client.post("/api/import/preview", json={"text": text}).json()
+        client.post("/api/import/preview", json={"text": text}).json(),
     )
     rows = preview.rows
     assert [row.accountId for row in rows] == [first, second, None]
@@ -104,7 +106,8 @@ def test_preview_routes_each_card_and_commit_accepts_mixed_accounts(
 
 
 def test_duplicate_check_uses_the_account_selected_for_each_row(
-    api: Api, client: TestClient
+    api: Api,
+    client: TestClient,
 ) -> None:
     other = api.account("Other")
     rows = api.preview(api.statement)
@@ -113,7 +116,7 @@ def test_duplicate_check_uses_the_account_selected_for_each_row(
 
     payload = TypeAdapter(list[ImportRowResponse]).dump_python(rows, mode="json")
     checked = TypeAdapter(DuplicatesResponse).validate_python(
-        client.post("/api/import/duplicates", json={"rows": payload}).json()
+        client.post("/api/import/duplicates", json={"rows": payload}).json(),
     )
     assert checked.duplicates == [True, False]
 
@@ -123,29 +126,25 @@ def test_import_commit_double_submit_is_idempotent(api: Api, client: TestClient)
     assert commit(client, api, rows) == {"inserted": 2, "skipped": 0}
     assert commit(client, api, rows) == {"inserted": 0, "skipped": 2}
     transactions = TypeAdapter(TransactionListResponse).validate_python(
-        client.get("/api/transactions").json()
+        client.get("/api/transactions").json(),
     )
     assert transactions.total == 2
 
 
 def test_import_commit_skips_only_the_first_n_already_stored(api: Api, client: TestClient) -> None:
-    """
-    Skip as many identical rows as already exist in the DB, insert the rest —
+    """Skip as many identical rows as already exist in the DB, insert the rest —
     a fresh statement's own repeats are legitimate, only re-imports are skipped.
     """
     r0 = api.preview(api.statement)[0]
 
-    # fresh DB: three identical rows are all genuinely new
     assert commit(client, api, [r0, r0, r0]) == {"inserted": 3, "skipped": 0}
     transactions = TypeAdapter(TransactionListResponse).validate_python(
-        client.get("/api/transactions").json()
+        client.get("/api/transactions").json(),
     )
     assert transactions.total == 3
 
-    # DB now holds 3; the same three are all skipped
     assert commit(client, api, [r0, r0, r0]) == {"inserted": 0, "skipped": 3}
 
-    # DB holds 3; five identical -> two beyond the stored three are inserted
     assert commit(client, api, [r0] * 5) == {"inserted": 2, "skipped": 3}
     assert client.get("/api/transactions").json()["total"] == 5
 
@@ -158,9 +157,10 @@ def test_import_commit_keeps_category(api: Api, client: TestClient) -> None:
     payload = TypeAdapter(list[ImportRowResponse]).dump_python(rows, mode="json")
     client.post("/api/import/commit", json={"accountId": api.default_account(), "rows": payload})
     imported = TypeAdapter(TransactionListResponse).validate_python(
-        client.get(f"/api/transactions?categoryId={cat}").json()
+        client.get(f"/api/transactions?categoryId={cat}").json(),
     )
-    assert imported.total == 1 and imported.rows[0].source == "import"
+    assert imported.total == 1
+    assert imported.rows[0].source == "import"
 
 
 def test_import_commit_accepts_goal_category(api: Api, client: TestClient) -> None:
@@ -185,13 +185,14 @@ def test_import_commit_accepts_goal_category(api: Api, client: TestClient) -> No
 
     assert response.status_code == 200, response.text
     imported = TypeAdapter(TransactionListResponse).validate_python(
-        client.get(f"/api/transactions?categoryId={goal}").json()
+        client.get(f"/api/transactions?categoryId={goal}").json(),
     )
     assert imported.total == 1
 
 
 def test_import_commit_rejects_category_with_the_wrong_direction(
-    api: Api, client: TestClient
+    api: Api,
+    client: TestClient,
 ) -> None:
     expenses = api.group("Expenses")
     income = api.group("Income", "income")
@@ -234,10 +235,10 @@ def test_preview_rejects_oversized_statement(api: Api, client: TestClient) -> No
 
 
 def test_import_preview_never_proposes_a_wrong_direction_category(
-    api: Api, client: TestClient
+    api: Api,
+    client: TestClient,
 ) -> None:
-    """
-    The refund fallback in the categorizer would happily file "Lenta +100" into
+    """The refund fallback in the categorizer would happily file "Lenta +100" into
     Groceries — but the commit rejects wrong-direction categories, so a preview
     proposing one would make the whole statement unimportable.
     """

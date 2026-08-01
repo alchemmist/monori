@@ -75,7 +75,8 @@ def test_cancel_drops_pending(runner: Runner) -> None:
 
 def test_remote_maps_transport_failure_to_connector_error() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
-        raise httpx.ConnectError("refused")
+        msg = "refused"
+        raise httpx.ConnectError(msg)
 
     client = httpx.Client(transport=httpx.MockTransport(handler), base_url="http://sync")
     r = RemoteRunner("http://sync", client=client)
@@ -111,10 +112,12 @@ class ClosableConnector:
         self.session = session
 
     def sync(self, since: str | None = None) -> SyncResult:
-        raise SmsRequired("code sent")
+        msg = "code sent"
+        raise SmsRequired(msg)
 
     def resume_sync(self, code: str) -> SyncResult:
-        raise ConnectorError("bad code")
+        msg = "bad code"
+        raise ConnectorError(msg)
 
     def close(self) -> None:
         type(self).closed += 1
@@ -166,7 +169,8 @@ class RecordingConnector:
         return SyncResult([], session=None)
 
     def resume_sync(self, code: str) -> SyncResult:
-        raise ConnectorError("no login in progress")
+        msg = "no login in progress"
+        raise ConnectorError(msg)
 
     def close(self) -> None:
         return None
@@ -189,11 +193,13 @@ class RetryOtpConnector:
         self.session = session
 
     def sync(self, since: str | None = None) -> SyncResult:
-        raise SmsRequired("code sent")
+        msg = "code sent"
+        raise SmsRequired(msg)
 
     def resume_sync(self, code: str) -> SyncResult:
         if code != "4242":
-            raise SmsRequired("the bank rejected the code — check it and try again")
+            msg = "the bank rejected the code — check it and try again"
+            raise SmsRequired(msg)
         return SyncResult([], session=None)
 
     def close(self) -> None:
@@ -207,7 +213,8 @@ class FailingCloseConnector(ClosableConnector):
     @override
     def close(self) -> None:
         type(self).closed += 1
-        raise RuntimeError("close blew up")
+        msg = "close blew up"
+        raise RuntimeError(msg)
 
 
 def test_since_is_passed_through(runner: Runner, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -237,7 +244,8 @@ def test_cancel_closes_pending_connector(runner: Runner, monkeypatch: pytest.Mon
 
 
 def test_failing_close_never_masks_the_flow(
-    runner: Runner, monkeypatch: pytest.MonkeyPatch
+    runner: Runner,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setitem(base.REGISTRY, ("failclose", "failclose"), FailingCloseConnector)
     FailingCloseConnector.closed = 0
@@ -303,7 +311,8 @@ def test_remote_awaiting_sms_message() -> None:
 
 def test_remote_resume_transport_failure() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
-        raise httpx.ConnectError("refused")
+        msg = "refused"
+        raise httpx.ConnectError(msg)
 
     client = httpx.Client(transport=httpx.MockTransport(handler), base_url="http://sync")
     r = RemoteRunner("http://sync", client=client)
@@ -336,7 +345,8 @@ def test_remote_cancel_uses_short_timeout() -> None:
 
 def test_remote_cancel_swallows_transport_failure() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
-        raise httpx.ConnectError("refused")
+        msg = "refused"
+        raise httpx.ConnectError(msg)
 
     client = httpx.Client(transport=httpx.MockTransport(handler), base_url="http://sync")
     RemoteRunner("http://sync", client=client).cancel(5)

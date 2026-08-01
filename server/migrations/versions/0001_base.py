@@ -1,6 +1,4 @@
-"""
-Base schema: category groups, categories, transactions, budgets.
-"""
+"""Base schema: category groups, categories, transactions, budgets."""
 
 from alembic import op
 
@@ -56,4 +54,5 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    raise NotImplementedError("monori migrations are forward-only")
+    msg = "monori migrations are forward-only"
+    raise NotImplementedError(msg)

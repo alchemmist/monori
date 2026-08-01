@@ -11,7 +11,9 @@ ADMIN_EMAIL = "boss@example.com"
 
 
 def _make_admin(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch, email: str = ADMIN_EMAIL
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    email: str = ADMIN_EMAIL,
 ) -> dict[str, str]:
     monkeypatch.setenv("MONORI_ADMIN_EMAILS", email)
     return login_as(client, email)
@@ -49,7 +51,8 @@ def test_admin_endpoints_reject_non_admin(client: TestClient) -> None:
 
 
 def test_admin_flag_synced_from_env_at_login(
-    anon: TestClient, monkeypatch: pytest.MonkeyPatch
+    anon: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.delenv("MONORI_ADMIN_EMAILS", raising=False)
     headers = login_as(anon, ADMIN_EMAIL)
@@ -66,17 +69,18 @@ def test_admin_flag_synced_from_env_at_login(
 
 
 def test_admin_flag_matches_env_through_a_gmail_alias(
-    anon: TestClient, monkeypatch: pytest.MonkeyPatch
+    anon: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # the admin env holds one form of a Gmail address; logging in through an
-    # alias of the same mailbox must still grant admin
+
     monkeypatch.setenv("MONORI_ADMIN_EMAILS", "admin.person@gmail.com")
     headers = login_as(anon, "adminperson+work@gmail.com")
     assert anon.get("/api/auth/me", headers=headers).json()["isAdmin"] is True
 
 
 def test_overview_counts_users_and_transactions(
-    anon: TestClient, monkeypatch: pytest.MonkeyPatch
+    anon: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     other = login_as(anon, "other@example.com")
     anon.headers.update(other)
@@ -97,7 +101,8 @@ def test_overview_counts_users_and_transactions(
 
 
 def test_users_list_reports_per_user_aggregates(
-    anon: TestClient, monkeypatch: pytest.MonkeyPatch
+    anon: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     other = login_as(anon, "other@example.com")
     anon.headers.update(other)
@@ -119,7 +124,8 @@ def test_users_list_reports_per_user_aggregates(
 
 
 def test_user_detail_returns_accounts_transactions_and_activity(
-    anon: TestClient, monkeypatch: pytest.MonkeyPatch
+    anon: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     other = login_as(anon, "other@example.com")
     anon.headers.update(other)
@@ -131,8 +137,7 @@ def test_user_detail_returns_accounts_transactions_and_activity(
     body = anon.get(f"/api/admin/users/{uid}").json()
     assert body["user"]["email"] == "other@example.com"
     assert len(body["accounts"]) == 1
-    # the row is uncategorized, so it is counted but not in the balance —
-    # the admin view follows the same rule as the user's own account pages
+
     assert body["accounts"][0]["balance"] == 0
     assert body["accounts"][0]["transactions"] == 1
     assert len(body["recentTransactions"]) == 1
@@ -144,14 +149,16 @@ def test_user_detail_returns_accounts_transactions_and_activity(
 
 
 def test_user_detail_404_for_unknown_user(
-    anon: TestClient, monkeypatch: pytest.MonkeyPatch
+    anon: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     anon.headers.update(_make_admin(anon, monkeypatch))
     assert anon.get("/api/admin/users/999").status_code == 404
 
 
 def test_user_transactions_returns_every_row_newest_first(
-    anon: TestClient, monkeypatch: pytest.MonkeyPatch
+    anon: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     other = login_as(anon, "other@example.com")
     anon.headers.update(other)
@@ -181,7 +188,8 @@ def test_user_transactions_returns_every_row_newest_first(
 
 
 def test_user_transactions_paginates_with_limit_and_offset(
-    anon: TestClient, monkeypatch: pytest.MonkeyPatch
+    anon: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     other = login_as(anon, "paged@example.com")
     anon.headers.update(other)
@@ -196,13 +204,14 @@ def test_user_transactions_paginates_with_limit_and_offset(
     page2 = anon.get(f"{base}?limit=2&offset=2").json()
     assert [r["date"] for r in page1] == ["2026-07-05T12:00:00", "2026-07-04T12:00:00"]
     assert [r["date"] for r in page2] == ["2026-07-03T12:00:00", "2026-07-02T12:00:00"]
-    # limit is capped, and out-of-range params are rejected rather than unbounded
+
     assert anon.get(f"{base}?limit=99999").status_code == 422
     assert anon.get(f"{base}?offset=-1").status_code == 422
 
 
 def test_user_transactions_404_for_unknown_user(
-    anon: TestClient, monkeypatch: pytest.MonkeyPatch
+    anon: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     anon.headers.update(_make_admin(anon, monkeypatch))
     assert anon.get("/api/admin/users/999/transactions").status_code == 404
@@ -223,7 +232,8 @@ def test_admin_creates_user(anon: TestClient, monkeypatch: pytest.MonkeyPatch) -
 
 
 def test_admin_deletes_user_with_all_data(
-    anon: TestClient, monkeypatch: pytest.MonkeyPatch
+    anon: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     other = login_as(anon, "victim@example.com")
     anon.headers.update(other)
@@ -249,7 +259,8 @@ def test_admin_cannot_delete_self(anon: TestClient, monkeypatch: pytest.MonkeyPa
 
 
 def test_activity_reports_feature_usage_and_logins(
-    anon: TestClient, monkeypatch: pytest.MonkeyPatch
+    anon: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     other = login_as(anon, "other@example.com")
     anon.get("/api/snapshot", headers=other)
@@ -268,7 +279,8 @@ def test_activity_reports_feature_usage_and_logins(
 
 
 def test_bulk_delete_removes_only_selected_transactions(
-    anon: TestClient, monkeypatch: pytest.MonkeyPatch
+    anon: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     other = login_as(anon, "bulk@example.com")
     anon.headers.update(other)
@@ -286,7 +298,8 @@ def test_bulk_delete_removes_only_selected_transactions(
 
 
 def test_bulk_delete_is_all_or_nothing_across_users(
-    anon: TestClient, monkeypatch: pytest.MonkeyPatch
+    anon: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     victim = login_as(anon, "victim2@example.com")
     anon.headers.update(victim)
@@ -299,7 +312,6 @@ def test_bulk_delete_is_all_or_nothing_across_users(
     anon.headers.clear()
     anon.headers.update(_make_admin(anon, monkeypatch))
 
-    # one foreign id poisons the whole request; nothing is deleted
     r = anon.post(f"/api/admin/users/{uid}/transactions/delete", json={"ids": [own, foreign]})
     assert r.status_code == 400
     assert anon.get(f"/api/admin/users/{uid}/transactions").json()[0]["id"] == own
@@ -317,7 +329,8 @@ def test_bulk_delete_rejects_non_admin(anon: TestClient) -> None:
 
 
 def test_usage_middleware_ignores_anonymous_and_garbage_tokens(
-    anon: TestClient, monkeypatch: pytest.MonkeyPatch
+    anon: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     anon.get("/api/snapshot")
     anon.get("/api/snapshot", headers={"Authorization": "Bearer garbage"})

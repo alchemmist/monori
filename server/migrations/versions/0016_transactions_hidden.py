@@ -1,5 +1,4 @@
-"""
-A hidden flag on transactions (issue #193).
+"""A hidden flag on transactions (issue #193).
 
 Deleting a transaction breaks bank sync — the connector sees it missing and
 re-imports it. Hidden rows stay in the table so dedup still counts them, but
@@ -19,4 +18,5 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    raise NotImplementedError("forward-only migrations")
+    msg = "forward-only migrations"
+    raise NotImplementedError(msg)

@@ -1,5 +1,4 @@
-"""
-Bank statement parsing and auto-categorization.
+"""Bank statement parsing and auto-categorization.
 
 The paste format is the bank's statement export: one transaction per line,
 tab- or semicolon-separated, dates as dd.mm.yyyy [hh:mm:ss], decimal commas.
@@ -53,7 +52,7 @@ COLUMNS = [
 
 DATE_RE = re.compile(r"^(\d{2})\.(\d{2})\.(\d{4})(?:\s+(\d{2}):(\d{2})(?::(\d{2}))?)?$")
 
-# first cell of a bank CSV export's header row — such a line is metadata, not data
+
 HEADER_FIRST_CELLS = {"дата операции", "op_date", "date"}
 
 
@@ -243,33 +242,28 @@ def parse_date(raw: str) -> datetime | None:
 
 
 def parse_amount_kop(raw: str) -> int | None:
-    """
-    '-1 500,00' -> -150000 kopecks.
-    """
+    """'-1 500,00' -> -150000 kopecks."""
     s = str(raw).strip().replace(" ", "").replace(" ", "").replace(",", ".")
     if not s or s in ("-", "."):
         return None
     try:
-        # round through cents to dodge float artifacts
         return round(round(float(s), 2) * 100)
     except ValueError:
         return None
 
 
 def tx_hash(account_id: int, date_iso: str, amount_kop: int, description: str) -> str:
-    """
-    Dedup key of a transaction. Always scoped to the account: the same
+    """Dedup key of a transaction. Always scoped to the account: the same
     date/amount/description legitimately occurs on two different accounts
     (transfer legs, mirrored cards) and must not collide.
     """
     return hashlib.sha256(
-        f"{account_id}|{date_iso}|{amount_kop}|{description}".encode()
+        f"{account_id}|{date_iso}|{amount_kop}|{description}".encode(),
     ).hexdigest()
 
 
 def parse_statement(text: str) -> tuple[list[ImportRow], list[ParseError]]:
-    """
-    Returns (rows, errors). Each row: dict with date (ISO), amount (kopecks),
+    """Returns (rows, errors). Each row: dict with date (ISO), amount (kopecks),
     description, bank_category, mcc. Accepts both pasted statement rows and a
     full bank CSV export — a header row is skipped, not reported. Hashes are
     not computed here — the account is not known yet; ingestion derives the
@@ -304,16 +298,16 @@ def parse_statement(text: str) -> tuple[list[ImportRow], list[ParseError]]:
                 bank_category=rec["bank_category"],
                 mcc=rec["mcc"],
                 card=rec["card"],
-            )
+            ),
         )
     return rows, errors
 
 
 def build_rules(
-    categories: Iterable[CategoryDefinition], groups: Mapping[int, str]
+    categories: Iterable[CategoryDefinition],
+    groups: Mapping[int, str],
 ) -> dict[str, list[CategoryRule]]:
-    """
-    categories: iterable of dicts with name/keywords/group_id;
+    """categories: iterable of dicts with name/keywords/group_id;
     groups: id -> kind ('income'|'expense'). Returns {'IN': [...], 'OUT': [...]}.
     """
     rules: dict[str, list[CategoryRule]] = {"IN": [], "OUT": []}
@@ -330,7 +324,7 @@ def build_rules(
                 category_id=c.id,
                 name=c.name,
                 keywords=keywords,
-            )
+            ),
         )
     return rules
 
@@ -340,8 +334,7 @@ def categorize(
     amount_kop: int,
     rules: Mapping[str, list[CategoryRule]],
 ) -> int | None:
-    """
-    Returns category_id or None.
+    """Returns category_id or None.
 
     An inflow is income first — but a merchant's money coming back is a refund,
     and a refund belongs in the envelope it left, or the category quietly reads

@@ -1,5 +1,4 @@
-"""
-Shared ingestion pipeline: turn parsed statement rows into transactions.
+"""Shared ingestion pipeline: turn parsed statement rows into transactions.
 
 Both the manual paste import (``/api/import/commit``) and automated connector
 syncs funnel through :func:`commit_rows`, so dedup and insertion behave
@@ -21,14 +20,12 @@ INSERT_SQL = """INSERT INTO transactions
 
 
 def load_rules(c: sqlite3.Connection) -> dict[str, list[CategoryRule]]:
-    """
-    Build the IN/OUT categorization rules from the current categories.
-    """
+    """Build the IN/OUT categorization rules from the current categories."""
     groups = {
         r["id"]: r["kind"]
         for r in c.execute(
             "SELECT g.id, t.type AS kind FROM category_groups g"
-            " JOIN category_group_types t ON t.id=g.type_id"
+            " JOIN category_group_types t ON t.id=g.type_id",
         )
     }
     cats: list[CategoryDefinition] = [
@@ -44,8 +41,7 @@ def load_rules(c: sqlite3.Connection) -> dict[str, list[CategoryRule]]:
 
 
 def existing_hash_counts(c: sqlite3.Connection, account_id: int) -> dict[str, int]:
-    """
-    Hash → count of matching transactions on ``account_id``. Dedup is scoped
+    """Hash → count of matching transactions on ``account_id``. Dedup is scoped
     per account so the same date/amount/description legitimately occurring on two
     different accounts is not collapsed away.
     """
@@ -59,8 +55,7 @@ def existing_hash_counts(c: sqlite3.Connection, account_id: int) -> dict[str, in
 
 
 def dedup_text(description: str) -> str:
-    """
-    The bank's own wording drifts between pulls — a pending operation can gain
+    """The bank's own wording drifts between pulls — a pending operation can gain
     or lose punctuation once it posts, and one character of drift is enough to
     slip past an exact-text key. Case, punctuation and extra whitespace are
     cosmetic; only the letters and digits identify the operation.
@@ -74,8 +69,7 @@ def historical_day_counts(
     uid: int,
     sources: tuple[str, ...] = ("workbook", "import", "sync", "sheets"),
 ) -> dict[tuple[str, int, str], int]:
-    """
-    ``(day, amount, normalized description) -> count`` over every transaction
+    """``(day, amount, normalized description) -> count`` over every transaction
     the user got from a statement-shaped source, across all accounts. The
     per-account hash cannot see the same bank operation arriving a second time
     through another door — a workbook over a synced ledger, or one connection
@@ -91,7 +85,6 @@ def historical_day_counts(
     for r in c.execute(
         "SELECT substr(t.date, 1, 10) day, t.amount, t.description, COUNT(*) n"
         " FROM transactions t JOIN accounts a ON a.id = t.account_id"
-        # `marks` contains only generated positional placeholders, never user input.
         f" WHERE a.user_id=? AND t.source IN ({marks})"  # nosec B608
         " GROUP BY day, t.amount, t.description",
         (uid, *sources),
@@ -102,10 +95,10 @@ def historical_day_counts(
 
 
 def drop_already_present(
-    rows: Iterable[SyncRow], counts: Mapping[tuple[str, int, str], int]
+    rows: Iterable[SyncRow],
+    counts: Mapping[tuple[str, int, str], int],
 ) -> tuple[list[SyncRow], int]:
-    """
-    Drop rows the ledger already holds according to ``counts``, counting
+    """Drop rows the ledger already holds according to ``counts``, counting
     repeats: two genuinely identical operations in one batch survive as long
     as the ledger holds fewer copies than the batch carries. Returns
     ``(kept, dropped)``.
@@ -131,8 +124,7 @@ def commit_rows(
     source: str,
     batch_id: int | None = None,
 ) -> tuple[int, int]:
-    """
-    Insert ``rows`` (dicts with date/amount/description/bank_category/mcc and
+    """Insert ``rows`` (dicts with date/amount/description/bank_category/mcc and
     an optional category_id) onto ``account_id``, skipping any whose hash is
     already present on that account or repeats within this batch. Does not commit
     — the caller owns the transaction. Returns ``(inserted, skipped)``.
@@ -170,9 +162,7 @@ def categorize_rows(
     rows: list[SyncRow],
     rules: Mapping[str, list[CategoryRule]],
 ) -> list[SyncRow]:
-    """
-    Fill ``category_id`` on each row in place using the given rules.
-    """
+    """Fill ``category_id`` on each row in place using the given rules."""
     for r in rows:
         r.category_id = categorize(r.description, r.amount, rules)
     return rows

@@ -1,5 +1,4 @@
-"""
-Unit tests for the connections router's credential validation and the
+"""Unit tests for the connections router's credential validation and the
 connector registry's parameter declarations.
 """
 

@@ -6,12 +6,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import ConfigDict
 from pydantic.dataclasses import dataclass as pydantic_dataclass
 
-from ..auth import AuthenticatedUser, current_user
-from ..db_records import TransactionRecord
-from ..deps import TransactionResponse, conn, serialize_tx
-from ..importer import tx_hash
-from ..transfer_match import AUTO_DAYS, SUGGEST_DAYS, TransferCandidate, split_confident
-from ..transfer_service import (
+from app.auth import AuthenticatedUser, current_user
+from app.db_records import TransactionRecord
+from app.deps import TransactionResponse, conn, serialize_tx
+from app.importer import tx_hash
+from app.transfer_match import AUTO_DAYS, SUGGEST_DAYS, TransferCandidate, split_confident
+from app.transfer_service import (
     LinkError,
     MergedTransfer,
     TransferResponse,
@@ -20,8 +20,8 @@ from ..transfer_service import (
     list_transfers,
     reject,
 )
-from ..transfer_service import link as link_pair
-from ..transfer_service import split as split_transfer
+from app.transfer_service import link as link_pair
+from app.transfer_service import split as split_transfer
 
 router = APIRouter(prefix="/api/transfers", tags=["transfers"])
 
@@ -93,10 +93,9 @@ def get_transfers(user: Annotated[AuthenticatedUser, Depends(current_user)]) -> 
 @router.get("/suggestions")
 def get_suggestions(
     user: Annotated[AuthenticatedUser, Depends(current_user)],
-    maxDays: int = Query(default=SUGGEST_DAYS, ge=0, le=31),
+    maxDays: Annotated[int, Query(ge=0, le=31)] = SUGGEST_DAYS,
 ) -> SuggestionsResponse:
-    """
-    Pairs that look like a transfer but that detection would not merge unasked
+    """Pairs that look like a transfer but that detection would not merge unasked
     — too far apart in time, or the two descriptions disagree. The transactions
     themselves ride along so the UI can show both sides without a second round
     trip.
@@ -121,10 +120,10 @@ def get_suggestions(
 
 @router.post("")
 def create_transfer(
-    body: TransferBody, user: Annotated[AuthenticatedUser, Depends(current_user)]
+    body: TransferBody,
+    user: Annotated[AuthenticatedUser, Depends(current_user)],
 ) -> TransferIdResponse:
-    """
-    A transfer is two linked transactions: a negative row on the source account
+    """A transfer is two linked transactions: a negative row on the source account
     and a positive row on the destination, merged into one ``transfers`` entity.
     Both legs stay uncategorized, so they never count as income or expense.
     """
@@ -136,7 +135,9 @@ def create_transfer(
     c = conn()
     try:
         if not account_exists(c, body.fromAccountId, uid) or not account_exists(
-            c, body.toAccountId, uid
+            c,
+            body.toAccountId,
+            uid,
         ):
             raise HTTPException(400, "unknown account")
         description = "Transfer"
@@ -159,7 +160,8 @@ def create_transfer(
                 ),
             )
             if cur.lastrowid is None:
-                raise RuntimeError("transaction insert did not return an id")
+                msg = "transaction insert did not return an id"
+                raise RuntimeError(msg)
             legs.append(cur.lastrowid)
         transfer_id = link_pair(c, uid, legs[0], legs[1], note=body.comment)
         c.commit()
@@ -172,10 +174,10 @@ def create_transfer(
 
 @router.post("/link")
 def link_transactions(
-    body: PairBody, user: Annotated[AuthenticatedUser, Depends(current_user)]
+    body: PairBody,
+    user: Annotated[AuthenticatedUser, Depends(current_user)],
 ) -> TransferIdResponse:
-    """
-    Merge a pair that is already in the ledger — the usual case for rows the
+    """Merge a pair that is already in the ledger — the usual case for rows the
     bank sent us itself. Nothing is inserted or deleted: both transactions keep
     their id and hash, so the next sync still recognizes them.
     """
@@ -198,7 +200,8 @@ def link_transactions(
 
 @router.post("/suggestions/dismiss")
 def dismiss_suggestion(
-    body: PairBody, user: Annotated[AuthenticatedUser, Depends(current_user)]
+    body: PairBody,
+    user: Annotated[AuthenticatedUser, Depends(current_user)],
 ) -> OkResponse:
     c = conn()
     try:
@@ -214,11 +217,9 @@ def dismiss_suggestion(
 @router.post("/detect")
 def run_detection(
     user: Annotated[AuthenticatedUser, Depends(current_user)],
-    maxDays: int = Query(default=SUGGEST_DAYS, ge=0, le=31),
+    maxDays: Annotated[int, Query(ge=0, le=31)] = SUGGEST_DAYS,
 ) -> DetectionResponse:
-    """
-    Merge the pairs that are beyond doubt and report the rest as suggestions.
-    """
+    """Merge the pairs that are beyond doubt and report the rest as suggestions."""
     c = conn()
     try:
         merged, suggested = detect(c, user.id, AUTO_DAYS, maxDays)
@@ -230,10 +231,10 @@ def run_detection(
 
 @router.delete("/{transfer_id}")
 def delete_transfer(
-    transfer_id: str, user: Annotated[AuthenticatedUser, Depends(current_user)]
+    transfer_id: str,
+    user: Annotated[AuthenticatedUser, Depends(current_user)],
 ) -> OkResponse:
-    """
-    Split a transfer back into two ordinary transactions, categories and all.
+    """Split a transfer back into two ordinary transactions, categories and all.
     The rows are never deleted here: half of them came from a bank, and deleting
     them would only invite the next sync to bring them back unlinked.
     """

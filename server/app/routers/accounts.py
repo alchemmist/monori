@@ -7,16 +7,16 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import ConfigDict
 from pydantic.dataclasses import dataclass as pydantic_dataclass
 
-from ..auth import AuthenticatedUser, current_user
-from ..db_records import AccountRecord
-from ..deps import AccountResponse, conn, serialize_account
-from ..importer import tx_hash
+from app.auth import AuthenticatedUser, current_user
+from app.db_records import AccountRecord
+from app.deps import AccountResponse, conn, serialize_account
+from app.importer import tx_hash
 
 router = APIRouter(prefix="/api/accounts", tags=["accounts"])
 
 TYPES = ("card", "cash", "savings", "other")
 HEX_COLOR = re.compile(r"^#[0-9a-fA-F]{6}$")
-# a custom icon is a small downscaled image sent as a data URL; cap the payload
+
 MAX_ICON_IMAGE = 300_000
 
 
@@ -41,13 +41,13 @@ class AccountPatch:
     type: str | None = None
     icon: str | None = None
     color: str | None = None
-    # None = leave as is, "" = clear the custom image, otherwise a new data URL
+
     iconImage: str | None = None
     currency: str | None = None
     openingBalance: int | None = None
     openingDate: str | None = None
     archived: bool | None = None
-    # None = leave as is, 0 = unlink from its bank connection
+
     connectionId: int | None = None
     bankRef: str | None = None
     cardTails: list[str] | None = None
@@ -60,7 +60,8 @@ class AccountIdResponse:
 
 def _owned_connection(c: sqlite3.Connection, connection_id: int, uid: int) -> None:
     if not c.execute(
-        "SELECT id FROM bank_connections WHERE id=? AND user_id=?", (connection_id, uid)
+        "SELECT id FROM bank_connections WHERE id=? AND user_id=?",
+        (connection_id, uid),
     ).fetchone():
         raise HTTPException(400, "unknown connection")
 
@@ -71,8 +72,7 @@ def _validate_color(color: str) -> None:
 
 
 def _clean_tails(tails: list[str]) -> str:
-    """
-    Normalize card tails to the digits of the masked number ('*8181' -> '8181'),
+    """Normalize card tails to the digits of the masked number ('*8181' -> '8181'),
     deduplicated in order, stored comma-separated.
     """
     cleaned = []
@@ -86,8 +86,7 @@ def _clean_tails(tails: list[str]) -> str:
 
 
 def _validate_icon_image(image: str | None) -> None:
-    """
-    A custom icon is optional; when present it must be an image data URL and
+    """A custom icon is optional; when present it must be an image data URL and
     stay within the size cap so the snapshot doesn't bloat.
     """
     if not image:
@@ -128,7 +127,8 @@ def list_accounts(
 
 @router.post("")
 def create_account(
-    body: AccountBody, user: Annotated[AuthenticatedUser, Depends(current_user)]
+    body: AccountBody,
+    user: Annotated[AuthenticatedUser, Depends(current_user)],
 ) -> AccountIdResponse:
     uid = user.id
     account_type = body.type or "other"
@@ -144,14 +144,16 @@ def create_account(
     c = conn()
     try:
         if c.execute(
-            "SELECT id FROM accounts WHERE user_id=? AND name=?", (uid, body.name)
+            "SELECT id FROM accounts WHERE user_id=? AND name=?",
+            (uid, body.name),
         ).fetchone():
             raise HTTPException(409, "account with this name already exists")
         connection_id = body.connectionId
         if connection_id:
             _owned_connection(c, connection_id, uid)
         max_sort = c.execute(
-            "SELECT COALESCE(MAX(sort),0) FROM accounts WHERE user_id=?", (uid,)
+            "SELECT COALESCE(MAX(sort),0) FROM accounts WHERE user_id=?",
+            (uid,),
         ).fetchone()[0]
         cur = c.execute(
             """INSERT INTO accounts
@@ -190,7 +192,8 @@ def patch_account(
     c = conn()
     try:
         if not c.execute(
-            "SELECT id FROM accounts WHERE id=? AND user_id=?", (account_id, uid)
+            "SELECT id FROM accounts WHERE id=? AND user_id=?",
+            (account_id, uid),
         ).fetchone():
             raise HTTPException(404, "account not found")
         name = patch.name
@@ -273,8 +276,7 @@ def delete_account(
     user: Annotated[AuthenticatedUser, Depends(current_user)],
     reassignTo: int | None = None,
 ) -> dict[str, bool]:
-    """
-    Deleting an account reassigns its transactions to another account. A
+    """Deleting an account reassigns its transactions to another account. A
     transaction must always belong to an account, so a non-empty account cannot
     be deleted without a reassign target, and the last account cannot be deleted.
     """
@@ -282,13 +284,15 @@ def delete_account(
     c = conn()
     try:
         if not c.execute(
-            "SELECT id FROM accounts WHERE id=? AND user_id=?", (account_id, uid)
+            "SELECT id FROM accounts WHERE id=? AND user_id=?",
+            (account_id, uid),
         ).fetchone():
             raise HTTPException(404, "account not found")
         if c.execute("SELECT COUNT(*) FROM accounts WHERE user_id=?", (uid,)).fetchone()[0] == 1:
             raise HTTPException(400, "cannot delete the last account")
         has_tx = c.execute(
-            "SELECT 1 FROM transactions WHERE account_id=? LIMIT 1", (account_id,)
+            "SELECT 1 FROM transactions WHERE account_id=? LIMIT 1",
+            (account_id,),
         ).fetchone()
         if has_tx:
             if reassignTo is None:
@@ -296,12 +300,12 @@ def delete_account(
             if (
                 reassignTo == account_id
                 or not c.execute(
-                    "SELECT id FROM accounts WHERE id=? AND user_id=?", (reassignTo, uid)
+                    "SELECT id FROM accounts WHERE id=? AND user_id=?",
+                    (reassignTo, uid),
                 ).fetchone()
             ):
                 raise HTTPException(400, "unknown reassign target")
-            # the dedup hash is account-scoped, so moved rows are re-fingerprinted
-            # for their new account or future imports would not dedup against them
+
             moved = c.execute(
                 "SELECT id, date, amount, description FROM transactions WHERE account_id=?",
                 (account_id,),
@@ -318,7 +322,8 @@ def delete_account(
                 ],
             )
         c.execute(
-            "UPDATE users SET default_account_id=NULL WHERE default_account_id=?", (account_id,)
+            "UPDATE users SET default_account_id=NULL WHERE default_account_id=?",
+            (account_id,),
         )
         c.execute("DELETE FROM accounts WHERE id=?", (account_id,))
         c.commit()
@@ -333,21 +338,19 @@ def reconcile_account(
     body: ReconcileBody,
     user: Annotated[AuthenticatedUser, Depends(current_user)],
 ) -> dict[str, int]:
-    """
-    Bring an account's computed balance to the real bank balance by posting a
+    """Bring an account's computed balance to the real bank balance by posting a
     single adjustment transaction for the difference. Returns the delta applied.
     """
     uid = user.id
     c = conn()
     try:
         acc = c.execute(
-            "SELECT opening_balance FROM accounts WHERE id=? AND user_id=?", (account_id, uid)
+            "SELECT opening_balance FROM accounts WHERE id=? AND user_id=?",
+            (account_id, uid),
         ).fetchone()
         if not acc:
             raise HTTPException(404, "account not found")
-        # the same rows the account pages count: categorized, transfer legs and
-        # earlier adjustments — an unaccepted uncategorized row is outside the
-        # balance, so reconciling must not fold it in either
+
         total = c.execute(
             "SELECT COALESCE(SUM(amount),0) FROM transactions"
             " WHERE account_id=? AND hidden = 0"
@@ -374,7 +377,8 @@ def reconcile_account(
 
 @router.post("/reorder")
 def reorder_accounts(
-    body: Reorder, user: Annotated[AuthenticatedUser, Depends(current_user)]
+    body: Reorder,
+    user: Annotated[AuthenticatedUser, Depends(current_user)],
 ) -> dict[str, bool]:
     uid = user.id
     c = conn()

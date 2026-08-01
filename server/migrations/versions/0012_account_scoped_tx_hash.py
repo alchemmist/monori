@@ -1,5 +1,4 @@
-"""
-Recompute every transaction's dedup fingerprint with the account included.
+"""Recompute every transaction's dedup fingerprint with the account included.
 
 ``transactions.hash`` used to cover only date|amount|description, so the same
 operation on two different accounts (transfer legs, mirrored cards) collided
@@ -22,7 +21,7 @@ BATCH = 1000
 
 def _hash(account_id: int, date_iso: str, amount_kop: int, description: str) -> str:
     return hashlib.sha256(
-        f"{account_id}|{date_iso}|{amount_kop}|{description}".encode()
+        f"{account_id}|{date_iso}|{amount_kop}|{description}".encode(),
     ).hexdigest()
 
 
@@ -46,4 +45,5 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    raise NotImplementedError("account-less fingerprints are not restorable")
+    msg = "account-less fingerprints are not restorable"
+    raise NotImplementedError(msg)

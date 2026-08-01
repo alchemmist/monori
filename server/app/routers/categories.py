@@ -5,9 +5,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import ConfigDict, Field, JsonValue, model_validator
 from pydantic.dataclasses import dataclass as pydantic_dataclass
 
-from ..auth import AuthenticatedUser, current_user
-from ..db_records import CategoryOwnershipRecord, GoalGroupRecord
-from ..deps import IdResponse, conn
+from app.auth import AuthenticatedUser, current_user
+from app.db_records import CategoryOwnershipRecord, GoalGroupRecord
+from app.deps import IdResponse, conn
 
 router = APIRouter(prefix="/api/categories", tags=["categories"])
 
@@ -97,7 +97,8 @@ def _name_taken(c: sqlite3.Connection, uid: int, name: str, except_id: int | Non
 
 @router.post("")
 def create_category(
-    body: CategoryBody, user: Annotated[AuthenticatedUser, Depends(current_user)]
+    body: CategoryBody,
+    user: Annotated[AuthenticatedUser, Depends(current_user)],
 ) -> IdResponse:
     uid = user.id
     name = body.name.strip()
@@ -146,7 +147,9 @@ def create_category(
 
 @router.patch("/{cat_id}")
 def patch_category(
-    cat_id: int, patch: CategoryPatch, user: Annotated[AuthenticatedUser, Depends(current_user)]
+    cat_id: int,
+    patch: CategoryPatch,
+    user: Annotated[AuthenticatedUser, Depends(current_user)],
 ) -> OkResponse:
     uid = user.id
     c = conn()
@@ -210,7 +213,9 @@ def patch_category(
 
 @router.post("/{cat_id}/archive-goal")
 def archive_goal(
-    cat_id: int, body: ArchiveGoalBody, user: Annotated[AuthenticatedUser, Depends(current_user)]
+    cat_id: int,
+    body: ArchiveGoalBody,
+    user: Annotated[AuthenticatedUser, Depends(current_user)],
 ) -> OkResponse:
     """Close a goal without rewriting its allocations or purchase history."""
     uid = user.id
@@ -228,10 +233,10 @@ def archive_goal(
 
 @router.delete("/{cat_id}")
 def delete_category(
-    cat_id: int, user: Annotated[AuthenticatedUser, Depends(current_user)]
+    cat_id: int,
+    user: Annotated[AuthenticatedUser, Depends(current_user)],
 ) -> OkResponse:
-    """
-    Deleting a category never shifts anything: its transactions are left
+    """Deleting a category never shifts anything: its transactions are left
     uncategorized and its budgets are removed by FK cascade.
 
     Moving the transactions somewhere instead is what /merge is for. Delete used
@@ -256,7 +261,8 @@ def delete_category(
 
 @router.post("/reorder")
 def reorder_categories(
-    body: Reorder, user: Annotated[AuthenticatedUser, Depends(current_user)]
+    body: Reorder,
+    user: Annotated[AuthenticatedUser, Depends(current_user)],
 ) -> OkResponse:
     uid = user.id
     c = conn()
@@ -281,10 +287,11 @@ def reorder_categories(
 
 @router.post("/{cat_id}/merge")
 def merge_category(
-    cat_id: int, body: MergeBody, user: Annotated[AuthenticatedUser, Depends(current_user)]
+    cat_id: int,
+    body: MergeBody,
+    user: Annotated[AuthenticatedUser, Depends(current_user)],
 ) -> OkResponse:
-    """
-    Combine a category into another: its transactions move to the target,
+    """Combine a category into another: its transactions move to the target,
     keywords are unioned, budgets are summed month by month, then the source
     category is deleted. Summing matters: the spending moves across, so a
     dropped plan would read as a retroactive overspend on the target.

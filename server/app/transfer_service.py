@@ -1,5 +1,4 @@
-"""
-The database side of transfers: merging two transactions into one entity,
+"""The database side of transfers: merging two transactions into one entity,
 splitting them apart again, and running detection over a user's ledger.
 
 Kept out of the router so the import and sync pipelines can merge freshly
@@ -28,8 +27,6 @@ LINKABLE_COLUMNS = (
     "SELECT t.id, t.date, t.amount, t.description, t.account_id, t.transfer_id"
     " FROM transactions t JOIN accounts a ON a.id = t.account_id"
     " WHERE a.user_id=? AND t.transfer_id IS NULL"
-    # a reconcile adjustment is bookkeeping, not money moving between accounts
-    # — matching one against a real row would merge fiction with fact
     " AND t.source != 'adjustment'"
 )
 
@@ -87,9 +84,7 @@ def owned_tx(c: sqlite3.Connection, uid: int, tx_id: int) -> TransactionRecord |
 
 
 class LinkError(Exception):
-    """
-    Why a pair cannot become a transfer. The router turns it into a 400.
-    """
+    """Why a pair cannot become a transfer. The router turns it into a 400."""
 
 
 def link(
@@ -100,8 +95,7 @@ def link(
     origin: str = "manual",
     note: str = "",
 ) -> str:
-    """
-    Merge two existing transactions into a transfer. The rows are left in place
+    """Merge two existing transactions into a transfer. The rows are left in place
     — only ``transfer_id`` is stamped and the categories are moved aside, so a
     later split restores exactly what was there.
     """
@@ -109,23 +103,26 @@ def link(
     out_row = owned_tx(c, uid, out_tx_id)
     in_row = owned_tx(c, uid, in_tx_id)
     if out_row is None or in_row is None:
-        raise LinkError("unknown transaction")
+        msg = "unknown transaction"
+        raise LinkError(msg)
     if out_row.amount >= 0 or in_row.amount <= 0:
-        raise LinkError("a transfer needs one outflow and one inflow")
+        msg = "a transfer needs one outflow and one inflow"
+        raise LinkError(msg)
     if out_row.account_id == in_row.account_id:
-        raise LinkError("both legs are on the same account")
+        msg = "both legs are on the same account"
+        raise LinkError(msg)
     if out_row.transfer_id or in_row.transfer_id:
-        raise LinkError("already part of a transfer")
+        msg = "already part of a transfer"
+        raise LinkError(msg)
     if c.execute(
         "SELECT 1 FROM splits WHERE transaction_id IN (?, ?) LIMIT 1",
         (out_tx_id, in_tx_id),
     ).fetchone():
-        raise LinkError("split transactions cannot be linked as a transfer")
+        msg = "split transactions cannot be linked as a transfer"
+        raise LinkError(msg)
 
     transfer_id = uuid.uuid4().hex
-    # the checks above race with any other writer; the UNIQUE columns are what
-    # actually enforce one transfer per transaction, so a loser here has to read
-    # as a 400 "already linked" and not as a 500
+
     try:
         c.execute(
             "INSERT INTO transfers"
@@ -145,7 +142,8 @@ def link(
             ),
         )
     except sqlite3.IntegrityError as e:
-        raise LinkError("already part of a transfer") from e
+        msg = "already part of a transfer"
+        raise LinkError(msg) from e
     c.execute(
         "UPDATE transactions SET transfer_id=?, category_id=NULL WHERE id IN (?, ?)",
         (transfer_id, out_tx_id, in_tx_id),
@@ -158,8 +156,7 @@ def link(
 
 
 def split(c: sqlite3.Connection, uid: int, transfer_id: str) -> bool:
-    """
-    Undo a merge: both transactions stay, get their categories back and stop
+    """Undo a merge: both transactions stay, get their categories back and stop
     pointing at the transfer. Returns False when the transfer is not the user's.
     """
     raw_row = c.execute(
@@ -183,8 +180,7 @@ def split(c: sqlite3.Connection, uid: int, transfer_id: str) -> bool:
 
 
 def detach_leg(c: sqlite3.Connection, uid: int, tx_id: int) -> bool:
-    """
-    Split whatever transfer this transaction belongs to, so it can be deleted on
+    """Split whatever transfer this transaction belongs to, so it can be deleted on
     its own. Without this the entity row cascades away while the surviving leg
     keeps a dangling ``transfer_id`` — and a dangling pointer reads as a transfer
     everywhere downstream, hiding a real transaction from every total.
@@ -199,11 +195,10 @@ def detach_leg(c: sqlite3.Connection, uid: int, tx_id: int) -> bool:
 
 
 def reject(c: sqlite3.Connection, uid: int, out_tx_id: int, in_tx_id: int) -> None:
-    """
-    Remember that this pair is not a transfer, so detection stops proposing it.
-    """
+    """Remember that this pair is not a transfer, so detection stops proposing it."""
     if owned_tx(c, uid, out_tx_id) is None or owned_tx(c, uid, in_tx_id) is None:
-        raise LinkError("unknown transaction")
+        msg = "unknown transaction"
+        raise LinkError(msg)
     c.execute(
         "INSERT OR IGNORE INTO transfer_rejections (out_tx_id, in_tx_id) VALUES (?, ?)",
         (out_tx_id, in_tx_id),
@@ -223,7 +218,9 @@ def rejections(c: sqlite3.Connection, uid: int) -> set[tuple[int, int]]:
 
 
 def candidates(
-    c: sqlite3.Connection, uid: int, max_days: int = SUGGEST_DAYS
+    c: sqlite3.Connection,
+    uid: int,
+    max_days: int = SUGGEST_DAYS,
 ) -> list[TransferCandidate]:
     rows = [
         TransferMatchRow(
@@ -240,10 +237,12 @@ def candidates(
 
 
 def detect(
-    c: sqlite3.Connection, uid: int, auto_days: int = AUTO_DAYS, max_days: int = SUGGEST_DAYS
+    c: sqlite3.Connection,
+    uid: int,
+    auto_days: int = AUTO_DAYS,
+    max_days: int = SUGGEST_DAYS,
 ) -> tuple[list[MergedTransfer], list[TransferCandidate]]:
-    """
-    Scan the ledger and merge what is unambiguous. Pairs that landed on the same
+    """Scan the ledger and merge what is unambiguous. Pairs that landed on the same
     day (or one apart, since banks post the legs at different times) are merged
     outright; anything looser is handed back as a suggestion for the user.
 
@@ -272,6 +271,6 @@ def detect(
                 days=pair.days,
                 hint=pair.hint,
                 mismatch=pair.mismatch,
-            )
+            ),
         )
     return merged, suggested

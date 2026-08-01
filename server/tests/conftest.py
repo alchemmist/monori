@@ -21,8 +21,8 @@ from app.routers.imports import ImportPreviewResponse, ImportRowResponse
 from app.routers.transfers import TransferIdResponse
 
 STATEMENT = (
-    "05.01.2026 10:00:00\t05.01.2026\t*1\tOK\t-100,00\tRUB\t-100,00\tRUB\t\tSuper\t5411\tLenta\t0\t0\t-100,00\n"  # noqa: E501
-    "06.01.2026 11:00:00\t06.01.2026\t*1\tOK\t-200,00\tRUB\t-200,00\tRUB\t\tSuper\t5411\tOkey\t0\t0\t-200,00\n"  # noqa: E501
+    "05.01.2026 10:00:00\t05.01.2026\t*1\tOK\t-100,00\tRUB\t-100,00\tRUB\t\tSuper\t5411\tLenta\t0\t0\t-100,00\n"
+    "06.01.2026 11:00:00\t06.01.2026\t*1\tOK\t-200,00\tRUB\t-200,00\tRUB\t\tSuper\t5411\tOkey\t0\t0\t-200,00\n"
 )
 
 
@@ -41,9 +41,7 @@ def _fresh_app_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
 
 
 def login_as(client: TestClient, email: str, password: str = "hunter2pw") -> dict[str, str]:
-    """
-    Register (if needed) and sign in; returns a bearer-token header dict.
-    """
+    """Register (if needed) and sign in; returns a bearer-token header dict."""
     client.post("/api/auth/register", json={"email": email, "password": password})
     r = client.post("/api/auth/token", data={"username": email, "password": password})
     assert r.status_code == 200, r.text
@@ -56,18 +54,15 @@ def _response_id(response: IdResponse) -> int:
     return response.id
 
 
-@pytest.fixture()
+@pytest.fixture
 def anon(monkeypatch: pytest.MonkeyPatch) -> TestClient:
-    """
-    A client with no credentials attached (the DB is fresh and empty).
-    """
+    """A client with no credentials attached (the DB is fresh and empty)."""
     return _fresh_app_client(monkeypatch)
 
 
-@pytest.fixture()
+@pytest.fixture
 def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
-    """
-    A client signed in as the default test user; every request carries the
+    """A client signed in as the default test user; every request carries the
     bearer token via default headers.
     """
     c = _fresh_app_client(monkeypatch)
@@ -76,8 +71,7 @@ def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
 
 
 class Api:
-    """
-    Thin helper over the HTTP client for arranging test state. Bodies that
+    """Thin helper over the HTTP client for arranging test state. Bodies that
     should always succeed assert 200; error paths are exercised with the raw
     `client` in the tests themselves.
     """
@@ -94,7 +88,8 @@ class Api:
 
     def category(self, name: str, group_id: int, keywords: str = "") -> int:
         r = self.client.post(
-            "/api/categories", json={"name": name, "groupId": group_id, "keywords": keywords}
+            "/api/categories",
+            json={"name": name, "groupId": group_id, "keywords": keywords},
         )
         assert r.status_code == 200, r.text
         return _response_id(TypeAdapter(IdResponse).validate_python(r.json()))
@@ -179,7 +174,7 @@ class Api:
 
     def snapshot(self) -> SnapshotResponse:
         return TypeAdapter(SnapshotResponse).validate_python(
-            self.client.get("/api/snapshot").json()
+            self.client.get("/api/snapshot").json(),
         )
 
     def cat(self, cat_id: int) -> CategoryResponse:
@@ -199,6 +194,6 @@ class Api:
         return TypeAdapter(ImportPreviewResponse).validate_python(response.json()).rows
 
 
-@pytest.fixture()
+@pytest.fixture
 def api(client: TestClient) -> Api:
     return Api(client)

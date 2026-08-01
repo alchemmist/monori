@@ -45,7 +45,7 @@ def _workbook() -> tuple[Workbook, Worksheet, Worksheet]:
             "Monori Category",
             "Account",
             "Comment",
-        ]
+        ],
     )
     return wb, ws, tx
 
@@ -123,7 +123,10 @@ def test_parse_dt_variants() -> None:
     ws = Workbook().active
     assert ws is not None
     assert _parse_dt(ws.cell(1, 1, datetime.datetime(2026, 1, 5, 10))) == datetime.datetime(
-        2026, 1, 5, 10
+        2026,
+        1,
+        5,
+        10,
     )
     assert _parse_dt(ws.cell(1, 2, datetime.date(2026, 1, 5))) == datetime.datetime(2026, 1, 5)
     assert _parse_dt(ws.cell(1, 3, "05.01.2026 10:00:00")) == datetime.datetime(2026, 1, 5, 10)
@@ -151,8 +154,7 @@ def test_rejects_garbage_bytes() -> None:
 
 
 def test_transactions_are_the_only_required_sheet() -> None:
-    """
-    The category structure is read from a sheet of its own when there is one and
+    """The category structure is read from a sheet of its own when there is one and
     inferred from the year grids when there isn't, so only the rows themselves
     are indispensable.
     """
@@ -227,8 +229,7 @@ def test_categories_unrecognized_row_warns() -> None:
 
 
 def test_category_sheet_saying_nothing_defers_to_the_grids() -> None:
-    """
-    The live spreadsheet has a sheet called Categories too, laid out nothing like
+    """The live spreadsheet has a sheet called Categories too, laid out nothing like
     ours. Rather than report every row of it, the reader treats a sheet it cannot
     read as absent and takes the structure from the year grids.
     """
@@ -240,7 +241,7 @@ def test_category_sheet_saying_nothing_defers_to_the_grids() -> None:
     assert parsed.groups == []
     assert parsed.warnings == [
         "Categories: no category rows recognized (2 rows skipped),"
-        " structure taken from the year grids"
+        " structure taken from the year grids",
     ]
 
 

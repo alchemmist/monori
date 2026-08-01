@@ -1,5 +1,4 @@
-"""
-Accounts: every transaction gains a NOT NULL account_id and a nullable
+"""Accounts: every transaction gains a NOT NULL account_id and a nullable
 transfer_id; pre-existing rows are backfilled onto a default 'T-Bank' account.
 """
 
@@ -30,7 +29,7 @@ def upgrade() -> None:
     )""")
     if not conn.exec_driver_sql("SELECT id FROM accounts LIMIT 1").fetchone():
         conn.exec_driver_sql(
-            "INSERT INTO accounts (name, type, currency, sort) VALUES ('T-Bank', 'card', 'RUB', 1)"
+            "INSERT INTO accounts (name, type, currency, sort) VALUES ('T-Bank', 'card', 'RUB', 1)",
         )
     row = conn.exec_driver_sql("SELECT MIN(id) FROM accounts").fetchone()
     assert row is not None
@@ -56,17 +55,18 @@ def upgrade() -> None:
             " account_id, transfer_id, comment, hash, source) "
             "SELECT id, date, amount, description, bank_category, mcc, category_id, "
             f"       {int(default_id)}, NULL, comment, hash, source "
-            "FROM transactions"
+            "FROM transactions",
         )
         conn.exec_driver_sql("DROP TABLE transactions")
         conn.exec_driver_sql("ALTER TABLE transactions_new RENAME TO transactions")
         conn.exec_driver_sql("CREATE INDEX IF NOT EXISTS idx_tx_date ON transactions(date)")
         conn.exec_driver_sql("CREATE INDEX IF NOT EXISTS idx_tx_hash ON transactions(hash)")
         conn.exec_driver_sql(
-            "CREATE INDEX IF NOT EXISTS idx_tx_category ON transactions(category_id)"
+            "CREATE INDEX IF NOT EXISTS idx_tx_category ON transactions(category_id)",
         )
     conn.exec_driver_sql("CREATE INDEX IF NOT EXISTS idx_tx_account ON transactions(account_id)")
 
 
 def downgrade() -> None:
-    raise NotImplementedError("monori migrations are forward-only")
+    msg = "monori migrations are forward-only"
+    raise NotImplementedError(msg)

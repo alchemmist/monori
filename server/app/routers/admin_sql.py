@@ -1,5 +1,4 @@
-"""
-Admin SQL console (issue #168): run one statement against the live database.
+"""Admin SQL console (issue #168): run one statement against the live database.
 
 This is deliberately unrestricted full data access — the same scope the rest of
 the admin API already has (#128), for an instance owner who would otherwise SSH
@@ -19,9 +18,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import ConfigDict
 from pydantic.dataclasses import dataclass as pydantic_dataclass
 
-from ..admin import admin_user
-from ..auth import AuthenticatedUser
-from ..deps import conn
+from app.admin import admin_user
+from app.auth import AuthenticatedUser
+from app.deps import conn
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
@@ -29,13 +28,12 @@ ROW_LIMIT = 1000
 STATEMENT_MAX_CHARS = 20000
 AUDIT_MAX_CHARS = 4000
 QUERY_TIMEOUT_S = 15.0
-# SQLite calls the progress handler every N virtual-machine instructions; small
-# enough to notice the deadline promptly, large enough not to dominate the query
+
+
 PROGRESS_INSTRUCTIONS = 10000
 BLOB_PREVIEW = 32
-# ROW_LIMIT alone does not bound the response: one row can hold a megabyte of
-# TEXT. The console is for reading data, not for exporting it — a cell longer
-# than this comes back cut, with the dropped length spelled out
+
+
 CELL_MAX_CHARS = 4096
 
 type SqliteValue = bytes | float | int | str | None
@@ -43,8 +41,7 @@ type SqlCell = float | int | str | None
 
 
 def leading_keyword(sql: str) -> str:
-    """
-    The first word of a statement, past any leading whitespace and comments —
+    r"""The first word of a statement, past any leading whitespace and comments —
     ``UPDATE`` in ``/* fix */ -- one row\\n update users …``. Used only to name
     the statement back to the admin; classification never relies on it.
 
@@ -104,10 +101,10 @@ class SqlDryResponse(SqlResponse):
 
 @router.post("/sql")
 def run_sql(
-    body: SqlBody, admin: Annotated[AuthenticatedUser, Depends(admin_user)]
+    body: SqlBody,
+    admin: Annotated[AuthenticatedUser, Depends(admin_user)],
 ) -> SqlResponse | SqlDryResponse:
-    """
-    Execute one statement and return either its rows or its affected-row count.
+    """Execute one statement and return either its rows or its affected-row count.
 
     A statement is classified as a write by what it *did*, not by how it reads:
     anything that returned no result set or touched a row needs ``confirmWrite``,
@@ -126,26 +123,20 @@ def run_sql(
         raise HTTPException(400, "empty statement")
 
     c = conn()
-    # autocommit hands transaction control to us, so DDL rolls back too (under
-    # the legacy mode Python only opens a transaction for DML)
+
     c.isolation_level = None
     try:
         started = time.perf_counter()
         before = c.total_changes
         deadline = time.monotonic() + QUERY_TIMEOUT_S
         try:
-            # the deadline guards the admin's statement and nothing else: an
-            # expired handler aborts every statement that follows, so leaving it
-            # armed would take the rollback and the audit insert down with the
-            # query and a timed-out attempt would go unrecorded
             try:
                 c.set_progress_handler(
-                    lambda: 1 if time.monotonic() > deadline else 0, PROGRESS_INSTRUCTIONS
+                    lambda: 1 if time.monotonic() > deadline else 0,
+                    PROGRESS_INSTRUCTIONS,
                 )
                 c.execute("BEGIN")
-                # codeql[py/sql-injection] — executing admin-typed SQL is this
-                # console's entire purpose; guarded by admin auth, transactions,
-                # write confirmation, timeouts and audit above
+
                 cur = c.execute(sql)
                 columns = [d[0] for d in cur.description] if cur.description else []
                 rows = (
@@ -197,8 +188,6 @@ def run_sql(
                 elapsedMs=elapsed_ms,
             )
 
-        # a read needs nothing committed; rolling back also undoes anything a
-        # statement did that neither returned rows nor bumped total_changes
         c.rollback()
         _audit(c, uid, "admin_sql", sql)
         truncated = len(rows) > ROW_LIMIT
@@ -215,8 +204,7 @@ def run_sql(
 
 
 def _audit(c: sqlite3.Connection, uid: int, kind: str, sql: str) -> None:
-    # a console statement can leave the schema unable to record itself (dropped
-    # table, deleted admin row); losing the audit row must not lose the result
+
     with contextlib.suppress(sqlite3.Error):
         c.execute(
             "INSERT INTO activity_events (user_id, kind, created_at, detail) VALUES (?, ?, ?, ?)",

@@ -57,7 +57,72 @@ exclude = ["web/prototypes"]
 force-exclude = true
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B", "SIM", "C4", "D209", "D213", "ANN", "PYI"]
+select = ["ALL"]
+ignore = [
+    # Formatter-owned or formatter-incompatible rules.
+    "COM812",
+    "E501",
+    "D205",
+    "D401",
+    # Ruff enables both sides of these mutually exclusive docstring pairs.
+    "D203",
+    "D213",
+
+    # Existing public API and test naming conventions.
+    "A002",
+    "ARG001",
+    "ARG002",
+    "D100",
+    "D101",
+    "D102",
+    "D103",
+    "D104",
+    "D105",
+    "D107",
+    "FBT001",
+    "FBT002",
+    "FBT003",
+    "N803",
+    "N813",
+    "N814",
+    "N815",
+    "N818",
+    "INP001",
+
+    # Intentional complexity and values in application/test orchestration.
+    "C901",
+    "DTZ001",
+    "DTZ005",
+    "PERF401",
+    "PERF403",
+    "PLR0912",
+    "PLR0913",
+    "PLR0915",
+    "PLR2004",
+    "PLW0603",
+    "PLW2901",
+    "PT012",
+    "PT017",
+    "PTH113",
+    "PTH118",
+    "RUF001",
+    "RUF003",
+    "RUF012",
+    "RUF043",
+    "S101",
+    "S105",
+    "S106",
+    "S107",
+    "S608",
+    "SLF001",
+    "TRY004",
+    "TRY300",
+    "TRY301",
+
+    # Required lazy imports and compatibility paths.
+    "PLC0415",
+    "TID252",
+]
 
 [tool.mypy]
 python_version = "3.12"

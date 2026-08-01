@@ -84,7 +84,7 @@ def test_export_uses_split_parts_for_rows_and_totals(api: Api, client: TestClien
             "parts": [
                 {"categoryId": groceries, "amount": -6000, "comment": "food"},
                 {"categoryId": household, "amount": -4000, "comment": "soap"},
-            ]
+            ],
         },
     )
     assert response.status_code == 200
@@ -395,8 +395,7 @@ def test_export_zero_balance_is_grey(api: Api, client: TestClient) -> None:
 
 
 def test_export_dashdata_refund_reduces_expense(api: Api, client: TestClient) -> None:
-    """
-    Direction enforcement keeps the API from filing an inflow into an expense
+    """Direction enforcement keeps the API from filing an inflow into an expense
     category, but migrated workbooks and old synced statements carry such
     refund rows — DashData must still net them out of the category's spend.
     """

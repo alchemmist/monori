@@ -1,5 +1,4 @@
-"""
-Admin panel API: instance-wide analytics and user management.
+"""Admin panel API: instance-wide analytics and user management.
 
 Every route requires the ``admin_user`` dependency (403 otherwise). The admin
 sees full user data — this is the instance owner's own deployment.
@@ -13,10 +12,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import ConfigDict
 from pydantic.dataclasses import dataclass as pydantic_dataclass
 
-from .. import auth
-from ..admin import admin_user
-from ..db_records import UserRecord
-from ..deps import UserResponse, conn, serialize_user
+from app import auth
+from app.admin import admin_user
+from app.db_records import UserRecord
+from app.deps import UserResponse, conn, serialize_user
+
 from .auth_router import create_user
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
@@ -36,14 +36,16 @@ def _cutoff(days: int) -> str:
 def _count(c: sqlite3.Connection, sql: str) -> int:
     row = c.execute(sql).fetchone()
     if row is None or not isinstance(row[0], int):
-        raise RuntimeError("count query did not return an integer")
+        msg = "count query did not return an integer"
+        raise RuntimeError(msg)
     return row[0]
 
 
 def _count_since(c: sqlite3.Connection, sql: str, since: str) -> int:
     row = c.execute(sql, (since,)).fetchone()
     if row is None or not isinstance(row[0], int):
-        raise RuntimeError("count query did not return an integer")
+        msg = "count query did not return an integer"
+        raise RuntimeError(msg)
     return row[0]
 
 
@@ -165,7 +167,8 @@ def overview(admin: Annotated[AdminContext, Depends(admin_user)]) -> OverviewRes
             (cutoff7[:10], cutoff7),
         ).fetchone()
         if active_row is None or not isinstance(active_row[0], int):
-            raise RuntimeError("active user query did not return an integer")
+            msg = "active user query did not return an integer"
+            raise RuntimeError(msg)
         return OverviewResponse(
             totals=AdminTotals(
                 users=_count(c, "SELECT COUNT(*) FROM users"),
@@ -173,19 +176,19 @@ def overview(admin: Annotated[AdminContext, Depends(admin_user)]) -> OverviewRes
                 accounts=_count(c, "SELECT COUNT(*) FROM accounts"),
                 connections=_count(c, "SELECT COUNT(*) FROM bank_connections"),
             ),
-            # pragmas rather than a filesystem stat: the connection knows the
-            # database regardless of where (or whether) the file lives
             dbSizeBytes=_count(c, "PRAGMA page_count") * _count(c, "PRAGMA page_size"),
             newUsers7d=_count_since(c, "SELECT COUNT(*) FROM users WHERE created_at >= ?", cutoff7),
             newUsers30d=_count_since(
-                c, "SELECT COUNT(*) FROM users WHERE created_at >= ?", cutoff30
+                c,
+                "SELECT COUNT(*) FROM users WHERE created_at >= ?",
+                cutoff30,
             ),
             activeUsers7d=active_row[0],
             registrations=[
                 RegistrationCount(month=r["m"], count=r["n"])
                 for r in c.execute(
                     "SELECT substr(created_at, 1, 7) AS m, COUNT(*) AS n FROM users"
-                    " GROUP BY m ORDER BY m"
+                    " GROUP BY m ORDER BY m",
                 )
             ],
         )
@@ -201,10 +204,12 @@ def list_users(
     try:
         connections = {}
         for r in c.execute(
-            "SELECT user_id, status, last_sync, last_error FROM bank_connections ORDER BY id"
+            "SELECT user_id, status, last_sync, last_error FROM bank_connections ORDER BY id",
         ):
             connections[r["user_id"]] = AdminConnectionSummary(
-                status=r["status"], lastSync=r["last_sync"], lastError=r["last_error"]
+                status=r["status"],
+                lastSync=r["last_sync"],
+                lastError=r["last_error"],
             )
         return [
             AdminUserSummary(
@@ -229,7 +234,7 @@ def list_users(
                 " (SELECT COUNT(*) FROM budgets b JOIN categories cat ON cat.id = b.category_id"
                 "  JOIN category_groups g ON g.id = cat.group_id WHERE g.user_id = u.id)"
                 "  AS budgets"
-                " FROM users u ORDER BY u.id"
+                " FROM users u ORDER BY u.id",
             )
         ]
     finally:
@@ -238,7 +243,8 @@ def list_users(
 
 @router.get("/users/{uid}")
 def user_detail(
-    uid: int, admin: Annotated[AdminContext, Depends(admin_user)]
+    uid: int,
+    admin: Annotated[AdminContext, Depends(admin_user)],
 ) -> UserDetailResponse:
     c = conn()
     try:
@@ -318,8 +324,7 @@ def user_transactions(
     limit: Annotated[int, Query(ge=1, le=TX_PAGE_MAX)] = TX_PAGE_MAX,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[AdminTransactionDetail]:
-    """
-    A user's transactions, newest first — the full list behind the detail view's
+    """A user's transactions, newest first — the full list behind the detail view's
     preview, rendered as one JSON object per line by the client. Paged (capped at
     ``TX_PAGE_MAX`` rows) so a heavy history can't materialize one giant response;
     the client walks ``offset`` until a short page comes back.
@@ -365,8 +370,7 @@ def delete_user_transactions(
     body: DeleteTransactionsBody,
     admin: Annotated[AdminContext, Depends(admin_user)],
 ) -> dict[str, int]:
-    """
-    Bulk-delete a selection of one user's transactions. All-or-nothing: every
+    """Bulk-delete a selection of one user's transactions. All-or-nothing: every
     id must belong to the target user, otherwise nothing is deleted — a stale
     selection must fail loudly rather than remove half of it.
     """
@@ -377,14 +381,12 @@ def delete_user_transactions(
     try:
         if c.execute("SELECT 1 FROM users WHERE id=?", (uid,)).fetchone() is None:
             raise HTTPException(404, "unknown user")
-        # the delete itself is scoped to the user's accounts and its rowcount
-        # verified, so there is no check-then-delete window: an id that stopped
-        # belonging to this user mid-flight rolls the whole batch back
+
         deleted = 0
         for i in range(0, len(ids), SQL_CHUNK):
             chunk = ids[i : i + SQL_CHUNK]
             marks = ",".join("?" * len(chunk))
-            # the interpolation only builds "?" placeholders; values are bound
+
             cur = c.execute(
                 f"DELETE FROM transactions WHERE id IN ({marks})"  # nosec B608
                 " AND account_id IN (SELECT id FROM accounts WHERE user_id=?)",
@@ -408,7 +410,8 @@ class CreateUserBody:
 
 @router.post("/users")
 def create_user_admin(
-    body: CreateUserBody, admin: Annotated[AdminContext, Depends(admin_user)]
+    body: CreateUserBody,
+    admin: Annotated[AdminContext, Depends(admin_user)],
 ) -> UserResponse:
     c = conn()
     try:
@@ -425,8 +428,7 @@ def delete_user(uid: int, admin: Annotated[AdminContext, Depends(admin_user)]) -
     try:
         if c.execute("SELECT id FROM users WHERE id=?", (uid,)).fetchone() is None:
             raise HTTPException(404, "unknown user")
-        # order respects the accounts <-> bank_connections FK cycle; budgets,
-        # activity_events and feature_usage go via ON DELETE CASCADE
+
         c.execute("UPDATE bank_connections SET pending_account_id=NULL WHERE user_id=?", (uid,))
         c.execute(
             "DELETE FROM transactions WHERE account_id IN"

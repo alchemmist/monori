@@ -46,11 +46,12 @@ def test_auto_provisions_key_without_env(tmp_path: Path, monkeypatch: pytest.Mon
 
 
 def test_persisted_key_survives_fresh_process(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _use_tmp_db(tmp_path, monkeypatch)
     blob = crypto.encrypt({"a": 1})
-    crypto._key_cache.clear()  # simulate a restart with an empty in-memory cache
+    crypto._key_cache.clear()
     assert crypto.decrypt(blob) == {"a": 1}
 
 

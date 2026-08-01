@@ -21,7 +21,7 @@ def test_validate_color_rejects_non_hex(bad: str) -> None:
 
 
 def test_validate_icon_image_allows_empty() -> None:
-    # empty / None means "no custom image" and must pass silently
+
     _validate_icon_image("")
     _validate_icon_image(None)
 
@@ -29,7 +29,7 @@ def test_validate_icon_image_allows_empty() -> None:
 def test_validate_icon_image_allows_data_url_at_the_size_cap() -> None:
     image = "data:image/png;base64," + "A" * (MAX_ICON_IMAGE - len("data:image/png;base64,"))
     assert len(image) == MAX_ICON_IMAGE
-    _validate_icon_image(image)  # exactly at the cap is allowed (guard is strictly >)
+    _validate_icon_image(image)
 
 
 def test_validate_icon_image_rejects_non_image_data() -> None:

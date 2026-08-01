@@ -7,10 +7,10 @@ from fastapi.concurrency import run_in_threadpool
 from pydantic import ConfigDict, Field, ValidationError
 from pydantic.dataclasses import dataclass as pydantic_dataclass
 
-from ..auth import AuthenticatedUser, current_user
-from ..connectors.base import SyncRow
-from ..deps import conn
-from ..importer import (
+from app.auth import AuthenticatedUser, current_user
+from app.connectors.base import SyncRow
+from app.deps import conn
+from app.importer import (
     CategoryDefinition,
     CategoryRule,
     ImportRow,
@@ -20,22 +20,21 @@ from ..importer import (
     parse_statement,
     tx_hash,
 )
-from ..ingest import commit_rows, existing_hash_counts
-from ..transfer_service import detect
-from ..workbook.apply import apply_workbook, budget_conflicts
-from ..workbook.models import (
+from app.ingest import commit_rows, existing_hash_counts
+from app.transfer_service import detect
+from app.workbook.apply import apply_workbook, budget_conflicts
+from app.workbook.models import (
     ACCOUNT_MAPPING_ADAPTER,
     ParsedWorkbook,
     WorkbookAccountSlot,
     WorkbookParseError,
     WorkbookTransaction,
 )
-from ..workbook.parser import DEFAULT_CURRENCY, WorkbookError, account_slot, parse_workbook
+from app.workbook.parser import DEFAULT_CURRENCY, WorkbookError, account_slot, parse_workbook
 
 router = APIRouter(prefix="/api/import", tags=["import"])
 
-# matches the client-side statement file cap (importFile.js) so oversized
-# uploads fail the same way whether they arrive via file or paste
+
 MAX_STATEMENT_TEXT = 5_000_000
 
 
@@ -58,9 +57,6 @@ class CommitRow:
 
 @pydantic_dataclass(config=ConfigDict(populate_by_name=True))
 class CommitBody:
-    # Kept as a fallback for older clients that send one account for the whole
-    # statement. New clients attach an account to every row, because a CSV can
-    # contain operations from several cards.
     rows: list[CommitRow]
     account_id: int | None = Field(default=None, alias="accountId")
 
@@ -210,15 +206,15 @@ def _owned_account(c: sqlite3.Connection, account_id: int | None, uid: int) -> b
     return (
         account_id is not None
         and c.execute(
-            "SELECT id FROM accounts WHERE id=? AND user_id=?", (account_id, uid)
+            "SELECT id FROM accounts WHERE id=? AND user_id=?",
+            (account_id, uid),
         ).fetchone()
         is not None
     )
 
 
 def _validate_import_categories(c: sqlite3.Connection, uid: int, rows: list[CommitRow]) -> None:
-    """
-    Every manually selected import category must belong to the account owner
+    """Every manually selected import category must belong to the account owner
     and match the sign of its transaction.
     """
     for row in rows:
@@ -253,13 +249,15 @@ def _detect_row_accounts(
     """Put an account on rows whose card tail belongs to exactly one account."""
     bound: dict[str, set[int]] = {}
     for account in c.execute(
-        "SELECT id, card_tails FROM accounts WHERE user_id=? AND archived=0", (uid,)
+        "SELECT id, card_tails FROM accounts WHERE user_id=? AND archived=0",
+        (uid,),
     ):
         for tail in (account["card_tails"] or "").split(","):
             if tail:
                 account_id = account["id"]
                 if not isinstance(account_id, int):
-                    raise RuntimeError("account query returned a non-integer id")
+                    msg = "account query returned a non-integer id"
+                    raise RuntimeError(msg)
                 bound.setdefault(tail, set()).add(account_id)
 
     for row in rows:
@@ -269,10 +267,7 @@ def _detect_row_accounts(
         ]
         best = max(matches, key=len) if matches else None
         owners = bound.get(best, set()) if best else set()
-        # A duplicate binding is deliberately left for the user: choosing an
-        # arbitrary account here could silently corrupt the ledger. The fallback
-        # only exists for the old one-account preview API; the mixed-CSV UI does
-        # not send one and therefore requires a manual choice.
+
         row.account_id = next(iter(owners)) if len(owners) == 1 else fallback_account_id
 
 
@@ -298,7 +293,8 @@ def _mark_duplicates(c: sqlite3.Connection, rows: list[ImportRow]) -> None:
 
 @router.post("/preview")
 def import_preview(
-    body: ImportBody, user: Annotated[AuthenticatedUser, Depends(current_user)]
+    body: ImportBody,
+    user: Annotated[AuthenticatedUser, Depends(current_user)],
 ) -> ImportPreviewResponse:
     uid = user.id
     if len(body.text) > MAX_STATEMENT_TEXT:
@@ -313,8 +309,7 @@ def import_preview(
             else None
         )
         _detect_row_accounts(c, uid, rows, fallback_account_id)
-        # commit enforces category direction, so the preview must not propose
-        # a category the commit would then reject wholesale
+
         kinds = {
             r["id"]: r["kind"]
             for r in c.execute(
@@ -342,7 +337,8 @@ def import_preview(
 
 @router.post("/duplicates")
 def import_duplicates(
-    body: DuplicateBody, user: Annotated[AuthenticatedUser, Depends(current_user)]
+    body: DuplicateBody,
+    user: Annotated[AuthenticatedUser, Depends(current_user)],
 ) -> DuplicatesResponse:
     """Re-check preview rows after the user manually changes their accounts."""
     uid = user.id
@@ -371,10 +367,10 @@ def import_duplicates(
 
 @router.post("/commit")
 def import_commit(
-    body: CommitBody, user: Annotated[AuthenticatedUser, Depends(current_user)]
+    body: CommitBody,
+    user: Annotated[AuthenticatedUser, Depends(current_user)],
 ) -> ImportCommitResponse:
-    """
-    Server-side dedup: rows whose hash already exists — or repeats within the
+    """Server-side dedup: rows whose hash already exists — or repeats within the
     batch — are skipped, so a double-submit can't create duplicates.
     """
     uid = user.id
@@ -385,8 +381,6 @@ def import_commit(
         _validate_import_categories(c, uid, body.rows)
         grouped: dict[int, list[SyncRow]] = {}
         for r in body.rows:
-            # A body-level account is the legacy, single-account contract and
-            # intentionally takes precedence over preview metadata.
             account_id = body.account_id if body.account_id is not None else r.account_id
             if account_id is None:
                 raise HTTPException(400, "every import row needs an account")
@@ -399,7 +393,7 @@ def import_commit(
                     mcc=r.mcc,
                     card="",
                     category_id=r.category_id,
-                )
+                ),
             )
         for account_id in grouped:
             if not _owned_account(c, account_id, uid):
@@ -429,8 +423,7 @@ async def _read_workbook_upload(file: UploadFile) -> bytes:
 
 
 def _account_slots(transactions: Iterable[WorkbookTransaction]) -> list[WorkbookAccountSlot]:
-    """
-    What the user has to map: one entry per card marker per currency. Splitting
+    """What the user has to map: one entry per card marker per currency. Splitting
     by currency is what makes a foreign-currency migration impossible to get
     wrong — a USD slot can only be pointed at a USD account, so a user without
     one has nothing to pick and the import stays blocked until they make it.
@@ -449,7 +442,8 @@ def _account_slots(transactions: Iterable[WorkbookTransaction]) -> list[Workbook
 
 
 def _workbook_preview_summary(
-    parsed: ParsedWorkbook, conflicts: int = 0
+    parsed: ParsedWorkbook,
+    conflicts: int = 0,
 ) -> WorkbookPreviewResponse:
     by_year: dict[str, int] = {}
     for row in parsed.transactions:
@@ -498,8 +492,7 @@ def _reject_currency_mismatch(
     slots: Mapping[str, WorkbookAccountSlot],
     marker_map: Mapping[str, int],
 ) -> None:
-    """
-    An amount is only meaningful on an account held in the same currency:
+    """An amount is only meaningful on an account held in the same currency:
     putting 95.78 USD on a ruble account would silently record 95 rubles 78
     kopecks. The UI already only offers matching accounts; this is the same rule
     enforced where it cannot be clicked around.
@@ -508,7 +501,6 @@ def _reject_currency_mismatch(
     placeholders = ",".join("?" * len(ids))
     held = {
         r["id"]: (r["currency"] or DEFAULT_CURRENCY).upper()
-        # only "?" marks are interpolated; the values go through bind params
         for r in c.execute(
             f"SELECT id, currency FROM accounts WHERE id IN ({placeholders})",  # nosec B608
             ids,
@@ -531,8 +523,7 @@ def _remember_markers(
     slots: Mapping[str, WorkbookAccountSlot],
     marker_map: Mapping[str, int],
 ) -> int:
-    """
-    Bind each slot's card marker to the account it was mapped onto, so the next
+    """Bind each slot's card marker to the account it was mapped onto, so the next
     statement import or sync routes those cards without asking. Tails are only
     appended — whatever the account already has stays, and a marker with no
     digits (the unmarked-rows slot) binds nothing.
@@ -546,7 +537,8 @@ def _remember_markers(
         row = c.execute("SELECT card_tails FROM accounts WHERE id=?", (account_id,)).fetchone()
         raw_value = row["card_tails"]
         if raw_value is not None and not isinstance(raw_value, str):
-            raise RuntimeError("account query returned non-text card tails")
+            msg = "account query returned non-text card tails"
+            raise RuntimeError(msg)
         raw_tails = raw_value or ""
         tails = [tail for tail in raw_tails.split(",") if tail]
         if digits in tails:
@@ -558,7 +550,11 @@ def _remember_markers(
 
 
 def _commit_workbook(
-    data: bytes, uid: int, mapping: str, budget_policy: str, remember: bool
+    data: bytes,
+    uid: int,
+    mapping: str,
+    budget_policy: str,
+    remember: bool,
 ) -> WorkbookCommitResponse:
     parsed = _parse_or_400(data)
     try:
@@ -585,7 +581,9 @@ def _commit_workbook(
             skipped=result.skipped,
             batches=[
                 WorkbookBatchResponse(
-                    accountId=batch.account_id, batchId=batch.batch_id, inserted=batch.inserted
+                    accountId=batch.account_id,
+                    batchId=batch.batch_id,
+                    inserted=batch.inserted,
                 )
                 for batch in result.batches
             ],
@@ -599,10 +597,6 @@ def _commit_workbook(
         c.close()
 
 
-# Parsing a workbook and writing thousands of rows takes tens of seconds. Run it
-# on a worker thread: on the event loop it would freeze every other request for
-# the whole migration, and it opens its own connection there because a sqlite3
-# handle belongs to the thread that created it.
 @router.post("/workbook/preview")
 async def workbook_preview(
     user: Annotated[AuthenticatedUser, Depends(current_user)],

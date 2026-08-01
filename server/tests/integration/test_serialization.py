@@ -9,9 +9,7 @@ pytestmark = pytest.mark.integration
 
 
 def test_snapshot_serialization_contract(api: Api, client: TestClient) -> None:
-    """
-    Pin the exact shape every serializer emits — API consumers depend on it.
-    """
+    """Pin the exact shape every serializer emits — API consumers depend on it."""
     g = api.group("Expenses", "expense")
     cat = api.category("Food", g, "lenta|okey")
     client.patch(f"/api/categories/{cat}", json={"archived": True})
@@ -43,7 +41,7 @@ def test_snapshot_serialization_contract(api: Api, client: TestClient) -> None:
             "connectionId": None,
             "bankRef": "",
             "cardTails": [],
-        }
+        },
     ]
     assert serialized["groups"] == [{"id": g, "name": "Expenses", "sort": 1, "kind": "expense"}]
     assert serialized["categories"] == [
@@ -57,7 +55,7 @@ def test_snapshot_serialization_contract(api: Api, client: TestClient) -> None:
             "goalTarget": None,
             "goalStatus": None,
             "goalTargetDate": None,
-        }
+        },
     ]
     assert serialized["transactions"] == [
         {
@@ -74,17 +72,15 @@ def test_snapshot_serialization_contract(api: Api, client: TestClient) -> None:
             "source": "manual",
             "hidden": False,
             "splits": [],
-        }
+        },
     ]
     assert serialized["budgets"] == [{"categoryId": cat, "year": 2026, "month": 3, "amount": 5000}]
 
 
 def test_snapshot_ordering_is_deterministic(api: Api) -> None:
-    """
-    Rows sharing a sort key fall back to id, so the order is stable.
-    """
+    """Rows sharing a sort key fall back to id, so the order is stable."""
     a = api.tx("2026-01-01T00:00:00", -1)
-    b = api.tx("2026-01-01T00:00:00", -2)  # same timestamp as a
+    b = api.tx("2026-01-01T00:00:00", -2)
     c = api.tx("2026-01-01T00:00:00", -3)
     ids = [transaction.id for transaction in api.snapshot().transactions]
     assert ids == [a, b, c]

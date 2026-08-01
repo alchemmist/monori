@@ -46,8 +46,7 @@ def test_category_reorder_and_archive_roundtrip(api: Api, client: TestClient) ->
 
 
 def test_category_delete_never_reassigns(api: Api, client: TestClient) -> None:
-    # moving transactions is /merge's job now; delete only ever uncategorizes,
-    # and a leftover reassignTo from an old client must not resurrect the move
+
     g = api.group("Expenses")
     a = api.category("A", g)
     b = api.category("B", g)
@@ -88,8 +87,7 @@ def test_category_merge_moves_tx_and_unions_keywords(api: Api, client: TestClien
     assert [category.id for category in snap.categories] == [dst]
     assert api.tx_by(tx).categoryId == dst
     assert api.cat(dst).keywords.split("|") == ["starbucks", "shokoladnitsa", "cofix"]
-    # the spending moved across, so the plan has to move with it: overlapping
-    # months are summed, months only the source had are carried over as they are
+
     assert sorted((budget.year, budget.month, budget.amount) for budget in snap.budgets) == [
         (2026, 1, 1000),
         (2026, 2, 200),
@@ -98,9 +96,7 @@ def test_category_merge_moves_tx_and_unions_keywords(api: Api, client: TestClien
 
 
 def test_merge_across_income_and_expense_is_refused(api: Api, client: TestClient) -> None:
-    # budgeting and analytics read the sign off the group kind, so this merge
-    # would reinterpret the whole moved history — the server refuses it even
-    # though the picker never offers it
+
     salary = api.category("Salary", api.group("Income", kind="income"))
     rent = api.category("Rent", api.group("Fixed", kind="expense"))
     tx = api.tx("2026-01-01T00:00:00", 90000, categoryId=salary)

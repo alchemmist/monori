@@ -61,7 +61,7 @@ def test_workbook_preview_summarizes(api: Api, client: TestClient) -> None:
     assert body["transactionsByYear"] == {"2026": 3}
     assert body["budgetCells"] == 2
     assert body["accountSlots"] == [
-        {"key": "RUB:Card", "marker": "Card", "currency": "RUB", "transactions": 3}
+        {"key": "RUB:Card", "marker": "Card", "currency": "RUB", "transactions": 3},
     ]
     assert body["budgetConflicts"] == 2
     assert body["errors"] == []
@@ -174,7 +174,7 @@ def test_workbook_reimport_is_idempotent(api: Api, client: TestClient) -> None:
                 "openingBalance": 0,
                 "bankRef": "",
             },
-        )
+        ),
     )
     payload = {"mapping": json.dumps({"RUB:Card": target})}
     files = {"file": ("book.xlsx", data, "application/octet-stream")}
@@ -205,7 +205,7 @@ def test_workbook_budget_policy_skip(api: Api, client: TestClient) -> None:
                 "openingBalance": 0,
                 "bankRef": "",
             },
-        )
+        ),
     )
     files = {"file": ("book.xlsx", data, "application/octet-stream")}
     r = client.post(
@@ -274,7 +274,7 @@ def test_workbook_import_lands_as_rollbackable_batch(api: Api, client: TestClien
                 "openingBalance": 0,
                 "bankRef": "",
             },
-        )
+        ),
     )
     r = client.post(
         "/api/import/workbook/commit",
@@ -294,8 +294,6 @@ def test_workbook_upload_guards(api: Api, client: TestClient) -> None:
     assert r.status_code == 400
     assert r.json()["detail"] == "empty upload"
 
-    # no size cap: a large payload is not rejected for its size, it reaches the
-    # parser and fails there instead (400, not 413)
     r = client.post(
         "/api/import/workbook/preview",
         files={"file": ("book.xlsx", b"x" * (30 * 1024 * 1024), "application/octet-stream")},
@@ -305,8 +303,7 @@ def test_workbook_upload_guards(api: Api, client: TestClient) -> None:
 
 
 def _mixed_currency_book() -> bytes:
-    """
-    One card carrying both RUB and USD rows — the shape a foreign-currency
+    """One card carrying both RUB and USD rows — the shape a foreign-currency
     balance leaves in a bank export.
     """
     wb = Workbook()
@@ -314,7 +311,7 @@ def _mixed_currency_book() -> bytes:
     assert ws is not None
     ws.title = "Transactions"
     ws.append(
-        ["Дата операции", "Номер карты", "Статус", "Сумма операции", "Валюта операции", "Описание"]
+        ["Дата операции", "Номер карты", "Статус", "Сумма операции", "Валюта операции", "Описание"],
     )
     ws.append(["2026-01-05 10:00:00", "*1111", "OK", -300.0, "RUB", "Lenta"])
     ws.append(["2026-01-06 10:00:00", "*1111", "OK", 95.78, "USD", "Interest"])
@@ -333,7 +330,8 @@ def test_workbook_preview_splits_a_card_by_currency(client: TestClient) -> None:
 
 
 def test_workbook_commit_refuses_foreign_rows_on_a_ruble_account(
-    api: Api, client: TestClient
+    api: Api,
+    client: TestClient,
 ) -> None:
     rub = api.account("Card")
     data = _mixed_currency_book()
@@ -354,7 +352,7 @@ def test_workbook_commit_refuses_foreign_rows_on_a_ruble_account(
                 "openingBalance": 0,
                 "bankRef": "",
             },
-        )
+        ),
     )
     mapping = json.dumps({"RUB:*1111": rub, "USD:*1111": usd})
     r = _upload(client, "/api/import/workbook/commit", data, {"mapping": mapping})
@@ -368,7 +366,7 @@ def _card_book() -> bytes:
     assert ws is not None
     ws.title = "Transactions"
     ws.append(
-        ["Дата операции", "Номер карты", "Статус", "Сумма операции", "Валюта операции", "Описание"]
+        ["Дата операции", "Номер карты", "Статус", "Сумма операции", "Валюта операции", "Описание"],
     )
     ws.append(["2026-01-05 10:00:00", "*8181", "OK", -300.0, "RUB", "Lenta"])
     ws.append(["2026-01-06 10:00:00", "", "OK", -200.0, "RUB", "Okey"])
@@ -378,8 +376,7 @@ def _card_book() -> bytes:
 
 
 def test_workbook_commit_remembers_card_markers_when_asked(api: Api, client: TestClient) -> None:
-    """
-    Mapping a card to an account is knowledge worth keeping: with remember set,
+    """Mapping a card to an account is knowledge worth keeping: with remember set,
     the marker's digits land in the account's card tails, so the next statement
     import or sync routes that card without asking. The unmarked-rows slot has
     no digits and binds nothing.
