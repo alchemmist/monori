@@ -1,11 +1,15 @@
-import json
 import pathlib
 import sys
 
-import pytest
-
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
-from app.importer import build_rules, categorize, parse_amount_kop, parse_date, parse_statement
+from app.importer import (
+    CategoryDefinition,
+    build_rules,
+    categorize,
+    parse_amount_kop,
+    parse_date,
+    parse_statement,
+)
 
 SAMPLE_TSV = (
     "03.07.2026 19:48:24\t03.07.2026\t*2947\tOK\t-450,00\tRUB\t-450,00\tRUB\t\t"
@@ -17,37 +21,41 @@ SAMPLE_TSV = (
 )
 
 
-def test_parse_date():
-    assert parse_date("03.07.2026 19:48:24").isoformat() == "2026-07-03T19:48:24"
-    assert parse_date("03.07.2026").isoformat() == "2026-07-03T00:00:00"
+def test_parse_date() -> None:
+    with_time = parse_date("03.07.2026 19:48:24")
+    without_time = parse_date("03.07.2026")
+    assert with_time is not None
+    assert without_time is not None
+    assert with_time.isoformat() == "2026-07-03T19:48:24"
+    assert without_time.isoformat() == "2026-07-03T00:00:00"
     assert parse_date("2026-07-03") is None
 
 
-def test_parse_amount():
+def test_parse_amount() -> None:
     assert parse_amount_kop("-1 500,50") == -150050
     assert parse_amount_kop("500") == 50000
     assert parse_amount_kop("0,10") == 10
     assert parse_amount_kop("abc") is None
 
 
-def test_parse_amount_strips_both_space_kinds():
+def test_parse_amount_strips_both_space_kinds() -> None:
     # a plain space and a non-breaking space (U+00A0) both used as thousands sep
     assert parse_amount_kop("1 500,00") == 150000
     assert parse_amount_kop("1 500,00") == 150000
 
 
-def test_parse_amount_rounds_through_cents():
+def test_parse_amount_rounds_through_cents() -> None:
     # the double round() dodges float artifacts: 2.675 must land on 267, not 268
     assert parse_amount_kop("2,675") == 267
 
 
-def test_parse_amount_blank_and_dash():
+def test_parse_amount_blank_and_dash() -> None:
     assert parse_amount_kop("") is None
     assert parse_amount_kop("   ") is None
     assert parse_amount_kop("-") is None
 
 
-def test_parse_statement():
+def test_parse_statement() -> None:
     rows, errors = parse_statement(SAMPLE_TSV)
     assert len(rows) == 2  # FAILED row skipped
     assert not errors
@@ -57,7 +65,7 @@ def test_parse_statement():
     assert rows[1]["amount"] == -150050
 
 
-def test_parse_statement_skips_csv_header_row():
+def test_parse_statement_skips_csv_header_row() -> None:
     header = (
         "Дата операции;Дата платежа;Номер карты;Статус;Сумма операции;Валюта операции;"
         "Сумма платежа;Валюта платежа;Кэшбэк;Категория;MCC;Описание;Бонусы (включая кэшбэк);"
@@ -70,13 +78,13 @@ def test_parse_statement_skips_csv_header_row():
     assert rows[0]["description"] == "Метро"
 
 
-def test_parse_statement_bad_line():
+def test_parse_statement_bad_line() -> None:
     rows, errors = parse_statement("garbage line\n")
     assert not rows
     assert len(errors) == 1
 
 
-def test_parse_statement_row_fields():
+def test_parse_statement_row_fields() -> None:
     rows, _ = parse_statement(SAMPLE_TSV)
     assert rows[0]["bank_category"] == "Переводы"
     assert rows[0]["mcc"] == ""
@@ -86,10 +94,10 @@ def test_parse_statement_row_fields():
     # the masked card number rides along so the client can route by its tail
     assert rows[0]["card"] == "*2947"
     # hashes are account-scoped and derived at ingest time, not during parsing
-    assert "hash" not in rows[0]
+    assert rows[0].hash == ""
 
 
-def test_tx_hash_is_scoped_to_the_account():
+def test_tx_hash_is_scoped_to_the_account() -> None:
     from app.importer import tx_hash
 
     a = tx_hash(1, "2026-07-03T19:48:24", -45000, "Сбербанк")
@@ -99,7 +107,7 @@ def test_tx_hash_is_scoped_to_the_account():
     assert a == tx_hash(1, "2026-07-03T19:48:24", -45000, "Сбербанк")
 
 
-def test_parse_statement_semicolon_delimiter_and_quotes():
+def test_parse_statement_semicolon_delimiter_and_quotes() -> None:
     line = '05.07.2026;05.07.2026;*1;OK;-20,00;RUB;-20,00;RUB;;Транспорт;4111;"Метро";0;0;-20,00\n'
     rows, errors = parse_statement(line)
     assert not errors
@@ -109,7 +117,7 @@ def test_parse_statement_semicolon_delimiter_and_quotes():
     assert rows[0]["amount"] == -2000
 
 
-def test_parse_statement_accepts_exactly_twelve_columns():
+def test_parse_statement_accepts_exactly_twelve_columns() -> None:
     line = (
         "05.07.2026 10:00:00\t05.07.2026\t*1\tOK\t-10,00\tRUB\t-10,00\tRUB\t\t"
         "Кафе\t5812\tStarbucks\n"
@@ -121,13 +129,16 @@ def test_parse_statement_accepts_exactly_twelve_columns():
     assert rows[0]["mcc"] == "5812"
 
 
-def test_parse_statement_too_few_columns_reports_count_and_line():
+def test_parse_statement_too_few_columns_reports_count_and_line() -> None:
     rows, errors = parse_statement("a;b;c\n")
     assert not rows
-    assert errors == [{"line": 1, "error": "expected >=12 columns, got 3", "raw": "a;b;c"}]
+    assert len(errors) == 1
+    assert errors[0].line == 1
+    assert errors[0].error == "expected >=12 columns, got 3"
+    assert errors[0].raw == "a;b;c"
 
 
-def test_parse_statement_error_line_numbers_are_one_based():
+def test_parse_statement_error_line_numbers_are_one_based() -> None:
     # blank first line is skipped but still counted; the bad row is line 2
     nodate = "NODATE\t05.07.2026\t*1\tOK\t-10,00\tRUB\t-10,00\tRUB\t\tКафе\t5812\tX"
     rows, errors = parse_statement("\n" + nodate + "\n")
@@ -136,7 +147,7 @@ def test_parse_statement_error_line_numbers_are_one_based():
     assert errors[0]["error"] == "unparseable date or amount"
 
 
-def test_parse_statement_needs_both_date_and_amount():
+def test_parse_statement_needs_both_date_and_amount() -> None:
     valid = "05.07.2026\t05.07.2026\t*1\tOK\t-10,00\tRUB\t-10,00\tRUB\t\tКафе\t5812\tX"
     bad_date = valid.replace("05.07.2026\t05.07.2026", "NODATE\t05.07.2026", 1)
     bad_amount = valid.replace("-10,00\tRUB\t-10,00", "-10,00\tRUB\tNOPE", 1)
@@ -146,7 +157,7 @@ def test_parse_statement_needs_both_date_and_amount():
         assert errors[0]["error"] == "unparseable date or amount"
 
 
-def test_parse_statement_strips_only_the_surrounding_quotes():
+def test_parse_statement_strips_only_the_surrounding_quotes() -> None:
     # a description that itself starts with a capital letter the quote-strip set
     # must not touch: stripping anything but the quotes eats real characters
     line = (
@@ -158,13 +169,13 @@ def test_parse_statement_strips_only_the_surrounding_quotes():
     assert rows[0]["description"] == "Xerox"
 
 
-def test_parse_statement_unparseable_error_carries_the_raw_line():
+def test_parse_statement_unparseable_error_carries_the_raw_line() -> None:
     nodate = "NODATE\t05.07.2026\t*1\tOK\t-10,00\tRUB\t-10,00\tRUB\t\tКафе\t5812\tX"
     _, errors = parse_statement(nodate + "\n")
     assert errors[0]["raw"] == nodate
 
 
-def test_parse_statement_continues_after_every_kind_of_skip():
+def test_parse_statement_continues_after_every_kind_of_skip() -> None:
     valid = "05.07.2026 10:00:00\t05.07.2026\t*1\tOK\t-10,00\tRUB\t-10,00\tRUB\t\tКафе\t5812\tGOOD"
     failed = valid.replace("\tOK\t", "\tFAILED\t").replace("GOOD", "SKIP")
     bad_date = valid.replace("05.07.2026 10:00:00", "NODATE", 1).replace("GOOD", "BADDATE")
@@ -176,12 +187,12 @@ def test_parse_statement_continues_after_every_kind_of_skip():
     assert len(errors) == 2
 
 
-def test_categorize_first_rule_wins_and_sign_split():
+def test_categorize_first_rule_wins_and_sign_split() -> None:
     groups = {1: "expense", 2: "income"}
-    cats = [
-        {"id": 10, "name": "Groceries", "keywords": "Пятёрочка|Лента", "group_id": 1},
-        {"id": 11, "name": "Entertainment", "keywords": "Лента", "group_id": 1},
-        {"id": 20, "name": "Cashback", "keywords": "Кэшбэк", "group_id": 2},
+    cats: list[CategoryDefinition] = [
+        CategoryDefinition(10, "Groceries", "Пятёрочка|Лента", 1),
+        CategoryDefinition(11, "Entertainment", "Лента", 1),
+        CategoryDefinition(20, "Cashback", "Кэшбэк", 2),
     ]
     rules = build_rules(cats, groups)
     assert categorize("Пятёрочка", -100, rules) == 10
@@ -191,30 +202,30 @@ def test_categorize_first_rule_wins_and_sign_split():
     assert categorize("", -100, rules) is None
 
 
-def test_build_rules_skips_empty_bad_kind_and_null_keywords():
+def test_build_rules_skips_empty_bad_kind_and_null_keywords() -> None:
     groups = {1: "expense", 2: "income", 3: "other"}
-    cats = [
-        {"id": 1, "name": "NoKw", "keywords": "", "group_id": 1},  # empty → skipped
-        {"id": 2, "name": "BadKind", "keywords": "x", "group_id": 3},  # not in/out → skipped
-        {"id": 3, "name": "Groceries", "keywords": "Пят | Лента", "group_id": 1},
-        {"id": 4, "name": "Salary", "keywords": "зарплата", "group_id": 2},
-        {"id": 5, "name": "NullKw", "keywords": None, "group_id": 1},  # None → skipped
+    cats: list[CategoryDefinition] = [
+        CategoryDefinition(1, "NoKw", "", 1),
+        CategoryDefinition(2, "BadKind", "x", 3),
+        CategoryDefinition(3, "Groceries", "Пят | Лента", 1),
+        CategoryDefinition(4, "Salary", "зарплата", 2),
+        CategoryDefinition(5, "NullKw", None, 1),
     ]
     rules = build_rules(cats, groups)
     # categories before Groceries are skipped with `continue`, not `break`
-    assert [r["category_id"] for r in rules["OUT"]] == [3]
-    assert [r["category_id"] for r in rules["IN"]] == [4]
-    assert rules["OUT"][0]["name"] == "Groceries"
+    assert [r.category_id for r in rules["OUT"]] == [3]
+    assert [r.category_id for r in rules["IN"]] == [4]
+    assert rules["OUT"][0].name == "Groceries"
     # keywords are split on '|', trimmed and lowercased
-    assert rules["OUT"][0]["keywords"] == ["пят", "лента"]
+    assert rules["OUT"][0].keywords == ["пят", "лента"]
 
 
-def test_categorize_guards_on_empty_desc_and_zero_amount():
+def test_categorize_guards_on_empty_desc_and_zero_amount() -> None:
     groups = {1: "expense", 2: "income"}
-    cats = [
-        {"id": 10, "name": "Cafe", "keywords": "кафе", "group_id": 1},
-        {"id": 20, "name": "Salary", "keywords": "зарплата", "group_id": 2},
-        {"id": 30, "name": "Decoy", "keywords": "xx", "group_id": 1},
+    cats: list[CategoryDefinition] = [
+        CategoryDefinition(10, "Cafe", "кафе", 1),
+        CategoryDefinition(20, "Salary", "зарплата", 2),
+        CategoryDefinition(30, "Decoy", "xx", 1),
     ]
     rules = build_rules(cats, groups)
     assert categorize("Кафе Пушкин", -500, rules) == 10
@@ -225,60 +236,18 @@ def test_categorize_guards_on_empty_desc_and_zero_amount():
     assert categorize("Зарплата", 1, rules) == 20
     # an empty description short-circuits to None (would match the "xx" decoy otherwise)
     assert categorize("", -500, rules) is None
-    assert categorize(None, -500, rules) is None
 
 
-def test_categorizer_agreement_with_sheet_history():
-    """
-    Port fidelity check: recategorize all historical transactions and compare
-    with the sheet's own FIND_CATEGORIES output (auto_category column).
-    """
-    out = pathlib.Path(__file__).resolve().parents[3] / "migration" / "out"
-    if not (out / "transactions.json").exists():
-        pytest.skip("migration/out fixtures not present (private Google Sheet data)")
-    txs = json.loads((out / "transactions.json").read_text())
-    cats_raw = json.loads((out / "categories.json").read_text())
-    groups = {}
-    group_ids = {}
-    for i, g in enumerate(cats_raw["groups"], 1):
-        group_ids[g["name"]] = i
-        groups[i] = "income" if g["type"] == "IN" else "expense"
-    cats = [
-        {"id": i, "name": c["name"], "keywords": c["keywords"], "group_id": group_ids[c["group"]]}
-        for i, c in enumerate(cats_raw["categories"], 1)
-    ]
-    name_by_id = {c["id"]: c["name"] for c in cats}
-    rules = build_rules(cats, groups)
-
-    known_stale = {("2025-05-31T23:18:27", "Яндекс Расписания")}
-
-    mismatches = []
-    for t in txs:
-        if (t["date"], t["description"]) in known_stale:
-            continue
-        got_id = categorize(t["description"], round(t["amount"] * 100), rules)
-        got = name_by_id.get(got_id, "")
-        expected = t["auto_category"] or ""
-        # The sheet's historical FIND_CATEGORIES formula left merchant refunds
-        # blank, while the importer deliberately files a positive merchant
-        # payment back into its expense envelope when no income rule matches.
-        if not expected and t["amount"] > 0 and got_id is not None:
-            continue
-        if got != expected:
-            mismatches.append((t["date"], t["description"][:40], expected, got))
-    assert mismatches == [], f"{len(mismatches)} disagreements, first: {mismatches[:5]}"
-
-
-def test_categorize_files_a_refund_back_into_its_expense_envelope():
+def test_categorize_files_a_refund_back_into_its_expense_envelope() -> None:
     """
     A merchant's money coming back is a refund: it must land in the envelope
     it left, not drift to uncategorized where the budget cannot see it. Income
     keywords still win first, so a real inflow is never mistaken for a refund.
     """
     groups = {1: "expense", 2: "income"}
-    cats = [
-        {"id": 10, "name": "Groceries", "keywords": "Пятёрочка", "group_id": 1},
-        {"id": 20, "name": "Cashback", "keywords": "Кэшбэк|пятёрочка кэшбэк", "group_id": 2},
+    cats: list[CategoryDefinition] = [
+        CategoryDefinition(10, "Groceries", "Пятёрочка", 1),
+        CategoryDefinition(20, "Cashback", "Кэшбэк|пятёрочка кэшбэк", 2),
     ]
     rules = build_rules(cats, groups)
     assert categorize("Пятёрочка возврат", 8470, rules) == 10

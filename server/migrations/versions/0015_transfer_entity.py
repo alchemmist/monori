@@ -63,12 +63,12 @@ HAVING COUNT(*) = 2
 """
 
 
-def upgrade():
+def upgrade() -> None:
     op.execute(CREATE_TRANSFERS)
     op.execute("CREATE INDEX IF NOT EXISTS idx_transfers_user ON transfers (user_id)")
     op.execute(CREATE_REJECTIONS)
     op.execute(BACKFILL)
 
 
-def downgrade():
+def downgrade() -> None:
     raise NotImplementedError("forward-only migrations")

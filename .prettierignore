@@ -5,7 +5,6 @@ server/static/
 server/data/
 server/.venv/
 server/uv.lock
-migration/
 docs/
 **/*.woff2
 **/*.png

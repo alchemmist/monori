@@ -1,45 +1,70 @@
+import sqlite3
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import ConfigDict, Field, JsonValue, model_validator
+from pydantic.dataclasses import dataclass as pydantic_dataclass
 
-from ..auth import current_user
-from ..deps import conn
+from ..auth import AuthenticatedUser, current_user
+from ..db_records import CategoryOwnershipRecord, GoalGroupRecord
+from ..deps import IdResponse, conn
 
 router = APIRouter(prefix="/api/categories", tags=["categories"])
 
 
-class CategoryBody(BaseModel):
-    name: str = Field(min_length=1, max_length=80)
+_CONFIG = ConfigDict(extra="forbid")
+
+
+@pydantic_dataclass(config=_CONFIG)
+class CategoryBody:
+    name: str
     groupId: int
     keywords: str = ""
-    goalTarget: int | None = Field(default=0, ge=0)
+    goalTarget: int | None = None
     goalTargetDate: str | None = None
 
 
-class CategoryPatch(BaseModel):
-    name: str | None = Field(default=None, min_length=1, max_length=80)
+@pydantic_dataclass(config=_CONFIG)
+class CategoryPatch:
+    name: str | None = None
     groupId: int | None = None
     keywords: str | None = None
     archived: bool | None = None
-    goalTarget: int | None = Field(default=0, ge=0)
+    goalTarget: int | None = None
     goalTargetDate: str | None = None
     goalStatus: str | None = None
+    goalTargetProvided: bool = Field(default=False, exclude=True, repr=False)
+    goalTargetDateProvided: bool = Field(default=False, exclude=True, repr=False)
+
+    @model_validator(mode="before")
+    @classmethod
+    def record_presence(cls, values: dict[str, JsonValue]) -> dict[str, JsonValue]:
+        values["goalTargetProvided"] = "goalTarget" in values
+        values["goalTargetDateProvided"] = "goalTargetDate" in values
+        return values
 
 
-class ArchiveGoalBody(BaseModel):
+@pydantic_dataclass(config=_CONFIG)
+class ArchiveGoalBody:
     pass
 
 
-class Reorder(BaseModel):
+@pydantic_dataclass(config=_CONFIG)
+class Reorder:
     ids: list[int]
 
 
-class MergeBody(BaseModel):
+@pydantic_dataclass(config=_CONFIG)
+class MergeBody:
     into: int
 
 
-def _merge_keywords(a, b):
+@pydantic_dataclass(config=_CONFIG)
+class OkResponse:
+    ok: bool
+
+
+def _merge_keywords(a: str, b: str) -> str:
     seen, out = set(), []
     for kw in [*str(a or "").split("|"), *str(b or "").split("|")]:
         kw = kw.strip()
@@ -50,17 +75,18 @@ def _merge_keywords(a, b):
     return "|".join(out)
 
 
-def _owned_category(c, cat_id, uid):
-    return c.execute(
+def _owned_category(c: sqlite3.Connection, cat_id: int, uid: int) -> CategoryOwnershipRecord | None:
+    row = c.execute(
         "SELECT c.id, c.keywords, c.goal_target, t.type, t.is_goal"
         " FROM categories c JOIN category_groups g ON g.id = c.group_id"
         " JOIN category_group_types t ON t.id = g.type_id"
         " WHERE c.id=? AND g.user_id=?",
         (cat_id, uid),
     ).fetchone()
+    return CategoryOwnershipRecord.from_row(row) if row is not None else None
 
 
-def _name_taken(c, uid, name, except_id=None):
+def _name_taken(c: sqlite3.Connection, uid: int, name: str, except_id: int | None = None) -> bool:
     dup = c.execute(
         "SELECT c.id FROM categories c JOIN category_groups g ON g.id = c.group_id"
         " WHERE g.user_id=? AND c.name=? AND c.id<>?",
@@ -70,8 +96,13 @@ def _name_taken(c, uid, name, except_id=None):
 
 
 @router.post("")
-def create_category(body: CategoryBody, user: Annotated[dict, Depends(current_user)]):
-    uid = user["id"]
+def create_category(
+    body: CategoryBody, user: Annotated[AuthenticatedUser, Depends(current_user)]
+) -> IdResponse:
+    uid = user.id
+    name = body.name.strip()
+    if not name:
+        raise HTTPException(422, "name cannot be empty")
     c = conn()
     try:
         group = c.execute(
@@ -82,9 +113,12 @@ def create_category(body: CategoryBody, user: Annotated[dict, Depends(current_us
         ).fetchone()
         if not group:
             raise HTTPException(400, "unknown group")
-        if group["is_goal"] and not body.goalTarget:
+        group_record = GoalGroupRecord.from_row(group)
+        keywords = body.keywords
+        goal_target = body.goalTarget
+        if group_record.is_goal and goal_target is None:
             raise HTTPException(400, "goalTarget is required for goal categories")
-        if _name_taken(c, uid, body.name):
+        if _name_taken(c, uid, name):
             raise HTTPException(409, "category with this name already exists")
         max_sort = c.execute(
             "SELECT COALESCE(MAX(c.sort),0) FROM categories c"
@@ -96,23 +130,25 @@ def create_category(body: CategoryBody, user: Annotated[dict, Depends(current_us
             " goal_target_date) VALUES (?, ?, ?, ?, ?, ?, ?)",
             (
                 body.groupId,
-                body.name,
-                body.keywords,
+                name,
+                keywords,
                 max_sort + 1,
-                body.goalTarget if group["is_goal"] else None,
-                "active" if group["is_goal"] else None,
-                body.goalTargetDate if group["is_goal"] else None,
+                goal_target if group_record.is_goal else None,
+                "active" if group_record.is_goal else None,
+                body.goalTargetDate if group_record.is_goal else None,
             ),
         )
         c.commit()
-        return {"id": cur.lastrowid}
+        return IdResponse(id=cur.lastrowid)
     finally:
         c.close()
 
 
 @router.patch("/{cat_id}")
-def patch_category(cat_id: int, patch: CategoryPatch, user: Annotated[dict, Depends(current_user)]):
-    uid = user["id"]
+def patch_category(
+    cat_id: int, patch: CategoryPatch, user: Annotated[AuthenticatedUser, Depends(current_user)]
+) -> OkResponse:
+    uid = user.id
     c = conn()
     try:
         category = _owned_category(c, cat_id, uid)
@@ -122,7 +158,7 @@ def patch_category(cat_id: int, patch: CategoryPatch, user: Annotated[dict, Depe
             if _name_taken(c, uid, patch.name, except_id=cat_id):
                 raise HTTPException(409, "category with this name already exists")
             c.execute("UPDATE categories SET name=? WHERE id=?", (patch.name, cat_id))
-        goal_fields_allowed = bool(category["is_goal"])
+        goal_fields_allowed = category.is_goal
         if patch.groupId is not None:
             target_group = c.execute(
                 "SELECT g.id, t.is_goal FROM category_groups g"
@@ -132,11 +168,16 @@ def patch_category(cat_id: int, patch: CategoryPatch, user: Annotated[dict, Depe
             ).fetchone()
             if not target_group:
                 raise HTTPException(400, "unknown group")
-            if target_group["is_goal"] and not patch.goalTarget and category["goal_target"] is None:
+            target_group_record = GoalGroupRecord.from_row(target_group)
+            if (
+                target_group_record.is_goal
+                and not patch.goalTargetProvided
+                and category.goal_target is None
+            ):
                 raise HTTPException(400, "goalTarget is required for goal categories")
-            goal_fields_allowed = bool(target_group["is_goal"])
+            goal_fields_allowed = target_group_record.is_goal
             c.execute("UPDATE categories SET group_id=? WHERE id=?", (patch.groupId, cat_id))
-            if not target_group["is_goal"]:
+            if not target_group_record.is_goal:
                 goal_fields_allowed = False
                 c.execute(
                     "UPDATE categories SET goal_target=NULL, goal_status=NULL,"
@@ -147,11 +188,12 @@ def patch_category(cat_id: int, patch: CategoryPatch, user: Annotated[dict, Depe
             c.execute("UPDATE categories SET keywords=? WHERE id=?", (patch.keywords, cat_id))
         if patch.archived is not None:
             c.execute(
-                "UPDATE categories SET archived=? WHERE id=?", (1 if patch.archived else 0, cat_id)
+                "UPDATE categories SET archived=? WHERE id=?",
+                (1 if patch.archived else 0, cat_id),
             )
-        if goal_fields_allowed and patch.goalTarget:
+        if goal_fields_allowed and patch.goalTarget is not None:
             c.execute("UPDATE categories SET goal_target=? WHERE id=?", (patch.goalTarget, cat_id))
-        if goal_fields_allowed and patch.goalTargetDate is not None:
+        if goal_fields_allowed and patch.goalTargetDateProvided:
             c.execute(
                 "UPDATE categories SET goal_target_date=? WHERE id=?",
                 (patch.goalTargetDate or None, cat_id),
@@ -161,29 +203,33 @@ def patch_category(cat_id: int, patch: CategoryPatch, user: Annotated[dict, Depe
                 raise HTTPException(400, "goalStatus must be 'active' or 'achieved'")
             c.execute("UPDATE categories SET goal_status=? WHERE id=?", (patch.goalStatus, cat_id))
         c.commit()
-        return {"ok": True}
+        return OkResponse(ok=True)
     finally:
         c.close()
 
 
 @router.post("/{cat_id}/archive-goal")
-def archive_goal(cat_id: int, body: ArchiveGoalBody, user: Annotated[dict, Depends(current_user)]):
+def archive_goal(
+    cat_id: int, body: ArchiveGoalBody, user: Annotated[AuthenticatedUser, Depends(current_user)]
+) -> OkResponse:
     """Close a goal without rewriting its allocations or purchase history."""
-    uid = user["id"]
+    uid = user.id
     c = conn()
     try:
         row = _owned_category(c, cat_id, uid)
-        if not row or not row["is_goal"]:
+        if not row or not row.is_goal:
             raise HTTPException(404, "goal not found")
         c.execute("UPDATE categories SET archived=1, goal_status='archived' WHERE id=?", (cat_id,))
         c.commit()
-        return {"ok": True}
+        return OkResponse(ok=True)
     finally:
         c.close()
 
 
 @router.delete("/{cat_id}")
-def delete_category(cat_id: int, user: Annotated[dict, Depends(current_user)]):
+def delete_category(
+    cat_id: int, user: Annotated[AuthenticatedUser, Depends(current_user)]
+) -> OkResponse:
     """
     Deleting a category never shifts anything: its transactions are left
     uncategorized and its budgets are removed by FK cascade.
@@ -193,7 +239,7 @@ def delete_category(cat_id: int, user: Annotated[dict, Depends(current_user)]):
     merge enforces — so the income/expense invariant was one API call from being
     bypassed. There is now exactly one path that moves transactions.
     """
-    uid = user["id"]
+    uid = user.id
     c = conn()
     try:
         c.execute("PRAGMA foreign_keys=ON")
@@ -203,14 +249,16 @@ def delete_category(cat_id: int, user: Annotated[dict, Depends(current_user)]):
             raise HTTPException(409, "category is used by transaction splits; merge it first")
         c.execute("DELETE FROM categories WHERE id=?", (cat_id,))
         c.commit()
-        return {"ok": True}
+        return OkResponse(ok=True)
     finally:
         c.close()
 
 
 @router.post("/reorder")
-def reorder_categories(body: Reorder, user: Annotated[dict, Depends(current_user)]):
-    uid = user["id"]
+def reorder_categories(
+    body: Reorder, user: Annotated[AuthenticatedUser, Depends(current_user)]
+) -> OkResponse:
+    uid = user.id
     c = conn()
     try:
         known = {
@@ -226,13 +274,15 @@ def reorder_categories(body: Reorder, user: Annotated[dict, Depends(current_user
         for sort, cid in enumerate(body.ids, 1):
             c.execute("UPDATE categories SET sort=? WHERE id=?", (sort, cid))
         c.commit()
-        return {"ok": True}
+        return OkResponse(ok=True)
     finally:
         c.close()
 
 
 @router.post("/{cat_id}/merge")
-def merge_category(cat_id: int, body: MergeBody, user: Annotated[dict, Depends(current_user)]):
+def merge_category(
+    cat_id: int, body: MergeBody, user: Annotated[AuthenticatedUser, Depends(current_user)]
+) -> OkResponse:
     """
     Combine a category into another: its transactions move to the target,
     keywords are unioned, budgets are summed month by month, then the source
@@ -243,7 +293,7 @@ def merge_category(cat_id: int, body: MergeBody, user: Annotated[dict, Depends(c
     group kind, so a cross-kind merge would silently reinterpret the whole
     moved history.
     """
-    uid = user["id"]
+    uid = user.id
     c = conn()
     try:
         c.execute("PRAGMA foreign_keys=ON")
@@ -255,13 +305,13 @@ def merge_category(cat_id: int, body: MergeBody, user: Annotated[dict, Depends(c
         dst = _owned_category(c, body.into, uid)
         if not dst:
             raise HTTPException(400, "unknown merge target")
-        if src["type"] != dst["type"]:
+        if src.type != dst.type:
             raise HTTPException(400, "cannot merge across income and expense")
         c.execute("UPDATE transactions SET category_id=? WHERE category_id=?", (body.into, cat_id))
         c.execute("UPDATE splits SET category_id=? WHERE category_id=?", (body.into, cat_id))
         c.execute(
             "UPDATE categories SET keywords=? WHERE id=?",
-            (_merge_keywords(dst["keywords"], src["keywords"]), body.into),
+            (_merge_keywords(dst.keywords, src.keywords), body.into),
         )
         c.execute(
             "INSERT INTO budgets (category_id, year, month, amount)"
@@ -272,6 +322,6 @@ def merge_category(cat_id: int, body: MergeBody, user: Annotated[dict, Depends(c
         )
         c.execute("DELETE FROM categories WHERE id=?", (cat_id,))
         c.commit()
-        return {"ok": True}
+        return OkResponse(ok=True)
     finally:
         c.close()

@@ -1,18 +1,25 @@
+from typing import override
+
 import pytest
 from cryptography.fernet import Fernet
+from fastapi.testclient import TestClient
+from httpx2 import Response as HTTPXResponse
+from pydantic import TypeAdapter
 
 import app.connectors.fake  # noqa: F401  (registers the FakeConnector)
 from app.connectors import base
-from app.connectors.base import SmsRequired, SyncResult
+from app.connectors.base import JsonObject, SmsRequired, SyncResult, SyncRow
 from app.routers import connections
+from app.routers.connections import ConnectionResponse
+from tests.conftest import Api
 
 
 @pytest.fixture()
-def keyed(monkeypatch):
+def keyed(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("MONORI_ENCRYPTION_KEY", Fernet.generate_key().decode())
 
 
-def _connect(client, account_id):
+def _connect(client: TestClient, account_id: int | None) -> HTTPXResponse:
     r = client.post(
         "/api/connections",
         json={
@@ -27,7 +34,9 @@ def _connect(client, account_id):
     return r
 
 
-def test_create_auto_provisions_encryption_key(api, client, monkeypatch):
+def test_create_auto_provisions_encryption_key(
+    api: Api, client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
     # with no MONORI_ENCRYPTION_KEY set, the key is generated and persisted on
     # demand, so bank connections work out of the box
     monkeypatch.delenv("MONORI_ENCRYPTION_KEY", raising=False)
@@ -35,7 +44,7 @@ def test_create_auto_provisions_encryption_key(api, client, monkeypatch):
     assert r.status_code == 200, r.text
 
 
-def test_create_rejects_unknown_bank(api, client, keyed):
+def test_create_rejects_unknown_bank(api: Api, client: TestClient, keyed: None) -> None:
     r = client.post(
         "/api/connections",
         json={
@@ -47,19 +56,21 @@ def test_create_rejects_unknown_bank(api, client, keyed):
     assert r.status_code == 400
 
 
-def test_connection_appears_in_snapshot_without_secrets(api, client, keyed):
+def test_connection_appears_in_snapshot_without_secrets(
+    api: Api, client: TestClient, keyed: None
+) -> None:
     r = _connect(client, api.default_account())
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["status"] == "disconnected"
     assert body["hasCredentials"] is True
     assert "credentials" not in body and "credentials_encrypted" not in body
-    conns = api.snapshot()["connections"]
+    conns = api.snapshot().connections
     assert len(conns) == 1
-    assert conns[0]["bank"] == "fake"
+    assert conns[0].bank == "fake"
 
 
-def test_two_phase_sync_then_incremental_dedup(api, client, keyed):
+def test_two_phase_sync_then_incremental_dedup(api: Api, client: TestClient, keyed: None) -> None:
     acct = api.default_account()
     # categories so the synced rows get auto-categorized in _finish
     inc = api.group("Income", kind="income")
@@ -71,12 +82,12 @@ def test_two_phase_sync_then_incremental_dedup(api, client, keyed):
     # first sync stops at the OTP step
     r = client.post(f"/api/connections/{cid}/sync")
     assert r.json()["status"] == "awaiting_sms"
-    assert api.snapshot()["connections"][0]["status"] == "awaiting_sms"
+    assert api.snapshot().connections[0].status == "awaiting_sms"
 
     # a wrong code resumes the same pending login, fails, and clears it
     r = client.post(f"/api/connections/{cid}/sms", json={"code": "9999"})
     assert r.status_code == 502
-    assert api.snapshot()["connections"][0]["status"] == "error"
+    assert api.snapshot().connections[0].status == "error"
     # the pending login is now gone: a second code submission conflicts
     assert client.post(f"/api/connections/{cid}/sms", json={"code": "0000"}).status_code == 409
 
@@ -92,15 +103,15 @@ def test_two_phase_sync_then_incremental_dedup(api, client, keyed):
     assert body["accounts"][0]["batchId"] is not None
 
     snap = api.snapshot()
-    synced = [t for t in snap["transactions"] if t["source"] == "sync"]
+    synced = [transaction for transaction in snap.transactions if transaction.source == "sync"]
     assert len(synced) == 2
-    assert all(t["accountId"] == acct for t in synced)
+    assert all(transaction.accountId == acct for transaction in synced)
     # the sync ran the rows through categorization
-    by_desc = {t["description"]: t for t in synced}
-    assert by_desc["Lenta"]["categoryId"] == food_cat
-    assert by_desc["Salary"]["categoryId"] == salary_cat
-    assert snap["connections"][0]["status"] == "connected"
-    assert snap["connections"][0]["lastSync"] is not None
+    by_desc = {transaction.description: transaction for transaction in synced}
+    assert by_desc["Lenta"].categoryId == food_cat
+    assert by_desc["Salary"].categoryId == salary_cat
+    assert snap.connections[0].status == "connected"
+    assert snap.connections[0].lastSync is not None
 
     # second sync reuses the cached session (no OTP) and dedups everything
     r = client.post(f"/api/connections/{cid}/sync")
@@ -110,22 +121,22 @@ def test_two_phase_sync_then_incremental_dedup(api, client, keyed):
     assert body["skipped"] == 2
 
 
-def test_sms_without_pending_login_conflicts(api, client, keyed):
+def test_sms_without_pending_login_conflicts(api: Api, client: TestClient, keyed: None) -> None:
     cid = _connect(client, api.default_account()).json()["id"]
     r = client.post(f"/api/connections/{cid}/sms", json={"code": "0000"})
     assert r.status_code == 409
 
 
-def test_cancel_clears_pending_login(api, client, keyed):
+def test_cancel_clears_pending_login(api: Api, client: TestClient, keyed: None) -> None:
     cid = _connect(client, api.default_account()).json()["id"]
     assert client.post(f"/api/connections/{cid}/sync").json()["status"] == "awaiting_sms"
     assert client.post(f"/api/connections/{cid}/cancel").status_code == 200
-    assert api.snapshot()["connections"][0]["status"] == "disconnected"
+    assert api.snapshot().connections[0].status == "disconnected"
     # nothing is parked anymore
     assert client.post(f"/api/connections/{cid}/sms", json={"code": "0000"}).status_code == 409
 
 
-def test_resync_replaces_pending_login(api, client, keyed):
+def test_resync_replaces_pending_login(api: Api, client: TestClient, keyed: None) -> None:
     cid = _connect(client, api.default_account()).json()["id"]
     assert client.post(f"/api/connections/{cid}/sync").json()["status"] == "awaiting_sms"
     # a second sync closes the first pending login and parks a fresh one, which
@@ -136,10 +147,10 @@ def test_resync_replaces_pending_login(api, client, keyed):
     )
 
 
-def test_delete_connection(api, client, keyed):
+def test_delete_connection(api: Api, client: TestClient, keyed: None) -> None:
     cid = _connect(client, api.default_account()).json()["id"]
     assert client.delete(f"/api/connections/{cid}").status_code == 200
-    assert api.snapshot()["connections"] == []
+    assert api.snapshot().connections == []
 
 
 class RetryOtpConnector:
@@ -147,24 +158,31 @@ class RetryOtpConnector:
     kind = "retryotp"
     hidden = True
 
-    def __init__(self, credentials, session=None, account_ref=None):
+    def __init__(
+        self,
+        credentials: JsonObject,
+        session: JsonObject | None = None,
+        account_ref: str | None = None,
+    ) -> None:
         self.credentials = credentials
         self.session = session
         self.account_ref = account_ref
 
-    def sync(self, since=None):
+    def sync(self, since: str | None = None) -> SyncResult:
         raise SmsRequired("code sent")
 
-    def resume_sync(self, code):
+    def resume_sync(self, code: str) -> SyncResult:
         if code != "4242":
             raise SmsRequired("the bank rejected the code — check it and try again")
         return SyncResult([], session=None)
 
-    def close(self):
+    def close(self) -> None:
         pass
 
 
-def test_rejected_code_stays_awaiting(api, client, keyed, monkeypatch):
+def test_rejected_code_stays_awaiting(
+    api: Api, client: TestClient, keyed: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setitem(base.REGISTRY, ("retryotp", "retryotp"), RetryOtpConnector)
     cid = client.post(
         "/api/connections",
@@ -183,7 +201,7 @@ def test_rejected_code_stays_awaiting(api, client, keyed, monkeypatch):
     body = r.json()
     assert body["status"] == "awaiting_sms"
     assert body["message"] == connections.CODE_REJECTED
-    assert api.snapshot()["connections"][0]["status"] == "awaiting_sms"
+    assert api.snapshot().connections[0].status == "awaiting_sms"
 
     assert client.post(f"/api/connections/{cid}/sms", json={"code": "4242"}).json()["status"] == (
         "connected"
@@ -193,13 +211,16 @@ def test_rejected_code_stays_awaiting(api, client, keyed, monkeypatch):
 class RefRequiredConnector(RetryOtpConnector):
     bank = "refreq"
     kind = "refreq"
-    account_params = [{"name": "account", "required": True}]
+    account_params = [base.ConnectorParam(name="account", required=True)]
 
-    def sync(self, since=None):
+    @override
+    def sync(self, since: str | None = None) -> SyncResult:
         return SyncResult([], session=None)
 
 
-def test_sync_requires_bank_ref_when_connector_demands_it(api, client, keyed, monkeypatch):
+def test_sync_requires_bank_ref_when_connector_demands_it(
+    api: Api, client: TestClient, keyed: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setitem(base.REGISTRY, ("refreq", "refreq"), RefRequiredConnector)
     cid = client.post(
         "/api/connections",
@@ -220,7 +241,7 @@ def test_sync_requires_bank_ref_when_connector_demands_it(api, client, keyed, mo
     assert client.post(f"/api/connections/{cid}/sync").json()["status"] == "connected"
 
 
-def test_available_lists_connectors_with_params(client):
+def test_available_lists_connectors_with_params(client: TestClient) -> None:
     r = client.get("/api/connections/available")
     assert r.status_code == 200
     banks = {c["bank"]: c for c in r.json()}
@@ -231,17 +252,17 @@ def test_available_lists_connectors_with_params(client):
     assert [p["name"] for p in tbank["accountParams"]] == ["account"]
 
 
-def test_one_connection_syncs_multiple_accounts(api, client, keyed):
+def test_one_connection_syncs_multiple_accounts(api: Api, client: TestClient, keyed: None) -> None:
     a1 = api.default_account()
     a2 = api.account("Savings")
     cid = _connect(client, a1).json()["id"]
     r = client.patch(f"/api/accounts/{a2}", json={"connectionId": cid, "bankRef": " 8121254731 "})
     assert r.status_code == 200
     snap = api.snapshot()
-    linked = {a["id"]: a for a in snap["accounts"]}
-    assert linked[a1]["connectionId"] == cid
-    assert linked[a2]["connectionId"] == cid
-    assert linked[a2]["bankRef"] == "8121254731"
+    linked = {account.id: account for account in snap.accounts}
+    assert linked[a1].connectionId == cid
+    assert linked[a2].connectionId == cid
+    assert linked[a2].bankRef == "8121254731"
 
     assert client.post(f"/api/connections/{cid}/sync").json()["status"] == "awaiting_sms"
     body = client.post(f"/api/connections/{cid}/sms", json={"code": "0000"}).json()
@@ -253,12 +274,12 @@ def test_one_connection_syncs_multiple_accounts(api, client, keyed):
     assert per_account[a1]["inserted"] == 2
     assert per_account[a2]["inserted"] == 2
     assert per_account[a1]["batchId"] != per_account[a2]["batchId"]
-    txs = api.snapshot()["transactions"]
-    assert len([t for t in txs if t["accountId"] == a1]) == 2
-    assert len([t for t in txs if t["accountId"] == a2]) == 2
+    txs = api.snapshot().transactions
+    assert len([transaction for transaction in txs if transaction.accountId == a1]) == 2
+    assert len([transaction for transaction in txs if transaction.accountId == a2]) == 2
 
 
-def test_sync_requires_a_linked_account(api, client, keyed):
+def test_sync_requires_a_linked_account(api: Api, client: TestClient, keyed: None) -> None:
     r = client.post(
         "/api/connections",
         json={
@@ -273,31 +294,31 @@ def test_sync_requires_a_linked_account(api, client, keyed):
     assert "linked" in r.json()["detail"]
 
 
-def test_delete_connection_unlinks_accounts(api, client, keyed):
+def test_delete_connection_unlinks_accounts(api: Api, client: TestClient, keyed: None) -> None:
     a1 = api.default_account()
     cid = _connect(client, a1).json()["id"]
-    assert api.snapshot()["accounts"][0]["connectionId"] == cid
+    assert api.snapshot().accounts[0].connectionId == cid
     client.delete(f"/api/connections/{cid}")
     snap = api.snapshot()
-    assert snap["connections"] == []
-    assert snap["accounts"][0]["connectionId"] is None
+    assert snap.connections == []
+    assert snap.accounts[0].connectionId is None
 
 
-def test_unlink_account_via_patch(api, client, keyed):
+def test_unlink_account_via_patch(api: Api, client: TestClient, keyed: None) -> None:
     a1 = api.default_account()
     _connect(client, a1)
     r = client.patch(f"/api/accounts/{a1}", json={"connectionId": 0})
     assert r.status_code == 200
-    assert api.snapshot()["accounts"][0]["connectionId"] is None
-    assert len(api.snapshot()["connections"]) == 1
+    assert api.snapshot().accounts[0].connectionId is None
+    assert len(api.snapshot().connections) == 1
 
 
-def test_link_rejects_unknown_connection(api, client, keyed):
+def test_link_rejects_unknown_connection(api: Api, client: TestClient, keyed: None) -> None:
     r = client.patch(f"/api/accounts/{api.default_account()}", json={"connectionId": 999})
     assert r.status_code == 400
 
 
-def test_missing_required_credentials_rejected(api, client, keyed):
+def test_missing_required_credentials_rejected(api: Api, client: TestClient, keyed: None) -> None:
     r = client.post(
         "/api/connections",
         json={"bank": "tbank", "kind": "playwright", "credentials": {"phone": "+7"}},
@@ -310,22 +331,29 @@ class SinceRecorder:
     bank = "sincer"
     kind = "sincer"
     hidden = True
-    calls = []
+    calls: list[tuple[str | None, str | None]] = []
 
-    def __init__(self, credentials, session=None, account_ref=None):
+    def __init__(
+        self,
+        credentials: JsonObject,
+        session: JsonObject | None = None,
+        account_ref: str | None = None,
+    ) -> None:
         self.credentials = credentials
         self.session = session
         self.account_ref = account_ref
 
-    def sync(self, since=None):
+    def sync(self, since: str | None = None) -> SyncResult:
         SinceRecorder.calls.append((self.account_ref, since))
         return SyncResult([], session={"token": "ok"})
 
-    def close(self):
+    def close(self) -> None:
         pass
 
 
-def test_newly_linked_account_gets_a_full_pull(api, client, keyed, monkeypatch):
+def test_newly_linked_account_gets_a_full_pull(
+    api: Api, client: TestClient, keyed: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setitem(base.REGISTRY, ("sincer", "sincer"), SinceRecorder)
     SinceRecorder.calls = []
     a1 = api.default_account()
@@ -346,7 +374,9 @@ def test_newly_linked_account_gets_a_full_pull(api, client, keyed, monkeypatch):
     assert refs["ref2"] is None
 
 
-def test_pending_account_is_persisted_and_resume_skips_synced(api, client, keyed):
+def test_pending_account_is_persisted_and_resume_skips_synced(
+    api: Api, client: TestClient, keyed: None
+) -> None:
     a1 = api.default_account()
     a2 = api.account("Second")
     cid = _connect(client, a1).json()["id"]
@@ -378,26 +408,30 @@ class MultiCardConnector(base.Connector):
     kind = "multicard"
     hidden = True
     rows = [
-        {"date": "2026-03-01T09:00:00", "amount": -100, "description": "A", "card": "*8181"},
-        {"date": "2026-03-01T10:00:00", "amount": -200, "description": "B", "card": "*2947"},
-        {"date": "2026-03-01T11:00:00", "amount": -300, "description": "C", "card": "*1111"},
+        SyncRow("2026-03-01T09:00:00", -100, "A", "", "", "*8181"),
+        SyncRow("2026-03-01T10:00:00", -200, "B", "", "", "*2947"),
+        SyncRow("2026-03-01T11:00:00", -300, "C", "", "", "*1111"),
     ]
 
-    def sync(self, since=None):
-        return SyncResult([dict(r) for r in self.rows], session={"token": "ok"})
+    @override
+    def sync(self, since: str | None = None) -> SyncResult:
+        return SyncResult(list(self.rows), session={"token": "ok"})
 
 
-def _connect_multicard(client, account_id):
+def _connect_multicard(client: TestClient, account_id: int) -> int:
     r = client.post(
         "/api/connections",
         json={"bank": "multicard", "kind": "multicard", "credentials": {"phone": "+7"}},
     )
     link = client.patch(f"/api/accounts/{account_id}", json={"connectionId": r.json()["id"]})
     assert link.status_code == 200, link.text
-    return r.json()["id"]
+    response = TypeAdapter(ConnectionResponse).validate_python(r.json())
+    return response.id
 
 
-def test_sync_routes_rows_by_bound_card_tail(api, client, keyed, monkeypatch):
+def test_sync_routes_rows_by_bound_card_tail(
+    api: Api, client: TestClient, keyed: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setitem(base.REGISTRY, ("multicard", "multicard"), MultiCardConnector)
     main = api.default_account()
     other = api.account("Other card", cardTails=["2947"])
@@ -417,12 +451,14 @@ def test_sync_routes_rows_by_bound_card_tail(api, client, keyed, monkeypatch):
     ]
 
     snap = api.snapshot()
-    routed = {t["description"]: t["accountId"] for t in snap["transactions"]}
+    routed = {transaction.description: transaction.accountId for transaction in snap.transactions}
     assert routed["B"] == other
     assert routed["A"] == main and routed["C"] == main
 
 
-def test_single_card_feed_reports_no_unmapped_tails(api, client, keyed):
+def test_single_card_feed_reports_no_unmapped_tails(
+    api: Api, client: TestClient, keyed: None
+) -> None:
     cid = _connect(client, api.default_account()).json()["id"]
     client.post(f"/api/connections/{cid}/sync")
     body = client.post(f"/api/connections/{cid}/sms", json={"code": "0000"}).json()
@@ -430,7 +466,9 @@ def test_single_card_feed_reports_no_unmapped_tails(api, client, keyed):
     assert body["unmappedTails"] == []
 
 
-def test_sync_routing_matches_longer_stored_tails_by_suffix(api, client, keyed, monkeypatch):
+def test_sync_routing_matches_longer_stored_tails_by_suffix(
+    api: Api, client: TestClient, keyed: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setitem(base.REGISTRY, ("multicard", "multicard"), MultiCardConnector)
     main = api.default_account()
     # stored tail longer than the 4 digits the statement shows still matches
@@ -440,11 +478,16 @@ def test_sync_routing_matches_longer_stored_tails_by_suffix(api, client, keyed, 
     body = client.post(f"/api/connections/{cid}/sync").json()
     by_account = {r["accountId"]: r for r in body["accounts"]}
     assert by_account[other]["inserted"] == 1
-    routed = {t["description"]: t["accountId"] for t in api.snapshot()["transactions"]}
+    routed = {
+        transaction.description: transaction.accountId
+        for transaction in api.snapshot().transactions
+    }
     assert routed["B"] == other
 
 
-def test_sync_routing_treats_duplicated_tail_as_unmapped(api, client, keyed, monkeypatch):
+def test_sync_routing_treats_duplicated_tail_as_unmapped(
+    api: Api, client: TestClient, keyed: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setitem(base.REGISTRY, ("multicard", "multicard"), MultiCardConnector)
     main = api.default_account()
     api.account("One", cardTails=["2947"])
@@ -457,11 +500,16 @@ def test_sync_routing_treats_duplicated_tail_as_unmapped(api, client, keyed, mon
     by_account = {r["accountId"]: r for r in body["accounts"]}
     assert by_account[main]["inserted"] == 3
     assert {u["tail"] for u in body["unmappedTails"]} == {"1111", "2947", "8181"}
-    routed = {t["description"]: t["accountId"] for t in api.snapshot()["transactions"]}
+    routed = {
+        transaction.description: transaction.accountId
+        for transaction in api.snapshot().transactions
+    }
     assert routed["B"] == main
 
 
-def test_overlapping_feeds_do_not_duplicate_rows_across_accounts(api, client, keyed):
+def test_overlapping_feeds_do_not_duplicate_rows_across_accounts(
+    api: Api, client: TestClient, keyed: None
+) -> None:
     """
     Two accounts on one connection whose pulls return the same feed (the fake
     without a bank_ref does exactly that) must not land the same operations
@@ -481,6 +529,6 @@ def test_overlapping_feeds_do_not_duplicate_rows_across_accounts(api, client, ke
     assert body["inserted"] == 2
     assert body["skipped"] == 2
 
-    txs = api.snapshot()["transactions"]
+    txs = api.snapshot().transactions
     assert len(txs) == 2
-    assert {t["accountId"] for t in txs} == {a1}
+    assert {transaction.accountId for transaction in txs} == {a1}

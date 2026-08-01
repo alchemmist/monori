@@ -8,4 +8,6 @@ import; importing this package makes them discoverable through the registry in
 :mod:`app.connectors.base`.
 """
 
-from . import base, tbank_playwright  # noqa: F401
+from . import base
+
+__all__ = ["base"]

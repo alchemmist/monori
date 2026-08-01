@@ -16,9 +16,11 @@ from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import ConfigDict
+from pydantic.dataclasses import dataclass as pydantic_dataclass
 
 from ..admin import admin_user
+from ..auth import AuthenticatedUser
 from ..deps import conn
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
@@ -36,8 +38,11 @@ BLOB_PREVIEW = 32
 # than this comes back cut, with the dropped length spelled out
 CELL_MAX_CHARS = 4096
 
+type SqliteValue = bytes | float | int | str | None
+type SqlCell = float | int | str | None
 
-def leading_keyword(sql):
+
+def leading_keyword(sql: str) -> str:
     """
     The first word of a statement, past any leading whitespace and comments —
     ``UPDATE`` in ``/* fix */ -- one row\\n update users …``. Used only to name
@@ -66,7 +71,7 @@ def leading_keyword(sql):
     return ""
 
 
-def cell(value):
+def cell(value: SqliteValue) -> SqlCell:
     if isinstance(value, bytes):
         head = value[:BLOB_PREVIEW].hex()
         return f"x'{head}{'…' if len(value) > BLOB_PREVIEW else ''}' ({len(value)} bytes)"
@@ -75,14 +80,32 @@ def cell(value):
     return value
 
 
-class SqlBody(BaseModel):
-    sql: str = Field(max_length=STATEMENT_MAX_CHARS)
-    confirmWrite: bool = False  # noqa: N815 — the JSON API is camelCase
-    dryRun: bool = False  # noqa: N815
+@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+class SqlBody:
+    sql: str
+    confirmWrite: bool
+    dryRun: bool
+
+
+@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+class SqlResponse:
+    kind: str
+    columns: list[str]
+    rows: list[list[SqlCell]]
+    rowCount: int
+    truncated: bool
+    elapsedMs: float
+
+
+@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+class SqlDryResponse(SqlResponse):
+    wouldWrite: bool
 
 
 @router.post("/sql")
-def run_sql(body: SqlBody, admin: Annotated[dict, Depends(admin_user)]):
+def run_sql(
+    body: SqlBody, admin: Annotated[AuthenticatedUser, Depends(admin_user)]
+) -> SqlResponse | SqlDryResponse:
     """
     Execute one statement and return either its rows or its affected-row count.
 
@@ -97,6 +120,7 @@ def run_sql(body: SqlBody, admin: Annotated[dict, Depends(admin_user)]):
     back unconditionally — a read is answered with its rows, a write with the
     count, and nothing is ever committed.
     """
+    uid = admin.id
     sql = body.sql.strip()
     if not sql:
         raise HTTPException(400, "empty statement")
@@ -131,7 +155,7 @@ def run_sql(body: SqlBody, admin: Annotated[dict, Depends(admin_user)]):
                 c.set_progress_handler(None, 0)
         except sqlite3.Error as e:
             c.rollback()
-            _audit(c, admin["id"], "admin_sql_failed", sql)
+            _audit(c, uid, "admin_sql_failed", sql)
             raise HTTPException(400, str(e)) from e
         elapsed_ms = round((time.perf_counter() - started) * 1000, 1)
 
@@ -141,20 +165,20 @@ def run_sql(body: SqlBody, admin: Annotated[dict, Depends(admin_user)]):
 
         if body.dryRun:
             c.rollback()
-            _audit(c, admin["id"], "admin_sql_dry_run", sql)
-            return {
-                "kind": "dry",
-                "wouldWrite": is_write,
-                "columns": columns,
-                "rows": rows[:ROW_LIMIT],
-                "rowCount": write_rows if is_write else min(len(rows), ROW_LIMIT),
-                "truncated": not is_write and len(rows) > ROW_LIMIT,
-                "elapsedMs": elapsed_ms,
-            }
+            _audit(c, uid, "admin_sql_dry_run", sql)
+            return SqlDryResponse(
+                kind="dry",
+                wouldWrite=is_write,
+                columns=columns,
+                rows=rows[:ROW_LIMIT],
+                rowCount=write_rows if is_write else min(len(rows), ROW_LIMIT),
+                truncated=not is_write and len(rows) > ROW_LIMIT,
+                elapsedMs=elapsed_ms,
+            )
 
         if is_write and not body.confirmWrite:
             c.rollback()
-            _audit(c, admin["id"], "admin_sql_rejected", sql)
+            _audit(c, uid, "admin_sql_rejected", sql)
             raise HTTPException(
                 400,
                 f"write statement ({leading_keyword(sql) or 'statement'}) needs confirmation;"
@@ -163,34 +187,34 @@ def run_sql(body: SqlBody, admin: Annotated[dict, Depends(admin_user)]):
 
         if is_write:
             c.commit()
-            _audit(c, admin["id"], "admin_sql", sql)
-            return {
-                "kind": "write",
-                "columns": [],
-                "rows": [],
-                "rowCount": write_rows,
-                "truncated": False,
-                "elapsedMs": elapsed_ms,
-            }
+            _audit(c, uid, "admin_sql", sql)
+            return SqlResponse(
+                kind="write",
+                columns=[],
+                rows=[],
+                rowCount=write_rows,
+                truncated=False,
+                elapsedMs=elapsed_ms,
+            )
 
         # a read needs nothing committed; rolling back also undoes anything a
         # statement did that neither returned rows nor bumped total_changes
         c.rollback()
-        _audit(c, admin["id"], "admin_sql", sql)
+        _audit(c, uid, "admin_sql", sql)
         truncated = len(rows) > ROW_LIMIT
-        return {
-            "kind": "read",
-            "columns": columns,
-            "rows": rows[:ROW_LIMIT],
-            "rowCount": min(len(rows), ROW_LIMIT),
-            "truncated": truncated,
-            "elapsedMs": elapsed_ms,
-        }
+        return SqlResponse(
+            kind="read",
+            columns=columns,
+            rows=rows[:ROW_LIMIT],
+            rowCount=min(len(rows), ROW_LIMIT),
+            truncated=truncated,
+            elapsedMs=elapsed_ms,
+        )
     finally:
         c.close()
 
 
-def _audit(c, uid, kind, sql):
+def _audit(c: sqlite3.Connection, uid: int, kind: str, sql: str) -> None:
     # a console statement can leave the schema unable to record itself (dropped
     # table, deleted admin row); losing the audit row must not lose the result
     with contextlib.suppress(sqlite3.Error):

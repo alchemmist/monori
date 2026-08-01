@@ -10,7 +10,7 @@ from app.emails import canonical_email, normalize_email
         ("plain@example.com", "plain@example.com"),
     ],
 )
-def test_normalize_email(raw, expected):
+def test_normalize_email(raw: str, expected: str) -> None:
     assert normalize_email(raw) == expected
 
 
@@ -34,10 +34,10 @@ def test_normalize_email(raw, expected):
         ("not-an-email", "not-an-email"),
     ],
 )
-def test_canonical_email(raw, expected):
+def test_canonical_email(raw: str, expected: str) -> None:
     assert canonical_email(raw) == expected
 
 
-def test_canonical_email_is_idempotent():
+def test_canonical_email_is_idempotent() -> None:
     once = canonical_email("Anton.Ingrish+shop@gmail.com")
     assert canonical_email(once) == once

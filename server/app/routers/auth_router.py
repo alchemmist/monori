@@ -9,15 +9,18 @@ a ``current_user`` dependency other routes can adopt.
 
 import sqlite3
 from datetime import UTC, datetime
+from enum import StrEnum
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import OAuth2PasswordRequestForm
-from pydantic import BaseModel
+from pydantic import ConfigDict
+from pydantic.dataclasses import dataclass as pydantic_dataclass
 
 from ..admin import admin_emails
-from ..auth import current_user
-from ..deps import conn, serialize_user
+from ..auth import AuthenticatedUser, current_user
+from ..db_records import UserRecord
+from ..deps import UserResponse, conn, serialize_user
 from ..emails import canonical_email, normalize_email
 from ..security import create_access_token, hash_password, verify_password
 
@@ -27,7 +30,7 @@ MIN_PASSWORD_LEN = 8
 MAX_EMAIL_LEN = 254
 
 
-def _valid_email(email):
+def _valid_email(email: str) -> bool:
     """
     Shape check for an email: one ``@``, non-empty local part, and a dotted
     domain with no empty labels. Linear and non-backtracking (bounded by
@@ -41,12 +44,23 @@ def _valid_email(email):
     return all(domain.split("."))
 
 
-class RegisterBody(BaseModel):
+@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+class RegisterBody:
     email: str
     password: str
 
 
-def create_user(c, raw_email, password):
+@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+class TokenResponse:
+    access_token: str
+    token_type: "OAuthTokenType"
+
+
+class OAuthTokenType(StrEnum):
+    BEARER = "bearer"
+
+
+def create_user(c: sqlite3.Connection, raw_email: str, password: str) -> UserResponse:
     """
     Validate and insert a user (with a default Cash account), returning the
     serialized user. Shared by public registration and admin user creation.
@@ -72,6 +86,8 @@ def create_user(c, raw_email, password):
     except sqlite3.IntegrityError:
         raise HTTPException(409, "email already registered") from None
     uid = cur.lastrowid
+    if uid is None:
+        raise RuntimeError("user insert did not return an id")
     if c.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 1:
         c.execute("UPDATE accounts SET user_id=? WHERE user_id IS NULL", (uid,))
         c.execute("UPDATE category_groups SET user_id=? WHERE user_id IS NULL", (uid,))
@@ -88,11 +104,13 @@ def create_user(c, raw_email, password):
         " FROM users WHERE id=?",
         (uid,),
     ).fetchone()
-    return serialize_user(row)
+    if row is None:
+        raise RuntimeError("created user was not found")
+    return serialize_user(UserRecord.from_row(row))
 
 
 @router.post("/register")
-def register(body: RegisterBody):
+def register(body: RegisterBody) -> UserResponse:
     c = conn()
     try:
         return create_user(c, body.email, body.password)
@@ -101,7 +119,7 @@ def register(body: RegisterBody):
 
 
 @router.post("/token")
-def token(form: Annotated[OAuth2PasswordRequestForm, Depends()]):
+def token(form: Annotated[OAuth2PasswordRequestForm, Depends()]) -> TokenResponse:
     """
     OAuth2 password grant: ``username`` is the email. Returns a bearer token.
     """
@@ -117,7 +135,11 @@ def token(form: Annotated[OAuth2PasswordRequestForm, Depends()]):
         # registered (account enumeration)
         if row is None:
             raise HTTPException(401, "no account is registered for this email")
-        if not verify_password(row["password_hash"], form.password):
+        password_hash = row["password_hash"]
+        user_id = row["id"]
+        if not isinstance(password_hash, str) or not isinstance(user_id, int):
+            raise RuntimeError("stored user credentials have invalid types")
+        if not verify_password(password_hash, form.password):
             raise HTTPException(401, "incorrect password")
         # MONORI_ADMIN_EMAILS is the source of truth for admin rights, so the
         # flag is (re)synced on every successful login; matched on the canonical
@@ -126,51 +148,59 @@ def token(form: Annotated[OAuth2PasswordRequestForm, Depends()]):
         admin_canon = {canonical_email(e) for e in admin_emails()}
         c.execute(
             "UPDATE users SET is_admin=?, last_login=? WHERE id=?",
-            (1 if canonical_email(email) in admin_canon else 0, now, row["id"]),
+            (1 if canonical_email(email) in admin_canon else 0, now, user_id),
         )
         c.execute(
             "INSERT INTO activity_events (user_id, kind, created_at) VALUES (?, 'login', ?)",
-            (row["id"], now),
+            (user_id, now),
         )
         c.commit()
     finally:
         c.close()
-    return {"access_token": create_access_token(row["id"]), "token_type": "bearer"}
+    return TokenResponse(
+        access_token=create_access_token(user_id), token_type=OAuthTokenType.BEARER
+    )
 
 
 @router.get("/me")
-def me(user: Annotated[dict, Depends(current_user)]):
-    return user
+def me(user: Annotated[AuthenticatedUser, Depends(current_user)]) -> UserResponse:
+    return user.to_api_dict()
 
 
-class MePatch(BaseModel):
+@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+class MePatch:
     defaultAccountId: int | None = None
 
 
 @router.patch("/me")
-def patch_me(body: MePatch, user: Annotated[dict, Depends(current_user)]):
+def patch_me(
+    body: MePatch, user: Annotated[AuthenticatedUser, Depends(current_user)]
+) -> UserResponse:
     """
     User-level preferences. ``defaultAccountId`` is where imports land rows no
     card number can route; null clears it and those rows go back to being
     assigned by hand.
     """
-    uid = user["id"]
+    uid = user.id
     c = conn()
     try:
+        default_account_id = body.defaultAccountId
         if (
-            body.defaultAccountId is not None
+            default_account_id is not None
             and not c.execute(
-                "SELECT id FROM accounts WHERE id=? AND user_id=?", (body.defaultAccountId, uid)
+                "SELECT id FROM accounts WHERE id=? AND user_id=?", (default_account_id, uid)
             ).fetchone()
         ):
             raise HTTPException(400, "unknown account")
-        c.execute("UPDATE users SET default_account_id=? WHERE id=?", (body.defaultAccountId, uid))
+        c.execute("UPDATE users SET default_account_id=? WHERE id=?", (default_account_id, uid))
         c.commit()
         row = c.execute(
             "SELECT id, email, created_at, is_admin, last_login, default_account_id"
             " FROM users WHERE id=?",
             (uid,),
         ).fetchone()
-        return serialize_user(row)
+        if row is None:
+            raise RuntimeError("updated user was not found")
+        return serialize_user(UserRecord.from_row(row))
     finally:
         c.close()

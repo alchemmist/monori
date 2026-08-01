@@ -49,11 +49,11 @@ STATEMENTS = [
 ]
 
 
-def upgrade():
+def upgrade() -> None:
     conn = op.get_bind()
     for statement in STATEMENTS:
         conn.exec_driver_sql(statement)
 
 
-def downgrade():
+def downgrade() -> None:
     raise NotImplementedError("monori migrations are forward-only")

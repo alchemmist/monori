@@ -20,11 +20,11 @@ from app.routers.admin_sql import BLOB_PREVIEW, cell, leading_keyword
         ("/* unterminated", ""),
     ],
 )
-def test_leading_keyword(sql, expected):
+def test_leading_keyword(sql: str, expected: str) -> None:
     assert leading_keyword(sql) == expected
 
 
-def test_leading_keyword_is_linear_on_adversarial_comment_openings():
+def test_leading_keyword_is_linear_on_adversarial_comment_openings() -> None:
     # the regex this replaced backtracked polynomially on repeated "/*" (CodeQL
     # flagged it): the input reaches the endpoint straight from the request body
     started = time.perf_counter()
@@ -32,11 +32,12 @@ def test_leading_keyword_is_linear_on_adversarial_comment_openings():
     assert time.perf_counter() - started < 1.0
 
 
-def test_cell_passes_scalars_through_and_summarizes_blobs():
+def test_cell_passes_scalars_through_and_summarizes_blobs() -> None:
     assert cell(None) is None
     assert cell(42) == 42
     assert cell("text") == "text"
     assert cell(b"\x00\x01") == "x'0001' (2 bytes)"
     long = cell(b"\xab" * (BLOB_PREVIEW + 10))
+    assert isinstance(long, str)
     assert long.startswith("x'ab")
     assert long.endswith(f"…' ({BLOB_PREVIEW + 10} bytes)")

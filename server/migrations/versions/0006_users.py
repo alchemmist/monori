@@ -11,7 +11,7 @@ branch_labels = None
 depends_on = None
 
 
-def upgrade():
+def upgrade() -> None:
     conn = op.get_bind()
     conn.exec_driver_sql("""CREATE TABLE IF NOT EXISTS users (
       id INTEGER PRIMARY KEY,
@@ -21,5 +21,5 @@ def upgrade():
     )""")
 
 
-def downgrade():
+def downgrade() -> None:
     raise NotImplementedError("monori migrations are forward-only")

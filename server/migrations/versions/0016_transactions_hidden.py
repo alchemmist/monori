@@ -14,9 +14,9 @@ branch_labels = None
 depends_on = None
 
 
-def upgrade():
+def upgrade() -> None:
     op.execute("ALTER TABLE transactions ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0")
 
 
-def downgrade():
+def downgrade() -> None:
     raise NotImplementedError("forward-only migrations")

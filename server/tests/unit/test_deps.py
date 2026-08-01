@@ -1,47 +1,43 @@
+import sqlite3
+
 from app.deps import serialize_transactions
 
 
-class SplitCursor:
-    def __init__(self):
-        self.chunks = []
-
-    def execute(self, _query, ids):
-        self.chunks.append(list(ids))
-        return [
-            {
-                "id": tx_id,
-                "transaction_id": tx_id,
-                "category_id": 7,
-                "amount": -1,
-                "comment": "part",
-            }
-            for tx_id in ids
-            if tx_id in {1, 1001}
-        ]
-
-
-def test_serialize_transactions_chunks_split_lookup():
-    rows = [
-        {
-            "id": tx_id,
-            "date": "2026-01-01",
-            "amount": -1,
-            "description": "row",
-            "bank_category": "",
-            "mcc": "",
-            "category_id": None,
-            "account_id": 1,
-            "transfer_id": None,
-            "comment": "",
-            "source": "sync",
-            "hidden": 0,
-        }
-        for tx_id in range(1, 1002)
-    ]
-    cursor = SplitCursor()
+def test_serialize_transactions_chunks_split_lookup() -> None:
+    connection = sqlite3.connect(":memory:")
+    connection.row_factory = sqlite3.Row
+    connection.executescript(
+        """
+        CREATE TABLE transactions (
+            id INTEGER PRIMARY KEY, date TEXT, amount INTEGER, description TEXT,
+            bank_category TEXT, mcc TEXT, category_id INTEGER, account_id INTEGER,
+            transfer_id TEXT, comment TEXT, source TEXT, hidden INTEGER
+        );
+        CREATE TABLE splits (
+            id INTEGER PRIMARY KEY, transaction_id INTEGER, category_id INTEGER,
+            amount INTEGER, comment TEXT, sort INTEGER DEFAULT 0
+        );
+        """
+    )
+    connection.executemany(
+        "INSERT INTO transactions VALUES (?, '2026-01-01', -1, 'row', '', '',"
+        " NULL, 1, NULL, '', 'sync', 0)",
+        ((tx_id,) for tx_id in range(1, 1002)),
+    )
+    connection.executemany(
+        "INSERT INTO splits (id, transaction_id, category_id, amount, comment)"
+        " VALUES (?, ?, 7, -1, 'part')",
+        ((1, 1), (2, 1001)),
+    )
+    statements: list[str] = []
+    connection.set_trace_callback(statements.append)
+    cursor = connection.cursor()
+    rows = cursor.execute("SELECT * FROM transactions ORDER BY id").fetchall()
 
     result = serialize_transactions(cursor, rows)
 
-    assert [len(chunk) for chunk in cursor.chunks] == [500, 500, 1]
-    assert result[0]["splits"][0]["categoryId"] == 7
-    assert result[-1]["splits"][0]["comment"] == "part"
+    split_queries = [statement for statement in statements if "FROM splits" in statement]
+    ids = [statement.partition(" IN (")[2].partition(") ORDER")[0] for statement in split_queries]
+    assert [chunk.count(",") + 1 for chunk in ids] == [500, 500, 1]
+    assert result[0].splits[0].categoryId == 7
+    assert result[-1].splits[0].comment == "part"

@@ -1,8 +1,10 @@
 import datetime
+from dataclasses import dataclass
 from io import BytesIO
 
 import pytest
 from openpyxl import Workbook
+from openpyxl.worksheet.worksheet import Worksheet
 
 from app.workbook.parser import (
     WorkbookError,
@@ -13,13 +15,17 @@ from app.workbook.parser import (
 )
 
 
-def _book(categories=None, transactions=None, extra_sheets=None):
-    wb = Workbook()
+def _active(wb: Workbook) -> Worksheet:
     ws = wb.active
+    assert ws is not None
+    return ws
+
+
+def _workbook() -> tuple[Workbook, Worksheet, Worksheet]:
+    wb = Workbook()
+    ws = _active(wb)
     ws.title = "Categories"
     ws.append(["Sort Order", "Category Group", "Category", "Keywords"])
-    for row in categories or []:
-        ws.append(row)
     tx = wb.create_sheet("Transactions")
     tx.append(
         [
@@ -41,18 +47,16 @@ def _book(categories=None, transactions=None, extra_sheets=None):
             "Comment",
         ]
     )
-    for row in transactions or []:
-        tx.append(row)
-    for name, rows in (extra_sheets or {}).items():
-        s = wb.create_sheet(name)
-        for row in rows:
-            s.append(row)
+    return wb, ws, tx
+
+
+def _bytes(wb: Workbook) -> bytes:
     buf = BytesIO()
     wb.save(buf)
     return buf.getvalue()
 
 
-def _year_header(months=12):
+def _write_year_header(ws: Worksheet, months: int = 12) -> None:
     """The two header rows the exporter writes above a year grid."""
     names = [
         "January",
@@ -68,45 +72,45 @@ def _year_header(months=12):
         "November",
         "December",
     ][:months]
-    top = [None]
-    sub = [None]
-    for name in names:
-        top += [name, None, None]
-        sub += ["Budgeted", "Outflows", "Balance"]
-    return [top, sub]
+    for index, name in enumerate(names):
+        base = 2 + index * 3
+        ws.cell(1, base, name)
+        ws.cell(2, base, "Budgeted")
+        ws.cell(2, base + 1, "Outflows")
+        ws.cell(2, base + 2, "Balance")
 
 
-def _tx_row(
-    op="05.01.2026 10:00:00",
-    status="OK",
-    amount=-125.5,
-    description="Lenta",
-    card="",
-    account="",
-    monori="",
-    comment="",
-):
-    return [
-        op,
-        "05.01.2026",
-        "05.01.2026",
-        card,
-        status,
-        amount,
-        "RUB",
-        "-125.50 ₽",
-        "RUB",
-        "",
-        "Super",
-        "5411",
-        description,
-        monori,
-        account,
-        comment,
-    ]
+@dataclass(frozen=True)
+class TransactionFixture:
+    op: str = "05.01.2026 10:00:00"
+    status: str = "OK"
+    amount: float = -125.5
+    description: str = "Lenta"
+    card: str = ""
+    account: str = ""
+    monori: str = ""
+    comment: str = ""
+
+    def append_to(self, ws: Worksheet) -> None:
+        row = ws.max_row + 1
+        ws.cell(row, 1, self.op)
+        ws.cell(row, 2, "05.01.2026")
+        ws.cell(row, 3, "05.01.2026")
+        ws.cell(row, 4, self.card)
+        ws.cell(row, 5, self.status)
+        ws.cell(row, 6, self.amount)
+        ws.cell(row, 7, "RUB")
+        ws.cell(row, 8, "-125.50 ₽")
+        ws.cell(row, 9, "RUB")
+        ws.cell(row, 11, "Super")
+        ws.cell(row, 12, "5411")
+        ws.cell(row, 13, self.description)
+        ws.cell(row, 14, self.monori)
+        ws.cell(row, 15, self.account)
+        ws.cell(row, 16, self.comment)
 
 
-def test_unquote_reverses_only_the_formula_escape():
+def test_unquote_reverses_only_the_formula_escape() -> None:
     assert _unquote("'=SUM(A1)") == "=SUM(A1)"
     assert _unquote("'+A1") == "+A1"
     assert _unquote("'@cmd") == "@cmd"
@@ -115,53 +119,62 @@ def test_unquote_reverses_only_the_formula_escape():
     assert _unquote("'legit apostrophe") == "'legit apostrophe"
 
 
-def test_parse_dt_variants():
-    assert _parse_dt(datetime.datetime(2026, 1, 5, 10, 0)) == datetime.datetime(2026, 1, 5, 10, 0)
-    assert _parse_dt(datetime.date(2026, 1, 5)) == datetime.datetime(2026, 1, 5)
-    assert _parse_dt("05.01.2026 10:00:00") == datetime.datetime(2026, 1, 5, 10)
-    assert _parse_dt("2026-01-05T10:00:00") == datetime.datetime(2026, 1, 5, 10)
-    assert _parse_dt("") is None
-    assert _parse_dt("garbage") is None
-    assert _parse_dt(None) is None
+def test_parse_dt_variants() -> None:
+    ws = Workbook().active
+    assert ws is not None
+    assert _parse_dt(ws.cell(1, 1, datetime.datetime(2026, 1, 5, 10))) == datetime.datetime(
+        2026, 1, 5, 10
+    )
+    assert _parse_dt(ws.cell(1, 2, datetime.date(2026, 1, 5))) == datetime.datetime(2026, 1, 5)
+    assert _parse_dt(ws.cell(1, 3, "05.01.2026 10:00:00")) == datetime.datetime(2026, 1, 5, 10)
+    assert _parse_dt(ws.cell(1, 4, "2026-01-05T10:00:00")) == datetime.datetime(2026, 1, 5, 10)
+    assert _parse_dt(ws.cell(1, 5, "")) is None
+    assert _parse_dt(ws.cell(1, 6, "garbage")) is None
+    assert _parse_dt(ws.cell(1, 7)) is None
 
 
-def test_amount_variants():
-    assert _amount(-125.5) == -12550
-    assert _amount(500) == 50000
-    assert _amount("-1 500,00") == -150000
-    assert _amount("") is None
-    assert _amount(None) is None
-    assert _amount("abc") is None
+def test_amount_variants() -> None:
+    ws = Workbook().active
+    assert ws is not None
+    assert _amount(ws.cell(1, 1, -125.5)) == -12550
+    assert _amount(ws.cell(1, 2, 500)) == 50000
+    assert _amount(ws.cell(1, 3, "-1 500,00")) == -150000
+    assert _amount(ws.cell(1, 4, "")) is None
+    assert _amount(ws.cell(1, 5)) is None
+    assert _amount(ws.cell(1, 6, "abc")) is None
 
 
-def test_rejects_garbage_bytes():
+def test_rejects_garbage_bytes() -> None:
     with pytest.raises(WorkbookError) as e:
         parse_workbook(b"nope")
     assert "not a readable .xlsx workbook" in str(e.value)
 
 
-def test_transactions_are_the_only_required_sheet():
+def test_transactions_are_the_only_required_sheet() -> None:
     """
     The category structure is read from a sheet of its own when there is one and
     inferred from the year grids when there isn't, so only the rows themselves
     are indispensable.
     """
     wb = Workbook()
-    wb.active.title = "Whatever"
+    ws = _active(wb)
+    ws.title = "Whatever"
     buf = BytesIO()
     wb.save(buf)
     with pytest.raises(WorkbookError) as e:
         parse_workbook(buf.getvalue())
     assert str(e.value) == "missing required sheet: Transactions"
 
-    data = _book(transactions=[_tx_row(monori="Groceries")])
-    parsed = parse_workbook(data)
-    assert [t["monori_category"] for t in parsed["transactions"]] == ["Groceries"]
+    wb, _, tx = _workbook()
+    TransactionFixture(monori="Groceries").append_to(tx)
+    parsed = parse_workbook(_bytes(wb))
+    assert [t.monori_category for t in parsed.transactions] == ["Groceries"]
 
 
-def test_missing_transactions_sheet():
+def test_missing_transactions_sheet() -> None:
     wb = Workbook()
-    wb.active.title = "Categories"
+    ws = _active(wb)
+    ws.title = "Categories"
     buf = BytesIO()
     wb.save(buf)
     with pytest.raises(WorkbookError) as e:
@@ -169,9 +182,10 @@ def test_missing_transactions_sheet():
     assert str(e.value) == "missing required sheet: Transactions"
 
 
-def test_missing_required_transaction_columns():
+def test_missing_required_transaction_columns() -> None:
     wb = Workbook()
-    wb.active.title = "Categories"
+    ws = _active(wb)
+    ws.title = "Categories"
     tx = wb.create_sheet("Transactions")
     tx.append(["Дата операции", "Status"])
     buf = BytesIO()
@@ -183,140 +197,139 @@ def test_missing_required_transaction_columns():
     assert "Сумма операции" in msg
 
 
-def test_categories_main_and_group_tables():
-    data = _book(
-        categories=[
-            [1, "▼Daily", "Groceries", "lenta|okey"],
-            [2, "▲Inflow", "Salary", ""],
-            [],
-            ["Category Group", "Sort Order", "Type"],
-            ["▼Daily", 1, "OUT"],
-            ["▲Inflow", 2, "IN"],
-        ]
-    )
-    parsed = parse_workbook(data)
-    assert parsed["groups"] == [
-        {"name": "Daily", "sort": 1, "kind": "expense"},
-        {"name": "Inflow", "sort": 2, "kind": "income"},
+def test_categories_main_and_group_tables() -> None:
+    wb, categories, _ = _workbook()
+    categories.append([1, "▼Daily", "Groceries", "lenta|okey"])
+    categories.append([2, "▲Inflow", "Salary", ""])
+    categories.append([])
+    categories.append(["Category Group", "Sort Order", "Type"])
+    categories.append(["▼Daily", 1, "OUT"])
+    categories.append(["▲Inflow", 2, "IN"])
+    parsed = parse_workbook(_bytes(wb))
+    assert [(group.name, group.sort, group.kind) for group in parsed.groups] == [
+        ("Daily", 1, "expense"),
+        ("Inflow", 2, "income"),
     ]
-    cats = {c["name"]: c for c in parsed["categories"]}
-    assert cats["Groceries"]["group"] == "Daily"
-    assert cats["Groceries"]["keywords"] == "lenta|okey"
-    assert cats["Salary"]["group"] == "Inflow"
-    assert cats["Salary"]["group_kind"] == "income"
-    assert parsed["warnings"] == []
+    cats = {c.name: c for c in parsed.categories}
+    assert cats["Groceries"].group == "Daily"
+    assert cats["Groceries"].keywords == "lenta|okey"
+    assert cats["Salary"].group == "Inflow"
+    assert cats["Salary"].group_kind == "income"
+    assert parsed.warnings == []
 
 
-def test_categories_unrecognized_row_warns():
-    data = _book(categories=[[1, "▼Daily", "Groceries", ""], ["junk", "row", None]])
-    parsed = parse_workbook(data)
-    assert any(w.startswith("Categories: unrecognized row skipped:") for w in parsed["warnings"])
+def test_categories_unrecognized_row_warns() -> None:
+    wb, categories, _ = _workbook()
+    categories.append([1, "▼Daily", "Groceries", ""])
+    categories.append(["junk", "row"])
+    parsed = parse_workbook(_bytes(wb))
+    assert any(w.startswith("Categories: unrecognized row skipped:") for w in parsed.warnings)
 
 
-def test_category_sheet_saying_nothing_defers_to_the_grids():
+def test_category_sheet_saying_nothing_defers_to_the_grids() -> None:
     """
     The live spreadsheet has a sheet called Categories too, laid out nothing like
     ours. Rather than report every row of it, the reader treats a sheet it cannot
     read as absent and takes the structure from the year grids.
     """
-    data = _book(categories=[["junk", "row", None], ["more", "junk", None]])
-    parsed = parse_workbook(data)
-    assert parsed["categories"] == []
-    assert parsed["groups"] == []
-    assert parsed["warnings"] == [
+    wb, categories, _ = _workbook()
+    categories.append(["junk", "row"])
+    categories.append(["more", "junk"])
+    parsed = parse_workbook(_bytes(wb))
+    assert parsed.categories == []
+    assert parsed.groups == []
+    assert parsed.warnings == [
         "Categories: no category rows recognized (2 rows skipped),"
         " structure taken from the year grids"
     ]
 
 
-def test_groups_derived_when_group_table_missing():
-    data = _book(
-        categories=[
-            [3, "▼Daily", "Groceries", ""],
-            [3, "▼Daily", "Cafes", ""],
-            [5, "▲Inflow", "Salary", ""],
-        ]
-    )
-    parsed = parse_workbook(data)
-    assert (
-        "Categories: group table missing, groups derived from category rows" in (parsed["warnings"])
-    )
-    assert parsed["groups"] == [
-        {"name": "Daily", "sort": 3, "kind": "expense"},
-        {"name": "Inflow", "sort": 5, "kind": "income"},
+def test_groups_derived_when_group_table_missing() -> None:
+    wb, categories, _ = _workbook()
+    categories.append([3, "▼Daily", "Groceries", ""])
+    categories.append([3, "▼Daily", "Cafes", ""])
+    categories.append([5, "▲Inflow", "Salary", ""])
+    parsed = parse_workbook(_bytes(wb))
+    assert "Categories: group table missing, groups derived from category rows" in parsed.warnings
+    assert [(group.name, group.sort, group.kind) for group in parsed.groups] == [
+        ("Daily", 3, "expense"),
+        ("Inflow", 5, "income"),
     ]
 
 
-def test_transactions_parse_and_markers():
-    data = _book(
-        transactions=[
-            _tx_row(card="*2947", monori="Groceries", comment="note"),
-            _tx_row(op="06.01.2026 09:30:00", amount="-1 500,00", account="Card", description="X"),
-            _tx_row(status="FAILED"),
-            [None] * 16,
-        ]
-    )
-    parsed = parse_workbook(data)
-    rows = parsed["transactions"]
+def test_transactions_parse_and_markers() -> None:
+    wb, _, tx = _workbook()
+    TransactionFixture(card="*2947", monori="Groceries", comment="note").append_to(tx)
+    TransactionFixture(op="06.01.2026 09:30:00", account="Card", description="X").append_to(tx)
+    tx.cell(tx.max_row, 6, "-1 500,00")
+    TransactionFixture(status="FAILED").append_to(tx)
+    tx.append([])
+    parsed = parse_workbook(_bytes(wb))
+    rows = parsed.transactions
     assert len(rows) == 2
     first, second = rows
-    assert first["date"] == "2026-01-05T10:00:00"
-    assert first["amount"] == -12550
-    assert first["marker"] == "*2947"
-    assert first["monori_category"] == "Groceries"
-    assert first["comment"] == "note"
-    assert first["bank_category"] == "Super"
-    assert first["mcc"] == "5411"
-    assert second["date"] == "2026-01-06T09:30:00"
-    assert second["amount"] == -150000
-    assert second["marker"] == "Card"
-    assert parsed["warnings"] == ["Transactions: 1 non-OK rows skipped"]
-    assert parsed["errors"] == []
+    assert first.date == "2026-01-05T10:00:00"
+    assert first.amount == -12550
+    assert first.marker == "*2947"
+    assert first.monori_category == "Groceries"
+    assert first.comment == "note"
+    assert first.bank_category == "Super"
+    assert first.mcc == "5411"
+    assert second.date == "2026-01-06T09:30:00"
+    assert second.amount == -150000
+    assert second.marker == "Card"
+    assert parsed.warnings == ["Transactions: 1 non-OK rows skipped"]
+    assert parsed.errors == []
 
 
-def test_transactions_unparseable_rows_reported_with_row_number():
-    data = _book(transactions=[_tx_row(op="garbage"), _tx_row(amount="zzz")])
-    parsed = parse_workbook(data)
-    assert parsed["transactions"] == []
-    assert parsed["errors"] == [
-        {"row": 2, "error": "unparseable date or amount"},
-        {"row": 3, "error": "unparseable date or amount"},
+def test_transactions_unparseable_rows_reported_with_row_number() -> None:
+    wb, _, tx = _workbook()
+    TransactionFixture(op="garbage").append_to(tx)
+    TransactionFixture().append_to(tx)
+    tx.cell(tx.max_row, 6, "zzz")
+    parsed = parse_workbook(_bytes(wb))
+    assert parsed.transactions == []
+    assert [(error.row, error.error) for error in parsed.errors] == [
+        (2, "unparseable date or amount"),
+        (3, "unparseable date or amount"),
     ]
 
 
-def test_year_sheet_budgets_and_unknown_labels():
-    year_rows = [
-        ["Month Summary", 200, 125.5, 74.5],
-        ["▼Daily", None, None, None],
-        ["Groceries", 200, 125.5, 74.5, 300],
-        ["Mystery", 1, 2, 3],
-    ]
-    data = _book(
-        categories=[
-            [1, "▼Daily", "Groceries", ""],
-            ["Category Group", "Sort Order", "Type"],
-            ["▼Daily", 1, "OUT"],
-        ],
-        extra_sheets={"2026": _year_header() + year_rows, "Notes": [["hi"]]},
-    )
-    parsed = parse_workbook(data)
-    cells = parsed["budgets"]
-    assert {(c["category"], c["year"], c["month"], c["amount"]) for c in cells} == {
+def test_year_sheet_budgets_and_unknown_labels() -> None:
+    wb, categories, _ = _workbook()
+    categories.append([1, "▼Daily", "Groceries", ""])
+    categories.append(["Category Group", "Sort Order", "Type"])
+    categories.append(["▼Daily", 1, "OUT"])
+    year = wb.create_sheet("2026")
+    _write_year_header(year)
+    year.append(["Month Summary", 200, 125.5, 74.5])
+    year.append(["▼Daily"])
+    year.append(["Groceries", 200, 125.5, 74.5, 300])
+    year.append(["Mystery", 1, 2, 3])
+    notes = wb.create_sheet("Notes")
+    notes.append(["hi"])
+    parsed = parse_workbook(_bytes(wb))
+    cells = parsed.budgets
+    assert {(c.category, c.year, c.month, c.amount) for c in cells} == {
         ("Groceries", 2026, 1, 20000),
         ("Groceries", 2026, 2, 30000),
     }
-    assert "2026: unknown row label skipped: Mystery" in parsed["warnings"]
-    assert "unknown sheet ignored: Notes" in parsed["warnings"]
+    assert "2026: unknown row label skipped: Mystery" in parsed.warnings
+    assert "unknown sheet ignored: Notes" in parsed.warnings
 
 
-def test_year_sheet_only_four_digit_names():
-    data = _book(extra_sheets={"20266": [["Groceries", 1]]})
-    parsed = parse_workbook(data)
-    assert parsed["budgets"] == []
-    assert "unknown sheet ignored: 20266" in parsed["warnings"]
+def test_year_sheet_only_four_digit_names() -> None:
+    wb, _, _ = _workbook()
+    year = wb.create_sheet("20266")
+    year.append(["Groceries", 1])
+    parsed = parse_workbook(_bytes(wb))
+    assert parsed.budgets == []
+    assert "unknown sheet ignored: 20266" in parsed.warnings
 
 
-def test_dashdata_sheet_is_known_and_silent():
-    data = _book(extra_sheets={"DashData": [["Month", "Income"]]})
-    parsed = parse_workbook(data)
-    assert parsed["warnings"] == []
+def test_dashdata_sheet_is_known_and_silent() -> None:
+    wb, _, _ = _workbook()
+    dash = wb.create_sheet("DashData")
+    dash.append(["Month", "Income"])
+    parsed = parse_workbook(_bytes(wb))
+    assert parsed.warnings == []

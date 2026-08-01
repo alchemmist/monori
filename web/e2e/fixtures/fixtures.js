@@ -37,7 +37,16 @@ class Api {
     }
 
     createAccount(fields = {}) {
-        return this.post("/api/accounts", { name: "Card", type: "card", ...fields });
+        return this.post("/api/accounts", {
+            name: "Card",
+            type: "card",
+            icon: "wallet",
+            color: "#5b6472",
+            currency: "RUB",
+            openingBalance: 0,
+            bankRef: "",
+            ...fields,
+        });
     }
 
     createGroup(name, kind = "expense") {

@@ -3,7 +3,7 @@ import json
 import sys
 
 
-def main():
+def main() -> int:
     if len(sys.argv) != 3:
         print("usage: mutation-gate.py <cicd-stats.json> <threshold>", file=sys.stderr)
         return 2
@@ -17,10 +17,10 @@ def main():
         print(f"mutation-gate: stats file not found: {stats_path}", file=sys.stderr)
         return 2
 
-    killed = s.get("killed", 0)
-    survived = s.get("survived", 0)
-    timeout = s.get("timeout", 0)
-    suspicious = s.get("suspicious", 0)
+    killed = int(s.get("killed", 0))
+    survived = int(s.get("survived", 0))
+    timeout = int(s.get("timeout", 0))
+    suspicious = int(s.get("suspicious", 0))
 
     considered = killed + survived + timeout + suspicious
     if considered == 0:
@@ -29,11 +29,11 @@ def main():
 
     score = 100.0 * killed / considered
     status = "PASS" if score >= threshold else "FAIL"
-    total = s.get("total", considered)
-    no_tests = s.get("no_tests", 0)
-    skipped = s.get("skipped", 0)
-    segfault = s.get("segfault", 0)
-    interrupted = s.get("check_was_interrupted_by_user", 0)
+    total = int(s.get("total", considered))
+    no_tests = int(s.get("no_tests", 0))
+    skipped = int(s.get("skipped", 0))
+    segfault = int(s.get("segfault", 0))
+    interrupted = int(s.get("check_was_interrupted_by_user", 0))
 
     print("── backend mutation summary ─────────────────────────")
     print("status        count   included in gate")

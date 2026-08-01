@@ -106,7 +106,7 @@ export default function DashboardPage({ firstYear, lastYear }) {
         return [...map.entries()].sort(([a], [b]) => a.localeCompare(b));
     }, [txns, excludedIds, incomeGroupIds, catById]);
 
-    const nowKey = now.toISOString().slice(0, 7);
+    const nowKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
     const closed = monthly.filter(([k]) => k < nowKey); // full months only
     const last12 = closed.slice(-12);
 

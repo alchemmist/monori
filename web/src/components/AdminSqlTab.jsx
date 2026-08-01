@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Button, Textarea } from "@mantine/core";
+import { Button } from "@mantine/core";
 import { api } from "../api.js";
 import { useStore } from "../store.js";
 import Tab from "../ui/Tab.jsx";
 import Txt from "../ui/Txt.jsx";
 import { showToast } from "../ui/notify.js";
 import { loadHistory, remember } from "./sqlHistory.js";
+import { TextareaAutosize } from "../../node_modules/@mantine/core/esm/components/Textarea/Autosize.mjs";
 
 const CELL_MAX = 200;
 
@@ -123,10 +124,9 @@ export default function AdminSqlTab({ onClose }) {
         <Tab title="SQL console" strip="SQL" onClose={onClose} footer={footer} width={60}>
             {/* a plain Textarea, not the inline-label FTextArea: SQL is written
                 on several lines and wants the whole box */}
-            <Textarea
+            <TextareaAutosize
                 ref={areaRef}
                 aria-label="SQL statement"
-                autosize
                 minRows={4}
                 maxRows={14}
                 spellCheck={false}
@@ -137,11 +137,7 @@ export default function AdminSqlTab({ onClose }) {
                 }}
                 onKeyDown={onKeyDown}
                 placeholder="SELECT * FROM transactions ORDER BY date DESC LIMIT 20"
-                styles={{
-                    input: {
-                        fontFamily: "var(--g-font-family-monospace, ui-monospace, monospace)",
-                    },
-                }}
+                className="sql-console__editor"
             />
 
             {pendingWrite && <div className="sql-console__warn">{pendingWrite}</div>}
