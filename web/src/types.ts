@@ -238,7 +238,7 @@ export interface TransferPair {
 export interface TransferSuggestion extends TransferPair {
     amount: number;
     days: number;
-    hint?: string;
+    hint?: boolean;
     mismatch?: boolean;
 }
 
@@ -287,7 +287,7 @@ export interface AvailableConnector {
 
 export interface SyncResult {
     status: string;
-    message?: string;
+    message?: string | null;
     inserted?: number;
     skipped?: number;
     accounts?: Array<{

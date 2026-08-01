@@ -23,6 +23,125 @@ const requireFile = (value: FormDataEntryValue | null): File => {
     return value;
 };
 
+const userResponse = {
+    id: 1,
+    email: "user@example.com",
+    createdAt: "2026-01-01T00:00:00",
+    isAdmin: false,
+    lastLogin: null,
+    defaultAccountId: null,
+};
+
+const connectionResponse = {
+    id: 1,
+    bank: "bank",
+    kind: "browser",
+    status: "disconnected",
+    lastSync: null,
+    lastError: null,
+    hasCredentials: true,
+    createdAt: "2026-01-01T00:00:00",
+    updatedAt: "2026-01-01T00:00:00",
+};
+
+const snapshotResponse = {
+    accounts: [],
+    groups: [],
+    categories: [],
+    transactions: [],
+    transactionsTotal: 0,
+    transfers: [],
+    budgets: [],
+    connections: [],
+};
+
+const responseFor = (url: string, method?: string): unknown => {
+    if (url.startsWith("/api/snapshot")) return snapshotResponse;
+    if (url.startsWith("/api/transactions?")) return { total: 0, rows: [] };
+    if (url.endsWith("/splits")) return { splits: [] };
+    if (url === "/api/budgets/bulk") return { set: 1 };
+    if (url === "/api/accounts/1/reconcile") return { delta: 0 };
+    if (url === "/api/transfers/suggestions") return { rows: [], transactions: [] };
+    if (url === "/api/transfers/detect") return { merged: [], suggested: 0 };
+    if (url === "/api/transfers" || url === "/api/transfers/link") return { transferId: "t" };
+    if (url === "/api/import/preview") return { rows: [], errors: [] };
+    if (url === "/api/import/duplicates") return { duplicates: [] };
+    if (url === "/api/import/commit")
+        return { inserted: 0, skipped: 0, transfersMerged: 0, transfersSuggested: 0 };
+    if (url === "/api/import/workbook/preview")
+        return {
+            groups: 0,
+            categories: 0,
+            transactions: 0,
+            transactionsByYear: {},
+            budgetCells: 0,
+            accountSlots: [],
+            warnings: [],
+            errors: [],
+            budgetConflicts: 0,
+        };
+    if (url === "/api/import/workbook/commit")
+        return {
+            groupsCreated: 0,
+            categoriesCreated: 0,
+            inserted: 0,
+            skipped: 0,
+            batches: [],
+            budgetsWritten: 0,
+            budgetsSkipped: 0,
+            warnings: [],
+            errors: [],
+            cardTailsBound: 0,
+        };
+    if (url === "/api/connections/available") return [];
+    if (url === "/api/connections") return connectionResponse;
+    if (url.endsWith("/sync") || url.endsWith("/sms"))
+        return {
+            status: "connected",
+            inserted: 0,
+            skipped: 0,
+            accounts: [],
+            dateFrom: null,
+            dateTo: null,
+            unmappedTails: [],
+        };
+    if (url.endsWith("/cancel")) return { cancelled: 1 };
+    if (url === "/api/connections/1") return { deleted: 1 };
+    if (url === "/api/auth/token") return { access_token: "token", token_type: "bearer" };
+    if (url.startsWith("/api/auth/")) return userResponse;
+    if (url === "/api/admin/overview")
+        return {
+            totals: { users: 0, transactions: 0, accounts: 0, connections: 0 },
+            dbSizeBytes: 0,
+            newUsers7d: 0,
+            newUsers30d: 0,
+            activeUsers7d: 0,
+            registrations: [],
+        };
+    if (url === "/api/admin/users") return [];
+    if (url === "/api/admin/users/1" && method !== "DELETE")
+        return {
+            user: userResponse,
+            accounts: [],
+            recentTransactions: [],
+            featureUsage: [],
+            recentLogins: [],
+        };
+    if (url.startsWith("/api/admin/users/1/transactions?")) return [];
+    if (url === "/api/admin/users/1/transactions/delete") return { deleted: 1 };
+    if (url === "/api/admin/activity") return { features: [], daily: [], recentLogins: [] };
+    if (url === "/api/admin/sql")
+        return { kind: "read", columns: [], rows: [], rowCount: 0, truncated: false, elapsedMs: 0 };
+    if (
+        url === "/api/transactions" ||
+        url === "/api/accounts" ||
+        url === "/api/categories" ||
+        url === "/api/groups"
+    )
+        return { id: 7 };
+    return { ok: true };
+};
+
 /** Every JSON endpoint, as [label, call, expected url, expected method, expected body]. */
 type Endpoint = [string, () => Promise<unknown>, string, string | undefined, unknown];
 
@@ -321,7 +440,9 @@ describe("api", () => {
             removeItem: (key: string) => values.delete(key),
             clear: () => values.clear(),
         });
-        fetch = vi.fn<TestFetch>().mockResolvedValue(ok({ id: 7, transferId: "t" }));
+        fetch = vi
+            .fn<TestFetch>()
+            .mockImplementation(async (url, options) => ok(responseFor(url, options.method)));
         vi.stubGlobal("fetch", fetch);
     });
     afterEach(() => {
@@ -346,6 +467,24 @@ describe("api", () => {
                 expect(options.headers["Content-Type"]).toBe("application/json");
                 expect(JSON.parse(requireString(options.body))).toEqual(body);
             }
+        },
+    );
+
+    it.each(ENDPOINTS)("rejects an invalid %s response at runtime", async (_label, call) => {
+        fetch.mockResolvedValueOnce(ok(null));
+        await expect(call()).rejects.toThrow();
+    });
+
+    it.each([
+        ["authLogin", () => api.authLogin("a@b.c", "pw")],
+        ["authMe", () => api.authMe("token")],
+        ["workbookPreview", () => api.workbookPreview(new File(["x"], "book.xlsx"))],
+        ["workbookCommit", () => api.workbookCommit(new File(["x"], "book.xlsx"), {}, "skip")],
+    ] satisfies Array<[string, () => Promise<unknown>]>)(
+        "rejects an invalid %s response at runtime",
+        async (_label, call) => {
+            fetch.mockResolvedValueOnce(ok(null));
+            await expect(call()).rejects.toThrow();
         },
     );
 
