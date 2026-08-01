@@ -7,9 +7,12 @@ import subprocess
 import sys
 from pathlib import Path
 
+# mutmut >=3.6.0 stores pytest exit codes in .py.meta files:
+# 0 means survived, 1/3 means killed, and the remaining values below are
+# timeout or suspicious outcomes that still belong in the score denominator.
 KILLED = {1, 3}
 SURVIVED = 0
-CONSIDERED = KILLED | {SURVIVED, -24, 24, 35, 36, 152, 255}
+OTHER_STATUSES = {-24, 24, 35, 36, 152, 255}
 CLASS_SEPARATOR = "ǁ"
 
 
@@ -17,21 +20,25 @@ def parse_changed_lines(diff: str) -> dict[str, set[int]]:
     paths: dict[str, set[int]] = {}
     current: str | None = None
     new_line = 0
+    deletion_only = False
     for line in diff.splitlines():
-        if line.startswith("+++ b/"):
-            current = line[6:]
+        if line.startswith("+++ "):
+            target = line[4:]
+            if target == "/dev/null":
+                current = None
+                continue
+            current = target.removeprefix("b/")
             paths.setdefault(current, set())
         elif line.startswith("@@"):
             hunk = line.split(" ", 3)[2]
             start, _, length = hunk[1:].partition(",")
             new_line = int(start)
-            if length and length != "0":
-                new_line = int(start)
+            deletion_only = length == "0"
         elif current and line.startswith("+") and not line.startswith("+++"):
             paths[current].add(new_line)
             new_line += 1
         elif current and line.startswith("-") and not line.startswith("---"):
-            paths[current].add(max(1, new_line - 1))
+            paths[current].add(max(1, new_line if deletion_only else new_line - 1))
         elif current and new_line:
             new_line += 1
     return {path: lines for path, lines in paths.items() if lines}
@@ -91,7 +98,10 @@ def mutant_function(key: str) -> tuple[str, str | None]:
 
 def load_meta(path: Path) -> dict[str, int | None]:
     data = json.loads(path.read_text())
-    return {key: value for key, value in data["exit_code_by_key"].items()}
+    statuses = data.get("exit_code_by_key")
+    if not isinstance(statuses, dict):
+        raise TypeError(f"mutation-diff: invalid mutmut metadata in {path}: missing exit_code_by_key")
+    return {key: value for key, value in statuses.items()}
 
 
 def gate_backend(
@@ -100,6 +110,7 @@ def gate_backend(
     root: Path,
     base: str,
     threshold: float,
+    skip_new_survivors: bool,
 ) -> int:
     line_changes = changed_lines(base)
     functions = changed_functions(root, line_changes)
@@ -126,7 +137,7 @@ def gate_backend(
                     new_survivors += 1
             elif status in KILLED:
                 killed += 1
-            elif status in CONSIDERED:
+            elif status in OTHER_STATUSES:
                 other += 1
 
     considered = killed + survived + other
@@ -134,7 +145,7 @@ def gate_backend(
         print("mutation-diff: changed functions have no tested mutants — pass")
         return 0
     score = 100 * killed / considered
-    passed = score >= threshold and new_survivors == 0
+    passed = score >= threshold and (skip_new_survivors or new_survivors == 0)
     print("── changed backend mutation summary ─────────────────")
     print(f"killed             {killed}")
     print(f"survived           {survived}")
@@ -152,8 +163,16 @@ def main() -> int:
     parser.add_argument("--baseline", type=Path, required=True)
     parser.add_argument("--base", required=True)
     parser.add_argument("--threshold", type=float, required=True)
+    parser.add_argument("--skip-new-survivors", action="store_true")
     args = parser.parse_args()
-    return gate_backend(args.mutants, args.baseline, Path.cwd(), args.base, args.threshold)
+    return gate_backend(
+        args.mutants,
+        args.baseline,
+        Path.cwd(),
+        args.base,
+        args.threshold,
+        args.skip_new_survivors,
+    )
 
 
 if __name__ == "__main__":
