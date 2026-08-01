@@ -189,7 +189,7 @@ m-front-diff:
 	if [ -z "$$files" ]; then \
 		echo "mutation-diff: no changed frontend files — pass"; exit 0; \
 	fi; \
-	( cd web && MUTATION_THRESHOLD=0 npx stryker run --incremental --mutate "$$files" ); web=$$?; \
+	( cd web && GITHUB_STEP_SUMMARY= MUTATION_THRESHOLD=0 npx stryker run --incremental --mutate "$$files" ); web=$$?; \
 	node scripts/mutation-diff-gate.mjs "$(BASE)" web/reports/stryker-incremental.json "$(MUTATION_DIFF_THRESHOLD)"; gate=$$?; \
 	if [ $$web -ne 0 ] || [ $$gate -ne 0 ]; then exit 1; fi
 
