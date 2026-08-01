@@ -70,6 +70,15 @@ export const api = {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ parts }),
         }).then(json),
+    refundSuggestions: (id) => apiFetch(`/api/transactions/${id}/refund-suggestions`).then(json),
+    linkRefund: (id, originalId) =>
+        apiFetch(`/api/transactions/${id}/refund`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ originalId }),
+        }).then(json),
+    unlinkRefund: (id) =>
+        apiFetch(`/api/transactions/${id}/refund`, { method: "DELETE" }).then(json),
     deleteTx: (id) => apiFetch(`/api/transactions/${id}`, { method: "DELETE" }).then(json),
     createAccount: (body) =>
         apiFetch("/api/accounts", {

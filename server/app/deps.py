@@ -48,7 +48,7 @@ def serialize_account(r):
     }
 
 
-def serialize_tx(r, splits=()):
+def serialize_tx(r, splits=(), refund_of_id=None, refund_ids=()):
     return {
         "id": r["id"],
         "date": r["date"],
@@ -71,6 +71,8 @@ def serialize_tx(r, splits=()):
             }
             for split in splits
         ],
+        "refundOfId": refund_of_id,
+        "refundIds": list(refund_ids),
     }
 
 
@@ -80,6 +82,8 @@ def serialize_transactions(cur, rows):
         return []
     ids = [row["id"] for row in rows]
     by_tx: dict[int, list] = {}
+    refund_of: dict[int, int] = {}
+    refunds: dict[int, set[int]] = {}
     for chunk in batched(ids, SPLIT_FETCH_BATCH_SIZE):
         marks = ",".join("?" for _ in chunk)
         for split in cur.execute(
@@ -90,7 +94,24 @@ def serialize_transactions(cur, rows):
             chunk,
         ):
             by_tx.setdefault(split["transaction_id"], []).append(split)
-    return [serialize_tx(row, by_tx.get(row["id"], ())) for row in rows]
+        for link in cur.execute(
+            # `marks` contains generated positional placeholders, never user input.
+            f"SELECT refund_tx_id, original_tx_id FROM refund_links"  # nosec B608
+            f" WHERE refund_tx_id IN ({marks}) OR original_tx_id IN ({marks})"
+            " ORDER BY refund_tx_id",
+            (*chunk, *chunk),
+        ):
+            refund_of[link["refund_tx_id"]] = link["original_tx_id"]
+            refunds.setdefault(link["original_tx_id"], set()).add(link["refund_tx_id"])
+    return [
+        serialize_tx(
+            row,
+            by_tx.get(row["id"], ()),
+            refund_of.get(row["id"]),
+            sorted(refunds.get(row["id"], ())),
+        )
+        for row in rows
+    ]
 
 
 def serialize_user(r):

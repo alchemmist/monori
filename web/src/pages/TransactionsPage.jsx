@@ -25,8 +25,10 @@ import DeleteTxDialog from "../components/DeleteTxDialog.jsx";
 import TransferDialog from "../components/TransferDialog.jsx";
 import TransferRow from "../components/TransferRow.jsx";
 import TransferSuggestions from "../components/TransferSuggestions.jsx";
+import RefundDialog from "../components/RefundDialog.jsx";
 import { mergeTransferRows } from "../engine/transfers.js";
 import { splitPartTransaction } from "../engine/splits.js";
+import { refundMerchantKey } from "../engine/refunds.js";
 import "./budget.css";
 import "./transfers.css";
 
@@ -41,6 +43,7 @@ export default function TransactionsPage() {
         setTxCategory,
         setTxAccount,
         replaceTransactionSplits,
+        unlinkRefund,
         updateTransaction,
         hiddenTx,
         loadHiddenTx,
@@ -66,6 +69,8 @@ export default function TransactionsPage() {
     const [suggesting, setSuggesting] = useState(false);
     const [expanded, setExpanded] = useState(() => new Set());
     const [deleting, setDeleting] = useState(null);
+    const [refunding, setRefunding] = useState(null);
+    const [focusTxId, setFocusTxId] = useState(null);
     const bodyRef = useRef(null);
     const [rowH, setRowH] = useState(ROW_H_FALLBACK);
     const [showTop, setShowTop] = useState(false);
@@ -144,15 +149,20 @@ export default function TransactionsPage() {
     const catSectionsFor = (t) => {
         const cur = t.categoryId != null ? catById.get(t.categoryId) : null;
         const uncategorized = { value: "", label: "Leave uncategorized" };
-        const kind = t.amount < 0 ? "expense" : t.amount > 0 ? "income" : null;
-        const matchingSections = kind
-            ? catSections.filter((section) => section.kind === kind)
+        const allowedKinds =
+            t.amount < 0 || t.refundOfId != null
+                ? new Set(["expense"])
+                : t.amount > 0
+                  ? new Set(["income"])
+                  : null;
+        const matchingSections = allowedKinds
+            ? catSections.filter((section) => allowedKinds.has(section.kind))
             : catSections;
         if (!cur || !cur.archived) return [uncategorized, ...matchingSections];
         const g = groupById.get(cur.groupId);
         const opt = { value: String(cur.id), label: cur.name };
         const clone = matchingSections.map((s) => ({ ...s, options: [...s.options] }));
-        if (kind && g?.kind !== kind) return [uncategorized, ...clone];
+        if (allowedKinds && !allowedKinds.has(g?.kind)) return [uncategorized, ...clone];
         const sec = clone.find((s) => s.id === cur.groupId);
         if (sec) sec.options.push(opt);
         else
@@ -171,6 +181,84 @@ export default function TransactionsPage() {
         if (!showHidden || !hiddenTx?.length) return snapshot.transactions;
         return [...snapshot.transactions, ...hiddenTx].sort(compareTx);
     }, [snapshot.transactions, hiddenTx, showHidden]);
+
+    const possibleRefundIds = useMemo(() => {
+        const transactions = snapshot.transactions ?? [];
+        const refunded = new Map();
+        for (const transaction of transactions) {
+            if (transaction.refundOfId != null)
+                refunded.set(
+                    transaction.refundOfId,
+                    (refunded.get(transaction.refundOfId) ?? 0) + transaction.amount,
+                );
+        }
+        const purchasesByMerchant = new Map();
+        const purchasesByAmount = new Map();
+        for (const transaction of transactions) {
+            if (
+                transaction.amount >= 0 ||
+                transaction.transferId != null ||
+                transaction.splits?.length
+            )
+                continue;
+            const purchase = {
+                date: transaction.date,
+                remaining: -transaction.amount - (refunded.get(transaction.id) ?? 0),
+            };
+            const merchant = refundMerchantKey(transaction.description);
+            if (merchant) {
+                const matches = purchasesByMerchant.get(merchant) ?? [];
+                matches.push(purchase);
+                purchasesByMerchant.set(merchant, matches);
+            }
+            const exactMatches = purchasesByAmount.get(-transaction.amount) ?? [];
+            exactMatches.push(purchase);
+            purchasesByAmount.set(-transaction.amount, exactMatches);
+        }
+        const preparePurchases = (purchases) => {
+            purchases.sort((a, b) => a.date.localeCompare(b.date));
+            let maxRemaining = 0;
+            return purchases.map((purchase) => {
+                maxRemaining = Math.max(maxRemaining, purchase.remaining);
+                return { date: purchase.date, maxRemaining };
+            });
+        };
+        for (const [merchant, purchases] of purchasesByMerchant)
+            purchasesByMerchant.set(merchant, preparePurchases(purchases));
+        for (const [amount, purchases] of purchasesByAmount)
+            purchasesByAmount.set(amount, preparePurchases(purchases));
+        const hasEligiblePurchase = (purchases, refund) => {
+            if (!purchases?.length) return false;
+            let low = 0;
+            let high = purchases.length;
+            while (low < high) {
+                const middle = (low + high) >> 1;
+                if (purchases[middle].date <= refund.date) low = middle + 1;
+                else high = middle;
+            }
+            return low > 0 && purchases[low - 1].maxRemaining >= refund.amount;
+        };
+        return new Set(
+            transactions
+                .filter(
+                    (transaction) =>
+                        transaction.amount > 0 &&
+                        transaction.transferId == null &&
+                        !transaction.splits?.length &&
+                        transaction.refundOfId == null &&
+                        transaction.source !== "manual",
+                )
+                .filter((refund) => {
+                    const merchant = refundMerchantKey(refund.description);
+                    return (
+                        (merchant &&
+                            hasEligiblePurchase(purchasesByMerchant.get(merchant), refund)) ||
+                        hasEligiblePurchase(purchasesByAmount.get(refund.amount), refund)
+                    );
+                })
+                .map((transaction) => transaction.id),
+        );
+    }, [snapshot.transactions]);
 
     const years = useMemo(() => {
         const s = new Set(combined.map((t) => t.date.slice(0, 4)));
@@ -266,6 +354,38 @@ export default function TransactionsPage() {
         });
     }, [filtered, snapshot.transactions, expanded]);
 
+    const jumpToTransaction = (transactionId) => {
+        setQuery("");
+        setCatFilter("all");
+        setYearFilter("all");
+        setAcctFilter("all");
+        setAmountRange(null);
+        setShowHidden(
+            !snapshot.transactions.some((transaction) => transaction.id === transactionId),
+        );
+        setFocusTxId(transactionId);
+    };
+
+    useEffect(() => {
+        if (focusTxId == null) return;
+        const index = items.findIndex((item) => item.tx?.id === focusTxId);
+        if (index < 0 || !bodyRef.current) return;
+        const top =
+            bodyRef.current.getBoundingClientRect().top + window.scrollY + index * rowH - 140;
+        window.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
+        const timer = window.setTimeout(() => setFocusTxId(null), 1800);
+        return () => window.clearTimeout(timer);
+    }, [focusTxId, items, rowH]);
+
+    const removeRefundLink = async (transaction) => {
+        try {
+            await unlinkRefund(transaction.id);
+            notify({ title: "Refund link removed", theme: "success" });
+        } catch (error) {
+            notify({ title: "Failed to unlink refund", content: String(error), theme: "danger" });
+        }
+    };
+
     const toggleTransfer = (transferId) =>
         setExpanded((prev) => {
             const next = new Set(prev);
@@ -322,7 +442,13 @@ export default function TransactionsPage() {
         return (
             <tr
                 key={leg ? `l${t.id}` : t.id}
+                data-tx-id={t.id}
                 className={`cat-row${leg ? " tx-row_leg" : ""}${splitPart ? " tx-row_leg" : ""}${t.hidden ? " tx-hidden-row" : ""}`}
+                style={
+                    focusTxId === t.id
+                        ? { outline: "2px solid var(--m-accent)", outlineOffset: -2 }
+                        : undefined
+                }
             >
                 <td style={{ textAlign: "left" }} className="num">
                     {editable ? (
@@ -383,6 +509,39 @@ export default function TransactionsPage() {
                             onClick={() => toggleSplit(t.id)}
                         >
                             split · {t.splits.length}
+                        </Button>
+                    )}
+                    {t.refundOfId != null && !leg && (
+                        <Button
+                            variant="light"
+                            size="compact-xs"
+                            style={{ marginLeft: 8 }}
+                            onClick={() => jumpToTransaction(t.refundOfId)}
+                        >
+                            refund ↗
+                        </Button>
+                    )}
+                    {possibleRefundIds.has(t.id) && !leg && (
+                        <Button
+                            variant="light"
+                            color="orange"
+                            size="compact-xs"
+                            style={{ marginLeft: 8 }}
+                            onClick={() => setRefunding(t)}
+                        >
+                            possible refund
+                        </Button>
+                    )}
+                    {t.refundIds?.length > 0 && !leg && (
+                        <Button
+                            variant="light"
+                            size="compact-xs"
+                            style={{ marginLeft: 8 }}
+                            onClick={() => jumpToTransaction(t.refundIds[0])}
+                        >
+                            {t.refundIds.length === 1
+                                ? "refunded ↗"
+                                : `${t.refundIds.length} refunds ↗`}
                         </Button>
                     )}
                     {t.hidden && <Tag style={{ marginLeft: 8 }}>hidden</Tag>}
@@ -512,6 +671,24 @@ export default function TransactionsPage() {
                                                           `tx-split-${t.id}`,
                                                       ),
                                               },
+                                          ]
+                                        : []),
+                                    ...(t.amount > 0 && !t.splits?.length
+                                        ? [
+                                              {
+                                                  text: t.refundOfId
+                                                      ? "Change linked purchase"
+                                                      : "Mark as refund of…",
+                                                  action: () => setRefunding(t),
+                                              },
+                                              ...(t.refundOfId
+                                                  ? [
+                                                        {
+                                                            text: "Unlink refund",
+                                                            action: () => removeRefundLink(t),
+                                                        },
+                                                    ]
+                                                  : []),
                                           ]
                                         : []),
                                     { text: "Hide transaction", action: () => hideTx(t.id) },
@@ -837,6 +1014,9 @@ export default function TransactionsPage() {
                 <TransferDialog accounts={accounts} onClose={() => setTransferring(false)} />
             )}
             {suggesting && <TransferSuggestions onClose={() => setSuggesting(false)} />}
+            {refunding && (
+                <RefundDialog transaction={refunding} onClose={() => setRefunding(null)} />
+            )}
             {deleting && <DeleteTxDialog tx={deleting} onClose={() => setDeleting(null)} />}
         </div>
     );

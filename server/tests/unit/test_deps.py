@@ -5,7 +5,9 @@ class SplitCursor:
     def __init__(self):
         self.chunks = []
 
-    def execute(self, _query, ids):
+    def execute(self, query, ids):
+        if "refund_links" in query:
+            return []
         self.chunks.append(list(ids))
         return [
             {

@@ -196,6 +196,40 @@ describe("TransactionsPage", () => {
         await waitFor(() => expect(setTxCategory).toHaveBeenCalledWith(1, 2));
     });
 
+    it("offers expense categories for a positive refund", async () => {
+        seed({
+            accounts,
+            groups: [...groups, { id: 4, name: "Income", kind: "income", sort: 2 }],
+            categories: [
+                ...categories,
+                { id: 4, groupId: 4, name: "Salary", archived: false, sort: 1 },
+            ],
+            transactions: [
+                tx(1, { amount: -10000, refundIds: [2] }),
+                tx(2, {
+                    amount: 2400,
+                    categoryId: 2,
+                    accountId: 1,
+                    refundOfId: 1,
+                }),
+            ],
+        });
+        const { user } = renderUI(<TransactionsPage />);
+        const row = screen.getByText("tx 2").closest("tr");
+        const categorySelect = row.querySelectorAll("button.gsel")[1];
+
+        await user.click(categorySelect);
+
+        const food = screen.getByRole("option", { name: "Food", hidden: true });
+        const dropdown = food.closest(".gsel__drop");
+        expect(food).toBeInTheDocument();
+        expect(
+            within(dropdown).queryByRole("option", { name: "Salary", hidden: true }),
+        ).not.toBeInTheDocument();
+        await user.click(categorySelect);
+        await waitFor(() => expect(food).not.toBeInTheDocument());
+    });
+
     it("offers import and transfer controls and disables transfer with one active account", () => {
         seed({ accounts, transactions: [] });
         const { unmount } = renderUI(<TransactionsPage />);
@@ -437,9 +471,11 @@ describe("TransactionsPage", () => {
 
         await user.click(selects[1]);
 
-        expect(screen.getByRole("option", { name: "Salary", hidden: true })).toBeInTheDocument();
+        const salary = screen.getByRole("option", { name: "Salary", hidden: true });
+        const dropdown = salary.closest(".gsel__drop");
+        expect(salary).toBeInTheDocument();
         expect(
-            screen.queryByRole("option", { name: "Food", hidden: true }),
+            within(dropdown).queryByRole("option", { name: "Food", hidden: true }),
         ).not.toBeInTheDocument();
     });
 

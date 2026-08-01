@@ -1,5 +1,6 @@
 import { isTransfer } from "./transfers.js";
 import { effectiveTransactions } from "./splits.js";
+import { refundMerchantKey } from "./refunds.js";
 
 /**
  * Analytics helpers — pure functions over the snapshot, no I/O.
@@ -71,13 +72,14 @@ export function yearTotals(monthly) {
         }));
 }
 
-/** Total expenses of one year bucketed by weekday. Returns [7] kopecks, Monday first. */
+/** Total expenses of one year bucketed by weekday. Returns [7] kopecks, Monday first.
+ * Refunds assigned to expense categories reduce the bucket in which they land. */
 export function weekdayProfile(snapshot, year) {
     const incomeIds = incomeGroupIdSet(snapshot.groups);
     const catById = new Map(snapshot.categories.map((c) => [c.id, c]));
     const sums = Array(7).fill(0);
     for (const t of effectiveTransactions(snapshot.transactions)) {
-        if (!t.date.startsWith(year) || t.categoryId == null || t.amount >= 0) continue;
+        if (!t.date.startsWith(year) || t.categoryId == null) continue;
         if (isTransfer(t)) continue;
         const cat = catById.get(t.categoryId);
         if (!cat || incomeIds.has(cat.groupId)) continue;
@@ -87,13 +89,14 @@ export function weekdayProfile(snapshot, year) {
     return sums;
 }
 
-/** Total expenses of one year bucketed by day of month. Returns [31] kopecks. */
+/** Total expenses of one year bucketed by day of month. Returns [31] kopecks.
+ * Refunds assigned to expense categories reduce the bucket in which they land. */
 export function dayOfMonthProfile(snapshot, year) {
     const incomeIds = incomeGroupIdSet(snapshot.groups);
     const catById = new Map(snapshot.categories.map((c) => [c.id, c]));
     const sums = Array(31).fill(0);
     for (const t of effectiveTransactions(snapshot.transactions)) {
-        if (!t.date.startsWith(year) || t.categoryId == null || t.amount >= 0) continue;
+        if (!t.date.startsWith(year) || t.categoryId == null) continue;
         if (isTransfer(t)) continue;
         const cat = catById.get(t.categoryId);
         if (!cat || incomeIds.has(cat.groupId)) continue;
@@ -187,17 +190,18 @@ export function merchantKey(description) {
         .join(" ");
 }
 
-/** Top merchants by spend for a year: [{name, fullName, total, count}] desc. */
+/** Top merchants by spend for a year: [{name, fullName, total, count}] desc.
+ * Refunds assigned to expense categories are counted and netted against spend. */
 export function topMerchants(snapshot, year, limit = 10) {
     const incomeIds = incomeGroupIdSet(snapshot.groups);
     const catById = new Map(snapshot.categories.map((c) => [c.id, c]));
     const sums = new Map();
     for (const t of effectiveTransactions(snapshot.transactions)) {
-        if (!t.date.startsWith(year) || t.categoryId == null || t.amount >= 0) continue;
+        if (!t.date.startsWith(year) || t.categoryId == null) continue;
         if (isTransfer(t)) continue;
         const cat = catById.get(t.categoryId);
         if (!cat || incomeIds.has(cat.groupId)) continue;
-        const key = merchantKey(t.description) || "(no description)";
+        const key = merchantKey(refundMerchantKey(t.description)) || "(no description)";
         let e = sums.get(key);
         if (!e) sums.set(key, (e = { fullName: t.description || key, total: 0, count: 0 }));
         e.total += -t.amount;
@@ -212,14 +216,15 @@ export function topMerchants(snapshot, year, limit = 10) {
 /** Expense-transaction stats for a year: count, median, largest.
  * Like every other analytics card, this uses only categorized expense rows:
  * uncategorized operations and transfer legs are not spending until they are
- * assigned to a real expense category. */
+ * assigned to a real expense category. Refunds in expense categories are
+ * included as negative expense amounts. */
 export function txStats(snapshot, year) {
     const incomeIds = incomeGroupIdSet(snapshot.groups);
     const catById = new Map(snapshot.categories.map((c) => [c.id, c]));
     const amounts = [];
     let largest = null;
     for (const t of effectiveTransactions(snapshot.transactions)) {
-        if (!t.date.startsWith(year) || t.amount >= 0) continue;
+        if (!t.date.startsWith(year)) continue;
         if (isTransfer(t)) continue; // moving money is not spending
         if (t.categoryId == null) continue;
         const cat = catById.get(t.categoryId);
