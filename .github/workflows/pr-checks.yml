@@ -1,0 +1,99 @@
+name: PR checks
+
+on:
+    pull_request:
+        branches: [main]
+    pull_request_target:
+        types: [opened, reopened, synchronize]
+
+permissions:
+    contents: read
+
+concurrency:
+    group: pr-checks-${{ github.event.pull_request.number }}
+    cancel-in-progress: true
+
+jobs:
+    workflow-graph:
+        name: Workflow graph validation
+        if: github.event_name == 'pull_request'
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v7
+              with:
+                  persist-credentials: false
+
+            - name: Setup Python
+              uses: actions/setup-python@v6
+              with:
+                  python-version: "3.12"
+
+            - name: Validate PR workflow graph
+              run: python -m unittest scripts.test_pr_workflow
+
+    quality:
+        name: Quality checks
+        if: github.event_name == 'pull_request'
+        uses: ./.github/workflows/build.yaml
+        permissions:
+            contents: read
+
+    mutation:
+        name: Mutation testing
+        needs: [quality, workflow-graph]
+        if: >-
+            github.event_name == 'pull_request'
+            && needs.quality.result == 'success'
+            && needs.workflow-graph.result == 'success'
+        uses: ./.github/workflows/mutation.yaml
+        permissions:
+            contents: read
+
+    bundle-size:
+        name: Frontend bundle size
+        needs: [quality, workflow-graph]
+        if: >-
+            github.event_name == 'pull_request'
+            && needs.quality.result == 'success'
+            && needs.workflow-graph.result == 'success'
+        uses: ./.github/workflows/bundle-size.yml
+        permissions:
+            actions: write
+            contents: read
+            issues: write
+            pull-requests: write
+
+    frontend-performance:
+        name: Frontend performance
+        needs: [quality, workflow-graph]
+        if: >-
+            github.event_name == 'pull_request'
+            && needs.quality.result == 'success'
+            && needs.workflow-graph.result == 'success'
+        uses: ./.github/workflows/frontend-perf.yml
+        permissions:
+            actions: write
+            contents: read
+            issues: write
+            pull-requests: write
+
+    object-annotations:
+        name: Python object annotation gate
+        if: github.event_name == 'pull_request_target'
+        uses: ./.github/workflows/object-annotation-gate.yaml
+        permissions:
+            actions: write
+            contents: read
+            issues: write
+            pull-requests: write
+
+    suppressions:
+        name: Lint suppression gate
+        if: github.event_name == 'pull_request_target'
+        uses: ./.github/workflows/suppression-gate.yaml
+        permissions:
+            actions: write
+            contents: read
+            issues: write
+            pull-requests: write

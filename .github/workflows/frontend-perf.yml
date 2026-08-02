@@ -4,21 +4,7 @@ on:
     # zizmor: ignore[dangerous-triggers]
     # The issue_comment job only reads the comment, verifies admin permission,
     # and reruns a workflow; pull request code is never executed from that event.
-    pull_request:
-        branches: [main]
-        types: [opened, reopened, synchronize]
-        paths:
-            - "web/**"
-            - "deploy/docker-compose.test.yml"
-            - "deploy/Dockerfile.front"
-            - "deploy/nginx.conf"
-            - ".dockerignore"
-            - "scripts/frontend-perf.sh"
-            - "scripts/frontend_perf.py"
-            - "scripts/test_frontend_perf.py"
-            - "tools/frontend-perf/**"
-            - "Makefile"
-            - ".github/workflows/frontend-perf.yml"
+    workflow_call:
     issue_comment:
         types: [created]
 
@@ -35,7 +21,7 @@ concurrency:
 jobs:
     changes:
         name: Frontend performance scope
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' || github.event_name == 'workflow_call'
         runs-on: ubuntu-latest
         outputs:
             relevant: ${{ steps.scope.outputs.relevant }}
@@ -78,7 +64,9 @@ jobs:
 
     measure:
         needs: changes
-        if: github.event_name == 'pull_request' && needs.changes.outputs.relevant == 'true'
+        if: >-
+            (github.event_name == 'pull_request' || github.event_name == 'workflow_call')
+            && needs.changes.outputs.relevant == 'true'
         name: Frontend performance
         runs-on: ubuntu-latest
         timeout-minutes: 45
@@ -229,7 +217,7 @@ jobs:
                       const runs = await github.paginate(github.rest.actions.listWorkflowRuns, {
                         owner: context.repo.owner,
                         repo: context.repo.repo,
-                        workflow_id: "frontend-perf.yml",
+                        workflow_id: "pr-checks.yml",
                         event: "pull_request",
                         per_page: 100,
                       });

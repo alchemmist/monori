@@ -4,16 +4,7 @@ on:
     # zizmor: ignore[dangerous-triggers]
     # The issue_comment job only verifies an admin command and reruns a workflow;
     # it never checks out or executes pull-request code.
-    pull_request:
-        branches: [main]
-        types: [opened, reopened, synchronize]
-        paths:
-            - "web/**"
-            - "Makefile"
-            - "scripts/bundle_size.py"
-            - "scripts/bundle_size_gate.py"
-            - "scripts/test_bundle_size.py"
-            - ".github/workflows/bundle-size.yml"
+    workflow_call:
     issue_comment:
         types: [created]
 
@@ -30,7 +21,7 @@ concurrency:
 jobs:
     measure:
         name: Frontend bundle size
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' || github.event_name == 'workflow_call'
         runs-on: ubuntu-latest
         timeout-minutes: 20
         steps:
@@ -155,7 +146,7 @@ jobs:
                       const runs = await github.paginate(github.rest.actions.listWorkflowRuns, {
                         owner: context.repo.owner,
                         repo: context.repo.repo,
-                        workflow_id: "bundle-size.yml",
+                        workflow_id: "pr-checks.yml",
                         event: "pull_request",
                         per_page: 100,
                       });

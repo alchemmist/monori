@@ -3,8 +3,7 @@ name: Python object annotation gate
 on:
     # zizmor: ignore[dangerous-triggers]
     # Only API-read files are parsed; pull request code is never executed.
-    pull_request_target:
-        types: [opened, reopened, synchronize]
+    workflow_call:
     issue_comment:
         types: [created]
 
@@ -23,6 +22,7 @@ jobs:
         name: Python object annotation gate
         if: >-
             github.event_name == 'pull_request_target'
+            || github.event_name == 'workflow_call'
             || (
               github.event_name == 'issue_comment'
               && github.event.issue.pull_request
