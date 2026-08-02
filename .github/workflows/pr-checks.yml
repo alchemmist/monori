@@ -38,3 +38,14 @@ jobs:
         uses: ./.github/workflows/build.yaml
         permissions:
             contents: read
+
+    mutation:
+        name: Mutation testing
+        needs: [quality, workflow-graph]
+        if: >-
+            github.event_name == 'pull_request'
+            && needs.quality.result == 'success'
+            && needs.workflow-graph.result == 'success'
+        uses: ./.github/workflows/mutation.yaml
+        permissions:
+            contents: read
