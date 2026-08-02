@@ -13,7 +13,7 @@ WEBBIN := web/node_modules/.bin
 .PHONY: install setup tools dev down reset-db deploy api web build \
         fmt fmt-check \
         lint lint-web lint-css lint-html lint-server lint-sql lint-yaml lint-md lint-docs lint-actions lint-docker lint-shell spell \
-        type type-front type-back analyze audit audit-deps audit-deps-py audit-secrets \
+        type type-front type-back analyze analyze-python-dead-code analyze-javascript-dead-code audit audit-deps audit-deps-py audit-secrets \
         test t-fast t-medium t-slow t-slow-ui coverage mutation mutation-diff m-front m-front-diff m-front-file m-back m-back-diff \
         schema-diagram check
 
@@ -133,6 +133,13 @@ analyze:
 	cd server && uv run bandit -c pyproject.toml -q -r app
 	semgrep --error --quiet --config p/python --config p/javascript \
 		--exclude-rule python.lang.security.insecure-hash-algorithms.insecure-hash-algorithm-sha1 .
+	$(MAKE) analyze-python-dead-code analyze-javascript-dead-code
+
+analyze-python-dead-code:
+	cd server && uv run vulture
+
+analyze-javascript-dead-code:
+	cd web && ./node_modules/.bin/knip --no-progress
 
 audit: audit-deps audit-deps-py audit-secrets
 

@@ -44,7 +44,7 @@ interface DisciplineCell {
  * "Expense" numbers are returned positive (outflows negated) for charting.
  */
 
-export function incomeGroupIdSet(groups: CategoryGroup[]): Set<Id> {
+function incomeGroupIdSet(groups: CategoryGroup[]): Set<Id> {
     return new Set(groups.filter((g) => g.kind === "income").map((g) => g.id));
 }
 

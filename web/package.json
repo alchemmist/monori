@@ -31,6 +31,7 @@
     },
     "devDependencies": {
         "@playwright/test": "^1.62.0",
+        "@stryker-mutator/api": "^9.6.1",
         "@stryker-mutator/core": "^9.6.1",
         "@stryker-mutator/vitest-runner": "^9.6.1",
         "@testing-library/jest-dom": "^7.0.0",
@@ -44,6 +45,7 @@
         "eslint": "^10.8.0",
         "eslint-plugin-react-hooks": "^7.1.1",
         "htmlhint": "^1.9.2",
+        "knip": "^6.31.0",
         "jsdom": "^29.1.1",
         "markdownlint-cli2": "^0.23.0",
         "oxlint": "^1.71.0",

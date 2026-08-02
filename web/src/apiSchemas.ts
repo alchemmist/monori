@@ -4,7 +4,7 @@ import type { Snapshot, TransactionPage, User } from "./types.js";
 const id = z.number().int().positive();
 const nullableId = id.nullable();
 
-export const accountSchema = z.strictObject({
+const accountSchema = z.strictObject({
     id,
     name: z.string(),
     type: z.string(),
@@ -21,14 +21,14 @@ export const accountSchema = z.strictObject({
     cardTails: z.array(z.string()),
 });
 
-export const categoryGroupSchema = z.strictObject({
+const categoryGroupSchema = z.strictObject({
     id,
     name: z.string(),
     sort: z.number(),
     kind: z.string(),
 });
 
-export const categorySchema = z.strictObject({
+const categorySchema = z.strictObject({
     id,
     groupId: id,
     name: z.string(),
@@ -40,14 +40,14 @@ export const categorySchema = z.strictObject({
     goalTargetDate: z.string().nullable(),
 });
 
-export const transactionSplitSchema = z.strictObject({
+const transactionSplitSchema = z.strictObject({
     id,
     categoryId: id,
     amount: z.number(),
     comment: z.string(),
 });
 
-export const transactionSchema = z.strictObject({
+const transactionSchema = z.strictObject({
     id,
     date: z.string(),
     amount: z.number(),
@@ -63,14 +63,14 @@ export const transactionSchema = z.strictObject({
     splits: z.array(transactionSplitSchema),
 });
 
-export const budgetCellSchema = z.strictObject({
+const budgetCellSchema = z.strictObject({
     categoryId: id,
     year: z.number().int(),
     month: z.number().int().min(1).max(12),
     amount: z.number(),
 });
 
-export const transferSchema = z.strictObject({
+const transferSchema = z.strictObject({
     id: z.string(),
     outTxId: id,
     inTxId: id,
