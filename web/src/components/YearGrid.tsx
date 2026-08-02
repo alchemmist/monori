@@ -120,7 +120,13 @@ export default function YearGrid({
     };
 
     return (
-        <div className="year-grid-wrap" ref={wrapRef}>
+        <div
+            className="year-grid-wrap"
+            ref={wrapRef}
+            role="region"
+            tabIndex={0}
+            aria-label="Year budget grid"
+        >
             <table className="year-grid" style={{ width: tableWidth }}>
                 <colgroup>
                     <col style={{ width: 210 }} />
@@ -194,7 +200,9 @@ export default function YearGrid({
                                 </th>
                             );
                         })}
-                        <th className="yg-band__tail" colSpan={2} />
+                        <th className="yg-band__tail" colSpan={2}>
+                            <span className="yg-visually-hidden">Year totals</span>
+                        </th>
                     </tr>
                     {/* column labels */}
                     <tr className="yg-colhead">

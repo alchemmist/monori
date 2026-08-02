@@ -30,6 +30,7 @@
         "zustand": "^5.0.14"
     },
     "devDependencies": {
+        "@axe-core/playwright": "^4.12.1",
         "@playwright/test": "^1.62.0",
         "@stryker-mutator/api": "^9.6.1",
         "@stryker-mutator/core": "^9.6.1",
@@ -45,8 +46,8 @@
         "eslint": "^10.8.0",
         "eslint-plugin-react-hooks": "^7.1.1",
         "htmlhint": "^1.9.2",
-        "knip": "^6.31.0",
         "jsdom": "^29.1.1",
+        "knip": "^6.31.0",
         "markdownlint-cli2": "^0.23.0",
         "oxlint": "^1.71.0",
         "oxlint-tsgolint": "^7.0.2001",

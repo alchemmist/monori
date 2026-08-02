@@ -65,6 +65,16 @@ function renderGrid({
 }
 
 describe("YearGrid", () => {
+    it("exposes the grid and its totals header to assistive technology", () => {
+        renderGrid();
+
+        const region = screen.getByRole("region", { name: "Year budget grid" });
+        expect(region).toBeInTheDocument();
+        expect(
+            within(region).getByRole("columnheader", { name: "Year totals" }),
+        ).toBeInTheDocument();
+    });
+
     it("shows group totals from all activity but only positive category balances", () => {
         renderGrid();
 
