@@ -23,29 +23,144 @@ jobs:
               uses: actions/checkout@v7
               with:
                   persist-credentials: false
-
             - name: Setup Python
               uses: actions/setup-python@v6
               with:
                   python-version: "3.12"
-
             - name: Validate PR workflow graph
               run: python -m unittest scripts.test_pr_workflow
 
-    quality:
-        name: Quality checks
-        if: github.event_name == 'pull_request'
-        uses: ./.github/workflows/build.yaml
-        permissions:
-            contents: read
+    fmt-check:
+        name: Format check
+        needs: workflow-graph
+        if: github.event_name == 'pull_request' && needs.workflow-graph.result == 'success'
+        runs-on: ubuntu-latest
+        steps:
+            - uses: ./.github/actions/setup-project
+            - run: make fmt-check
+
+    lint:
+        name: Lint
+        needs: fmt-check
+        if: github.event_name == 'pull_request' && needs.fmt-check.result == 'success'
+        runs-on: ubuntu-latest
+        steps:
+            - uses: ./.github/actions/setup-project
+            - name: Install external linters
+              run: |
+                  python -m pip install --upgrade pip
+                  python -m pip install shellcheck-py
+                  curl -sSfL https://raw.githubusercontent.com/hadolint/hadolint/master/install.sh | sh -s -- -d "$RUNNER_TEMP"
+                  curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash | bash -s -- -b "$RUNNER_TEMP"
+                  echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+            - run: make lint
+
+    type:
+        name: Type check
+        needs: lint
+        if: github.event_name == 'pull_request' && needs.lint.result == 'success'
+        runs-on: ubuntu-latest
+        steps:
+            - uses: ./.github/actions/setup-project
+            - run: make type
+
+    analyze:
+        name: Static analysis
+        needs: type
+        if: github.event_name == 'pull_request' && needs.type.result == 'success'
+        runs-on: ubuntu-latest
+        steps:
+            - uses: ./.github/actions/setup-project
+            - name: Install semgrep
+              run: python -m pip install semgrep
+            - run: make analyze
+
+    test-fast:
+        name: Fast tests
+        needs: analyze
+        if: github.event_name == 'pull_request' && needs.analyze.result == 'success'
+        runs-on: ubuntu-latest
+        steps:
+            - uses: ./.github/actions/setup-project
+            - run: make t-fast
+
+    test-medium:
+        name: Medium tests
+        needs: test-fast
+        if: github.event_name == 'pull_request' && needs.test-fast.result == 'success'
+        runs-on: ubuntu-latest
+        steps:
+            - uses: ./.github/actions/setup-project
+            - run: make t-medium
+
+    test-slow:
+        name: Slow tests
+        needs: test-medium
+        if: github.event_name == 'pull_request' && needs.test-medium.result == 'success'
+        runs-on: ubuntu-latest
+        steps:
+            - uses: ./.github/actions/setup-project
+            - name: Install Playwright browsers
+              run: uv run playwright install --with-deps chromium
+              working-directory: server
+            - run: make t-slow
+
+    build:
+        name: Build
+        needs: test-slow
+        if: github.event_name == 'pull_request' && needs.test-slow.result == 'success'
+        runs-on: ubuntu-latest
+        steps:
+            - uses: ./.github/actions/setup-project
+            - run: make build
+
+    coverage:
+        name: Coverage
+        needs: build
+        if: github.event_name == 'pull_request' && needs.build.result == 'success'
+        runs-on: ubuntu-latest
+        steps:
+            - uses: ./.github/actions/setup-project
+            - run: make coverage
+
+    audit-deps:
+        name: Dependency audit
+        needs: coverage
+        if: github.event_name == 'pull_request' && needs.coverage.result == 'success'
+        runs-on: ubuntu-latest
+        steps:
+            - uses: ./.github/actions/setup-project
+            - run: make audit-deps
+
+    audit-deps-py:
+        name: Python dependency audit
+        needs: audit-deps
+        if: github.event_name == 'pull_request' && needs.audit-deps.result == 'success'
+        runs-on: ubuntu-latest
+        steps:
+            - uses: ./.github/actions/setup-project
+            - run: make audit-deps-py
+
+    secrets:
+        name: Secret scan
+        needs: audit-deps-py
+        if: github.event_name == 'pull_request' && needs.audit-deps-py.result == 'success'
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v7
+              with:
+                  fetch-depth: 0
+                  persist-credentials: false
+            - name: Scan for secrets
+              uses: gitleaks/gitleaks-action@v3
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     mutation:
         name: Mutation testing
-        needs: [quality, workflow-graph]
-        if: >-
-            github.event_name == 'pull_request'
-            && needs.quality.result == 'success'
-            && needs.workflow-graph.result == 'success'
+        needs: secrets
+        if: github.event_name == 'pull_request' && needs.secrets.result == 'success'
         permissions:
             contents: read
         runs-on: ubuntu-latest
@@ -56,30 +171,24 @@ jobs:
               with:
                   fetch-depth: 1
                   persist-credentials: false
-
             - name: Fetch mutation base
               run: git fetch --no-tags --depth=1 origin main
-
             - name: Setup Node
               uses: actions/setup-node@v7
               with:
                   node-version: 22
                   cache: npm
                   cache-dependency-path: web/package.json
-
             - name: Setup uv
               uses: astral-sh/setup-uv@v7
               with:
                   enable-cache: true
-
             - name: Install web deps
               run: npm install --no-audit --no-fund
               working-directory: web
-
             - name: Install server deps
               run: uv sync
               working-directory: server
-
             - name: Restore Stryker cache
               uses: actions/cache@v4
               with:
@@ -88,76 +197,266 @@ jobs:
                   restore-keys: |
                       mutation-stryker-${{ runner.os }}-${{ hashFiles('web/package.json') }}-pr-${{ github.event.pull_request.number }}-
                       mutation-stryker-${{ runner.os }}-${{ hashFiles('web/package.json') }}-main-
-
             - name: Restore mutmut cache
               uses: actions/cache/restore@v4
               with:
                   path: server/mutants
                   key: mutation-mutmut-${{ runner.os }}-${{ hashFiles('server/pyproject.toml') }}-main-
-                  restore-keys: |
-                      mutation-mutmut-${{ runner.os }}-${{ hashFiles('server/pyproject.toml') }}-main-
-
+                  restore-keys: mutation-mutmut-${{ runner.os }}-${{ hashFiles('server/pyproject.toml') }}-main-
             - name: Test diff mutation gate
               run: env -u GITHUB_STEP_SUMMARY python3 -m unittest scripts/test_mutation_diff_gate.py
-
             - name: Run frontend diff mutation tests
               id: mutation-front
               continue-on-error: true
               run: make BASE=origin/main MUTATION_DIFF_THRESHOLD=90 m-front-diff
-
             - name: Run backend diff mutation tests
               id: mutation-back
               continue-on-error: true
               run: make BASE=origin/main MUTATION_DIFF_THRESHOLD=90 m-back-diff
-
             - name: Fail if a mutation gate failed
               if: steps.mutation-front.outcome == 'failure' || steps.mutation-back.outcome == 'failure'
               run: exit 1
 
     bundle-size:
         name: Frontend bundle size
-        needs: [quality, workflow-graph]
-        if: >-
-            github.event_name == 'pull_request'
-            && needs.quality.result == 'success'
-            && needs.workflow-graph.result == 'success'
-        uses: ./.github/workflows/bundle-size.yml
+        needs: secrets
+        if: github.event_name == 'pull_request' && needs.secrets.result == 'success'
         permissions:
             actions: write
             contents: read
             issues: write
             pull-requests: write
+        runs-on: ubuntu-latest
+        timeout-minutes: 20
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v7
+              with:
+                  fetch-depth: 1
+                  persist-credentials: false
+            - name: Setup Node
+              uses: actions/setup-node@v7
+              with:
+                  node-version: 22
+                  cache: npm
+                  cache-dependency-path: web/package.json
+            - name: Test bundle tools
+              run: python -m unittest scripts.test_bundle_size
+            - name: Install web dependencies
+              run: npm install --no-audit --no-fund
+              working-directory: web
+            - name: Build pull request
+              run: npm run build
+              working-directory: web
+            - name: Measure pull-request bundle
+              run: python scripts/bundle_size.py measure --dist web/dist --output "$RUNNER_TEMP/current.json"
+            - name: Build merge base
+              env:
+                  BASE_SHA: ${{ github.event.pull_request.base.sha }}
+              run: |
+                  git fetch --no-tags --depth=1 origin "$BASE_SHA"
+                  git worktree add --detach "$RUNNER_TEMP/base-repo" "$BASE_SHA"
+                  npm install --no-audit --no-fund --prefix "$RUNNER_TEMP/base-repo/web"
+                  npm run build --prefix "$RUNNER_TEMP/base-repo/web"
+                  python scripts/bundle_size.py measure --dist "$RUNNER_TEMP/base-repo/web/dist" --output "$RUNNER_TEMP/base.json"
+            - name: Compare bundle sizes
+              id: compare
+              env:
+                  PR_NUMBER: ${{ github.event.pull_request.number }}
+                  HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+                  REPORT_PATH: ${{ runner.temp }}/bundle-size/report.json
+                  SUMMARY_PATH: ${{ runner.temp }}/bundle-size/summary.md
+                  GITHUB_TOKEN: ${{ github.token }}
+                  GITHUB_REPOSITORY: ${{ github.repository }}
+              run: |
+                  set +e
+                  mkdir -p "$RUNNER_TEMP/bundle-size"
+                  python scripts/bundle_size.py compare --base "$RUNNER_TEMP/base.json" --current "$RUNNER_TEMP/current.json" --output "$RUNNER_TEMP/bundle-size/report.json" --pr-number "$PR_NUMBER" --head-sha "$HEAD_SHA"
+                  python scripts/bundle_size_gate.py
+                  code=$?
+                  echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+                  exit 0
+            - name: Publish workflow summary
+              if: always()
+              run: |
+                  if [ -f "$RUNNER_TEMP/bundle-size/summary.md" ]; then cat "$RUNNER_TEMP/bundle-size/summary.md" >> "$GITHUB_STEP_SUMMARY"; else echo "## ❌ Bundle size measurement failed" >> "$GITHUB_STEP_SUMMARY"; fi
+            - name: Enforce bundle-size verdict
+              if: always()
+              env:
+                  GATE_EXIT: ${{ steps.compare.outputs.exit_code }}
+              run: exit "${GATE_EXIT:-2}"
+
+    frontend-performance-scope:
+        name: Frontend performance scope
+        needs: secrets
+        if: github.event_name == 'pull_request' && needs.secrets.result == 'success'
+        permissions:
+            actions: write
+            contents: read
+            issues: write
+            pull-requests: write
+        runs-on: ubuntu-latest
+        outputs:
+            relevant: ${{ steps.scope.outputs.relevant }}
+        steps:
+            - name: Detect performance-relevant changes
+              id: scope
+              uses: actions/github-script@v8
+              with:
+                  script: |
+                      const files = await github.paginate(github.rest.pulls.listFiles, {
+                        owner: context.repo.owner,
+                        repo: context.repo.repo,
+                        pull_number: context.payload.pull_request.number,
+                        per_page: 100,
+                      });
+                      const relevant = files.some((file) => {
+                        const path = file.filename;
+                        if (path.startsWith("web/") || path.startsWith("tools/frontend-perf/") || path === "deploy/docker-compose.test.yml" || path === "deploy/Dockerfile.front" || path === "deploy/nginx.conf" || path === ".dockerignore" || path === "scripts/frontend-perf.sh" || path === "scripts/frontend_perf.py" || path === "scripts/test_frontend_perf.py" || path === ".github/workflows/frontend-perf.yml") return true;
+                        return path === "Makefile" && /(perf-front|PERF_|frontend)/i.test(file.patch || "");
+                      });
+                      core.setOutput("relevant", relevant ? "true" : "false");
+                      await core.summary.addHeading("Frontend performance").addRaw(relevant ? "Performance-relevant files changed; running the gate." : "No performance-relevant files changed; the gate is skipped.").write();
 
     frontend-performance:
         name: Frontend performance
-        needs: [quality, workflow-graph]
-        if: >-
-            github.event_name == 'pull_request'
-            && needs.quality.result == 'success'
-            && needs.workflow-graph.result == 'success'
-        uses: ./.github/workflows/frontend-perf.yml
+        needs: [secrets, frontend-performance-scope]
+        if: github.event_name == 'pull_request' && needs.secrets.result == 'success' && needs.frontend-performance-scope.result == 'success' && needs.frontend-performance-scope.outputs.relevant == 'true'
         permissions:
             actions: write
             contents: read
             issues: write
             pull-requests: write
+        runs-on: ubuntu-latest
+        timeout-minutes: 45
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v7
+              with:
+                  fetch-depth: 0
+                  persist-credentials: false
+            - name: Setup Node
+              uses: actions/setup-node@v7
+              with:
+                  node-version: 22
+                  cache: npm
+                  cache-dependency-path: tools/frontend-perf/package-lock.json
+            - name: Setup Python
+              uses: actions/setup-python@v6
+              with:
+                  python-version: "3.12"
+            - name: Install performance tools
+              run: npm install --no-audit --no-fund
+              working-directory: tools/frontend-perf
+            - name: Install Chromium
+              run: npx playwright install --with-deps chromium
+              working-directory: tools/frontend-perf
+            - name: Test performance comparator
+              run: python -m unittest scripts.test_frontend_perf scripts.test_frontend_perf_gate
+            - name: Compare PR with merge base
+              id: performance
+              env:
+                  BASE: ${{ github.event.pull_request.base.sha }}
+                  HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+                  PR_NUMBER: ${{ github.event.pull_request.number }}
+                  PERF_OUTPUT_DIR: ${{ runner.temp }}/frontend-performance
+                  GITHUB_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+              run: |
+                  set +e
+                  make perf-front-diff
+                  code=$?
+                  echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+                  exit 0
+            - name: Apply performance approvals
+              id: approvals
+              if: always()
+              env:
+                  GITHUB_TOKEN: ${{ github.token }}
+                  GITHUB_REPOSITORY: ${{ github.repository }}
+                  REPORT_PATH: ${{ runner.temp }}/frontend-performance/report.json
+                  SUMMARY_PATH: ${{ runner.temp }}/frontend-performance/summary.md
+              run: |
+                  set +e
+                  python scripts/frontend_perf_gate.py
+                  code=$?
+                  echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+                  exit 0
+            - name: Publish workflow summary
+              if: always()
+              env:
+                  PERF_OUTPUT_DIR: ${{ runner.temp }}/frontend-performance
+              run: |
+                  if [ -f "$PERF_OUTPUT_DIR/summary.md" ]; then cat "$PERF_OUTPUT_DIR/summary.md" >> "$GITHUB_STEP_SUMMARY"; else echo "## ❌ Frontend performance measurement did not produce a report" >> "$GITHUB_STEP_SUMMARY"; fi
+            - name: Upload raw performance reports
+              if: always()
+              uses: actions/upload-artifact@v7
+              with:
+                  name: frontend-performance-${{ github.event.pull_request.number }}
+                  path: ${{ runner.temp }}/frontend-performance
+                  if-no-files-found: error
+                  retention-days: 7
+            - name: Enforce performance verdict
+              if: always()
+              env:
+                  GATE_EXIT: ${{ steps.approvals.outputs.exit_code || steps.performance.outputs.exit_code }}
+              run: exit "${GATE_EXIT:-2}"
+
+    frontend-performance-skipped:
+        name: Frontend performance skipped
+        needs: frontend-performance-scope
+        if: github.event_name == 'pull_request' && needs.frontend-performance-scope.result == 'success' && needs.frontend-performance-scope.outputs.relevant == 'false'
+        runs-on: ubuntu-latest
+        steps:
+            - run: echo "Frontend performance skipped because the pull request does not affect performance-relevant files."
 
     object-annotations:
         name: Python object annotation gate
         if: github.event_name == 'pull_request_target'
-        uses: ./.github/workflows/object-annotation-gate.yaml
+        runs-on: ubuntu-latest
+        timeout-minutes: 10
         permissions:
             actions: write
             contents: read
             issues: write
             pull-requests: write
+        steps:
+            - name: Checkout workflow code
+              uses: actions/checkout@v7
+              with:
+                  persist-credentials: false
+            - name: Setup Python
+              uses: actions/setup-python@v6
+              with:
+                  python-version: "3.12"
+            - name: Test annotation checker
+              run: python -m unittest discover -s scripts -p 'test_object_annotation_gate.py'
+            - name: Check Python annotations
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              run: python scripts/object_annotation_gate.py
 
     suppressions:
         name: Lint suppression gate
         if: github.event_name == 'pull_request_target'
-        uses: ./.github/workflows/suppression-gate.yaml
+        runs-on: ubuntu-latest
+        timeout-minutes: 10
         permissions:
             actions: write
             contents: read
             issues: write
             pull-requests: write
+        steps:
+            - name: Checkout workflow code
+              uses: actions/checkout@v7
+              with:
+                  persist-credentials: false
+            - name: Setup Python
+              uses: actions/setup-python@v6
+              with:
+                  python-version: "3.12"
+            - name: Test suppression checker
+              run: python -m unittest discover -s scripts -p 'test_suppression_gate.py'
+            - name: Check lint suppressions
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              run: python scripts/suppression_gate.py
