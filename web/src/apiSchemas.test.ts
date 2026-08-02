@@ -52,14 +52,35 @@ const snapshot = {
         },
     ],
     transactionsTotal: 1,
-    transfers: [],
+    transfers: [
+        {
+            id: "transfer-1",
+            out_tx_id: 1,
+            in_tx_id: 2,
+            origin: "manual",
+            note: "",
+            created_at: "2026-06-10T12:00:00",
+        },
+    ],
     budgets: [{ categoryId: 1, year: 2026, month: 6, amount: 10_000 }],
     connections: [],
 };
 
 describe("API runtime contracts", () => {
     it("accepts a complete snapshot response", () => {
-        expect(snapshotSchema.parse(snapshot)).toEqual(snapshot);
+        expect(snapshotSchema.parse(snapshot)).toMatchObject({
+            ...snapshot,
+            transfers: [
+                {
+                    id: "transfer-1",
+                    outTxId: 1,
+                    inTxId: 2,
+                    origin: "manual",
+                    note: "",
+                    createdAt: "2026-06-10T12:00:00",
+                },
+            ],
+        });
     });
 
     it("rejects unknown fields at nested boundaries", () => {

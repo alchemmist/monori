@@ -70,14 +70,21 @@ const budgetCellSchema = z.strictObject({
     amount: z.number(),
 });
 
-const transferSchema = z.strictObject({
-    id: z.string(),
-    outTxId: id,
-    inTxId: id,
-    origin: z.string(),
-    note: z.string(),
-    createdAt: z.string(),
-});
+const transferSchema = z
+    .strictObject({
+        id: z.string(),
+        out_tx_id: id,
+        in_tx_id: id,
+        origin: z.string(),
+        note: z.string(),
+        created_at: z.string(),
+    })
+    .transform(({ out_tx_id: outTxId, in_tx_id: inTxId, created_at: createdAt, ...transfer }) => ({
+        ...transfer,
+        outTxId,
+        inTxId,
+        createdAt,
+    }));
 
 export const connectionSchema = z.strictObject({
     id,
@@ -124,34 +131,48 @@ export const entitySchema = z.strictObject({ id });
 export const okResponseSchema = z.strictObject({ ok: z.boolean() });
 export const setResponseSchema = z.strictObject({ set: z.number().int().nonnegative() });
 export const deltaResponseSchema = z.strictObject({ delta: z.number() });
-export const transferIdResponseSchema = z.strictObject({ transferId: z.string().min(1) });
+export const transferIdResponseSchema = z
+    .strictObject({ transfer_id: z.string().min(1) })
+    .transform(({ transfer_id: transferId }) => ({ transferId }));
 export const splitsResponseSchema = z.strictObject({ splits: z.array(transactionSplitSchema) });
 export const deletedResponseSchema = z.strictObject({ deleted: id });
 export const cancelledResponseSchema = z.strictObject({ cancelled: id });
 
-const transferCandidateSchema = z.strictObject({
-    outTxId: id,
-    inTxId: id,
-    amount: z.number(),
-    days: z.number().int().nonnegative(),
-    hint: z.boolean(),
-    mismatch: z.boolean(),
-});
+const transferCandidateSchema = z
+    .strictObject({
+        out_tx_id: id,
+        in_tx_id: id,
+        amount: z.number(),
+        days: z.number().int().nonnegative(),
+        hint: z.boolean(),
+        mismatch: z.boolean(),
+    })
+    .transform(({ out_tx_id: outTxId, in_tx_id: inTxId, ...candidate }) => ({
+        ...candidate,
+        outTxId,
+        inTxId,
+    }));
 
 export const transferSuggestionsResponseSchema = z.strictObject({
     rows: z.array(transferCandidateSchema),
     transactions: z.array(transactionSchema),
 });
 
-const mergedTransferSchema = z.strictObject({
-    id: z.string().min(1),
-    outTxId: id,
-    inTxId: id,
-    amount: z.number(),
-    days: z.number().int().nonnegative(),
-    hint: z.boolean(),
-    mismatch: z.boolean(),
-});
+const mergedTransferSchema = z
+    .strictObject({
+        id: z.string().min(1),
+        out_tx_id: id,
+        in_tx_id: id,
+        amount: z.number(),
+        days: z.number().int().nonnegative(),
+        hint: z.boolean(),
+        mismatch: z.boolean(),
+    })
+    .transform(({ out_tx_id: outTxId, in_tx_id: inTxId, ...transfer }) => ({
+        ...transfer,
+        outTxId,
+        inTxId,
+    }));
 
 export const transferDetectionResponseSchema = z
     .strictObject({
