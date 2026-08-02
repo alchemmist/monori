@@ -186,8 +186,11 @@ class ReportTest(unittest.TestCase):
 
         self.assertIn("### Navigation scenarios", body)
         self.assertIn("### Budget", body)
+        self.assertIn("| Navigation | main | PR | Δ | Tier |", body)
+        self.assertIn("| Budget → Dashboard | 100 ms | 100 ms | 0 ms (+0.0%) |", body)
+        self.assertNotIn("| Navigation | 100 ms |", body)
         self.assertNotIn("Route / interaction", body)
-        self.assertEqual(body.count("| Metric | main | PR | Δ | Tier |"), 2)
+        self.assertEqual(body.count("| Metric | main | PR | Δ | Tier |"), 1)
 
     def test_delta_uses_soft_colors_for_direction_and_black_for_zero(self) -> None:
         body = render_report(
@@ -200,8 +203,8 @@ class ReportTest(unittest.TestCase):
             comment=False,
         )
 
-        self.assertIn('<span style="color: #c05640">+200 ms (+20.0%)</span>', body)
-        self.assertIn('<span style="color: #2f855a">-200 ms (-20.0%)</span>', body)
+        self.assertIn('<font color="#c05640">+200 ms (+20.0%)</font>', body)
+        self.assertIn('<font color="#2f855a">-200 ms (-20.0%)</font>', body)
         self.assertIn("| 0 ms (+0.0%) |", body)
 
     def test_summary_has_collapsed_blocking_standards(self) -> None:

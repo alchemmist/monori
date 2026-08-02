@@ -336,9 +336,9 @@ def format_delta(entry: Entry) -> str:
 def format_delta_cell(entry: Entry) -> str:
     delta = format_delta(entry)
     if entry.delta > 0:
-        return f'<span style="color: #c05640">{delta}</span>'
+        return f'<font color="#c05640">{delta}</font>'
     if entry.delta < 0:
-        return f'<span style="color: #2f855a">{delta}</span>'
+        return f'<font color="#2f855a">{delta}</font>'
     return delta
 
 
@@ -359,8 +359,15 @@ def sorted_regressions(entries: list[Entry]) -> list[Entry]:
     )
 
 
-def report_table(entries: list[Entry], *, include_route: bool = True) -> list[str]:
-    if include_route:
+def report_table(
+    entries: list[Entry], *, include_route: bool = True, navigation: bool = False
+) -> list[str]:
+    if navigation:
+        lines = [
+            "| Navigation | main | PR | Δ | Tier |",
+            "| --- | ---: | ---: | ---: | --- |",
+        ]
+    elif include_route:
         lines = [
             "| Route / interaction | Metric | main | PR | Δ | Tier |",
             "| --- | --- | ---: | ---: | ---: | --- |",
@@ -371,10 +378,14 @@ def report_table(entries: list[Entry], *, include_route: bool = True) -> list[st
             "| --- | ---: | ---: | ---: | --- |",
         ]
     for entry in entries:
-        route = f"{entry.route_label} | " if include_route else ""
-        metric = f"{route}{entry.metric_label}"
+        if navigation:
+            first_column = entry.route_label
+        elif include_route:
+            first_column = f"{entry.route_label} | {entry.metric_label}"
+        else:
+            first_column = entry.metric_label
         lines.append(
-            f"| {metric} | {format_value(entry.base, entry.unit)} | "
+            f"| {first_column} | {format_value(entry.base, entry.unit)} | "
             f"{format_value(entry.current, entry.unit)} | {format_delta_cell(entry)} | "
             f"{tier_cell(entry.tier)} |"
         )
@@ -391,7 +402,7 @@ def report_sections(entries: list[Entry]) -> list[str]:
 
     if navigation:
         lines.extend(
-            ["### Navigation scenarios", "", *report_table(navigation, include_route=False), ""]
+            ["### Navigation scenarios", "", *report_table(navigation, navigation=True), ""]
         )
     for page_entries in pages.values():
         lines.extend(
