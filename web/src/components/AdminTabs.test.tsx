@@ -14,15 +14,20 @@ vi.mock("@mantine/core", async (importOriginal) => {
     return {
         ...actual,
         Textarea: forwardRef<HTMLTextAreaElement, MockTextareaProps>(
-            ({ value, onChange, onKeyDown, autosize: _, minRows: __, maxRows: ___, ...props }, ref) => (
-                <textarea
-                    ref={ref}
-                    value={value}
-                    onChange={onChange}
-                    onKeyDown={onKeyDown}
-                    {...props}
-                />
-            ),
+            ({ value, onChange, onKeyDown, ...props }, ref) => {
+                delete props.autosize;
+                delete props.minRows;
+                delete props.maxRows;
+                return (
+                    <textarea
+                        ref={ref}
+                        value={value}
+                        onChange={onChange}
+                        onKeyDown={onKeyDown}
+                        {...props}
+                    />
+                );
+            },
         ),
     };
 });

@@ -59,7 +59,12 @@ describe("ImportPanel", () => {
     it("previews an uploaded statement, imports the fresh rows and closes", async () => {
         const originalConsoleError = console.error;
         vi.spyOn(console, "error").mockImplementation((...args) => {
-            if (args.some((arg) => typeof arg === "string" && arg.includes("invalid value for the `left`"))) {
+            if (
+                args.some(
+                    (arg) =>
+                        typeof arg === "string" && arg.includes("invalid value for the `left`"),
+                )
+            ) {
                 return;
             }
             originalConsoleError(...args);
