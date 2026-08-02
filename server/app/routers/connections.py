@@ -37,6 +37,7 @@ from app.connectors.base import (
     SyncRow,
 )
 from app.deps import conn
+from app.domain_types import ConnectionStatus, TransactionSource
 from app.importer import CategoryDefinition, CategoryRule, build_rules
 from app.ingest import categorize_rows, commit_rows, drop_already_present, historical_day_counts
 from app.sync_runner import NoPendingLoginError, SyncRequest, get_runner
@@ -82,7 +83,7 @@ class ConnectionRow:
     session_encrypted: bytes | memoryview | None
     last_sync: str | None
     pending_account_id: int | None
-    status: str
+    status: ConnectionStatus
     last_error: str | None
     created_at: str
     updated_at: str
@@ -132,7 +133,7 @@ class UnmappedTail:
 class SyncResponse:
     """Represent SyncResponse."""
 
-    status: str
+    status: ConnectionStatus
     inserted: int
     skipped: int
     accounts: list[AccountSyncSummary]
@@ -145,7 +146,7 @@ class SyncResponse:
 class SyncStatusResponse:
     """Represent SyncStatusResponse."""
 
-    status: str
+    status: ConnectionStatus
     message: str | None = None
 
 
@@ -156,7 +157,7 @@ class ConnectionResponse:
     id: int
     bank: str
     kind: str
-    status: str
+    status: ConnectionStatus
     last_sync: str | None = Field(serialization_alias="lastSync", validation_alias="lastSync")
     last_error: str | None = Field(serialization_alias="lastError", validation_alias="lastError")
     has_credentials: bool = Field(
@@ -196,7 +197,7 @@ def _load(c: sqlite3.Connection, cid: int, uid: int) -> ConnectionRow:
         session_encrypted=_optional_blob(row, "session_encrypted"),
         last_sync=_optional_str(row, "last_sync"),
         pending_account_id=_optional_int(row, "pending_account_id"),
-        status=str(row["status"]),
+        status=ConnectionStatus(str(row["status"])),
         last_error=_optional_str(row, "last_error"),
         created_at=str(row["created_at"]),
         updated_at=str(row["updated_at"]),
@@ -394,7 +395,9 @@ def _finish_account(
             (target_id, row.id, _now()),
         )
         batch_id = cur.lastrowid
-        inserted, skipped = commit_rows(c, target_id, rows, source="sync", batch_id=batch_id)
+        inserted, skipped = commit_rows(
+            c, target_id, rows, source=TransactionSource.SYNC, batch_id=batch_id
+        )
         if target_id == account_id:
             skipped += redelivered
         c.execute(
@@ -440,7 +443,7 @@ def _aggregate(
     dates_from = [r.date_from for r in results if r.date_from is not None]
     dates_to = [r.date_to for r in results if r.date_to is not None]
     return SyncResponse(
-        status="connected",
+        status=ConnectionStatus.CONNECTED,
         inserted=sum(r.inserted for r in results),
         skipped=sum(r.skipped for r in results),
         accounts=results,
@@ -664,7 +667,7 @@ def sync_connection(
             _mark_connected(c, cid)
             return _aggregate(results, unmapped)
         except SmsRequiredError:
-            return SyncStatusResponse(status="awaiting_sms", message=SMS_SENT)
+            return SyncStatusResponse(status=ConnectionStatus.AWAITING_SMS, message=SMS_SENT)
         except ConnectorError as e:
             _fail(c, cid, e)
     finally:
@@ -696,7 +699,7 @@ def submit_sms(
         except NoPendingLoginError as e:
             raise HTTPException(409, "no login awaiting a code") from e
         except SmsRequiredError:
-            return SyncStatusResponse(status="awaiting_sms", message=CODE_REJECTED)
+            return SyncStatusResponse(status=ConnectionStatus.AWAITING_SMS, message=CODE_REJECTED)
         except ConnectorError as e:
             _fail(c, cid, e)
         results, unmapped = _finish_account(c, row, pending_id, result, uid)
@@ -710,7 +713,7 @@ def submit_sms(
                 remaining,
             )
         except SmsRequiredError:
-            return SyncStatusResponse(status="awaiting_sms", message=SMS_SENT)
+            return SyncStatusResponse(status=ConnectionStatus.AWAITING_SMS, message=SMS_SENT)
         except ConnectorError as e:
             _fail(c, cid, e)
         results.extend(more)

@@ -19,6 +19,13 @@ from .db_records import (
     TransactionRecord,
     UserRecord,
 )
+from .domain_types import (
+    AccountType,
+    CategoryGroupKind,
+    ConnectionStatus,
+    GoalStatus,
+    TransactionSource,
+)
 from .transfer_service import TransferResponse, list_transfers
 
 SPLIT_FETCH_BATCH_SIZE = 500
@@ -33,7 +40,7 @@ class AccountResponse:
 
     id: int
     name: str
-    type: str
+    type: AccountType
     icon: str
     color: str
     currency: str
@@ -64,7 +71,7 @@ class GroupResponse:
     id: int
     name: str
     sort: int
-    kind: str
+    kind: CategoryGroupKind
 
 
 @pydantic_dataclass(config=_DTO_CONFIG)
@@ -80,7 +87,7 @@ class CategoryResponse:
     goal_target: int | None = Field(
         ..., serialization_alias="goalTarget", validation_alias="goalTarget"
     )
-    goal_status: str | None = Field(
+    goal_status: GoalStatus | None = Field(
         ..., serialization_alias="goalStatus", validation_alias="goalStatus"
     )
     goal_target_date: str | None = Field(
@@ -108,7 +115,7 @@ class TransactionResponse:
     description: str
     mcc: str
     comment: str
-    source: str
+    source: TransactionSource
     hidden: bool
     splits: list[SplitResponse]
     bank_category: str = Field(
@@ -146,7 +153,7 @@ class ConnectionResponse:
     id: int
     bank: str
     kind: str
-    status: str
+    status: ConnectionStatus
     last_sync: str | None = Field(..., serialization_alias="lastSync", validation_alias="lastSync")
     last_error: str | None = Field(
         ..., serialization_alias="lastError", validation_alias="lastError"

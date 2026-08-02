@@ -97,6 +97,13 @@ describe("API runtime contracts", () => {
         expect(() => snapshotSchema.parse(malformed)).toThrow();
     });
 
+    it("rejects misspelled domain values", () => {
+        const malformed = structuredClone(snapshot);
+        malformed.transactions[0]!.source = "unknown_source";
+
+        expect(() => snapshotSchema.parse(malformed)).toThrow();
+    });
+
     it("requires the complete OAuth token response", () => {
         expect(() => authTokenSchema.parse({ access_token: "token" })).toThrow();
         expect(authTokenSchema.parse({ access_token: "token", token_type: "bearer" })).toEqual({

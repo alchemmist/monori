@@ -19,10 +19,11 @@ from app.deps import (
     serialize_group,
     serialize_tx,
 )
+from app.domain_types import AccountType, CategoryGroupKind, ConnectionStatus, TransactionSource
 
 
 def test_serialize_group() -> None:
-    row = GroupRecord(id=1, name="Bills", sort=3, kind="expense")
+    row = GroupRecord(id=1, name="Bills", sort=3, kind=CategoryGroupKind.EXPENSE)
     assert asdict(serialize_group(row)) == {
         "id": 1,
         "name": "Bills",
@@ -62,7 +63,7 @@ def test_serialize_account() -> None:
     row = AccountRecord(
         id=5,
         name="T-Bank",
-        type="card",
+        type=AccountType.CARD,
         icon="wallet",
         color="#5b6472",
         icon_image=None,
@@ -97,7 +98,7 @@ def test_serialize_account_archived_true() -> None:
     row = AccountRecord(
         id=5,
         name="Old",
-        type="cash",
+        type=AccountType.CASH,
         icon="sack",
         color="#000000",
         icon_image="data:image/png;base64,AAAA",
@@ -127,7 +128,7 @@ def test_serialize_tx() -> None:
         account_id=1,
         transfer_id=None,
         comment="note",
-        source="import",
+        source=TransactionSource.IMPORT,
         hidden=False,
     )
     assert asdict(serialize_tx(row)) == {
@@ -162,7 +163,7 @@ def test_serialize_connection() -> None:
         id=8,
         bank="tbank",
         kind="playwright",
-        status="connected",
+        status=ConnectionStatus.CONNECTED,
         last_sync="2026-02-01T09:00:00",
         last_error=None,
         has_credentials=True,
@@ -187,7 +188,7 @@ def test_serialize_connection_without_credentials_and_with_error() -> None:
         id=8,
         bank="tbank",
         kind="playwright",
-        status="error",
+        status=ConnectionStatus.ERROR,
         last_sync=None,
         last_error="login rejected",
         has_credentials=False,

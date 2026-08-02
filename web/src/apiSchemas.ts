@@ -1,13 +1,32 @@
 import { z } from "zod";
-import type { Snapshot, TransactionPage, User } from "./types.js";
 
 const id = z.number().int().positive();
 const nullableId = id.nullable();
 
-const accountSchema = z.strictObject({
+export const accountTypeSchema = z.enum(["card", "cash", "savings", "other"]);
+export const categoryGroupKindSchema = z.enum(["income", "expense", "goal"]);
+export const connectionStatusSchema = z.enum([
+    "disconnected",
+    "awaiting_sms",
+    "connected",
+    "error",
+    "pending",
+]);
+export const transactionSourceSchema = z.enum([
+    "manual",
+    "import",
+    "sync",
+    "transfer",
+    "adjustment",
+    "workbook",
+    "sheets",
+]);
+export const goalStatusSchema = z.enum(["active", "achieved", "archived"]);
+
+export const accountSchema = z.strictObject({
     id,
     name: z.string(),
-    type: z.string(),
+    type: accountTypeSchema,
     icon: z.string(),
     color: z.string(),
     iconImage: z.string().nullable(),
@@ -21,14 +40,14 @@ const accountSchema = z.strictObject({
     cardTails: z.array(z.string()),
 });
 
-const categoryGroupSchema = z.strictObject({
+export const categoryGroupSchema = z.strictObject({
     id,
     name: z.string(),
     sort: z.number(),
-    kind: z.string(),
+    kind: categoryGroupKindSchema,
 });
 
-const categorySchema = z.strictObject({
+export const categorySchema = z.strictObject({
     id,
     groupId: id,
     name: z.string(),
@@ -36,18 +55,18 @@ const categorySchema = z.strictObject({
     sort: z.number(),
     archived: z.boolean(),
     goalTarget: z.number().nullable(),
-    goalStatus: z.string().nullable(),
+    goalStatus: goalStatusSchema.nullable(),
     goalTargetDate: z.string().nullable(),
 });
 
-const transactionSplitSchema = z.strictObject({
+export const transactionSplitSchema = z.strictObject({
     id,
     categoryId: id,
     amount: z.number(),
     comment: z.string(),
 });
 
-const transactionSchema = z.strictObject({
+export const transactionSchema = z.strictObject({
     id,
     date: z.string(),
     amount: z.number(),
@@ -58,19 +77,19 @@ const transactionSchema = z.strictObject({
     accountId: id,
     transferId: z.string().nullable(),
     comment: z.string(),
-    source: z.string(),
+    source: transactionSourceSchema,
     hidden: z.boolean(),
     splits: z.array(transactionSplitSchema),
 });
 
-const budgetCellSchema = z.strictObject({
+export const budgetCellSchema = z.strictObject({
     categoryId: id,
     year: z.number().int(),
     month: z.number().int().min(1).max(12),
     amount: z.number(),
 });
 
-const transferSchema = z
+export const transferSchema = z
     .strictObject({
         id: z.string(),
         out_tx_id: id,
@@ -90,7 +109,7 @@ export const connectionSchema = z.strictObject({
     id,
     bank: z.string(),
     kind: z.string(),
-    status: z.string(),
+    status: connectionStatusSchema,
     lastSync: z.string().nullable(),
     lastError: z.string().nullable(),
     hasCredentials: z.boolean(),
@@ -107,12 +126,12 @@ export const snapshotSchema = z.strictObject({
     transfers: z.array(transferSchema),
     budgets: z.array(budgetCellSchema),
     connections: z.array(connectionSchema),
-}) satisfies z.ZodType<Snapshot>;
+});
 
 export const transactionPageSchema = z.strictObject({
     total: z.number().int().nonnegative(),
     rows: z.array(transactionSchema),
-}) satisfies z.ZodType<TransactionPage>;
+});
 
 export const userSchema = z.strictObject({
     id,
@@ -121,7 +140,7 @@ export const userSchema = z.strictObject({
     isAdmin: z.boolean(),
     lastLogin: z.string().nullable(),
     defaultAccountId: nullableId,
-}) satisfies z.ZodType<User>;
+});
 
 export const authTokenSchema = z.strictObject({
     access_token: z.string().min(1),
@@ -245,7 +264,7 @@ const syncAccountSchema = z.strictObject({
     dateTo: z.string().nullable(),
 });
 const syncCompleteSchema = z.strictObject({
-    status: z.string(),
+    status: connectionStatusSchema,
     inserted: z.number().int().nonnegative(),
     skipped: z.number().int().nonnegative(),
     accounts: z.array(syncAccountSchema),
@@ -255,7 +274,10 @@ const syncCompleteSchema = z.strictObject({
         z.strictObject({ tail: z.string(), rows: z.number().int().nonnegative() }),
     ),
 });
-const syncStatusSchema = z.strictObject({ status: z.string(), message: z.string().nullable() });
+const syncStatusSchema = z.strictObject({
+    status: connectionStatusSchema,
+    message: z.string().nullable(),
+});
 export const syncResultSchema = z.union([syncCompleteSchema, syncStatusSchema]);
 
 const workbookErrorSchema = z
@@ -312,7 +334,7 @@ export const adminOverviewSchema = z.strictObject({
     registrations: z.array(z.strictObject({ month: z.string(), count: nonnegativeInt })),
 });
 const adminConnectionSchema = z.strictObject({
-    status: z.string(),
+    status: connectionStatusSchema,
     lastSync: z.string().nullable(),
     lastError: z.string().nullable(),
 });
@@ -339,7 +361,7 @@ const adminTransactionSummarySchema = z.strictObject({
 export const adminTransactionSchema = adminTransactionSummarySchema.extend({
     mcc: z.string(),
     comment: z.string(),
-    source: z.string(),
+    source: transactionSourceSchema,
 });
 export const adminUserDetailSchema = z.strictObject({
     user: userSchema,
@@ -347,7 +369,7 @@ export const adminUserDetailSchema = z.strictObject({
         z.strictObject({
             id,
             name: z.string(),
-            type: z.string(),
+            type: accountTypeSchema,
             currency: z.string(),
             archived: z.boolean(),
             balance: z.number(),

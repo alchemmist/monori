@@ -3,12 +3,13 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import ConfigDict
+from pydantic import ConfigDict, JsonValue, field_validator
 from pydantic.dataclasses import dataclass as pydantic_dataclass
 
 from app.auth import AuthenticatedUser, current_user
 from app.db_records import GroupRecord
 from app.deps import GroupResponse, IdResponse, conn, serialize_group
+from app.domain_types import CategoryGroupKind
 
 router = APIRouter(prefix="/api/groups", tags=["groups"])
 
@@ -18,7 +19,18 @@ class GroupBody:
     """Represent GroupBody."""
 
     name: str
-    kind: str
+    kind: CategoryGroupKind
+
+    @field_validator("kind", mode="before")
+    @classmethod
+    def validate_kind(cls, value: JsonValue) -> CategoryGroupKind:
+        """Preserve the existing 400 response for unsupported group kinds."""
+        if not isinstance(value, str):
+            raise HTTPException(400, "kind must be 'income', 'expense', or 'goal'")
+        try:
+            return CategoryGroupKind(value)
+        except ValueError as error:
+            raise HTTPException(400, "kind must be 'income', 'expense', or 'goal'") from error
 
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid"))
@@ -26,7 +38,20 @@ class GroupPatch:
     """Represent GroupPatch."""
 
     name: str | None = None
-    kind: str | None = None
+    kind: CategoryGroupKind | None = None
+
+    @field_validator("kind", mode="before")
+    @classmethod
+    def validate_kind(cls, value: JsonValue) -> CategoryGroupKind | None:
+        """Preserve the existing 400 response for unsupported group kinds."""
+        if value is None:
+            return None
+        if not isinstance(value, str):
+            raise HTTPException(400, "kind must be 'income', 'expense', or 'goal'")
+        try:
+            return CategoryGroupKind(value)
+        except ValueError as error:
+            raise HTTPException(400, "kind must be 'income', 'expense', or 'goal'") from error
 
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid"))

@@ -13,6 +13,7 @@ import sqlite3
 from collections.abc import Iterable, Mapping
 
 from .connectors.base import SyncRow
+from .domain_types import TransactionSource
 from .importer import CategoryDefinition, CategoryRule, build_rules, categorize, tx_hash
 
 INSERT_SQL = """INSERT INTO transactions
@@ -73,7 +74,12 @@ def dedup_text(description: str) -> str:
 def historical_day_counts(
     c: sqlite3.Connection,
     uid: int,
-    sources: tuple[str, ...] = ("workbook", "import", "sync", "sheets"),
+    sources: tuple[TransactionSource, ...] = (
+        TransactionSource.WORKBOOK,
+        TransactionSource.IMPORT,
+        TransactionSource.SYNC,
+        TransactionSource.SHEETS,
+    ),
 ) -> dict[tuple[str, int, str], int]:
     """
     ``(day, amount, normalized description) -> count`` over every transaction.
@@ -130,7 +136,7 @@ def commit_rows(
     c: sqlite3.Connection,
     account_id: int,
     rows: Iterable[SyncRow],
-    source: str,
+    source: TransactionSource,
     batch_id: int | None = None,
 ) -> tuple[int, int]:
     """

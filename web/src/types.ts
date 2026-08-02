@@ -1,4 +1,39 @@
+import type { z } from "zod";
+import type {
+    accountSchema,
+    budgetCellSchema,
+    categoryGroupSchema,
+    categorySchema,
+    connectionSchema,
+    snapshotSchema,
+    transactionPageSchema,
+    transactionSchema,
+    transactionSplitSchema,
+    transferSchema,
+    userSchema,
+} from "./apiSchemas.js";
+
 export type Id = number;
+declare const brand: unique symbol;
+type Brand<Value, Name extends string> = Value & { readonly [brand]: Name };
+export type AccountId = Brand<number, "AccountId">;
+export type CategoryId = Brand<number, "CategoryId">;
+export type TransactionId = Brand<number, "TransactionId">;
+export type Kopecks = Brand<number, "Kopecks">;
+export type IsoDate = Brand<string, "IsoDate">;
+export type IsoDateTime = Brand<string, "IsoDateTime">;
+
+export type AccountResponse = z.infer<typeof accountSchema>;
+export type CategoryGroupResponse = z.infer<typeof categoryGroupSchema>;
+export type CategoryResponse = z.infer<typeof categorySchema>;
+export type TransactionSplitResponse = z.infer<typeof transactionSplitSchema>;
+export type TransactionResponse = z.infer<typeof transactionSchema>;
+export type BudgetCellResponse = z.infer<typeof budgetCellSchema>;
+export type TransferResponse = z.infer<typeof transferSchema>;
+export type ConnectionResponse = z.infer<typeof connectionSchema>;
+export type SnapshotResponse = z.infer<typeof snapshotSchema>;
+export type TransactionPageResponse = z.infer<typeof transactionPageSchema>;
+export type UserResponse = z.infer<typeof userSchema>;
 export type ThemeMode = "light" | "dark";
 
 export interface Account {
