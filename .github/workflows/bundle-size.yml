@@ -55,9 +55,11 @@ jobs:
               working-directory: web
 
             - name: Build pull request
-              run: |
-                  npm run build
-                  python scripts/bundle_size.py measure --dist web/dist --output "$RUNNER_TEMP/current.json"
+              run: npm run build
+              working-directory: web
+
+            - name: Measure pull-request bundle
+              run: python scripts/bundle_size.py measure --dist web/dist --output "$RUNNER_TEMP/current.json"
 
             - name: Build merge base
               env:
