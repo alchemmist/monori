@@ -105,6 +105,17 @@ describe("Root", () => {
         expect(window.location.pathname).toBe("/docs/getting-started");
     });
 
+    it("renders the creative 404 page for unknown routes", async () => {
+        window.history.replaceState({}, "", "/somewhere/over-the-ledger");
+        renderUI(<Root />);
+        expect(await screen.findByRole("heading", { name: "404" })).toBeInTheDocument();
+        expect(screen.getByText("lost in the ledger")).toBeInTheDocument();
+        expect(screen.getByRole("link", { name: "Go to Budget" })).toHaveAttribute(
+            "href",
+            "/budget",
+        );
+    });
+
     it("toggles and persists theme from both route shells", async () => {
         window.history.replaceState({}, "", "/welcome");
         const { user } = renderUI(<Root />);

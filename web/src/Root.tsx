@@ -4,6 +4,8 @@ import { Notifications } from "@mantine/notifications";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import App from "./App.jsx";
 import Shell from "./components/Shell.jsx";
+import LoginPage from "./pages/LoginPage.jsx";
+import NotFound from "./components/NotFound.jsx";
 import { theme as mantineTheme } from "./ui/theme.js";
 import type { ThemeMode } from "./types.js";
 
@@ -47,6 +49,8 @@ export default function Root() {
     }, [theme]);
 
     // MantineProvider drives its own dark styles via data-mantine-color-scheme
+    const app = <App theme={theme} onToggleTheme={toggleTheme} />;
+
     return (
         <MantineProvider theme={mantineTheme} forceColorScheme={theme}>
             <BrowserRouter>
@@ -69,11 +73,18 @@ export default function Root() {
                         </Route>
                         {/* the diagram viewer owns the whole viewport, so it sits outside the Shell */}
                         <Route path="/docs/:slug/diagram/:index" element={<DiagramPage />} />
-                        {/* everything else is the app itself (auth, demo, panel) */}
-                        <Route
-                            path="*"
-                            element={<App theme={theme} onToggleTheme={toggleTheme} />}
-                        />
+                        <Route path="/" element={app} />
+                        <Route path="/login" element={<LoginPage />} />
+                        <Route path="/demo" element={app} />
+                        <Route path="/demo/:page" element={app} />
+                        <Route path="/budget" element={app} />
+                        <Route path="/dashboard" element={app} />
+                        <Route path="/transactions" element={app} />
+                        <Route path="/accounts" element={app} />
+                        <Route path="/categories" element={app} />
+                        <Route path="/settings" element={app} />
+                        <Route path="/admin" element={app} />
+                        <Route path="*" element={<NotFound />} />
                     </Routes>
                 </Suspense>
             </BrowserRouter>

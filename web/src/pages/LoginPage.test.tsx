@@ -1,25 +1,34 @@
 import { describe, expect, it, vi, afterEach } from "vitest";
+import { MemoryRouter } from "react-router-dom";
 import LoginPage from "./LoginPage.jsx";
 import { fireEvent, renderUI, screen, waitFor, resetStore } from "../test/render.jsx";
 
 vi.mock("../api.js");
 
+function renderLogin() {
+    return renderUI(
+        <MemoryRouter>
+            <LoginPage />
+        </MemoryRouter>,
+    );
+}
+
 describe("LoginPage", () => {
     afterEach(() => resetStore());
     it("renders the login form with email and password fields", () => {
-        renderUI(<LoginPage />);
+        renderLogin();
         expect(screen.getByPlaceholderText("Email")).toBeInTheDocument();
         expect(screen.getByPlaceholderText("Password")).toBeInTheDocument();
         expect(screen.getByRole("button", { name: "Sign in" })).toBeInTheDocument();
     });
 
     it("starts in login mode with 'Every ruble in its place' title", () => {
-        renderUI(<LoginPage />);
+        renderLogin();
         expect(screen.getByText(/Every ruble/, { exact: false })).toBeInTheDocument();
     });
 
     it("switches to register mode when Register is clicked", async () => {
-        const { user } = renderUI(<LoginPage />);
+        const { user } = renderLogin();
         const switchButton = screen.getByRole("button", { name: "Register" });
         await user.click(switchButton);
         expect(screen.getByText(/Start counting/, { exact: false })).toBeInTheDocument();
@@ -28,7 +37,7 @@ describe("LoginPage", () => {
     });
 
     it("switches back to login mode when Sign in is clicked from register", async () => {
-        const { user } = renderUI(<LoginPage />);
+        const { user } = renderLogin();
         await user.click(screen.getByRole("button", { name: "Register" }));
         await user.click(screen.getByRole("button", { name: "Sign in" }));
         expect(screen.getByText(/Every ruble/, { exact: false })).toBeInTheDocument();
@@ -36,7 +45,7 @@ describe("LoginPage", () => {
     });
 
     it("toggles password visibility with eye button", async () => {
-        const { user } = renderUI(<LoginPage />);
+        const { user } = renderLogin();
         const passwordInput = screen.getByPlaceholderText("Password");
         const eyeButton = screen.getByRole("button", { name: "Show password" });
         expect(passwordInput).toHaveAttribute("type", "password");
@@ -47,7 +56,7 @@ describe("LoginPage", () => {
     });
 
     it("disables submit button while request is in flight", async () => {
-        const { user } = renderUI(<LoginPage />);
+        const { user } = renderLogin();
         const submitButton = screen.getByRole("button", { name: "Sign in" });
         const emailInput = screen.getByPlaceholderText("Email");
         const passwordInput = screen.getByPlaceholderText("Password");
@@ -71,7 +80,7 @@ describe("LoginPage", () => {
     });
 
     it("displays error message on login failure with email field highlighting", async () => {
-        const { user } = renderUI(<LoginPage />);
+        const { user } = renderLogin();
         const { useStore } = await import("../store.js");
         const loginSpy = vi
             .spyOn(useStore.getState(), "login")
@@ -95,7 +104,7 @@ describe("LoginPage", () => {
     });
 
     it("displays error message on login failure with password field highlighting", async () => {
-        const { user } = renderUI(<LoginPage />);
+        const { user } = renderLogin();
         const { useStore } = await import("../store.js");
         const loginSpy = vi
             .spyOn(useStore.getState(), "login")
@@ -119,7 +128,7 @@ describe("LoginPage", () => {
     });
 
     it("displays generic error when message doesn't mention email or password", async () => {
-        const { user } = renderUI(<LoginPage />);
+        const { user } = renderLogin();
         const { useStore } = await import("../store.js");
         const loginSpy = vi
             .spyOn(useStore.getState(), "login")
@@ -144,7 +153,7 @@ describe("LoginPage", () => {
     });
 
     it("clears error message when switching modes", async () => {
-        const { user } = renderUI(<LoginPage />);
+        const { user } = renderLogin();
         const { useStore } = await import("../store.js");
         const loginSpy = vi
             .spyOn(useStore.getState(), "login")
@@ -169,7 +178,7 @@ describe("LoginPage", () => {
     });
 
     it("calls register on registration form submission", async () => {
-        const { user } = renderUI(<LoginPage />);
+        const { user } = renderLogin();
         const { useStore } = await import("../store.js");
         const registerSpy = vi
             .spyOn(useStore.getState(), "register")
@@ -193,7 +202,7 @@ describe("LoginPage", () => {
     });
 
     it("prevents form submission when email is empty", async () => {
-        const { user } = renderUI(<LoginPage />);
+        const { user } = renderLogin();
         const passwordInput = screen.getByPlaceholderText("Password");
         const submitButton = screen.getByRole("button", { name: "Sign in" });
 
@@ -205,7 +214,7 @@ describe("LoginPage", () => {
     });
 
     it("prevents form submission when password is empty", async () => {
-        const { user } = renderUI(<LoginPage />);
+        const { user } = renderLogin();
         const emailInput = screen.getByPlaceholderText("Email");
         const submitButton = screen.getByRole("button", { name: "Sign in" });
 
@@ -217,7 +226,7 @@ describe("LoginPage", () => {
     });
 
     it("asks the browser for an 8-character password when registering only", async () => {
-        const { user } = renderUI(<LoginPage />);
+        const { user } = renderLogin();
         expect(screen.getByPlaceholderText("Password")).not.toHaveAttribute("minlength");
 
         await user.click(screen.getByRole("button", { name: "Register" }));
@@ -231,7 +240,7 @@ describe("LoginPage", () => {
     });
 
     it("ignores a second submit while the first request is still in flight", async () => {
-        const { user } = renderUI(<LoginPage />);
+        const { user } = renderLogin();
         const { useStore } = await import("../store.js");
         let release = () => {};
         const login = vi
@@ -250,7 +259,7 @@ describe("LoginPage", () => {
     });
 
     it("opens docs, demo and GitHub in a new tab", () => {
-        renderUI(<LoginPage />);
+        renderLogin();
         const links = screen
             .getAllByRole("link")
             .map((a) => [a.textContent, a.getAttribute("href"), a.getAttribute("target")]);
