@@ -86,16 +86,18 @@ exception only when the symbol is an intentional external entry point.
 The suite is a testing "trophy" — heavy on integration tests that use real
 dependencies (a real temp SQLite database, the real FastAPI app), not mocks.
 
-| Target               | Does                                                                                                                                              |
-| ---------------      | ----------------------------------------------------------------------------------------------------------------------------------------------    |
-| `make test`          | The whole suite (`t-front` + `t-back` + `t-e2e`).                                                                                                 |
-| `make t-fast`        | Fast unit tests for both frontend (Vitest) and backend (pytest without integration tests).                                                        |
-| `make t-front`       | Frontend tests via Vitest.                                                                                                                        |
-| `make t-back`        | Backend unit and integration tests via pytest.                                                                                                    |
-| `make t-e2e`         | End-to-end Playwright tests against the real backend and production frontend stack.                                                               |
-| `make coverage`      | Coverage as a tree (root → back/front → module → file), via `scripts/coverage-tree.sh`. Fails below **90% statements and lines** in `web/src`.    |
-| `make mutation`      | Full mutation sweep: Stryker on `web/src`, mutmut on `server/app`. Runs nightly at 05:00 Moscow time and on manual dispatch.                      |
-| `make mutation-diff` | Diff-scoped gate for changed frontend lines and backend functions. Needs full git history. Example: `BASE=origin/main`, threshold 90%.            |
+| Target | Does |
+| --- | --- |
+| `make test` | The whole suite (`t-front` + `t-back` + `t-e2e`). |
+| `make t-fast` | CI fast lane: frontend logic/store tests (`.test.ts`) plus backend tests without the `integration` marker. |
+| `make t-medium` | CI medium lane: frontend component tests (`.test.tsx`) plus backend tests marked `integration`. |
+| `make t-slow` | CI slow lane: end-to-end Playwright tests against the real backend and production frontend stack. |
+| `make t-front` | Local frontend slice via Vitest. |
+| `make t-back` | Local backend slice with unit and integration tests. |
+| `make t-e2e` | Local end-to-end slice against the real backend and production frontend stack. |
+| `make coverage` | Coverage as a tree (root → back/front → module → file), via `scripts/coverage-tree.sh`. Fails below **90% statements and lines** in `web/src`. |
+| `make mutation` | Full mutation sweep: Stryker on `web/src`, mutmut on `server/app`. Runs nightly at 05:00 Moscow time and on manual dispatch. |
+| `make mutation-diff` | Diff-scoped gate for changed frontend lines and backend functions. Needs full git history. Example: `BASE=origin/main`, threshold 90%. |
 
 ### The pre-commit gate
 
@@ -123,6 +125,8 @@ points straight at the failing tool.
 - Backend integration tests use a fixture that spins up a temp SQLite file and a
   FastAPI `TestClient`, split by resource under `server/tests/integration/`; unit
   tests (e.g. the importer) live under `server/tests/unit/`.
+- Frontend logic and store unit tests use the `.test.ts` suffix; component
+  integration tests rendered in jsdom use `.test.tsx`.
 - Coverage is gated: pytest fails under 80% on the backend, and Vitest holds
   `web/src` at 90% statements and lines, with the engine held to the same bar.
 - Mutation scores are the real quality check on the test suite; some surviving
