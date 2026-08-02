@@ -45,8 +45,10 @@ class PullRequestWorkflowGraphTest(unittest.TestCase):
     def test_checks_form_a_sequential_chain(self) -> None:
         chain = (
             ("fmt-check", "workflow-graph"),
-            ("lint", "fmt-check"),
-            ("type", "lint"),
+            ("suppressions", "fmt-check"),
+            ("lint", "suppressions"),
+            ("object-annotations", "lint"),
+            ("type", "object-annotations"),
             ("analyze", "type"),
             ("test-fast", "analyze"),
             ("test-medium", "test-fast"),
