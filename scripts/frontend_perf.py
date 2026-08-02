@@ -1,0 +1,516 @@
+"""Compare frontend performance measurements and render the CI report."""
+
+import argparse
+import json
+import os
+import statistics
+import sys
+import urllib.parse
+from dataclasses import asdict, dataclass
+from pathlib import Path
+
+type JsonValue = None | bool | int | float | str | list[JsonValue] | dict[str, JsonValue]
+type MeasurementKey = tuple[str, str]
+
+SCHEMA_VERSION = 1
+TIERS = {"none": 0, "info": 1, "significant": 2, "critical": 3, "error": 4}
+TIER_LABELS = {
+    "none": "None",
+    "info": "Info",
+    "significant": "Significant",
+    "critical": "Critical",
+    "error": "Measurement failure",
+}
+TIER_EMOJI = {
+    "none": "✅",
+    "info": "💬",
+    "significant": "⚠️",
+    "critical": "❌",
+    "error": "❌",
+}
+COMMENT_MARKER = "<!-- monori-frontend-performance -->"
+
+
+@dataclass(frozen=True)
+class Measurement:
+    route_id: str
+    route_label: str
+    metric_id: str
+    metric_label: str
+    unit: str
+    value: float
+
+
+@dataclass(frozen=True)
+class Entry:
+    route_id: str
+    route_label: str
+    metric_id: str
+    metric_label: str
+    unit: str
+    base: float
+    current: float
+    delta: float
+    delta_percent: float | None
+    tier: str
+    reason: str
+
+
+def decode_json(path: Path) -> JsonValue:
+    value: JsonValue = json.loads(path.read_text())
+    return value
+
+
+def json_object(value: JsonValue, context: str) -> dict[str, JsonValue]:
+    if not isinstance(value, dict):
+        raise RuntimeError(f"Expected an object for {context}")
+    return value
+
+
+def json_array(value: JsonValue, context: str) -> list[JsonValue]:
+    if not isinstance(value, list):
+        raise RuntimeError(f"Expected an array for {context}")
+    return value
+
+
+def json_string(value: JsonValue, context: str) -> str:
+    if not isinstance(value, str):
+        raise RuntimeError(f"Expected a string for {context}")
+    return value
+
+
+def json_number(value: JsonValue, context: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        raise RuntimeError(f"Expected a number for {context}")
+    return float(value)
+
+
+def config_parts(
+    config: dict[str, JsonValue],
+) -> tuple[int, list[dict[str, JsonValue]], dict[str, dict[str, JsonValue]]]:
+    raw_runs = config.get("runs")
+    if isinstance(raw_runs, bool) or not isinstance(raw_runs, int) or raw_runs < 1:
+        raise RuntimeError("config.runs must be a positive integer")
+    routes = [
+        json_object(route, "lighthouse route")
+        for route in json_array(config.get("lighthouseRoutes"), "lighthouseRoutes")
+    ]
+    raw_metrics = json_object(config.get("metrics"), "metrics")
+    metrics = {
+        metric_id: json_object(metric, f"metric {metric_id}")
+        for metric_id, metric in raw_metrics.items()
+    }
+    return raw_runs, routes, metrics
+
+
+def median(values: list[float], expected_runs: int, context: str) -> float:
+    if len(values) != expected_runs:
+        raise RuntimeError(f"{context} has {len(values)} runs; expected {expected_runs}")
+    return float(statistics.median(values))
+
+
+def load_lighthouse(
+    directory: Path, config: dict[str, JsonValue]
+) -> dict[MeasurementKey, Measurement]:
+    runs, routes, metrics = config_parts(config)
+    route_by_path = {json_string(route.get("path"), "route path"): route for route in routes}
+    values: dict[MeasurementKey, list[float]] = {}
+
+    for report_path in sorted(directory.glob("*.json")):
+        raw = decode_json(report_path)
+        if not isinstance(raw, dict) or "audits" not in raw:
+            continue
+        report = json_object(raw, str(report_path))
+        raw_url = report.get("finalUrl") or report.get("requestedUrl")
+        route_path = urllib.parse.urlparse(json_string(raw_url, "Lighthouse URL")).path
+        route = route_by_path.get(route_path)
+        if route is None:
+            raise RuntimeError(f"Unexpected Lighthouse route {route_path}")
+        route_id = json_string(route.get("id"), "route id")
+        audits = json_object(report.get("audits"), "Lighthouse audits")
+        for metric_id in metrics:
+            if metric_id == "navigation":
+                continue
+            audit = json_object(audits.get(metric_id), f"Lighthouse audit {metric_id}")
+            value = json_number(audit.get("numericValue"), f"{metric_id}.numericValue")
+            values.setdefault((route_id, metric_id), []).append(value)
+
+    measurements: dict[MeasurementKey, Measurement] = {}
+    for route in routes:
+        route_id = json_string(route.get("id"), "route id")
+        route_label = json_string(route.get("label"), "route label")
+        for metric_id, metric in metrics.items():
+            if metric_id == "navigation":
+                continue
+            metric_label = json_string(metric.get("label"), f"{metric_id} label")
+            unit = json_string(metric.get("unit"), f"{metric_id} unit")
+            key = (route_id, metric_id)
+            measurements[key] = Measurement(
+                route_id=route_id,
+                route_label=route_label,
+                metric_id=metric_id,
+                metric_label=metric_label,
+                unit=unit,
+                value=median(values.get(key, []), runs, f"{route_label} {metric_label}"),
+            )
+    return measurements
+
+
+def load_navigation(path: Path, config: dict[str, JsonValue]) -> dict[MeasurementKey, Measurement]:
+    runs, _, metrics = config_parts(config)
+    navigation_metric = metrics["navigation"]
+    root = json_object(decode_json(path), str(path))
+    scenarios = json_array(root.get("scenarios"), "navigation scenarios")
+    measurements: dict[MeasurementKey, Measurement] = {}
+    for raw_scenario in scenarios:
+        scenario = json_object(raw_scenario, "navigation scenario")
+        scenario_id = json_string(scenario.get("id"), "navigation scenario id")
+        label = json_string(scenario.get("label"), "navigation scenario label")
+        values = [
+            json_number(value, f"{label} duration")
+            for value in json_array(scenario.get("valuesMs"), f"{label} values")
+        ]
+        key = (scenario_id, "navigation")
+        if key in measurements:
+            raise RuntimeError(f"Duplicate navigation scenario {scenario_id}")
+        measurements[key] = Measurement(
+            route_id=scenario_id,
+            route_label=label,
+            metric_id="navigation",
+            metric_label=json_string(navigation_metric.get("label"), "navigation label"),
+            unit=json_string(navigation_metric.get("unit"), "navigation unit"),
+            value=median(values, runs, label),
+        )
+
+    configured = {
+        json_string(
+            json_object(scenario, "configured navigation scenario").get("id"),
+            "configured navigation id",
+        )
+        for scenario in json_array(config.get("navigationScenarios"), "navigationScenarios")
+    }
+    measured = {route_id for route_id, _ in measurements}
+    if measured != configured:
+        missing = ", ".join(sorted(configured - measured)) or "none"
+        extra = ", ".join(sorted(measured - configured)) or "none"
+        raise RuntimeError(
+            f"Navigation scenarios differ from config; missing={missing}; extra={extra}"
+        )
+    return measurements
+
+
+def load_measurements(
+    directory: Path, config: dict[str, JsonValue]
+) -> dict[MeasurementKey, Measurement]:
+    lighthouse = load_lighthouse(directory / "lighthouse", config)
+    navigation = load_navigation(directory / "navigation.json", config)
+    return lighthouse | navigation
+
+
+def band(value: float, metric: dict[str, JsonValue]) -> str | None:
+    raw_good = metric.get("good")
+    raw_poor = metric.get("poor")
+    if raw_good is None or raw_poor is None:
+        return None
+    good = json_number(raw_good, "good band")
+    poor = json_number(raw_poor, "poor band")
+    if value <= good:
+        return "good"
+    if value >= poor:
+        return "poor"
+    return "needs improvement"
+
+
+def threshold(metric: dict[str, JsonValue], name: str, default: float = 0) -> float:
+    raw = metric.get(name)
+    return default if raw is None else json_number(raw, name)
+
+
+def classify(base: float, current: float, metric: dict[str, JsonValue]) -> tuple[str, str]:
+    delta = current - base
+    if delta <= 0:
+        return "none", "same or better"
+
+    base_band = band(base, metric)
+    current_band = band(current, metric)
+    absolute_noise = threshold(metric, "noiseAbsolute")
+    if current_band == "poor" and base_band != "poor" and delta >= absolute_noise:
+        return "critical", "crossed into the poor band"
+    if base_band == "good" and current_band == "needs improvement" and delta >= absolute_noise:
+        return "significant", "crossed out of the good band"
+
+    delta_percent = float("inf") if base <= 0 else delta / base * 100
+    policy = metric.get("policy")
+    if policy == "ttfb":
+        if delta_percent > threshold(metric, "criticalPercent") and delta >= threshold(
+            metric, "criticalAbsolute"
+        ):
+            return "critical", "TTFB more than doubled with at least 300 ms growth"
+        if delta_percent > threshold(metric, "significantPercent") and delta >= threshold(
+            metric, "significantAbsolute"
+        ):
+            return "significant", "large TTFB increase"
+
+    if delta_percent <= threshold(metric, "noisePercent") or delta < absolute_noise:
+        return "none", "within the noise floor"
+    if policy != "ttfb" and delta_percent > threshold(metric, "criticalPercent"):
+        return "critical", "more than 25% slower"
+    if policy != "ttfb" and delta_percent > threshold(metric, "significantPercent"):
+        return "significant", "more than 10% slower"
+    return "info", "above the noise floor"
+
+
+def compare_measurements(
+    base: dict[MeasurementKey, Measurement],
+    current: dict[MeasurementKey, Measurement],
+    config: dict[str, JsonValue],
+) -> list[Entry]:
+    if set(base) != set(current):
+        missing = ", ".join(
+            f"{route}/{metric}" for route, metric in sorted(set(base) - set(current))
+        )
+        extra = ", ".join(f"{route}/{metric}" for route, metric in sorted(set(current) - set(base)))
+        raise RuntimeError(
+            "PR measurements differ from main; "
+            f"missing={missing or 'none'}; extra={extra or 'none'}"
+        )
+
+    _, _, metrics = config_parts(config)
+    entries: list[Entry] = []
+    for key in sorted(base):
+        before = base[key]
+        after = current[key]
+        metric = metrics[before.metric_id]
+        tier, reason = classify(before.value, after.value, metric)
+        delta = after.value - before.value
+        delta_percent = None if before.value == 0 else delta / before.value * 100
+        entries.append(
+            Entry(
+                route_id=before.route_id,
+                route_label=before.route_label,
+                metric_id=before.metric_id,
+                metric_label=before.metric_label,
+                unit=before.unit,
+                base=before.value,
+                current=after.value,
+                delta=delta,
+                delta_percent=delta_percent,
+                tier=tier,
+                reason=reason,
+            )
+        )
+    return entries
+
+
+def worst_tier(entries: list[Entry]) -> str:
+    return max((entry.tier for entry in entries), key=lambda tier: TIERS[tier], default="none")
+
+
+def format_value(value: float, unit: str) -> str:
+    if unit == "score":
+        return f"{value:.3f}"
+    if abs(value) >= 1000:
+        return f"{value / 1000:.2f} s"
+    return f"{value:.0f} ms"
+
+
+def format_delta(entry: Entry) -> str:
+    sign = "+" if entry.delta > 0 else ""
+    value = format_value(entry.delta, entry.unit)
+    percent = "new" if entry.delta_percent is None else f"{entry.delta_percent:+.1f}%"
+    return f"{sign}{value} ({percent})"
+
+
+def tier_cell(tier: str) -> str:
+    symbols = {"none": "✔", "info": "💬", "significant": "⚠", "critical": "✗"}
+    return f"{symbols[tier]} {TIER_LABELS[tier]}"
+
+
+def sorted_regressions(entries: list[Entry]) -> list[Entry]:
+    return sorted(
+        (entry for entry in entries if entry.tier != "none"),
+        key=lambda entry: (
+            TIERS[entry.tier],
+            entry.delta_percent if entry.delta_percent is not None else float("inf"),
+            entry.delta,
+        ),
+        reverse=True,
+    )
+
+
+def report_table(entries: list[Entry]) -> list[str]:
+    lines = [
+        "| Route / interaction | Metric | main | PR | Δ | Tier |",
+        "| --- | --- | ---: | ---: | ---: | --- |",
+    ]
+    for entry in entries:
+        lines.append(
+            f"| {entry.route_label} | {entry.metric_label} | "
+            f"{format_value(entry.base, entry.unit)} | "
+            f"{format_value(entry.current, entry.unit)} | {format_delta(entry)} | "
+            f"{tier_cell(entry.tier)} |"
+        )
+    return lines
+
+
+def render_report(entries: list[Entry], verdict: str, *, comment: bool) -> str:
+    emoji = TIER_EMOJI[verdict]
+    label = TIER_LABELS[verdict]
+    if comment:
+        lines = [COMMENT_MARKER, "", f"## {emoji} Frontend performance — {label}", ""]
+    else:
+        lines = ["## Frontend performance", "", f"### {emoji} {label}", ""]
+
+    if verdict == "critical":
+        lines.extend(
+            [
+                "> [!CAUTION]",
+                "> A critical runtime performance regression was detected. Fix the highlighted "
+                "route or metric before merging.",
+                "",
+            ]
+        )
+    elif verdict == "significant":
+        lines.extend(
+            [
+                "> [!WARNING]",
+                "> Runtime performance regressed noticeably. The check still passes, but the "
+                "change should be reviewed.",
+                "",
+            ]
+        )
+    elif verdict == "info":
+        lines.extend(
+            [
+                "A small regression exceeded the configured noise floor. The check still passes.",
+                "",
+            ]
+        )
+    else:
+        lines.extend(["No meaningful runtime performance regression was detected.", ""])
+
+    regressions = sorted_regressions(entries)
+    if regressions:
+        lines.extend(["**Biggest regressions:**", ""])
+        for entry in regressions[:5]:
+            lines.append(
+                f"- {entry.route_label} · {entry.metric_label}: "
+                f"{format_value(entry.base, entry.unit)} → "
+                f"{format_value(entry.current, entry.unit)} · {format_delta(entry)} — "
+                f"{entry.reason}"
+            )
+        lines.append("")
+
+    if comment:
+        lines.extend(["<details>", "<summary>Full performance report</summary>", ""])
+    lines.extend(report_table(entries))
+    if comment:
+        lines.extend(["", "</details>"])
+    else:
+        run_url = os.environ.get("GITHUB_RUN_URL")
+        if run_url:
+            lines.extend(
+                ["", f"Raw Lighthouse and navigation reports: [workflow artifacts]({run_url})."]
+            )
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def write_json(path: Path, value: JsonValue) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n")
+
+
+def write_outputs(
+    output: Path,
+    entries: list[Entry],
+    verdict: str,
+    pr_number: int,
+    head_sha: str,
+) -> None:
+    output.mkdir(parents=True, exist_ok=True)
+    report: dict[str, JsonValue] = {
+        "schemaVersion": SCHEMA_VERSION,
+        "prNumber": pr_number,
+        "headSha": head_sha,
+        "verdict": verdict,
+        "commentRequired": verdict != "none",
+        "entries": [asdict(entry) for entry in entries],
+    }
+    write_json(output / "report.json", report)
+    (output / "summary.md").write_text(render_report(entries, verdict, comment=False))
+    (output / "comment.md").write_text(
+        "" if verdict == "none" else render_report(entries, verdict, comment=True)
+    )
+
+
+def write_error(output: Path, message: str, pr_number: int, head_sha: str) -> None:
+    output.mkdir(parents=True, exist_ok=True)
+    summary = (
+        "## Frontend performance\n\n"
+        "### ❌ Measurement failure\n\n"
+        "The performance comparison could not finish. This is an infrastructure or "
+        "measurement failure, not a detected product regression.\n\n"
+        f"```text\n{message}\n```\n"
+    )
+    comment = (
+        f"{COMMENT_MARKER}\n"
+        "## ❌ Frontend performance — measurement failure\n\n"
+        "> [!CAUTION]\n"
+        "> The performance comparison could not finish. Check the workflow logs and rerun it; "
+        "this does not mean that a product regression was measured.\n"
+    )
+    report: dict[str, JsonValue] = {
+        "schemaVersion": SCHEMA_VERSION,
+        "prNumber": pr_number,
+        "headSha": head_sha,
+        "verdict": "error",
+        "commentRequired": True,
+        "message": message,
+        "entries": [],
+    }
+    write_json(output / "report.json", report)
+    (output / "summary.md").write_text(summary)
+    (output / "comment.md").write_text(comment)
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser()
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    compare = subparsers.add_parser("compare")
+    compare.add_argument("--base-dir", type=Path, required=True)
+    compare.add_argument("--pr-dir", type=Path, required=True)
+    compare.add_argument("--config", type=Path, required=True)
+    compare.add_argument("--output", type=Path, required=True)
+    compare.add_argument("--pr-number", type=int, default=0)
+    compare.add_argument("--head-sha", default="")
+
+    error = subparsers.add_parser("error")
+    error.add_argument("--output", type=Path, required=True)
+    error.add_argument("--message", required=True)
+    error.add_argument("--pr-number", type=int, default=0)
+    error.add_argument("--head-sha", default="")
+    return parser.parse_args()
+
+
+def main() -> int:
+    args = parse_args()
+    if args.command == "error":
+        write_error(args.output, args.message, args.pr_number, args.head_sha)
+        return 0
+
+    config = json_object(decode_json(args.config), "config")
+    base = load_measurements(args.base_dir, config)
+    current = load_measurements(args.pr_dir, config)
+    entries = compare_measurements(base, current, config)
+    verdict = worst_tier(entries)
+    write_outputs(args.output, entries, verdict, args.pr_number, args.head_sha)
+    return 1 if verdict == "critical" else 0
+
+
+if __name__ == "__main__":
+    try:
+        raise SystemExit(main())
+    except RuntimeError as error:
+        print(f"frontend performance: {error}", file=sys.stderr)
+        raise SystemExit(2) from error

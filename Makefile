@@ -14,11 +14,12 @@ WEBBIN := web/node_modules/.bin
         fmt fmt-check \
         lint lint-web lint-css lint-html lint-server lint-sql lint-yaml lint-md lint-docs lint-actions lint-docker lint-shell spell \
         type type-front type-back analyze analyze-python-dead-code analyze-javascript-dead-code audit audit-deps audit-deps-py audit-secrets \
-        test t-fast t-medium t-slow t-slow-ui t-front t-back t-e2e t-e2e-ui coverage mutation mutation-diff m-front m-front-diff m-front-file m-back m-back-diff \
+        test t-fast t-medium t-slow t-slow-ui t-front t-back t-e2e t-e2e-ui coverage perf-front-diff mutation mutation-diff m-front m-front-diff m-front-file m-back m-back-diff \
         schema-diagram check
 
 install:
 	cd web && npm install --no-audit --no-fund
+	cd tools/frontend-perf && npm install --no-audit --no-fund
 	cd server && uv sync
 	$(MAKE) tools
 
@@ -147,6 +148,9 @@ audit-deps:
 	cd web && npm install --no-audit --no-fund --silent
 	(cd web && npm audit --audit-level=high --json) | \
 		uv run --project server python scripts/npm-audit-gate.py
+	cd tools/frontend-perf && npm install --no-audit --no-fund --silent
+	(cd tools/frontend-perf && npm audit --audit-level=high --json) | \
+		uv run --project server python scripts/npm-audit-gate.py
 
 audit-deps-py:
 	@req=$$(mktemp); \
@@ -185,6 +189,9 @@ t-e2e-ui:
 
 coverage:
 	bash scripts/coverage-tree.sh
+
+perf-front-diff:
+	BASE="$(BASE)" COMPOSE="$(COMPOSE)" bash scripts/frontend-perf.sh
 
 m-front:
 	@set +e; \
