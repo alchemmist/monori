@@ -61,10 +61,22 @@ build:
 	cp -r web/dist server/static
 
 clean:
-	rm -rf -- \
+	@root=$$(git rev-parse --show-toplevel); \
+	remove_path() { \
+		path="$$1"; \
+		[ -e "$$path" ] || [ -L "$$path" ] || return 0; \
+		resolved=$$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$$path") || return 1; \
+		case "$$resolved" in \
+			"$$root"/*) rm -rf -- "$$path" ;; \
+			*) echo "Skipping path outside repository: $$path" ;; \
+		esac; \
+	}; \
+	for path in \
 		.coverage coverage.json htmlcov coverage \
 		.stryker-tmp reports .mutmut-cache mutants \
-		.issue197 server/static web/dist web/test-results web/playwright-report
+		.issue197 server/static web/dist web/test-results web/playwright-report; do \
+		remove_path "$$path"; \
+	done
 	find . \
 		-path './.git' -prune -o \
 		-path './web/node_modules' -prune -o \
