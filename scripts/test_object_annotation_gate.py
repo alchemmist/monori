@@ -4,15 +4,41 @@ import unittest
 
 from scripts.object_annotation_gate import (
     Finding,
+    JsonValue,
     added_lines_from_patch,
     changed_lines,
     comment_body,
     parse_command,
-    parse_state,
     scan_file,
-    state_marker,
     summary_body,
+    sync_approvals,
+    sync_failure_label,
 )
+
+
+class FakeGitHub:
+    def __init__(self, permission: str = "admin") -> None:
+        self.permission = permission
+        self.calls: list[tuple[str, str, JsonValue]] = []
+
+    def paged(self, path: str) -> list[dict[str, JsonValue]]:
+        self.calls.append(("paged", path, None))
+        return [
+            {"name": "monori-object-annotation-ignore-stale"},
+            {"name": "monori-object-annotation-ignore-finding-1"},
+        ]
+
+    def request(self, method: str, path: str, payload: JsonValue = None) -> JsonValue:
+        self.calls.append((method, path, payload))
+        if path.startswith("/collaborators/"):
+            return {"permission": self.permission}
+        return None
+
+    def file_text(self, path: str, ref: str) -> str | None:
+        return None
+
+    def ensure_label(self, name: str) -> None:
+        self.calls.append(("ensure_label", name, None))
 
 
 class ObjectAnnotationGateTest(unittest.TestCase):
@@ -71,14 +97,38 @@ other: "list[object]"
         self.assertEqual(findings, [])
         self.assertIn("Cannot parse Python file", output.getvalue())
 
-    def test_approval_state_requires_valid_current_sha(self) -> None:
-        body = state_marker("current", {"abc123"})
+    def test_finding_id_survives_line_shift_but_not_annotation_change(self) -> None:
+        before = scan_file("example.py", "value: object\n", {1})[0]
+        after = scan_file("example.py", "header = 0\nvalue: object\n", {2})[0]
+        changed = scan_file("example.py", "value: list[object]\n", {1})[0]
 
-        self.assertEqual(parse_state(body, "current"), {"abc123"})
-        self.assertEqual(parse_state(body, "old"), set())
-        self.assertEqual(
-            parse_state("<!-- monori-object-annotation-state: not-json -->", "current"), set()
+        self.assertEqual(before.finding_id, after.finding_id)
+        self.assertNotEqual(before.finding_id, changed.finding_id)
+
+    def test_admin_approval_uses_stable_labels_and_removes_stale_labels(self) -> None:
+        github = FakeGitHub()
+        finding = Finding("example.py", 1, 7, "object", "finding-1")
+
+        approved, admin, changed = sync_approvals(
+            github, 1, [finding], ("ignore-object", "finding-1"), "admin"
         )
+
+        self.assertTrue(admin)
+        self.assertTrue(changed)
+        self.assertEqual(approved, {"finding-1"})
+        self.assertTrue(any(call[0] == "DELETE" and "stale" in call[1] for call in github.calls))
+        self.assertTrue(
+            any(call[0] == "POST" and call[1] == "/issues/1/labels" for call in github.calls)
+        )
+
+    def test_failure_label_tracks_active_findings(self) -> None:
+        github = FakeGitHub()
+
+        sync_failure_label(github, 1, True)
+        sync_failure_label(github, 1, False)
+
+        self.assertIn(("ensure_label", "monori-object-annotation-failed", None), github.calls)
+        self.assertTrue(any(call[0] == "DELETE" and "failed" in call[1] for call in github.calls))
 
     def test_approval_command_requires_exactly_one_id(self) -> None:
         self.assertEqual(parse_command("/ignore-object abc123"), ("ignore-object", "abc123"))
@@ -114,7 +164,7 @@ other: "list[object]"
     def test_comment_includes_finding_count_and_pr_links(self) -> None:
         finding = Finding("server/app/example.py", 7, 2, "object", "finding-1")
 
-        body = comment_body([finding], "sha", set(), "https://github.com/org/repo/pull/1")
+        body = comment_body([finding], set(), "https://github.com/org/repo/pull/1")
 
         self.assertIn("## ❌ Python <code>object</code> annotation check", body)
         self.assertIn("List of problems (1)", body)
@@ -122,9 +172,7 @@ other: "list[object]"
         self.assertIn("| `/ignore-all` | Approve all findings in the pull request. |", body)
         self.assertIn("https://github.com/org/repo/pull/1/changes#diff-", body)
 
-        approved_body = comment_body(
-            [finding], "sha", {"finding-1"}, "https://github.com/org/repo/pull/1"
-        )
+        approved_body = comment_body([finding], {"finding-1"}, "https://github.com/org/repo/pull/1")
 
         self.assertIn("## ✅ Python <code>object</code> annotation check", approved_body)
 
