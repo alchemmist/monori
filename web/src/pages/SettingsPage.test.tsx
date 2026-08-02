@@ -1,10 +1,25 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { ReactElement } from "react";
+import { MemoryRouter, useLocation } from "react-router-dom";
 import { fireEvent, renderUI, resetStore, screen, setPath, waitFor } from "../test/render.jsx";
 import { useStore } from "../store.js";
 import SettingsPage from "./SettingsPage.jsx";
 
 vi.mock("../api.js", () => ({ api: { exportXlsx: vi.fn() } }));
 import { api } from "../api.js";
+
+function CurrentPath() {
+    return <output data-testid="current-path">{useLocation().pathname}</output>;
+}
+
+function renderSettings(page: ReactElement) {
+    return renderUI(
+        <MemoryRouter initialEntries={["/settings"]}>
+            {page}
+            <CurrentPath />
+        </MemoryRouter>,
+    );
+}
 
 describe("SettingsPage", () => {
     afterEach(() => {
@@ -17,7 +32,7 @@ describe("SettingsPage", () => {
             user: { id: 1, email: "me@example.com", createdAt: "2026-01-02", isAdmin: true },
         });
         const toggle = vi.fn();
-        renderUI(<SettingsPage theme="light" onToggleTheme={toggle} onMigrate={vi.fn()} />);
+        renderSettings(<SettingsPage theme="light" onToggleTheme={toggle} onMigrate={vi.fn()} />);
         expect(screen.getByText("me@example.com")).toBeInTheDocument();
         expect(screen.getByText("Joined 02.01.2026")).toBeInTheDocument();
         expect(screen.getByText("Admin")).toBeInTheDocument();
@@ -29,20 +44,19 @@ describe("SettingsPage", () => {
     it("migrates and logs out through their controls", async () => {
         useStore.setState({ user: { id: 1, email: "me@example.com" } });
         const migrate = vi.fn();
-        const logout = vi.spyOn(useStore.getState(), "logout").mockImplementation(() => {});
-        const { user } = renderUI(
+        const { user } = renderSettings(
             <SettingsPage theme="light" onToggleTheme={vi.fn()} onMigrate={migrate} />,
         );
         await user.click(screen.getByRole("button", { name: /migrate from spreadsheet/i }));
         expect(migrate).toHaveBeenCalledOnce();
         await user.click(screen.getByRole("button", { name: /log out/i }));
-        expect(logout).toHaveBeenCalledOnce();
+        expect(screen.getByTestId("current-path")).toHaveTextContent("/logout");
     });
 
     it("flips the theme only when the other segment is picked", async () => {
         useStore.setState({ user: { id: 1, email: "me@example.com" } });
         const toggle = vi.fn();
-        const { user } = renderUI(
+        const { user } = renderSettings(
             <SettingsPage theme="light" onToggleTheme={toggle} onMigrate={vi.fn()} />,
         );
         expect(screen.getByRole("radio", { name: "Light" })).toBeChecked();
@@ -59,7 +73,7 @@ describe("SettingsPage", () => {
 
     it("shows no join date or admin badge for a plain account", () => {
         useStore.setState({ user: { id: 1, email: "plain@example.com" } });
-        renderUI(<SettingsPage theme="light" onToggleTheme={vi.fn()} onMigrate={vi.fn()} />);
+        renderSettings(<SettingsPage theme="light" onToggleTheme={vi.fn()} onMigrate={vi.fn()} />);
         expect(screen.getByText("plain@example.com")).toBeInTheDocument();
         expect(screen.queryByText("Admin")).not.toBeInTheDocument();
         expect(screen.queryByText(/^Joined/)).not.toBeInTheDocument();
@@ -73,7 +87,7 @@ describe("SettingsPage", () => {
         Object.assign(URL, { createObjectURL: create, revokeObjectURL: revoke });
         const blob = new Blob(["xlsx"]);
         vi.mocked(api.exportXlsx).mockResolvedValueOnce(blob);
-        const { user } = renderUI(
+        const { user } = renderSettings(
             <SettingsPage theme="light" onToggleTheme={vi.fn()} onMigrate={vi.fn()} />,
         );
         await user.click(screen.getByRole("button", { name: /export to excel/i }));
@@ -97,7 +111,7 @@ describe("SettingsPage", () => {
 
     it("hides identity on the public demo", () => {
         setPath("/demo");
-        renderUI(<SettingsPage theme="dark" onToggleTheme={vi.fn()} onMigrate={vi.fn()} />);
+        renderSettings(<SettingsPage theme="dark" onToggleTheme={vi.fn()} onMigrate={vi.fn()} />);
         expect(screen.queryByText("Account")).not.toBeInTheDocument();
         expect(screen.getByText("Appearance")).toBeInTheDocument();
     });

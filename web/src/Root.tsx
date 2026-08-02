@@ -34,6 +34,16 @@ function LoginRoute() {
     return <LoginPage />;
 }
 
+function LogoutRoute() {
+    const logout = useStore((state) => state.logout);
+
+    useLayoutEffect(() => {
+        logout();
+    }, [logout]);
+
+    return <Navigate to="/welcome" replace />;
+}
+
 // one theme for the whole site (landing, docs, auth, app), persisted under a
 // single localStorage key so it never diverges between routes
 function readTheme(): ThemeMode {
@@ -94,6 +104,7 @@ export default function Root() {
                         <Route path="/docs/:slug/diagram/:index" element={<DiagramPage />} />
                         <Route path="/" element={app} />
                         <Route path="/login" element={<LoginRoute />} />
+                        <Route path="/logout" element={<LogoutRoute />} />
                         <Route path="/demo" element={app} />
                         <Route path="/demo/:page" element={app} />
                         <Route path="/budget" element={app} />

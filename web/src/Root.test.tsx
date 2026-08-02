@@ -168,6 +168,22 @@ describe("Root", () => {
         expect(window.location.pathname).toBe("/budget");
     });
 
+    it("clears the session before redirecting logout to the welcome page", async () => {
+        localStorage.setItem("monori_token", "token");
+        useStore.setState({
+            authChecked: true,
+            user: { id: 1, email: "user@example.com" },
+        });
+        window.history.replaceState({}, "", "/logout");
+
+        renderUI(<Root />);
+
+        expect(await screen.findByText("Landing")).toBeInTheDocument();
+        expect(window.location.pathname).toBe("/welcome");
+        expect(useStore.getState().user).toBeNull();
+        expect(localStorage.getItem("monori_token")).toBeNull();
+    });
+
     it("toggles and persists theme from both route shells", async () => {
         window.history.replaceState({}, "", "/welcome");
         const { user } = renderUI(<Root />);
