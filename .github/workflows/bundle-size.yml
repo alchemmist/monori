@@ -51,7 +51,7 @@ jobs:
               run: python -m unittest scripts.test_bundle_size
 
             - name: Install web dependencies
-              run: npm ci --no-audit --no-fund
+              run: npm install --no-audit --no-fund
               working-directory: web
 
             - name: Build pull request
@@ -65,7 +65,7 @@ jobs:
               run: |
                   git fetch --no-tags --depth=1 origin "$BASE_SHA"
                   git worktree add --detach "$RUNNER_TEMP/base-repo" "$BASE_SHA"
-                  npm ci --no-audit --no-fund --prefix "$RUNNER_TEMP/base-repo/web"
+                  npm install --no-audit --no-fund --prefix "$RUNNER_TEMP/base-repo/web"
                   npm run build --prefix "$RUNNER_TEMP/base-repo/web"
                   python scripts/bundle_size.py measure \
                     --dist "$RUNNER_TEMP/base-repo/web/dist" \
