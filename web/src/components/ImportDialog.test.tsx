@@ -1,7 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { ReactNode } from "react";
 import { api } from "../api.js";
 import { renderUI, resetStore, screen, seed, waitFor } from "../test/render.jsx";
 import { useStore } from "../store.js";
+
+vi.mock("@mantine/core", async (importOriginal) => {
+    const actual = await importOriginal<typeof import("@mantine/core")>();
+    return {
+        ...actual,
+        Modal: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
+    };
+});
+
 import ImportDialog from "./ImportDialog.jsx";
 
 const clearStorage = () => {
