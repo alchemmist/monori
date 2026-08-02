@@ -2,7 +2,6 @@
 
 import argparse
 import json
-import os
 import re
 import statistics
 import sys
@@ -488,14 +487,6 @@ def render_report(
     if comment:
         lines.extend(["", "</details>"])
     else:
-        run_url = os.environ.get("GITHUB_RUN_URL")
-        if run_url:
-            lines.extend(
-                [
-                    "",
-                    f"Raw Lighthouse and navigation reports: [workflow artifacts]({run_url}).",
-                ]
-            )
         if config is not None:
             lines.extend(["", *render_standards(config)])
     return "\n".join(lines).rstrip() + "\n"

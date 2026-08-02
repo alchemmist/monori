@@ -198,6 +198,7 @@ class ReportTest(unittest.TestCase):
 
         self.assertTrue(body.startswith("## ✅ Frontend performance\n"))
         self.assertNotIn("No regressions", body.split("\n", 3)[0])
+        self.assertNotIn("Raw Lighthouse and navigation reports", body)
 
     def test_summary_uses_a_cross_for_critical_verdict(self) -> None:
         body = render_report([self.entry("critical", 200, 20)], "critical", comment=False)
