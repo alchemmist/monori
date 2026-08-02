@@ -9,11 +9,12 @@ import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
-from typing import cast
+from typing import Protocol, cast
 
-type JsonValue = None | bool | int | float | str | list[JsonValue] | dict[str, JsonValue]
+type JsonValue = bool | int | float | str | list[JsonValue] | dict[str, JsonValue] | None
 
 LABEL_PREFIX = "monori-suppress-"
+SUPPRESSION_KEYS = r"(?:ignorePatterns|per-file-ignores|extend-ignore|disable_all|disabledRules)"
 COMMAND_RE = re.compile(
     r"^/(ignore-all|ignore-file|ignore-suppression|remove-ignore)(?:\s+(\S+))?$"
 )
@@ -23,13 +24,13 @@ SOURCE_SUPPRESSION_RE = re.compile(
     r"|#\s*pragma:\s*no cover"
     r"|//\s*(?:eslint-disable|@ts-(?:ignore|nocheck)|stryker\s+disable)"
     r"|/\*\s*(?:eslint-disable|stylelint-disable|@ts-(?:ignore|nocheck)|stryker\s+disable)"
-    r"|/\*\s*stylelint-disable\s*\*/"
-    r"|\b(?:ignorePatterns|per-file-ignores|extend-ignore|disable_all|disabledRules)\b)"
+    rf"|\b{SUPPRESSION_KEYS}\b)"
 )
 CONFIG_SUPPRESSION_RE = re.compile(
-    r"(?:\b(?:ignorePatterns|per-file-ignores|extend-ignore|disable_all|disabledRules)\b"
+    rf"(?:\b{SUPPRESSION_KEYS}\b"
     r"|\b(?:noqa|ignore|ignores|exclude)\s*="
-    r"|:\s*[\"']?(?:off|0)[\"']?\s*[,}])"
+    r"|:\s*[\"']?(?:off|0)[\"']?(?:\s*[,}]|\s*$)"
+    r"|\bzizmor\s*:\s*ignore\b|\bactionlint\s*:\s*ignore\b)"
 )
 REQUEST_TIMEOUT = 30
 
@@ -139,6 +140,14 @@ class GitHub:
             import base64
 
             return base64.b64decode(content).decode("utf-8")
+        download_url = optional_string(data.get("download_url"))
+        if download_url:
+            request = urllib.request.Request(
+                download_url,
+                headers={"Authorization": f"Bearer {self.token}"},
+            )
+            with urllib.request.urlopen(request, timeout=REQUEST_TIMEOUT) as result:
+                return cast(str, result.read().decode("utf-8"))
         return None
 
     def ensure_label(self, name: str) -> None:
@@ -155,6 +164,16 @@ class GitHub:
             )
 
 
+class GitHubAPI(Protocol):
+    def request(self, method: str, path: str, payload: JsonValue = None) -> JsonValue: ...
+
+    def paged(self, path: str) -> list[dict[str, JsonValue]]: ...
+
+    def file_text(self, path: str, ref: str) -> str | None: ...
+
+    def ensure_label(self, name: str) -> None: ...
+
+
 def added_lines_from_patch(patch: str) -> set[int]:
     added: set[int] = set()
     new_line = 0
@@ -167,7 +186,9 @@ def added_lines_from_patch(patch: str) -> set[int]:
         elif line.startswith("+") and not line.startswith("+++"):
             added.add(new_line)
             new_line += 1
-        elif line.startswith("-") and not line.startswith("---"):
+        elif (
+            line.startswith("-") and not line.startswith("---")
+        ) or line == r"\ No newline at end of file":
             continue
         elif new_line:
             new_line += 1
@@ -181,10 +202,11 @@ def scan_file(path: str, source: str, added_lines: set[int]) -> list[Finding]:
     )
     pattern = CONFIG_SUPPRESSION_RE if is_config else SOURCE_SUPPRESSION_RE
     for line_number, line in enumerate(source.splitlines(), 1):
-        if line_number not in added_lines or not pattern.search(line):
+        if line_number not in added_lines:
             continue
         match = pattern.search(line)
-        assert match is not None
+        if match is None:
+            continue
         raw_id = f"{path}:{line_number}:{match.start()}:{line.strip()}"
         finding_id = hashlib.sha256(raw_id.encode()).hexdigest()[:12]
         findings.append(Finding(path, line_number, match.start(), line.strip(), finding_id))
@@ -204,7 +226,7 @@ def labels_for_sha(labels: list[dict[str, JsonValue]], sha: str) -> set[str]:
     }
 
 
-def changed_files(github: GitHub, pull: dict[str, JsonValue]) -> list[Finding]:
+def changed_files(github: GitHubAPI, pull: dict[str, JsonValue]) -> list[Finding]:
     number = json_integer(pull["number"], "pull request number")
     head = json_object(pull["head"], "head")
     head_sha = json_string(head["sha"], "head sha")
@@ -240,7 +262,7 @@ def changed_files(github: GitHub, pull: dict[str, JsonValue]) -> list[Finding]:
     return sorted(findings, key=lambda finding: (finding.path, finding.line, finding.column))
 
 
-def is_admin(github: GitHub, login: str) -> bool:
+def is_admin(github: GitHubAPI, login: str) -> bool:
     encoded = urllib.parse.quote(login, safe="")
     permission = github.request("GET", f"/collaborators/{encoded}/permission")
     return (
@@ -250,13 +272,13 @@ def is_admin(github: GitHub, login: str) -> bool:
 
 
 def sync_approvals(
-    github: GitHub,
+    github: GitHubAPI,
     number: int,
     sha: str,
     findings: list[Finding],
     command: tuple[str, str | None] | None,
     author: str | None,
-) -> set[str]:
+) -> tuple[set[str], bool]:
     labels = github.paged(f"/issues/{number}/labels")
     for label in labels:
         name = optional_string(label.get("name"))
@@ -267,8 +289,9 @@ def sync_approvals(
         ):
             github.request("DELETE", f"/issues/{number}/labels/{urllib.parse.quote(name, safe='')}")
     approved = labels_for_sha(labels, sha)
-    if not command or author is None or not is_admin(github, author):
-        return approved
+    admin = command is not None and author is not None and is_admin(github, author)
+    if not command or not admin:
+        return approved, admin
     finding_ids = {finding.finding_id for finding in findings}
     name, argument = command
     selected = (
@@ -280,7 +303,9 @@ def sync_approvals(
             if name == "ignore-file" and finding.path == argument
         }
     )
-    if name in {"ignore-suppression", "remove-ignore"} and argument in finding_ids:
+    if (name == "remove-ignore" and argument) or (
+        name == "ignore-suppression" and argument in finding_ids
+    ):
         selected = {argument}
     for finding_id in selected:
         label_name = finding_label(sha, finding_id)
@@ -294,7 +319,7 @@ def sync_approvals(
             github.ensure_label(label_name)
             github.request("POST", f"/issues/{number}/labels", {"labels": [label_name]})
             approved.add(finding_id)
-    return approved
+    return approved, admin
 
 
 def summary_body(findings: list[Finding], approved: set[str]) -> str:
@@ -315,9 +340,9 @@ def summary_body(findings: list[Finding], approved: set[str]) -> str:
     ]
     for finding in findings:
         marker = "✔" if finding.finding_id in approved else "✗"
+        text = finding.text.replace("`", "\\`")[:200]
         lines.append(
-            f"- {marker} `{finding.path}:{finding.line}` — `{finding.text}` · "
-            f"`{finding.finding_id}`"
+            f"- {marker} `{finding.path}:{finding.line}` — `{text}` · `{finding.finding_id}`"
         )
     lines.extend(
         [
@@ -343,26 +368,30 @@ def summary_body(findings: list[Finding], approved: set[str]) -> str:
 def append_summary(body: str) -> None:
     path = os.environ.get("GITHUB_STEP_SUMMARY")
     if path:
-        with Path(path).open("a") as summary:
+        with Path(path).open("a", encoding="utf-8") as summary:
             summary.write(body.rstrip() + "\n")
 
 
-def rerun_gate(github: GitHub, number: int) -> None:
-    runs = json_object(
-        github.request(
-            "GET",
-            "/actions/workflows/suppression-gate.yaml/runs?event=pull_request_target",
-        ),
-        "workflow runs",
-    )
+def rerun_gate(github: GitHubAPI, number: int) -> None:
     matching: list[dict[str, JsonValue]] = []
-    for run in json_array(runs.get("workflow_runs", []), "workflow runs"):
-        run_data = json_object(run, "workflow run")
-        if any(
-            json_object(pull, "workflow pull request").get("number") == number
-            for pull in json_array(run_data.get("pull_requests", []), "workflow pull requests")
-        ):
-            matching.append(run_data)
+    for page in range(1, 6):
+        runs = json_object(
+            github.request(
+                "GET",
+                f"/actions/workflows/suppression-gate.yaml/runs?event=pull_request_target&per_page=100&page={page}",
+            ),
+            "workflow runs",
+        )
+        page_runs = json_array(runs.get("workflow_runs", []), "workflow runs")
+        for run in page_runs:
+            run_data = json_object(run, "workflow run")
+            if any(
+                json_object(pull, "workflow pull request").get("number") == number
+                for pull in json_array(run_data.get("pull_requests", []), "workflow pull requests")
+            ):
+                matching.append(run_data)
+        if len(page_runs) < 100 or matching:
+            break
     if matching:
         latest = max(matching, key=lambda run: optional_string(run.get("created_at")) or "")
         run_id = json_integer(latest["id"], "workflow run id")
@@ -386,9 +415,9 @@ def main() -> int:
     command = parse_command((optional_string(comment.get("body")) or "").strip())
     author_data = json_object(comment.get("user", {}), "comment user")
     author = optional_string(author_data.get("login")) if command else None
-    approved = sync_approvals(github, number, sha, findings, command, author)
+    approved, admin = sync_approvals(github, number, sha, findings, command, author)
     append_summary(summary_body(findings, approved))
-    if command and author and is_admin(github, author):
+    if admin:
         rerun_gate(github, number)
     for finding in findings:
         if finding.finding_id not in approved:

@@ -1,11 +1,39 @@
 import unittest
 
 from scripts.suppression_gate import (
+    Finding,
+    JsonValue,
     added_lines_from_patch,
     parse_command,
     scan_file,
     summary_body,
+    sync_approvals,
 )
+
+
+class FakeGitHub:
+    def __init__(self, permission: str) -> None:
+        self.permission = permission
+        self.calls: list[tuple[str, str, JsonValue]] = []
+
+    def paged(self, path: str) -> list[dict[str, JsonValue]]:
+        self.calls.append(("paged", path, None))
+        return [
+            {"name": "monori-suppress-oldsha-oldfinding"},
+            {"name": "monori-suppress-currentsha-finding-1"},
+        ]
+
+    def request(self, method: str, path: str, payload: JsonValue = None) -> JsonValue:
+        self.calls.append((method, path, payload))
+        if path.startswith("/collaborators/"):
+            return {"permission": self.permission}
+        return None
+
+    def file_text(self, path: str, ref: str) -> str | None:
+        return None
+
+    def ensure_label(self, name: str) -> None:
+        self.calls.append(("ensure_label", name, None))
 
 
 class SuppressionGateTest(unittest.TestCase):
@@ -32,6 +60,38 @@ value = 2
         findings = scan_file("web/eslint.config.mjs", '"no-console": "off",\n', {1})
 
         self.assertEqual(len(findings), 1)
+
+    def test_admin_can_approve_and_stale_labels_expire(self) -> None:
+        github = FakeGitHub("admin")
+        finding = Finding("example.py", 1, 0, "value = 1 # noqa", "finding-1")
+
+        approved, admin = sync_approvals(
+            github,
+            334,
+            "currentsha",
+            [finding],
+            ("ignore-suppression", "finding-1"),
+            "admin",
+        )
+
+        self.assertTrue(admin)
+        self.assertEqual(approved, {"finding-1"})
+        self.assertTrue(any(call[0] == "DELETE" and "oldsha" in call[1] for call in github.calls))
+        self.assertTrue(
+            any(call[0] == "POST" and call[1] == "/issues/334/labels" for call in github.calls)
+        )
+
+    def test_non_admin_cannot_change_approval_state(self) -> None:
+        github = FakeGitHub("write")
+        finding = Finding("example.py", 1, 0, "value = 1 # noqa", "finding-1")
+
+        approved, admin = sync_approvals(
+            github, 334, "currentsha", [finding], ("ignore-all", None), "contributor"
+        )
+
+        self.assertFalse(admin)
+        self.assertEqual(approved, {"finding-1"})
+        self.assertFalse(any(call[0] == "POST" for call in github.calls))
 
     def test_reads_added_lines_from_patch(self) -> None:
         patch = """\
