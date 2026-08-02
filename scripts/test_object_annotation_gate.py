@@ -110,7 +110,7 @@ other: "list[object]"
         finding = Finding("example.py", 1, 7, "object", "finding-1")
 
         approved, admin, changed = sync_approvals(
-            github, 1, [finding], ("ignore", ["object-finding-1"]), "admin"
+            github, 1, {"body": ""}, [finding], ("ignore", ["object-finding-1"]), "admin"
         )
 
         self.assertTrue(admin)
@@ -118,7 +118,7 @@ other: "list[object]"
         self.assertEqual(approved, {"finding-1"})
         self.assertTrue(any(call[0] == "DELETE" and "stale" in call[1] for call in github.calls))
         self.assertTrue(
-            any(call[0] == "POST" and call[1] == "/issues/1/labels" for call in github.calls)
+            any(call[0] == "PATCH" and call[1] == "/pulls/1" for call in github.calls)
         )
 
     def test_failure_label_tracks_active_findings(self) -> None:

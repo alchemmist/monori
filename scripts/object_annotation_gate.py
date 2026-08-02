@@ -25,6 +25,7 @@ PATCH_HUNK_RE = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@")
 IGNORE_LABEL_PREFIX = "monori-object-annotation-ignore-"
 FINDING_ID_PREFIX = "object-"
 FAILURE_LABEL = "monori-object-annotation-failed"
+APPROVAL_STATE_RE = re.compile(r"<!-- monori-object-annotation-approvals: ([0-9a-f,]*) -->")
 REQUEST_TIMEOUT = 30
 
 
@@ -71,6 +72,13 @@ def parse_command(body: str) -> tuple[str, list[str] | None] | None:
         return None
     arguments = [item.strip() for item in argument.split(",")]
     return (name, arguments) if all(arguments) else None
+
+
+def command_targets_gate(command: tuple[str, list[str] | None]) -> bool:
+    name, arguments = command
+    return name in {"ignore-all", "ignore-file"} or any(
+        argument.startswith(FINDING_ID_PREFIX) for argument in (arguments or [])
+    )
 
 
 @dataclass(frozen=True)
@@ -390,41 +398,55 @@ def delete_bot_comment(github: GitHub, existing: dict[str, JsonValue] | None) ->
         github.request("DELETE", f"/issues/comments/{comment_id}")
 
 
-def finding_label(finding_id: str) -> str:
-    return f"{IGNORE_LABEL_PREFIX}{finding_id}"
+def approval_state(body: str) -> set[str]:
+    match = APPROVAL_STATE_RE.search(body)
+    return set(match.group(1).split(",")) if match and match.group(1) else set()
 
 
-def labels_for_findings(labels: list[dict[str, JsonValue]], finding_ids: set[str]) -> set[str]:
-    return {
-        name[len(IGNORE_LABEL_PREFIX) :]
-        for label in labels
-        if (name := optional_string(label.get("name")))
-        and name.startswith(IGNORE_LABEL_PREFIX)
-        and name[len(IGNORE_LABEL_PREFIX) :] in finding_ids
-    }
+def update_approval_state(
+    github: GitHubAPI, number: int, pull: dict[str, JsonValue], approved: set[str]
+) -> None:
+    body = optional_string(pull.get("body")) or ""
+    marker = f"<!-- monori-object-annotation-approvals: {','.join(sorted(approved))} -->"
+    updated_body = APPROVAL_STATE_RE.sub(marker, body)
+    if updated_body == body:
+        updated_body = f"{body.rstrip()}\n\n{marker}" if body.strip() else marker
+    if updated_body != body:
+        github.request("PATCH", f"/pulls/{number}", {"body": updated_body})
 
 
 def sync_approvals(
     github: GitHubAPI,
     number: int,
+    pull: dict[str, JsonValue],
     findings: list[Finding],
     command: tuple[str, list[str] | None] | None,
     author: str | None,
 ) -> tuple[set[str], bool, bool]:
     labels = github.paged(f"/issues/{number}/labels")
     finding_ids = {finding.finding_id for finding in findings}
+    body = optional_string(pull.get("body")) or ""
+    state_exists = APPROVAL_STATE_RE.search(body) is not None
+    legacy_approved = {
+        name[len(IGNORE_LABEL_PREFIX) :]
+        for label in labels
+        if (name := optional_string(label.get("name")))
+        and name.startswith(IGNORE_LABEL_PREFIX)
+        and name[len(IGNORE_LABEL_PREFIX) :] in finding_ids
+    }
     for label in labels:
         name = optional_string(label.get("name"))
         if (
             name
             and name.startswith(IGNORE_LABEL_PREFIX)
-            and name[len(IGNORE_LABEL_PREFIX) :] not in finding_ids
         ):
             github.request("DELETE", f"/issues/{number}/labels/{urllib.parse.quote(name, safe='')}")
-    approved = labels_for_findings(labels, finding_ids)
+    approved = (approval_state(body) if state_exists else legacy_approved) & finding_ids
     admin = command is not None and author is not None and is_admin(github, author)
     state_changed = False
     if not command or not admin:
+        if not state_exists:
+            update_approval_state(github, number, pull, approved)
         return approved, admin, state_changed
     name, arguments = command
     arguments = arguments or []
@@ -444,18 +466,12 @@ def sync_approvals(
             if argument.startswith(FINDING_ID_PREFIX)
         } & finding_ids
     for finding_id in selected:
-        label_name = finding_label(finding_id)
         if name == "remove-ignore":
-            github.request(
-                "DELETE",
-                f"/issues/{number}/labels/{urllib.parse.quote(label_name, safe='')}",
-            )
             approved.discard(finding_id)
         else:
-            github.ensure_label(label_name)
-            github.request("POST", f"/issues/{number}/labels", {"labels": [label_name]})
             approved.add(finding_id)
         state_changed = True
+    update_approval_state(github, number, pull, approved)
     return approved, admin, state_changed
 
 
@@ -567,9 +583,11 @@ def main() -> int:
 
     comment = json_object(event.get("comment", {}), "event comment")
     command = parse_command((optional_string(comment.get("body")) or "").strip())
+    if command and not command_targets_gate(command):
+        command = None
     author_data = json_object(comment.get("user", {}), "comment user")
     author = json_string(author_data["login"], "comment author") if command else None
-    approved, _, state_changed = sync_approvals(github, number, findings, command, author)
+    approved, _, state_changed = sync_approvals(github, number, pull, findings, command, author)
     active = [finding for finding in findings if finding.finding_id not in approved]
     sync_failure_label(github, number, bool(active))
 

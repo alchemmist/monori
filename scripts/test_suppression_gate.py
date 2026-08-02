@@ -80,6 +80,7 @@ value = 2
         approved, admin = sync_approvals(
             github,
             334,
+            {"body": ""},
             [finding],
             ("ignore", ["suppression-finding-1"]),
             "admin",
@@ -89,7 +90,7 @@ value = 2
         self.assertEqual(approved, {"finding-1"})
         self.assertTrue(any(call[0] == "DELETE" and "stale" in call[1] for call in github.calls))
         self.assertTrue(
-            any(call[0] == "POST" and call[1] == "/issues/334/labels" for call in github.calls)
+            any(call[0] == "PATCH" and call[1] == "/pulls/334" for call in github.calls)
         )
 
     def test_non_admin_cannot_change_approval_state(self) -> None:
@@ -97,7 +98,7 @@ value = 2
         finding = Finding("example.py", 1, 0, "value = 1 # noqa", "finding-1")
 
         approved, admin = sync_approvals(
-            github, 334, [finding], ("ignore-all", None), "contributor"
+            github, 334, {"body": ""}, [finding], ("ignore-all", None), "contributor"
         )
 
         self.assertFalse(admin)
