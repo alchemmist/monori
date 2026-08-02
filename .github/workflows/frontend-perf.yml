@@ -192,11 +192,11 @@ jobs:
               with:
                   script: |
                       const body = context.payload.comment.body.trim();
-                      const command = /^\/(ignore|ignore-all|remove-ignore)(?:\s+\S+)?$/;
-                      if (!command.test(body)) {
-                        core.info("Not a frontend performance command");
-                        return;
-                      }
+                      const match = body.match(/^\/(ignore|ignore-all|remove-ignore)(?:\s+(\S+))?$/);
+                      if (!match) return;
+                      const targetsPerformance = match[1] === "ignore-all"
+                        || (match[2] || "").split(",").some((id) => id.startsWith("frontend-"));
+                      if (!targetsPerformance) return;
                       const number = context.issue.number;
                       const permission = await github.rest.repos.getCollaboratorPermissionLevel({
                         owner: context.repo.owner,

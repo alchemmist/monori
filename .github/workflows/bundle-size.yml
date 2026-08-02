@@ -45,7 +45,7 @@ jobs:
               with:
                   node-version: 22
                   cache: npm
-                  cache-dependency-path: web/package-lock.json
+                  cache-dependency-path: web/package.json
 
             - name: Test bundle tools
               run: python -m unittest scripts.test_bundle_size
