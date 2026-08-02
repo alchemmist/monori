@@ -193,6 +193,12 @@ class ReportTest(unittest.TestCase):
         self.assertIn("Measurement failure", body)
         self.assertEqual(body.count("<details>"), 1)
 
+    def test_summary_uses_a_human_readable_success_label(self) -> None:
+        body = render_report([self.entry("none", 0, 0)], "none", comment=False)
+
+        self.assertIn("### ✅ No regressions", body)
+        self.assertNotIn("### ✅ None", body)
+
     def test_comparison_rejects_different_measurement_sets(self) -> None:
         extra = Measurement("extra", "Extra", "navigation", "Navigation", "ms", 100)
         with self.assertRaisesRegex(RuntimeError, "differ from main"):

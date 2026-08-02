@@ -16,7 +16,7 @@ type MeasurementKey = tuple[str, str]
 SCHEMA_VERSION = 1
 TIERS = {"none": 0, "info": 1, "significant": 2, "critical": 3, "error": 4}
 TIER_LABELS = {
-    "none": "None",
+    "none": "No regressions",
     "info": "Info",
     "significant": "Significant",
     "critical": "Critical",
