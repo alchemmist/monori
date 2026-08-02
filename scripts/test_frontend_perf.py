@@ -167,7 +167,7 @@ class ReportTest(unittest.TestCase):
     def test_summary_splits_navigation_and_pages_into_separate_tables(self) -> None:
         navigation = Entry(
             route_id="budget-to-dashboard",
-            route_label="Budget → Dashboard",
+            route_label="Budget · Year → Dashboard",
             metric_id="navigation",
             metric_label="Navigation",
             unit="ms",
@@ -187,7 +187,7 @@ class ReportTest(unittest.TestCase):
         self.assertIn("### Navigation scenarios", body)
         self.assertIn("### Budget", body)
         self.assertIn("| Navigation | main | PR | Δ | Tier |", body)
-        self.assertIn("| Budget → Dashboard | 100 ms | 100 ms | 0 ms (+0.0%) |", body)
+        self.assertIn("| Budget · Year → Dashboard | 100 ms | 100 ms | 0 ms (+0.0%) |", body)
         self.assertNotIn("| Navigation | 100 ms |", body)
         self.assertNotIn("Route / interaction", body)
         self.assertEqual(body.count("| Metric | main | PR | Δ | Tier |"), 1)

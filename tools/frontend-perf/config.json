@@ -20,14 +20,14 @@
         },
         {
             "id": "budget-to-transactions",
-            "label": "Budget → Transactions",
+            "label": "Budget · Year → Transactions",
             "startPath": "/budget",
             "action": "Transactions",
             "readySelector": ".tx-table"
         },
         {
             "id": "budget-to-dashboard",
-            "label": "Budget → Dashboard",
+            "label": "Budget · Year → Dashboard",
             "startPath": "/budget",
             "action": "Dashboard",
             "readySelector": ".dash-head"
