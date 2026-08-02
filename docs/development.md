@@ -58,12 +58,16 @@ one-to-one — there is no separate CI script to drift out of sync.
 Pull requests also run a CI-only Python annotation gate. It rejects new uses of
 `object` as an annotation, including nested types such as `list[object]`. Use a
 specific type, a protocol, or a suitable generic instead. If a boundary truly
-requires `object`, a repository administrator can approve that finding for the
-current commit by posting a new pull request comment containing only
+requires `object`, a repository administrator can approve that finding by
+posting a new pull request comment containing only
 one of `/ignore-object <finding-id>`, `/ignore-file path/to/file.py`, or
 `/ignore-all`. An administrator can remove one approval with
-`/remove-ignore <finding-id>`. The approval expires when the pull request receives
-a new commit.
+`/remove-ignore <finding-id>`. Approvals are tied to a stable finding fingerprint,
+so moving the same suppression to another line preserves the approval; changing
+the suppressed code or directive creates a new finding that requires review.
+The gate adds a failure label to PRs with active findings and removes it when
+all findings are fixed or approved. Finding IDs and file paths in the commands
+may be comma-separated.
 
 ### Dead-code analysis
 

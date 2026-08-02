@@ -11,22 +11,25 @@ import sys
 import urllib.error
 import urllib.parse
 import urllib.request
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Protocol, cast
 
 type JsonValue = None | bool | int | float | str | list[JsonValue] | dict[str, JsonValue]
 
 BOT_MARKER = "<!-- monori-object-annotation-gate -->"
 BOT_LOGIN = "github-actions[bot]"
-STATE_RE = re.compile(r"<!-- monori-object-annotation-state: (.+?) -->")
-COMMAND_RE = re.compile(r"^/(ignore-all|ignore-file|ignore-object|remove-ignore)(?:\s+(\S+))?$")
+COMMAND_RE = re.compile(r"^/(ignore|ignore-all|ignore-file|remove-ignore)(?:\s+(\S+))?$")
 PATCH_HUNK_RE = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@")
+IGNORE_LABEL_PREFIX = "monori-object-annotation-ignore-"
+FINDING_ID_PREFIX = "object-"
+FAILURE_LABEL = "monori-object-annotation-failed"
 REQUEST_TIMEOUT = 30
 
 
 def decode_json(data: bytes | str) -> JsonValue:
-    value: JsonValue = json.loads(data)
-    return value
+    return cast(JsonValue, json.loads(data))
 
 
 def json_object(value: JsonValue, context: str) -> dict[str, JsonValue]:
@@ -57,14 +60,17 @@ def optional_string(value: JsonValue) -> str | None:
     return value if isinstance(value, str) else None
 
 
-def parse_command(body: str) -> tuple[str, str | None] | None:
+def parse_command(body: str) -> tuple[str, list[str] | None] | None:
     match = COMMAND_RE.fullmatch(body)
     if not match:
         return None
     name, argument = match.groups()
     if name == "ignore-all":
         return (name, None) if argument is None else None
-    return (name, argument) if argument else None
+    if not argument:
+        return None
+    arguments = [item.strip() for item in argument.split(",")]
+    return (name, arguments) if all(arguments) else None
 
 
 @dataclass(frozen=True)
@@ -74,6 +80,10 @@ class Finding:
     column: int
     annotation: str
     finding_id: str
+
+
+def display_finding_id(finding_id: str) -> str:
+    return f"{FINDING_ID_PREFIX}{finding_id}"
 
 
 class GitHubAPIError(RuntimeError):
@@ -108,7 +118,7 @@ class GitHub:
                     return None
                 return decode_json(response.read())
         except urllib.error.HTTPError as error:
-            if method == "GET" and error.code == 404:
+            if method in {"GET", "DELETE"} and error.code == 404:
                 return None
             raise GitHubAPIError(method, path, error.code) from error
         except (TimeoutError, urllib.error.URLError) as error:
@@ -145,6 +155,25 @@ class GitHub:
         with urllib.request.urlopen(request, timeout=REQUEST_TIMEOUT) as result:
             text: str = result.read().decode("utf-8")
             return text
+
+    def ensure_label(self, name: str) -> None:
+        encoded = urllib.parse.quote(name, safe="")
+        if self.request("GET", f"/labels/{encoded}") is None:
+            self.request(
+                "POST",
+                "/labels",
+                {"name": name, "color": "b60205", "description": "Object annotation gate state"},
+            )
+
+
+class GitHubAPI(Protocol):
+    def request(self, method: str, path: str, payload: JsonValue = None) -> JsonValue: ...
+
+    def paged(self, path: str) -> list[dict[str, JsonValue]]: ...
+
+    def file_text(self, path: str, ref: str) -> str | None: ...
+
+    def ensure_label(self, name: str) -> None: ...
 
 
 def changed_lines(before: str | None, after: str) -> set[int]:
@@ -219,36 +248,22 @@ def scan_file(path: str, source: str, changed: set[int]) -> list[Finding]:
         )
         return []
 
-    findings: list[Finding] = []
+    candidates: list[tuple[int, int, str, str]] = []
     for annotation in annotation_nodes(tree):
         object_location = contains_object(annotation)
         if object_location is None or object_location[0] not in changed:
             continue
         object_line, object_column = object_location
         rendered = ast.unparse(annotation)
-        raw_id = f"{path}:{object_line}:{object_column}:{rendered}"
-        finding_id = hashlib.sha256(raw_id.encode()).hexdigest()[:12]
+        raw_id = f"{path}:{' '.join(rendered.split())}"
+        candidates.append((object_line, object_column, rendered, raw_id))
+    duplicates = Counter(raw_id for _, _, _, raw_id in candidates)
+    findings: list[Finding] = []
+    for object_line, object_column, rendered, raw_id in candidates:
+        disambiguator = f":{object_line}:{object_column}" if duplicates[raw_id] > 1 else ""
+        finding_id = hashlib.sha256(f"{raw_id}{disambiguator}".encode()).hexdigest()[:12]
         findings.append(Finding(path, object_line, object_column, rendered, finding_id))
     return sorted(findings, key=lambda finding: (finding.line, finding.column, finding.annotation))
-
-
-def parse_state(body: str, sha: str) -> set[str]:
-    match = STATE_RE.search(body)
-    if not match:
-        return set()
-    try:
-        state = json_object(decode_json(match.group(1)), "annotation state")
-    except json.JSONDecodeError:
-        return set()
-    if state.get("sha") != sha:
-        return set()
-    approved = json_array(state.get("approved", []), "approved findings")
-    return {json_string(item, "approved finding") for item in approved}
-
-
-def state_marker(sha: str, approved: set[str]) -> str:
-    state = json.dumps({"sha": sha, "approved": sorted(approved)}, separators=(",", ":"))
-    return f"{BOT_MARKER}\n<!-- monori-object-annotation-state: {state} -->"
 
 
 def finding_url(pr_url: str, finding: Finding) -> str:
@@ -256,11 +271,11 @@ def finding_url(pr_url: str, finding: Finding) -> str:
     return f"{pr_url}/changes#diff-{diff_hash}R{finding.line}"
 
 
-def comment_body(findings: list[Finding], sha: str, approved: set[str], pr_url: str) -> str:
+def comment_body(findings: list[Finding], approved: set[str], pr_url: str) -> str:
     active = [finding for finding in findings if finding.finding_id not in approved]
     status = "✅" if not active else "❌"
     lines = [
-        state_marker(sha, approved),
+        BOT_MARKER,
         f"## {status} Python <code>object</code> annotation check",
         "This check finds newly added Python annotations that use the broad `object` type.",
         "Please replace each finding with a specific type, or ask an administrator to approve it.",
@@ -274,7 +289,7 @@ def comment_body(findings: list[Finding], sha: str, approved: set[str], pr_url: 
         location = f"{finding.path}:{finding.line}"
         lines.append(
             f"- {marker} [`{location}`]({finding_url(pr_url, finding)}) "
-            f"— `{finding.annotation}` · `{finding.finding_id}`"
+            f"— `{finding.annotation}` · `{display_finding_id(finding.finding_id)}`"
         )
     lines.append("</details>")
     lines.extend(
@@ -287,10 +302,20 @@ def comment_body(findings: list[Finding], sha: str, approved: set[str], pr_url: 
             "",
             "| Command | Purpose |",
             "| --- | --- |",
-            "| `/ignore-object <finding-id>` | Approve one finding. |",
-            "| `/ignore-file path/to/file.py` | Approve all findings in a file. |",
+            (
+                "| `/ignore object-<finding-id>[,object-<finding-id>...]` | "
+                "Approve one or more object findings. |"
+            ),
+            (
+                "| `/ignore-file path/to/file.py[,path/to/file.py...]` | "
+                "Approve findings in one or more "
+                "files. |"
+            ),
             "| `/ignore-all` | Approve all findings in the pull request. |",
-            "| `/remove-ignore <finding-id>` | Remove an approval. |",
+            (
+                "| `/remove-ignore <object-or-suppression-id>[,<object-or-suppression-id>...]` | "
+                "Remove one or more approvals. |"
+            ),
             "",
             "</details>",
         ]
@@ -319,7 +344,7 @@ def summary_body(findings: list[Finding], approved: set[str], pr_url: str) -> st
         location = f"{finding.path}:{finding.line}"
         lines.append(
             f"- {marker} [`{location}`]({finding_url(pr_url, finding)}) "
-            f"— `{finding.annotation}` · `{finding.finding_id}`"
+            f"— `{finding.annotation}` · `{display_finding_id(finding.finding_id)}`"
         )
     lines.extend(["", "</details>"])
     return "\n".join(lines)
@@ -365,7 +390,87 @@ def delete_bot_comment(github: GitHub, existing: dict[str, JsonValue] | None) ->
         github.request("DELETE", f"/issues/comments/{comment_id}")
 
 
-def is_admin(github: GitHub, login: str) -> bool:
+def finding_label(finding_id: str) -> str:
+    return f"{IGNORE_LABEL_PREFIX}{finding_id}"
+
+
+def labels_for_findings(labels: list[dict[str, JsonValue]], finding_ids: set[str]) -> set[str]:
+    return {
+        name[len(IGNORE_LABEL_PREFIX) :]
+        for label in labels
+        if (name := optional_string(label.get("name")))
+        and name.startswith(IGNORE_LABEL_PREFIX)
+        and name[len(IGNORE_LABEL_PREFIX) :] in finding_ids
+    }
+
+
+def sync_approvals(
+    github: GitHubAPI,
+    number: int,
+    findings: list[Finding],
+    command: tuple[str, list[str] | None] | None,
+    author: str | None,
+) -> tuple[set[str], bool, bool]:
+    labels = github.paged(f"/issues/{number}/labels")
+    finding_ids = {finding.finding_id for finding in findings}
+    for label in labels:
+        name = optional_string(label.get("name"))
+        if (
+            name
+            and name.startswith(IGNORE_LABEL_PREFIX)
+            and name[len(IGNORE_LABEL_PREFIX) :] not in finding_ids
+        ):
+            github.request("DELETE", f"/issues/{number}/labels/{urllib.parse.quote(name, safe='')}")
+    approved = labels_for_findings(labels, finding_ids)
+    admin = command is not None and author is not None and is_admin(github, author)
+    state_changed = False
+    if not command or not admin:
+        return approved, admin, state_changed
+    name, arguments = command
+    arguments = arguments or []
+    selected = (
+        finding_ids
+        if name == "ignore-all"
+        else {
+            finding.finding_id
+            for finding in findings
+            if name == "ignore-file" and finding.path in arguments
+        }
+    )
+    if name in {"ignore", "remove-ignore"}:
+        selected = {
+            argument[len(FINDING_ID_PREFIX) :]
+            for argument in arguments
+            if argument.startswith(FINDING_ID_PREFIX)
+        } & finding_ids
+    for finding_id in selected:
+        label_name = finding_label(finding_id)
+        if name == "remove-ignore":
+            github.request(
+                "DELETE",
+                f"/issues/{number}/labels/{urllib.parse.quote(label_name, safe='')}",
+            )
+            approved.discard(finding_id)
+        else:
+            github.ensure_label(label_name)
+            github.request("POST", f"/issues/{number}/labels", {"labels": [label_name]})
+            approved.add(finding_id)
+        state_changed = True
+    return approved, admin, state_changed
+
+
+def sync_failure_label(github: GitHubAPI, number: int, has_active_findings: bool) -> None:
+    if has_active_findings:
+        github.ensure_label(FAILURE_LABEL)
+        github.request("POST", f"/issues/{number}/labels", {"labels": [FAILURE_LABEL]})
+    else:
+        github.request(
+            "DELETE",
+            f"/issues/{number}/labels/{urllib.parse.quote(FAILURE_LABEL, safe='')}",
+        )
+
+
+def is_admin(github: GitHubAPI, login: str) -> bool:
     encoded = urllib.parse.quote(login, safe="")
     try:
         permission = github.request("GET", f"/collaborators/{encoded}/permission")
@@ -458,48 +563,15 @@ def main() -> int:
         raise RuntimeError(f"Pull request #{number} was not found")
     pull = json_object(raw_pull, "pull request")
     findings = scan_pull_request(github, pull)
-    head = json_object(pull["head"], "pull request head")
-    sha = json_string(head["sha"], "head sha")
     existing = find_bot_comment(github, number)
-    approved = parse_state(optional_string(existing.get("body")) or "", sha) if existing else set()
 
     comment = json_object(event.get("comment", {}), "event comment")
     command = parse_command((optional_string(comment.get("body")) or "").strip())
-    state_changed = False
-    if command:
-        command_name, command_argument = command
-        author_data = json_object(comment["user"], "comment user")
-        author = json_string(author_data["login"], "comment author")
-        if not is_admin(github, author):
-            print(f"{author} is not a repository administrator; approval ignored")
-        else:
-            finding_ids = {finding.finding_id for finding in findings}
-            if command_name == "ignore-all" and command_argument is None:
-                approved.update(finding_ids)
-                state_changed = True
-            elif command_name == "ignore-file" and command_argument:
-                file_ids = {
-                    finding.finding_id for finding in findings if finding.path == command_argument
-                }
-                if file_ids:
-                    approved.update(file_ids)
-                    state_changed = True
-                else:
-                    print(
-                        f"{command_argument} is not an active Python file in {sha};"
-                        " approval ignored"
-                    )
-            elif command_name in {"ignore-object", "remove-ignore"} and command_argument:
-                if command_argument not in finding_ids:
-                    print(f"{command_argument} is not an active finding for {sha}; command ignored")
-                elif command_name == "ignore-object":
-                    approved.add(command_argument)
-                    state_changed = True
-                elif command_argument in approved:
-                    approved.remove(command_argument)
-                    state_changed = True
-            else:
-                print(f"Invalid {command_name} command; command ignored")
+    author_data = json_object(comment.get("user", {}), "comment user")
+    author = json_string(author_data["login"], "comment author") if command else None
+    approved, _, state_changed = sync_approvals(github, number, findings, command, author)
+    active = [finding for finding in findings if finding.finding_id not in approved]
+    sync_failure_label(github, number, bool(active))
 
     pr_url = json_string(pull["html_url"], "pull request URL")
     append_step_summary(summary_body(findings, approved, pr_url))
@@ -510,14 +582,13 @@ def main() -> int:
     update_bot_comment(
         github,
         number,
-        comment_body(findings, sha, approved, pr_url),
+        comment_body(findings, approved, pr_url),
         existing,
     )
-    unapproved = [finding for finding in findings if finding.finding_id not in approved]
     if state_changed:
         rerun_pull_request_gate(github, number)
-    if unapproved:
-        for finding in unapproved:
+    if active:
+        for finding in active:
             print(
                 f"::error file={finding.path},line={finding.line},"
                 f"col={finding.column + 1}::Use a specific type instead of object"
