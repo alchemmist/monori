@@ -30,9 +30,9 @@ jobs:
                     - lint
                     - type
                     - analyze
-                    - t-fast
-                    - t-medium
-                    - t-slow
+                    - t-front
+                    - t-back
+                    - t-e2e
                     - build
                     - coverage
                     - audit-deps
@@ -65,7 +65,7 @@ jobs:
               working-directory: server
 
             - name: Install Playwright browsers
-              if: matrix.target == 't-slow'
+              if: matrix.target == 't-e2e'
               run: npx playwright install --with-deps chromium
               working-directory: web
 
@@ -106,7 +106,7 @@ jobs:
               run: make ${{ matrix.target }}
 
             - name: Upload Playwright report
-              if: failure() && matrix.target == 't-slow'
+              if: failure() && matrix.target == 't-e2e'
               uses: actions/upload-artifact@v7
               with:
                   name: playwright-report

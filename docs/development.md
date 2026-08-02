@@ -51,7 +51,7 @@ one-to-one — there is no separate CI script to drift out of sync.
 | `make fmt-check`      | The same, check-only.                                                                                                                |
 | `make lint`           | Everything: web (Oxlint), CSS, HTML, server (Ruff), YAML, Markdown, generated docs, GitHub Actions, Dockerfile, shell, and spelling. |
 | `make schema-diagram` | Regenerates the ER diagram in [data-model.md](data-model.md) from `server/schema.sql`. `make lint` fails if it is stale.             |
-| `make typecheck`      | Strict mypy for all tracked Python plus TypeScript compiler and type-aware Oxlint checks.                                            |
+| `make type`           | Strict mypy for all tracked Python plus TypeScript compiler and type-aware Oxlint checks.                                            |
 | `make analyze`        | bandit + semgrep security scans, plus Vulture for Python and Knip for JavaScript/TypeScript dead code.                               |
 | `make audit`          | Dependency + secret scanning (`audit-deps`, `audit-deps-py`, `audit-secrets`).                                                       |
 
@@ -88,10 +88,10 @@ dependencies (a real temp SQLite database, the real FastAPI app), not mocks.
 
 | Target               | Does                                                                                                                                              |
 | ---------------      | ----------------------------------------------------------------------------------------------------------------------------------------------    |
-| `make test`          | The whole suite (`t-fast` + `t-medium` + `t-slow`).                                                                                               |
-| `make t-fast`        | Unit tests: Vitest + pytest `-m "not integration"`.                                                                                               |
-| `make t-medium`      | Integration tests: pytest `-m integration` against a real DB.                                                                                     |
-| `make t-slow`        | Placeholder for end-to-end (Playwright), not yet wired up.                                                                                        |
+| `make test`          | The whole suite (`t-front` + `t-back` + `t-e2e`).                                                                                                  |
+| `make t-front`       | Frontend unit tests via Vitest.                                                                                                                    |
+| `make t-back`        | Backend unit and integration tests via pytest.                                                                                                     |
+| `make t-e2e`         | End-to-end Playwright tests against the real backend and production frontend stack.                                                                |
 | `make coverage`      | Coverage as a tree (root → back/front → module → file), via `scripts/coverage-tree.sh`. Fails below **90% statements and lines** in `web/src`.    |
 | `make mutation`      | Full mutation sweep: Stryker on `web/src`, mutmut on `server/app`. Runs nightly at 05:00 Moscow time and on manual dispatch.                      |
 | `make mutation-diff` | Diff-scoped gate for changed frontend lines and backend functions. Needs full git history. Example: `BASE=origin/main`, threshold 90%.            |
@@ -99,7 +99,7 @@ dependencies (a real temp SQLite database, the real FastAPI app), not mocks.
 ### The pre-commit gate
 
 ```bash
-make check   # fmt-check + lint + typecheck + analyze + test
+make check   # fmt-check + lint + type + analyze + t-front + t-back
 ```
 
 ## Typing policy

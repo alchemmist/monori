@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# e2e runner behind `make t-slow`: brings up the isolated full stack
+# e2e runner behind `make t-e2e`: brings up the isolated full stack
 # (deploy/docker-compose.test.yml — real API + production web build + throwaway
 # database), waits until it answers, runs the Playwright suite against it and
 # always tears the stack down, even on failure. Local and CI run this same

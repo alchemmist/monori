@@ -14,7 +14,7 @@ WEBBIN := web/node_modules/.bin
         fmt fmt-check \
         lint lint-web lint-css lint-html lint-server lint-sql lint-yaml lint-md lint-docs lint-actions lint-docker lint-shell spell \
         type type-front type-back analyze analyze-python-dead-code analyze-javascript-dead-code audit audit-deps audit-deps-py audit-secrets \
-        test t-fast t-medium t-slow t-slow-ui coverage mutation mutation-diff m-front m-front-diff m-front-file m-back m-back-diff \
+        test t-front t-back t-e2e t-e2e-ui coverage mutation mutation-diff m-front m-front-diff m-front-file m-back m-back-diff \
         schema-diagram check
 
 install:
@@ -157,19 +157,18 @@ audit-deps-py:
 audit-secrets:
 	gitleaks detect --no-banner --redact
 
-test: t-fast t-medium t-slow
+test: t-front t-back t-e2e
 
-t-fast:
+t-front:
 	cd web && npx vitest run
-	cd server && uv run pytest -q -m "not integration"
 
-t-medium:
-	cd server && uv run pytest -q -m integration
+t-back:
+	cd server && uv run pytest -q
 
-t-slow:
+t-e2e:
 	COMPOSE="$(COMPOSE)" bash scripts/e2e.sh
 
-t-slow-ui:
+t-e2e-ui:
 	COMPOSE="$(COMPOSE)" bash scripts/e2e.sh --ui
 
 coverage:
@@ -255,4 +254,4 @@ mutation:
 	echo "── mutation gates: frontend exit=$$front, backend exit=$$back ──"; \
 	if [ $$front -ne 0 ] || [ $$back -ne 0 ]; then exit 1; fi
 
-check: fmt-check lint type analyze t-fast
+check: fmt-check lint type analyze t-front t-back
