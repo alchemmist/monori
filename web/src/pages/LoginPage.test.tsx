@@ -1,20 +1,48 @@
 import { describe, expect, it, vi, afterEach } from "vitest";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import LoginPage from "./LoginPage.jsx";
 import { fireEvent, renderUI, screen, waitFor, resetStore } from "../test/render.jsx";
 
 vi.mock("../api.js");
 
-function renderLogin() {
+type LoginEntry = string | { pathname: string; state?: unknown };
+
+function LocationProbe() {
+    const location = useLocation();
+    const navigate = useNavigate();
+    return (
+        <div>
+            <span data-testid="current-location">
+                {location.pathname}
+                {location.search}
+                {location.hash}
+            </span>
+            <button type="button" onClick={() => void navigate(-1)}>
+                Back in test history
+            </button>
+        </div>
+    );
+}
+
+function renderLogin(initialEntries: LoginEntry[] = ["/login"], initialIndex?: number) {
     return renderUI(
-        <MemoryRouter>
-            <LoginPage />
+        <MemoryRouter
+            initialEntries={initialEntries}
+            {...(initialIndex === undefined ? {} : { initialIndex })}
+        >
+            <Routes>
+                <Route path="/login" element={<LoginPage />} />
+                <Route path="*" element={<LocationProbe />} />
+            </Routes>
         </MemoryRouter>,
     );
 }
 
 describe("LoginPage", () => {
-    afterEach(() => resetStore());
+    afterEach(() => {
+        vi.restoreAllMocks();
+        resetStore();
+    });
     it("renders the login form with email and password fields", () => {
         renderLogin();
         expect(screen.getByPlaceholderText("Email")).toBeInTheDocument();
@@ -269,4 +297,67 @@ describe("LoginPage", () => {
             ["GitHub", "https://github.com/alchemmist/monori", "_blank"],
         ]);
     });
+
+    it("returns to the saved internal location and replaces the login history entry", async () => {
+        const { useStore } = await import("../store.js");
+        vi.spyOn(useStore.getState(), "login").mockResolvedValueOnce(undefined);
+        const { user } = renderLogin(
+            [
+                "/previous",
+                {
+                    pathname: "/login",
+                    state: {
+                        from: {
+                            pathname: "/transactions",
+                            search: "?query=rent",
+                            hash: "#recent",
+                        },
+                    },
+                },
+            ],
+            1,
+        );
+
+        await user.type(screen.getByPlaceholderText("Email"), "user@test.com");
+        await user.type(screen.getByPlaceholderText("Password"), "password");
+        await user.click(screen.getByRole("button", { name: "Sign in" }));
+
+        expect(await screen.findByTestId("current-location")).toHaveTextContent(
+            "/transactions?query=rent#recent",
+        );
+        await user.click(screen.getByRole("button", { name: "Back in test history" }));
+        expect(await screen.findByTestId("current-location")).toHaveTextContent("/previous");
+    });
+
+    it("returns to Budget when no saved location exists", async () => {
+        const { useStore } = await import("../store.js");
+        vi.spyOn(useStore.getState(), "login").mockResolvedValueOnce(undefined);
+        const { user } = renderLogin();
+
+        await user.type(screen.getByPlaceholderText("Email"), "user@test.com");
+        await user.type(screen.getByPlaceholderText("Password"), "password");
+        await user.click(screen.getByRole("button", { name: "Sign in" }));
+
+        expect(await screen.findByTestId("current-location")).toHaveTextContent("/budget");
+    });
+
+    it.each(["//attacker.example", "https://attacker.example"])(
+        "rejects an external saved destination: %s",
+        async (pathname) => {
+            const { useStore } = await import("../store.js");
+            vi.spyOn(useStore.getState(), "login").mockResolvedValueOnce(undefined);
+            const { user } = renderLogin([
+                {
+                    pathname: "/login",
+                    state: { from: { pathname, search: "", hash: "" } },
+                },
+            ]);
+
+            await user.type(screen.getByPlaceholderText("Email"), "user@test.com");
+            await user.type(screen.getByPlaceholderText("Password"), "password");
+            await user.click(screen.getByRole("button", { name: "Sign in" }));
+
+            expect(await screen.findByTestId("current-location")).toHaveTextContent("/budget");
+        },
+    );
 });

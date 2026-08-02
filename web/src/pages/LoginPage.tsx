@@ -13,11 +13,13 @@ const badField = (message: string | null): "email" | "password" | null => {
     return null;
 };
 
-function isLocation(value: unknown): value is Location {
+function isInternalLocation(value: unknown): value is Location {
     if (value == null || typeof value !== "object") return false;
     return (
         "pathname" in value &&
         typeof value.pathname === "string" &&
+        value.pathname.startsWith("/") &&
+        !value.pathname.startsWith("//") &&
         "search" in value &&
         typeof value.search === "string" &&
         "hash" in value &&
@@ -47,7 +49,7 @@ export default function LoginPage() {
             const state = location.state as unknown;
             const from =
                 state != null && typeof state === "object" && "from" in state ? state.from : null;
-            const destination = isLocation(from)
+            const destination = isInternalLocation(from)
                 ? `${from.pathname}${from.search}${from.hash}`
                 : "/budget";
             void navigate(destination, { replace: true });

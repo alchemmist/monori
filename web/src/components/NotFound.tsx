@@ -1,5 +1,5 @@
 import { ArrowLeft, House } from "@gravity-ui/icons";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import "./not-found.css";
 
 const SCRAPS = [
@@ -15,7 +15,12 @@ function isDemoPath(pathname: string) {
 
 export default function NotFound() {
     const { pathname } = useLocation();
+    const navigate = useNavigate();
     const budgetPath = isDemoPath(pathname) ? "/demo/budget" : "/budget";
+    const goBack = () => {
+        if (window.history.length > 1) window.history.back();
+        else void navigate(budgetPath, { replace: true });
+    };
 
     return (
         <main className="not-found" aria-labelledby="not-found-title">
@@ -94,11 +99,7 @@ export default function NotFound() {
                         <House width={15} height={15} />
                         Return to Budget
                     </Link>
-                    <button
-                        className="not-found__back"
-                        type="button"
-                        onClick={() => window.history.back()}
-                    >
+                    <button className="not-found__back" type="button" onClick={goBack}>
                         <ArrowLeft width={14} height={14} />
                         Go back
                     </button>

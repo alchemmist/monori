@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import Root from "./Root.jsx";
+import { useStore } from "./store.js";
 import { renderUI, screen, waitFor, resetStore } from "./test/render.jsx";
 interface ThemeProps {
     theme: "light" | "dark";
@@ -54,6 +55,10 @@ vi.mock("./components/MarkdownPage.jsx", () => ({
 
 vi.mock("./components/DiagramPage.jsx", () => ({
     default: () => <div>DiagramPage</div>,
+}));
+
+vi.mock("./pages/LoginPage.jsx", () => ({
+    default: () => <div>LoginPage</div>,
 }));
 
 describe("Root", () => {
@@ -114,6 +119,41 @@ describe("Root", () => {
             "href",
             "/budget",
         );
+    });
+
+    it("shows the login page after confirming there is no active session", async () => {
+        useStore.setState({ authChecked: true, user: null });
+        window.history.replaceState({}, "", "/login");
+
+        renderUI(<Root />);
+
+        expect(await screen.findByText("LoginPage")).toBeInTheDocument();
+    });
+
+    it("checks for an existing session before showing the login page", async () => {
+        const checkAuth = vi.fn(async () => {
+            useStore.setState({ authChecked: true, user: null });
+        });
+        useStore.setState({ authChecked: false, checkAuth });
+        window.history.replaceState({}, "", "/login");
+
+        renderUI(<Root />);
+
+        await waitFor(() => expect(checkAuth).toHaveBeenCalledOnce());
+        expect(await screen.findByText("LoginPage")).toBeInTheDocument();
+    });
+
+    it("redirects authenticated users away from the login page", async () => {
+        useStore.setState({
+            authChecked: true,
+            user: { id: 1, email: "user@example.com" },
+        });
+        window.history.replaceState({}, "", "/login");
+
+        renderUI(<Root />);
+
+        expect(await screen.findByText("App: light")).toBeInTheDocument();
+        expect(window.location.pathname).toBe("/budget");
     });
 
     it("toggles and persists theme from both route shells", async () => {
