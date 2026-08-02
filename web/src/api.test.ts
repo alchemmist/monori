@@ -63,7 +63,7 @@ const responseFor = (url: string, method?: string): unknown => {
     if (url === "/api/accounts/1/reconcile") return { delta: 0 };
     if (url === "/api/transfers/suggestions") return { rows: [], transactions: [] };
     if (url === "/api/transfers/detect") return { merged: [], suggested: 0 };
-    if (url === "/api/transfers" || url === "/api/transfers/link") return { transferId: "t" };
+    if (url === "/api/transfers" || url === "/api/transfers/link") return { transfer_id: "t" };
     if (url === "/api/import/preview") return { rows: [], errors: [] };
     if (url === "/api/import/duplicates") return { duplicates: [] };
     if (url === "/api/import/commit")
