@@ -25,8 +25,7 @@ def test_leading_keyword(sql: str, expected: str) -> None:
 
 
 def test_leading_keyword_is_linear_on_adversarial_comment_openings() -> None:
-    # the regex this replaced backtracked polynomially on repeated "/*" (CodeQL
-    # flagged it): the input reaches the endpoint straight from the request body
+
     started = time.perf_counter()
     assert leading_keyword("/* " * 40000) == ""
     assert time.perf_counter() - started < 1.0

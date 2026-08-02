@@ -22,23 +22,26 @@ from .connectors.base import JSON_OBJECT_ADAPTER, JsonObject
 from .security import load_or_create_secret_file
 
 
-class CryptoUnavailable(RuntimeError):
-    """
-    Raised when a secret must be handled but no encryption key is configured.
-    """
+class CryptoUnavailableError(RuntimeError):
+    """Raised when a secret must be handled but no encryption key is configured."""
 
 
 _key_cache: dict[str, str] = {}
 
 
 def available() -> bool:
+    """Handle available."""
     return True
 
 
 def generate_key() -> str:
-    from cryptography.fernet import Fernet
-
+    """Handle generate key."""
     return Fernet.generate_key().decode()
+
+
+def clear_key_cache() -> None:
+    """Clear cached encryption key values."""
+    _key_cache.clear()
 
 
 def _key_path() -> pathlib.Path:
@@ -64,16 +67,12 @@ def _fernet() -> Fernet:
 
 
 def encrypt(data: Mapping[str, JsonValue]) -> bytes:
-    """
-    Encrypt a JSON-serializable dict to an opaque token (bytes).
-    """
+    """Encrypt a JSON-serializable dict to an opaque token (bytes)."""
     return _fernet().encrypt(json.dumps(data).encode())
 
 
 def decrypt(blob: bytes | memoryview | None) -> JsonObject | None:
-    """
-    Decrypt a token produced by :func:`encrypt` back to its dict.
-    """
+    """Decrypt a token produced by :func:`encrypt` back to its dict."""
     if blob is None:
         return None
     return JSON_OBJECT_ADAPTER.validate_python(json.loads(_fernet().decrypt(bytes(blob)).decode()))

@@ -1,11 +1,14 @@
-import os
 import pathlib
 import sys
 import tempfile
+from dataclasses import dataclass
 
 import pytest
 from fastapi.testclient import TestClient
 from pydantic import TypeAdapter
+
+import app.db as dbmod
+from app.main import app as fastapi_app
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
@@ -21,29 +24,46 @@ from app.routers.imports import ImportPreviewResponse, ImportRowResponse
 from app.routers.transfers import TransferIdResponse
 
 STATEMENT = (
-    "05.01.2026 10:00:00\t05.01.2026\t*1\tOK\t-100,00\tRUB\t-100,00\tRUB\t\tSuper\t5411\tLenta\t0\t0\t-100,00\n"  # noqa: E501
-    "06.01.2026 11:00:00\t06.01.2026\t*1\tOK\t-200,00\tRUB\t-200,00\tRUB\t\tSuper\t5411\tOkey\t0\t0\t-200,00\n"  # noqa: E501
+    "05.01.2026 10:00:00\t05.01.2026\t*1\tOK\t-100,00\tRUB\t-100,00\tRUB\t\t"
+    "Super\t5411\tLenta\t0\t0\t-100,00\n"
+    "06.01.2026 11:00:00\t06.01.2026\t*1\tOK\t-200,00\tRUB\t-200,00\tRUB\t\t"
+    "Super\t5411\tOkey\t0\t0\t-200,00\n"
 )
 
 
+@dataclass(frozen=True)
+class AccountOptions:
+    account_type: str = "cash"
+    icon: str = "wallet"
+    color: str = "#5b6472"
+    currency: str = "RUB"
+    opening_balance: int = 0
+    bank_ref: str = ""
+    card_tails: list[str] | None = None
+
+
+@dataclass(frozen=True)
+class TransactionOptions:
+    account_id: int | None = None
+    category_id: int | None = None
+    description: str = ""
+    bank_category: str = ""
+    mcc: str = ""
+    comment: str = ""
+
+
 def _fresh_app_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
-    tmp = tempfile.mkdtemp()
-    db_path = os.path.join(tmp, "test.db")
-    monkeypatch.setenv("MONORI_DB", db_path)
-    import app.db as dbmod
+    db_path = pathlib.Path(tempfile.mkdtemp()) / "test.db"
+    monkeypatch.setenv("MONORI_DB", str(db_path))
 
-    monkeypatch.setattr(dbmod, "DB_PATH", db_path)
+    monkeypatch.setattr(dbmod, "DB_PATH", str(db_path))
     dbmod.connect(db_path).close()
-
-    from app.main import app as fastapi_app
 
     return TestClient(fastapi_app)
 
 
 def login_as(client: TestClient, email: str, password: str = "hunter2pw") -> dict[str, str]:
-    """
-    Register (if needed) and sign in; returns a bearer-token header dict.
-    """
+    """Register (if needed) and sign in; returns a bearer-token header dict."""
     client.post("/api/auth/register", json={"email": email, "password": password})
     r = client.post("/api/auth/token", data={"username": email, "password": password})
     assert r.status_code == 200, r.text
@@ -56,18 +76,17 @@ def _response_id(response: IdResponse) -> int:
     return response.id
 
 
-@pytest.fixture()
+@pytest.fixture
 def anon(monkeypatch: pytest.MonkeyPatch) -> TestClient:
-    """
-    A client with no credentials attached (the DB is fresh and empty).
-    """
+    """Handle A client with no credentials attached (the DB is fresh and empty)."""
     return _fresh_app_client(monkeypatch)
 
 
-@pytest.fixture()
+@pytest.fixture
 def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     """
-    A client signed in as the default test user; every request carries the
+    Handle A client signed in as the default test user; every request carries the.
+
     bearer token via default headers.
     """
     c = _fresh_app_client(monkeypatch)
@@ -77,8 +96,9 @@ def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
 
 class Api:
     """
-    Thin helper over the HTTP client for arranging test state. Bodies that
-    should always succeed assert 200; error paths are exercised with the raw
+    Thin helper over the HTTP client for arranging test state. Bodies that.
+
+    should always succeed assert 200; error paths are exercised with the raw.
     `client` in the tests themselves.
     """
 
@@ -94,7 +114,8 @@ class Api:
 
     def category(self, name: str, group_id: int, keywords: str = "") -> int:
         r = self.client.post(
-            "/api/categories", json={"name": name, "groupId": group_id, "keywords": keywords}
+            "/api/categories",
+            json={"name": name, "groupId": group_id, "keywords": keywords},
         )
         assert r.status_code == 200, r.text
         return _response_id(TypeAdapter(IdResponse).validate_python(r.json()))
@@ -102,24 +123,18 @@ class Api:
     def account(
         self,
         name: str,
-        *,
-        type: str = "cash",
-        icon: str = "wallet",
-        color: str = "#5b6472",
-        currency: str = "RUB",
-        openingBalance: int = 0,
-        bankRef: str = "",
-        cardTails: list[str] | None = None,
+        options: AccountOptions | None = None,
     ) -> int:
+        options = options or AccountOptions()
         body = {
             "name": name,
-            "type": type,
-            "icon": icon,
-            "color": color,
-            "currency": currency,
-            "openingBalance": openingBalance,
-            "bankRef": bankRef,
-            "cardTails": cardTails or [],
+            "type": options.account_type,
+            "icon": options.icon,
+            "color": options.color,
+            "currency": options.currency,
+            "openingBalance": options.opening_balance,
+            "bankRef": options.bank_ref,
+            "cardTails": options.card_tails or [],
         }
         r = self.client.post("/api/accounts", json=body)
         assert r.status_code == 200, r.text
@@ -132,25 +147,20 @@ class Api:
         self,
         date: str,
         amount: int,
-        *,
-        accountId: int | None = None,
-        categoryId: int | None = None,
-        description: str = "",
-        bankCategory: str = "",
-        mcc: str = "",
-        comment: str = "",
+        options: TransactionOptions | None = None,
     ) -> int:
+        options = options or TransactionOptions()
         r = self.client.post(
             "/api/transactions",
             json={
                 "date": date,
                 "amount": amount,
-                "accountId": accountId or self.default_account(),
-                "categoryId": categoryId,
-                "description": description,
-                "bankCategory": bankCategory,
-                "mcc": mcc,
-                "comment": comment,
+                "accountId": options.account_id or self.default_account(),
+                "categoryId": options.category_id,
+                "description": options.description,
+                "bankCategory": options.bank_category,
+                "mcc": options.mcc,
+                "comment": options.comment,
             },
         )
         assert r.status_code == 200, r.text
@@ -175,11 +185,11 @@ class Api:
             },
         )
         assert r.status_code == 200, r.text
-        return TypeAdapter(TransferIdResponse).validate_python(r.json()).transferId
+        return TypeAdapter(TransferIdResponse).validate_python(r.json()).transfer_id
 
     def snapshot(self) -> SnapshotResponse:
         return TypeAdapter(SnapshotResponse).validate_python(
-            self.client.get("/api/snapshot").json()
+            self.client.get("/api/snapshot").json(),
         )
 
     def cat(self, cat_id: int) -> CategoryResponse:
@@ -199,6 +209,6 @@ class Api:
         return TypeAdapter(ImportPreviewResponse).validate_python(response.json()).rows
 
 
-@pytest.fixture()
+@pytest.fixture
 def api(client: TestClient) -> Api:
     return Api(client)

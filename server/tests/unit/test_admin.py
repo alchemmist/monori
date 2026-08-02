@@ -1,4 +1,5 @@
 import pytest
+from fastapi import HTTPException
 
 from app.admin import admin_emails, admin_user, feature_from_path, user_id_from_auth_header
 from app.auth import AuthenticatedUser
@@ -16,16 +17,28 @@ def test_admin_emails_empty_when_unset(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_admin_user_rejects_non_admin() -> None:
-    from fastapi import HTTPException
-
+    user = AuthenticatedUser(
+        1,
+        "u@example.com",
+        "2026-01-01",
+        is_admin=False,
+        last_login=None,
+        default_account_id=None,
+    )
     with pytest.raises(HTTPException) as e:
-        user = AuthenticatedUser(1, "u@example.com", "2026-01-01", False, None, None)
         admin_user(user)
     assert e.value.status_code == 403
 
 
 def test_admin_user_passes_admin_through() -> None:
-    user = AuthenticatedUser(1, "u@example.com", "2026-01-01", True, None, None)
+    user = AuthenticatedUser(
+        1,
+        "u@example.com",
+        "2026-01-01",
+        is_admin=True,
+        last_login=None,
+        default_account_id=None,
+    )
     assert admin_user(user) is user
 
 
@@ -60,7 +73,8 @@ def test_user_id_from_auth_header_roundtrip(monkeypatch: pytest.MonkeyPatch) -> 
     [None, "", "Basic abc", "Bearer not-a-jwt"],
 )
 def test_user_id_from_auth_header_rejects_bad_headers(
-    monkeypatch: pytest.MonkeyPatch, header: str | None
+    monkeypatch: pytest.MonkeyPatch,
+    header: str | None,
 ) -> None:
     monkeypatch.setenv("MONORI_AUTH_SECRET", "unit-test-secret-0123456789abcdef")
     assert user_id_from_auth_header(header) is None

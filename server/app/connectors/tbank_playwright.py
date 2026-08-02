@@ -28,6 +28,7 @@ followed by ``playwright install chromium``.
 
 import base64
 import contextlib
+import importlib
 import io
 import os
 import pathlib
@@ -38,41 +39,105 @@ import tempfile
 import threading
 from collections.abc import Callable
 from contextlib import AbstractContextManager
+from dataclasses import dataclass
 from datetime import timedelta
 from types import TracebackType
-from typing import Literal, Protocol, Self, override
+from typing import ClassVar, Literal, Protocol, Self, override, runtime_checkable
 from urllib.parse import quote
 
-from ..importer import parse_statement
+from pydantic import JsonValue
+
+from app.importer import parse_statement
+
 from .base import (
     Connector,
     ConnectorError,
     ConnectorParam,
     JsonObject,
-    SmsRequired,
+    SmsRequiredError,
     SyncResult,
     SyncRow,
     register,
 )
 
 
-# playwright is an optional dependency (see _run); when it is installed we
-# catch its real timeout so only a missing element is skipped. Without the
-# extra the connector can't run a live sync at all, so this fallback type is
-# only ever hit by the flow unit tests, which drive a fake page. The factory
-# keeps mypy happy both with and without playwright installed: a plain
-# try/except rebinding trips no-redef or assignment errors depending on which
-# environment runs the check.
-def _timeout_error_type() -> type[Exception]:
+class _MissingPlaywrightTimeoutError(Exception): ...
+
+
+class _BrowserContext(Protocol):
+    @property
+    def pages(self) -> list["_RawPage"]: ...
+
+    def new_page(self) -> "_RawPage": ...
+
+    def close(self) -> None: ...
+
+
+class _Chromium(Protocol):
+    def launch_persistent_context(
+        self,
+        user_data_dir: str,
+        *,
+        headless: bool,
+        user_agent: str,
+        accept_downloads: bool,
+        args: list[str],
+    ) -> _BrowserContext: ...
+
+
+class _Playwright(Protocol):
+    @property
+    def chromium(self) -> _Chromium: ...
+
+
+class _PlaywrightContextManager(Protocol):
+    def __enter__(self) -> _Playwright: ...
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> bool | None: ...
+
+
+@dataclass(slots=True)
+class _LoginState:
+    quick_code: JsonValue | None
+    tried_quick: bool = False
+    otp_prompt: str = "enter the code sent by the bank"
+
+
+@runtime_checkable
+class _SyncPlaywright(Protocol):
+    def __call__(self) -> _PlaywrightContextManager: ...
+
+
+PlaywrightTimeoutError: type[Exception]
+
+try:
+    from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
+except ImportError:
+    PlaywrightTimeoutError = _MissingPlaywrightTimeoutError
+
+
+def _load_sync_playwright() -> _SyncPlaywright:
     try:
-        from playwright.sync_api import TimeoutError as timeout_error
+        module = importlib.import_module("playwright.sync_api")
+    except ImportError as error:
+        msg = (
+            "playwright is not installed; run "
+            "`pip install 'monori-server[connectors]'` and `playwright install chromium`"
+        )
+        raise ConnectorError(msg) from error
+    factory = getattr(module, "sync_playwright", None)
+    if not isinstance(factory, _SyncPlaywright):
+        msg = "playwright.sync_api does not provide sync_playwright"
+        raise ConnectorError(msg)
+    return factory
 
-        return timeout_error
-    except ImportError:
-        return Exception
 
-
-PlaywrightTimeoutError = _timeout_error_type()
+__all__ = ["PlaywrightTimeoutError", "TBankPlaywrightConnector"]
 
 
 class _Locator(Protocol):
@@ -180,7 +245,10 @@ class _RawPage(_LocatorPage, Protocol):
     def wait_for_timeout(self, timeout: float) -> None: ...
 
     def wait_for_load_state(
-        self, state: _LoadState = "load", *, timeout: float | timedelta | None = None
+        self,
+        state: _LoadState = "load",
+        *,
+        timeout: float | timedelta | None = None,
     ) -> None: ...
 
     def fill(self, selector: str, value: str, *, timeout: float | None = None) -> None: ...
@@ -203,6 +271,7 @@ class _RawPage(_LocatorPage, Protocol):
 
 class _DownloadExpectationAdapter(AbstractContextManager["_DownloadExpectationAdapter"]):
     def __init__(self, expectation: _DownloadEventContext) -> None:
+        """Initialize the instance."""
         self._expectation = expectation
         self._event: _DownloadEvent | None = None
 
@@ -223,12 +292,14 @@ class _DownloadExpectationAdapter(AbstractContextManager["_DownloadExpectationAd
     @property
     def value(self) -> _Download:
         if self._event is None:
-            raise RuntimeError("download expectation has not been entered")
+            msg = "download expectation has not been entered"
+            raise RuntimeError(msg)
         return self._event.value
 
 
 class _PageAdapter:
     def __init__(self, page: _RawPage) -> None:
+        """Initialize the instance."""
         self._page = page
 
     @property
@@ -277,11 +348,7 @@ class _PageAdapter:
 
 
 type _ToWorkerMessage = tuple[Literal["sms"], str] | tuple[Literal["cancel"], None]
-type _FromWorkerMessage = (
-    tuple[Literal["sms_required"], str]
-    | tuple[Literal["error"], str]
-    | tuple[Literal["result"], SyncResult]
-)
+type _FromWorkerMessage = tuple[str, SyncResult | str]
 
 USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -291,14 +358,16 @@ USER_AGENT = (
 
 @register
 class TBankPlaywrightConnector(Connector):
+    """Represent TBankPlaywrightConnector."""
+
     bank = "tbank"
     kind = "playwright"
     label = "T-Bank (browser sync)"
-    connection_params = [
+    connection_params: ClassVar[list[ConnectorParam]] = [
         ConnectorParam(name="phone", label="Phone", required=True),
         ConnectorParam(name="password", label="Password", secret=True, required=True),
     ]
-    account_params = [
+    account_params: ClassVar[list[ConnectorParam]] = [
         ConnectorParam(
             name="account",
             label="T-Bank account number",
@@ -306,48 +375,36 @@ class TBankPlaywrightConnector(Connector):
             help="The number from the account's operations link in the cabinet"
             " (/mybank/operations/?account=<id>); the sync pulls exactly that"
             " account.",
-        )
+        ),
     ]
 
     URL_LOGIN = "https://www.tbank.ru/auth/login/"
     URL_HOME = "https://www.tbank.ru/mybank/"
     URL_OPERATIONS = "https://www.tbank.ru/mybank/operations/"
 
-    # The login is the id.tbank.ru SSO: every step is a card at /auth/step with a
-    # heading in [automation-id='form-title'] and a single submit in
-    # [automation-id='button-submit']. There are three input screens — phone,
-    # password, and a 4-box pin widget reused for BOTH the SMS code and the
-    # quick-login code. We drive it as a state machine keyed on which field is on
-    # screen (and the title, to tell "set a code" from "enter a code"), rather
-    # than a fixed phone→password→sms sequence, so slow renders or a reordered
-    # step can't make us skip one.
     SEL_PHONE = "[automation-id='phone-input']"
-    SEL_PASSWORD = "[automation-id='password-input']"
-    # the SMS code screen is a single one-time-code input (auto-submits on the
-    # last digit) — distinct from the 4-box pin widget used to set/enter the
-    # quick-login code
+    SEL_PASSWORD = "[automation-id='password-input']"  # noqa: S105
+
     SEL_OTP = "[automation-id='otp-input']"
     SEL_PIN = "[automation-id='pin-code-input-0']"
     SEL_SUBMIT = "[automation-id='button-submit']"
     SEL_FORM_TITLE = "[automation-id='form-title']"
-    # the bank's "Доступ заблокирован" popup (anti-automation / rate limit); it
-    # sits over the phone screen, so the driver must detect it and stop rather
-    # than re-entering the phone until the step loop is exhausted
+
     SEL_ACCESS_DENIED = "[automation-id='access-denied-popup']"
     SEL_ACCESS_DENIED_TITLE = "[automation-id='access-denied-title']"
     SEL_ACCESS_DENIED_DESC = "[automation-id='access-denied-description']"
-    # the operations page: an export dropdown whose format items only render once
-    # the dropdown is opened. Each item carries a stable per-format hook — CSV is
-    # the one the statement parser consumes. data-qa-type is a space-joined token
-    # list ("click-area … menuItem menuItem-csv"), so match the token with ~=.
+
     SEL_EXPORT_TRIGGER = "[data-qa-type='molecule-export-dropdown-operations-button']"
     SEL_EXPORT_CSV = "[data-qa-type~='molecule-export-dropdown-operations-menuItem-csv']"
-    # fall back to a visible CSV label only if that hook ever changes; every
-    # candidate is a CSV variant (xlsx/ofx would break the CSV statement parser)
-    EXPORT_FORMAT_LABELS = ("Скачать в CSV", "Выгрузить в CSV", "CSV-файл", "CSV")
 
-    # form-title text that distinguishes the "create a quick-login code" screen
-    # from the "enter a code" screens (SMS or quick-login)
+    EXPORT_FORMAT_LABELS = (
+        "Download CSV",
+        "Скачать в CSV",
+        "Выгрузить в CSV",
+        "CSV-файл",
+        "CSV",
+    )
+
     TITLE_SET_CODE = "Придумайте код"
 
     LOGIN_STEPS = 24
@@ -360,111 +417,120 @@ class TBankPlaywrightConnector(Connector):
         session: JsonObject | None = None,
         account_ref: str | None = None,
     ) -> None:
+        """Initialize the instance."""
         super().__init__(credentials, session, account_ref)
         self._worker: threading.Thread | None = None
-        self._to_worker: queue.Queue[_ToWorkerMessage] = queue.Queue()
-        self._from_worker: queue.Queue[_FromWorkerMessage] = queue.Queue()
+        self.to_worker: queue.Queue[_ToWorkerMessage] = queue.Queue()
+        self.from_worker: queue.Queue[_FromWorkerMessage] = queue.Queue()
 
     @override
     def sync(self, since: str | None = None) -> SyncResult:
+        """Handle sync."""
         self._worker = threading.Thread(target=self._run, args=(since,), daemon=True)
         self._worker.start()
-        return self._await_worker()
+        return self.await_worker()
 
     @override
     def resume_sync(self, code: str) -> SyncResult:
+        """Handle resume sync."""
         if self._worker is None or not self._worker.is_alive():
-            raise ConnectorError("no login in progress")
-        self._to_worker.put(("sms", code))
-        return self._await_worker()
+            msg = "no login in progress"
+            raise ConnectorError(msg)
+        self.to_worker.put(("sms", code))
+        return self.await_worker()
 
     @override
     def close(self) -> None:
-        # unblock a worker parked on the OTP prompt; it aborts the login, which
-        # closes the browser as its `with` blocks unwind, then the thread exits
+        """Handle close."""
         if self._worker is not None and self._worker.is_alive():
-            self._to_worker.put(("cancel", None))
+            self.to_worker.put(("cancel", None))
             self._worker.join(timeout=10)
 
-    def _await_worker(self) -> SyncResult:
-        kind, payload = self._from_worker.get()
+    def await_worker(self) -> SyncResult:
+        """Wait for the next worker event and return or raise its result."""
+        kind, payload = self.from_worker.get()
         if kind == "sms_required":
-            raise SmsRequired(payload)
+            raise SmsRequiredError(payload)
         if kind == "error":
             raise ConnectorError(payload)
         if kind == "result":
             if isinstance(payload, SyncResult):
                 return payload
-            raise ConnectorError("worker returned an invalid result")
-        raise ConnectorError(f"unexpected worker message: {kind}")
+            msg = "worker returned an invalid result"
+            raise ConnectorError(msg)
+        if isinstance(payload, SyncResult):
+            msg = "unexpected worker payload"
+            raise ConnectorError(msg)
+        msg = f"unexpected worker message: {kind}"
+        raise ConnectorError(msg)
 
-    def _ask_sms(self, message: str = "enter the code sent by the bank") -> str:
-        """
-        Signal the router that an OTP is needed and block for the code.
-        """
-        self._from_worker.put(("sms_required", message))
-        kind, code = self._to_worker.get()
+    def ask_sms(self, message: str = "enter the code sent by the bank") -> str:
+        """Signal the router that an OTP is needed and block for the code."""
+        self.from_worker.put(("sms_required", message))
+        kind, code = self.to_worker.get()
         if kind != "sms":
-            raise ConnectorError("login aborted")
+            msg = "login aborted"
+            raise ConnectorError(msg)
         if code is None:
-            raise ConnectorError("login aborted")
+            msg = "login aborted"
+            raise ConnectorError(msg)
         return code
 
     def _run(self, since: str | None) -> None:
         try:
-            from playwright.sync_api import sync_playwright
-        except ImportError:
-            self._from_worker.put(
+            playwright = _load_sync_playwright()
+        except ConnectorError as error:
+            self.from_worker.put(
                 (
                     "error",
-                    "playwright is not installed; run "
-                    "`pip install 'monori-server[connectors]'` and `playwright install chromium`",
-                )
+                    str(error),
+                ),
             )
             return
-        # The reusable authenticated state (cookies, trusted-device identity)
-        # lives only inside the encrypted session blob. Restore it into an
-        # owner-only temp dir for the run, then re-archive and hand it back
-        # encrypted; the plaintext profile never outlives the sync.
-        # mkdtemp already creates the directory owner-only (0700)
+
         work_dir = tempfile.mkdtemp(prefix="tbank-profile-")
         try:
-            self._restore_profile(work_dir)
-            with sync_playwright() as p:
+            self.restore_profile(work_dir)
+            with playwright() as p:
                 args = ["--disk-cache-size=1"]
                 if getattr(os, "geteuid", lambda: -1)() == 0:
-                    # chromium refuses to sandbox as root (the in-container case)
                     args.append("--no-sandbox")
                 context = p.chromium.launch_persistent_context(
                     work_dir,
-                    headless=self._headless(),
+                    headless=self.headless(),
                     user_agent=USER_AGENT,
                     accept_downloads=True,
                     args=args,
                 )
                 raw_page = context.pages[0] if context.pages else context.new_page()
                 page: _Page = _PageAdapter(raw_page)
-                # the authenticated /mybank SPA can take well over Playwright's
-                # default 30s to reach domcontentloaded (seen as a goto timeout on
-                # retry) — give navigations and actions the full login budget
+
                 page.set_default_navigation_timeout(self.LOGIN_TIMEOUT_MS)
                 page.set_default_timeout(self.LOGIN_TIMEOUT_MS)
                 try:
-                    self._ensure_logged_in(page)
-                    rows = self._download_and_parse(page, since)
+                    self.ensure_logged_in(page)
+                    rows = self.download_and_parse(page, since)
                 except Exception:
                     self._save_debug(page)
                     raise
                 finally:
                     context.close()
-                session: JsonObject = {"profile": self._archive_profile(work_dir)}
-                self._from_worker.put(("result", SyncResult(rows, session=session)))
-        except Exception as e:  # noqa: BLE001 - surfaced to the user as a sync error
-            self._from_worker.put(("error", str(e)))
+                session: JsonObject = {"profile": self.archive_profile(work_dir)}
+                self.from_worker.put(("result", SyncResult(rows, session=session)))
+        except (
+            ConnectorError,
+            PlaywrightTimeoutError,
+            OSError,
+            RuntimeError,
+            ValueError,
+            tarfile.TarError,
+        ) as error:
+            self.from_worker.put(("error", str(error)))
         finally:
             shutil.rmtree(work_dir, ignore_errors=True)
 
-    def _restore_profile(self, work_dir: str) -> None:
+    def restore_profile(self, work_dir: str) -> None:
+        """Restore the saved browser profile into a working directory."""
         session = self.session
         blob = session.get("profile") if session else None
         if not isinstance(blob, str) or not blob:
@@ -474,17 +540,19 @@ class TBankPlaywrightConnector(Connector):
             with tarfile.open(fileobj=io.BytesIO(raw), mode="r:gz") as tar:
                 tar.extractall(work_dir, filter="data")
 
-    def _archive_profile(self, work_dir: str) -> str:
-        self._prune_cache(work_dir)
+    def archive_profile(self, work_dir: str) -> str:
+        """Archive a browser profile for storage in the connector session."""
+        self.prune_cache(work_dir)
         buf = io.BytesIO()
         with tarfile.open(fileobj=buf, mode="w:gz") as tar:
             tar.add(work_dir, arcname=".")
         return base64.b64encode(buf.getvalue()).decode()
 
     @staticmethod
-    def _prune_cache(work_dir: str) -> None:
+    def prune_cache(work_dir: str) -> None:
         """
-        Drop Chromium cache dirs before archiving so the encrypted session
+        Drop Chromium cache dirs before archiving so the encrypted session.
+
         blob stays small — only cookies/localStorage/IndexedDB matter.
         """
         junk = {
@@ -500,38 +568,39 @@ class TBankPlaywrightConnector(Connector):
         for root, dirs, _files in os.walk(work_dir):
             for d in list(dirs):
                 if d in junk:
-                    shutil.rmtree(os.path.join(root, d), ignore_errors=True)
+                    shutil.rmtree(pathlib.Path(root) / d, ignore_errors=True)
                     dirs.remove(d)
 
     @staticmethod
-    def _headless() -> bool:
+    def headless() -> bool:
+        """Return whether connector should run in headless mode."""
         return os.environ.get("MONORI_CONNECTOR_HEADED") not in ("1", "true")
 
     @staticmethod
-    def _debug_on() -> bool:
+    def debug_on() -> bool:
+        """Return whether connector debug mode is enabled."""
         return bool(os.environ.get("MONORI_CONNECTOR_DEBUG"))
 
     @classmethod
-    def _shot(cls, page: _Page, name: str) -> None:
-        if not cls._debug_on():
+    def shot(cls, page: _Page, name: str) -> None:
+        """Save a screenshot and page HTML when connector debugging is enabled."""
+        if not cls.debug_on():
             return
         out = pathlib.Path("data")
-        # a debugging aid must never mask the real error
+
         with contextlib.suppress(Exception):
             out.mkdir(parents=True, exist_ok=True)
             page.screenshot(path=str(out / f"tbank-{name}.png"), full_page=True)
             (out / f"tbank-{name}.html").write_text(
-                f"<!-- url: {page.url} -->\n{page.content()}", encoding="utf-8"
+                f"<!-- url: {page.url} -->\n{page.content()}",
+                encoding="utf-8",
             )
 
     def _save_debug(self, page: _Page) -> None:
-        self._shot(page, "error")
+        self.shot(page, "error")
 
-    def _is_logged_in(self, page: _Page) -> bool:
-        # the authenticated app lives under /mybank while the SSO login stays on
-        # id.tbank.ru/auth/step — but the bank can also re-park a code prompt over
-        # a /mybank URL, so require both: the /mybank path AND no login step still
-        # on screen, or the driver would stop early on a prompt it hasn't cleared
+    def is_logged_in(self, page: _Page) -> bool:
+        """Return True when current page appears to be a logged-in bank state."""
         if "/mybank" not in page.url:
             return False
         return not (
@@ -543,7 +612,8 @@ class TBankPlaywrightConnector(Connector):
 
     def _access_denied(self, page: _Page) -> str:
         """
-        The bank's "Доступ заблокирован" popup text when it's shown, else ''.
+        Handle The bank's "Доступ заблокирован" popup text when it's shown, else ''.
+
         It blocks the phone screen (anti-automation / rate limit), so the driver
         checks for it first and fails fast with the bank's own wording.
         """
@@ -560,20 +630,19 @@ class TBankPlaywrightConnector(Connector):
             return " — ".join(parts) or "access denied"
         return ""
 
-    def _form_title(self, page: _Page) -> str:
-        """
-        The heading of the current SSO step, or '' when none is shown.
-        """
+    def form_title(self, page: _Page) -> str:
+        """Handle The heading of the current SSO step, or '' when none is shown."""
         with contextlib.suppress(Exception):
             el = page.query_selector(self.SEL_FORM_TITLE)
             if el is not None:
                 return (el.inner_text() or "").strip()
         return ""
 
-    def _submit(self, page: _LocatorPage) -> None:
+    def submit(self, page: _LocatorPage) -> None:
         """
-        Click the step's submit button. Some layouts auto-advance as the last
-        digit lands, so a genuinely-absent button times out and is skipped — but
+        Click the step's submit button. Some layouts auto-advance as the last.
+
+        digit lands, so a genuinely-absent button times out and is skipped — but.
         a real click failure (detached node, intercepted click) still surfaces.
         """
         with contextlib.suppress(PlaywrightTimeoutError):
@@ -581,8 +650,9 @@ class TBankPlaywrightConnector(Connector):
 
     def _type_pin(self, page: _Page, digits: str) -> None:
         """
-        Type into the 4-box pin widget used for both the SMS code and the
-        quick-login code. Focusing the first box and typing lets it auto-advance
+        Type into the 4-box pin widget used for both the SMS code and the.
+
+        quick-login code. Focusing the first box and typing lets it auto-advance.
         across the boxes.
         """
         with contextlib.suppress(Exception):
@@ -592,19 +662,18 @@ class TBankPlaywrightConnector(Connector):
 
     def _dismiss_interstitials(self, page: _Page) -> None:
         for label in ("Не сейчас", "Пропустить", "Позже", "Закрыть"):
-            # the label just isn't on this screen
             with contextlib.suppress(Exception):
                 page.locator(f"text={label}").first.click(timeout=3_000)
                 page.wait_for_timeout(1_000)
 
-    def _ensure_logged_in(self, page: _Page) -> None:
+    def ensure_logged_in(self, page: _Page) -> None:
+        """Ensure authenticated session and navigate to home page when needed."""
         page.goto(self.URL_HOME, wait_until="domcontentloaded")
         page.wait_for_timeout(1_500)
-        self._shot(page, "01-open")
-        if self._is_logged_in(page):
+        self.shot(page, "01-open")
+        if self.is_logged_in(page):
             return
-        # a cold visit to /mybank bounces to id.tbank.ru; make sure we're on the
-        # SSO before driving it (goto is a no-op if we're already there)
+
         on_sso = (
             page.query_selector(self.SEL_PHONE)
             or page.query_selector(self.SEL_OTP)
@@ -613,14 +682,13 @@ class TBankPlaywrightConnector(Connector):
         if not on_sso:
             page.goto(self.URL_LOGIN, wait_until="domcontentloaded")
             page.wait_for_timeout(1_500)
-        self._shot(page, "02-login")
+        self.shot(page, "02-login")
         self._drive_sso_login(page)
-        self._shot(page, "09-logged-in")
-        if not self._is_logged_in(page):
-            # name the screen we're stuck on so the failure points at the real
-            # step (a wrong selector, an unhandled prompt) instead of being generic
-            where = self._form_title(page) or page.url or "unknown screen"
-            raise ConnectorError(f"login did not reach the bank home page (stuck on: {where})")
+        self.shot(page, "09-logged-in")
+        if not self.is_logged_in(page):
+            where = self.form_title(page) or page.url or "unknown screen"
+            msg = f"login did not reach the bank home page (stuck on: {where})"
+            raise ConnectorError(msg)
 
     def _drive_sso_login(self, page: _Page) -> None:
         """
@@ -630,105 +698,90 @@ class TBankPlaywrightConnector(Connector):
         the pin widget (set-a-code / enter-a-code) — so a slow render or a
         reordered step just means another pass, never a skipped field.
         """
-        code = self.credentials.get("code")
-        tried_quick = False
-        otp_prompt = "enter the code sent by the bank"
+        state = _LoginState(self.credentials.get("code"))
         for step in range(self.LOGIN_STEPS):
-            if self._is_logged_in(page):
+            if self.is_logged_in(page):
                 return
-            blocked = self._access_denied(page)
-            if blocked:
-                raise ConnectorError(f"the bank blocked the login: {blocked}")
-            if page.query_selector(self.SEL_PHONE):
-                phone = self.credentials.get("phone")
-                if not isinstance(phone, str):
-                    raise ConnectorError("missing phone")
-                page.fill(self.SEL_PHONE, phone)
-                self._submit(page)
-            elif page.query_selector(self.SEL_PASSWORD):
-                password = self.credentials.get("password")
-                if not isinstance(password, str):
-                    raise ConnectorError("missing password")
-                page.fill(self.SEL_PASSWORD, password)
-                self._submit(page)
-            elif page.query_selector(self.SEL_OTP):
-                # the SMS one-time code: surface the input to the user right away,
-                # then type it into the single otp field (it auto-submits on the
-                # last digit). If the same screen is still up next pass the code was
-                # rejected, so we ask again with the rejection message.
-                otp = self._ask_sms(otp_prompt)
-                otp_prompt = "the bank rejected the code — check it and try again"
-                page.fill(self.SEL_OTP, otp)
-                self._submit(page)
-            elif page.query_selector(self.SEL_PIN):
-                title = self._form_title(page)
-                if self.TITLE_SET_CODE in title:
-                    # the bank wants us to create a quick-login code — set the one
-                    # the server generated (and stored) so future syncs skip SMS
-                    if not isinstance(code, str):
-                        raise ConnectorError("missing quick-login code")
-                    self._type_pin(page, code)
-                    self._submit(page)
-                elif code and not tried_quick:
-                    # trusted device, expired session: quick-login with the stored
-                    # code. Try it once — if it's stale the screen persists and we
-                    # fall through (to the phone / SMS path) instead of looping.
-                    if not isinstance(code, str):
-                        raise ConnectorError("missing quick-login code")
-                    self._type_pin(page, code)
-                    self._submit(page)
-                    tried_quick = True
-                else:
-                    self._dismiss_interstitials(page)
-                    page.goto(self.URL_HOME, wait_until="domcontentloaded")
-            else:
-                # an interstitial (promo, "not now") between steps — clear it and
-                # nudge back toward home
-                self._dismiss_interstitials(page)
-                page.goto(self.URL_HOME, wait_until="domcontentloaded")
+            self._drive_sso_step(page, state)
             page.wait_for_timeout(self.STEP_PAUSE_MS)
-            self._shot(page, f"step-{step:02d}")
+            self.shot(page, f"step-{step:02d}")
 
-    def _operations_url(self) -> str:
-        # scope the export to a single T-Bank account when the connection names
-        # one (the cabinet's own per-account link is
-        # /mybank/operations/?account=<id>, e.g. the Black debit 5858870594);
-        # without it the page exports the default all-accounts feed. Each monori
-        # account maps to its own connection, so a savings account is just
-        # another connection with its own id.
+    def _drive_sso_step(self, page: _Page, state: _LoginState) -> None:
+        self._raise_if_access_denied(page)
+        if page.query_selector(self.SEL_PHONE):
+            self._fill_credential(page, self.SEL_PHONE, "phone")
+        elif page.query_selector(self.SEL_PASSWORD):
+            self._fill_credential(page, self.SEL_PASSWORD, "password")
+        elif page.query_selector(self.SEL_OTP):
+            self._submit_otp(page, state)
+        elif page.query_selector(self.SEL_PIN):
+            self._submit_pin(page, state)
+        else:
+            self._return_to_home(page)
+
+    def _raise_if_access_denied(self, page: _Page) -> None:
+        if blocked := self._access_denied(page):
+            msg = f"the bank blocked the login: {blocked}"
+            raise ConnectorError(msg)
+
+    def _fill_credential(self, page: _Page, selector: str, name: str) -> None:
+        value = self.credentials.get(name)
+        if not isinstance(value, str):
+            msg = f"missing {name}"
+            raise ConnectorError(msg)
+        page.fill(selector, value)
+        self.submit(page)
+
+    def _submit_otp(self, page: _Page, state: _LoginState) -> None:
+        page.fill(self.SEL_OTP, self.ask_sms(state.otp_prompt))
+        state.otp_prompt = "the bank rejected the code — check it and try again"
+        self.submit(page)
+
+    def _submit_pin(self, page: _Page, state: _LoginState) -> None:
+        if self.TITLE_SET_CODE in self.form_title(page):
+            self._enter_quick_code(page, state)
+        elif state.quick_code and not state.tried_quick:
+            self._enter_quick_code(page, state)
+            state.tried_quick = True
+        else:
+            self._return_to_home(page)
+
+    def _enter_quick_code(self, page: _Page, state: _LoginState) -> None:
+        if not isinstance(state.quick_code, str):
+            msg = "missing quick-login code"
+            raise ConnectorError(msg)
+        self._type_pin(page, state.quick_code)
+        self.submit(page)
+
+    def _return_to_home(self, page: _Page) -> None:
+        self._dismiss_interstitials(page)
+        page.goto(self.URL_HOME, wait_until="domcontentloaded")
+
+    def operations_url(self) -> str:
+        """Return operations URL optionally scoped to configured bank account."""
         account = self.account_ref or (self.credentials or {}).get("account")
-        # a whitespace-only id is not a real account — strip before deciding, so
-        # stored creds from a non-web client can't scope us to ...?account=%20
+
         account = str(account).strip() if account is not None else ""
         if account:
             return f"{self.URL_OPERATIONS}?account={quote(account, safe='')}"
         return self.URL_OPERATIONS
 
-    def _download_and_parse(self, page: _Page, since: str | None) -> list[SyncRow]:
-        page.goto(self._operations_url(), wait_until="domcontentloaded")
-        # the ?account= scope in the URL above is applied by the SPA with an
-        # async XHR *after* domcontentloaded; opening the export before that
-        # settles hands back the default all-accounts feed that rendered first,
-        # so a per-account sync would pull every account. Wait for the network
-        # to go quiet so the export reflects the single-account view, keeping a
-        # fixed floor in case the chatty SPA never fully idles.
+    def download_and_parse(self, page: _Page, _since: str | None) -> list[SyncRow]:
+        """Download a CSV statement from operations and parse it to sync rows."""
+        page.goto(self.operations_url(), wait_until="domcontentloaded")
+
         with contextlib.suppress(Exception):
             page.wait_for_load_state("networkidle", timeout=self.LOGIN_TIMEOUT_MS)
         page.wait_for_timeout(2_500)
-        self._shot(page, "08-operations")
+        self.shot(page, "08-operations")
 
-        # The feed's default period (the current month) is what's exported. The
-        # "Год" period tab lives in a collapsed analytics widget that stays
-        # visibility:hidden here and doesn't drive the export, so there's nothing
-        # to click — overlapping syncs are deduped by row hash downstream, so a
-        # regular sync misses nothing.
-        # open the export dropdown, then pick the CSV format inside it
         page.locator(self.SEL_EXPORT_TRIGGER).first.click(timeout=self.LOGIN_TIMEOUT_MS)
         page.wait_for_timeout(1_000)
-        self._shot(page, "09-export-menu")
+        self.shot(page, "09-export-menu")
         with page.expect_download(timeout=self.LOGIN_TIMEOUT_MS) as dl:
-            if not self._click_export_format(page):
-                raise ConnectorError("could not find a CSV export option in the dropdown")
+            if not self.click_export_format(page):
+                msg = "could not find a CSV export option in the dropdown"
+                raise ConnectorError(msg)
         download = dl.value
 
         with tempfile.NamedTemporaryFile(suffix=".csv") as tmp:
@@ -737,15 +790,12 @@ class TBankPlaywrightConnector(Connector):
         rows, _ = parse_statement(text)
         return [row.to_sync_dict() for row in rows]
 
-    def _click_export_format(self, page: _Page) -> bool:
-        # prefer the stable per-format hook (reliable even when a "CSV" substring
-        # shows up elsewhere on the page); fall back to a visible label only if
-        # the markup drifts. Both target CSV — what the statement parser reads.
+    def click_export_format(self, page: _Page) -> bool:
+        """Try to choose CSV export in dropdown and report whether it was found."""
         with contextlib.suppress(Exception):
             page.locator(self.SEL_EXPORT_CSV).first.click(timeout=5_000)
             return True
         for label in self.EXPORT_FORMAT_LABELS:
-            # try the next candidate label if this one isn't in the dropdown
             with contextlib.suppress(Exception):
                 page.get_by_text(label, exact=False).first.click(timeout=2_500)
                 return True

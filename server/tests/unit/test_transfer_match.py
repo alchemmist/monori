@@ -1,3 +1,5 @@
+from dataclasses import replace
+
 from app.transfer_match import (
     TransferCandidate,
     TransferMatchRow,
@@ -14,7 +16,6 @@ def row(
     amount: int,
     account: int,
     description: str = "",
-    transfer_id: str | None = None,
 ) -> TransferMatchRow:
     return TransferMatchRow(
         id=tx_id,
@@ -22,32 +23,30 @@ def row(
         amount=amount,
         account_id=account,
         description=description,
-        transfer_id=transfer_id,
+        transfer_id=None,
     )
 
 
 def test_day_number_counts_calendar_days() -> None:
     assert day_number("2026-03-02T23:59:00") - day_number("2026-03-01T00:01:00") == 1
     assert day_number("2026-01-01") - day_number("2025-12-31") == 1
-    # a leap day must not shift the count
+
     assert day_number("2024-03-01") - day_number("2024-02-28") == 2
 
 
 def test_day_number_is_days_since_the_unix_epoch() -> None:
-    # absolute values, not just gaps: the epoch offset, the era multiplier and
-    # the year-of-era arithmetic all cancel out of a difference and only show
-    # here
+
     assert day_number("1970-01-01") == 0
     assert day_number("1970-01-02") == 1
     assert day_number("1969-12-31") == -1
     assert day_number("2000-01-01") == 10957
-    # a year that drives the era term negative (0000-01-01 shifts to y = -1)
+
     assert day_number("0000-01-01") == -719528
 
 
 def test_pairs_opposite_amounts_on_different_accounts() -> None:
     pairs = find_pairs([row(1, 10, -5000, 1), row(2, 10, 5000, 2)])
-    assert pairs == [TransferCandidate(1, 2, 5000, 0, False)]
+    assert pairs == [TransferCandidate(1, 2, 5000, 0, hint=False)]
 
 
 def test_same_account_is_not_a_transfer() -> None:
@@ -55,7 +54,7 @@ def test_same_account_is_not_a_transfer() -> None:
 
 
 def test_unequal_amounts_never_match() -> None:
-    # a fee makes the legs differ; those are left for the user to link by hand
+
     assert find_pairs([row(1, 10, -5000, 1), row(2, 10, 4950, 2)]) == []
 
 
@@ -66,7 +65,8 @@ def test_pairs_outside_the_window_are_dropped() -> None:
 
 
 def test_rows_already_in_a_transfer_are_skipped() -> None:
-    rows = [row(1, 10, -5000, 1, transfer_id="abc"), row(2, 10, 5000, 2)]
+    linked_row = replace(row(1, 10, -5000, 1), transfer_id="abc")
+    rows = [linked_row, row(2, 10, 5000, 2)]
     assert find_pairs(rows) == []
 
 
@@ -76,20 +76,20 @@ def test_rejected_pairs_are_not_offered_again() -> None:
 
 
 def test_each_transaction_is_used_at_most_once() -> None:
-    # one outflow, two possible inflows: the closer one wins and the other is left
+
     rows = [row(1, 10, -5000, 1), row(2, 10, 5000, 2), row(3, 13, 5000, 3)]
     pairs = find_pairs(rows)
-    assert [(p.outTxId, p.inTxId) for p in pairs] == [(1, 2)]
+    assert [(p.out_tx_id, p.in_tx_id) for p in pairs] == [(1, 2)]
 
 
 def test_a_transfer_sounding_description_breaks_the_tie() -> None:
     rows = [
         row(1, 10, -5000, 1),
         row(2, 10, 5000, 2),
-        row(3, 10, 5000, 3, description="Перевод между своими счетами"),
+        row(3, 10, 5000, 3, description="Transfer between own accounts"),
     ]
     pairs = find_pairs(rows)
-    assert [(p.outTxId, p.inTxId) for p in pairs] == [(1, 3)]
+    assert [(p.out_tx_id, p.in_tx_id) for p in pairs] == [(1, 3)]
     assert pairs[0].hint is True
 
 
@@ -99,16 +99,16 @@ def test_matching_does_not_depend_on_row_order() -> None:
 
 
 def test_has_hint_is_case_insensitive() -> None:
-    assert has_hint("ПЕРЕВОД СБП")
+    assert has_hint("SBP TRANSFER")
     assert has_hint("Transfer to savings")
     assert not has_hint("Lenta groceries")
 
 
 def test_split_confident_separates_by_distance() -> None:
     pairs = [
-        TransferCandidate(1, 2, 1, 0, False),
-        TransferCandidate(3, 4, 1, 1, False),
-        TransferCandidate(5, 6, 1, 4, False),
+        TransferCandidate(1, 2, 1, 0, hint=False),
+        TransferCandidate(3, 4, 1, 1, hint=False),
+        TransferCandidate(5, 6, 1, 4, hint=False),
     ]
     auto, suggested = split_confident(pairs, auto_days=1)
     assert auto == pairs[:2]
@@ -117,14 +117,15 @@ def test_split_confident_separates_by_distance() -> None:
 
 def test_a_purchase_matching_a_transfer_leg_is_never_merged_on_its_own() -> None:
     """
-    A transfer's inflow whose true outflow sits on the same account (and so can
-    never pair) must not swallow an unrelated purchase that happens to match the
+    A transfer's inflow whose true outflow sits on the same account (and so can.
+
+    never pair) must not swallow an unrelated purchase that happens to match the.
     amount — one leg saying "transfer" while the other names a merchant is a
     question for the user, not a merge.
     """
     rows = [
         row(1, 10, -100000, 1, description="IP Elyan A.Kh"),
-        row(2, 10, 100000, 2, description="Между своими счетами"),
+        row(2, 10, 100000, 2, description="Between own accounts"),
     ]
     pairs = find_pairs(rows)
     assert len(pairs) == 1
@@ -135,11 +136,10 @@ def test_a_purchase_matching_a_transfer_leg_is_never_merged_on_its_own() -> None
 
 
 def test_a_hinted_leg_with_a_silent_partner_still_merges() -> None:
-    # banks often leave one leg's description blank; that is absence of
-    # evidence, not a contradiction
+
     rows = [
         row(1, 10, -100000, 1, description=""),
-        row(2, 10, 100000, 2, description="Перевод между своими счетами"),
+        row(2, 10, 100000, 2, description="Transfer between own accounts"),
     ]
     pairs = find_pairs(rows)
     assert pairs[0].mismatch is False
@@ -150,12 +150,12 @@ def test_a_hinted_leg_with_a_silent_partner_still_merges() -> None:
 
 def test_both_legs_hinted_beat_a_mismatched_pair_at_the_same_distance() -> None:
     rows = [
-        row(1, 10, -100000, 1, description="Перевод СБП"),
-        row(2, 10, -100000, 2, description="Ресторан У Луки"),
-        row(3, 10, 100000, 3, description="Пополнение. Перевод между своими"),
+        row(1, 10, -100000, 1, description="Transfer SBP"),
+        row(2, 10, -100000, 2, description="Restaurant U Luky"),
+        row(3, 10, 100000, 3, description="Top up. Transfer between own accounts"),
     ]
     pairs = find_pairs(rows)
-    assert [(p.outTxId, p.inTxId) for p in pairs] == [(1, 3)]
+    assert [(p.out_tx_id, p.in_tx_id) for p in pairs] == [(1, 3)]
     assert pairs[0].mismatch is False
 
 

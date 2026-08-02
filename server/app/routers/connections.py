@@ -1,6 +1,7 @@
 """
-Bank connections: one bank login per connection, owned by the user, with any
-number of accounts linked to it (``accounts.connection_id`` + a bank-specific
+Bank connections: one bank login per connection, owned by the user, with any.
+
+number of accounts linked to it (``accounts.connection_id`` + a bank-specific.
 ``accounts.bank_ref`` locator). A sync logs in once and pulls every linked
 account in turn, reusing the cached session between pulls.
 
@@ -17,30 +18,29 @@ import secrets
 import sqlite3
 from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Annotated, NoReturn
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import ConfigDict
+from pydantic import ConfigDict, Field
 from pydantic.dataclasses import dataclass as pydantic_dataclass
 
-from .. import crypto
-from ..auth import AuthenticatedUser, current_user
-from ..connectors import base as connectors
-from ..connectors import tbank_playwright as _tbank_playwright  # noqa: F401
-from ..connectors.base import (
+from app import crypto
+from app.auth import AuthenticatedUser, current_user
+from app.connectors import base as connectors
+from app.connectors.base import (
     ConnectorError,
     ConnectorInfo,
     JsonObject,
-    SmsRequired,
+    SmsRequiredError,
     SyncResult,
     SyncRow,
 )
-from ..deps import conn
-from ..importer import CategoryDefinition, CategoryRule, build_rules
-from ..ingest import categorize_rows, commit_rows, drop_already_present, historical_day_counts
-from ..sync_runner import NoPendingLogin, get_runner
-from ..transfer_service import detect
+from app.deps import conn
+from app.importer import CategoryDefinition, CategoryRule, build_rules
+from app.ingest import categorize_rows, commit_rows, drop_already_present, historical_day_counts
+from app.sync_runner import NoPendingLoginError, SyncRequest, get_runner
+from app.transfer_service import detect
 
 router = APIRouter(prefix="/api/connections", tags=["connections"])
 
@@ -52,11 +52,13 @@ SYNC_FAILED = "The bank sync could not be completed. Check the connection and tr
 
 
 def _now() -> str:
-    return datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+    return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S")
 
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid"))
 class ConnectionBody:
+    """Represent ConnectionBody."""
+
     bank: str
     kind: str
     credentials: JsonObject
@@ -64,11 +66,15 @@ class ConnectionBody:
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid"))
 class SmsBody:
+    """Represent SmsBody."""
+
     code: str
 
 
 @dataclass(slots=True)
 class ConnectionRow:
+    """Represent ConnectionRow."""
+
     id: int
     bank: str
     kind: str
@@ -84,55 +90,80 @@ class ConnectionRow:
 
 @dataclass(slots=True)
 class LinkedAccount:
+    """Represent LinkedAccount."""
+
     id: int
     name: str
     bank_ref: str | None
 
 
-@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+@dataclass(slots=True)
+class SyncContext:
+    """Represent shared state for a connection sync."""
+
+    connection: sqlite3.Connection
+    row: ConnectionRow
+    credentials: JsonObject
+    session: JsonObject | None
+    user_id: int
+
+
+@pydantic_dataclass(config=ConfigDict(extra="forbid", populate_by_name=True))
 class AccountSyncSummary:
-    accountId: int
+    """Represent AccountSyncSummary."""
+
     inserted: int
     skipped: int
-    batchId: int | None
-    dateFrom: str | None
-    dateTo: str | None
+    account_id: int = Field(serialization_alias="accountId")
+    batch_id: int | None = Field(serialization_alias="batchId")
+    date_from: str | None = Field(serialization_alias="dateFrom")
+    date_to: str | None = Field(serialization_alias="dateTo")
 
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid"))
 class UnmappedTail:
+    """Represent UnmappedTail."""
+
     tail: str
     rows: int
 
 
-@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+@pydantic_dataclass(config=ConfigDict(extra="forbid", populate_by_name=True))
 class SyncResponse:
+    """Represent SyncResponse."""
+
     status: str
     inserted: int
     skipped: int
     accounts: list[AccountSyncSummary]
-    dateFrom: str | None
-    dateTo: str | None
-    unmappedTails: list[UnmappedTail]
+    date_from: str | None = Field(serialization_alias="dateFrom")
+    date_to: str | None = Field(serialization_alias="dateTo")
+    unmapped_tails: list[UnmappedTail] = Field(serialization_alias="unmappedTails")
 
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid"))
 class SyncStatusResponse:
+    """Represent SyncStatusResponse."""
+
     status: str
     message: str | None = None
 
 
-@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+@pydantic_dataclass(config=ConfigDict(extra="forbid", populate_by_name=True))
 class ConnectionResponse:
+    """Represent ConnectionResponse."""
+
     id: int
     bank: str
     kind: str
     status: str
-    lastSync: str | None
-    lastError: str | None
-    hasCredentials: bool
-    createdAt: str
-    updatedAt: str
+    last_sync: str | None = Field(serialization_alias="lastSync", validation_alias="lastSync")
+    last_error: str | None = Field(serialization_alias="lastError", validation_alias="lastError")
+    has_credentials: bool = Field(
+        serialization_alias="hasCredentials", validation_alias="hasCredentials"
+    )
+    created_at: str = Field(serialization_alias="createdAt", validation_alias="createdAt")
+    updated_at: str = Field(serialization_alias="updatedAt", validation_alias="updatedAt")
 
 
 def _optional_blob(value: sqlite3.Row, key: str) -> bytes | memoryview | None:
@@ -152,7 +183,8 @@ def _optional_int(value: sqlite3.Row, key: str) -> int | None:
 
 def _load(c: sqlite3.Connection, cid: int, uid: int) -> ConnectionRow:
     row = c.execute(
-        "SELECT * FROM bank_connections WHERE id=? AND user_id=?", (cid, uid)
+        "SELECT * FROM bank_connections WHERE id=? AND user_id=?",
+        (cid, uid),
     ).fetchone()
     if row is None:
         raise HTTPException(404, "unknown connection")
@@ -177,11 +209,11 @@ def _serialize_connection(row: ConnectionRow) -> ConnectionResponse:
         bank=row.bank,
         kind=row.kind,
         status=row.status,
-        lastSync=row.last_sync,
-        lastError=row.last_error,
-        hasCredentials=row.credentials_encrypted is not None,
-        createdAt=row.created_at,
-        updatedAt=row.updated_at,
+        last_sync=row.last_sync,
+        last_error=row.last_error,
+        has_credentials=row.credentials_encrypted is not None,
+        created_at=row.created_at,
+        updated_at=row.updated_at,
     )
 
 
@@ -242,8 +274,9 @@ def _validate_credentials(bank: str, kind: str, credentials: JsonObject) -> None
 
 def _require_account_refs(row: ConnectionRow, accounts: list[LinkedAccount]) -> None:
     """
-    A connector that declares required account params cannot sync an account
-    without its bank_ref — the pull would silently fall back to the default
+    Handle A connector that declares required account params cannot sync an account.
+
+    without its bank_ref — the pull would silently fall back to the default.
     feed and land another account's operations here.
     """
     try:
@@ -268,7 +301,8 @@ def _mark_error(c: sqlite3.Connection, cid: int, message: str) -> None:
 
 def _fail(c: sqlite3.Connection, cid: int, error: Exception) -> NoReturn:
     """
-    Record a failed sync and surface it to the client without leaking the raw
+    Record a failed sync and surface it to the client without leaking the raw.
+
     connector error: the detail is logged, the user sees a fixed message.
     """
     log.warning("bank connection %s sync failed: %s", cid, error)
@@ -282,7 +316,8 @@ def _card_digits(card: str) -> str:
 
 def _match_tail(bound: Mapping[str, set[int]], digits: str) -> str | None:
     """
-    The bound tail that identifies this card, by mutual suffix (a 4-digit
+    Handle The bound tail that identifies this card, by mutual suffix (a 4-digit.
+
     statement tail must still match a longer stored tail and vice versa).
     The longest — most specific — matching tail wins.
     """
@@ -291,11 +326,15 @@ def _match_tail(bound: Mapping[str, set[int]], digits: str) -> str | None:
 
 
 def _route_rows(
-    c: sqlite3.Connection, uid: int, default_account_id: int, rows: list[SyncRow]
+    c: sqlite3.Connection,
+    uid: int,
+    default_account_id: int,
+    rows: list[SyncRow],
 ) -> tuple[dict[int, list[SyncRow]], dict[str, int]]:
     """
-    Split synced rows between the user's accounts by their bound card tails
-    (``accounts.card_tails``). Rows whose tail is not bound anywhere — or is
+    Split synced rows between the user's accounts by their bound card tails.
+
+    (``accounts.card_tails``). Rows whose tail is not bound anywhere — or is.
     bound to several accounts, which makes routing ambiguous — stay on the
     synced account; when the feed mixes several cards, those tails are
     reported back so the user can fix the bindings instead of silently merging.
@@ -318,14 +357,11 @@ def _route_rows(
         if len(owners) == 1:
             target = next(iter(owners))
         else:
-            # unbound, or the same tail bound to several accounts: routing is
-            # undefined, keep the row where the sync ran and say so
             target = default_account_id
             if tail:
                 unmapped[tail] = unmapped.get(tail, 0) + 1
         routed.setdefault(target, []).append(row)
     if len(seen_tails) <= 1:
-        # a single-card feed is unambiguous — nothing to warn about
         unmapped = {}
     return routed, unmapped
 
@@ -338,20 +374,17 @@ def _finish_account(
     uid: int,
 ) -> tuple[list[AccountSyncSummary], dict[str, int]]:
     """
-    Categorize, route rows to their bound accounts (falling back to the synced
-    account), commit each slice as its own batch, cache the session. Returns
+    Categorize, route rows to their bound accounts (falling back to the synced.
+
+    account), commit each slice as its own batch, cache the session. Returns.
     (per-account summaries, unmapped card tails).
     """
     rules = _load_user_rules(c, uid)
     categorize_rows(result.rows, rules)
-    # an overlapping feed (a credit card turning up in two pulls, or a pull
-    # repeating what a workbook already imported) re-delivers operations the
-    # ledger holds on another account, where the per-account hash cannot see
-    # them — drop those before routing gets to spread the copies around
+
     rows, redelivered = drop_already_present(result.rows, historical_day_counts(c, uid))
     routed, unmapped = _route_rows(c, uid, account_id, rows)
-    # the synced account always gets its batch, even for an empty pull — the
-    # incremental-sync cursor (_account_since) keys on that batch's existence
+
     routed.setdefault(account_id, [])
     summaries: list[AccountSyncSummary] = []
     for target_id, rows in sorted(routed.items(), key=lambda kv: kv[0] != account_id):
@@ -371,13 +404,13 @@ def _finish_account(
         dates = sorted(r.date for r in rows)
         summaries.append(
             AccountSyncSummary(
-                accountId=target_id,
+                account_id=target_id,
                 inserted=inserted,
                 skipped=skipped,
-                batchId=batch_id,
-                dateFrom=dates[0] if dates else None,
-                dateTo=dates[-1] if dates else None,
-            )
+                batch_id=batch_id,
+                date_from=dates[0] if dates else None,
+                date_to=dates[-1] if dates else None,
+            ),
         )
     session = getattr(result, "session", None)
     if session:
@@ -385,9 +418,7 @@ def _finish_account(
             "UPDATE bank_connections SET session_encrypted=?, updated_at=? WHERE id=?",
             (crypto.encrypt(session), _now(), row.id),
         )
-    # a transfer arrives as two rows on two accounts, often from two different
-    # pulls — merging right after ingestion is the only moment both are present
-    # and still uncategorized
+
     detect(c, uid)
     c.commit()
     return summaries, unmapped
@@ -403,27 +434,32 @@ def _mark_connected(c: sqlite3.Connection, cid: int) -> None:
 
 
 def _aggregate(
-    results: list[AccountSyncSummary], unmapped: dict[str, int] | None = None
+    results: list[AccountSyncSummary],
+    unmapped: dict[str, int] | None = None,
 ) -> SyncResponse:
-    dates_from = [r.dateFrom for r in results if r.dateFrom is not None]
-    dates_to = [r.dateTo for r in results if r.dateTo is not None]
+    dates_from = [r.date_from for r in results if r.date_from is not None]
+    dates_to = [r.date_to for r in results if r.date_to is not None]
     return SyncResponse(
         status="connected",
         inserted=sum(r.inserted for r in results),
         skipped=sum(r.skipped for r in results),
         accounts=results,
-        dateFrom=min(dates_from) if dates_from else None,
-        dateTo=max(dates_to) if dates_to else None,
-        unmappedTails=[UnmappedTail(tail=t, rows=n) for t, n in sorted((unmapped or {}).items())],
+        date_from=min(dates_from) if dates_from else None,
+        date_to=max(dates_to) if dates_to else None,
+        unmapped_tails=[UnmappedTail(tail=t, rows=n) for t, n in sorted((unmapped or {}).items())],
     )
 
 
 def _account_since(
-    c: sqlite3.Connection, cid: int, account_id: int, last_sync: str | None
+    c: sqlite3.Connection,
+    cid: int,
+    account_id: int,
+    last_sync: str | None,
 ) -> str | None:
     """
-    An account newly linked to an already-synced connection still needs a
-    full pull: the connection's last_sync cursor only applies to accounts that
+    Handle An account newly linked to an already-synced connection still needs a.
+
+    full pull: the connection's last_sync cursor only applies to accounts that.
     have synced through it before.
     """
     if last_sync is None:
@@ -437,33 +473,34 @@ def _account_since(
 
 
 def _sync_accounts(
-    c: sqlite3.Connection,
-    row: ConnectionRow,
+    context: SyncContext,
     accounts: list[LinkedAccount],
-    creds: JsonObject,
-    session: JsonObject | None,
-    uid: int,
 ) -> tuple[list[AccountSyncSummary], dict[str, int]]:
     """
-    Pull each account in order. Returns (per-account summaries, unmapped card
-    tails); raises SmsRequired after persisting which account the parked login
+    Pull each account in order. Returns (per-account summaries, unmapped card.
+
+    tails); raises SmsRequiredError after persisting which account the parked login.
     belongs to.
     """
+    c = context.connection
+    row = context.row
     cid = row.id
     results: list[AccountSyncSummary] = []
     unmapped: dict[str, int] = {}
     for acct in accounts:
         try:
             result = get_runner().start(
-                cid,
-                row.bank,
-                row.kind,
-                creds,
-                session,
-                _account_since(c, cid, acct.id, row.last_sync),
-                acct.bank_ref,
+                SyncRequest(
+                    cid,
+                    row.bank,
+                    row.kind,
+                    context.credentials,
+                    context.session,
+                    _account_since(c, cid, acct.id, row.last_sync),
+                    acct.bank_ref,
+                ),
             )
-        except SmsRequired:
+        except SmsRequiredError:
             c.execute(
                 "UPDATE bank_connections SET status='awaiting_sms', pending_account_id=?,"
                 " updated_at=? WHERE id=?",
@@ -471,31 +508,33 @@ def _sync_accounts(
             )
             c.commit()
             raise
-        summaries, missed = _finish_account(c, row, acct.id, result, uid)
+        summaries, missed = _finish_account(c, row, acct.id, result, context.user_id)
         results.extend(summaries)
         for t, n in missed.items():
             unmapped[t] = unmapped.get(t, 0) + n
-        session = result.session or session
+        context.session = result.session or context.session
     return results, unmapped
 
 
 @router.get("/available")
-def available(user: Annotated[AuthenticatedUser, Depends(current_user)]) -> list[ConnectorInfo]:
+def available(_user: Annotated[AuthenticatedUser, Depends(current_user)]) -> list[ConnectorInfo]:
+    """Handle available."""
     return connectors.available_connectors()
 
 
 @router.post("")
 def create_connection(
-    body: ConnectionBody, user: Annotated[AuthenticatedUser, Depends(current_user)]
+    body: ConnectionBody,
+    user: Annotated[AuthenticatedUser, Depends(current_user)],
 ) -> ConnectionResponse:
+    """Handle create connection."""
     _require_crypto()
     uid = user.id
     _validate_credentials(body.bank, body.kind, body.credentials)
     c = conn()
     try:
         creds_dict = dict(body.credentials)
-        # a quick-login code we set on the bank's "create a code" screen after the
-        # first OTP, then reuse to log in on later syncs without another SMS
+
         creds_dict["code"] = f"{secrets.randbelow(10000):04d}"
         creds = crypto.encrypt(creds_dict)
         cur = c.execute(
@@ -506,7 +545,8 @@ def create_connection(
         c.commit()
         connection_id = cur.lastrowid
         if connection_id is None:
-            raise RuntimeError("inserted connection did not return a row id")
+            msg = "inserted connection did not return a row id"
+            raise RuntimeError(msg)
         return _serialize_connection(_load(c, connection_id, uid))
     finally:
         c.close()
@@ -514,13 +554,18 @@ def create_connection(
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid"))
 class CredentialsPatch:
+    """Represent CredentialsPatch."""
+
     credentials: JsonObject
 
 
 @router.patch("/{cid}")
 def update_credentials(
-    cid: int, body: CredentialsPatch, user: Annotated[AuthenticatedUser, Depends(current_user)]
+    cid: int,
+    body: CredentialsPatch,
+    user: Annotated[AuthenticatedUser, Depends(current_user)],
 ) -> ConnectionResponse:
+    """Handle update credentials."""
     _require_crypto()
     uid = user.id
     c = conn()
@@ -542,8 +587,10 @@ def update_credentials(
 
 @router.delete("/{cid}")
 def delete_connection(
-    cid: int, user: Annotated[AuthenticatedUser, Depends(current_user)]
+    cid: int,
+    user: Annotated[AuthenticatedUser, Depends(current_user)],
 ) -> dict[str, int]:
+    """Handle delete connection."""
     uid = user.id
     c = conn()
     try:
@@ -559,10 +606,12 @@ def delete_connection(
 
 @router.post("/{cid}/cancel")
 def cancel_sync(
-    cid: int, user: Annotated[AuthenticatedUser, Depends(current_user)]
+    cid: int,
+    user: Annotated[AuthenticatedUser, Depends(current_user)],
 ) -> dict[str, int]:
     """
-    Abandon a login waiting for its OTP: close the parked connector and drop
+    Abandon a login waiting for its OTP: close the parked connector and drop.
+
     the connection out of the awaiting_sms state.
     """
     uid = user.id
@@ -583,8 +632,10 @@ def cancel_sync(
 
 @router.post("/{cid}/sync")
 def sync_connection(
-    cid: int, user: Annotated[AuthenticatedUser, Depends(current_user)]
+    cid: int,
+    user: Annotated[AuthenticatedUser, Depends(current_user)],
 ) -> SyncResponse | SyncStatusResponse:
+    """Handle sync connection."""
     _require_crypto()
     uid = user.id
     c = conn()
@@ -606,10 +657,13 @@ def sync_connection(
             c.commit()
         session = crypto.decrypt(row.session_encrypted)
         try:
-            results, unmapped = _sync_accounts(c, row, accounts, creds, session, uid)
+            results, unmapped = _sync_accounts(
+                SyncContext(c, row, creds, session, uid),
+                accounts,
+            )
             _mark_connected(c, cid)
             return _aggregate(results, unmapped)
-        except SmsRequired:
+        except SmsRequiredError:
             return SyncStatusResponse(status="awaiting_sms", message=SMS_SENT)
         except ConnectorError as e:
             _fail(c, cid, e)
@@ -619,8 +673,11 @@ def sync_connection(
 
 @router.post("/{cid}/sms")
 def submit_sms(
-    cid: int, body: SmsBody, user: Annotated[AuthenticatedUser, Depends(current_user)]
+    cid: int,
+    body: SmsBody,
+    user: Annotated[AuthenticatedUser, Depends(current_user)],
 ) -> SyncResponse | SyncStatusResponse:
+    """Handle submit sms."""
     _require_crypto()
     uid = user.id
     c = conn()
@@ -636,9 +693,9 @@ def submit_sms(
             raise HTTPException(400, "no accounts are linked to this connection")
         try:
             result = get_runner().resume(cid, body.code)
-        except NoPendingLogin as e:
+        except NoPendingLoginError as e:
             raise HTTPException(409, "no login awaiting a code") from e
-        except SmsRequired:
+        except SmsRequiredError:
             return SyncStatusResponse(status="awaiting_sms", message=CODE_REJECTED)
         except ConnectorError as e:
             _fail(c, cid, e)
@@ -648,8 +705,11 @@ def submit_sms(
         after = ids.index(pending_id) + 1 if pending_id in ids else len(ids)
         remaining = accounts[after:]
         try:
-            more, missed = _sync_accounts(c, row, remaining, _creds(c, row), session, uid)
-        except SmsRequired:
+            more, missed = _sync_accounts(
+                SyncContext(c, row, _creds(row), session, uid),
+                remaining,
+            )
+        except SmsRequiredError:
             return SyncStatusResponse(status="awaiting_sms", message=SMS_SENT)
         except ConnectorError as e:
             _fail(c, cid, e)
@@ -662,7 +722,7 @@ def submit_sms(
         c.close()
 
 
-def _creds(c: sqlite3.Connection, row: ConnectionRow) -> JsonObject:
+def _creds(row: ConnectionRow) -> JsonObject:
     creds = crypto.decrypt(row.credentials_encrypted)
     if not creds:
         raise HTTPException(400, "connection has no credentials")

@@ -1,9 +1,13 @@
+"""Provide backend functionality."""
+
 import sqlite3
 from dataclasses import dataclass
 
 
 @dataclass(frozen=True, slots=True)
 class GroupRecord:
+    """Represent GroupRecord."""
+
     id: int
     name: str
     sort: int
@@ -11,11 +15,14 @@ class GroupRecord:
 
     @classmethod
     def from_row(cls, row: sqlite3.Row) -> "GroupRecord":
+        """Handle from row."""
         return cls(id=row["id"], name=row["name"], sort=row["sort"], kind=row["kind"])
 
 
 @dataclass(frozen=True, slots=True)
 class CategoryRecord:
+    """Represent CategoryRecord."""
+
     id: int
     group_id: int
     name: str
@@ -28,6 +35,7 @@ class CategoryRecord:
 
     @classmethod
     def from_row(cls, row: sqlite3.Row) -> "CategoryRecord":
+        """Handle from row."""
         keys = row.keys()
         return cls(
             id=row["id"],
@@ -44,6 +52,8 @@ class CategoryRecord:
 
 @dataclass(frozen=True, slots=True)
 class CategoryOwnershipRecord:
+    """Represent CategoryOwnershipRecord."""
+
     id: int
     keywords: str
     goal_target: int | None
@@ -52,6 +62,7 @@ class CategoryOwnershipRecord:
 
     @classmethod
     def from_row(cls, row: sqlite3.Row) -> "CategoryOwnershipRecord":
+        """Handle from row."""
         return cls(
             id=row["id"],
             keywords=row["keywords"],
@@ -63,26 +74,34 @@ class CategoryOwnershipRecord:
 
 @dataclass(frozen=True, slots=True)
 class GoalGroupRecord:
+    """Represent GoalGroupRecord."""
+
     id: int
     is_goal: bool
 
     @classmethod
     def from_row(cls, row: sqlite3.Row) -> "GoalGroupRecord":
+        """Handle from row."""
         return cls(id=row["id"], is_goal=bool(row["is_goal"]))
 
 
 @dataclass(frozen=True, slots=True)
 class CategorySignRecord:
+    """Represent CategorySignRecord."""
+
     id: int
     transaction_sign: int
 
     @classmethod
     def from_row(cls, row: sqlite3.Row) -> "CategorySignRecord":
+        """Handle from row."""
         return cls(id=row["id"], transaction_sign=row["transaction_sign"])
 
 
 @dataclass(frozen=True, slots=True)
 class AccountRecord:
+    """Represent AccountRecord."""
+
     id: int
     name: str
     type: str
@@ -100,6 +119,7 @@ class AccountRecord:
 
     @classmethod
     def from_row(cls, row: sqlite3.Row) -> "AccountRecord":
+        """Handle from row."""
         return cls(
             id=row["id"],
             name=row["name"],
@@ -120,6 +140,8 @@ class AccountRecord:
 
 @dataclass(frozen=True, slots=True)
 class SplitRecord:
+    """Represent SplitRecord."""
+
     id: int
     transaction_id: int
     category_id: int
@@ -128,6 +150,7 @@ class SplitRecord:
 
     @classmethod
     def from_row(cls, row: sqlite3.Row) -> "SplitRecord":
+        """Handle from row."""
         return cls(
             id=row["id"],
             transaction_id=row["transaction_id"],
@@ -139,6 +162,8 @@ class SplitRecord:
 
 @dataclass(frozen=True, slots=True)
 class TransactionRecord:
+    """Represent TransactionRecord."""
+
     id: int
     date: str
     amount: int
@@ -154,6 +179,7 @@ class TransactionRecord:
 
     @classmethod
     def from_row(cls, row: sqlite3.Row) -> "TransactionRecord":
+        """Handle from row."""
         return cls(
             id=row["id"],
             date=row["date"],
@@ -172,6 +198,8 @@ class TransactionRecord:
 
 @dataclass(frozen=True, slots=True)
 class UserRecord:
+    """Represent UserRecord."""
+
     id: int
     email: str
     created_at: str
@@ -181,6 +209,7 @@ class UserRecord:
 
     @classmethod
     def from_row(cls, row: sqlite3.Row) -> "UserRecord":
+        """Handle from row."""
         return cls(
             id=row["id"],
             email=row["email"],
@@ -193,6 +222,8 @@ class UserRecord:
 
 @dataclass(frozen=True, slots=True)
 class ConnectionRecord:
+    """Represent ConnectionRecord."""
+
     id: int
     bank: str
     kind: str
@@ -205,6 +236,7 @@ class ConnectionRecord:
 
     @classmethod
     def from_row(cls, row: sqlite3.Row) -> "ConnectionRecord":
+        """Handle from row."""
         return cls(
             id=row["id"],
             bank=row["bank"],
@@ -220,6 +252,8 @@ class ConnectionRecord:
 
 @dataclass(frozen=True, slots=True)
 class BudgetRecord:
+    """Represent BudgetRecord."""
+
     category_id: int
     year: int
     month: int
@@ -227,6 +261,7 @@ class BudgetRecord:
 
     @classmethod
     def from_row(cls, row: sqlite3.Row) -> "BudgetRecord":
+        """Handle from row."""
         return cls(
             category_id=row["category_id"],
             year=row["year"],
@@ -237,6 +272,8 @@ class BudgetRecord:
 
 @dataclass(frozen=True, slots=True)
 class TransferRecord:
+    """Represent TransferRecord."""
+
     id: str
     out_tx_id: int
     in_tx_id: int
@@ -246,6 +283,7 @@ class TransferRecord:
 
     @classmethod
     def from_row(cls, row: sqlite3.Row) -> "TransferRecord":
+        """Handle from row."""
         return cls(
             id=row["id"],
             out_tx_id=row["out_tx_id"],
@@ -258,6 +296,8 @@ class TransferRecord:
 
 @dataclass(frozen=True, slots=True)
 class TransferSplitRecord:
+    """Represent TransferSplitRecord."""
+
     out_tx_id: int
     in_tx_id: int
     out_category_id: int | None
@@ -265,6 +305,7 @@ class TransferSplitRecord:
 
     @classmethod
     def from_row(cls, row: sqlite3.Row) -> "TransferSplitRecord":
+        """Handle from row."""
         return cls(
             out_tx_id=row["out_tx_id"],
             in_tx_id=row["in_tx_id"],

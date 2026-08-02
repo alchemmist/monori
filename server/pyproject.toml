@@ -4,26 +4,26 @@ version = "0.1.0"
 description = "Monori personal budget server"
 requires-python = ">=3.12"
 dependencies = [
-    "fastapi>=0.115",
-    "uvicorn[standard]>=0.30",
-    "cryptography>=44",
-    "pyjwt>=2.9",
-    "argon2-cffi>=23",
-    "python-multipart>=0.0.9",
-    "alembic>=1.18.5", "httpx[socks]>=0.27", "openpyxl>=3.1",
+  "fastapi>=0.115",
+  "uvicorn[standard]>=0.30",
+  "cryptography>=44",
+  "pyjwt>=2.9",
+  "argon2-cffi>=23",
+  "python-multipart>=0.0.9",
+  "alembic>=1.18.5",
+  "httpx[socks]>=0.27",
+  "openpyxl>=3.1",
 ]
 
 [project.optional-dependencies]
-connectors = [
-    "playwright>=1.40",
-]
+connectors = ["playwright>=1.40"]
 
 [dependency-groups]
 dev = [
     "pytest>=8",
     "pytest-cov>=5",
     "httpx>=0.27",
-    "ruff>=0.14",
+    "ruff==0.15.22",
     "mypy>=1.13",
     "bandit>=1.8",
     "vulture>=2.16",
@@ -39,9 +39,7 @@ dev = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-markers = [
-    "integration: integration test that stands up real dependencies",
-]
+markers = ["integration: integration test that stands up real dependencies"]
 
 [tool.coverage.run]
 source = ["app"]
@@ -57,7 +55,28 @@ exclude = ["web/prototypes"]
 force-exclude = true
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B", "SIM", "C4", "D209", "D213", "ANN", "PYI"]
+select = ["ALL"]
+ignore = ["COM812", "D203", "D212"]
+
+[tool.ruff.lint.per-file-ignores]
+"server/tests/**/*.py" = [
+  "D102",
+  "D103",
+  "PLR2004",
+  "S101",
+  "D101",
+  "S106",
+  "S107",
+  "D100",
+  "S105",
+  "D107",
+  "D105",
+  "D104",
+  "F401",
+]
+"server/migrations/**/*.py" = ["S101", "INP001"]
+"server/app/workbook/parser.py" = ["RUF001"]
+"server/app/connectors/tbank_playwright.py" = ["RUF001"] # TODO: remove from ignore
 
 [tool.mypy]
 python_version = "3.12"
@@ -76,14 +95,14 @@ disallow_any_unimported = true
 disallow_any_decorated = true
 warn_return_any = true
 enable_error_code = [
-    "explicit-override",
-    "mutable-override",
-    "truthy-bool",
-    "truthy-iterable",
-    "possibly-undefined",
-    "redundant-expr",
-    "unused-awaitable",
-    "ignore-without-code",
+  "explicit-override",
+  "mutable-override",
+  "truthy-bool",
+  "truthy-iterable",
+  "possibly-undefined",
+  "redundant-expr",
+  "unused-awaitable",
+  "ignore-without-code",
 ]
 
 [tool.bandit]
@@ -98,4 +117,4 @@ paths = ["app"]
 min_confidence = 80
 # These names are required by Playwright-compatible protocol signatures even
 # when the local adapter does not use the callback arguments.
-ignore_names = ["referer", "predicate"]
+ignore_names = ["referer", "predicate", "user_data_dir", "user_agent", "accept_downloads"]

@@ -17,7 +17,7 @@ def test_serialize_transactions_chunks_split_lookup() -> None:
             id INTEGER PRIMARY KEY, transaction_id INTEGER, category_id INTEGER,
             amount INTEGER, comment TEXT, sort INTEGER DEFAULT 0
         );
-        """
+        """,
     )
     connection.executemany(
         "INSERT INTO transactions VALUES (?, '2026-01-01', -1, 'row', '', '',"
@@ -39,5 +39,5 @@ def test_serialize_transactions_chunks_split_lookup() -> None:
     split_queries = [statement for statement in statements if "FROM splits" in statement]
     ids = [statement.partition(" IN (")[2].partition(") ORDER")[0] for statement in split_queries]
     assert [chunk.count(",") + 1 for chunk in ids] == [500, 500, 1]
-    assert result[0].splits[0].categoryId == 7
+    assert result[0].splits[0].category_id == 7
     assert result[-1].splits[0].comment == "part"

@@ -19,17 +19,18 @@ from .auth import AuthenticatedUser, current_user
 from .deps import conn
 from .security import decode_access_token
 
-# usage buckets are keyed by the first path segment after /api; auth is skipped
-# because logins are recorded as explicit activity events
 UNTRACKED_FEATURES = {"auth"}
+MIN_API_PATH_PARTS = 3
 
 
 def admin_emails() -> set[str]:
+    """Handle admin emails."""
     raw = os.environ.get("MONORI_ADMIN_EMAILS", "")
     return {e.strip().lower() for e in raw.split(",") if e.strip()}
 
 
 def admin_user(user: Annotated[AuthenticatedUser, Depends(current_user)]) -> AuthenticatedUser:
+    """Handle admin user."""
     if not user.is_admin:
         raise HTTPException(403, "admin rights required")
     return user
@@ -37,11 +38,12 @@ def admin_user(user: Annotated[AuthenticatedUser, Depends(current_user)]) -> Aut
 
 def feature_from_path(path: str) -> str | None:
     """
-    The usage-bucket name for an API path, or None if the request should not be
+    Handle The usage-bucket name for an API path, or None if the request should not be.
+
     counted (non-API paths and ``UNTRACKED_FEATURES``).
     """
     parts = path.split("/")
-    if len(parts) < 3 or parts[0] != "" or parts[1] != "api" or not parts[2]:
+    if len(parts) < MIN_API_PATH_PARTS or parts[0] != "" or parts[1] != "api" or not parts[2]:
         return None
     feature = parts[2]
     if feature in UNTRACKED_FEATURES:
@@ -50,6 +52,7 @@ def feature_from_path(path: str) -> str | None:
 
 
 def user_id_from_auth_header(header: str | None) -> int | None:
+    """Handle user id from auth header."""
     if not header or not header.lower().startswith("bearer "):
         return None
     try:
@@ -60,6 +63,7 @@ def user_id_from_auth_header(header: str | None) -> int | None:
 
 
 def record_api_usage(path: str, auth_header: str | None) -> None:
+    """Handle record api usage."""
     feature = feature_from_path(path)
     if feature is None:
         return

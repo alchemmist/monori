@@ -1,6 +1,4 @@
-"""
-Accounts gain a display color and an optional custom icon image.
-"""
+"""Accounts gain a display color and an optional custom icon image."""
 
 from alembic import op
 from sqlalchemy.engine import Connection
@@ -16,14 +14,17 @@ def _has_column(conn: Connection, table: str, column: str) -> bool:
 
 
 def upgrade() -> None:
+    """Handle upgrade."""
     conn = op.get_bind()
     if not _has_column(conn, "accounts", "color"):
         conn.exec_driver_sql(
-            "ALTER TABLE accounts ADD COLUMN color TEXT NOT NULL DEFAULT '#5b6472'"
+            "ALTER TABLE accounts ADD COLUMN color TEXT NOT NULL DEFAULT '#5b6472'",
         )
     if not _has_column(conn, "accounts", "icon_image"):
         conn.exec_driver_sql("ALTER TABLE accounts ADD COLUMN icon_image TEXT")
 
 
 def downgrade() -> None:
-    raise NotImplementedError("monori migrations are forward-only")
+    """Handle downgrade."""
+    msg = "monori migrations are forward-only"
+    raise NotImplementedError(msg)

@@ -10,6 +10,8 @@ _CONFIG = ConfigDict(extra="forbid", frozen=True)
 
 @pydantic_dataclass(config=_CONFIG)
 class WorkbookGroup:
+    """Represent WorkbookGroup."""
+
     name: str
     sort: int
     kind: Literal["income", "expense"]
@@ -17,6 +19,8 @@ class WorkbookGroup:
 
 @pydantic_dataclass(config=_CONFIG)
 class WorkbookCategory:
+    """Represent WorkbookCategory."""
+
     group: str
     name: str
     group_kind: Literal["income", "expense"] | None = None
@@ -26,6 +30,8 @@ class WorkbookCategory:
 
 @pydantic_dataclass(config=_CONFIG)
 class WorkbookTransaction:
+    """Represent WorkbookTransaction."""
+
     date: str
     amount: int
     description: str
@@ -39,6 +45,8 @@ class WorkbookTransaction:
 
 @pydantic_dataclass(config=_CONFIG)
 class WorkbookBudget:
+    """Represent WorkbookBudget."""
+
     category: str
     year: int
     month: int
@@ -47,12 +55,16 @@ class WorkbookBudget:
 
 @pydantic_dataclass(config=_CONFIG)
 class WorkbookParseError:
+    """Represent WorkbookParseError."""
+
     row: int
     error: str
 
 
 @pydantic_dataclass(config=_CONFIG)
 class ParsedWorkbook:
+    """Represent ParsedWorkbook."""
+
     groups: list[WorkbookGroup]
     categories: list[WorkbookCategory]
     transactions: list[WorkbookTransaction]
@@ -67,6 +79,8 @@ ACCOUNT_MAPPING_ADAPTER = TypeAdapter(dict[str, int])
 
 @pydantic_dataclass(config=_CONFIG)
 class WorkbookAccountSlot:
+    """Represent WorkbookAccountSlot."""
+
     key: str
     marker: str
     currency: str
@@ -75,6 +89,8 @@ class WorkbookAccountSlot:
 
 @pydantic_dataclass(config=_CONFIG)
 class WorkbookBatchResult:
+    """Represent WorkbookBatchResult."""
+
     account_id: int
     batch_id: int
     inserted: int
@@ -82,6 +98,8 @@ class WorkbookBatchResult:
 
 @pydantic_dataclass(config=_CONFIG)
 class WorkbookApplyResult:
+    """Represent WorkbookApplyResult."""
+
     groups_created: int
     categories_created: int
     inserted: int

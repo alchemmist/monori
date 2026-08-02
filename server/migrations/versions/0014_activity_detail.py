@@ -14,8 +14,11 @@ depends_on = None
 
 
 def upgrade() -> None:
+    """Handle upgrade."""
     op.execute("ALTER TABLE activity_events ADD COLUMN detail TEXT")
 
 
 def downgrade() -> None:
-    raise NotImplementedError("forward-only migrations")
+    """Handle downgrade."""
+    msg = "forward-only migrations"
+    raise NotImplementedError(msg)

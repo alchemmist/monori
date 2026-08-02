@@ -9,15 +9,16 @@ from app.importer import (
     parse_amount_kop,
     parse_date,
     parse_statement,
+    tx_hash,
 )
 
 SAMPLE_TSV = (
     "03.07.2026 19:48:24\t03.07.2026\t*2947\tOK\t-450,00\tRUB\t-450,00\tRUB\t\t"
-    "Переводы\t\tСбербанк\t0\t0\t-450,00\n"
+    "Transfers\t\tSberbank\t0\t0\t-450,00\n"
     "01.07.2026 12:00:00\t01.07.2026\t*2947\tOK\t-1 500,50\tRUB\t-1 500,50\tRUB\t\t"
-    "Супермаркеты\t5411\tПятёрочка\t0\t0\t-1500,50\n"
+    "Supermarkets\t5411\tPyaterochka\t0\t0\t-1500,50\n"
     "01.07.2026\t01.07.2026\t*2947\tFAILED\t-100,00\tRUB\t-100,00\tRUB\t\t"
-    "Супермаркеты\t5411\tЛента\t0\t0\t-100,00\n"
+    "Supermarkets\t5411\tLenta\t0\t0\t-100,00\n"
 )
 
 
@@ -26,8 +27,8 @@ def test_parse_date() -> None:
     without_time = parse_date("03.07.2026")
     assert with_time is not None
     assert without_time is not None
-    assert with_time.isoformat() == "2026-07-03T19:48:24"
-    assert without_time.isoformat() == "2026-07-03T00:00:00"
+    assert with_time.isoformat() == "2026-07-03T19:48:24+00:00"
+    assert without_time.isoformat() == "2026-07-03T00:00:00+00:00"
     assert parse_date("2026-07-03") is None
 
 
@@ -39,13 +40,13 @@ def test_parse_amount() -> None:
 
 
 def test_parse_amount_strips_both_space_kinds() -> None:
-    # a plain space and a non-breaking space (U+00A0) both used as thousands sep
+
     assert parse_amount_kop("1 500,00") == 150000
-    assert parse_amount_kop("1 500,00") == 150000
+    assert parse_amount_kop("1\u00a0500,00") == 150000
 
 
 def test_parse_amount_rounds_through_cents() -> None:
-    # the double round() dodges float artifacts: 2.675 must land on 267, not 268
+
     assert parse_amount_kop("2,675") == 267
 
 
@@ -57,25 +58,26 @@ def test_parse_amount_blank_and_dash() -> None:
 
 def test_parse_statement() -> None:
     rows, errors = parse_statement(SAMPLE_TSV)
-    assert len(rows) == 2  # FAILED row skipped
+    assert len(rows) == 2
     assert not errors
     assert rows[0]["date"] == "2026-07-03T19:48:24"
     assert rows[0]["amount"] == -45000
-    assert rows[1]["description"] == "Пятёрочка"
+    assert rows[1]["description"] == "Pyaterochka"
     assert rows[1]["amount"] == -150050
 
 
 def test_parse_statement_skips_csv_header_row() -> None:
     header = (
-        "Дата операции;Дата платежа;Номер карты;Статус;Сумма операции;Валюта операции;"
-        "Сумма платежа;Валюта платежа;Кэшбэк;Категория;MCC;Описание;Бонусы (включая кэшбэк);"
-        "Округление на инвесткопилку;Сумма операции с округлением\n"
+        "Operation date;Payment date;Card number;Status;Operation amount;Transaction currency;"
+        "Payment amount;Payment currency;Cashback;Category;MCC;Description;"
+        "Bonuses (including cashback);"
+        "Rounding to spare coins;Rounded operation amount\n"
     )
-    line = '05.07.2026;05.07.2026;*1;OK;-20,00;RUB;-20,00;RUB;;Транспорт;4111;"Метро";0;0;-20,00\n'
+    line = '05.07.2026;05.07.2026;*1;OK;-20,00;RUB;-20,00;RUB;;Transport;4111;"Metro";0;0;-20,00\n'
     rows, errors = parse_statement(header + line)
     assert not errors
     assert len(rows) == 1
-    assert rows[0]["description"] == "Метро"
+    assert rows[0]["description"] == "Metro"
 
 
 def test_parse_statement_bad_line() -> None:
@@ -86,41 +88,39 @@ def test_parse_statement_bad_line() -> None:
 
 def test_parse_statement_row_fields() -> None:
     rows, _ = parse_statement(SAMPLE_TSV)
-    assert rows[0]["bank_category"] == "Переводы"
+    assert rows[0]["bank_category"] == "Transfers"
     assert rows[0]["mcc"] == ""
-    assert rows[0]["description"] == "Сбербанк"
-    assert rows[1]["bank_category"] == "Супермаркеты"
+    assert rows[0]["description"] == "Sberbank"
+    assert rows[1]["bank_category"] == "Supermarkets"
     assert rows[1]["mcc"] == "5411"
-    # the masked card number rides along so the client can route by its tail
+
     assert rows[0]["card"] == "*2947"
-    # hashes are account-scoped and derived at ingest time, not during parsing
+
     assert rows[0].hash == ""
 
 
 def test_tx_hash_is_scoped_to_the_account() -> None:
-    from app.importer import tx_hash
-
-    a = tx_hash(1, "2026-07-03T19:48:24", -45000, "Сбербанк")
-    b = tx_hash(2, "2026-07-03T19:48:24", -45000, "Сбербанк")
+    a = tx_hash(1, "2026-07-03T19:48:24", -45000, "Sberbank")
+    b = tx_hash(2, "2026-07-03T19:48:24", -45000, "Sberbank")
     assert a != b
     assert len(a) == len(b) == 64
-    assert a == tx_hash(1, "2026-07-03T19:48:24", -45000, "Сбербанк")
+    assert a == tx_hash(1, "2026-07-03T19:48:24", -45000, "Sberbank")
 
 
 def test_parse_statement_semicolon_delimiter_and_quotes() -> None:
-    line = '05.07.2026;05.07.2026;*1;OK;-20,00;RUB;-20,00;RUB;;Транспорт;4111;"Метро";0;0;-20,00\n'
+    line = '05.07.2026;05.07.2026;*1;OK;-20,00;RUB;-20,00;RUB;;Transport;4111;"Metro";0;0;-20,00\n'
     rows, errors = parse_statement(line)
     assert not errors
     assert len(rows) == 1
-    # the surrounding double quotes must be stripped
-    assert rows[0]["description"] == "Метро"
+
+    assert rows[0]["description"] == "Metro"
     assert rows[0]["amount"] == -2000
 
 
 def test_parse_statement_accepts_exactly_twelve_columns() -> None:
     line = (
         "05.07.2026 10:00:00\t05.07.2026\t*1\tOK\t-10,00\tRUB\t-10,00\tRUB\t\t"
-        "Кафе\t5812\tStarbucks\n"
+        "Cafe\t5812\tStarbucks\n"
     )
     rows, errors = parse_statement(line)
     assert not errors
@@ -139,8 +139,8 @@ def test_parse_statement_too_few_columns_reports_count_and_line() -> None:
 
 
 def test_parse_statement_error_line_numbers_are_one_based() -> None:
-    # blank first line is skipped but still counted; the bad row is line 2
-    nodate = "NODATE\t05.07.2026\t*1\tOK\t-10,00\tRUB\t-10,00\tRUB\t\tКафе\t5812\tX"
+
+    nodate = "NODATE\t05.07.2026\t*1\tOK\t-10,00\tRUB\t-10,00\tRUB\t\tCafe\t5812\tX"
     rows, errors = parse_statement("\n" + nodate + "\n")
     assert not rows
     assert errors[0]["line"] == 2
@@ -148,7 +148,7 @@ def test_parse_statement_error_line_numbers_are_one_based() -> None:
 
 
 def test_parse_statement_needs_both_date_and_amount() -> None:
-    valid = "05.07.2026\t05.07.2026\t*1\tOK\t-10,00\tRUB\t-10,00\tRUB\t\tКафе\t5812\tX"
+    valid = "05.07.2026\t05.07.2026\t*1\tOK\t-10,00\tRUB\t-10,00\tRUB\t\tCafe\t5812\tX"
     bad_date = valid.replace("05.07.2026\t05.07.2026", "NODATE\t05.07.2026", 1)
     bad_amount = valid.replace("-10,00\tRUB\t-10,00", "-10,00\tRUB\tNOPE", 1)
     for line in (bad_date, bad_amount):
@@ -158,11 +158,10 @@ def test_parse_statement_needs_both_date_and_amount() -> None:
 
 
 def test_parse_statement_strips_only_the_surrounding_quotes() -> None:
-    # a description that itself starts with a capital letter the quote-strip set
-    # must not touch: stripping anything but the quotes eats real characters
+
     line = (
         "05.07.2026 10:00:00\t05.07.2026\t*1\tOK\t-10,00\tRUB\t-10,00\tRUB\t\t"
-        "Электроника\t5732\tXerox\n"
+        "Electronics\t5732\tXerox\n"
     )
     rows, errors = parse_statement(line)
     assert not errors
@@ -170,35 +169,35 @@ def test_parse_statement_strips_only_the_surrounding_quotes() -> None:
 
 
 def test_parse_statement_unparseable_error_carries_the_raw_line() -> None:
-    nodate = "NODATE\t05.07.2026\t*1\tOK\t-10,00\tRUB\t-10,00\tRUB\t\tКафе\t5812\tX"
+    nodate = "NODATE\t05.07.2026\t*1\tOK\t-10,00\tRUB\t-10,00\tRUB\t\tCafe\t5812\tX"
     _, errors = parse_statement(nodate + "\n")
     assert errors[0]["raw"] == nodate
 
 
 def test_parse_statement_continues_after_every_kind_of_skip() -> None:
-    valid = "05.07.2026 10:00:00\t05.07.2026\t*1\tOK\t-10,00\tRUB\t-10,00\tRUB\t\tКафе\t5812\tGOOD"
+    valid = "05.07.2026 10:00:00\t05.07.2026\t*1\tOK\t-10,00\tRUB\t-10,00\tRUB\t\tCafe\t5812\tGOOD"
     failed = valid.replace("\tOK\t", "\tFAILED\t").replace("GOOD", "SKIP")
     bad_date = valid.replace("05.07.2026 10:00:00", "NODATE", 1).replace("GOOD", "BADDATE")
-    text = "\n".join(["", "a;b", failed, bad_date, valid]) + "\n"
+    text = f"\na;b\n{failed}\n{bad_date}\n{valid}" + "\n"
     rows, errors = parse_statement(text)
-    # only the final valid row survives; a `break` instead of `continue` would drop it
+
     assert [r["description"] for r in rows] == ["GOOD"]
-    # the too-few-columns line and the bad-date line each produce one error
+
     assert len(errors) == 2
 
 
 def test_categorize_first_rule_wins_and_sign_split() -> None:
     groups = {1: "expense", 2: "income"}
     cats: list[CategoryDefinition] = [
-        CategoryDefinition(10, "Groceries", "Пятёрочка|Лента", 1),
-        CategoryDefinition(11, "Entertainment", "Лента", 1),
-        CategoryDefinition(20, "Cashback", "Кэшбэк", 2),
+        CategoryDefinition(10, "Groceries", "Pyaterochka|Lenta", 1),
+        CategoryDefinition(11, "Entertainment", "Lenta", 1),
+        CategoryDefinition(20, "Cashback", "Cashback", 2),
     ]
     rules = build_rules(cats, groups)
-    assert categorize("Пятёрочка", -100, rules) == 10
-    assert categorize("ЛЕНТА", -100, rules) == 10  # first rule in order wins
-    assert categorize("Зачисление кэшбэка", 100, rules) == 20
-    assert categorize("Кэшбэк", -100, rules) is None  # wrong sign for income rule
+    assert categorize("Pyaterochka", -100, rules) == 10
+    assert categorize("LENTA", -100, rules) == 10
+    assert categorize("Cashback credit", 100, rules) == 20
+    assert categorize("Cashback", -100, rules) is None
     assert categorize("", -100, rules) is None
 
 
@@ -207,50 +206,51 @@ def test_build_rules_skips_empty_bad_kind_and_null_keywords() -> None:
     cats: list[CategoryDefinition] = [
         CategoryDefinition(1, "NoKw", "", 1),
         CategoryDefinition(2, "BadKind", "x", 3),
-        CategoryDefinition(3, "Groceries", "Пят | Лента", 1),
-        CategoryDefinition(4, "Salary", "зарплата", 2),
+        CategoryDefinition(3, "Groceries", "Pyaterochka | Lenta| Lenta", 1),
+        CategoryDefinition(4, "Salary", "salary", 2),
         CategoryDefinition(5, "NullKw", None, 1),
     ]
     rules = build_rules(cats, groups)
-    # categories before Groceries are skipped with `continue`, not `break`
+
     assert [r.category_id for r in rules["OUT"]] == [3]
     assert [r.category_id for r in rules["IN"]] == [4]
     assert rules["OUT"][0].name == "Groceries"
-    # keywords are split on '|', trimmed and lowercased
-    assert rules["OUT"][0].keywords == ["пят", "лента"]
+
+    assert rules["OUT"][0].keywords == ["pyaterochka", "lenta"]
 
 
 def test_categorize_guards_on_empty_desc_and_zero_amount() -> None:
     groups = {1: "expense", 2: "income"}
     cats: list[CategoryDefinition] = [
-        CategoryDefinition(10, "Cafe", "кафе", 1),
-        CategoryDefinition(20, "Salary", "зарплата", 2),
+        CategoryDefinition(10, "Cafe", "cafe", 1),
+        CategoryDefinition(20, "Salary", "salary", 2),
         CategoryDefinition(30, "Decoy", "xx", 1),
     ]
     rules = build_rules(cats, groups)
-    assert categorize("Кафе Пушкин", -500, rules) == 10
-    assert categorize("Зарплата", 500, rules) == 20
-    # a zero amount is never categorized, even with a matching description
-    assert categorize("Кафе", 0, rules) is None
-    # a tiny positive amount uses the income rules (sign split is strictly > 0)
-    assert categorize("Зарплата", 1, rules) == 20
-    # an empty description short-circuits to None (would match the "xx" decoy otherwise)
+    assert categorize("Cafe Pushkin", -500, rules) == 10
+    assert categorize("Salary", 500, rules) == 20
+
+    assert categorize("Cafe", 0, rules) is None
+
+    assert categorize("Salary", 1, rules) == 20
+
     assert categorize("", -500, rules) is None
 
 
 def test_categorize_files_a_refund_back_into_its_expense_envelope() -> None:
     """
-    A merchant's money coming back is a refund: it must land in the envelope
-    it left, not drift to uncategorized where the budget cannot see it. Income
+    A merchant's money coming back is a refund: it must land in the envelope.
+
+    it left, not drift to uncategorized where the budget cannot see it. Income.
     keywords still win first, so a real inflow is never mistaken for a refund.
     """
     groups = {1: "expense", 2: "income"}
     cats: list[CategoryDefinition] = [
-        CategoryDefinition(10, "Groceries", "Пятёрочка", 1),
-        CategoryDefinition(20, "Cashback", "Кэшбэк|пятёрочка кэшбэк", 2),
+        CategoryDefinition(10, "Groceries", "Pyaterochka", 1),
+        CategoryDefinition(20, "Cashback", "Cashback|pyaterochka cashback", 2),
     ]
     rules = build_rules(cats, groups)
-    assert categorize("Пятёрочка возврат", 8470, rules) == 10
-    assert categorize("Пятёрочка кэшбэк", 100, rules) == 20
-    assert categorize("Перевод от мамы", 5000, rules) is None
-    assert categorize("Пятёрочка", -100, rules) == 10
+    assert categorize("Pyaterochka refund", 8470, rules) == 10
+    assert categorize("Pyaterochka cashback", 100, rules) == 20
+    assert categorize("Transfer from mom", 5000, rules) is None
+    assert categorize("Pyaterochka", -100, rules) == 10

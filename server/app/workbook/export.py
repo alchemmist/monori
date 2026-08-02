@@ -20,22 +20,25 @@ from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.worksheet import Worksheet
 
-from ..deps import SnapshotResponse, TransactionResponse
+from app.deps import CategoryResponse, GroupResponse, SnapshotResponse, TransactionResponse
+
 from . import spec
 
 
 @dataclass(frozen=True, slots=True)
 class EffectiveTransaction:
+    """Represent EffectiveTransaction."""
+
     id: int | str
     date: str
-    accountId: int
+    account_id: int
     amount: int
-    bankCategory: str
+    bank_category: str
     mcc: str
     description: str
-    categoryId: int | None
+    category_id: int | None
     comment: str
-    transferId: str | None
+    transfer_id: str | None
 
 
 BOLD = Font(bold=True)
@@ -101,7 +104,7 @@ def _categories_sheet(ws: Worksheet, snap: SnapshotResponse) -> None:
     _style_header(ws, 1)
     by_group = defaultdict(list)
     for cat in snap.categories:
-        by_group[cat.groupId].append(cat)
+        by_group[cat.group_id].append(cat)
     for group in snap.groups:
         display = spec.group_display(group.name, group.kind)
         for cat in by_group[group.id]:
@@ -115,7 +118,7 @@ def _categories_sheet(ws: Worksheet, snap: SnapshotResponse) -> None:
                 _text(spec.group_display(group.name, group.kind)),
                 group.sort,
                 spec.group_type(group.kind),
-            ]
+            ],
         )
     ws.freeze_panes = "A2"
 
@@ -124,14 +127,14 @@ def _effective_transaction(tx: TransactionResponse) -> EffectiveTransaction:
     return EffectiveTransaction(
         id=tx.id,
         date=tx.date,
-        accountId=tx.accountId,
+        account_id=tx.account_id,
         amount=tx.amount,
-        bankCategory=tx.bankCategory,
+        bank_category=tx.bank_category,
         mcc=tx.mcc,
         description=tx.description,
-        categoryId=tx.categoryId,
+        category_id=tx.category_id,
         comment=tx.comment,
-        transferId=tx.transferId,
+        transfer_id=tx.transfer_id,
     )
 
 
@@ -142,21 +145,23 @@ def _effective_transactions(snap: SnapshotResponse) -> list[EffectiveTransaction
         if not tx.splits:
             effective.append(_effective_transaction(tx))
             continue
-        for part in tx.splits:
-            effective.append(
+        effective.extend(
+            [
                 EffectiveTransaction(
                     id=f"{tx.id}:{part.id}",
                     date=tx.date,
-                    accountId=tx.accountId,
+                    account_id=tx.account_id,
                     amount=part.amount,
-                    bankCategory=tx.bankCategory,
+                    bank_category=tx.bank_category,
                     mcc=tx.mcc,
                     description=tx.description,
-                    categoryId=part.categoryId,
+                    category_id=part.category_id,
                     comment=part.comment,
-                    transferId=tx.transferId,
+                    transfer_id=tx.transfer_id,
                 )
-            )
+                for part in tx.splits
+            ],
+        )
     return effective
 
 
@@ -172,7 +177,7 @@ def _transactions_sheet(
     row = 2
     for tx in _effective_transactions(snap):
         dt = _parse_dt(tx.date)
-        currency = acct_currency.get(tx.accountId, "RUB")
+        currency = acct_currency.get(tx.account_id, "RUB")
         rub = spec.kop_to_rub(tx.amount)
         ws.cell(row=row, column=1, value=dt.strftime("%d.%m.%Y %H:%M:%S"))
         ws.cell(row=row, column=2, value=dt.strftime("%d.%m.%Y"))
@@ -184,13 +189,13 @@ def _transactions_sheet(
         ws.cell(row=row, column=8, value=spec.amount_display(rub, currency))
         ws.cell(row=row, column=9, value=currency)
         ws.cell(row=row, column=10, value="")
-        ws.cell(row=row, column=11, value=_text(tx.bankCategory))
+        ws.cell(row=row, column=11, value=_text(tx.bank_category))
         ws.cell(row=row, column=12, value=_text(tx.mcc))
         ws.cell(row=row, column=13, value=_text(tx.description))
-        category_id = tx.categoryId
+        category_id = tx.category_id
         category_name = cat_names.get(category_id, "") if category_id is not None else ""
         ws.cell(row=row, column=14, value=_text(category_name))
-        ws.cell(row=row, column=15, value=_text(acct_names.get(tx.accountId, "")))
+        ws.cell(row=row, column=15, value=_text(acct_names.get(tx.account_id, "")))
         ws.cell(row=row, column=16, value=_text(tx.comment))
         row += 1
     ws.freeze_panes = "A2"
@@ -199,17 +204,17 @@ def _transactions_sheet(
 def _month_activity(snap: SnapshotResponse) -> dict[tuple[int, int, int], int]:
     activity: dict[tuple[int, int, int], int] = defaultdict(int)
     for tx in _effective_transactions(snap):
-        if tx.categoryId is None:
+        if tx.category_id is None:
             continue
         dt = _parse_dt(tx.date)
-        activity[(tx.categoryId, dt.year, dt.month)] += tx.amount
+        activity[(tx.category_id, dt.year, dt.month)] += tx.amount
     return activity
 
 
 def _budget_index(snap: SnapshotResponse) -> dict[tuple[int, int, int], int]:
     budgets: dict[tuple[int, int, int], int] = {}
     for cell in snap.budgets:
-        budgets[(cell.categoryId, cell.year, cell.month)] = cell.amount
+        budgets[(cell.category_id, cell.year, cell.month)] = cell.amount
     return budgets
 
 
@@ -220,6 +225,35 @@ def _year_sheet(
     activity: dict[tuple[int, int, int], int],
     budgets: dict[tuple[int, int, int], int],
 ) -> None:
+    total_col = _year_headers(ws)
+    data = _YearSheetData(year, snap, activity, budgets, total_col)
+    hero = _write_year_groups(ws, data)
+    _write_year_summary(ws, data, hero)
+    _style_year_sheet(ws, total_col)
+
+
+@dataclass(frozen=True, slots=True)
+class _YearSheetData:
+    year: int
+    snapshot: SnapshotResponse
+    activity: dict[tuple[int, int, int], int]
+    budgets: dict[tuple[int, int, int], int]
+    total_col: int
+
+
+@dataclass(frozen=True, slots=True)
+class _YearGroup:
+    group: GroupResponse
+    categories: list[CategoryResponse]
+
+
+@dataclass(frozen=True, slots=True)
+class _YearCategory:
+    category: CategoryResponse
+    expense: bool
+
+
+def _year_headers(ws: Worksheet) -> int:
     for m in range(12):
         col = 2 + m * 3
         head = ws.cell(row=1, column=col, value=spec.MONTHS[m])
@@ -230,62 +264,88 @@ def _year_sheet(
     total_col = 2 + 12 * 3
     ws.cell(row=1, column=total_col, value="Total")
     ws.cell(row=1, column=total_col + 1, value="Average")
+    return total_col
 
-    by_group = defaultdict(list)
-    for cat in snap.categories:
-        by_group[cat.groupId].append(cat)
 
-    hero = {m: [0, 0, 0] for m in range(1, 13)}
+def _write_year_groups(ws: Worksheet, data: _YearSheetData) -> dict[int, list[int]]:
+    by_group: defaultdict[int, list[CategoryResponse]] = defaultdict(list)
+    for category in data.snapshot.categories:
+        by_group[category.group_id].append(category)
+    hero = {month: [0, 0, 0] for month in range(1, 13)}
     row = 4
-    for group in snap.groups:
-        cats = by_group[group.id]
-        if not cats:
-            continue
-        ws.cell(row=row, column=1, value=_text(spec.group_display(group.name, group.kind)))
-        _fill_band(ws, row, total_col + 1, GROUP_FILL, BOLD)
-        row += 1
-        expense = group.kind == "expense"
-        for cat in cats:
-            ws.cell(row=row, column=1, value=_text(cat.name))
-            balance = 0
-            total_out = 0
-            for m in range(1, 13):
-                budgeted = budgets.get((cat.id, year, m), 0)
-                signed = activity.get((cat.id, year, m), 0)
-                out = -signed if expense else signed
-                balance += budgeted - out
-                col = 2 + (m - 1) * 3
-                _money_cell(ws, row, col, budgeted)
-                _money_cell(ws, row, col + 1, out)
-                _money_cell(ws, row, col + 2, balance).font = _balance_font(balance)
-                total_out += out
-                if expense:
-                    hero[m][0] += budgeted
-                    hero[m][1] += out
-            _money_cell(ws, row, total_col, total_out)
-            _money_cell(ws, row, total_col + 1, round(total_out / 12))
-            row += 1
-        row += 1
+    for group in data.snapshot.groups:
+        categories = by_group[group.id]
+        if categories:
+            row = _write_year_group(ws, row, data, hero, _YearGroup(group, categories))
+    return hero
 
+
+def _write_year_group(
+    ws: Worksheet,
+    row: int,
+    data: _YearSheetData,
+    hero: dict[int, list[int]],
+    section: _YearGroup,
+) -> int:
+    group = section.group
+    ws.cell(row=row, column=1, value=_text(spec.group_display(group.name, group.kind)))
+    _fill_band(ws, row, data.total_col + 1, GROUP_FILL, BOLD)
+    row += 1
+    for category in section.categories:
+        _write_year_category(ws, row, data, hero, _YearCategory(category, group.kind == "expense"))
+        row += 1
+    return row + 1
+
+
+def _write_year_category(
+    ws: Worksheet,
+    row: int,
+    data: _YearSheetData,
+    hero: dict[int, list[int]],
+    item: _YearCategory,
+) -> None:
+    category = item.category
+    ws.cell(row=row, column=1, value=_text(category.name))
+    balance = total_out = 0
+    for month in range(1, 13):
+        budgeted = data.budgets.get((category.id, data.year, month), 0)
+        signed = data.activity.get((category.id, data.year, month), 0)
+        out = -signed if item.expense else signed
+        balance += budgeted - out
+        col = 2 + (month - 1) * 3
+        _money_cell(ws, row, col, budgeted)
+        _money_cell(ws, row, col + 1, out)
+        _money_cell(ws, row, col + 2, balance).font = _balance_font(balance)
+        total_out += out
+        if item.expense:
+            hero[month][0] += budgeted
+            hero[month][1] += out
+    _money_cell(ws, row, data.total_col, total_out)
+    _money_cell(ws, row, data.total_col + 1, round(total_out / 12))
+
+
+def _write_year_summary(ws: Worksheet, data: _YearSheetData, hero: dict[int, list[int]]) -> None:
     hero_balance = 0
     ws.cell(row=3, column=1, value="Month Summary")
     hero_total = 0
-    summary_balances = []
-    for m in range(1, 13):
-        budgeted, out, _ = hero[m]
+    summary_balances: list[tuple[int, int]] = []
+    for month in range(1, 13):
+        budgeted, out, _ = hero[month]
         hero_balance += budgeted - out
-        col = 2 + (m - 1) * 3
+        col = 2 + (month - 1) * 3
         _money_cell(ws, 3, col, budgeted)
         _money_cell(ws, 3, col + 1, out)
         _money_cell(ws, 3, col + 2, hero_balance)
         summary_balances.append((col + 2, hero_balance))
         hero_total += out
-    _money_cell(ws, 3, total_col, hero_total)
-    _money_cell(ws, 3, total_col + 1, round(hero_total / 12))
-    _fill_band(ws, 3, total_col + 1, SUMMARY_FILL, SUMMARY_FONT)
+    _money_cell(ws, 3, data.total_col, hero_total)
+    _money_cell(ws, 3, data.total_col + 1, round(hero_total / 12))
+    _fill_band(ws, 3, data.total_col + 1, SUMMARY_FILL, SUMMARY_FONT)
     for col, bal in summary_balances:
         ws.cell(row=3, column=col).font = _balance_font(bal)
 
+
+def _style_year_sheet(ws: Worksheet, total_col: int) -> None:
     _fill_band(ws, 1, total_col + 1, HEADER_FILL, HEADER_FONT)
     ws.cell(row=1, column=2).alignment = CENTER
     _fill_band(ws, 2, total_col + 1, HEADER_FILL, HEADER_FONT)
@@ -297,17 +357,25 @@ def _year_sheet(
 
 
 def _dashdata_sheet(
-    ws: Worksheet, snap: SnapshotResponse, activity: dict[tuple[int, int, int], int]
+    ws: Worksheet,
+    snap: SnapshotResponse,
+    activity: dict[tuple[int, int, int], int],
 ) -> None:
     ws.append(spec.DASH_HEADERS)
     _style_header(ws, 1)
+    _write_monthly_dashdata(ws, snap)
+    _write_category_year_totals(ws, snap, activity)
+    ws.freeze_panes = "A2"
+
+
+def _write_monthly_dashdata(ws: Worksheet, snap: SnapshotResponse) -> None:
     monthly: defaultdict[tuple[int, int], list[int]] = defaultdict(lambda: [0, 0])
     kinds = {g.id: g.kind for g in snap.groups}
-    cat_kind = {c.id: kinds[c.groupId] for c in snap.categories}
+    cat_kind = {c.id: kinds[c.group_id] for c in snap.categories}
     for tx in _effective_transactions(snap):
-        if tx.transferId:
+        if tx.transfer_id:
             continue
-        category_id = tx.categoryId
+        category_id = tx.category_id
         if category_id is None:
             continue
         kind = cat_kind.get(category_id)
@@ -332,9 +400,15 @@ def _dashdata_sheet(
         _money_cell(ws, row, 5, cum_net)
         row += 1
 
+
+def _write_category_year_totals(
+    ws: Worksheet,
+    snap: SnapshotResponse,
+    activity: dict[tuple[int, int, int], int],
+) -> None:
     years = sorted({y for (_, y, _m) in activity})
     if years:
-        row += 1
+        row = ws.max_row + 2
         ws.cell(row=row, column=1, value="Category").font = BOLD
         for i, year in enumerate(years):
             ws.cell(row=row, column=2 + i, value=year).font = BOLD
@@ -344,10 +418,10 @@ def _dashdata_sheet(
             for i, year in enumerate(years):
                 total = sum(activity.get((cat.id, year, m), 0) for m in range(1, 13))
                 _money_cell(ws, row, 2 + i, total)
-    ws.freeze_panes = "A2"
 
 
 def build_workbook(snap: SnapshotResponse) -> Workbook:
+    """Handle build workbook."""
     cat_names = {c.id: c.name for c in snap.categories}
     acct_names = {a.id: a.name for a in snap.accounts}
     acct_currency = {a.id: a.currency for a in snap.accounts}
@@ -357,10 +431,15 @@ def build_workbook(snap: SnapshotResponse) -> Workbook:
     wb = Workbook()
     active = wb.active
     if active is None:
-        raise RuntimeError("workbook has no active worksheet")
+        msg = "workbook has no active worksheet"
+        raise RuntimeError(msg)
     _categories_sheet(active, snap)
     _transactions_sheet(
-        wb.create_sheet(spec.SHEET_TRANSACTIONS), snap, cat_names, acct_names, acct_currency
+        wb.create_sheet(spec.SHEET_TRANSACTIONS),
+        snap,
+        cat_names,
+        acct_names,
+        acct_currency,
     )
     years = sorted({y for (_, y, _m) in activity} | {b.year for b in snap.budgets})
     for year in years:
@@ -370,6 +449,7 @@ def build_workbook(snap: SnapshotResponse) -> Workbook:
 
 
 def workbook_bytes(snap: SnapshotResponse) -> bytes:
+    """Handle workbook bytes."""
     buf = BytesIO()
     build_workbook(snap).save(buf)
     return buf.getvalue()

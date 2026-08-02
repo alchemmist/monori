@@ -1,12 +1,19 @@
 import pathlib
 import sqlite3
-from collections.abc import Callable
+import threading
+import time
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 import pytest
 from alembic import command
+from alembic.config import Config
 
 from app.db import LEGACY_REVISIONS, _alembic_config, connect
+from app.importer import tx_hash
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 HEAD = "0019"
 assert LEGACY_REVISIONS[-1] == "0006"
@@ -42,7 +49,7 @@ def _make_old_db(path: pathlib.Path) -> None:
     old.execute(
         "INSERT INTO transactions (id, date, amount, description, hash) VALUES "
         "(1, '2026-01-01T00:00:00', -100, 'a', 'h1'),"
-        "(2, '2026-01-02T00:00:00', -200, 'b', 'h2')"
+        "(2, '2026-01-02T00:00:00', -200, 'b', 'h2')",
     )
     old.commit()
     old.close()
@@ -211,7 +218,7 @@ def test_migration_0011_backfills_and_enforces_canonical(tmp_path: pathlib.Path)
     raw = sqlite3.connect(db_path)
     raw.execute(
         "INSERT INTO users (email, password_hash, created_at)"
-        " VALUES ('a.n.ton+shop@gmail.com', 'h', 't')"
+        " VALUES ('a.n.ton+shop@gmail.com', 'h', 't')",
     )
     raw.commit()
     raw.close()
@@ -221,14 +228,14 @@ def test_migration_0011_backfills_and_enforces_canonical(tmp_path: pathlib.Path)
         assert _revision(conn) == HEAD
         canon = _str_scalar(conn, "SELECT email_canonical FROM users")
         assert canon == "anton@gmail.com"
-        # a distinct alias of the same mailbox collapses to the same canonical
-        # and is rejected by the new unique index
+
         try:
             conn.execute(
                 "INSERT INTO users (email, email_canonical, password_hash, created_at)"
-                " VALUES ('anton@gmail.com', 'anton@gmail.com', 'h', 't')"
+                " VALUES ('anton@gmail.com', 'anton@gmail.com', 'h', 't')",
             )
-            raise AssertionError("canonical alias collision was accepted")
+            msg = "canonical alias collision was accepted"
+            raise AssertionError(msg)
         except sqlite3.IntegrityError:
             pass
     finally:
@@ -241,16 +248,13 @@ def test_migration_0011_reports_canonical_collisions(tmp_path: pathlib.Path) -> 
     raw = sqlite3.connect(db_path)
     raw.execute(
         "INSERT INTO users (email, password_hash, created_at) VALUES"
-        " ('anton@gmail.com', 'h', 't'), ('an.ton@gmail.com', 'h', 't')"
+        " ('anton@gmail.com', 'h', 't'), ('an.ton@gmail.com', 'h', 't')",
     )
     raw.commit()
     raw.close()
 
-    try:
+    with pytest.raises(Exception, match="merge these first"):
         connect(db_path).close()
-        raise AssertionError("migration did not report the canonical collision")
-    except Exception as exc:  # noqa: BLE001 — alembic wraps the RuntimeError
-        assert "merge these first" in str(exc)
 
 
 def test_blank_email_canonical_is_rejected(tmp_path: pathlib.Path) -> None:
@@ -266,19 +270,21 @@ def test_blank_email_canonical_is_rejected(tmp_path: pathlib.Path) -> None:
             try:
                 raw.execute(
                     "INSERT INTO users (email, password_hash, created_at)"
-                    " VALUES ('u@e.co', 'h', 't')"
+                    " VALUES ('u@e.co', 'h', 't')",
                 )
-                raise AssertionError(f"{name}: blank email_canonical on insert was accepted")
+                msg = f"{name}: blank email_canonical on insert was accepted"
+                raise AssertionError(msg)
             except sqlite3.IntegrityError:
                 pass
-            # blanking an existing row via UPDATE is rejected too
+
             raw.execute(
                 "INSERT INTO users (email, email_canonical, password_hash, created_at)"
-                " VALUES ('v@e.co', 'v@e.co', 'h', 't')"
+                " VALUES ('v@e.co', 'v@e.co', 'h', 't')",
             )
             try:
                 raw.execute("UPDATE users SET email_canonical = '' WHERE email = 'v@e.co'")
-                raise AssertionError(f"{name}: blank email_canonical on update was accepted")
+                msg = f"{name}: blank email_canonical on update was accepted"
+                raise AssertionError(msg)
             except sqlite3.IntegrityError:
                 pass
         finally:
@@ -293,32 +299,27 @@ def test_migration_0011_reports_blank_backfill(tmp_path: pathlib.Path) -> None:
     raw.commit()
     raw.close()
 
-    try:
+    with pytest.raises(Exception, match="fix their address first"):
         connect(db_path).close()
-        raise AssertionError("migration did not report the blank backfill")
-    except Exception as exc:  # noqa: BLE001 — alembic wraps the RuntimeError
-        assert "fix their address first" in str(exc)
 
 
 def test_migration_0012_rehashes_with_account_scope(tmp_path: pathlib.Path) -> None:
-    from app.importer import tx_hash
-
     db_path = tmp_path / "v11.db"
     command.upgrade(_alembic_config(db_path), "0011")
     raw = sqlite3.connect(db_path)
     raw.execute(
         "INSERT INTO users (email, email_canonical, password_hash, created_at)"
-        " VALUES ('u@e.co', 'u@e.co', 'h', 't')"
+        " VALUES ('u@e.co', 'u@e.co', 'h', 't')",
     )
     raw.execute(
         "INSERT INTO accounts (user_id, name, type, currency, sort) VALUES"
-        " (1, 'A', 'card', 'RUB', 1), (1, 'B', 'card', 'RUB', 2)"
+        " (1, 'A', 'card', 'RUB', 1), (1, 'B', 'card', 'RUB', 2)",
     )
-    # the same-looking operation on two accounts shared one account-less hash
+
     raw.execute(
         "INSERT INTO transactions (date, amount, description, account_id, hash) VALUES"
         " ('2026-01-01T00:00:00', -100, 'coffee', 1, 'old'),"
-        " ('2026-01-01T00:00:00', -100, 'coffee', 2, 'old')"
+        " ('2026-01-01T00:00:00', -100, 'coffee', 2, 'old')",
     )
     raw.commit()
     raw.close()
@@ -327,7 +328,7 @@ def test_migration_0012_rehashes_with_account_scope(tmp_path: pathlib.Path) -> N
     try:
         assert _revision(conn) == HEAD
         rows = conn.execute(
-            "SELECT account_id, hash FROM transactions ORDER BY account_id"
+            "SELECT account_id, hash FROM transactions ORDER BY account_id",
         ).fetchall()
         hashes: dict[int, str] = {}
         for row in rows:
@@ -372,7 +373,7 @@ def test_upgrade_assigns_orphans_to_earliest_user(tmp_path: pathlib.Path) -> Non
     raw = sqlite3.connect(db_path)
     raw.execute("INSERT INTO users (email, password_hash, created_at) VALUES ('a@b.co', 'h', 't')")
     raw.execute(
-        "INSERT INTO accounts (name, type, currency, sort) VALUES ('Old', 'card', 'RUB', 1)"
+        "INSERT INTO accounts (name, type, currency, sort) VALUES ('Old', 'card', 'RUB', 1)",
     )
     raw.execute("INSERT INTO category_groups (name, sort, kind) VALUES ('G', 1, 'expense')")
     raw.commit()
@@ -388,23 +389,19 @@ def test_upgrade_assigns_orphans_to_earliest_user(tmp_path: pathlib.Path) -> Non
 
 
 def test_concurrent_first_connects_bootstrap_once(
-    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: pathlib.Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import threading
-    import time
-
-    import app.db as dbmod
-
     db_path = tmp_path / "race.db"
     calls: list[int] = []
-    real_bootstrap = dbmod._bootstrap
+    real_stamp = command.stamp
 
-    def slow_bootstrap(path: pathlib.Path) -> None:
+    def counted_bootstrap_call(cfg: Config, revision: str) -> None:
         calls.append(1)
         time.sleep(0.05)
-        real_bootstrap(path)
+        real_stamp(cfg, revision)
 
-    monkeypatch.setattr(dbmod, "_bootstrap", slow_bootstrap)
+    monkeypatch.setattr(command, "stamp", counted_bootstrap_call)
     threads = [threading.Thread(target=lambda: connect(db_path).close()) for _ in range(6)]
     for t in threads:
         t.start()
@@ -462,12 +459,13 @@ def test_connection_conversion_to_user_level(tmp_path: pathlib.Path) -> None:
     c.execute("INSERT INTO users (email, password_hash, created_at) VALUES ('u@e.co', 'h', 't')")
     c.execute(
         "INSERT INTO accounts (user_id, name, type, currency, sort)"
-        " VALUES (1, 'Card', 'card', 'RUB', 1)"
+        " VALUES (1, 'Card', 'card', 'RUB', 1)",
     )
     acct_id = _int_scalar(c, "SELECT id FROM accounts WHERE name='Card'")
     c.execute(
         "INSERT INTO bank_connections (account_id, bank, kind, status, created_at, updated_at)"
-        f" VALUES ({acct_id}, 'tbank', 'playwright', 'connected', 't1', 't2')"
+        " VALUES (?, 'tbank', 'playwright', 'connected', 't1', 't2')",
+        (acct_id,),
     )
     c.commit()
     c.close()

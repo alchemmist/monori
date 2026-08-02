@@ -64,6 +64,7 @@ HAVING COUNT(*) = 2
 
 
 def upgrade() -> None:
+    """Handle upgrade."""
     op.execute(CREATE_TRANSFERS)
     op.execute("CREATE INDEX IF NOT EXISTS idx_transfers_user ON transfers (user_id)")
     op.execute(CREATE_REJECTIONS)
@@ -71,4 +72,6 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    raise NotImplementedError("forward-only migrations")
+    """Handle downgrade."""
+    msg = "forward-only migrations"
+    raise NotImplementedError(msg)

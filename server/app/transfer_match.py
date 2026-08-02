@@ -1,5 +1,6 @@
 """
-Pairing rule for transfers: find the two rows that are the same money leaving
+Pairing rule for transfers: find the two rows that are the same money leaving.
+
 one account and arriving on another.
 
 Pure functions over transfer records — no database, no I/O — so the rule can be
@@ -28,6 +29,7 @@ from dataclasses import dataclass
 
 AUTO_DAYS = 1
 SUGGEST_DAYS = 5
+FEBRUARY = 2
 
 TRANSFER_HINTS = (
     "перевод",
@@ -35,6 +37,7 @@ TRANSFER_HINTS = (
     "перевел",
     "между своими",
     "собственные средства",
+    "between own accounts",
     "transfer",
     "card2card",
     "c2c",
@@ -47,6 +50,8 @@ TRANSFER_HINTS = (
 
 @dataclass(frozen=True, slots=True)
 class TransferMatchRow:
+    """Represent TransferMatchRow."""
+
     id: int
     date: str
     amount: int
@@ -57,8 +62,10 @@ class TransferMatchRow:
 
 @dataclass(frozen=True, slots=True)
 class TransferCandidate:
-    outTxId: int
-    inTxId: int
+    """Represent TransferCandidate."""
+
+    out_tx_id: int
+    in_tx_id: int
     amount: int
     days: int
     hint: bool
@@ -67,20 +74,22 @@ class TransferCandidate:
 
 def day_number(date_iso: str) -> int:
     """
-    Days since the epoch for an ISO date(time), by calendar day only — the
+    Days since the epoch for an ISO date(time), by calendar day only — the.
+
     times of the two legs are irrelevant and banks disagree about them anyway.
     """
     y, m, d = (int(p) for p in date_iso[:10].split("-"))
-    # Howard Hinnant's days_from_civil, so no datetime import for a hot loop
-    y -= m <= 2
+
+    y -= m <= FEBRUARY
     era = (y if y >= 0 else y - 399) // 400
     yoe = y - era * 400
-    doy = (153 * (m + (-3 if m > 2 else 9)) + 2) // 5 + d - 1
+    doy = (153 * (m + (-3 if m > FEBRUARY else 9)) + 2) // 5 + d - 1
     doe = yoe * 365 + yoe // 4 - yoe // 100 + doy
     return era * 146097 + doe - 719468
 
 
 def has_hint(description: str) -> bool:
+    """Handle has hint."""
     lowered = description.lower()
     return any(h in lowered for h in TRANSFER_HINTS)
 
@@ -97,67 +106,99 @@ def find_pairs(
     user has dismissed. Results are sorted best-first: closest in time,
     transfer-sounding descriptions ahead of silent ones, then by id.
     """
-    rejected = {(int(p[0]), int(p[1])) for p in rejected}
+    rejected_pairs = {(int(pair[0]), int(pair[1])) for pair in rejected}
+    outs, ins = _transfer_buckets(rows)
+    candidates = _transfer_candidates(outs, ins, max_days, rejected_pairs)
+    candidates.sort(key=_candidate_sort_key)
+    return _select_pairs(candidates)
+
+
+def _transfer_buckets(
+    rows: Iterable[TransferMatchRow],
+) -> tuple[dict[int, list[TransferMatchRow]], dict[int, list[TransferMatchRow]]]:
     outs: dict[int, list[TransferMatchRow]] = {}
     ins: dict[int, list[TransferMatchRow]] = {}
-    for r in rows:
-        if r.transfer_id:
+    for row in rows:
+        if row.transfer_id or row.amount == 0:
             continue
-        amount = r.amount
-        if amount == 0:
-            continue
-        bucket = outs if amount < 0 else ins
-        bucket.setdefault(abs(amount), []).append(r)
+        bucket = outs if row.amount < 0 else ins
+        bucket.setdefault(abs(row.amount), []).append(row)
+    return outs, ins
 
+
+def _transfer_candidates(
+    outs: dict[int, list[TransferMatchRow]],
+    ins: dict[int, list[TransferMatchRow]],
+    max_days: int,
+    rejected: set[tuple[int, int]],
+) -> list[TransferCandidate]:
     candidates: list[TransferCandidate] = []
     for amount, out_rows in outs.items():
-        in_rows = ins.get(amount)
-        if not in_rows:
-            continue
         for out_row in out_rows:
-            out_day = day_number(out_row.date)
-            for in_row in in_rows:
-                if out_row.account_id == in_row.account_id:
-                    continue
-                if (out_row.id, in_row.id) in rejected:
-                    continue
-                days = abs(day_number(in_row.date) - out_day)
-                if days > max_days:
-                    continue
-                out_hint = has_hint(out_row.description)
-                in_hint = has_hint(in_row.description)
-                silent = (in_row if out_hint else out_row).description
-                candidates.append(
-                    TransferCandidate(
-                        outTxId=out_row.id,
-                        inTxId=in_row.id,
-                        amount=amount,
-                        days=days,
-                        hint=out_hint or in_hint,
-                        # one leg says "transfer", the other names something else
-                        # entirely — the amount agreeing is not enough to be sure
-                        mismatch=out_hint != in_hint and bool(silent.strip()),
-                    )
-                )
+            candidates.extend(
+                candidate
+                for in_row in ins.get(amount, [])
+                if (candidate := _transfer_candidate(out_row, in_row, amount, max_days, rejected))
+                is not None
+            )
+    return candidates
 
-    candidates.sort(key=lambda c: (c.days, c.mismatch, not c.hint, c.outTxId, c.inTxId))
-    used = set()
-    pairs = []
-    for c in candidates:
-        if c.outTxId in used or c.inTxId in used:
+
+def _transfer_candidate(
+    out_row: TransferMatchRow,
+    in_row: TransferMatchRow,
+    amount: int,
+    max_days: int,
+    rejected: set[tuple[int, int]],
+) -> TransferCandidate | None:
+    if out_row.account_id == in_row.account_id or (out_row.id, in_row.id) in rejected:
+        return None
+    days = abs(day_number(in_row.date) - day_number(out_row.date))
+    if days > max_days:
+        return None
+    out_hint = has_hint(out_row.description)
+    in_hint = has_hint(in_row.description)
+    silent = in_row if out_hint else out_row
+    return TransferCandidate(
+        out_tx_id=out_row.id,
+        in_tx_id=in_row.id,
+        amount=amount,
+        days=days,
+        hint=out_hint or in_hint,
+        mismatch=out_hint != in_hint and bool(silent.description.strip()),
+    )
+
+
+def _candidate_sort_key(candidate: TransferCandidate) -> tuple[int, bool, bool, int, int]:
+    return (
+        candidate.days,
+        candidate.mismatch,
+        not candidate.hint,
+        candidate.out_tx_id,
+        candidate.in_tx_id,
+    )
+
+
+def _select_pairs(candidates: Iterable[TransferCandidate]) -> list[TransferCandidate]:
+    used: set[int] = set()
+    pairs: list[TransferCandidate] = []
+    for candidate in candidates:
+        if candidate.out_tx_id in used or candidate.in_tx_id in used:
             continue
-        used.add(c.outTxId)
-        used.add(c.inTxId)
-        pairs.append(c)
+        used.add(candidate.out_tx_id)
+        used.add(candidate.in_tx_id)
+        pairs.append(candidate)
     return pairs
 
 
 def split_confident(
-    pairs: Iterable[TransferCandidate], auto_days: int = AUTO_DAYS
+    pairs: Iterable[TransferCandidate],
+    auto_days: int = AUTO_DAYS,
 ) -> tuple[list[TransferCandidate], list[TransferCandidate]]:
     """
-    Partition matched pairs into the ones safe to merge without asking
-    (``days <= auto_days`` and no description mismatch) and the ones worth
+    Partition matched pairs into the ones safe to merge without asking.
+
+    (``days <= auto_days`` and no description mismatch) and the ones worth.
     showing as suggestions.
     """
     auto: list[TransferCandidate] = []

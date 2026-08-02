@@ -23,7 +23,7 @@ def _db(tmp_path: Path) -> tuple[sqlite3.Connection, int, int]:
     c = dbmod.connect(str(tmp_path / "t.db"))
     c.execute(
         "INSERT INTO users (email, email_canonical, password_hash, created_at)"
-        " VALUES ('u@e.co', 'u@e.co', 'h', 't')"
+        " VALUES ('u@e.co', 'u@e.co', 'h', 't')",
     )
     user_row = c.execute("SELECT id FROM users").fetchone()
     assert user_row is not None
@@ -116,7 +116,7 @@ def test_apply_creates_groups_categories_transactions_budgets(tmp_path: Path) ->
         r["name"]: (r["sort"], r["kind"])
         for r in c.execute(
             "SELECT g.name, g.sort, t.type AS kind FROM category_groups g"
-            " JOIN category_group_types t ON t.id=g.type_id"
+            " JOIN category_group_types t ON t.id=g.type_id",
         )
     }
     assert groups == {"Daily": (1, "expense"), "Inflow": (5, "income")}
@@ -133,17 +133,17 @@ def test_apply_preserves_blank_categories_despite_keywords(tmp_path: Path) -> No
     c, uid, acct = _db(tmp_path)
     result = apply_workbook(c, uid, _parsed(), {"RUB:": acct})
     c.commit()
-    # a wall of uncategorized rows reads as a fault unless the result says why
+
     assert result.warnings == [
         "1 rows carry no category in the sheet and were imported uncategorized"
         " — typically transfers between your own accounts, which the spreadsheet"
-        " leaves out of the budget as well"
+        " leaves out of the budget as well",
     ]
     rows = list(
         c.execute(
             "SELECT t.description, cat.name FROM transactions t"
-            " LEFT JOIN categories cat ON cat.id = t.category_id ORDER BY t.date"
-        )
+            " LEFT JOIN categories cat ON cat.id = t.category_id ORDER BY t.date",
+        ),
     )
     assert [(r[0], r[1]) for r in rows] == [
         ("Lenta", "Groceries"),
@@ -160,19 +160,19 @@ def test_named_category_outside_the_sheet_beats_keywords(tmp_path: Path) -> None
     )
     gid = c.execute("SELECT id FROM category_groups WHERE name='Mine'").fetchone()[0]
     c.execute(
-        "INSERT INTO categories (group_id, name, keywords, sort) VALUES (?, 'Pets', '', 0)", (gid,)
+        "INSERT INTO categories (group_id, name, keywords, sort) VALUES (?, 'Pets', '', 0)",
+        (gid,),
     )
     c.commit()
     parsed = _parsed()
-    # "lenta" would match the Groceries keyword; the row names Pets instead, and
-    # Pets exists only in monori — never on the workbook's Categories sheet
+
     parsed.transactions[1] = replace(parsed.transactions[1], monori_category=" PETS ")
     result = apply_workbook(c, uid, parsed, {"RUB:": acct})
     c.commit()
     assert result.warnings == []
     named = c.execute(
         "SELECT cat.name FROM transactions t JOIN categories cat ON cat.id = t.category_id"
-        " WHERE t.description='lenta market'"
+        " WHERE t.description='lenta market'",
     ).fetchone()[0]
     assert named == "Pets"
 
@@ -185,7 +185,7 @@ def test_unknown_named_category_is_left_uncategorized_not_guessed(tmp_path: Path
     c.commit()
     assert (
         c.execute(
-            "SELECT category_id FROM transactions WHERE description='lenta market'"
+            "SELECT category_id FROM transactions WHERE description='lenta market'",
         ).fetchone()[0]
         is None
     )
@@ -278,7 +278,7 @@ def test_budget_conflicts_counts_only_matching_cells(tmp_path: Path) -> None:
 
     apply_workbook(c, uid, _parsed(), {"RUB:": acct})
     c.commit()
-    # Groceries 2026-01 now exists; the Ghost cell has no matching category.
+
     assert budget_conflicts(c, uid, cells) == 1
     assert budget_conflicts(c, uid, []) == 0
 
@@ -296,18 +296,15 @@ def _row(
     description: str,
     category: str,
     marker: str = "",
-    bank_category: str = "Super",
-    mcc: str = "5411",
-    comment: str = "",
 ) -> WorkbookTransaction:
     return WorkbookTransaction(
         date=date,
         amount=amount,
         description=description,
         currency="RUB",
-        bank_category=bank_category,
-        mcc=mcc,
-        comment=comment,
+        bank_category="Super",
+        mcc="5411",
+        comment="",
         monori_category=category,
         marker=marker,
     )
@@ -317,8 +314,9 @@ def test_every_row_lands_in_its_account_batch_with_the_bank_columns_intact(
     tmp_path: Path,
 ) -> None:
     """
-    The batch is what an import is later browsed and undone by, so each row has
-    to carry the id of the batch on its own account — and the bank's own
+    The batch is what an import is later browsed and undone by, so each row has.
+
+    to carry the id of the batch on its own account — and the bank's own.
     category and MCC have to survive the trip, since nothing else records them.
     """
     c, uid, acct = _db(tmp_path)
@@ -334,7 +332,7 @@ def test_every_row_lands_in_its_account_batch_with_the_bank_columns_intact(
             _row("2026-01-06T11:00:00", -700, "unfiled one", ""),
             _row("2026-01-07T11:00:00", -800, "unfiled two", ""),
             _row("2026-02-05T10:00:00", -3000, "Pyaterochka", "Groceries", marker="*2947"),
-        ]
+        ],
     )
     result = apply_workbook(c, uid, parsed, {"RUB:": acct, "RUB:*2947": second})
     c.commit()
@@ -357,7 +355,8 @@ def test_every_row_lands_in_its_account_batch_with_the_bank_columns_intact(
 
 def test_unmatched_category_names_are_listed_ten_at_a_time(tmp_path: Path) -> None:
     """
-    The warning names what was left uncategorized so it can be fixed by hand;
+    The warning names what was left uncategorized so it can be fixed by hand;.
+
     a long list is cut off rather than filling the screen.
     """
     c, uid, acct = _db(tmp_path)
@@ -366,21 +365,22 @@ def test_unmatched_category_names_are_listed_ten_at_a_time(tmp_path: Path) -> No
         transactions=[
             _row(f"2026-01-{i + 1:02d}T10:00:00", -100 * (i + 1), f"row {i}", name)
             for i, name in enumerate(names)
-        ]
+        ],
     )
     result = apply_workbook(c, uid, parsed, {"RUB:": acct})
     c.commit()
     assert result.warnings == [
         "11 category names in the sheet match nothing in monori"
         " — those rows were left uncategorized rather than guessed:"
-        f" {', '.join(names[:10])}"
+        f" {', '.join(names[:10])}",
     ]
 
 
 def test_category_names_match_across_any_spacing(tmp_path: Path) -> None:
     """
-    A name typed with a stray double space is the same envelope to a human, so
-    the whole-account fallback compares names with their inner runs of
+    A name typed with a stray double space is the same envelope to a human, so.
+
+    the whole-account fallback compares names with their inner runs of.
     whitespace collapsed, not just their ends trimmed.
     """
     c, uid, acct = _db(tmp_path)
@@ -400,15 +400,16 @@ def test_category_names_match_across_any_spacing(tmp_path: Path) -> None:
     c.commit()
     assert result.warnings == []
     matched = c.execute(
-        "SELECT cat.name FROM transactions t JOIN categories cat ON cat.id = t.category_id"
+        "SELECT cat.name FROM transactions t JOIN categories cat ON cat.id = t.category_id",
     ).fetchone()[0]
     assert matched == "Lunch  Coffee"
 
 
 def test_a_category_whose_group_is_missing_does_not_stop_the_rest(tmp_path: Path) -> None:
     """
-    Structure and grid can disagree — a category can name a group no sheet ever
-    declared. That one has nowhere to go, but the categories after it in the
+    Structure and grid can disagree — a category can name a group no sheet ever.
+
+    declared. That one has nowhere to go, but the categories after it in the.
     list still do.
     """
     c, uid, acct = _db(tmp_path)
@@ -431,8 +432,9 @@ def test_a_category_whose_group_is_missing_does_not_stop_the_rest(tmp_path: Path
 
 def test_apply_skips_rows_a_sync_already_delivered_to_another_account(tmp_path: Path) -> None:
     """
-    A sheet kept alongside a live bank sync describes operations the sync
-    already imported — and the sheet's card marker can map them to a different
+    A sheet kept alongside a live bank sync describes operations the sync.
+
+    already imported — and the sheet's card marker can map them to a different.
     account than the sync routed them to, where the per-account hash is blind.
     Those rows must not be imported a second time.
     """
@@ -455,14 +457,13 @@ def test_apply_skips_rows_a_sync_already_delivered_to_another_account(tmp_path: 
     assert result.skipped == 1
     assert result.warnings[0].startswith("1 rows are already in monori")
     rows = c.execute(
-        "SELECT account_id, COUNT(*) FROM transactions WHERE description='Lenta' GROUP BY 1"
+        "SELECT account_id, COUNT(*) FROM transactions WHERE description='Lenta' GROUP BY 1",
     ).fetchall()
     assert [tuple(r) for r in rows] == [(other, 1)]
 
 
 def test_apply_keeps_a_manual_twin_out_of_the_dedup(tmp_path: Path) -> None:
-    # a row the user typed by hand is their own words, not a feed re-delivering
-    # the same operation — the workbook copy still lands
+
     c, uid, acct = _db(tmp_path)
     c.execute(
         "INSERT INTO transactions (date, amount, description, account_id, hash, source)"

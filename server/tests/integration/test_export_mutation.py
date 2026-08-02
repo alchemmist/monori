@@ -1,6 +1,7 @@
 """
-Export tests over a dataset with several transactions per category, more than
-one month and a month without income. The single-row fixtures elsewhere cannot
+Export tests over a dataset with several transactions per category, more than.
+
+one month and a month without income. The single-row fixtures elsewhere cannot.
 tell an accumulation (`+=`) from an assignment (`=`), a three-wide month stride
 from a four-wide one, or an empty ratio from a filled one — this one can.
 """
@@ -13,7 +14,7 @@ from fastapi.testclient import TestClient
 from openpyxl import Workbook, load_workbook
 from openpyxl.worksheet.worksheet import Worksheet
 
-from tests.conftest import Api
+from tests.conftest import AccountOptions, Api, TransactionOptions
 
 pytestmark = pytest.mark.integration
 
@@ -32,23 +33,53 @@ def _rich(api: Api, client: TestClient) -> dict[str, int]:
     salary = api.category("Salary", inflow)
     acct = api.account(
         "Card",
-        type="card",
-        icon="wallet",
-        color="#5b6472",
-        bankRef="card-1",
-        currency="RUB",
-        openingBalance=0,
+        AccountOptions(
+            account_type="card",
+            icon="wallet",
+            color="#5b6472",
+            bank_ref="card-1",
+            currency="RUB",
+            opening_balance=0,
+        ),
     )
-    # January: two grocery rows, one cafe row, two salary rows
-    api.tx("2026-01-05T10:00:00", -10000, accountId=acct, categoryId=groceries, description="G1")
-    api.tx("2026-01-06T10:00:00", -5000, accountId=acct, categoryId=groceries, description="G2")
-    api.tx("2026-01-07T10:00:00", -3000, accountId=acct, categoryId=cafes, description="C1")
-    api.tx("2026-01-10T10:00:00", 500000, accountId=acct, categoryId=salary, description="S1")
-    api.tx("2026-01-11T10:00:00", 100000, accountId=acct, categoryId=salary, description="S2")
-    # February: one grocery row, no income
-    api.tx("2026-02-05T10:00:00", -20000, accountId=acct, categoryId=groceries, description="G3")
-    # March: expense only, so its income is zero and the ratio is blank
-    api.tx("2026-03-05T10:00:00", -4000, accountId=acct, categoryId=cafes, description="C2")
+
+    api.tx(
+        "2026-01-05T10:00:00",
+        -10000,
+        TransactionOptions(account_id=acct, category_id=groceries, description="G1"),
+    )
+    api.tx(
+        "2026-01-06T10:00:00",
+        -5000,
+        TransactionOptions(account_id=acct, category_id=groceries, description="G2"),
+    )
+    api.tx(
+        "2026-01-07T10:00:00",
+        -3000,
+        TransactionOptions(account_id=acct, category_id=cafes, description="C1"),
+    )
+    api.tx(
+        "2026-01-10T10:00:00",
+        500000,
+        TransactionOptions(account_id=acct, category_id=salary, description="S1"),
+    )
+    api.tx(
+        "2026-01-11T10:00:00",
+        100000,
+        TransactionOptions(account_id=acct, category_id=salary, description="S2"),
+    )
+
+    api.tx(
+        "2026-02-05T10:00:00",
+        -20000,
+        TransactionOptions(account_id=acct, category_id=groceries, description="G3"),
+    )
+
+    api.tx(
+        "2026-03-05T10:00:00",
+        -4000,
+        TransactionOptions(account_id=acct, category_id=cafes, description="C2"),
+    )
     for month, cat, amount in (
         (1, groceries, 30000),
         (1, cafes, 20000),
@@ -69,14 +100,14 @@ def test_year_sheet_sums_repeated_category_rows(api: Api, client: TestClient) ->
     _rich(api, client)
     ws = _export(client)["2026"]
     row = _row_of(ws, "Groceries")
-    # two January grocery rows: -100 and -50 -> the month's outflow is 150, not 50
+
     assert ws.cell(row=row, column=3).value == 150.0
 
 
 def test_month_summary_sums_across_categories(api: Api, client: TestClient) -> None:
     _rich(api, client)
     ws = _export(client)["2026"]
-    # Month Summary budgeted for January is Groceries 300 + Cafes 200
+
     assert ws.cell(row=3, column=2).value == 500.0
 
 
@@ -84,7 +115,7 @@ def test_year_sheet_uses_a_three_wide_month_stride(api: Api, client: TestClient)
     _rich(api, client)
     ws = _export(client)["2026"]
     row = _row_of(ws, "Groceries")
-    # February's block starts at column 2 + (2-1)*3 = 5
+
     assert ws.cell(row=row, column=5).value == 400.0
     assert ws.cell(row=row, column=6).value == 200.0
 
@@ -127,14 +158,14 @@ def test_dashdata_sums_income_across_rows(api: Api, client: TestClient) -> None:
     _rich(api, client)
     ws = _export(client)["DashData"]
     jan = _dash_row(ws, "2026-01")
-    # two salary rows, 5000 + 1000
+
     assert jan.income == 6000.0
 
 
 def test_dashdata_carries_a_running_cumulative_net(api: Api, client: TestClient) -> None:
     _rich(api, client)
     ws = _export(client)["DashData"]
-    # Jan net = 6000 - (150 + 30) = 5820; Feb net = 0 - 200; cumulative = 5620
+
     assert _dash_row(ws, "2026-01").cumulative == 5820.0
     assert _dash_row(ws, "2026-02").cumulative == 5620.0
 

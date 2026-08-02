@@ -3,20 +3,31 @@ import { forwardRef } from "react";
 import type { ComponentPropsWithoutRef, ReactNode } from "react";
 import type { AdminTransaction } from "../types.js";
 
+type MockTextareaProps = ComponentPropsWithoutRef<"textarea"> & {
+    autosize?: boolean;
+    minRows?: number;
+    maxRows?: number;
+};
+
 vi.mock("@mantine/core", async (importOriginal) => {
     const actual = await importOriginal<typeof import("@mantine/core")>();
     return {
         ...actual,
-        Textarea: forwardRef<HTMLTextAreaElement, ComponentPropsWithoutRef<"textarea">>(
-            ({ value, onChange, onKeyDown, ...props }, ref) => (
-                <textarea
-                    ref={ref}
-                    value={value}
-                    onChange={onChange}
-                    onKeyDown={onKeyDown}
-                    {...props}
-                />
-            ),
+        Textarea: forwardRef<HTMLTextAreaElement, MockTextareaProps>(
+            ({ value, onChange, onKeyDown, ...props }, ref) => {
+                delete props.autosize;
+                delete props.minRows;
+                delete props.maxRows;
+                return (
+                    <textarea
+                        ref={ref}
+                        value={value}
+                        onChange={onChange}
+                        onKeyDown={onKeyDown}
+                        {...props}
+                    />
+                );
+            },
         ),
     };
 });

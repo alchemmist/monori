@@ -2,19 +2,25 @@ import pytest
 from fastapi.testclient import TestClient
 from httpx2 import Response as HTTPXResponse
 
-from tests.conftest import Api
+import app.db as dbmod
+from app.routers.auth_router import _valid_email
+from tests.conftest import Api, login_as
 
 pytestmark = pytest.mark.integration
 
 
 def _register(
-    client: TestClient, email: str = "user@example.com", password: str = "hunter2pw"
+    client: TestClient,
+    email: str = "user@example.com",
+    password: str = "hunter2pw",
 ) -> HTTPXResponse:
     return client.post("/api/auth/register", json={"email": email, "password": password})
 
 
 def _login(
-    client: TestClient, email: str = "user@example.com", password: str = "hunter2pw"
+    client: TestClient,
+    email: str = "user@example.com",
+    password: str = "hunter2pw",
 ) -> HTTPXResponse:
     return client.post("/api/auth/token", data={"username": email, "password": password})
 
@@ -24,8 +30,10 @@ def test_register_returns_user_without_hash(client: TestClient) -> None:
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["email"] == "user@example.com"
-    assert "id" in body and "createdAt" in body
-    assert "password" not in body and "password_hash" not in body
+    assert "id" in body
+    assert "createdAt" in body
+    assert "password" not in body
+    assert "password_hash" not in body
 
 
 def test_register_rejects_duplicate_email(client: TestClient) -> None:
@@ -36,7 +44,7 @@ def test_register_rejects_duplicate_email(client: TestClient) -> None:
 
 def test_register_normalizes_email(client: TestClient) -> None:
     assert _register(client, email="  Mixed@Example.COM ").status_code == 200
-    # a differently-cased duplicate is rejected
+
     assert _register(client, email="mixed@example.com").status_code == 409
 
 
@@ -50,7 +58,7 @@ def test_register_normalizes_email(client: TestClient) -> None:
 )
 def test_register_rejects_gmail_alias_of_same_mailbox(client: TestClient, alias: str) -> None:
     assert _register(client, email="anton.ingrish@gmail.com").status_code == 200
-    # a Gmail alias (dots / +tag) resolves to the same inbox and is rejected
+
     assert _register(client, email=alias).status_code == 409
 
 
@@ -60,7 +68,7 @@ def test_register_rejects_plus_tag_alias_on_any_domain(client: TestClient) -> No
 
 
 def test_register_allows_dots_on_non_gmail_domain(client: TestClient) -> None:
-    # dots only collapse for Gmail; other providers keep them distinct
+
     assert _register(client, email="a.b@example.com").status_code == 200
     assert _register(client, email="ab@example.com").status_code == 200
 
@@ -78,8 +86,6 @@ def test_register_validates_email_and_password(client: TestClient) -> None:
 
 @pytest.mark.parametrize("email", ["user@example.com", "a.b+c@sub.example.co"])
 def test_valid_email_accepts(email: str) -> None:
-    from app.routers.auth_router import _valid_email
-
     assert _valid_email(email)
 
 
@@ -98,8 +104,6 @@ def test_valid_email_accepts(email: str) -> None:
     ],
 )
 def test_valid_email_rejects(email: str) -> None:
-    from app.routers.auth_router import _valid_email
-
     assert not _valid_email(email)
 
 
@@ -118,7 +122,7 @@ def test_login_wrong_password_and_unknown_user(client: TestClient) -> None:
     unknown = _login(client, email="nobody@example.com")
     assert wrong_password.status_code == 401
     assert unknown.status_code == 401
-    # the two failures are told apart, so the form can point at the bad field
+
     assert wrong_password.json()["detail"] == "incorrect password"
     assert unknown.json()["detail"] == "no account is registered for this email"
 
@@ -147,8 +151,6 @@ def test_me_rejects_token_of_deleted_user(anon: TestClient) -> None:
     _register(client)
     token = _login(client).json()["access_token"]
 
-    import app.db as dbmod
-
     c = dbmod.connect()
     c.execute("DELETE FROM accounts")
     c.execute("DELETE FROM category_groups")
@@ -163,8 +165,9 @@ def test_me_rejects_token_of_deleted_user(anon: TestClient) -> None:
 
 def test_default_account_is_set_cleared_and_guarded(api: Api, client: TestClient) -> None:
     """
-    The default account for card-less rows is a user preference: settable to an
-    owned account, clearable back to "assign by hand", and never someone
+    The default account for card-less rows is a user preference: settable to an.
+
+    owned account, clearable back to "assign by hand", and never someone.
     else's account.
     """
     assert client.get("/api/auth/me").json()["defaultAccountId"] is None
@@ -180,8 +183,6 @@ def test_default_account_is_set_cleared_and_guarded(api: Api, client: TestClient
     assert r.json()["defaultAccountId"] is None
 
     assert client.patch("/api/auth/me", json={"defaultAccountId": 99999}).status_code == 400
-
-    from tests.conftest import login_as
 
     headers = dict(client.headers)
     client.headers.update(login_as(client, "stranger@example.com"))

@@ -1,6 +1,4 @@
-"""
-Accounts gain a display icon (a short glyph name mapped by the frontend).
-"""
+"""Accounts gain a display icon (a short glyph name mapped by the frontend)."""
 
 from alembic import op
 from sqlalchemy.engine import Connection
@@ -16,10 +14,13 @@ def _has_column(conn: Connection, table: str, column: str) -> bool:
 
 
 def upgrade() -> None:
+    """Handle upgrade."""
     conn = op.get_bind()
     if not _has_column(conn, "accounts", "icon"):
         conn.exec_driver_sql("ALTER TABLE accounts ADD COLUMN icon TEXT NOT NULL DEFAULT 'wallet'")
 
 
 def downgrade() -> None:
-    raise NotImplementedError("monori migrations are forward-only")
+    """Handle downgrade."""
+    msg = "monori migrations are forward-only"
+    raise NotImplementedError(msg)

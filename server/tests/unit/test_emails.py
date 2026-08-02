@@ -17,20 +17,16 @@ def test_normalize_email(raw: str, expected: str) -> None:
 @pytest.mark.parametrize(
     ("raw", "expected"),
     [
-        # gmail ignores dots and +tags
         ("anton.ingrish@gmail.com", "antoningrish@gmail.com"),
         ("a.n.t.o.n@gmail.com", "anton@gmail.com"),
         ("Anton.Ingrish+shop@GMail.com", "antoningrish@gmail.com"),
         ("user@googlemail.com", "user@googlemail.com"),
         ("u.s.e.r+x@googlemail.com", "user@googlemail.com"),
-        # other domains: +tag stripped, dots kept
         ("user+promo@example.com", "user@example.com"),
         ("a.b@example.com", "a.b@example.com"),
         ("plain@example.com", "plain@example.com"),
-        # degenerate local part is left intact, never collapsed to "@domain"
         ("+tag@gmail.com", "+tag@gmail.com"),
         (".@gmail.com", ".@gmail.com"),
-        # no @ falls through unchanged (validation happens elsewhere)
         ("not-an-email", "not-an-email"),
     ],
 )

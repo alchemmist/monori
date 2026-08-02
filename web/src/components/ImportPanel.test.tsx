@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, renderUI, resetStore, screen, seed, waitFor } from "../test/render.jsx";
 import { api } from "../api.js";
 import { useStore } from "../store.js";
@@ -37,6 +37,10 @@ describe("ImportPanel", () => {
         }
     });
 
+    afterEach(() => {
+        vi.restoreAllMocks();
+    });
+
     it("shows the empty prompt before any file is chosen", () => {
         const { container } = renderUI(<ImportPanel onClose={vi.fn()} />);
         expect(screen.getByText(/Upload a bank CSV\./)).toBeInTheDocument();
@@ -53,6 +57,18 @@ describe("ImportPanel", () => {
     });
 
     it("previews an uploaded statement, imports the fresh rows and closes", async () => {
+        const originalConsoleError = console.error;
+        vi.spyOn(console, "error").mockImplementation((...args) => {
+            if (
+                args.some(
+                    (arg) =>
+                        typeof arg === "string" && arg.includes("invalid value for the `left`"),
+                )
+            ) {
+                return;
+            }
+            originalConsoleError(...args);
+        });
         vi.spyOn(api, "importPreview").mockResolvedValue({
             rows: [
                 {

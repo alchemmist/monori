@@ -15,6 +15,19 @@ from app.workbook.parser import (
 )
 
 
+def _workbook_datetime(*parts: int) -> datetime.datetime:
+    values = list(parts) + [0] * (6 - len(parts))
+    return datetime.datetime(
+        values[0],
+        values[1],
+        values[2],
+        values[3],
+        values[4],
+        values[5],
+        tzinfo=datetime.UTC,
+    ).replace(tzinfo=None)
+
+
 def _active(wb: Workbook) -> Worksheet:
     ws = wb.active
     assert ws is not None
@@ -29,23 +42,23 @@ def _workbook() -> tuple[Workbook, Worksheet, Worksheet]:
     tx = wb.create_sheet("Transactions")
     tx.append(
         [
-            "Дата операции",
-            "Date",
-            "Дата платежа",
-            "Номер карты",
+            "Operation date",
+            "Payment date",
+            "Operation date",
+            "Card",
             "Status",
-            "Сумма операции",
-            "Валюта операции",
+            "Operation amount",
+            "Transaction currency",
             "Amount",
-            "Валюта платежа",
-            "Кэшбэк",
-            "Категория",
+            "Payment currency",
+            "Cashback",
+            "Category",
             "MCC",
             "Description",
             "Monori Category",
             "Account",
             "Comment",
-        ]
+        ],
     )
     return wb, ws, tx
 
@@ -57,7 +70,7 @@ def _bytes(wb: Workbook) -> bytes:
 
 
 def _write_year_header(ws: Worksheet, months: int = 12) -> None:
-    """The two header rows the exporter writes above a year grid."""
+    """Handle The two header rows the exporter writes above a year grid."""
     names = [
         "January",
         "February",
@@ -122,12 +135,15 @@ def test_unquote_reverses_only_the_formula_escape() -> None:
 def test_parse_dt_variants() -> None:
     ws = Workbook().active
     assert ws is not None
-    assert _parse_dt(ws.cell(1, 1, datetime.datetime(2026, 1, 5, 10))) == datetime.datetime(
-        2026, 1, 5, 10
+    assert _parse_dt(ws.cell(1, 1, _workbook_datetime(2026, 1, 5, 10))) == _workbook_datetime(
+        2026,
+        1,
+        5,
+        10,
     )
-    assert _parse_dt(ws.cell(1, 2, datetime.date(2026, 1, 5))) == datetime.datetime(2026, 1, 5)
-    assert _parse_dt(ws.cell(1, 3, "05.01.2026 10:00:00")) == datetime.datetime(2026, 1, 5, 10)
-    assert _parse_dt(ws.cell(1, 4, "2026-01-05T10:00:00")) == datetime.datetime(2026, 1, 5, 10)
+    assert _parse_dt(ws.cell(1, 2, datetime.date(2026, 1, 5))) == _workbook_datetime(2026, 1, 5)
+    assert _parse_dt(ws.cell(1, 3, "05.01.2026 10:00:00")) == _workbook_datetime(2026, 1, 5, 10)
+    assert _parse_dt(ws.cell(1, 4, "2026-01-05T10:00:00")) == _workbook_datetime(2026, 1, 5, 10)
     assert _parse_dt(ws.cell(1, 5, "")) is None
     assert _parse_dt(ws.cell(1, 6, "garbage")) is None
     assert _parse_dt(ws.cell(1, 7)) is None
@@ -152,8 +168,9 @@ def test_rejects_garbage_bytes() -> None:
 
 def test_transactions_are_the_only_required_sheet() -> None:
     """
-    The category structure is read from a sheet of its own when there is one and
-    inferred from the year grids when there isn't, so only the rows themselves
+    The category structure is read from a sheet of its own when there is one and.
+
+    inferred from the year grids when there isn't, so only the rows themselves.
     are indispensable.
     """
     wb = Workbook()
@@ -187,14 +204,14 @@ def test_missing_required_transaction_columns() -> None:
     ws = _active(wb)
     ws.title = "Categories"
     tx = wb.create_sheet("Transactions")
-    tx.append(["Дата операции", "Status"])
+    tx.append(["Operation date", "Status"])
     buf = BytesIO()
     wb.save(buf)
     with pytest.raises(WorkbookError) as e:
         parse_workbook(buf.getvalue())
     msg = str(e.value)
     assert msg.startswith("Transactions sheet is missing required columns:")
-    assert "Сумма операции" in msg
+    assert "Operation amount" in msg
 
 
 def test_categories_main_and_group_tables() -> None:
@@ -228,8 +245,9 @@ def test_categories_unrecognized_row_warns() -> None:
 
 def test_category_sheet_saying_nothing_defers_to_the_grids() -> None:
     """
-    The live spreadsheet has a sheet called Categories too, laid out nothing like
-    ours. Rather than report every row of it, the reader treats a sheet it cannot
+    The live spreadsheet has a sheet called Categories too, laid out nothing like.
+
+    ours. Rather than report every row of it, the reader treats a sheet it cannot.
     read as absent and takes the structure from the year grids.
     """
     wb, categories, _ = _workbook()
@@ -240,7 +258,7 @@ def test_category_sheet_saying_nothing_defers_to_the_grids() -> None:
     assert parsed.groups == []
     assert parsed.warnings == [
         "Categories: no category rows recognized (2 rows skipped),"
-        " structure taken from the year grids"
+        " structure taken from the year grids",
     ]
 
 

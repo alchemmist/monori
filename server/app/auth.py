@@ -1,3 +1,5 @@
+"""Provide backend functionality."""
+
 import sqlite3
 from dataclasses import dataclass
 from typing import Annotated
@@ -14,6 +16,8 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/auth/token", auto_error=True)
 
 @dataclass(frozen=True, slots=True)
 class AuthenticatedUser:
+    """Represent AuthenticatedUser."""
+
     id: int
     email: str
     created_at: str
@@ -22,13 +26,14 @@ class AuthenticatedUser:
     default_account_id: int | None
 
     def to_api_dict(self) -> UserResponse:
+        """Handle to api dict."""
         return UserResponse(
             id=self.id,
             email=self.email,
-            createdAt=self.created_at,
-            isAdmin=self.is_admin,
-            lastLogin=self.last_login,
-            defaultAccountId=self.default_account_id,
+            created_at=self.created_at,
+            is_admin=self.is_admin,
+            last_login=self.last_login,
+            default_account_id=self.default_account_id,
         )
 
 
@@ -46,9 +51,7 @@ def _user_from_row(row: sqlite3.Row) -> AuthenticatedUser:
 
 
 def current_user(token: Annotated[str, Depends(oauth2_scheme)]) -> AuthenticatedUser:
-    """
-    Resolve the signed-in user from a bearer JWT, or raise 401.
-    """
+    """Resolve the signed-in user from a bearer JWT, or raise 401."""
     try:
         payload = decode_access_token(token)
         subject = payload.sub

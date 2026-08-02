@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 from openpyxl import Workbook, load_workbook
 
 from app.importer import tx_hash
-from tests.conftest import Api
+from tests.conftest import AccountOptions, Api, TransactionOptions
 
 pytestmark = pytest.mark.integration
 
@@ -28,8 +28,16 @@ def _setup(api: Api, client: TestClient) -> tuple[int, int]:
     cat = api.category("Groceries", g_out, keywords="lenta|okey")
     salary = api.category("Salary", g_in)
     acct = api.account("Card")
-    api.tx("2026-01-05T10:00:00", -12550, accountId=acct, categoryId=cat, description="Lenta")
-    api.tx("2026-01-10T09:00:00", 500000, accountId=acct, categoryId=salary, description="Pay")
+    api.tx(
+        "2026-01-05T10:00:00",
+        -12550,
+        TransactionOptions(account_id=acct, category_id=cat, description="Lenta"),
+    )
+    api.tx(
+        "2026-01-10T09:00:00",
+        500000,
+        TransactionOptions(account_id=acct, category_id=salary, description="Pay"),
+    )
     client.put("/api/budgets", json={"categoryId": cat, "year": 2026, "month": 1, "amount": 20000})
     return cat, acct
 
@@ -75,8 +83,10 @@ def test_export_uses_split_parts_for_rows_and_totals(api: Api, client: TestClien
     tx = api.tx(
         "2026-01-05T10:00:00",
         -10000,
-        accountId=account,
-        description="Mixed receipt",
+        TransactionOptions(
+            account_id=account,
+            description="Mixed receipt",
+        ),
     )
     response = client.put(
         f"/api/transactions/{tx}/splits",
@@ -84,7 +94,7 @@ def test_export_uses_split_parts_for_rows_and_totals(api: Api, client: TestClien
             "parts": [
                 {"categoryId": groceries, "amount": -6000, "comment": "food"},
                 {"categoryId": household, "amount": -4000, "comment": "soap"},
-            ]
+            ],
         },
     )
     assert response.status_code == 200
@@ -238,7 +248,11 @@ def test_export_year_sheet_totals(api: Api, client: TestClient) -> None:
 
 def test_export_escapes_at_prefix(api: Api, client: TestClient) -> None:
     cat, acct = _setup(api, client)
-    api.tx("2026-03-01T10:00:00", -100, accountId=acct, categoryId=cat, description="@cmd|test")
+    api.tx(
+        "2026-03-01T10:00:00",
+        -100,
+        TransactionOptions(account_id=acct, category_id=cat, description="@cmd|test"),
+    )
     ws = _export(client)["Transactions"]
     descriptions = {ws.cell(row=r, column=13).value for r in range(2, ws.max_row + 1)}
     assert "'@cmd|test" in descriptions
@@ -253,12 +267,24 @@ def test_export_dashdata_freeze_and_bold(api: Api, client: TestClient) -> None:
 
 def test_export_amount_uses_account_currency_symbol(api: Api, client: TestClient) -> None:
     cat, _ = _setup(api, client)
-    usd = api.account("Dollars", currency="USD")
-    eur = api.account("Euros", currency="EUR")
-    chf = api.account("Francs", currency="CHF")
-    api.tx("2026-04-01T10:00:00", -30000, accountId=usd, categoryId=cat, description="Hotel")
-    api.tx("2026-04-02T10:00:00", -20000, accountId=eur, categoryId=cat, description="Train")
-    api.tx("2026-04-03T10:00:00", -10000, accountId=chf, categoryId=cat, description="Cheese")
+    usd = api.account("Dollars", AccountOptions(currency="USD"))
+    eur = api.account("Euros", AccountOptions(currency="EUR"))
+    chf = api.account("Francs", AccountOptions(currency="CHF"))
+    api.tx(
+        "2026-04-01T10:00:00",
+        -30000,
+        TransactionOptions(account_id=usd, category_id=cat, description="Hotel"),
+    )
+    api.tx(
+        "2026-04-02T10:00:00",
+        -20000,
+        TransactionOptions(account_id=eur, category_id=cat, description="Train"),
+    )
+    api.tx(
+        "2026-04-03T10:00:00",
+        -10000,
+        TransactionOptions(account_id=chf, category_id=cat, description="Cheese"),
+    )
     ws = _export(client)["Transactions"]
     amounts = {ws.cell(row=r, column=8).value for r in range(2, ws.max_row + 1)}
     assert "-125.50 ₽" in amounts
@@ -269,7 +295,7 @@ def test_export_amount_uses_account_currency_symbol(api: Api, client: TestClient
 
 def test_export_dashdata_skips_uncategorized(api: Api, client: TestClient) -> None:
     _setup(api, client)
-    api.tx("2026-01-25T10:00:00", -99900, description="Mystery")
+    api.tx("2026-01-25T10:00:00", -99900, TransactionOptions(description="Mystery"))
     ws = _export(client)["DashData"]
     row = [c.value for c in ws[2]]
     assert row[1] == 5000.0
@@ -299,10 +325,12 @@ def test_export_escapes_formula_prefixes(api: Api, client: TestClient) -> None:
     api.tx(
         "2026-02-01T10:00:00",
         -100,
-        accountId=acct,
-        categoryId=cat,
-        description="=HYPERLINK(evil)",
-        comment="+SUM(A1)",
+        TransactionOptions(
+            account_id=acct,
+            category_id=cat,
+            description="=HYPERLINK(evil)",
+            comment="+SUM(A1)",
+        ),
     )
     ws = _export(client)["Transactions"]
     descriptions = {ws.cell(row=r, column=13).value for r in range(2, ws.max_row + 1)}
@@ -368,7 +396,11 @@ def test_export_negative_balance_is_red(api: Api, client: TestClient) -> None:
     g_out = api.group("Overspend")
     cat = api.category("Splurge", g_out)
     acct = api.account("Card")
-    api.tx("2026-01-05T10:00:00", -20000, accountId=acct, categoryId=cat, description="Big")
+    api.tx(
+        "2026-01-05T10:00:00",
+        -20000,
+        TransactionOptions(account_id=acct, category_id=cat, description="Big"),
+    )
     client.put("/api/budgets", json={"categoryId": cat, "year": 2026, "month": 1, "amount": 10000})
     ws = _export(client)["2026"]
     splurge_row = next(
@@ -383,7 +415,11 @@ def test_export_zero_balance_is_grey(api: Api, client: TestClient) -> None:
     g_out = api.group("OnBudget")
     cat = api.category("Exact", g_out)
     acct = api.account("Card")
-    api.tx("2026-01-05T10:00:00", -10000, accountId=acct, categoryId=cat, description="Spend")
+    api.tx(
+        "2026-01-05T10:00:00",
+        -10000,
+        TransactionOptions(account_id=acct, category_id=cat, description="Spend"),
+    )
     client.put("/api/budgets", json={"categoryId": cat, "year": 2026, "month": 1, "amount": 10000})
     ws = _export(client)["2026"]
     exact_row = next(
@@ -396,8 +432,9 @@ def test_export_zero_balance_is_grey(api: Api, client: TestClient) -> None:
 
 def test_export_dashdata_refund_reduces_expense(api: Api, client: TestClient) -> None:
     """
-    Direction enforcement keeps the API from filing an inflow into an expense
-    category, but migrated workbooks and old synced statements carry such
+    Direction enforcement keeps the API from filing an inflow into an expense.
+
+    category, but migrated workbooks and old synced statements carry such.
     refund rows — DashData must still net them out of the category's spend.
     """
     cat, acct = _setup(api, client)

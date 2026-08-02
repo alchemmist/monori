@@ -1,13 +1,13 @@
 import pytest
 from fastapi.testclient import TestClient
 
-import app.connectors.fake  # noqa: F401  (registers the FakeConnector)
+import app.connectors.fake
 from app import sync_service
 
 CREDS = {"phone": "+70000000000", "password": "pw"}
 
 
-@pytest.fixture()
+@pytest.fixture
 def client() -> TestClient:
     sync_service.PENDING.clear()
     return TestClient(sync_service.app)

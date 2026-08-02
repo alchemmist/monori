@@ -5,21 +5,27 @@ Every route requires the ``admin_user`` dependency (403 otherwise). The admin
 sees full user data — this is the instance owner's own deployment.
 """
 
+import json
 import sqlite3
 from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import ConfigDict
+from pydantic import ConfigDict, Field
 from pydantic.dataclasses import dataclass as pydantic_dataclass
 
-from .. import auth
-from ..admin import admin_user
-from ..db_records import UserRecord
-from ..deps import UserResponse, conn, serialize_user
+from app import auth
+from app.admin import admin_user
+from app.db_records import UserRecord
+from app.deps import UserResponse, conn, serialize_user
+
 from .auth_router import create_user
 
-router = APIRouter(prefix="/api/admin", tags=["admin"])
+router = APIRouter(
+    prefix="/api/admin",
+    tags=["admin"],
+    dependencies=[Depends(admin_user)],
+)
 type AdminContext = auth.AuthenticatedUser
 
 RECENT_TX_LIMIT = 50
@@ -27,6 +33,7 @@ TX_PAGE_MAX = 1000
 SQL_CHUNK = 500
 RECENT_LOGINS_LIMIT = 50
 ACTIVITY_WINDOW_DAYS = 30
+_CONFIG = ConfigDict(extra="forbid", populate_by_name=True)
 
 
 def _cutoff(days: int) -> str:
@@ -36,64 +43,78 @@ def _cutoff(days: int) -> str:
 def _count(c: sqlite3.Connection, sql: str) -> int:
     row = c.execute(sql).fetchone()
     if row is None or not isinstance(row[0], int):
-        raise RuntimeError("count query did not return an integer")
+        msg = "count query did not return an integer"
+        raise RuntimeError(msg)
     return row[0]
 
 
 def _count_since(c: sqlite3.Connection, sql: str, since: str) -> int:
     row = c.execute(sql, (since,)).fetchone()
     if row is None or not isinstance(row[0], int):
-        raise RuntimeError("count query did not return an integer")
+        msg = "count query did not return an integer"
+        raise RuntimeError(msg)
     return row[0]
 
 
-@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+@pydantic_dataclass(config=_CONFIG)
 class AdminTotals:
+    """Represent AdminTotals."""
+
     users: int
     transactions: int
     accounts: int
     connections: int
 
 
-@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+@pydantic_dataclass(config=_CONFIG)
 class RegistrationCount:
+    """Represent RegistrationCount."""
+
     month: str
     count: int
 
 
-@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+@pydantic_dataclass(config=_CONFIG)
 class OverviewResponse:
+    """Represent OverviewResponse."""
+
     totals: AdminTotals
-    dbSizeBytes: int
-    newUsers7d: int
-    newUsers30d: int
-    activeUsers7d: int
     registrations: list[RegistrationCount]
+    db_size_bytes: int = Field(serialization_alias="dbSizeBytes")
+    new_users_7d: int = Field(serialization_alias="newUsers7d")
+    new_users_30d: int = Field(serialization_alias="newUsers30d")
+    active_users_7d: int = Field(serialization_alias="activeUsers7d")
 
 
-@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+@pydantic_dataclass(config=_CONFIG)
 class AdminConnectionSummary:
+    """Represent AdminConnectionSummary."""
+
     status: str
-    lastSync: str | None
-    lastError: str | None
+    last_sync: str | None = Field(serialization_alias="lastSync")
+    last_error: str | None = Field(serialization_alias="lastError")
 
 
-@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+@pydantic_dataclass(config=_CONFIG)
 class AdminUserSummary:
+    """Represent AdminUserSummary."""
+
     id: int
     email: str
-    createdAt: str
-    lastLogin: str | None
-    isAdmin: bool
     accounts: int
     transactions: int
-    lastTransaction: str | None
     budgets: int
     connection: AdminConnectionSummary | None
+    created_at: str = Field(serialization_alias="createdAt")
+    last_login: str | None = Field(serialization_alias="lastLogin")
+    is_admin: bool = Field(serialization_alias="isAdmin")
+    last_transaction: str | None = Field(serialization_alias="lastTransaction")
 
 
-@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+@pydantic_dataclass(config=_CONFIG)
 class AdminAccountSummary:
+    """Represent AdminAccountSummary."""
+
     id: int
     name: str
     type: str
@@ -103,8 +124,10 @@ class AdminAccountSummary:
     transactions: int
 
 
-@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+@pydantic_dataclass(config=_CONFIG)
 class AdminTransactionSummary:
+    """Represent AdminTransactionSummary."""
+
     id: int
     date: str
     amount: int
@@ -113,49 +136,64 @@ class AdminTransactionSummary:
     category: str | None
 
 
-@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+@pydantic_dataclass(config=_CONFIG)
 class AdminTransactionDetail(AdminTransactionSummary):
+    """Represent AdminTransactionDetail."""
+
     mcc: str
     comment: str
     source: str
 
 
-@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+@pydantic_dataclass(config=_CONFIG)
 class FeatureCount:
+    """Represent FeatureCount."""
+
     feature: str
     count: int
 
 
-@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+@pydantic_dataclass(config=_CONFIG)
 class UserDetailResponse:
+    """Represent UserDetailResponse."""
+
     user: UserResponse
     accounts: list[AdminAccountSummary]
-    recentTransactions: list[AdminTransactionSummary]
-    featureUsage: list[FeatureCount]
-    recentLogins: list[str]
+    recent_transactions: list[AdminTransactionSummary] = Field(
+        serialization_alias="recentTransactions"
+    )
+    feature_usage: list[FeatureCount] = Field(serialization_alias="featureUsage")
+    recent_logins: list[str] = Field(serialization_alias="recentLogins")
 
 
-@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+@pydantic_dataclass(config=_CONFIG)
 class DayCount:
+    """Represent DayCount."""
+
     day: str
     count: int
 
 
-@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+@pydantic_dataclass(config=_CONFIG)
 class LoginEvent:
+    """Represent LoginEvent."""
+
     email: str
     at: str
 
 
-@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+@pydantic_dataclass(config=_CONFIG)
 class ActivityResponse:
+    """Represent ActivityResponse."""
+
     features: list[FeatureCount]
     daily: list[DayCount]
-    recentLogins: list[LoginEvent]
+    recent_logins: list[LoginEvent] = Field(serialization_alias="recentLogins")
 
 
 @router.get("/overview")
-def overview(admin: Annotated[AdminContext, Depends(admin_user)]) -> OverviewResponse:
+def overview() -> OverviewResponse:
+    """Handle overview."""
     c = conn()
     try:
         cutoff7, cutoff30 = _cutoff(7), _cutoff(30)
@@ -165,7 +203,8 @@ def overview(admin: Annotated[AdminContext, Depends(admin_user)]) -> OverviewRes
             (cutoff7[:10], cutoff7),
         ).fetchone()
         if active_row is None or not isinstance(active_row[0], int):
-            raise RuntimeError("active user query did not return an integer")
+            msg = "active user query did not return an integer"
+            raise RuntimeError(msg)
         return OverviewResponse(
             totals=AdminTotals(
                 users=_count(c, "SELECT COUNT(*) FROM users"),
@@ -173,19 +212,23 @@ def overview(admin: Annotated[AdminContext, Depends(admin_user)]) -> OverviewRes
                 accounts=_count(c, "SELECT COUNT(*) FROM accounts"),
                 connections=_count(c, "SELECT COUNT(*) FROM bank_connections"),
             ),
-            # pragmas rather than a filesystem stat: the connection knows the
-            # database regardless of where (or whether) the file lives
-            dbSizeBytes=_count(c, "PRAGMA page_count") * _count(c, "PRAGMA page_size"),
-            newUsers7d=_count_since(c, "SELECT COUNT(*) FROM users WHERE created_at >= ?", cutoff7),
-            newUsers30d=_count_since(
-                c, "SELECT COUNT(*) FROM users WHERE created_at >= ?", cutoff30
+            db_size_bytes=_count(c, "PRAGMA page_count") * _count(c, "PRAGMA page_size"),
+            new_users_7d=_count_since(
+                c,
+                "SELECT COUNT(*) FROM users WHERE created_at >= ?",
+                cutoff7,
             ),
-            activeUsers7d=active_row[0],
+            new_users_30d=_count_since(
+                c,
+                "SELECT COUNT(*) FROM users WHERE created_at >= ?",
+                cutoff30,
+            ),
+            active_users_7d=active_row[0],
             registrations=[
                 RegistrationCount(month=r["m"], count=r["n"])
                 for r in c.execute(
                     "SELECT substr(created_at, 1, 7) AS m, COUNT(*) AS n FROM users"
-                    " GROUP BY m ORDER BY m"
+                    " GROUP BY m ORDER BY m",
                 )
             ],
         )
@@ -194,28 +237,29 @@ def overview(admin: Annotated[AdminContext, Depends(admin_user)]) -> OverviewRes
 
 
 @router.get("/users")
-def list_users(
-    admin: Annotated[AdminContext, Depends(admin_user)],
-) -> list[AdminUserSummary]:
+def list_users() -> list[AdminUserSummary]:
+    """Handle list users."""
     c = conn()
     try:
         connections = {}
         for r in c.execute(
-            "SELECT user_id, status, last_sync, last_error FROM bank_connections ORDER BY id"
+            "SELECT user_id, status, last_sync, last_error FROM bank_connections ORDER BY id",
         ):
             connections[r["user_id"]] = AdminConnectionSummary(
-                status=r["status"], lastSync=r["last_sync"], lastError=r["last_error"]
+                status=r["status"],
+                last_sync=r["last_sync"],
+                last_error=r["last_error"],
             )
         return [
             AdminUserSummary(
                 id=r["id"],
                 email=r["email"],
-                createdAt=r["created_at"],
-                lastLogin=r["last_login"],
-                isAdmin=bool(r["is_admin"]),
+                created_at=r["created_at"],
+                last_login=r["last_login"],
+                is_admin=bool(r["is_admin"]),
                 accounts=r["accounts"],
                 transactions=r["transactions"],
-                lastTransaction=r["last_tx"],
+                last_transaction=r["last_tx"],
                 budgets=r["budgets"],
                 connection=connections.get(r["id"]),
             )
@@ -229,7 +273,7 @@ def list_users(
                 " (SELECT COUNT(*) FROM budgets b JOIN categories cat ON cat.id = b.category_id"
                 "  JOIN category_groups g ON g.id = cat.group_id WHERE g.user_id = u.id)"
                 "  AS budgets"
-                " FROM users u ORDER BY u.id"
+                " FROM users u ORDER BY u.id",
             )
         ]
     finally:
@@ -238,8 +282,9 @@ def list_users(
 
 @router.get("/users/{uid}")
 def user_detail(
-    uid: int, admin: Annotated[AdminContext, Depends(admin_user)]
+    uid: int,
 ) -> UserDetailResponse:
+    """Handle user detail."""
     c = conn()
     try:
         row = c.execute(
@@ -272,7 +317,7 @@ def user_detail(
                     (uid,),
                 )
             ],
-            recentTransactions=[
+            recent_transactions=[
                 AdminTransactionSummary(
                     id=r["id"],
                     date=r["date"],
@@ -290,7 +335,7 @@ def user_detail(
                     (uid, RECENT_TX_LIMIT),
                 )
             ],
-            featureUsage=[
+            feature_usage=[
                 FeatureCount(feature=r["feature"], count=r["n"])
                 for r in c.execute(
                     "SELECT feature, SUM(count) AS n FROM feature_usage WHERE user_id=?"
@@ -298,7 +343,7 @@ def user_detail(
                     (uid,),
                 )
             ],
-            recentLogins=[
+            recent_logins=[
                 r["created_at"]
                 for r in c.execute(
                     "SELECT created_at FROM activity_events WHERE user_id=? AND kind='login'"
@@ -314,13 +359,13 @@ def user_detail(
 @router.get("/users/{uid}/transactions")
 def user_transactions(
     uid: int,
-    admin: Annotated[AdminContext, Depends(admin_user)],
     limit: Annotated[int, Query(ge=1, le=TX_PAGE_MAX)] = TX_PAGE_MAX,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[AdminTransactionDetail]:
     """
-    A user's transactions, newest first — the full list behind the detail view's
-    preview, rendered as one JSON object per line by the client. Paged (capped at
+    Handle A user's transactions, newest first — the full list behind the detail view's.
+
+    preview, rendered as one JSON object per line by the client. Paged (capped at.
     ``TX_PAGE_MAX`` rows) so a heavy history can't materialize one giant response;
     the client walks ``offset`` until a short page comes back.
     """
@@ -354,8 +399,10 @@ def user_transactions(
         c.close()
 
 
-@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+@pydantic_dataclass(config=_CONFIG)
 class DeleteTransactionsBody:
+    """Represent DeleteTransactionsBody."""
+
     ids: list[int]
 
 
@@ -363,11 +410,11 @@ class DeleteTransactionsBody:
 def delete_user_transactions(
     uid: int,
     body: DeleteTransactionsBody,
-    admin: Annotated[AdminContext, Depends(admin_user)],
 ) -> dict[str, int]:
     """
-    Bulk-delete a selection of one user's transactions. All-or-nothing: every
-    id must belong to the target user, otherwise nothing is deleted — a stale
+    Bulk-delete a selection of one user's transactions. All-or-nothing: every.
+
+    id must belong to the target user, otherwise nothing is deleted — a stale.
     selection must fail loudly rather than remove half of it.
     """
     ids = sorted(set(body.ids))
@@ -377,18 +424,15 @@ def delete_user_transactions(
     try:
         if c.execute("SELECT 1 FROM users WHERE id=?", (uid,)).fetchone() is None:
             raise HTTPException(404, "unknown user")
-        # the delete itself is scoped to the user's accounts and its rowcount
-        # verified, so there is no check-then-delete window: an id that stopped
-        # belonging to this user mid-flight rolls the whole batch back
+
         deleted = 0
         for i in range(0, len(ids), SQL_CHUNK):
             chunk = ids[i : i + SQL_CHUNK]
-            marks = ",".join("?" * len(chunk))
-            # the interpolation only builds "?" placeholders; values are bound
+
             cur = c.execute(
-                f"DELETE FROM transactions WHERE id IN ({marks})"  # nosec B608
+                "DELETE FROM transactions WHERE id IN (SELECT value FROM json_each(?))"
                 " AND account_id IN (SELECT id FROM accounts WHERE user_id=?)",
-                (*chunk, uid),
+                (json.dumps(chunk), uid),
             )
             deleted += cur.rowcount
         if deleted != len(ids):
@@ -400,16 +444,19 @@ def delete_user_transactions(
         c.close()
 
 
-@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+@pydantic_dataclass(config=_CONFIG)
 class CreateUserBody:
+    """Represent CreateUserBody."""
+
     email: str
     password: str
 
 
 @router.post("/users")
 def create_user_admin(
-    body: CreateUserBody, admin: Annotated[AdminContext, Depends(admin_user)]
+    body: CreateUserBody,
 ) -> UserResponse:
+    """Handle create user admin."""
     c = conn()
     try:
         return create_user(c, body.email, body.password)
@@ -419,14 +466,14 @@ def create_user_admin(
 
 @router.delete("/users/{uid}")
 def delete_user(uid: int, admin: Annotated[AdminContext, Depends(admin_user)]) -> dict[str, bool]:
+    """Handle delete user."""
     if uid == admin.id:
         raise HTTPException(400, "cannot delete yourself")
     c = conn()
     try:
         if c.execute("SELECT id FROM users WHERE id=?", (uid,)).fetchone() is None:
             raise HTTPException(404, "unknown user")
-        # order respects the accounts <-> bank_connections FK cycle; budgets,
-        # activity_events and feature_usage go via ON DELETE CASCADE
+
         c.execute("UPDATE bank_connections SET pending_account_id=NULL WHERE user_id=?", (uid,))
         c.execute(
             "DELETE FROM transactions WHERE account_id IN"
@@ -449,7 +496,8 @@ def delete_user(uid: int, admin: Annotated[AdminContext, Depends(admin_user)]) -
 
 
 @router.get("/activity")
-def activity(admin: Annotated[AdminContext, Depends(admin_user)]) -> ActivityResponse:
+def activity() -> ActivityResponse:
+    """Handle activity."""
     c = conn()
     try:
         day_cutoff = _cutoff(ACTIVITY_WINDOW_DAYS)[:10]
@@ -470,7 +518,7 @@ def activity(admin: Annotated[AdminContext, Depends(admin_user)]) -> ActivityRes
                     (day_cutoff,),
                 )
             ],
-            recentLogins=[
+            recent_logins=[
                 LoginEvent(email=r["email"], at=r["created_at"])
                 for r in c.execute(
                     "SELECT u.email, e.created_at FROM activity_events e"

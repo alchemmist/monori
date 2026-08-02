@@ -13,7 +13,7 @@ import hashlib
 import re
 from collections.abc import Iterable, Mapping
 from dataclasses import asdict
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Literal, overload
 
 from pydantic import ConfigDict
@@ -27,6 +27,8 @@ type RuleValue = str | list[str] | int
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid"))
 class CategoryDefinition:
+    """Represent CategoryDefinition."""
+
     id: int
     name: str
     keywords: str | None
@@ -50,11 +52,12 @@ COLUMNS = [
     "rounding",
     "rounded_total",
 ]
+MIN_STATEMENT_COLUMNS = 12
 
 DATE_RE = re.compile(r"^(\d{2})\.(\d{2})\.(\d{4})(?:\s+(\d{2}):(\d{2})(?::(\d{2}))?)?$")
 
-# first cell of a bank CSV export's header row — such a line is metadata, not data
-HEADER_FIRST_CELLS = {"дата операции", "op_date", "date"}
+
+HEADER_FIRST_CELLS = {"дата операции", "op_date", "date", "operation date"}
 
 
 def _attr_name(key: str) -> str:
@@ -66,6 +69,8 @@ def _attr_name(key: str) -> str:
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid"))
 class ParseError:
+    """Represent ParseError."""
+
     line: int
     error: str
     raw: str
@@ -80,6 +85,7 @@ class ParseError:
     def __getitem__(self, key: Literal["raw"]) -> str: ...
 
     def __getitem__(self, key: str) -> int | str:
+        """Return a parse-error field by its API key."""
         if key == "line":
             return self.line
         if key == "error":
@@ -89,11 +95,14 @@ class ParseError:
         raise KeyError(key)
 
     def to_api_dict(self) -> dict[str, int | str]:
+        """Handle to api dict."""
         return asdict(self)
 
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid", validate_assignment=True))
 class ImportRow:
+    """Represent ImportRow."""
+
     date: str
     amount: int
     description: str
@@ -136,6 +145,7 @@ class ImportRow:
     def __getitem__(self, key: Literal["hash"]) -> str: ...
 
     def __getitem__(self, key: str) -> ImportValue:
+        """Return an import-row field by its API or internal key."""
         values: dict[str, ImportValue] = self.to_api_dict()
         try:
             return values[key]
@@ -160,9 +170,11 @@ class ImportRow:
     def __setitem__(self, key: Literal["hash"], value: str) -> None: ...
 
     def __setitem__(self, key: str, value: ImportValue) -> None:
+        """Assign an import-row field by its API or internal key."""
         setattr(self, _attr_name(key), value)
 
     def get(self, key: str, default: ImportValue = None) -> ImportValue:
+        """Handle get."""
         try:
             values: dict[str, ImportValue] = self.to_api_dict()
             return values[key]
@@ -170,6 +182,7 @@ class ImportRow:
             return default
 
     def to_api_dict(self) -> dict[str, ImportValue]:
+        """Handle to api dict."""
         return {
             "date": self.date,
             "amount": self.amount,
@@ -195,6 +208,7 @@ class ImportRow:
         }
 
     def to_sync_dict(self) -> SyncRow:
+        """Handle to sync dict."""
         return SyncRow(
             date=self.date,
             amount=self.amount,
@@ -211,6 +225,8 @@ class ImportRow:
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid"))
 class CategoryRule:
+    """Represent CategoryRule."""
+
     category_id: int
     name: str
     keywords: list[str]
@@ -225,6 +241,7 @@ class CategoryRule:
     def __getitem__(self, key: Literal["keywords"]) -> list[str]: ...
 
     def __getitem__(self, key: str) -> RuleValue:
+        """Return a category-rule field by its name."""
         if key == "category_id":
             return self.category_id
         if key == "name":
@@ -235,22 +252,20 @@ class CategoryRule:
 
 
 def parse_date(raw: str) -> datetime | None:
+    """Handle parse date."""
     m = DATE_RE.match(raw.strip())
     if not m:
         return None
     d, mo, y, hh, mm, ss = m.groups()
-    return datetime(int(y), int(mo), int(d), int(hh or 0), int(mm or 0), int(ss or 0))
+    return datetime(int(y), int(mo), int(d), int(hh or 0), int(mm or 0), int(ss or 0), tzinfo=UTC)
 
 
 def parse_amount_kop(raw: str) -> int | None:
-    """
-    '-1 500,00' -> -150000 kopecks.
-    """
-    s = str(raw).strip().replace(" ", "").replace(" ", "").replace(",", ".")
+    """'-1 500,00' -> -150000 kopecks."""
+    s = str(raw).strip().replace("\u00a0", "").replace(" ", "").replace(",", ".")
     if not s or s in ("-", "."):
         return None
     try:
-        # round through cents to dodge float artifacts
         return round(round(float(s), 2) * 100)
     except ValueError:
         return None
@@ -258,19 +273,21 @@ def parse_amount_kop(raw: str) -> int | None:
 
 def tx_hash(account_id: int, date_iso: str, amount_kop: int, description: str) -> str:
     """
-    Dedup key of a transaction. Always scoped to the account: the same
-    date/amount/description legitimately occurs on two different accounts
+    Dedup key of a transaction. Always scoped to the account: the same.
+
+    date/amount/description legitimately occurs on two different accounts.
     (transfer legs, mirrored cards) and must not collide.
     """
     return hashlib.sha256(
-        f"{account_id}|{date_iso}|{amount_kop}|{description}".encode()
+        f"{account_id}|{date_iso}|{amount_kop}|{description}".encode(),
     ).hexdigest()
 
 
 def parse_statement(text: str) -> tuple[list[ImportRow], list[ParseError]]:
     """
-    Returns (rows, errors). Each row: dict with date (ISO), amount (kopecks),
-    description, bank_category, mcc. Accepts both pasted statement rows and a
+    Handle Returns (rows, errors). Each row: dict with date (ISO), amount (kopecks),.
+
+    description, bank_category, mcc. Accepts both pasted statement rows and a.
     full bank CSV export — a header row is skipped, not reported. Hashes are
     not computed here — the account is not known yet; ingestion derives the
     account-scoped hash on insert.
@@ -284,7 +301,7 @@ def parse_statement(text: str) -> tuple[list[ImportRow], list[ParseError]]:
         parts = [p.strip().strip('"') for p in line.split(delim)]
         if parts and parts[0].lower() in HEADER_FIRST_CELLS:
             continue
-        if len(parts) < 12:
+        if len(parts) < MIN_STATEMENT_COLUMNS:
             errors.append(ParseError(ln, f"expected >=12 columns, got {len(parts)}", line[:200]))
             continue
         rec = dict(zip(COLUMNS, parts + [""] * (len(COLUMNS) - len(parts)), strict=False))
@@ -304,21 +321,25 @@ def parse_statement(text: str) -> tuple[list[ImportRow], list[ParseError]]:
                 bank_category=rec["bank_category"],
                 mcc=rec["mcc"],
                 card=rec["card"],
-            )
+            ),
         )
     return rows, errors
 
 
 def build_rules(
-    categories: Iterable[CategoryDefinition], groups: Mapping[int, str]
+    categories: Iterable[CategoryDefinition],
+    groups: Mapping[int, str],
 ) -> dict[str, list[CategoryRule]]:
     """
-    categories: iterable of dicts with name/keywords/group_id;
+    categories: iterable of dicts with name/keywords/group_id;.
+
     groups: id -> kind ('income'|'expense'). Returns {'IN': [...], 'OUT': [...]}.
     """
     rules: dict[str, list[CategoryRule]] = {"IN": [], "OUT": []}
     for c in categories:
-        keywords = [k.strip().lower() for k in (c.keywords or "").split("|") if k.strip()]
+        keywords = list(
+            dict.fromkeys(k.strip().lower() for k in (c.keywords or "").split("|") if k.strip())
+        )
         if not keywords:
             continue
         group_id = c.group_id
@@ -330,7 +351,7 @@ def build_rules(
                 category_id=c.id,
                 name=c.name,
                 keywords=keywords,
-            )
+            ),
         )
     return rules
 
@@ -341,7 +362,7 @@ def categorize(
     rules: Mapping[str, list[CategoryRule]],
 ) -> int | None:
     """
-    Returns category_id or None.
+    Handle Returns category_id or None.
 
     An inflow is income first — but a merchant's money coming back is a refund,
     and a refund belongs in the envelope it left, or the category quietly reads

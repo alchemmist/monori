@@ -8,7 +8,7 @@ from openpyxl import Workbook
 from pydantic import TypeAdapter
 
 from app.deps import IdResponse, SnapshotResponse
-from tests.conftest import Api, login_as
+from tests.conftest import AccountOptions, Api, TransactionOptions, login_as
 
 pytestmark = pytest.mark.integration
 
@@ -25,9 +25,19 @@ def _seed(api: Api, client: TestClient) -> int:
     cat = api.category("Groceries", g_out, keywords="lenta|okey")
     salary = api.category("Salary", g_in)
     acct = api.account("Card")
-    api.tx("2026-01-05T10:00:00", -12550, accountId=acct, categoryId=cat, description="Lenta")
-    api.tx("2026-01-10T09:00:00", 500000, accountId=acct, categoryId=salary, description="Pay")
-    api.tx("2026-02-01T12:00:00", -700, accountId=acct, description="Okey market")
+    api.tx(
+        "2026-01-05T10:00:00",
+        -12550,
+        TransactionOptions(account_id=acct, category_id=cat, description="Lenta"),
+    )
+    api.tx(
+        "2026-01-10T09:00:00",
+        500000,
+        TransactionOptions(account_id=acct, category_id=salary, description="Pay"),
+    )
+    api.tx(
+        "2026-02-01T12:00:00", -700, TransactionOptions(account_id=acct, description="Okey market")
+    )
     client.put("/api/budgets", json={"categoryId": cat, "year": 2026, "month": 1, "amount": 20000})
     client.put("/api/budgets", json={"categoryId": cat, "year": 2026, "month": 2, "amount": 30000})
     return acct
@@ -61,7 +71,7 @@ def test_workbook_preview_summarizes(api: Api, client: TestClient) -> None:
     assert body["transactionsByYear"] == {"2026": 3}
     assert body["budgetCells"] == 2
     assert body["accountSlots"] == [
-        {"key": "RUB:Card", "marker": "Card", "currency": "RUB", "transactions": 3}
+        {"key": "RUB:Card", "marker": "Card", "currency": "RUB", "transactions": 3},
     ]
     assert body["budgetConflicts"] == 2
     assert body["errors"] == []
@@ -151,9 +161,9 @@ def test_workbook_roundtrip_into_fresh_user(api: Api, client: TestClient) -> Non
         ("2026-01-10T09:00:00", 500000, "Pay"),
         ("2026-02-01T12:00:00", -700, "Okey market"),
     ]
-    assert txs[0].categoryId == cats["Groceries"].id
-    assert txs[1].categoryId == cats["Salary"].id
-    assert txs[2].categoryId is None
+    assert txs[0].category_id == cats["Groceries"].id
+    assert txs[1].category_id == cats["Salary"].id
+    assert txs[2].category_id is None
     budgets = {budget.month: budget.amount for budget in snap.budgets}
     assert budgets == {1: 20000, 2: 30000}
 
@@ -174,7 +184,7 @@ def test_workbook_reimport_is_idempotent(api: Api, client: TestClient) -> None:
                 "openingBalance": 0,
                 "bankRef": "",
             },
-        )
+        ),
     )
     payload = {"mapping": json.dumps({"RUB:Card": target})}
     files = {"file": ("book.xlsx", data, "application/octet-stream")}
@@ -205,7 +215,7 @@ def test_workbook_budget_policy_skip(api: Api, client: TestClient) -> None:
                 "openingBalance": 0,
                 "bankRef": "",
             },
-        )
+        ),
     )
     files = {"file": ("book.xlsx", data, "application/octet-stream")}
     r = client.post(
@@ -274,7 +284,7 @@ def test_workbook_import_lands_as_rollbackable_batch(api: Api, client: TestClien
                 "openingBalance": 0,
                 "bankRef": "",
             },
-        )
+        ),
     )
     r = client.post(
         "/api/import/workbook/commit",
@@ -286,7 +296,7 @@ def test_workbook_import_lands_as_rollbackable_batch(api: Api, client: TestClien
     assert batch["inserted"] == 3
 
 
-def test_workbook_upload_guards(api: Api, client: TestClient) -> None:
+def test_workbook_upload_guards(client: TestClient) -> None:
     r = client.post(
         "/api/import/workbook/preview",
         files={"file": ("book.xlsx", b"", "application/octet-stream")},
@@ -294,8 +304,6 @@ def test_workbook_upload_guards(api: Api, client: TestClient) -> None:
     assert r.status_code == 400
     assert r.json()["detail"] == "empty upload"
 
-    # no size cap: a large payload is not rejected for its size, it reaches the
-    # parser and fails there instead (400, not 413)
     r = client.post(
         "/api/import/workbook/preview",
         files={"file": ("book.xlsx", b"x" * (30 * 1024 * 1024), "application/octet-stream")},
@@ -306,7 +314,8 @@ def test_workbook_upload_guards(api: Api, client: TestClient) -> None:
 
 def _mixed_currency_book() -> bytes:
     """
-    One card carrying both RUB and USD rows — the shape a foreign-currency
+    One card carrying both RUB and USD rows — the shape a foreign-currency.
+
     balance leaves in a bank export.
     """
     wb = Workbook()
@@ -314,7 +323,14 @@ def _mixed_currency_book() -> bytes:
     assert ws is not None
     ws.title = "Transactions"
     ws.append(
-        ["Дата операции", "Номер карты", "Статус", "Сумма операции", "Валюта операции", "Описание"]
+        [
+            "Operation date",
+            "Card",
+            "Status",
+            "Operation amount",
+            "Transaction currency",
+            "Description",
+        ],
     )
     ws.append(["2026-01-05 10:00:00", "*1111", "OK", -300.0, "RUB", "Lenta"])
     ws.append(["2026-01-06 10:00:00", "*1111", "OK", 95.78, "USD", "Interest"])
@@ -333,7 +349,8 @@ def test_workbook_preview_splits_a_card_by_currency(client: TestClient) -> None:
 
 
 def test_workbook_commit_refuses_foreign_rows_on_a_ruble_account(
-    api: Api, client: TestClient
+    api: Api,
+    client: TestClient,
 ) -> None:
     rub = api.account("Card")
     data = _mixed_currency_book()
@@ -354,7 +371,7 @@ def test_workbook_commit_refuses_foreign_rows_on_a_ruble_account(
                 "openingBalance": 0,
                 "bankRef": "",
             },
-        )
+        ),
     )
     mapping = json.dumps({"RUB:*1111": rub, "USD:*1111": usd})
     r = _upload(client, "/api/import/workbook/commit", data, {"mapping": mapping})
@@ -368,7 +385,14 @@ def _card_book() -> bytes:
     assert ws is not None
     ws.title = "Transactions"
     ws.append(
-        ["Дата операции", "Номер карты", "Статус", "Сумма операции", "Валюта операции", "Описание"]
+        [
+            "Operation date",
+            "Card",
+            "Status",
+            "Operation amount",
+            "Transaction currency",
+            "Description",
+        ],
     )
     ws.append(["2026-01-05 10:00:00", "*8181", "OK", -300.0, "RUB", "Lenta"])
     ws.append(["2026-01-06 10:00:00", "", "OK", -200.0, "RUB", "Okey"])
@@ -379,12 +403,13 @@ def _card_book() -> bytes:
 
 def test_workbook_commit_remembers_card_markers_when_asked(api: Api, client: TestClient) -> None:
     """
-    Mapping a card to an account is knowledge worth keeping: with remember set,
-    the marker's digits land in the account's card tails, so the next statement
+    Mapping a card to an account is knowledge worth keeping: with remember set,.
+
+    the marker's digits land in the account's card tails, so the next statement.
     import or sync routes that card without asking. The unmarked-rows slot has
     no digits and binds nothing.
     """
-    acct = api.account("Card", cardTails=["1111"])
+    acct = api.account("Card", AccountOptions(card_tails=["1111"]))
     other = api.account("Other")
     mapping = json.dumps({"RUB:*8181": acct, "RUB:": other})
     r = _upload(
@@ -395,7 +420,7 @@ def test_workbook_commit_remembers_card_markers_when_asked(api: Api, client: Tes
     )
     assert r.status_code == 200, r.text
     assert r.json()["cardTailsBound"] == 1
-    tails = {account.name: account.cardTails for account in api.snapshot().accounts}
+    tails = {account.name: account.card_tails for account in api.snapshot().accounts}
     assert tails["Card"] == ["1111", "8181"]
     assert tails["Other"] == []
 
@@ -407,11 +432,11 @@ def test_workbook_commit_leaves_card_tails_alone_by_default(api: Api, client: Te
     r = _upload(client, "/api/import/workbook/commit", _card_book(), {"mapping": mapping})
     assert r.status_code == 200, r.text
     assert r.json()["cardTailsBound"] == 0
-    assert all(account.cardTails == [] for account in api.snapshot().accounts)
+    assert all(account.card_tails == [] for account in api.snapshot().accounts)
 
 
 def test_remembering_an_already_bound_marker_changes_nothing(api: Api, client: TestClient) -> None:
-    acct = api.account("Card", cardTails=["8181"])
+    acct = api.account("Card", AccountOptions(card_tails=["8181"]))
     other = api.account("Other")
     mapping = json.dumps({"RUB:*8181": acct, "RUB:": other})
     r = _upload(
@@ -422,5 +447,5 @@ def test_remembering_an_already_bound_marker_changes_nothing(api: Api, client: T
     )
     assert r.status_code == 200, r.text
     assert r.json()["cardTailsBound"] == 0
-    tails = {account.name: account.cardTails for account in api.snapshot().accounts}
+    tails = {account.name: account.card_tails for account in api.snapshot().accounts}
     assert tails["Card"] == ["8181"]

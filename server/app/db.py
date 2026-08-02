@@ -14,17 +14,19 @@ import pathlib
 import sqlite3
 import threading
 
+from alembic import command
 from alembic.config import Config
 
 DB_PATH = os.environ.get(
-    "MONORI_DB", str(pathlib.Path(__file__).resolve().parent.parent / "data" / "monori.db")
+    "MONORI_DB",
+    str(pathlib.Path(__file__).resolve().parent.parent / "data" / "monori.db"),
 )
 
 SERVER_DIR = pathlib.Path(__file__).resolve().parent.parent
 SCHEMA_PATH = SERVER_DIR / "schema.sql"
 MIGRATIONS_PATH = SERVER_DIR / "migrations"
 
-# alembic revision reached after applying N legacy user_version steps
+
 LEGACY_REVISIONS = ["0001", "0002", "0003", "0004", "0005", "0006"]
 
 _bootstrapped: set[str] = set()
@@ -39,8 +41,6 @@ def _alembic_config(path: pathlib.Path) -> Config:
 
 
 def _bootstrap(path: pathlib.Path) -> None:
-    from alembic import command
-
     conn = sqlite3.connect(path)
     try:
         tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
@@ -65,6 +65,7 @@ def _bootstrap(path: pathlib.Path) -> None:
 
 
 def connect(db_path: str | os.PathLike[str] | None = None) -> sqlite3.Connection:
+    """Handle connect."""
     path = pathlib.Path(db_path or DB_PATH)
     path.parent.mkdir(parents=True, exist_ok=True)
     key = str(path.resolve())

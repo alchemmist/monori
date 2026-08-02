@@ -8,7 +8,6 @@ server/data/
 web/node_modules/
 web/dist/
 server/.venv/
-server/uv.lock
 __pycache__/
 *.pyc
 .pytest_cache/
@@ -27,3 +26,4 @@ web/playwright-report/
 .worktrees/
 .issue197/
 node_modules
+mutation.log

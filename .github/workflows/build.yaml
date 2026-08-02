@@ -61,7 +61,7 @@ jobs:
               working-directory: web
 
             - name: Install server deps
-              run: uv sync
+              run: uv sync --locked
               working-directory: server
 
             - name: Install Playwright browsers

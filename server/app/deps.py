@@ -1,8 +1,11 @@
+"""Provide backend functionality."""
+
+import json
 import sqlite3
 from collections.abc import Iterable
 from itertools import batched
 
-from pydantic import ConfigDict
+from pydantic import ConfigDict, Field
 from pydantic.dataclasses import dataclass as pydantic_dataclass
 
 from . import db as dbmod
@@ -21,29 +24,43 @@ from .transfer_service import TransferResponse, list_transfers
 SPLIT_FETCH_BATCH_SIZE = 500
 
 
-_DTO_CONFIG = ConfigDict(extra="forbid")
+_DTO_CONFIG = ConfigDict(extra="forbid", populate_by_name=True)
 
 
 @pydantic_dataclass(config=_DTO_CONFIG)
 class AccountResponse:
+    """Represent AccountResponse."""
+
     id: int
     name: str
     type: str
     icon: str
     color: str
-    iconImage: str | None
     currency: str
     sort: int
     archived: bool
-    openingBalance: int
-    openingDate: str | None
-    connectionId: int | None
-    bankRef: str
-    cardTails: list[str]
+    icon_image: str | None = Field(
+        ..., serialization_alias="iconImage", validation_alias="iconImage"
+    )
+    opening_balance: int = Field(
+        ..., serialization_alias="openingBalance", validation_alias="openingBalance"
+    )
+    opening_date: str | None = Field(
+        ..., serialization_alias="openingDate", validation_alias="openingDate"
+    )
+    connection_id: int | None = Field(
+        ..., serialization_alias="connectionId", validation_alias="connectionId"
+    )
+    bank_ref: str = Field(..., serialization_alias="bankRef", validation_alias="bankRef")
+    card_tails: list[str] = Field(
+        ..., serialization_alias="cardTails", validation_alias="cardTails"
+    )
 
 
 @pydantic_dataclass(config=_DTO_CONFIG)
 class GroupResponse:
+    """Represent GroupResponse."""
+
     id: int
     name: str
     sort: int
@@ -52,151 +69,195 @@ class GroupResponse:
 
 @pydantic_dataclass(config=_DTO_CONFIG)
 class CategoryResponse:
+    """Represent CategoryResponse."""
+
     id: int
-    groupId: int
     name: str
     keywords: str
     sort: int
     archived: bool
-    goalTarget: int | None
-    goalStatus: str | None
-    goalTargetDate: str | None
+    group_id: int = Field(..., serialization_alias="groupId", validation_alias="groupId")
+    goal_target: int | None = Field(
+        ..., serialization_alias="goalTarget", validation_alias="goalTarget"
+    )
+    goal_status: str | None = Field(
+        ..., serialization_alias="goalStatus", validation_alias="goalStatus"
+    )
+    goal_target_date: str | None = Field(
+        ..., serialization_alias="goalTargetDate", validation_alias="goalTargetDate"
+    )
 
 
 @pydantic_dataclass(config=_DTO_CONFIG)
 class SplitResponse:
+    """Represent SplitResponse."""
+
     id: int
-    categoryId: int
     amount: int
     comment: str
+    category_id: int = Field(..., serialization_alias="categoryId", validation_alias="categoryId")
 
 
 @pydantic_dataclass(config=_DTO_CONFIG)
 class TransactionResponse:
+    """Represent TransactionResponse."""
+
     id: int
     date: str
     amount: int
     description: str
-    bankCategory: str
     mcc: str
-    categoryId: int | None
-    accountId: int
-    transferId: str | None
     comment: str
     source: str
     hidden: bool
     splits: list[SplitResponse]
+    bank_category: str = Field(
+        ..., serialization_alias="bankCategory", validation_alias="bankCategory"
+    )
+    category_id: int | None = Field(
+        ..., serialization_alias="categoryId", validation_alias="categoryId"
+    )
+    account_id: int = Field(..., serialization_alias="accountId", validation_alias="accountId")
+    transfer_id: str | None = Field(
+        ..., serialization_alias="transferId", validation_alias="transferId"
+    )
 
 
 @pydantic_dataclass(config=_DTO_CONFIG)
 class UserResponse:
+    """Represent UserResponse."""
+
     id: int
     email: str
-    createdAt: str
-    isAdmin: bool
-    lastLogin: str | None
-    defaultAccountId: int | None
+    created_at: str = Field(..., serialization_alias="createdAt", validation_alias="createdAt")
+    is_admin: bool = Field(..., serialization_alias="isAdmin", validation_alias="isAdmin")
+    last_login: str | None = Field(
+        ..., serialization_alias="lastLogin", validation_alias="lastLogin"
+    )
+    default_account_id: int | None = Field(
+        ..., serialization_alias="defaultAccountId", validation_alias="defaultAccountId"
+    )
 
 
 @pydantic_dataclass(config=_DTO_CONFIG)
 class ConnectionResponse:
+    """Represent ConnectionResponse."""
+
     id: int
     bank: str
     kind: str
     status: str
-    lastSync: str | None
-    lastError: str | None
-    hasCredentials: bool
-    createdAt: str
-    updatedAt: str
+    last_sync: str | None = Field(..., serialization_alias="lastSync", validation_alias="lastSync")
+    last_error: str | None = Field(
+        ..., serialization_alias="lastError", validation_alias="lastError"
+    )
+    has_credentials: bool = Field(
+        ..., serialization_alias="hasCredentials", validation_alias="hasCredentials"
+    )
+    created_at: str = Field(..., serialization_alias="createdAt", validation_alias="createdAt")
+    updated_at: str = Field(..., serialization_alias="updatedAt", validation_alias="updatedAt")
 
 
 @pydantic_dataclass(config=_DTO_CONFIG)
 class BudgetResponse:
-    categoryId: int
+    """Represent BudgetResponse."""
+
     year: int
     month: int
     amount: int
+    category_id: int = Field(..., serialization_alias="categoryId", validation_alias="categoryId")
 
 
 @pydantic_dataclass(config=_DTO_CONFIG)
 class IdResponse:
+    """Represent IdResponse."""
+
     id: int | None
 
 
 @pydantic_dataclass(config=_DTO_CONFIG)
 class SnapshotResponse:
+    """Represent SnapshotResponse."""
+
     accounts: list[AccountResponse]
     groups: list[GroupResponse]
     categories: list[CategoryResponse]
     transactions: list[TransactionResponse]
-    transactionsTotal: int
     transfers: list["TransferResponse"]
     budgets: list[BudgetResponse]
     connections: list[ConnectionResponse]
+    transactions_total: int = Field(
+        ..., serialization_alias="transactionsTotal", validation_alias="transactionsTotal"
+    )
 
 
 def conn() -> sqlite3.Connection:
+    """Handle conn."""
     return dbmod.connect()
 
 
 def serialize_group(group: GroupRecord) -> GroupResponse:
+    """Handle serialize group."""
     return GroupResponse(id=group.id, name=group.name, sort=group.sort, kind=group.kind)
 
 
 def serialize_category(category: CategoryRecord) -> CategoryResponse:
+    """Handle serialize category."""
     return CategoryResponse(
         id=category.id,
-        groupId=category.group_id,
+        group_id=category.group_id,
         name=category.name,
         keywords=category.keywords,
         sort=category.sort,
         archived=category.archived,
-        goalTarget=category.goal_target,
-        goalStatus=category.goal_status,
-        goalTargetDate=category.goal_target_date,
+        goal_target=category.goal_target,
+        goal_status=category.goal_status,
+        goal_target_date=category.goal_target_date,
     )
 
 
 def serialize_account(account: AccountRecord) -> AccountResponse:
+    """Handle serialize account."""
     return AccountResponse(
         id=account.id,
         name=account.name,
         type=account.type,
         icon=account.icon,
         color=account.color,
-        iconImage=account.icon_image,
+        icon_image=account.icon_image,
         currency=account.currency,
         sort=account.sort,
         archived=account.archived,
-        openingBalance=account.opening_balance,
-        openingDate=account.opening_date,
-        connectionId=account.connection_id,
-        bankRef=account.bank_ref,
-        cardTails=[tail for tail in account.card_tails.split(",") if tail],
+        opening_balance=account.opening_balance,
+        opening_date=account.opening_date,
+        connection_id=account.connection_id,
+        bank_ref=account.bank_ref,
+        card_tails=[tail for tail in account.card_tails.split(",") if tail],
     )
 
 
 def serialize_tx(
-    transaction: TransactionRecord, splits: Iterable[SplitRecord] = ()
+    transaction: TransactionRecord,
+    splits: Iterable[SplitRecord] = (),
 ) -> TransactionResponse:
+    """Handle serialize tx."""
     return TransactionResponse(
         id=transaction.id,
         date=transaction.date,
         amount=transaction.amount,
         description=transaction.description,
-        bankCategory=transaction.bank_category,
+        bank_category=transaction.bank_category,
         mcc=transaction.mcc,
-        categoryId=transaction.category_id,
-        accountId=transaction.account_id,
-        transferId=transaction.transfer_id,
+        category_id=transaction.category_id,
+        account_id=transaction.account_id,
+        transfer_id=transaction.transfer_id,
         comment=transaction.comment,
         source=transaction.source,
         hidden=transaction.hidden,
         splits=[
             SplitResponse(
                 id=split.id,
-                categoryId=split.category_id,
+                category_id=split.category_id,
                 amount=split.amount,
                 comment=split.comment,
             )
@@ -206,21 +267,21 @@ def serialize_tx(
 
 
 def serialize_transactions(
-    cur: sqlite3.Cursor, rows: Iterable[sqlite3.Row]
+    cur: sqlite3.Cursor,
+    rows: Iterable[sqlite3.Row],
 ) -> list[TransactionResponse]:
+    """Handle serialize transactions."""
     transactions = [TransactionRecord.from_row(row) for row in rows]
     if not transactions:
         return []
     ids = [transaction.id for transaction in transactions]
     by_tx: dict[int, list[SplitRecord]] = {}
     for chunk in batched(ids, SPLIT_FETCH_BATCH_SIZE):
-        marks = ",".join("?" for _ in chunk)
         for split in cur.execute(
-            # `marks` contains generated positional placeholders, never user input.
-            f"SELECT id, transaction_id, category_id, amount, comment"  # nosec B608
-            f" FROM splits WHERE transaction_id IN ({marks})"
+            "SELECT id, transaction_id, category_id, amount, comment"
+            " FROM splits WHERE transaction_id IN (SELECT value FROM json_each(?))"
             " ORDER BY transaction_id, sort, id",
-            chunk,
+            (json.dumps(chunk),),
         ):
             record = SplitRecord.from_row(split)
             by_tx.setdefault(record.transaction_id, []).append(record)
@@ -228,39 +289,36 @@ def serialize_transactions(
 
 
 def serialize_user(user: UserRecord) -> UserResponse:
-    """
-    A user, without the password hash.
-    """
+    """Handle A user, without the password hash."""
     return UserResponse(
         id=user.id,
         email=user.email,
-        createdAt=user.created_at,
-        isAdmin=user.is_admin,
-        lastLogin=user.last_login,
-        defaultAccountId=user.default_account_id,
+        created_at=user.created_at,
+        is_admin=user.is_admin,
+        last_login=user.last_login,
+        default_account_id=user.default_account_id,
     )
 
 
 def serialize_connection(connection: ConnectionRecord) -> ConnectionResponse:
-    """
-    A bank connection, without any secret material (credentials/session).
-    """
+    """Handle A bank connection, without any secret material (credentials/session)."""
     return ConnectionResponse(
         id=connection.id,
         bank=connection.bank,
         kind=connection.kind,
         status=connection.status,
-        lastSync=connection.last_sync,
-        lastError=connection.last_error,
-        hasCredentials=connection.has_credentials,
-        createdAt=connection.created_at,
-        updatedAt=connection.updated_at,
+        last_sync=connection.last_sync,
+        last_error=connection.last_error,
+        has_credentials=connection.has_credentials,
+        created_at=connection.created_at,
+        updated_at=connection.updated_at,
     )
 
 
 def serialize_budget(budget: BudgetRecord) -> BudgetResponse:
+    """Handle serialize budget."""
     return BudgetResponse(
-        categoryId=budget.category_id,
+        category_id=budget.category_id,
         year=budget.year,
         month=budget.month,
         amount=budget.amount,
@@ -278,10 +336,13 @@ TX_COLUMNS = (
 
 
 def _snapshot_transactions(
-    cur: sqlite3.Cursor, uid: tuple[int], tx_limit: int | None
+    cur: sqlite3.Cursor,
+    uid: tuple[int],
+    tx_limit: int | None,
 ) -> list[TransactionResponse]:
     """
-    The newest ``tx_limit`` transactions, handed back in the canonical
+    Handle The newest ``tx_limit`` transactions, handed back in the canonical.
+
     ``date, id`` order the client keeps them in. ``None`` means all of them.
     """
     if tx_limit is None:
@@ -291,10 +352,11 @@ def _snapshot_transactions(
 
 
 def snapshot(c: sqlite3.Connection, user_id: int, tx_limit: int | None = None) -> SnapshotResponse:
+    """Handle snapshot."""
     cur = c.cursor()
     uid = (user_id,)
     transactions = _snapshot_transactions(cur, uid, tx_limit)
-    # a short read means the window covered everything, so the count is free
+
     transactions_total = (
         len(transactions)
         if tx_limit is None or len(transactions) < tx_limit
@@ -334,7 +396,7 @@ def snapshot(c: sqlite3.Connection, user_id: int, tx_limit: int | None = None) -
             )
         ],
         transactions=transactions,
-        transactionsTotal=transactions_total,
+        transactions_total=transactions_total,
         transfers=list_transfers(c, user_id),
         budgets=[
             serialize_budget(BudgetRecord.from_row(r))

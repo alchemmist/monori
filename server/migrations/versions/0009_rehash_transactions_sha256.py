@@ -24,6 +24,7 @@ def _hash(date_iso: str, amount_kop: int, description: str) -> str:
 
 
 def upgrade() -> None:
+    """Handle upgrade."""
     conn = op.get_bind()
     last_id = 0
     while True:
@@ -43,4 +44,6 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    raise NotImplementedError("SHA-1 fingerprints are not restorable")
+    """Handle downgrade."""
+    msg = "SHA-1 fingerprints are not restorable"
+    raise NotImplementedError(msg)

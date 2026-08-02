@@ -1,6 +1,7 @@
 """
-Targets the parts of apply that the existing suite pins only loosely: the
-timestamp format stamped on a batch, the budget counters when more than one
+Targets the parts of apply that the existing suite pins only loosely: the.
+
+timestamp format stamped on a batch, the budget counters when more than one.
 cell is written, and the exact text of the "already imported" warning.
 """
 
@@ -26,7 +27,7 @@ def _db(tmp_path: pathlib.Path) -> tuple[sqlite3.Connection, int, int]:
     c = dbmod.connect(str(tmp_path / "t.db"))
     c.execute(
         "INSERT INTO users (email, email_canonical, password_hash, created_at)"
-        " VALUES ('u@e.co', 'u@e.co', 'h', 't')"
+        " VALUES ('u@e.co', 'u@e.co', 'h', 't')",
     )
     uid = c.execute("SELECT id FROM users").fetchone()[0]
     c.execute(
@@ -56,7 +57,7 @@ def _parsed(budgets: list[WorkbookBudget]) -> ParsedWorkbook:
                 monori_category="Groceries",
                 marker="",
                 currency="RUB",
-            )
+            ),
         ],
         budgets=budgets,
         warnings=[],
@@ -79,7 +80,11 @@ def test_import_batch_created_at_is_a_full_iso_timestamp(tmp_path: pathlib.Path)
 def test_overwrite_counts_every_written_budget(tmp_path: pathlib.Path) -> None:
     c, uid, acct = _db(tmp_path)
     result = apply_workbook(
-        c, uid, _parsed([_b("Groceries"), _b("Cafes")]), {"RUB:": acct}, budget_policy="overwrite"
+        c,
+        uid,
+        _parsed([_b("Groceries"), _b("Cafes")]),
+        {"RUB:": acct},
+        budget_policy="overwrite",
     )
     c.commit()
     assert result.budgets_written == 2
@@ -89,7 +94,11 @@ def test_overwrite_counts_every_written_budget(tmp_path: pathlib.Path) -> None:
 def test_skip_policy_counts_every_freshly_inserted_budget(tmp_path: pathlib.Path) -> None:
     c, uid, acct = _db(tmp_path)
     result = apply_workbook(
-        c, uid, _parsed([_b("Groceries"), _b("Cafes")]), {"RUB:": acct}, budget_policy="skip"
+        c,
+        uid,
+        _parsed([_b("Groceries"), _b("Cafes")]),
+        {"RUB:": acct},
+        budget_policy="skip",
     )
     c.commit()
     assert result.budgets_written == 2
@@ -98,7 +107,7 @@ def test_skip_policy_counts_every_freshly_inserted_budget(tmp_path: pathlib.Path
 
 def test_an_unmatched_budget_does_not_halt_the_rest(tmp_path: pathlib.Path) -> None:
     c, uid, acct = _db(tmp_path)
-    # the unmatched cell comes first: a `break` here would drop the valid one after it
+
     result = apply_workbook(c, uid, _parsed([_b("Ghost"), _b("Groceries")]), {"RUB:": acct})
     c.commit()
     assert result.budgets_written == 1
@@ -124,5 +133,5 @@ def test_already_imported_warning_reads_in_full(tmp_path: pathlib.Path) -> None:
     assert result.warnings == [
         "1 rows are already in monori — delivered by a bank sync or an"
         " earlier import, possibly onto a different account — and were not"
-        " imported again"
+        " imported again",
     ]

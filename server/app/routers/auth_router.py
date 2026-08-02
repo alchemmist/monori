@@ -14,15 +14,15 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import OAuth2PasswordRequestForm
-from pydantic import ConfigDict
+from pydantic import ConfigDict, Field
 from pydantic.dataclasses import dataclass as pydantic_dataclass
 
-from ..admin import admin_emails
-from ..auth import AuthenticatedUser, current_user
-from ..db_records import UserRecord
-from ..deps import UserResponse, conn, serialize_user
-from ..emails import canonical_email, normalize_email
-from ..security import create_access_token, hash_password, verify_password
+from app.admin import admin_emails
+from app.auth import AuthenticatedUser, current_user
+from app.db_records import UserRecord
+from app.deps import UserResponse, conn, serialize_user
+from app.emails import canonical_email, normalize_email
+from app.security import create_access_token, hash_password, verify_password
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -32,8 +32,9 @@ MAX_EMAIL_LEN = 254
 
 def _valid_email(email: str) -> bool:
     """
-    Shape check for an email: one ``@``, non-empty local part, and a dotted
-    domain with no empty labels. Linear and non-backtracking (bounded by
+    Shape check for an email: one ``@``, non-empty local part, and a dotted.
+
+    domain with no empty labels. Linear and non-backtracking (bounded by.
     ``MAX_EMAIL_LEN``) so it cannot be driven into a ReDoS.
     """
     if not email or len(email) > MAX_EMAIL_LEN or any(ch.isspace() for ch in email):
@@ -46,23 +47,30 @@ def _valid_email(email: str) -> bool:
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid"))
 class RegisterBody:
+    """Represent RegisterBody."""
+
     email: str
     password: str
 
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid"))
 class TokenResponse:
+    """Represent TokenResponse."""
+
     access_token: str
     token_type: "OAuthTokenType"
 
 
 class OAuthTokenType(StrEnum):
+    """Represent OAuthTokenType."""
+
     BEARER = "bearer"
 
 
 def create_user(c: sqlite3.Connection, raw_email: str, password: str) -> UserResponse:
     """
-    Validate and insert a user (with a default Cash account), returning the
+    Validate and insert a user (with a default Cash account), returning the.
+
     serialized user. Shared by public registration and admin user creation.
     Raises HTTPException on invalid input or duplicate email.
 
@@ -87,7 +95,8 @@ def create_user(c: sqlite3.Connection, raw_email: str, password: str) -> UserRes
         raise HTTPException(409, "email already registered") from None
     uid = cur.lastrowid
     if uid is None:
-        raise RuntimeError("user insert did not return an id")
+        msg = "user insert did not return an id"
+        raise RuntimeError(msg)
     if c.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 1:
         c.execute("UPDATE accounts SET user_id=? WHERE user_id IS NULL", (uid,))
         c.execute("UPDATE category_groups SET user_id=? WHERE user_id IS NULL", (uid,))
@@ -105,12 +114,14 @@ def create_user(c: sqlite3.Connection, raw_email: str, password: str) -> UserRes
         (uid,),
     ).fetchone()
     if row is None:
-        raise RuntimeError("created user was not found")
+        msg = "created user was not found"
+        raise RuntimeError(msg)
     return serialize_user(UserRecord.from_row(row))
 
 
 @router.post("/register")
 def register(body: RegisterBody) -> UserResponse:
+    """Handle register."""
     c = conn()
     try:
         return create_user(c, body.email, body.password)
@@ -120,9 +131,7 @@ def register(body: RegisterBody) -> UserResponse:
 
 @router.post("/token")
 def token(form: Annotated[OAuth2PasswordRequestForm, Depends()]) -> TokenResponse:
-    """
-    OAuth2 password grant: ``username`` is the email. Returns a bearer token.
-    """
+    """OAuth2 password grant: ``username`` is the email. Returns a bearer token."""
     email = normalize_email(form.username)
     c = conn()
     try:
@@ -130,20 +139,17 @@ def token(form: Annotated[OAuth2PasswordRequestForm, Depends()]) -> TokenRespons
             "SELECT id, password_hash FROM users WHERE email_canonical=?",
             (canonical_email(email),),
         ).fetchone()
-        # deliberately distinguishable: the sign-in form tells the user which of
-        # the two fields is wrong, at the cost of confirming which addresses are
-        # registered (account enumeration)
+
         if row is None:
             raise HTTPException(401, "no account is registered for this email")
         password_hash = row["password_hash"]
         user_id = row["id"]
         if not isinstance(password_hash, str) or not isinstance(user_id, int):
-            raise RuntimeError("stored user credentials have invalid types")
+            msg = "stored user credentials have invalid types"
+            raise TypeError(msg)
         if not verify_password(password_hash, form.password):
             raise HTTPException(401, "incorrect password")
-        # MONORI_ADMIN_EMAILS is the source of truth for admin rights, so the
-        # flag is (re)synced on every successful login; matched on the canonical
-        # form so an admin's mailbox is recognised through any of its aliases
+
         now = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S")
         admin_canon = {canonical_email(e) for e in admin_emails()}
         c.execute(
@@ -158,37 +164,44 @@ def token(form: Annotated[OAuth2PasswordRequestForm, Depends()]) -> TokenRespons
     finally:
         c.close()
     return TokenResponse(
-        access_token=create_access_token(user_id), token_type=OAuthTokenType.BEARER
+        access_token=create_access_token(user_id),
+        token_type=OAuthTokenType.BEARER,
     )
 
 
 @router.get("/me")
 def me(user: Annotated[AuthenticatedUser, Depends(current_user)]) -> UserResponse:
+    """Handle me."""
     return user.to_api_dict()
 
 
-@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+@pydantic_dataclass(config=ConfigDict(extra="forbid", populate_by_name=True))
 class MePatch:
-    defaultAccountId: int | None = None
+    """Represent MePatch."""
+
+    default_account_id: int | None = Field(default=None, alias="defaultAccountId")
 
 
 @router.patch("/me")
 def patch_me(
-    body: MePatch, user: Annotated[AuthenticatedUser, Depends(current_user)]
+    body: MePatch,
+    user: Annotated[AuthenticatedUser, Depends(current_user)],
 ) -> UserResponse:
     """
-    User-level preferences. ``defaultAccountId`` is where imports land rows no
-    card number can route; null clears it and those rows go back to being
+    User-level preferences. ``defaultAccountId`` is where imports land rows no.
+
+    card number can route; null clears it and those rows go back to being.
     assigned by hand.
     """
     uid = user.id
     c = conn()
     try:
-        default_account_id = body.defaultAccountId
+        default_account_id = body.default_account_id
         if (
             default_account_id is not None
             and not c.execute(
-                "SELECT id FROM accounts WHERE id=? AND user_id=?", (default_account_id, uid)
+                "SELECT id FROM accounts WHERE id=? AND user_id=?",
+                (default_account_id, uid),
             ).fetchone()
         ):
             raise HTTPException(400, "unknown account")
@@ -200,7 +213,8 @@ def patch_me(
             (uid,),
         ).fetchone()
         if row is None:
-            raise RuntimeError("updated user was not found")
+            msg = "updated user was not found"
+            raise RuntimeError(msg)
         return serialize_user(UserRecord.from_row(row))
     finally:
         c.close()
