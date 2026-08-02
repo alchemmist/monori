@@ -27,8 +27,8 @@ def test_parse_date() -> None:
     without_time = parse_date("03.07.2026")
     assert with_time is not None
     assert without_time is not None
-    assert with_time.isoformat() == "2026-07-03T19:48:24"
-    assert without_time.isoformat() == "2026-07-03T00:00:00"
+    assert with_time.isoformat() == "2026-07-03T19:48:24+00:00"
+    assert without_time.isoformat() == "2026-07-03T00:00:00+00:00"
     assert parse_date("2026-07-03") is None
 
 

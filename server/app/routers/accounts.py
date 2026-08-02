@@ -20,6 +20,7 @@ TYPES = ("card", "cash", "savings", "other")
 HEX_COLOR = re.compile(r"^#[0-9a-fA-F]{6}$")
 
 MAX_ICON_IMAGE = 300_000
+MAX_CARD_TAIL_DIGITS = 8
 
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid", populate_by_name=True))
@@ -88,7 +89,7 @@ def _clean_tails(tails: list[str]) -> str:
     cleaned = []
     for raw in tails:
         digits = "".join(ch for ch in str(raw) if ch.isdigit())
-        if not digits or len(digits) > 8:  # noqa: PLR2004
+        if not digits or len(digits) > MAX_CARD_TAIL_DIGITS:
             raise HTTPException(400, "card tail must be 1-8 digits")
         if digits not in cleaned:
             cleaned.append(digits)
@@ -201,7 +202,7 @@ def create_account(
 
 
 @router.patch("/{account_id}")
-def patch_account(  # noqa: C901,PLR0912,PLR0915
+def patch_account(
     account_id: int,
     patch: AccountPatch,
     user: Annotated[AuthenticatedUser, Depends(current_user)],
@@ -210,83 +211,110 @@ def patch_account(  # noqa: C901,PLR0912,PLR0915
     uid = user.id
     c = conn()
     try:
-        if not c.execute(
-            "SELECT id FROM accounts WHERE id=? AND user_id=?",
-            (account_id, uid),
-        ).fetchone():
-            raise HTTPException(404, "account not found")
-        name = patch.name
-        if name is not None:
-            dup = c.execute(
-                "SELECT id FROM accounts WHERE user_id=? AND name=? AND id<>?",
-                (uid, name, account_id),
-            ).fetchone()
-            if dup:
-                raise HTTPException(409, "account with this name already exists")
-            c.execute("UPDATE accounts SET name=? WHERE id=?", (name, account_id))
-        account_type = patch.type
-        if account_type is not None:
-            if account_type not in TYPES:
-                raise HTTPException(400, "type must be one of card, cash, savings, other")
-            c.execute("UPDATE accounts SET type=? WHERE id=?", (account_type, account_id))
-        icon = patch.icon
-        if icon is not None:
-            c.execute("UPDATE accounts SET icon=? WHERE id=?", (icon, account_id))
-        color = patch.color
-        if color is not None:
-            _validate_color(color)
-            c.execute("UPDATE accounts SET color=? WHERE id=?", (color, account_id))
-        icon_image = patch.icon_image
-        if icon_image is not None:
-            _validate_icon_image(icon_image)
-            c.execute(
-                "UPDATE accounts SET icon_image=? WHERE id=?",
-                (icon_image or None, account_id),
-            )
-        currency = patch.currency
-        if currency is not None:
-            c.execute("UPDATE accounts SET currency=? WHERE id=?", (currency, account_id))
-        opening_balance = patch.opening_balance
-        if opening_balance is not None:
-            c.execute(
-                "UPDATE accounts SET opening_balance=? WHERE id=?",
-                (opening_balance, account_id),
-            )
-        opening_date = patch.opening_date
-        if opening_date is not None:
-            c.execute("UPDATE accounts SET opening_date=? WHERE id=?", (opening_date, account_id))
-        archived = patch.archived
-        if archived is not None:
-            c.execute(
-                "UPDATE accounts SET archived=? WHERE id=?",
-                (1 if archived else 0, account_id),
-            )
-        connection_id = patch.connection_id
-        if connection_id is not None:
-            if connection_id == 0:
-                c.execute("UPDATE accounts SET connection_id=NULL WHERE id=?", (account_id,))
-            else:
-                _owned_connection(c, connection_id, uid)
-                c.execute(
-                    "UPDATE accounts SET connection_id=? WHERE id=?",
-                    (connection_id, account_id),
-                )
-        bank_ref = patch.bank_ref
-        if bank_ref is not None:
-            c.execute(
-                "UPDATE accounts SET bank_ref=? WHERE id=?",
-                (bank_ref.strip(), account_id),
-            )
-        card_tails = patch.card_tails
-        if card_tails is not None:
-            c.execute(
-                "UPDATE accounts SET card_tails=? WHERE id=?",
-                (_clean_tails(card_tails), account_id),
-            )
+        _require_account(c, account_id, uid)
+        _validate_account_patch(patch)
+        _update_account_fields(c, account_id, uid, patch)
+        _update_account_connection(c, account_id, uid, patch.connection_id)
+        _update_account_tails(c, account_id, patch.card_tails)
         c.commit()
         return {"ok": True}
     finally:
         c.close()
+
+
+def _require_account(c: sqlite3.Connection, account_id: int, uid: int) -> None:
+    if not c.execute(
+        "SELECT id FROM accounts WHERE id=? AND user_id=?",
+        (account_id, uid),
+    ).fetchone():
+        raise HTTPException(404, "account not found")
+
+
+def _validate_account_patch(patch: AccountPatch) -> None:
+    if patch.type is not None and patch.type not in TYPES:
+        raise HTTPException(400, "type must be one of card, cash, savings, other")
+    if patch.color is not None:
+        _validate_color(patch.color)
+    if patch.icon_image is not None:
+        _validate_icon_image(patch.icon_image)
+
+
+def _update_account_fields(
+    c: sqlite3.Connection,
+    account_id: int,
+    uid: int,
+    patch: AccountPatch,
+) -> None:
+    _ensure_account_name_available(c, account_id, uid, patch.name)
+    fields = (
+        ("UPDATE accounts SET name=? WHERE id=?", patch.name),
+        ("UPDATE accounts SET type=? WHERE id=?", patch.type),
+        ("UPDATE accounts SET icon=? WHERE id=?", patch.icon),
+        ("UPDATE accounts SET color=? WHERE id=?", patch.color),
+        ("UPDATE accounts SET currency=? WHERE id=?", patch.currency),
+        ("UPDATE accounts SET opening_balance=? WHERE id=?", patch.opening_balance),
+        ("UPDATE accounts SET opening_date=? WHERE id=?", patch.opening_date),
+        (
+            "UPDATE accounts SET archived=? WHERE id=?",
+            None if patch.archived is None else int(patch.archived),
+        ),
+        (
+            "UPDATE accounts SET bank_ref=? WHERE id=?",
+            None if patch.bank_ref is None else patch.bank_ref.strip(),
+        ),
+    )
+    for sql, value in fields:
+        if value is not None:
+            c.execute(sql, (value, account_id))
+    _update_icon_image(c, account_id, patch.icon_image)
+
+
+def _update_icon_image(c: sqlite3.Connection, account_id: int, image: str | None) -> None:
+    if image is not None:
+        c.execute("UPDATE accounts SET icon_image=? WHERE id=?", (image or None, account_id))
+
+
+def _ensure_account_name_available(
+    c: sqlite3.Connection,
+    account_id: int,
+    uid: int,
+    name: str | None,
+) -> None:
+    if (
+        name is not None
+        and c.execute(
+            "SELECT id FROM accounts WHERE user_id=? AND name=? AND id<>?",
+            (uid, name, account_id),
+        ).fetchone()
+    ):
+        raise HTTPException(409, "account with this name already exists")
+
+
+def _update_account_connection(
+    c: sqlite3.Connection,
+    account_id: int,
+    uid: int,
+    connection_id: int | None,
+) -> None:
+    if connection_id is None:
+        return
+    if connection_id == 0:
+        c.execute("UPDATE accounts SET connection_id=NULL WHERE id=?", (account_id,))
+        return
+    _owned_connection(c, connection_id, uid)
+    c.execute("UPDATE accounts SET connection_id=? WHERE id=?", (connection_id, account_id))
+
+
+def _update_account_tails(
+    c: sqlite3.Connection,
+    account_id: int,
+    tails: list[str] | None,
+) -> None:
+    if tails is not None:
+        c.execute(
+            "UPDATE accounts SET card_tails=? WHERE id=?",
+            (_clean_tails(tails), account_id),
+        )
 
 
 @router.delete("/{account_id}")

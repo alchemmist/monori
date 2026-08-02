@@ -168,6 +168,8 @@ LABEL_HEADERS = ("Категория", "Категории", "Category", "Catego
 SKIP_LABELS = (*LABEL_HEADERS, "Month Summary", "Total", "Итого")
 
 DEFAULT_CURRENCY = "RUB"
+MIN_LAYOUT_BASES = 2
+MONTHS_IN_YEAR = 12
 INCOME_GROUP = "Inflow"
 INCOME_CATEGORY = "Income"
 OTHER_GROUP = "Other"
@@ -219,7 +221,11 @@ def _kop(cell: Cell | MergedCell | None) -> int | None:
 
 
 def _last_day(year: int, month: int) -> datetime.date:
-    end = datetime.date(year + 1, 1, 1) if month == 12 else datetime.date(year, month + 1, 1)  # noqa: PLR2004
+    end = (
+        datetime.date(year + 1, 1, 1)
+        if month == MONTHS_IN_YEAR
+        else datetime.date(year, month + 1, 1)
+    )
     return end - datetime.timedelta(days=1)
 
 
@@ -232,7 +238,42 @@ def _month_num(cell: Cell | MergedCell | None) -> int | None:
     return MONTH_ABBREVS.get(abbr)
 
 
-def _find_layout(ws: Worksheet) -> LayoutRow | None:  # noqa: C901,PLR0912
+def _layout_bases(ws: Worksheet, row_number: int) -> list[int]:
+    return [
+        column
+        for column in range(1, ws.max_column + 1)
+        if _s(ws.cell(row_number, column)) in BUDGET_HEADERS
+    ]
+
+
+def _layout_offsets(ws: Worksheet, row_number: int, first_base: int) -> tuple[int, int] | None:
+    out_off = bal_off = None
+    for column in range(first_base + 1, ws.max_column + 1):
+        value = _s(ws.cell(row_number, column))
+        if value in OUTFLOW_HEADERS and out_off is None:
+            out_off = column - first_base
+        if value in BALANCE_HEADERS and bal_off is None:
+            bal_off = column - first_base
+    return (out_off, bal_off) if out_off is not None and bal_off is not None else None
+
+
+def _layout_label_column(ws: Worksheet, header_row: int, first_base: int) -> int:
+    for row_number in (header_row, header_row + 1):
+        for column in range(1, first_base):
+            if _s(ws.cell(row_number, column)) in LABEL_HEADERS:
+                return column
+    return _label_col(ws, header_row, first_base)
+
+
+def _layout_start_month(ws: Worksheet, first_base: int) -> int:
+    for row_number in (1, 2, 3):
+        month = _month_num(ws.cell(row_number, first_base))
+        if month is not None:
+            return month
+    return 1
+
+
+def _find_layout(ws: Worksheet) -> LayoutRow | None:
     """
     Locates the month blocks of a year sheet by looking for the row that repeats.
 
@@ -241,43 +282,21 @@ def _find_layout(ws: Worksheet) -> LayoutRow | None:  # noqa: C901,PLR0912
     different row and labelled in a different language. Returns None when no
     such row exists, which is how a sheet says it is not a year grid at all.
     """
-    for r in range(1, 11):
-        row = [ws.cell(r, c) for c in range(1, ws.max_column + 1)]
-        bases = [i + 1 for i, v in enumerate(row) if _s(v) in BUDGET_HEADERS]
-        if len(bases) < 2:  # noqa: PLR2004
+    for header_row in range(1, 11):
+        bases = _layout_bases(ws, header_row)
+        if len(bases) < MIN_LAYOUT_BASES:
             continue
-        out_off = bal_off = None
-        for i, v in enumerate(row):
-            col = i + 1
-            if col <= bases[0]:
-                continue
-            if _s(v) in OUTFLOW_HEADERS and out_off is None:
-                out_off = col - bases[0]
-            if _s(v) in BALANCE_HEADERS and bal_off is None:
-                bal_off = col - bases[0]
-        if out_off is None or bal_off is None:
+        offsets = _layout_offsets(ws, header_row, bases[0])
+        if offsets is None:
             continue
-        label_col = None
-        for rr in (r, r + 1):
-            for c in range(1, bases[0]):
-                if _s(ws.cell(rr, c)) in LABEL_HEADERS:
-                    label_col = c
-                    break
-            if label_col:
-                break
-        start_month = None
-        for rr in (1, 2, 3):
-            mon = _month_num(ws.cell(rr, bases[0]))
-            if mon:
-                start_month = mon
-                break
+        out_off, bal_off = offsets
         return LayoutRow(
-            header_row=r,
+            header_row=header_row,
             bases=bases,
             out_off=out_off,
             bal_off=bal_off,
-            label_col=label_col or _label_col(ws, r, bases[0]),
-            start_month=start_month or 1,
+            label_col=_layout_label_column(ws, header_row, bases[0]),
+            start_month=_layout_start_month(ws, bases[0]),
         )
     return None
 
@@ -405,15 +424,22 @@ def _summary_value(ws: Worksheet, base: int, labels: tuple[str, ...]) -> int | N
     return None
 
 
-def _parse_year_sheet(ws: Worksheet, year: int, layout: LayoutRow) -> YearSheetRow:  # noqa: C901,PLR0912
-    months: list[tuple[int, int]] = []
-    for i, base in enumerate(layout.bases):
-        m = layout.start_month + i
-        if m > 12:  # noqa: PLR2004
-            break
-        months.append((m, base))
+def _year_months(layout: LayoutRow) -> list[tuple[int, int]]:
+    return [
+        (layout.start_month + i, base)
+        for i, base in enumerate(layout.bases)
+        if layout.start_month + i <= MONTHS_IN_YEAR
+    ]
+
+
+def _year_categories(
+    ws: Worksheet,
+    layout: LayoutRow,
+    months: list[tuple[int, int]],
+    sections: list[YearSection],
+) -> dict[str, YearCategoryRow]:
     cats: dict[str, YearCategoryRow] = {}
-    for section in _sheet_sections(ws, layout):
+    for section in sections:
         for r, name in section.rows:
             entry = cats.setdefault(
                 name,
@@ -429,6 +455,13 @@ def _parse_year_sheet(ws: Worksheet, year: int, layout: LayoutRow) -> YearSheetR
                     entry.outflows[m] = o
                 if bal is not None:
                     entry.balances[m] = bal
+    return cats
+
+
+def _year_summaries(
+    ws: Worksheet,
+    months: list[tuple[int, int]],
+) -> tuple[dict[int, int], dict[int, int]]:
     income: dict[int, int] = {}
     available: dict[int, int] = {}
     for m, base in months:
@@ -442,12 +475,24 @@ def _parse_year_sheet(ws: Worksheet, year: int, layout: LayoutRow) -> YearSheetR
                 if av is not None:
                     available[m] = av
                 break
+    return income, available
 
+
+def _year_seeds(ws: Worksheet, months: list[tuple[int, int]]) -> dict[int, int]:
     seeds: dict[int, int] = {}
     for m, base in months:
         carried = _summary_value(ws, base, ("Not budgeted", "Не заложено"))
         if carried is not None:
             seeds[m] = carried
+    return seeds
+
+
+def _parse_year_sheet(ws: Worksheet, year: int, layout: LayoutRow) -> YearSheetRow:
+    months = _year_months(layout)
+    sections = _sheet_sections(ws, layout)
+    cats = _year_categories(ws, layout, months, sections)
+    income, available = _year_summaries(ws, months)
+    seeds = _year_seeds(ws, months)
     return YearSheetRow(
         year=year,
         months=[m for m, _ in months],
@@ -456,7 +501,7 @@ def _parse_year_sheet(ws: Worksheet, year: int, layout: LayoutRow) -> YearSheetR
         available=available,
         seeds=seeds,
         seed=seeds.get(months[0][0]) if months else None,
-        sections=_sheet_sections(ws, layout),
+        sections=sections,
     )
 
 
@@ -485,7 +530,7 @@ def _parse_dt(cell: Cell | MergedCell | None) -> datetime.datetime | None:
         return None
     parsed = parse_date(text)
     if parsed:
-        return parsed
+        return parsed.replace(tzinfo=None)
     try:
         return datetime.datetime.fromisoformat(text)
     except ValueError:
@@ -521,95 +566,164 @@ def _tx_columns(idx: Mapping[str, int]) -> dict[str, int | None]:
     }
 
 
-def _parse_transactions(  # noqa: C901,PLR0912,PLR0915
-    ws: Worksheet,
-    warnings: list[str],
-    errors: list[WorkbookParseErrorRow],
-) -> list[WorkbookTransactionRow]:
-    idx = _tx_header_index(ws)
-    if idx is None:
+@dataclass(slots=True)
+class _TransactionReader:
+    columns: dict[str, int | None]
+    category_column: int
+
+    def cell(
+        self,
+        row: tuple[Cell | MergedCell, ...],
+        field: str,
+    ) -> Cell | MergedCell | None:
+        column = self.columns[field]
+        return row[column] if column is not None and column < len(row) else None
+
+    def text(self, row: tuple[Cell | MergedCell, ...], field: str) -> str:
+        return _unquote(_s(self.cell(row, field)))
+
+    def category(self, row: tuple[Cell | MergedCell, ...]) -> str:
+        return _unquote(_s(row[self.category_column])) if self.category_column < len(row) else ""
+
+
+def _transaction_reader(ws: Worksheet) -> _TransactionReader:
+    index = _tx_header_index(ws)
+    if index is None:
         msg = "Transactions sheet is empty"
         raise WorkbookError(msg)
-    at = _tx_columns(idx)
-    missing = [TX_ALIASES[f][0] for f in TX_REQUIRED if at[f] is None]
-    if at["pay_amount"] is not None and TX_ALIASES["amount"][0] in missing:
+    columns = _tx_columns(index)
+    _require_transaction_columns(columns)
+    category_column = columns["category"]
+    return _TransactionReader(
+        columns,
+        category_column if category_column is not None else _category_col(ws, index),
+    )
+
+
+def _require_transaction_columns(columns: Mapping[str, int | None]) -> None:
+    missing = [TX_ALIASES[field][0] for field in TX_REQUIRED if columns[field] is None]
+    if columns["pay_amount"] is not None and TX_ALIASES["amount"][0] in missing:
         missing.remove(TX_ALIASES["amount"][0])
     if missing:
         msg = f"Transactions sheet is missing required columns: {missing}"
         raise WorkbookError(msg)
 
-    def col(row: tuple[Cell | MergedCell, ...], field: str) -> Cell | MergedCell | None:
-        """Handle col."""
-        i = at[field]
-        return row[i] if i is not None and i < len(row) else None
 
-    def text(row: tuple[Cell | MergedCell, ...], field: str) -> str:
-        """Handle text."""
-        return _unquote(_s(col(row, field)))
+@dataclass(slots=True)
+class _TransactionParseState:
+    errors: list[WorkbookParseErrorRow]
+    rows: list[WorkbookTransactionRow] = field(default_factory=list)
+    seen: set[tuple[str, int, str, str, str]] = field(default_factory=set)
+    skipped_status: int = 0
+    foreign: dict[str, int] = field(default_factory=dict)
+    duplicates: int = 0
 
-    cat_col = at["category"] if at["category"] is not None else _category_col(ws, idx)
-    rows: list[WorkbookTransactionRow] = []
-    seen: set[tuple[str, int, str, str, str]] = set()
-    skipped_status = 0
-    foreign: dict[str, int] = {}
-    dupes = 0
-    for n, row in enumerate(ws.iter_rows(min_row=2), start=2):
-        if all(_s(cell) == "" for cell in row):
-            continue
-        status = _s(col(row, "status")).upper()
-        if status not in ("OK", ""):
-            skipped_status += 1
-            continue
-        dt = _parse_dt(col(row, "date"))
+    def consume(
+        self,
+        reader: _TransactionReader,
+        row: tuple[Cell | MergedCell, ...],
+        number: int,
+    ) -> None:
+        if _blank_transaction_row(row) or self._skipped_status(reader, row):
+            return
+        transaction = self._transaction(reader, row, number)
+        if transaction is None:
+            return
+        if transaction.currency != DEFAULT_CURRENCY:
+            self.foreign[transaction.currency] = self.foreign.get(transaction.currency, 0) + 1
+        key = _transaction_key(transaction)
+        if key in self.seen:
+            self.duplicates += 1
+            return
+        self.seen.add(key)
+        self.rows.append(transaction)
 
-        amount = _amount(col(row, "pay_amount"))
-        currency = _s(col(row, "pay_currency"))
-        if amount is None:
-            amount = _amount(col(row, "amount"))
-            currency = _s(col(row, "currency"))
-        currency = currency or _s(col(row, "currency"))
-        description = text(row, "description")
-        if dt is None or amount is None:
-            if dt is None and amount is None and not description:
-                continue
-            errors.append(WorkbookParseErrorRow(row=n, error="unparseable date or amount"))
-            continue
-        currency = (currency or DEFAULT_CURRENCY).upper()
-        if currency != DEFAULT_CURRENCY:
-            foreign[currency] = foreign.get(currency, 0) + 1
-        date_iso = dt.strftime("%Y-%m-%dT%H:%M:%S")
-        marker = text(row, "card") or text(row, "account")
-        key = (date_iso, amount, description, marker, currency)
-        if key in seen:
-            dupes += 1
-            continue
-        seen.add(key)
-        category = _unquote(_s(row[cat_col])) if cat_col < len(row) else ""
-        rows.append(
-            WorkbookTransactionRow(
-                date=date_iso,
-                amount=amount,
-                description=description,
-                currency=currency,
-                bank_category=text(row, "bank_category"),
-                mcc=text(row, "mcc"),
-                comment=text(row, "comment"),
-                monori_category=category,
-                marker=marker,
-            ),
+    def _skipped_status(
+        self,
+        reader: _TransactionReader,
+        row: tuple[Cell | MergedCell, ...],
+    ) -> bool:
+        if _s(reader.cell(row, "status")).upper() in ("OK", ""):
+            return False
+        self.skipped_status += 1
+        return True
+
+    def _transaction(
+        self,
+        reader: _TransactionReader,
+        row: tuple[Cell | MergedCell, ...],
+        number: int,
+    ) -> WorkbookTransactionRow | None:
+        date = _parse_dt(reader.cell(row, "date"))
+        amount, currency = _transaction_amount(reader, row)
+        description = reader.text(row, "description")
+        if date is None or amount is None:
+            if date is not None or amount is not None or description:
+                self.errors.append(
+                    WorkbookParseErrorRow(row=number, error="unparseable date or amount")
+                )
+            return None
+        return WorkbookTransactionRow(
+            date=date.strftime("%Y-%m-%dT%H:%M:%S"),
+            amount=amount,
+            description=description,
+            currency=(currency or DEFAULT_CURRENCY).upper(),
+            bank_category=reader.text(row, "bank_category"),
+            mcc=reader.text(row, "mcc"),
+            comment=reader.text(row, "comment"),
+            monori_category=reader.category(row),
+            marker=reader.text(row, "card") or reader.text(row, "account"),
         )
-    if dupes:
+
+
+def _blank_transaction_row(row: tuple[Cell | MergedCell, ...]) -> bool:
+    return all(_s(cell) == "" for cell in row)
+
+
+def _transaction_amount(
+    reader: _TransactionReader,
+    row: tuple[Cell | MergedCell, ...],
+) -> tuple[int | None, str]:
+    amount = _amount(reader.cell(row, "pay_amount"))
+    currency = _s(reader.cell(row, "pay_currency"))
+    if amount is None:
+        amount = _amount(reader.cell(row, "amount"))
+        currency = _s(reader.cell(row, "currency"))
+    return amount, currency or _s(reader.cell(row, "currency"))
+
+
+def _transaction_key(transaction: WorkbookTransactionRow) -> tuple[str, int, str, str, str]:
+    return (
+        transaction.date,
+        transaction.amount,
+        transaction.description,
+        transaction.marker,
+        transaction.currency,
+    )
+
+
+def _parse_transactions(
+    ws: Worksheet,
+    warnings: list[str],
+    errors: list[WorkbookParseErrorRow],
+) -> list[WorkbookTransactionRow]:
+    reader = _transaction_reader(ws)
+    state = _TransactionParseState(errors)
+    for n, row in enumerate(ws.iter_rows(min_row=2), start=2):
+        state.consume(reader, row, n)
+    if state.duplicates:
         warnings.append(
-            f"Transactions: {dupes} rows identical in date, amount, description and card"
+            f"Transactions: {state.duplicates} rows identical in date, amount, description and card"
             " — kept once",
         )
-    if skipped_status:
-        warnings.append(f"Transactions: {skipped_status} non-OK rows skipped")
-    for code, n in sorted(foreign.items()):
+    if state.skipped_status:
+        warnings.append(f"Transactions: {state.skipped_status} non-OK rows skipped")
+    for code, count in sorted(state.foreign.items()):
         warnings.append(
-            f"Transactions: {n} rows in {code} — they need an account held in {code} to land on",
+            f"Transactions: {count} rows in {code} — they need an account held in {code} "
+            "to land on",
         )
-    return rows
+    return state.rows
 
 
 def _known_max_col(idx: Mapping[str, int]) -> int:
@@ -683,15 +797,14 @@ def _parse_keywords(ws: Worksheet, idx: Mapping[str, int]) -> dict[str, str]:
     return keywords
 
 
-def _synthetic(  # noqa: PLR0913
-    year: int,
-    month: int,
+def _synthetic(
+    period: tuple[int, int],
     amount: int,
     category: str,
     description: str,
     marker: str = "",
 ) -> WorkbookTransactionRow:
-    date_iso = _stamp(year, month)
+    date_iso = _stamp(*period)
     return WorkbookTransactionRow(
         date=date_iso,
         amount=amount,
@@ -730,9 +843,9 @@ def _activity_span(
     """
     seen = []
 
-    for tx in transactions:
-        if tx.monori_category:
-            seen.append((int(tx.date[:4]), int(tx.date[5:7])))  # noqa: PERF401
+    seen.extend(
+        [(int(tx.date[:4]), int(tx.date[5:7])) for tx in transactions if tx.monori_category]
+    )
     for source in sources:
         y = source.year
         seen.extend((y, m) for m, v in source.income.items() if v)
@@ -746,7 +859,7 @@ def _month_range(start: tuple[int, int], end: tuple[int, int]) -> Iterable[tuple
     while (y, m) <= end:
         yield (y, m)
         m += 1
-        if m > 12:  # noqa: PLR2004
+        if m > MONTHS_IN_YEAR:
             y, m = y + 1, 1
 
 
@@ -767,22 +880,90 @@ def parse_workbook(data: bytes) -> ParsedWorkbook:
         wb.close()
 
 
-def _parse(wb: Workbook) -> ParsedWorkbook:  # noqa: C901,PLR0912,PLR0915
+def _parse(wb: Workbook) -> ParsedWorkbook:
     warnings: list[str] = []
     errors: list[WorkbookParseErrorRow] = []
-    if spec.SHEET_TRANSACTIONS not in wb.sheetnames:
-        msg = f"missing required sheet: {spec.SHEET_TRANSACTIONS}"
-        raise WorkbookError(msg)
-    tx_ws = wb[spec.SHEET_TRANSACTIONS]
+    sheets = _parse_sheets(wb, warnings, errors)
+    catalog = _build_catalog(wb, sheets, warnings)
+    if not sheets.has_years:
+        return _result(
+            _ParsedRows(catalog.groups, catalog.categories, sheets.transactions, []),
+            warnings,
+            errors,
+        )
+    income_category = catalog.income_category()
+    budgets = _collect_budgets(sheets, catalog)
+    reconciliation = _Reconciliation(sheets, catalog, sheets.transactions, budgets, income_category)
+    synthetic, reconciliation_warnings = reconciliation.run()
+    warnings.extend(reconciliation_warnings)
+
+    return _result(
+        _ParsedRows(catalog.groups, catalog.categories, sheets.transactions + synthetic, budgets),
+        warnings,
+        errors,
+    )
+
+
+@dataclass(slots=True)
+class _SheetData:
+    transactions: list[WorkbookTransactionRow]
+    keywords: dict[str, str]
+    archive_years: dict[int, YearSheetRow]
+    live_years: dict[int, YearSheetRow]
+    plain_sheets: dict[int, YearSheetRow]
+    seam_year: int
+    seam_sheet: YearSheetRow | None
+
+    @property
+    def has_years(self) -> bool:
+        return bool(self.live_years or self.archive_years)
+
+    @property
+    def sources(self) -> list[YearSheetRow]:
+        return list(self.archive_years.values()) + list(self.live_years.values())
+
+
+def _parse_sheets(
+    wb: Workbook,
+    warnings: list[str],
+    errors: list[WorkbookParseErrorRow],
+) -> _SheetData:
+    tx_ws = _transaction_sheet(wb)
     tx_idx = _tx_header_index(tx_ws)
     transactions = _parse_transactions(tx_ws, warnings, errors)
     if tx_idx is None:
         msg = "Transactions sheet is missing required columns"
         raise WorkbookError(msg)
-    keywords = _parse_keywords(tx_ws, tx_idx)
+    archive_years, plain_sheets = _parse_year_sheets(wb, warnings)
+    live_years = {
+        year: parsed for year, parsed in plain_sheets.items() if year not in archive_years
+    }
+    _warn_unknown_sheets(wb, warnings)
+    first_live = min(live_years) if live_years else None
+    seam_year = -1 if first_live is None else first_live - 1
+    return _SheetData(
+        transactions,
+        _parse_keywords(tx_ws, tx_idx),
+        archive_years,
+        live_years,
+        plain_sheets,
+        seam_year,
+        plain_sheets.get(seam_year),
+    )
 
+
+def _transaction_sheet(wb: Workbook) -> Worksheet:
+    if spec.SHEET_TRANSACTIONS not in wb.sheetnames:
+        msg = f"missing required sheet: {spec.SHEET_TRANSACTIONS}"
+        raise WorkbookError(msg)
+    return wb[spec.SHEET_TRANSACTIONS]
+
+
+def _parse_year_sheets(
+    wb: Workbook,
+    warnings: list[str],
+) -> tuple[dict[int, YearSheetRow], dict[int, YearSheetRow]]:
     archive_years: dict[int, YearSheetRow] = {}
-    live_years: dict[int, YearSheetRow] = {}
     plain_sheets: dict[int, YearSheetRow] = {}
     for name in wb.sheetnames:
         year_match = YEAR_RE.match(name)
@@ -795,346 +976,612 @@ def _parse(wb: Workbook) -> ParsedWorkbook:  # noqa: C901,PLR0912,PLR0915
         if layout is None:
             warnings.append(f"{name}: unrecognized year sheet layout, ignored")
             continue
-        year = int(year_match.group(1))
-        parsed = _parse_year_sheet(ws, year, layout)
-        if year_match.group(2):
-            archive_years[year] = parsed
-        else:
-            plain_sheets[year] = parsed
-    for year, parsed in plain_sheets.items():
-        if year not in archive_years:
-            live_years[year] = parsed  # noqa: PERF403
+        parsed = _parse_year_sheet(ws, int(year_match.group(1)), layout)
+        destination = archive_years if year_match.group(2) else plain_sheets
+        destination[parsed.year] = parsed
+    return archive_years, plain_sheets
+
+
+def _warn_unknown_sheets(wb: Workbook, warnings: list[str]) -> None:
     known_sheets = {spec.SHEET_CATEGORIES, spec.SHEET_TRANSACTIONS, spec.SHEET_DASHDATA}
-    for name in wb.sheetnames:
-        if name not in known_sheets and not YEAR_RE.match(name):
-            warnings.append(f"unknown sheet ignored: {name}")  # noqa: PERF401
+    warnings.extend(
+        f"unknown sheet ignored: {name}"
+        for name in wb.sheetnames
+        if name not in known_sheets and not YEAR_RE.match(name)
+    )
 
-    first_live = min(live_years) if live_years else None
-    seam_year = -1 if first_live is None else first_live - 1
-    seam_sheet = plain_sheets.get(seam_year)
 
-    groups: list[WorkbookGroupRow] = []
-    categories: list[WorkbookCategoryRow] = []
-    group_names: set[str] = set()
-    cat_names: dict[str, str] = {}
+@dataclass(slots=True)
+class _CategoryCatalog:
+    keywords: dict[str, str]
+    groups: list[WorkbookGroupRow] = field(default_factory=list)
+    categories: list[WorkbookCategoryRow] = field(default_factory=list)
+    group_names: set[str] = field(default_factory=set)
+    category_groups: dict[str, str] = field(default_factory=dict)
 
-    def add_group(name: str, kind: Literal["income", "expense"], sort: int | None = None) -> None:
-        """Handle add group."""
-        if name in group_names:
-            return
-        group_names.add(name)
-        groups.append(
-            WorkbookGroupRow(name=name, sort=len(groups) if sort is None else sort, kind=kind),
-        )
+    def add_group(
+        self,
+        name: str,
+        kind: Literal["income", "expense"],
+        sort: int | None = None,
+    ) -> None:
+        if name not in self.group_names:
+            self.group_names.add(name)
+            self.groups.append(
+                WorkbookGroupRow(
+                    name=name, sort=len(self.groups) if sort is None else sort, kind=kind
+                ),
+            )
 
     def add_category(
+        self,
         name: str,
         group: str,
         keywords_text: str | None = None,
         group_kind: Literal["income", "expense"] | None = None,
         group_sort: int = 0,
     ) -> None:
-        """Handle add category."""
-        if name in cat_names:
-            return
-        cat_names[name] = group
-        categories.append(
-            WorkbookCategoryRow(
-                group=group,
-                group_kind=group_kind,
-                group_sort=group_sort,
-                name=name,
-                keywords=keywords_text if keywords_text is not None else keywords.get(name, ""),
-            ),
-        )
+        if name not in self.category_groups:
+            self.category_groups[name] = group
+            self.categories.append(
+                WorkbookCategoryRow(
+                    group=group,
+                    group_kind=group_kind,
+                    group_sort=group_sort,
+                    name=name,
+                    keywords=keywords_text
+                    if keywords_text is not None
+                    else self.keywords.get(name, ""),
+                ),
+            )
 
+    def income_category(self) -> str:
+        income_category = next(
+            (
+                category.name
+                for category in self.categories
+                if category.name == INCOME_CATEGORY
+                or _kind_of(category.group, self.groups) == "income"
+            ),
+            None,
+        )
+        if income_category is None:
+            self.add_group(INCOME_GROUP, "income")
+            self.add_category(INCOME_CATEGORY, INCOME_GROUP)
+            return INCOME_CATEGORY
+        return income_category
+
+
+def _build_catalog(
+    wb: Workbook,
+    sheets: _SheetData,
+    warnings: list[str],
+) -> _CategoryCatalog:
+    catalog = _CategoryCatalog(sheets.keywords)
+    stated = _add_stated_categories(wb, catalog, warnings)
+    _add_grid_categories(sheets, catalog, stated=stated, warnings=warnings)
+    _add_transaction_categories(sheets.transactions, catalog)
+    return catalog
+
+
+def _add_stated_categories(
+    wb: Workbook,
+    catalog: _CategoryCatalog,
+    warnings: list[str],
+) -> bool:
     stated_warnings: list[str] = []
     stated_groups, stated_categories = (
         _parse_categories(wb[spec.SHEET_CATEGORIES], stated_warnings)
         if spec.SHEET_CATEGORIES in wb.sheetnames
         else ([], [])
     )
-
-    if stated_categories:
-        warnings.extend(stated_warnings)
-    else:
-        stated_groups = []
-        if stated_warnings:
-            warnings.append(
-                f"Categories: no category rows recognized ({len(stated_warnings)} rows skipped),"
-                " structure taken from the year grids",
-            )
+    if not stated_categories:
+        _warn_missing_categories(stated_warnings, warnings)
+        return False
+    warnings.extend(stated_warnings)
     for group in stated_groups:
-        add_group(group.name, group.kind, group.sort)
-    for cat in stated_categories:
-        add_group(cat.group, cat.group_kind or "expense", cat.group_sort)
-        add_category(cat.name, cat.group, cat.keywords, cat.group_kind, cat.group_sort)
+        catalog.add_group(group.name, group.kind, group.sort)
+    for category in stated_categories:
+        catalog.add_group(category.group, category.group_kind or "expense", category.group_sort)
+        catalog.add_category(
+            category.name,
+            category.group,
+            category.keywords,
+            category.group_kind,
+            category.group_sort,
+        )
+    return True
 
-    stated = bool(stated_categories)
 
+def _warn_missing_categories(
+    stated_warnings: list[str],
+    warnings: list[str],
+) -> None:
+    if stated_warnings:
+        warnings.append(
+            f"Categories: no category rows recognized ({len(stated_warnings)} rows skipped),"
+            " structure taken from the year grids",
+        )
+
+
+def _add_grid_categories(
+    sheets: _SheetData,
+    catalog: _CategoryCatalog,
+    *,
+    stated: bool,
+    warnings: list[str],
+) -> None:
     all_sections = [
         section
-        for years in (live_years, archive_years)
+        for years in (sheets.live_years, sheets.archive_years)
         for year in years
         for section in years[year].sections
     ]
-    if not stated and all_sections and not any(s.kind == "income" for s in all_sections):
-        add_group(INCOME_GROUP, "income")
-        add_category(INCOME_CATEGORY, INCOME_GROUP)
-
-    for years in (live_years, archive_years):
+    if (
+        not stated
+        and all_sections
+        and not any(section.kind == "income" for section in all_sections)
+    ):
+        catalog.add_group(INCOME_GROUP, "income")
+        catalog.add_category(INCOME_CATEGORY, INCOME_GROUP)
+    for years in (sheets.live_years, sheets.archive_years):
         for year in sorted(years, reverse=True):
-            for section in years[year].sections:
-                if stated:
-                    for _, name in section.rows:
-                        if name not in cat_names:
-                            warnings.append(f"{year}: unknown row label skipped: {name[:60]}")
-                    continue
-                add_group(section.name, _group_kind(section.kind) or "expense")
-                for _, name in section.rows:
-                    add_category(name, section.name)
+            _add_year_sections(year, years[year], catalog, stated=stated, warnings=warnings)
 
+
+def _add_year_sections(
+    year: int,
+    source: YearSheetRow,
+    catalog: _CategoryCatalog,
+    *,
+    stated: bool,
+    warnings: list[str],
+) -> None:
+    for section in source.sections:
+        if stated:
+            _warn_unknown_section_rows(year, section.rows, catalog, warnings)
+            continue
+        catalog.add_group(section.name, _group_kind(section.kind) or "expense")
+        for _, name in section.rows:
+            catalog.add_category(name, section.name)
+
+
+def _warn_unknown_section_rows(
+    year: int,
+    rows: Iterable[tuple[int, str]],
+    catalog: _CategoryCatalog,
+    warnings: list[str],
+) -> None:
+    for _, name in rows:
+        if name not in catalog.category_groups:
+            warnings.append(f"{year}: unknown row label skipped: {name[:60]}")
+
+
+def _add_transaction_categories(
+    transactions: Iterable[WorkbookTransactionRow],
+    catalog: _CategoryCatalog,
+) -> None:
     named_only: dict[str, list[int]] = {}
-    for tx in transactions:
-        category_name = tx.monori_category
-        if category_name and category_name not in cat_names:
-            named_only.setdefault(category_name, []).append(tx.amount)
-    if named_only:
-        income_group = next((g.name for g in groups if g.kind == "income"), None)
-        expense_group = next((g.name for g in groups if g.kind != "income"), None)
-        for name, amounts in named_only.items():
-            if all(a >= 0 for a in amounts):
-                if income_group is None:
-                    add_group(INCOME_GROUP, "income")
-                    income_group = INCOME_GROUP
-                add_category(name, income_group)
-            else:
-                if expense_group is None:
-                    add_group(OTHER_GROUP, "expense")
-                    expense_group = OTHER_GROUP
-                add_category(name, expense_group)
+    for transaction in transactions:
+        name = transaction.monori_category
+        if name and name not in catalog.category_groups:
+            named_only.setdefault(name, []).append(transaction.amount)
+    income_group = next((group.name for group in catalog.groups if group.kind == "income"), None)
+    expense_group = next((group.name for group in catalog.groups if group.kind != "income"), None)
+    for name, amounts in named_only.items():
+        income_group, expense_group = _add_transaction_category(
+            name,
+            amounts,
+            catalog,
+            income_group,
+            expense_group,
+        )
 
-    if not live_years and not archive_years:
-        return _result(groups, categories, transactions, [], warnings, errors)
 
-    income_category = next(
-        (
-            c.name
-            for c in categories
-            if c.name == INCOME_CATEGORY or _kind_of(c.group, groups) == "income"
-        ),
-        None,
-    )
-    if income_category is None:
-        add_group(INCOME_GROUP, "income")
-        add_category(INCOME_CATEGORY, INCOME_GROUP)
-        income_category = INCOME_CATEGORY
+def _add_transaction_category(
+    name: str,
+    amounts: list[int],
+    catalog: _CategoryCatalog,
+    income_group: str | None,
+    expense_group: str | None,
+) -> tuple[str | None, str | None]:
+    if all(amount >= 0 for amount in amounts):
+        if income_group is None:
+            catalog.add_group(INCOME_GROUP, "income")
+            income_group = INCOME_GROUP
+        catalog.add_category(name, income_group)
+        return income_group, expense_group
+    if expense_group is None:
+        catalog.add_group(OTHER_GROUP, "expense")
+        expense_group = OTHER_GROUP
+    catalog.add_category(name, expense_group)
+    return income_group, expense_group
 
-    kinds: dict[str, str] = {}
-    group_kind: dict[str, str] = {g.name: g.kind for g in groups}
-    for cat in categories:
-        kinds[cat.name] = group_kind.get(cat.group, "expense")
 
+def _collect_budgets(sheets: _SheetData, catalog: _CategoryCatalog) -> list[WorkbookBudgetRow]:
     budgets: list[WorkbookBudgetRow] = []
-    for source in list(archive_years.values()) + list(live_years.values()):
+    for source in sheets.sources:
         for name, entry in source.cats.items():
-            if name not in cat_names:
+            if name not in catalog.category_groups:
                 continue
-            for m, amount in entry.budgets.items():
+            for month, amount in entry.budgets.items():
                 if amount:
                     budgets.append(
-                        WorkbookBudgetRow(category=name, year=source.year, month=m, amount=amount),
+                        WorkbookBudgetRow(
+                            category=name, year=source.year, month=month, amount=amount
+                        ),
                     )
+    return budgets
 
-    tx_sums: dict[tuple[str, int, int], int] = {}
-    income_sums: dict[tuple[int, int], int] = {}
-    for tx in transactions:
-        category_name = tx.monori_category
-        if not category_name:
-            continue
-        y, m = int(tx.date[:4]), int(tx.date[5:7])
-        if kinds.get(category_name) == "income":
-            income_sums[(y, m)] = income_sums.get((y, m), 0) + tx.amount
-        else:
-            tx_sums[(category_name, y, m)] = tx_sums.get((category_name, y, m), 0) + tx.amount
 
-    months_with_rows: set[tuple[int, int]] = {
-        (int(tx.date[:4]), int(tx.date[5:7])) for tx in transactions if tx.monori_category
-    }
-
-    synthetic: list[WorkbookTransactionRow] = []
-    n_hist = n_adjust = 0
-
-    def count(y: int, m: int) -> None:
-        """Handle count."""
-        nonlocal n_hist, n_adjust
-        if (y, m) in months_with_rows:
-            n_adjust += 1
-        else:
-            n_hist += 1
-
-    for source in list(archive_years.values()) + list(live_years.values()):
-        year = source.year
-        for m, target in source.income.items():
-            have = income_sums.get((year, m), 0)
-            delta = target - have
-            if abs(delta) > ADJUST_TOLERANCE_KOP:
-                synthetic.append(_synthetic(year, m, delta, income_category, income_category))
-                income_sums[(year, m)] = have + delta
-                count(year, m)
-
-    budget_map: dict[tuple[str, int, int], int] = {}
-    for cell in budgets:
-        key = (cell.category, cell.year, cell.month)
-        budget_map[key] = budget_map.get(key, 0) + cell.amount
-
-    all_years = sorted(set(archive_years) | set(live_years))
-    first_sheet = archive_years.get(all_years[0]) or live_years[all_years[0]]
-    start = (all_years[0], min(first_sheet.months))
-    end = (all_years[-1], 12)
-    first_active, last_active = _activity_span(
-        transactions,
-        list(archive_years.values()) + list(live_years.values()),
-    )
-    if last_active is not None and last_active < end:
-        end = max(last_active, start)
-        if seam_sheet is not None:
-            end = max(end, (seam_year, 12))
-    expense_cats = [c.name for c in categories if kinds[c.name] != "income"]
-
-    seeds = {}
-    for years in (archive_years, live_years):
-        for year, source in years.items():
-            for m, value in source.seeds.items():
-                seeds[(year, m)] = value
-    opening = seeds.get(first_active) if first_active is not None else None
-
-    seam_targets: dict[str, int] = {}
-    if seam_sheet is not None:
-        last_m = max(seam_sheet.months)
-        for name, entry in seam_sheet.cats.items():
-            bal = entry.balances.get(last_m)
-            if bal is not None:
-                seam_targets[name] = bal
-    if first_live is None:
-        seam_seed: int | None = None
-    else:
-        seam_seed = live_years[first_live].seed
-
-    balances: dict[str, int] = {}
-    avail = 0
-    prev_overspent = 0
-    avail_residuals: list[tuple[int, int, int]] = []
-    n_seam = 0
+@dataclass(slots=True)
+class _Reconciliation:
+    sheets: _SheetData
+    catalog: _CategoryCatalog
+    transactions: list[WorkbookTransactionRow]
+    budgets: list[WorkbookBudgetRow]
+    income_category: str
+    kinds: dict[str, str] = field(init=False)
+    tx_sums: dict[tuple[str, int, int], int] = field(init=False)
+    income_sums: dict[tuple[int, int], int] = field(init=False)
+    budget_map: dict[tuple[str, int, int], int] = field(init=False)
+    months_with_rows: set[tuple[int, int]] = field(init=False)
+    synthetic: list[WorkbookTransactionRow] = field(default_factory=list)
+    n_hist: int = 0
+    n_adjust: int = 0
+    n_seam: int = 0
+    avail_residuals: list[tuple[int, int, int]] = field(default_factory=list)
     opened: tuple[int, int, int] | None = None
-    for y, m in _month_range(start, end):
-        if (y, m) == first_active and opening is not None:
-            delta = opening - avail
-            if abs(delta) > ADJUST_TOLERANCE_KOP:
-                py, pm = (y - 1, 12) if m == 1 else (y, m - 1)
-                synthetic.append(_synthetic(py, pm, delta, income_category, OPENING_DESCRIPTION))
-                income_sums[(py, pm)] = income_sums.get((py, pm), 0) + delta
-                avail += delta
-                opened = (opening, y, m)
-        income = income_sums.get((y, m), 0)
-        budgeted_total = sum(budget_map.get((name, y, m), 0) for name in expense_cats)
-        avail = avail + prev_overspent + income - budgeted_total
-        live = y in live_years
-        year_sheet = live_years.get(y)
-        if year_sheet is None:
-            year_sheet = archive_years.get(y)
-        if year_sheet is None:
-            msg = f"missing year sheet: {y}"
-            raise WorkbookError(msg)
-        sheet_cats = year_sheet.cats
-        at_seam = seam_sheet is not None and (y, m) == (seam_year, 12)
+
+    def __post_init__(self) -> None:
+        self.kinds = _category_kinds(self.catalog.groups, self.catalog.categories)
+        self.tx_sums, self.income_sums = _transaction_totals(self.transactions, self.kinds)
+        self.budget_map = _budget_totals(self.budgets)
+        self.months_with_rows = {
+            (int(tx.date[:4]), int(tx.date[5:7])) for tx in self.transactions if tx.monori_category
+        }
+
+    def run(self) -> tuple[list[WorkbookTransactionRow], list[str]]:
+        self._adjust_income_targets()
+        self._reconcile_balances()
+        return self.synthetic, self._warnings()
+
+    def _adjust_income_targets(self) -> None:
+        for source in self.sheets.sources:
+            for month, target in source.income.items():
+                have = self.income_sums.get((source.year, month), 0)
+                delta = target - have
+                if abs(delta) > ADJUST_TOLERANCE_KOP:
+                    self.synthetic.append(
+                        _synthetic(
+                            (source.year, month), delta, self.income_category, self.income_category
+                        ),
+                    )
+                    self.income_sums[(source.year, month)] = have + delta
+                    self._count_adjustment(source.year, month)
+
+    def _reconcile_balances(self) -> None:
+        start, end, first_active = self._range()
+        opening = self._opening_balance(first_active)
+        balances: dict[str, int] = {}
+        available = 0
         overspent = 0
-        for name in expense_cats:
-            carry = max(balances.get(name, 0), 0)
-            have = tx_sums.get((name, y, m), 0)
-            projected = carry + budget_map.get((name, y, m), 0) + have
-            sheet_entry = sheet_cats.get(name)
-            desired: int | None = None
-            if at_seam:
-                if name in seam_targets:
-                    desired = seam_targets[name]
-                elif first_live is not None and name not in live_years[first_live].cats:
-                    desired = 0
-            elif sheet_entry is not None:
-                desired = sheet_entry.balances.get(m)
-                if desired is None and m in sheet_entry.outflows:
-                    desired = projected - have + sheet_entry.outflows[m]
-            elif not live and balances.get(name, 0) != 0 and m == max(year_sheet.months):
-                desired = 0
-            delta = 0 if desired is None else desired - projected
-            if abs(delta) > ADJUST_TOLERANCE_KOP:
-                if at_seam:
-                    n_seam += 1
-                else:
-                    count(y, m)
-                synthetic.append(_synthetic(y, m, delta, name, name))
-                tx_sums[(name, y, m)] = have + delta
-                projected += delta
-            balances[name] = projected
+        for year, month in _month_range(start, end):
+            available = self._apply_opening(year, month, first_active, opening, available)
+            available += overspent + self.income_sums.get((year, month), 0)
+            available -= self._budgeted_total(year, month)
+            source = self._year_sheet(year)
+            overspent = self._reconcile_month(year, month, source, balances)
+            available = self._apply_seam_seed(year, month, available)
+            self._record_available_residual(year, month, source, available)
+
+    def _range(self) -> tuple[tuple[int, int], tuple[int, int], tuple[int, int] | None]:
+        years = sorted(set(self.sheets.archive_years) | set(self.sheets.live_years))
+        first_sheet = self.sheets.archive_years.get(years[0]) or self.sheets.live_years[years[0]]
+        start = years[0], min(first_sheet.months)
+        end = years[-1], 12
+        first_active, last_active = _activity_span(self.transactions, self.sheets.sources)
+        if last_active is not None and last_active < end:
+            end = max(last_active, start)
+            if self.sheets.seam_sheet is not None:
+                end = max(end, (self.sheets.seam_year, 12))
+        return start, end, first_active
+
+    def _opening_balance(self, first_active: tuple[int, int] | None) -> int | None:
+        if first_active is None:
+            return None
+        seeds = {
+            (year, month): value
+            for years in (self.sheets.archive_years, self.sheets.live_years)
+            for year, source in years.items()
+            for month, value in source.seeds.items()
+        }
+        return seeds.get(first_active)
+
+    def _apply_opening(
+        self,
+        year: int,
+        month: int,
+        first_active: tuple[int, int] | None,
+        opening: int | None,
+        available: int,
+    ) -> int:
+        if (year, month) != first_active or opening is None:
+            return available
+        delta = opening - available
+        if abs(delta) <= ADJUST_TOLERANCE_KOP:
+            return available
+        previous_year, previous_month = (year - 1, 12) if month == 1 else (year, month - 1)
+        self.synthetic.append(
+            _synthetic(
+                (previous_year, previous_month), delta, self.income_category, OPENING_DESCRIPTION
+            ),
+        )
+        self.income_sums[(previous_year, previous_month)] = (
+            self.income_sums.get((previous_year, previous_month), 0) + delta
+        )
+        self.opened = opening, year, month
+        return available + delta
+
+    def _budgeted_total(self, year: int, month: int) -> int:
+        return sum(
+            self.budget_map.get((category.name, year, month), 0)
+            for category in self.catalog.categories
+            if self.kinds[category.name] != "income"
+        )
+
+    def _year_sheet(self, year: int) -> YearSheetRow:
+        source = self.sheets.live_years.get(year) or self.sheets.archive_years.get(year)
+        if source is None:
+            msg = f"missing year sheet: {year}"
+            raise WorkbookError(msg)
+        return source
+
+    def _reconcile_month(
+        self,
+        year: int,
+        month: int,
+        source: YearSheetRow,
+        balances: dict[str, int],
+    ) -> int:
+        overspent = 0
+        for category in self.catalog.categories:
+            if self.kinds[category.name] == "income":
+                continue
+            projected = self._reconcile_category(year, month, source, category.name, balances)
             overspent += min(projected, 0)
-        if at_seam and seam_seed is not None:
-            delta = seam_seed - avail
-            if abs(delta) > ADJUST_TOLERANCE_KOP:
-                synthetic.append(_synthetic(y, m, delta, income_category, income_category))
-                income_sums[(y, m)] = income_sums.get((y, m), 0) + delta
-                avail += delta
-                n_seam += 1
-        prev_overspent = overspent
-        if live and source is not None:
-            target_avail = source.available.get(m)
-            if target_avail is not None and abs(target_avail - avail) > VERIFY_TOLERANCE_KOP:
-                avail_residuals.append((y, m, target_avail - avail))
+        return overspent
 
-    if n_hist:
-        warnings.append(
-            f"history: {n_hist} transactions stand in for months the sheet keeps only as monthly"
-            " totals, with no rows of their own — one per category per month, so those months"
-            " still add up",
+    def _reconcile_category(
+        self,
+        year: int,
+        month: int,
+        source: YearSheetRow,
+        name: str,
+        balances: dict[str, int],
+    ) -> int:
+        have = self.tx_sums.get((name, year, month), 0)
+        projected = (
+            max(balances.get(name, 0), 0) + self.budget_map.get((name, year, month), 0) + have
         )
-    if n_adjust:
-        warnings.append(
-            f"reconciliation: {n_adjust} adjustment transactions align live months with the sheet",
-        )
-    if n_seam:
-        warnings.append(f"seam: {n_seam} carry corrections at {seam_year}-12")
-    if opened is not None:
-        amount, oy, om = opened
-        warnings.append(
-            f"opening balance: {amount / 100:,.2f} was already there when the sheet's first month"
-            f" with rows ({oy}-{om:02d}) began — imported as one transaction, since no row in the"
-            " sheet accounts for it",
-        )
-    if avail_residuals:
-        (fy, fm, fd), (ly, lm, ld) = avail_residuals[0], avail_residuals[-1]
-        warnings.append(
-            f"verify: the sheet's own Available differs from the one rebuilt from its rows in "
-            f"{len(avail_residuals)} months, from {fd / 100:,.2f} ({fy}-{fm:02d}) to "
-            f"{ld / 100:,.2f} ({ly}-{lm:02d}) — every row, budget and carried balance is imported"
-            " as the sheet has it, so a gap that only grows in months with overspending is the"
-            " sheet's own header formula, not a mis-read row",
+        attempt = _CategoryBalance(name, projected, have, balances)
+        desired = self._desired_balance(year, month, source, attempt)
+        delta = 0 if desired is None else desired - projected
+        if abs(delta) > ADJUST_TOLERANCE_KOP:
+            self._record_category_adjustment(year, month, name, delta, have)
+            projected += delta
+        balances[name] = projected
+        return projected
+
+    def _desired_balance(
+        self,
+        year: int,
+        month: int,
+        source: YearSheetRow,
+        attempt: "_CategoryBalance",
+    ) -> int | None:
+        if self._at_seam(year, month):
+            return self._seam_balance(attempt.name)
+        entry = source.cats.get(attempt.name)
+        if entry is not None:
+            balance = entry.balances.get(month)
+            return (
+                attempt.projected - attempt.have + entry.outflows[month]
+                if balance is None and month in entry.outflows
+                else balance
+            )
+        if self._is_archived_final_balance(year, month, source, attempt):
+            return 0
+        return None
+
+    def _seam_balance(self, name: str) -> int | None:
+        seam_sheet = self.sheets.seam_sheet
+        if seam_sheet is None:
+            return None
+        last_month = max(seam_sheet.months)
+        entry = seam_sheet.cats.get(name)
+        if entry is not None and (balance := entry.balances.get(last_month)) is not None:
+            return balance
+        first_live = min(self.sheets.live_years) if self.sheets.live_years else None
+        if first_live is not None and name not in self.sheets.live_years[first_live].cats:
+            return 0
+        return None
+
+    def _is_archived_final_balance(
+        self,
+        year: int,
+        month: int,
+        source: YearSheetRow,
+        attempt: "_CategoryBalance",
+    ) -> bool:
+        return (
+            year not in self.sheets.live_years
+            and attempt.balances.get(attempt.name, 0) != 0
+            and month == max(source.months)
         )
 
-    return _result(groups, categories, transactions + synthetic, budgets, warnings, errors)
+    def _record_category_adjustment(
+        self,
+        year: int,
+        month: int,
+        name: str,
+        delta: int,
+        have: int,
+    ) -> None:
+        if self._at_seam(year, month):
+            self.n_seam += 1
+        else:
+            self._count_adjustment(year, month)
+        self.synthetic.append(_synthetic((year, month), delta, name, name))
+        self.tx_sums[(name, year, month)] = have + delta
+
+    def _apply_seam_seed(self, year: int, month: int, available: int) -> int:
+        if not self._at_seam(year, month):
+            return available
+        first_live = min(self.sheets.live_years) if self.sheets.live_years else None
+        seed = None if first_live is None else self.sheets.live_years[first_live].seed
+        if seed is None or abs(seed - available) <= ADJUST_TOLERANCE_KOP:
+            return available
+        delta = seed - available
+        self.synthetic.append(
+            _synthetic((year, month), delta, self.income_category, self.income_category)
+        )
+        self.income_sums[(year, month)] = self.income_sums.get((year, month), 0) + delta
+        self.n_seam += 1
+        return available + delta
+
+    def _record_available_residual(
+        self,
+        year: int,
+        month: int,
+        source: YearSheetRow,
+        available: int,
+    ) -> None:
+        if year in self.sheets.live_years:
+            target = source.available.get(month)
+            if target is not None and abs(target - available) > VERIFY_TOLERANCE_KOP:
+                self.avail_residuals.append((year, month, target - available))
+
+    def _at_seam(self, year: int, month: int) -> bool:
+        return self.sheets.seam_sheet is not None and (year, month) == (self.sheets.seam_year, 12)
+
+    def _count_adjustment(self, year: int, month: int) -> None:
+        if (year, month) in self.months_with_rows:
+            self.n_adjust += 1
+        else:
+            self.n_hist += 1
+
+    def _warnings(self) -> list[str]:
+        warnings: list[str] = []
+        self._append_adjustment_warnings(warnings)
+        self._append_opening_warning(warnings)
+        self._append_available_warning(warnings)
+        return warnings
+
+    def _append_adjustment_warnings(self, warnings: list[str]) -> None:
+        if self.n_hist:
+            warnings.append(
+                f"history: {self.n_hist} transactions stand in for months the sheet keeps only as "
+                "monthly"
+                " totals, with no rows of their own — one per category per month, so those months"
+                " still add up",
+            )
+        if self.n_adjust:
+            warnings.append(
+                f"reconciliation: {self.n_adjust} adjustment transactions align live months with "
+                "the sheet",
+            )
+        if self.n_seam:
+            warnings.append(f"seam: {self.n_seam} carry corrections at {self.sheets.seam_year}-12")
+
+    def _append_opening_warning(self, warnings: list[str]) -> None:
+        if self.opened is not None:
+            amount, year, month = self.opened
+            warnings.append(
+                f"opening balance: {amount / 100:,.2f} was already there when the sheet's first "
+                "month"
+                f" with rows ({year}-{month:02d}) began — imported as one transaction, since no "
+                "row in the"
+                " sheet accounts for it",
+            )
+
+    def _append_available_warning(self, warnings: list[str]) -> None:
+        if self.avail_residuals:
+            (first_year, first_month, first_delta), (last_year, last_month, last_delta) = (
+                self.avail_residuals[0],
+                self.avail_residuals[-1],
+            )
+            warnings.append(
+                f"verify: the sheet's own Available differs from the one rebuilt from its rows in "
+                f"{len(self.avail_residuals)} months, from {first_delta / 100:,.2f} "
+                f"({first_year}-{first_month:02d}) to {last_delta / 100:,.2f} "
+                f"({last_year}-{last_month:02d}) — every row, budget and carried balance is "
+                "imported"
+                " as the sheet has it, so a gap that only grows in months with overspending is the"
+                " sheet's own header formula, not a mis-read row",
+            )
 
 
-def _result(  # noqa: PLR0913
+@dataclass(slots=True)
+class _CategoryBalance:
+    name: str
+    projected: int
+    have: int
+    balances: dict[str, int]
+
+
+def _category_kinds(
     groups: Iterable[WorkbookGroupRow],
     categories: Iterable[WorkbookCategoryRow],
+) -> dict[str, str]:
+    group_kinds = {group.name: group.kind for group in groups}
+    return {category.name: group_kinds.get(category.group, "expense") for category in categories}
+
+
+def _transaction_totals(
     transactions: Iterable[WorkbookTransactionRow],
-    budgets: Iterable[WorkbookBudgetRow],
+    kinds: Mapping[str, str],
+) -> tuple[dict[tuple[str, int, int], int], dict[tuple[int, int], int]]:
+    tx_sums: dict[tuple[str, int, int], int] = {}
+    income_sums: dict[tuple[int, int], int] = {}
+    for transaction in transactions:
+        name = transaction.monori_category
+        if name:
+            year, month = int(transaction.date[:4]), int(transaction.date[5:7])
+            if kinds.get(name) == "income":
+                income_sums[(year, month)] = income_sums.get((year, month), 0) + transaction.amount
+            else:
+                key = name, year, month
+                tx_sums[key] = tx_sums.get(key, 0) + transaction.amount
+    return tx_sums, income_sums
+
+
+def _budget_totals(budgets: Iterable[WorkbookBudgetRow]) -> dict[tuple[str, int, int], int]:
+    totals: dict[tuple[str, int, int], int] = {}
+    for budget in budgets:
+        key = budget.category, budget.year, budget.month
+        totals[key] = totals.get(key, 0) + budget.amount
+    return totals
+
+
+@dataclass(slots=True)
+class _ParsedRows:
+    groups: Iterable[WorkbookGroupRow]
+    categories: Iterable[WorkbookCategoryRow]
+    transactions: Iterable[WorkbookTransactionRow]
+    budgets: Iterable[WorkbookBudgetRow]
+
+
+def _result(
+    rows: _ParsedRows,
     warnings: list[str],
     errors: Iterable[WorkbookParseErrorRow],
 ) -> ParsedWorkbook:
     return ParsedWorkbook(
-        groups=list(groups),
-        categories=list(categories),
-        transactions=list(transactions),
-        budgets=list(budgets),
+        groups=list(rows.groups),
+        categories=list(rows.categories),
+        transactions=list(rows.transactions),
+        budgets=list(rows.budgets),
         warnings=warnings,
         errors=list(errors),
     )

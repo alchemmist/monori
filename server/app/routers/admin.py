@@ -5,6 +5,7 @@ Every route requires the ``admin_user`` dependency (403 otherwise). The admin
 sees full user data — this is the instance owner's own deployment.
 """
 
+import json
 import sqlite3
 from datetime import UTC, datetime, timedelta
 from typing import Annotated
@@ -20,7 +21,11 @@ from app.deps import UserResponse, conn, serialize_user
 
 from .auth_router import create_user
 
-router = APIRouter(prefix="/api/admin", tags=["admin"])
+router = APIRouter(
+    prefix="/api/admin",
+    tags=["admin"],
+    dependencies=[Depends(admin_user)],
+)
 type AdminContext = auth.AuthenticatedUser
 
 RECENT_TX_LIMIT = 50
@@ -187,7 +192,7 @@ class ActivityResponse:
 
 
 @router.get("/overview")
-def overview(admin: Annotated[AdminContext, Depends(admin_user)]) -> OverviewResponse:  # noqa: ARG001
+def overview() -> OverviewResponse:
     """Handle overview."""
     c = conn()
     try:
@@ -232,9 +237,7 @@ def overview(admin: Annotated[AdminContext, Depends(admin_user)]) -> OverviewRes
 
 
 @router.get("/users")
-def list_users(
-    admin: Annotated[AdminContext, Depends(admin_user)],  # noqa: ARG001
-) -> list[AdminUserSummary]:
+def list_users() -> list[AdminUserSummary]:
     """Handle list users."""
     c = conn()
     try:
@@ -280,7 +283,6 @@ def list_users(
 @router.get("/users/{uid}")
 def user_detail(
     uid: int,
-    admin: Annotated[AdminContext, Depends(admin_user)],  # noqa: ARG001
 ) -> UserDetailResponse:
     """Handle user detail."""
     c = conn()
@@ -357,7 +359,6 @@ def user_detail(
 @router.get("/users/{uid}/transactions")
 def user_transactions(
     uid: int,
-    admin: Annotated[AdminContext, Depends(admin_user)],  # noqa: ARG001
     limit: Annotated[int, Query(ge=1, le=TX_PAGE_MAX)] = TX_PAGE_MAX,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[AdminTransactionDetail]:
@@ -409,7 +410,6 @@ class DeleteTransactionsBody:
 def delete_user_transactions(
     uid: int,
     body: DeleteTransactionsBody,
-    admin: Annotated[AdminContext, Depends(admin_user)],  # noqa: ARG001
 ) -> dict[str, int]:
     """
     Bulk-delete a selection of one user's transactions. All-or-nothing: every.
@@ -428,12 +428,11 @@ def delete_user_transactions(
         deleted = 0
         for i in range(0, len(ids), SQL_CHUNK):
             chunk = ids[i : i + SQL_CHUNK]
-            marks = ",".join("?" * len(chunk))
 
             cur = c.execute(
-                f"DELETE FROM transactions WHERE id IN ({marks})"  # nosec B608  # noqa: S608
+                "DELETE FROM transactions WHERE id IN (SELECT value FROM json_each(?))"
                 " AND account_id IN (SELECT id FROM accounts WHERE user_id=?)",
-                (*chunk, uid),
+                (json.dumps(chunk), uid),
             )
             deleted += cur.rowcount
         if deleted != len(ids):
@@ -456,7 +455,6 @@ class CreateUserBody:
 @router.post("/users")
 def create_user_admin(
     body: CreateUserBody,
-    admin: Annotated[AdminContext, Depends(admin_user)],  # noqa: ARG001
 ) -> UserResponse:
     """Handle create user admin."""
     c = conn()
@@ -498,7 +496,7 @@ def delete_user(uid: int, admin: Annotated[AdminContext, Depends(admin_user)]) -
 
 
 @router.get("/activity")
-def activity(admin: Annotated[AdminContext, Depends(admin_user)]) -> ActivityResponse:  # noqa: ARG001
+def activity() -> ActivityResponse:
     """Handle activity."""
     c = conn()
     try:

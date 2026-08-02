@@ -9,6 +9,7 @@ ingested rows through exactly the same code path the UI uses.
 
 import sqlite3
 import uuid
+from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from pydantic import ConfigDict, Field
@@ -96,13 +97,20 @@ class LinkError(Exception):
     """Why a pair cannot become a transfer. The router turns it into a 400."""
 
 
-def link(  # noqa: PLR0913
+@dataclass(frozen=True, slots=True)
+class LinkRequest:
+    """Represent the two transaction legs and metadata for a transfer."""
+
+    out_tx_id: int
+    in_tx_id: int
+    origin: str = "manual"
+    note: str = ""
+
+
+def link(
     c: sqlite3.Connection,
     uid: int,
-    out_tx_id: int,
-    in_tx_id: int,
-    origin: str = "manual",
-    note: str = "",
+    request: LinkRequest,
 ) -> str:
     """
     Merge two existing transactions into a transfer. The rows are left in place.
@@ -111,8 +119,8 @@ def link(  # noqa: PLR0913
     later split restores exactly what was there.
     """
     begin_write(c)
-    out_row = owned_tx(c, uid, out_tx_id)
-    in_row = owned_tx(c, uid, in_tx_id)
+    out_row = owned_tx(c, uid, request.out_tx_id)
+    in_row = owned_tx(c, uid, request.in_tx_id)
     if out_row is None or in_row is None:
         msg = "unknown transaction"
         raise LinkError(msg)
@@ -127,7 +135,7 @@ def link(  # noqa: PLR0913
         raise LinkError(msg)
     if c.execute(
         "SELECT 1 FROM splits WHERE transaction_id IN (?, ?) LIMIT 1",
-        (out_tx_id, in_tx_id),
+        (request.out_tx_id, request.in_tx_id),
     ).fetchone():
         msg = "split transactions cannot be linked as a transfer"
         raise LinkError(msg)
@@ -143,12 +151,12 @@ def link(  # noqa: PLR0913
             (
                 transfer_id,
                 uid,
-                out_tx_id,
-                in_tx_id,
-                origin,
+                request.out_tx_id,
+                request.in_tx_id,
+                request.origin,
                 out_row.category_id,
                 in_row.category_id,
-                note,
+                request.note,
                 datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S"),
             ),
         )
@@ -157,11 +165,11 @@ def link(  # noqa: PLR0913
         raise LinkError(msg) from e
     c.execute(
         "UPDATE transactions SET transfer_id=?, category_id=NULL WHERE id IN (?, ?)",
-        (transfer_id, out_tx_id, in_tx_id),
+        (transfer_id, request.out_tx_id, request.in_tx_id),
     )
     c.execute(
         "DELETE FROM transfer_rejections WHERE out_tx_id=? AND in_tx_id=?",
-        (out_tx_id, in_tx_id),
+        (request.out_tx_id, request.in_tx_id),
     )
     return transfer_id
 
@@ -275,9 +283,7 @@ def detect(
             transfer_id = link(
                 c,
                 uid,
-                pair.out_tx_id,
-                pair.in_tx_id,
-                origin="matched",
+                LinkRequest(pair.out_tx_id, pair.in_tx_id, origin="matched"),
             )
         except LinkError:
             continue

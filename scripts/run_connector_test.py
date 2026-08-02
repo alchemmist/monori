@@ -50,7 +50,7 @@ def main() -> None:
         print(f"RESULT: SmsRequired -> {e} (trusted session lapsed, needs OTP)")
         conn.close()
         return
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:  
         print(f"RESULT: ERROR -> {type(e).__name__}: {e}")
         return
     rows = result.rows

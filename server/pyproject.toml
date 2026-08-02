@@ -72,6 +72,7 @@ ignore = ["COM812", "D203", "D212"]
   "D107",
   "D105",
   "D104",
+  "F401",
 ]
 "server/migrations/**/*.py" = ["S101", "INP001"]
 "server/app/workbook/parser.py" = ["RUF001"]
@@ -116,4 +117,4 @@ paths = ["app"]
 min_confidence = 80
 # These names are required by Playwright-compatible protocol signatures even
 # when the local adapter does not use the callback arguments.
-ignore_names = ["referer", "predicate"]
+ignore_names = ["referer", "predicate", "user_data_dir", "user_agent", "accept_downloads"]

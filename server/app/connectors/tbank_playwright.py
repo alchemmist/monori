@@ -39,10 +39,13 @@ import tempfile
 import threading
 from collections.abc import Callable
 from contextlib import AbstractContextManager
+from dataclasses import dataclass
 from datetime import timedelta
 from types import TracebackType
 from typing import ClassVar, Literal, Protocol, Self, override, runtime_checkable
 from urllib.parse import quote
+
+from pydantic import JsonValue
 
 from app.importer import parse_statement
 
@@ -96,6 +99,13 @@ class _PlaywrightContextManager(Protocol):
         exc_value: BaseException | None,
         traceback: TracebackType | None,
     ) -> bool | None: ...
+
+
+@dataclass(slots=True)
+class _LoginState:
+    quick_code: JsonValue | None
+    tried_quick: bool = False
+    otp_prompt: str = "enter the code sent by the bank"
 
 
 @runtime_checkable
@@ -507,8 +517,15 @@ class TBankPlaywrightConnector(Connector):
                     context.close()
                 session: JsonObject = {"profile": self.archive_profile(work_dir)}
                 self.from_worker.put(("result", SyncResult(rows, session=session)))
-        except Exception as e:  # noqa: BLE001 - surfaced to the user as a sync error
-            self.from_worker.put(("error", str(e)))
+        except (
+            ConnectorError,
+            PlaywrightTimeoutError,
+            OSError,
+            RuntimeError,
+            ValueError,
+            tarfile.TarError,
+        ) as error:
+            self.from_worker.put(("error", str(error)))
         finally:
             shutil.rmtree(work_dir, ignore_errors=True)
 
@@ -551,7 +568,7 @@ class TBankPlaywrightConnector(Connector):
         for root, dirs, _files in os.walk(work_dir):
             for d in list(dirs):
                 if d in junk:
-                    shutil.rmtree(os.path.join(root, d), ignore_errors=True)  # noqa: PTH118
+                    shutil.rmtree(pathlib.Path(root) / d, ignore_errors=True)
                     dirs.remove(d)
 
     @staticmethod
@@ -673,7 +690,7 @@ class TBankPlaywrightConnector(Connector):
             msg = f"login did not reach the bank home page (stuck on: {where})"
             raise ConnectorError(msg)
 
-    def _drive_sso_login(self, page: _Page) -> None:  # noqa: C901,PLR0912,PLR0915
+    def _drive_sso_login(self, page: _Page) -> None:
         """
         Walk the id.tbank.ru SSO one step at a time until we reach /mybank.
 
@@ -681,58 +698,64 @@ class TBankPlaywrightConnector(Connector):
         the pin widget (set-a-code / enter-a-code) — so a slow render or a
         reordered step just means another pass, never a skipped field.
         """
-        code = self.credentials.get("code")
-        tried_quick = False
-        otp_prompt = "enter the code sent by the bank"
+        state = _LoginState(self.credentials.get("code"))
         for step in range(self.LOGIN_STEPS):
             if self.is_logged_in(page):
                 return
-            blocked = self._access_denied(page)
-            if blocked:
-                msg = f"the bank blocked the login: {blocked}"
-                raise ConnectorError(msg)
-            if page.query_selector(self.SEL_PHONE):
-                phone = self.credentials.get("phone")
-                if not isinstance(phone, str):
-                    msg = "missing phone"
-                    raise ConnectorError(msg)
-                page.fill(self.SEL_PHONE, phone)
-                self.submit(page)
-            elif page.query_selector(self.SEL_PASSWORD):
-                password = self.credentials.get("password")
-                if not isinstance(password, str):
-                    msg = "missing password"
-                    raise ConnectorError(msg)
-                page.fill(self.SEL_PASSWORD, password)
-                self.submit(page)
-            elif page.query_selector(self.SEL_OTP):
-                otp = self.ask_sms(otp_prompt)
-                otp_prompt = "the bank rejected the code — check it and try again"
-                page.fill(self.SEL_OTP, otp)
-                self.submit(page)
-            elif page.query_selector(self.SEL_PIN):
-                title = self.form_title(page)
-                if self.TITLE_SET_CODE in title:
-                    if not isinstance(code, str):
-                        msg = "missing quick-login code"
-                        raise ConnectorError(msg)
-                    self._type_pin(page, code)
-                    self.submit(page)
-                elif code and not tried_quick:
-                    if not isinstance(code, str):
-                        msg = "missing quick-login code"
-                        raise ConnectorError(msg)
-                    self._type_pin(page, code)
-                    self.submit(page)
-                    tried_quick = True
-                else:
-                    self._dismiss_interstitials(page)
-                    page.goto(self.URL_HOME, wait_until="domcontentloaded")
-            else:
-                self._dismiss_interstitials(page)
-                page.goto(self.URL_HOME, wait_until="domcontentloaded")
+            self._drive_sso_step(page, state)
             page.wait_for_timeout(self.STEP_PAUSE_MS)
             self.shot(page, f"step-{step:02d}")
+
+    def _drive_sso_step(self, page: _Page, state: _LoginState) -> None:
+        self._raise_if_access_denied(page)
+        if page.query_selector(self.SEL_PHONE):
+            self._fill_credential(page, self.SEL_PHONE, "phone")
+        elif page.query_selector(self.SEL_PASSWORD):
+            self._fill_credential(page, self.SEL_PASSWORD, "password")
+        elif page.query_selector(self.SEL_OTP):
+            self._submit_otp(page, state)
+        elif page.query_selector(self.SEL_PIN):
+            self._submit_pin(page, state)
+        else:
+            self._return_to_home(page)
+
+    def _raise_if_access_denied(self, page: _Page) -> None:
+        if blocked := self._access_denied(page):
+            msg = f"the bank blocked the login: {blocked}"
+            raise ConnectorError(msg)
+
+    def _fill_credential(self, page: _Page, selector: str, name: str) -> None:
+        value = self.credentials.get(name)
+        if not isinstance(value, str):
+            msg = f"missing {name}"
+            raise ConnectorError(msg)
+        page.fill(selector, value)
+        self.submit(page)
+
+    def _submit_otp(self, page: _Page, state: _LoginState) -> None:
+        page.fill(self.SEL_OTP, self.ask_sms(state.otp_prompt))
+        state.otp_prompt = "the bank rejected the code — check it and try again"
+        self.submit(page)
+
+    def _submit_pin(self, page: _Page, state: _LoginState) -> None:
+        if self.TITLE_SET_CODE in self.form_title(page):
+            self._enter_quick_code(page, state)
+        elif state.quick_code and not state.tried_quick:
+            self._enter_quick_code(page, state)
+            state.tried_quick = True
+        else:
+            self._return_to_home(page)
+
+    def _enter_quick_code(self, page: _Page, state: _LoginState) -> None:
+        if not isinstance(state.quick_code, str):
+            msg = "missing quick-login code"
+            raise ConnectorError(msg)
+        self._type_pin(page, state.quick_code)
+        self.submit(page)
+
+    def _return_to_home(self, page: _Page) -> None:
+        self._dismiss_interstitials(page)
+        page.goto(self.URL_HOME, wait_until="domcontentloaded")
 
     def operations_url(self) -> str:
         """Return operations URL optionally scoped to configured bank account."""
@@ -743,7 +766,7 @@ class TBankPlaywrightConnector(Connector):
             return f"{self.URL_OPERATIONS}?account={quote(account, safe='')}"
         return self.URL_OPERATIONS
 
-    def download_and_parse(self, page: _Page, since: str | None) -> list[SyncRow]:  # noqa: ARG002
+    def download_and_parse(self, page: _Page, _since: str | None) -> list[SyncRow]:
         """Download a CSV statement from operations and parse it to sync rows."""
         page.goto(self.operations_url(), wait_until="domcontentloaded")
 

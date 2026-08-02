@@ -236,7 +236,7 @@ def test_known_max_col_defaults_to_minus_one_without_known_headers() -> None:
 
 
 def test_synthetic_carries_the_default_currency() -> None:
-    row = _synthetic(2025, 3, -1000, "Groceries", "Groceries")
+    row = _synthetic((2025, 3), -1000, "Groceries", "Groceries")
     assert row.currency == "RUB"
     assert row.marker == ""
 

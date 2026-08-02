@@ -13,7 +13,7 @@ import hashlib
 import re
 from collections.abc import Iterable, Mapping
 from dataclasses import asdict
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Literal, overload
 
 from pydantic import ConfigDict
@@ -52,6 +52,7 @@ COLUMNS = [
     "rounding",
     "rounded_total",
 ]
+MIN_STATEMENT_COLUMNS = 12
 
 DATE_RE = re.compile(r"^(\d{2})\.(\d{2})\.(\d{4})(?:\s+(\d{2}):(\d{2})(?::(\d{2}))?)?$")
 
@@ -256,7 +257,7 @@ def parse_date(raw: str) -> datetime | None:
     if not m:
         return None
     d, mo, y, hh, mm, ss = m.groups()
-    return datetime(int(y), int(mo), int(d), int(hh or 0), int(mm or 0), int(ss or 0))  # noqa: DTZ001
+    return datetime(int(y), int(mo), int(d), int(hh or 0), int(mm or 0), int(ss or 0), tzinfo=UTC)
 
 
 def parse_amount_kop(raw: str) -> int | None:
@@ -300,7 +301,7 @@ def parse_statement(text: str) -> tuple[list[ImportRow], list[ParseError]]:
         parts = [p.strip().strip('"') for p in line.split(delim)]
         if parts and parts[0].lower() in HEADER_FIRST_CELLS:
             continue
-        if len(parts) < 12:  # noqa: PLR2004
+        if len(parts) < MIN_STATEMENT_COLUMNS:
             errors.append(ParseError(ln, f"expected >=12 columns, got {len(parts)}", line[:200]))
             continue
         rec = dict(zip(COLUMNS, parts + [""] * (len(COLUMNS) - len(parts)), strict=False))

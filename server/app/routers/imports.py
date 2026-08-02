@@ -1,5 +1,6 @@
 """Provide backend functionality."""
 
+import json
 import sqlite3
 from collections.abc import Iterable, Mapping
 from typing import Annotated
@@ -38,6 +39,7 @@ router = APIRouter(prefix="/api/import", tags=["import"])
 
 
 MAX_STATEMENT_TEXT = 5_000_000
+MAX_CARD_TAIL_DIGITS = 8
 
 
 @pydantic_dataclass(config=ConfigDict(populate_by_name=True))
@@ -88,8 +90,12 @@ class ImportRowResponse:
     card: str
     duplicate: bool
     hash: str
-    account_id: int | None = Field(default=None, serialization_alias="accountId")
-    category_id: int | None = Field(default=None, serialization_alias="categoryId")
+    account_id: int | None = Field(
+        default=None, serialization_alias="accountId", validation_alias="accountId"
+    )
+    category_id: int | None = Field(
+        default=None, serialization_alias="categoryId", validation_alias="categoryId"
+    )
 
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid"))
@@ -122,8 +128,12 @@ class ImportCommitResponse:
 
     inserted: int
     skipped: int
-    transfers_merged: int = Field(serialization_alias="transfersMerged")
-    transfers_suggested: int = Field(serialization_alias="transfersSuggested")
+    transfers_merged: int = Field(
+        serialization_alias="transfersMerged", validation_alias="transfersMerged"
+    )
+    transfers_suggested: int = Field(
+        serialization_alias="transfersSuggested", validation_alias="transfersSuggested"
+    )
 
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid"))
@@ -153,10 +163,16 @@ class WorkbookPreviewResponse:
     transactions: int
     warnings: list[str]
     errors: list[WorkbookParseErrorResponse]
-    transactions_by_year: dict[str, int] = Field(serialization_alias="transactionsByYear")
-    budget_cells: int = Field(serialization_alias="budgetCells")
-    account_slots: list[WorkbookAccountSlotResponse] = Field(serialization_alias="accountSlots")
-    budget_conflicts: int = Field(serialization_alias="budgetConflicts", default=0)
+    transactions_by_year: dict[str, int] = Field(
+        serialization_alias="transactionsByYear", validation_alias="transactionsByYear"
+    )
+    budget_cells: int = Field(serialization_alias="budgetCells", validation_alias="budgetCells")
+    account_slots: list[WorkbookAccountSlotResponse] = Field(
+        serialization_alias="accountSlots", validation_alias="accountSlots"
+    )
+    budget_conflicts: int = Field(
+        serialization_alias="budgetConflicts", validation_alias="budgetConflicts", default=0
+    )
 
 
 @pydantic_dataclass(config=ConfigDict(populate_by_name=True))
@@ -164,8 +180,8 @@ class WorkbookBatchResponse:
     """Represent WorkbookBatchResponse."""
 
     inserted: int
-    account_id: int = Field(serialization_alias="accountId")
-    batch_id: int = Field(serialization_alias="batchId")
+    account_id: int = Field(serialization_alias="accountId", validation_alias="accountId")
+    batch_id: int = Field(serialization_alias="batchId", validation_alias="batchId")
 
 
 @pydantic_dataclass(config=ConfigDict(populate_by_name=True))
@@ -177,11 +193,21 @@ class WorkbookCommitResponse:
     batches: list[WorkbookBatchResponse]
     warnings: list[str]
     errors: list[WorkbookParseErrorResponse]
-    groups_created: int = Field(serialization_alias="groupsCreated")
-    categories_created: int = Field(serialization_alias="categoriesCreated")
-    budgets_written: int = Field(serialization_alias="budgetsWritten")
-    budgets_skipped: int = Field(serialization_alias="budgetsSkipped")
-    card_tails_bound: int = Field(serialization_alias="cardTailsBound")
+    groups_created: int = Field(
+        serialization_alias="groupsCreated", validation_alias="groupsCreated"
+    )
+    categories_created: int = Field(
+        serialization_alias="categoriesCreated", validation_alias="categoriesCreated"
+    )
+    budgets_written: int = Field(
+        serialization_alias="budgetsWritten", validation_alias="budgetsWritten"
+    )
+    budgets_skipped: int = Field(
+        serialization_alias="budgetsSkipped", validation_alias="budgetsSkipped"
+    )
+    card_tails_bound: int = Field(
+        serialization_alias="cardTailsBound", validation_alias="cardTailsBound"
+    )
 
 
 def _serialize_import_row(row: ImportRow) -> ImportRowResponse:
@@ -537,12 +563,11 @@ def _reject_currency_mismatch(
     enforced where it cannot be clicked around.
     """
     ids = sorted(set(marker_map.values()))
-    placeholders = ",".join("?" * len(ids))
     held = {
         r["id"]: (r["currency"] or DEFAULT_CURRENCY).upper()
         for r in c.execute(
-            f"SELECT id, currency FROM accounts WHERE id IN ({placeholders})",  # nosec B608  # noqa: S608
-            ids,
+            "SELECT id, currency FROM accounts WHERE id IN (SELECT value FROM json_each(?))",
+            (json.dumps(ids),),
         )
     }
     for key, slot in slots.items():
@@ -572,7 +597,7 @@ def _remember_markers(
     bound = 0
     for key, slot in slots.items():
         digits = "".join(ch for ch in slot.marker if ch.isdigit())
-        if not digits or len(digits) > 8:  # noqa: PLR2004
+        if not digits or len(digits) > MAX_CARD_TAIL_DIGITS:
             continue
         account_id = marker_map[key]
         row = c.execute("SELECT card_tails FROM accounts WHERE id=?", (account_id,)).fetchone()
@@ -595,7 +620,8 @@ def _commit_workbook(
     uid: int,
     mapping: str,
     budget_policy: str,
-    remember: bool,  # noqa: FBT001
+    *,
+    remember: bool,
 ) -> WorkbookCommitResponse:
     parsed = _parse_or_400(data)
     try:
@@ -653,8 +679,9 @@ async def workbook_commit(
     user: Annotated[AuthenticatedUser, Depends(current_user)],
     file: Annotated[UploadFile, File()],
     mapping: Annotated[str, Form()],
+    *,
     budget_policy: Annotated[str, Form(alias="budgetPolicy")] = "overwrite",
-    remember: Annotated[bool, Form()] = False,  # noqa: FBT002
+    remember: Annotated[bool, Form()] = False,
 ) -> WorkbookCommitResponse:
     """Handle workbook commit."""
     if budget_policy not in ("overwrite", "skip"):
@@ -666,5 +693,5 @@ async def workbook_commit(
         user.id,
         mapping,
         budget_policy,
-        remember,
+        remember=remember,
     )

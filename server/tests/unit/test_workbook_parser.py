@@ -1,4 +1,5 @@
 import datetime
+import re
 from dataclasses import dataclass
 from io import BytesIO
 from typing import TYPE_CHECKING
@@ -279,7 +280,7 @@ def test_month_range_wraps_across_years() -> None:
 
 
 def test_synthetic_shape() -> None:
-    a = _synthetic(2025, 1, 20000, "Groceries", "Groceries")
+    a = _synthetic((2025, 1), 20000, "Groceries", "Groceries")
     assert a.date == "2025-01-31T12:00:00"
     assert a.amount == 20000
     assert a.monori_category == "Groceries"
@@ -1227,7 +1228,7 @@ def test_prepared_next_year_sheet_adds_no_future_rows() -> None:
 
 
 def test_parse_template_rejects_garbage_bytes() -> None:
-    with pytest.raises(WorkbookError, match="not a readable .xlsx workbook"):  # noqa: RUF043
+    with pytest.raises(WorkbookError, match=re.escape("not a readable .xlsx workbook")):
         parse_workbook(b"nope")
 
 

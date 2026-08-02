@@ -53,12 +53,13 @@ def upgrade() -> None:
           source TEXT NOT NULL DEFAULT 'import'
         )""")
         conn.exec_driver_sql(
-            "INSERT INTO transactions_new "  # noqa: S608
+            "INSERT INTO transactions_new "
             "(id, date, amount, description, bank_category, mcc, category_id, "
             " account_id, transfer_id, comment, hash, source) "
             "SELECT id, date, amount, description, bank_category, mcc, category_id, "
-            f"       {int(default_id)}, NULL, comment, hash, source "
+            "       ?, NULL, comment, hash, source "
             "FROM transactions",
+            (default_id,),
         )
         conn.exec_driver_sql("DROP TABLE transactions")
         conn.exec_driver_sql("ALTER TABLE transactions_new RENAME TO transactions")

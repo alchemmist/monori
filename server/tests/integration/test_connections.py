@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 from httpx2 import Response as HTTPXResponse
 from pydantic import TypeAdapter
 
-import app.connectors.fake  # noqa: F401  (registers the FakeConnector)
+import app.connectors.fake
 import app.db as dbmod
 from app.connectors import base
 from app.connectors.base import JsonObject, SmsRequiredError, SyncResult, SyncRow

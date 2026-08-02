@@ -1,5 +1,6 @@
 """Provide backend functionality."""
 
+import json
 import sqlite3
 from collections.abc import Iterable
 from itertools import batched
@@ -276,12 +277,11 @@ def serialize_transactions(
     ids = [transaction.id for transaction in transactions]
     by_tx: dict[int, list[SplitRecord]] = {}
     for chunk in batched(ids, SPLIT_FETCH_BATCH_SIZE):
-        marks = ",".join("?" for _ in chunk)
         for split in cur.execute(
-            f"SELECT id, transaction_id, category_id, amount, comment"  # nosec B608  # noqa: S608
-            f" FROM splits WHERE transaction_id IN ({marks})"
+            "SELECT id, transaction_id, category_id, amount, comment"
+            " FROM splits WHERE transaction_id IN (SELECT value FROM json_each(?))"
             " ORDER BY transaction_id, sort, id",
-            chunk,
+            (json.dumps(chunk),),
         ):
             record = SplitRecord.from_row(split)
             by_tx.setdefault(record.transaction_id, []).append(record)

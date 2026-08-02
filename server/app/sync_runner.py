@@ -14,6 +14,8 @@ when an OTP code arrives with no login waiting for it.
 
 import contextlib
 import os
+from dataclasses import dataclass
+from functools import lru_cache
 
 import httpx
 
@@ -26,9 +28,24 @@ from .connectors.base import (
     SyncResult,
 )
 
+HTTP_CONFLICT = 409
+
 
 class NoPendingLoginError(Exception):
     """An OTP code or cancel arrived but no login is parked for the connection."""
+
+
+@dataclass(frozen=True, slots=True)
+class SyncRequest:
+    """Represent one account pull requested from a sync runner."""
+
+    connection_id: int
+    bank: str
+    kind: str
+    credentials: JsonObject
+    session: JsonObject | None
+    since: str | None
+    account_ref: str | None = None
 
 
 class LocalRunner:
@@ -38,24 +55,15 @@ class LocalRunner:
         """Initialize the instance."""
         self._pending: dict[int, connectors.Connector] = {}
 
-    def start(  # noqa: PLR0913
-        self,
-        cid: int,
-        bank: str,
-        kind: str,
-        credentials: JsonObject,
-        session: JsonObject | None,
-        since: str | None,
-        account_ref: str | None = None,
-    ) -> SyncResult:
+    def start(self, request: SyncRequest) -> SyncResult:
         """Handle start."""
-        self.cancel(cid)
-        cls = connectors.get_connector_class(bank, kind)
-        connector = cls(credentials, session, account_ref=account_ref)
+        self.cancel(request.connection_id)
+        cls = connectors.get_connector_class(request.bank, request.kind)
+        connector = cls(request.credentials, request.session, account_ref=request.account_ref)
         try:
-            return connector.sync(since)
+            return connector.sync(request.since)
         except SmsRequiredError:
-            self._pending[cid] = connector
+            self._pending[request.connection_id] = connector
             raise
 
     def resume(self, cid: int, code: str) -> SyncResult:
@@ -110,27 +118,18 @@ class RemoteRunner:
             raise SmsRequiredError(payload.get("message") or "code sent")
         raise ConnectorError(payload.get("message") or "sync failed")
 
-    def start(  # noqa: PLR0913
-        self,
-        cid: int,
-        bank: str,
-        kind: str,
-        credentials: JsonObject,
-        session: JsonObject | None,
-        since: str | None,
-        account_ref: str | None = None,
-    ) -> SyncResult:
+    def start(self, request: SyncRequest) -> SyncResult:
         """Handle start."""
         try:
             r = self._client.post(
-                f"/runs/{cid}",
+                f"/runs/{request.connection_id}",
                 json={
-                    "bank": bank,
-                    "kind": kind,
-                    "credentials": credentials,
-                    "session": session,
-                    "since": since,
-                    "accountRef": account_ref,
+                    "bank": request.bank,
+                    "kind": request.kind,
+                    "credentials": request.credentials,
+                    "session": request.session,
+                    "since": request.since,
+                    "accountRef": request.account_ref,
                 },
             )
             r.raise_for_status()
@@ -143,7 +142,7 @@ class RemoteRunner:
         """Handle resume."""
         try:
             r = self._client.post(f"/runs/{cid}/sms", json={"code": code})
-            if r.status_code == 409:  # noqa: PLR2004
+            if r.status_code == HTTP_CONFLICT:
                 raise NoPendingLoginError
             r.raise_for_status()
         except httpx.HTTPError as e:
@@ -157,13 +156,8 @@ class RemoteRunner:
             self._client.post(f"/runs/{cid}/cancel", timeout=httpx.Timeout(5, connect=2))
 
 
-_runner: LocalRunner | RemoteRunner | None = None
-
-
+@lru_cache(maxsize=1)
 def get_runner() -> LocalRunner | RemoteRunner:
     """Handle get runner."""
-    global _runner  # noqa: PLW0603
-    if _runner is None:
-        url = (os.environ.get("MONORI_SYNC_URL") or "").strip()
-        _runner = RemoteRunner(url) if url else LocalRunner()
-    return _runner
+    url = (os.environ.get("MONORI_SYNC_URL") or "").strip()
+    return RemoteRunner(url) if url else LocalRunner()

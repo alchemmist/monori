@@ -123,7 +123,7 @@ def main() -> None:
                 break
             try:
                 result = handle(page, line)
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:  
                 result = f"ERROR: {type(e).__name__}: {e}"
             (CTL / "result").write_text(result, encoding="utf-8")
             (CTL / "done").write_text(str(time.time()), encoding="utf-8")

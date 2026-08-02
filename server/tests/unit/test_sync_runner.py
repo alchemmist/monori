@@ -6,12 +6,11 @@ import pytest
 from fastapi.testclient import TestClient
 from pydantic import TypeAdapter
 
-import app.connectors.fake  # noqa: F401  (registers the FakeConnector)
-import app.sync_runner as sr
+import app.connectors.fake
 from app import sync_service
 from app.connectors import base
 from app.connectors.base import ConnectorError, JsonObject, SmsRequiredError, SyncResult
-from app.sync_runner import LocalRunner, NoPendingLoginError, RemoteRunner, get_runner
+from app.sync_runner import LocalRunner, NoPendingLoginError, RemoteRunner, SyncRequest, get_runner
 
 CREDS: JsonObject = {"phone": "+70000000000", "password": "pw"}
 type Runner = LocalRunner | RemoteRunner
@@ -43,21 +42,21 @@ def runner(request: pytest.FixtureRequest) -> Runner:
 
 def test_otp_flow(runner: Runner) -> None:
     with pytest.raises(SmsRequiredError):
-        runner.start(1, "fake", "fake", CREDS, None, None)
+        runner.start(SyncRequest(1, "fake", "fake", CREDS, None, None))
     result = runner.resume(1, "0000")
     assert len(result.rows) == 2
     assert result.session == {"token": "ok"}
 
 
 def test_cached_session_skips_otp(runner: Runner) -> None:
-    result = runner.start(1, "fake", "fake", CREDS, {"token": "ok"}, None)
+    result = runner.start(SyncRequest(1, "fake", "fake", CREDS, {"token": "ok"}, None))
     assert len(result.rows) == 2
 
 
 def test_connector_error(runner: Runner) -> None:
     expected = sync_service.SYNC_FAILED if isinstance(runner, RemoteRunner) else "missing phone"
     with pytest.raises(ConnectorError) as ei:
-        runner.start(1, "fake", "fake", {}, None, None)
+        runner.start(SyncRequest(1, "fake", "fake", {}, None, None))
     assert expected in str(ei.value)
 
 
@@ -68,7 +67,7 @@ def test_resume_without_login(runner: Runner) -> None:
 
 def test_cancel_drops_pending(runner: Runner) -> None:
     with pytest.raises(SmsRequiredError):
-        runner.start(1, "fake", "fake", CREDS, None, None)
+        runner.start(SyncRequest(1, "fake", "fake", CREDS, None, None))
     runner.cancel(1)
     with pytest.raises(NoPendingLoginError):
         runner.resume(1, "0000")
@@ -84,7 +83,7 @@ def test_remote_maps_transport_failure_to_connector_error() -> None:
     client = httpx.Client(transport=httpx.MockTransport(handler), base_url="http://sync")
     r = RemoteRunner("http://sync", client=client)
     with pytest.raises(ConnectorError, match="sync service unavailable"):
-        r.start(1, "fake", "fake", CREDS, None, None)
+        r.start(SyncRequest(1, "fake", "fake", CREDS, None, None))
 
 
 @pytest.mark.parametrize("content", [b"not json", b"[1, 2]"])
@@ -97,7 +96,7 @@ def test_remote_maps_malformed_response_to_connector_error(content: bytes) -> No
     client = httpx.Client(transport=httpx.MockTransport(handler), base_url="http://sync")
     r = RemoteRunner("http://sync", client=client)
     with pytest.raises(ConnectorError, match="invalid response"):
-        r.start(1, "fake", "fake", CREDS, None, None)
+        r.start(SyncRequest(1, "fake", "fake", CREDS, None, None))
 
 
 class ClosableConnector(base.Connector):
@@ -136,7 +135,7 @@ def test_failed_resume_closes_connector(monkeypatch: pytest.MonkeyPatch) -> None
     ClosableConnector.closed = 0
     runner = LocalRunner()
     with pytest.raises(SmsRequiredError):
-        runner.start(1, "closable", "closable", CREDS, None, None)
+        runner.start(SyncRequest(1, "closable", "closable", CREDS, None, None))
     with pytest.raises(ConnectorError, match="bad code"):
         runner.resume(1, "0000")
     assert ClosableConnector.closed == 1
@@ -234,7 +233,7 @@ class FailingCloseConnector(ClosableConnector):
 def test_since_is_passed_through(runner: Runner, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setitem(base.REGISTRY, ("recording", "recording"), RecordingConnector)
     RecordingConnector.last_since = None
-    runner.start(1, "recording", "recording", CREDS, None, "2026-01-01")
+    runner.start(SyncRequest(1, "recording", "recording", CREDS, None, "2026-01-01"))
     assert RecordingConnector.last_since == "2026-01-01"
 
 
@@ -242,9 +241,9 @@ def test_new_start_closes_previous_pending(runner: Runner, monkeypatch: pytest.M
     monkeypatch.setitem(base.REGISTRY, ("closable", "closable"), ClosableConnector)
     ClosableConnector.closed = 0
     with pytest.raises(SmsRequiredError):
-        runner.start(1, "closable", "closable", CREDS, None, None)
+        runner.start(SyncRequest(1, "closable", "closable", CREDS, None, None))
     with pytest.raises(SmsRequiredError):
-        runner.start(1, "closable", "closable", CREDS, None, None)
+        runner.start(SyncRequest(1, "closable", "closable", CREDS, None, None))
     assert ClosableConnector.closed == 1
 
 
@@ -252,7 +251,7 @@ def test_cancel_closes_pending_connector(runner: Runner, monkeypatch: pytest.Mon
     monkeypatch.setitem(base.REGISTRY, ("closable", "closable"), ClosableConnector)
     ClosableConnector.closed = 0
     with pytest.raises(SmsRequiredError):
-        runner.start(1, "closable", "closable", CREDS, None, None)
+        runner.start(SyncRequest(1, "closable", "closable", CREDS, None, None))
     runner.cancel(1)
     assert ClosableConnector.closed == 1
 
@@ -264,11 +263,11 @@ def test_failing_close_never_masks_the_flow(
     monkeypatch.setitem(base.REGISTRY, ("failclose", "failclose"), FailingCloseConnector)
     FailingCloseConnector.closed = 0
     with pytest.raises(SmsRequiredError):
-        runner.start(1, "failclose", "failclose", CREDS, None, None)
+        runner.start(SyncRequest(1, "failclose", "failclose", CREDS, None, None))
     runner.cancel(1)
     assert FailingCloseConnector.closed == 1
     with pytest.raises(SmsRequiredError):
-        runner.start(2, "failclose", "failclose", CREDS, None, None)
+        runner.start(SyncRequest(2, "failclose", "failclose", CREDS, None, None))
     expected = sync_service.SYNC_FAILED if isinstance(runner, RemoteRunner) else "bad code"
     with pytest.raises(ConnectorError) as ei:
         runner.resume(2, "0000")
@@ -280,7 +279,7 @@ def test_rejected_code_keeps_login_alive(runner: Runner, monkeypatch: pytest.Mon
     monkeypatch.setitem(base.REGISTRY, ("retryotp", "retryotp"), RetryOtpConnector)
     RetryOtpConnector.closed = 0
     with pytest.raises(SmsRequiredError):
-        runner.start(1, "retryotp", "retryotp", CREDS, None, None)
+        runner.start(SyncRequest(1, "retryotp", "retryotp", CREDS, None, None))
     with pytest.raises(SmsRequiredError) as ei:
         runner.resume(1, "0000")
     expected = (
@@ -310,7 +309,7 @@ def test_remote_error_messages_are_exact() -> None:
         client = httpx.Client(transport=httpx.MockTransport(handler), base_url="http://sync")
         r = RemoteRunner("http://sync", client=client)
         with pytest.raises(ConnectorError) as ei:
-            r.start(1, "fake", "fake", CREDS, None, None)
+            r.start(SyncRequest(1, "fake", "fake", CREDS, None, None))
         assert str(ei.value) == expected
 
 
@@ -323,7 +322,7 @@ def test_remote_awaiting_sms_message() -> None:
     client = httpx.Client(transport=httpx.MockTransport(handler), base_url="http://sync")
     r = RemoteRunner("http://sync", client=client)
     with pytest.raises(SmsRequiredError) as ei:
-        r.start(1, "fake", "fake", CREDS, None, None)
+        r.start(SyncRequest(1, "fake", "fake", CREDS, None, None))
     assert str(ei.value) == "code sent"
 
 
@@ -375,12 +374,12 @@ def test_remote_cancel_swallows_transport_failure() -> None:
 
 
 def test_get_runner_selects_by_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(sr, "_runner", None)
+    get_runner.cache_clear()
     monkeypatch.delenv("MONORI_SYNC_URL", raising=False)
     assert isinstance(get_runner(), LocalRunner)
 
-    monkeypatch.setattr(sr, "_runner", None)
+    get_runner.cache_clear()
     monkeypatch.setenv("MONORI_SYNC_URL", "http://sync:8010")
     assert isinstance(get_runner(), RemoteRunner)
 
-    monkeypatch.setattr(sr, "_runner", None)
+    get_runner.cache_clear()

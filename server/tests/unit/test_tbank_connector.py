@@ -20,7 +20,7 @@ from typing import ClassVar, Literal, Self, override
 
 import pytest
 
-from app.connectors import fake as fake_connector  # noqa: F401
+from app.connectors import fake as fake_connector
 from app.connectors import tbank_playwright as tbank_mod
 from app.connectors.base import (
     ConnectorError,
@@ -30,7 +30,7 @@ from app.connectors.base import (
     get_connector_class,
 )
 from app.connectors.fake import FIXTURE_ROWS, _rows
-from app.connectors.tbank_playwright import TBankPlaywrightConnector as TB  # noqa: N814
+from app.connectors.tbank_playwright import TBankPlaywrightConnector as TBankConnector
 
 STATEMENT = (
     "05.01.2026 10:00:00\t05.01.2026\t*1\tOK\t-100,00\tRUB\t-100,00\tRUB\t\tSuper\t5411\t"
@@ -146,7 +146,7 @@ class FakePage:
         "phone": "Sign in to T-Bank",
         "password": "Enter password",
         "sms": "Enter code",
-        "setcode": TB.TITLE_SET_CODE,
+        "setcode": TBankConnector.TITLE_SET_CODE,
         "quickcode": "Enter code",
     }
     PIN_STAGES = ("setcode", "quickcode")
@@ -187,18 +187,18 @@ class FakePage:
 
     def goto(self, url: str, wait_until: str | None = None) -> None:
         self.log.append(PageEvent("goto", url, wait_until))
-        if url == TB.URL_HOME:
+        if url == TBankConnector.URL_HOME:
             if self.scenario == "logged_in" or self.stage == "in":
-                self.stage, self.url = "in", TB.URL_HOME
+                self.stage, self.url = "in", TBankConnector.URL_HOME
             elif self.scenario == "quick":
-                self.stage, self.url = "quickcode", TB.URL_LOGIN
+                self.stage, self.url = "quickcode", TBankConnector.URL_LOGIN
             else:
-                self.stage, self.url = "phone", TB.URL_LOGIN
-        elif url == TB.URL_LOGIN:
+                self.stage, self.url = "phone", TBankConnector.URL_LOGIN
+        elif url == TBankConnector.URL_LOGIN:
             self.stage = "quickcode" if self.scenario == "quick" else "phone"
-            self.url = TB.URL_LOGIN
-        elif url == TB.URL_OPERATIONS:
-            self.stage, self.url = "ops", TB.URL_OPERATIONS
+            self.url = TBankConnector.URL_LOGIN
+        elif url == TBankConnector.URL_OPERATIONS:
+            self.stage, self.url = "ops", TBankConnector.URL_OPERATIONS
 
     def wait_for_timeout(self, ms: int) -> None:
         self.log.append(PageEvent("wait", ms))
@@ -209,20 +209,20 @@ class FakePage:
 
     def fill(self, selector: str, value: str) -> None:
         self.log.append(PageEvent("fill", selector, value))
-        if selector == TB.SEL_OTP and self.stage == "sms":
+        if selector == TBankConnector.SEL_OTP and self.stage == "sms":
             self.last_code = value
             self.advance()
 
     def query_selector(self, selector: str) -> FakeElement | None:
         self.log.append(PageEvent("query", selector))
         if (
-            (selector == TB.SEL_PHONE and self.stage == "phone")
-            or (selector == TB.SEL_PASSWORD and self.stage == "password")
-            or (selector == TB.SEL_OTP and self.stage == "sms")
-            or (selector == TB.SEL_PIN and self.stage in self.PIN_STAGES)
+            (selector == TBankConnector.SEL_PHONE and self.stage == "phone")
+            or (selector == TBankConnector.SEL_PASSWORD and self.stage == "password")
+            or (selector == TBankConnector.SEL_OTP and self.stage == "sms")
+            or (selector == TBankConnector.SEL_PIN and self.stage in self.PIN_STAGES)
         ):
             return FakeElement("")
-        if selector == TB.SEL_FORM_TITLE and self.stage in self.TITLES:
+        if selector == TBankConnector.SEL_FORM_TITLE and self.stage in self.TITLES:
             return FakeElement(self.TITLES[self.stage])
         return None
 
@@ -244,7 +244,7 @@ class FakePage:
         elif self.stage == "sms":
             self.stage = "sms" if self.last_code in self.wrong_codes else "setcode"
         elif self.stage in ("setcode", "quickcode"):
-            self.stage, self.url = "in", TB.URL_HOME
+            self.stage, self.url = "in", TBankConnector.URL_HOME
 
     def _advance(self) -> None:
         self.advance()
@@ -252,20 +252,28 @@ class FakePage:
     def locator(self, selector: str) -> FakeLocator:
         present = False
         on_click = None
-        if selector == TB.SEL_PIN and self.stage in self.PIN_STAGES:
+        if selector == TBankConnector.SEL_PIN and self.stage in self.PIN_STAGES:
             present = True
-        elif selector == TB.SEL_SUBMIT and self.stage in (*self.PIN_STAGES, "phone", "password"):
+        elif selector == TBankConnector.SEL_SUBMIT and self.stage in (
+            *self.PIN_STAGES,
+            "phone",
+            "password",
+        ):
             present = True
 
             if self.stage in ("phone", "password"):
                 on_click = self.advance
-        elif selector == TB.SEL_EXPORT_TRIGGER and self.stage == "ops":
+        elif selector == TBankConnector.SEL_EXPORT_TRIGGER and self.stage == "ops":
             present = True
 
             def on_click() -> None:
                 self.stage = "export_open"
 
-        elif selector == TB.SEL_EXPORT_CSV and self.stage == "export_open" and self.csv_hook:
+        elif (
+            selector == TBankConnector.SEL_EXPORT_CSV
+            and self.stage == "export_open"
+            and self.csv_hook
+        ):
             present = True
 
             def on_click() -> None:
@@ -288,31 +296,31 @@ class FakePage:
 def _connector(
     creds: JsonObject | None = None,
     session: JsonObject | None = None,
-) -> TB:
-    return TB(creds if creds is not None else dict(CREDS), session)
+) -> TBankConnector:
+    return TBankConnector(creds if creds is not None else dict(CREDS), session)
 
 
 def test_headless_default_and_headed_override(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("MONORI_CONNECTOR_HEADED", raising=False)
-    assert TB.headless() is True
+    assert TBankConnector.headless() is True
     monkeypatch.setenv("MONORI_CONNECTOR_HEADED", "1")
-    assert TB.headless() is False
+    assert TBankConnector.headless() is False
 
 
 def test_debug_flag(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("MONORI_CONNECTOR_DEBUG", raising=False)
-    assert TB.debug_on() is False
+    assert TBankConnector.debug_on() is False
     monkeypatch.setenv("MONORI_CONNECTOR_DEBUG", "1")
-    assert TB.debug_on() is True
+    assert TBankConnector.debug_on() is True
 
 
 def test_is_logged_in_is_true_only_on_mybank() -> None:
     c = _connector()
     page = FakePage(scenario="logged_in")
-    page.stage, page.url = "in", TB.URL_HOME
+    page.stage, page.url = "in", TBankConnector.URL_HOME
     assert c.is_logged_in(page) is True
 
-    page.url = TB.URL_LOGIN
+    page.url = TBankConnector.URL_LOGIN
     assert c.is_logged_in(page) is False
 
 
@@ -320,7 +328,7 @@ def test_is_logged_in_false_when_a_code_prompt_is_reparked_over_mybank() -> None
     c = _connector()
     page = FakePage(scenario="fresh")
 
-    page.stage, page.url = "setcode", TB.URL_HOME
+    page.stage, page.url = "setcode", TBankConnector.URL_HOME
     assert c.is_logged_in(page) is False
 
 
@@ -363,7 +371,9 @@ def test_already_logged_in_skips_login() -> None:
     page = FakePage(scenario="logged_in")
     c.ensure_logged_in(page)
 
-    assert not any(event.kind == "goto" and event.argument == TB.URL_LOGIN for event in page.log)
+    assert not any(
+        event.kind == "goto" and event.argument == TBankConnector.URL_LOGIN for event in page.log
+    )
     assert not any(event.kind == "fill" for event in page.log)
 
 
@@ -382,10 +392,10 @@ def test_full_login_enters_phone_password_otp_then_sets_code() -> None:
     page = FakePage(scenario="fresh")
     c.ensure_logged_in(page)
     fills = [event for event in page.log if event.kind == "fill"]
-    assert PageEvent("fill", TB.SEL_PHONE, "+70000000000") in fills
-    assert PageEvent("fill", TB.SEL_PASSWORD, "pw") in fills
+    assert PageEvent("fill", TBankConnector.SEL_PHONE, "+70000000000") in fills
+    assert PageEvent("fill", TBankConnector.SEL_PASSWORD, "pw") in fills
 
-    assert PageEvent("fill", TB.SEL_OTP, "9999") in fills
+    assert PageEvent("fill", TBankConnector.SEL_OTP, "9999") in fills
     assert [event.argument for event in page.log if event.kind == "type"] == ["1234"]
     assert c.is_logged_in(page) is True
 
@@ -397,7 +407,9 @@ def test_wrong_otp_reprompts_with_rejection_message() -> None:
     page = FakePage(scenario="fresh", wrong_codes={"1111"})
     c.ensure_logged_in(page)
     otp_fills = [
-        event.value for event in page.log if event.kind == "fill" and event.argument == TB.SEL_OTP
+        event.value
+        for event in page.log
+        if event.kind == "fill" and event.argument == TBankConnector.SEL_OTP
     ]
     assert "1111" in otp_fills
     assert "2222" in otp_fills
@@ -422,11 +434,11 @@ class _BlockedPage(FakePage):
 
     @override
     def query_selector(self, selector: str) -> FakeElement | None:
-        if selector == TB.SEL_ACCESS_DENIED:
+        if selector == TBankConnector.SEL_ACCESS_DENIED:
             return FakeElement("")
-        if selector == TB.SEL_ACCESS_DENIED_TITLE:
+        if selector == TBankConnector.SEL_ACCESS_DENIED_TITLE:
             return FakeElement("Access blocked")
-        if selector == TB.SEL_ACCESS_DENIED_DESC:
+        if selector == TBankConnector.SEL_ACCESS_DENIED_DESC:
             return FakeElement("Try again later")
         return super().query_selector(selector)
 
@@ -451,7 +463,7 @@ class _SubmitClickPage:
         self._error = error
 
     def locator(self, selector: str) -> tbank_mod._Locator:
-        assert selector == TB.SEL_SUBMIT
+        assert selector == TBankConnector.SEL_SUBMIT
         error = self._error
 
         class L:
@@ -487,20 +499,20 @@ def test_submit_propagates_real_click_error(monkeypatch: pytest.MonkeyPatch) -> 
 
 def test_operations_url_scopes_to_account_when_set() -> None:
     c = _connector({**CREDS, "account": "5858870594"})
-    assert c.operations_url() == TB.URL_OPERATIONS + "?account=5858870594"
+    assert c.operations_url() == TBankConnector.URL_OPERATIONS + "?account=5858870594"
 
 
 def test_operations_url_defaults_to_all_feed_when_account_absent_or_blank() -> None:
-    assert _connector(dict(CREDS)).operations_url() == TB.URL_OPERATIONS
-    assert _connector({**CREDS, "account": ""}).operations_url() == TB.URL_OPERATIONS
+    assert _connector(dict(CREDS)).operations_url() == TBankConnector.URL_OPERATIONS
+    assert _connector({**CREDS, "account": ""}).operations_url() == TBankConnector.URL_OPERATIONS
 
-    assert _connector({**CREDS, "account": "   "}).operations_url() == TB.URL_OPERATIONS
-    assert _connector({**CREDS, "account": None}).operations_url() == TB.URL_OPERATIONS
+    assert _connector({**CREDS, "account": "   "}).operations_url() == TBankConnector.URL_OPERATIONS
+    assert _connector({**CREDS, "account": None}).operations_url() == TBankConnector.URL_OPERATIONS
 
 
 def test_operations_url_encodes_the_account() -> None:
     c = _connector({**CREDS, "account": "a b&x"})
-    assert c.operations_url() == TB.URL_OPERATIONS + "?account=a%20b%26x"
+    assert c.operations_url() == TBankConnector.URL_OPERATIONS + "?account=a%20b%26x"
 
 
 def test_download_and_parse_returns_rows() -> None:
@@ -518,12 +530,12 @@ def test_download_waits_for_the_account_feed_to_settle_before_export() -> None:
     page.stage = "in"
     c.download_and_parse(page, None)
     assert [event for event in page.log if event.kind == "goto"] == [
-        PageEvent("goto", TB.URL_OPERATIONS, "domcontentloaded"),
+        PageEvent("goto", TBankConnector.URL_OPERATIONS, "domcontentloaded"),
     ]
     settled = [event for event in page.log if event.kind == "load_state"]
     assert settled == [PageEvent("load_state", "networkidle")]
-    assert page.load_timeout == TB.LOGIN_TIMEOUT_MS
-    assert page.download_timeout == TB.LOGIN_TIMEOUT_MS
+    assert page.load_timeout == TBankConnector.LOGIN_TIMEOUT_MS
+    assert page.download_timeout == TBankConnector.LOGIN_TIMEOUT_MS
 
 
 def test_download_without_export_option_raises() -> None:
@@ -604,7 +616,7 @@ def test_prune_cache_drops_junk_dirs(tmp_path: Path) -> None:
     (root / "Default" / "Cache" / "x").write_text("junk")
     (root / "GPUCache").mkdir()
     (root / "Default" / "Local Storage").mkdir(parents=True)
-    TB.prune_cache(str(root))
+    TBankConnector.prune_cache(str(root))
     assert not (root / "Default" / "Cache").exists()
     assert not (root / "GPUCache").exists()
     assert (root / "Default" / "Local Storage").exists()
@@ -678,8 +690,8 @@ def test_run_two_phase_produces_rows_and_session(monkeypatch: pytest.MonkeyPatch
     assert isinstance(result.session, dict)
     assert "profile" in result.session
 
-    assert page.nav_timeout == TB.LOGIN_TIMEOUT_MS
-    assert page.action_timeout == TB.LOGIN_TIMEOUT_MS
+    assert page.nav_timeout == TBankConnector.LOGIN_TIMEOUT_MS
+    assert page.action_timeout == TBankConnector.LOGIN_TIMEOUT_MS
     assert page.launch_options is not None
     work_dir, headless, user_agent, accept_downloads, args = page.launch_options
     assert pathlib.Path(work_dir).name.startswith("tbank-profile-")
@@ -702,7 +714,7 @@ def test_shot_writes_when_debug_on(monkeypatch: pytest.MonkeyPatch, tmp_path: Pa
     monkeypatch.setenv("MONORI_CONNECTOR_DEBUG", "1")
     monkeypatch.chdir(tmp_path)
     page = FakePage(scenario="logged_in")
-    TB.shot(page, "step")
+    TBankConnector.shot(page, "step")
     assert page.screenshots
     screenshot_path, full_page = page.screenshots[0]
     assert screenshot_path.endswith("tbank-step.png")

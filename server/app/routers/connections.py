@@ -18,7 +18,7 @@ import secrets
 import sqlite3
 from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Annotated, NoReturn
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -28,7 +28,6 @@ from pydantic.dataclasses import dataclass as pydantic_dataclass
 from app import crypto
 from app.auth import AuthenticatedUser, current_user
 from app.connectors import base as connectors
-from app.connectors import tbank_playwright as _tbank_playwright  # noqa: F401
 from app.connectors.base import (
     ConnectorError,
     ConnectorInfo,
@@ -40,7 +39,7 @@ from app.connectors.base import (
 from app.deps import conn
 from app.importer import CategoryDefinition, CategoryRule, build_rules
 from app.ingest import categorize_rows, commit_rows, drop_already_present, historical_day_counts
-from app.sync_runner import NoPendingLoginError, get_runner
+from app.sync_runner import NoPendingLoginError, SyncRequest, get_runner
 from app.transfer_service import detect
 
 router = APIRouter(prefix="/api/connections", tags=["connections"])
@@ -53,7 +52,7 @@ SYNC_FAILED = "The bank sync could not be completed. Check the connection and tr
 
 
 def _now() -> str:
-    return datetime.now().strftime("%Y-%m-%dT%H:%M:%S")  # noqa: DTZ005
+    return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S")
 
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid"))
@@ -96,6 +95,17 @@ class LinkedAccount:
     id: int
     name: str
     bank_ref: str | None
+
+
+@dataclass(slots=True)
+class SyncContext:
+    """Represent shared state for a connection sync."""
+
+    connection: sqlite3.Connection
+    row: ConnectionRow
+    credentials: JsonObject
+    session: JsonObject | None
+    user_id: int
 
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid", populate_by_name=True))
@@ -462,13 +472,9 @@ def _account_since(
     return last_sync if prior else None
 
 
-def _sync_accounts(  # noqa: PLR0913
-    c: sqlite3.Connection,
-    row: ConnectionRow,
+def _sync_accounts(
+    context: SyncContext,
     accounts: list[LinkedAccount],
-    creds: JsonObject,
-    session: JsonObject | None,
-    uid: int,
 ) -> tuple[list[AccountSyncSummary], dict[str, int]]:
     """
     Pull each account in order. Returns (per-account summaries, unmapped card.
@@ -476,19 +482,23 @@ def _sync_accounts(  # noqa: PLR0913
     tails); raises SmsRequiredError after persisting which account the parked login.
     belongs to.
     """
+    c = context.connection
+    row = context.row
     cid = row.id
     results: list[AccountSyncSummary] = []
     unmapped: dict[str, int] = {}
     for acct in accounts:
         try:
             result = get_runner().start(
-                cid,
-                row.bank,
-                row.kind,
-                creds,
-                session,
-                _account_since(c, cid, acct.id, row.last_sync),
-                acct.bank_ref,
+                SyncRequest(
+                    cid,
+                    row.bank,
+                    row.kind,
+                    context.credentials,
+                    context.session,
+                    _account_since(c, cid, acct.id, row.last_sync),
+                    acct.bank_ref,
+                ),
             )
         except SmsRequiredError:
             c.execute(
@@ -498,16 +508,16 @@ def _sync_accounts(  # noqa: PLR0913
             )
             c.commit()
             raise
-        summaries, missed = _finish_account(c, row, acct.id, result, uid)
+        summaries, missed = _finish_account(c, row, acct.id, result, context.user_id)
         results.extend(summaries)
         for t, n in missed.items():
             unmapped[t] = unmapped.get(t, 0) + n
-        session = result.session or session
+        context.session = result.session or context.session
     return results, unmapped
 
 
 @router.get("/available")
-def available(user: Annotated[AuthenticatedUser, Depends(current_user)]) -> list[ConnectorInfo]:  # noqa: ARG001
+def available(_user: Annotated[AuthenticatedUser, Depends(current_user)]) -> list[ConnectorInfo]:
     """Handle available."""
     return connectors.available_connectors()
 
@@ -647,7 +657,10 @@ def sync_connection(
             c.commit()
         session = crypto.decrypt(row.session_encrypted)
         try:
-            results, unmapped = _sync_accounts(c, row, accounts, creds, session, uid)
+            results, unmapped = _sync_accounts(
+                SyncContext(c, row, creds, session, uid),
+                accounts,
+            )
             _mark_connected(c, cid)
             return _aggregate(results, unmapped)
         except SmsRequiredError:
@@ -692,7 +705,10 @@ def submit_sms(
         after = ids.index(pending_id) + 1 if pending_id in ids else len(ids)
         remaining = accounts[after:]
         try:
-            more, missed = _sync_accounts(c, row, remaining, _creds(c, row), session, uid)
+            more, missed = _sync_accounts(
+                SyncContext(c, row, _creds(row), session, uid),
+                remaining,
+            )
         except SmsRequiredError:
             return SyncStatusResponse(status="awaiting_sms", message=SMS_SENT)
         except ConnectorError as e:
@@ -706,7 +722,7 @@ def submit_sms(
         c.close()
 
 
-def _creds(c: sqlite3.Connection, row: ConnectionRow) -> JsonObject:  # noqa: ARG001
+def _creds(row: ConnectionRow) -> JsonObject:
     creds = crypto.decrypt(row.credentials_encrypted)
     if not creds:
         raise HTTPException(400, "connection has no credentials")

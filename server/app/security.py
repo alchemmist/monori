@@ -48,9 +48,10 @@ def verify_password(password_hash: str, password: str) -> bool:
     """Handle verify password."""
     try:
         _hasher.verify(password_hash, password)
-        return True  # noqa: TRY300
     except (Argon2Error, ValueError):
         return False
+    else:
+        return True
 
 
 def _secret_path() -> pathlib.Path:

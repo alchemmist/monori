@@ -18,7 +18,6 @@ from pydantic import ConfigDict, Field
 from pydantic.dataclasses import dataclass as pydantic_dataclass
 
 from .connectors import base as connectors
-from .connectors import tbank_playwright as _tbank_playwright  # noqa: F401
 from .connectors.base import ConnectorError, JsonObject, SmsRequiredError, SyncResult
 
 app = FastAPI(title="monori-sync")

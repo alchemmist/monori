@@ -91,8 +91,7 @@ def test_confirmed_write_applies_and_reports_row_count(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     anon.headers.update(_make_admin(anon, monkeypatch))
-    uid = anon.get("/api/auth/me").json()["id"]
-    r = _sql(anon, f"UPDATE users SET is_admin=1 WHERE id={uid}", confirm=True)  # noqa: S608
+    r = _sql(anon, "UPDATE users SET is_admin=1 WHERE email='boss@example.com'", confirm=True)
     assert r.status_code == 200, r.text
     assert r.json() == {
         "kind": "write",

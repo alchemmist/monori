@@ -79,12 +79,12 @@ class OkResponse:
 
 def _merge_keywords(a: str, b: str) -> str:
     seen, out = set(), []
-    for kw in [*str(a or "").split("|"), *str(b or "").split("|")]:
-        kw = kw.strip()  # noqa: PLW2901
-        key = kw.lower()
-        if kw and key not in seen:
+    for raw_keyword in [*str(a or "").split("|"), *str(b or "").split("|")]:
+        keyword = raw_keyword.strip()
+        key = keyword.lower()
+        if keyword and key not in seen:
             seen.add(key)
-            out.append(kw)
+            out.append(keyword)
     return "|".join(out)
 
 
@@ -160,7 +160,7 @@ def create_category(
 
 
 @router.patch("/{cat_id}")
-def patch_category(  # noqa: C901,PLR0912
+def patch_category(
     cat_id: int,
     patch: CategoryPatch,
     user: Annotated[AuthenticatedUser, Depends(current_user)],
@@ -172,64 +172,94 @@ def patch_category(  # noqa: C901,PLR0912
         category = _owned_category(c, cat_id, uid)
         if not category:
             raise HTTPException(404, "category not found")
-        if patch.name is not None:
-            if _name_taken(c, uid, patch.name, except_id=cat_id):
-                raise HTTPException(409, "category with this name already exists")
-            c.execute("UPDATE categories SET name=? WHERE id=?", (patch.name, cat_id))
-        goal_fields_allowed = category.is_goal
-        if patch.group_id is not None:
-            target_group = c.execute(
-                "SELECT g.id, t.is_goal FROM category_groups g"
-                " JOIN category_group_types t ON t.id=g.type_id"
-                " WHERE g.id=? AND g.user_id=?",
-                (patch.group_id, uid),
-            ).fetchone()
-            if not target_group:
-                raise HTTPException(400, "unknown group")
-            target_group_record = GoalGroupRecord.from_row(target_group)
-            if (
-                target_group_record.is_goal
-                and not patch.goal_target_provided
-                and category.goal_target is None
-            ):
-                raise HTTPException(400, "goalTarget is required for goal categories")
-            goal_fields_allowed = target_group_record.is_goal
-            c.execute("UPDATE categories SET group_id=? WHERE id=?", (patch.group_id, cat_id))
-            if not target_group_record.is_goal:
-                goal_fields_allowed = False
-                c.execute(
-                    "UPDATE categories SET goal_target=NULL, goal_status=NULL,"
-                    " goal_target_date=NULL WHERE id=?",
-                    (cat_id,),
-                )
-        if patch.keywords is not None:
-            c.execute("UPDATE categories SET keywords=? WHERE id=?", (patch.keywords, cat_id))
-        if patch.archived is not None:
-            c.execute(
-                "UPDATE categories SET archived=? WHERE id=?",
-                (1 if patch.archived else 0, cat_id),
-            )
-        if goal_fields_allowed and patch.goal_target is not None:
-            c.execute("UPDATE categories SET goal_target=? WHERE id=?", (patch.goal_target, cat_id))
-        if goal_fields_allowed and patch.goal_target_date_provided:
-            c.execute(
-                "UPDATE categories SET goal_target_date=? WHERE id=?",
-                (patch.goal_target_date or None, cat_id),
-            )
-        if goal_fields_allowed and patch.goal_status is not None:
-            if patch.goal_status not in ("active", "achieved"):
-                raise HTTPException(400, "goalStatus must be 'active' or 'achieved'")
-            c.execute("UPDATE categories SET goal_status=? WHERE id=?", (patch.goal_status, cat_id))
+        _update_category_name(c, cat_id, uid, patch)
+        goal_fields_allowed = _move_category(c, cat_id, uid, category, patch)
+        _update_category_fields(c, cat_id, patch)
+        _update_goal_fields(c, cat_id, patch, allowed=goal_fields_allowed)
         c.commit()
         return OkResponse(ok=True)
     finally:
         c.close()
 
 
+def _update_category_name(
+    c: sqlite3.Connection,
+    cat_id: int,
+    uid: int,
+    patch: CategoryPatch,
+) -> None:
+    if patch.name is not None:
+        if _name_taken(c, uid, patch.name, except_id=cat_id):
+            raise HTTPException(409, "category with this name already exists")
+        c.execute("UPDATE categories SET name=? WHERE id=?", (patch.name, cat_id))
+
+
+def _move_category(
+    c: sqlite3.Connection,
+    cat_id: int,
+    uid: int,
+    category: CategoryOwnershipRecord,
+    patch: CategoryPatch,
+) -> bool:
+    if patch.group_id is None:
+        return category.is_goal
+    target_group = c.execute(
+        "SELECT g.id, t.is_goal FROM category_groups g"
+        " JOIN category_group_types t ON t.id=g.type_id"
+        " WHERE g.id=? AND g.user_id=?",
+        (patch.group_id, uid),
+    ).fetchone()
+    if not target_group:
+        raise HTTPException(400, "unknown group")
+    target = GoalGroupRecord.from_row(target_group)
+    if target.is_goal and not patch.goal_target_provided and category.goal_target is None:
+        raise HTTPException(400, "goalTarget is required for goal categories")
+    c.execute("UPDATE categories SET group_id=? WHERE id=?", (patch.group_id, cat_id))
+    if not target.is_goal:
+        c.execute(
+            "UPDATE categories SET goal_target=NULL, goal_status=NULL,"
+            " goal_target_date=NULL WHERE id=?",
+            (cat_id,),
+        )
+    return target.is_goal
+
+
+def _update_category_fields(c: sqlite3.Connection, cat_id: int, patch: CategoryPatch) -> None:
+    if patch.keywords is not None:
+        c.execute("UPDATE categories SET keywords=? WHERE id=?", (patch.keywords, cat_id))
+    if patch.archived is not None:
+        c.execute(
+            "UPDATE categories SET archived=? WHERE id=?",
+            (1 if patch.archived else 0, cat_id),
+        )
+
+
+def _update_goal_fields(
+    c: sqlite3.Connection,
+    cat_id: int,
+    patch: CategoryPatch,
+    *,
+    allowed: bool,
+) -> None:
+    if not allowed:
+        return
+    if patch.goal_target is not None:
+        c.execute("UPDATE categories SET goal_target=? WHERE id=?", (patch.goal_target, cat_id))
+    if patch.goal_target_date_provided:
+        c.execute(
+            "UPDATE categories SET goal_target_date=? WHERE id=?",
+            (patch.goal_target_date or None, cat_id),
+        )
+    if patch.goal_status is not None:
+        if patch.goal_status not in ("active", "achieved"):
+            raise HTTPException(400, "goalStatus must be 'active' or 'achieved'")
+        c.execute("UPDATE categories SET goal_status=? WHERE id=?", (patch.goal_status, cat_id))
+
+
 @router.post("/{cat_id}/archive-goal")
 def archive_goal(
     cat_id: int,
-    body: ArchiveGoalBody,  # noqa: ARG001
+    _body: ArchiveGoalBody,
     user: Annotated[AuthenticatedUser, Depends(current_user)],
 ) -> OkResponse:
     """Close a goal without rewriting its allocations or purchase history."""

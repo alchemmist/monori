@@ -94,7 +94,8 @@ for _router in (
 @app.get("/api/snapshot")
 def get_snapshot(
     user: Annotated[AuthenticatedUser, Depends(current_user)],
-    light: bool = False,  # noqa: FBT001,FBT002
+    *,
+    light: bool = False,
     limit: Annotated[int, Query(ge=1, le=5000)] = LIGHT_SNAPSHOT_TX_LIMIT,
 ) -> SnapshotResponse:
     """
@@ -117,8 +118,9 @@ def get_snapshot(
     methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"],
     include_in_schema=False,
 )
-def api_not_found(path: str) -> None:  # noqa: ARG001
+def api_not_found(path: str) -> None:
     """Handle api not found."""
+    del path
     raise HTTPException(status_code=404, detail="Not Found")
 
 

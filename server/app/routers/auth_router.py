@@ -146,7 +146,7 @@ def token(form: Annotated[OAuth2PasswordRequestForm, Depends()]) -> TokenRespons
         user_id = row["id"]
         if not isinstance(password_hash, str) or not isinstance(user_id, int):
             msg = "stored user credentials have invalid types"
-            raise RuntimeError(msg)  # noqa: TRY004
+            raise TypeError(msg)
         if not verify_password(password_hash, form.password):
             raise HTTPException(401, "incorrect password")
 

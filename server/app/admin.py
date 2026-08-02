@@ -20,6 +20,7 @@ from .deps import conn
 from .security import decode_access_token
 
 UNTRACKED_FEATURES = {"auth"}
+MIN_API_PATH_PARTS = 3
 
 
 def admin_emails() -> set[str]:
@@ -42,7 +43,7 @@ def feature_from_path(path: str) -> str | None:
     counted (non-API paths and ``UNTRACKED_FEATURES``).
     """
     parts = path.split("/")
-    if len(parts) < 3 or parts[0] != "" or parts[1] != "api" or not parts[2]:  # noqa: PLR2004
+    if len(parts) < MIN_API_PATH_PARTS or parts[0] != "" or parts[1] != "api" or not parts[2]:
         return None
     feature = parts[2]
     if feature in UNTRACKED_FEATURES:

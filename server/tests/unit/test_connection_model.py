@@ -7,7 +7,7 @@ connector registry's parameter declarations.
 import pytest
 from fastapi import HTTPException
 
-import app.connectors.fake  # noqa: F401
+import app.connectors.fake
 from app.connectors.base import available_connectors
 from app.routers.connections import _validate_credentials
 

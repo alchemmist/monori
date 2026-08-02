@@ -15,6 +15,7 @@ from app.importer import tx_hash
 from app.transfer_service import detach_leg
 
 router = APIRouter(prefix="/api/transactions", tags=["transactions"])
+MIN_SPLIT_PARTS = 2
 
 
 _CONFIG = ConfigDict(extra="forbid", populate_by_name=True)
@@ -83,6 +84,21 @@ class TransactionListResponse:
 
 
 @pydantic_dataclass(config=_CONFIG)
+class TransactionListFilters:
+    """Represent query parameters for the transaction list."""
+
+    from_: Annotated[str | None, Query(alias="from")] = None
+    to: str | None = None
+    category_id: Annotated[int | None, Query(alias="categoryId")] = None
+    account_id: Annotated[int | None, Query(alias="accountId")] = None
+    uncategorized: bool = False
+    hidden: bool = False
+    q: str | None = None
+    limit: Annotated[int, Query(ge=1, le=1000)] = 100
+    offset: Annotated[int, Query(ge=0)] = 0
+
+
+@pydantic_dataclass(config=_CONFIG)
 class OkResponse:
     """Represent OkResponse."""
 
@@ -143,31 +159,23 @@ def _resolve_account(c: sqlite3.Connection, account_id: int, uid: int) -> int:
 
 
 @router.get("")
-def list_transactions(  # noqa: PLR0913
+def list_transactions(
     user: Annotated[AuthenticatedUser, Depends(current_user)],
-    from_: Annotated[str | None, Query(alias="from")] = None,
-    to: str | None = None,
-    category_id: Annotated[int | None, Query(alias="categoryId")] = None,
-    account_id: Annotated[int | None, Query(alias="accountId")] = None,
-    uncategorized: bool = False,  # noqa: FBT001,FBT002
-    hidden: bool = False,  # noqa: FBT001,FBT002
-    q: str | None = None,
-    limit: Annotated[int, Query(ge=1, le=1000)] = 100,
-    offset: Annotated[int, Query(ge=0)] = 0,
+    filters: Annotated[TransactionListFilters, Depends()],
 ) -> TransactionListResponse:
     """Handle list transactions."""
     uid = user.id
     params = {
         "uid": uid,
-        "from": from_,
-        "to": to,
-        "uncat": 1 if uncategorized else 0,
-        "hidden": 1 if hidden else 0,
-        "cat": category_id,
-        "acct": account_id,
-        "q": f"%{q.lower()}%" if q else None,
-        "limit": limit,
-        "offset": offset,
+        "from": filters.from_,
+        "to": filters.to,
+        "uncat": 1 if filters.uncategorized else 0,
+        "hidden": 1 if filters.hidden else 0,
+        "cat": filters.category_id,
+        "acct": filters.account_id,
+        "q": f"%{filters.q.lower()}%" if filters.q else None,
+        "limit": filters.limit,
+        "offset": filters.offset,
     }
     c = conn()
     try:
@@ -194,7 +202,7 @@ def list_transactions(  # noqa: PLR0913
         )
         if not isinstance(total, int):
             msg = "transaction count must be an integer"
-            raise RuntimeError(msg)  # noqa: TRY004
+            raise TypeError(msg)
         return TransactionListResponse(total=total, rows=serialize_transactions(c.cursor(), rows))
     finally:
         c.close()
@@ -309,7 +317,7 @@ def patch_transaction(
 
 
 @router.put("/{tx_id}/splits")
-def replace_splits(  # noqa: C901
+def replace_splits(
     tx_id: int,
     body: SplitBody,
     user: Annotated[AuthenticatedUser, Depends(current_user)],
@@ -319,55 +327,76 @@ def replace_splits(  # noqa: C901
     c = conn()
     try:
         begin_write(c)
-        row = c.execute(
-            "SELECT t.* FROM transactions t JOIN accounts a ON a.id=t.account_id"
-            " WHERE t.id=? AND a.user_id=?",
-            (tx_id, uid),
-        ).fetchone()
-        if not row:
-            raise HTTPException(404, "transaction not found")
-        transaction = TransactionRecord.from_row(row)
-        if transaction.transfer_id is not None:
-            raise HTTPException(400, "transfer transactions cannot be split")
-        if body.parts:
-            if len(body.parts) < 2:  # noqa: PLR2004
-                raise HTTPException(400, "a split requires at least two parts")
-            if any(part.amount == 0 for part in body.parts):
-                raise HTTPException(400, "split amounts cannot be zero")
-            if any((part.amount > 0) != (transaction.amount > 0) for part in body.parts):
-                raise HTTPException(400, "split parts must have the transaction's sign")
-            if sum(part.amount for part in body.parts) != transaction.amount:
-                raise HTTPException(400, "split amounts must equal the transaction amount")
-            for part in body.parts:
-                _resolve_category(c, part.category_id, uid, part.amount)
-        c.execute("DELETE FROM splits WHERE transaction_id=?", (tx_id,))
-        for sort, part in enumerate(body.parts):
-            c.execute(
-                "INSERT INTO splits"
-                " (transaction_id, category_id, amount, comment, sort) VALUES (?, ?, ?, ?, ?)",
-                (tx_id, part.category_id, part.amount, part.comment, sort),
-            )
-        if body.parts:
-            c.execute("UPDATE transactions SET category_id=NULL WHERE id=?", (tx_id,))
+        transaction = _split_parent(c, tx_id, uid)
+        _validate_split_parts(c, transaction, body.parts, uid)
+        _replace_split_rows(c, tx_id, body.parts)
         c.commit()
-        splits = c.execute(
-            "SELECT id, category_id, amount, comment FROM splits"
-            " WHERE transaction_id=? ORDER BY sort, id",
-            (tx_id,),
-        )
-        return SplitsResponse(
-            splits=[
-                SplitResponse(
-                    id=part["id"],
-                    category_id=part["category_id"],
-                    amount=part["amount"],
-                    comment=part["comment"],
-                )
-                for part in splits
-            ],
-        )
+        return SplitsResponse(splits=_serialized_splits(c, tx_id))
     finally:
         c.close()
+
+
+def _split_parent(c: sqlite3.Connection, tx_id: int, uid: int) -> TransactionRecord:
+    row = c.execute(
+        "SELECT t.* FROM transactions t JOIN accounts a ON a.id=t.account_id"
+        " WHERE t.id=? AND a.user_id=?",
+        (tx_id, uid),
+    ).fetchone()
+    if row is None:
+        raise HTTPException(404, "transaction not found")
+    transaction = TransactionRecord.from_row(row)
+    if transaction.transfer_id is not None:
+        raise HTTPException(400, "transfer transactions cannot be split")
+    return transaction
+
+
+def _validate_split_parts(
+    c: sqlite3.Connection,
+    transaction: TransactionRecord,
+    parts: list[SplitPart],
+    uid: int,
+) -> None:
+    if not parts:
+        return
+    if len(parts) < MIN_SPLIT_PARTS:
+        raise HTTPException(400, "a split requires at least two parts")
+    if any(part.amount == 0 for part in parts):
+        raise HTTPException(400, "split amounts cannot be zero")
+    if any((part.amount > 0) != (transaction.amount > 0) for part in parts):
+        raise HTTPException(400, "split parts must have the transaction's sign")
+    if sum(part.amount for part in parts) != transaction.amount:
+        raise HTTPException(400, "split amounts must equal the transaction amount")
+    for part in parts:
+        _resolve_category(c, part.category_id, uid, part.amount)
+
+
+def _replace_split_rows(c: sqlite3.Connection, tx_id: int, parts: list[SplitPart]) -> None:
+    c.execute("DELETE FROM splits WHERE transaction_id=?", (tx_id,))
+    for sort, part in enumerate(parts):
+        c.execute(
+            "INSERT INTO splits"
+            " (transaction_id, category_id, amount, comment, sort) VALUES (?, ?, ?, ?, ?)",
+            (tx_id, part.category_id, part.amount, part.comment, sort),
+        )
+    if parts:
+        c.execute("UPDATE transactions SET category_id=NULL WHERE id=?", (tx_id,))
+
+
+def _serialized_splits(c: sqlite3.Connection, tx_id: int) -> list[SplitResponse]:
+    rows = c.execute(
+        "SELECT id, category_id, amount, comment FROM splits"
+        " WHERE transaction_id=? ORDER BY sort, id",
+        (tx_id,),
+    )
+    return [
+        SplitResponse(
+            id=row["id"],
+            category_id=row["category_id"],
+            amount=row["amount"],
+            comment=row["comment"],
+        )
+        for row in rows
+    ]
 
 
 @router.delete("/{tx_id}")

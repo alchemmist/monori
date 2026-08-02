@@ -15,6 +15,7 @@ from app.importer import tx_hash
 from app.transfer_match import AUTO_DAYS, SUGGEST_DAYS, split_confident
 from app.transfer_service import (
     LinkError,
+    LinkRequest,
     MergedTransfer,
     TransferResponse,
     candidates,
@@ -210,7 +211,7 @@ def create_transfer(
                 msg = "transaction insert did not return an id"
                 raise RuntimeError(msg)
             legs.append(cur.lastrowid)
-        transfer_id = link_pair(c, uid, legs[0], legs[1], note=body.comment)
+        transfer_id = link_pair(c, uid, LinkRequest(legs[0], legs[1], note=body.comment))
         c.commit()
         return TransferIdResponse(transfer_id=transfer_id)
     except LinkError as e:
@@ -235,9 +236,7 @@ def link_transactions(
         transfer_id = link_pair(
             c,
             user.id,
-            body.out_tx_id,
-            body.in_tx_id,
-            note=body.note,
+            LinkRequest(body.out_tx_id, body.in_tx_id, note=body.note),
         )
         c.commit()
         return TransferIdResponse(transfer_id=transfer_id)

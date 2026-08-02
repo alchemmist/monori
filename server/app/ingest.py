@@ -8,6 +8,7 @@ here and never trusted from the caller, so a re-submit or a re-sync can never
 create duplicates.
 """
 
+import json
 import sqlite3
 from collections.abc import Iterable, Mapping
 
@@ -87,14 +88,13 @@ def historical_day_counts(
     ``sheets`` is the retired template importer's label — those rows are still
     in the wild and are statement-shaped all the same.
     """
-    marks = ",".join("?" * len(sources))
     counts: dict[tuple[str, int, str], int] = {}
     for r in c.execute(
-        "SELECT substr(t.date, 1, 10) day, t.amount, t.description, COUNT(*) n"  # noqa: S608
+        "SELECT substr(t.date, 1, 10) day, t.amount, t.description, COUNT(*) n"
         " FROM transactions t JOIN accounts a ON a.id = t.account_id"
-        f" WHERE a.user_id=? AND t.source IN ({marks})"  # nosec B608
+        " WHERE a.user_id=? AND t.source IN (SELECT value FROM json_each(?))"
         " GROUP BY day, t.amount, t.description",
-        (uid, *sources),
+        (uid, json.dumps(sources)),
     ):
         key = (str(r["day"]), int(r["amount"]), dedup_text(str(r["description"])))
         counts[key] = counts.get(key, 0) + int(r["n"])

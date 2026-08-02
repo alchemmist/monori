@@ -217,7 +217,8 @@ def _import_budgets(
     c: sqlite3.Connection,
     budgets: Iterable[WorkbookBudget],
     category_ids: Mapping[str, int],
-    overwrite: bool,  # noqa: FBT001
+    *,
+    overwrite: bool,
 ) -> tuple[int, int]:
     written = skipped = 0
     for cell in budgets:
@@ -289,7 +290,7 @@ def apply_workbook(
         c,
         parsed.budgets,
         category_ids,
-        budget_policy == "overwrite",
+        overwrite=budget_policy == "overwrite",
     )
     warnings: list[str] = []
     if already:

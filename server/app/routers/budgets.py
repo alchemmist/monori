@@ -11,6 +11,7 @@ from app.auth import AuthenticatedUser, current_user
 from app.deps import conn
 
 router = APIRouter(prefix="/api/budgets", tags=["budgets"])
+MONTHS_IN_YEAR = 12
 
 
 _CONFIG = ConfigDict(extra="forbid", populate_by_name=True)
@@ -65,7 +66,7 @@ class CopyResponse:
 
 
 def _set_cell(c: sqlite3.Connection, cell: BudgetCell, uid: int) -> None:
-    if not 1 <= cell.month <= 12:  # noqa: PLR2004
+    if not 1 <= cell.month <= MONTHS_IN_YEAR:
         raise HTTPException(422, "month must be between 1 and 12")
     if not c.execute(
         "SELECT c.id FROM categories c JOIN category_groups g ON g.id = c.group_id"
