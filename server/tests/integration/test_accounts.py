@@ -27,8 +27,8 @@ def test_create_account_applies_defaults(api: Api, client: TestClient) -> None:
     assert account.icon == "wallet"
     assert account.color == "#5b6472"
     assert account.currency == "RUB"
-    assert account.openingBalance == 0
-    assert account.bankRef == ""
+    assert account.opening_balance == 0
+    assert account.bank_ref == ""
 
 
 def test_account_crud_and_uniqueness(api: Api, client: TestClient) -> None:
