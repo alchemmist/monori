@@ -203,7 +203,7 @@ export const transferDetectionResponseSchema = z
         suggested,
     }));
 
-export const importRowResponseSchema = z
+const importRowResponseSchema = z
     .strictObject({
         date: z.string(),
         amount: z.number(),

@@ -99,7 +99,7 @@ describe("API runtime contracts", () => {
 
     it("rejects misspelled domain values", () => {
         const malformed = structuredClone(snapshot);
-        malformed.transactions[0]!.source = "conected";
+        malformed.transactions[0]!.source = "unknown_source";
 
         expect(() => snapshotSchema.parse(malformed)).toThrow();
     });

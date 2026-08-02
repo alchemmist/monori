@@ -22,9 +22,12 @@ class RowTypeError(TypeError):
     """Raised when a SQLite column has an unexpected Python type."""
 
 
-def _row_value(row: sqlite3.Row, key: str) -> object:
+type SqliteCell = int | float | str | bytes | None
+
+
+def _row_value(row: sqlite3.Row, key: str) -> SqliteCell:
     try:
-        return cast("object", row[key])
+        return cast("SqliteCell", row[key])
     except IndexError as error:
         message = f"SQL row is missing required column {key!r}"
         raise RowValueError(message) from error

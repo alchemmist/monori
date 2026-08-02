@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import ConfigDict, Field, field_validator
+from pydantic import ConfigDict, Field, JsonValue, field_validator
 from pydantic.dataclasses import dataclass as pydantic_dataclass
 
 from app.auth import AuthenticatedUser, current_user
@@ -41,7 +41,7 @@ class AccountBody:
 
     @field_validator("type", mode="before")
     @classmethod
-    def validate_type(cls, value: object) -> AccountType | None:
+    def validate_type(cls, value: JsonValue) -> AccountType | None:
         """Keep invalid account types as the existing 400 API response."""
         if value is None:
             return None
@@ -74,7 +74,7 @@ class AccountPatch:
 
     @field_validator("type", mode="before")
     @classmethod
-    def validate_type(cls, value: object) -> AccountType | None:
+    def validate_type(cls, value: JsonValue) -> AccountType | None:
         """Keep invalid account types as the existing 400 API response."""
         if value is None:
             return None

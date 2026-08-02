@@ -8,6 +8,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
 import app.db as dbmod
 from app.connectors.base import SyncRow
 from app.deps import snapshot
+from app.domain_types import TransactionSource
 from app.importer import CategoryRule
 from app.ingest import (
     categorize_rows,
@@ -113,7 +114,7 @@ def test_existing_hash_counts_is_account_scoped(tmp_path: Path) -> None:
     c = _db(tmp_path)
     acct1 = _required_int(c.execute("SELECT MIN(id) FROM accounts").fetchone())
     acct2 = _inserted_id(c.execute("INSERT INTO accounts (name) VALUES ('Second')"))
-    commit_rows(c, acct1, [_row("2026-01-01T00:00:00", -100, "A")], source="import")
+    commit_rows(c, acct1, [_row("2026-01-01T00:00:00", -100, "A")], source=TransactionSource.IMPORT)
     c.commit()
     assert len(existing_hash_counts(c, acct1)) == 1
     assert existing_hash_counts(c, acct2) == {}
@@ -136,7 +137,7 @@ def test_commit_rows_inserts_with_fields_and_defaults(tmp_path: Path) -> None:
         ),
         _row("2026-01-02T00:00:00", -200, "B"),
     ]
-    inserted, skipped = commit_rows(c, acct, rows, source="sync", batch_id=bid)
+    inserted, skipped = commit_rows(c, acct, rows, source=TransactionSource.SYNC, batch_id=bid)
     c.commit()
     assert (inserted, skipped) == (2, 0)
     got = c.execute(
@@ -157,10 +158,10 @@ def test_commit_rows_skips_existing_hashes(tmp_path: Path) -> None:
     c = _db(tmp_path)
     acct = _required_int(c.execute("SELECT MIN(id) FROM accounts").fetchone())
     rows = [_row("2026-01-01T00:00:00", -100, "A")]
-    assert commit_rows(c, acct, rows, source="import") == (1, 0)
+    assert commit_rows(c, acct, rows, source=TransactionSource.IMPORT) == (1, 0)
     c.commit()
 
-    assert commit_rows(c, acct, rows, source="import") == (0, 1)
+    assert commit_rows(c, acct, rows, source=TransactionSource.IMPORT) == (0, 1)
     c.commit()
     assert c.execute("SELECT COUNT(*) FROM transactions").fetchone()[0] == 1
 
@@ -170,10 +171,10 @@ def test_commit_rows_dedup_is_per_account(tmp_path: Path) -> None:
     acct1 = _required_int(c.execute("SELECT MIN(id) FROM accounts").fetchone())
     acct2 = _inserted_id(c.execute("INSERT INTO accounts (name) VALUES ('Second')"))
     rows = [_row("2026-01-01T00:00:00", -100, "A")]
-    commit_rows(c, acct1, rows, source="import")
+    commit_rows(c, acct1, rows, source=TransactionSource.IMPORT)
     c.commit()
 
-    assert commit_rows(c, acct2, rows, source="import") == (1, 0)
+    assert commit_rows(c, acct2, rows, source=TransactionSource.IMPORT) == (1, 0)
 
 
 def test_commit_rows_dedup_within_batch(tmp_path: Path) -> None:
@@ -181,17 +182,17 @@ def test_commit_rows_dedup_within_batch(tmp_path: Path) -> None:
     acct = _required_int(c.execute("SELECT MIN(id) FROM accounts").fetchone())
 
     rows = [_row("2026-01-01T00:00:00", -100, "A")] * 3
-    assert commit_rows(c, acct, rows, source="import") == (3, 0)
+    assert commit_rows(c, acct, rows, source=TransactionSource.IMPORT) == (3, 0)
 
 
 def test_commit_rows_partial_skip_against_existing(tmp_path: Path) -> None:
     c = _db(tmp_path)
     acct = _required_int(c.execute("SELECT MIN(id) FROM accounts").fetchone())
     row = _row("2026-01-01T00:00:00", -100, "A")
-    commit_rows(c, acct, [row], source="import")
+    commit_rows(c, acct, [row], source=TransactionSource.IMPORT)
     c.commit()
 
-    assert commit_rows(c, acct, [row, row, row], source="import") == (2, 1)
+    assert commit_rows(c, acct, [row, row, row], source=TransactionSource.IMPORT) == (2, 1)
 
 
 def test_snapshot_full_shape(tmp_path: Path) -> None:
