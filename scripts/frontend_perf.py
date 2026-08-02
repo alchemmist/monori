@@ -334,6 +334,15 @@ def format_delta(entry: Entry) -> str:
     return f"{sign}{value} ({percent})"
 
 
+def format_delta_cell(entry: Entry) -> str:
+    delta = format_delta(entry)
+    if entry.delta > 0:
+        return f'<span style="color: #c05640">{delta}</span>'
+    if entry.delta < 0:
+        return f'<span style="color: #2f855a">{delta}</span>'
+    return delta
+
+
 def tier_cell(tier: str) -> str:
     symbols = {"none": "✔", "info": "💬", "significant": "⚠", "critical": "✗"}
     return f"{symbols[tier]} {TIER_LABELS[tier]}"
@@ -360,7 +369,7 @@ def report_table(entries: list[Entry]) -> list[str]:
         lines.append(
             f"| {entry.route_label} | {entry.metric_label} | "
             f"{format_value(entry.base, entry.unit)} | "
-            f"{format_value(entry.current, entry.unit)} | {format_delta(entry)} | "
+            f"{format_value(entry.current, entry.unit)} | {format_delta_cell(entry)} | "
             f"{tier_cell(entry.tier)} |"
         )
     return lines

@@ -163,6 +163,21 @@ class ReportTest(unittest.TestCase):
         self.assertIn("<summary>Full performance report</summary>", body)
         self.assertIn("Budget · LCP", body)
 
+    def test_delta_uses_soft_colors_for_direction_and_black_for_zero(self) -> None:
+        body = render_report(
+            [
+                self.entry("critical", 200, 20),
+                self.entry("none", -200, -20),
+                self.entry("none", 0, 0),
+            ],
+            "critical",
+            comment=False,
+        )
+
+        self.assertIn('<span style="color: #c05640">+200 ms (+20.0%)</span>', body)
+        self.assertIn('<span style="color: #2f855a">-200 ms (-20.0%)</span>', body)
+        self.assertIn("| 0 ms (+0.0%) |", body)
+
     def test_summary_has_collapsed_blocking_standards(self) -> None:
         config: dict[str, JsonValue] = {
             "runs": 1,
