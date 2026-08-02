@@ -26,3 +26,4 @@ web/playwright-report/
 .worktrees/
 .issue197/
 node_modules
+mutation.log
