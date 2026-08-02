@@ -36,6 +36,9 @@ jobs:
         if: github.event_name == 'pull_request' && needs.workflow-graph.result == 'success'
         runs-on: ubuntu-latest
         steps:
+            - uses: actions/checkout@v7
+              with:
+                  persist-credentials: false
             - uses: ./.github/actions/setup-project
             - run: make fmt-check
 
@@ -45,6 +48,9 @@ jobs:
         if: github.event_name == 'pull_request' && needs.fmt-check.result == 'success'
         runs-on: ubuntu-latest
         steps:
+            - uses: actions/checkout@v7
+              with:
+                  persist-credentials: false
             - uses: ./.github/actions/setup-project
             - name: Install external linters
               run: |
@@ -61,6 +67,9 @@ jobs:
         if: github.event_name == 'pull_request' && needs.lint.result == 'success'
         runs-on: ubuntu-latest
         steps:
+            - uses: actions/checkout@v7
+              with:
+                  persist-credentials: false
             - uses: ./.github/actions/setup-project
             - run: make type
 
@@ -70,6 +79,9 @@ jobs:
         if: github.event_name == 'pull_request' && needs.type.result == 'success'
         runs-on: ubuntu-latest
         steps:
+            - uses: actions/checkout@v7
+              with:
+                  persist-credentials: false
             - uses: ./.github/actions/setup-project
             - name: Install semgrep
               run: python -m pip install semgrep
@@ -81,6 +93,9 @@ jobs:
         if: github.event_name == 'pull_request' && needs.analyze.result == 'success'
         runs-on: ubuntu-latest
         steps:
+            - uses: actions/checkout@v7
+              with:
+                  persist-credentials: false
             - uses: ./.github/actions/setup-project
             - run: make t-fast
 
@@ -90,6 +105,9 @@ jobs:
         if: github.event_name == 'pull_request' && needs.test-fast.result == 'success'
         runs-on: ubuntu-latest
         steps:
+            - uses: actions/checkout@v7
+              with:
+                  persist-credentials: false
             - uses: ./.github/actions/setup-project
             - run: make t-medium
 
@@ -99,6 +117,9 @@ jobs:
         if: github.event_name == 'pull_request' && needs.test-medium.result == 'success'
         runs-on: ubuntu-latest
         steps:
+            - uses: actions/checkout@v7
+              with:
+                  persist-credentials: false
             - uses: ./.github/actions/setup-project
             - name: Install Playwright browsers
               run: uv run playwright install --with-deps chromium
@@ -111,6 +132,9 @@ jobs:
         if: github.event_name == 'pull_request' && needs.test-slow.result == 'success'
         runs-on: ubuntu-latest
         steps:
+            - uses: actions/checkout@v7
+              with:
+                  persist-credentials: false
             - uses: ./.github/actions/setup-project
             - run: make build
 
@@ -120,6 +144,9 @@ jobs:
         if: github.event_name == 'pull_request' && needs.build.result == 'success'
         runs-on: ubuntu-latest
         steps:
+            - uses: actions/checkout@v7
+              with:
+                  persist-credentials: false
             - uses: ./.github/actions/setup-project
             - run: make coverage
 
@@ -129,6 +156,9 @@ jobs:
         if: github.event_name == 'pull_request' && needs.coverage.result == 'success'
         runs-on: ubuntu-latest
         steps:
+            - uses: actions/checkout@v7
+              with:
+                  persist-credentials: false
             - uses: ./.github/actions/setup-project
             - run: make audit-deps
 
@@ -138,6 +168,9 @@ jobs:
         if: github.event_name == 'pull_request' && needs.audit-deps.result == 'success'
         runs-on: ubuntu-latest
         steps:
+            - uses: actions/checkout@v7
+              with:
+                  persist-credentials: false
             - uses: ./.github/actions/setup-project
             - run: make audit-deps-py
 
