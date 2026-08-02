@@ -4,6 +4,7 @@ import pathlib
 import sqlite3
 import sys
 from collections.abc import Callable
+from typing import cast
 
 import pytest
 
@@ -30,7 +31,7 @@ def _row() -> sqlite3.Row:
         " 'crypto' AS invalid_enum"
     ).fetchone()
     assert row is not None
-    return row
+    return cast(sqlite3.Row, row)
 
 
 def test_row_adapters_read_valid_values() -> None:
