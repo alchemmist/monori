@@ -109,7 +109,7 @@ describe("Root", () => {
         window.history.replaceState({}, "", "/somewhere/over-the-ledger");
         renderUI(<Root />);
         expect(await screen.findByRole("heading", { name: "404" })).toBeInTheDocument();
-        expect(screen.getByText("lost in the ledger")).toBeInTheDocument();
+        expect(screen.getByText("This page isn't in your ledger.")).toBeInTheDocument();
         expect(screen.getByRole("link", { name: "Go to Budget" })).toHaveAttribute(
             "href",
             "/budget",
