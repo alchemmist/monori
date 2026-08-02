@@ -261,9 +261,15 @@ def classify(base: float, current: float, metric: dict[str, JsonValue]) -> tuple
     if delta_percent <= threshold(metric, "noisePercent") or delta < absolute_noise:
         return "none", "within the noise floor"
     if policy != "ttfb" and delta_percent > threshold(metric, "criticalPercent"):
-        return "critical", f"more than {threshold(metric, 'criticalPercent'):.0f}% slower"
+        return (
+            "critical",
+            f"more than {threshold(metric, 'criticalPercent'):.0f}% slower",
+        )
     if policy != "ttfb" and delta_percent > threshold(metric, "significantPercent"):
-        return "significant", f"more than {threshold(metric, 'significantPercent'):.0f}% slower"
+        return (
+            "significant",
+            f"more than {threshold(metric, 'significantPercent'):.0f}% slower",
+        )
     return "info", "above the noise floor"
 
 
@@ -360,7 +366,67 @@ def report_table(entries: list[Entry]) -> list[str]:
     return lines
 
 
-def render_report(entries: list[Entry], verdict: str, *, comment: bool) -> str:
+def render_standards(config: dict[str, JsonValue]) -> list[str]:
+    _, _, metrics = config_parts(config)
+    lines = [
+        "<details>",
+        "<summary>Blocking standards</summary>",
+        "",
+        "The CI fails only for a Critical verdict or a measurement failure. "
+        "None, Info, and Significant verdicts remain green.",
+        "",
+    ]
+    for metric_id, metric in metrics.items():
+        label = json_string(metric.get("label"), f"{metric_id} label")
+        noise = format_value(
+            json_number(metric.get("noiseAbsolute"), "noiseAbsolute"),
+            json_string(metric.get("unit"), "unit"),
+        )
+        policy = metric.get("policy")
+        if policy == "ttfb":
+            critical_percent = json_number(metric.get("criticalPercent"), "criticalPercent")
+            critical_absolute = format_value(
+                json_number(metric.get("criticalAbsolute"), "criticalAbsolute"),
+                json_string(metric.get("unit"), "unit"),
+            )
+            poor = format_value(
+                json_number(metric.get("poor"), "poor"),
+                json_string(metric.get("unit"), "unit"),
+            )
+            lines.append(
+                f"- **{label}:** more than {critical_percent:.0f}% slower and at least "
+                f"+{critical_absolute}, or enters the poor band (≥ {poor}) with at least +{noise}."
+            )
+            continue
+
+        critical_percent = json_number(metric.get("criticalPercent"), "criticalPercent")
+        line = f"- **{label}:** more than {critical_percent:.0f}% slower and at least +{noise}"
+        if metric.get("poor") is not None:
+            poor = format_value(
+                json_number(metric.get("poor"), "poor"),
+                json_string(metric.get("unit"), "unit"),
+            )
+            line += f", or crosses into the poor band (≥ {poor}) after clearing +{noise}"
+        lines.append(line + ".")
+
+    lines.extend(
+        [
+            "- **Measurement failure:** the collector or comparator exits with status 2 and the CI "
+            "fails; this is reported separately from a product regression.",
+            "",
+            "</details>",
+        ]
+    )
+    return lines
+
+
+def render_report(
+    entries: list[Entry],
+    verdict: str,
+    *,
+    comment: bool,
+    config: dict[str, JsonValue] | None = None,
+) -> str:
     emoji = TIER_EMOJI[verdict]
     label = TIER_LABELS[verdict]
     if comment:
@@ -417,8 +483,13 @@ def render_report(entries: list[Entry], verdict: str, *, comment: bool) -> str:
         run_url = os.environ.get("GITHUB_RUN_URL")
         if run_url:
             lines.extend(
-                ["", f"Raw Lighthouse and navigation reports: [workflow artifacts]({run_url})."]
+                [
+                    "",
+                    f"Raw Lighthouse and navigation reports: [workflow artifacts]({run_url}).",
+                ]
             )
+        if config is not None:
+            lines.extend(["", *render_standards(config)])
     return "\n".join(lines).rstrip() + "\n"
 
 
@@ -433,6 +504,7 @@ def write_outputs(
     verdict: str,
     pr_number: int,
     head_sha: str,
+    config: dict[str, JsonValue],
 ) -> None:
     output.mkdir(parents=True, exist_ok=True)
     report: dict[str, JsonValue] = {
@@ -444,7 +516,9 @@ def write_outputs(
         "entries": [asdict(entry) for entry in entries],
     }
     write_json(output / "report.json", report)
-    (output / "summary.md").write_text(render_report(entries, verdict, comment=False))
+    (output / "summary.md").write_text(
+        render_report(entries, verdict, comment=False, config=config)
+    )
     (output / "comment.md").write_text(
         "" if verdict == "none" else render_report(entries, verdict, comment=True)
     )
@@ -516,7 +590,7 @@ def main() -> int:
     current = load_measurements(args.pr_dir, config)
     entries = compare_measurements(base, current, config)
     verdict = worst_tier(entries)
-    write_outputs(args.output, entries, verdict, args.pr_number, args.head_sha)
+    write_outputs(args.output, entries, verdict, args.pr_number, args.head_sha, config)
     return 1 if verdict == "critical" else 0
 
 

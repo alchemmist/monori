@@ -58,7 +58,8 @@ class ClassificationTest(unittest.TestCase):
         self.assertEqual(classify(2490, 2510, config)[0], "none")
         self.assertEqual(classify(3990, 4010, config)[0], "none")
         self.assertEqual(
-            classify(2400, 2600, config), ("significant", "crossed out of the good band")
+            classify(2400, 2600, config),
+            ("significant", "crossed out of the good band"),
         )
         self.assertEqual(classify(3900, 4100, config), ("critical", "crossed into the poor band"))
 
@@ -161,6 +162,21 @@ class ReportTest(unittest.TestCase):
         self.assertIn("> [!WARNING]", body)
         self.assertIn("<summary>Full performance report</summary>", body)
         self.assertIn("Budget · LCP", body)
+
+    def test_summary_has_collapsed_blocking_standards(self) -> None:
+        config: dict[str, JsonValue] = {
+            "runs": 1,
+            "lighthouseRoutes": [],
+            "navigationScenarios": [],
+            "metrics": {"navigation": metric()},
+        }
+
+        body = render_report([self.entry("none", 0, 0)], "none", comment=False, config=config)
+
+        self.assertIn("<summary>Blocking standards</summary>", body)
+        self.assertIn("more than 25% slower and at least +100 ms", body)
+        self.assertIn("Measurement failure", body)
+        self.assertEqual(body.count("<details>"), 1)
 
     def test_comparison_rejects_different_measurement_sets(self) -> None:
         extra = Measurement("extra", "Extra", "navigation", "Navigation", "ms", 100)
