@@ -62,7 +62,7 @@ def test_export_transactions_sheet(api: Api, client: TestClient) -> None:
     _setup(api, client)
     ws = _export(client)["Transactions"]
     headers = [c.value for c in ws[1]]
-    assert headers[0] == "Operation date"
+    assert headers[0] == "Дата операции"
     assert headers[-3:] == ["Monori Category", "Account", "Comment"]
     row = [c.value for c in ws[2]]
     assert row[0] == "05.01.2026 10:00:00"
@@ -316,7 +316,7 @@ def test_export_empty_user(client: TestClient) -> None:
         "Category",
         "Keywords",
     ]
-    assert wb["Transactions"].cell(row=1, column=1).value == "Operation date"
+    assert wb["Transactions"].cell(row=1, column=1).value == "Дата операции"
     assert [c.value for c in wb["DashData"][1]] == ["Month", "Income", "Expense", "Ratio", "CumNet"]
 
 

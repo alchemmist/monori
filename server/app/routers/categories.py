@@ -46,8 +46,10 @@ class CategoryPatch:
     @classmethod
     def record_presence(cls, values: dict[str, JsonValue]) -> dict[str, JsonValue]:
         """Handle record presence."""
-        values["goalTargetProvided"] = "goalTarget" in values
-        values["goalTargetDateProvided"] = "goalTargetDate" in values
+        values["goal_target_provided"] = "goalTarget" in values or "goal_target" in values
+        values["goal_target_date_provided"] = (
+            "goalTargetDate" in values or "goal_target_date" in values
+        )
         return values
 
 

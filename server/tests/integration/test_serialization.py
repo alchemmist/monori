@@ -34,29 +34,29 @@ def test_snapshot_serialization_contract(api: Api, client: TestClient) -> None:
             "type": "cash",
             "icon": "wallet",
             "color": "#5b6472",
-            "iconImage": None,
+            "icon_image": None,
             "currency": "RUB",
             "sort": 1,
             "archived": False,
-            "openingBalance": 0,
-            "openingDate": None,
-            "connectionId": None,
-            "bankRef": "",
-            "cardTails": [],
+            "opening_balance": 0,
+            "opening_date": None,
+            "connection_id": None,
+            "bank_ref": "",
+            "card_tails": [],
         },
     ]
     assert serialized["groups"] == [{"id": g, "name": "Expenses", "sort": 1, "kind": "expense"}]
     assert serialized["categories"] == [
         {
             "id": cat,
-            "groupId": g,
+            "group_id": g,
             "name": "Food",
             "keywords": "lenta|okey",
             "sort": 1,
             "archived": True,
-            "goalTarget": None,
-            "goalStatus": None,
-            "goalTargetDate": None,
+            "goal_target": None,
+            "goal_status": None,
+            "goal_target_date": None,
         },
     ]
     assert serialized["transactions"] == [
@@ -65,18 +65,18 @@ def test_snapshot_serialization_contract(api: Api, client: TestClient) -> None:
             "date": "2026-01-05T10:00:00",
             "amount": -12345,
             "description": "Lenta",
-            "bankCategory": "Super",
+            "bank_category": "Super",
             "mcc": "5411",
-            "categoryId": cat,
-            "accountId": 1,
-            "transferId": None,
+            "category_id": cat,
+            "account_id": 1,
+            "transfer_id": None,
             "comment": "note",
             "source": "manual",
             "hidden": False,
             "splits": [],
         },
     ]
-    assert serialized["budgets"] == [{"categoryId": cat, "year": 2026, "month": 3, "amount": 5000}]
+    assert serialized["budgets"] == [{"category_id": cat, "year": 2026, "month": 3, "amount": 5000}]
 
 
 def test_snapshot_ordering_is_deterministic(api: Api) -> None:

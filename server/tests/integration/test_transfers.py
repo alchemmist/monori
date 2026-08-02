@@ -106,7 +106,7 @@ def test_link_merges_an_existing_pair_without_touching_the_rows(
 
     r = client.post("/api/transfers/link", json={"outTxId": out_id, "inTxId": in_id})
     assert r.status_code == 200, r.text
-    transfer_id = r.json()["transferId"]
+    transfer_id = r.json()["transfer_id"]
 
     assert {transaction.id for transaction in legs(api, transfer_id)} == {out_id, in_id}
 
@@ -131,7 +131,7 @@ def test_link_moves_categories_aside_and_split_gives_them_back(
     transfer_id = client.post(
         "/api/transfers/link",
         json={"outTxId": out_id, "inTxId": in_id},
-    ).json()["transferId"]
+    ).json()["transfer_id"]
     assert api.tx_by(out_id).category_id is None
 
     assert client.delete(f"/api/transfers/{transfer_id}").status_code == 200
@@ -161,7 +161,7 @@ def test_split_frees_the_legs_to_be_linked_again(api: Api, client: TestClient) -
     b = api.account("Vault")
     out_id, in_id = pair(api, a, b)
     first = client.post("/api/transfers/link", json={"outTxId": out_id, "inTxId": in_id}).json()
-    client.delete(f"/api/transfers/{first['transferId']}")
+    client.delete(f"/api/transfers/{first['transfer_id']}")
     second = client.post("/api/transfers/link", json={"outTxId": out_id, "inTxId": in_id})
     assert second.status_code == 200
 
@@ -216,7 +216,7 @@ def test_detect_merges_a_same_day_pair(api: Api, client: TestClient) -> None:
 
     result = client.post("/api/transfers/detect").json()
     assert result["merged"]
-    assert result["merged"][0]["outTxId"] == out_id
+    assert result["merged"][0]["out_tx_id"] == out_id
     assert api.tx_by(in_id).transfer_id == result["merged"][0]["id"]
     assert next(iter(api.snapshot().transfers)).origin == "matched"
 
@@ -231,7 +231,7 @@ def test_detect_leaves_a_distant_pair_as_a_suggestion(api: Api, client: TestClie
     assert result["suggested"] == 1
 
     rows = client.get("/api/transfers/suggestions").json()
-    assert [(p["outTxId"], p["inTxId"]) for p in rows["rows"]] == [(out_id, in_id)]
+    assert [(p["out_tx_id"], p["in_tx_id"]) for p in rows["rows"]] == [(out_id, in_id)]
     assert {t["id"] for t in rows["transactions"]} == {out_id, in_id}
 
 
@@ -276,7 +276,7 @@ def test_detect_leaves_a_disagreeing_same_day_pair_as_a_suggestion(
     assert result["suggested"] == 1
 
     rows = client.get("/api/transfers/suggestions").json()
-    assert [(p["outTxId"], p["inTxId"]) for p in rows["rows"]] == [(out_id, in_id)]
+    assert [(p["out_tx_id"], p["in_tx_id"]) for p in rows["rows"]] == [(out_id, in_id)]
     assert rows["rows"][0]["mismatch"] is True
 
 
@@ -415,8 +415,8 @@ def test_transfer_created_at_is_a_full_iso_timestamp(api: Api, client: TestClien
     b = api.account("Vault")
     api.transfer(a, b, 5000)
     row = client.get("/api/transfers").json()["rows"][0]
-    assert "createdAt" in row
-    assert re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}", row["createdAt"])
+    assert "created_at" in row
+    assert re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}", row["created_at"])
 
 
 def test_detection_never_pairs_a_reconcile_adjustment(api: Api, client: TestClient) -> None:

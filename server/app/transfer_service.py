@@ -12,7 +12,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from pydantic import ConfigDict, Field
+from pydantic import ConfigDict
 from pydantic.dataclasses import dataclass as pydantic_dataclass
 
 from .db import begin_write
@@ -41,9 +41,9 @@ class TransferResponse:
     id: str
     origin: str
     note: str
-    out_tx_id: int = Field(serialization_alias="outTxId")
-    in_tx_id: int = Field(serialization_alias="inTxId")
-    created_at: str = Field(serialization_alias="createdAt")
+    out_tx_id: int
+    in_tx_id: int
+    created_at: str
 
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid", populate_by_name=True))
@@ -55,8 +55,8 @@ class MergedTransfer:
     days: int
     hint: bool
     mismatch: bool
-    out_tx_id: int = Field(serialization_alias="outTxId")
-    in_tx_id: int = Field(serialization_alias="inTxId")
+    out_tx_id: int
+    in_tx_id: int
 
 
 def serialize_transfer(record: TransferRecord) -> TransferResponse:

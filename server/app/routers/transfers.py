@@ -77,15 +77,15 @@ class SuggestionResponse:
     days: int
     hint: bool
     mismatch: bool
-    out_tx_id: int = Field(serialization_alias="outTxId")
-    in_tx_id: int = Field(serialization_alias="inTxId")
+    out_tx_id: int
+    in_tx_id: int
 
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid", populate_by_name=True))
 class TransferIdResponse:
     """Represent TransferIdResponse."""
 
-    transfer_id: str = Field(serialization_alias="transferId")
+    transfer_id: str
 
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid"))
