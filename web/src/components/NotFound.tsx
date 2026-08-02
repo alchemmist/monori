@@ -42,7 +42,9 @@ export default function NotFound() {
                             rotate: scrap.rotate,
                         }}
                     >
-                        <b>MONORI</b>
+                        <b className="not-found__scrap-brand">
+                            もの<span>り</span>
+                        </b>
                         <i />
                         404
                         <i />
@@ -58,8 +60,10 @@ export default function NotFound() {
                 </div>
 
                 <p className="not-found__receipt-date">PAGE LOOKUP · FINAL RECEIPT</p>
-                <h1 id="not-found-title" className="not-found__title">
-                    404
+                <h1 id="not-found-title" className="not-found__title" aria-label="404">
+                    <span>4</span>
+                    <span>0</span>
+                    <span>4</span>
                 </h1>
                 <p className="not-found__message">This page isn't in your ledger.</p>
 

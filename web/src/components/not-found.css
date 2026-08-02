@@ -186,13 +186,15 @@
 }
 
 .not-found__title {
+    display: flex;
+    align-items: baseline;
+    justify-content: center;
+    gap: 0.09em;
     margin: 44px 0 25px;
     font-size: clamp(105px, 14vw, 174px);
     font-weight: 800;
-    letter-spacing: -0.15em;
     line-height: 0.66;
     text-align: center;
-    transform: translateX(-0.04em);
 }
 
 .not-found__message {
@@ -329,6 +331,22 @@
     padding: 13px 9px;
     background: var(--receipt-paper);
     box-shadow: 0 12px 30px rgb(0 0 0 / 10%);
+    clip-path: polygon(
+        0 0,
+        100% 0,
+        100% 94%,
+        91% 100%,
+        82% 94%,
+        73% 100%,
+        64% 94%,
+        55% 100%,
+        46% 94%,
+        37% 100%,
+        28% 94%,
+        19% 100%,
+        10% 94%,
+        0 100%
+    );
     color: var(--receipt-dim);
     font-family: var(--g-font-family-monospace);
     font-size: 8px;
@@ -337,10 +355,18 @@
     animation: not-found-scrap-fall linear infinite;
 }
 
-.not-found__scrap b {
+.not-found__scrap-brand {
     display: block;
     color: var(--receipt-ink);
-    font-size: 8px;
+    font-family: "M PLUS Rounded 1c", sans-serif;
+    font-size: 13px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    line-height: 1;
+}
+
+.not-found__scrap-brand span {
+    color: var(--m-accent);
 }
 
 .not-found__scrap i {
