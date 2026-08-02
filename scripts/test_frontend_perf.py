@@ -1,4 +1,5 @@
 import json
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -12,9 +13,11 @@ from scripts.frontend_perf import (
     compare_measurements,
     json_object,
     load_measurements,
+    main,
     median,
     render_report,
     worst_tier,
+    write_error,
 )
 
 
@@ -163,6 +166,93 @@ class ReportTest(unittest.TestCase):
         extra = Measurement("extra", "Extra", "navigation", "Navigation", "ms", 100)
         with self.assertRaisesRegex(RuntimeError, "differ from main"):
             compare_measurements({}, {("extra", "navigation"): extra}, {})
+
+
+class CommandTest(unittest.TestCase):
+    def test_error_command_writes_an_error_report(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary)
+            old_argv = sys.argv
+            try:
+                sys.argv = [
+                    "frontend_perf.py",
+                    "error",
+                    "--output",
+                    str(output),
+                    "--message",
+                    "collector failed",
+                ]
+                self.assertEqual(main(), 0)
+            finally:
+                sys.argv = old_argv
+
+            report = json.loads((output / "report.json").read_text())
+            comment = (output / "comment.md").read_text()
+
+        self.assertEqual(report["verdict"], "error")
+        self.assertTrue(report["commentRequired"])
+        self.assertIn(COMMENT_MARKER, comment)
+
+    def test_error_report_uses_a_safe_fence_for_backticks(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary)
+            write_error(output, "collector failed with ``` in the log", 301, "sha")
+
+            summary = (output / "summary.md").read_text()
+            comment = (output / "comment.md").read_text()
+
+        self.assertIn("````text", summary)
+        self.assertIn("collector failed with ``` in the log", summary)
+        self.assertIn(COMMENT_MARKER, comment)
+
+    def test_main_returns_one_only_for_a_critical_verdict(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            config = {
+                "runs": 1,
+                "lighthouseRoutes": [{"id": "login", "label": "Login", "path": "/login"}],
+                "navigationScenarios": [{"id": "nav", "label": "Navigation"}],
+                "metrics": {"navigation": metric()},
+            }
+            for name in ("base", "pr"):
+                directory = root / name
+                (directory / "lighthouse").mkdir(parents=True)
+                (directory / "navigation.json").write_text(
+                    json.dumps(
+                        {
+                            "scenarios": [
+                                {
+                                    "id": "nav",
+                                    "label": "Navigation",
+                                    "valuesMs": [1000 if name == "base" else 1300],
+                                }
+                            ]
+                        }
+                    )
+                )
+            config_path = root / "config.json"
+            config_path.write_text(json.dumps(config))
+            output = root / "output"
+            old_argv = sys.argv
+            try:
+                sys.argv = [
+                    "frontend_perf.py",
+                    "compare",
+                    "--base-dir",
+                    str(root / "base"),
+                    "--pr-dir",
+                    str(root / "pr"),
+                    "--config",
+                    str(config_path),
+                    "--output",
+                    str(output),
+                ]
+                self.assertEqual(main(), 1)
+                config["metrics"] = {"navigation": {**metric(), "criticalPercent": 40}}
+                config_path.write_text(json.dumps(config))
+                self.assertEqual(main(), 0)
+            finally:
+                sys.argv = old_argv
 
 
 if __name__ == "__main__":

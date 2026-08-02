@@ -3,13 +3,14 @@
 import argparse
 import json
 import os
+import re
 import statistics
 import sys
 import urllib.parse
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
-type JsonValue = None | bool | int | float | str | list[JsonValue] | dict[str, JsonValue]
+type JsonValue = bool | int | float | str | list[JsonValue] | dict[str, JsonValue] | None
 type MeasurementKey = tuple[str, str]
 
 SCHEMA_VERSION = 1
@@ -242,21 +243,27 @@ def classify(base: float, current: float, metric: dict[str, JsonValue]) -> tuple
     delta_percent = float("inf") if base <= 0 else delta / base * 100
     policy = metric.get("policy")
     if policy == "ttfb":
-        if delta_percent > threshold(metric, "criticalPercent") and delta >= threshold(
-            metric, "criticalAbsolute"
-        ):
-            return "critical", "TTFB more than doubled with at least 300 ms growth"
-        if delta_percent > threshold(metric, "significantPercent") and delta >= threshold(
-            metric, "significantAbsolute"
-        ):
-            return "significant", "large TTFB increase"
+        critical_percent = threshold(metric, "criticalPercent")
+        critical_absolute = threshold(metric, "criticalAbsolute")
+        significant_percent = threshold(metric, "significantPercent")
+        significant_absolute = threshold(metric, "significantAbsolute")
+        if delta_percent > critical_percent and delta >= critical_absolute:
+            return "critical", (
+                f"TTFB grew by more than {critical_percent:.0f}% "
+                f"and at least {critical_absolute:.0f} ms"
+            )
+        if delta_percent > significant_percent and delta >= significant_absolute:
+            return "significant", (
+                f"TTFB grew by more than {significant_percent:.0f}% "
+                f"and at least {significant_absolute:.0f} ms"
+            )
 
     if delta_percent <= threshold(metric, "noisePercent") or delta < absolute_noise:
         return "none", "within the noise floor"
     if policy != "ttfb" and delta_percent > threshold(metric, "criticalPercent"):
-        return "critical", "more than 25% slower"
+        return "critical", f"more than {threshold(metric, 'criticalPercent'):.0f}% slower"
     if policy != "ttfb" and delta_percent > threshold(metric, "significantPercent"):
-        return "significant", "more than 10% slower"
+        return "significant", f"more than {threshold(metric, 'significantPercent'):.0f}% slower"
     return "info", "above the noise floor"
 
 
@@ -445,12 +452,17 @@ def write_outputs(
 
 def write_error(output: Path, message: str, pr_number: int, head_sha: str) -> None:
     output.mkdir(parents=True, exist_ok=True)
+    longest_backtick_run = max(
+        (len(run) for run in re.findall(r"`+", message)),
+        default=0,
+    )
+    fence = "`" * max(3, longest_backtick_run + 1)
     summary = (
         "## Frontend performance\n\n"
         "### ❌ Measurement failure\n\n"
         "The performance comparison could not finish. This is an infrastructure or "
         "measurement failure, not a detected product regression.\n\n"
-        f"```text\n{message}\n```\n"
+        f"{fence}text\n{message}\n{fence}\n"
     )
     comment = (
         f"{COMMENT_MARKER}\n"
@@ -511,6 +523,6 @@ def main() -> int:
 if __name__ == "__main__":
     try:
         raise SystemExit(main())
-    except RuntimeError as error:
+    except (OSError, ValueError, LookupError, TypeError, RuntimeError) as error:
         print(f"frontend performance: {error}", file=sys.stderr)
         raise SystemExit(2) from error
