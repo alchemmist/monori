@@ -90,6 +90,7 @@ const PAGE_ENTRIES: Array<[Page, string]> = [
 
 function pageFromPath(pathname: string): Page | null {
     const path = pathname.startsWith("/demo") ? pathname.slice("/demo".length) || "/" : pathname;
+    // Stryker disable next-line ConditionalExpression: searching PAGE_ENTRIES for "/" also returns null
     if (path === "/") return null;
     const entry = PAGE_ENTRIES.find(([, route]) => route === path);
     return entry?.[0] ?? null;

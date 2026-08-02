@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { act } from "@testing-library/react";
 import Root from "./Root.jsx";
 import { useStore } from "./store.js";
 import { renderUI, screen, waitFor, resetStore } from "./test/render.jsx";
@@ -122,24 +123,35 @@ describe("Root", () => {
     });
 
     it("shows the login page after confirming there is no active session", async () => {
-        useStore.setState({ authChecked: true, user: null });
+        const checkAuth = vi.fn();
+        useStore.setState({ authChecked: true, user: null, checkAuth });
         window.history.replaceState({}, "", "/login");
 
         renderUI(<Root />);
 
         expect(await screen.findByText("LoginPage")).toBeInTheDocument();
+        expect(checkAuth).not.toHaveBeenCalled();
     });
 
     it("checks for an existing session before showing the login page", async () => {
-        const checkAuth = vi.fn(async () => {
-            useStore.setState({ authChecked: true, user: null });
-        });
+        let release = () => {};
+        const checkAuth = vi.fn(
+            () =>
+                new Promise<void>((resolve) => {
+                    release = () => {
+                        useStore.setState({ authChecked: true, user: null });
+                        resolve();
+                    };
+                }),
+        );
         useStore.setState({ authChecked: false, checkAuth });
         window.history.replaceState({}, "", "/login");
 
         renderUI(<Root />);
 
         await waitFor(() => expect(checkAuth).toHaveBeenCalledOnce());
+        expect(screen.queryByText("LoginPage")).not.toBeInTheDocument();
+        await act(async () => release());
         expect(await screen.findByText("LoginPage")).toBeInTheDocument();
     });
 

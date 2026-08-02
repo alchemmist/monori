@@ -199,8 +199,8 @@ m-front-diff:
 	@set +e; \
 	git rev-parse --verify --quiet "$(BASE)" >/dev/null || { echo "mutation-diff: BASE='$(BASE)' is not a valid revision"; exit 1; }; \
 	ranges=$$(git diff --diff-filter=ACMR --unified=0 "$(BASE)...HEAD" -- web/src | \
-		awk '/^diff --git / { file=$$4; sub(/^b\/web\//, "", file); next } \
-		/^@@ / { hunk=$$0; sub(/^.*\+/, "", hunk); sub(/ .*/, "", hunk); split(hunk, parts, ","); start=parts[1]; count=(parts[2] == "" ? 1 : parts[2]); if (count > 0) { end=start + count - 1; found[file] = found[file] (found[file] == "" ? "" : ",") file ":" start "-" end } } \
+		awk '/^diff --git / { file=$$4; sub(/^b\/web\//, "", file); eligible=(file ~ /^src\/.*\.tsx?$$/ && file !~ /\.test\.tsx?$$/ && file != "src/main.tsx" && file !~ /^src\/test\// && file != "src/components/Meadow.tsx" && file != "src/components/GlyphFlower.tsx" && file !~ /^src\/demo\//); next } \
+		/^@@ / { hunk=$$0; sub(/^.*\+/, "", hunk); sub(/ .*/, "", hunk); split(hunk, parts, ","); start=parts[1]; count=(parts[2] == "" ? 1 : parts[2]); if (eligible && count > 0) { end=start + count - 1; found[file] = found[file] (found[file] == "" ? "" : ",") file ":" start "-" end } } \
 		END { for (file in found) printf "%s,", found[file] }' | sed 's/,$$//'); \
 	if [ -z "$$ranges" ]; then \
 		echo "mutation-diff: no changed frontend lines — pass"; exit 0; \

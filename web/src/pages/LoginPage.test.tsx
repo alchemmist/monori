@@ -360,4 +360,23 @@ describe("LoginPage", () => {
             expect(await screen.findByTestId("current-location")).toHaveTextContent("/budget");
         },
     );
+
+    it.each([
+        ["a primitive router state", "invalid"],
+        ["a string destination", { from: "/transactions" }],
+        ["a missing pathname", { from: { search: "", hash: "" } }],
+        ["a non-string pathname", { from: { pathname: 1, search: "", hash: "" } }],
+        ["a non-string search", { from: { pathname: "/budget", search: 1, hash: "" } }],
+        ["a non-string hash", { from: { pathname: "/budget", search: "", hash: 1 } }],
+    ])("returns to Budget for %s", async (_description, state) => {
+        const { useStore } = await import("../store.js");
+        vi.spyOn(useStore.getState(), "login").mockResolvedValueOnce(undefined);
+        const { user } = renderLogin([{ pathname: "/login", state }]);
+
+        await user.type(screen.getByPlaceholderText("Email"), "user@test.com");
+        await user.type(screen.getByPlaceholderText("Password"), "password");
+        await user.click(screen.getByRole("button", { name: "Sign in" }));
+
+        expect(await screen.findByTestId("current-location")).toHaveTextContent(/^\/budget$/);
+    });
 });
