@@ -68,14 +68,17 @@ def decode_json(data: bytes | str) -> JsonValue:
     return cast(JsonValue, json.loads(data))
 
 
-def parse_command(body: str) -> tuple[str, str | None] | None:
+def parse_command(body: str) -> tuple[str, list[str] | None] | None:
     match = COMMAND_RE.fullmatch(body)
     if not match:
         return None
     name, argument = match.groups()
     if name == "ignore-all":
         return (name, None) if argument is None else None
-    return (name, argument) if argument else None
+    if not argument:
+        return None
+    arguments = [item.strip() for item in argument.split(",")]
+    return (name, arguments) if all(arguments) else None
 
 
 @dataclass(frozen=True)
@@ -285,7 +288,7 @@ def sync_approvals(
     github: GitHubAPI,
     number: int,
     findings: list[Finding],
-    command: tuple[str, str | None] | None,
+    command: tuple[str, list[str] | None] | None,
     author: str | None,
 ) -> tuple[set[str], bool]:
     labels = github.paged(f"/issues/{number}/labels")
@@ -298,20 +301,21 @@ def sync_approvals(
     admin = command is not None and author is not None and is_admin(github, author)
     if not command or not admin:
         return approved, admin
-    name, argument = command
+    name, arguments = command
+    arguments = arguments or []
     selected = (
         finding_ids
         if name == "ignore-all"
         else {
             finding.finding_id
             for finding in findings
-            if name == "ignore-file" and finding.path == argument
+            if name == "ignore-file" and finding.path in arguments
         }
     )
-    if (name == "remove-ignore" and argument) or (
-        name == "ignore-suppression" and argument in finding_ids
-    ):
-        selected = {argument}
+    if name == "remove-ignore" and arguments:
+        selected = set(arguments)
+    elif name == "ignore-suppression":
+        selected = set(arguments) & finding_ids
     for finding_id in selected:
         label_name = finding_label(finding_id)
         if name == "remove-ignore":
@@ -358,11 +362,12 @@ def summary_body(findings: list[Finding], approved: set[str]) -> str:
             "",
             "Post exactly one command as a new pull-request comment:",
             "",
-            "- `/ignore-suppression <finding-id>`",
-            "- `/ignore-file path/to/file`",
+            "- `/ignore-suppression <finding-id>[,<finding-id>...]`",
+            "- `/ignore-file path/to/file[,path/to/file...]`",
             "- `/ignore-all`",
-            "- `/remove-ignore <finding-id>`",
+            "- `/remove-ignore <finding-id>[,<finding-id>...]`",
             "",
+            "Finding IDs and file paths may be comma-separated.",
             "Approvals persist while the finding fingerprint stays unchanged.",
             "</details>",
         ]

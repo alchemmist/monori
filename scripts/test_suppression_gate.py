@@ -69,7 +69,7 @@ value = 2
             github,
             334,
             [finding],
-            ("ignore-suppression", "finding-1"),
+            ("ignore-suppression", ["finding-1"]),
             "admin",
         )
 
@@ -122,15 +122,27 @@ value = 2
     def test_commands_are_exact(self) -> None:
         self.assertEqual(
             parse_command("/ignore-suppression abc123"),
-            ("ignore-suppression", "abc123"),
+            ("ignore-suppression", ["abc123"]),
         )
         self.assertEqual(
             parse_command("/ignore-file server/app.py"),
-            ("ignore-file", "server/app.py"),
+            ("ignore-file", ["server/app.py"]),
+        )
+        self.assertEqual(
+            parse_command("/ignore-suppression abc123,def456"),
+            ("ignore-suppression", ["abc123", "def456"]),
+        )
+        self.assertEqual(
+            parse_command("/ignore-file server/app.py,web/eslint.config.mjs"),
+            ("ignore-file", ["server/app.py", "web/eslint.config.mjs"]),
         )
         self.assertEqual(parse_command("/ignore-all"), ("ignore-all", None))
-        self.assertEqual(parse_command("/remove-ignore abc123"), ("remove-ignore", "abc123"))
+        self.assertEqual(
+            parse_command("/remove-ignore abc123,def456"),
+            ("remove-ignore", ["abc123", "def456"]),
+        )
         self.assertIsNone(parse_command("/ignore-all extra"))
+        self.assertIsNone(parse_command("/ignore-suppression abc123,,def456"))
 
     def test_summary_has_collapsed_admin_commands_and_no_comment_marker(self) -> None:
         finding = scan_file("example.py", "value = 1  # noqa\n", {1})[0]

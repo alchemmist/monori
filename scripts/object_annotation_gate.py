@@ -59,14 +59,17 @@ def optional_string(value: JsonValue) -> str | None:
     return value if isinstance(value, str) else None
 
 
-def parse_command(body: str) -> tuple[str, str | None] | None:
+def parse_command(body: str) -> tuple[str, list[str] | None] | None:
     match = COMMAND_RE.fullmatch(body)
     if not match:
         return None
     name, argument = match.groups()
     if name == "ignore-all":
         return (name, None) if argument is None else None
-    return (name, argument) if argument else None
+    if not argument:
+        return None
+    arguments = [item.strip() for item in argument.split(",")]
+    return (name, arguments) if all(arguments) else None
 
 
 @dataclass(frozen=True)
@@ -294,10 +297,14 @@ def comment_body(findings: list[Finding], approved: set[str], pr_url: str) -> st
             "",
             "| Command | Purpose |",
             "| --- | --- |",
-            "| `/ignore-object <finding-id>` | Approve one finding. |",
-            "| `/ignore-file path/to/file.py` | Approve all findings in a file. |",
+            "| `/ignore-object <finding-id>[,<finding-id>...]` | Approve one or more findings. |",
+            (
+                "| `/ignore-file path/to/file.py[,path/to/file.py...]` | "
+                "Approve findings in one or more "
+                "files. |"
+            ),
             "| `/ignore-all` | Approve all findings in the pull request. |",
-            "| `/remove-ignore <finding-id>` | Remove an approval. |",
+            "| `/remove-ignore <finding-id>[,<finding-id>...]` | Remove one or more approvals. |",
             "",
             "</details>",
         ]
@@ -390,7 +397,7 @@ def sync_approvals(
     github: GitHubAPI,
     number: int,
     findings: list[Finding],
-    command: tuple[str, str | None] | None,
+    command: tuple[str, list[str] | None] | None,
     author: str | None,
 ) -> tuple[set[str], bool, bool]:
     labels = github.paged(f"/issues/{number}/labels")
@@ -408,20 +415,21 @@ def sync_approvals(
     state_changed = False
     if not command or not admin:
         return approved, admin, state_changed
-    name, argument = command
+    name, arguments = command
+    arguments = arguments or []
     selected = (
         finding_ids
         if name == "ignore-all"
         else {
             finding.finding_id
             for finding in findings
-            if name == "ignore-file" and finding.path == argument
+            if name == "ignore-file" and finding.path in arguments
         }
     )
-    if (name == "remove-ignore" and argument) or (
-        name == "ignore-object" and argument in finding_ids
-    ):
-        selected = {argument}
+    if name == "remove-ignore" and arguments:
+        selected = set(arguments)
+    elif name == "ignore-object":
+        selected = set(arguments) & finding_ids
     for finding_id in selected:
         label_name = finding_label(finding_id)
         if name == "remove-ignore":

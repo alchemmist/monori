@@ -66,7 +66,8 @@ one of `/ignore-object <finding-id>`, `/ignore-file path/to/file.py`, or
 so moving the same suppression to another line preserves the approval; changing
 the suppressed code or directive creates a new finding that requires review.
 The gate adds a failure label to PRs with active findings and removes it when
-all findings are fixed or approved.
+all findings are fixed or approved. Finding IDs and file paths in the commands
+may be comma-separated.
 
 ### Dead-code analysis
 
