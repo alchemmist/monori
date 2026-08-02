@@ -4,6 +4,7 @@ HAVE_PODMAN_COMPOSE = $(shell podman compose version >/dev/null 2>&1 && echo 1)
 COMPOSE ?= $(if $(HAVE_DOCKER_COMPOSE),docker compose,$(if $(HAVE_PODMAN_COMPOSE),podman compose --in-pod=false,docker compose))
 MUTATION_THRESHOLD ?= 85
 MUTATION_DIFF_THRESHOLD ?= 90
+MUTATION_JOBS ?= $(shell getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 1)
 BASE ?= origin/main
 
 WEBBIN := web/node_modules/.bin
@@ -230,7 +231,7 @@ m-front-diff:
 m-back:
 	@set +e; \
 	thr=$(MUTATION_THRESHOLD); \
-	( cd server && mkdir -p mutants && uv run mutmut run 2>mutants/mutmut-stderr.log ); mutmut=$$?; \
+	( cd server && mkdir -p mutants && uv run mutmut run --max-children $(MUTATION_JOBS) 2>mutants/mutmut-stderr.log ); mutmut=$$?; \
 	( cd server && mkdir -p mutants && uv run mutmut export-cicd-stats ); export=$$?; \
 	if [ $$export -eq 0 ]; then \
 		python3 scripts/mutation-gate.py server/mutants/mutmut-cicd-stats.json $$thr; srv=$$?; \
@@ -238,7 +239,7 @@ m-back:
 		srv=$$export; \
 	fi; \
 	if [ -s server/mutants/mutmut-stderr.log ]; then echo "── mutmut diagnostics: server/mutants/mutmut-stderr.log ──"; fi; \
-	echo "── backend mutation gate (threshold $$thr%): mutmut run exit=$$mutmut, mutmut gate exit=$$srv ──"; \
+	echo "── backend mutation gate (threshold $$thr%, workers $(MUTATION_JOBS)): mutmut run exit=$$mutmut, mutmut gate exit=$$srv ──"; \
 	if [ $$mutmut -ne 0 ] || [ $$srv -ne 0 ]; then exit 1; fi
 
 m-back-diff:
@@ -254,12 +255,12 @@ m-back-diff:
 	set -- $$paths; \
 	baseline=$$(mktemp -d); trap 'rm -rf "$$baseline"' EXIT; \
 	cold_start=0; if [ -d server/mutants ]; then cp -a server/mutants "$$baseline/mutants"; else mkdir -p "$$baseline/mutants"; cold_start=1; fi; \
-	( cd server && mkdir -p mutants && uv run mutmut run "$$@" 2>mutants/mutmut-stderr.log ); mutmut=$$?; \
+	( cd server && mkdir -p mutants && uv run mutmut run --max-children $(MUTATION_JOBS) "$$@" 2>mutants/mutmut-stderr.log ); mutmut=$$?; \
 	args="--mutants server/mutants --baseline $$baseline/mutants --base $(BASE) --threshold $(MUTATION_DIFF_THRESHOLD)"; \
 	if [ $$cold_start -eq 1 ]; then args="$$args --skip-new-survivors"; fi; \
 	python3 scripts/mutation-diff-gate.py $$args; gate=$$?; \
 	if [ -s server/mutants/mutmut-stderr.log ]; then echo "── mutmut diagnostics: server/mutants/mutmut-stderr.log ──"; fi; \
-	echo "── backend diff mutation gate (threshold $(MUTATION_DIFF_THRESHOLD)%): mutmut run exit=$$mutmut, gate exit=$$gate ──"; \
+	echo "── backend diff mutation gate (threshold $(MUTATION_DIFF_THRESHOLD)%, workers $(MUTATION_JOBS)): mutmut run exit=$$mutmut, gate exit=$$gate ──"; \
 	if [ $$mutmut -ne 0 ] || [ $$gate -ne 0 ]; then exit 1; fi
 
 mutation-diff:
