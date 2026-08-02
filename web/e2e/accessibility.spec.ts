@@ -17,6 +17,7 @@ test("reports accessibility violations on authenticated sections", async ({
     await openApp(page, user);
 
     const report: Record<string, unknown> = {};
+    const violations: string[] = [];
     for (const section of SECTIONS) {
         if (section !== "Budget") {
             await gotoSection(page, section);
@@ -24,6 +25,11 @@ test("reports accessibility violations on authenticated sections", async ({
 
         const results = await new AxeBuilder({ page }).analyze();
         report[section] = results.violations;
+        violations.push(
+            ...results.violations.map(
+                (violation) => `${section}: ${violation.id} (${violation.impact ?? "unknown"})`,
+            ),
+        );
         console.log(
             `[a11y] ${section}: ${results.violations.length} violation(s), ` +
                 `${results.incomplete.length} incomplete check(s)`,
@@ -44,4 +50,5 @@ test("reports accessibility violations on authenticated sections", async ({
         contentType: "application/json",
     });
     expect(Object.keys(report)).toHaveLength(SECTIONS.length);
+    expect(violations, `Accessibility violations found:\n${violations.join("\n")}`).toHaveLength(0);
 });
