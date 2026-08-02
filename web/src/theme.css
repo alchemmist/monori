@@ -90,8 +90,8 @@
     --g-color-text-danger-heavy: rgb(189, 9, 53);
     --g-color-text-hint: rgb(0, 0, 0, 0.55);
     --g-color-text-info-heavy: rgb(48, 114, 179);
-    --g-color-text-positive: rgb(48, 170, 110);
-    --g-color-text-positive-heavy: rgb(45, 139, 93);
+    --g-color-text-positive: #167a48;
+    --g-color-text-positive-heavy: #12633b;
     --g-color-text-secondary: rgb(0, 0, 0, 0.65);
     --g-color-text-warning: rgb(189, 142, 75);
     --g-color-text-warning-heavy: rgb(189, 92, 10);
@@ -115,6 +115,7 @@
     --m-text-dim: #a3a0b0;
     --m-text-faint: #aaa7b8;
     --m-accent: #ff8a52;
+    --m-accent-contrast: #0a0a0a;
     --m-accent-soft: #3a1e10;
     --m-income: #4ade80;
     --m-expense: #f87171;
