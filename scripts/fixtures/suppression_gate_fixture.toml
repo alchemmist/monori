@@ -1,0 +1,2 @@
+[tool.suppression_gate_fixture]
+ignore = ["E501"]
