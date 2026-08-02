@@ -34,11 +34,11 @@
     --m-border-soft: #efefed;
     --m-text: #0a0a0a;
     --m-text-dim: #5c5c58;
-    --m-text-faint: #a3a29d;
-    --m-accent: #ef5a17;
+    --m-text-faint: #6b6a66;
+    --m-accent: #c2410c;
     --m-accent-soft: #ffe6d9;
-    --m-income: #15803d;
-    --m-expense: #dc2626;
+    --m-income: #166534;
+    --m-expense: #b91c1c;
     --m-warning: #b45309;
     --m-income-soft: #e4f3e9;
     --m-expense-soft: #fbe3e3;
@@ -58,13 +58,13 @@
     --glass-shadow: 0 2px 16px rgb(0 0 0 / 6%);
 
     /* accent-tuned brand tokens (drive the Mantine skin's filled/selection look) */
-    --g-color-base-brand: #ef5a17;
-    --g-color-base-brand-hover: #d94e10;
-    --g-color-line-brand: #ef5a17;
-    --g-color-text-brand: #d94e10;
-    --g-color-text-brand-heavy: #c2450d;
-    --g-color-text-link: #d94e10;
-    --g-color-text-link-hover: #c2450d;
+    --g-color-base-brand: #c2410c;
+    --g-color-base-brand-hover: #a9360b;
+    --g-color-line-brand: #c2410c;
+    --g-color-text-brand: #a9360b;
+    --g-color-text-brand-heavy: #8f2f09;
+    --g-color-text-link: #a9360b;
+    --g-color-text-link-hover: #8f2f09;
     --g-color-text-brand-contrast: #fff;
     --g-color-base-selection: #ffe6d9;
     --g-color-base-selection-hover: #ffd9c5;
@@ -88,11 +88,11 @@
     --g-color-text-complementary: rgb(0, 0, 0, 0.7);
     --g-color-text-danger: rgb(233, 3, 58);
     --g-color-text-danger-heavy: rgb(189, 9, 53);
-    --g-color-text-hint: rgb(0, 0, 0, 0.3);
+    --g-color-text-hint: rgb(0, 0, 0, 0.55);
     --g-color-text-info-heavy: rgb(48, 114, 179);
     --g-color-text-positive: rgb(48, 170, 110);
     --g-color-text-positive-heavy: rgb(45, 139, 93);
-    --g-color-text-secondary: rgb(0, 0, 0, 0.5);
+    --g-color-text-secondary: rgb(0, 0, 0, 0.65);
     --g-color-text-warning: rgb(189, 142, 75);
     --g-color-text-warning-heavy: rgb(189, 92, 10);
 }
@@ -113,8 +113,8 @@
     --m-border-soft: #2c252c;
     --m-text: #f2f1f6;
     --m-text-dim: #a3a0b0;
-    --m-text-faint: #6c6980;
-    --m-accent: #ff7a3c;
+    --m-text-faint: #aaa7b8;
+    --m-accent: #ff8a52;
     --m-accent-soft: #3a1e10;
     --m-income: #4ade80;
     --m-expense: #f87171;
@@ -133,13 +133,13 @@
     --m-card-border: var(--glass-border);
     --m-sidebar-edge: rgb(255 255 255 / 8%);
 
-    --g-color-base-brand: #ff7a3c;
-    --g-color-base-brand-hover: #ff8f5a;
-    --g-color-line-brand: #ff7a3c;
-    --g-color-text-brand: #ff8f5a;
-    --g-color-text-brand-heavy: #ffa877;
-    --g-color-text-link: #ff8f5a;
-    --g-color-text-link-hover: #ffa877;
+    --g-color-base-brand: #ff8a52;
+    --g-color-base-brand-hover: #ff9d70;
+    --g-color-line-brand: #ff8a52;
+    --g-color-text-brand: #ff9d70;
+    --g-color-text-brand-heavy: #ffb28f;
+    --g-color-text-link: #ff9d70;
+    --g-color-text-link-hover: #ffb28f;
     --g-color-text-brand-contrast: #0a0a0a;
     --g-color-base-selection: #3a1e10;
     --g-color-base-selection-hover: #4a2614;
@@ -162,11 +162,11 @@
     --g-color-text-complementary: rgb(255, 255, 255, 0.7);
     --g-color-text-danger: rgb(229, 50, 93);
     --g-color-text-danger-heavy: rgb(232, 71, 109);
-    --g-color-text-hint: rgb(255, 255, 255, 0.3);
+    --g-color-text-hint: rgb(255, 255, 255, 0.65);
     --g-color-text-info-heavy: rgb(74, 161, 242);
     --g-color-text-positive: rgb(77, 176, 155);
     --g-color-text-positive-heavy: rgb(95, 184, 165);
-    --g-color-text-secondary: rgb(255, 255, 255, 0.5);
+    --g-color-text-secondary: rgb(255, 255, 255, 0.7);
     --g-color-text-warning: rgb(255, 190, 92);
     --g-color-text-warning-heavy: rgb(255, 197, 108);
 }

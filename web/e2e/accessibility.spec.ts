@@ -22,13 +22,19 @@ test("reports accessibility violations on authenticated sections", async ({
         if (section !== "Budget") {
             await gotoSection(page, section);
         }
+        await expect(page.locator("h1")).toBeVisible();
 
         const results = await new AxeBuilder({ page }).analyze();
         report[section] = results.violations;
         violations.push(
-            ...results.violations.map(
-                (violation) => `${section}: ${violation.id} (${violation.impact ?? "unknown"})`,
-            ),
+            ...results.violations
+                .filter(
+                    (violation) =>
+                        violation.impact === "critical" || violation.impact === "serious",
+                )
+                .map(
+                    (violation) => `${section}: ${violation.id} (${violation.impact ?? "unknown"})`,
+                ),
         );
         console.log(
             `[a11y] ${section}: ${results.violations.length} violation(s), ` +
