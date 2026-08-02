@@ -56,12 +56,12 @@ describe("API response type contracts", () => {
         >();
         expectTypeOf<UserResponse>().toEqualTypeOf<z.output<typeof userSchema>>();
 
-        expectTypeOf<AccountId>().toMatchTypeOf<number>();
-        expectTypeOf<CategoryId>().toMatchTypeOf<number>();
-        expectTypeOf<TransactionId>().toMatchTypeOf<number>();
-        expectTypeOf<Kopecks>().toMatchTypeOf<number>();
-        expectTypeOf<IsoDate>().toMatchTypeOf<string>();
-        expectTypeOf<IsoDateTime>().toMatchTypeOf<string>();
+        expectTypeOf<AccountId>().toExtend<number>();
+        expectTypeOf<CategoryId>().toExtend<number>();
+        expectTypeOf<TransactionId>().toExtend<number>();
+        expectTypeOf<Kopecks>().toExtend<number>();
+        expectTypeOf<IsoDate>().toExtend<string>();
+        expectTypeOf<IsoDateTime>().toExtend<string>();
     });
 
     it("exposes the closed runtime domains", () => {
