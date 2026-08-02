@@ -9,6 +9,7 @@ from pydantic.dataclasses import dataclass as pydantic_dataclass
 from app.auth import AuthenticatedUser, current_user
 from app.db_records import GroupRecord
 from app.deps import GroupResponse, IdResponse, conn, serialize_group
+from app.domain_types import CategoryGroupKind
 
 router = APIRouter(prefix="/api/groups", tags=["groups"])
 
@@ -18,7 +19,7 @@ class GroupBody:
     """Represent GroupBody."""
 
     name: str
-    kind: str
+    kind: CategoryGroupKind
 
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid"))
@@ -26,7 +27,7 @@ class GroupPatch:
     """Represent GroupPatch."""
 
     name: str | None = None
-    kind: str | None = None
+    kind: CategoryGroupKind | None = None
 
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid"))

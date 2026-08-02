@@ -13,6 +13,7 @@ from pydantic.dataclasses import dataclass as pydantic_dataclass
 from app.auth import AuthenticatedUser, current_user
 from app.connectors.base import SyncRow
 from app.deps import conn
+from app.domain_types import TransactionSource
 from app.importer import (
     CategoryDefinition,
     CategoryRule,
@@ -461,7 +462,7 @@ def import_commit(
                 raise HTTPException(400, "unknown account")
         inserted = skipped = 0
         for account_id, rows in grouped.items():
-            added, ignored = commit_rows(c, account_id, rows, source="import")
+            added, ignored = commit_rows(c, account_id, rows, source=TransactionSource.IMPORT)
             inserted += added
             skipped += ignored
         merged, suggested = detect(c, uid)

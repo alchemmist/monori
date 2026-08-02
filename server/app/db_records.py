@@ -2,6 +2,92 @@
 
 import sqlite3
 from dataclasses import dataclass
+from enum import StrEnum
+from typing import cast
+
+from .domain_types import (
+    AccountType,
+    CategoryGroupKind,
+    ConnectionStatus,
+    GoalStatus,
+    TransactionSource,
+)
+
+
+class RowValueError(ValueError):
+    """Raised when a SQLite row does not match the selected record shape."""
+
+
+class RowTypeError(TypeError):
+    """Raised when a SQLite column has an unexpected Python type."""
+
+
+def _row_value(row: sqlite3.Row, key: str) -> object:
+    try:
+        return cast("object", row[key])
+    except IndexError as error:
+        message = f"SQL row is missing required column {key!r}"
+        raise RowValueError(message) from error
+
+
+def row_int(row: sqlite3.Row, key: str) -> int:
+    """Read a required SQLite integer without leaking ``Any`` into records."""
+    value = _row_value(row, key)
+    if type(value) is not int:
+        message = f"SQL column {key!r} must be an int, got {type(value).__name__}"
+        raise RowTypeError(message)
+    return value
+
+
+def row_str(row: sqlite3.Row, key: str) -> str:
+    """Read a required SQLite text column without leaking ``Any`` into records."""
+    value = _row_value(row, key)
+    if not isinstance(value, str):
+        message = f"SQL column {key!r} must be a str, got {type(value).__name__}"
+        raise RowTypeError(message)
+    return value
+
+
+def row_optional_int(row: sqlite3.Row, key: str) -> int | None:
+    """Read a nullable SQLite integer column."""
+    value = _row_value(row, key)
+    if value is None:
+        return None
+    if type(value) is not int:
+        message = f"SQL column {key!r} must be an int or null, got {type(value).__name__}"
+        raise RowTypeError(message)
+    return value
+
+
+def row_optional_str(row: sqlite3.Row, key: str) -> str | None:
+    """Read a nullable SQLite text column."""
+    value = _row_value(row, key)
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        message = f"SQL column {key!r} must be a str or null, got {type(value).__name__}"
+        raise RowTypeError(message)
+    return value
+
+
+def row_bool(row: sqlite3.Row, key: str) -> bool:
+    """Read SQLite's integer-backed boolean representation."""
+    value = row_int(row, key)
+    if value not in (0, 1):
+        message = f"SQL column {key!r} must be 0 or 1, got {value}"
+        raise RowValueError(message)
+    return bool(value)
+
+
+def row_enum[EnumValue: StrEnum](
+    row: sqlite3.Row, key: str, enum_type: type[EnumValue]
+) -> EnumValue:
+    """Read a closed string value and make unexpected persisted data explicit."""
+    try:
+        return enum_type(row_str(row, key))
+    except ValueError as error:
+        message = f"SQL column {key!r} contains an invalid {enum_type.__name__}"
+        raise RowValueError(message) from error
 
 
 @dataclass(frozen=True, slots=True)
@@ -11,12 +97,17 @@ class GroupRecord:
     id: int
     name: str
     sort: int
-    kind: str
+    kind: CategoryGroupKind
 
     @classmethod
     def from_row(cls, row: sqlite3.Row) -> "GroupRecord":
         """Handle from row."""
-        return cls(id=row["id"], name=row["name"], sort=row["sort"], kind=row["kind"])
+        return cls(
+            id=row_int(row, "id"),
+            name=row_str(row, "name"),
+            sort=row_int(row, "sort"),
+            kind=row_enum(row, "kind", CategoryGroupKind),
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -30,7 +121,7 @@ class CategoryRecord:
     sort: int
     archived: bool
     goal_target: int | None = None
-    goal_status: str | None = None
+    goal_status: GoalStatus | None = None
     goal_target_date: str | None = None
 
     @classmethod
@@ -38,15 +129,21 @@ class CategoryRecord:
         """Handle from row."""
         keys = row.keys()
         return cls(
-            id=row["id"],
-            group_id=row["group_id"],
-            name=row["name"],
-            keywords=row["keywords"],
-            sort=row["sort"],
-            archived=bool(row["archived"]),
-            goal_target=row["goal_target"] if "goal_target" in keys else None,
-            goal_status=row["goal_status"] if "goal_status" in keys else None,
-            goal_target_date=row["goal_target_date"] if "goal_target_date" in keys else None,
+            id=row_int(row, "id"),
+            group_id=row_int(row, "group_id"),
+            name=row_str(row, "name"),
+            keywords=row_str(row, "keywords"),
+            sort=row_int(row, "sort"),
+            archived=row_bool(row, "archived"),
+            goal_target=row_optional_int(row, "goal_target") if "goal_target" in keys else None,
+            goal_status=(
+                row_enum(row, "goal_status", GoalStatus)
+                if "goal_status" in keys and row_optional_str(row, "goal_status") is not None
+                else None
+            ),
+            goal_target_date=(
+                row_optional_str(row, "goal_target_date") if "goal_target_date" in keys else None
+            ),
         )
 
 
@@ -57,18 +154,18 @@ class CategoryOwnershipRecord:
     id: int
     keywords: str
     goal_target: int | None
-    type: str
+    type: CategoryGroupKind
     is_goal: bool
 
     @classmethod
     def from_row(cls, row: sqlite3.Row) -> "CategoryOwnershipRecord":
         """Handle from row."""
         return cls(
-            id=row["id"],
-            keywords=row["keywords"],
-            goal_target=row["goal_target"],
-            type=row["type"],
-            is_goal=bool(row["is_goal"]),
+            id=row_int(row, "id"),
+            keywords=row_str(row, "keywords"),
+            goal_target=row_optional_int(row, "goal_target"),
+            type=row_enum(row, "type", CategoryGroupKind),
+            is_goal=row_bool(row, "is_goal"),
         )
 
 
@@ -82,7 +179,7 @@ class GoalGroupRecord:
     @classmethod
     def from_row(cls, row: sqlite3.Row) -> "GoalGroupRecord":
         """Handle from row."""
-        return cls(id=row["id"], is_goal=bool(row["is_goal"]))
+        return cls(id=row_int(row, "id"), is_goal=row_bool(row, "is_goal"))
 
 
 @dataclass(frozen=True, slots=True)
@@ -95,7 +192,7 @@ class CategorySignRecord:
     @classmethod
     def from_row(cls, row: sqlite3.Row) -> "CategorySignRecord":
         """Handle from row."""
-        return cls(id=row["id"], transaction_sign=row["transaction_sign"])
+        return cls(id=row_int(row, "id"), transaction_sign=row_int(row, "transaction_sign"))
 
 
 @dataclass(frozen=True, slots=True)
@@ -104,7 +201,7 @@ class AccountRecord:
 
     id: int
     name: str
-    type: str
+    type: AccountType
     icon: str
     color: str
     icon_image: str | None
@@ -121,20 +218,20 @@ class AccountRecord:
     def from_row(cls, row: sqlite3.Row) -> "AccountRecord":
         """Handle from row."""
         return cls(
-            id=row["id"],
-            name=row["name"],
-            type=row["type"],
-            icon=row["icon"],
-            color=row["color"],
-            icon_image=row["icon_image"],
-            currency=row["currency"],
-            sort=row["sort"],
-            archived=bool(row["archived"]),
-            opening_balance=row["opening_balance"],
-            opening_date=row["opening_date"],
-            connection_id=row["connection_id"],
-            bank_ref=row["bank_ref"],
-            card_tails=row["card_tails"],
+            id=row_int(row, "id"),
+            name=row_str(row, "name"),
+            type=row_enum(row, "type", AccountType),
+            icon=row_str(row, "icon"),
+            color=row_str(row, "color"),
+            icon_image=row_optional_str(row, "icon_image"),
+            currency=row_str(row, "currency"),
+            sort=row_int(row, "sort"),
+            archived=row_bool(row, "archived"),
+            opening_balance=row_int(row, "opening_balance"),
+            opening_date=row_optional_str(row, "opening_date"),
+            connection_id=row_optional_int(row, "connection_id"),
+            bank_ref=row_str(row, "bank_ref"),
+            card_tails=row_str(row, "card_tails"),
         )
 
 
@@ -152,11 +249,11 @@ class SplitRecord:
     def from_row(cls, row: sqlite3.Row) -> "SplitRecord":
         """Handle from row."""
         return cls(
-            id=row["id"],
-            transaction_id=row["transaction_id"],
-            category_id=row["category_id"],
-            amount=row["amount"],
-            comment=row["comment"],
+            id=row_int(row, "id"),
+            transaction_id=row_int(row, "transaction_id"),
+            category_id=row_int(row, "category_id"),
+            amount=row_int(row, "amount"),
+            comment=row_str(row, "comment"),
         )
 
 
@@ -174,25 +271,25 @@ class TransactionRecord:
     account_id: int
     transfer_id: str | None
     comment: str
-    source: str
+    source: TransactionSource
     hidden: bool
 
     @classmethod
     def from_row(cls, row: sqlite3.Row) -> "TransactionRecord":
         """Handle from row."""
         return cls(
-            id=row["id"],
-            date=row["date"],
-            amount=row["amount"],
-            description=row["description"],
-            bank_category=row["bank_category"],
-            mcc=row["mcc"],
-            category_id=row["category_id"],
-            account_id=row["account_id"],
-            transfer_id=row["transfer_id"],
-            comment=row["comment"],
-            source=row["source"],
-            hidden=bool(row["hidden"]),
+            id=row_int(row, "id"),
+            date=row_str(row, "date"),
+            amount=row_int(row, "amount"),
+            description=row_str(row, "description"),
+            bank_category=row_str(row, "bank_category"),
+            mcc=row_str(row, "mcc"),
+            category_id=row_optional_int(row, "category_id"),
+            account_id=row_int(row, "account_id"),
+            transfer_id=row_optional_str(row, "transfer_id"),
+            comment=row_str(row, "comment"),
+            source=row_enum(row, "source", TransactionSource),
+            hidden=row_bool(row, "hidden"),
         )
 
 
@@ -211,12 +308,12 @@ class UserRecord:
     def from_row(cls, row: sqlite3.Row) -> "UserRecord":
         """Handle from row."""
         return cls(
-            id=row["id"],
-            email=row["email"],
-            created_at=row["created_at"],
-            is_admin=bool(row["is_admin"]),
-            last_login=row["last_login"],
-            default_account_id=row["default_account_id"],
+            id=row_int(row, "id"),
+            email=row_str(row, "email"),
+            created_at=row_str(row, "created_at"),
+            is_admin=row_bool(row, "is_admin"),
+            last_login=row_optional_str(row, "last_login"),
+            default_account_id=row_optional_int(row, "default_account_id"),
         )
 
 
@@ -227,7 +324,7 @@ class ConnectionRecord:
     id: int
     bank: str
     kind: str
-    status: str
+    status: ConnectionStatus
     last_sync: str | None
     last_error: str | None
     has_credentials: bool
@@ -238,15 +335,15 @@ class ConnectionRecord:
     def from_row(cls, row: sqlite3.Row) -> "ConnectionRecord":
         """Handle from row."""
         return cls(
-            id=row["id"],
-            bank=row["bank"],
-            kind=row["kind"],
-            status=row["status"],
-            last_sync=row["last_sync"],
-            last_error=row["last_error"],
-            has_credentials=row["credentials_encrypted"] is not None,
-            created_at=row["created_at"],
-            updated_at=row["updated_at"],
+            id=row_int(row, "id"),
+            bank=row_str(row, "bank"),
+            kind=row_str(row, "kind"),
+            status=row_enum(row, "status", ConnectionStatus),
+            last_sync=row_optional_str(row, "last_sync"),
+            last_error=row_optional_str(row, "last_error"),
+            has_credentials=_row_value(row, "credentials_encrypted") is not None,
+            created_at=row_str(row, "created_at"),
+            updated_at=row_str(row, "updated_at"),
         )
 
 
@@ -263,10 +360,10 @@ class BudgetRecord:
     def from_row(cls, row: sqlite3.Row) -> "BudgetRecord":
         """Handle from row."""
         return cls(
-            category_id=row["category_id"],
-            year=row["year"],
-            month=row["month"],
-            amount=row["amount"],
+            category_id=row_int(row, "category_id"),
+            year=row_int(row, "year"),
+            month=row_int(row, "month"),
+            amount=row_int(row, "amount"),
         )
 
 
@@ -285,12 +382,12 @@ class TransferRecord:
     def from_row(cls, row: sqlite3.Row) -> "TransferRecord":
         """Handle from row."""
         return cls(
-            id=row["id"],
-            out_tx_id=row["out_tx_id"],
-            in_tx_id=row["in_tx_id"],
-            origin=row["origin"],
-            note=row["note"],
-            created_at=row["created_at"],
+            id=row_str(row, "id"),
+            out_tx_id=row_int(row, "out_tx_id"),
+            in_tx_id=row_int(row, "in_tx_id"),
+            origin=row_str(row, "origin"),
+            note=row_str(row, "note"),
+            created_at=row_str(row, "created_at"),
         )
 
 
@@ -307,8 +404,8 @@ class TransferSplitRecord:
     def from_row(cls, row: sqlite3.Row) -> "TransferSplitRecord":
         """Handle from row."""
         return cls(
-            out_tx_id=row["out_tx_id"],
-            in_tx_id=row["in_tx_id"],
-            out_category_id=row["out_category_id"],
-            in_category_id=row["in_category_id"],
+            out_tx_id=row_int(row, "out_tx_id"),
+            in_tx_id=row_int(row, "in_tx_id"),
+            out_category_id=row_optional_int(row, "out_category_id"),
+            in_category_id=row_optional_int(row, "in_category_id"),
         )

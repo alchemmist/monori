@@ -10,6 +10,7 @@ from pydantic.dataclasses import dataclass as pydantic_dataclass
 from app.auth import AuthenticatedUser, current_user
 from app.db_records import CategoryOwnershipRecord, GoalGroupRecord
 from app.deps import IdResponse, conn
+from app.domain_types import GoalStatus
 
 router = APIRouter(prefix="/api/categories", tags=["categories"])
 
@@ -38,7 +39,7 @@ class CategoryPatch:
     archived: bool | None = None
     goal_target: int | None = Field(default=None, alias="goalTarget")
     goal_target_date: str | None = Field(default=None, alias="goalTargetDate")
-    goal_status: str | None = Field(default=None, alias="goalStatus")
+    goal_status: GoalStatus | None = Field(default=None, alias="goalStatus")
     goal_target_provided: bool = Field(default=False, exclude=True, repr=False)
     goal_target_date_provided: bool = Field(default=False, exclude=True, repr=False)
 
@@ -151,7 +152,7 @@ def create_category(
                 keywords,
                 max_sort + 1,
                 goal_target if group_record.is_goal else None,
-                "active" if group_record.is_goal else None,
+                GoalStatus.ACTIVE if group_record.is_goal else None,
                 body.goal_target_date if group_record.is_goal else None,
             ),
         )
@@ -253,7 +254,7 @@ def _update_goal_fields(
             (patch.goal_target_date or None, cat_id),
         )
     if patch.goal_status is not None:
-        if patch.goal_status not in ("active", "achieved"):
+        if patch.goal_status is GoalStatus.ARCHIVED:
             raise HTTPException(400, "goalStatus must be 'active' or 'achieved'")
         c.execute("UPDATE categories SET goal_status=? WHERE id=?", (patch.goal_status, cat_id))
 
@@ -271,7 +272,10 @@ def archive_goal(
         row = _owned_category(c, cat_id, uid)
         if not row or not row.is_goal:
             raise HTTPException(404, "goal not found")
-        c.execute("UPDATE categories SET archived=1, goal_status='archived' WHERE id=?", (cat_id,))
+        c.execute(
+            "UPDATE categories SET archived=1, goal_status=? WHERE id=?",
+            (GoalStatus.ARCHIVED, cat_id),
+        )
         c.commit()
         return OkResponse(ok=True)
     finally:

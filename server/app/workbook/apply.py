@@ -8,6 +8,7 @@ import datetime
 import sqlite3
 from collections.abc import Iterable, Mapping
 
+from app.domain_types import TransactionSource
 from app.importer import ImportRow
 from app.ingest import commit_rows, dedup_text, historical_day_counts
 
@@ -200,7 +201,7 @@ def _import_transactions(
             c,
             account_id,
             [row.to_sync_dict() for row in rows],
-            source="workbook",
+            source=TransactionSource.WORKBOOK,
             batch_id=batch_id,
         )
         c.execute(

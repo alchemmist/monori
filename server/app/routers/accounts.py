@@ -6,17 +6,17 @@ from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import ConfigDict, Field
+from pydantic import ConfigDict, Field, field_validator
 from pydantic.dataclasses import dataclass as pydantic_dataclass
 
 from app.auth import AuthenticatedUser, current_user
 from app.db_records import AccountRecord
 from app.deps import AccountResponse, conn, serialize_account
+from app.domain_types import AccountType
 from app.importer import tx_hash
 
 router = APIRouter(prefix="/api/accounts", tags=["accounts"])
 
-TYPES = ("card", "cash", "savings", "other")
 HEX_COLOR = re.compile(r"^#[0-9a-fA-F]{6}$")
 
 MAX_ICON_IMAGE = 300_000
@@ -28,7 +28,7 @@ class AccountBody:
     """Represent AccountBody."""
 
     name: str
-    type: str | None = None
+    type: AccountType | None = None
     icon: str | None = None
     color: str | None = None
     icon_image: str | None = Field(default=None, alias="iconImage")
@@ -39,13 +39,26 @@ class AccountBody:
     bank_ref: str | None = Field(default=None, alias="bankRef")
     card_tails: list[str] | None = Field(default=None, alias="cardTails")
 
+    @field_validator("type", mode="before")
+    @classmethod
+    def validate_type(cls, value: object) -> AccountType | None:
+        """Keep invalid account types as the existing 400 API response."""
+        if value is None:
+            return None
+        if not isinstance(value, str):
+            raise HTTPException(400, "type must be one of card, cash, savings, other")
+        try:
+            return AccountType(value)
+        except ValueError as error:
+            raise HTTPException(400, "type must be one of card, cash, savings, other") from error
+
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid", populate_by_name=True))
 class AccountPatch:
     """Represent AccountPatch."""
 
     name: str | None = None
-    type: str | None = None
+    type: AccountType | None = None
     icon: str | None = None
     color: str | None = None
 
@@ -58,6 +71,19 @@ class AccountPatch:
     connection_id: int | None = Field(default=None, alias="connectionId")
     bank_ref: str | None = Field(default=None, alias="bankRef")
     card_tails: list[str] | None = Field(default=None, alias="cardTails")
+
+    @field_validator("type", mode="before")
+    @classmethod
+    def validate_type(cls, value: object) -> AccountType | None:
+        """Keep invalid account types as the existing 400 API response."""
+        if value is None:
+            return None
+        if not isinstance(value, str):
+            raise HTTPException(400, "type must be one of card, cash, savings, other")
+        try:
+            return AccountType(value)
+        except ValueError as error:
+            raise HTTPException(400, "type must be one of card, cash, savings, other") from error
 
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid"))
@@ -150,14 +176,12 @@ def create_account(
 ) -> AccountIdResponse:
     """Handle create account."""
     uid = user.id
-    account_type = body.type or "other"
+    account_type = body.type or AccountType.OTHER
     icon = body.icon or "wallet"
     color = body.color or "#5b6472"
     currency = body.currency or "RUB"
     opening_balance = body.opening_balance if body.opening_balance is not None else 0
     bank_ref = (body.bank_ref or "").strip()
-    if account_type not in TYPES:
-        raise HTTPException(400, "type must be one of card, cash, savings, other")
     _validate_color(color)
     _validate_icon_image(body.icon_image)
     c = conn()
@@ -231,8 +255,6 @@ def _require_account(c: sqlite3.Connection, account_id: int, uid: int) -> None:
 
 
 def _validate_account_patch(patch: AccountPatch) -> None:
-    if patch.type is not None and patch.type not in TYPES:
-        raise HTTPException(400, "type must be one of card, cash, savings, other")
     if patch.color is not None:
         _validate_color(patch.color)
     if patch.icon_image is not None:
