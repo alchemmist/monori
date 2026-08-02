@@ -1,7 +1,6 @@
 """Monori API. Money in/out of this API is integer kopecks everywhere."""
 
 import contextlib
-import os
 import pathlib
 from collections.abc import Awaitable, Callable
 from typing import Annotated
@@ -69,9 +68,10 @@ def _serve_spa(base: pathlib.Path, path: str) -> FileResponse:
     and must stay strictly under ``base`` before the file is opened, so absolute
     paths or traversal escaping ``base`` are rejected.
     """
-    root = pathlib.Path(os.path.realpath(base))
-    if path:
-        target = (root / path.lstrip("/")).resolve()
+    root = base.resolve()
+    relative = pathlib.PurePosixPath(path)
+    if path and not relative.is_absolute() and ".." not in relative.parts:
+        target = root.joinpath(*relative.parts).resolve()
         if target.is_relative_to(root) and target.is_file():
             return FileResponse(str(target))
     return FileResponse(str(root / "index.html"))
