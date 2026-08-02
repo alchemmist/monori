@@ -37,7 +37,7 @@ jobs:
             - name: Checkout
               uses: actions/checkout@v7
               with:
-                  fetch-depth: 0
+                  fetch-depth: 1
                   persist-credentials: false
 
             - name: Setup Node
@@ -63,6 +63,7 @@ jobs:
               env:
                   BASE_SHA: ${{ github.event.pull_request.base.sha }}
               run: |
+                  git fetch --no-tags --depth=1 origin "$BASE_SHA"
                   git worktree add --detach "$RUNNER_TEMP/base-repo" "$BASE_SHA"
                   npm ci --no-audit --no-fund --prefix "$RUNNER_TEMP/base-repo/web"
                   npm run build --prefix "$RUNNER_TEMP/base-repo/web"
