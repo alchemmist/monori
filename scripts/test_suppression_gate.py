@@ -61,6 +61,18 @@ value = 2
 
         self.assertEqual(len(findings), 1)
 
+    def test_finds_entry_added_to_existing_toml_suppression_section(self) -> None:
+        source = """\
+[tool.ruff.lint.per-file-ignores]
+"server/app.py" = ["E501"]
+"""
+
+        findings = scan_file("server/pyproject.toml", source, {2})
+
+        self.assertEqual(len(findings), 1)
+        self.assertEqual(findings[0].line, 2)
+        self.assertIn('"server/app.py" = ["E501"]', findings[0].text)
+
     def test_admin_can_approve_and_stale_labels_expire(self) -> None:
         github = FakeGitHub("admin")
         finding = Finding("example.py", 1, 0, "value = 1 # noqa", "finding-1")

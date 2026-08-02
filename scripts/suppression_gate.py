@@ -33,6 +33,8 @@ CONFIG_SUPPRESSION_RE = re.compile(
     r"|:\s*[\"']?(?:off|0)[\"']?(?:\s*[,}]|\s*$)"
     r"|\bzizmor\s*:\s*ignore\b|\bactionlint\s*:\s*ignore\b)"
 )
+TOML_SECTION_RE = re.compile(r"^\s*\[([^\]]+)\]\s*$")
+TOML_SUPPRESSION_SECTION_NAMES = {"per-file-ignores", "extend-per-file-ignores"}
 REQUEST_TIMEOUT = 30
 
 
@@ -201,21 +203,41 @@ def added_lines_from_patch(patch: str) -> set[int]:
 
 def scan_file(path: str, source: str, added_lines: set[int]) -> list[Finding]:
     candidates: list[tuple[int, int, str, str]] = []
+    is_toml = path.endswith(".toml")
     is_config = path.endswith((".toml", ".json", ".jsonc", ".yaml", ".yml")) or any(
         name in path.lower() for name in ("eslint.config", "stylelint", "knip.config")
     )
     pattern = CONFIG_SUPPRESSION_RE if is_config else SOURCE_SUPPRESSION_RE
+    toml_section = ""
     for line_number, line in enumerate(source.splitlines(), 1):
+        if is_toml:
+            section_match = TOML_SECTION_RE.match(line)
+            if section_match:
+                toml_section = section_match.group(1)
         if line_number not in added_lines:
             continue
         match = pattern.search(line)
-        if match is None:
+        if match is not None:
+            code = f"{line[: match.start()]}{line[match.end() :]}"
+            normalized_code = " ".join(code.split())
+            normalized_directive = " ".join(match.group(0).lower().split())
+            column = match.start()
+        elif (
+            is_toml
+            and toml_section.rsplit(".", 1)[-1].strip('"').lower()
+            in TOML_SUPPRESSION_SECTION_NAMES
+            and line.strip()
+            and not line.lstrip().startswith("#")
+        ):
+            # Entries and multiline values inside an existing per-file-ignores
+            # section do not repeat the section name on every added line.
+            normalized_code = " ".join(line.split())
+            normalized_directive = f"toml-section:{toml_section.lower()}"
+            column = len(line) - len(line.lstrip())
+        else:
             continue
-        code = f"{line[: match.start()]}{line[match.end() :]}"
-        normalized_code = " ".join(code.split())
-        normalized_directive = " ".join(match.group(0).lower().split())
         raw_id = f"{path}:{normalized_directive}:{normalized_code}"
-        candidates.append((line_number, match.start(), line.strip(), raw_id))
+        candidates.append((line_number, column, line.strip(), raw_id))
     duplicates = Counter(raw_id for _, _, _, raw_id in candidates)
     findings: list[Finding] = []
     for line_number, column, text, raw_id in candidates:
