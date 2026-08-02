@@ -18,8 +18,6 @@ from typing import Protocol, cast
 
 type JsonValue = None | bool | int | float | str | list[JsonValue] | dict[str, JsonValue]
 
-BOT_MARKER = "<!-- monori-object-annotation-gate -->"
-BOT_LOGIN = "github-actions[bot]"
 COMMAND_RE = re.compile(r"^/(ignore|ignore-all|ignore-file|remove-ignore)(?:\s+(\S+))?$")
 PATCH_HUNK_RE = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@")
 IGNORE_LABEL_PREFIX = "monori-object-annotation-ignore-"
@@ -279,58 +277,6 @@ def finding_url(pr_url: str, finding: Finding) -> str:
     return f"{pr_url}/changes#diff-{diff_hash}R{finding.line}"
 
 
-def comment_body(findings: list[Finding], approved: set[str], pr_url: str) -> str:
-    active = [finding for finding in findings if finding.finding_id not in approved]
-    status = "✅" if not active else "❌"
-    lines = [
-        BOT_MARKER,
-        f"## {status} Python <code>object</code> annotation check",
-        "This check finds newly added Python annotations that use the broad `object` type.",
-        "Please replace each finding with a specific type, or ask an administrator to approve it.",
-        "",
-        "<details>",
-        f"<summary>List of problems ({len(findings)})</summary>",
-        "",
-    ]
-    for finding in findings:
-        marker = "✔" if finding.finding_id in approved else "✗"
-        location = f"{finding.path}:{finding.line}"
-        lines.append(
-            f"- {marker} [`{location}`]({finding_url(pr_url, finding)}) "
-            f"— `{finding.annotation}` · `{display_finding_id(finding.finding_id)}`"
-        )
-    lines.append("</details>")
-    lines.extend(
-        [
-            "",
-            "<details>",
-            "<summary>For admins</summary>",
-            "",
-            "Post exactly one command as a new comment to manage approvals:",
-            "",
-            "| Command | Purpose |",
-            "| --- | --- |",
-            (
-                "| `/ignore object-<finding-id>[,object-<finding-id>...]` | "
-                "Approve one or more object findings. |"
-            ),
-            (
-                "| `/ignore-file path/to/file.py[,path/to/file.py...]` | "
-                "Approve findings in one or more "
-                "files. |"
-            ),
-            "| `/ignore-all` | Approve all findings in the pull request. |",
-            (
-                "| `/remove-ignore <object-or-suppression-id>[,<object-or-suppression-id>...]` | "
-                "Remove one or more approvals. |"
-            ),
-            "",
-            "</details>",
-        ]
-    )
-    return "\n".join(lines)
-
-
 def summary_body(findings: list[Finding], approved: set[str], pr_url: str) -> str:
     active = [finding for finding in findings if finding.finding_id not in approved]
     status = "✅ PASS" if not active else "❌ FAIL"
@@ -354,7 +300,23 @@ def summary_body(findings: list[Finding], approved: set[str], pr_url: str) -> st
             f"- {marker} [`{location}`]({finding_url(pr_url, finding)}) "
             f"— `{finding.annotation}` · `{display_finding_id(finding.finding_id)}`"
         )
-    lines.extend(["", "</details>"])
+    lines.extend(
+        [
+            "",
+            "</details>",
+            "",
+            "<details><summary>For repository administrators</summary>",
+            "",
+            "Post exactly one command as a new pull-request comment:",
+            "",
+            "- `/ignore object-<finding-id>[,object-<finding-id>...]`",
+            "- `/ignore-file path/to/file.py[,path/to/file.py...]`",
+            "- `/ignore-all`",
+            "- `/remove-ignore <object-or-suppression-id>[,<object-or-suppression-id>...]`",
+            "",
+            "</details>",
+        ]
+    )
     return "\n".join(lines)
 
 
@@ -363,39 +325,6 @@ def append_step_summary(body: str) -> None:
     if summary_path:
         with Path(summary_path).open("a") as summary:
             summary.write(body.rstrip() + "\n")
-
-
-def find_bot_comment(github: GitHub, number: int) -> dict[str, JsonValue] | None:
-    comments = github.paged(f"/issues/{number}/comments")
-    return next(
-        (
-            comment
-            for comment in comments
-            if json_object(comment.get("user", {}), "comment user").get("login") == BOT_LOGIN
-            and json_object(comment.get("user", {}), "comment user").get("type") == "Bot"
-            and BOT_MARKER in (optional_string(comment.get("body")) or "")
-        ),
-        None,
-    )
-
-
-def update_bot_comment(
-    github: GitHub,
-    number: int,
-    body: str,
-    existing: dict[str, JsonValue] | None,
-) -> None:
-    if existing:
-        comment_id = json_integer(existing["id"], "comment id")
-        github.request("PATCH", f"/issues/comments/{comment_id}", {"body": body})
-    else:
-        github.request("POST", f"/issues/{number}/comments", {"body": body})
-
-
-def delete_bot_comment(github: GitHub, existing: dict[str, JsonValue] | None) -> None:
-    if existing:
-        comment_id = json_integer(existing["id"], "comment id")
-        github.request("DELETE", f"/issues/comments/{comment_id}")
 
 
 def approval_state(body: str) -> set[str]:
@@ -579,8 +508,6 @@ def main() -> int:
         raise RuntimeError(f"Pull request #{number} was not found")
     pull = json_object(raw_pull, "pull request")
     findings = scan_pull_request(github, pull)
-    existing = find_bot_comment(github, number)
-
     comment = json_object(event.get("comment", {}), "event comment")
     command = parse_command((optional_string(comment.get("body")) or "").strip())
     if command and not command_targets_gate(command):
@@ -594,15 +521,8 @@ def main() -> int:
     pr_url = json_string(pull["html_url"], "pull request URL")
     append_step_summary(summary_body(findings, approved, pr_url))
     if not findings:
-        delete_bot_comment(github, existing)
         return 0
 
-    update_bot_comment(
-        github,
-        number,
-        comment_body(findings, approved, pr_url),
-        existing,
-    )
     if state_changed:
         rerun_pull_request_gate(github, number)
     if active:

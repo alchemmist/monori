@@ -7,7 +7,6 @@ from scripts.object_annotation_gate import (
     JsonValue,
     added_lines_from_patch,
     changed_lines,
-    comment_body,
     parse_command,
     scan_file,
     summary_body,
@@ -168,21 +167,6 @@ other: "list[object]"
 
         self.assertEqual(added_lines_from_patch(patch), {2})
 
-    def test_comment_includes_finding_count_and_pr_links(self) -> None:
-        finding = Finding("server/app/example.py", 7, 2, "object", "finding-1")
-
-        body = comment_body([finding], set(), "https://github.com/org/repo/pull/1")
-
-        self.assertIn("## ❌ Python <code>object</code> annotation check", body)
-        self.assertIn("List of problems (1)", body)
-        self.assertIn("<summary>For admins</summary>", body)
-        self.assertIn("| `/ignore-all` | Approve all findings in the pull request. |", body)
-        self.assertIn("https://github.com/org/repo/pull/1/changes#diff-", body)
-
-        approved_body = comment_body([finding], {"finding-1"}, "https://github.com/org/repo/pull/1")
-
-        self.assertIn("## ✅ Python <code>object</code> annotation check", approved_body)
-
     def test_summary_includes_status_and_finding_links_without_admin_commands(self) -> None:
         finding = Finding("server/app/example.py", 7, 2, "object", "finding-1")
 
@@ -192,7 +176,7 @@ other: "list[object]"
         self.assertIn("| Status | ❌ FAIL |", body)
         self.assertIn("| Findings | 1 |", body)
         self.assertIn("server/app/example.py:7", body)
-        self.assertNotIn("/ignore-all", body)
+        self.assertIn("/ignore-all", body)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,168 @@
+name: Frontend bundle size
+
+on:
+    # zizmor: ignore[dangerous-triggers]
+    # The issue_comment job only verifies an admin command and reruns a workflow;
+    # it never checks out or executes pull-request code.
+    pull_request:
+        branches: [main]
+        types: [opened, reopened, synchronize]
+        paths:
+            - "web/**"
+            - "Makefile"
+            - "scripts/bundle_size.py"
+            - "scripts/bundle_size_gate.py"
+            - "scripts/test_bundle_size.py"
+            - ".github/workflows/bundle-size.yml"
+    issue_comment:
+        types: [created]
+
+permissions:
+    actions: write
+    contents: read
+    issues: write
+    pull-requests: write
+
+concurrency:
+    group: bundle-size-${{ github.event.pull_request.number || github.event.issue.number }}
+    cancel-in-progress: false
+
+jobs:
+    measure:
+        name: Frontend bundle size
+        if: github.event_name == 'pull_request'
+        runs-on: ubuntu-latest
+        timeout-minutes: 20
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v7
+              with:
+                  fetch-depth: 0
+                  persist-credentials: false
+
+            - name: Setup Node
+              uses: actions/setup-node@v7
+              with:
+                  node-version: 22
+                  cache: npm
+                  cache-dependency-path: web/package-lock.json
+
+            - name: Test bundle tools
+              run: python -m unittest scripts.test_bundle_size
+
+            - name: Install web dependencies
+              run: npm ci --no-audit --no-fund
+              working-directory: web
+
+            - name: Build pull request
+              run: |
+                  npm run build
+                  python scripts/bundle_size.py measure --dist web/dist --output "$RUNNER_TEMP/current.json"
+
+            - name: Build merge base
+              env:
+                  BASE_SHA: ${{ github.event.pull_request.base.sha }}
+              run: |
+                  git worktree add --detach "$RUNNER_TEMP/base-repo" "$BASE_SHA"
+                  npm ci --no-audit --no-fund --prefix "$RUNNER_TEMP/base-repo/web"
+                  npm run build --prefix "$RUNNER_TEMP/base-repo/web"
+                  python scripts/bundle_size.py measure \
+                    --dist "$RUNNER_TEMP/base-repo/web/dist" \
+                    --output "$RUNNER_TEMP/base.json"
+
+            - name: Compare bundle sizes
+              id: compare
+              env:
+                  PR_NUMBER: ${{ github.event.pull_request.number }}
+                  HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+                  REPORT_PATH: ${{ runner.temp }}/bundle-size/report.json
+                  SUMMARY_PATH: ${{ runner.temp }}/bundle-size/summary.md
+                  GITHUB_TOKEN: ${{ github.token }}
+                  GITHUB_REPOSITORY: ${{ github.repository }}
+              run: |
+                  set +e
+                  mkdir -p "$RUNNER_TEMP/bundle-size"
+                  python scripts/bundle_size.py compare \
+                    --base "$RUNNER_TEMP/base.json" \
+                    --current "$RUNNER_TEMP/current.json" \
+                    --output "$RUNNER_TEMP/bundle-size/report.json" \
+                    --pr-number "$PR_NUMBER" \
+                    --head-sha "$HEAD_SHA"
+                  python scripts/bundle_size_gate.py
+                  code=$?
+                  echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+                  exit 0
+
+            - name: Publish workflow summary
+              if: always()
+              run: |
+                  if [ -f "$RUNNER_TEMP/bundle-size/summary.md" ]; then
+                    cat "$RUNNER_TEMP/bundle-size/summary.md" >> "$GITHUB_STEP_SUMMARY"
+                  else
+                    echo "## ❌ Bundle size measurement failed" >> "$GITHUB_STEP_SUMMARY"
+                  fi
+
+            - name: Enforce bundle-size verdict
+              if: always()
+              env:
+                  GATE_EXIT: ${{ steps.compare.outputs.exit_code }}
+              run: exit "${GATE_EXIT:-2}"
+
+    command:
+        name: Process bundle-size approval command
+        if: >-
+            github.event_name == 'issue_comment'
+            && github.event.issue.pull_request
+            && startsWith(github.event.comment.body, '/')
+        runs-on: ubuntu-latest
+        steps:
+            - name: Queue command and rerun bundle-size gate
+              uses: actions/github-script@v8
+              with:
+                  script: |
+                      const body = context.payload.comment.body.trim();
+                      const match = body.match(/^\/(ignore|ignore-all|remove-ignore)(?:\s+(\S+))?$/);
+                      if (!match) return;
+                      const targetsBundle = match[1] === "ignore-all"
+                        || (match[2] || "").split(",").some((id) => id.startsWith("bundle-"));
+                      if (!targetsBundle) return;
+                      const permission = await github.rest.repos.getCollaboratorPermissionLevel({
+                        owner: context.repo.owner,
+                        repo: context.repo.repo,
+                        username: context.payload.comment.user.login,
+                      });
+                      if (permission.data.permission !== "admin") return;
+                      const pull = await github.rest.pulls.get({
+                        owner: context.repo.owner,
+                        repo: context.repo.repo,
+                        pull_number: context.issue.number,
+                      });
+                      const marker = `<!-- monori-bundle-size-pending: ${context.payload.comment.id} -->`;
+                      const pending = /<!-- monori-bundle-size-pending: \d+ -->/;
+                      const current = pull.data.body || "";
+                      const updated = pending.test(current)
+                        ? current.replace(pending, marker)
+                        : `${current.trim()}\n\n${marker}`.trim();
+                      await github.rest.pulls.update({
+                        owner: context.repo.owner,
+                        repo: context.repo.repo,
+                        pull_number: context.issue.number,
+                        body: updated,
+                      });
+                      const runs = await github.paginate(github.rest.actions.listWorkflowRuns, {
+                        owner: context.repo.owner,
+                        repo: context.repo.repo,
+                        workflow_id: "bundle-size.yml",
+                        event: "pull_request",
+                        per_page: 100,
+                      });
+                      const run = runs.find((item) =>
+                        item.pull_requests?.some((itemPull) => itemPull.number === context.issue.number)
+                        && item.status === "completed"
+                      );
+                      if (!run) throw new Error(`No completed bundle-size run found for PR #${context.issue.number}`);
+                      await github.rest.actions.reRunWorkflow({
+                        owner: context.repo.owner,
+                        repo: context.repo.repo,
+                        run_id: run.id,
+                      });
