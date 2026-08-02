@@ -14,7 +14,7 @@ WEBBIN := web/node_modules/.bin
         fmt fmt-check \
         lint lint-web lint-css lint-html lint-server lint-sql lint-yaml lint-md lint-docs lint-actions lint-docker lint-shell spell \
         type type-front type-back analyze analyze-python-dead-code analyze-javascript-dead-code audit audit-deps audit-deps-py audit-secrets \
-        test t-front t-back t-e2e t-e2e-ui coverage mutation mutation-diff m-front m-front-diff m-front-file m-back m-back-diff \
+        test t-fast t-front t-back t-e2e t-e2e-ui coverage mutation mutation-diff m-front m-front-diff m-front-file m-back m-back-diff \
         schema-diagram check
 
 install:
@@ -159,6 +159,10 @@ audit-secrets:
 
 test: t-front t-back t-e2e
 
+t-fast:
+	cd web && npx vitest run
+	cd server && uv run pytest -q -m "not integration"
+
 t-front:
 	cd web && npx vitest run
 
@@ -254,4 +258,4 @@ mutation:
 	echo "── mutation gates: frontend exit=$$front, backend exit=$$back ──"; \
 	if [ $$front -ne 0 ] || [ $$back -ne 0 ]; then exit 1; fi
 
-check: fmt-check lint type analyze t-front t-back
+check: fmt-check lint type analyze t-fast

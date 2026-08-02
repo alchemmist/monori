@@ -88,10 +88,11 @@ dependencies (a real temp SQLite database, the real FastAPI app), not mocks.
 
 | Target               | Does                                                                                                                                              |
 | ---------------      | ----------------------------------------------------------------------------------------------------------------------------------------------    |
-| `make test`          | The whole suite (`t-front` + `t-back` + `t-e2e`).                                                                                                  |
-| `make t-front`       | Frontend unit tests via Vitest.                                                                                                                    |
-| `make t-back`        | Backend unit and integration tests via pytest.                                                                                                     |
-| `make t-e2e`         | End-to-end Playwright tests against the real backend and production frontend stack.                                                                |
+| `make test`          | The whole suite (`t-front` + `t-back` + `t-e2e`).                                                                                                 |
+| `make t-fast`        | Fast unit tests for both frontend (Vitest) and backend (pytest without integration tests).                                                        |
+| `make t-front`       | Frontend tests via Vitest.                                                                                                                        |
+| `make t-back`        | Backend unit and integration tests via pytest.                                                                                                    |
+| `make t-e2e`         | End-to-end Playwright tests against the real backend and production frontend stack.                                                               |
 | `make coverage`      | Coverage as a tree (root → back/front → module → file), via `scripts/coverage-tree.sh`. Fails below **90% statements and lines** in `web/src`.    |
 | `make mutation`      | Full mutation sweep: Stryker on `web/src`, mutmut on `server/app`. Runs nightly at 05:00 Moscow time and on manual dispatch.                      |
 | `make mutation-diff` | Diff-scoped gate for changed frontend lines and backend functions. Needs full git history. Example: `BASE=origin/main`, threshold 90%.            |
@@ -99,7 +100,7 @@ dependencies (a real temp SQLite database, the real FastAPI app), not mocks.
 ### The pre-commit gate
 
 ```bash
-make check   # fmt-check + lint + type + analyze + t-front + t-back
+make check   # fmt-check + lint + type + analyze + t-fast
 ```
 
 ## Typing policy
