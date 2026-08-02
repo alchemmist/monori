@@ -14,6 +14,7 @@ test("reports accessibility violations on authenticated sections", async ({
     page,
     user,
 }, testInfo) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
     await openApp(page, user);
 
     const report: Record<string, unknown> = {};
@@ -22,7 +23,7 @@ test("reports accessibility violations on authenticated sections", async ({
         if (section !== "Budget") {
             await gotoSection(page, section);
         }
-        await expect(page.locator("h1")).toBeVisible();
+        await expect(page.locator("h1")).toHaveText(section);
 
         const results = await new AxeBuilder({ page }).analyze();
         report[section] = results.violations;
