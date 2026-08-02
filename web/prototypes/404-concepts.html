@@ -112,6 +112,12 @@
                 border-color: var(--accent);
                 color: var(--accent);
             }
+            .theme-button:focus-visible,
+            .arrow-button:focus-visible,
+            .dot:focus-visible {
+                outline: 2px solid var(--accent);
+                outline-offset: 3px;
+            }
             .gallery-stage {
                 position: fixed;
                 inset: 72px 0 74px;
@@ -122,14 +128,17 @@
                 inset: 0;
                 overflow: hidden;
                 opacity: 0;
+                visibility: hidden;
                 pointer-events: none;
                 transform: scale(0.985);
                 transition:
                     opacity 0.45s,
-                    transform 0.55s;
+                    transform 0.55s,
+                    visibility 0.45s;
             }
             .scene.active {
                 opacity: 1;
+                visibility: visible;
                 pointer-events: auto;
                 transform: scale(1);
             }
@@ -1941,7 +1950,7 @@
             }
             @keyframes orbit-spin {
                 to {
-                    transform: translate(-50%, -50%) rotate(350deg);
+                    transform: translate(-50%, -50%) rotate(360deg);
                 }
             }
             @keyframes cloud {
@@ -2136,7 +2145,7 @@
             }
             @keyframes planet-spin {
                 to {
-                    transform: translate(-50%, -50%) rotate(349deg);
+                    transform: translate(-50%, -50%) rotate(360deg);
                 }
             }
             @media (max-width: 800px) {
@@ -2329,6 +2338,12 @@
                 *::after {
                     animation: none !important;
                     transition: none !important;
+                }
+                .elevator-door.left {
+                    transform: translateX(-93%);
+                }
+                .elevator-door.right {
+                    transform: translateX(93%);
                 }
             }
         </style>
@@ -2616,7 +2631,7 @@
         <footer class="gallery-bottom">
             <div class="concept-name">Concept: <strong id="name">Overgrown ledger</strong></div>
             <nav class="dots" aria-label="Concepts">
-                <button class="dot active" aria-label="Concept 1"></button
+                <button class="dot active" aria-current="true" aria-label="Concept 1"></button
                 ><button class="dot" aria-label="Concept 2"></button
                 ><button class="dot" aria-label="Concept 3"></button
                 ><button class="dot" aria-label="Concept 4"></button
@@ -2645,19 +2660,24 @@
             const root = document.documentElement,
                 scenes = [...document.querySelectorAll(".scene")],
                 dots = [...document.querySelectorAll(".dot")],
-                name = document.getElementById("name");
+                nameEl = document.getElementById("name");
             let active = 0;
             function show(index) {
                 active = (index + scenes.length) % scenes.length;
                 scenes.forEach((scene, i) => scene.classList.toggle("active", i === active));
-                dots.forEach((dot, i) => dot.classList.toggle("active", i === active));
-                name.textContent = scenes[active].dataset.name;
+                dots.forEach((dot, i) => {
+                    dot.classList.toggle("active", i === active);
+                    if (i === active) dot.setAttribute("aria-current", "true");
+                    else dot.removeAttribute("aria-current");
+                });
+                nameEl.textContent = scenes[active].dataset.name;
             }
             document.getElementById("theme").onclick = () => root.classList.toggle("dark");
             document.getElementById("prev").onclick = () => show(active - 1);
             document.getElementById("next").onclick = () => show(active + 1);
             dots.forEach((dot, i) => (dot.onclick = () => show(i)));
             document.addEventListener("keydown", (event) => {
+                if (event.ctrlKey || event.metaKey || event.altKey) return;
                 if (event.key === "ArrowRight") show(active + 1);
                 if (event.key === "ArrowLeft") show(active - 1);
                 if (event.key.toLowerCase() === "t") root.classList.toggle("dark");
