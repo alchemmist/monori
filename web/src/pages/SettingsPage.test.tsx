@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ReactElement } from "react";
-import { MemoryRouter, useLocation } from "react-router-dom";
+import { MemoryRouter, useLocation, useNavigationType } from "react-router-dom";
 import { fireEvent, renderUI, resetStore, screen, setPath, waitFor } from "../test/render.jsx";
 import { useStore } from "../store.js";
 import SettingsPage from "./SettingsPage.jsx";
@@ -9,7 +9,12 @@ vi.mock("../api.js", () => ({ api: { exportXlsx: vi.fn() } }));
 import { api } from "../api.js";
 
 function CurrentPath() {
-    return <output data-testid="current-path">{useLocation().pathname}</output>;
+    const navigationType = useNavigationType();
+    return (
+        <output data-testid="current-path" data-navigation-type={navigationType}>
+            {useLocation().pathname}
+        </output>
+    );
 }
 
 function renderSettings(page: ReactElement) {
@@ -51,6 +56,10 @@ describe("SettingsPage", () => {
         expect(migrate).toHaveBeenCalledOnce();
         await user.click(screen.getByRole("button", { name: /log out/i }));
         expect(screen.getByTestId("current-path")).toHaveTextContent("/logout");
+        expect(screen.getByTestId("current-path")).toHaveAttribute(
+            "data-navigation-type",
+            "REPLACE",
+        );
     });
 
     it("flips the theme only when the other segment is picked", async () => {
