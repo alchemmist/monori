@@ -15,10 +15,10 @@ LHCI_BIN="$HARNESS/node_modules/.bin/lhci"
 PYTHON=${PYTHON:-python3}
 
 case "$PERF_OUTPUT_DIR" in
-  "" | "/" | "$PWD")
-    echo "frontend performance: refusing unsafe PERF_OUTPUT_DIR '$PERF_OUTPUT_DIR'" >&2
-    exit 2
-    ;;
+"" | "/" | "$PWD")
+  echo "frontend performance: refusing unsafe PERF_OUTPUT_DIR '$PERF_OUTPUT_DIR'" >&2
+  exit 2
+  ;;
 esac
 
 rm -rf "$PERF_OUTPUT_DIR/base" "$PERF_OUTPUT_DIR/pr"
@@ -46,7 +46,7 @@ cleanup_stack() {
   fi
 }
 
-# shellcheck disable=SC2329 # called by the EXIT-trapped finish function
+# shellcheck disable=SC2317,SC2329 # called by the EXIT-trapped finish function
 cleanup() {
   cleanup_stack
   rm -f "$PERF_OUTPUT_DIR/base/token.json" "$PERF_OUTPUT_DIR/pr/token.json"
@@ -59,7 +59,7 @@ cleanup() {
   rmdir "$base_parent" >/dev/null 2>&1 || true
 }
 
-# shellcheck disable=SC2329 # invoked through the EXIT trap below
+# shellcheck disable=SC2317,SC2329 # invoked through the EXIT trap below
 finish() {
   code=$?
   cleanup
