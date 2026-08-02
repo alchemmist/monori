@@ -46,6 +46,115 @@ jobs:
             github.event_name == 'pull_request'
             && needs.quality.result == 'success'
             && needs.workflow-graph.result == 'success'
-        uses: ./.github/workflows/mutation.yaml
         permissions:
             contents: read
+        runs-on: ubuntu-latest
+        timeout-minutes: 45
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v7
+              with:
+                  fetch-depth: 0
+                  persist-credentials: false
+
+            - name: Setup Node
+              uses: actions/setup-node@v7
+              with:
+                  node-version: 22
+                  cache: npm
+                  cache-dependency-path: web/package.json
+
+            - name: Setup uv
+              uses: astral-sh/setup-uv@v7
+              with:
+                  enable-cache: true
+
+            - name: Install web deps
+              run: npm install --no-audit --no-fund
+              working-directory: web
+
+            - name: Install server deps
+              run: uv sync
+              working-directory: server
+
+            - name: Restore Stryker cache
+              uses: actions/cache@v4
+              with:
+                  path: web/reports/stryker-incremental.json
+                  key: mutation-stryker-${{ runner.os }}-${{ hashFiles('web/package.json') }}-pr-${{ github.event.pull_request.number }}-${{ github.sha }}
+                  restore-keys: |
+                      mutation-stryker-${{ runner.os }}-${{ hashFiles('web/package.json') }}-pr-${{ github.event.pull_request.number }}-
+                      mutation-stryker-${{ runner.os }}-${{ hashFiles('web/package.json') }}-main-
+
+            - name: Restore mutmut cache
+              uses: actions/cache/restore@v4
+              with:
+                  path: server/mutants
+                  key: mutation-mutmut-${{ runner.os }}-${{ hashFiles('server/pyproject.toml') }}-main-
+                  restore-keys: |
+                      mutation-mutmut-${{ runner.os }}-${{ hashFiles('server/pyproject.toml') }}-main-
+
+            - name: Test diff mutation gate
+              run: env -u GITHUB_STEP_SUMMARY python3 -m unittest scripts/test_mutation_diff_gate.py
+
+            - name: Run frontend diff mutation tests
+              id: mutation-front
+              continue-on-error: true
+              run: make BASE=origin/main MUTATION_DIFF_THRESHOLD=90 m-front-diff
+
+            - name: Run backend diff mutation tests
+              id: mutation-back
+              continue-on-error: true
+              run: make BASE=origin/main MUTATION_DIFF_THRESHOLD=90 m-back-diff
+
+            - name: Fail if a mutation gate failed
+              if: steps.mutation-front.outcome == 'failure' || steps.mutation-back.outcome == 'failure'
+              run: exit 1
+
+    bundle-size:
+        name: Frontend bundle size
+        needs: [quality, workflow-graph]
+        if: >-
+            github.event_name == 'pull_request'
+            && needs.quality.result == 'success'
+            && needs.workflow-graph.result == 'success'
+        uses: ./.github/workflows/bundle-size.yml
+        permissions:
+            actions: write
+            contents: read
+            issues: write
+            pull-requests: write
+
+    frontend-performance:
+        name: Frontend performance
+        needs: [quality, workflow-graph]
+        if: >-
+            github.event_name == 'pull_request'
+            && needs.quality.result == 'success'
+            && needs.workflow-graph.result == 'success'
+        uses: ./.github/workflows/frontend-perf.yml
+        permissions:
+            actions: write
+            contents: read
+            issues: write
+            pull-requests: write
+
+    object-annotations:
+        name: Python object annotation gate
+        if: github.event_name == 'pull_request_target'
+        uses: ./.github/workflows/object-annotation-gate.yaml
+        permissions:
+            actions: write
+            contents: read
+            issues: write
+            pull-requests: write
+
+    suppressions:
+        name: Lint suppression gate
+        if: github.event_name == 'pull_request_target'
+        uses: ./.github/workflows/suppression-gate.yaml
+        permissions:
+            actions: write
+            contents: read
+            issues: write
+            pull-requests: write
