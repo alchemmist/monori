@@ -103,11 +103,25 @@ dependencies (a real temp SQLite database, the real FastAPI app), not mocks.
 | `make mutation` | Full mutation sweep: Stryker on `web/src`, mutmut on `server/app`. Runs nightly at 05:00 Moscow time and on manual dispatch. |
 | `make mutation-diff` | Diff-scoped gate for changed frontend lines and backend functions. Needs full git history. Example: `BASE=origin/main`, threshold 90%. |
 
-### The pre-commit gate
+### The pre-commit hook
+
+Install the repository hook once per checkout:
 
 ```bash
-make check   # fmt-check + lint + type + analyze + t-fast
+make precommit-install
 ```
+
+The hook runs `make fmt` before each commit and stages formatter changes so
+they are included in that commit. Formatting failures stop the commit.
+
+Remove the hook with:
+
+```bash
+make precommit-uninstall
+```
+
+The hook only manages formatting. Run `make check` separately for the full
+local quality gate (`fmt-check` + `lint` + `type` + `analyze` + `t-fast`).
 
 ## Typing policy
 

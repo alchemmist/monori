@@ -12,6 +12,7 @@ WEBBIN := web/node_modules/.bin
 .DEFAULT_GOAL := up
 
 .PHONY: install setup tools dev down reset-db deploy api web build clean \
+        precommit-install precommit-uninstall \
         fmt fmt-check \
         lint lint-web lint-css lint-html lint-server lint-no-comments lint-sql lint-yaml lint-md lint-docs lint-actions lint-docker lint-shell spell \
         type type-front type-back analyze analyze-python-dead-code analyze-javascript-dead-code audit audit-deps audit-deps-py audit-secrets \
@@ -31,6 +32,24 @@ tools:
 	uvx --from 'sqlfluff==3.4.2' sqlfluff --version >/dev/null
 	uvx yamllint --version >/dev/null
 	uvx codespell --version >/dev/null
+
+precommit-install:
+	@hook=$$(git rev-parse --git-path hooks)/pre-commit; \
+	if [ -e "$$hook" ] && ! grep -q '^# monori-pre-commit-hook$$' "$$hook"; then \
+		echo "Refusing to replace an existing non-Monori hook: $$hook"; \
+		exit 1; \
+	fi; \
+	install -m 755 scripts/pre-commit "$$hook"; \
+	echo "Installed Monori pre-commit hook at $$hook"
+
+precommit-uninstall:
+	@hook=$$(git rev-parse --git-path hooks)/pre-commit; \
+	if [ -e "$$hook" ] && grep -q '^# monori-pre-commit-hook$$' "$$hook"; then \
+		rm -- "$$hook"; \
+		echo "Removed Monori pre-commit hook from $$hook"; \
+	else \
+		echo "Monori pre-commit hook is not installed"; \
+	fi
 
 up:
 	$(COMPOSE) -f deploy/docker-compose.dev.yml up --build
