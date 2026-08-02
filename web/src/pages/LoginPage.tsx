@@ -1,4 +1,5 @@
 import { useState, type SyntheticEvent } from "react";
+import { useLocation, useNavigate, type Location } from "react-router-dom";
 import { Eye, EyeSlash } from "@gravity-ui/icons";
 import { useStore } from "../store.js";
 import Meadow from "../components/Meadow.jsx";
@@ -12,8 +13,24 @@ const badField = (message: string | null): "email" | "password" | null => {
     return null;
 };
 
+function isInternalLocation(value: unknown): value is Location {
+    if (value == null || typeof value !== "object") return false;
+    return (
+        "pathname" in value &&
+        typeof value.pathname === "string" &&
+        value.pathname.startsWith("/") &&
+        !value.pathname.startsWith("//") &&
+        "search" in value &&
+        typeof value.search === "string" &&
+        "hash" in value &&
+        typeof value.hash === "string"
+    );
+}
+
 export default function LoginPage() {
     const { login, register } = useStore();
+    const location = useLocation();
+    const navigate = useNavigate();
     const [mode, setMode] = useState("login");
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
@@ -29,6 +46,13 @@ export default function LoginPage() {
         try {
             if (mode === "register") await register(email, password);
             else await login(email, password);
+            const state = location.state as unknown;
+            const from =
+                state != null && typeof state === "object" && "from" in state ? state.from : null;
+            const destination = isInternalLocation(from)
+                ? `${from.pathname}${from.search}${from.hash}`
+                : "/budget";
+            void navigate(destination, { replace: true });
         } catch (err) {
             setError(err instanceof Error ? err.message : String(err));
         } finally {

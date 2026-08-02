@@ -14,7 +14,7 @@ WEBBIN := web/node_modules/.bin
         fmt fmt-check \
         lint lint-web lint-css lint-html lint-server lint-sql lint-yaml lint-md lint-docs lint-actions lint-docker lint-shell spell \
         type type-front type-back analyze analyze-python-dead-code analyze-javascript-dead-code audit audit-deps audit-deps-py audit-secrets \
-        test t-fast t-front t-back t-e2e t-e2e-ui coverage mutation mutation-diff m-front m-front-diff m-front-file m-back m-back-diff \
+        test t-fast t-medium t-slow t-slow-ui t-front t-back t-e2e t-e2e-ui coverage mutation mutation-diff m-front m-front-diff m-front-file m-back m-back-diff \
         schema-diagram check
 
 install:
@@ -160,8 +160,16 @@ audit-secrets:
 test: t-front t-back t-e2e
 
 t-fast:
-	cd web && npx vitest run
+	cd web && npx vitest run --exclude "src/**/*.test.tsx"
 	cd server && uv run pytest -q -m "not integration"
+
+t-medium:
+	cd web && npx vitest run --exclude "src/**/*.test.ts"
+	cd server && uv run pytest -q -m integration
+
+t-slow: t-e2e
+
+t-slow-ui: t-e2e-ui
 
 t-front:
 	cd web && npx vitest run
@@ -199,8 +207,8 @@ m-front-diff:
 	@set +e; \
 	git rev-parse --verify --quiet "$(BASE)" >/dev/null || { echo "mutation-diff: BASE='$(BASE)' is not a valid revision"; exit 1; }; \
 	ranges=$$(git diff --diff-filter=ACMR --unified=0 "$(BASE)...HEAD" -- web/src | \
-		awk '/^diff --git / { file=$$4; sub(/^b\/web\//, "", file); next } \
-		/^@@ / { hunk=$$0; sub(/^.*\+/, "", hunk); sub(/ .*/, "", hunk); split(hunk, parts, ","); start=parts[1]; count=(parts[2] == "" ? 1 : parts[2]); if (count > 0) { end=start + count - 1; found[file] = found[file] (found[file] == "" ? "" : ",") file ":" start "-" end } } \
+		awk '/^diff --git / { file=$$4; sub(/^b\/web\//, "", file); eligible=(file ~ /^src\/.*\.tsx?$$/ && file !~ /\.test\.tsx?$$/ && file != "src/main.tsx" && file !~ /^src\/test\// && file != "src/components/Meadow.tsx" && file != "src/components/GlyphFlower.tsx" && file !~ /^src\/demo\//); next } \
+		/^@@ / { hunk=$$0; sub(/^.*\+/, "", hunk); sub(/ .*/, "", hunk); split(hunk, parts, ","); start=parts[1]; count=(parts[2] == "" ? 1 : parts[2]); if (eligible && count > 0) { end=start + count - 1; found[file] = found[file] (found[file] == "" ? "" : ",") file ":" start "-" end } } \
 		END { for (file in found) printf "%s,", found[file] }' | sed 's/,$$//'); \
 	if [ -z "$$ranges" ]; then \
 		echo "mutation-diff: no changed frontend lines — pass"; exit 0; \

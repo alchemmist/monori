@@ -1,4 +1,12 @@
-import { test, expect, openApp, gotoSection, YEAR, MONTH } from "./fixtures/fixtures.js";
+import {
+    test,
+    expect,
+    openApp,
+    gotoSection,
+    reloadCurrentPage,
+    YEAR,
+    MONTH,
+} from "./fixtures/fixtures.js";
 import type { Locator } from "@playwright/test";
 
 // June's "Bud" cell in the year grid: td 0 is the category name, then one td
@@ -33,7 +41,7 @@ test("editing a budgeted cell recomputes available-to-budget and persists", asyn
     await expect(juneCell(row)).toHaveText("500");
     await expect(june.locator(".yg-msum__av")).toHaveText("-500 ₽");
 
-    await page.reload();
+    await reloadCurrentPage(page);
     await expect(page.locator(".sidebar")).toBeVisible();
     await page.getByText("Plan", { exact: true }).click();
     await expect(juneCell(page.locator(".yg-row", { hasText: "Groceries" }))).toHaveText("500");

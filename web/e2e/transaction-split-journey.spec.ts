@@ -1,4 +1,12 @@
-import { test, expect, openApp, gotoSection, YEAR, MONTH } from "./fixtures/fixtures.js";
+import {
+    test,
+    expect,
+    openApp,
+    gotoSection,
+    reloadCurrentPage,
+    YEAR,
+    MONTH,
+} from "./fixtures/fixtures.js";
 import type { Locator, Page } from "@playwright/test";
 
 const juneBaseCell = 1 + (MONTH - 1) * 3;
@@ -103,7 +111,7 @@ test("split journey keeps allocation, budgets and dashboard visualizations consi
     await expect(incomeRow.getByRole("button", { name: "split · 2" })).toBeVisible();
     await expect(page.locator(".ui-tab")).toHaveCount(0);
 
-    await page.reload();
+    await reloadCurrentPage(page);
     await expect(page.locator(".sidebar")).toBeVisible();
     await gotoSection(page, "Transactions");
     const reloadedExpense = page.locator(".tx-grid .cat-row", { hasText: "E2E MIXED RECEIPT" });

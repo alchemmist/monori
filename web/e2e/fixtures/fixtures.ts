@@ -150,6 +150,22 @@ export const test = base.extend<{ user: TestUser }>({
 
 export { expect };
 
+const SECTION_PATHS = {
+    Budget: "/budget",
+    Dashboard: "/dashboard",
+    Transactions: "/transactions",
+    Accounts: "/accounts",
+    Categories: "/categories",
+    Settings: "/settings",
+    Admin: "/admin",
+} as const;
+
+export async function expectPath(page: Page, pathname: string) {
+    await expect(page).toHaveURL(
+        (url) => url.pathname === pathname && url.search === "" && url.hash === "",
+    );
+}
+
 // Programmatic login: pin the clock, drop the real token into localStorage and
 // land in the authed app. Specs other than auth.spec use this so their setup
 // does not re-test the login form.
@@ -157,11 +173,21 @@ export async function openApp(page: Page, user: TestUser) {
     await page.clock.install({ time: FIXED_NOW });
     await page.addInitScript((token) => localStorage.setItem("monori_token", token), user.token);
     await page.goto("/");
+    await expectPath(page, "/budget");
     await expect(page.locator(".sidebar")).toBeVisible();
 }
 
-export async function gotoSection(page: Page, label: string) {
+export async function gotoSection(page: Page, label: keyof typeof SECTION_PATHS) {
     await page.locator(".sidebar__item", { hasText: label }).first().click();
+    await expectPath(page, SECTION_PATHS[label]);
+}
+
+export async function reloadCurrentPage(page: Page) {
+    const { pathname, search, hash } = new URL(page.url());
+    await page.reload();
+    await expect(page).toHaveURL(
+        (url) => url.pathname === pathname && url.search === search && url.hash === hash,
+    );
 }
 
 // Swap the signed-in tenant on an already-open page (the clock stays pinned —
@@ -175,6 +201,6 @@ export async function switchUser(page: Page, user: TestUser) {
         localStorage.clear();
         localStorage.setItem("monori_token", token);
     }, user.token);
-    await page.reload();
+    await reloadCurrentPage(page);
     await expect(page.locator(".sidebar")).toBeVisible();
 }

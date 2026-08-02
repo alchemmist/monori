@@ -1,4 +1,4 @@
-import { test, expect, openApp, gotoSection } from "./fixtures/fixtures.js";
+import { test, expect, openApp, gotoSection, reloadCurrentPage } from "./fixtures/fixtures.js";
 import type { Page } from "@playwright/test";
 
 // The kanban drag is custom pointer-event DnD with a 5px start threshold, so
@@ -46,7 +46,7 @@ test("reordering a group on the kanban carries into the budget grid", async ({ p
     await expect.poll(order).toEqual([second, first]);
 
     // the new order survives a reload (persisted through the reorder API) ...
-    await page.reload();
+    await reloadCurrentPage(page);
     await expect(page.locator(".sidebar")).toBeVisible();
     await gotoSection(page, "Categories");
     await expect.poll(order).toEqual([second, first]);

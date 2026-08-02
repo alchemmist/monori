@@ -35,6 +35,9 @@ docker compose -f deploy/docker-compose.test.yml -p monori-e2e down -v
 - Start with `openApp(page, user)`: it pins the browser clock to `FIXED_NOW`
   (2026-06-15) and logs in programmatically by dropping the real token into
   `localStorage`. Only `auth.spec.js` drives the login form itself.
+- Use `gotoSection` and `reloadCurrentPage` for in-app navigation and reloads;
+  they assert the resulting URL. Auth journeys that navigate directly must use
+  `expectPath` after every transition.
 - Express all seeded dates relative to `FIXED_NOW`/`YEAR`/`MONTH` so specs
   stay deterministic across month and year rollover.
 - Keep the cap small: a handful of critical journeys. Exhaustive coverage

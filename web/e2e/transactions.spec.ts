@@ -1,4 +1,4 @@
-import { test, expect, openApp, gotoSection } from "./fixtures/fixtures.js";
+import { test, expect, openApp, gotoSection, reloadCurrentPage } from "./fixtures/fixtures.js";
 import type { Locator } from "@playwright/test";
 
 test("categorizing via the grouped picker persists and follows kanban order", async ({
@@ -42,7 +42,7 @@ test("categorizing via the grouped picker persists and follows kanban order", as
     await expect(row.locator(".gsel").last()).toContainText("Coffee");
     await saved;
 
-    await page.reload();
+    await reloadCurrentPage(page);
     await expect(page.locator(".sidebar")).toBeVisible();
     await gotoSection(page, "Transactions");
     await expect(
@@ -73,7 +73,7 @@ test("hiding a transaction removes it everywhere and the toggle brings it back",
     await hidden;
 
     // gone for real: a reload rebuilds from the server snapshot
-    await page.reload();
+    await reloadCurrentPage(page);
     await expect(page.locator(".sidebar")).toBeVisible();
     await gotoSection(page, "Transactions");
     await expect(page.locator(".tx-grid .cat-row", { hasText: "KEEP ME" })).toBeVisible();
@@ -206,7 +206,7 @@ test("the add-transaction tab records rows one after another without closing", a
     await second;
 
     // both rows survive a reload, on the category that stayed picked
-    await page.reload();
+    await reloadCurrentPage(page);
     await expect(page.locator(".sidebar")).toBeVisible();
     await gotoSection(page, "Transactions");
     const one = page.locator(".tx-grid .cat-row", { hasText: "MANUAL ONE" });

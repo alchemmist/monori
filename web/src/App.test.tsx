@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import App from "./App.jsx";
 import { api } from "./api.js";
 import { renderUI, screen, waitFor, atDemo, setPath, resetStore } from "./test/render.jsx";
@@ -40,6 +40,25 @@ function renderDemo() {
     );
 }
 
+function LocationPage() {
+    const location = useLocation();
+    return <div data-testid="current-location">{location.pathname}</div>;
+}
+
+function renderRoute(path: string) {
+    setPath(path);
+    return renderUI(
+        <MemoryRouter initialEntries={[path]}>
+            <Routes>
+                <Route path="/welcome" element={<LocationPage />} />
+                <Route path="/login" element={<LocationPage />} />
+                <Route path="/demo/budget" element={<LocationPage />} />
+                <Route path="*" element={<App theme="light" onToggleTheme={() => {}} />} />
+            </Routes>
+        </MemoryRouter>,
+    );
+}
+
 describe("App", () => {
     beforeEach(() => {
         resetStore();
@@ -63,10 +82,10 @@ describe("App", () => {
 
     it("shows every navigation destination and marks Budget as the landing page", async () => {
         renderDemo();
-        const budget = await screen.findByRole("button", { name: "Budget" });
+        const budget = await screen.findByRole("link", { name: "Budget" });
         expect(budget).toHaveClass("sidebar__item_active");
         for (const title of ["Dashboard", "Transactions", "Accounts", "Categories"]) {
-            expect(screen.getByRole("button", { name: title })).not.toHaveClass(
+            expect(screen.getByRole("link", { name: title })).not.toHaveClass(
                 "sidebar__item_active",
             );
         }
@@ -74,10 +93,10 @@ describe("App", () => {
 
     it("switches the content pane when a sidebar destination is clicked", async () => {
         const { user } = renderDemo();
-        const budget = await screen.findByRole("button", { name: "Budget" });
+        const budget = await screen.findByRole("link", { name: "Budget" });
         expect(screen.getByRole("heading", { name: "Budget" })).toBeInTheDocument();
 
-        const transactions = screen.getByRole("button", { name: "Transactions" });
+        const transactions = screen.getByRole("link", { name: "Transactions" });
         await user.click(transactions);
         await waitFor(() =>
             expect(screen.getByRole("heading", { name: "Transactions" })).toBeInTheDocument(),
@@ -85,6 +104,58 @@ describe("App", () => {
         expect(transactions).toHaveClass("sidebar__item_active");
         expect(budget).not.toHaveClass("sidebar__item_active");
         expect(screen.queryByRole("heading", { name: "Budget" })).not.toBeInTheDocument();
+    });
+
+    it("marks Settings as active after navigating there", async () => {
+        const { user } = renderDemo();
+        const settings = await screen.findByRole("link", { name: "Settings" });
+
+        await user.click(settings);
+
+        expect(settings).toHaveClass("sidebar__item_active");
+    });
+
+    it("redirects the demo root to its Budget route", async () => {
+        renderRoute("/demo");
+
+        expect(await screen.findByTestId("current-location")).toHaveTextContent("/demo/budget");
+    });
+
+    it("renders Not Found for an unknown demo route", async () => {
+        renderRoute("/demo/unknown");
+
+        expect(await screen.findByRole("heading", { name: "404" })).toBeInTheDocument();
+    });
+
+    it("redirects a signed-out app route to login", async () => {
+        renderRoute("/budget");
+
+        expect(await screen.findByTestId("current-location")).toHaveTextContent("/login");
+    });
+
+    it("redirects the signed-out app root to welcome", async () => {
+        renderRoute("/");
+
+        expect(await screen.findByTestId("current-location")).toHaveTextContent("/welcome");
+    });
+
+    it("renders Not Found for a signed-in non-admin opening /admin", async () => {
+        useStore.setState({
+            authChecked: true,
+            loading: false,
+            user: { id: 1, email: "user@example.com", isAdmin: false },
+        });
+
+        renderRoute("/admin");
+
+        expect(await screen.findByRole("heading", { name: "404" })).toBeInTheDocument();
+        expect(screen.queryByTestId("admin-page")).not.toBeInTheDocument();
+    });
+
+    it("renders Not Found for the demo admin route", async () => {
+        renderRoute("/demo/admin");
+
+        expect(await screen.findByRole("heading", { name: "404" })).toBeInTheDocument();
     });
 
     it("offers years up to the one after the latest data or the current year", async () => {
@@ -98,7 +169,7 @@ describe("App", () => {
 
     it("shows the roadmap destinations as disabled", async () => {
         renderDemo();
-        await screen.findByRole("button", { name: "Budget" });
+        await screen.findByRole("link", { name: "Budget" });
         const soon = screen.getByText("Net worth").closest<HTMLElement>(".sidebar__item")!;
         expect(soon).toHaveAttribute("aria-disabled", "true");
         expect(soon.tagName).toBe("DIV");
@@ -106,7 +177,7 @@ describe("App", () => {
 
     it("links out to the docs and to a pre-filled bug report", async () => {
         renderDemo();
-        await screen.findByRole("button", { name: "Budget" });
+        await screen.findByRole("link", { name: "Budget" });
         expect(screen.getByRole("link", { name: "Docs" })).toHaveAttribute("href", "/docs");
         expect(screen.getByRole("link", { name: "Report a bug" })).toHaveAttribute(
             "href",
@@ -116,7 +187,7 @@ describe("App", () => {
 
     it("collapses the sidebar and remembers the choice", async () => {
         const { container, user } = renderDemo();
-        await screen.findByRole("button", { name: "Budget" });
+        await screen.findByRole("link", { name: "Budget" });
         const sidebar = container.querySelector<HTMLElement>(".sidebar")!;
         expect(sidebar).not.toHaveClass("sidebar_collapsed");
 
@@ -131,7 +202,7 @@ describe("App", () => {
 
     it("replaces the app with a loader while the snapshot is on its way", async () => {
         renderDemo();
-        await screen.findByRole("button", { name: "Budget" });
+        await screen.findByRole("link", { name: "Budget" });
         useStore.setState({ loading: true });
         await waitFor(() =>
             expect(screen.queryByRole("button", { name: "Budget" })).not.toBeInTheDocument(),
@@ -140,7 +211,7 @@ describe("App", () => {
 
     it("replaces the app with the failure message when loading fails", async () => {
         renderDemo();
-        await screen.findByRole("button", { name: "Budget" });
+        await screen.findByRole("link", { name: "Budget" });
         useStore.setState({ error: "Failed to fetch" });
         expect(await screen.findByText("Failed to load data: Failed to fetch")).toBeInTheDocument();
         expect(screen.queryByRole("button", { name: "Budget" })).not.toBeInTheDocument();
@@ -167,19 +238,24 @@ describe("App", () => {
                     <App theme="light" onToggleTheme={() => {}} />
                 </MemoryRouter>,
             );
-            await screen.findByRole("button", { name: "Budget" });
+            await screen.findByRole("link", { name: "Budget" });
             return rendered;
         }
 
         it("opens the admin page for an admin", async () => {
             const { user } = await renderSignedIn(true);
-            await user.click(screen.getByRole("button", { name: "Admin" }));
+            const admin = screen.getByRole("link", { name: "Admin" });
+            expect(admin).not.toHaveClass("sidebar__item_active");
+
+            await user.click(admin);
+
             expect(await screen.findByTestId("admin-page")).toBeInTheDocument();
+            expect(admin).toHaveClass("sidebar__item_active");
         });
 
         it("does not render the admin page once the session loses its admin rights", async () => {
             const { user } = await renderSignedIn(true);
-            await user.click(screen.getByRole("button", { name: "Admin" }));
+            await user.click(screen.getByRole("link", { name: "Admin" }));
             await screen.findByTestId("admin-page");
 
             // the render guard next to the link guard: dropping the flag must
@@ -193,8 +269,8 @@ describe("App", () => {
 
         it("hides the admin link from a non-admin session", async () => {
             await renderSignedIn(false);
-            expect(screen.queryByRole("button", { name: "Admin" })).not.toBeInTheDocument();
-            expect(screen.getByRole("button", { name: "Settings" })).toBeInTheDocument();
+            expect(screen.queryByRole("link", { name: "Admin" })).not.toBeInTheDocument();
+            expect(screen.getByRole("link", { name: "Settings" })).toBeInTheDocument();
         });
     });
 });

@@ -1,5 +1,6 @@
 import { Button, SegmentedControl } from "@mantine/core";
 import { useState, type ReactNode } from "react";
+import { useNavigate } from "react-router-dom";
 import type { ThemeMode } from "../types.js";
 
 import { FSelect } from "../ui/fields.jsx";
@@ -55,7 +56,7 @@ export default function SettingsPage({
     onMigrate: () => void;
 }) {
     const user = useStore((s) => s.user);
-    const logout = useStore((s) => s.logout);
+    const navigate = useNavigate();
     const snapshot = useStore((s) => s.snapshot);
     const load = useStore((s) => s.load);
     const notify = useStore((s) => s.notify);
@@ -63,6 +64,10 @@ export default function SettingsPage({
     const [exporting, setExporting] = useState(false);
     const [exportError, setExportError] = useState("");
     const [seedingDemo, setSeedingDemo] = useState(false);
+
+    const endSession = () => {
+        void navigate("/logout", { replace: true });
+    };
 
     const exportXlsx = async () => {
         setExporting(true);
@@ -133,7 +138,7 @@ export default function SettingsPage({
                             </div>
                         </div>
                         <Row label="Session" hint="End this session on this device">
-                            <Button variant="outline" data-tone="danger" onClick={logout}>
+                            <Button variant="outline" data-tone="danger" onClick={endSession}>
                                 Log out
                             </Button>
                         </Row>

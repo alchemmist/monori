@@ -1,4 +1,5 @@
 import { Suspense, lazy, useEffect, useMemo, useState } from "react";
+import { Navigate, NavLink, useLocation } from "react-router-dom";
 import { Loader } from "@mantine/core";
 import {
     ChartColumn,
@@ -31,11 +32,15 @@ import TransactionsPage from "./pages/TransactionsPage.jsx";
 import AccountsPage from "./pages/AccountsPage.jsx";
 import CategoriesPage from "./pages/CategoriesPage.jsx";
 import SettingsPage from "./pages/SettingsPage.jsx";
-import LoginPage from "./pages/LoginPage.jsx";
 import TabHost from "./components/TabHost.jsx";
+import NotFound from "./components/NotFound.jsx";
 import type { ThemeMode } from "./types.js";
 
-const NAV = [
+type Page =
+    "budget" | "dashboard" | "transactions" | "accounts" | "categories" | "settings" | "admin";
+type MainPage = Exclude<Page, "settings" | "admin">;
+
+const NAV: Array<{ id: MainPage; title: string; icon: typeof LayoutHeaderCellsLarge }> = [
     { id: "budget", title: "Budget", icon: LayoutHeaderCellsLarge },
     { id: "dashboard", title: "Dashboard", icon: ChartColumn },
     { id: "transactions", title: "Transactions", icon: ListUl },
@@ -63,6 +68,34 @@ const REPORT_BUG_URL = `https://github.com/alchemmist/monori/issues/new?labels=b
 
 const DEFAULT_FIRST_YEAR = 2020;
 
+const PAGE_PATHS: Record<Page, string> = {
+    budget: "/budget",
+    dashboard: "/dashboard",
+    transactions: "/transactions",
+    accounts: "/accounts",
+    categories: "/categories",
+    settings: "/settings",
+    admin: "/admin",
+};
+
+const PAGE_ENTRIES: Array<[Page, string]> = [
+    ["budget", PAGE_PATHS.budget],
+    ["dashboard", PAGE_PATHS.dashboard],
+    ["transactions", PAGE_PATHS.transactions],
+    ["accounts", PAGE_PATHS.accounts],
+    ["categories", PAGE_PATHS.categories],
+    ["settings", PAGE_PATHS.settings],
+    ["admin", PAGE_PATHS.admin],
+];
+
+function pageFromPath(pathname: string): Page | null {
+    const path = pathname.startsWith("/demo") ? pathname.slice("/demo".length) || "/" : pathname;
+    // Stryker disable next-line ConditionalExpression: searching PAGE_ENTRIES for "/" also returns null
+    if (path === "/") return null;
+    const entry = PAGE_ENTRIES.find(([, route]) => route === path);
+    return entry?.[0] ?? null;
+}
+
 export default function App({
     theme,
     onToggleTheme,
@@ -70,6 +103,7 @@ export default function App({
     theme: ThemeMode;
     onToggleTheme: () => void;
 }) {
+    const location = useLocation();
     const {
         snapshot,
         loading,
@@ -82,7 +116,9 @@ export default function App({
         checkAuth,
         openTab,
     } = useStore();
-    const [page, setPage] = useState("budget");
+    const demo = isDemo();
+    const basePath = demo ? "/demo" : "";
+    const page = pageFromPath(location.pathname);
     const [collapsed, setCollapsed] = useState(
         () => localStorage.getItem("sidebar_collapsed") === "1",
     );
@@ -104,12 +140,6 @@ export default function App({
     useEffect(() => {
         if (toast) showToast(toast);
     }, [toast]);
-
-    useEffect(() => {
-        if (!isDemo() && user && window.location.pathname === "/login") {
-            window.history.replaceState(null, "", "/");
-        }
-    }, [user]);
 
     const firstYear = useMemo(() => firstBudgetYear(snapshot, DEFAULT_FIRST_YEAR), [snapshot]);
 
@@ -142,13 +172,15 @@ export default function App({
             </div>
         );
     }
-    if (!isDemo() && !user) {
-        if (window.location.pathname === "/login") {
-            return <LoginPage />;
-        }
-        window.location.replace("/welcome");
-        return null;
+    if (!demo && !user) {
+        if (location.pathname === "/") return <Navigate to="/welcome" replace />;
+        return <Navigate to="/login" state={{ from: location }} replace />;
     }
+    if (location.pathname === "/" || location.pathname === "/demo") {
+        return <Navigate to={`${basePath}/budget`} replace />;
+    }
+    if (page == null) return <NotFound />;
+    if (page === "admin" && user?.isAdmin !== true) return <NotFound />;
     if (loading) {
         return (
             <div style={{ display: "grid", placeItems: "center", height: "100vh" }}>
@@ -183,15 +215,17 @@ export default function App({
                     </div>
                 </div>
                 {NAV.map(({ id, title, icon: Icon }) => (
-                    <button
+                    <NavLink
                         key={id}
-                        className={`sidebar__item ${page === id ? "sidebar__item_active" : ""}`}
-                        onClick={() => setPage(id)}
+                        to={`${basePath}${PAGE_PATHS[id]}`}
+                        className={({ isActive }) =>
+                            `sidebar__item ${isActive ? "sidebar__item_active" : ""}`
+                        }
                         title={collapsed ? title : undefined}
                     >
                         <Icon width={16} height={16} />
                         <span className="sidebar__label">{title}</span>
-                    </button>
+                    </NavLink>
                 ))}
 
                 <div className="sidebar__gap" />
@@ -209,14 +243,14 @@ export default function App({
 
                 <div className="sidebar__bottom">
                     {user?.isAdmin === true && (
-                        <button
+                        <NavLink
                             className={`sidebar__item ${page === "admin" ? "sidebar__item_active" : ""}`}
-                            onClick={() => setPage("admin")}
+                            to={`${basePath}${PAGE_PATHS.admin}`}
                             title={collapsed ? "Admin" : undefined}
                         >
                             <PersonGear width={16} height={16} />
                             <span className="sidebar__label">Admin</span>
-                        </button>
+                        </NavLink>
                     )}
                     <a
                         className="sidebar__item"
@@ -238,14 +272,16 @@ export default function App({
                         <Bug width={16} height={16} />
                         <span className="sidebar__label">Report a bug</span>
                     </a>
-                    <button
-                        className={`sidebar__item ${page === "settings" ? "sidebar__item_active" : ""}`}
-                        onClick={() => setPage("settings")}
+                    <NavLink
+                        to={`${basePath}${PAGE_PATHS.settings}`}
+                        className={({ isActive }) =>
+                            `sidebar__item ${isActive ? "sidebar__item_active" : ""}`
+                        }
                         title={collapsed ? "Settings" : user?.email}
                     >
                         <Gear width={16} height={16} />
                         <span className="sidebar__label">Settings</span>
-                    </button>
+                    </NavLink>
                     <button
                         className="sidebar__collapse"
                         onClick={toggleSidebar}

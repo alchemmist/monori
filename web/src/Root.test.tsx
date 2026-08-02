@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { act } from "@testing-library/react";
 import Root from "./Root.jsx";
+import { useStore } from "./store.js";
 import { renderUI, screen, waitFor, resetStore } from "./test/render.jsx";
 interface ThemeProps {
     theme: "light" | "dark";
@@ -56,6 +58,10 @@ vi.mock("./components/DiagramPage.jsx", () => ({
     default: () => <div>DiagramPage</div>,
 }));
 
+vi.mock("./pages/LoginPage.jsx", () => ({
+    default: () => <div>LoginPage</div>,
+}));
+
 describe("Root", () => {
     beforeEach(() => {
         resetStore();
@@ -103,6 +109,52 @@ describe("Root", () => {
         renderUI(<Root />);
         expect(await screen.findByText("MarkdownPage")).toBeInTheDocument();
         expect(window.location.pathname).toBe("/docs/getting-started");
+    });
+
+    it("shows the login page after confirming there is no active session", async () => {
+        const checkAuth = vi.fn();
+        useStore.setState({ authChecked: true, user: null, checkAuth });
+        window.history.replaceState({}, "", "/login");
+
+        renderUI(<Root />);
+
+        expect(await screen.findByText("LoginPage")).toBeInTheDocument();
+        expect(checkAuth).not.toHaveBeenCalled();
+    });
+
+    it("checks for an existing session before showing the login page", async () => {
+        let release = () => {};
+        const checkAuth = vi.fn(
+            () =>
+                new Promise<void>((resolve) => {
+                    release = () => {
+                        useStore.setState({ authChecked: true, user: null });
+                        resolve();
+                    };
+                }),
+        );
+        useStore.setState({ authChecked: false, checkAuth });
+        window.history.replaceState({}, "", "/login");
+
+        renderUI(<Root />);
+
+        await waitFor(() => expect(checkAuth).toHaveBeenCalledOnce());
+        expect(screen.queryByText("LoginPage")).not.toBeInTheDocument();
+        await act(async () => release());
+        expect(await screen.findByText("LoginPage")).toBeInTheDocument();
+    });
+
+    it("redirects authenticated users away from the login page", async () => {
+        useStore.setState({
+            authChecked: true,
+            user: { id: 1, email: "user@example.com" },
+        });
+        window.history.replaceState({}, "", "/login");
+
+        renderUI(<Root />);
+
+        expect(await screen.findByText("App: light")).toBeInTheDocument();
+        expect(window.location.pathname).toBe("/budget");
     });
 
     it("toggles and persists theme from both route shells", async () => {
