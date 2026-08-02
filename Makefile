@@ -20,7 +20,7 @@ WEBBIN := web/node_modules/.bin
 install:
 	cd web && npm install --no-audit --no-fund
 	cd tools/frontend-perf && npm install --no-audit --no-fund
-	cd server && uv sync
+	cd server && uv sync --locked
 	$(MAKE) tools
 
 setup: install
@@ -50,7 +50,7 @@ deploy:
 	echo "follow it with: gh run watch \$$(gh run list --workflow deploy.yaml -L1 --json databaseId -q '.[0].databaseId')"
 
 api:
-	cd server && uv run uvicorn app.main:app --port $(API_PORT) --reload
+	cd server && uv run --locked uvicorn app.main:app --port $(API_PORT) --reload
 
 web:
 	cd web && API_PORT=$(API_PORT) npm run dev
@@ -67,16 +67,16 @@ schema-diagram:
 
 fmt: schema-diagram
 	$(WEBBIN)/prettier --write .
-	@(uv run --project server ruff check --config server/pyproject.toml server --fix >/dev/null 2>&1 || true)
-	uv run --project server ruff format --config server/pyproject.toml server
+	@(uv run --locked --project server ruff check --config server/pyproject.toml server --fix >/dev/null 2>&1 || true)
+	uv run --locked --project server ruff format --config server/pyproject.toml server
 	$(SQLFLUFF) fix .
 	@-$(WEBBIN)/markdownlint-cli2 --fix >/dev/null 2>&1
 	@files=$$(git ls-files '*.sh'); [ -z "$$files" ] || shfmt -w $$files
 
 fmt-check:
 	$(WEBBIN)/prettier --check .
-	uv run --project server ruff check --config server/pyproject.toml server
-	uv run --project server ruff format --config server/pyproject.toml --check server
+	uv run --locked --project server ruff check --config server/pyproject.toml server
+	uv run --locked --project server ruff format --config server/pyproject.toml --check server
 	$(SQLFLUFF) lint .
 
 lint: lint-web lint-css lint-html lint-server lint-sql lint-yaml lint-md lint-docs lint-actions lint-docker lint-shell spell
@@ -92,7 +92,7 @@ lint-html:
 	$(WEBBIN)/htmlhint web/index.html
 
 lint-server: lint-no-comments
-	uv run --project server ruff check --config server/pyproject.toml server
+	uv run --locked --project server ruff check --config server/pyproject.toml server
 
 lint-no-comments:
 	python3 scripts/no_comments.py server
@@ -131,16 +131,16 @@ type-front:
 	cd web && ./node_modules/.bin/eslint "src/**/*.{ts,tsx}" "e2e/**/*.ts" "*.config.ts" stryker.conf.ts
 
 type-back:
-	MYPYPATH=server uv run --project server --extra connectors mypy --config-file server/pyproject.toml .
+	MYPYPATH=server uv run --locked --project server --extra connectors mypy --config-file server/pyproject.toml .
 
 analyze:
-	cd server && uv run bandit -c pyproject.toml -q -r app
+	cd server && uv run --locked bandit -c pyproject.toml -q -r app
 	semgrep --error --quiet --config p/python --config p/javascript \
 		--exclude-rule python.lang.security.insecure-hash-algorithms.insecure-hash-algorithm-sha1 .
 	$(MAKE) analyze-python-dead-code analyze-javascript-dead-code
 
 analyze-python-dead-code:
-	cd server && uv run vulture
+	cd server && uv run --locked vulture
 
 analyze-javascript-dead-code:
 	cd web && ./node_modules/.bin/knip --no-progress
@@ -150,15 +150,15 @@ audit: audit-deps audit-deps-py audit-secrets
 audit-deps:
 	cd web && npm install --no-audit --no-fund --silent
 	(cd web && npm audit --audit-level=high --json) | \
-		uv run --project server python scripts/npm-audit-gate.py
+		uv run --locked --project server python scripts/npm-audit-gate.py
 	cd tools/frontend-perf && npm install --no-audit --no-fund --silent
 	(cd tools/frontend-perf && npm audit --audit-level=high --json) | \
-		uv run --project server python scripts/npm-audit-gate.py
+		uv run --locked --project server python scripts/npm-audit-gate.py
 
 audit-deps-py:
 	@req=$$(mktemp); \
 	( cd server && uv export --no-dev --no-hashes --format requirements-txt -o "$$req" \
-		&& uv run pip-audit -r "$$req" ); code=$$?; \
+		&& uv run --locked pip-audit -r "$$req" ); code=$$?; \
 	rm -f "$$req"; exit $$code
 
 audit-secrets:
@@ -168,7 +168,7 @@ test: t-front t-back t-e2e
 
 t-fast:
 	cd web && npx vitest run --exclude "src/**/*.test.tsx"
-	cd server && uv run pytest -q -m "not integration"
+	cd server && uv run --locked pytest -q -m "not integration"
 
 t-medium:
 	cd web && npx vitest run --exclude "src/**/*.test.ts"
@@ -182,7 +182,7 @@ t-front:
 	cd web && npx vitest run
 
 t-back:
-	cd server && uv run pytest -q
+	cd server && uv run --locked pytest -q
 
 t-e2e:
 	COMPOSE="$(COMPOSE)" bash scripts/e2e.sh
