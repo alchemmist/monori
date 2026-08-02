@@ -359,14 +359,22 @@ def sorted_regressions(entries: list[Entry]) -> list[Entry]:
     )
 
 
-def report_table(entries: list[Entry]) -> list[str]:
-    lines = [
-        "| Metric | main | PR | Δ | Tier |",
-        "| --- | ---: | ---: | ---: | --- |",
-    ]
+def report_table(entries: list[Entry], *, include_route: bool = True) -> list[str]:
+    if include_route:
+        lines = [
+            "| Route / interaction | Metric | main | PR | Δ | Tier |",
+            "| --- | --- | ---: | ---: | ---: | --- |",
+        ]
+    else:
+        lines = [
+            "| Metric | main | PR | Δ | Tier |",
+            "| --- | ---: | ---: | ---: | --- |",
+        ]
     for entry in entries:
+        route = f"{entry.route_label} | " if include_route else ""
+        metric = f"{route}{entry.metric_label}"
         lines.append(
-            f"| {entry.metric_label} | {format_value(entry.base, entry.unit)} | "
+            f"| {metric} | {format_value(entry.base, entry.unit)} | "
             f"{format_value(entry.current, entry.unit)} | {format_delta_cell(entry)} | "
             f"{tier_cell(entry.tier)} |"
         )
@@ -382,13 +390,15 @@ def report_sections(entries: list[Entry]) -> list[str]:
             pages.setdefault(entry.route_id, []).append(entry)
 
     if navigation:
-        lines.extend(["### Navigation scenarios", "", *report_table(navigation), ""])
+        lines.extend(
+            ["### Navigation scenarios", "", *report_table(navigation, include_route=False), ""]
+        )
     for page_entries in pages.values():
         lines.extend(
             [
                 f"### {page_entries[0].route_label}",
                 "",
-                *report_table(page_entries),
+                *report_table(page_entries, include_route=False),
                 "",
             ]
         )
@@ -504,7 +514,7 @@ def render_report(
 
     if comment:
         lines.extend(["<details>", "<summary>Full performance report</summary>", ""])
-    lines.extend(report_sections(entries))
+    lines.extend(report_table(entries) if comment else report_sections(entries))
     if comment:
         lines.extend(["", "</details>"])
     else:

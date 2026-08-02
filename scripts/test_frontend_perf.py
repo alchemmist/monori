@@ -161,7 +161,8 @@ class ReportTest(unittest.TestCase):
         self.assertIn(COMMENT_MARKER, body)
         self.assertIn("> [!WARNING]", body)
         self.assertIn("<summary>Full performance report</summary>", body)
-        self.assertIn("### Budget", body)
+        self.assertIn("Budget | LCP", body)
+        self.assertIn("Route / interaction", body)
 
     def test_summary_splits_navigation_and_pages_into_separate_tables(self) -> None:
         navigation = Entry(
