@@ -236,11 +236,6 @@ def main() -> int:
         flags=re.MULTILINE,
     )
     summary_path.write_text(append_commands(summary, entries, approved))
-    comment_path = Path(os.environ["COMMENT_PATH"])
-    comment_path.write_text(
-        append_commands(comment_path.read_text(), entries, approved) if failed else ""
-    )
-
     if failed:
         github.ensure_label(STATUS_LABEL)
         github.request("POST", f"/issues/{number}/labels", {"labels": [STATUS_LABEL]})

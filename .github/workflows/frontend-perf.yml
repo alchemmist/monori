@@ -33,8 +33,52 @@ concurrency:
     cancel-in-progress: true
 
 jobs:
-    measure:
+    changes:
+        name: Frontend performance scope
         if: github.event_name == 'pull_request'
+        runs-on: ubuntu-latest
+        outputs:
+            relevant: ${{ steps.scope.outputs.relevant }}
+        steps:
+            - name: Detect performance-relevant changes
+              id: scope
+              uses: actions/github-script@v8
+              with:
+                  script: |
+                      const files = await github.paginate(github.rest.pulls.listFiles, {
+                        owner: context.repo.owner,
+                        repo: context.repo.repo,
+                        pull_number: context.payload.pull_request.number,
+                        per_page: 100,
+                      });
+                      const relevant = files.some((file) => {
+                        const path = file.filename;
+                        if (
+                          path.startsWith("web/")
+                          || path.startsWith("tools/frontend-perf/")
+                          || path === "deploy/docker-compose.test.yml"
+                          || path === "deploy/Dockerfile.front"
+                          || path === "deploy/nginx.conf"
+                          || path === ".dockerignore"
+                          || path === "scripts/frontend-perf.sh"
+                          || path === "scripts/frontend_perf.py"
+                          || path === "scripts/test_frontend_perf.py"
+                          || path === ".github/workflows/frontend-perf.yml"
+                        ) return true;
+                        return path === "Makefile"
+                          && /(perf-front|PERF_|frontend)/i.test(file.patch || "");
+                      });
+                      core.setOutput("relevant", relevant ? "true" : "false");
+                      core.summary
+                        .addHeading("Frontend performance")
+                        .addRaw(relevant
+                          ? "Performance-relevant files changed; running the gate."
+                          : "No performance-relevant files changed; the gate is skipped.")
+                        .write();
+
+    measure:
+        needs: changes
+        if: github.event_name == 'pull_request' && needs.changes.outputs.relevant == 'true'
         name: Frontend performance
         runs-on: ubuntu-latest
         timeout-minutes: 45
@@ -92,7 +136,6 @@ jobs:
                   GITHUB_REPOSITORY: ${{ github.repository }}
                   REPORT_PATH: ${{ runner.temp }}/frontend-performance/report.json
                   SUMMARY_PATH: ${{ runner.temp }}/frontend-performance/summary.md
-                  COMMENT_PATH: ${{ runner.temp }}/frontend-performance/comment.md
               run: |
                   set +e
                   python scripts/frontend_perf_gate.py
@@ -127,6 +170,15 @@ jobs:
                   GATE_EXIT: ${{ steps.approvals.outputs.exit_code || steps.performance.outputs.exit_code }}
               run: exit "${GATE_EXIT:-2}"
 
+    skipped:
+        name: Frontend performance (skipped)
+        needs: changes
+        if: needs.changes.outputs.relevant == 'false'
+        runs-on: ubuntu-latest
+        steps:
+            - name: Explain skip
+              run: echo "Frontend performance skipped because the pull request does not affect performance-relevant files."
+
     command:
         name: Process performance approval command
         if: >-
@@ -140,11 +192,11 @@ jobs:
               with:
                   script: |
                       const body = context.payload.comment.body.trim();
-                      const command = /^\/(ignore|ignore-all|remove-ignore)(?:\s+\S+)?$/;
-                      if (!command.test(body)) {
-                        core.info("Not a frontend performance command");
-                        return;
-                      }
+                      const match = body.match(/^\/(ignore|ignore-all|remove-ignore)(?:\s+(\S+))?$/);
+                      if (!match) return;
+                      const targetsPerformance = match[1] === "ignore-all"
+                        || (match[2] || "").split(",").some((id) => id.startsWith("frontend-"));
+                      if (!targetsPerformance) return;
                       const number = context.issue.number;
                       const permission = await github.rest.repos.getCollaboratorPermissionLevel({
                         owner: context.repo.owner,
@@ -194,81 +246,3 @@ jobs:
                         repo: context.repo.repo,
                         run_id: run.id,
                       });
-
-    comment:
-        name: Update performance comment
-        needs: measure
-        if: >-
-            always()
-            && github.event_name == 'pull_request'
-            && github.event.pull_request.head.repo.full_name == github.repository
-        runs-on: ubuntu-latest
-        permissions:
-            actions: read
-            pull-requests: write
-        steps:
-            - name: Download performance report
-              uses: actions/download-artifact@v7
-              with:
-                  name: frontend-performance-${{ github.event.pull_request.number }}
-                  path: report
-
-            - name: Create, update, or remove sticky comment
-              uses: actions/github-script@v8
-              env:
-                  EXPECTED_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-                  REPORT_PATH: report/report.json
-                  COMMENT_PATH: report/comment.md
-              with:
-                  script: |
-                      const fs = require("node:fs");
-                      const marker = "<!-- monori-frontend-performance -->";
-                      const report = JSON.parse(fs.readFileSync(process.env.REPORT_PATH, "utf8"));
-                      const number = context.issue.number;
-                      if (
-                        report.schemaVersion !== 1 ||
-                        report.prNumber !== number ||
-                        report.headSha !== process.env.EXPECTED_HEAD_SHA
-                      ) {
-                        core.setFailed("Performance artifact does not belong to this PR revision");
-                        return;
-                      }
-                      const comments = await github.paginate(github.rest.issues.listComments, {
-                        owner: context.repo.owner,
-                        repo: context.repo.repo,
-                        issue_number: number,
-                        per_page: 100,
-                      });
-                      const existing = comments.find(
-                        (comment) => comment.user?.type === "Bot" && comment.body?.includes(marker),
-                      );
-                      if (!report.commentRequired) {
-                        if (existing) {
-                          await github.rest.issues.deleteComment({
-                            owner: context.repo.owner,
-                            repo: context.repo.repo,
-                            comment_id: existing.id,
-                          });
-                        }
-                        return;
-                      }
-                      const body = fs.readFileSync(process.env.COMMENT_PATH, "utf8");
-                      if (!body.includes(marker)) {
-                        core.setFailed("Performance comment is missing its sticky marker");
-                        return;
-                      }
-                      if (existing) {
-                        await github.rest.issues.updateComment({
-                          owner: context.repo.owner,
-                          repo: context.repo.repo,
-                          comment_id: existing.id,
-                          body,
-                        });
-                      } else {
-                        await github.rest.issues.createComment({
-                          owner: context.repo.owner,
-                          repo: context.repo.repo,
-                          issue_number: number,
-                          body,
-                        });
-                      }
