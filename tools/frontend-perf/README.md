@@ -5,9 +5,11 @@ revisions as isolated production compose stacks on the same GitHub runner, so it
 stored baseline, database, or previous workflow artifact.
 
 Each stack gets a new account populated with the deterministic demo ledger through the real API and
-UI. Lighthouse measures Login, Budget, Transactions, and Dashboard three times with a simulated
-desktop profile. A browser scenario also measures the Year-to-Month interaction and navigation from
-Budget to Transactions and Dashboard. The comparator uses the median of each group of three runs.
+UI. Lighthouse measures Welcome, Login, Budget, Dashboard, Transactions, Accounts, Categories, and
+Settings three times with a simulated desktop profile. A browser scenario also measures the
+Year-to-Month interaction and navigation from Budget to Transactions and Dashboard. The comparator
+uses the median of each group of three runs. The admin page is excluded because the performance
+account is intentionally a regular user and cannot access admin-only data.
 
 Thresholds, routes, and scenarios live in `tools/frontend-perf/config.json`. LCP, TBT, Speed Index,
 CLS, and SPA navigation use percentage tiers with an absolute noise floor. TTFB is deliberately more

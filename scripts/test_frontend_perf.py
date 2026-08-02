@@ -161,7 +161,32 @@ class ReportTest(unittest.TestCase):
         self.assertIn(COMMENT_MARKER, body)
         self.assertIn("> [!WARNING]", body)
         self.assertIn("<summary>Full performance report</summary>", body)
-        self.assertIn("Budget · LCP", body)
+        self.assertIn("### Budget", body)
+
+    def test_summary_splits_navigation_and_pages_into_separate_tables(self) -> None:
+        navigation = Entry(
+            route_id="budget-to-dashboard",
+            route_label="Budget → Dashboard",
+            metric_id="navigation",
+            metric_label="Navigation",
+            unit="ms",
+            base=100,
+            current=100,
+            delta=0,
+            delta_percent=0,
+            tier="none",
+            reason="same or better",
+        )
+        body = render_report(
+            [navigation, self.entry("none", 0, 0)],
+            "none",
+            comment=False,
+        )
+
+        self.assertIn("### Navigation scenarios", body)
+        self.assertIn("### Budget", body)
+        self.assertNotIn("Route / interaction", body)
+        self.assertEqual(body.count("| Metric | main | PR | Δ | Tier |"), 2)
 
     def test_delta_uses_soft_colors_for_direction_and_black_for_zero(self) -> None:
         body = render_report(

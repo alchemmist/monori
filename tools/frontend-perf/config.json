@@ -2,9 +2,13 @@
     "runs": 3,
     "lighthouseRoutes": [
         { "id": "login", "label": "Login", "path": "/login" },
+        { "id": "welcome", "label": "Welcome", "path": "/welcome" },
         { "id": "budget-year", "label": "Budget · Year", "path": "/budget" },
+        { "id": "dashboard", "label": "Dashboard", "path": "/dashboard" },
         { "id": "transactions", "label": "Transactions", "path": "/transactions" },
-        { "id": "dashboard", "label": "Dashboard", "path": "/dashboard" }
+        { "id": "accounts", "label": "Accounts", "path": "/accounts" },
+        { "id": "categories", "label": "Categories", "path": "/categories" },
+        { "id": "settings", "label": "Settings", "path": "/settings" }
     ],
     "navigationScenarios": [
         {

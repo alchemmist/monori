@@ -361,15 +361,36 @@ def sorted_regressions(entries: list[Entry]) -> list[Entry]:
 
 def report_table(entries: list[Entry]) -> list[str]:
     lines = [
-        "| Route / interaction | Metric | main | PR | Δ | Tier |",
-        "| --- | --- | ---: | ---: | ---: | --- |",
+        "| Metric | main | PR | Δ | Tier |",
+        "| --- | ---: | ---: | ---: | --- |",
     ]
     for entry in entries:
         lines.append(
-            f"| {entry.route_label} | {entry.metric_label} | "
-            f"{format_value(entry.base, entry.unit)} | "
+            f"| {entry.metric_label} | {format_value(entry.base, entry.unit)} | "
             f"{format_value(entry.current, entry.unit)} | {format_delta_cell(entry)} | "
             f"{tier_cell(entry.tier)} |"
+        )
+    return lines
+
+
+def report_sections(entries: list[Entry]) -> list[str]:
+    lines: list[str] = []
+    navigation = [entry for entry in entries if entry.metric_id == "navigation"]
+    pages: dict[str, list[Entry]] = {}
+    for entry in entries:
+        if entry.metric_id != "navigation":
+            pages.setdefault(entry.route_id, []).append(entry)
+
+    if navigation:
+        lines.extend(["### Navigation scenarios", "", *report_table(navigation), ""])
+    for page_entries in pages.values():
+        lines.extend(
+            [
+                f"### {page_entries[0].route_label}",
+                "",
+                *report_table(page_entries),
+                "",
+            ]
         )
     return lines
 
@@ -483,7 +504,7 @@ def render_report(
 
     if comment:
         lines.extend(["<details>", "<summary>Full performance report</summary>", ""])
-    lines.extend(report_table(entries))
+    lines.extend(report_sections(entries))
     if comment:
         lines.extend(["", "</details>"])
     else:
