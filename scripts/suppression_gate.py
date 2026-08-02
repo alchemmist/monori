@@ -17,8 +17,9 @@ type JsonValue = bool | int | float | str | list[JsonValue] | dict[str, JsonValu
 LABEL_PREFIX = "monori-suppress-"
 SUPPRESSION_KEYS = r"(?:ignorePatterns|per-file-ignores|extend-ignore|disable_all|disabledRules)"
 COMMAND_RE = re.compile(
-    r"^/(ignore-all|ignore-file|ignore-suppression|remove-ignore)(?:\s+(\S+))?$"
+    r"^/(ignore|ignore-all|ignore-file|remove-ignore)(?:\s+(\S+))?$"
 )
+FINDING_ID_PREFIX = "suppression-"
 PATCH_HUNK_RE = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@")
 SOURCE_SUPPRESSION_RE = re.compile(
     r"(?:#\s*(?:noqa|type:\s*ignore|pyright:\s*ignore|pylint:\s*(?:disable|skip-file))"
@@ -90,6 +91,10 @@ class Finding:
     column: int
     text: str
     finding_id: str
+
+
+def display_finding_id(finding_id: str) -> str:
+    return f"{FINDING_ID_PREFIX}{finding_id}"
 
 
 class GitHub:
@@ -334,10 +339,12 @@ def sync_approvals(
             if name == "ignore-file" and finding.path in arguments
         }
     )
-    if name == "remove-ignore" and arguments:
-        selected = set(arguments)
-    elif name == "ignore-suppression":
-        selected = set(arguments) & finding_ids
+    if name in {"ignore", "remove-ignore"}:
+        selected = {
+            argument[len(FINDING_ID_PREFIX) :]
+            for argument in arguments
+            if argument.startswith(FINDING_ID_PREFIX)
+        } & finding_ids
     for finding_id in selected:
         label_name = finding_label(finding_id)
         if name == "remove-ignore":
@@ -373,7 +380,8 @@ def summary_body(findings: list[Finding], approved: set[str]) -> str:
         marker = "✔" if finding.finding_id in approved else "✗"
         text = finding.text.replace("`", "\\`")[:200]
         lines.append(
-            f"- {marker} `{finding.path}:{finding.line}` — `{text}` · `{finding.finding_id}`"
+            f"- {marker} `{finding.path}:{finding.line}` — `{text}` · "
+            f"`{display_finding_id(finding.finding_id)}`"
         )
     lines.extend(
         [
@@ -384,10 +392,11 @@ def summary_body(findings: list[Finding], approved: set[str]) -> str:
             "",
             "Post exactly one command as a new pull-request comment:",
             "",
-            "- `/ignore-suppression <finding-id>[,<finding-id>...]`",
+            "- `/ignore object-<finding-id>[,object-<finding-id>...]`",
+            "- `/ignore suppression-<finding-id>[,suppression-<finding-id>...]`",
             "- `/ignore-file path/to/file[,path/to/file...]`",
             "- `/ignore-all`",
-            "- `/remove-ignore <finding-id>[,<finding-id>...]`",
+            "- `/remove-ignore <object-or-suppression-id>[,<object-or-suppression-id>...]`",
             "",
             "Finding IDs and file paths may be comma-separated.",
             "Approvals persist while the finding fingerprint stays unchanged.",

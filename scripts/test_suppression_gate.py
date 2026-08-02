@@ -81,7 +81,7 @@ value = 2
             github,
             334,
             [finding],
-            ("ignore-suppression", ["finding-1"]),
+            ("ignore", ["suppression-finding-1"]),
             "admin",
         )
 
@@ -131,18 +131,18 @@ value = 2
 
         self.assertEqual(added_lines_from_patch(patch), {2})
 
-    def test_commands_are_exact(self) -> None:
+    def test_commands_are_shared_between_gates(self) -> None:
         self.assertEqual(
-            parse_command("/ignore-suppression abc123"),
-            ("ignore-suppression", ["abc123"]),
+            parse_command("/ignore suppression-abc123"),
+            ("ignore", ["suppression-abc123"]),
         )
         self.assertEqual(
             parse_command("/ignore-file server/app.py"),
             ("ignore-file", ["server/app.py"]),
         )
         self.assertEqual(
-            parse_command("/ignore-suppression abc123,def456"),
-            ("ignore-suppression", ["abc123", "def456"]),
+            parse_command("/ignore object-abc123,suppression-def456"),
+            ("ignore", ["object-abc123", "suppression-def456"]),
         )
         self.assertEqual(
             parse_command("/ignore-file server/app.py,web/eslint.config.mjs"),
@@ -150,11 +150,11 @@ value = 2
         )
         self.assertEqual(parse_command("/ignore-all"), ("ignore-all", None))
         self.assertEqual(
-            parse_command("/remove-ignore abc123,def456"),
-            ("remove-ignore", ["abc123", "def456"]),
+            parse_command("/remove-ignore object-abc123,suppression-def456"),
+            ("remove-ignore", ["object-abc123", "suppression-def456"]),
         )
         self.assertIsNone(parse_command("/ignore-all extra"))
-        self.assertIsNone(parse_command("/ignore-suppression abc123,,def456"))
+        self.assertIsNone(parse_command("/ignore suppression-abc123,,suppression-def456"))
 
     def test_summary_has_collapsed_admin_commands_and_no_comment_marker(self) -> None:
         finding = scan_file("example.py", "value = 1  # noqa\n", {1})[0]
@@ -163,7 +163,7 @@ value = 2
 
         self.assertIn("❌ FAIL", body)
         self.assertIn("<details><summary>For repository administrators</summary>", body)
-        self.assertIn("/ignore-suppression", body)
+        self.assertIn("/ignore suppression-<finding-id>", body)
         self.assertNotIn("<!--", body)
 
 

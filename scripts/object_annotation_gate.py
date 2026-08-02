@@ -20,9 +20,10 @@ type JsonValue = None | bool | int | float | str | list[JsonValue] | dict[str, J
 
 BOT_MARKER = "<!-- monori-object-annotation-gate -->"
 BOT_LOGIN = "github-actions[bot]"
-COMMAND_RE = re.compile(r"^/(ignore-all|ignore-file|ignore-object|remove-ignore)(?:\s+(\S+))?$")
+COMMAND_RE = re.compile(r"^/(ignore|ignore-all|ignore-file|remove-ignore)(?:\s+(\S+))?$")
 PATCH_HUNK_RE = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@")
 IGNORE_LABEL_PREFIX = "monori-object-annotation-ignore-"
+FINDING_ID_PREFIX = "object-"
 FAILURE_LABEL = "monori-object-annotation-failed"
 REQUEST_TIMEOUT = 30
 
@@ -79,6 +80,10 @@ class Finding:
     column: int
     annotation: str
     finding_id: str
+
+
+def display_finding_id(finding_id: str) -> str:
+    return f"{FINDING_ID_PREFIX}{finding_id}"
 
 
 class GitHubAPIError(RuntimeError):
@@ -284,7 +289,7 @@ def comment_body(findings: list[Finding], approved: set[str], pr_url: str) -> st
         location = f"{finding.path}:{finding.line}"
         lines.append(
             f"- {marker} [`{location}`]({finding_url(pr_url, finding)}) "
-            f"— `{finding.annotation}` · `{finding.finding_id}`"
+            f"— `{finding.annotation}` · `{display_finding_id(finding.finding_id)}`"
         )
     lines.append("</details>")
     lines.extend(
@@ -297,14 +302,20 @@ def comment_body(findings: list[Finding], approved: set[str], pr_url: str) -> st
             "",
             "| Command | Purpose |",
             "| --- | --- |",
-            "| `/ignore-object <finding-id>[,<finding-id>...]` | Approve one or more findings. |",
+            (
+                "| `/ignore object-<finding-id>[,object-<finding-id>...]` | "
+                "Approve one or more object findings. |"
+            ),
             (
                 "| `/ignore-file path/to/file.py[,path/to/file.py...]` | "
                 "Approve findings in one or more "
                 "files. |"
             ),
             "| `/ignore-all` | Approve all findings in the pull request. |",
-            "| `/remove-ignore <finding-id>[,<finding-id>...]` | Remove one or more approvals. |",
+            (
+                "| `/remove-ignore <object-or-suppression-id>[,<object-or-suppression-id>...]` | "
+                "Remove one or more approvals. |"
+            ),
             "",
             "</details>",
         ]
@@ -333,7 +344,7 @@ def summary_body(findings: list[Finding], approved: set[str], pr_url: str) -> st
         location = f"{finding.path}:{finding.line}"
         lines.append(
             f"- {marker} [`{location}`]({finding_url(pr_url, finding)}) "
-            f"— `{finding.annotation}` · `{finding.finding_id}`"
+            f"— `{finding.annotation}` · `{display_finding_id(finding.finding_id)}`"
         )
     lines.extend(["", "</details>"])
     return "\n".join(lines)
@@ -426,10 +437,12 @@ def sync_approvals(
             if name == "ignore-file" and finding.path in arguments
         }
     )
-    if name == "remove-ignore" and arguments:
-        selected = set(arguments)
-    elif name == "ignore-object":
-        selected = set(arguments) & finding_ids
+    if name in {"ignore", "remove-ignore"}:
+        selected = {
+            argument[len(FINDING_ID_PREFIX) :]
+            for argument in arguments
+            if argument.startswith(FINDING_ID_PREFIX)
+        } & finding_ids
     for finding_id in selected:
         label_name = finding_label(finding_id)
         if name == "remove-ignore":

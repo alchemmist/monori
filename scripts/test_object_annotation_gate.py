@@ -110,7 +110,7 @@ other: "list[object]"
         finding = Finding("example.py", 1, 7, "object", "finding-1")
 
         approved, admin, changed = sync_approvals(
-            github, 1, [finding], ("ignore-object", ["finding-1"]), "admin"
+            github, 1, [finding], ("ignore", ["object-finding-1"]), "admin"
         )
 
         self.assertTrue(admin)
@@ -130,22 +130,22 @@ other: "list[object]"
         self.assertIn(("ensure_label", "monori-object-annotation-failed", None), github.calls)
         self.assertTrue(any(call[0] == "DELETE" and "failed" in call[1] for call in github.calls))
 
-    def test_approval_command_requires_exactly_one_id(self) -> None:
-        self.assertEqual(parse_command("/ignore-object abc123"), ("ignore-object", ["abc123"]))
+    def test_approval_commands_use_shared_namespace(self) -> None:
+        self.assertEqual(parse_command("/ignore object-abc123"), ("ignore", ["object-abc123"]))
         self.assertEqual(
             parse_command("/ignore-file server/app.py"), ("ignore-file", ["server/app.py"])
         )
         self.assertEqual(
-            parse_command("/ignore-object abc123,def456"),
-            ("ignore-object", ["abc123", "def456"]),
+            parse_command("/ignore object-abc123,suppression-def456"),
+            ("ignore", ["object-abc123", "suppression-def456"]),
         )
         self.assertEqual(parse_command("/ignore-all"), ("ignore-all", None))
         self.assertEqual(
-            parse_command("/remove-ignore abc123,def456"),
-            ("remove-ignore", ["abc123", "def456"]),
+            parse_command("/remove-ignore object-abc123,suppression-def456"),
+            ("remove-ignore", ["object-abc123", "suppression-def456"]),
         )
-        self.assertIsNone(parse_command("/ignore-object"))
-        self.assertIsNone(parse_command("/ignore-object abc123 extra"))
+        self.assertIsNone(parse_command("/ignore"))
+        self.assertIsNone(parse_command("/ignore object-abc123 extra"))
         self.assertIsNone(parse_command("/ignore-all extra"))
 
     def test_reports_only_added_lines(self) -> None:
