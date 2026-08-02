@@ -161,9 +161,9 @@ def test_workbook_roundtrip_into_fresh_user(api: Api, client: TestClient) -> Non
         ("2026-01-10T09:00:00", 500000, "Pay"),
         ("2026-02-01T12:00:00", -700, "Okey market"),
     ]
-    assert txs[0].categoryId == cats["Groceries"].id
-    assert txs[1].categoryId == cats["Salary"].id
-    assert txs[2].categoryId is None
+    assert txs[0].category_id == cats["Groceries"].id
+    assert txs[1].category_id == cats["Salary"].id
+    assert txs[2].category_id is None
     budgets = {budget.month: budget.amount for budget in snap.budgets}
     assert budgets == {1: 20000, 2: 30000}
 
@@ -420,7 +420,7 @@ def test_workbook_commit_remembers_card_markers_when_asked(api: Api, client: Tes
     )
     assert r.status_code == 200, r.text
     assert r.json()["cardTailsBound"] == 1
-    tails = {account.name: account.cardTails for account in api.snapshot().accounts}
+    tails = {account.name: account.card_tails for account in api.snapshot().accounts}
     assert tails["Card"] == ["1111", "8181"]
     assert tails["Other"] == []
 
@@ -432,7 +432,7 @@ def test_workbook_commit_leaves_card_tails_alone_by_default(api: Api, client: Te
     r = _upload(client, "/api/import/workbook/commit", _card_book(), {"mapping": mapping})
     assert r.status_code == 200, r.text
     assert r.json()["cardTailsBound"] == 0
-    assert all(account.cardTails == [] for account in api.snapshot().accounts)
+    assert all(account.card_tails == [] for account in api.snapshot().accounts)
 
 
 def test_remembering_an_already_bound_marker_changes_nothing(api: Api, client: TestClient) -> None:
@@ -447,5 +447,5 @@ def test_remembering_an_already_bound_marker_changes_nothing(api: Api, client: T
     )
     assert r.status_code == 200, r.text
     assert r.json()["cardTailsBound"] == 0
-    tails = {account.name: account.cardTails for account in api.snapshot().accounts}
+    tails = {account.name: account.card_tails for account in api.snapshot().accounts}
     assert tails["Card"] == ["8181"]

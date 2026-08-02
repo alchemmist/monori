@@ -62,8 +62,8 @@ class BulkBody:
 class SplitPart:
     """Represent SplitPart."""
 
-    category_id: int = Field(alias="categoryId")
     amount: int
+    category_id: int = Field(alias="categoryId")
     comment: str = ""
 
 
@@ -359,7 +359,7 @@ def replace_splits(  # noqa: C901
             splits=[
                 SplitResponse(
                     id=part["id"],
-                    categoryId=part["category_id"],
+                    category_id=part["category_id"],
                     amount=part["amount"],
                     comment=part["comment"],
                 )

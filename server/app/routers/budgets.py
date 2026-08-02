@@ -20,10 +20,10 @@ _CONFIG = ConfigDict(extra="forbid", populate_by_name=True)
 class BudgetCell:
     """Represent BudgetCell."""
 
-    category_id: int = Field(alias="categoryId")
     year: int
     month: int
     amount: int
+    category_id: int = Field(alias="categoryId")
 
 
 @pydantic_dataclass(config=_CONFIG)

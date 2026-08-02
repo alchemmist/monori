@@ -23,7 +23,7 @@ def test_light_snapshot_returns_newest_window_in_canonical_order(
         client.get("/api/snapshot?light=1&limit=3").json(),
     )
     assert _ids(snap.transactions) == ids[-3:]
-    assert snap.transactionsTotal == 7
+    assert snap.transactions_total == 7
 
     assert len(snap.accounts) == 1
     assert snap.budgets == []
@@ -41,7 +41,7 @@ def test_light_snapshot_plus_paged_fill_reconstructs_the_full_ledger(
     )
     loaded = list(snap.transactions)
     offset = len(loaded)
-    while offset < snap.transactionsTotal:
+    while offset < snap.transactions_total:
         page = TypeAdapter(TransactionListResponse).validate_python(
             client.get(f"/api/transactions?limit=2&offset={offset}").json(),
         )
@@ -57,7 +57,7 @@ def test_snapshot_without_light_is_unpaged(api: Api, client: TestClient) -> None
 
     snap = TypeAdapter(SnapshotResponse).validate_python(client.get("/api/snapshot?limit=2").json())
     assert _ids(snap.transactions) == ids
-    assert snap.transactionsTotal == 5
+    assert snap.transactions_total == 5
 
 
 def test_light_snapshot_shorter_than_the_window_reports_its_own_total(
@@ -70,7 +70,7 @@ def test_light_snapshot_shorter_than_the_window_reports_its_own_total(
         client.get("/api/snapshot?light=1&limit=100").json(),
     )
     assert len(snap.transactions) == 1
-    assert snap.transactionsTotal == 1
+    assert snap.transactions_total == 1
 
 
 def test_light_snapshot_limit_is_bounded(client: TestClient) -> None:

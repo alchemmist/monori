@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 from alembic import command
+from alembic.config import Config
 
 from app.db import LEGACY_REVISIONS, _alembic_config, connect
 from app.importer import tx_hash
@@ -395,7 +396,7 @@ def test_concurrent_first_connects_bootstrap_once(
     calls: list[int] = []
     real_stamp = command.stamp
 
-    def counted_bootstrap_call(cfg: object, revision: str) -> None:
+    def counted_bootstrap_call(cfg: Config, revision: str) -> None:
         calls.append(1)
         time.sleep(0.05)
         real_stamp(cfg, revision)

@@ -86,10 +86,10 @@ class ImportRowResponse:
     bank_category: str
     mcc: str
     card: str
-    account_id: int | None = Field(default=None, alias="accountId")
-    category_id: int | None = Field(default=None, alias="categoryId")
     duplicate: bool
     hash: str
+    account_id: int | None = Field(default=None, serialization_alias="accountId")
+    category_id: int | None = Field(default=None, serialization_alias="categoryId")
 
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid"))
@@ -122,8 +122,8 @@ class ImportCommitResponse:
 
     inserted: int
     skipped: int
-    transfers_merged: int = Field(alias="transfersMerged")
-    transfers_suggested: int = Field(alias="transfersSuggested")
+    transfers_merged: int = Field(serialization_alias="transfersMerged")
+    transfers_suggested: int = Field(serialization_alias="transfersSuggested")
 
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid"))
@@ -151,37 +151,37 @@ class WorkbookPreviewResponse:
     groups: int
     categories: int
     transactions: int
-    transactions_by_year: dict[str, int] = Field(alias="transactionsByYear")
-    budget_cells: int = Field(alias="budgetCells")
-    account_slots: list[WorkbookAccountSlotResponse] = Field(alias="accountSlots")
     warnings: list[str]
     errors: list[WorkbookParseErrorResponse]
-    budget_conflicts: int = Field(alias="budgetConflicts", default=0)
+    transactions_by_year: dict[str, int] = Field(serialization_alias="transactionsByYear")
+    budget_cells: int = Field(serialization_alias="budgetCells")
+    account_slots: list[WorkbookAccountSlotResponse] = Field(serialization_alias="accountSlots")
+    budget_conflicts: int = Field(serialization_alias="budgetConflicts", default=0)
 
 
 @pydantic_dataclass(config=ConfigDict(populate_by_name=True))
 class WorkbookBatchResponse:
     """Represent WorkbookBatchResponse."""
 
-    account_id: int = Field(alias="accountId")
-    batch_id: int = Field(alias="batchId")
     inserted: int
+    account_id: int = Field(serialization_alias="accountId")
+    batch_id: int = Field(serialization_alias="batchId")
 
 
 @pydantic_dataclass(config=ConfigDict(populate_by_name=True))
 class WorkbookCommitResponse:
     """Represent WorkbookCommitResponse."""
 
-    groups_created: int = Field(alias="groupsCreated")
-    categories_created: int = Field(alias="categoriesCreated")
     inserted: int
     skipped: int
     batches: list[WorkbookBatchResponse]
-    budgets_written: int = Field(alias="budgetsWritten")
-    budgets_skipped: int = Field(alias="budgetsSkipped")
     warnings: list[str]
     errors: list[WorkbookParseErrorResponse]
-    card_tails_bound: int = Field(alias="cardTailsBound")
+    groups_created: int = Field(serialization_alias="groupsCreated")
+    categories_created: int = Field(serialization_alias="categoriesCreated")
+    budgets_written: int = Field(serialization_alias="budgetsWritten")
+    budgets_skipped: int = Field(serialization_alias="budgetsSkipped")
+    card_tails_bound: int = Field(serialization_alias="cardTailsBound")
 
 
 def _serialize_import_row(row: ImportRow) -> ImportRowResponse:

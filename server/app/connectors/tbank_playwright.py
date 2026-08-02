@@ -28,6 +28,7 @@ followed by ``playwright install chromium``.
 
 import base64
 import contextlib
+import importlib
 import io
 import os
 import pathlib
@@ -40,7 +41,7 @@ from collections.abc import Callable
 from contextlib import AbstractContextManager
 from datetime import timedelta
 from types import TracebackType
-from typing import ClassVar, Literal, Protocol, Self, override
+from typing import ClassVar, Literal, Protocol, Self, override, runtime_checkable
 from urllib.parse import quote
 
 from app.importer import parse_statement
@@ -56,12 +57,77 @@ from .base import (
     register,
 )
 
+
+class _MissingPlaywrightTimeoutError(Exception): ...
+
+
+class _BrowserContext(Protocol):
+    @property
+    def pages(self) -> list["_RawPage"]: ...
+
+    def new_page(self) -> "_RawPage": ...
+
+    def close(self) -> None: ...
+
+
+class _Chromium(Protocol):
+    def launch_persistent_context(
+        self,
+        user_data_dir: str,
+        *,
+        headless: bool,
+        user_agent: str,
+        accept_downloads: bool,
+        args: list[str],
+    ) -> _BrowserContext: ...
+
+
+class _Playwright(Protocol):
+    @property
+    def chromium(self) -> _Chromium: ...
+
+
+class _PlaywrightContextManager(Protocol):
+    def __enter__(self) -> _Playwright: ...
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> bool | None: ...
+
+
+@runtime_checkable
+class _SyncPlaywright(Protocol):
+    def __call__(self) -> _PlaywrightContextManager: ...
+
+
+PlaywrightTimeoutError: type[Exception]
+
 try:
     from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
-    from playwright.sync_api import sync_playwright as _sync_playwright
 except ImportError:
-    PlaywrightTimeoutError = Exception
-    _sync_playwright = None
+    PlaywrightTimeoutError = _MissingPlaywrightTimeoutError
+
+
+def _load_sync_playwright() -> _SyncPlaywright:
+    try:
+        module = importlib.import_module("playwright.sync_api")
+    except ImportError as error:
+        msg = (
+            "playwright is not installed; run "
+            "`pip install 'monori-server[connectors]'` and `playwright install chromium`"
+        )
+        raise ConnectorError(msg) from error
+    factory = getattr(module, "sync_playwright", None)
+    if not isinstance(factory, _SyncPlaywright):
+        msg = "playwright.sync_api does not provide sync_playwright"
+        raise ConnectorError(msg)
+    return factory
+
+
+__all__ = ["PlaywrightTimeoutError", "TBankPlaywrightConnector"]
 
 
 class _Locator(Protocol):
@@ -272,11 +338,7 @@ class _PageAdapter:
 
 
 type _ToWorkerMessage = tuple[Literal["sms"], str] | tuple[Literal["cancel"], None]
-type _FromWorkerMessage = (
-    tuple[Literal["sms_required"], str]
-    | tuple[Literal["error"], str]
-    | tuple[Literal["result"], SyncResult]
-)
+type _FromWorkerMessage = tuple[str, SyncResult | str]
 
 USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -386,6 +448,9 @@ class TBankPlaywrightConnector(Connector):
                 return payload
             msg = "worker returned an invalid result"
             raise ConnectorError(msg)
+        if isinstance(payload, SyncResult):
+            msg = "unexpected worker payload"
+            raise ConnectorError(msg)
         msg = f"unexpected worker message: {kind}"
         raise ConnectorError(msg)
 
@@ -402,12 +467,13 @@ class TBankPlaywrightConnector(Connector):
         return code
 
     def _run(self, since: str | None) -> None:
-        if _sync_playwright is None:
+        try:
+            playwright = _load_sync_playwright()
+        except ConnectorError as error:
             self.from_worker.put(
                 (
                     "error",
-                    "playwright is not installed; run "
-                    "`pip install 'monori-server[connectors]'` and `playwright install chromium`",
+                    str(error),
                 ),
             )
             return
@@ -415,7 +481,7 @@ class TBankPlaywrightConnector(Connector):
         work_dir = tempfile.mkdtemp(prefix="tbank-profile-")
         try:
             self.restore_profile(work_dir)
-            with _sync_playwright() as p:
+            with playwright() as p:
                 args = ["--disk-cache-size=1"]
                 if getattr(os, "geteuid", lambda: -1)() == 0:
                     args.append("--no-sandbox")

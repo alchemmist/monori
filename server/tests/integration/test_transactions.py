@@ -15,10 +15,10 @@ def test_transaction_create_variants(api: Api, client: TestClient) -> None:
     row = api.tx_by(manual)
     assert row.source == "manual"
     assert row.amount == -12345
-    assert row.categoryId == cat
+    assert row.category_id == cat
 
     uncat = api.tx("2026-02-04T10:00:00", -1, TransactionOptions(category_id=0))
-    assert api.tx_by(uncat).categoryId is None
+    assert api.tx_by(uncat).category_id is None
 
     acct = api.default_account()
     bad = client.post(
@@ -46,7 +46,7 @@ def test_transaction_partial_patch_preserves_other_fields(api: Api, client: Test
     assert row.comment == "b"
     assert row.amount == -100
     assert row.description == "Lenta"
-    assert row.categoryId == cat
+    assert row.category_id == cat
 
     client.patch(
         f"/api/transactions/{tx}",
@@ -55,7 +55,7 @@ def test_transaction_partial_patch_preserves_other_fields(api: Api, client: Test
     row = api.tx_by(tx)
     assert row.amount == -999
     assert row.date == "2026-05-05T00:00:00"
-    assert row.categoryId is None
+    assert row.category_id is None
     assert client.patch(f"/api/transactions/{tx}", json={"categoryId": 999}).status_code == 400
     assert client.patch("/api/transactions/999", json={"amount": 1}).status_code == 404
 
@@ -94,8 +94,8 @@ def test_transaction_category_must_match_amount_direction(api: Api, client: Test
         json={"action": "categorize", "ids": [expense, income_tx], "categoryId": food},
     )
     assert bulk.status_code == 400
-    assert api.tx_by(expense).categoryId == food
-    assert api.tx_by(income_tx).categoryId == salary
+    assert api.tx_by(expense).category_id == food
+    assert api.tx_by(income_tx).category_id == salary
 
 
 def test_transaction_patch_recomputes_hash_for_dedup(api: Api, client: TestClient) -> None:
@@ -218,7 +218,7 @@ def test_splits_are_atomic_and_visible_in_snapshot(api: Api, client: TestClient)
     )
     assert response.status_code == 200
     row = api.tx_by(tx)
-    assert row.categoryId is None
+    assert row.category_id is None
     assert sum(part.amount for part in row.splits) == row.amount
     assert [part.comment for part in row.splits] == ["food", "soap"]
     assert client.get(f"/api/transactions?categoryId={groceries}").json()["total"] == 1
@@ -270,7 +270,7 @@ def test_hidden_transaction_disappears_from_list_and_snapshot(api: Api, client: 
 
     snap = api.snapshot()
     assert [transaction.id for transaction in snap.transactions] == [keep]
-    assert snap.transactionsTotal == 1
+    assert snap.transactions_total == 1
 
     hidden = client.get("/api/transactions?hidden=true").json()
     assert hidden["total"] == 1

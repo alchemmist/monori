@@ -34,21 +34,21 @@ def test_goal_crud_accepts_spending_and_archive_preserves_history(
 
     snap = api.snapshot()
     cat = next(category for category in snap.categories if category.id == goal)
-    assert cat.goalTarget == 100_000
-    assert cat.goalStatus == "active"
-    assert cat.goalTargetDate == "2026-12-31"
+    assert cat.goal_target == 100_000
+    assert cat.goal_status == "active"
+    assert cat.goal_target_date == "2026-12-31"
 
     archived = client.post(f"/api/categories/{goal}/archive-goal", json={})
     assert archived.status_code == 200, archived.text
     snap = api.snapshot()
     cat = next(category for category in snap.categories if category.id == goal)
     assert cat.archived is True
-    assert cat.goalStatus == "archived"
-    assert sum(budget.amount for budget in snap.budgets if budget.categoryId == goal) == 50_000
+    assert cat.goal_status == "archived"
+    assert sum(budget.amount for budget in snap.budgets if budget.category_id == goal) == 50_000
     purchase_row = next(
         transaction for transaction in snap.transactions if transaction.id == purchase
     )
-    assert purchase_row.categoryId == goal
+    assert purchase_row.category_id == goal
 
 
 def test_goal_requires_target(api: Api, client: TestClient) -> None:
@@ -74,6 +74,6 @@ def test_moving_goal_to_expense_group_clears_goal_metadata(api: Api, client: Tes
     moved = client.patch(f"/api/categories/{goal}", json={"groupId": expenses})
     assert moved.status_code == 200, moved.text
     category = next(category for category in api.snapshot().categories if category.id == goal)
-    assert category.goalTarget is None
-    assert category.goalStatus is None
-    assert category.goalTargetDate is None
+    assert category.goal_target is None
+    assert category.goal_status is None
+    assert category.goal_target_date is None

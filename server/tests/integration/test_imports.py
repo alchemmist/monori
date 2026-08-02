@@ -42,8 +42,8 @@ def test_import_preview_categorizes_and_flags_errors(api: Api, client: TestClien
         client.post("/api/import/preview", json={"text": text}).json(),
     )
     assert len(prev.rows) == 2
-    assert prev.rows[0].categoryId is not None
-    assert prev.rows[1].categoryId is None
+    assert prev.rows[0].category_id is not None
+    assert prev.rows[1].category_id is None
     assert len(prev.errors) == 1
 
 
@@ -88,9 +88,9 @@ def test_preview_routes_each_card_and_commit_accepts_mixed_accounts(
         client.post("/api/import/preview", json={"text": text}).json(),
     )
     rows = preview.rows
-    assert [row.accountId for row in rows] == [first, second, None]
+    assert [row.account_id for row in rows] == [first, second, None]
 
-    rows[2].accountId = first
+    rows[2].account_id = first
     payload = TypeAdapter(list[ImportRowResponse]).dump_python(rows, mode="json")
     r = client.post("/api/import/commit", json={"rows": payload})
     assert counts(r) == {"inserted": 3, "skipped": 0}
@@ -99,7 +99,7 @@ def test_preview_routes_each_card_and_commit_accepts_mixed_accounts(
         .validate_python(client.get("/api/transactions?limit=10").json())
         .rows
     )
-    assert {row.description: row.accountId for row in tx} == {
+    assert {row.description: row.account_id for row in tx} == {
         "First": first,
         "Second": second,
         "Unknown": first,
@@ -117,7 +117,7 @@ def test_duplicate_check_uses_the_account_selected_for_each_row(
         rows[0].amount,
         TransactionOptions(account_id=other, description=rows[0].description),
     )
-    rows[0].accountId = other
+    rows[0].account_id = other
 
     payload = TypeAdapter(list[ImportRowResponse]).dump_python(rows, mode="json")
     checked = TypeAdapter(DuplicatesResponse).validate_python(
@@ -160,7 +160,7 @@ def test_import_commit_keeps_category(api: Api, client: TestClient) -> None:
     g = api.group("Expenses")
     cat = api.category("Groceries", g)
     rows = api.preview(api.statement)
-    rows[0].categoryId = cat
+    rows[0].category_id = cat
     payload = TypeAdapter(list[ImportRowResponse]).dump_python(rows, mode="json")
     client.post("/api/import/commit", json={"accountId": api.default_account(), "rows": payload})
     imported = TypeAdapter(TransactionListResponse).validate_python(
@@ -180,7 +180,7 @@ def test_import_commit_accepts_goal_category(api: Api, client: TestClient) -> No
     assert created_category.id is not None
     goal = created_category.id
     rows = api.preview(api.statement)
-    rows[0].categoryId = goal
+    rows[0].category_id = goal
 
     response = client.post(
         "/api/import/commit",
@@ -207,7 +207,7 @@ def test_import_commit_rejects_category_with_the_wrong_direction(
     salary = api.category("Salary", income)
     rows = api.preview(api.statement)
 
-    rows[0].categoryId = salary
+    rows[0].category_id = salary
     payload = TypeAdapter(list[ImportRowResponse]).dump_python(rows, mode="json")
     bad_expense = client.post(
         "/api/import/commit",
@@ -217,7 +217,7 @@ def test_import_commit_rejects_category_with_the_wrong_direction(
 
     rows = api.preview(api.statement)
     rows[1].amount = 100
-    rows[1].categoryId = food
+    rows[1].category_id = food
     payload = TypeAdapter(list[ImportRowResponse]).dump_python(rows, mode="json")
     bad_income = client.post(
         "/api/import/commit",
@@ -253,4 +253,4 @@ def test_import_preview_never_proposes_a_wrong_direction_category(
     refund = api.statement.splitlines()[0].replace("-100,00", "100,00") + "\n"
     rows = api.preview(refund)
     assert rows[0].amount > 0
-    assert rows[0].categoryId is None
+    assert rows[0].category_id is None

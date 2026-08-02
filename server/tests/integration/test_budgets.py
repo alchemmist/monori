@@ -35,7 +35,7 @@ def test_budget_bulk_and_copy_overwrites(api: Api, client: TestClient) -> None:
         },
     )
     jan = [budget for budget in api.snapshot().budgets if budget.month == 1]
-    assert {budget.categoryId for budget in jan} == {b}
+    assert {budget.category_id for budget in jan} == {b}
 
     client.put("/api/budgets", json={"categoryId": a, "year": 2026, "month": 2, "amount": 777})
     copy = client.post(
@@ -45,7 +45,7 @@ def test_budget_bulk_and_copy_overwrites(api: Api, client: TestClient) -> None:
     assert copy.json()["copied"] == 1
     feb = [budget for budget in api.snapshot().budgets if budget.month == 2]
     assert len(feb) == 1
-    assert feb[0].categoryId == b
+    assert feb[0].category_id == b
     assert feb[0].amount == 2000
 
     year_copy = client.post("/api/budgets/copy", json={"fromYear": 2026, "toYear": 2027})

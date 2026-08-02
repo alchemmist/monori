@@ -97,16 +97,16 @@ class SqlResponse:
     kind: str
     columns: list[str]
     rows: list[list[SqlCell]]
-    row_count: int = Field(alias="rowCount")
     truncated: bool
-    elapsed_ms: float = Field(alias="elapsedMs")
+    row_count: int = Field(serialization_alias="rowCount")
+    elapsed_ms: float = Field(serialization_alias="elapsedMs")
 
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid", populate_by_name=True))
 class SqlDryResponse(SqlResponse):
     """Represent SqlDryResponse."""
 
-    would_write: bool = Field(alias="wouldWrite")
+    would_write: bool = Field(serialization_alias="wouldWrite")
 
 
 @router.post("/sql")

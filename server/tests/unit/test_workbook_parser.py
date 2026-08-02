@@ -42,7 +42,16 @@ TX_HEADER: list[str] = [
 
 
 def _workbook_datetime(*parts: int) -> datetime.datetime:
-    return datetime.datetime(*parts, tzinfo=datetime.UTC).replace(tzinfo=None)
+    values = list(parts) + [0] * (6 - len(parts))
+    return datetime.datetime(
+        values[0],
+        values[1],
+        values[2],
+        values[3],
+        values[4],
+        values[5],
+        tzinfo=datetime.UTC,
+    ).replace(tzinfo=None)
 
 
 def _active(wb: Workbook) -> Worksheet:

@@ -35,15 +35,25 @@ class AccountResponse:
     type: str
     icon: str
     color: str
-    icon_image: str | None = Field(alias="iconImage")
     currency: str
     sort: int
     archived: bool
-    opening_balance: int = Field(alias="openingBalance")
-    opening_date: str | None = Field(alias="openingDate")
-    connection_id: int | None = Field(alias="connectionId")
-    bank_ref: str = Field(alias="bankRef")
-    card_tails: list[str] = Field(alias="cardTails")
+    icon_image: str | None = Field(
+        ..., serialization_alias="iconImage", validation_alias="iconImage"
+    )
+    opening_balance: int = Field(
+        ..., serialization_alias="openingBalance", validation_alias="openingBalance"
+    )
+    opening_date: str | None = Field(
+        ..., serialization_alias="openingDate", validation_alias="openingDate"
+    )
+    connection_id: int | None = Field(
+        ..., serialization_alias="connectionId", validation_alias="connectionId"
+    )
+    bank_ref: str = Field(..., serialization_alias="bankRef", validation_alias="bankRef")
+    card_tails: list[str] = Field(
+        ..., serialization_alias="cardTails", validation_alias="cardTails"
+    )
 
 
 @pydantic_dataclass(config=_DTO_CONFIG)
@@ -61,14 +71,20 @@ class CategoryResponse:
     """Represent CategoryResponse."""
 
     id: int
-    group_id: int = Field(alias="groupId")
     name: str
     keywords: str
     sort: int
     archived: bool
-    goal_target: int | None = Field(alias="goalTarget")
-    goal_status: str | None = Field(alias="goalStatus")
-    goal_target_date: str | None = Field(alias="goalTargetDate")
+    group_id: int = Field(..., serialization_alias="groupId", validation_alias="groupId")
+    goal_target: int | None = Field(
+        ..., serialization_alias="goalTarget", validation_alias="goalTarget"
+    )
+    goal_status: str | None = Field(
+        ..., serialization_alias="goalStatus", validation_alias="goalStatus"
+    )
+    goal_target_date: str | None = Field(
+        ..., serialization_alias="goalTargetDate", validation_alias="goalTargetDate"
+    )
 
 
 @pydantic_dataclass(config=_DTO_CONFIG)
@@ -76,9 +92,9 @@ class SplitResponse:
     """Represent SplitResponse."""
 
     id: int
-    category_id: int = Field(alias="categoryId")
     amount: int
     comment: str
+    category_id: int = Field(..., serialization_alias="categoryId", validation_alias="categoryId")
 
 
 @pydantic_dataclass(config=_DTO_CONFIG)
@@ -89,15 +105,21 @@ class TransactionResponse:
     date: str
     amount: int
     description: str
-    bank_category: str = Field(alias="bankCategory")
     mcc: str
-    category_id: int | None = Field(alias="categoryId")
-    account_id: int = Field(alias="accountId")
-    transfer_id: str | None = Field(alias="transferId")
     comment: str
     source: str
     hidden: bool
     splits: list[SplitResponse]
+    bank_category: str = Field(
+        ..., serialization_alias="bankCategory", validation_alias="bankCategory"
+    )
+    category_id: int | None = Field(
+        ..., serialization_alias="categoryId", validation_alias="categoryId"
+    )
+    account_id: int = Field(..., serialization_alias="accountId", validation_alias="accountId")
+    transfer_id: str | None = Field(
+        ..., serialization_alias="transferId", validation_alias="transferId"
+    )
 
 
 @pydantic_dataclass(config=_DTO_CONFIG)
@@ -106,10 +128,14 @@ class UserResponse:
 
     id: int
     email: str
-    created_at: str = Field(alias="createdAt")
-    is_admin: bool = Field(alias="isAdmin")
-    last_login: str | None = Field(alias="lastLogin")
-    default_account_id: int | None = Field(alias="defaultAccountId")
+    created_at: str = Field(..., serialization_alias="createdAt", validation_alias="createdAt")
+    is_admin: bool = Field(..., serialization_alias="isAdmin", validation_alias="isAdmin")
+    last_login: str | None = Field(
+        ..., serialization_alias="lastLogin", validation_alias="lastLogin"
+    )
+    default_account_id: int | None = Field(
+        ..., serialization_alias="defaultAccountId", validation_alias="defaultAccountId"
+    )
 
 
 @pydantic_dataclass(config=_DTO_CONFIG)
@@ -120,21 +146,25 @@ class ConnectionResponse:
     bank: str
     kind: str
     status: str
-    last_sync: str | None = Field(alias="lastSync")
-    last_error: str | None = Field(alias="lastError")
-    has_credentials: bool = Field(alias="hasCredentials")
-    created_at: str = Field(alias="createdAt")
-    updated_at: str = Field(alias="updatedAt")
+    last_sync: str | None = Field(..., serialization_alias="lastSync", validation_alias="lastSync")
+    last_error: str | None = Field(
+        ..., serialization_alias="lastError", validation_alias="lastError"
+    )
+    has_credentials: bool = Field(
+        ..., serialization_alias="hasCredentials", validation_alias="hasCredentials"
+    )
+    created_at: str = Field(..., serialization_alias="createdAt", validation_alias="createdAt")
+    updated_at: str = Field(..., serialization_alias="updatedAt", validation_alias="updatedAt")
 
 
 @pydantic_dataclass(config=_DTO_CONFIG)
 class BudgetResponse:
     """Represent BudgetResponse."""
 
-    category_id: int = Field(alias="categoryId")
     year: int
     month: int
     amount: int
+    category_id: int = Field(..., serialization_alias="categoryId", validation_alias="categoryId")
 
 
 @pydantic_dataclass(config=_DTO_CONFIG)
@@ -152,10 +182,12 @@ class SnapshotResponse:
     groups: list[GroupResponse]
     categories: list[CategoryResponse]
     transactions: list[TransactionResponse]
-    transactions_total: int = Field(alias="transactionsTotal")
     transfers: list["TransferResponse"]
     budgets: list[BudgetResponse]
     connections: list[ConnectionResponse]
+    transactions_total: int = Field(
+        ..., serialization_alias="transactionsTotal", validation_alias="transactionsTotal"
+    )
 
 
 def conn() -> sqlite3.Connection:

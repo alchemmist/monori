@@ -13,7 +13,7 @@ def legs(api: Api, transfer_id: str) -> list[TransactionResponse]:
     return [
         transaction
         for transaction in api.snapshot().transactions
-        if transaction.transferId == transfer_id
+        if transaction.transfer_id == transfer_id
     ]
 
 
@@ -42,12 +42,12 @@ def test_transfer_creates_linked_pair(api: Api) -> None:
 
     rows = legs(api, transfer_id)
     assert len(rows) == 2
-    assert {transaction.accountId: transaction.amount for transaction in rows} == {
+    assert {transaction.account_id: transaction.amount for transaction in rows} == {
         a: -5000,
         b: 5000,
     }
     assert all(
-        transaction.categoryId is None and transaction.source == "transfer" for transaction in rows
+        transaction.category_id is None and transaction.source == "transfer" for transaction in rows
     )
     assert sum(transaction.amount for transaction in rows) == 0
 
@@ -60,9 +60,9 @@ def test_transfer_shows_up_as_an_entity_in_the_snapshot(api: Api) -> None:
     entity = next(transfer for transfer in api.snapshot().transfers if transfer.id == transfer_id)
     out_leg, in_leg = (api.tx_by(entity.out_tx_id), api.tx_by(entity.in_tx_id))
     assert out_leg.amount == -5000
-    assert out_leg.accountId == a
+    assert out_leg.account_id == a
     assert in_leg.amount == 5000
-    assert in_leg.accountId == b
+    assert in_leg.account_id == b
     assert entity.origin == "manual"
     assert entity.note == "move"
 
@@ -132,10 +132,10 @@ def test_link_moves_categories_aside_and_split_gives_them_back(
         "/api/transfers/link",
         json={"outTxId": out_id, "inTxId": in_id},
     ).json()["transferId"]
-    assert api.tx_by(out_id).categoryId is None
+    assert api.tx_by(out_id).category_id is None
 
     assert client.delete(f"/api/transfers/{transfer_id}").status_code == 200
-    assert api.tx_by(out_id).categoryId == cat
+    assert api.tx_by(out_id).category_id == cat
 
 
 def test_split_keeps_both_transactions(api: Api, client: TestClient) -> None:
@@ -150,8 +150,8 @@ def test_split_keeps_both_transactions(api: Api, client: TestClient) -> None:
     assert legs(api, transfer_id) == []
     assert not api.snapshot().transfers
 
-    assert api.tx_by(out_id).transferId is None
-    assert api.tx_by(in_id).transferId is None
+    assert api.tx_by(out_id).transfer_id is None
+    assert api.tx_by(in_id).transfer_id is None
 
     assert client.delete(f"/api/transfers/{transfer_id}").status_code == 404
 
@@ -217,7 +217,7 @@ def test_detect_merges_a_same_day_pair(api: Api, client: TestClient) -> None:
     result = client.post("/api/transfers/detect").json()
     assert result["merged"]
     assert result["merged"][0]["outTxId"] == out_id
-    assert api.tx_by(in_id).transferId == result["merged"][0]["id"]
+    assert api.tx_by(in_id).transfer_id == result["merged"][0]["id"]
     assert next(iter(api.snapshot().transfers)).origin == "matched"
 
 
@@ -315,7 +315,7 @@ def test_deleting_one_leg_leaves_no_dangling_transfer_pointer(api: Api, client: 
     snap = api.snapshot()
     assert snap.transfers == []
     survivor = next(transaction for transaction in snap.transactions if transaction.id == in_id)
-    assert survivor.transferId is None
+    assert survivor.transfer_id is None
 
 
 def test_bulk_delete_of_one_leg_also_frees_the_other(api: Api, client: TestClient) -> None:
@@ -332,7 +332,9 @@ def test_bulk_delete_of_one_leg_also_frees_the_other(api: Api, client: TestClien
     snap = api.snapshot()
     assert snap.transfers == []
     assert (
-        next(transaction for transaction in snap.transactions if transaction.id == in_id).transferId
+        next(
+            transaction for transaction in snap.transactions if transaction.id == in_id
+        ).transfer_id
         is None
     )
 
@@ -355,7 +357,7 @@ def test_deleting_a_leg_restores_the_partner_category(api: Api, client: TestClie
     survivor = next(
         transaction for transaction in api.snapshot().transactions if transaction.id == out_id
     )
-    assert survivor.categoryId == cat
+    assert survivor.category_id == cat
 
 
 def test_link_reports_an_unknown_transaction_by_message(api: Api, client: TestClient) -> None:

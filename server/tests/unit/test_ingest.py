@@ -222,12 +222,12 @@ def test_snapshot_full_shape(tmp_path: Path) -> None:
     assert [a.name for a in snap.accounts] == ["T-Bank"]
     assert [g.name for g in snap.groups] == ["Bills"]
     assert snap.categories[0].name == "Rent"
-    assert snap.categories[0].groupId == gid
+    assert snap.categories[0].group_id == gid
     assert len(snap.transactions) == 1
-    assert snap.transactions[0].accountId == acct
+    assert snap.transactions[0].account_id == acct
     assert snap.transactions[0].amount == -100
     budget = snap.budgets[0]
-    assert (budget.categoryId, budget.year, budget.month, budget.amount) == (cid, 2026, 1, 5000)
+    assert (budget.category_id, budget.year, budget.month, budget.amount) == (cid, 2026, 1, 5000)
 
 
 def test_snapshot_includes_connections_without_secrets(tmp_path: Path) -> None:
@@ -242,7 +242,7 @@ def test_snapshot_includes_connections_without_secrets(tmp_path: Path) -> None:
     assert len(conns) == 1
     assert conns[0].bank == "tbank"
     assert conns[0].status == "connected"
-    assert conns[0].hasCredentials is True
+    assert conns[0].has_credentials is True
     assert not hasattr(conns[0], "credentials_encrypted")
 
 

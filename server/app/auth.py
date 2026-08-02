@@ -30,10 +30,10 @@ class AuthenticatedUser:
         return UserResponse(
             id=self.id,
             email=self.email,
-            createdAt=self.created_at,
-            isAdmin=self.is_admin,
-            lastLogin=self.last_login,
-            defaultAccountId=self.default_account_id,
+            created_at=self.created_at,
+            is_admin=self.is_admin,
+            last_login=self.last_login,
+            default_account_id=self.default_account_id,
         )
 
 

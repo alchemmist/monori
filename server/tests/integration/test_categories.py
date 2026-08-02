@@ -23,7 +23,7 @@ def test_category_patch_move_group_and_name(api: Api, client: TestClient) -> Non
     a = api.category("A", g1)
     api.category("B", g1)
     assert client.patch(f"/api/categories/{a}", json={"groupId": g2}).status_code == 200
-    assert api.cat(a).groupId == g2
+    assert api.cat(a).group_id == g2
     assert client.patch(f"/api/categories/{a}", json={"groupId": 999}).status_code == 400
     assert client.patch(f"/api/categories/{a}", json={"name": "B"}).status_code == 409
     assert client.patch("/api/categories/999", json={"name": "z"}).status_code == 404
@@ -56,8 +56,8 @@ def test_category_delete_never_reassigns(api: Api, client: TestClient) -> None:
 
     assert client.delete(f"/api/categories/{a}?reassignTo={b}").status_code == 200
     snap = api.snapshot()
-    assert api.tx_by(tx).categoryId is None
-    assert {budget.categoryId: budget.amount for budget in snap.budgets} == {b: 2000}
+    assert api.tx_by(tx).category_id is None
+    assert {budget.category_id: budget.amount for budget in snap.budgets} == {b: 2000}
 
 
 def test_category_delete_without_reassign_uncategorizes(api: Api, client: TestClient) -> None:
@@ -65,7 +65,7 @@ def test_category_delete_without_reassign_uncategorizes(api: Api, client: TestCl
     a = api.category("A", g)
     tx = api.tx("2026-01-01T00:00:00", -500, TransactionOptions(category_id=a))
     assert client.delete(f"/api/categories/{a}").status_code == 200
-    assert api.tx_by(tx).categoryId is None
+    assert api.tx_by(tx).category_id is None
     assert client.delete("/api/categories/999").status_code == 404
 
 
@@ -85,14 +85,14 @@ def test_category_merge_moves_tx_and_unions_keywords(api: Api, client: TestClien
     assert client.post(f"/api/categories/{src}/merge", json={"into": dst}).status_code == 200
     snap = api.snapshot()
     assert [category.id for category in snap.categories] == [dst]
-    assert api.tx_by(tx).categoryId == dst
+    assert api.tx_by(tx).category_id == dst
     assert api.cat(dst).keywords.split("|") == ["starbucks", "shokoladnitsa", "cofix"]
 
     assert sorted((budget.year, budget.month, budget.amount) for budget in snap.budgets) == [
         (2026, 1, 1000),
         (2026, 2, 200),
     ]
-    assert {budget.categoryId for budget in snap.budgets} == {dst}
+    assert {budget.category_id for budget in snap.budgets} == {dst}
 
 
 def test_merge_across_income_and_expense_is_refused(api: Api, client: TestClient) -> None:
@@ -107,8 +107,8 @@ def test_merge_across_income_and_expense_is_refused(api: Api, client: TestClient
 
     snap = api.snapshot()
     assert sorted(category.id for category in snap.categories) == sorted([salary, rent])
-    assert api.tx_by(tx).categoryId == salary
-    assert [(budget.categoryId, budget.amount) for budget in snap.budgets] == [(salary, 700)]
+    assert api.tx_by(tx).category_id == salary
+    assert [(budget.category_id, budget.amount) for budget in snap.budgets] == [(salary, 700)]
 
 
 def test_merge_with_empty_keywords(api: Api, client: TestClient) -> None:

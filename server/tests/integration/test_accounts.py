@@ -37,7 +37,7 @@ def test_account_crud_and_uniqueness(api: Api, client: TestClient) -> None:
     )
     row = api.acct(cash)
     assert row.type == "cash"
-    assert row.openingBalance == 5000
+    assert row.opening_balance == 5000
     assert row.icon == "ruble"
 
     client.patch(f"/api/accounts/{cash}", json={"icon": "sack"})
@@ -76,10 +76,10 @@ def test_account_color_and_custom_image(api: Api, client: TestClient) -> None:
 
     img = "data:image/png;base64,iVBORw0KGgo="
     client.patch(f"/api/accounts/{acc}", json={"iconImage": img})
-    assert api.acct(acc).iconImage == img
+    assert api.acct(acc).icon_image == img
 
     client.patch(f"/api/accounts/{acc}", json={"iconImage": ""})
-    assert api.acct(acc).iconImage is None
+    assert api.acct(acc).icon_image is None
 
     too_big = client.patch(
         f"/api/accounts/{acc}",
@@ -115,7 +115,7 @@ def test_delete_reassigns_transactions(api: Api, client: TestClient) -> None:
 
     ok = client.delete(f"/api/accounts/{cash}?reassignTo={default}")
     assert ok.status_code == 200
-    assert api.tx_by(tx).accountId == default
+    assert api.tx_by(tx).account_id == default
     assert cash not in [account.id for account in api.snapshot().accounts]
 
     c = dbmod.connect()
@@ -156,7 +156,7 @@ def test_reconcile_posts_adjustment_for_the_delta(api: Api, client: TestClient) 
     assert r.json()["delta"] == 1500
 
     rows = [
-        transaction for transaction in api.snapshot().transactions if transaction.accountId == acc
+        transaction for transaction in api.snapshot().transactions if transaction.account_id == acc
     ]
     adjustment = next(transaction for transaction in rows if transaction.source == "adjustment")
     assert adjustment.amount == 1500
@@ -205,13 +205,13 @@ def test_import_targets_account(api: Api, client: TestClient) -> None:
 def test_card_tails_stored_normalized_and_validated(api: Api, client: TestClient) -> None:
     acc = api.account("Card", AccountOptions(card_tails=["*8181", "8181", "29-47"]))
     row = api.acct(acc)
-    assert row.cardTails == ["8181", "2947"]
+    assert row.card_tails == ["8181", "2947"]
 
     client.patch(f"/api/accounts/{acc}", json={"cardTails": ["*1111"]})
-    assert api.acct(acc).cardTails == ["1111"]
+    assert api.acct(acc).card_tails == ["1111"]
 
     client.patch(f"/api/accounts/{acc}", json={"cardTails": []})
-    assert api.acct(acc).cardTails == []
+    assert api.acct(acc).card_tails == []
 
     bad = client.patch(f"/api/accounts/{acc}", json={"cardTails": ["no-digits"]})
     assert bad.status_code == 400

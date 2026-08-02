@@ -36,6 +36,7 @@ TRANSFER_HINTS = (
     "перевел",
     "между своими",
     "собственные средства",
+    "between own accounts",
     "transfer",
     "card2card",
     "c2c",

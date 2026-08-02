@@ -15,7 +15,7 @@ import tarfile
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "server"))
 
-from app.connectors.base import JsonObject, SmsRequired, SyncResult
+from app.connectors.base import JsonObject, SmsRequiredError, SyncResult
 from app.connectors.tbank_playwright import TBankPlaywrightConnector
 
 PROFILE_DIR = os.environ.get("PROFILE_DIR", "/tmp/tbank-explore/profile")
@@ -41,12 +41,12 @@ def main() -> None:
     if not isinstance(profile, str):
         raise RuntimeError("profile archive is not a string")
     print(f"profile blob: {len(profile)} b64 chars")
-    print(f"headless: {TBankPlaywrightConnector._headless()}")
+    print(f"headless: {TBankPlaywrightConnector.headless()}")
 
     conn = TBankPlaywrightConnector(creds, session)
     try:
         result: SyncResult = conn.sync()
-    except SmsRequired as e:
+    except SmsRequiredError as e:
         print(f"RESULT: SmsRequired -> {e} (trusted session lapsed, needs OTP)")
         conn.close()
         return

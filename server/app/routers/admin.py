@@ -74,11 +74,11 @@ class OverviewResponse:
     """Represent OverviewResponse."""
 
     totals: AdminTotals
-    db_size_bytes: int = Field(alias="dbSizeBytes")
-    new_users_7d: int = Field(alias="newUsers7d")
-    new_users_30d: int = Field(alias="newUsers30d")
-    active_users_7d: int = Field(alias="activeUsers7d")
     registrations: list[RegistrationCount]
+    db_size_bytes: int = Field(serialization_alias="dbSizeBytes")
+    new_users_7d: int = Field(serialization_alias="newUsers7d")
+    new_users_30d: int = Field(serialization_alias="newUsers30d")
+    active_users_7d: int = Field(serialization_alias="activeUsers7d")
 
 
 @pydantic_dataclass(config=_CONFIG)
@@ -86,8 +86,8 @@ class AdminConnectionSummary:
     """Represent AdminConnectionSummary."""
 
     status: str
-    last_sync: str | None = Field(alias="lastSync")
-    last_error: str | None = Field(alias="lastError")
+    last_sync: str | None = Field(serialization_alias="lastSync")
+    last_error: str | None = Field(serialization_alias="lastError")
 
 
 @pydantic_dataclass(config=_CONFIG)
@@ -96,14 +96,14 @@ class AdminUserSummary:
 
     id: int
     email: str
-    created_at: str = Field(alias="createdAt")
-    last_login: str | None = Field(alias="lastLogin")
-    is_admin: bool = Field(alias="isAdmin")
     accounts: int
     transactions: int
-    last_transaction: str | None = Field(alias="lastTransaction")
     budgets: int
     connection: AdminConnectionSummary | None
+    created_at: str = Field(serialization_alias="createdAt")
+    last_login: str | None = Field(serialization_alias="lastLogin")
+    is_admin: bool = Field(serialization_alias="isAdmin")
+    last_transaction: str | None = Field(serialization_alias="lastTransaction")
 
 
 @pydantic_dataclass(config=_CONFIG)
@@ -154,9 +154,11 @@ class UserDetailResponse:
 
     user: UserResponse
     accounts: list[AdminAccountSummary]
-    recent_transactions: list[AdminTransactionSummary] = Field(alias="recentTransactions")
-    feature_usage: list[FeatureCount] = Field(alias="featureUsage")
-    recent_logins: list[str] = Field(alias="recentLogins")
+    recent_transactions: list[AdminTransactionSummary] = Field(
+        serialization_alias="recentTransactions"
+    )
+    feature_usage: list[FeatureCount] = Field(serialization_alias="featureUsage")
+    recent_logins: list[str] = Field(serialization_alias="recentLogins")
 
 
 @pydantic_dataclass(config=_CONFIG)
@@ -181,7 +183,7 @@ class ActivityResponse:
 
     features: list[FeatureCount]
     daily: list[DayCount]
-    recent_logins: list[LoginEvent] = Field(alias="recentLogins")
+    recent_logins: list[LoginEvent] = Field(serialization_alias="recentLogins")
 
 
 @router.get("/overview")

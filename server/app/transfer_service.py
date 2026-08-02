@@ -40,9 +40,9 @@ class TransferResponse:
     id: str
     origin: str
     note: str
-    out_tx_id: int = Field(alias="outTxId")
-    in_tx_id: int = Field(alias="inTxId")
-    created_at: str = Field(alias="createdAt")
+    out_tx_id: int = Field(serialization_alias="outTxId")
+    in_tx_id: int = Field(serialization_alias="inTxId")
+    created_at: str = Field(serialization_alias="createdAt")
 
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid", populate_by_name=True))
@@ -54,8 +54,8 @@ class MergedTransfer:
     days: int
     hint: bool
     mismatch: bool
-    out_tx_id: int = Field(alias="outTxId")
-    in_tx_id: int = Field(alias="inTxId")
+    out_tx_id: int = Field(serialization_alias="outTxId")
+    in_tx_id: int = Field(serialization_alias="inTxId")
 
 
 def serialize_transfer(record: TransferRecord) -> TransferResponse:

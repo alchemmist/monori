@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from no_comments import main, violations
+from no_comments import main, violations  # type: ignore[import-not-found]
 
 
 class NoCommentsTest(unittest.TestCase):

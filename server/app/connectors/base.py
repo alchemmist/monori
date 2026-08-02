@@ -34,8 +34,8 @@ class ConnectorInfo:
     bank: str
     kind: str
     label: str
-    connection_params: list[ConnectorParam] = Field(alias="connectionParams")
-    account_params: list[ConnectorParam] = Field(alias="accountParams")
+    connection_params: list[ConnectorParam] = Field(serialization_alias="connectionParams")
+    account_params: list[ConnectorParam] = Field(serialization_alias="accountParams")
 
     def __getattr__(self, name: str) -> list[ConnectorParam]:
         """Provide camelCase compatibility aliases for serialized connector params."""

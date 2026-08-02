@@ -39,18 +39,18 @@ class TransferBody:
 
     amount: int
     date: str
-    comment: str = ""
     from_account_id: int = Field(alias="fromAccountId")
     to_account_id: int = Field(alias="toAccountId")
+    comment: str = ""
 
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid", populate_by_name=True))
 class PairBody:
     """Represent PairBody."""
 
-    note: str = ""
     out_tx_id: int = Field(alias="outTxId")
     in_tx_id: int = Field(alias="inTxId")
+    note: str = ""
 
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid"))
@@ -76,15 +76,15 @@ class SuggestionResponse:
     days: int
     hint: bool
     mismatch: bool
-    out_tx_id: int = Field(alias="outTxId")
-    in_tx_id: int = Field(alias="inTxId")
+    out_tx_id: int = Field(serialization_alias="outTxId")
+    in_tx_id: int = Field(serialization_alias="inTxId")
 
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid", populate_by_name=True))
 class TransferIdResponse:
     """Represent TransferIdResponse."""
 
-    transfer_id: str = Field(alias="transferId")
+    transfer_id: str = Field(serialization_alias="transferId")
 
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid"))

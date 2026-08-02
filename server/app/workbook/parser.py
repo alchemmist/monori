@@ -106,7 +106,7 @@ TX_ALIASES = {
     "card": ("Номер карты", "Card"),
     "account": ("Account",),
     "status": ("Статус", "Status"),
-    "amount": ("Сумма операции", "Amount"),
+    "amount": ("Operation amount", "Сумма операции", "Amount"),
     "currency": ("Валюта операции", "Transaction currency"),
     "pay_amount": ("Сумма платежа", "Payment amount"),
     "pay_currency": ("Валюта платежа", "Payment currency"),
@@ -150,7 +150,7 @@ MONTH_ABBREVS = {
 
 
 KNOWN_TX_HEADERS = (
-    *tuple(name for names in TX_ALIASES.values() for name in names),
+    *tuple(name for names in TX_ALIASES.values() for name in names if name != "Category"),
     "Дата платежа",
     "Кэшбэк",
     "Бонусы (включая кэшбэк)",
@@ -464,7 +464,12 @@ def _tx_header_index(ws: Worksheet) -> dict[str, int] | None:
     header = next(ws.iter_rows(min_row=1, max_row=1), None)
     if header is None:
         return None
-    return {_s(v): i for i, v in enumerate(header) if _s(v)}
+    index: dict[str, int] = {}
+    for i, cell in enumerate(header):
+        name = _s(cell)
+        if name:
+            index.setdefault(name, i)
+    return index
 
 
 def _parse_dt(cell: Cell | MergedCell | None) -> datetime.datetime | None:
@@ -472,7 +477,9 @@ def _parse_dt(cell: Cell | MergedCell | None) -> datetime.datetime | None:
     if isinstance(value, datetime.datetime):
         return value
     if isinstance(value, datetime.date):
-        return datetime.datetime(value.year, value.month, value.day)  # noqa: DTZ001
+        return datetime.datetime(value.year, value.month, value.day, tzinfo=datetime.UTC).replace(
+            tzinfo=None
+        )
     text = _s(cell)
     if not text:
         return None

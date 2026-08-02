@@ -102,12 +102,12 @@ class LinkedAccount:
 class AccountSyncSummary:
     """Represent AccountSyncSummary."""
 
-    account_id: int = Field(alias="accountId")
     inserted: int
     skipped: int
-    batch_id: int | None = Field(alias="batchId")
-    date_from: str | None = Field(alias="dateFrom")
-    date_to: str | None = Field(alias="dateTo")
+    account_id: int = Field(serialization_alias="accountId")
+    batch_id: int | None = Field(serialization_alias="batchId")
+    date_from: str | None = Field(serialization_alias="dateFrom")
+    date_to: str | None = Field(serialization_alias="dateTo")
 
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid"))
@@ -126,9 +126,9 @@ class SyncResponse:
     inserted: int
     skipped: int
     accounts: list[AccountSyncSummary]
-    date_from: str | None = Field(alias="dateFrom")
-    date_to: str | None = Field(alias="dateTo")
-    unmapped_tails: list[UnmappedTail] = Field(alias="unmappedTails")
+    date_from: str | None = Field(serialization_alias="dateFrom")
+    date_to: str | None = Field(serialization_alias="dateTo")
+    unmapped_tails: list[UnmappedTail] = Field(serialization_alias="unmappedTails")
 
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid"))
@@ -147,11 +147,13 @@ class ConnectionResponse:
     bank: str
     kind: str
     status: str
-    last_sync: str | None = Field(alias="lastSync")
-    last_error: str | None = Field(alias="lastError")
-    has_credentials: bool = Field(alias="hasCredentials")
-    created_at: str = Field(alias="createdAt")
-    updated_at: str = Field(alias="updatedAt")
+    last_sync: str | None = Field(serialization_alias="lastSync", validation_alias="lastSync")
+    last_error: str | None = Field(serialization_alias="lastError", validation_alias="lastError")
+    has_credentials: bool = Field(
+        serialization_alias="hasCredentials", validation_alias="hasCredentials"
+    )
+    created_at: str = Field(serialization_alias="createdAt", validation_alias="createdAt")
+    updated_at: str = Field(serialization_alias="updatedAt", validation_alias="updatedAt")
 
 
 def _optional_blob(value: sqlite3.Row, key: str) -> bytes | memoryview | None:

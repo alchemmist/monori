@@ -104,7 +104,7 @@ def _categories_sheet(ws: Worksheet, snap: SnapshotResponse) -> None:
     _style_header(ws, 1)
     by_group = defaultdict(list)
     for cat in snap.categories:
-        by_group[cat.groupId].append(cat)
+        by_group[cat.group_id].append(cat)
     for group in snap.groups:
         display = spec.group_display(group.name, group.kind)
         for cat in by_group[group.id]:
@@ -127,14 +127,14 @@ def _effective_transaction(tx: TransactionResponse) -> EffectiveTransaction:
     return EffectiveTransaction(
         id=tx.id,
         date=tx.date,
-        account_id=tx.accountId,
+        account_id=tx.account_id,
         amount=tx.amount,
-        bank_category=tx.bankCategory,
+        bank_category=tx.bank_category,
         mcc=tx.mcc,
         description=tx.description,
-        category_id=tx.categoryId,
+        category_id=tx.category_id,
         comment=tx.comment,
-        transfer_id=tx.transferId,
+        transfer_id=tx.transfer_id,
     )
 
 
@@ -150,14 +150,14 @@ def _effective_transactions(snap: SnapshotResponse) -> list[EffectiveTransaction
                 EffectiveTransaction(
                     id=f"{tx.id}:{part.id}",
                     date=tx.date,
-                    account_id=tx.accountId,
+                    account_id=tx.account_id,
                     amount=part.amount,
-                    bank_category=tx.bankCategory,
+                    bank_category=tx.bank_category,
                     mcc=tx.mcc,
                     description=tx.description,
-                    category_id=part.categoryId,
+                    category_id=part.category_id,
                     comment=part.comment,
-                    transfer_id=tx.transferId,
+                    transfer_id=tx.transfer_id,
                 ),
             )
     return effective
@@ -212,7 +212,7 @@ def _month_activity(snap: SnapshotResponse) -> dict[tuple[int, int, int], int]:
 def _budget_index(snap: SnapshotResponse) -> dict[tuple[int, int, int], int]:
     budgets: dict[tuple[int, int, int], int] = {}
     for cell in snap.budgets:
-        budgets[(cell.categoryId, cell.year, cell.month)] = cell.amount
+        budgets[(cell.category_id, cell.year, cell.month)] = cell.amount
     return budgets
 
 
@@ -236,7 +236,7 @@ def _year_sheet(  # noqa: C901,PLR0915
 
     by_group = defaultdict(list)
     for cat in snap.categories:
-        by_group[cat.groupId].append(cat)
+        by_group[cat.group_id].append(cat)
 
     hero = {m: [0, 0, 0] for m in range(1, 13)}
     row = 4
@@ -308,7 +308,7 @@ def _dashdata_sheet(  # noqa: C901
     _style_header(ws, 1)
     monthly: defaultdict[tuple[int, int], list[int]] = defaultdict(lambda: [0, 0])
     kinds = {g.id: g.kind for g in snap.groups}
-    cat_kind = {c.id: kinds[c.groupId] for c in snap.categories}
+    cat_kind = {c.id: kinds[c.group_id] for c in snap.categories}
     for tx in _effective_transactions(snap):
         if tx.transfer_id:
             continue

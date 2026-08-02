@@ -56,7 +56,7 @@ COLUMNS = [
 DATE_RE = re.compile(r"^(\d{2})\.(\d{2})\.(\d{4})(?:\s+(\d{2}):(\d{2})(?::(\d{2}))?)?$")
 
 
-HEADER_FIRST_CELLS = {"дата операции", "op_date", "date"}
+HEADER_FIRST_CELLS = {"дата операции", "op_date", "date", "operation date"}
 
 
 def _attr_name(key: str) -> str:
@@ -336,7 +336,9 @@ def build_rules(
     """
     rules: dict[str, list[CategoryRule]] = {"IN": [], "OUT": []}
     for c in categories:
-        keywords = [k.strip().lower() for k in (c.keywords or "").split("|") if k.strip()]
+        keywords = list(
+            dict.fromkeys(k.strip().lower() for k in (c.keywords or "").split("|") if k.strip())
+        )
         if not keywords:
             continue
         group_id = c.group_id
