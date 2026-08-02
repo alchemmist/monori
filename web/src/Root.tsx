@@ -5,6 +5,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import App from "./App.jsx";
 import Shell from "./components/Shell.jsx";
 import LoginPage from "./pages/LoginPage.jsx";
+import LogoutPage from "./pages/LogoutPage.jsx";
 import NotFound from "./components/NotFound.jsx";
 import { useStore } from "./store.js";
 import { theme as mantineTheme } from "./ui/theme.js";
@@ -32,16 +33,6 @@ function LoginRoute() {
     }
     if (user) return <Navigate to="/budget" replace />;
     return <LoginPage />;
-}
-
-function LogoutRoute() {
-    const logout = useStore((state) => state.logout);
-
-    useLayoutEffect(() => {
-        logout();
-    }, [logout]);
-
-    return <Navigate to="/welcome" replace />;
 }
 
 // one theme for the whole site (landing, docs, auth, app), persisted under a
@@ -104,7 +95,7 @@ export default function Root() {
                         <Route path="/docs/:slug/diagram/:index" element={<DiagramPage />} />
                         <Route path="/" element={app} />
                         <Route path="/login" element={<LoginRoute />} />
-                        <Route path="/logout" element={<LogoutRoute />} />
+                        <Route path="/logout" element={<LogoutPage />} />
                         <Route path="/demo" element={app} />
                         <Route path="/demo/:page" element={app} />
                         <Route path="/budget" element={app} />

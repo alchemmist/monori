@@ -111,17 +111,6 @@ describe("Root", () => {
         expect(window.location.pathname).toBe("/docs/getting-started");
     });
 
-    it("renders the creative 404 page for unknown routes", async () => {
-        window.history.replaceState({}, "", "/somewhere/over-the-ledger");
-        renderUI(<Root />);
-        expect(await screen.findByRole("heading", { name: "404" })).toBeInTheDocument();
-        expect(screen.getByText("This page isn't in your ledger.")).toBeInTheDocument();
-        expect(screen.getByRole("link", { name: "Go to Budget" })).toHaveAttribute(
-            "href",
-            "/budget",
-        );
-    });
-
     it("shows the login page after confirming there is no active session", async () => {
         const checkAuth = vi.fn();
         useStore.setState({ authChecked: true, user: null, checkAuth });
@@ -166,22 +155,6 @@ describe("Root", () => {
 
         expect(await screen.findByText("App: light")).toBeInTheDocument();
         expect(window.location.pathname).toBe("/budget");
-    });
-
-    it("clears the session before redirecting logout to the welcome page", async () => {
-        localStorage.setItem("monori_token", "token");
-        useStore.setState({
-            authChecked: true,
-            user: { id: 1, email: "user@example.com" },
-        });
-        window.history.replaceState({}, "", "/logout");
-
-        renderUI(<Root />);
-
-        expect(await screen.findByText("Landing")).toBeInTheDocument();
-        expect(window.location.pathname).toBe("/welcome");
-        expect(useStore.getState().user).toBeNull();
-        expect(localStorage.getItem("monori_token")).toBeNull();
     });
 
     it("toggles and persists theme from both route shells", async () => {

@@ -14,11 +14,11 @@ function isDemoPath(pathname: string) {
 }
 
 export default function NotFound() {
-    const { pathname } = useLocation();
+    const location = useLocation();
     const navigate = useNavigate();
-    const budgetPath = isDemoPath(pathname) ? "/demo/budget" : "/budget";
+    const budgetPath = isDemoPath(location.pathname) ? "/demo/budget" : "/budget";
     const goBack = () => {
-        if (window.history.length > 1) window.history.back();
+        if (location.key !== "default") void navigate(-1);
         else void navigate(budgetPath, { replace: true });
     };
 

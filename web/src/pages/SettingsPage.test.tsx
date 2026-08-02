@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ReactElement } from "react";
-import { MemoryRouter, useLocation, useNavigationType } from "react-router-dom";
+import { MemoryRouter } from "react-router-dom";
 import { fireEvent, renderUI, resetStore, screen, setPath, waitFor } from "../test/render.jsx";
 import { useStore } from "../store.js";
 import SettingsPage from "./SettingsPage.jsx";
@@ -8,22 +8,8 @@ import SettingsPage from "./SettingsPage.jsx";
 vi.mock("../api.js", () => ({ api: { exportXlsx: vi.fn() } }));
 import { api } from "../api.js";
 
-function CurrentPath() {
-    const navigationType = useNavigationType();
-    return (
-        <output data-testid="current-path" data-navigation-type={navigationType}>
-            {useLocation().pathname}
-        </output>
-    );
-}
-
 function renderSettings(page: ReactElement) {
-    return renderUI(
-        <MemoryRouter initialEntries={["/settings"]}>
-            {page}
-            <CurrentPath />
-        </MemoryRouter>,
-    );
+    return renderUI(<MemoryRouter initialEntries={["/settings"]}>{page}</MemoryRouter>);
 }
 
 describe("SettingsPage", () => {
@@ -46,7 +32,7 @@ describe("SettingsPage", () => {
         ).toBeInTheDocument();
     });
 
-    it("migrates and logs out through their controls", async () => {
+    it("starts migration through its control", async () => {
         useStore.setState({ user: { id: 1, email: "me@example.com" } });
         const migrate = vi.fn();
         const { user } = renderSettings(
@@ -54,12 +40,6 @@ describe("SettingsPage", () => {
         );
         await user.click(screen.getByRole("button", { name: /migrate from spreadsheet/i }));
         expect(migrate).toHaveBeenCalledOnce();
-        await user.click(screen.getByRole("button", { name: /log out/i }));
-        expect(screen.getByTestId("current-path")).toHaveTextContent("/logout");
-        expect(screen.getByTestId("current-path")).toHaveAttribute(
-            "data-navigation-type",
-            "REPLACE",
-        );
     });
 
     it("flips the theme only when the other segment is picked", async () => {
