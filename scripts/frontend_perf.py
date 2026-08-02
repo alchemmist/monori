@@ -437,11 +437,10 @@ def render_report(
     config: dict[str, JsonValue] | None = None,
 ) -> str:
     emoji = TIER_EMOJI[verdict]
-    label = TIER_LABELS[verdict]
     if comment:
-        lines = [COMMENT_MARKER, "", f"## {emoji} Frontend performance — {label}", ""]
+        lines = [COMMENT_MARKER, "", f"## {emoji} Frontend performance", ""]
     else:
-        lines = ["## Frontend performance", "", f"### {emoji} {label}", ""]
+        lines = [f"## {emoji} Frontend performance", ""]
 
     if verdict == "critical":
         lines.extend(

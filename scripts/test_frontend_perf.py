@@ -196,8 +196,13 @@ class ReportTest(unittest.TestCase):
     def test_summary_uses_a_human_readable_success_label(self) -> None:
         body = render_report([self.entry("none", 0, 0)], "none", comment=False)
 
-        self.assertIn("### ✅ No regressions", body)
-        self.assertNotIn("### ✅ None", body)
+        self.assertTrue(body.startswith("## ✅ Frontend performance\n"))
+        self.assertNotIn("No regressions", body.split("\n", 3)[0])
+
+    def test_summary_uses_a_cross_for_critical_verdict(self) -> None:
+        body = render_report([self.entry("critical", 200, 20)], "critical", comment=False)
+
+        self.assertTrue(body.startswith("## ❌ Frontend performance\n"))
 
     def test_comparison_rejects_different_measurement_sets(self) -> None:
         extra = Measurement("extra", "Extra", "navigation", "Navigation", "ms", 100)
