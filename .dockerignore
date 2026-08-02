@@ -1,0 +1,13 @@
+.git
+.worktrees
+reports
+server/.venv
+server/data
+server/static
+web/dist
+web/node_modules
+web/package-lock.json
+web/playwright-report
+web/reports
+web/test-results
+tools/frontend-perf

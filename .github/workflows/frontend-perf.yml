@@ -1,0 +1,180 @@
+name: Frontend performance
+
+on:
+    pull_request:
+        branches: [main]
+        types: [opened, reopened, synchronize]
+        paths:
+            - "web/**"
+            - "deploy/docker-compose.test.yml"
+            - "deploy/Dockerfile.front"
+            - "deploy/nginx.conf"
+            - ".dockerignore"
+            - "scripts/frontend-perf.sh"
+            - "scripts/frontend_perf.py"
+            - "scripts/test_frontend_perf.py"
+            - "tools/frontend-perf/**"
+            - "Makefile"
+            - ".github/workflows/frontend-perf.yml"
+
+permissions:
+    contents: read
+
+concurrency:
+    group: frontend-performance-${{ github.event.pull_request.number }}
+    cancel-in-progress: true
+
+jobs:
+    measure:
+        name: Frontend performance
+        runs-on: ubuntu-latest
+        timeout-minutes: 45
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v7
+              with:
+                  fetch-depth: 0
+                  persist-credentials: false
+
+            - name: Setup Node
+              uses: actions/setup-node@v7
+              with:
+                  node-version: 22
+                  cache: npm
+                  cache-dependency-path: tools/frontend-perf/package-lock.json
+
+            - name: Setup Python
+              uses: actions/setup-python@v6
+              with:
+                  python-version: "3.12"
+
+            - name: Install performance tools
+              run: npm install --no-audit --no-fund
+              working-directory: tools/frontend-perf
+
+            - name: Install Chromium
+              run: npx playwright install --with-deps chromium
+              working-directory: tools/frontend-perf
+
+            - name: Test performance comparator
+              run: python -m unittest scripts.test_frontend_perf
+
+            - name: Compare PR with merge base
+              id: performance
+              env:
+                  BASE: ${{ github.event.pull_request.base.sha }}
+                  HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+                  PR_NUMBER: ${{ github.event.pull_request.number }}
+                  PERF_OUTPUT_DIR: ${{ runner.temp }}/frontend-performance
+                  GITHUB_RUN_URL: >-
+                      ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+              run: |
+                  set +e
+                  make perf-front-diff
+                  code=$?
+                  echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+                  exit 0
+
+            - name: Publish workflow summary
+              if: always()
+              env:
+                  PERF_OUTPUT_DIR: ${{ runner.temp }}/frontend-performance
+              run: |
+                  if [ -f "$PERF_OUTPUT_DIR/summary.md" ]; then
+                    cat "$PERF_OUTPUT_DIR/summary.md" >> "$GITHUB_STEP_SUMMARY"
+                  else
+                    echo "## ❌ Frontend performance measurement did not produce a report" \
+                      >> "$GITHUB_STEP_SUMMARY"
+                  fi
+
+            - name: Upload raw performance reports
+              if: always()
+              uses: actions/upload-artifact@v7
+              with:
+                  name: frontend-performance-${{ github.event.pull_request.number }}
+                  path: ${{ runner.temp }}/frontend-performance
+                  if-no-files-found: error
+                  retention-days: 7
+
+            - name: Enforce performance verdict
+              if: always()
+              env:
+                  GATE_EXIT: ${{ steps.performance.outputs.exit_code }}
+              run: exit "${GATE_EXIT:-2}"
+
+    comment:
+        name: Update performance comment
+        needs: measure
+        if: >-
+            always()
+            && github.event.pull_request.head.repo.full_name == github.repository
+        runs-on: ubuntu-latest
+        permissions:
+            actions: read
+            pull-requests: write
+        steps:
+            - name: Download performance report
+              uses: actions/download-artifact@v7
+              with:
+                  name: frontend-performance-${{ github.event.pull_request.number }}
+                  path: report
+
+            - name: Create, update, or remove sticky comment
+              uses: actions/github-script@v8
+              env:
+                  EXPECTED_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+                  REPORT_PATH: report/report.json
+                  COMMENT_PATH: report/comment.md
+              with:
+                  script: |
+                      const fs = require("node:fs");
+                      const marker = "<!-- monori-frontend-performance -->";
+                      const report = JSON.parse(fs.readFileSync(process.env.REPORT_PATH, "utf8"));
+                      const number = context.issue.number;
+                      if (
+                        report.schemaVersion !== 1 ||
+                        report.prNumber !== number ||
+                        report.headSha !== process.env.EXPECTED_HEAD_SHA
+                      ) {
+                        core.setFailed("Performance artifact does not belong to this PR revision");
+                        return;
+                      }
+                      const comments = await github.paginate(github.rest.issues.listComments, {
+                        owner: context.repo.owner,
+                        repo: context.repo.repo,
+                        issue_number: number,
+                        per_page: 100,
+                      });
+                      const existing = comments.find(
+                        (comment) => comment.user?.type === "Bot" && comment.body?.includes(marker),
+                      );
+                      if (!report.commentRequired) {
+                        if (existing) {
+                          await github.rest.issues.deleteComment({
+                            owner: context.repo.owner,
+                            repo: context.repo.repo,
+                            comment_id: existing.id,
+                          });
+                        }
+                        return;
+                      }
+                      const body = fs.readFileSync(process.env.COMMENT_PATH, "utf8");
+                      if (!body.includes(marker)) {
+                        core.setFailed("Performance comment is missing its sticky marker");
+                        return;
+                      }
+                      if (existing) {
+                        await github.rest.issues.updateComment({
+                          owner: context.repo.owner,
+                          repo: context.repo.repo,
+                          comment_id: existing.id,
+                          body,
+                        });
+                      } else {
+                        await github.rest.issues.createComment({
+                          owner: context.repo.owner,
+                          repo: context.repo.repo,
+                          issue_number: number,
+                          body,
+                        });
+                      }
