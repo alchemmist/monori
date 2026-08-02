@@ -3,8 +3,6 @@ name: PR checks
 on:
     pull_request:
         branches: [main]
-    pull_request_target:
-        types: [opened, reopened, synchronize]
 
 permissions:
     contents: read
@@ -464,7 +462,7 @@ jobs:
 
     object-annotations:
         name: Python object annotation gate
-        if: github.event_name == 'pull_request_target'
+        if: github.event_name == 'pull_request'
         runs-on: ubuntu-latest
         timeout-minutes: 10
         permissions:
@@ -490,7 +488,7 @@ jobs:
 
     suppressions:
         name: Lint suppression gate
-        if: github.event_name == 'pull_request_target'
+        if: github.event_name == 'pull_request'
         runs-on: ubuntu-latest
         timeout-minutes: 10
         permissions:

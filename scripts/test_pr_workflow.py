@@ -82,7 +82,7 @@ class PullRequestWorkflowGraphTest(unittest.TestCase):
 
     def test_code_and_api_gate_events_are_separated(self) -> None:
         self.assertIn("github.event_name == 'pull_request'", self.source)
-        self.assertIn("github.event_name == 'pull_request_target'", self.source)
+        self.assertNotIn("github.event_name == 'pull_request_target'", self.source)
         self.assertNotIn("issue_comment:", self.source)
 
 

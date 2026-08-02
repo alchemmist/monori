@@ -471,7 +471,7 @@ def scan_pull_request(github: GitHub, pull: dict[str, JsonValue]) -> list[Findin
 def rerun_pull_request_gate(github: GitHub, number: int) -> None:
     raw_response = github.request(
         "GET",
-        "/actions/workflows/pr-checks.yml/runs?event=pull_request_target&per_page=100",
+        "/actions/workflows/pr-checks.yml/runs?event=pull_request&per_page=100",
     )
     if raw_response is None:
         runs: list[dict[str, JsonValue]] = []

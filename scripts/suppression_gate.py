@@ -445,7 +445,7 @@ def rerun_gate(github: GitHubAPI, number: int) -> None:
         runs = json_object(
             github.request(
                 "GET",
-                f"/actions/workflows/pr-checks.yml/runs?event=pull_request_target&per_page=100&page={page}",
+                f"/actions/workflows/pr-checks.yml/runs?event=pull_request&per_page=100&page={page}",
             ),
             "workflow runs",
         )
