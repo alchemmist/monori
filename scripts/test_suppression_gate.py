@@ -19,8 +19,8 @@ class FakeGitHub:
     def paged(self, path: str) -> list[dict[str, JsonValue]]:
         self.calls.append(("paged", path, None))
         return [
-            {"name": "monori-suppress-oldsha-oldfinding"},
-            {"name": "monori-suppress-currentsha-finding-1"},
+            {"name": "monori-suppress-stale-finding"},
+            {"name": "monori-suppress-finding-1"},
         ]
 
     def request(self, method: str, path: str, payload: JsonValue = None) -> JsonValue:
@@ -68,7 +68,6 @@ value = 2
         approved, admin = sync_approvals(
             github,
             334,
-            "currentsha",
             [finding],
             ("ignore-suppression", "finding-1"),
             "admin",
@@ -76,7 +75,7 @@ value = 2
 
         self.assertTrue(admin)
         self.assertEqual(approved, {"finding-1"})
-        self.assertTrue(any(call[0] == "DELETE" and "oldsha" in call[1] for call in github.calls))
+        self.assertTrue(any(call[0] == "DELETE" and "stale" in call[1] for call in github.calls))
         self.assertTrue(
             any(call[0] == "POST" and call[1] == "/issues/334/labels" for call in github.calls)
         )
@@ -86,12 +85,29 @@ value = 2
         finding = Finding("example.py", 1, 0, "value = 1 # noqa", "finding-1")
 
         approved, admin = sync_approvals(
-            github, 334, "currentsha", [finding], ("ignore-all", None), "contributor"
+            github, 334, [finding], ("ignore-all", None), "contributor"
         )
 
         self.assertFalse(admin)
         self.assertEqual(approved, {"finding-1"})
         self.assertFalse(any(call[0] == "POST" for call in github.calls))
+
+    def test_finding_id_survives_line_shift_but_not_code_change(self) -> None:
+        before = scan_file("example.py", "value = 1  # noqa\n", {1})[0]
+        after = scan_file("example.py", "header = 0\nvalue = 1  # noqa\n", {2})[0]
+        changed = scan_file("example.py", "value = 2  # noqa\n", {1})[0]
+
+        self.assertEqual(before.finding_id, after.finding_id)
+        self.assertNotEqual(before.finding_id, changed.finding_id)
+
+    def test_duplicate_suppressions_get_location_sensitive_ids(self) -> None:
+        findings = scan_file(
+            "example.py",
+            "value = 1  # noqa\nvalue = 1  # noqa\n",
+            {1, 2},
+        )
+
+        self.assertEqual(len({finding.finding_id for finding in findings}), 2)
 
     def test_reads_added_lines_from_patch(self) -> None:
         patch = """\

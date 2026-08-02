@@ -7,6 +7,7 @@ import re
 import urllib.error
 import urllib.parse
 import urllib.request
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol, cast
@@ -196,7 +197,7 @@ def added_lines_from_patch(patch: str) -> set[int]:
 
 
 def scan_file(path: str, source: str, added_lines: set[int]) -> list[Finding]:
-    findings: list[Finding] = []
+    candidates: list[tuple[int, int, str, str]] = []
     is_config = path.endswith((".toml", ".json", ".jsonc", ".yaml", ".yml")) or any(
         name in path.lower() for name in ("eslint.config", "stylelint", "knip.config")
     )
@@ -207,22 +208,31 @@ def scan_file(path: str, source: str, added_lines: set[int]) -> list[Finding]:
         match = pattern.search(line)
         if match is None:
             continue
-        raw_id = f"{path}:{line_number}:{match.start()}:{line.strip()}"
-        finding_id = hashlib.sha256(raw_id.encode()).hexdigest()[:12]
-        findings.append(Finding(path, line_number, match.start(), line.strip(), finding_id))
+        code = f"{line[: match.start()]}{line[match.end() :]}"
+        normalized_code = " ".join(code.split())
+        normalized_directive = " ".join(match.group(0).lower().split())
+        raw_id = f"{path}:{normalized_directive}:{normalized_code}"
+        candidates.append((line_number, match.start(), line.strip(), raw_id))
+    duplicates = Counter(raw_id for _, _, _, raw_id in candidates)
+    findings: list[Finding] = []
+    for line_number, column, text, raw_id in candidates:
+        disambiguator = f":{line_number}" if duplicates[raw_id] > 1 else ""
+        finding_id = hashlib.sha256(f"{raw_id}{disambiguator}".encode()).hexdigest()[:12]
+        findings.append(Finding(path, line_number, column, text, finding_id))
     return findings
 
 
-def finding_label(sha: str, finding_id: str) -> str:
-    return f"{LABEL_PREFIX}{sha[:12]}-{finding_id}"
+def finding_label(finding_id: str) -> str:
+    return f"{LABEL_PREFIX}{finding_id}"
 
 
-def labels_for_sha(labels: list[dict[str, JsonValue]], sha: str) -> set[str]:
-    prefix = f"{LABEL_PREFIX}{sha[:12]}-"
+def labels_for_findings(labels: list[dict[str, JsonValue]], finding_ids: set[str]) -> set[str]:
     return {
-        name[len(prefix) :]
+        name[len(LABEL_PREFIX) :]
         for label in labels
-        if (name := optional_string(label.get("name"))) and name.startswith(prefix)
+        if (name := optional_string(label.get("name")))
+        and name.startswith(LABEL_PREFIX)
+        and name[len(LABEL_PREFIX) :] in finding_ids
     }
 
 
@@ -274,25 +284,20 @@ def is_admin(github: GitHubAPI, login: str) -> bool:
 def sync_approvals(
     github: GitHubAPI,
     number: int,
-    sha: str,
     findings: list[Finding],
     command: tuple[str, str | None] | None,
     author: str | None,
 ) -> tuple[set[str], bool]:
     labels = github.paged(f"/issues/{number}/labels")
+    finding_ids = {finding.finding_id for finding in findings}
     for label in labels:
         name = optional_string(label.get("name"))
-        if (
-            name
-            and name.startswith(LABEL_PREFIX)
-            and not name.startswith(f"{LABEL_PREFIX}{sha[:12]}-")
-        ):
+        if name and name.startswith(LABEL_PREFIX) and name[len(LABEL_PREFIX) :] not in finding_ids:
             github.request("DELETE", f"/issues/{number}/labels/{urllib.parse.quote(name, safe='')}")
-    approved = labels_for_sha(labels, sha)
+    approved = labels_for_findings(labels, finding_ids)
     admin = command is not None and author is not None and is_admin(github, author)
     if not command or not admin:
         return approved, admin
-    finding_ids = {finding.finding_id for finding in findings}
     name, argument = command
     selected = (
         finding_ids
@@ -308,7 +313,7 @@ def sync_approvals(
     ):
         selected = {argument}
     for finding_id in selected:
-        label_name = finding_label(sha, finding_id)
+        label_name = finding_label(finding_id)
         if name == "remove-ignore":
             github.request(
                 "DELETE",
@@ -358,7 +363,7 @@ def summary_body(findings: list[Finding], approved: set[str]) -> str:
             "- `/ignore-all`",
             "- `/remove-ignore <finding-id>`",
             "",
-            "Approvals apply only to the current pull-request commit.",
+            "Approvals persist while the finding fingerprint stays unchanged.",
             "</details>",
         ]
     )
@@ -408,14 +413,12 @@ def main() -> int:
         return 0
     number = number_value
     pull = json_object(github.request("GET", f"/pulls/{number}"), "pull request")
-    head = json_object(pull["head"], "head")
-    sha = json_string(head["sha"], "head sha")
     findings = changed_files(github, pull)
     comment = json_object(event.get("comment", {}), "comment")
     command = parse_command((optional_string(comment.get("body")) or "").strip())
     author_data = json_object(comment.get("user", {}), "comment user")
     author = optional_string(author_data.get("login")) if command else None
-    approved, admin = sync_approvals(github, number, sha, findings, command, author)
+    approved, admin = sync_approvals(github, number, findings, command, author)
     append_summary(summary_body(findings, approved))
     if admin:
         rerun_gate(github, number)

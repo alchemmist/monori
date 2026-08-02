@@ -62,8 +62,9 @@ requires `object`, a repository administrator can approve that finding for the
 current commit by posting a new pull request comment containing only
 one of `/ignore-object <finding-id>`, `/ignore-file path/to/file.py`, or
 `/ignore-all`. An administrator can remove one approval with
-`/remove-ignore <finding-id>`. The approval expires when the pull request receives
-a new commit.
+`/remove-ignore <finding-id>`. Approvals are tied to a stable finding fingerprint,
+so moving the same suppression to another line preserves the approval; changing
+the suppressed code or directive creates a new finding that requires review.
 
 ### Dead-code analysis
 
