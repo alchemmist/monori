@@ -10,7 +10,7 @@ WEBBIN := web/node_modules/.bin
 
 .DEFAULT_GOAL := up
 
-.PHONY: install setup tools dev down reset-db deploy api web build \
+.PHONY: install setup tools dev down reset-db deploy api web build clean \
         fmt fmt-check \
         lint lint-web lint-css lint-html lint-server lint-sql lint-yaml lint-md lint-docs lint-actions lint-docker lint-shell spell \
         type type-front type-back analyze analyze-python-dead-code analyze-javascript-dead-code audit audit-deps audit-deps-py audit-secrets \
@@ -59,6 +59,33 @@ build:
 	cd web && npm run build
 	rm -rf server/static
 	cp -r web/dist server/static
+
+clean:
+	@root=$$(git rev-parse --show-toplevel); \
+	remove_path() { \
+		path="$$1"; \
+		[ -e "$$path" ] || [ -L "$$path" ] || return 0; \
+		resolved=$$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$$path") || return 1; \
+		case "$$resolved" in \
+			"$$root"/*) rm -rf -- "$$path" ;; \
+			*) echo "Skipping path outside repository: $$path" ;; \
+		esac; \
+	}; \
+	for path in \
+		.coverage coverage.json htmlcov coverage \
+		.stryker-tmp reports .mutmut-cache mutants \
+		.issue197 server/static web/dist web/test-results web/playwright-report; do \
+		remove_path "$$path"; \
+	done
+	find . \
+		-path './.git' -prune -o \
+		-path './web/node_modules' -prune -o \
+		-path './server/.venv' -prune -o \
+		-path './deploy/data' -prune -o \
+		-path './.worktrees' -prune -o \
+		-path './.claude/worktrees' -prune -o \
+		-type d -name '__pycache__' -prune -exec rm -rf {} + -o \
+		-type f -name '*.pyc' -delete
 
 SQLFLUFF := uvx --from 'sqlfluff==3.4.2' sqlfluff
 

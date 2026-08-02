@@ -16,9 +16,7 @@ type JsonValue = bool | int | float | str | list[JsonValue] | dict[str, JsonValu
 
 LABEL_PREFIX = "monori-suppress-"
 SUPPRESSION_KEYS = r"(?:ignorePatterns|per-file-ignores|extend-ignore|disable_all|disabledRules)"
-COMMAND_RE = re.compile(
-    r"^/(ignore|ignore-all|ignore-file|remove-ignore)(?:\s+(\S+))?$"
-)
+COMMAND_RE = re.compile(r"^/(ignore|ignore-all|ignore-file|remove-ignore)(?:\s+(\S+))?$")
 FINDING_ID_PREFIX = "suppression-"
 STATUS_LABEL = "monori-suppression-failed"
 APPROVAL_STATE_RE = re.compile(r"<!-- monori-suppression-approvals: ([0-9a-f,]*) -->")
@@ -238,8 +236,7 @@ def scan_file(path: str, source: str, added_lines: set[int]) -> list[Finding]:
             column = match.start()
         elif (
             is_toml
-            and toml_section.rsplit(".", 1)[-1].strip('"').lower()
-            in TOML_SUPPRESSION_SECTION_NAMES
+            and toml_section.rsplit(".", 1)[-1].strip('"').lower() in TOML_SUPPRESSION_SECTION_NAMES
             and line.strip()
             and not line.lstrip().startswith("#")
         ):
