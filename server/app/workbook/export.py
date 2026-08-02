@@ -31,14 +31,14 @@ class EffectiveTransaction:
 
     id: int | str
     date: str
-    accountId: int
+    account_id: int
     amount: int
-    bankCategory: str
+    bank_category: str
     mcc: str
     description: str
-    categoryId: int | None
+    category_id: int | None
     comment: str
-    transferId: str | None
+    transfer_id: str | None
 
 
 BOLD = Font(bold=True)
@@ -127,14 +127,14 @@ def _effective_transaction(tx: TransactionResponse) -> EffectiveTransaction:
     return EffectiveTransaction(
         id=tx.id,
         date=tx.date,
-        accountId=tx.accountId,
+        account_id=tx.accountId,
         amount=tx.amount,
-        bankCategory=tx.bankCategory,
+        bank_category=tx.bankCategory,
         mcc=tx.mcc,
         description=tx.description,
-        categoryId=tx.categoryId,
+        category_id=tx.categoryId,
         comment=tx.comment,
-        transferId=tx.transferId,
+        transfer_id=tx.transferId,
     )
 
 
@@ -150,14 +150,14 @@ def _effective_transactions(snap: SnapshotResponse) -> list[EffectiveTransaction
                 EffectiveTransaction(
                     id=f"{tx.id}:{part.id}",
                     date=tx.date,
-                    accountId=tx.accountId,
+                    account_id=tx.accountId,
                     amount=part.amount,
-                    bankCategory=tx.bankCategory,
+                    bank_category=tx.bankCategory,
                     mcc=tx.mcc,
                     description=tx.description,
-                    categoryId=part.categoryId,
+                    category_id=part.categoryId,
                     comment=part.comment,
-                    transferId=tx.transferId,
+                    transfer_id=tx.transferId,
                 ),
             )
     return effective
@@ -175,7 +175,7 @@ def _transactions_sheet(
     row = 2
     for tx in _effective_transactions(snap):
         dt = _parse_dt(tx.date)
-        currency = acct_currency.get(tx.accountId, "RUB")
+        currency = acct_currency.get(tx.account_id, "RUB")
         rub = spec.kop_to_rub(tx.amount)
         ws.cell(row=row, column=1, value=dt.strftime("%d.%m.%Y %H:%M:%S"))
         ws.cell(row=row, column=2, value=dt.strftime("%d.%m.%Y"))
@@ -187,13 +187,13 @@ def _transactions_sheet(
         ws.cell(row=row, column=8, value=spec.amount_display(rub, currency))
         ws.cell(row=row, column=9, value=currency)
         ws.cell(row=row, column=10, value="")
-        ws.cell(row=row, column=11, value=_text(tx.bankCategory))
+        ws.cell(row=row, column=11, value=_text(tx.bank_category))
         ws.cell(row=row, column=12, value=_text(tx.mcc))
         ws.cell(row=row, column=13, value=_text(tx.description))
-        category_id = tx.categoryId
+        category_id = tx.category_id
         category_name = cat_names.get(category_id, "") if category_id is not None else ""
         ws.cell(row=row, column=14, value=_text(category_name))
-        ws.cell(row=row, column=15, value=_text(acct_names.get(tx.accountId, "")))
+        ws.cell(row=row, column=15, value=_text(acct_names.get(tx.account_id, "")))
         ws.cell(row=row, column=16, value=_text(tx.comment))
         row += 1
     ws.freeze_panes = "A2"
@@ -202,10 +202,10 @@ def _transactions_sheet(
 def _month_activity(snap: SnapshotResponse) -> dict[tuple[int, int, int], int]:
     activity: dict[tuple[int, int, int], int] = defaultdict(int)
     for tx in _effective_transactions(snap):
-        if tx.categoryId is None:
+        if tx.category_id is None:
             continue
         dt = _parse_dt(tx.date)
-        activity[(tx.categoryId, dt.year, dt.month)] += tx.amount
+        activity[(tx.category_id, dt.year, dt.month)] += tx.amount
     return activity
 
 
@@ -310,9 +310,9 @@ def _dashdata_sheet(  # noqa: C901
     kinds = {g.id: g.kind for g in snap.groups}
     cat_kind = {c.id: kinds[c.groupId] for c in snap.categories}
     for tx in _effective_transactions(snap):
-        if tx.transferId:
+        if tx.transfer_id:
             continue
-        category_id = tx.categoryId
+        category_id = tx.category_id
         if category_id is None:
             continue
         kind = cat_kind.get(category_id)

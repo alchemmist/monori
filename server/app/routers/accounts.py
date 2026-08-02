@@ -5,8 +5,8 @@ import sqlite3
 from datetime import UTC, datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
-from pydantic import ConfigDict
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import ConfigDict, Field
 from pydantic.dataclasses import dataclass as pydantic_dataclass
 
 from app.auth import AuthenticatedUser, current_user
@@ -22,7 +22,7 @@ HEX_COLOR = re.compile(r"^#[0-9a-fA-F]{6}$")
 MAX_ICON_IMAGE = 300_000
 
 
-@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+@pydantic_dataclass(config=ConfigDict(extra="forbid", populate_by_name=True))
 class AccountBody:
     """Represent AccountBody."""
 
@@ -30,16 +30,16 @@ class AccountBody:
     type: str | None = None
     icon: str | None = None
     color: str | None = None
-    iconImage: str | None = None
+    icon_image: str | None = Field(default=None, alias="iconImage")
     currency: str | None = None
-    openingBalance: int | None = None
-    openingDate: str | None = None
-    connectionId: int | None = None
-    bankRef: str | None = None
-    cardTails: list[str] | None = None
+    opening_balance: int | None = Field(default=None, alias="openingBalance")
+    opening_date: str | None = Field(default=None, alias="openingDate")
+    connection_id: int | None = Field(default=None, alias="connectionId")
+    bank_ref: str | None = Field(default=None, alias="bankRef")
+    card_tails: list[str] | None = Field(default=None, alias="cardTails")
 
 
-@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+@pydantic_dataclass(config=ConfigDict(extra="forbid", populate_by_name=True))
 class AccountPatch:
     """Represent AccountPatch."""
 
@@ -48,15 +48,15 @@ class AccountPatch:
     icon: str | None = None
     color: str | None = None
 
-    iconImage: str | None = None
+    icon_image: str | None = Field(default=None, alias="iconImage")
     currency: str | None = None
-    openingBalance: int | None = None
-    openingDate: str | None = None
+    opening_balance: int | None = Field(default=None, alias="openingBalance")
+    opening_date: str | None = Field(default=None, alias="openingDate")
     archived: bool | None = None
 
-    connectionId: int | None = None
-    bankRef: str | None = None
-    cardTails: list[str] | None = None
+    connection_id: int | None = Field(default=None, alias="connectionId")
+    bank_ref: str | None = Field(default=None, alias="bankRef")
+    card_tails: list[str] | None = Field(default=None, alias="cardTails")
 
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid"))
@@ -114,11 +114,11 @@ class Reorder:
     ids: list[int]
 
 
-@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+@pydantic_dataclass(config=ConfigDict(extra="forbid", populate_by_name=True))
 class ReconcileBody:
     """Represent ReconcileBody."""
 
-    actualBalance: int
+    actual_balance: int = Field(alias="actualBalance")
 
 
 @router.get("")
@@ -153,12 +153,12 @@ def create_account(
     icon = body.icon or "wallet"
     color = body.color or "#5b6472"
     currency = body.currency or "RUB"
-    opening_balance = body.openingBalance if body.openingBalance is not None else 0
-    bank_ref = (body.bankRef or "").strip()
+    opening_balance = body.opening_balance if body.opening_balance is not None else 0
+    bank_ref = (body.bank_ref or "").strip()
     if account_type not in TYPES:
         raise HTTPException(400, "type must be one of card, cash, savings, other")
     _validate_color(color)
-    _validate_icon_image(body.iconImage)
+    _validate_icon_image(body.icon_image)
     c = conn()
     try:
         if c.execute(
@@ -166,7 +166,7 @@ def create_account(
             (uid, body.name),
         ).fetchone():
             raise HTTPException(409, "account with this name already exists")
-        connection_id = body.connectionId
+        connection_id = body.connection_id
         if connection_id:
             _owned_connection(c, connection_id, uid)
         max_sort = c.execute(
@@ -184,14 +184,14 @@ def create_account(
                 account_type,
                 icon,
                 color,
-                body.iconImage or None,
+                body.icon_image or None,
                 currency,
                 opening_balance,
-                body.openingDate,
+                body.opening_date,
                 max_sort + 1,
                 connection_id or None,
                 bank_ref,
-                _clean_tails(body.cardTails or []),
+                _clean_tails(body.card_tails or []),
             ),
         )
         c.commit()
@@ -236,7 +236,7 @@ def patch_account(  # noqa: C901,PLR0912,PLR0915
         if color is not None:
             _validate_color(color)
             c.execute("UPDATE accounts SET color=? WHERE id=?", (color, account_id))
-        icon_image = patch.iconImage
+        icon_image = patch.icon_image
         if icon_image is not None:
             _validate_icon_image(icon_image)
             c.execute(
@@ -246,13 +246,13 @@ def patch_account(  # noqa: C901,PLR0912,PLR0915
         currency = patch.currency
         if currency is not None:
             c.execute("UPDATE accounts SET currency=? WHERE id=?", (currency, account_id))
-        opening_balance = patch.openingBalance
+        opening_balance = patch.opening_balance
         if opening_balance is not None:
             c.execute(
                 "UPDATE accounts SET opening_balance=? WHERE id=?",
                 (opening_balance, account_id),
             )
-        opening_date = patch.openingDate
+        opening_date = patch.opening_date
         if opening_date is not None:
             c.execute("UPDATE accounts SET opening_date=? WHERE id=?", (opening_date, account_id))
         archived = patch.archived
@@ -261,7 +261,7 @@ def patch_account(  # noqa: C901,PLR0912,PLR0915
                 "UPDATE accounts SET archived=? WHERE id=?",
                 (1 if archived else 0, account_id),
             )
-        connection_id = patch.connectionId
+        connection_id = patch.connection_id
         if connection_id is not None:
             if connection_id == 0:
                 c.execute("UPDATE accounts SET connection_id=NULL WHERE id=?", (account_id,))
@@ -271,13 +271,13 @@ def patch_account(  # noqa: C901,PLR0912,PLR0915
                     "UPDATE accounts SET connection_id=? WHERE id=?",
                     (connection_id, account_id),
                 )
-        bank_ref = patch.bankRef
+        bank_ref = patch.bank_ref
         if bank_ref is not None:
             c.execute(
                 "UPDATE accounts SET bank_ref=? WHERE id=?",
                 (bank_ref.strip(), account_id),
             )
-        card_tails = patch.cardTails
+        card_tails = patch.card_tails
         if card_tails is not None:
             c.execute(
                 "UPDATE accounts SET card_tails=? WHERE id=?",
@@ -293,7 +293,7 @@ def patch_account(  # noqa: C901,PLR0912,PLR0915
 def delete_account(
     account_id: int,
     user: Annotated[AuthenticatedUser, Depends(current_user)],
-    reassignTo: int | None = None,
+    reassign_to: Annotated[int | None, Query(alias="reassignTo")] = None,
 ) -> dict[str, bool]:
     """
     Handle Deleting an account reassigns its transactions to another account. A.
@@ -316,13 +316,13 @@ def delete_account(
             (account_id,),
         ).fetchone()
         if has_tx:
-            if reassignTo is None:
+            if reassign_to is None:
                 raise HTTPException(400, "account has transactions; a reassign target is required")
             if (
-                reassignTo == account_id
+                reassign_to == account_id
                 or not c.execute(
                     "SELECT id FROM accounts WHERE id=? AND user_id=?",
-                    (reassignTo, uid),
+                    (reassign_to, uid),
                 ).fetchone()
             ):
                 raise HTTPException(400, "unknown reassign target")
@@ -335,8 +335,8 @@ def delete_account(
                 "UPDATE transactions SET account_id=?, hash=? WHERE id=?",
                 [
                     (
-                        reassignTo,
-                        tx_hash(reassignTo, r["date"], r["amount"], r["description"]),
+                        reassign_to,
+                        tx_hash(reassign_to, r["date"], r["amount"], r["description"]),
                         r["id"],
                     )
                     for r in moved
@@ -382,7 +382,7 @@ def reconcile_account(
             (account_id,),
         ).fetchone()[0]
         current = acc["opening_balance"] + total
-        delta = body.actualBalance - current
+        delta = body.actual_balance - current
         if delta != 0:
             date = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S")
             desc = "Reconcile adjustment"

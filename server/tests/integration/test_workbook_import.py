@@ -8,7 +8,7 @@ from openpyxl import Workbook
 from pydantic import TypeAdapter
 
 from app.deps import IdResponse, SnapshotResponse
-from tests.conftest import Api, login_as
+from tests.conftest import AccountOptions, Api, TransactionOptions, login_as
 
 pytestmark = pytest.mark.integration
 
@@ -25,9 +25,19 @@ def _seed(api: Api, client: TestClient) -> int:
     cat = api.category("Groceries", g_out, keywords="lenta|okey")
     salary = api.category("Salary", g_in)
     acct = api.account("Card")
-    api.tx("2026-01-05T10:00:00", -12550, accountId=acct, categoryId=cat, description="Lenta")
-    api.tx("2026-01-10T09:00:00", 500000, accountId=acct, categoryId=salary, description="Pay")
-    api.tx("2026-02-01T12:00:00", -700, accountId=acct, description="Okey market")
+    api.tx(
+        "2026-01-05T10:00:00",
+        -12550,
+        TransactionOptions(account_id=acct, category_id=cat, description="Lenta"),
+    )
+    api.tx(
+        "2026-01-10T09:00:00",
+        500000,
+        TransactionOptions(account_id=acct, category_id=salary, description="Pay"),
+    )
+    api.tx(
+        "2026-02-01T12:00:00", -700, TransactionOptions(account_id=acct, description="Okey market")
+    )
     client.put("/api/budgets", json={"categoryId": cat, "year": 2026, "month": 1, "amount": 20000})
     client.put("/api/budgets", json={"categoryId": cat, "year": 2026, "month": 2, "amount": 30000})
     return acct
@@ -399,7 +409,7 @@ def test_workbook_commit_remembers_card_markers_when_asked(api: Api, client: Tes
     import or sync routes that card without asking. The unmarked-rows slot has
     no digits and binds nothing.
     """
-    acct = api.account("Card", cardTails=["1111"])
+    acct = api.account("Card", AccountOptions(card_tails=["1111"]))
     other = api.account("Other")
     mapping = json.dumps({"RUB:*8181": acct, "RUB:": other})
     r = _upload(
@@ -426,7 +436,7 @@ def test_workbook_commit_leaves_card_tails_alone_by_default(api: Api, client: Te
 
 
 def test_remembering_an_already_bound_marker_changes_nothing(api: Api, client: TestClient) -> None:
-    acct = api.account("Card", cardTails=["8181"])
+    acct = api.account("Card", AccountOptions(card_tails=["8181"]))
     other = api.account("Other")
     mapping = json.dumps({"RUB:*8181": acct, "RUB:": other})
     r = _upload(

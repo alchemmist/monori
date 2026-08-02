@@ -4,7 +4,7 @@ import sqlite3
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import ConfigDict
+from pydantic import ConfigDict, Field
 from pydantic.dataclasses import dataclass as pydantic_dataclass
 
 from app.auth import AuthenticatedUser, current_user
@@ -13,14 +13,14 @@ from app.deps import conn
 router = APIRouter(prefix="/api/budgets", tags=["budgets"])
 
 
-_CONFIG = ConfigDict(extra="forbid")
+_CONFIG = ConfigDict(extra="forbid", populate_by_name=True)
 
 
 @pydantic_dataclass(config=_CONFIG)
 class BudgetCell:
     """Represent BudgetCell."""
 
-    categoryId: int
+    category_id: int = Field(alias="categoryId")
     year: int
     month: int
     amount: int
@@ -37,10 +37,10 @@ class BulkBody:
 class CopyBody:
     """Represent CopyBody."""
 
-    fromYear: int
-    toYear: int
-    fromMonth: int | None = None
-    toMonth: int | None = None
+    from_year: int = Field(alias="fromYear")
+    to_year: int = Field(alias="toYear")
+    from_month: int | None = Field(default=None, alias="fromMonth")
+    to_month: int | None = Field(default=None, alias="toMonth")
 
 
 @pydantic_dataclass(config=_CONFIG)
@@ -70,19 +70,19 @@ def _set_cell(c: sqlite3.Connection, cell: BudgetCell, uid: int) -> None:
     if not c.execute(
         "SELECT c.id FROM categories c JOIN category_groups g ON g.id = c.group_id"
         " WHERE c.id=? AND g.user_id=?",
-        (cell.categoryId, uid),
+        (cell.category_id, uid),
     ).fetchone():
         raise HTTPException(400, "unknown category")
     if cell.amount == 0:
         c.execute(
             "DELETE FROM budgets WHERE category_id=? AND year=? AND month=?",
-            (cell.categoryId, cell.year, cell.month),
+            (cell.category_id, cell.year, cell.month),
         )
     else:
         c.execute(
             """INSERT INTO budgets (category_id, year, month, amount) VALUES (?, ?, ?, ?)
                ON CONFLICT(category_id, year, month) DO UPDATE SET amount=excluded.amount""",
-            (cell.categoryId, cell.year, cell.month, cell.amount),
+            (cell.category_id, cell.year, cell.month, cell.amount),
         )
 
 
@@ -131,8 +131,8 @@ def copy_budgets(
     copy of the source.
     """
     uid = user.id
-    from_month = body.fromMonth
-    to_month = body.toMonth
+    from_month = body.from_month
+    to_month = body.to_month
     month_mode = from_month is not None and to_month is not None
     year_mode = from_month is None and to_month is None
     if not (month_mode or year_mode):
@@ -144,35 +144,35 @@ def copy_budgets(
                 "SELECT category_id, amount FROM budgets WHERE year=? AND month=?"
                 " AND category_id IN (SELECT c.id FROM categories c"
                 " JOIN category_groups g ON g.id = c.group_id WHERE g.user_id=?)",
-                (body.fromYear, from_month, uid),
+                (body.from_year, from_month, uid),
             ).fetchall()
             c.execute(
                 "DELETE FROM budgets WHERE year=? AND month=?"
                 " AND category_id IN (SELECT c.id FROM categories c"
                 " JOIN category_groups g ON g.id = c.group_id WHERE g.user_id=?)",
-                (body.toYear, to_month, uid),
+                (body.to_year, to_month, uid),
             )
             for r in src:
                 c.execute(
                     "INSERT INTO budgets (category_id, year, month, amount) VALUES (?, ?, ?, ?)",
-                    (r["category_id"], body.toYear, to_month, r["amount"]),
+                    (r["category_id"], body.to_year, to_month, r["amount"]),
                 )
         else:
             src = c.execute(
                 "SELECT category_id, month, amount FROM budgets WHERE year=?"
                 " AND category_id IN (SELECT c.id FROM categories c"
                 " JOIN category_groups g ON g.id = c.group_id WHERE g.user_id=?)",
-                (body.fromYear, uid),
+                (body.from_year, uid),
             ).fetchall()
             c.execute(
                 "DELETE FROM budgets WHERE year=? AND category_id IN (SELECT c.id FROM categories c"
                 " JOIN category_groups g ON g.id = c.group_id WHERE g.user_id=?)",
-                (body.toYear, uid),
+                (body.to_year, uid),
             )
             for r in src:
                 c.execute(
                     "INSERT INTO budgets (category_id, year, month, amount) VALUES (?, ?, ?, ?)",
-                    (r["category_id"], body.toYear, r["month"], r["amount"]),
+                    (r["category_id"], body.to_year, r["month"], r["amount"]),
                 )
         c.commit()
         return CopyResponse(copied=len(src))

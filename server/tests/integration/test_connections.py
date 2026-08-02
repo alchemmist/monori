@@ -1,4 +1,4 @@
-from typing import override
+from typing import ClassVar, override
 
 import pytest
 from cryptography.fernet import Fernet
@@ -12,7 +12,7 @@ from app.connectors import base
 from app.connectors.base import JsonObject, SmsRequiredError, SyncResult, SyncRow
 from app.routers import connections
 from app.routers.connections import ConnectionResponse
-from tests.conftest import Api
+from tests.conftest import AccountOptions, Api
 
 
 @pytest.fixture(autouse=True)
@@ -217,7 +217,9 @@ def test_rejected_code_stays_awaiting(
 class RefRequiredConnector(RetryOtpConnector):
     bank = "refreq"
     kind = "refreq"
-    account_params = [base.ConnectorParam(name="account", required=True)]
+    account_params: ClassVar[list[base.ConnectorParam]] = [
+        base.ConnectorParam(name="account", required=True)
+    ]
 
     @override
     def sync(self, since: str | None = None) -> SyncResult:
@@ -339,7 +341,7 @@ class SinceRecorder(base.Connector):
     bank = "sincer"
     kind = "sincer"
     hidden = True
-    calls: list[tuple[str | None, str | None]] = []
+    calls: ClassVar[list[tuple[str | None, str | None]]] = []
 
     def __init__(
         self,
@@ -419,7 +421,7 @@ class MultiCardConnector(base.Connector):
     bank = "multicard"
     kind = "multicard"
     hidden = True
-    rows = [
+    rows: ClassVar[list[SyncRow]] = [
         SyncRow("2026-03-01T09:00:00", -100, "A", "", "", "*8181"),
         SyncRow("2026-03-01T10:00:00", -200, "B", "", "", "*2947"),
         SyncRow("2026-03-01T11:00:00", -300, "C", "", "", "*1111"),
@@ -448,7 +450,7 @@ def test_sync_routes_rows_by_bound_card_tail(
 ) -> None:
     monkeypatch.setitem(base.REGISTRY, ("multicard", "multicard"), MultiCardConnector)
     main = api.default_account()
-    other = api.account("Other card", cardTails=["2947"])
+    other = api.account("Other card", AccountOptions(card_tails=["2947"]))
     cid = _connect_multicard(client, main)
 
     body = client.post(f"/api/connections/{cid}/sync").json()
@@ -490,7 +492,7 @@ def test_sync_routing_matches_longer_stored_tails_by_suffix(
     monkeypatch.setitem(base.REGISTRY, ("multicard", "multicard"), MultiCardConnector)
     main = api.default_account()
 
-    other = api.account("Other card", cardTails=["55362947"])
+    other = api.account("Other card", AccountOptions(card_tails=["55362947"]))
     cid = _connect_multicard(client, main)
 
     body = client.post(f"/api/connections/{cid}/sync").json()
@@ -510,8 +512,8 @@ def test_sync_routing_treats_duplicated_tail_as_unmapped(
 ) -> None:
     monkeypatch.setitem(base.REGISTRY, ("multicard", "multicard"), MultiCardConnector)
     main = api.default_account()
-    api.account("One", cardTails=["2947"])
-    api.account("Two", cardTails=["2947"])
+    api.account("One", AccountOptions(card_tails=["2947"]))
+    api.account("Two", AccountOptions(card_tails=["2947"]))
     cid = _connect_multicard(client, main)
 
     body = client.post(f"/api/connections/{cid}/sync").json()

@@ -4,7 +4,7 @@ import sqlite3
 from collections.abc import Iterable
 from itertools import batched
 
-from pydantic import ConfigDict
+from pydantic import ConfigDict, Field
 from pydantic.dataclasses import dataclass as pydantic_dataclass
 
 from . import db as dbmod
@@ -23,7 +23,7 @@ from .transfer_service import TransferResponse, list_transfers
 SPLIT_FETCH_BATCH_SIZE = 500
 
 
-_DTO_CONFIG = ConfigDict(extra="forbid")
+_DTO_CONFIG = ConfigDict(extra="forbid", populate_by_name=True)
 
 
 @pydantic_dataclass(config=_DTO_CONFIG)
@@ -35,15 +35,15 @@ class AccountResponse:
     type: str
     icon: str
     color: str
-    iconImage: str | None
+    icon_image: str | None = Field(alias="iconImage")
     currency: str
     sort: int
     archived: bool
-    openingBalance: int
-    openingDate: str | None
-    connectionId: int | None
-    bankRef: str
-    cardTails: list[str]
+    opening_balance: int = Field(alias="openingBalance")
+    opening_date: str | None = Field(alias="openingDate")
+    connection_id: int | None = Field(alias="connectionId")
+    bank_ref: str = Field(alias="bankRef")
+    card_tails: list[str] = Field(alias="cardTails")
 
 
 @pydantic_dataclass(config=_DTO_CONFIG)
@@ -61,14 +61,14 @@ class CategoryResponse:
     """Represent CategoryResponse."""
 
     id: int
-    groupId: int
+    group_id: int = Field(alias="groupId")
     name: str
     keywords: str
     sort: int
     archived: bool
-    goalTarget: int | None
-    goalStatus: str | None
-    goalTargetDate: str | None
+    goal_target: int | None = Field(alias="goalTarget")
+    goal_status: str | None = Field(alias="goalStatus")
+    goal_target_date: str | None = Field(alias="goalTargetDate")
 
 
 @pydantic_dataclass(config=_DTO_CONFIG)
@@ -76,7 +76,7 @@ class SplitResponse:
     """Represent SplitResponse."""
 
     id: int
-    categoryId: int
+    category_id: int = Field(alias="categoryId")
     amount: int
     comment: str
 
@@ -89,11 +89,11 @@ class TransactionResponse:
     date: str
     amount: int
     description: str
-    bankCategory: str
+    bank_category: str = Field(alias="bankCategory")
     mcc: str
-    categoryId: int | None
-    accountId: int
-    transferId: str | None
+    category_id: int | None = Field(alias="categoryId")
+    account_id: int = Field(alias="accountId")
+    transfer_id: str | None = Field(alias="transferId")
     comment: str
     source: str
     hidden: bool
@@ -106,10 +106,10 @@ class UserResponse:
 
     id: int
     email: str
-    createdAt: str
-    isAdmin: bool
-    lastLogin: str | None
-    defaultAccountId: int | None
+    created_at: str = Field(alias="createdAt")
+    is_admin: bool = Field(alias="isAdmin")
+    last_login: str | None = Field(alias="lastLogin")
+    default_account_id: int | None = Field(alias="defaultAccountId")
 
 
 @pydantic_dataclass(config=_DTO_CONFIG)
@@ -120,18 +120,18 @@ class ConnectionResponse:
     bank: str
     kind: str
     status: str
-    lastSync: str | None
-    lastError: str | None
-    hasCredentials: bool
-    createdAt: str
-    updatedAt: str
+    last_sync: str | None = Field(alias="lastSync")
+    last_error: str | None = Field(alias="lastError")
+    has_credentials: bool = Field(alias="hasCredentials")
+    created_at: str = Field(alias="createdAt")
+    updated_at: str = Field(alias="updatedAt")
 
 
 @pydantic_dataclass(config=_DTO_CONFIG)
 class BudgetResponse:
     """Represent BudgetResponse."""
 
-    categoryId: int
+    category_id: int = Field(alias="categoryId")
     year: int
     month: int
     amount: int
@@ -152,7 +152,7 @@ class SnapshotResponse:
     groups: list[GroupResponse]
     categories: list[CategoryResponse]
     transactions: list[TransactionResponse]
-    transactionsTotal: int
+    transactions_total: int = Field(alias="transactionsTotal")
     transfers: list["TransferResponse"]
     budgets: list[BudgetResponse]
     connections: list[ConnectionResponse]
@@ -172,14 +172,14 @@ def serialize_category(category: CategoryRecord) -> CategoryResponse:
     """Handle serialize category."""
     return CategoryResponse(
         id=category.id,
-        groupId=category.group_id,
+        group_id=category.group_id,
         name=category.name,
         keywords=category.keywords,
         sort=category.sort,
         archived=category.archived,
-        goalTarget=category.goal_target,
-        goalStatus=category.goal_status,
-        goalTargetDate=category.goal_target_date,
+        goal_target=category.goal_target,
+        goal_status=category.goal_status,
+        goal_target_date=category.goal_target_date,
     )
 
 
@@ -191,15 +191,15 @@ def serialize_account(account: AccountRecord) -> AccountResponse:
         type=account.type,
         icon=account.icon,
         color=account.color,
-        iconImage=account.icon_image,
+        icon_image=account.icon_image,
         currency=account.currency,
         sort=account.sort,
         archived=account.archived,
-        openingBalance=account.opening_balance,
-        openingDate=account.opening_date,
-        connectionId=account.connection_id,
-        bankRef=account.bank_ref,
-        cardTails=[tail for tail in account.card_tails.split(",") if tail],
+        opening_balance=account.opening_balance,
+        opening_date=account.opening_date,
+        connection_id=account.connection_id,
+        bank_ref=account.bank_ref,
+        card_tails=[tail for tail in account.card_tails.split(",") if tail],
     )
 
 
@@ -213,18 +213,18 @@ def serialize_tx(
         date=transaction.date,
         amount=transaction.amount,
         description=transaction.description,
-        bankCategory=transaction.bank_category,
+        bank_category=transaction.bank_category,
         mcc=transaction.mcc,
-        categoryId=transaction.category_id,
-        accountId=transaction.account_id,
-        transferId=transaction.transfer_id,
+        category_id=transaction.category_id,
+        account_id=transaction.account_id,
+        transfer_id=transaction.transfer_id,
         comment=transaction.comment,
         source=transaction.source,
         hidden=transaction.hidden,
         splits=[
             SplitResponse(
                 id=split.id,
-                categoryId=split.category_id,
+                category_id=split.category_id,
                 amount=split.amount,
                 comment=split.comment,
             )
@@ -261,10 +261,10 @@ def serialize_user(user: UserRecord) -> UserResponse:
     return UserResponse(
         id=user.id,
         email=user.email,
-        createdAt=user.created_at,
-        isAdmin=user.is_admin,
-        lastLogin=user.last_login,
-        defaultAccountId=user.default_account_id,
+        created_at=user.created_at,
+        is_admin=user.is_admin,
+        last_login=user.last_login,
+        default_account_id=user.default_account_id,
     )
 
 
@@ -275,18 +275,18 @@ def serialize_connection(connection: ConnectionRecord) -> ConnectionResponse:
         bank=connection.bank,
         kind=connection.kind,
         status=connection.status,
-        lastSync=connection.last_sync,
-        lastError=connection.last_error,
-        hasCredentials=connection.has_credentials,
-        createdAt=connection.created_at,
-        updatedAt=connection.updated_at,
+        last_sync=connection.last_sync,
+        last_error=connection.last_error,
+        has_credentials=connection.has_credentials,
+        created_at=connection.created_at,
+        updated_at=connection.updated_at,
     )
 
 
 def serialize_budget(budget: BudgetRecord) -> BudgetResponse:
     """Handle serialize budget."""
     return BudgetResponse(
-        categoryId=budget.category_id,
+        category_id=budget.category_id,
         year=budget.year,
         month=budget.month,
         amount=budget.amount,
@@ -364,7 +364,7 @@ def snapshot(c: sqlite3.Connection, user_id: int, tx_limit: int | None = None) -
             )
         ],
         transactions=transactions,
-        transactionsTotal=transactions_total,
+        transactions_total=transactions_total,
         transfers=list_transfers(c, user_id),
         budgets=[
             serialize_budget(BudgetRecord.from_row(r))

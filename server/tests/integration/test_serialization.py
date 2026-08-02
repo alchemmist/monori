@@ -3,7 +3,7 @@ from fastapi.testclient import TestClient
 from pydantic import TypeAdapter
 
 from app.deps import SnapshotResponse
-from tests.conftest import Api
+from tests.conftest import Api, TransactionOptions
 
 pytestmark = pytest.mark.integration
 
@@ -16,11 +16,13 @@ def test_snapshot_serialization_contract(api: Api, client: TestClient) -> None:
     tx = api.tx(
         "2026-01-05T10:00:00",
         -12345,
-        description="Lenta",
-        bankCategory="Super",
-        mcc="5411",
-        categoryId=cat,
-        comment="note",
+        TransactionOptions(
+            description="Lenta",
+            bank_category="Super",
+            mcc="5411",
+            category_id=cat,
+            comment="note",
+        ),
     )
     client.put("/api/budgets", json={"categoryId": cat, "year": 2026, "month": 3, "amount": 5000})
     snap = api.snapshot()

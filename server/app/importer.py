@@ -84,6 +84,7 @@ class ParseError:
     def __getitem__(self, key: Literal["raw"]) -> str: ...
 
     def __getitem__(self, key: str) -> int | str:
+        """Return a parse-error field by its API key."""
         if key == "line":
             return self.line
         if key == "error":
@@ -143,6 +144,7 @@ class ImportRow:
     def __getitem__(self, key: Literal["hash"]) -> str: ...
 
     def __getitem__(self, key: str) -> ImportValue:
+        """Return an import-row field by its API or internal key."""
         values: dict[str, ImportValue] = self.to_api_dict()
         try:
             return values[key]
@@ -167,6 +169,7 @@ class ImportRow:
     def __setitem__(self, key: Literal["hash"], value: str) -> None: ...
 
     def __setitem__(self, key: str, value: ImportValue) -> None:
+        """Assign an import-row field by its API or internal key."""
         setattr(self, _attr_name(key), value)
 
     def get(self, key: str, default: ImportValue = None) -> ImportValue:
@@ -237,6 +240,7 @@ class CategoryRule:
     def __getitem__(self, key: Literal["keywords"]) -> list[str]: ...
 
     def __getitem__(self, key: str) -> RuleValue:
+        """Return a category-rule field by its name."""
         if key == "category_id":
             return self.category_id
         if key == "name":
@@ -257,7 +261,7 @@ def parse_date(raw: str) -> datetime | None:
 
 def parse_amount_kop(raw: str) -> int | None:
     """'-1 500,00' -> -150000 kopecks."""
-    s = str(raw).strip().replace(" ", "").replace(" ", "").replace(",", ".")
+    s = str(raw).strip().replace("\u00a0", "").replace(" ", "").replace(",", ".")
     if not s or s in ("-", "."):
         return None
     try:

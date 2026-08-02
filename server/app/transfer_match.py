@@ -62,8 +62,8 @@ class TransferMatchRow:
 class TransferCandidate:
     """Represent TransferCandidate."""
 
-    outTxId: int
-    inTxId: int
+    out_tx_id: int
+    in_tx_id: int
     amount: int
     days: int
     hint: bool
@@ -136,8 +136,8 @@ def find_pairs(  # noqa: C901
                 silent = (in_row if out_hint else out_row).description
                 candidates.append(
                     TransferCandidate(
-                        outTxId=out_row.id,
-                        inTxId=in_row.id,
+                        out_tx_id=out_row.id,
+                        in_tx_id=in_row.id,
                         amount=amount,
                         days=days,
                         hint=out_hint or in_hint,
@@ -145,14 +145,14 @@ def find_pairs(  # noqa: C901
                     ),
                 )
 
-    candidates.sort(key=lambda c: (c.days, c.mismatch, not c.hint, c.outTxId, c.inTxId))
+    candidates.sort(key=lambda c: (c.days, c.mismatch, not c.hint, c.out_tx_id, c.in_tx_id))
     used = set()
     pairs = []
     for c in candidates:
-        if c.outTxId in used or c.inTxId in used:
+        if c.out_tx_id in used or c.in_tx_id in used:
             continue
-        used.add(c.outTxId)
-        used.add(c.inTxId)
+        used.add(c.out_tx_id)
+        used.add(c.in_tx_id)
         pairs.append(c)
     return pairs
 

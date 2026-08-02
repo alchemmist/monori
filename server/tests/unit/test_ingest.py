@@ -109,17 +109,6 @@ def _row(
     return SyncRow(date, amount, desc, bank_category, mcc, "", category_id=category_id)
 
 
-def _row_with_tags(
-    date: str,
-    amount: int,
-    desc: str,
-    bank_category: str,
-    mcc: str,
-    category_id: int | None = None,
-) -> SyncRow:
-    return _row(date, amount, desc, tags=(bank_category, mcc), category_id=category_id)
-
-
 def test_existing_hash_counts_is_account_scoped(tmp_path: Path) -> None:
     c = _db(tmp_path)
     acct1 = _required_int(c.execute("SELECT MIN(id) FROM accounts").fetchone())
@@ -138,12 +127,11 @@ def test_commit_rows_inserts_with_fields_and_defaults(tmp_path: Path) -> None:
         (acct,),
     ).lastrowid
     rows = [
-        _row_with_tags(
+        _row(
             "2026-01-01T00:00:00",
             -100,
             "A",
-            "Cafe",
-            "5814",
+            tags=("Cafe", "5814"),
             category_id=None,
         ),
         _row("2026-01-02T00:00:00", -200, "B"),

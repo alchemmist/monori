@@ -4,7 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.deps import TransactionResponse
-from tests.conftest import Api, login_as
+from tests.conftest import Api, TransactionOptions, login_as
 
 pytestmark = pytest.mark.integration
 
@@ -22,16 +22,16 @@ def pair(
     out_account: int,
     in_account: int,
     amount: int = 5000,
-    out_date: str = "2026-03-10",
-    in_date: str = "2026-03-10",
+    dates: tuple[str, str] = ("2026-03-10", "2026-03-10"),
 ) -> tuple[int, int]:
     """
     Two ordinary transactions that together look like a transfer, as a bank.
 
     would deliver them: nothing links them yet.
     """
-    out_id = api.tx(f"{out_date}T09:00:00", -amount, accountId=out_account)
-    in_id = api.tx(f"{in_date}T18:00:00", amount, accountId=in_account)
+    out_date, in_date = dates
+    out_id = api.tx(f"{out_date}T09:00:00", -amount, TransactionOptions(account_id=out_account))
+    in_id = api.tx(f"{in_date}T18:00:00", amount, TransactionOptions(account_id=in_account))
     return out_id, in_id
 
 
@@ -58,7 +58,7 @@ def test_transfer_shows_up_as_an_entity_in_the_snapshot(api: Api) -> None:
     transfer_id = api.transfer(a, b, 5000, comment="move")
 
     entity = next(transfer for transfer in api.snapshot().transfers if transfer.id == transfer_id)
-    out_leg, in_leg = (api.tx_by(entity.outTxId), api.tx_by(entity.inTxId))
+    out_leg, in_leg = (api.tx_by(entity.out_tx_id), api.tx_by(entity.in_tx_id))
     assert out_leg.amount == -5000
     assert out_leg.accountId == a
     assert in_leg.amount == 5000
@@ -183,8 +183,8 @@ def test_link_rejects_pairs_that_are_not_a_transfer(
 ) -> None:
     a = api.default_account()
     b = a if same_account else api.account("Vault")
-    out_id = api.tx("2026-03-10T09:00:00", amounts[0], accountId=a)
-    in_id = api.tx("2026-03-10T18:00:00", amounts[1], accountId=b)
+    out_id = api.tx("2026-03-10T09:00:00", amounts[0], TransactionOptions(account_id=a))
+    in_id = api.tx("2026-03-10T18:00:00", amounts[1], TransactionOptions(account_id=b))
     r = client.post("/api/transfers/link", json={"outTxId": out_id, "inTxId": in_id})
     assert r.status_code == 400
 
@@ -195,7 +195,7 @@ def test_link_rejects_a_leg_already_in_a_transfer(api: Api, client: TestClient) 
     third = api.account("Pocket")
     out_id, in_id = pair(api, a, b)
     client.post("/api/transfers/link", json={"outTxId": out_id, "inTxId": in_id})
-    other = api.tx("2026-03-10T18:00:00", 5000, accountId=third)
+    other = api.tx("2026-03-10T18:00:00", 5000, TransactionOptions(account_id=third))
     r = client.post("/api/transfers/link", json={"outTxId": out_id, "inTxId": other})
     assert r.status_code == 400
 
@@ -224,7 +224,7 @@ def test_detect_merges_a_same_day_pair(api: Api, client: TestClient) -> None:
 def test_detect_leaves_a_distant_pair_as_a_suggestion(api: Api, client: TestClient) -> None:
     a = api.default_account()
     b = api.account("Vault")
-    out_id, in_id = pair(api, a, b, out_date="2026-03-10", in_date="2026-03-13")
+    out_id, in_id = pair(api, a, b, dates=("2026-03-10", "2026-03-13"))
 
     result = client.post("/api/transfers/detect").json()
     assert result["merged"] == []
@@ -238,7 +238,7 @@ def test_detect_leaves_a_distant_pair_as_a_suggestion(api: Api, client: TestClie
 def test_dismissed_suggestions_stop_coming_back(api: Api, client: TestClient) -> None:
     a = api.default_account()
     b = api.account("Vault")
-    out_id, in_id = pair(api, a, b, out_date="2026-03-10", in_date="2026-03-13")
+    out_id, in_id = pair(api, a, b, dates=("2026-03-10", "2026-03-13"))
 
     client.post("/api/transfers/suggestions/dismiss", json={"outTxId": out_id, "inTxId": in_id})
     assert client.get("/api/transfers/suggestions").json()["rows"] == []
@@ -257,12 +257,18 @@ def test_detect_leaves_a_disagreeing_same_day_pair_as_a_suggestion(
     """
     a = api.default_account()
     b = api.account("Vault")
-    out_id = api.tx("2026-03-10T09:00:00", -100000, accountId=a, description="IP Elyan A.Kh")
+    out_id = api.tx(
+        "2026-03-10T09:00:00",
+        -100000,
+        TransactionOptions(account_id=a, description="IP Elyan A.Kh"),
+    )
     in_id = api.tx(
         "2026-03-10T18:00:00",
         100000,
-        accountId=b,
-        description="Transfer between own accounts",
+        TransactionOptions(
+            account_id=b,
+            description="Transfer between own accounts",
+        ),
     )
 
     result = client.post("/api/transfers/detect").json()
@@ -354,7 +360,7 @@ def test_deleting_a_leg_restores_the_partner_category(api: Api, client: TestClie
 
 def test_link_reports_an_unknown_transaction_by_message(api: Api, client: TestClient) -> None:
     a = api.default_account()
-    out_id = api.tx("2026-03-10T09:00:00", -5000, accountId=a)
+    out_id = api.tx("2026-03-10T09:00:00", -5000, TransactionOptions(account_id=a))
     r = client.post("/api/transfers/link", json={"outTxId": out_id, "inTxId": 999999})
     assert r.status_code == 400
     assert r.json()["detail"] == "unknown transaction"
@@ -363,8 +369,8 @@ def test_link_reports_an_unknown_transaction_by_message(api: Api, client: TestCl
 def test_link_reports_two_outflows_by_message(api: Api, client: TestClient) -> None:
     a = api.default_account()
     b = api.account("Vault")
-    out_id = api.tx("2026-03-10T09:00:00", -5000, accountId=a)
-    in_id = api.tx("2026-03-10T18:00:00", -5000, accountId=b)
+    out_id = api.tx("2026-03-10T09:00:00", -5000, TransactionOptions(account_id=a))
+    in_id = api.tx("2026-03-10T18:00:00", -5000, TransactionOptions(account_id=b))
     r = client.post("/api/transfers/link", json={"outTxId": out_id, "inTxId": in_id})
     assert r.status_code == 400
     assert r.json()["detail"] == "a transfer needs one outflow and one inflow"
@@ -372,8 +378,8 @@ def test_link_reports_two_outflows_by_message(api: Api, client: TestClient) -> N
 
 def test_link_reports_same_account_by_message(api: Api, client: TestClient) -> None:
     a = api.default_account()
-    out_id = api.tx("2026-03-10T09:00:00", -5000, accountId=a)
-    in_id = api.tx("2026-03-10T18:00:00", 5000, accountId=a)
+    out_id = api.tx("2026-03-10T09:00:00", -5000, TransactionOptions(account_id=a))
+    in_id = api.tx("2026-03-10T18:00:00", 5000, TransactionOptions(account_id=a))
     r = client.post("/api/transfers/link", json={"outTxId": out_id, "inTxId": in_id})
     assert r.status_code == 400
     assert r.json()["detail"] == "both legs are on the same account"
@@ -385,7 +391,7 @@ def test_link_reports_an_already_linked_leg_by_message(api: Api, client: TestCli
     third = api.account("Pocket")
     out_id, in_id = pair(api, a, b)
     client.post("/api/transfers/link", json={"outTxId": out_id, "inTxId": in_id})
-    other = api.tx("2026-03-10T18:00:00", 5000, accountId=third)
+    other = api.tx("2026-03-10T18:00:00", 5000, TransactionOptions(account_id=third))
     r = client.post("/api/transfers/link", json={"outTxId": out_id, "inTxId": other})
     assert r.status_code == 400
     assert r.json()["detail"] == "already part of a transfer"
@@ -393,7 +399,7 @@ def test_link_reports_an_already_linked_leg_by_message(api: Api, client: TestCli
 
 def test_dismiss_reports_an_unknown_transaction_by_message(api: Api, client: TestClient) -> None:
     a = api.default_account()
-    out_id = api.tx("2026-03-10T09:00:00", -5000, accountId=a)
+    out_id = api.tx("2026-03-10T09:00:00", -5000, TransactionOptions(account_id=a))
     r = client.post(
         "/api/transfers/suggestions/dismiss",
         json={"outTxId": out_id, "inTxId": 999999},
@@ -420,7 +426,7 @@ def test_detection_never_pairs_a_reconcile_adjustment(api: Api, client: TestClie
     """
     a = api.default_account()
     b = api.account("Vault")
-    api.tx("2026-03-10T09:00:00", -5000, accountId=a)
+    api.tx("2026-03-10T09:00:00", -5000, TransactionOptions(account_id=a))
     r = client.post(f"/api/accounts/{b}/reconcile", json={"actualBalance": 5000})
     assert r.status_code == 200
     assert r.json()["delta"] == 5000

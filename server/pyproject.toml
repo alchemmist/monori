@@ -73,6 +73,9 @@ ignore = ["COM812", "D203", "D212"]
   "D105",
   "D104",
 ]
+"server/migrations/**/*.py" = ["S101", "INP001"]
+"server/app/workbook/parser.py" = ["RUF001"]
+"server/app/connectors/tbank_playwright.py" = ["RUF001"] # TODO: remove from ignore
 
 [tool.mypy]
 python_version = "3.12"

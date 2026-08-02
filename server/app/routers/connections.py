@@ -22,7 +22,7 @@ from datetime import datetime
 from typing import Annotated, NoReturn
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import ConfigDict
+from pydantic import ConfigDict, Field
 from pydantic.dataclasses import dataclass as pydantic_dataclass
 
 from app import crypto
@@ -98,16 +98,16 @@ class LinkedAccount:
     bank_ref: str | None
 
 
-@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+@pydantic_dataclass(config=ConfigDict(extra="forbid", populate_by_name=True))
 class AccountSyncSummary:
     """Represent AccountSyncSummary."""
 
-    accountId: int
+    account_id: int = Field(alias="accountId")
     inserted: int
     skipped: int
-    batchId: int | None
-    dateFrom: str | None
-    dateTo: str | None
+    batch_id: int | None = Field(alias="batchId")
+    date_from: str | None = Field(alias="dateFrom")
+    date_to: str | None = Field(alias="dateTo")
 
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid"))
@@ -118,7 +118,7 @@ class UnmappedTail:
     rows: int
 
 
-@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+@pydantic_dataclass(config=ConfigDict(extra="forbid", populate_by_name=True))
 class SyncResponse:
     """Represent SyncResponse."""
 
@@ -126,9 +126,9 @@ class SyncResponse:
     inserted: int
     skipped: int
     accounts: list[AccountSyncSummary]
-    dateFrom: str | None
-    dateTo: str | None
-    unmappedTails: list[UnmappedTail]
+    date_from: str | None = Field(alias="dateFrom")
+    date_to: str | None = Field(alias="dateTo")
+    unmapped_tails: list[UnmappedTail] = Field(alias="unmappedTails")
 
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid"))
@@ -139,7 +139,7 @@ class SyncStatusResponse:
     message: str | None = None
 
 
-@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+@pydantic_dataclass(config=ConfigDict(extra="forbid", populate_by_name=True))
 class ConnectionResponse:
     """Represent ConnectionResponse."""
 
@@ -147,11 +147,11 @@ class ConnectionResponse:
     bank: str
     kind: str
     status: str
-    lastSync: str | None
-    lastError: str | None
-    hasCredentials: bool
-    createdAt: str
-    updatedAt: str
+    last_sync: str | None = Field(alias="lastSync")
+    last_error: str | None = Field(alias="lastError")
+    has_credentials: bool = Field(alias="hasCredentials")
+    created_at: str = Field(alias="createdAt")
+    updated_at: str = Field(alias="updatedAt")
 
 
 def _optional_blob(value: sqlite3.Row, key: str) -> bytes | memoryview | None:
@@ -197,11 +197,11 @@ def _serialize_connection(row: ConnectionRow) -> ConnectionResponse:
         bank=row.bank,
         kind=row.kind,
         status=row.status,
-        lastSync=row.last_sync,
-        lastError=row.last_error,
-        hasCredentials=row.credentials_encrypted is not None,
-        createdAt=row.created_at,
-        updatedAt=row.updated_at,
+        last_sync=row.last_sync,
+        last_error=row.last_error,
+        has_credentials=row.credentials_encrypted is not None,
+        created_at=row.created_at,
+        updated_at=row.updated_at,
     )
 
 
@@ -392,12 +392,12 @@ def _finish_account(
         dates = sorted(r.date for r in rows)
         summaries.append(
             AccountSyncSummary(
-                accountId=target_id,
+                account_id=target_id,
                 inserted=inserted,
                 skipped=skipped,
-                batchId=batch_id,
-                dateFrom=dates[0] if dates else None,
-                dateTo=dates[-1] if dates else None,
+                batch_id=batch_id,
+                date_from=dates[0] if dates else None,
+                date_to=dates[-1] if dates else None,
             ),
         )
     session = getattr(result, "session", None)
@@ -425,16 +425,16 @@ def _aggregate(
     results: list[AccountSyncSummary],
     unmapped: dict[str, int] | None = None,
 ) -> SyncResponse:
-    dates_from = [r.dateFrom for r in results if r.dateFrom is not None]
-    dates_to = [r.dateTo for r in results if r.dateTo is not None]
+    dates_from = [r.date_from for r in results if r.date_from is not None]
+    dates_to = [r.date_to for r in results if r.date_to is not None]
     return SyncResponse(
         status="connected",
         inserted=sum(r.inserted for r in results),
         skipped=sum(r.skipped for r in results),
         accounts=results,
-        dateFrom=min(dates_from) if dates_from else None,
-        dateTo=max(dates_to) if dates_to else None,
-        unmappedTails=[UnmappedTail(tail=t, rows=n) for t, n in sorted((unmapped or {}).items())],
+        date_from=min(dates_from) if dates_from else None,
+        date_to=max(dates_to) if dates_to else None,
+        unmapped_tails=[UnmappedTail(tail=t, rows=n) for t, n in sorted((unmapped or {}).items())],
     )
 
 

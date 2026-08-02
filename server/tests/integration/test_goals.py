@@ -1,7 +1,7 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from tests.conftest import Api
+from tests.conftest import Api, TransactionOptions
 
 pytestmark = pytest.mark.integration
 
@@ -26,7 +26,7 @@ def test_goal_crud_accepts_spending_and_archive_preserves_history(
         "/api/budgets",
         json={"categoryId": goal, "year": 2026, "month": 1, "amount": 30_000},
     )
-    purchase = api.tx("2026-02-20T10:00:00", -40_000, categoryId=goal)
+    purchase = api.tx("2026-02-20T10:00:00", -40_000, TransactionOptions(category_id=goal))
     client.put(
         "/api/budgets",
         json={"categoryId": goal, "year": 2026, "month": 2, "amount": 20_000},

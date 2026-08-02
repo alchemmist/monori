@@ -5,14 +5,14 @@ import sqlite3
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import ConfigDict
+from pydantic import ConfigDict, Field
 from pydantic.dataclasses import dataclass as pydantic_dataclass
 
 from app.auth import AuthenticatedUser, current_user
 from app.db_records import TransactionRecord
 from app.deps import TransactionResponse, conn, serialize_tx
 from app.importer import tx_hash
-from app.transfer_match import AUTO_DAYS, SUGGEST_DAYS, TransferCandidate, split_confident
+from app.transfer_match import AUTO_DAYS, SUGGEST_DAYS, split_confident
 from app.transfer_service import (
     LinkError,
     MergedTransfer,
@@ -33,24 +33,24 @@ LEGS_BY_ID = (
 )
 
 
-@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+@pydantic_dataclass(config=ConfigDict(extra="forbid", populate_by_name=True))
 class TransferBody:
     """Represent TransferBody."""
 
-    fromAccountId: int
-    toAccountId: int
     amount: int
     date: str
     comment: str = ""
+    from_account_id: int = Field(alias="fromAccountId")
+    to_account_id: int = Field(alias="toAccountId")
 
 
-@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+@pydantic_dataclass(config=ConfigDict(extra="forbid", populate_by_name=True))
 class PairBody:
     """Represent PairBody."""
 
-    outTxId: int
-    inTxId: int
     note: str = ""
+    out_tx_id: int = Field(alias="outTxId")
+    in_tx_id: int = Field(alias="inTxId")
 
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid"))
@@ -64,15 +64,27 @@ class TransfersResponse:
 class SuggestionsResponse:
     """Represent SuggestionsResponse."""
 
-    rows: list[TransferCandidate]
+    rows: list["SuggestionResponse"]
     transactions: list[TransactionResponse]
 
 
-@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+@pydantic_dataclass(config=ConfigDict(extra="forbid", populate_by_name=True))
+class SuggestionResponse:
+    """Represent SuggestionResponse."""
+
+    amount: int
+    days: int
+    hint: bool
+    mismatch: bool
+    out_tx_id: int = Field(alias="outTxId")
+    in_tx_id: int = Field(alias="inTxId")
+
+
+@pydantic_dataclass(config=ConfigDict(extra="forbid", populate_by_name=True))
 class TransferIdResponse:
     """Represent TransferIdResponse."""
 
-    transferId: str
+    transfer_id: str = Field(alias="transferId")
 
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid"))
@@ -111,7 +123,7 @@ def get_transfers(user: Annotated[AuthenticatedUser, Depends(current_user)]) -> 
 @router.get("/suggestions")
 def get_suggestions(
     user: Annotated[AuthenticatedUser, Depends(current_user)],
-    maxDays: Annotated[int, Query(ge=0, le=31)] = SUGGEST_DAYS,
+    max_days: Annotated[int, Query(ge=0, le=31, alias="maxDays")] = SUGGEST_DAYS,
 ) -> SuggestionsResponse:
     """
     Pairs that look like a transfer but that detection would not merge unasked.
@@ -123,8 +135,8 @@ def get_suggestions(
     uid = user.id
     c = conn()
     try:
-        _, pairs = split_confident(candidates(c, uid, maxDays))
-        ids = sorted({p.outTxId for p in pairs} | {p.inTxId for p in pairs})
+        _, pairs = split_confident(candidates(c, uid, max_days))
+        ids = sorted({p.out_tx_id for p in pairs} | {p.in_tx_id for p in pairs})
         legs = (
             [
                 serialize_tx(TransactionRecord.from_row(row))
@@ -133,7 +145,20 @@ def get_suggestions(
             if ids
             else []
         )
-        return SuggestionsResponse(rows=pairs, transactions=legs)
+        return SuggestionsResponse(
+            rows=[
+                SuggestionResponse(
+                    out_tx_id=pair.out_tx_id,
+                    in_tx_id=pair.in_tx_id,
+                    amount=pair.amount,
+                    days=pair.days,
+                    hint=pair.hint,
+                    mismatch=pair.mismatch,
+                )
+                for pair in pairs
+            ],
+            transactions=legs,
+        )
     finally:
         c.close()
 
@@ -152,21 +177,21 @@ def create_transfer(
     uid = user.id
     if body.amount <= 0:
         raise HTTPException(422, "amount must be positive")
-    if body.fromAccountId == body.toAccountId:
+    if body.from_account_id == body.to_account_id:
         raise HTTPException(400, "cannot transfer to the same account")
     c = conn()
     try:
-        if not account_exists(c, body.fromAccountId, uid) or not account_exists(
+        if not account_exists(c, body.from_account_id, uid) or not account_exists(
             c,
-            body.toAccountId,
+            body.to_account_id,
             uid,
         ):
             raise HTTPException(400, "unknown account")
         description = "Transfer"
         legs: list[int] = []
         for account_id, amount in (
-            (body.fromAccountId, -body.amount),
-            (body.toAccountId, body.amount),
+            (body.from_account_id, -body.amount),
+            (body.to_account_id, body.amount),
         ):
             cur = c.execute(
                 """INSERT INTO transactions
@@ -187,7 +212,7 @@ def create_transfer(
             legs.append(cur.lastrowid)
         transfer_id = link_pair(c, uid, legs[0], legs[1], note=body.comment)
         c.commit()
-        return TransferIdResponse(transferId=transfer_id)
+        return TransferIdResponse(transfer_id=transfer_id)
     except LinkError as e:
         raise HTTPException(400, str(e)) from e
     finally:
@@ -210,12 +235,12 @@ def link_transactions(
         transfer_id = link_pair(
             c,
             user.id,
-            body.outTxId,
-            body.inTxId,
+            body.out_tx_id,
+            body.in_tx_id,
             note=body.note,
         )
         c.commit()
-        return TransferIdResponse(transferId=transfer_id)
+        return TransferIdResponse(transfer_id=transfer_id)
     except LinkError as e:
         raise HTTPException(400, str(e)) from e
     finally:
@@ -230,7 +255,7 @@ def dismiss_suggestion(
     """Handle dismiss suggestion."""
     c = conn()
     try:
-        reject(c, user.id, body.outTxId, body.inTxId)
+        reject(c, user.id, body.out_tx_id, body.in_tx_id)
         c.commit()
         return OkResponse(ok=True)
     except LinkError as e:
@@ -242,12 +267,12 @@ def dismiss_suggestion(
 @router.post("/detect")
 def run_detection(
     user: Annotated[AuthenticatedUser, Depends(current_user)],
-    maxDays: Annotated[int, Query(ge=0, le=31)] = SUGGEST_DAYS,
+    max_days: Annotated[int, Query(ge=0, le=31, alias="maxDays")] = SUGGEST_DAYS,
 ) -> DetectionResponse:
     """Merge the pairs that are beyond doubt and report the rest as suggestions."""
     c = conn()
     try:
-        merged, suggested = detect(c, user.id, AUTO_DAYS, maxDays)
+        merged, suggested = detect(c, user.id, AUTO_DAYS, max_days)
         c.commit()
         return DetectionResponse(merged=merged, suggested=len(suggested))
     finally:

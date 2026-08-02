@@ -14,7 +14,7 @@ import contextlib
 import logging
 
 from fastapi import FastAPI, HTTPException
-from pydantic import ConfigDict
+from pydantic import ConfigDict, Field
 from pydantic.dataclasses import dataclass as pydantic_dataclass
 
 from .connectors import base as connectors
@@ -63,7 +63,7 @@ class RunBody:
     credentials: JsonObject
     session: JsonObject | None = None
     since: str | None = None
-    accountRef: str | None = None
+    account_ref: str | None = Field(default=None, alias="accountRef")
 
 
 @pydantic_dataclass(config=ConfigDict(populate_by_name=True))
@@ -98,7 +98,7 @@ def start_run(cid: int, body: RunBody) -> RunDoneResponse | RunStatusResponse:
         cls = connectors.get_connector_class(body.bank, body.kind)
     except ConnectorError as e:
         return _error(cid, e)
-    connector = cls(body.credentials, body.session, account_ref=body.accountRef)
+    connector = cls(body.credentials, body.session, account_ref=body.account_ref)
     try:
         return _done(connector.sync(body.since))
     except SmsRequiredError:

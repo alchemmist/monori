@@ -10,7 +10,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import ConfigDict
+from pydantic import ConfigDict, Field
 from pydantic.dataclasses import dataclass as pydantic_dataclass
 
 from app import auth
@@ -28,6 +28,7 @@ TX_PAGE_MAX = 1000
 SQL_CHUNK = 500
 RECENT_LOGINS_LIMIT = 50
 ACTIVITY_WINDOW_DAYS = 30
+_CONFIG = ConfigDict(extra="forbid", populate_by_name=True)
 
 
 def _cutoff(days: int) -> str:
@@ -50,7 +51,7 @@ def _count_since(c: sqlite3.Connection, sql: str, since: str) -> int:
     return row[0]
 
 
-@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+@pydantic_dataclass(config=_CONFIG)
 class AdminTotals:
     """Represent AdminTotals."""
 
@@ -60,7 +61,7 @@ class AdminTotals:
     connections: int
 
 
-@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+@pydantic_dataclass(config=_CONFIG)
 class RegistrationCount:
     """Represent RegistrationCount."""
 
@@ -68,44 +69,44 @@ class RegistrationCount:
     count: int
 
 
-@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+@pydantic_dataclass(config=_CONFIG)
 class OverviewResponse:
     """Represent OverviewResponse."""
 
     totals: AdminTotals
-    dbSizeBytes: int
-    newUsers7d: int
-    newUsers30d: int
-    activeUsers7d: int
+    db_size_bytes: int = Field(alias="dbSizeBytes")
+    new_users_7d: int = Field(alias="newUsers7d")
+    new_users_30d: int = Field(alias="newUsers30d")
+    active_users_7d: int = Field(alias="activeUsers7d")
     registrations: list[RegistrationCount]
 
 
-@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+@pydantic_dataclass(config=_CONFIG)
 class AdminConnectionSummary:
     """Represent AdminConnectionSummary."""
 
     status: str
-    lastSync: str | None
-    lastError: str | None
+    last_sync: str | None = Field(alias="lastSync")
+    last_error: str | None = Field(alias="lastError")
 
 
-@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+@pydantic_dataclass(config=_CONFIG)
 class AdminUserSummary:
     """Represent AdminUserSummary."""
 
     id: int
     email: str
-    createdAt: str
-    lastLogin: str | None
-    isAdmin: bool
+    created_at: str = Field(alias="createdAt")
+    last_login: str | None = Field(alias="lastLogin")
+    is_admin: bool = Field(alias="isAdmin")
     accounts: int
     transactions: int
-    lastTransaction: str | None
+    last_transaction: str | None = Field(alias="lastTransaction")
     budgets: int
     connection: AdminConnectionSummary | None
 
 
-@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+@pydantic_dataclass(config=_CONFIG)
 class AdminAccountSummary:
     """Represent AdminAccountSummary."""
 
@@ -118,7 +119,7 @@ class AdminAccountSummary:
     transactions: int
 
 
-@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+@pydantic_dataclass(config=_CONFIG)
 class AdminTransactionSummary:
     """Represent AdminTransactionSummary."""
 
@@ -130,7 +131,7 @@ class AdminTransactionSummary:
     category: str | None
 
 
-@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+@pydantic_dataclass(config=_CONFIG)
 class AdminTransactionDetail(AdminTransactionSummary):
     """Represent AdminTransactionDetail."""
 
@@ -139,7 +140,7 @@ class AdminTransactionDetail(AdminTransactionSummary):
     source: str
 
 
-@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+@pydantic_dataclass(config=_CONFIG)
 class FeatureCount:
     """Represent FeatureCount."""
 
@@ -147,18 +148,18 @@ class FeatureCount:
     count: int
 
 
-@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+@pydantic_dataclass(config=_CONFIG)
 class UserDetailResponse:
     """Represent UserDetailResponse."""
 
     user: UserResponse
     accounts: list[AdminAccountSummary]
-    recentTransactions: list[AdminTransactionSummary]
-    featureUsage: list[FeatureCount]
-    recentLogins: list[str]
+    recent_transactions: list[AdminTransactionSummary] = Field(alias="recentTransactions")
+    feature_usage: list[FeatureCount] = Field(alias="featureUsage")
+    recent_logins: list[str] = Field(alias="recentLogins")
 
 
-@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+@pydantic_dataclass(config=_CONFIG)
 class DayCount:
     """Represent DayCount."""
 
@@ -166,7 +167,7 @@ class DayCount:
     count: int
 
 
-@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+@pydantic_dataclass(config=_CONFIG)
 class LoginEvent:
     """Represent LoginEvent."""
 
@@ -174,13 +175,13 @@ class LoginEvent:
     at: str
 
 
-@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+@pydantic_dataclass(config=_CONFIG)
 class ActivityResponse:
     """Represent ActivityResponse."""
 
     features: list[FeatureCount]
     daily: list[DayCount]
-    recentLogins: list[LoginEvent]
+    recent_logins: list[LoginEvent] = Field(alias="recentLogins")
 
 
 @router.get("/overview")
@@ -204,14 +205,18 @@ def overview(admin: Annotated[AdminContext, Depends(admin_user)]) -> OverviewRes
                 accounts=_count(c, "SELECT COUNT(*) FROM accounts"),
                 connections=_count(c, "SELECT COUNT(*) FROM bank_connections"),
             ),
-            dbSizeBytes=_count(c, "PRAGMA page_count") * _count(c, "PRAGMA page_size"),
-            newUsers7d=_count_since(c, "SELECT COUNT(*) FROM users WHERE created_at >= ?", cutoff7),
-            newUsers30d=_count_since(
+            db_size_bytes=_count(c, "PRAGMA page_count") * _count(c, "PRAGMA page_size"),
+            new_users_7d=_count_since(
+                c,
+                "SELECT COUNT(*) FROM users WHERE created_at >= ?",
+                cutoff7,
+            ),
+            new_users_30d=_count_since(
                 c,
                 "SELECT COUNT(*) FROM users WHERE created_at >= ?",
                 cutoff30,
             ),
-            activeUsers7d=active_row[0],
+            active_users_7d=active_row[0],
             registrations=[
                 RegistrationCount(month=r["m"], count=r["n"])
                 for r in c.execute(
@@ -237,19 +242,19 @@ def list_users(
         ):
             connections[r["user_id"]] = AdminConnectionSummary(
                 status=r["status"],
-                lastSync=r["last_sync"],
-                lastError=r["last_error"],
+                last_sync=r["last_sync"],
+                last_error=r["last_error"],
             )
         return [
             AdminUserSummary(
                 id=r["id"],
                 email=r["email"],
-                createdAt=r["created_at"],
-                lastLogin=r["last_login"],
-                isAdmin=bool(r["is_admin"]),
+                created_at=r["created_at"],
+                last_login=r["last_login"],
+                is_admin=bool(r["is_admin"]),
                 accounts=r["accounts"],
                 transactions=r["transactions"],
-                lastTransaction=r["last_tx"],
+                last_transaction=r["last_tx"],
                 budgets=r["budgets"],
                 connection=connections.get(r["id"]),
             )
@@ -308,7 +313,7 @@ def user_detail(
                     (uid,),
                 )
             ],
-            recentTransactions=[
+            recent_transactions=[
                 AdminTransactionSummary(
                     id=r["id"],
                     date=r["date"],
@@ -326,7 +331,7 @@ def user_detail(
                     (uid, RECENT_TX_LIMIT),
                 )
             ],
-            featureUsage=[
+            feature_usage=[
                 FeatureCount(feature=r["feature"], count=r["n"])
                 for r in c.execute(
                     "SELECT feature, SUM(count) AS n FROM feature_usage WHERE user_id=?"
@@ -334,7 +339,7 @@ def user_detail(
                     (uid,),
                 )
             ],
-            recentLogins=[
+            recent_logins=[
                 r["created_at"]
                 for r in c.execute(
                     "SELECT created_at FROM activity_events WHERE user_id=? AND kind='login'"
@@ -391,7 +396,7 @@ def user_transactions(
         c.close()
 
 
-@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+@pydantic_dataclass(config=_CONFIG)
 class DeleteTransactionsBody:
     """Represent DeleteTransactionsBody."""
 
@@ -438,7 +443,7 @@ def delete_user_transactions(
         c.close()
 
 
-@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+@pydantic_dataclass(config=_CONFIG)
 class CreateUserBody:
     """Represent CreateUserBody."""
 
@@ -513,7 +518,7 @@ def activity(admin: Annotated[AdminContext, Depends(admin_user)]) -> ActivityRes
                     (day_cutoff,),
                 )
             ],
-            recentLogins=[
+            recent_logins=[
                 LoginEvent(email=r["email"], at=r["created_at"])
                 for r in c.execute(
                     "SELECT u.email, e.created_at FROM activity_events e"

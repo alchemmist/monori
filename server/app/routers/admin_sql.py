@@ -16,7 +16,7 @@ from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import ConfigDict
+from pydantic import ConfigDict, Field
 from pydantic.dataclasses import dataclass as pydantic_dataclass
 
 from app.admin import admin_user
@@ -81,32 +81,32 @@ def cell(value: SqliteValue) -> SqlCell:
     return value
 
 
-@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+@pydantic_dataclass(config=ConfigDict(extra="forbid", populate_by_name=True))
 class SqlBody:
     """Represent SqlBody."""
 
     sql: str
-    confirmWrite: bool
-    dryRun: bool
+    confirm_write: bool = Field(alias="confirmWrite")
+    dry_run: bool = Field(alias="dryRun")
 
 
-@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+@pydantic_dataclass(config=ConfigDict(extra="forbid", populate_by_name=True))
 class SqlResponse:
     """Represent SqlResponse."""
 
     kind: str
     columns: list[str]
     rows: list[list[SqlCell]]
-    rowCount: int
+    row_count: int = Field(alias="rowCount")
     truncated: bool
-    elapsedMs: float
+    elapsed_ms: float = Field(alias="elapsedMs")
 
 
-@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+@pydantic_dataclass(config=ConfigDict(extra="forbid", populate_by_name=True))
 class SqlDryResponse(SqlResponse):
     """Represent SqlDryResponse."""
 
-    wouldWrite: bool
+    would_write: bool = Field(alias="wouldWrite")
 
 
 @router.post("/sql")
@@ -165,20 +165,20 @@ def run_sql(
         is_write = not columns or changed > 0
         write_rows = max(changed, cur.rowcount, 0)
 
-        if body.dryRun:
+        if body.dry_run:
             c.rollback()
             _audit(c, uid, "admin_sql_dry_run", sql)
             return SqlDryResponse(
                 kind="dry",
-                wouldWrite=is_write,
+                would_write=is_write,
                 columns=columns,
                 rows=rows[:ROW_LIMIT],
-                rowCount=write_rows if is_write else min(len(rows), ROW_LIMIT),
+                row_count=write_rows if is_write else min(len(rows), ROW_LIMIT),
                 truncated=not is_write and len(rows) > ROW_LIMIT,
-                elapsedMs=elapsed_ms,
+                elapsed_ms=elapsed_ms,
             )
 
-        if is_write and not body.confirmWrite:
+        if is_write and not body.confirm_write:
             c.rollback()
             _audit(c, uid, "admin_sql_rejected", sql)
             raise HTTPException(
@@ -194,9 +194,9 @@ def run_sql(
                 kind="write",
                 columns=[],
                 rows=[],
-                rowCount=write_rows,
+                row_count=write_rows,
                 truncated=False,
-                elapsedMs=elapsed_ms,
+                elapsed_ms=elapsed_ms,
             )
 
         c.rollback()
@@ -206,9 +206,9 @@ def run_sql(
             kind="read",
             columns=columns,
             rows=rows[:ROW_LIMIT],
-            rowCount=min(len(rows), ROW_LIMIT),
+            row_count=min(len(rows), ROW_LIMIT),
             truncated=truncated,
-            elapsedMs=elapsed_ms,
+            elapsed_ms=elapsed_ms,
         )
     finally:
         c.close()

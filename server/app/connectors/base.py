@@ -10,7 +10,7 @@ raises :class:`SmsRequiredError`; the caller parks the live connector and later 
 
 from typing import ClassVar
 
-from pydantic import JsonValue, TypeAdapter
+from pydantic import ConfigDict, Field, JsonValue, TypeAdapter
 from pydantic.dataclasses import dataclass as pydantic_dataclass
 
 type JsonObject = dict[str, JsonValue]
@@ -27,15 +27,23 @@ class ConnectorParam:
     help: str | None = None
 
 
-@pydantic_dataclass
+@pydantic_dataclass(config=ConfigDict(populate_by_name=True, serialize_by_alias=True))
 class ConnectorInfo:
     """Represent ConnectorInfo."""
 
     bank: str
     kind: str
     label: str
-    connectionParams: list[ConnectorParam]
-    accountParams: list[ConnectorParam]
+    connection_params: list[ConnectorParam] = Field(alias="connectionParams")
+    account_params: list[ConnectorParam] = Field(alias="accountParams")
+
+    def __getattr__(self, name: str) -> list[ConnectorParam]:
+        """Provide camelCase compatibility aliases for serialized connector params."""
+        if name == "connectionParams":
+            return self.connection_params
+        if name == "accountParams":
+            return self.account_params
+        raise AttributeError(name)
 
 
 @pydantic_dataclass
@@ -151,8 +159,8 @@ def available_connectors() -> list[ConnectorInfo]:
             bank=cls.bank,
             kind=cls.kind,
             label=cls.label or cls.bank,
-            connectionParams=cls.connection_params,
-            accountParams=cls.account_params,
+            connection_params=cls.connection_params,
+            account_params=cls.account_params,
         )
         for cls in REGISTRY.values()
         if not cls.hidden

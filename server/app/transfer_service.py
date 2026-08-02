@@ -11,7 +11,7 @@ import sqlite3
 import uuid
 from datetime import UTC, datetime
 
-from pydantic import ConfigDict
+from pydantic import ConfigDict, Field
 from pydantic.dataclasses import dataclass as pydantic_dataclass
 
 from .db import begin_write
@@ -33,40 +33,40 @@ LINKABLE_COLUMNS = (
 )
 
 
-@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+@pydantic_dataclass(config=ConfigDict(extra="forbid", populate_by_name=True))
 class TransferResponse:
     """Represent TransferResponse."""
 
     id: str
-    outTxId: int
-    inTxId: int
     origin: str
     note: str
-    createdAt: str
+    out_tx_id: int = Field(alias="outTxId")
+    in_tx_id: int = Field(alias="inTxId")
+    created_at: str = Field(alias="createdAt")
 
 
-@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+@pydantic_dataclass(config=ConfigDict(extra="forbid", populate_by_name=True))
 class MergedTransfer:
     """Represent MergedTransfer."""
 
     id: str
-    outTxId: int
-    inTxId: int
     amount: int
     days: int
     hint: bool
     mismatch: bool
+    out_tx_id: int = Field(alias="outTxId")
+    in_tx_id: int = Field(alias="inTxId")
 
 
 def serialize_transfer(record: TransferRecord) -> TransferResponse:
     """Handle serialize transfer."""
     return TransferResponse(
         id=record.id,
-        outTxId=record.out_tx_id,
-        inTxId=record.in_tx_id,
+        out_tx_id=record.out_tx_id,
+        in_tx_id=record.in_tx_id,
         origin=record.origin,
         note=record.note,
-        createdAt=record.created_at,
+        created_at=record.created_at,
     )
 
 
@@ -275,8 +275,8 @@ def detect(
             transfer_id = link(
                 c,
                 uid,
-                pair.outTxId,
-                pair.inTxId,
+                pair.out_tx_id,
+                pair.in_tx_id,
                 origin="matched",
             )
         except LinkError:
@@ -284,8 +284,8 @@ def detect(
         merged.append(
             MergedTransfer(
                 id=transfer_id,
-                outTxId=pair.outTxId,
-                inTxId=pair.inTxId,
+                out_tx_id=pair.out_tx_id,
+                in_tx_id=pair.in_tx_id,
                 amount=pair.amount,
                 days=pair.days,
                 hint=pair.hint,

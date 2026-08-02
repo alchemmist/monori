@@ -3,9 +3,9 @@ from fastapi.testclient import TestClient
 from pydantic import TypeAdapter
 
 import app.db as dbmod
-from app.routers.imports import ImportRowResponse
 from app.importer import tx_hash
-from tests.conftest import Api
+from app.routers.imports import ImportRowResponse
+from tests.conftest import AccountOptions, Api, TransactionOptions
 
 pytestmark = pytest.mark.integration
 
@@ -32,7 +32,9 @@ def test_create_account_applies_defaults(api: Api, client: TestClient) -> None:
 
 
 def test_account_crud_and_uniqueness(api: Api, client: TestClient) -> None:
-    cash = api.account("Vault", type="cash", icon="ruble", openingBalance=5000)
+    cash = api.account(
+        "Vault", AccountOptions(account_type="cash", icon="ruble", opening_balance=5000)
+    )
     row = api.acct(cash)
     assert row.type == "cash"
     assert row.openingBalance == 5000
@@ -65,7 +67,7 @@ def test_account_crud_and_uniqueness(api: Api, client: TestClient) -> None:
 
 
 def test_account_color_and_custom_image(api: Api, client: TestClient) -> None:
-    acc = api.account("Broker", color="#2f6feb")
+    acc = api.account("Broker", AccountOptions(color="#2f6feb"))
     assert api.acct(acc).color == "#2f6feb"
 
     bad = client.patch(f"/api/accounts/{acc}", json={"color": "blue"})
@@ -106,7 +108,7 @@ def test_reorder_accounts(api: Api, client: TestClient) -> None:
 def test_delete_reassigns_transactions(api: Api, client: TestClient) -> None:
     default = api.default_account()
     cash = api.account("Vault")
-    tx = api.tx("2026-03-01T10:00:00", -1000, accountId=cash)
+    tx = api.tx("2026-03-01T10:00:00", -1000, TransactionOptions(account_id=cash))
 
     no_target = client.delete(f"/api/accounts/{cash}")
     assert no_target.status_code == 400
@@ -137,17 +139,17 @@ def test_empty_account_deletes_without_target(api: Api, client: TestClient) -> N
 def test_transactions_filter_by_account(api: Api, client: TestClient) -> None:
     default = api.default_account()
     cash = api.account("Vault")
-    api.tx("2026-03-01T10:00:00", -1000, accountId=default)
-    api.tx("2026-03-02T10:00:00", -2000, accountId=cash)
+    api.tx("2026-03-01T10:00:00", -1000, TransactionOptions(account_id=default))
+    api.tx("2026-03-02T10:00:00", -2000, TransactionOptions(account_id=cash))
     only_cash = client.get(f"/api/transactions?accountId={cash}").json()
     assert only_cash["total"] == 1
     assert only_cash["rows"][0]["accountId"] == cash
 
 
 def test_reconcile_posts_adjustment_for_the_delta(api: Api, client: TestClient) -> None:
-    acc = api.account("Vault", openingBalance=10000)
+    acc = api.account("Vault", AccountOptions(opening_balance=10000))
     cat = api.category("Misc", api.group("Stuff"))
-    api.tx("2026-03-01T10:00:00", -2500, accountId=acc, categoryId=cat)
+    api.tx("2026-03-01T10:00:00", -2500, TransactionOptions(account_id=acc, category_id=cat))
 
     r = client.post(f"/api/accounts/{acc}/reconcile", json={"actualBalance": 9000})
     assert r.status_code == 200
@@ -164,8 +166,8 @@ def test_reconcile_posts_adjustment_for_the_delta(api: Api, client: TestClient) 
 
 
 def test_reconcile_ignores_hidden_transactions(api: Api, client: TestClient) -> None:
-    acc = api.account("Vault", openingBalance=10000)
-    junk = api.tx("2026-03-01T10:00:00", -2500, accountId=acc)
+    acc = api.account("Vault", AccountOptions(opening_balance=10000))
+    junk = api.tx("2026-03-01T10:00:00", -2500, TransactionOptions(account_id=acc))
     client.patch(f"/api/transactions/{junk}", json={"hidden": True})
 
     r = client.post(f"/api/accounts/{acc}/reconcile", json={"actualBalance": 10000})
@@ -180,8 +182,8 @@ def test_reconcile_skips_rows_the_balance_does_not_count(api: Api, client: TestC
     accepted: the account pages leave it out of the balance, so reconciling.
     against the bank must not fold it in and post a phantom adjustment.
     """
-    acc = api.account("Vault", openingBalance=10000)
-    api.tx("2026-03-01T10:00:00", -2500, accountId=acc)
+    acc = api.account("Vault", AccountOptions(opening_balance=10000))
+    api.tx("2026-03-01T10:00:00", -2500, TransactionOptions(account_id=acc))
 
     r = client.post(f"/api/accounts/{acc}/reconcile", json={"actualBalance": 10000})
     assert r.status_code == 200
@@ -201,7 +203,7 @@ def test_import_targets_account(api: Api, client: TestClient) -> None:
 
 
 def test_card_tails_stored_normalized_and_validated(api: Api, client: TestClient) -> None:
-    acc = api.account("Card", cardTails=["*8181", "8181", "29-47"])
+    acc = api.account("Card", AccountOptions(card_tails=["*8181", "8181", "29-47"]))
     row = api.acct(acc)
     assert row.cardTails == ["8181", "2947"]
 

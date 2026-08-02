@@ -14,7 +14,7 @@ from app.deps import IdResponse, conn
 router = APIRouter(prefix="/api/categories", tags=["categories"])
 
 
-_CONFIG = ConfigDict(extra="forbid")
+_CONFIG = ConfigDict(extra="forbid", populate_by_name=True)
 
 
 @pydantic_dataclass(config=_CONFIG)
@@ -22,10 +22,10 @@ class CategoryBody:
     """Represent CategoryBody."""
 
     name: str
-    groupId: int
+    group_id: int = Field(alias="groupId")
     keywords: str = ""
-    goalTarget: int | None = None
-    goalTargetDate: str | None = None
+    goal_target: int | None = Field(default=None, alias="goalTarget")
+    goal_target_date: str | None = Field(default=None, alias="goalTargetDate")
 
 
 @pydantic_dataclass(config=_CONFIG)
@@ -33,14 +33,14 @@ class CategoryPatch:
     """Represent CategoryPatch."""
 
     name: str | None = None
-    groupId: int | None = None
+    group_id: int | None = Field(default=None, alias="groupId")
     keywords: str | None = None
     archived: bool | None = None
-    goalTarget: int | None = None
-    goalTargetDate: str | None = None
-    goalStatus: str | None = None
-    goalTargetProvided: bool = Field(default=False, exclude=True, repr=False)
-    goalTargetDateProvided: bool = Field(default=False, exclude=True, repr=False)
+    goal_target: int | None = Field(default=None, alias="goalTarget")
+    goal_target_date: str | None = Field(default=None, alias="goalTargetDate")
+    goal_status: str | None = Field(default=None, alias="goalStatus")
+    goal_target_provided: bool = Field(default=False, exclude=True, repr=False)
+    goal_target_date_provided: bool = Field(default=False, exclude=True, repr=False)
 
     @model_validator(mode="before")
     @classmethod
@@ -124,13 +124,13 @@ def create_category(
             "SELECT g.id, t.is_goal FROM category_groups g"
             " JOIN category_group_types t ON t.id=g.type_id"
             " WHERE g.id=? AND g.user_id=?",
-            (body.groupId, uid),
+            (body.group_id, uid),
         ).fetchone()
         if not group:
             raise HTTPException(400, "unknown group")
         group_record = GoalGroupRecord.from_row(group)
         keywords = body.keywords
-        goal_target = body.goalTarget
+        goal_target = body.goal_target
         if group_record.is_goal and goal_target is None:
             raise HTTPException(400, "goalTarget is required for goal categories")
         if _name_taken(c, uid, name):
@@ -144,13 +144,13 @@ def create_category(
             "INSERT INTO categories (group_id, name, keywords, sort, goal_target, goal_status,"
             " goal_target_date) VALUES (?, ?, ?, ?, ?, ?, ?)",
             (
-                body.groupId,
+                body.group_id,
                 name,
                 keywords,
                 max_sort + 1,
                 goal_target if group_record.is_goal else None,
                 "active" if group_record.is_goal else None,
-                body.goalTargetDate if group_record.is_goal else None,
+                body.goal_target_date if group_record.is_goal else None,
             ),
         )
         c.commit()
@@ -177,24 +177,24 @@ def patch_category(  # noqa: C901,PLR0912
                 raise HTTPException(409, "category with this name already exists")
             c.execute("UPDATE categories SET name=? WHERE id=?", (patch.name, cat_id))
         goal_fields_allowed = category.is_goal
-        if patch.groupId is not None:
+        if patch.group_id is not None:
             target_group = c.execute(
                 "SELECT g.id, t.is_goal FROM category_groups g"
                 " JOIN category_group_types t ON t.id=g.type_id"
                 " WHERE g.id=? AND g.user_id=?",
-                (patch.groupId, uid),
+                (patch.group_id, uid),
             ).fetchone()
             if not target_group:
                 raise HTTPException(400, "unknown group")
             target_group_record = GoalGroupRecord.from_row(target_group)
             if (
                 target_group_record.is_goal
-                and not patch.goalTargetProvided
+                and not patch.goal_target_provided
                 and category.goal_target is None
             ):
                 raise HTTPException(400, "goalTarget is required for goal categories")
             goal_fields_allowed = target_group_record.is_goal
-            c.execute("UPDATE categories SET group_id=? WHERE id=?", (patch.groupId, cat_id))
+            c.execute("UPDATE categories SET group_id=? WHERE id=?", (patch.group_id, cat_id))
             if not target_group_record.is_goal:
                 goal_fields_allowed = False
                 c.execute(
@@ -209,17 +209,17 @@ def patch_category(  # noqa: C901,PLR0912
                 "UPDATE categories SET archived=? WHERE id=?",
                 (1 if patch.archived else 0, cat_id),
             )
-        if goal_fields_allowed and patch.goalTarget is not None:
-            c.execute("UPDATE categories SET goal_target=? WHERE id=?", (patch.goalTarget, cat_id))
-        if goal_fields_allowed and patch.goalTargetDateProvided:
+        if goal_fields_allowed and patch.goal_target is not None:
+            c.execute("UPDATE categories SET goal_target=? WHERE id=?", (patch.goal_target, cat_id))
+        if goal_fields_allowed and patch.goal_target_date_provided:
             c.execute(
                 "UPDATE categories SET goal_target_date=? WHERE id=?",
-                (patch.goalTargetDate or None, cat_id),
+                (patch.goal_target_date or None, cat_id),
             )
-        if goal_fields_allowed and patch.goalStatus is not None:
-            if patch.goalStatus not in ("active", "achieved"):
+        if goal_fields_allowed and patch.goal_status is not None:
+            if patch.goal_status not in ("active", "achieved"):
                 raise HTTPException(400, "goalStatus must be 'active' or 'achieved'")
-            c.execute("UPDATE categories SET goal_status=? WHERE id=?", (patch.goalStatus, cat_id))
+            c.execute("UPDATE categories SET goal_status=? WHERE id=?", (patch.goal_status, cat_id))
         c.commit()
         return OkResponse(ok=True)
     finally:

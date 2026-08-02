@@ -14,7 +14,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import OAuth2PasswordRequestForm
-from pydantic import ConfigDict
+from pydantic import ConfigDict, Field
 from pydantic.dataclasses import dataclass as pydantic_dataclass
 
 from app.admin import admin_emails
@@ -175,11 +175,11 @@ def me(user: Annotated[AuthenticatedUser, Depends(current_user)]) -> UserRespons
     return user.to_api_dict()
 
 
-@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+@pydantic_dataclass(config=ConfigDict(extra="forbid", populate_by_name=True))
 class MePatch:
     """Represent MePatch."""
 
-    defaultAccountId: int | None = None
+    default_account_id: int | None = Field(default=None, alias="defaultAccountId")
 
 
 @router.patch("/me")
@@ -196,7 +196,7 @@ def patch_me(
     uid = user.id
     c = conn()
     try:
-        default_account_id = body.defaultAccountId
+        default_account_id = body.default_account_id
         if (
             default_account_id is not None
             and not c.execute(

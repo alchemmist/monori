@@ -17,15 +17,15 @@ def test_admin_emails_empty_when_unset(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_admin_user_rejects_non_admin() -> None:
+    user = AuthenticatedUser(
+        1,
+        "u@example.com",
+        "2026-01-01",
+        is_admin=False,
+        last_login=None,
+        default_account_id=None,
+    )
     with pytest.raises(HTTPException) as e:
-        user = AuthenticatedUser(
-            1,
-            "u@example.com",
-            "2026-01-01",
-            is_admin=False,
-            last_login=None,
-            default_account_id=None,
-        )
         admin_user(user)
     assert e.value.status_code == 403
 

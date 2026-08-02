@@ -14,7 +14,7 @@ from fastapi.testclient import TestClient
 from openpyxl import Workbook, load_workbook
 from openpyxl.worksheet.worksheet import Worksheet
 
-from tests.conftest import Api
+from tests.conftest import AccountOptions, Api, TransactionOptions
 
 pytestmark = pytest.mark.integration
 
@@ -33,23 +33,53 @@ def _rich(api: Api, client: TestClient) -> dict[str, int]:
     salary = api.category("Salary", inflow)
     acct = api.account(
         "Card",
-        type="card",
-        icon="wallet",
-        color="#5b6472",
-        bankRef="card-1",
-        currency="RUB",
-        openingBalance=0,
+        AccountOptions(
+            account_type="card",
+            icon="wallet",
+            color="#5b6472",
+            bank_ref="card-1",
+            currency="RUB",
+            opening_balance=0,
+        ),
     )
 
-    api.tx("2026-01-05T10:00:00", -10000, accountId=acct, categoryId=groceries, description="G1")
-    api.tx("2026-01-06T10:00:00", -5000, accountId=acct, categoryId=groceries, description="G2")
-    api.tx("2026-01-07T10:00:00", -3000, accountId=acct, categoryId=cafes, description="C1")
-    api.tx("2026-01-10T10:00:00", 500000, accountId=acct, categoryId=salary, description="S1")
-    api.tx("2026-01-11T10:00:00", 100000, accountId=acct, categoryId=salary, description="S2")
+    api.tx(
+        "2026-01-05T10:00:00",
+        -10000,
+        TransactionOptions(account_id=acct, category_id=groceries, description="G1"),
+    )
+    api.tx(
+        "2026-01-06T10:00:00",
+        -5000,
+        TransactionOptions(account_id=acct, category_id=groceries, description="G2"),
+    )
+    api.tx(
+        "2026-01-07T10:00:00",
+        -3000,
+        TransactionOptions(account_id=acct, category_id=cafes, description="C1"),
+    )
+    api.tx(
+        "2026-01-10T10:00:00",
+        500000,
+        TransactionOptions(account_id=acct, category_id=salary, description="S1"),
+    )
+    api.tx(
+        "2026-01-11T10:00:00",
+        100000,
+        TransactionOptions(account_id=acct, category_id=salary, description="S2"),
+    )
 
-    api.tx("2026-02-05T10:00:00", -20000, accountId=acct, categoryId=groceries, description="G3")
+    api.tx(
+        "2026-02-05T10:00:00",
+        -20000,
+        TransactionOptions(account_id=acct, category_id=groceries, description="G3"),
+    )
 
-    api.tx("2026-03-05T10:00:00", -4000, accountId=acct, categoryId=cafes, description="C2")
+    api.tx(
+        "2026-03-05T10:00:00",
+        -4000,
+        TransactionOptions(account_id=acct, category_id=cafes, description="C2"),
+    )
     for month, cat, amount in (
         (1, groceries, 30000),
         (1, cafes, 20000),

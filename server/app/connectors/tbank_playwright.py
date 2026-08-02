@@ -56,17 +56,12 @@ from .base import (
     register,
 )
 
-
-def _timeout_error_type() -> type[Exception]:
-    try:
-        from playwright.sync_api import TimeoutError as timeout_error  # noqa: N813
-
-        return timeout_error  # noqa: TRY300
-    except ImportError:
-        return Exception
-
-
-PlaywrightTimeoutError = _timeout_error_type()
+try:
+    from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
+    from playwright.sync_api import sync_playwright as _sync_playwright
+except ImportError:
+    PlaywrightTimeoutError = Exception
+    _sync_playwright = None
 
 
 class _Locator(Protocol):
@@ -407,9 +402,7 @@ class TBankPlaywrightConnector(Connector):
         return code
 
     def _run(self, since: str | None) -> None:
-        try:
-            from playwright.sync_api import sync_playwright
-        except ImportError:
+        if _sync_playwright is None:
             self.from_worker.put(
                 (
                     "error",
@@ -422,7 +415,7 @@ class TBankPlaywrightConnector(Connector):
         work_dir = tempfile.mkdtemp(prefix="tbank-profile-")
         try:
             self.restore_profile(work_dir)
-            with sync_playwright() as p:
+            with _sync_playwright() as p:
                 args = ["--disk-cache-size=1"]
                 if getattr(os, "geteuid", lambda: -1)() == 0:
                     args.append("--no-sandbox")
@@ -497,10 +490,12 @@ class TBankPlaywrightConnector(Connector):
 
     @staticmethod
     def headless() -> bool:
+        """Return whether connector should run in headless mode."""
         return os.environ.get("MONORI_CONNECTOR_HEADED") not in ("1", "true")
 
     @staticmethod
     def debug_on() -> bool:
+        """Return whether connector debug mode is enabled."""
         return bool(os.environ.get("MONORI_CONNECTOR_DEBUG"))
 
     @classmethod
@@ -522,7 +517,7 @@ class TBankPlaywrightConnector(Connector):
         self.shot(page, "error")
 
     def is_logged_in(self, page: _Page) -> bool:
-
+        """Return True when current page appears to be a logged-in bank state."""
         if "/mybank" not in page.url:
             return False
         return not (
@@ -589,6 +584,7 @@ class TBankPlaywrightConnector(Connector):
                 page.wait_for_timeout(1_000)
 
     def ensure_logged_in(self, page: _Page) -> None:
+        """Ensure authenticated session and navigate to home page when needed."""
         page.goto(self.URL_HOME, wait_until="domcontentloaded")
         page.wait_for_timeout(1_500)
         self.shot(page, "01-open")
@@ -673,7 +669,7 @@ class TBankPlaywrightConnector(Connector):
             self.shot(page, f"step-{step:02d}")
 
     def operations_url(self) -> str:
-
+        """Return operations URL optionally scoped to configured bank account."""
         account = self.account_ref or (self.credentials or {}).get("account")
 
         account = str(account).strip() if account is not None else ""
@@ -682,6 +678,7 @@ class TBankPlaywrightConnector(Connector):
         return self.URL_OPERATIONS
 
     def download_and_parse(self, page: _Page, since: str | None) -> list[SyncRow]:  # noqa: ARG002
+        """Download a CSV statement from operations and parse it to sync rows."""
         page.goto(self.operations_url(), wait_until="domcontentloaded")
 
         with contextlib.suppress(Exception):
@@ -705,7 +702,7 @@ class TBankPlaywrightConnector(Connector):
         return [row.to_sync_dict() for row in rows]
 
     def click_export_format(self, page: _Page) -> bool:
-
+        """Try to choose CSV export in dropdown and report whether it was found."""
         with contextlib.suppress(Exception):
             page.locator(self.SEL_EXPORT_CSV).first.click(timeout=5_000)
             return True

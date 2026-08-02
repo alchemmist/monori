@@ -1,14 +1,14 @@
-import os
 import pathlib
 import sys
 import tempfile
+from dataclasses import dataclass
 
 import pytest
 from fastapi.testclient import TestClient
 from pydantic import TypeAdapter
-from app.main import app as fastapi_app
 
 import app.db as dbmod
+from app.main import app as fastapi_app
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
@@ -31,12 +31,32 @@ STATEMENT = (
 )
 
 
-def _fresh_app_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
-    tmp = tempfile.mkdtemp()
-    db_path = os.path.join(tmp, "test.db")
-    monkeypatch.setenv("MONORI_DB", db_path)
+@dataclass(frozen=True)
+class AccountOptions:
+    account_type: str = "cash"
+    icon: str = "wallet"
+    color: str = "#5b6472"
+    currency: str = "RUB"
+    opening_balance: int = 0
+    bank_ref: str = ""
+    card_tails: list[str] | None = None
 
-    monkeypatch.setattr(dbmod, "DB_PATH", db_path)
+
+@dataclass(frozen=True)
+class TransactionOptions:
+    account_id: int | None = None
+    category_id: int | None = None
+    description: str = ""
+    bank_category: str = ""
+    mcc: str = ""
+    comment: str = ""
+
+
+def _fresh_app_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
+    db_path = pathlib.Path(tempfile.mkdtemp()) / "test.db"
+    monkeypatch.setenv("MONORI_DB", str(db_path))
+
+    monkeypatch.setattr(dbmod, "DB_PATH", str(db_path))
     dbmod.connect(db_path).close()
 
     return TestClient(fastapi_app)
@@ -103,43 +123,18 @@ class Api:
     def account(
         self,
         name: str,
-        *,
-        account_type: str = "cash",
-        icon: str = "wallet",
-        color: str = "#5b6472",
-        currency: str = "RUB",
-        opening_balance: int = 0,
-        bank_ref: str = "",
-        card_tails: list[str] | None = None,
-        **legacy_kwargs: object,
+        options: AccountOptions | None = None,
     ) -> int:
-        if "type" in legacy_kwargs:
-            account_type = legacy_kwargs.pop("type")
-            if not isinstance(account_type, str):
-                raise TypeError
-        if "openingBalance" in legacy_kwargs:
-            opening_balance = legacy_kwargs.pop("openingBalance")
-            if not isinstance(opening_balance, int):
-                raise TypeError
-        if "bankRef" in legacy_kwargs:
-            bank_ref = legacy_kwargs.pop("bankRef")
-            if not isinstance(bank_ref, str):
-                raise TypeError
-        if "cardTails" in legacy_kwargs:
-            card_tails = legacy_kwargs.pop("cardTails")
-            if not isinstance(card_tails, list) and card_tails is not None:
-                raise TypeError
-        if legacy_kwargs:
-            raise TypeError
+        options = options or AccountOptions()
         body = {
             "name": name,
-            "type": account_type,
-            "icon": icon,
-            "color": color,
-            "currency": currency,
-            "openingBalance": opening_balance,
-            "bankRef": bank_ref,
-            "cardTails": card_tails or [],
+            "type": options.account_type,
+            "icon": options.icon,
+            "color": options.color,
+            "currency": options.currency,
+            "openingBalance": options.opening_balance,
+            "bankRef": options.bank_ref,
+            "cardTails": options.card_tails or [],
         }
         r = self.client.post("/api/accounts", json=body)
         assert r.status_code == 200, r.text
@@ -152,38 +147,20 @@ class Api:
         self,
         date: str,
         amount: int,
-        *,
-        account_id: int | None = None,
-        category_id: int | None = None,
-        description: str = "",
-        bank_category: str = "",
-        mcc: str = "",
-        comment: str = "",
-        **legacy_kwargs: object,
+        options: TransactionOptions | None = None,
     ) -> int:
-        if "accountId" in legacy_kwargs:
-            account_id = legacy_kwargs.pop("accountId")
-
-        if "categoryId" in legacy_kwargs:
-            category_id = legacy_kwargs.pop("categoryId")
-
-        if "bankCategory" in legacy_kwargs:
-            bank_category = legacy_kwargs.pop("bankCategory")
-
-        if legacy_kwargs:
-            raise TypeError
-
+        options = options or TransactionOptions()
         r = self.client.post(
             "/api/transactions",
             json={
                 "date": date,
                 "amount": amount,
-                "accountId": account_id or self.default_account(),
-                "categoryId": category_id,
-                "description": description,
-                "bankCategory": bank_category,
-                "mcc": mcc,
-                "comment": comment,
+                "accountId": options.account_id or self.default_account(),
+                "categoryId": options.category_id,
+                "description": options.description,
+                "bankCategory": options.bank_category,
+                "mcc": options.mcc,
+                "comment": options.comment,
             },
         )
         assert r.status_code == 200, r.text
@@ -208,7 +185,7 @@ class Api:
             },
         )
         assert r.status_code == 200, r.text
-        return TypeAdapter(TransferIdResponse).validate_python(r.json()).transferId
+        return TypeAdapter(TransferIdResponse).validate_python(r.json()).transfer_id
 
     def snapshot(self) -> SnapshotResponse:
         return TypeAdapter(SnapshotResponse).validate_python(

@@ -7,8 +7,8 @@ from fastapi.testclient import TestClient
 from pydantic import TypeAdapter
 
 import app.connectors.fake  # noqa: F401  (registers the FakeConnector)
-from app import sync_service
 import app.sync_runner as sr
+from app import sync_service
 from app.connectors import base
 from app.connectors.base import ConnectorError, JsonObject, SmsRequiredError, SyncResult
 from app.sync_runner import LocalRunner, NoPendingLoginError, RemoteRunner, get_runner

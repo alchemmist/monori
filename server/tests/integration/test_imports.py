@@ -14,7 +14,7 @@ from app.routers.imports import (
     ImportRowResponse,
 )
 from app.routers.transactions import TransactionListResponse
-from tests.conftest import Api
+from tests.conftest import AccountOptions, Api, TransactionOptions
 
 pytestmark = pytest.mark.integration
 
@@ -52,7 +52,7 @@ def test_preview_routes_each_card_and_commit_accepts_mixed_accounts(
     client: TestClient,
 ) -> None:
     first = api.default_account()
-    second = api.account("Second card", cardTails=["2947"])
+    second = api.account("Second card", AccountOptions(card_tails=["2947"]))
     client.patch(f"/api/accounts/{first}", json={"cardTails": ["1111"]})
 
     def row(card: str, amount: str, description: str, day: int) -> str:
@@ -112,7 +112,11 @@ def test_duplicate_check_uses_the_account_selected_for_each_row(
 ) -> None:
     other = api.account("Other")
     rows = api.preview(api.statement)
-    api.tx(rows[0].date, rows[0].amount, accountId=other, description=rows[0].description)
+    api.tx(
+        rows[0].date,
+        rows[0].amount,
+        TransactionOptions(account_id=other, description=rows[0].description),
+    )
     rows[0].accountId = other
 
     payload = TypeAdapter(list[ImportRowResponse]).dump_python(rows, mode="json")

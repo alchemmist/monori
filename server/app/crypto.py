@@ -36,8 +36,6 @@ def available() -> bool:
 
 def generate_key() -> str:
     """Handle generate key."""
-    from cryptography.fernet import Fernet
-
     return Fernet.generate_key().decode()
 
 

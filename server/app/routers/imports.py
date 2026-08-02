@@ -76,7 +76,7 @@ class DuplicateBody:
     rows: list[CommitRow]
 
 
-@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+@pydantic_dataclass(config=ConfigDict(populate_by_name=True))
 class ImportRowResponse:
     """Represent ImportRowResponse."""
 
@@ -86,8 +86,8 @@ class ImportRowResponse:
     bank_category: str
     mcc: str
     card: str
-    accountId: int | None
-    categoryId: int | None
+    account_id: int | None = Field(default=None, alias="accountId")
+    category_id: int | None = Field(default=None, alias="categoryId")
     duplicate: bool
     hash: str
 
@@ -116,14 +116,14 @@ class DuplicatesResponse:
     duplicates: list[bool]
 
 
-@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+@pydantic_dataclass(config=ConfigDict(populate_by_name=True))
 class ImportCommitResponse:
     """Represent ImportCommitResponse."""
 
     inserted: int
     skipped: int
-    transfersMerged: int
-    transfersSuggested: int
+    transfers_merged: int = Field(alias="transfersMerged")
+    transfers_suggested: int = Field(alias="transfersSuggested")
 
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid"))
@@ -144,44 +144,44 @@ class WorkbookParseErrorResponse:
     error: str
 
 
-@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+@pydantic_dataclass(config=ConfigDict(populate_by_name=True))
 class WorkbookPreviewResponse:
     """Represent WorkbookPreviewResponse."""
 
     groups: int
     categories: int
     transactions: int
-    transactionsByYear: dict[str, int]
-    budgetCells: int
-    accountSlots: list[WorkbookAccountSlotResponse]
+    transactions_by_year: dict[str, int] = Field(alias="transactionsByYear")
+    budget_cells: int = Field(alias="budgetCells")
+    account_slots: list[WorkbookAccountSlotResponse] = Field(alias="accountSlots")
     warnings: list[str]
     errors: list[WorkbookParseErrorResponse]
-    budgetConflicts: int = 0
+    budget_conflicts: int = Field(alias="budgetConflicts", default=0)
 
 
-@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+@pydantic_dataclass(config=ConfigDict(populate_by_name=True))
 class WorkbookBatchResponse:
     """Represent WorkbookBatchResponse."""
 
-    accountId: int
-    batchId: int
+    account_id: int = Field(alias="accountId")
+    batch_id: int = Field(alias="batchId")
     inserted: int
 
 
-@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+@pydantic_dataclass(config=ConfigDict(populate_by_name=True))
 class WorkbookCommitResponse:
     """Represent WorkbookCommitResponse."""
 
-    groupsCreated: int
-    categoriesCreated: int
+    groups_created: int = Field(alias="groupsCreated")
+    categories_created: int = Field(alias="categoriesCreated")
     inserted: int
     skipped: int
     batches: list[WorkbookBatchResponse]
-    budgetsWritten: int
-    budgetsSkipped: int
+    budgets_written: int = Field(alias="budgetsWritten")
+    budgets_skipped: int = Field(alias="budgetsSkipped")
     warnings: list[str]
     errors: list[WorkbookParseErrorResponse]
-    cardTailsBound: int
+    card_tails_bound: int = Field(alias="cardTailsBound")
 
 
 def _serialize_import_row(row: ImportRow) -> ImportRowResponse:
@@ -192,8 +192,8 @@ def _serialize_import_row(row: ImportRow) -> ImportRowResponse:
         bank_category=row.bank_category,
         mcc=row.mcc,
         card=row.card,
-        accountId=row.account_id,
-        categoryId=row.category_id,
+        account_id=row.account_id,
+        category_id=row.category_id,
         duplicate=row.duplicate,
         hash=row.hash,
     )
@@ -443,8 +443,8 @@ def import_commit(
         return ImportCommitResponse(
             inserted=inserted,
             skipped=skipped,
-            transfersMerged=len(merged),
-            transfersSuggested=len(suggested),
+            transfers_merged=len(merged),
+            transfers_suggested=len(suggested),
         )
     finally:
         c.close()
@@ -490,9 +490,9 @@ def _workbook_preview_summary(
         groups=len(parsed.groups),
         categories=len(parsed.categories),
         transactions=len(parsed.transactions),
-        transactionsByYear=dict(sorted(by_year.items())),
-        budgetCells=len(parsed.budgets),
-        accountSlots=[
+        transactions_by_year=dict(sorted(by_year.items())),
+        budget_cells=len(parsed.budgets),
+        account_slots=[
             WorkbookAccountSlotResponse(
                 key=slot.key,
                 marker=slot.marker,
@@ -503,7 +503,7 @@ def _workbook_preview_summary(
         ],
         warnings=list(parsed.warnings),
         errors=[_serialize_workbook_error(error) for error in parsed.errors],
-        budgetConflicts=conflicts,
+        budget_conflicts=conflicts,
     )
 
 
@@ -616,23 +616,23 @@ def _commit_workbook(
         card_tails_bound = _remember_markers(c, slots, marker_map) if remember else 0
         c.commit()
         return WorkbookCommitResponse(
-            groupsCreated=result.groups_created,
-            categoriesCreated=result.categories_created,
+            groups_created=result.groups_created,
+            categories_created=result.categories_created,
             inserted=result.inserted,
             skipped=result.skipped,
             batches=[
                 WorkbookBatchResponse(
-                    accountId=batch.account_id,
-                    batchId=batch.batch_id,
+                    account_id=batch.account_id,
+                    batch_id=batch.batch_id,
                     inserted=batch.inserted,
                 )
                 for batch in result.batches
             ],
-            budgetsWritten=result.budgets_written,
-            budgetsSkipped=result.budgets_skipped,
+            budgets_written=result.budgets_written,
+            budgets_skipped=result.budgets_skipped,
             warnings=[*parsed.warnings, *result.warnings],
             errors=[_serialize_workbook_error(error) for error in parsed.errors],
-            cardTailsBound=card_tails_bound,
+            card_tails_bound=card_tails_bound,
         )
     finally:
         c.close()
@@ -653,11 +653,18 @@ async def workbook_commit(
     user: Annotated[AuthenticatedUser, Depends(current_user)],
     file: Annotated[UploadFile, File()],
     mapping: Annotated[str, Form()],
-    budgetPolicy: Annotated[str, Form()] = "overwrite",
+    budget_policy: Annotated[str, Form(alias="budgetPolicy")] = "overwrite",
     remember: Annotated[bool, Form()] = False,  # noqa: FBT002
 ) -> WorkbookCommitResponse:
     """Handle workbook commit."""
-    if budgetPolicy not in ("overwrite", "skip"):
+    if budget_policy not in ("overwrite", "skip"):
         raise HTTPException(400, "budgetPolicy must be overwrite or skip")
     data = await _read_workbook_upload(file)
-    return await run_in_threadpool(_commit_workbook, data, user.id, mapping, budgetPolicy, remember)
+    return await run_in_threadpool(
+        _commit_workbook,
+        data,
+        user.id,
+        mapping,
+        budget_policy,
+        remember,
+    )

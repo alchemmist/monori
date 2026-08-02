@@ -79,7 +79,7 @@ def test_each_transaction_is_used_at_most_once() -> None:
 
     rows = [row(1, 10, -5000, 1), row(2, 10, 5000, 2), row(3, 13, 5000, 3)]
     pairs = find_pairs(rows)
-    assert [(p.outTxId, p.inTxId) for p in pairs] == [(1, 2)]
+    assert [(p.out_tx_id, p.in_tx_id) for p in pairs] == [(1, 2)]
 
 
 def test_a_transfer_sounding_description_breaks_the_tie() -> None:
@@ -89,7 +89,7 @@ def test_a_transfer_sounding_description_breaks_the_tie() -> None:
         row(3, 10, 5000, 3, description="Transfer between own accounts"),
     ]
     pairs = find_pairs(rows)
-    assert [(p.outTxId, p.inTxId) for p in pairs] == [(1, 3)]
+    assert [(p.out_tx_id, p.in_tx_id) for p in pairs] == [(1, 3)]
     assert pairs[0].hint is True
 
 
@@ -155,7 +155,7 @@ def test_both_legs_hinted_beat_a_mismatched_pair_at_the_same_distance() -> None:
         row(3, 10, 100000, 3, description="Top up. Transfer between own accounts"),
     ]
     pairs = find_pairs(rows)
-    assert [(p.outTxId, p.inTxId) for p in pairs] == [(1, 3)]
+    assert [(p.out_tx_id, p.in_tx_id) for p in pairs] == [(1, 3)]
     assert pairs[0].mismatch is False
 
 

@@ -1,7 +1,7 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from tests.conftest import Api
+from tests.conftest import Api, TransactionOptions
 
 pytestmark = pytest.mark.integration
 
@@ -50,7 +50,7 @@ def test_category_delete_never_reassigns(api: Api, client: TestClient) -> None:
     g = api.group("Expenses")
     a = api.category("A", g)
     b = api.category("B", g)
-    tx = api.tx("2026-01-01T00:00:00", -500, categoryId=a)
+    tx = api.tx("2026-01-01T00:00:00", -500, TransactionOptions(category_id=a))
     client.put("/api/budgets", json={"categoryId": a, "year": 2026, "month": 1, "amount": 1000})
     client.put("/api/budgets", json={"categoryId": b, "year": 2026, "month": 1, "amount": 2000})
 
@@ -63,7 +63,7 @@ def test_category_delete_never_reassigns(api: Api, client: TestClient) -> None:
 def test_category_delete_without_reassign_uncategorizes(api: Api, client: TestClient) -> None:
     g = api.group("Expenses")
     a = api.category("A", g)
-    tx = api.tx("2026-01-01T00:00:00", -500, categoryId=a)
+    tx = api.tx("2026-01-01T00:00:00", -500, TransactionOptions(category_id=a))
     assert client.delete(f"/api/categories/{a}").status_code == 200
     assert api.tx_by(tx).categoryId is None
     assert client.delete("/api/categories/999").status_code == 404
@@ -73,7 +73,7 @@ def test_category_merge_moves_tx_and_unions_keywords(api: Api, client: TestClien
     g = api.group("Expenses")
     src = api.category("Coffee", g, "cofix|STARBUCKS")
     dst = api.category("Cafe", g, "starbucks|shokoladnitsa")
-    tx = api.tx("2026-01-01T00:00:00", -500, categoryId=src)
+    tx = api.tx("2026-01-01T00:00:00", -500, TransactionOptions(category_id=src))
     client.put("/api/budgets", json={"categoryId": src, "year": 2026, "month": 1, "amount": 900})
     client.put("/api/budgets", json={"categoryId": src, "year": 2026, "month": 2, "amount": 200})
     client.put("/api/budgets", json={"categoryId": dst, "year": 2026, "month": 1, "amount": 100})
@@ -99,7 +99,7 @@ def test_merge_across_income_and_expense_is_refused(api: Api, client: TestClient
 
     salary = api.category("Salary", api.group("Income", kind="income"))
     rent = api.category("Rent", api.group("Fixed", kind="expense"))
-    tx = api.tx("2026-01-01T00:00:00", 90000, categoryId=salary)
+    tx = api.tx("2026-01-01T00:00:00", 90000, TransactionOptions(category_id=salary))
     client.put("/api/budgets", json={"categoryId": salary, "year": 2026, "month": 1, "amount": 700})
 
     assert client.post(f"/api/categories/{salary}/merge", json={"into": rent}).status_code == 400

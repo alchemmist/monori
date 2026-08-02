@@ -14,6 +14,7 @@ import pathlib
 import sqlite3
 import threading
 
+from alembic import command
 from alembic.config import Config
 
 DB_PATH = os.environ.get(
@@ -40,8 +41,6 @@ def _alembic_config(path: pathlib.Path) -> Config:
 
 
 def _bootstrap(path: pathlib.Path) -> None:
-    from alembic import command
-
     conn = sqlite3.connect(path)
     try:
         tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
