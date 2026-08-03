@@ -328,7 +328,7 @@ jobs:
             - uses: ./.github/actions/bundle-size-gate
 
     frontend-performance-scope:
-        name: Frontend performance needed?
+        name: Front performance needed?
         needs: build
         if: github.event_name == 'pull_request' && needs.build.result == 'success'
         permissions:
@@ -412,7 +412,7 @@ jobs:
                   github-token: ${{ secrets.GITHUB_TOKEN }}
 
     admin-command:
-        name: Process CI approval command
+        name: Command handler
         if: >-
             github.event_name == 'issue_comment'
             && github.event.issue.pull_request
