@@ -48,6 +48,7 @@ class PullRequestWorkflowGraphTest(unittest.TestCase):
             "frontend-performance-skipped",
             "object-annotations",
             "suppressions",
+            "admin-command",
         ):
             self.assertRegex(
                 self.source,
@@ -137,6 +138,7 @@ class PullRequestWorkflowGraphTest(unittest.TestCase):
             "frontend-performance": "frontend-performance-gate",
             "object-annotations": "object-annotation-gate",
             "suppressions": "suppression-gate",
+            "admin-command": "admin-command",
         }
         for job, action in expected_actions.items():
             block = re.search(
