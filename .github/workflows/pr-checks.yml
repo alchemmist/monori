@@ -25,6 +25,8 @@ jobs:
               uses: actions/setup-python@v6
               with:
                   python-version: "3.12"
+            - name: Install workflow test dependencies
+              run: python -m pip install pyyaml
             - name: Validate PR workflow graph
               run: python -m unittest scripts.test_pr_workflow
 
