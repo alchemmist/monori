@@ -154,8 +154,8 @@ jobs:
                         item.pull_requests?.some((itemPull) => itemPull.number === context.issue.number)
                         && item.status === "completed"
                       );
-                      if (!run) throw new Error(`No completed bundle-size run found for PR #${context.issue.number}`);
-                      await github.rest.actions.reRunWorkflow({
+                      if (!run) throw new Error(`No completed pr-checks.yml run found for PR #${context.issue.number}`);
+                      await github.rest.actions.reRunWorkflowFailedJobs({
                         owner: context.repo.owner,
                         repo: context.repo.repo,
                         run_id: run.id,

@@ -13,6 +13,7 @@ import urllib.parse
 import urllib.request
 from collections import Counter
 from dataclasses import dataclass
+from itertools import count
 from pathlib import Path
 from typing import Protocol, cast
 
@@ -467,29 +468,36 @@ def scan_pull_request(github: GitHub, pull: dict[str, JsonValue]) -> list[Findin
 
 
 def rerun_pull_request_gate(github: GitHub, number: int) -> None:
-    raw_response = github.request(
-        "GET",
-        "/actions/workflows/pr-checks.yml/runs?event=pull_request&per_page=100",
-    )
-    if raw_response is None:
-        runs: list[dict[str, JsonValue]] = []
-    else:
-        response = json_object(raw_response, "workflow runs")
+    latest = latest_pull_request_run(github, number)
+    if latest is None:
+        raise RuntimeError(f"Cannot find a previous gate run for pull request #{number}")
+    run_id = json_integer(latest["id"], "workflow run id")
+    github.request("POST", f"/actions/runs/{run_id}/rerun-failed-jobs")
+
+
+def latest_pull_request_run(github: GitHubAPI, number: int) -> dict[str, JsonValue] | None:
+    for page in count(1):
+        response = json_object(
+            github.request(
+                "GET",
+                f"/actions/workflows/pr-checks.yml/runs?event=pull_request&per_page=100&page={page}",
+            ),
+            "workflow runs",
+        )
         raw_runs = json_array(response.get("workflow_runs", []), "workflow runs")
         runs = [json_object(run, "workflow run") for run in raw_runs]
-    matching = [
-        run
-        for run in runs
-        if any(
-            json_object(pull_request, "workflow pull request").get("number") == number
-            for pull_request in json_array(run.get("pull_requests", []), "workflow pull requests")
-        )
-    ]
-    if not matching:
-        raise RuntimeError(f"Cannot find a previous gate run for pull request #{number}")
-    latest = max(matching, key=lambda run: optional_string(run.get("created_at")) or "")
-    run_id = json_integer(latest["id"], "workflow run id")
-    github.request("POST", f"/actions/runs/{run_id}/rerun")
+        matching = [
+            run
+            for run in runs
+            if any(
+                json_object(pull_request, "workflow pull request").get("number") == number
+                for pull_request in json_array(run.get("pull_requests", []), "workflow pull requests")
+            )
+        ]
+        if matching:
+            return max(matching, key=lambda run: optional_string(run.get("created_at")) or "")
+        if len(runs) < 100:
+            return None
 
 
 def main() -> int:

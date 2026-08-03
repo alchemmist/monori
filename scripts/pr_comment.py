@@ -7,10 +7,13 @@ import json
 import os
 import urllib.error
 import urllib.request
+from itertools import count
 from pathlib import Path
-from typing import cast
+from typing import Protocol, cast
 
-type JsonValue = None | bool | int | float | str | list[JsonValue] | dict[str, JsonValue]
+type JsonValue = (
+    None | bool | int | float | str | list[JsonValue] | dict[str, JsonValue]
+)
 
 
 def json_object(value: JsonValue, context: str) -> dict[str, JsonValue]:
@@ -46,32 +49,54 @@ class GitHub:
         )
         try:
             with urllib.request.urlopen(request, timeout=30) as response:
-                return None if response.status == 204 else cast(JsonValue, json.loads(response.read()))
+                return (
+                    None
+                    if response.status == 204
+                    else cast(JsonValue, json.loads(response.read()))
+                )
         except urllib.error.HTTPError as error:
-            raise RuntimeError(f"GitHub API {method} {path} failed: HTTP {error.code}") from error
+            raise RuntimeError(
+                f"GitHub API {method} {path} failed: HTTP {error.code}"
+            ) from error
 
-    def comments(self, number: int) -> list[dict[str, JsonValue]]:
-        result: list[dict[str, JsonValue]] = []
-        for page in range(1, 6):
-            raw = self.request(
-                "GET", f"/issues/{number}/comments?per_page=100&page={page}"
-            )
-            items = json_array(raw, "pull request comments")
-            result.extend(json_object(item, "pull request comment") for item in items)
-            if len(items) < 100:
-                break
-        return result
+
+class GitHubAPI(Protocol):
+    def request(
+        self, method: str, path: str, payload: JsonValue = None
+    ) -> JsonValue: ...
+
+
+def comments(github: GitHubAPI, number: int) -> list[dict[str, JsonValue]]:
+    result: list[dict[str, JsonValue]] = []
+    for page in count(1):
+        raw = github.request(
+            "GET", f"/issues/{number}/comments?per_page=100&page={page}"
+        )
+        items = json_array(raw, "pull request comments")
+        result.extend(json_object(item, "pull request comment") for item in items)
+        if len(items) < 100:
+            break
+    return result
 
 
 def comment_body(marker: str, body: str) -> str:
     return f"<!-- monori-report: {marker} -->\n\n{body.rstrip()}\n"
 
 
-def upsert_comment(github: GitHub, number: int, marker: str, body: str) -> None:
+def upsert_comment(github: GitHubAPI, number: int, marker: str, body: str) -> None:
     rendered = comment_body(marker, body)
-    for comment in github.comments(number):
+    viewer = json_object(github.request("GET", "/user"), "authenticated user")
+    viewer_login = viewer.get("login")
+    if not isinstance(viewer_login, str):
+        raise TypeError("Authenticated user has no login")
+    for comment in comments(github, number):
         comment_body_value = comment.get("body")
-        if not isinstance(comment_body_value, str) or f"<!-- monori-report: {marker} -->" not in comment_body_value:
+        author = json_object(comment.get("user", {}), "comment author").get("login")
+        if (
+            not isinstance(comment_body_value, str)
+            or f"<!-- monori-report: {marker} -->" not in comment_body_value
+            or author != viewer_login
+        ):
             continue
         comment_id = comment.get("id")
         if not isinstance(comment_id, int):

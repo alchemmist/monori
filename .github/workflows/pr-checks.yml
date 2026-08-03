@@ -228,10 +228,10 @@ jobs:
             - name: Checkout
               uses: actions/checkout@v7
               with:
-                  fetch-depth: 1
+                  fetch-depth: 0
                   persist-credentials: false
             - name: Fetch mutation base
-              run: git fetch --no-tags --depth=1 origin main
+              run: git fetch --no-tags origin main
             - name: Setup Node
               uses: actions/setup-node@v7
               with:
@@ -382,6 +382,14 @@ jobs:
         outputs:
             relevant: ${{ steps.scope.outputs.relevant }}
         steps:
+            - name: Checkout workflow code
+              uses: actions/checkout@v7
+              with:
+                  persist-credentials: false
+            - name: Setup Python
+              uses: actions/setup-python@v6
+              with:
+                  python-version: "3.12"
             - name: Detect performance-relevant changes
               id: scope
               uses: actions/github-script@v8
@@ -399,20 +407,23 @@ jobs:
                         return path === "Makefile" && /(perf-front|PERF_|frontend)/i.test(file.patch || "");
                       });
                       core.setOutput("relevant", relevant ? "true" : "false");
-                      const marker = "<!-- monori-report: frontend-performance -->";
-                      const body = `${marker}\n\n## ${relevant ? "⏳" : "✅"} Frontend performance\n\n${relevant ? "Performance-relevant files changed; running the gate." : "No performance-relevant files changed; the gate is skipped."}`;
-                      const comments = await github.paginate(github.rest.issues.listComments, {
-                        owner: context.repo.owner,
-                        repo: context.repo.repo,
-                        issue_number: context.payload.pull_request.number,
-                        per_page: 100,
-                      });
-                      const existing = comments.find((comment) => comment.body?.includes(marker));
-                      if (existing) {
-                        await github.rest.issues.updateComment({ owner: context.repo.owner, repo: context.repo.repo, comment_id: existing.id, body });
-                      } else {
-                        await github.rest.issues.createComment({ owner: context.repo.owner, repo: context.repo.repo, issue_number: context.payload.pull_request.number, body });
-                      }
+            - name: Publish performance scope report
+              if: steps.scope.outcome == 'success'
+              env:
+                  GITHUB_TOKEN: ${{ github.token }}
+                  GITHUB_REPOSITORY: ${{ github.repository }}
+                  PR_NUMBER: ${{ github.event.pull_request.number }}
+                  RELEVANT: ${{ steps.scope.outputs.relevant }}
+              run: |
+                  if [ "$RELEVANT" = true ]; then
+                    printf '%s\n' '## ⏳ Frontend performance' '' 'Performance-relevant files changed; running the gate.' > "$RUNNER_TEMP/frontend-performance-scope.md"
+                  else
+                    printf '%s\n' '## ✅ Frontend performance' '' 'No performance-relevant files changed; the gate is skipped.' > "$RUNNER_TEMP/frontend-performance-scope.md"
+                  fi
+                  python scripts/pr_comment.py \
+                    --marker frontend-performance \
+                    --body-file "$RUNNER_TEMP/frontend-performance-scope.md" \
+                    --pr-number "$PR_NUMBER"
 
     frontend-performance:
         name: Frontend performance

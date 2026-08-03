@@ -7,6 +7,7 @@ from scripts.object_annotation_gate import (
     JsonValue,
     added_lines_from_patch,
     changed_lines,
+    latest_pull_request_run,
     parse_command,
     scan_file,
     summary_body,
@@ -109,13 +110,20 @@ other: "list[object]"
         finding = Finding("example.py", 1, 7, "object", "finding-1")
 
         approved, admin, changed = sync_approvals(
-            github, 1, {"body": ""}, [finding], ("ignore", ["object-finding-1"]), "admin"
+            github,
+            1,
+            {"body": ""},
+            [finding],
+            ("ignore", ["object-finding-1"]),
+            "admin",
         )
 
         self.assertTrue(admin)
         self.assertTrue(changed)
         self.assertEqual(approved, {"finding-1"})
-        self.assertTrue(any(call[0] == "DELETE" and "stale" in call[1] for call in github.calls))
+        self.assertTrue(
+            any(call[0] == "DELETE" and "stale" in call[1] for call in github.calls)
+        )
         self.assertTrue(
             any(call[0] == "PATCH" and call[1] == "/pulls/1" for call in github.calls)
         )
@@ -126,13 +134,49 @@ other: "list[object]"
         sync_failure_label(github, 1, True)
         sync_failure_label(github, 1, False)
 
-        self.assertIn(("ensure_label", "monori-object-annotation-failed", None), github.calls)
-        self.assertTrue(any(call[0] == "DELETE" and "failed" in call[1] for call in github.calls))
+        self.assertIn(
+            ("ensure_label", "monori-object-annotation-failed", None), github.calls
+        )
+        self.assertTrue(
+            any(call[0] == "DELETE" and "failed" in call[1] for call in github.calls)
+        )
+
+    def test_rerun_lookup_paginates_past_first_page(self) -> None:
+        class WorkflowRunsGitHub(FakeGitHub):
+            def request(
+                self, method: str, path: str, payload: JsonValue = None
+            ) -> JsonValue:
+                self.calls.append((method, path, payload))
+                if path.endswith("page=1"):
+                    return {
+                        "workflow_runs": [
+                            {"id": index, "pull_requests": []} for index in range(100)
+                        ]
+                    }
+                return {
+                    "workflow_runs": [
+                        {
+                            "id": 999,
+                            "created_at": "2026-01-01",
+                            "pull_requests": [{"number": 343}],
+                        }
+                    ]
+                }
+
+        github = WorkflowRunsGitHub()
+
+        run = latest_pull_request_run(github, 343)
+
+        self.assertEqual(run and run["id"], 999)
+        self.assertTrue(any("page=2" in call[1] for call in github.calls))
 
     def test_approval_commands_use_shared_namespace(self) -> None:
-        self.assertEqual(parse_command("/ignore object-abc123"), ("ignore", ["object-abc123"]))
         self.assertEqual(
-            parse_command("/ignore-file server/app.py"), ("ignore-file", ["server/app.py"])
+            parse_command("/ignore object-abc123"), ("ignore", ["object-abc123"])
+        )
+        self.assertEqual(
+            parse_command("/ignore-file server/app.py"),
+            ("ignore-file", ["server/app.py"]),
         )
         self.assertEqual(
             parse_command("/ignore object-abc123,suppression-def456"),
@@ -154,7 +198,8 @@ other: "list[object]"
         self.assertEqual(changed_lines(before, after), {2})
         findings = scan_file("example.py", after, changed_lines(before, after))
         self.assertEqual(
-            [(finding.line, finding.annotation) for finding in findings], [(2, "object")]
+            [(finding.line, finding.annotation) for finding in findings],
+            [(2, "object")],
         )
 
     def test_reads_added_lines_from_unified_patch(self) -> None:
@@ -167,7 +212,9 @@ other: "list[object]"
 
         self.assertEqual(added_lines_from_patch(patch), {2})
 
-    def test_summary_includes_status_and_finding_links_without_admin_commands(self) -> None:
+    def test_summary_includes_status_and_finding_links_without_admin_commands(
+        self,
+    ) -> None:
         finding = Finding("server/app/example.py", 7, 2, "object", "finding-1")
 
         body = summary_body([finding], set(), "https://github.com/org/repo/pull/1")

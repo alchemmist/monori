@@ -9,6 +9,7 @@ import urllib.parse
 import urllib.request
 from collections import Counter
 from dataclasses import dataclass
+from itertools import count
 from pathlib import Path
 from typing import Protocol, cast
 
@@ -36,7 +37,7 @@ SOURCE_SUPPRESSION_RE = re.compile(
 CONFIG_SUPPRESSION_RE = re.compile(
     rf"(?:\b{SUPPRESSION_KEYS}\b"
     r"|\b(?:noqa|ignore|ignores|exclude)\s*="
-    r"|:\s*[\"']?(?:off|0)[\"']?(?:\s*[,}]|\s*$)"
+    r"|(?<!fetch-depth):\s*[\"']?(?:off|0)[\"']?(?:\s*[,}]|\s*$)"
     r"|\bzizmor\s*:\s*ignore\b|\bactionlint\s*:\s*ignore\b)"
 )
 TOML_SECTION_RE = re.compile(r"^\s*\[([^\]]+)\]\s*$")
@@ -439,7 +440,7 @@ def summary_body(findings: list[Finding], approved: set[str]) -> str:
 
 def rerun_gate(github: GitHubAPI, number: int) -> None:
     matching: list[dict[str, JsonValue]] = []
-    for page in range(1, 6):
+    for page in count(1):
         runs = json_object(
             github.request(
                 "GET",
@@ -460,7 +461,7 @@ def rerun_gate(github: GitHubAPI, number: int) -> None:
     if matching:
         latest = max(matching, key=lambda run: optional_string(run.get("created_at")) or "")
         run_id = json_integer(latest["id"], "workflow run id")
-        github.request("POST", f"/actions/runs/{run_id}/rerun")
+        github.request("POST", f"/actions/runs/{run_id}/rerun-failed-jobs")
 
 
 def main() -> int:

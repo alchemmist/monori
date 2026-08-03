@@ -61,6 +61,11 @@ value = 2
 
         self.assertEqual(len(findings), 1)
 
+    def test_does_not_treat_numeric_workflow_settings_as_suppressions(self) -> None:
+        self.assertEqual(
+            scan_file(".github/workflows/ci.yml", "fetch-depth: 0\n", {1}), []
+        )
+
     def test_finds_entry_added_to_existing_toml_suppression_section(self) -> None:
         source = """\
 [tool.ruff.lint.per-file-ignores]
@@ -88,7 +93,9 @@ value = 2
 
         self.assertTrue(admin)
         self.assertEqual(approved, {"finding-1"})
-        self.assertTrue(any(call[0] == "DELETE" and "stale" in call[1] for call in github.calls))
+        self.assertTrue(
+            any(call[0] == "DELETE" and "stale" in call[1] for call in github.calls)
+        )
         self.assertTrue(
             any(call[0] == "PATCH" and call[1] == "/pulls/334" for call in github.calls)
         )
@@ -155,7 +162,9 @@ value = 2
             ("remove-ignore", ["object-abc123", "suppression-def456"]),
         )
         self.assertIsNone(parse_command("/ignore-all extra"))
-        self.assertIsNone(parse_command("/ignore suppression-abc123,,suppression-def456"))
+        self.assertIsNone(
+            parse_command("/ignore suppression-abc123,,suppression-def456")
+        )
 
     def test_summary_has_collapsed_admin_commands_and_no_comment_marker(self) -> None:
         finding = scan_file("example.py", "value = 1  # noqa\n", {1})[0]

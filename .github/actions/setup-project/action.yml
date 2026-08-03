@@ -17,7 +17,7 @@ runs:
 
         - name: Install web dependencies
           shell: bash
-          run: npm install --no-audit --no-fund
+          run: npm ci --no-audit --no-fund
           working-directory: web
 
         - name: Install server dependencies
