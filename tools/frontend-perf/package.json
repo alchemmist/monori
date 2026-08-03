@@ -1,6 +1,7 @@
 {
     "name": "monori-frontend-performance-tools",
     "private": true,
+    "packageManager": "npm@10.9.2",
     "version": "0.0.0",
     "dependencies": {
         "@lhci/cli": "^0.15.1",

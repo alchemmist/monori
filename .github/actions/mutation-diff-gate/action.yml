@@ -19,6 +19,11 @@ runs:
               node-version: 22
               cache: npm
               cache-dependency-path: web/package-lock.json
+
+        - name: Pin npm
+          shell: bash
+          run: npm install --global npm@10.9.2
+
         - name: Setup uv
           uses: astral-sh/setup-uv@v7
           with:
