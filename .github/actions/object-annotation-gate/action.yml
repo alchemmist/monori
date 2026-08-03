@@ -1,0 +1,15 @@
+name: Python object annotation gate
+description: Check changed Python annotations and publish the gate report
+runs:
+    using: composite
+    steps:
+        - name: Setup Python
+          uses: actions/setup-python@v6
+          with:
+              python-version: "3.12"
+        - name: Test annotation checker
+          shell: bash
+          run: python -m unittest discover -s scripts -p 'test_object_annotation_gate.py'
+        - name: Check Python annotations
+          shell: bash
+          run: python scripts/object_annotation_gate.py

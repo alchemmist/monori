@@ -1,0 +1,48 @@
+name: Frontend performance scope
+description: Detect performance-relevant pull request changes and publish the scope report
+outputs:
+    relevant:
+        description: Whether the pull request changes frontend performance-relevant files
+        value: ${{ steps.scope.outputs.relevant }}
+runs:
+    using: composite
+    steps:
+        - name: Setup Python
+          uses: actions/setup-python@v6
+          with:
+              python-version: "3.12"
+        - name: Detect performance-relevant changes
+          id: scope
+          uses: actions/github-script@v8
+          with:
+              script: |
+                  const files = await github.paginate(github.rest.pulls.listFiles, {
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    pull_number: context.payload.pull_request.number,
+                    per_page: 100,
+                  });
+                  const relevant = files.some((file) => {
+                    const path = file.filename;
+                    if (path.startsWith("web/") || path.startsWith("tools/frontend-perf/") || path === "deploy/docker-compose.test.yml" || path === "deploy/Dockerfile.front" || path === "deploy/nginx.conf" || path === ".dockerignore" || path === "scripts/frontend-perf.sh" || path === "scripts/frontend_perf.py" || path === "scripts/test_frontend_perf.py" || path === ".github/workflows/a.yaml") return true;
+                    return path === "Makefile" && /(perf-front|PERF_|frontend)/i.test(file.patch || "");
+                  });
+                  core.setOutput("relevant", relevant ? "true" : "false");
+        - name: Publish performance scope report
+          if: steps.scope.outcome == 'success'
+          shell: bash
+          env:
+              GITHUB_TOKEN: ${{ github.token }}
+              GITHUB_REPOSITORY: ${{ github.repository }}
+              PR_NUMBER: ${{ github.event.pull_request.number }}
+              RELEVANT: ${{ steps.scope.outputs.relevant }}
+          run: |
+              if [ "$RELEVANT" = true ]; then
+                printf '%s\n' '## ⏳ Frontend performance' '' 'Performance-relevant files changed; running the gate.' > "$RUNNER_TEMP/frontend-performance-scope.md"
+              else
+                printf '%s\n' '## ✅ Frontend performance' '' 'No performance-relevant files changed; the gate is skipped.' > "$RUNNER_TEMP/frontend-performance-scope.md"
+              fi
+              python scripts/pr_comment.py \
+                --marker frontend-performance \
+                --body-file "$RUNNER_TEMP/frontend-performance-scope.md" \
+                --pr-number "$PR_NUMBER"

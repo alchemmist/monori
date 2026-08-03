@@ -109,6 +109,25 @@ class PullRequestWorkflowGraphTest(unittest.TestCase):
             )
             self.assertIn("needs.secrets.result == 'success'", block.group("body"), job)
 
+    def test_complex_gates_use_local_actions(self) -> None:
+        expected_actions = {
+            "mutation": "mutation-diff-gate",
+            "bundle-size": "bundle-size-gate",
+            "frontend-performance-scope": "frontend-performance-scope",
+            "frontend-performance": "frontend-performance-gate",
+            "object-annotations": "object-annotation-gate",
+            "suppressions": "suppression-gate",
+        }
+        for job, action in expected_actions.items():
+            block = re.search(
+                rf"^    {re.escape(job)}:\n(?P<body>.*?)(?=^    \S|\Z)",
+                self.source,
+                re.MULTILINE | re.DOTALL,
+            )
+            self.assertIsNotNone(block, job)
+            assert block is not None
+            self.assertIn(f"uses: ./.github/actions/{action}", block.group("body"), job)
+
     def test_code_and_api_gate_events_are_separated(self) -> None:
         self.assertIn("github.event_name == 'pull_request'", self.source)
         self.assertNotIn("github.event_name == 'pull_request_target'", self.source)
