@@ -36,8 +36,9 @@ class GitHub:
 
     def request(self, method: str, path: str, payload: JsonValue = None) -> JsonValue:
         data = None if payload is None else json.dumps(payload).encode()
+        api_path = path if path == "/user" else f"/repos/{self.repository}{path}"
         request = urllib.request.Request(
-            f"{self.base}/repos/{self.repository}{path}",
+            f"{self.base}{api_path}",
             data=data,
             method=method,
             headers={
