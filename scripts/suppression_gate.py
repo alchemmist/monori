@@ -14,12 +14,17 @@ from pathlib import Path
 from typing import Protocol, cast
 
 from scripts.pr_comment import upsert_comment
+from scripts.quality_graph_commands import (
+    QualityGraphCommand,
+    command_targets_gate,
+    parse_command,
+    validate_command,
+)
 
 type JsonValue = bool | int | float | str | list[JsonValue] | dict[str, JsonValue] | None
 
 LABEL_PREFIX = "monori-suppress-"
 SUPPRESSION_KEYS = r"(?:ignorePatterns|per-file-ignores|extend-ignore|disable_all|disabledRules)"
-COMMAND_RE = re.compile(r"^/(ignore|ignore-all|ignore-file|remove-ignore)(?:\s+(\S+))?$")
 FINDING_ID_PREFIX = "suppression-"
 STATUS_LABEL = "monori-suppression-failed"
 APPROVAL_STATE_RE = re.compile(r"<!-- monori-suppression-approvals: ([0-9a-f,]*) -->")
@@ -72,26 +77,6 @@ def optional_string(value: JsonValue) -> str | None:
 
 def decode_json(data: bytes | str) -> JsonValue:
     return cast(JsonValue, json.loads(data))
-
-
-def parse_command(body: str) -> tuple[str, list[str] | None] | None:
-    match = COMMAND_RE.fullmatch(body)
-    if not match:
-        return None
-    name, argument = match.groups()
-    if name == "ignore-all":
-        return (name, None) if argument is None else None
-    if not argument:
-        return None
-    arguments = [item.strip() for item in argument.split(",")]
-    return (name, arguments) if all(arguments) else None
-
-
-def command_targets_gate(command: tuple[str, list[str] | None]) -> bool:
-    name, arguments = command
-    return name in {"ignore-all", "ignore-file"} or any(
-        argument.startswith(FINDING_ID_PREFIX) for argument in (arguments or [])
-    )
 
 
 @dataclass(frozen=True)
@@ -330,7 +315,7 @@ def sync_approvals(
     number: int,
     pull: dict[str, JsonValue],
     findings: list[Finding],
-    command: tuple[str, list[str] | None] | None,
+    command: QualityGraphCommand | None,
     author: str | None,
 ) -> tuple[set[str], bool]:
     labels = github.paged(f"/issues/{number}/labels")
@@ -354,23 +339,25 @@ def sync_approvals(
         if not state_exists:
             update_approval_state(github, number, pull, approved)
         return approved, admin
-    name, arguments = command
-    arguments = arguments or []
-    selected = (
-        finding_ids
-        if name == "ignore-all"
-        else {
-            finding.finding_id
-            for finding in findings
-            if name == "ignore-file" and finding.path in arguments
-        }
-    )
+    name = command.name
+    arguments = command.arguments
+    if name in {"help", "status"}:
+        return approved, admin
+    selected = {
+        finding.finding_id
+        for finding in findings
+        if name == "ignore-file" and finding.path in arguments
+    }
     if name in {"ignore", "remove-ignore"}:
-        selected = {
-            argument[len(FINDING_ID_PREFIX) :]
-            for argument in arguments
-            if argument.startswith(FINDING_ID_PREFIX)
-        } & finding_ids
+        selected = (
+            finding_ids
+            if "suppression" in arguments
+            else {
+                argument[len(FINDING_ID_PREFIX) :]
+                for argument in arguments
+                if argument.startswith(FINDING_ID_PREFIX)
+            }
+        ) & finding_ids
     for finding_id in selected:
         if name == "remove-ignore":
             approved.discard(finding_id)
@@ -423,13 +410,13 @@ def summary_body(findings: list[Finding], approved: set[str]) -> str:
             "",
             "Post exactly one command as a new pull-request comment:",
             "",
-            "- `/ignore object-<finding-id>[,object-<finding-id>...]`",
-            "- `/ignore suppression-<finding-id>[,suppression-<finding-id>...]`",
-            "- `/ignore-file path/to/file[,path/to/file...]`",
-            "- `/ignore-all`",
-            "- `/remove-ignore <object-or-suppression-id>[,<object-or-suppression-id>...]`",
+            "- `/qg ignore object-<finding-id>[,object-<finding-id>...]`",
+            "- `/qg ignore suppression-<finding-id>[,suppression-<finding-id>...]`",
+            "- `/qg ignore suppression`",
+            "- `/qg ignore-file path/to/file[,path/to/file...]`",
+            "- `/qg remove-ignore <object-or-suppression-id>[,<object-or-suppression-id>...]`",
             "",
-            "Finding IDs and file paths may be comma-separated.",
+            "Finding IDs, gate names, and file paths may be comma-separated.",
             "Approvals persist while the finding fingerprint stays unchanged.",
             "</details>",
         ]
@@ -476,7 +463,9 @@ def main() -> int:
     findings = changed_files(github, pull)
     comment = json_object(event.get("comment", {}), "comment")
     command = parse_command((optional_string(comment.get("body")) or "").strip())
-    if command and not command_targets_gate(command):
+    if command and validate_command(command) is not None:
+        command = None
+    if command and not command_targets_gate(command, "suppression"):
         command = None
     author_data = json_object(comment.get("user", {}), "comment user")
     author = optional_string(author_data.get("login")) if command else None

@@ -10,13 +10,18 @@ import urllib.request
 from pathlib import Path
 from typing import cast
 
+from scripts.quality_graph_commands import (
+    QualityGraphCommand,
+    parse_command,
+    validate_command,
+)
+
 type JsonValue = None | bool | int | float | str | list[JsonValue] | dict[str, JsonValue]
 
 STATUS_LABEL = "monori-frontend-performance-failed"
 FINDING_ID_PREFIX = "frontend-"
 STATE_RE = re.compile(r"<!-- monori-frontend-performance-approvals: ([0-9a-f,]*) -->")
 PENDING_RE = re.compile(r"<!-- monori-frontend-performance-pending: (\d+) -->")
-COMMAND_RE = re.compile(r"^/(ignore|ignore-all|remove-ignore)(?:\s+(\S+))?$")
 REQUEST_TIMEOUT = 30
 
 
@@ -47,19 +52,6 @@ def json_integer(value: JsonValue, context: str) -> int:
     if isinstance(value, bool) or not isinstance(value, int):
         raise RuntimeError(f"Expected an integer for {context}")
     return value
-
-
-def parse_command(body: str) -> tuple[str, list[str] | None] | None:
-    match = COMMAND_RE.fullmatch(body)
-    if not match:
-        return None
-    name, argument = match.groups()
-    if name == "ignore-all":
-        return (name, None) if argument is None else None
-    if not argument:
-        return None
-    arguments = [item.strip() for item in argument.split(",")]
-    return (name, arguments) if all(arguments) else None
 
 
 def finding_id(entry: dict[str, JsonValue]) -> str:
@@ -137,12 +129,14 @@ def update_body_state(github: GitHub, number: int, body: str, approved: set[str]
     return updated
 
 
-def command_from_pending(github: GitHub, body: str) -> tuple[str, list[str] | None] | None:
+def command_from_pending(github: GitHub, body: str) -> QualityGraphCommand | None:
     match = PENDING_RE.search(body)
     if not match:
         return None
     comment = json_object(github.request("GET", f"/issues/comments/{match.group(1)}"), "comment")
     command = parse_command((optional_string(comment.get("body")) or "").strip())
+    if command and validate_command(command) is not None:
+        command = None
     author = json_object(comment.get("user", {}), "comment user")
     login = optional_string(author.get("login"))
     return command if command and login and is_admin(github, login) else None
@@ -153,22 +147,28 @@ def entry_ids(entries: list[dict[str, JsonValue]]) -> set[str]:
 
 
 def apply_command(
-    command: tuple[str, list[str] | None] | None,
+    command: QualityGraphCommand | None,
     entries: list[dict[str, JsonValue]],
     approved: set[str],
 ) -> set[str]:
     if command is None:
         return approved
-    name, arguments = command
-    arguments = arguments or []
+    name = command.name
+    arguments = command.arguments
+    if name in {"help", "status", "ignore-file"}:
+        return approved
     ids = entry_ids(entries)
-    if name == "ignore-all":
+    if name == "ignore" and "frontend" in arguments:
         return approved | ids
-    selected = {
-        argument
-        for argument in arguments
-        if argument.startswith(FINDING_ID_PREFIX)
-    } & ids
+    selected = (
+        ids
+        if name == "ignore" and "frontend" in arguments
+        else {
+            argument
+            for argument in arguments
+            if argument.startswith(FINDING_ID_PREFIX)
+        }
+    ) & ids
     return approved - selected if name == "remove-ignore" else approved | selected
 
 
@@ -178,9 +178,9 @@ def append_commands(text: str, entries: list[dict[str, JsonValue]], approved: se
     lines.extend(
         [
             "",
-            "- `/ignore frontend-<finding-id>[,frontend-<finding-id>...]`",
-            "- `/ignore-all`",
-            "- `/remove-ignore frontend-<finding-id>[,frontend-<finding-id>...]`",
+            "- `/qg ignore frontend-<finding-id>[,frontend-<finding-id>...]`",
+            "- `/qg ignore frontend`",
+            "- `/qg remove-ignore frontend-<finding-id>[,frontend-<finding-id>...]`",
             "",
         ]
     )

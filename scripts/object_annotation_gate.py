@@ -18,10 +18,15 @@ from pathlib import Path
 from typing import Protocol, cast
 
 from scripts.pr_comment import upsert_comment
+from scripts.quality_graph_commands import (
+    QualityGraphCommand,
+    command_targets_gate,
+    parse_command,
+    validate_command,
+)
 
 type JsonValue = None | bool | int | float | str | list[JsonValue] | dict[str, JsonValue]
 
-COMMAND_RE = re.compile(r"^/(ignore|ignore-all|ignore-file|remove-ignore)(?:\s+(\S+))?$")
 PATCH_HUNK_RE = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@")
 IGNORE_LABEL_PREFIX = "monori-object-annotation-ignore-"
 FINDING_ID_PREFIX = "object-"
@@ -60,26 +65,6 @@ def json_integer(value: JsonValue, context: str) -> int:
 
 def optional_string(value: JsonValue) -> str | None:
     return value if isinstance(value, str) else None
-
-
-def parse_command(body: str) -> tuple[str, list[str] | None] | None:
-    match = COMMAND_RE.fullmatch(body)
-    if not match:
-        return None
-    name, argument = match.groups()
-    if name == "ignore-all":
-        return (name, None) if argument is None else None
-    if not argument:
-        return None
-    arguments = [item.strip() for item in argument.split(",")]
-    return (name, arguments) if all(arguments) else None
-
-
-def command_targets_gate(command: tuple[str, list[str] | None]) -> bool:
-    name, arguments = command
-    return name in {"ignore-all", "ignore-file"} or any(
-        argument.startswith(FINDING_ID_PREFIX) for argument in (arguments or [])
-    )
 
 
 @dataclass(frozen=True)
@@ -314,10 +299,10 @@ def summary_body(findings: list[Finding], approved: set[str], pr_url: str) -> st
             "",
             "Post exactly one command as a new pull-request comment:",
             "",
-            "- `/ignore object-<finding-id>[,object-<finding-id>...]`",
-            "- `/ignore-file path/to/file.py[,path/to/file.py...]`",
-            "- `/ignore-all`",
-            "- `/remove-ignore <object-or-suppression-id>[,<object-or-suppression-id>...]`",
+            "- `/qg ignore object-<finding-id>[,object-<finding-id>...]`",
+            "- `/qg ignore object`",
+            "- `/qg ignore-file path/to/file.py[,path/to/file.py...]`",
+            "- `/qg remove-ignore <object-or-suppression-id>[,<object-or-suppression-id>...]`",
             "",
             "</details>",
         ]
@@ -347,7 +332,7 @@ def sync_approvals(
     number: int,
     pull: dict[str, JsonValue],
     findings: list[Finding],
-    command: tuple[str, list[str] | None] | None,
+    command: QualityGraphCommand | None,
     author: str | None,
 ) -> tuple[set[str], bool, bool]:
     labels = github.paged(f"/issues/{number}/labels")
@@ -375,23 +360,25 @@ def sync_approvals(
         if not state_exists:
             update_approval_state(github, number, pull, approved)
         return approved, admin, state_changed
-    name, arguments = command
-    arguments = arguments or []
-    selected = (
-        finding_ids
-        if name == "ignore-all"
-        else {
-            finding.finding_id
-            for finding in findings
-            if name == "ignore-file" and finding.path in arguments
-        }
-    )
+    name = command.name
+    arguments = command.arguments
+    if name in {"help", "status"}:
+        return approved, admin, state_changed
+    selected = {
+        finding.finding_id
+        for finding in findings
+        if name == "ignore-file" and finding.path in arguments
+    }
     if name in {"ignore", "remove-ignore"}:
-        selected = {
-            argument[len(FINDING_ID_PREFIX) :]
-            for argument in arguments
-            if argument.startswith(FINDING_ID_PREFIX)
-        } & finding_ids
+        selected = (
+            finding_ids
+            if "object" in arguments
+            else {
+                argument[len(FINDING_ID_PREFIX) :]
+                for argument in arguments
+                if argument.startswith(FINDING_ID_PREFIX)
+            }
+        ) & finding_ids
     for finding_id in selected:
         if name == "remove-ignore":
             approved.discard(finding_id)
@@ -516,7 +503,9 @@ def main() -> int:
     findings = scan_pull_request(github, pull)
     comment = json_object(event.get("comment", {}), "event comment")
     command = parse_command((optional_string(comment.get("body")) or "").strip())
-    if command and not command_targets_gate(command):
+    if command and validate_command(command) is not None:
+        command = None
+    if command and not command_targets_gate(command, "object"):
         command = None
     author_data = json_object(comment.get("user", {}), "comment user")
     author = json_string(author_data["login"], "comment author") if command else None

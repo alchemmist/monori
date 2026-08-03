@@ -11,12 +11,17 @@ import urllib.request
 from pathlib import Path
 from typing import cast
 
+from scripts.quality_graph_commands import (
+    QualityGraphCommand,
+    parse_command,
+    validate_command,
+)
+
 type JsonValue = None | bool | int | float | str | list[JsonValue] | dict[str, JsonValue]
 
 STATUS_LABEL = "monori-bundle-size-failed"
 STATE_RE = re.compile(r"<!-- monori-bundle-size-approvals: ([a-z0-9,-]*) -->")
 PENDING_RE = re.compile(r"<!-- monori-bundle-size-pending: (\d+) -->")
-COMMAND_RE = re.compile(r"^/(ignore|ignore-all|remove-ignore)(?:\s+(\S+))?$")
 
 
 def obj(value: JsonValue, context: str) -> dict[str, JsonValue]:
@@ -43,33 +48,23 @@ def array(value: JsonValue, context: str) -> list[JsonValue]:
     return value
 
 
-def parse_command(body: str) -> tuple[str, list[str] | None] | None:
-    match = COMMAND_RE.fullmatch(body)
-    if not match:
-        return None
-    name, argument = match.groups()
-    if name == "ignore-all":
-        return (name, None) if argument is None else None
-    if not argument:
-        return None
-    arguments = [item.strip() for item in argument.split(",")]
-    return (name, arguments) if all(arguments) else None
-
-
 def state_from_body(body: str) -> set[str]:
     match = STATE_RE.search(body)
     return set(match.group(1).split(",")) if match and match.group(1) else set()
 
 
 def apply_command(
-    command: tuple[str, list[str] | None] | None, ids: set[str], approved: set[str]
+    command: QualityGraphCommand | None, ids: set[str], approved: set[str]
 ) -> set[str]:
     if command is None:
         return approved
-    name, arguments = command
-    if name == "ignore-all":
+    name = command.name
+    arguments = command.arguments
+    if name in {"help", "status", "ignore-file"}:
+        return approved
+    if name == "ignore" and "bundle" in arguments:
         return approved | ids
-    selected = set(arguments or []) & ids
+    selected = (ids if name == "ignore" and "bundle" in arguments else set(arguments)) & ids
     return approved - selected if name == "remove-ignore" else approved | selected
 
 
@@ -107,12 +102,14 @@ class GitHub:
             self.request("DELETE", f"/issues/{number}/labels/{encoded}")
 
 
-def command_from_pending(github: GitHub, body: str) -> tuple[str, list[str] | None] | None:
+def command_from_pending(github: GitHub, body: str) -> QualityGraphCommand | None:
     match = PENDING_RE.search(body)
     if not match:
         return None
     comment = obj(github.request("GET", f"/issues/comments/{match.group(1)}"), "comment")
     command = parse_command(string(comment.get("body"), "comment body").strip())
+    if command and validate_command(command) is not None:
+        command = None
     user = obj(comment.get("user", {}), "comment user")
     login = string(user.get("login"), "comment login")
     permission = obj(github.request("GET", f"/collaborators/{urllib.parse.quote(login, safe='')}/permission"), "permission")
@@ -120,7 +117,7 @@ def command_from_pending(github: GitHub, body: str) -> tuple[str, list[str] | No
 
 
 def append_commands(summary: str, entries: list[dict[str, JsonValue]], approved: set[str]) -> str:
-    lines = ["", "<details><summary>For repository administrators</summary>", "", "Post exactly one command as a new pull-request comment:", "", "- `/ignore bundle-<id>[,bundle-<id>...]`", "- `/ignore-all`", "- `/remove-ignore bundle-<id>[,bundle-<id>...]`", "", "Findings:"]
+    lines = ["", "<details><summary>For repository administrators</summary>", "", "Post exactly one command as a new pull-request comment:", "", "- `/qg ignore bundle-<id>[,bundle-<id>...]`", "- `/qg ignore bundle`", "- `/qg remove-ignore bundle-<id>[,bundle-<id>...]`", "", "Findings:"]
     for entry in entries:
         finding = string(entry.get("id"), "finding id")
         marker = "✔" if finding in approved else "✗"

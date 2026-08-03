@@ -1,5 +1,5 @@
-name: Process CI approval command
-description: Apply an administrator command to the pull request quality gates
+name: Process Quality Graph command
+description: Apply an administrator command to the pull request Quality Graph
 runs:
     using: composite
     steps:
@@ -7,9 +7,9 @@ runs:
           uses: actions/setup-python@v6
           with:
               python-version: "3.12"
-        - name: Test approval gates
+        - name: Test Quality Graph command API
           shell: bash
-          run: python -m unittest scripts.test_object_annotation_gate scripts.test_suppression_gate
+          run: python -m unittest scripts.test_quality_graph_commands scripts.test_object_annotation_gate scripts.test_suppression_gate
         - name: Apply object and suppression command
           continue-on-error: true
           shell: bash
@@ -18,61 +18,8 @@ runs:
           run: |
               python -m scripts.object_annotation_gate || true
               python -m scripts.suppression_gate || true
-        - name: Queue bundle and performance command
-          uses: actions/github-script@v8
-          with:
-              script: |
-                  const body = context.payload.comment.body.trim();
-                  const match = body.match(/^\/(ignore|ignore-all|remove-ignore)(?:\s+(\S+))?$/);
-                  if (!match) return;
-                  const args = (match[2] || "").split(",");
-                  const targetsBundle = match[1] === "ignore-all" || args.some((id) => id.startsWith("bundle-"));
-                  const targetsPerformance = match[1] === "ignore-all" || args.some((id) => id.startsWith("frontend-"));
-                  const removing = match[1] === "remove-ignore";
-                  if (!targetsBundle && !targetsPerformance) return;
-                  const permission = await github.rest.repos.getCollaboratorPermissionLevel({
-                    owner: context.repo.owner,
-                    repo: context.repo.repo,
-                    username: context.payload.comment.user.login,
-                  });
-                  if (permission.data.permission !== "admin") return;
-                  const pull = await github.rest.pulls.get({
-                    owner: context.repo.owner,
-                    repo: context.repo.repo,
-                    pull_number: context.issue.number,
-                  });
-                  let updated = pull.data.body || "";
-                  const applyMarker = (body, pattern, marker) => {
-                    if (removing) return body.replace(pattern, "").trim();
-                    return pattern.test(body)
-                      ? body.replace(pattern, marker)
-                      : `${body.trim()}\n\n${marker}`.trim();
-                  };
-                  if (targetsBundle) {
-                    const marker = `<!-- monori-bundle-size-pending: ${context.payload.comment.id} -->`;
-                    updated = applyMarker(updated, /<!-- monori-bundle-size-pending: \d+ -->/, marker);
-                  }
-                  if (targetsPerformance) {
-                    const marker = `<!-- monori-frontend-performance-pending: ${context.payload.comment.id} -->`;
-                    updated = applyMarker(updated, /<!-- monori-frontend-performance-pending: \d+ -->/, marker);
-                  }
-                  if (updated !== pull.data.body) {
-                    await github.rest.pulls.update({ owner: context.repo.owner, repo: context.repo.repo, pull_number: context.issue.number, body: updated });
-                  }
-                  const pullRequest = pull.data;
-                  const runs = await github.paginate(github.rest.actions.listWorkflowRuns, {
-                    owner: context.repo.owner,
-                    repo: context.repo.repo,
-                    workflow_id: "pr-checks.yaml",
-                    event: "pull_request",
-                    branch: pullRequest.head.ref,
-                    status: "completed",
-                    per_page: 100,
-                  }, (response, done) => {
-                    const match = response.data.find((item) => item.head_sha === pullRequest.head.sha);
-                    if (match) done();
-                    return response.data;
-                  });
-                  const run = runs.find((item) => item.head_sha === pullRequest.head.sha);
-                  if (!run) throw new Error(`No completed pr-checks.yaml run found for PR #${context.issue.number}`);
-                  await github.rest.actions.reRunWorkflowFailedJobs({ owner: context.repo.owner, repo: context.repo.repo, run_id: run.id });
+        - name: Process Quality Graph command
+          shell: bash
+          env:
+              GITHUB_TOKEN: ${{ github.token }}
+          run: python -m scripts.quality_graph_commands
