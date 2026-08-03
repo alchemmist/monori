@@ -38,14 +38,10 @@ class PullRequestWorkflowGraphTest(unittest.TestCase):
             "test-slow",
             "build",
             "coverage",
-            "audit-deps",
-            "audit-deps-py",
-            "secrets",
+            "audit",
             "mutation",
             "bundle-size",
-            "frontend-performance-scope",
             "frontend-performance",
-            "frontend-performance-skipped",
             "object-annotations",
             "suppressions",
             "admin-command",
@@ -72,9 +68,7 @@ class PullRequestWorkflowGraphTest(unittest.TestCase):
             "mutation": "test-slow",
             "build": "test-slow",
             "bundle-size": "build",
-            "frontend-performance-scope": "build",
-            "frontend-performance": "frontend-performance-scope",
-            "frontend-performance-skipped": "frontend-performance-scope",
+            "frontend-performance": "build",
         }
         for job, dependency in expected.items():
             data = jobs[job]
@@ -110,9 +104,7 @@ class PullRequestWorkflowGraphTest(unittest.TestCase):
     def test_final_audits_converge_after_all_expensive_checks(self) -> None:
         jobs = self.workflow["jobs"]
         expected_dependencies = {
-            "audit-deps": {"coverage", "mutation", "bundle-size", "frontend-performance-scope", "frontend-performance", "frontend-performance-skipped"},
-            "audit-deps-py": {"coverage", "mutation", "bundle-size", "frontend-performance-scope", "frontend-performance", "frontend-performance-skipped"},
-            "secrets": {"coverage", "mutation", "bundle-size", "frontend-performance-scope", "frontend-performance", "frontend-performance-skipped"},
+            "audit": {"coverage", "mutation", "bundle-size", "frontend-performance"},
         }
         for job, expected in expected_dependencies.items():
             needs = jobs[job].get("needs", [])
@@ -127,18 +119,12 @@ class PullRequestWorkflowGraphTest(unittest.TestCase):
             self.assertIsNotNone(block, job)
             assert block is not None
             self.assertIn("always()", block.group("body"), job)
-            self.assertIn("needs.frontend-performance-scope.result == 'success'", block.group("body"), job)
-            self.assertIn(
-                "needs.frontend-performance.result == 'success' || needs.frontend-performance-skipped.result == 'success'",
-                block.group("body"),
-                job,
-            )
+            self.assertIn("needs.frontend-performance.result == 'success'", block.group("body"), job)
 
     def test_complex_gates_use_local_actions(self) -> None:
         expected_actions = {
             "mutation": "mutation-diff-gate",
             "bundle-size": "bundle-size-gate",
-            "frontend-performance-scope": "frontend-performance-scope",
             "frontend-performance": "frontend-performance-gate",
             "object-annotations": "object-annotation-gate",
             "suppressions": "suppression-gate",
@@ -153,6 +139,28 @@ class PullRequestWorkflowGraphTest(unittest.TestCase):
             self.assertIsNotNone(block, job)
             assert block is not None
             self.assertIn(f"uses: ./.github/actions/{action}", block.group("body"), job)
+
+    def test_frontend_performance_is_one_conditional_job(self) -> None:
+        block = re.search(
+            r"^    frontend-performance:\n(?P<body>.*?)(?=^    \S|\Z)",
+            self.source,
+            re.MULTILINE | re.DOTALL,
+        )
+        self.assertIsNotNone(block)
+        assert block is not None
+        self.assertIn("uses: ./.github/actions/frontend-performance-scope", block.group("body"))
+        self.assertIn("if: steps.scope.outputs.relevant == 'true'", block.group("body"))
+        self.assertNotIn("frontend-performance-skipped", self.source)
+
+    def test_audit_job_runs_aggregate_make_target(self) -> None:
+        block = re.search(
+            r"^    audit:\n(?P<body>.*?)(?=^    \S|\Z)",
+            self.source,
+            re.MULTILINE | re.DOTALL,
+        )
+        self.assertIsNotNone(block)
+        assert block is not None
+        self.assertIn("- run: make audit", block.group("body"))
 
     def test_code_and_api_gate_events_are_separated(self) -> None:
         self.assertIn("github.event_name == 'pull_request'", self.source)

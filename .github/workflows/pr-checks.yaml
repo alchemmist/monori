@@ -219,92 +219,29 @@ jobs:
                   install-server: true
             - run: make coverage
 
-    audit-deps:
-        name: Dependency audit
-        needs:
-            [
-                coverage,
-                mutation,
-                bundle-size,
-                frontend-performance-scope,
-                frontend-performance,
-                frontend-performance-skipped,
-            ]
+    audit:
+        name: Dependency and security audit
+        needs: [coverage, mutation, bundle-size, frontend-performance]
         if: >-
             always()
             && needs.coverage.result == 'success'
             && needs.mutation.result == 'success'
             && needs.bundle-size.result == 'success'
-            && needs.frontend-performance-scope.result == 'success'
-            && (needs.frontend-performance.result == 'success' || needs.frontend-performance-skipped.result == 'success')
+            && needs.frontend-performance.result == 'success'
         runs-on: ubuntu-latest
+        permissions:
+            contents: read
+            security-events: write
         steps:
             - uses: actions/checkout@v7
               with:
+                  fetch-depth: 0
                   persist-credentials: false
             - uses: ./.github/actions/setup-project
               with:
                   install-web: true
                   install-server: true
-            - run: make audit-deps
-
-    audit-deps-py:
-        name: Python dependency audit
-        needs:
-            [
-                coverage,
-                mutation,
-                bundle-size,
-                frontend-performance-scope,
-                frontend-performance,
-                frontend-performance-skipped,
-            ]
-        if: >-
-            always()
-            && needs.coverage.result == 'success'
-            && needs.mutation.result == 'success'
-            && needs.bundle-size.result == 'success'
-            && needs.frontend-performance-scope.result == 'success'
-            && (needs.frontend-performance.result == 'success' || needs.frontend-performance-skipped.result == 'success')
-        runs-on: ubuntu-latest
-        steps:
-            - uses: actions/checkout@v7
-              with:
-                  persist-credentials: false
-            - uses: ./.github/actions/setup-project
-              with:
-                  install-server: true
-            - run: make audit-deps-py
-
-    secrets:
-        name: Secret scan
-        needs:
-            [
-                coverage,
-                mutation,
-                bundle-size,
-                frontend-performance-scope,
-                frontend-performance,
-                frontend-performance-skipped,
-            ]
-        if: >-
-            always()
-            && needs.coverage.result == 'success'
-            && needs.mutation.result == 'success'
-            && needs.bundle-size.result == 'success'
-            && needs.frontend-performance-scope.result == 'success'
-            && (needs.frontend-performance.result == 'success' || needs.frontend-performance-skipped.result == 'success')
-        runs-on: ubuntu-latest
-        steps:
-            - name: Checkout
-              uses: actions/checkout@v7
-              with:
-                  fetch-depth: 0
-                  persist-credentials: false
-            - name: Scan for secrets
-              uses: gitleaks/gitleaks-action@v3
-              env:
-                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+            - run: make audit
 
     mutation:
         name: Mutation testing
@@ -343,29 +280,10 @@ jobs:
                   persist-credentials: false
             - uses: ./.github/actions/bundle-size-gate
 
-    frontend-performance-scope:
-        name: Front performance needed?
+    frontend-performance:
+        name: Frontend performance
         needs: build
         if: github.event_name == 'pull_request' && needs.build.result == 'success'
-        permissions:
-            contents: read
-            issues: write
-            pull-requests: write
-        runs-on: ubuntu-latest
-        outputs:
-            relevant: ${{ steps.scope.outputs.relevant }}
-        steps:
-            - name: Checkout workflow code
-              uses: actions/checkout@v7
-              with:
-                  persist-credentials: false
-            - id: scope
-              uses: ./.github/actions/frontend-performance-scope
-
-    frontend-performance:
-        name: Run frontend performance
-        needs: frontend-performance-scope
-        if: github.event_name == 'pull_request' && needs.frontend-performance-scope.result == 'success' && needs.frontend-performance-scope.outputs.relevant == 'true'
         permissions:
             actions: write
             contents: read
@@ -374,20 +292,15 @@ jobs:
         runs-on: ubuntu-latest
         timeout-minutes: 45
         steps:
-            - name: Checkout
+            - name: Checkout workflow code
               uses: actions/checkout@v7
               with:
                   fetch-depth: 0
                   persist-credentials: false
+            - id: scope
+              uses: ./.github/actions/frontend-performance-scope
             - uses: ./.github/actions/frontend-performance-gate
-
-    frontend-performance-skipped:
-        name: Skip frontend performance
-        needs: frontend-performance-scope
-        if: github.event_name == 'pull_request' && needs.frontend-performance-scope.result == 'success' && needs.frontend-performance-scope.outputs.relevant == 'false'
-        runs-on: ubuntu-latest
-        steps:
-            - run: echo "Frontend performance skipped because the pull request does not affect performance-relevant files."
+              if: steps.scope.outputs.relevant == 'true'
 
     object-annotations:
         name: Python object annotation gate

@@ -34,9 +34,7 @@ class MainWorkflowGraphTest(unittest.TestCase):
                 "test-slow",
                 "build",
                 "coverage",
-                "audit-deps",
-                "audit-deps-py",
-                "secrets",
+                "audit",
                 "mutation-full",
             },
         )
@@ -52,10 +50,8 @@ class MainWorkflowGraphTest(unittest.TestCase):
             "test-slow": "test-medium",
             "build": "test-slow",
             "coverage": "build",
-            "audit-deps": "coverage",
-            "audit-deps-py": "audit-deps",
-            "secrets": "audit-deps-py",
-            "mutation-full": "secrets",
+            "audit": "coverage",
+            "mutation-full": "audit",
         }
         for job, dependency in expected.items():
             needs = jobs[job].get("needs", [])

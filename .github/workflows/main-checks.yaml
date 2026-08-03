@@ -186,38 +186,9 @@ jobs:
                   install-server: true
             - run: make coverage
 
-    audit-deps:
-        name: Dependency audit
+    audit:
+        name: Dependency and security audit
         needs: coverage
-        runs-on: ubuntu-latest
-        steps:
-            - name: Checkout
-              uses: actions/checkout@v7
-              with:
-                  persist-credentials: false
-            - uses: ./.github/actions/setup-project
-              with:
-                  install-web: true
-                  install-server: true
-            - run: make audit-deps
-
-    audit-deps-py:
-        name: Python dependency audit
-        needs: audit-deps
-        runs-on: ubuntu-latest
-        steps:
-            - name: Checkout
-              uses: actions/checkout@v7
-              with:
-                  persist-credentials: false
-            - uses: ./.github/actions/setup-project
-              with:
-                  install-server: true
-            - run: make audit-deps-py
-
-    secrets:
-        name: Secret scan
-        needs: audit-deps-py
         runs-on: ubuntu-latest
         permissions:
             contents: read
@@ -228,14 +199,15 @@ jobs:
               with:
                   fetch-depth: 0
                   persist-credentials: false
-            - name: Scan for secrets
-              uses: gitleaks/gitleaks-action@v3
-              env:
-                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+            - uses: ./.github/actions/setup-project
+              with:
+                  install-web: true
+                  install-server: true
+            - run: make audit
 
     mutation-full:
         name: Full mutation sweep
-        needs: secrets
+        needs: audit
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
         runs-on: ubuntu-latest
         timeout-minutes: 180
