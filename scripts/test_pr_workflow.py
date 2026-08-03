@@ -1,22 +1,30 @@
 import re
 import unittest
 from pathlib import Path
-from typing import ClassVar, override
+from typing import ClassVar, TypedDict, cast, override
 
 import yaml
 
 WORKFLOW = Path(__file__).parents[1] / ".github/workflows/a.yaml"
 
 
+class WorkflowJob(TypedDict, total=False):
+    needs: str | list[str]
+
+
+class WorkflowDocument(TypedDict):
+    jobs: dict[str, WorkflowJob]
+
+
 class PullRequestWorkflowGraphTest(unittest.TestCase):
     source: ClassVar[str]
-    workflow: ClassVar[dict[str, object]]
+    workflow: ClassVar[WorkflowDocument]
 
     @override
     @classmethod
     def setUpClass(cls) -> None:
         cls.source = WORKFLOW.read_text()
-        cls.workflow = yaml.safe_load(cls.source)
+        cls.workflow = cast(WorkflowDocument, yaml.safe_load(cls.source))
 
     def test_pr_workflow_contains_all_gate_jobs(self) -> None:
         for job in (
@@ -49,8 +57,6 @@ class PullRequestWorkflowGraphTest(unittest.TestCase):
 
     def test_checks_have_declared_dependencies_and_no_cycle(self) -> None:
         jobs = self.workflow["jobs"]
-        self.assertIsInstance(jobs, dict)
-        assert isinstance(jobs, dict)
         expected = {
             "fmt-check": "workflow-graph",
             "suppressions": "fmt-check",
@@ -61,16 +67,12 @@ class PullRequestWorkflowGraphTest(unittest.TestCase):
         }
         for job, dependency in expected.items():
             data = jobs[job]
-            self.assertIsInstance(data, dict)
-            assert isinstance(data, dict)
             needs = data.get("needs", [])
             needs = [needs] if isinstance(needs, str) else needs
             self.assertIn(dependency, needs, job)
 
         dependencies: dict[str, list[str]] = {}
         for job, data in jobs.items():
-            self.assertIsInstance(data, dict)
-            assert isinstance(data, dict)
             needs = data.get("needs", [])
             dependencies[job] = [needs] if isinstance(needs, str) else list(needs)
             for dependency in dependencies[job]:

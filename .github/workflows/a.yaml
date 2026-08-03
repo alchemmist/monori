@@ -33,7 +33,7 @@ jobs:
               with:
                   python-version: "3.12"
             - name: Install workflow test dependencies
-              run: python -m pip install pyyaml
+              run: python -m pip install pyyaml types-PyYAML
             - name: Validate PR workflow graph
               run: python -m unittest scripts.test_pr_workflow
 
