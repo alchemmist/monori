@@ -5,7 +5,7 @@ from typing import ClassVar, TypedDict, cast, override
 
 import yaml
 
-WORKFLOW = Path(__file__).parents[1] / ".github/workflows/a.yaml"
+WORKFLOW = Path(__file__).parents[1] / ".github/workflows/pr-checks.yaml"
 
 
 class WorkflowJob(TypedDict, total=False):

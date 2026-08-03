@@ -24,7 +24,7 @@ runs:
                   });
                   const relevant = files.some((file) => {
                     const path = file.filename;
-                    if (path.startsWith("web/") || path.startsWith("tools/frontend-perf/") || path === "deploy/docker-compose.test.yml" || path === "deploy/Dockerfile.front" || path === "deploy/nginx.conf" || path === ".dockerignore" || path === "scripts/frontend-perf.sh" || path === "scripts/frontend_perf.py" || path === "scripts/test_frontend_perf.py" || path === ".github/workflows/a.yaml") return true;
+                    if (path.startsWith("web/") || path.startsWith("tools/frontend-perf/") || path === "deploy/docker-compose.test.yml" || path === "deploy/Dockerfile.front" || path === "deploy/nginx.conf" || path === ".dockerignore" || path === "scripts/frontend-perf.sh" || path === "scripts/frontend_perf.py" || path === "scripts/test_frontend_perf.py" || path === ".github/workflows/pr-checks.yaml") return true;
                     return path === "Makefile" && /(perf-front|PERF_|frontend)/i.test(file.patch || "");
                   });
                   core.setOutput("relevant", relevant ? "true" : "false");
