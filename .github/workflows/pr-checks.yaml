@@ -91,8 +91,8 @@ jobs:
 
     type:
         name: Type check
-        needs: [lint, object-annotations]
-        if: github.event_name == 'pull_request' && needs.lint.result == 'success' && needs.object-annotations.result == 'success'
+        needs: object-annotations
+        if: github.event_name == 'pull_request' && needs.object-annotations.result == 'success'
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@v7
@@ -106,8 +106,8 @@ jobs:
 
     analyze:
         name: Static analysis
-        needs: type
-        if: github.event_name == 'pull_request' && needs.type.result == 'success'
+        needs: [lint, type]
+        if: github.event_name == 'pull_request' && needs.lint.result == 'success' && needs.type.result == 'success'
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@v7
@@ -347,8 +347,8 @@ jobs:
 
     object-annotations:
         name: Python object annotation gate
-        needs: suppressions
-        if: github.event_name == 'pull_request' && needs.suppressions.result == 'success'
+        needs: fmt-check
+        if: github.event_name == 'pull_request' && needs.fmt-check.result == 'success'
         runs-on: ubuntu-latest
         timeout-minutes: 10
         permissions:
