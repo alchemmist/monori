@@ -16,6 +16,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol, cast
 
+from scripts.pr_comment import upsert_comment
+
 type JsonValue = None | bool | int | float | str | list[JsonValue] | dict[str, JsonValue]
 
 COMMAND_RE = re.compile(r"^/(ignore|ignore-all|ignore-file|remove-ignore)(?:\s+(\S+))?$")
@@ -320,13 +322,6 @@ def summary_body(findings: list[Finding], approved: set[str], pr_url: str) -> st
     return "\n".join(lines)
 
 
-def append_step_summary(body: str) -> None:
-    summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
-    if summary_path:
-        with Path(summary_path).open("a") as summary:
-            summary.write(body.rstrip() + "\n")
-
-
 def approval_state(body: str) -> set[str]:
     match = APPROVAL_STATE_RE.search(body)
     return set(match.group(1).split(",")) if match and match.group(1) else set()
@@ -519,7 +514,12 @@ def main() -> int:
     sync_failure_label(github, number, bool(active))
 
     pr_url = json_string(pull["html_url"], "pull request URL")
-    append_step_summary(summary_body(findings, approved, pr_url))
+    upsert_comment(
+        github,
+        number,
+        "object-annotations",
+        summary_body(findings, approved, pr_url),
+    )
     if not findings:
         return 0
 

@@ -12,6 +12,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol, cast
 
+from scripts.pr_comment import upsert_comment
+
 type JsonValue = bool | int | float | str | list[JsonValue] | dict[str, JsonValue] | None
 
 LABEL_PREFIX = "monori-suppress-"
@@ -432,13 +434,6 @@ def summary_body(findings: list[Finding], approved: set[str]) -> str:
     return "\n".join(lines)
 
 
-def append_summary(body: str) -> None:
-    path = os.environ.get("GITHUB_STEP_SUMMARY")
-    if path:
-        with Path(path).open("a", encoding="utf-8") as summary:
-            summary.write(body.rstrip() + "\n")
-
-
 def rerun_gate(github: GitHubAPI, number: int) -> None:
     matching: list[dict[str, JsonValue]] = []
     for page in range(1, 6):
@@ -485,7 +480,7 @@ def main() -> int:
     approved, admin = sync_approvals(github, number, pull, findings, command, author)
     active = [finding for finding in findings if finding.finding_id not in approved]
     sync_status_label(github, number, bool(active))
-    append_summary(summary_body(findings, approved))
+    upsert_comment(github, number, "suppression", summary_body(findings, approved))
     if admin:
         rerun_gate(github, number)
     for finding in findings:

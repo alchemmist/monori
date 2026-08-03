@@ -10,7 +10,7 @@ if (!base || !reportPath || !Number.isFinite(threshold)) {
 }
 
 function appendStepSummary(content) {
-    const summaryPath = process.env.GITHUB_STEP_SUMMARY;
+    const summaryPath = process.env.MUTATION_SUMMARY_PATH || process.env.GITHUB_STEP_SUMMARY;
     if (summaryPath) {
         fs.appendFileSync(summaryPath, `${content.trim()}\n`);
     }
