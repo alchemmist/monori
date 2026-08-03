@@ -15,7 +15,7 @@ runs:
               python-version: "3.12"
         - name: Install performance tools
           shell: bash
-          run: npm install --no-audit --no-fund
+          run: npm ci --no-audit --no-fund
           working-directory: tools/frontend-perf
         - name: Install Chromium
           shell: bash

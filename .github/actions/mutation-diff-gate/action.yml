@@ -18,14 +18,14 @@ runs:
           with:
               node-version: 22
               cache: npm
-              cache-dependency-path: web/package.json
+              cache-dependency-path: web/package-lock.json
         - name: Setup uv
           uses: astral-sh/setup-uv@v7
           with:
               enable-cache: true
         - name: Install web deps
           shell: bash
-          run: npm install --no-audit --no-fund
+          run: npm ci --no-audit --no-fund
           working-directory: web
         - name: Install server deps
           shell: bash
@@ -35,10 +35,10 @@ runs:
           uses: actions/cache@v4
           with:
               path: web/reports/stryker-incremental.json
-              key: mutation-stryker-${{ runner.os }}-${{ hashFiles('web/package.json') }}-pr-${{ github.event.pull_request.number }}-${{ github.sha }}
+              key: mutation-stryker-${{ runner.os }}-${{ hashFiles('web/package-lock.json') }}-pr-${{ github.event.pull_request.number }}-${{ github.sha }}
               restore-keys: |
-                  mutation-stryker-${{ runner.os }}-${{ hashFiles('web/package.json') }}-pr-${{ github.event.pull_request.number }}-
-                  mutation-stryker-${{ runner.os }}-${{ hashFiles('web/package.json') }}-main-
+                  mutation-stryker-${{ runner.os }}-${{ hashFiles('web/package-lock.json') }}-pr-${{ github.event.pull_request.number }}-
+                  mutation-stryker-${{ runner.os }}-${{ hashFiles('web/package-lock.json') }}-main-
         - name: Restore mutmut cache
           uses: actions/cache/restore@v4
           with:

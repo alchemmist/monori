@@ -8,13 +8,13 @@ runs:
           with:
               node-version: 22
               cache: npm
-              cache-dependency-path: web/package.json
+              cache-dependency-path: web/package-lock.json
         - name: Test bundle tools
           shell: bash
           run: python -m unittest scripts.test_bundle_size
         - name: Install web dependencies
           shell: bash
-          run: npm install --no-audit --no-fund
+          run: npm ci --no-audit --no-fund
           working-directory: web
         - name: Build pull request
           shell: bash
@@ -30,7 +30,11 @@ runs:
           run: |
               git fetch --no-tags --depth=1 origin "$BASE_SHA"
               git worktree add --detach "$RUNNER_TEMP/base-repo" "$BASE_SHA"
-              npm install --no-audit --no-fund --prefix "$RUNNER_TEMP/base-repo/web"
+              if [ -f "$RUNNER_TEMP/base-repo/web/package-lock.json" ]; then
+                npm ci --no-audit --no-fund --prefix "$RUNNER_TEMP/base-repo/web"
+              else
+                npm install --no-audit --no-fund --prefix "$RUNNER_TEMP/base-repo/web"
+              fi
               npm run build --prefix "$RUNNER_TEMP/base-repo/web"
               python scripts/bundle_size.py measure --dist "$RUNNER_TEMP/base-repo/web/dist" --output "$RUNNER_TEMP/base.json"
         - name: Compare bundle sizes
