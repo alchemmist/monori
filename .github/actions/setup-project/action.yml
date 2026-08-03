@@ -1,0 +1,26 @@
+name: Setup project
+description: Install the dependencies shared by Python and web checks
+runs:
+    using: composite
+    steps:
+        - name: Setup Node
+          uses: actions/setup-node@v7
+          with:
+              node-version: 22
+              cache: npm
+              cache-dependency-path: web/package.json
+
+        - name: Setup uv
+          uses: astral-sh/setup-uv@v7
+          with:
+              enable-cache: true
+
+        - name: Install web dependencies
+          shell: bash
+          run: npm install --no-audit --no-fund
+          working-directory: web
+
+        - name: Install server dependencies
+          shell: bash
+          run: uv sync --locked
+          working-directory: server

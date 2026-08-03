@@ -9,8 +9,14 @@ import urllib.parse
 import urllib.request
 from collections import Counter
 from dataclasses import dataclass
+from itertools import count
 from pathlib import Path
 from typing import Protocol, cast
+
+try:
+    from scripts.pr_comment import upsert_comment
+except ModuleNotFoundError:
+    from pr_comment import upsert_comment
 
 type JsonValue = bool | int | float | str | list[JsonValue] | dict[str, JsonValue] | None
 
@@ -31,7 +37,7 @@ SOURCE_SUPPRESSION_RE = re.compile(
 CONFIG_SUPPRESSION_RE = re.compile(
     rf"(?:\b{SUPPRESSION_KEYS}\b"
     r"|\b(?:noqa|ignore|ignores|exclude)\s*="
-    r"|:\s*[\"']?(?:off|0)[\"']?(?:\s*[,}]|\s*$)"
+    r"|(?<!fetch-depth):\s*[\"']?(?:off|0)[\"']?(?:\s*[,}]|\s*$)"
     r"|\bzizmor\s*:\s*ignore\b|\bactionlint\s*:\s*ignore\b)"
 )
 TOML_SECTION_RE = re.compile(r"^\s*\[([^\]]+)\]\s*$")
@@ -432,20 +438,13 @@ def summary_body(findings: list[Finding], approved: set[str]) -> str:
     return "\n".join(lines)
 
 
-def append_summary(body: str) -> None:
-    path = os.environ.get("GITHUB_STEP_SUMMARY")
-    if path:
-        with Path(path).open("a", encoding="utf-8") as summary:
-            summary.write(body.rstrip() + "\n")
-
-
 def rerun_gate(github: GitHubAPI, number: int) -> None:
     matching: list[dict[str, JsonValue]] = []
-    for page in range(1, 6):
+    for page in count(1):
         runs = json_object(
             github.request(
                 "GET",
-                f"/actions/workflows/suppression-gate.yaml/runs?event=pull_request_target&per_page=100&page={page}",
+                f"/actions/workflows/a.yaml/runs?event=pull_request&per_page=100&page={page}",
             ),
             "workflow runs",
         )
@@ -462,7 +461,7 @@ def rerun_gate(github: GitHubAPI, number: int) -> None:
     if matching:
         latest = max(matching, key=lambda run: optional_string(run.get("created_at")) or "")
         run_id = json_integer(latest["id"], "workflow run id")
-        github.request("POST", f"/actions/runs/{run_id}/rerun")
+        github.request("POST", f"/actions/runs/{run_id}/rerun-failed-jobs")
 
 
 def main() -> int:
@@ -485,7 +484,7 @@ def main() -> int:
     approved, admin = sync_approvals(github, number, pull, findings, command, author)
     active = [finding for finding in findings if finding.finding_id not in approved]
     sync_status_label(github, number, bool(active))
-    append_summary(summary_body(findings, approved))
+    upsert_comment(github, number, "suppression", summary_body(findings, approved))
     if admin:
         rerun_gate(github, number)
     for finding in findings:

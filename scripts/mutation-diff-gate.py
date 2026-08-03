@@ -19,7 +19,7 @@ CLASS_SEPARATOR = "ǁ"
 
 
 def append_step_summary(content: str) -> None:
-    summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
+    summary_path = os.environ.get("MUTATION_SUMMARY_PATH") or os.environ.get("GITHUB_STEP_SUMMARY")
     if summary_path:
         with Path(summary_path).open("a") as summary:
             summary.write(content.rstrip() + "\n")
