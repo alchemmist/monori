@@ -5,7 +5,7 @@ from typing import ClassVar, TypedDict, cast, override
 
 import yaml
 
-WORKFLOW = Path(__file__).parents[1] / ".github/workflows/pr-checks.yaml"
+WORKFLOW = Path(__file__).parents[2] / ".github/workflows/pr-checks.yaml"
 
 
 class WorkflowJob(TypedDict, total=False):
@@ -24,7 +24,7 @@ class PullRequestWorkflowGraphTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.source = WORKFLOW.read_text()
-        cls.workflow = cast(WorkflowDocument, yaml.safe_load(cls.source))
+        cls.workflow = cast("WorkflowDocument", yaml.safe_load(cls.source))
 
     def test_pr_workflow_contains_all_gate_jobs(self) -> None:
         for job in (
@@ -119,7 +119,9 @@ class PullRequestWorkflowGraphTest(unittest.TestCase):
             self.assertIsNotNone(block, job)
             assert block is not None
             self.assertIn("always()", block.group("body"), job)
-            self.assertIn("needs.frontend-performance.result == 'success'", block.group("body"), job)
+            self.assertIn(
+                "needs.frontend-performance.result == 'success'", block.group("body"), job
+            )
 
     def test_complex_gates_use_local_actions(self) -> None:
         expected_actions = {

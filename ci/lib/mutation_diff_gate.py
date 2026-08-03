@@ -57,7 +57,15 @@ def parse_changed_lines(diff: str) -> dict[str, set[int]]:
 
 def changed_lines(base: str) -> dict[str, set[int]]:
     result = subprocess.run(
-        ["git", "diff", "--unified=0", f"{base}...HEAD", "--", "server/app"],
+        [
+            "git",
+            "diff",
+            "--unified=0",
+            f"{base}...HEAD",
+            "--",
+            "server/app",
+            "ci/quality_graph",
+        ],
         check=True,
         capture_output=True,
         text=True,
@@ -126,7 +134,7 @@ def load_meta(path: Path) -> dict[str, int | None]:
     return dict(statuses)
 
 
-def gate_backend(
+def gate_python(
     mutants_dir: Path,
     baseline_dir: Path,
     root: Path,
@@ -137,8 +145,8 @@ def gate_backend(
     line_changes = changed_lines(base)
     functions = changed_functions(root, line_changes)
     if not functions:
-        print("mutation-diff: no changed backend functions — pass")
-        append_step_summary("## Backend mutation diff\n\nNo changed backend functions — **pass**.")
+        print("mutation-diff: no changed Python functions — pass")
+        append_step_summary("## Python mutation diff\n\nNo changed Python functions — **pass**.")
         return 0
 
     killed = survived = other = new_survivors = 0
@@ -146,7 +154,12 @@ def gate_backend(
     no_coverage_keys: list[str] = []
     for meta_path in mutants_dir.rglob("*.py.meta"):
         relative = meta_path.relative_to(mutants_dir)
-        source_path = f"server/{str(relative)[:-5]}"  # remove .meta
+        relative_source = str(relative)[:-5]
+        source_path = (
+            f"server/{relative_source}"
+            if relative_source.startswith("app/")
+            else f"ci/{relative_source}"
+        )
         allowed = functions.get(source_path)
         if not allowed:
             continue
@@ -173,13 +186,13 @@ def gate_backend(
     if considered == 0:
         print("mutation-diff: changed functions have no tested mutants — pass")
         append_step_summary(
-            "## Backend mutation diff\n\nChanged functions have no tested mutants — **pass**."
+            "## Python mutation diff\n\nChanged functions have no tested mutants — **pass**."
         )
         return 0
     score = 100 * killed / considered
     passed = score >= threshold and (skip_new_survivors or new_survivors == 0)
     gate_status = "✅ PASS" if passed else "❌ FAIL"
-    print("── changed backend mutation summary ─────────────────")
+    print("── changed Python mutation summary ─────────────────")
     print(f"killed             {killed}")
     print(f"survived           {survived}")
     print(f"new survivors      {new_survivors}")
@@ -188,7 +201,7 @@ def gate_backend(
     print(f"threshold          {threshold:.0f}%")
     print(f"mutation-diff gate {'PASS' if passed else 'FAIL'}")
     summary = [
-        "## Backend mutation diff",
+        "## Python mutation diff",
         "",
         "| Metric | Value |",
         "| --- | ---: |",
@@ -213,6 +226,9 @@ def gate_backend(
     return 0 if passed else 1
 
 
+gate_backend = gate_python
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--mutants", type=Path, required=True)
@@ -221,7 +237,7 @@ def main() -> int:
     parser.add_argument("--threshold", type=float, required=True)
     parser.add_argument("--skip-new-survivors", action="store_true")
     args = parser.parse_args()
-    return gate_backend(
+    return gate_python(
         args.mutants,
         args.baseline,
         Path.cwd(),

@@ -4,9 +4,9 @@ from typing import ClassVar, cast, override
 
 import yaml
 
-from scripts.test_pr_workflow import WorkflowDocument
+from ci.tests.test_pr_workflow import WorkflowDocument
 
-WORKFLOW = Path(__file__).parents[1] / ".github/workflows/main-checks.yaml"
+WORKFLOW = Path(__file__).parents[2] / ".github/workflows/main-checks.yaml"
 
 
 class MainWorkflowGraphTest(unittest.TestCase):
@@ -17,7 +17,7 @@ class MainWorkflowGraphTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.source = WORKFLOW.read_text()
-        cls.workflow = cast(WorkflowDocument, yaml.safe_load(cls.source))
+        cls.workflow = cast("WorkflowDocument", yaml.safe_load(cls.source))
 
     def test_main_checks_are_individual_jobs(self) -> None:
         self.assertNotIn("matrix:", self.source)

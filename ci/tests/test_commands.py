@@ -2,7 +2,8 @@ import unittest
 from typing import cast, override
 from unittest import mock
 
-from scripts.quality_graph_commands import (
+from ci.lib.json import JsonValue
+from ci.quality_graph.commands import (
     QualityGraphCommand,
     command_targets_gate,
     command_text,
@@ -12,7 +13,6 @@ from scripts.quality_graph_commands import (
     upsert_status,
     validate_command,
 )
-from scripts.quality_graph_commands import JsonValue
 
 
 class FakeGitHub:
@@ -24,9 +24,7 @@ class FakeGitHub:
         if path == "/user":
             return {"login": "github-actions[bot]"}
         if path.endswith("/reactions") and method == "GET":
-            return [
-                {"id": 7, "user": {"login": "github-actions[bot]"}, "content": "eyes"}
-            ]
+            return [{"id": 7, "user": {"login": "github-actions[bot]"}, "content": "eyes"}]
         if path.endswith("/comments?per_page=100&page=1"):
             return [
                 {
@@ -45,17 +43,13 @@ class FakeGitHub:
 
 class QualityGraphCommandTest(unittest.TestCase):
     def test_full_name_and_alias_share_the_same_command(self) -> None:
-        expected = QualityGraphCommand(
-            "ignore", ("object-abc123", "suppression-def456")
-        )
+        expected = QualityGraphCommand("ignore", ("object-abc123", "suppression-def456"))
 
         self.assertEqual(
             parse_command("/quality-graph ignore object-abc123,suppression-def456"),
             expected,
         )
-        self.assertEqual(
-            parse_command("/qg ignore object-abc123,suppression-def456"), expected
-        )
+        self.assertEqual(parse_command("/qg ignore object-abc123,suppression-def456"), expected)
 
     def test_gate_name_targets_all_findings_of_that_type(self) -> None:
         command = parse_command("/qg ignore object,suppression")
@@ -81,9 +75,7 @@ class QualityGraphCommandTest(unittest.TestCase):
         )
 
     def test_command_text_is_canonical(self) -> None:
-        command = QualityGraphCommand(
-            "remove-ignore", ("object-abc123", "suppression-def456")
-        )
+        command = QualityGraphCommand("remove-ignore", ("object-abc123", "suppression-def456"))
 
         self.assertEqual(
             command_text(command), "/qg remove-ignore object-abc123,suppression-def456"
@@ -110,10 +102,8 @@ class QualityGraphCommandTest(unittest.TestCase):
                 "PATCH",
                 "/issues/comments/2",
                 cast(
-                    JsonValue,
-                    {
-                        "body": "<!-- monori-report: quality-graph -->\n\n## Quality Graph status\n"
-                    },
+                    "JsonValue",
+                    {"body": "<!-- monori-report: quality-graph -->\n\n## Quality Graph status\n"},
                 ),
             ),
             github.calls,
@@ -123,9 +113,7 @@ class QualityGraphCommandTest(unittest.TestCase):
     def test_rerun_reads_workflow_runs_from_the_api_response_object(self) -> None:
         class WorkflowGitHub(FakeGitHub):
             @override
-            def request(
-                self, method: str, path: str, payload: JsonValue = None
-            ) -> JsonValue:
+            def request(self, method: str, path: str, payload: JsonValue = None) -> JsonValue:
                 self.calls.append((method, path, payload))
                 if path == "/pulls/42":
                     return {"head": {"sha": "abc", "ref": "feature"}}

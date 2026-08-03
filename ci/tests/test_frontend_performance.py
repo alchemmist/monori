@@ -1,13 +1,13 @@
 import unittest
 from typing import override
 
-from scripts.frontend_perf_gate import (
+from ci.quality_graph.checks.frontend_performance import (
     JsonValue,
     apply_command,
     entry_ids,
     finding_id,
 )
-from scripts.quality_graph_commands import parse_command
+from ci.quality_graph.commands import parse_command
 
 
 class FrontendPerformanceGateTest(unittest.TestCase):
@@ -38,9 +38,7 @@ class FrontendPerformanceGateTest(unittest.TestCase):
     def test_ignore_accepts_only_frontend_ids(self) -> None:
         command = parse_command("/qg ignore frontend-fea774364776,object-abc123")
 
-        self.assertEqual(
-            apply_command(command, self.entries, set()), {"frontend-fea774364776"}
-        )
+        self.assertEqual(apply_command(command, self.entries, set()), {"frontend-fea774364776"})
 
     def test_ignore_all_and_remove_ignore(self) -> None:
         all_command = parse_command("/qg ignore frontend")

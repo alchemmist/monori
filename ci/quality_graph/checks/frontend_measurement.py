@@ -528,9 +528,8 @@ def render_report(
     lines.extend(report_table(entries) if comment else report_sections(entries))
     if comment:
         lines.extend(["", "</details>"])
-    else:
-        if config is not None:
-            lines.extend(["", *render_standards(config)])
+    elif config is not None:
+        lines.extend(["", *render_standards(config)])
     return "\n".join(lines).rstrip() + "\n"
 
 

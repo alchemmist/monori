@@ -27,9 +27,9 @@ def stacknode($name; $all):
   | to_entries
   | map(select(.value.summary.num_statements > 0))
   | map({
-      stack: "backend",
-      module: "app",
-      file: (.key | sub("^app/"; "")),
+      stack: (if (.key | startswith("ci/")) then "ci" else "backend" end),
+      module: (if (.key | startswith("ci/")) then "quality_graph" else "app" end),
+      file: (.key | sub("^(server/)?(app|ci/quality_graph)/"; "")),
       c: .value.summary.covered_lines,
       t: .value.summary.num_statements,
     })) as $bf
@@ -49,6 +49,6 @@ def stacknode($name; $all):
     label: "monori",
     c: ($all | map(.c) | add),
     t: ($all | map(.t) | add),
-    children: [stacknode("backend"; $all), stacknode("frontend"; $all)],
+    children: [stacknode("backend"; $all), stacknode("ci"; $all), stacknode("frontend"; $all)],
   }
 | ([nodelabel] + render(""))[]

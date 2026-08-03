@@ -3,9 +3,10 @@ import io
 import unittest
 from typing import override
 
-from scripts.object_annotation_gate import (
+from ci.quality_graph.checks.object_annotations import (
     Finding,
     JsonValue,
+    ObjectAnnotationCheck,
     added_lines_from_patch,
     changed_lines,
     latest_pull_request_run,
@@ -14,7 +15,8 @@ from scripts.object_annotation_gate import (
     sync_approvals,
     sync_failure_label,
 )
-from scripts.quality_graph_commands import parse_command
+from ci.quality_graph.commands import parse_command
+from ci.quality_graph.models import CheckContext, Verdict
 
 
 class FakeGitHub:
@@ -43,6 +45,18 @@ class FakeGitHub:
 
 
 class ObjectAnnotationGateTest(unittest.TestCase):
+    def test_check_class_collects_typed_result(self) -> None:
+        result = ObjectAnnotationCheck().collect(
+            CheckContext(
+                files={"example.py": "def f(value: object) -> str:\n    return 'x'\n"},
+                changed_lines={"example.py": frozenset({1})},
+            )
+        )
+
+        self.assertEqual(result.verdict, Verdict.FAIL)
+        self.assertEqual(len(result.findings), 1)
+        self.assertIsInstance(result.findings[0], Finding)
+
     def test_finds_direct_and_nested_annotations(self) -> None:
         source = """\
 class Example:
@@ -122,12 +136,8 @@ other: "list[object]"
         self.assertTrue(admin)
         self.assertTrue(changed)
         self.assertEqual(approved, {"finding-1"})
-        self.assertTrue(
-            any(call[0] == "DELETE" and "stale" in call[1] for call in github.calls)
-        )
-        self.assertTrue(
-            any(call[0] == "PATCH" and call[1] == "/pulls/1" for call in github.calls)
-        )
+        self.assertTrue(any(call[0] == "DELETE" and "stale" in call[1] for call in github.calls))
+        self.assertTrue(any(call[0] == "PATCH" and call[1] == "/pulls/1" for call in github.calls))
 
     def test_failure_label_tracks_active_findings(self) -> None:
         github = FakeGitHub()
@@ -135,19 +145,13 @@ other: "list[object]"
         sync_failure_label(github, 1, True)
         sync_failure_label(github, 1, False)
 
-        self.assertIn(
-            ("ensure_label", "monori-object-annotation-failed", None), github.calls
-        )
-        self.assertTrue(
-            any(call[0] == "DELETE" and "failed" in call[1] for call in github.calls)
-        )
+        self.assertIn(("ensure_label", "monori-object-annotation-failed", None), github.calls)
+        self.assertTrue(any(call[0] == "DELETE" and "failed" in call[1] for call in github.calls))
 
     def test_rerun_lookup_paginates_past_first_page(self) -> None:
         class WorkflowRunsGitHub(FakeGitHub):
             @override
-            def request(
-                self, method: str, path: str, payload: JsonValue = None
-            ) -> JsonValue:
+            def request(self, method: str, path: str, payload: JsonValue = None) -> JsonValue:
                 self.calls.append((method, path, payload))
                 if path.endswith("page=1"):
                     return {
@@ -175,12 +179,8 @@ other: "list[object]"
     def test_approval_commands_use_shared_namespace(self) -> None:
         self.assertIsNotNone(parse_command("/qg ignore object-abc123"))
         self.assertIsNotNone(parse_command("/qg ignore-file server/app.py"))
-        self.assertIsNotNone(
-            parse_command("/qg ignore object-abc123,suppression-def456")
-        )
-        self.assertIsNotNone(
-            parse_command("/qg remove-ignore object-abc123,suppression-def456")
-        )
+        self.assertIsNotNone(parse_command("/qg ignore object-abc123,suppression-def456"))
+        self.assertIsNotNone(parse_command("/qg remove-ignore object-abc123,suppression-def456"))
         self.assertEqual(
             parse_command("/qg ignore object"),
             parse_command("/quality-graph ignore object"),

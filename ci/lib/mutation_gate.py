@@ -35,7 +35,7 @@ def main() -> int:
     segfault = int(s.get("segfault", 0))
     interrupted = int(s.get("check_was_interrupted_by_user", 0))
 
-    print("── backend mutation summary ─────────────────────────")
+    print("── Python mutation summary ─────────────────────────")
     print("status        count   included in gate")
     print(f"killed        {killed:5}   yes")
     print(f"survived      {survived:5}   yes")

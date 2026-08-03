@@ -2,15 +2,17 @@
 
 from __future__ import annotations
 
-import re
-from dataclasses import dataclass
 import json
 import os
-import urllib.error
+import re
 import urllib.parse
-import urllib.request
+from collections.abc import Collection
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Collection, Literal, Protocol, cast
+from typing import Literal, Protocol, cast
+
+from ci.lib.github import GitHub
+from ci.lib.json import JsonValue, array_value, object_value, string_value
 
 CommandName = Literal["help", "status", "ignore", "ignore-file", "remove-ignore"]
 COMMAND_RE = re.compile(
@@ -32,7 +34,7 @@ def parse_command(body: str) -> QualityGraphCommand | None:
     match = COMMAND_RE.fullmatch(body.strip())
     if not match:
         return None
-    name = cast(CommandName, match.group(1) or "status")
+    name = cast("CommandName", match.group(1) or "status")
     argument = match.group(2)
     if name in {"help", "status"}:
         return QualityGraphCommand(name) if argument is None else None
@@ -110,68 +112,20 @@ def admin_command_lines(
     return lines
 
 
-type JsonValue = (
-    bool | int | float | str | list[JsonValue] | dict[str, JsonValue] | None
-)
-
-
 def json_object(value: JsonValue, context: str) -> dict[str, JsonValue]:
-    if not isinstance(value, dict):
-        raise RuntimeError(f"Expected object for {context}")
-    return value
+    return object_value(value, context)
 
 
 def json_array(value: JsonValue, context: str) -> list[JsonValue]:
-    if not isinstance(value, list):
-        raise RuntimeError(f"Expected array for {context}")
-    return value
+    return array_value(value, context)
 
 
 def json_string(value: JsonValue, context: str) -> str:
-    if not isinstance(value, str):
-        raise RuntimeError(f"Expected string for {context}")
-    return value
+    return string_value(value, context)
 
 
 class GitHubAPI(Protocol):
-    def request(
-        self, method: str, path: str, payload: JsonValue = None
-    ) -> JsonValue: ...
-
-
-class GitHub:
-    def __init__(self) -> None:
-        self.base = os.environ.get("GITHUB_API_URL", "https://api.github.com")
-        self.repository = os.environ["GITHUB_REPOSITORY"]
-        self.token = os.environ["GITHUB_TOKEN"]
-
-    def request(self, method: str, path: str, payload: JsonValue = None) -> JsonValue:
-        data = None if payload is None else json.dumps(payload).encode()
-        api_path = path if path == "/user" else f"/repos/{self.repository}{path}"
-        request = urllib.request.Request(
-            f"{self.base}{api_path}",
-            data=data,
-            method=method,
-            headers={
-                "Accept": "application/vnd.github+json",
-                "Authorization": f"Bearer {self.token}",
-                "X-GitHub-Api-Version": "2022-11-28",
-                "Content-Type": "application/json",
-            },
-        )
-        try:
-            with urllib.request.urlopen(request, timeout=30) as response:
-                return (
-                    None
-                    if response.status == 204
-                    else cast(JsonValue, json.loads(response.read()))
-                )
-        except urllib.error.HTTPError as error:
-            if error.code == 403 and method in {"POST", "PATCH", "DELETE"}:
-                return None
-            raise RuntimeError(
-                f"GitHub API {method} {path} failed: HTTP {error.code}"
-            ) from error
+    def request(self, method: str, path: str, payload: JsonValue = None) -> JsonValue: ...
 
 
 def bot_login(github: GitHubAPI) -> str:
@@ -192,12 +146,8 @@ def set_comment_reaction(github: GitHubAPI, comment_id: int, content: str) -> No
         user = json_object(reaction.get("user", {}), "reaction user")
         reaction_id = reaction.get("id")
         if user.get("login") == login and isinstance(reaction_id, int):
-            github.request(
-                "DELETE", f"/issues/comments/{comment_id}/reactions/{reaction_id}"
-            )
-    github.request(
-        "POST", f"/issues/comments/{comment_id}/reactions", {"content": content}
-    )
+            github.request("DELETE", f"/issues/comments/{comment_id}/reactions/{reaction_id}")
+    github.request("POST", f"/issues/comments/{comment_id}/reactions", {"content": content})
 
 
 def upsert_status(github: GitHubAPI, number: int, body: str) -> None:
@@ -206,25 +156,18 @@ def upsert_status(github: GitHubAPI, number: int, body: str) -> None:
     login = bot_login(github)
     for page in range(1, 101):
         comments = json_array(
-            github.request(
-                "GET", f"/issues/{number}/comments?per_page=100&page={page}"
-            ),
+            github.request("GET", f"/issues/{number}/comments?per_page=100&page={page}"),
             "pull request comments",
         )
         for item in comments:
             comment = json_object(item, "pull request comment")
             author = json_object(comment.get("user", {}), "comment author")
-            if (
-                marker not in str(comment.get("body", ""))
-                or author.get("login") != login
-            ):
+            if marker not in str(comment.get("body", "")) or author.get("login") != login:
                 continue
             comment_id = comment.get("id")
             if not isinstance(comment_id, int):
                 raise RuntimeError("Quality Graph comment has no numeric id")
-            github.request(
-                "PATCH", f"/issues/comments/{comment_id}", {"body": rendered}
-            )
+            github.request("PATCH", f"/issues/comments/{comment_id}", {"body": rendered})
             return
         if len(comments) < 100:
             break
@@ -236,8 +179,7 @@ def is_admin(github: GitHubAPI, login: str) -> bool:
     permission = github.request("GET", f"/collaborators/{encoded}/permission")
     return (
         permission is not None
-        and json_object(permission, "collaborator permission").get("permission")
-        == "admin"
+        and json_object(permission, "collaborator permission").get("permission") == "admin"
     )
 
 
@@ -280,7 +222,7 @@ def help_body() -> str:
 
 def main() -> int:
     event = cast(
-        dict[str, JsonValue],
+        "dict[str, JsonValue]",
         json.loads(Path(os.environ["GITHUB_EVENT_PATH"]).read_text()),
     )
     comment = json_object(event.get("comment", {}), "event comment")
@@ -314,9 +256,7 @@ def main() -> int:
     if validation_error is not None:
         set_comment_reaction(github, comment_id, "eyes")
         if number is not None:
-            upsert_status(
-                github, number, command_result(command, "❌", validation_error)
-            )
+            upsert_status(github, number, command_result(command, "❌", validation_error))
         set_comment_reaction(github, comment_id, "-1")
         return 0
     set_comment_reaction(github, comment_id, "eyes")
@@ -357,9 +297,7 @@ def main() -> int:
     set_comment_reaction(github, comment_id, "hooray")
     pull = json_object(github.request("GET", f"/pulls/{number}"), "pull request")
     body = (
-        json_string(pull.get("body"), "pull request body")
-        if pull.get("body") is not None
-        else ""
+        json_string(pull.get("body"), "pull request body") if pull.get("body") is not None else ""
     )
     markers = {
         "bundle": "monori-bundle-size-pending",

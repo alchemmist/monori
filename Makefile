@@ -16,13 +16,13 @@ WEBBIN := web/node_modules/.bin
         fmt fmt-check \
         lint lint-web lint-css lint-html lint-server lint-no-comments lint-sql lint-yaml lint-md lint-docs lint-actions lint-docker lint-shell spell \
         type type-front type-back analyze analyze-python-dead-code analyze-javascript-dead-code audit audit-deps audit-deps-py audit-secrets \
-        test t-fast t-medium t-slow t-slow-ui t-front t-back t-e2e t-e2e-ui coverage perf-front-diff mutation mutation-diff m-front m-front-diff m-front-file m-back m-back-diff \
+        test t-fast t-medium t-ci t-slow t-slow-ui t-front t-back t-e2e t-e2e-ui coverage perf-front-diff mutation mutation-diff mutation-python m-front m-front-diff m-front-file m-back m-back-diff \
         schema-diagram check
 
 install:
 	cd web && npm install --no-audit --no-fund
 	cd tools/frontend-perf && npm install --no-audit --no-fund
-	cd server && uv sync --locked
+	uv sync --locked --all-packages
 	$(MAKE) tools
 
 setup: install
@@ -94,13 +94,13 @@ clean:
 	for path in \
 		.coverage coverage.json htmlcov coverage \
 		.stryker-tmp reports .mutmut-cache mutants \
-		.issue197 server/static web/dist web/test-results web/playwright-report; do \
+		.issue197 server/static ci/coverage.json web/dist web/test-results web/playwright-report; do \
 		remove_path "$$path"; \
 	done
 	find . \
 		-path './.git' -prune -o \
 		-path './web/node_modules' -prune -o \
-		-path './server/.venv' -prune -o \
+		-path './.venv' -prune -o \
 		-path './deploy/data' -prune -o \
 		-path './.worktrees' -prune -o \
 		-path './.claude/worktrees' -prune -o \
@@ -114,16 +114,16 @@ schema-diagram:
 
 fmt: schema-diagram
 	$(WEBBIN)/prettier --write .
-	@(uv run --locked --project server ruff check --config server/pyproject.toml server --fix >/dev/null 2>&1 || true)
-	uv run --locked --project server ruff format --config server/pyproject.toml server
+	@(uv run --locked ruff check server ci --fix >/dev/null 2>&1 || true)
+	uv run --locked ruff format server ci
 	$(SQLFLUFF) fix .
 	@-$(WEBBIN)/markdownlint-cli2 --fix >/dev/null 2>&1
 	@files=$$(git ls-files '*.sh'); [ -z "$$files" ] || shfmt -w $$files
 
 fmt-check:
 	$(WEBBIN)/prettier --check .
-	uv run --locked --project server ruff check --config server/pyproject.toml server
-	uv run --locked --project server ruff format --config server/pyproject.toml --check server
+	uv run --locked ruff check server ci
+	uv run --locked ruff format --check server ci
 	$(SQLFLUFF) lint .
 
 lint: lint-web lint-css lint-html lint-server lint-sql lint-yaml lint-md lint-docs lint-actions lint-docker lint-shell spell
@@ -139,10 +139,11 @@ lint-html:
 	$(WEBBIN)/htmlhint web/index.html
 
 lint-server: lint-no-comments
-	uv run --locked --project server ruff check --config server/pyproject.toml server
+	uv run --locked ruff check server ci
 
 lint-no-comments:
-	python3 scripts/no_comments.py server
+	python3 -m ci.lib.no_comments server
+	python3 -m ci.lib.no_comments ci
 
 lint-sql:
 	$(SQLFLUFF) lint .
@@ -167,7 +168,7 @@ lint-shell:
 	@files=$$(git ls-files '*.sh'); [ -z "$$files" ] || shfmt -d $$files
 
 spell:
-	uvx codespell web/src server/app server/tests \
+	uvx codespell web/src server/app server/tests ci \
 		README.md web/README.md docs Makefile .github
 
 type: type-back type-front
@@ -178,16 +179,16 @@ type-front:
 	cd web && ./node_modules/.bin/eslint "src/**/*.{ts,tsx}" "e2e/**/*.ts" "*.config.ts" stryker.conf.ts
 
 type-back:
-	MYPYPATH=server uv run --locked --project server --extra connectors mypy --config-file server/pyproject.toml .
+	MYPYPATH=server uv run --locked --package monori-server --extra connectors mypy server/app ci
 
 analyze:
-	cd server && uv run --locked bandit -c pyproject.toml -q -r app
+	uv run --locked bandit -q -r server/app ci
 	semgrep --error --quiet --config p/python --config p/javascript \
 		--exclude-rule python.lang.security.insecure-hash-algorithms.insecure-hash-algorithm-sha1 .
 	$(MAKE) analyze-python-dead-code analyze-javascript-dead-code
 
 analyze-python-dead-code:
-	cd server && uv run --locked vulture
+	uv run --locked vulture
 
 analyze-javascript-dead-code:
 	cd web && ./node_modules/.bin/knip --no-progress
@@ -197,14 +198,14 @@ audit: audit-deps audit-deps-py audit-secrets
 audit-deps:
 	cd web && npm install --no-audit --no-fund --silent
 	(cd web && npm audit --audit-level=high --json) | \
-		uv run --locked --project server python scripts/npm-audit-gate.py
+		uv run --locked python -m ci.lib.npm_audit_gate
 	cd tools/frontend-perf && npm install --no-audit --no-fund --silent
 	(cd tools/frontend-perf && npm audit --audit-level=high --json) | \
-		uv run --locked --project server python scripts/npm-audit-gate.py
+		uv run --locked python -m ci.lib.npm_audit_gate
 
 audit-deps-py:
 	@req=$$(mktemp); \
-	( cd server && uv export --no-dev --no-hashes --format requirements-txt -o "$$req" \
+	( uv export --package monori-server --no-dev --no-hashes --format requirements-txt -o "$$req" \
 		&& uv run --locked pip-audit -r "$$req" ); code=$$?; \
 	rm -f "$$req"; exit $$code
 
@@ -215,11 +216,15 @@ test: t-front t-back t-e2e
 
 t-fast:
 	cd web && npx vitest run --exclude "src/**/*.test.tsx"
-	cd server && uv run --locked pytest -q -m "not integration"
+	$(MAKE) t-ci
+	uv run --locked pytest -q server/tests -m "not integration"
 
 t-medium:
 	cd web && npx vitest run --exclude "src/**/*.test.ts"
-	cd server && uv run pytest -q -m integration
+	uv run --locked pytest -q server/tests -m integration
+
+t-ci:
+	uv run --locked pytest -q ci/tests
 
 t-slow: t-e2e
 
@@ -229,7 +234,7 @@ t-front:
 	cd web && npx vitest run
 
 t-back:
-	cd server && uv run --locked pytest -q
+	uv run --locked pytest -q server/tests
 
 t-e2e:
 	COMPOSE="$(COMPOSE)" bash scripts/e2e.sh
@@ -277,50 +282,52 @@ m-front-diff:
 m-back:
 	@set +e; \
 	thr=$(MUTATION_THRESHOLD); \
-	( cd server && mkdir -p mutants && uv run mutmut run --max-children $(MUTATION_JOBS) 2>mutants/mutmut-stderr.log ); mutmut=$$?; \
-	( cd server && mkdir -p mutants && uv run mutmut export-cicd-stats ); export=$$?; \
+	( mkdir -p mutants && uv run --locked mutmut run --max-children $(MUTATION_JOBS) 2>mutants/mutmut-stderr.log ); mutmut=$$?; \
+	( mkdir -p mutants && uv run --locked mutmut export-cicd-stats ); export=$$?; \
 	if [ $$export -eq 0 ]; then \
-		python3 scripts/mutation-gate.py server/mutants/mutmut-cicd-stats.json $$thr; srv=$$?; \
+		python3 -m ci.lib.mutation_gate mutants/mutmut-cicd-stats.json $$thr; srv=$$?; \
 	else \
 		srv=$$export; \
 	fi; \
-	if [ -s server/mutants/mutmut-stderr.log ]; then echo "── mutmut diagnostics: server/mutants/mutmut-stderr.log ──"; fi; \
-	echo "── backend mutation gate (threshold $$thr%, workers $(MUTATION_JOBS)): mutmut run exit=$$mutmut, mutmut gate exit=$$srv ──"; \
+	if [ -s mutants/mutmut-stderr.log ]; then echo "── mutmut diagnostics: mutants/mutmut-stderr.log ──"; fi; \
+	echo "── Python mutation gate (threshold $$thr%, workers $(MUTATION_JOBS)): mutmut run exit=$$mutmut, mutmut gate exit=$$srv ──"; \
 	if [ $$mutmut -ne 0 ] || [ $$srv -ne 0 ]; then exit 1; fi
+
+mutation-python: m-back
 
 m-back-diff:
 	@set +e; \
 	git rev-parse --verify --quiet "$(BASE)" >/dev/null || { echo "mutation-diff: BASE='$(BASE)' is not a valid revision"; exit 1; }; \
-	if git diff --quiet "$(BASE)...HEAD" -- server/app; then \
-		echo "mutation-diff: no changed backend files — pass"; exit 0; \
+	if git diff --quiet "$(BASE)...HEAD" -- server/app ci/quality_graph; then \
+		echo "mutation-diff: no changed Python files — pass"; exit 0; \
 	fi; \
-	paths=$$(git diff --diff-filter=ACMR --name-only "$(BASE)...HEAD" -- server/app | sed -e 's#^server/##' -e 's#\.py$$##' -e 's#/#.#g' -e 's#$$#.*#' | paste -sd' ' -); \
+	paths=$$(git diff --diff-filter=ACMR --name-only "$(BASE)...HEAD" -- server/app ci/quality_graph | sed -e 's#^server/##' -e 's#^ci/##' -e 's#\.py$$##' -e 's#/#.#g' -e 's#$$#.*#' | paste -sd' ' -); \
 	if [ -z "$$paths" ]; then \
-		echo "mutation-diff: no changed backend source files — pass"; exit 0; \
+		echo "mutation-diff: no changed Python source files — pass"; exit 0; \
 	fi; \
 	set -- $$paths; \
 	baseline=$$(mktemp -d); trap 'rm -rf "$$baseline"' EXIT; \
-	cold_start=0; if [ -d server/mutants ]; then cp -a server/mutants "$$baseline/mutants"; else mkdir -p "$$baseline/mutants"; cold_start=1; fi; \
-	( cd server && mkdir -p mutants && uv run mutmut run --max-children $(MUTATION_JOBS) "$$@" 2>mutants/mutmut-stderr.log ); mutmut=$$?; \
-	args="--mutants server/mutants --baseline $$baseline/mutants --base $(BASE) --threshold $(MUTATION_DIFF_THRESHOLD)"; \
+	cold_start=0; if [ -d mutants ]; then cp -a mutants "$$baseline/mutants"; else mkdir -p "$$baseline/mutants"; cold_start=1; fi; \
+	( mkdir -p mutants && uv run --locked mutmut run --max-children $(MUTATION_JOBS) "$$@" 2>mutants/mutmut-stderr.log ); mutmut=$$?; \
+	args="--mutants mutants --baseline $$baseline/mutants --base $(BASE) --threshold $(MUTATION_DIFF_THRESHOLD)"; \
 	if [ $$cold_start -eq 1 ]; then args="$$args --skip-new-survivors"; fi; \
-	python3 scripts/mutation-diff-gate.py $$args; gate=$$?; \
-	if [ -s server/mutants/mutmut-stderr.log ]; then echo "── mutmut diagnostics: server/mutants/mutmut-stderr.log ──"; fi; \
-	echo "── backend diff mutation gate (threshold $(MUTATION_DIFF_THRESHOLD)%, workers $(MUTATION_JOBS)): mutmut run exit=$$mutmut, gate exit=$$gate ──"; \
+	python3 -m ci.lib.mutation_diff_gate $$args; gate=$$?; \
+	if [ -s mutants/mutmut-stderr.log ]; then echo "── mutmut diagnostics: mutants/mutmut-stderr.log ──"; fi; \
+	echo "── Python diff mutation gate (threshold $(MUTATION_DIFF_THRESHOLD)%, workers $(MUTATION_JOBS)): mutmut run exit=$$mutmut, gate exit=$$gate ──"; \
 	if [ $$mutmut -ne 0 ] || [ $$gate -ne 0 ]; then exit 1; fi
 
 mutation-diff:
 	@set +e; \
 	$(MAKE) BASE="$(BASE)" MUTATION_DIFF_THRESHOLD=$(MUTATION_DIFF_THRESHOLD) m-front-diff; front=$$?; \
 	$(MAKE) BASE="$(BASE)" MUTATION_DIFF_THRESHOLD=$(MUTATION_DIFF_THRESHOLD) m-back-diff; back=$$?; \
-	echo "── diff mutation gates: frontend exit=$$front, backend exit=$$back ──"; \
+	echo "── diff mutation gates: frontend exit=$$front, Python exit=$$back ──"; \
 	if [ $$front -ne 0 ] || [ $$back -ne 0 ]; then exit 1; fi
 
 mutation:
 	@set +e; \
 	$(MAKE) MUTATION_THRESHOLD=$(MUTATION_THRESHOLD) m-front; front=$$?; \
 	$(MAKE) MUTATION_THRESHOLD=$(MUTATION_THRESHOLD) m-back; back=$$?; \
-	echo "── mutation gates: frontend exit=$$front, backend exit=$$back ──"; \
+	echo "── mutation gates: frontend exit=$$front, Python exit=$$back ──"; \
 	if [ $$front -ne 0 ] || [ $$back -ne 0 ]; then exit 1; fi
 
 check: fmt-check lint type analyze t-fast

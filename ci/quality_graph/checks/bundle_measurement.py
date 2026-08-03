@@ -71,7 +71,9 @@ def compare(base: Snapshot, current: Snapshot) -> dict[str, JsonValue]:
     def total(names: list[str]) -> int:
         return sum(current["assets"].get(name, {"gzip": 0})["gzip"] for name in names)
 
-    def metric(metric_id: str, label: str, base_bytes: int, current_bytes: int) -> dict[str, JsonValue]:
+    def metric(
+        metric_id: str, label: str, base_bytes: int, current_bytes: int
+    ) -> dict[str, JsonValue]:
         delta = current_bytes - base_bytes
         percent = (delta / base_bytes * 100) if base_bytes else (100.0 if delta else 0.0)
         return {
@@ -108,10 +110,13 @@ def compare(base: Snapshot, current: Snapshot) -> dict[str, JsonValue]:
         if current_assets[name] > base_assets.get(name, 0)
     ]
     growth.sort(key=lambda item: int(item["delta"]), reverse=True)
-    verdict = max((str(entry["tier"]) for entry in entries), key=("none", "info", "significant", "critical").index)
+    verdict = max(
+        (str(entry["tier"]) for entry in entries),
+        key=("none", "info", "significant", "critical").index,
+    )
     return {
-        "entries": cast(JsonValue, entries),
-        "assetGrowth": cast(JsonValue, growth[:10]),
+        "entries": cast("JsonValue", entries),
+        "assetGrowth": cast("JsonValue", growth[:10]),
         "verdict": verdict,
     }
 
@@ -130,7 +135,7 @@ def main() -> int:
     compare_parser.add_argument("--head-sha", required=True)
     args = parser.parse_args()
     if args.command == "measure":
-        result: JsonValue = cast(JsonValue, snapshot(args.dist))
+        result: JsonValue = cast("JsonValue", snapshot(args.dist))
     else:
         comparison = compare(
             json.loads(args.base.read_text()), json.loads(args.current.read_text())
@@ -140,7 +145,7 @@ def main() -> int:
         result = comparison
     args.output.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n")
     if args.command == "compare":
-        comparison = cast(dict[str, JsonValue], result)
+        comparison = cast("dict[str, JsonValue]", result)
         return 1 if comparison["verdict"] == "critical" else 0
     return 0
 

@@ -11,16 +11,14 @@ import urllib.request
 from pathlib import Path
 from typing import cast
 
-from scripts.quality_graph_commands import (
+from ci.quality_graph.commands import (
     QualityGraphCommand,
     admin_command_lines,
     parse_command,
     validate_command,
 )
 
-type JsonValue = (
-    None | bool | int | float | str | list[JsonValue] | dict[str, JsonValue]
-)
+type JsonValue = None | bool | int | float | str | list[JsonValue] | dict[str, JsonValue]
 
 STATUS_LABEL = "monori-bundle-size-failed"
 STATE_RE = re.compile(r"<!-- monori-bundle-size-approvals: ([a-z0-9,-]*) -->")
@@ -67,9 +65,7 @@ def apply_command(
         return approved
     if name == "ignore" and "bundle" in arguments:
         return approved | ids
-    selected = (
-        ids if name == "ignore" and "bundle" in arguments else set(arguments)
-    ) & ids
+    selected = (ids if name == "ignore" and "bundle" in arguments else set(arguments)) & ids
     return approved - selected if name == "remove-ignore" else approved | selected
 
 
@@ -95,24 +91,20 @@ class GitHub:
                 return (
                     None
                     if response.status == 204
-                    else cast(JsonValue, json.loads(response.read()))
+                    else cast("JsonValue", json.loads(response.read()))
                 )
         except urllib.error.HTTPError as error:
             if error.code == 403 and method in {"POST", "PATCH", "DELETE"}:
                 return None
             if error.code == 404 and method in {"GET", "DELETE"}:
                 return None
-            raise RuntimeError(
-                f"GitHub API {method} {path} failed: HTTP {error.code}"
-            ) from error
+            raise RuntimeError(f"GitHub API {method} {path} failed: HTTP {error.code}") from error
 
     def sync_label(self, number: int, failed: bool) -> None:
         encoded = urllib.parse.quote(STATUS_LABEL, safe="")
         if failed:
             if self.request("GET", f"/labels/{encoded}") is None:
-                self.request(
-                    "POST", "/labels", {"name": STATUS_LABEL, "color": "b60205"}
-                )
+                self.request("POST", "/labels", {"name": STATUS_LABEL, "color": "b60205"})
             self.request("POST", f"/issues/{number}/labels", {"labels": [STATUS_LABEL]})
         else:
             self.request("DELETE", f"/issues/{number}/labels/{encoded}")
@@ -122,26 +114,20 @@ def command_from_pending(github: GitHub, body: str) -> QualityGraphCommand | Non
     match = PENDING_RE.search(body)
     if not match:
         return None
-    comment = obj(
-        github.request("GET", f"/issues/comments/{match.group(1)}"), "comment"
-    )
+    comment = obj(github.request("GET", f"/issues/comments/{match.group(1)}"), "comment")
     command = parse_command(string(comment.get("body"), "comment body").strip())
     if command and validate_command(command) is not None:
         command = None
     user = obj(comment.get("user", {}), "comment user")
     login = string(user.get("login"), "comment login")
     permission = obj(
-        github.request(
-            "GET", f"/collaborators/{urllib.parse.quote(login, safe='')}/permission"
-        ),
+        github.request("GET", f"/collaborators/{urllib.parse.quote(login, safe='')}/permission"),
         "permission",
     )
     return command if permission.get("permission") == "admin" else None
 
 
-def append_commands(
-    summary: str, entries: list[dict[str, JsonValue]], approved: set[str]
-) -> str:
+def append_commands(summary: str, entries: list[dict[str, JsonValue]], approved: set[str]) -> str:
     finding_ids = {
         string(entry.get("id"), "finding id")
         for entry in entries
@@ -154,9 +140,7 @@ def append_commands(
     for entry in entries:
         finding = string(entry.get("id"), "finding id")
         marker = "✔" if finding in approved else "✗"
-        lines.append(
-            f"- {marker} `{string(entry.get('label'), 'finding label')}` · `{finding}`"
-        )
+        lines.append(f"- {marker} `{string(entry.get('label'), 'finding label')}` · `{finding}`")
     return summary.rstrip() + "\n" + "\n".join(lines) + "\n\n</details>\n"
 
 
@@ -184,8 +168,7 @@ def render_summary(report: dict[str, JsonValue], failed: bool) -> str:
             f"{string(entry.get('tier'), 'tier')} |"
         )
     growth = [
-        obj(item, "asset growth")
-        for item in array(report.get("assetGrowth"), "asset growth")
+        obj(item, "asset growth") for item in array(report.get("assetGrowth"), "asset growth")
     ]
     lines.extend(["", "<details><summary>Largest asset increases</summary>", ""])
     if growth:
@@ -202,7 +185,7 @@ def render_summary(report: dict[str, JsonValue], failed: bool) -> str:
 def main() -> int:
     github = GitHub()
     report_path = Path(os.environ["REPORT_PATH"])
-    report = obj(cast(JsonValue, json.loads(report_path.read_text())), "report")
+    report = obj(cast("JsonValue", json.loads(report_path.read_text())), "report")
     entries = [obj(item, "entry") for item in array(report.get("entries"), "entries")]
     number = int(json_number(report.get("prNumber"), "pull request number"))
     pull = obj(github.request("GET", f"/pulls/{number}"), "pull request")
@@ -220,19 +203,15 @@ def main() -> int:
         body = PENDING_RE.sub("", body).rstrip()
         marker = f"<!-- monori-bundle-size-approvals: {','.join(sorted(approved))} -->"
         body = (
-            STATE_RE.sub(marker, body)
-            if STATE_RE.search(body)
-            else f"{body}\n\n{marker}".strip()
+            STATE_RE.sub(marker, body) if STATE_RE.search(body) else f"{body}\n\n{marker}".strip()
         )
         github.request("PATCH", f"/pulls/{number}", {"body": body})
     failed = report.get("verdict") == "critical" and ids != approved
-    report["approvedFindings"] = cast(JsonValue, sorted(approved))
+    report["approvedFindings"] = cast("JsonValue", sorted(approved))
     report["verdict"] = "critical" if failed else "none"
     report_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
     summary_path = Path(os.environ["SUMMARY_PATH"])
-    summary_path.write_text(
-        append_commands(render_summary(report, failed), entries, approved)
-    )
+    summary_path.write_text(append_commands(render_summary(report, failed), entries, approved))
     github.sync_label(number, failed)
     return 1 if failed else 0
 

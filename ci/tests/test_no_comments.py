@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from scripts.no_comments import main, violations
+from ci.lib.no_comments import main, violations
 
 
 class NoCommentsTest(unittest.TestCase):

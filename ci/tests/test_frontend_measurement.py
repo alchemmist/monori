@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from scripts.frontend_perf import (
+from ci.quality_graph.checks.frontend_measurement import (
     COMMENT_MARKER,
     Entry,
     JsonValue,

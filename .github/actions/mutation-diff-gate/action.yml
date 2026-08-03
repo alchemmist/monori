@@ -1,5 +1,5 @@
 name: Mutation diff gate
-description: Run frontend and backend mutation checks for the pull request diff
+description: Run frontend and Python mutation checks for the pull request diff
 runs:
     using: composite
     steps:
@@ -34,8 +34,7 @@ runs:
           working-directory: web
         - name: Install server deps
           shell: bash
-          run: uv sync --locked
-          working-directory: server
+          run: uv sync --locked --all-packages
         - name: Restore Stryker cache
           uses: actions/cache@v4
           with:
@@ -46,7 +45,7 @@ runs:
                   mutation-stryker-${{ runner.os }}-${{ hashFiles('web/package-lock.json') }}-main-
         - name: Test diff mutation gate
           shell: bash
-          run: env -u GITHUB_STEP_SUMMARY python3 -m unittest scripts/test_mutation_diff_gate.py
+          run: env -u GITHUB_STEP_SUMMARY python3 -m unittest ci.tests.test_mutation_diff_gate
         - name: Run frontend diff mutation tests
           id: mutation-front
           continue-on-error: true
@@ -68,7 +67,7 @@ runs:
               if [ ! -s "$MUTATION_SUMMARY_PATH" ]; then
                 printf '%s\n' '## Mutation testing' '' 'No mutation report was produced.' > "$MUTATION_SUMMARY_PATH"
               fi
-              python -m scripts.pr_comment \
+              python -m ci.lib.comments \
                 --marker mutation \
                 --body-file "$MUTATION_SUMMARY_PATH" \
                 --pr-number "$PR_NUMBER"

@@ -28,7 +28,7 @@ runs:
           working-directory: tools/frontend-perf
         - name: Test performance comparator
           shell: bash
-          run: python -m unittest scripts.test_frontend_perf scripts.test_frontend_perf_gate
+          run: python -m unittest ci.tests.test_frontend_measurement ci.tests.test_frontend_performance
         - name: Compare PR with merge base
           id: performance
           shell: bash
@@ -55,7 +55,7 @@ runs:
               SUMMARY_PATH: ${{ runner.temp }}/frontend-performance/summary.md
           run: |
               set +e
-              python -m scripts.frontend_perf_gate
+              python -m ci.quality_graph.checks.frontend_performance
               code=$?
               echo "exit_code=$code" >> "$GITHUB_OUTPUT"
               exit 0
@@ -72,7 +72,7 @@ runs:
               if [ ! -f "$PERF_OUTPUT_DIR/summary.md" ]; then
                 printf '%s\n' '## ❌ Frontend performance measurement did not produce a report' > "$PERF_OUTPUT_DIR/summary.md"
               fi
-              python -m scripts.pr_comment \
+              python -m ci.lib.comments \
                 --marker frontend-performance \
                 --body-file "$PERF_OUTPUT_DIR/summary.md" \
                 --pr-number "$PR_NUMBER"

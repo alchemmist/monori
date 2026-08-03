@@ -10,16 +10,14 @@ import urllib.request
 from pathlib import Path
 from typing import cast
 
-from scripts.quality_graph_commands import (
+from ci.quality_graph.commands import (
     QualityGraphCommand,
     admin_command_lines,
     parse_command,
     validate_command,
 )
 
-type JsonValue = (
-    None | bool | int | float | str | list[JsonValue] | dict[str, JsonValue]
-)
+type JsonValue = None | bool | int | float | str | list[JsonValue] | dict[str, JsonValue]
 
 STATUS_LABEL = "monori-frontend-performance-failed"
 FINDING_ID_PREFIX = "frontend-"
@@ -89,16 +87,14 @@ class GitHub:
                 return (
                     None
                     if response.status == 204
-                    else cast(JsonValue, json.loads(response.read()))
+                    else cast("JsonValue", json.loads(response.read()))
                 )
         except urllib.error.HTTPError as error:
             if error.code == 403 and method in {"POST", "PATCH", "DELETE"}:
                 return None
             if error.code == 404 and method in {"GET", "DELETE"}:
                 return None
-            raise RuntimeError(
-                f"GitHub API {method} {path} failed: HTTP {error.code}"
-            ) from error
+            raise RuntimeError(f"GitHub API {method} {path} failed: HTTP {error.code}") from error
 
     def ensure_label(self, name: str) -> None:
         encoded = urllib.parse.quote(name, safe="")
@@ -128,12 +124,8 @@ def state_from_body(body: str) -> set[str]:
     return set(match.group(1).split(",")) if match and match.group(1) else set()
 
 
-def update_body_state(
-    github: GitHub, number: int, body: str, approved: set[str]
-) -> str:
-    marker = (
-        f"<!-- monori-frontend-performance-approvals: {','.join(sorted(approved))} -->"
-    )
+def update_body_state(github: GitHub, number: int, body: str, approved: set[str]) -> str:
+    marker = f"<!-- monori-frontend-performance-approvals: {','.join(sorted(approved))} -->"
     updated = STATE_RE.sub(marker, body)
     if updated == body:
         updated = f"{body.rstrip()}\n\n{marker}" if body.strip() else marker
@@ -146,9 +138,7 @@ def command_from_pending(github: GitHub, body: str) -> QualityGraphCommand | Non
     match = PENDING_RE.search(body)
     if not match:
         return None
-    comment = json_object(
-        github.request("GET", f"/issues/comments/{match.group(1)}"), "comment"
-    )
+    comment = json_object(github.request("GET", f"/issues/comments/{match.group(1)}"), "comment")
     command = parse_command((optional_string(comment.get("body")) or "").strip())
     if command and validate_command(command) is not None:
         command = None
@@ -178,16 +168,12 @@ def apply_command(
     selected = (
         ids
         if name == "ignore" and "frontend" in arguments
-        else {
-            argument for argument in arguments if argument.startswith(FINDING_ID_PREFIX)
-        }
+        else {argument for argument in arguments if argument.startswith(FINDING_ID_PREFIX)}
     ) & ids
     return approved - selected if name == "remove-ignore" else approved | selected
 
 
-def append_commands(
-    text: str, entries: list[dict[str, JsonValue]], approved: set[str]
-) -> str:
+def append_commands(text: str, entries: list[dict[str, JsonValue]], approved: set[str]) -> str:
     lines = ["", "<details><summary>For repository administrators</summary>", ""]
     lines.extend(
         admin_command_lines(
@@ -215,10 +201,9 @@ def append_commands(
 def main() -> int:
     github = GitHub()
     report_path = Path(os.environ["REPORT_PATH"])
-    report = json_object(cast(JsonValue, json.loads(report_path.read_text())), "report")
+    report = json_object(cast("JsonValue", json.loads(report_path.read_text())), "report")
     entries = [
-        json_object(item, "report entry")
-        for item in json_array(report.get("entries"), "entries")
+        json_object(item, "report entry") for item in json_array(report.get("entries"), "entries")
     ]
     number = json_integer(report.get("prNumber"), "pull request number")
     pull = json_object(github.request("GET", f"/pulls/{number}"), "pull request")
@@ -235,14 +220,13 @@ def main() -> int:
     active = {
         finding_id(entry)
         for entry in entries
-        if entry.get("tier") in {"critical", "error"}
-        and finding_id(entry) not in approved
+        if entry.get("tier") in {"critical", "error"} and finding_id(entry) not in approved
     }
     failed = bool(active) or original_verdict == "error"
     effective_verdict = original_verdict if failed else "none"
     report["verdict"] = effective_verdict
     report["commentRequired"] = failed
-    report["approvedFindings"] = cast(JsonValue, sorted(approved))
+    report["approvedFindings"] = cast("JsonValue", sorted(approved))
     report_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
 
     summary_path = Path(os.environ["SUMMARY_PATH"])

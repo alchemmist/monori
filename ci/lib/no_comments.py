@@ -6,7 +6,6 @@ import sys
 import tokenize
 from pathlib import Path
 
-
 ALLOWED_COMMENT = re.compile(r"^#\s*(?:noqa|nosec|type:\s*(?:ignore|noqa))\b", re.IGNORECASE)
 
 

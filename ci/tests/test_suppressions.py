@@ -1,14 +1,16 @@
 import unittest
 
-from scripts.suppression_gate import (
+from ci.quality_graph.checks.suppressions import (
     Finding,
     JsonValue,
+    SuppressionCheck,
     added_lines_from_patch,
     scan_file,
     summary_body,
     sync_approvals,
 )
-from scripts.quality_graph_commands import parse_command
+from ci.quality_graph.commands import parse_command
+from ci.quality_graph.models import CheckContext, Verdict
 
 
 class FakeGitHub:
@@ -37,6 +39,17 @@ class FakeGitHub:
 
 
 class SuppressionGateTest(unittest.TestCase):
+    def test_check_class_collects_typed_result(self) -> None:
+        result = SuppressionCheck().collect(
+            CheckContext(
+                files={"example.py": "value = 1  # noqa\n"},
+                changed_lines={"example.py": frozenset({1})},
+            )
+        )
+
+        self.assertEqual(result.verdict, Verdict.FAIL)
+        self.assertEqual(len(result.findings), 1)
+
     def test_finds_backend_and_frontend_suppressions_on_added_lines(self) -> None:
         source = """\
 value = 1  # noqa: E501
@@ -62,9 +75,7 @@ value = 2
         self.assertEqual(len(findings), 1)
 
     def test_does_not_treat_numeric_workflow_settings_as_suppressions(self) -> None:
-        self.assertEqual(
-            scan_file(".github/workflows/ci.yml", "fetch-depth: 0\n", {1}), []
-        )
+        self.assertEqual(scan_file(".github/workflows/ci.yml", "fetch-depth: 0\n", {1}), [])
 
     def test_finds_entry_added_to_existing_toml_suppression_section(self) -> None:
         source = """\
@@ -93,9 +104,7 @@ value = 2
 
         self.assertTrue(admin)
         self.assertEqual(approved, {"finding-1"})
-        self.assertTrue(
-            any(call[0] == "DELETE" and "stale" in call[1] for call in github.calls)
-        )
+        self.assertTrue(any(call[0] == "DELETE" and "stale" in call[1] for call in github.calls))
         self.assertTrue(
             any(call[0] == "PATCH" and call[1] == "/pulls/334" for call in github.calls)
         )
@@ -147,19 +156,11 @@ value = 2
     def test_commands_are_shared_between_gates(self) -> None:
         self.assertIsNotNone(parse_command("/qg ignore suppression-abc123"))
         self.assertIsNotNone(parse_command("/qg ignore-file server/app.py"))
-        self.assertIsNotNone(
-            parse_command("/qg ignore object-abc123,suppression-def456")
-        )
-        self.assertIsNotNone(
-            parse_command("/qg ignore-file server/app.py,web/eslint.config.mjs")
-        )
-        self.assertIsNotNone(
-            parse_command("/qg remove-ignore object-abc123,suppression-def456")
-        )
+        self.assertIsNotNone(parse_command("/qg ignore object-abc123,suppression-def456"))
+        self.assertIsNotNone(parse_command("/qg ignore-file server/app.py,web/eslint.config.mjs"))
+        self.assertIsNotNone(parse_command("/qg remove-ignore object-abc123,suppression-def456"))
         self.assertIsNone(parse_command("/qg ignore all"))
-        self.assertIsNone(
-            parse_command("/qg ignore suppression-abc123,,suppression-def456")
-        )
+        self.assertIsNone(parse_command("/qg ignore suppression-abc123,,suppression-def456"))
 
     def test_summary_has_collapsed_admin_commands_and_no_comment_marker(self) -> None:
         finding = scan_file("example.py", "value = 1  # noqa\n", {1})[0]

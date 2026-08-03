@@ -40,5 +40,5 @@ runs:
         - name: Install server dependencies
           if: inputs.install-server == 'true'
           shell: bash
-          run: uv sync --locked
-          working-directory: server
+          run: uv sync --locked --all-packages
+          working-directory: .

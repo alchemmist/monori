@@ -1,16 +1,10 @@
-import importlib.util
 import json
 import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
 
-SPEC = importlib.util.spec_from_file_location(
-    "mutation_diff_gate", Path(__file__).with_name("mutation-diff-gate.py")
-)
-assert SPEC and SPEC.loader
-module = importlib.util.module_from_spec(SPEC)
-SPEC.loader.exec_module(module)
+from ci.lib import mutation_diff_gate as module
 
 
 class MutationDiffGateTest(unittest.TestCase):

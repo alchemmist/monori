@@ -46,7 +46,7 @@ jobs:
             - name: Install workflow test dependencies
               run: python -m pip install pyyaml types-PyYAML
             - name: Validate PR workflow graph
-              run: python -m unittest scripts.test_pr_workflow scripts.test_main_workflow
+              run: python -m unittest ci.tests.test_pr_workflow ci.tests.test_main_workflow
 
     fmt-check:
         name: Format check

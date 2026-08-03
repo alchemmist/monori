@@ -1,7 +1,7 @@
 import unittest
 from typing import TypedDict, cast
 
-from scripts.bundle_size import Snapshot, compare, normalized_asset, tier
+from ci.quality_graph.checks.bundle_measurement import Snapshot, compare, normalized_asset, tier
 
 
 class BundleEntry(TypedDict):
@@ -29,10 +29,10 @@ class BundleSizeTest(unittest.TestCase):
             "initial": ["assets/index-abcdefgh.js"],
             "assets": {"assets/index-abcdefgh.js": {"size": 110, "gzip": 110_000}},
         }
-        result = compare(cast(Snapshot, base), cast(Snapshot, current))
+        result = compare(cast("Snapshot", base), cast("Snapshot", current))
         self.assertEqual(result["verdict"], "critical")
-        entries = cast(list[BundleEntry], result["entries"])
-        growth = cast(list[AssetGrowth], result["assetGrowth"])
+        entries = cast("list[BundleEntry]", result["entries"])
+        growth = cast("list[AssetGrowth]", result["assetGrowth"])
         self.assertEqual(entries[0]["id"], "bundle-initial-load")
         self.assertEqual(growth[0]["delta"], 10_000)
 
