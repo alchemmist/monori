@@ -299,7 +299,7 @@ jobs:
             - uses: ./.github/actions/bundle-size-gate
 
     frontend-performance-scope:
-        name: Frontend performance scope
+        name: Frontend performance needed?
         needs: build
         if: github.event_name == 'pull_request' && needs.build.result == 'success'
         permissions:
@@ -319,7 +319,7 @@ jobs:
               uses: ./.github/actions/frontend-performance-scope
 
     frontend-performance:
-        name: Frontend performance
+        name: Run frontend performance
         needs: frontend-performance-scope
         if: github.event_name == 'pull_request' && needs.frontend-performance-scope.result == 'success' && needs.frontend-performance-scope.outputs.relevant == 'true'
         permissions:
@@ -338,7 +338,7 @@ jobs:
             - uses: ./.github/actions/frontend-performance-gate
 
     frontend-performance-skipped:
-        name: Frontend performance skipped
+        name: Skip frontend performance
         needs: frontend-performance-scope
         if: github.event_name == 'pull_request' && needs.frontend-performance-scope.result == 'success' && needs.frontend-performance-scope.outputs.relevant == 'false'
         runs-on: ubuntu-latest

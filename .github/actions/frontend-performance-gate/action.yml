@@ -63,6 +63,7 @@ runs:
               GITHUB_REPOSITORY: ${{ github.repository }}
               PR_NUMBER: ${{ github.event.pull_request.number }}
           run: |
+              mkdir -p "$PERF_OUTPUT_DIR"
               if [ ! -f "$PERF_OUTPUT_DIR/summary.md" ]; then
                 printf '%s\n' '## ❌ Frontend performance measurement did not produce a report' > "$PERF_OUTPUT_DIR/summary.md"
               fi
