@@ -1,4 +1,4 @@
-name: PR checks
+name: Quality Graph
 
 on:
     issue_comment:
@@ -165,8 +165,8 @@ jobs:
                   install-web: true
                   install-server: true
             - name: Install Playwright browsers
-              run: uv run playwright install --with-deps chromium
-              working-directory: server
+              run: npx playwright install --with-deps chromium
+              working-directory: web
             - run: make t-slow
 
     build:
