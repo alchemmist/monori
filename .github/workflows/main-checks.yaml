@@ -33,7 +33,7 @@ jobs:
                   - `/qg status` — show command status
                   - `/qg help` — show this reference
 
-                  `/quality-graph` is an alias for `/qg`. Old `/ignore` commands are not supported.
+                  `/quality-graph` is an alias for `/qg`.
                   EOF
             - name: Checkout
               uses: actions/checkout@v7
