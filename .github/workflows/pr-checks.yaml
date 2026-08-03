@@ -91,8 +91,8 @@ jobs:
 
     type:
         name: Type check
-        needs: object-annotations
-        if: github.event_name == 'pull_request' && needs.object-annotations.result == 'success'
+        needs: [lint, object-annotations]
+        if: github.event_name == 'pull_request' && needs.lint.result == 'success' && needs.object-annotations.result == 'success'
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@v7
@@ -138,8 +138,8 @@ jobs:
 
     test-medium:
         name: Medium tests
-        needs: test-fast
-        if: github.event_name == 'pull_request' && needs.test-fast.result == 'success'
+        needs: analyze
+        if: github.event_name == 'pull_request' && needs.analyze.result == 'success'
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@v7
@@ -153,8 +153,8 @@ jobs:
 
     test-slow:
         name: Slow tests
-        needs: test-medium
-        if: github.event_name == 'pull_request' && needs.test-medium.result == 'success'
+        needs: [test-fast, test-medium]
+        if: github.event_name == 'pull_request' && needs.test-fast.result == 'success' && needs.test-medium.result == 'success'
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@v7
@@ -185,8 +185,8 @@ jobs:
 
     coverage:
         name: Coverage
-        needs: build
-        if: github.event_name == 'pull_request' && needs.build.result == 'success'
+        needs: test-slow
+        if: github.event_name == 'pull_request' && needs.test-slow.result == 'success'
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@v7
@@ -200,8 +200,14 @@ jobs:
 
     audit-deps:
         name: Dependency audit
-        needs: coverage
-        if: github.event_name == 'pull_request' && needs.coverage.result == 'success'
+        needs: [coverage, mutation, bundle-size, frontend-performance, frontend-performance-skipped]
+        if: >-
+            always()
+            && needs.coverage.result == 'success'
+            && needs.mutation.result == 'success'
+            && needs.bundle-size.result == 'success'
+            && (needs.frontend-performance.result == 'success' || needs.frontend-performance.result == 'skipped')
+            && (needs.frontend-performance-skipped.result == 'success' || needs.frontend-performance-skipped.result == 'skipped')
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@v7
@@ -215,8 +221,14 @@ jobs:
 
     audit-deps-py:
         name: Python dependency audit
-        needs: audit-deps
-        if: github.event_name == 'pull_request' && needs.audit-deps.result == 'success'
+        needs: [coverage, mutation, bundle-size, frontend-performance, frontend-performance-skipped]
+        if: >-
+            always()
+            && needs.coverage.result == 'success'
+            && needs.mutation.result == 'success'
+            && needs.bundle-size.result == 'success'
+            && (needs.frontend-performance.result == 'success' || needs.frontend-performance.result == 'skipped')
+            && (needs.frontend-performance-skipped.result == 'success' || needs.frontend-performance-skipped.result == 'skipped')
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@v7
@@ -229,8 +241,14 @@ jobs:
 
     secrets:
         name: Secret scan
-        needs: audit-deps-py
-        if: github.event_name == 'pull_request' && needs.audit-deps-py.result == 'success'
+        needs: [coverage, mutation, bundle-size, frontend-performance, frontend-performance-skipped]
+        if: >-
+            always()
+            && needs.coverage.result == 'success'
+            && needs.mutation.result == 'success'
+            && needs.bundle-size.result == 'success'
+            && (needs.frontend-performance.result == 'success' || needs.frontend-performance.result == 'skipped')
+            && (needs.frontend-performance-skipped.result == 'success' || needs.frontend-performance-skipped.result == 'skipped')
         runs-on: ubuntu-latest
         steps:
             - name: Checkout
@@ -245,8 +263,8 @@ jobs:
 
     mutation:
         name: Mutation testing
-        needs: secrets
-        if: github.event_name == 'pull_request' && needs.secrets.result == 'success'
+        needs: test-slow
+        if: github.event_name == 'pull_request' && needs.test-slow.result == 'success'
         permissions:
             issues: write
             pull-requests: write
@@ -263,8 +281,8 @@ jobs:
 
     bundle-size:
         name: Frontend bundle size
-        needs: secrets
-        if: github.event_name == 'pull_request' && needs.secrets.result == 'success'
+        needs: build
+        if: github.event_name == 'pull_request' && needs.build.result == 'success'
         permissions:
             actions: write
             contents: read
@@ -282,8 +300,8 @@ jobs:
 
     frontend-performance-scope:
         name: Frontend performance scope
-        needs: secrets
-        if: github.event_name == 'pull_request' && needs.secrets.result == 'success'
+        needs: build
+        if: github.event_name == 'pull_request' && needs.build.result == 'success'
         permissions:
             actions: write
             contents: read
@@ -302,8 +320,8 @@ jobs:
 
     frontend-performance:
         name: Frontend performance
-        needs: [secrets, frontend-performance-scope]
-        if: github.event_name == 'pull_request' && needs.secrets.result == 'success' && needs.frontend-performance-scope.result == 'success' && needs.frontend-performance-scope.outputs.relevant == 'true'
+        needs: frontend-performance-scope
+        if: github.event_name == 'pull_request' && needs.frontend-performance-scope.result == 'success' && needs.frontend-performance-scope.outputs.relevant == 'true'
         permissions:
             actions: write
             contents: read
@@ -329,8 +347,8 @@ jobs:
 
     object-annotations:
         name: Python object annotation gate
-        needs: lint
-        if: github.event_name == 'pull_request' && needs.lint.result == 'success'
+        needs: suppressions
+        if: github.event_name == 'pull_request' && needs.suppressions.result == 'success'
         runs-on: ubuntu-latest
         timeout-minutes: 10
         permissions:

@@ -61,15 +61,28 @@ class PullRequestWorkflowGraphTest(unittest.TestCase):
             "fmt-check": "workflow-graph",
             "suppressions": "fmt-check",
             "lint": "suppressions",
-            "object-annotations": "lint",
-            "type": "object-annotations",
-            "coverage": "build",
+            "object-annotations": "suppressions",
+            "type": {"lint", "object-annotations"},
+            "analyze": "type",
+            "test-fast": "analyze",
+            "test-medium": "analyze",
+            "test-slow": "test-fast",
+            "coverage": "test-slow",
+            "mutation": "test-slow",
+            "build": "test-slow",
+            "bundle-size": "build",
+            "frontend-performance-scope": "build",
+            "frontend-performance": "frontend-performance-scope",
+            "frontend-performance-skipped": "frontend-performance-scope",
         }
         for job, dependency in expected.items():
             data = jobs[job]
             needs = data.get("needs", [])
             needs = [needs] if isinstance(needs, str) else needs
-            self.assertIn(dependency, needs, job)
+            if isinstance(dependency, set):
+                self.assertEqual(set(needs), dependency, job)
+            else:
+                self.assertIn(dependency, needs, job)
 
         dependencies: dict[str, list[str]] = {}
         for job, data in jobs.items():
@@ -95,8 +108,18 @@ class PullRequestWorkflowGraphTest(unittest.TestCase):
         for job in jobs:
             visit(job)
 
-    def test_expensive_checks_start_after_secret_scan(self) -> None:
-        for job in ("mutation", "bundle-size", "frontend-performance-scope"):
+    def test_final_audits_converge_after_all_expensive_checks(self) -> None:
+        jobs = self.workflow["jobs"]
+        expected_dependencies = {
+            "audit-deps": {"coverage", "mutation", "bundle-size", "frontend-performance", "frontend-performance-skipped"},
+            "audit-deps-py": {"coverage", "mutation", "bundle-size", "frontend-performance", "frontend-performance-skipped"},
+            "secrets": {"coverage", "mutation", "bundle-size", "frontend-performance", "frontend-performance-skipped"},
+        }
+        for job, expected in expected_dependencies.items():
+            needs = jobs[job].get("needs", [])
+            actual = {needs} if isinstance(needs, str) else set(needs)
+            self.assertEqual(actual, expected, job)
+
             block = re.search(
                 rf"^    {re.escape(job)}:\n(?P<body>.*?)(?=^    \S|\Z)",
                 self.source,
@@ -104,10 +127,7 @@ class PullRequestWorkflowGraphTest(unittest.TestCase):
             )
             self.assertIsNotNone(block, job)
             assert block is not None
-            self.assertRegex(
-                block.group("body"), r"needs: secrets(?:\n|$)|needs: \[secrets,", job
-            )
-            self.assertIn("needs.secrets.result == 'success'", block.group("body"), job)
+            self.assertIn("always()", block.group("body"), job)
 
     def test_complex_gates_use_local_actions(self) -> None:
         expected_actions = {
