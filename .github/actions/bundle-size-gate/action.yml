@@ -14,6 +14,11 @@ runs:
           shell: bash
           run: npm install --global npm@10.9.2
 
+        - name: Setup Python
+          uses: actions/setup-python@v6
+          with:
+              python-version: "3.12"
+
         - name: Test bundle tools
           shell: bash
           run: python -m unittest scripts.test_bundle_size
@@ -68,6 +73,7 @@ runs:
               GITHUB_REPOSITORY: ${{ github.repository }}
               PR_NUMBER: ${{ github.event.pull_request.number }}
           run: |
+              mkdir -p "$RUNNER_TEMP/bundle-size"
               if [ ! -f "$RUNNER_TEMP/bundle-size/summary.md" ]; then
                 printf '%s\n' '## ❌ Bundle size measurement failed' > "$RUNNER_TEMP/bundle-size/summary.md"
               fi

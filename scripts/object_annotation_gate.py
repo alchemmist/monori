@@ -127,6 +127,8 @@ class GitHub:
                     return None
                 return decode_json(response.read())
         except urllib.error.HTTPError as error:
+            if error.code == 403 and method in {"POST", "PATCH", "DELETE"}:
+                return None
             if method in {"GET", "DELETE"} and error.code == 404:
                 return None
             raise GitHubAPIError(method, path, error.code) from error

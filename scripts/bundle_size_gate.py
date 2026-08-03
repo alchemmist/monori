@@ -91,6 +91,8 @@ class GitHub:
             with urllib.request.urlopen(request, timeout=30) as response:
                 return None if response.status == 204 else cast(JsonValue, json.loads(response.read()))
         except urllib.error.HTTPError as error:
+            if error.code == 403 and method in {"POST", "PATCH", "DELETE"}:
+                return None
             if error.code == 404 and method in {"GET", "DELETE"}:
                 return None
             raise RuntimeError(f"GitHub API {method} {path} failed: HTTP {error.code}") from error

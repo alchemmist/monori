@@ -6,7 +6,7 @@ name: Deploy
 
 on:
     workflow_run:
-        workflows: [Main checks]
+        workflows: [Main-branch checks]
         types: [completed]
         branches: [main]
     workflow_dispatch:

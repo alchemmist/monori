@@ -67,7 +67,7 @@ class PullRequestWorkflowGraphTest(unittest.TestCase):
             "analyze": {"lint", "type"},
             "test-fast": "analyze",
             "test-medium": "analyze",
-            "test-slow": "test-fast",
+            "test-slow": {"test-fast", "test-medium"},
             "coverage": "test-slow",
             "mutation": "test-slow",
             "build": "test-slow",
@@ -80,10 +80,8 @@ class PullRequestWorkflowGraphTest(unittest.TestCase):
             data = jobs[job]
             needs = data.get("needs", [])
             needs = [needs] if isinstance(needs, str) else needs
-            if isinstance(dependency, set):
-                self.assertEqual(set(needs), dependency, job)
-            else:
-                self.assertIn(dependency, needs, job)
+            expected_needs = dependency if isinstance(dependency, set) else {dependency}
+            self.assertEqual(set(needs), expected_needs, job)
 
         dependencies: dict[str, list[str]] = {}
         for job, data in jobs.items():
@@ -112,9 +110,9 @@ class PullRequestWorkflowGraphTest(unittest.TestCase):
     def test_final_audits_converge_after_all_expensive_checks(self) -> None:
         jobs = self.workflow["jobs"]
         expected_dependencies = {
-            "audit-deps": {"coverage", "mutation", "bundle-size", "frontend-performance", "frontend-performance-skipped"},
-            "audit-deps-py": {"coverage", "mutation", "bundle-size", "frontend-performance", "frontend-performance-skipped"},
-            "secrets": {"coverage", "mutation", "bundle-size", "frontend-performance", "frontend-performance-skipped"},
+            "audit-deps": {"coverage", "mutation", "bundle-size", "frontend-performance-scope", "frontend-performance", "frontend-performance-skipped"},
+            "audit-deps-py": {"coverage", "mutation", "bundle-size", "frontend-performance-scope", "frontend-performance", "frontend-performance-skipped"},
+            "secrets": {"coverage", "mutation", "bundle-size", "frontend-performance-scope", "frontend-performance", "frontend-performance-skipped"},
         }
         for job, expected in expected_dependencies.items():
             needs = jobs[job].get("needs", [])
@@ -129,6 +127,12 @@ class PullRequestWorkflowGraphTest(unittest.TestCase):
             self.assertIsNotNone(block, job)
             assert block is not None
             self.assertIn("always()", block.group("body"), job)
+            self.assertIn("needs.frontend-performance-scope.result == 'success'", block.group("body"), job)
+            self.assertIn(
+                "needs.frontend-performance.result == 'success' || needs.frontend-performance-skipped.result == 'success'",
+                block.group("body"),
+                job,
+            )
 
     def test_complex_gates_use_local_actions(self) -> None:
         expected_actions = {

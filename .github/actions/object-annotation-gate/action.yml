@@ -1,5 +1,9 @@
 name: Python object annotation gate
 description: Check changed Python annotations and publish the gate report
+inputs:
+    github-token:
+        description: GitHub token used to publish the gate report
+        required: true
 runs:
     using: composite
     steps:
@@ -12,4 +16,6 @@ runs:
           run: python -m unittest discover -s scripts -p 'test_object_annotation_gate.py'
         - name: Check Python annotations
           shell: bash
+          env:
+              GITHUB_TOKEN: ${{ inputs.github-token }}
           run: python -m scripts.object_annotation_gate

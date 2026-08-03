@@ -164,6 +164,11 @@ jobs:
               with:
                   install-web: true
                   install-server: true
+            - name: Restore Playwright browser cache
+              uses: actions/cache@v4
+              with:
+                  path: ~/.cache/ms-playwright
+                  key: playwright-${{ runner.os }}-${{ hashFiles('web/package-lock.json') }}
             - name: Install Playwright browsers
               run: npx playwright install --with-deps chromium
               working-directory: web
@@ -200,14 +205,22 @@ jobs:
 
     audit-deps:
         name: Dependency audit
-        needs: [coverage, mutation, bundle-size, frontend-performance, frontend-performance-skipped]
+        needs:
+            [
+                coverage,
+                mutation,
+                bundle-size,
+                frontend-performance-scope,
+                frontend-performance,
+                frontend-performance-skipped,
+            ]
         if: >-
             always()
             && needs.coverage.result == 'success'
             && needs.mutation.result == 'success'
             && needs.bundle-size.result == 'success'
-            && (needs.frontend-performance.result == 'success' || needs.frontend-performance.result == 'skipped')
-            && (needs.frontend-performance-skipped.result == 'success' || needs.frontend-performance-skipped.result == 'skipped')
+            && needs.frontend-performance-scope.result == 'success'
+            && (needs.frontend-performance.result == 'success' || needs.frontend-performance-skipped.result == 'success')
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@v7
@@ -221,14 +234,22 @@ jobs:
 
     audit-deps-py:
         name: Python dependency audit
-        needs: [coverage, mutation, bundle-size, frontend-performance, frontend-performance-skipped]
+        needs:
+            [
+                coverage,
+                mutation,
+                bundle-size,
+                frontend-performance-scope,
+                frontend-performance,
+                frontend-performance-skipped,
+            ]
         if: >-
             always()
             && needs.coverage.result == 'success'
             && needs.mutation.result == 'success'
             && needs.bundle-size.result == 'success'
-            && (needs.frontend-performance.result == 'success' || needs.frontend-performance.result == 'skipped')
-            && (needs.frontend-performance-skipped.result == 'success' || needs.frontend-performance-skipped.result == 'skipped')
+            && needs.frontend-performance-scope.result == 'success'
+            && (needs.frontend-performance.result == 'success' || needs.frontend-performance-skipped.result == 'success')
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@v7
@@ -241,14 +262,22 @@ jobs:
 
     secrets:
         name: Secret scan
-        needs: [coverage, mutation, bundle-size, frontend-performance, frontend-performance-skipped]
+        needs:
+            [
+                coverage,
+                mutation,
+                bundle-size,
+                frontend-performance-scope,
+                frontend-performance,
+                frontend-performance-skipped,
+            ]
         if: >-
             always()
             && needs.coverage.result == 'success'
             && needs.mutation.result == 'success'
             && needs.bundle-size.result == 'success'
-            && (needs.frontend-performance.result == 'success' || needs.frontend-performance.result == 'skipped')
-            && (needs.frontend-performance-skipped.result == 'success' || needs.frontend-performance-skipped.result == 'skipped')
+            && needs.frontend-performance-scope.result == 'success'
+            && (needs.frontend-performance.result == 'success' || needs.frontend-performance-skipped.result == 'success')
         runs-on: ubuntu-latest
         steps:
             - name: Checkout
@@ -303,7 +332,6 @@ jobs:
         needs: build
         if: github.event_name == 'pull_request' && needs.build.result == 'success'
         permissions:
-            actions: write
             contents: read
             issues: write
             pull-requests: write
@@ -352,7 +380,6 @@ jobs:
         runs-on: ubuntu-latest
         timeout-minutes: 10
         permissions:
-            actions: write
             contents: read
             issues: write
             pull-requests: write
@@ -362,8 +389,8 @@ jobs:
               with:
                   persist-credentials: false
             - uses: ./.github/actions/object-annotation-gate
-              env:
-                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              with:
+                  github-token: ${{ secrets.GITHUB_TOKEN }}
 
     suppressions:
         name: Lint suppression gate
@@ -372,7 +399,6 @@ jobs:
         runs-on: ubuntu-latest
         timeout-minutes: 10
         permissions:
-            actions: write
             contents: read
             issues: write
             pull-requests: write
@@ -382,8 +408,8 @@ jobs:
               with:
                   persist-credentials: false
             - uses: ./.github/actions/suppression-gate
-              env:
-                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              with:
+                  github-token: ${{ secrets.GITHUB_TOKEN }}
 
     admin-command:
         name: Process CI approval command

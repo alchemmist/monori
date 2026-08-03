@@ -34,7 +34,7 @@ runs:
           working-directory: web
         - name: Install server deps
           shell: bash
-          run: uv sync
+          run: uv sync --locked
           working-directory: server
         - name: Restore Stryker cache
           uses: actions/cache@v4
@@ -44,12 +44,6 @@ runs:
               restore-keys: |
                   mutation-stryker-${{ runner.os }}-${{ hashFiles('web/package-lock.json') }}-pr-${{ github.event.pull_request.number }}-
                   mutation-stryker-${{ runner.os }}-${{ hashFiles('web/package-lock.json') }}-main-
-        - name: Restore mutmut cache
-          uses: actions/cache/restore@v4
-          with:
-              path: server/mutants
-              key: mutation-mutmut-${{ runner.os }}-${{ hashFiles('server/pyproject.toml') }}-main-
-              restore-keys: mutation-mutmut-${{ runner.os }}-${{ hashFiles('server/pyproject.toml') }}-main-
         - name: Test diff mutation gate
           shell: bash
           run: env -u GITHUB_STEP_SUMMARY python3 -m unittest scripts/test_mutation_diff_gate.py

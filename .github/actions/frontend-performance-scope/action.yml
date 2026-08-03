@@ -22,10 +22,28 @@ runs:
                     pull_number: context.payload.pull_request.number,
                     per_page: 100,
                   });
+                  const relevantPrefixes = [
+                    "web/",
+                    "tools/frontend-perf/",
+                    ".github/actions/frontend-performance",
+                  ];
+                  const relevantPaths = new Set([
+                    "deploy/docker-compose.test.yml",
+                    "deploy/Dockerfile.front",
+                    "deploy/nginx.conf",
+                    ".dockerignore",
+                    "scripts/frontend-perf.sh",
+                    "scripts/frontend_perf.py",
+                    "scripts/test_frontend_perf.py",
+                    ".github/workflows/pr-checks.yaml",
+                  ]);
                   const relevant = files.some((file) => {
                     const path = file.filename;
-                    if (path.startsWith("web/") || path.startsWith("tools/frontend-perf/") || path === "deploy/docker-compose.test.yml" || path === "deploy/Dockerfile.front" || path === "deploy/nginx.conf" || path === ".dockerignore" || path === "scripts/frontend-perf.sh" || path === "scripts/frontend_perf.py" || path === "scripts/test_frontend_perf.py" || path === ".github/workflows/pr-checks.yaml") return true;
-                    return path === "Makefile" && /(perf-front|PERF_|frontend)/i.test(file.patch || "");
+                    if (relevantPrefixes.some((prefix) => path.startsWith(prefix))) return true;
+                    if (relevantPaths.has(path)) return true;
+                    if (path !== "Makefile") return false;
+                    if (file.patch === undefined) return true;
+                    return /(perf-front|PERF_|frontend)/i.test(file.patch);
                   });
                   core.setOutput("relevant", relevant ? "true" : "false");
         - name: Publish performance scope report

@@ -88,5 +88,10 @@ runs:
           if: always()
           shell: bash
           env:
-              GATE_EXIT: ${{ steps.approvals.outputs.exit_code || steps.performance.outputs.exit_code }}
-          run: exit "${GATE_EXIT:-2}"
+              PERFORMANCE_EXIT: ${{ steps.performance.outputs.exit_code }}
+              APPROVAL_EXIT: ${{ steps.approvals.outputs.exit_code }}
+          run: |
+              if [ -n "$PERFORMANCE_EXIT" ] && [ "$PERFORMANCE_EXIT" -ne 0 ]; then
+                exit "$PERFORMANCE_EXIT"
+              fi
+              exit "${APPROVAL_EXIT:-2}"
