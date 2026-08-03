@@ -15,7 +15,7 @@ permissions:
     contents: read
 
 concurrency:
-    group: ci-${{ github.event.pull_request.number || github.event.issue.number || github.ref }}
+    group: ci-${{ github.event_name }}-${{ github.event.pull_request.number || github.event.issue.number || github.ref }}
     cancel-in-progress: true
 
 jobs:
