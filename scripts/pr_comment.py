@@ -86,17 +86,14 @@ def comment_body(marker: str, body: str) -> str:
 
 def upsert_comment(github: GitHubAPI, number: int, marker: str, body: str) -> None:
     rendered = comment_body(marker, body)
-    viewer = json_object(github.request("GET", "/user"), "authenticated user")
-    viewer_login = viewer.get("login")
-    if not isinstance(viewer_login, str):
-        raise TypeError("Authenticated user has no login")
+    workflow_bot_login = os.environ.get("GITHUB_ACTIONS_BOT_LOGIN", "github-actions[bot]")
     for comment in comments(github, number):
         comment_body_value = comment.get("body")
         author = json_object(comment.get("user", {}), "comment author").get("login")
         if (
             not isinstance(comment_body_value, str)
             or f"<!-- monori-report: {marker} -->" not in comment_body_value
-            or author != viewer_login
+            or author != workflow_bot_login
         ):
             continue
         comment_id = comment.get("id")

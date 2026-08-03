@@ -10,8 +10,6 @@ class FakeGitHub:
 
     def request(self, method: str, path: str, payload: JsonValue = None) -> JsonValue:
         self.calls.append((method, path, payload))
-        if path == "/user":
-            return {"login": "monori-bot"}
         if path.startswith("/issues/1/comments"):
             return self.items
         return None
@@ -35,7 +33,7 @@ class PullRequestCommentTest(unittest.TestCase):
                 {
                     "id": 8,
                     "body": "<!-- monori-report: bundle-size -->\nold",
-                    "user": {"login": "monori-bot"},
+                    "user": {"login": "github-actions[bot]"},
                 },
             ]
         )
