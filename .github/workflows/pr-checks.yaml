@@ -1,0 +1,447 @@
+name: Quality Graph
+
+on:
+    issue_comment:
+        types: [created]
+    pull_request:
+        branches: [main]
+
+permissions:
+    contents: read
+
+concurrency:
+    group: ci-${{ github.event_name }}-${{ github.event.pull_request.number || github.event.issue.number || github.ref }}
+    cancel-in-progress: true
+
+jobs:
+    workflow-graph:
+        name: Workflow graph validation
+        if: github.event_name == 'pull_request'
+        runs-on: ubuntu-latest
+        steps:
+            - name: Quality Graph command reference
+              run: |
+                  cat >> "$GITHUB_STEP_SUMMARY" <<'EOF'
+                  ## Quality Graph commands
+
+                  Repository administrators can use these commands in a pull-request comment:
+
+                  - `/qg ignore <type>-<finding-id>[,<type>-<finding-id>...]` — ignore selected findings
+                  - `/qg ignore <type>[,<type>...]` — ignore all current findings of selected types
+                  - `/qg ignore-file path/to/file[,path/to/file...]` — ignore findings in selected files
+                  - `/qg remove-ignore <type>-<finding-id>[,<type>-<finding-id>...]` — remove selected ignores
+                  - `/qg status` — show command status
+                  - `/qg help` — show this reference
+
+                  `/quality-graph` is an alias for `/qg`.
+                  EOF
+            - name: Checkout
+              uses: actions/checkout@v7
+              with:
+                  persist-credentials: false
+            - name: Setup Python
+              uses: actions/setup-python@v6
+              with:
+                  python-version: "3.12"
+            - name: Install workflow test dependencies
+              run: python -m pip install pyyaml types-PyYAML
+            - name: Validate PR workflow graph
+              run: python -m unittest scripts.test_pr_workflow scripts.test_main_workflow
+
+    fmt-check:
+        name: Format check
+        needs: workflow-graph
+        if: github.event_name == 'pull_request' && needs.workflow-graph.result == 'success'
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v7
+              with:
+                  persist-credentials: false
+            - uses: ./.github/actions/setup-project
+              with:
+                  install-web: true
+                  install-server: true
+            - run: make fmt-check
+
+    lint:
+        name: Lint
+        needs: suppressions
+        if: github.event_name == 'pull_request' && needs.suppressions.result == 'success'
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v7
+              with:
+                  persist-credentials: false
+            - uses: ./.github/actions/setup-project
+              with:
+                  install-web: true
+                  install-server: true
+            - name: Install external linters
+              env:
+                  HADOLINT_VERSION: "2.12.0"
+                  HADOLINT_SHA256: "56de6d5e5ec427e17b74fa48d51271c7fc0d61244bf5c90e828aab8362d55010"
+                  ACTIONLINT_VERSION: "1.7.7"
+                  SHFMT_VERSION: "3.10.0"
+              run: |
+                  set -euo pipefail
+                  sudo apt-get update
+                  sudo apt-get install -y shellcheck
+
+                  shfmt_bin="shfmt_v${SHFMT_VERSION}_linux_amd64"
+                  curl -sSfL "https://github.com/mvdan/sh/releases/download/v${SHFMT_VERSION}/${shfmt_bin}" -o "${shfmt_bin}"
+                  curl -sSfL "https://github.com/mvdan/sh/releases/download/v${SHFMT_VERSION}/sha256sums.txt" -o shfmt_sha256sums.txt
+                  grep " ${shfmt_bin}\$" shfmt_sha256sums.txt | sha256sum -c -
+                  sudo install -m 0755 "${shfmt_bin}" /usr/local/bin/shfmt
+
+                  curl -sSfL "https://github.com/hadolint/hadolint/releases/download/v${HADOLINT_VERSION}/hadolint-Linux-x86_64" -o hadolint
+                  echo "${HADOLINT_SHA256}  hadolint" | sha256sum -c -
+                  sudo install -m 0755 hadolint /usr/local/bin/hadolint
+
+                  tarball="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+                  curl -sSfL "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/${tarball}" -o "${tarball}"
+                  curl -sSfL "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_checksums.txt" -o actionlint_checksums.txt
+                  grep " ${tarball}\$" actionlint_checksums.txt | sha256sum -c -
+                  tar -xzf "${tarball}" actionlint
+                  sudo install -m 0755 actionlint /usr/local/bin/actionlint
+            - run: make lint
+
+    type:
+        name: Type check
+        needs: object-annotations
+        if: github.event_name == 'pull_request' && needs.object-annotations.result == 'success'
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v7
+              with:
+                  persist-credentials: false
+            - uses: ./.github/actions/setup-project
+              with:
+                  install-web: true
+                  install-server: true
+            - run: make type
+
+    analyze:
+        name: Static analysis
+        needs: [lint, type]
+        if: github.event_name == 'pull_request' && needs.lint.result == 'success' && needs.type.result == 'success'
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v7
+              with:
+                  persist-credentials: false
+            - uses: ./.github/actions/setup-project
+              with:
+                  install-web: true
+                  install-server: true
+            - name: Install semgrep
+              run: python -m pip install semgrep
+            - run: make analyze
+
+    test-fast:
+        name: Fast tests
+        needs: analyze
+        if: github.event_name == 'pull_request' && needs.analyze.result == 'success'
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v7
+              with:
+                  persist-credentials: false
+            - uses: ./.github/actions/setup-project
+              with:
+                  install-web: true
+                  install-server: true
+            - run: make t-fast
+
+    test-medium:
+        name: Medium tests
+        needs: analyze
+        if: github.event_name == 'pull_request' && needs.analyze.result == 'success'
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v7
+              with:
+                  persist-credentials: false
+            - uses: ./.github/actions/setup-project
+              with:
+                  install-web: true
+                  install-server: true
+            - run: make t-medium
+
+    test-slow:
+        name: Slow tests
+        needs: [test-fast, test-medium]
+        if: github.event_name == 'pull_request' && needs.test-fast.result == 'success' && needs.test-medium.result == 'success'
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v7
+              with:
+                  persist-credentials: false
+            - uses: ./.github/actions/setup-project
+              with:
+                  install-web: true
+                  install-server: true
+            - name: Restore Playwright browser cache
+              uses: actions/cache@v4
+              with:
+                  path: ~/.cache/ms-playwright
+                  key: playwright-${{ runner.os }}-${{ hashFiles('web/package-lock.json') }}
+            - name: Install Playwright browsers
+              run: npx playwright install --with-deps chromium
+              working-directory: web
+            - run: make t-slow
+
+    build:
+        name: Build
+        needs: test-slow
+        if: github.event_name == 'pull_request' && needs.test-slow.result == 'success'
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v7
+              with:
+                  persist-credentials: false
+            - uses: ./.github/actions/setup-project
+              with:
+                  install-web: true
+            - run: make build
+
+    coverage:
+        name: Coverage
+        needs: test-slow
+        if: github.event_name == 'pull_request' && needs.test-slow.result == 'success'
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v7
+              with:
+                  persist-credentials: false
+            - uses: ./.github/actions/setup-project
+              with:
+                  install-web: true
+                  install-server: true
+            - run: make coverage
+
+    audit-deps:
+        name: Dependency audit
+        needs:
+            [
+                coverage,
+                mutation,
+                bundle-size,
+                frontend-performance-scope,
+                frontend-performance,
+                frontend-performance-skipped,
+            ]
+        if: >-
+            always()
+            && needs.coverage.result == 'success'
+            && needs.mutation.result == 'success'
+            && needs.bundle-size.result == 'success'
+            && needs.frontend-performance-scope.result == 'success'
+            && (needs.frontend-performance.result == 'success' || needs.frontend-performance-skipped.result == 'success')
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v7
+              with:
+                  persist-credentials: false
+            - uses: ./.github/actions/setup-project
+              with:
+                  install-web: true
+                  install-server: true
+            - run: make audit-deps
+
+    audit-deps-py:
+        name: Python dependency audit
+        needs:
+            [
+                coverage,
+                mutation,
+                bundle-size,
+                frontend-performance-scope,
+                frontend-performance,
+                frontend-performance-skipped,
+            ]
+        if: >-
+            always()
+            && needs.coverage.result == 'success'
+            && needs.mutation.result == 'success'
+            && needs.bundle-size.result == 'success'
+            && needs.frontend-performance-scope.result == 'success'
+            && (needs.frontend-performance.result == 'success' || needs.frontend-performance-skipped.result == 'success')
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v7
+              with:
+                  persist-credentials: false
+            - uses: ./.github/actions/setup-project
+              with:
+                  install-server: true
+            - run: make audit-deps-py
+
+    secrets:
+        name: Secret scan
+        needs:
+            [
+                coverage,
+                mutation,
+                bundle-size,
+                frontend-performance-scope,
+                frontend-performance,
+                frontend-performance-skipped,
+            ]
+        if: >-
+            always()
+            && needs.coverage.result == 'success'
+            && needs.mutation.result == 'success'
+            && needs.bundle-size.result == 'success'
+            && needs.frontend-performance-scope.result == 'success'
+            && (needs.frontend-performance.result == 'success' || needs.frontend-performance-skipped.result == 'success')
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v7
+              with:
+                  fetch-depth: 0
+                  persist-credentials: false
+            - name: Scan for secrets
+              uses: gitleaks/gitleaks-action@v3
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    mutation:
+        name: Mutation testing
+        needs: test-slow
+        if: github.event_name == 'pull_request' && needs.test-slow.result == 'success'
+        permissions:
+            issues: write
+            pull-requests: write
+            contents: read
+        runs-on: ubuntu-latest
+        timeout-minutes: 45
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v7
+              with:
+                  fetch-depth: 0
+                  persist-credentials: false
+            - uses: ./.github/actions/mutation-diff-gate
+
+    bundle-size:
+        name: Frontend bundle size
+        needs: build
+        if: github.event_name == 'pull_request' && needs.build.result == 'success'
+        permissions:
+            actions: write
+            contents: read
+            issues: write
+            pull-requests: write
+        runs-on: ubuntu-latest
+        timeout-minutes: 20
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v7
+              with:
+                  fetch-depth: 1
+                  persist-credentials: false
+            - uses: ./.github/actions/bundle-size-gate
+
+    frontend-performance-scope:
+        name: Front performance needed?
+        needs: build
+        if: github.event_name == 'pull_request' && needs.build.result == 'success'
+        permissions:
+            contents: read
+            issues: write
+            pull-requests: write
+        runs-on: ubuntu-latest
+        outputs:
+            relevant: ${{ steps.scope.outputs.relevant }}
+        steps:
+            - name: Checkout workflow code
+              uses: actions/checkout@v7
+              with:
+                  persist-credentials: false
+            - id: scope
+              uses: ./.github/actions/frontend-performance-scope
+
+    frontend-performance:
+        name: Run frontend performance
+        needs: frontend-performance-scope
+        if: github.event_name == 'pull_request' && needs.frontend-performance-scope.result == 'success' && needs.frontend-performance-scope.outputs.relevant == 'true'
+        permissions:
+            actions: write
+            contents: read
+            issues: write
+            pull-requests: write
+        runs-on: ubuntu-latest
+        timeout-minutes: 45
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v7
+              with:
+                  fetch-depth: 0
+                  persist-credentials: false
+            - uses: ./.github/actions/frontend-performance-gate
+
+    frontend-performance-skipped:
+        name: Skip frontend performance
+        needs: frontend-performance-scope
+        if: github.event_name == 'pull_request' && needs.frontend-performance-scope.result == 'success' && needs.frontend-performance-scope.outputs.relevant == 'false'
+        runs-on: ubuntu-latest
+        steps:
+            - run: echo "Frontend performance skipped because the pull request does not affect performance-relevant files."
+
+    object-annotations:
+        name: Python object annotation gate
+        needs: fmt-check
+        if: github.event_name == 'pull_request' && needs.fmt-check.result == 'success'
+        runs-on: ubuntu-latest
+        timeout-minutes: 10
+        permissions:
+            contents: read
+            issues: write
+            pull-requests: write
+        steps:
+            - name: Checkout workflow code
+              uses: actions/checkout@v7
+              with:
+                  persist-credentials: false
+            - uses: ./.github/actions/object-annotation-gate
+              with:
+                  github-token: ${{ secrets.GITHUB_TOKEN }}
+
+    suppressions:
+        name: Lint suppression gate
+        needs: fmt-check
+        if: github.event_name == 'pull_request' && needs.fmt-check.result == 'success'
+        runs-on: ubuntu-latest
+        timeout-minutes: 10
+        permissions:
+            contents: read
+            issues: write
+            pull-requests: write
+        steps:
+            - name: Checkout workflow code
+              uses: actions/checkout@v7
+              with:
+                  persist-credentials: false
+            - uses: ./.github/actions/suppression-gate
+              with:
+                  github-token: ${{ secrets.GITHUB_TOKEN }}
+
+    admin-command:
+        name: Command handler
+        if: >-
+            github.event_name == 'issue_comment'
+            && github.event.issue.pull_request
+            && startsWith(github.event.comment.body, '/')
+        runs-on: ubuntu-latest
+        permissions:
+            actions: write
+            contents: read
+            issues: write
+            pull-requests: write
+        steps:
+            - name: Checkout workflow code
+              uses: actions/checkout@v7
+              with:
+                  persist-credentials: false
+            - uses: ./.github/actions/admin-command

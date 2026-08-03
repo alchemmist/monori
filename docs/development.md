@@ -60,9 +60,11 @@ Pull requests also run a CI-only Python annotation gate. It rejects new uses of
 specific type, a protocol, or a suitable generic instead. If a boundary truly
 requires `object`, a repository administrator can approve that finding by
 posting a new pull request comment containing only
-one of `/ignore-object <finding-id>`, `/ignore-file path/to/file.py`, or
-`/ignore-all`. An administrator can remove one approval with
-`/remove-ignore <finding-id>`. Approvals are tied to a stable finding fingerprint,
+one of `/qg ignore object-<finding-id>`, `/qg ignore-file path/to/file.py`, or
+`/qg ignore object`. An administrator can remove one approval with
+`/qg remove-ignore object-<finding-id>`. The `/quality-graph` spelling is also
+accepted.
+Approvals are tied to a stable finding fingerprint,
 so moving the same suppression to another line preserves the approval; changing
 the suppressed code or directive creates a new finding that requires review.
 The gate adds a failure label to PRs with active findings and removes it when

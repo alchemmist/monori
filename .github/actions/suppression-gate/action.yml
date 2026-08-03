@@ -1,0 +1,21 @@
+name: Lint suppression gate
+description: Check changed lint suppressions and publish the gate report
+inputs:
+    github-token:
+        description: GitHub token used to publish the gate report
+        required: true
+runs:
+    using: composite
+    steps:
+        - name: Setup Python
+          uses: actions/setup-python@v6
+          with:
+              python-version: "3.12"
+        - name: Test suppression checker
+          shell: bash
+          run: python -m unittest discover -s scripts -p 'test_suppression_gate.py'
+        - name: Check lint suppressions
+          shell: bash
+          env:
+              GITHUB_TOKEN: ${{ inputs.github-token }}
+          run: python -m scripts.suppression_gate

@@ -1,0 +1,268 @@
+name: Main-branch checks
+
+on:
+    push:
+        branches: [main]
+    schedule:
+        - cron: "0 2 * * *"
+    workflow_dispatch:
+
+permissions:
+    contents: read
+
+concurrency:
+    group: main-ci-${{ github.ref }}
+    cancel-in-progress: true
+
+jobs:
+    fmt-check:
+        name: Format check
+        runs-on: ubuntu-latest
+        steps:
+            - name: Quality Graph command reference
+              run: |
+                  cat >> "$GITHUB_STEP_SUMMARY" <<'EOF'
+                  ## Quality Graph commands
+
+                  Repository administrators can use these commands in a pull-request comment:
+
+                  - `/qg ignore <type>-<finding-id>[,<type>-<finding-id>...]` — ignore selected findings
+                  - `/qg ignore <type>[,<type>...]` — ignore all current findings of selected types
+                  - `/qg ignore-file path/to/file[,path/to/file...]` — ignore findings in selected files
+                  - `/qg remove-ignore <type>-<finding-id>[,<type>-<finding-id>...]` — remove selected ignores
+                  - `/qg status` — show command status
+                  - `/qg help` — show this reference
+
+                  `/quality-graph` is an alias for `/qg`.
+                  EOF
+            - name: Checkout
+              uses: actions/checkout@v7
+              with:
+                  persist-credentials: false
+            - uses: ./.github/actions/setup-project
+              with:
+                  install-web: true
+                  install-server: true
+            - run: make fmt-check
+
+    lint:
+        name: Lint
+        needs: fmt-check
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v7
+              with:
+                  persist-credentials: false
+            - uses: ./.github/actions/setup-project
+              with:
+                  install-web: true
+                  install-server: true
+            - name: Install external linters
+              run: |
+                  set -euo pipefail
+                  sudo apt-get update
+                  sudo apt-get install -y shellcheck
+                  curl -sSfL https://github.com/mvdan/sh/releases/download/v3.10.0/shfmt_v3.10.0_linux_amd64 -o "$RUNNER_TEMP/shfmt"
+                  sudo install -m 0755 "$RUNNER_TEMP/shfmt" /usr/local/bin/shfmt
+                  curl -sSfL https://github.com/hadolint/hadolint/releases/download/v2.12.0/hadolint-Linux-x86_64 -o "$RUNNER_TEMP/hadolint"
+                  sudo install -m 0755 "$RUNNER_TEMP/hadolint" /usr/local/bin/hadolint
+                  curl -sSfL https://github.com/rhysd/actionlint/releases/download/v1.7.7/actionlint_1.7.7_linux_amd64.tar.gz -o "$RUNNER_TEMP/actionlint.tar.gz"
+                  tar -xzf "$RUNNER_TEMP/actionlint.tar.gz" -C "$RUNNER_TEMP"
+                  sudo install -m 0755 "$RUNNER_TEMP/actionlint" /usr/local/bin/actionlint
+            - run: make lint
+
+    type:
+        name: Type check
+        needs: lint
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v7
+              with:
+                  persist-credentials: false
+            - uses: ./.github/actions/setup-project
+              with:
+                  install-web: true
+                  install-server: true
+            - run: make type
+
+    analyze:
+        name: Static analysis
+        needs: type
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v7
+              with:
+                  persist-credentials: false
+            - uses: ./.github/actions/setup-project
+              with:
+                  install-web: true
+                  install-server: true
+            - name: Install semgrep
+              run: pipx install semgrep
+            - run: make analyze
+
+    test-fast:
+        name: Fast tests
+        needs: analyze
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v7
+              with:
+                  persist-credentials: false
+            - uses: ./.github/actions/setup-project
+              with:
+                  install-web: true
+                  install-server: true
+            - run: make t-fast
+
+    test-medium:
+        name: Medium tests
+        needs: test-fast
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v7
+              with:
+                  persist-credentials: false
+            - uses: ./.github/actions/setup-project
+              with:
+                  install-web: true
+                  install-server: true
+            - run: make t-medium
+
+    test-slow:
+        name: Slow tests
+        needs: test-medium
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v7
+              with:
+                  persist-credentials: false
+            - uses: ./.github/actions/setup-project
+              with:
+                  install-web: true
+                  install-server: true
+            - name: Restore Playwright browser cache
+              uses: actions/cache@v4
+              with:
+                  path: ~/.cache/ms-playwright
+                  key: playwright-${{ runner.os }}-${{ hashFiles('web/package-lock.json') }}
+            - name: Install Playwright browsers
+              run: npx playwright install --with-deps chromium
+              working-directory: web
+            - run: make t-slow
+
+    build:
+        name: Build
+        needs: test-slow
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v7
+              with:
+                  persist-credentials: false
+            - uses: ./.github/actions/setup-project
+              with:
+                  install-web: true
+            - run: make build
+
+    coverage:
+        name: Coverage
+        needs: build
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v7
+              with:
+                  persist-credentials: false
+            - uses: ./.github/actions/setup-project
+              with:
+                  install-web: true
+                  install-server: true
+            - run: make coverage
+
+    audit-deps:
+        name: Dependency audit
+        needs: coverage
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v7
+              with:
+                  persist-credentials: false
+            - uses: ./.github/actions/setup-project
+              with:
+                  install-web: true
+                  install-server: true
+            - run: make audit-deps
+
+    audit-deps-py:
+        name: Python dependency audit
+        needs: audit-deps
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v7
+              with:
+                  persist-credentials: false
+            - uses: ./.github/actions/setup-project
+              with:
+                  install-server: true
+            - run: make audit-deps-py
+
+    secrets:
+        name: Secret scan
+        needs: audit-deps-py
+        runs-on: ubuntu-latest
+        permissions:
+            contents: read
+            security-events: write
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v7
+              with:
+                  fetch-depth: 0
+                  persist-credentials: false
+            - name: Scan for secrets
+              uses: gitleaks/gitleaks-action@v3
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    mutation-full:
+        name: Full mutation sweep
+        needs: secrets
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        runs-on: ubuntu-latest
+        timeout-minutes: 180
+        permissions:
+            contents: read
+            issues: write
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v7
+              with:
+                  fetch-depth: 0
+                  persist-credentials: false
+            - uses: ./.github/actions/setup-project
+              with:
+                  install-web: true
+                  install-server: true
+            - name: Run full mutation tests
+              run: make mutation
+            - name: Report scheduled mutation failure
+              if: failure() && github.event_name == 'schedule'
+              uses: actions/github-script@v8
+              with:
+                  script: |
+                      const title = "Nightly mutation sweep failed";
+                      const { owner, repo } = context.repo;
+                      const { data: openIssues } = await github.rest.issues.listForRepo({ owner, repo, state: "open" });
+                      const body = ["The scheduled full mutation sweep failed.", "", `Run: ${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`].join("\n");
+                      const existing = openIssues.find((issue) => issue.title === title);
+                      if (existing) await github.rest.issues.createComment({ owner, repo, issue_number: existing.number, body });
+                      else await github.rest.issues.create({ owner, repo, title, body });

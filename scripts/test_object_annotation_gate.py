@@ -1,6 +1,7 @@
 import contextlib
 import io
 import unittest
+from typing import override
 
 from scripts.object_annotation_gate import (
     Finding,
@@ -8,12 +9,12 @@ from scripts.object_annotation_gate import (
     added_lines_from_patch,
     changed_lines,
     latest_pull_request_run,
-    parse_command,
     scan_file,
     summary_body,
     sync_approvals,
     sync_failure_label,
 )
+from scripts.quality_graph_commands import parse_command
 
 
 class FakeGitHub:
@@ -114,7 +115,7 @@ other: "list[object]"
             1,
             {"body": ""},
             [finding],
-            ("ignore", ["object-finding-1"]),
+            parse_command("/qg ignore object-finding-1"),
             "admin",
         )
 
@@ -143,6 +144,7 @@ other: "list[object]"
 
     def test_rerun_lookup_paginates_past_first_page(self) -> None:
         class WorkflowRunsGitHub(FakeGitHub):
+            @override
             def request(
                 self, method: str, path: str, payload: JsonValue = None
             ) -> JsonValue:
@@ -171,25 +173,21 @@ other: "list[object]"
         self.assertTrue(any("page=2" in call[1] for call in github.calls))
 
     def test_approval_commands_use_shared_namespace(self) -> None:
-        self.assertEqual(
-            parse_command("/ignore object-abc123"), ("ignore", ["object-abc123"])
+        self.assertIsNotNone(parse_command("/qg ignore object-abc123"))
+        self.assertIsNotNone(parse_command("/qg ignore-file server/app.py"))
+        self.assertIsNotNone(
+            parse_command("/qg ignore object-abc123,suppression-def456")
+        )
+        self.assertIsNotNone(
+            parse_command("/qg remove-ignore object-abc123,suppression-def456")
         )
         self.assertEqual(
-            parse_command("/ignore-file server/app.py"),
-            ("ignore-file", ["server/app.py"]),
+            parse_command("/qg ignore object"),
+            parse_command("/quality-graph ignore object"),
         )
-        self.assertEqual(
-            parse_command("/ignore object-abc123,suppression-def456"),
-            ("ignore", ["object-abc123", "suppression-def456"]),
-        )
-        self.assertEqual(parse_command("/ignore-all"), ("ignore-all", None))
-        self.assertEqual(
-            parse_command("/remove-ignore object-abc123,suppression-def456"),
-            ("remove-ignore", ["object-abc123", "suppression-def456"]),
-        )
-        self.assertIsNone(parse_command("/ignore"))
-        self.assertIsNone(parse_command("/ignore object-abc123 extra"))
-        self.assertIsNone(parse_command("/ignore-all extra"))
+        self.assertIsNone(parse_command("/ignore object-abc123"))
+        self.assertIsNone(parse_command("/qg ignore object-abc123 extra"))
+        self.assertIsNone(parse_command("/qg ignore all"))
 
     def test_reports_only_added_lines(self) -> None:
         before = "value: object\n"
@@ -223,7 +221,7 @@ other: "list[object]"
         self.assertIn("| Status | ❌ FAIL |", body)
         self.assertIn("| Findings | 1 |", body)
         self.assertIn("server/app/example.py:7", body)
-        self.assertIn("/ignore-all", body)
+        self.assertIn("/qg ignore object", body)
 
 
 if __name__ == "__main__":

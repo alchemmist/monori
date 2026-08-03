@@ -1,4 +1,7 @@
+import os
 import unittest
+from typing import cast
+from unittest import mock
 
 from scripts.pr_comment import JsonValue, comment_body, upsert_comment
 
@@ -10,10 +13,8 @@ class FakeGitHub:
 
     def request(self, method: str, path: str, payload: JsonValue = None) -> JsonValue:
         self.calls.append((method, path, payload))
-        if path == "/user":
-            return {"login": "monori-bot"}
         if path.startswith("/issues/1/comments"):
-            return self.items
+            return cast(JsonValue, self.items)
         return None
 
 
@@ -35,12 +36,13 @@ class PullRequestCommentTest(unittest.TestCase):
                 {
                     "id": 8,
                     "body": "<!-- monori-report: bundle-size -->\nold",
-                    "user": {"login": "monori-bot"},
+                    "user": {"login": "github-actions[bot]"},
                 },
             ]
         )
 
-        upsert_comment(github, 1, "bundle-size", "new")
+        with mock.patch.dict(os.environ, {"GITHUB_ACTIONS_BOT_LOGIN": "github-actions[bot]"}):
+            upsert_comment(github, 1, "bundle-size", "new")
 
         self.assertIn(
             (
@@ -58,6 +60,22 @@ class PullRequestCommentTest(unittest.TestCase):
             ),
             github.calls,
         )
+
+    def test_updates_a_legacy_bot_comment(self) -> None:
+        github = FakeGitHub(
+            [
+                {
+                    "id": 8,
+                    "body": "<!-- monori-report: bundle-size -->\nold",
+                    "user": {"login": "monori-bot"},
+                }
+            ]
+        )
+
+        with mock.patch.dict(os.environ, {"GITHUB_ACTIONS_BOT_LOGIN": "custom-bot"}):
+            upsert_comment(github, 1, "bundle-size", "new")
+
+        self.assertIn(("PATCH", "/issues/comments/8", mock.ANY), github.calls)
 
 
 if __name__ == "__main__":

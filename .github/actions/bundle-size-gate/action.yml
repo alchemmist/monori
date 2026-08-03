@@ -1,0 +1,89 @@
+name: Frontend bundle size gate
+description: Build and compare the pull request frontend bundle
+runs:
+    using: composite
+    steps:
+        - name: Setup Node
+          uses: actions/setup-node@v7
+          with:
+              node-version: 22
+              cache: npm
+              cache-dependency-path: web/package-lock.json
+
+        - name: Pin npm
+          shell: bash
+          run: npm install --global npm@10.9.2
+
+        - name: Setup Python
+          uses: actions/setup-python@v6
+          with:
+              python-version: "3.12"
+
+        - name: Test bundle tools
+          shell: bash
+          run: python -m unittest scripts.test_bundle_size
+        - name: Install web dependencies
+          shell: bash
+          run: npm ci --no-audit --no-fund
+          working-directory: web
+        - name: Build pull request
+          shell: bash
+          run: npm run build
+          working-directory: web
+        - name: Measure pull-request bundle
+          shell: bash
+          run: python scripts/bundle_size.py measure --dist web/dist --output "$RUNNER_TEMP/current.json"
+        - name: Build merge base
+          shell: bash
+          env:
+              BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          run: |
+              git fetch --no-tags --depth=1 origin "$BASE_SHA"
+              git worktree add --detach "$RUNNER_TEMP/base-repo" "$BASE_SHA"
+              if [ -f "$RUNNER_TEMP/base-repo/web/package-lock.json" ]; then
+                npm ci --no-audit --no-fund --prefix "$RUNNER_TEMP/base-repo/web"
+              else
+                npm install --no-audit --no-fund --prefix "$RUNNER_TEMP/base-repo/web"
+              fi
+              npm run build --prefix "$RUNNER_TEMP/base-repo/web"
+              python scripts/bundle_size.py measure --dist "$RUNNER_TEMP/base-repo/web/dist" --output "$RUNNER_TEMP/base.json"
+        - name: Compare bundle sizes
+          id: compare
+          shell: bash
+          env:
+              PR_NUMBER: ${{ github.event.pull_request.number }}
+              HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+              REPORT_PATH: ${{ runner.temp }}/bundle-size/report.json
+              SUMMARY_PATH: ${{ runner.temp }}/bundle-size/summary.md
+              GITHUB_TOKEN: ${{ github.token }}
+              GITHUB_REPOSITORY: ${{ github.repository }}
+          run: |
+              set +e
+              mkdir -p "$RUNNER_TEMP/bundle-size"
+              python scripts/bundle_size.py compare --base "$RUNNER_TEMP/base.json" --current "$RUNNER_TEMP/current.json" --output "$RUNNER_TEMP/bundle-size/report.json" --pr-number "$PR_NUMBER" --head-sha "$HEAD_SHA"
+              python -m scripts.bundle_size_gate
+              code=$?
+              echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+              exit 0
+        - name: Publish bundle-size report
+          if: always()
+          shell: bash
+          env:
+              GITHUB_TOKEN: ${{ github.token }}
+              GITHUB_REPOSITORY: ${{ github.repository }}
+              PR_NUMBER: ${{ github.event.pull_request.number }}
+          run: |
+              mkdir -p "$RUNNER_TEMP/bundle-size"
+              if [ ! -f "$RUNNER_TEMP/bundle-size/summary.md" ]; then
+                printf '%s\n' '## ❌ Bundle size measurement failed' > "$RUNNER_TEMP/bundle-size/summary.md"
+              fi
+              python -m scripts.pr_comment \
+                --marker bundle-size \
+                --body-file "$RUNNER_TEMP/bundle-size/summary.md" \
+                --pr-number "$PR_NUMBER"
+        - name: Enforce bundle-size verdict
+          if: always()
+          shell: bash
+          env:
+              GATE_EXIT: ${{ steps.compare.outputs.exit_code }}
+          run: exit "${GATE_EXIT:-2}"

@@ -17,19 +17,26 @@ from itertools import count
 from pathlib import Path
 from typing import Protocol, cast
 
-try:
-    from scripts.pr_comment import upsert_comment
-except ModuleNotFoundError:
-    from pr_comment import upsert_comment
+from scripts.pr_comment import upsert_comment
+from scripts.quality_graph_commands import (
+    QualityGraphCommand,
+    admin_command_lines,
+    command_targets_gate,
+    parse_command,
+    validate_command,
+)
 
-type JsonValue = None | bool | int | float | str | list[JsonValue] | dict[str, JsonValue]
+type JsonValue = (
+    None | bool | int | float | str | list[JsonValue] | dict[str, JsonValue]
+)
 
-COMMAND_RE = re.compile(r"^/(ignore|ignore-all|ignore-file|remove-ignore)(?:\s+(\S+))?$")
 PATCH_HUNK_RE = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@")
 IGNORE_LABEL_PREFIX = "monori-object-annotation-ignore-"
 FINDING_ID_PREFIX = "object-"
 FAILURE_LABEL = "monori-object-annotation-failed"
-APPROVAL_STATE_RE = re.compile(r"<!-- monori-object-annotation-approvals: ([0-9a-f,]*) -->")
+APPROVAL_STATE_RE = re.compile(
+    r"<!-- monori-object-annotation-approvals: ([0-9a-f,]*) -->"
+)
 REQUEST_TIMEOUT = 30
 
 
@@ -63,26 +70,6 @@ def json_integer(value: JsonValue, context: str) -> int:
 
 def optional_string(value: JsonValue) -> str | None:
     return value if isinstance(value, str) else None
-
-
-def parse_command(body: str) -> tuple[str, list[str] | None] | None:
-    match = COMMAND_RE.fullmatch(body)
-    if not match:
-        return None
-    name, argument = match.groups()
-    if name == "ignore-all":
-        return (name, None) if argument is None else None
-    if not argument:
-        return None
-    arguments = [item.strip() for item in argument.split(",")]
-    return (name, arguments) if all(arguments) else None
-
-
-def command_targets_gate(command: tuple[str, list[str] | None]) -> bool:
-    name, arguments = command
-    return name in {"ignore-all", "ignore-file"} or any(
-        argument.startswith(FINDING_ID_PREFIX) for argument in (arguments or [])
-    )
 
 
 @dataclass(frozen=True)
@@ -130,6 +117,8 @@ class GitHub:
                     return None
                 return decode_json(response.read())
         except urllib.error.HTTPError as error:
+            if error.code == 403 and method in {"POST", "PATCH", "DELETE"}:
+                return None
             if method in {"GET", "DELETE"} and error.code == 404:
                 return None
             raise GitHubAPIError(method, path, error.code) from error
@@ -150,7 +139,9 @@ class GitHub:
 
     def file_text(self, path: str, ref: str) -> str | None:
         encoded = urllib.parse.quote(path, safe="")
-        raw_response = self.request("GET", f"/contents/{encoded}?ref={urllib.parse.quote(ref)}")
+        raw_response = self.request(
+            "GET", f"/contents/{encoded}?ref={urllib.parse.quote(ref)}"
+        )
         if raw_response is None:
             return None
         response = json_object(raw_response, path)
@@ -174,12 +165,18 @@ class GitHub:
             self.request(
                 "POST",
                 "/labels",
-                {"name": name, "color": "b60205", "description": "Object annotation gate state"},
+                {
+                    "name": name,
+                    "color": "b60205",
+                    "description": "Object annotation gate state",
+                },
             )
 
 
 class GitHubAPI(Protocol):
-    def request(self, method: str, path: str, payload: JsonValue = None) -> JsonValue: ...
+    def request(
+        self, method: str, path: str, payload: JsonValue = None
+    ) -> JsonValue: ...
 
     def paged(self, path: str) -> list[dict[str, JsonValue]]: ...
 
@@ -226,7 +223,9 @@ def annotation_nodes(tree: ast.AST) -> list[ast.expr]:
             arguments.extend(
                 argument for argument in (node.args.vararg, node.args.kwarg) if argument
             )
-            nodes.extend(argument.annotation for argument in arguments if argument.annotation)
+            nodes.extend(
+                argument.annotation for argument in arguments if argument.annotation
+            )
             if node.returns:
                 nodes.append(node.returns)
         elif isinstance(node, ast.AnnAssign):
@@ -272,10 +271,16 @@ def scan_file(path: str, source: str, changed: set[int]) -> list[Finding]:
     duplicates = Counter(raw_id for _, _, _, raw_id in candidates)
     findings: list[Finding] = []
     for object_line, object_column, rendered, raw_id in candidates:
-        disambiguator = f":{object_line}:{object_column}" if duplicates[raw_id] > 1 else ""
-        finding_id = hashlib.sha256(f"{raw_id}{disambiguator}".encode()).hexdigest()[:12]
+        disambiguator = (
+            f":{object_line}:{object_column}" if duplicates[raw_id] > 1 else ""
+        )
+        finding_id = hashlib.sha256(f"{raw_id}{disambiguator}".encode()).hexdigest()[
+            :12
+        ]
         findings.append(Finding(path, object_line, object_column, rendered, finding_id))
-    return sorted(findings, key=lambda finding: (finding.line, finding.column, finding.annotation))
+    return sorted(
+        findings, key=lambda finding: (finding.line, finding.column, finding.annotation)
+    )
 
 
 def finding_url(pr_url: str, finding: Finding) -> str:
@@ -313,13 +318,16 @@ def summary_body(findings: list[Finding], approved: set[str], pr_url: str) -> st
             "",
             "<details><summary>For repository administrators</summary>",
             "",
-            "Post exactly one command as a new pull-request comment:",
-            "",
-            "- `/ignore object-<finding-id>[,object-<finding-id>...]`",
-            "- `/ignore-file path/to/file.py[,path/to/file.py...]`",
-            "- `/ignore-all`",
-            "- `/remove-ignore <object-or-suppression-id>[,<object-or-suppression-id>...]`",
-            "",
+            *admin_command_lines(
+                "object",
+                [display_finding_id(finding.finding_id) for finding in active],
+                [
+                    display_finding_id(finding.finding_id)
+                    for finding in findings
+                    if finding.finding_id in approved
+                ],
+                [finding.path for finding in active],
+            ),
             "</details>",
         ]
     )
@@ -335,7 +343,9 @@ def update_approval_state(
     github: GitHubAPI, number: int, pull: dict[str, JsonValue], approved: set[str]
 ) -> None:
     body = optional_string(pull.get("body")) or ""
-    marker = f"<!-- monori-object-annotation-approvals: {','.join(sorted(approved))} -->"
+    marker = (
+        f"<!-- monori-object-annotation-approvals: {','.join(sorted(approved))} -->"
+    )
     updated_body = APPROVAL_STATE_RE.sub(marker, body)
     if updated_body == body:
         updated_body = f"{body.rstrip()}\n\n{marker}" if body.strip() else marker
@@ -348,7 +358,7 @@ def sync_approvals(
     number: int,
     pull: dict[str, JsonValue],
     findings: list[Finding],
-    command: tuple[str, list[str] | None] | None,
+    command: QualityGraphCommand | None,
     author: str | None,
 ) -> tuple[set[str], bool, bool]:
     labels = github.paged(f"/issues/{number}/labels")
@@ -364,11 +374,10 @@ def sync_approvals(
     }
     for label in labels:
         name = optional_string(label.get("name"))
-        if (
-            name
-            and name.startswith(IGNORE_LABEL_PREFIX)
-        ):
-            github.request("DELETE", f"/issues/{number}/labels/{urllib.parse.quote(name, safe='')}")
+        if name and name.startswith(IGNORE_LABEL_PREFIX):
+            github.request(
+                "DELETE", f"/issues/{number}/labels/{urllib.parse.quote(name, safe='')}"
+            )
     approved = (approval_state(body) if state_exists else legacy_approved) & finding_ids
     admin = command is not None and author is not None and is_admin(github, author)
     state_changed = False
@@ -376,23 +385,25 @@ def sync_approvals(
         if not state_exists:
             update_approval_state(github, number, pull, approved)
         return approved, admin, state_changed
-    name, arguments = command
-    arguments = arguments or []
-    selected = (
-        finding_ids
-        if name == "ignore-all"
-        else {
-            finding.finding_id
-            for finding in findings
-            if name == "ignore-file" and finding.path in arguments
-        }
-    )
+    name = command.name
+    arguments = command.arguments
+    if name in {"help", "status"}:
+        return approved, admin, state_changed
+    selected = {
+        finding.finding_id
+        for finding in findings
+        if name == "ignore-file" and finding.path in arguments
+    }
     if name in {"ignore", "remove-ignore"}:
-        selected = {
-            argument[len(FINDING_ID_PREFIX) :]
-            for argument in arguments
-            if argument.startswith(FINDING_ID_PREFIX)
-        } & finding_ids
+        selected = (
+            finding_ids
+            if "object" in arguments
+            else {
+                argument[len(FINDING_ID_PREFIX) :]
+                for argument in arguments
+                if argument.startswith(FINDING_ID_PREFIX)
+            }
+        ) & finding_ids
     for finding_id in selected:
         if name == "remove-ignore":
             approved.discard(finding_id)
@@ -403,7 +414,9 @@ def sync_approvals(
     return approved, admin, state_changed
 
 
-def sync_failure_label(github: GitHubAPI, number: int, has_active_findings: bool) -> None:
+def sync_failure_label(
+    github: GitHubAPI, number: int, has_active_findings: bool
+) -> None:
     if has_active_findings:
         github.ensure_label(FAILURE_LABEL)
         github.request("POST", f"/issues/{number}/labels", {"labels": [FAILURE_LABEL]})
@@ -424,7 +437,9 @@ def is_admin(github: GitHubAPI, login: str) -> bool:
         raise
     if permission is None:
         return False
-    return json_object(permission, "collaborator permission").get("permission") == "admin"
+    return (
+        json_object(permission, "collaborator permission").get("permission") == "admin"
+    )
 
 
 def pull_request_number(event: dict[str, JsonValue]) -> int | None:
@@ -432,7 +447,11 @@ def pull_request_number(event: dict[str, JsonValue]) -> int | None:
         pull = json_object(event["pull_request"], "event pull request")
         return json_integer(pull["number"], "pull request number")
     issue = json_object(event.get("issue", {}), "event issue")
-    return json_integer(issue["number"], "issue number") if issue.get("pull_request") else None
+    return (
+        json_integer(issue["number"], "issue number")
+        if issue.get("pull_request")
+        else None
+    )
 
 
 def scan_pull_request(github: GitHub, pull: dict[str, JsonValue]) -> list[Finding]:
@@ -464,23 +483,29 @@ def scan_pull_request(github: GitHub, pull: dict[str, JsonValue]) -> list[Findin
             before = github.file_text(before_path, merge_base)
             changed = changed_lines(before, source)
         findings.extend(scan_file(path, source, changed))
-    return sorted(findings, key=lambda finding: (finding.path, finding.line, finding.column))
+    return sorted(
+        findings, key=lambda finding: (finding.path, finding.line, finding.column)
+    )
 
 
 def rerun_pull_request_gate(github: GitHub, number: int) -> None:
     latest = latest_pull_request_run(github, number)
     if latest is None:
-        raise RuntimeError(f"Cannot find a previous gate run for pull request #{number}")
+        raise RuntimeError(
+            f"Cannot find a previous gate run for pull request #{number}"
+        )
     run_id = json_integer(latest["id"], "workflow run id")
     github.request("POST", f"/actions/runs/{run_id}/rerun-failed-jobs")
 
 
-def latest_pull_request_run(github: GitHubAPI, number: int) -> dict[str, JsonValue] | None:
+def latest_pull_request_run(
+    github: GitHubAPI, number: int
+) -> dict[str, JsonValue] | None:
     for page in count(1):
         response = json_object(
             github.request(
                 "GET",
-                f"/actions/workflows/a.yaml/runs?event=pull_request&per_page=100&page={page}",
+                f"/actions/workflows/pr-checks.yaml/runs?event=pull_request&per_page=100&page={page}",
             ),
             "workflow runs",
         )
@@ -490,14 +515,20 @@ def latest_pull_request_run(github: GitHubAPI, number: int) -> dict[str, JsonVal
             run
             for run in runs
             if any(
-                json_object(pull_request, "workflow pull request").get("number") == number
-                for pull_request in json_array(run.get("pull_requests", []), "workflow pull requests")
+                json_object(pull_request, "workflow pull request").get("number")
+                == number
+                for pull_request in json_array(
+                    run.get("pull_requests", []), "workflow pull requests"
+                )
             )
         ]
         if matching:
-            return max(matching, key=lambda run: optional_string(run.get("created_at")) or "")
+            return max(
+                matching, key=lambda run: optional_string(run.get("created_at")) or ""
+            )
         if len(runs) < 100:
             return None
+    raise RuntimeError("Workflow run pagination terminated unexpectedly")
 
 
 def main() -> int:
@@ -516,11 +547,15 @@ def main() -> int:
     findings = scan_pull_request(github, pull)
     comment = json_object(event.get("comment", {}), "event comment")
     command = parse_command((optional_string(comment.get("body")) or "").strip())
-    if command and not command_targets_gate(command):
+    if command and validate_command(command) is not None:
+        command = None
+    if command and not command_targets_gate(command, "object"):
         command = None
     author_data = json_object(comment.get("user", {}), "comment user")
     author = json_string(author_data["login"], "comment author") if command else None
-    approved, _, state_changed = sync_approvals(github, number, pull, findings, command, author)
+    approved, _, state_changed = sync_approvals(
+        github, number, pull, findings, command, author
+    )
     active = [finding for finding in findings if finding.finding_id not in approved]
     sync_failure_label(github, number, bool(active))
 

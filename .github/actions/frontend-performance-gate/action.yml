@@ -1,0 +1,97 @@
+name: Frontend performance gate
+description: Measure frontend performance against the pull request merge base
+runs:
+    using: composite
+    steps:
+        - name: Setup Node
+          uses: actions/setup-node@v7
+          with:
+              node-version: 22
+              cache: npm
+              cache-dependency-path: tools/frontend-perf/package-lock.json
+
+        - name: Pin npm
+          shell: bash
+          run: npm install --global npm@10.9.2
+
+        - name: Setup Python
+          uses: actions/setup-python@v6
+          with:
+              python-version: "3.12"
+        - name: Install performance tools
+          shell: bash
+          run: npm ci --no-audit --no-fund
+          working-directory: tools/frontend-perf
+        - name: Install Chromium
+          shell: bash
+          run: npx playwright install --with-deps chromium
+          working-directory: tools/frontend-perf
+        - name: Test performance comparator
+          shell: bash
+          run: python -m unittest scripts.test_frontend_perf scripts.test_frontend_perf_gate
+        - name: Compare PR with merge base
+          id: performance
+          shell: bash
+          env:
+              BASE: ${{ github.event.pull_request.base.sha }}
+              HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+              PR_NUMBER: ${{ github.event.pull_request.number }}
+              PERF_OUTPUT_DIR: ${{ runner.temp }}/frontend-performance
+              GITHUB_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          run: |
+              set +e
+              make perf-front-diff
+              code=$?
+              echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+              exit 0
+        - name: Apply performance approvals
+          id: approvals
+          if: always()
+          shell: bash
+          env:
+              GITHUB_TOKEN: ${{ github.token }}
+              GITHUB_REPOSITORY: ${{ github.repository }}
+              REPORT_PATH: ${{ runner.temp }}/frontend-performance/report.json
+              SUMMARY_PATH: ${{ runner.temp }}/frontend-performance/summary.md
+          run: |
+              set +e
+              python -m scripts.frontend_perf_gate
+              code=$?
+              echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+              exit 0
+        - name: Publish frontend-performance report
+          if: always()
+          shell: bash
+          env:
+              PERF_OUTPUT_DIR: ${{ runner.temp }}/frontend-performance
+              GITHUB_TOKEN: ${{ github.token }}
+              GITHUB_REPOSITORY: ${{ github.repository }}
+              PR_NUMBER: ${{ github.event.pull_request.number }}
+          run: |
+              mkdir -p "$PERF_OUTPUT_DIR"
+              if [ ! -f "$PERF_OUTPUT_DIR/summary.md" ]; then
+                printf '%s\n' '## ❌ Frontend performance measurement did not produce a report' > "$PERF_OUTPUT_DIR/summary.md"
+              fi
+              python -m scripts.pr_comment \
+                --marker frontend-performance \
+                --body-file "$PERF_OUTPUT_DIR/summary.md" \
+                --pr-number "$PR_NUMBER"
+        - name: Upload raw performance reports
+          if: always()
+          uses: actions/upload-artifact@v7
+          with:
+              name: frontend-performance-${{ github.event.pull_request.number }}
+              path: ${{ runner.temp }}/frontend-performance
+              if-no-files-found: error
+              retention-days: 7
+        - name: Enforce performance verdict
+          if: always()
+          shell: bash
+          env:
+              PERFORMANCE_EXIT: ${{ steps.performance.outputs.exit_code }}
+              APPROVAL_EXIT: ${{ steps.approvals.outputs.exit_code }}
+          run: |
+              if [ -n "$PERFORMANCE_EXIT" ] && [ "$PERFORMANCE_EXIT" -ne 0 ]; then
+                exit "$PERFORMANCE_EXIT"
+              fi
+              exit "${APPROVAL_EXIT:-2}"

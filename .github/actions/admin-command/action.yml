@@ -1,0 +1,25 @@
+name: Process Quality Graph command
+description: Apply an administrator command to the pull request Quality Graph
+runs:
+    using: composite
+    steps:
+        - name: Setup Python
+          uses: actions/setup-python@v6
+          with:
+              python-version: "3.12"
+        - name: Test Quality Graph command API
+          shell: bash
+          run: python -m unittest scripts.test_quality_graph_commands scripts.test_object_annotation_gate scripts.test_suppression_gate
+        - name: Apply object and suppression command
+          continue-on-error: true
+          shell: bash
+          env:
+              GITHUB_TOKEN: ${{ github.token }}
+          run: |
+              python -m scripts.object_annotation_gate || true
+              python -m scripts.suppression_gate || true
+        - name: Process Quality Graph command
+          shell: bash
+          env:
+              GITHUB_TOKEN: ${{ github.token }}
+          run: python -m scripts.quality_graph_commands
