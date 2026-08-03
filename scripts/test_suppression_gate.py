@@ -4,11 +4,11 @@ from scripts.suppression_gate import (
     Finding,
     JsonValue,
     added_lines_from_patch,
-    parse_command,
     scan_file,
     summary_body,
     sync_approvals,
 )
+from scripts.quality_graph_commands import parse_command
 
 
 class FakeGitHub:

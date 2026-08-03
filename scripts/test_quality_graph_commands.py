@@ -1,5 +1,5 @@
 import unittest
-from typing import cast
+from typing import cast, override
 from unittest import mock
 
 from scripts.quality_graph_commands import (
@@ -7,6 +7,7 @@ from scripts.quality_graph_commands import (
     command_targets_gate,
     command_text,
     parse_command,
+    rerun_workflow,
     set_comment_reaction,
     upsert_status,
     validate_command,
@@ -118,6 +119,28 @@ class QualityGraphCommandTest(unittest.TestCase):
             github.calls,
         )
         self.assertNotIn(("PATCH", "/issues/comments/1", mock.ANY), github.calls)
+
+    def test_rerun_reads_workflow_runs_from_the_api_response_object(self) -> None:
+        class WorkflowGitHub(FakeGitHub):
+            @override
+            def request(
+                self, method: str, path: str, payload: JsonValue = None
+            ) -> JsonValue:
+                self.calls.append((method, path, payload))
+                if path == "/pulls/42":
+                    return {"head": {"sha": "abc", "ref": "feature"}}
+                if path.startswith("/actions/workflows/pr-checks.yaml/runs?"):
+                    return {
+                        "total_count": 1,
+                        "workflow_runs": [{"id": 9, "head_sha": "abc"}],
+                    }
+                return None
+
+        github = WorkflowGitHub()
+
+        rerun_workflow(github, 42)
+
+        self.assertIn(("POST", "/actions/runs/9/rerun-failed-jobs", None), github.calls)
 
 
 if __name__ == "__main__":

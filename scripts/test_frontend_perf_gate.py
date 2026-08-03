@@ -6,8 +6,8 @@ from scripts.frontend_perf_gate import (
     apply_command,
     entry_ids,
     finding_id,
-    parse_command,
 )
+from scripts.quality_graph_commands import parse_command
 
 
 class FrontendPerformanceGateTest(unittest.TestCase):

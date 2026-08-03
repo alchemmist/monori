@@ -9,12 +9,12 @@ from scripts.object_annotation_gate import (
     added_lines_from_patch,
     changed_lines,
     latest_pull_request_run,
-    parse_command,
     scan_file,
     summary_body,
     sync_approvals,
     sync_failure_label,
 )
+from scripts.quality_graph_commands import parse_command
 
 
 class FakeGitHub:

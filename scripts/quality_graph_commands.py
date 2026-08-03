@@ -88,7 +88,7 @@ def command_text(command: QualityGraphCommand) -> str:
 
 
 type JsonValue = (
-    None | bool | int | float | str | list[JsonValue] | dict[str, JsonValue]
+    bool | int | float | str | list[JsonValue] | dict[str, JsonValue] | None
 )
 
 
@@ -362,13 +362,14 @@ def rerun_workflow(github: GitHubAPI, number: int) -> None:
     sha = json_string(head.get("sha"), "pull request head sha")
     branch = json_string(head.get("ref"), "pull request head branch")
     for page in range(1, 101):
-        runs = json_array(
+        response = json_object(
             github.request(
                 "GET",
                 f"/actions/workflows/pr-checks.yaml/runs?event=pull_request&branch={urllib.parse.quote(branch)}&per_page=100&page={page}",
             ),
-            "workflow runs",
+            "workflow runs response",
         )
+        runs = json_array(response.get("workflow_runs"), "workflow runs")
         for item in runs:
             run = json_object(item, "workflow run")
             if run.get("head_sha") == sha and isinstance(run.get("id"), int):

@@ -62,7 +62,8 @@ requires `object`, a repository administrator can approve that finding by
 posting a new pull request comment containing only
 one of `/qg ignore object-<finding-id>`, `/qg ignore-file path/to/file.py`, or
 `/qg ignore object`. An administrator can remove one approval with
-`/qg remove-ignore <finding-id>`. The `/quality-graph` spelling is also accepted.
+`/qg remove-ignore object-<finding-id>`. The `/quality-graph` spelling is also
+accepted.
 Approvals are tied to a stable finding fingerprint,
 so moving the same suppression to another line preserves the approval; changing
 the suppressed code or directive creates a new finding that requires review.
