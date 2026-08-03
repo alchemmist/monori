@@ -12,4 +12,4 @@ runs:
           run: python -m unittest discover -s scripts -p 'test_object_annotation_gate.py'
         - name: Check Python annotations
           shell: bash
-          run: python scripts/object_annotation_gate.py
+          run: python -m scripts.object_annotation_gate

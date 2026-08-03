@@ -1,4 +1,5 @@
 import unittest
+from typing import cast
 
 from scripts.pr_comment import JsonValue, comment_body, upsert_comment
 
@@ -11,7 +12,7 @@ class FakeGitHub:
     def request(self, method: str, path: str, payload: JsonValue = None) -> JsonValue:
         self.calls.append((method, path, payload))
         if path.startswith("/issues/1/comments"):
-            return self.items
+            return cast(JsonValue, self.items)
         return None
 
 

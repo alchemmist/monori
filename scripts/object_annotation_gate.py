@@ -17,10 +17,7 @@ from itertools import count
 from pathlib import Path
 from typing import Protocol, cast
 
-try:
-    from scripts.pr_comment import upsert_comment
-except ModuleNotFoundError:
-    from pr_comment import upsert_comment
+from scripts.pr_comment import upsert_comment
 
 type JsonValue = None | bool | int | float | str | list[JsonValue] | dict[str, JsonValue]
 
@@ -498,6 +495,7 @@ def latest_pull_request_run(github: GitHubAPI, number: int) -> dict[str, JsonVal
             return max(matching, key=lambda run: optional_string(run.get("created_at")) or "")
         if len(runs) < 100:
             return None
+    raise RuntimeError("Workflow run pagination terminated unexpectedly")
 
 
 def main() -> int:

@@ -1,6 +1,7 @@
 import contextlib
 import io
 import unittest
+from typing import override
 
 from scripts.object_annotation_gate import (
     Finding,
@@ -143,6 +144,7 @@ other: "list[object]"
 
     def test_rerun_lookup_paginates_past_first_page(self) -> None:
         class WorkflowRunsGitHub(FakeGitHub):
+            @override
             def request(
                 self, method: str, path: str, payload: JsonValue = None
             ) -> JsonValue:

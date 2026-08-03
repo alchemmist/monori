@@ -1,7 +1,15 @@
 import unittest
-from typing import cast
+from typing import TypedDict, cast
 
 from scripts.bundle_size import Snapshot, compare, normalized_asset, tier
+
+
+class BundleEntry(TypedDict):
+    id: str
+
+
+class AssetGrowth(TypedDict):
+    delta: int
 
 
 class BundleSizeTest(unittest.TestCase):
@@ -23,8 +31,8 @@ class BundleSizeTest(unittest.TestCase):
         }
         result = compare(cast(Snapshot, base), cast(Snapshot, current))
         self.assertEqual(result["verdict"], "critical")
-        entries = cast(list[dict[str, object]], result["entries"])
-        growth = cast(list[dict[str, object]], result["assetGrowth"])
+        entries = cast(list[BundleEntry], result["entries"])
+        growth = cast(list[AssetGrowth], result["assetGrowth"])
         self.assertEqual(entries[0]["id"], "bundle-initial-load")
         self.assertEqual(growth[0]["delta"], 10_000)
 

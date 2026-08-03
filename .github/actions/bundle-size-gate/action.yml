@@ -47,7 +47,7 @@ runs:
               set +e
               mkdir -p "$RUNNER_TEMP/bundle-size"
               python scripts/bundle_size.py compare --base "$RUNNER_TEMP/base.json" --current "$RUNNER_TEMP/current.json" --output "$RUNNER_TEMP/bundle-size/report.json" --pr-number "$PR_NUMBER" --head-sha "$HEAD_SHA"
-              python scripts/bundle_size_gate.py
+              python -m scripts.bundle_size_gate
               code=$?
               echo "exit_code=$code" >> "$GITHUB_OUTPUT"
               exit 0
@@ -62,7 +62,7 @@ runs:
               if [ ! -f "$RUNNER_TEMP/bundle-size/summary.md" ]; then
                 printf '%s\n' '## ❌ Bundle size measurement failed' > "$RUNNER_TEMP/bundle-size/summary.md"
               fi
-              python scripts/pr_comment.py \
+              python -m scripts.pr_comment \
                 --marker bundle-size \
                 --body-file "$RUNNER_TEMP/bundle-size/summary.md" \
                 --pr-number "$PR_NUMBER"

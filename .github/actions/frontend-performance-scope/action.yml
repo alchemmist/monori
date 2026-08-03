@@ -42,7 +42,7 @@ runs:
               else
                 printf '%s\n' '## ✅ Frontend performance' '' 'No performance-relevant files changed; the gate is skipped.' > "$RUNNER_TEMP/frontend-performance-scope.md"
               fi
-              python scripts/pr_comment.py \
+              python -m scripts.pr_comment \
                 --marker frontend-performance \
                 --body-file "$RUNNER_TEMP/frontend-performance-scope.md" \
                 --pr-number "$PR_NUMBER"

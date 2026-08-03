@@ -24,6 +24,9 @@ jobs:
               with:
                   persist-credentials: false
             - uses: ./.github/actions/setup-project
+              with:
+                  install-web: true
+                  install-server: true
             - run: make fmt-check
 
     lint:
@@ -36,6 +39,9 @@ jobs:
               with:
                   persist-credentials: false
             - uses: ./.github/actions/setup-project
+              with:
+                  install-web: true
+                  install-server: true
             - name: Install external linters
               run: |
                   set -euo pipefail
@@ -60,6 +66,9 @@ jobs:
               with:
                   persist-credentials: false
             - uses: ./.github/actions/setup-project
+              with:
+                  install-web: true
+                  install-server: true
             - run: make type
 
     analyze:
@@ -72,6 +81,9 @@ jobs:
               with:
                   persist-credentials: false
             - uses: ./.github/actions/setup-project
+              with:
+                  install-web: true
+                  install-server: true
             - name: Install semgrep
               run: pipx install semgrep
             - run: make analyze
@@ -86,6 +98,9 @@ jobs:
               with:
                   persist-credentials: false
             - uses: ./.github/actions/setup-project
+              with:
+                  install-web: true
+                  install-server: true
             - run: make t-fast
 
     test-medium:
@@ -98,6 +113,9 @@ jobs:
               with:
                   persist-credentials: false
             - uses: ./.github/actions/setup-project
+              with:
+                  install-web: true
+                  install-server: true
             - run: make t-medium
 
     test-slow:
@@ -110,6 +128,9 @@ jobs:
               with:
                   persist-credentials: false
             - uses: ./.github/actions/setup-project
+              with:
+                  install-web: true
+                  install-server: true
             - name: Install Playwright browsers
               run: npx playwright install --with-deps chromium
               working-directory: web
@@ -125,6 +146,8 @@ jobs:
               with:
                   persist-credentials: false
             - uses: ./.github/actions/setup-project
+              with:
+                  install-web: true
             - run: make build
 
     coverage:
@@ -137,6 +160,9 @@ jobs:
               with:
                   persist-credentials: false
             - uses: ./.github/actions/setup-project
+              with:
+                  install-web: true
+                  install-server: true
             - run: make coverage
 
     audit-deps:
@@ -149,6 +175,9 @@ jobs:
               with:
                   persist-credentials: false
             - uses: ./.github/actions/setup-project
+              with:
+                  install-web: true
+                  install-server: true
             - run: make audit-deps
 
     audit-deps-py:
@@ -161,6 +190,8 @@ jobs:
               with:
                   persist-credentials: false
             - uses: ./.github/actions/setup-project
+              with:
+                  install-server: true
             - run: make audit-deps-py
 
     secrets:
@@ -197,6 +228,9 @@ jobs:
                   fetch-depth: 0
                   persist-credentials: false
             - uses: ./.github/actions/setup-project
+              with:
+                  install-web: true
+                  install-server: true
             - name: Run full mutation tests
               run: make mutation
             - name: Report scheduled mutation failure

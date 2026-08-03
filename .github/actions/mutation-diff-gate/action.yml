@@ -69,7 +69,7 @@ runs:
               if [ ! -s "$MUTATION_SUMMARY_PATH" ]; then
                 printf '%s\n' '## Mutation testing' '' 'No mutation report was produced.' > "$MUTATION_SUMMARY_PATH"
               fi
-              python scripts/pr_comment.py \
+              python -m scripts.pr_comment \
                 --marker mutation \
                 --body-file "$MUTATION_SUMMARY_PATH" \
                 --pr-number "$PR_NUMBER"

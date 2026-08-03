@@ -12,4 +12,4 @@ runs:
           run: python -m unittest discover -s scripts -p 'test_suppression_gate.py'
         - name: Check lint suppressions
           shell: bash
-          run: python scripts/suppression_gate.py
+          run: python -m scripts.suppression_gate
