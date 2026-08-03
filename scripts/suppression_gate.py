@@ -12,7 +12,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol, cast
 
-from scripts.pr_comment import upsert_comment
+try:
+    from scripts.pr_comment import upsert_comment
+except ModuleNotFoundError:
+    from pr_comment import upsert_comment
 
 type JsonValue = bool | int | float | str | list[JsonValue] | dict[str, JsonValue] | None
 
