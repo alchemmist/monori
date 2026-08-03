@@ -16,15 +16,20 @@ from typing import Protocol, cast
 from scripts.pr_comment import upsert_comment
 from scripts.quality_graph_commands import (
     QualityGraphCommand,
+    admin_command_lines,
     command_targets_gate,
     parse_command,
     validate_command,
 )
 
-type JsonValue = bool | int | float | str | list[JsonValue] | dict[str, JsonValue] | None
+type JsonValue = (
+    bool | int | float | str | list[JsonValue] | dict[str, JsonValue] | None
+)
 
 LABEL_PREFIX = "monori-suppress-"
-SUPPRESSION_KEYS = r"(?:ignorePatterns|per-file-ignores|extend-ignore|disable_all|disabledRules)"
+SUPPRESSION_KEYS = (
+    r"(?:ignorePatterns|per-file-ignores|extend-ignore|disable_all|disabledRules)"
+)
 FINDING_ID_PREFIX = "suppression-"
 STATUS_LABEL = "monori-suppression-failed"
 APPROVAL_STATE_RE = re.compile(r"<!-- monori-suppression-approvals: ([0-9a-f,]*) -->")
@@ -120,7 +125,9 @@ class GitHub:
                 return None
             if error.code == 404 and method in {"GET", "DELETE"}:
                 return None
-            raise RuntimeError(f"GitHub API {method} {path} failed: HTTP {error.code}") from error
+            raise RuntimeError(
+                f"GitHub API {method} {path} failed: HTTP {error.code}"
+            ) from error
         except (TimeoutError, urllib.error.URLError) as error:
             raise RuntimeError(f"GitHub API {method} {path} failed: {error}") from error
 
@@ -139,7 +146,9 @@ class GitHub:
 
     def file_text(self, path: str, ref: str) -> str | None:
         encoded = urllib.parse.quote(path, safe="")
-        response = self.request("GET", f"/contents/{encoded}?ref={urllib.parse.quote(ref)}")
+        response = self.request(
+            "GET", f"/contents/{encoded}?ref={urllib.parse.quote(ref)}"
+        )
         if response is None:
             return None
         data = json_object(response, path)
@@ -173,7 +182,9 @@ class GitHub:
 
 
 class GitHubAPI(Protocol):
-    def request(self, method: str, path: str, payload: JsonValue = None) -> JsonValue: ...
+    def request(
+        self, method: str, path: str, payload: JsonValue = None
+    ) -> JsonValue: ...
 
     def paged(self, path: str) -> list[dict[str, JsonValue]]: ...
 
@@ -226,7 +237,8 @@ def scan_file(path: str, source: str, added_lines: set[int]) -> list[Finding]:
             column = match.start()
         elif (
             is_toml
-            and toml_section.rsplit(".", 1)[-1].strip('"').lower() in TOML_SUPPRESSION_SECTION_NAMES
+            and toml_section.rsplit(".", 1)[-1].strip('"').lower()
+            in TOML_SUPPRESSION_SECTION_NAMES
             and line.strip()
             and not line.lstrip().startswith("#")
         ):
@@ -243,7 +255,9 @@ def scan_file(path: str, source: str, added_lines: set[int]) -> list[Finding]:
     findings: list[Finding] = []
     for line_number, column, text, raw_id in candidates:
         disambiguator = f":{line_number}" if duplicates[raw_id] > 1 else ""
-        finding_id = hashlib.sha256(f"{raw_id}{disambiguator}".encode()).hexdigest()[:12]
+        finding_id = hashlib.sha256(f"{raw_id}{disambiguator}".encode()).hexdigest()[
+            :12
+        ]
         findings.append(Finding(path, line_number, column, text, finding_id))
     return findings
 
@@ -298,7 +312,9 @@ def changed_files(github: GitHubAPI, pull: dict[str, JsonValue]) -> list[Finding
         if source is None or not patch:
             continue
         findings.extend(scan_file(path, source, added_lines_from_patch(patch)))
-    return sorted(findings, key=lambda finding: (finding.path, finding.line, finding.column))
+    return sorted(
+        findings, key=lambda finding: (finding.path, finding.line, finding.column)
+    )
 
 
 def is_admin(github: GitHubAPI, login: str) -> bool:
@@ -332,7 +348,9 @@ def sync_approvals(
     for label in labels:
         name = optional_string(label.get("name"))
         if name and name.startswith(LABEL_PREFIX):
-            github.request("DELETE", f"/issues/{number}/labels/{urllib.parse.quote(name, safe='')}")
+            github.request(
+                "DELETE", f"/issues/{number}/labels/{urllib.parse.quote(name, safe='')}"
+            )
     approved = (approval_state(body) if state_exists else legacy_approved) & finding_ids
     admin = command is not None and author is not None and is_admin(github, author)
     if not command or not admin:
@@ -367,7 +385,9 @@ def sync_approvals(
     return approved, admin
 
 
-def sync_status_label(github: GitHubAPI, number: int, has_active_findings: bool) -> None:
+def sync_status_label(
+    github: GitHubAPI, number: int, has_active_findings: bool
+) -> None:
     if has_active_findings:
         github.ensure_label(STATUS_LABEL)
         github.request("POST", f"/issues/{number}/labels", {"labels": [STATUS_LABEL]})
@@ -408,13 +428,16 @@ def summary_body(findings: list[Finding], approved: set[str]) -> str:
             "",
             "<details><summary>For repository administrators</summary>",
             "",
-            "Post exactly one command as a new pull-request comment:",
-            "",
-            "- `/qg ignore object-<finding-id>[,object-<finding-id>...]`",
-            "- `/qg ignore suppression-<finding-id>[,suppression-<finding-id>...]`",
-            "- `/qg ignore suppression`",
-            "- `/qg ignore-file path/to/file[,path/to/file...]`",
-            "- `/qg remove-ignore <object-or-suppression-id>[,<object-or-suppression-id>...]`",
+            *admin_command_lines(
+                "suppression",
+                [display_finding_id(finding.finding_id) for finding in active],
+                [
+                    display_finding_id(finding.finding_id)
+                    for finding in findings
+                    if finding.finding_id in approved
+                ],
+                [finding.path for finding in active],
+            ),
             "",
             "Finding IDs, gate names, and file paths may be comma-separated.",
             "Approvals persist while the finding fingerprint stays unchanged.",
@@ -439,24 +462,32 @@ def rerun_gate(github: GitHubAPI, number: int) -> None:
             run_data = json_object(run, "workflow run")
             if any(
                 json_object(pull, "workflow pull request").get("number") == number
-                for pull in json_array(run_data.get("pull_requests", []), "workflow pull requests")
+                for pull in json_array(
+                    run_data.get("pull_requests", []), "workflow pull requests"
+                )
             ):
                 matching.append(run_data)
         if len(page_runs) < 100 or matching:
             break
     if matching:
-        latest = max(matching, key=lambda run: optional_string(run.get("created_at")) or "")
+        latest = max(
+            matching, key=lambda run: optional_string(run.get("created_at")) or ""
+        )
         run_id = json_integer(latest["id"], "workflow run id")
         github.request("POST", f"/actions/runs/{run_id}/rerun-failed-jobs")
 
 
 def main() -> int:
     github = GitHub()
-    event = json_object(decode_json(Path(os.environ["GITHUB_EVENT_PATH"]).read_text()), "event")
+    event = json_object(
+        decode_json(Path(os.environ["GITHUB_EVENT_PATH"]).read_text()), "event"
+    )
     pull_event = json_object(event.get("pull_request", {}), "pull request event")
     issue = json_object(event.get("issue", {}), "issue event")
     number_value = pull_event.get("number") or issue.get("number")
-    if not isinstance(number_value, int) or not (pull_event or issue.get("pull_request")):
+    if not isinstance(number_value, int) or not (
+        pull_event or issue.get("pull_request")
+    ):
         return 0
     number = number_value
     pull = json_object(github.request("GET", f"/pulls/{number}"), "pull request")

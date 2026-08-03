@@ -175,9 +175,16 @@ other: "list[object]"
     def test_approval_commands_use_shared_namespace(self) -> None:
         self.assertIsNotNone(parse_command("/qg ignore object-abc123"))
         self.assertIsNotNone(parse_command("/qg ignore-file server/app.py"))
-        self.assertIsNotNone(parse_command("/qg ignore object-abc123,suppression-def456"))
-        self.assertIsNotNone(parse_command("/qg remove-ignore object-abc123,suppression-def456"))
-        self.assertEqual(parse_command("/qg ignore object"), parse_command("/quality-graph ignore object"))
+        self.assertIsNotNone(
+            parse_command("/qg ignore object-abc123,suppression-def456")
+        )
+        self.assertIsNotNone(
+            parse_command("/qg remove-ignore object-abc123,suppression-def456")
+        )
+        self.assertEqual(
+            parse_command("/qg ignore object"),
+            parse_command("/quality-graph ignore object"),
+        )
         self.assertIsNone(parse_command("/ignore object-abc123"))
         self.assertIsNone(parse_command("/qg ignore object-abc123 extra"))
         self.assertIsNone(parse_command("/qg ignore all"))

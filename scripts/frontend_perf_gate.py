@@ -12,11 +12,14 @@ from typing import cast
 
 from scripts.quality_graph_commands import (
     QualityGraphCommand,
+    admin_command_lines,
     parse_command,
     validate_command,
 )
 
-type JsonValue = None | bool | int | float | str | list[JsonValue] | dict[str, JsonValue]
+type JsonValue = (
+    None | bool | int | float | str | list[JsonValue] | dict[str, JsonValue]
+)
 
 STATUS_LABEL = "monori-frontend-performance-failed"
 FINDING_ID_PREFIX = "frontend-"
@@ -93,7 +96,9 @@ class GitHub:
                 return None
             if error.code == 404 and method in {"GET", "DELETE"}:
                 return None
-            raise RuntimeError(f"GitHub API {method} {path} failed: HTTP {error.code}") from error
+            raise RuntimeError(
+                f"GitHub API {method} {path} failed: HTTP {error.code}"
+            ) from error
 
     def ensure_label(self, name: str) -> None:
         encoded = urllib.parse.quote(name, safe="")
@@ -101,7 +106,11 @@ class GitHub:
             self.request(
                 "POST",
                 "/labels",
-                {"name": name, "color": "b60205", "description": "Frontend performance gate state"},
+                {
+                    "name": name,
+                    "color": "b60205",
+                    "description": "Frontend performance gate state",
+                },
             )
 
 
@@ -119,8 +128,12 @@ def state_from_body(body: str) -> set[str]:
     return set(match.group(1).split(",")) if match and match.group(1) else set()
 
 
-def update_body_state(github: GitHub, number: int, body: str, approved: set[str]) -> str:
-    marker = f"<!-- monori-frontend-performance-approvals: {','.join(sorted(approved))} -->"
+def update_body_state(
+    github: GitHub, number: int, body: str, approved: set[str]
+) -> str:
+    marker = (
+        f"<!-- monori-frontend-performance-approvals: {','.join(sorted(approved))} -->"
+    )
     updated = STATE_RE.sub(marker, body)
     if updated == body:
         updated = f"{body.rstrip()}\n\n{marker}" if body.strip() else marker
@@ -133,7 +146,9 @@ def command_from_pending(github: GitHub, body: str) -> QualityGraphCommand | Non
     match = PENDING_RE.search(body)
     if not match:
         return None
-    comment = json_object(github.request("GET", f"/issues/comments/{match.group(1)}"), "comment")
+    comment = json_object(
+        github.request("GET", f"/issues/comments/{match.group(1)}"), "comment"
+    )
     command = parse_command((optional_string(comment.get("body")) or "").strip())
     if command and validate_command(command) is not None:
         command = None
@@ -164,25 +179,26 @@ def apply_command(
         ids
         if name == "ignore" and "frontend" in arguments
         else {
-            argument
-            for argument in arguments
-            if argument.startswith(FINDING_ID_PREFIX)
+            argument for argument in arguments if argument.startswith(FINDING_ID_PREFIX)
         }
     ) & ids
     return approved - selected if name == "remove-ignore" else approved | selected
 
 
-def append_commands(text: str, entries: list[dict[str, JsonValue]], approved: set[str]) -> str:
+def append_commands(
+    text: str, entries: list[dict[str, JsonValue]], approved: set[str]
+) -> str:
     lines = ["", "<details><summary>For repository administrators</summary>", ""]
-    lines.append("Post exactly one command as a new pull-request comment:")
     lines.extend(
-        [
-            "",
-            "- `/qg ignore frontend-<finding-id>[,frontend-<finding-id>...]`",
-            "- `/qg ignore frontend`",
-            "- `/qg remove-ignore frontend-<finding-id>[,frontend-<finding-id>...]`",
-            "",
-        ]
+        admin_command_lines(
+            "frontend",
+            [
+                finding_id(entry)
+                for entry in entries
+                if entry.get("tier") != "none" and finding_id(entry) not in approved
+            ],
+            [finding_id(entry) for entry in entries if finding_id(entry) in approved],
+        )
     )
     lines.append("Performance findings:")
     for entry in entries:
@@ -219,7 +235,8 @@ def main() -> int:
     active = {
         finding_id(entry)
         for entry in entries
-        if entry.get("tier") in {"critical", "error"} and finding_id(entry) not in approved
+        if entry.get("tier") in {"critical", "error"}
+        and finding_id(entry) not in approved
     }
     failed = bool(active) or original_verdict == "error"
     effective_verdict = original_verdict if failed else "none"

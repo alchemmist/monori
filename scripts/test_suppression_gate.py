@@ -105,7 +105,12 @@ value = 2
         finding = Finding("example.py", 1, 0, "value = 1 # noqa", "finding-1")
 
         approved, admin = sync_approvals(
-            github, 334, {"body": ""}, [finding], parse_command("/qg ignore suppression"), "contributor"
+            github,
+            334,
+            {"body": ""},
+            [finding],
+            parse_command("/qg ignore suppression"),
+            "contributor",
         )
 
         self.assertFalse(admin)
@@ -142,9 +147,15 @@ value = 2
     def test_commands_are_shared_between_gates(self) -> None:
         self.assertIsNotNone(parse_command("/qg ignore suppression-abc123"))
         self.assertIsNotNone(parse_command("/qg ignore-file server/app.py"))
-        self.assertIsNotNone(parse_command("/qg ignore object-abc123,suppression-def456"))
-        self.assertIsNotNone(parse_command("/qg ignore-file server/app.py,web/eslint.config.mjs"))
-        self.assertIsNotNone(parse_command("/qg remove-ignore object-abc123,suppression-def456"))
+        self.assertIsNotNone(
+            parse_command("/qg ignore object-abc123,suppression-def456")
+        )
+        self.assertIsNotNone(
+            parse_command("/qg ignore-file server/app.py,web/eslint.config.mjs")
+        )
+        self.assertIsNotNone(
+            parse_command("/qg remove-ignore object-abc123,suppression-def456")
+        )
         self.assertIsNone(parse_command("/qg ignore all"))
         self.assertIsNone(
             parse_command("/qg ignore suppression-abc123,,suppression-def456")
@@ -157,7 +168,8 @@ value = 2
 
         self.assertIn("❌ FAIL", body)
         self.assertIn("<details><summary>For repository administrators</summary>", body)
-        self.assertIn("/qg ignore suppression-<finding-id>", body)
+        self.assertIn("/qg ignore suppression-600043a9733a", body)
+        self.assertIn("/qg ignore-file example.py", body)
         self.assertNotIn("<!--", body)
 
 

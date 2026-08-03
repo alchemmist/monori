@@ -10,7 +10,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
-from typing import Literal, Protocol, cast
+from typing import Collection, Literal, Protocol, cast
 
 CommandName = Literal["help", "status", "ignore", "ignore-file", "remove-ignore"]
 COMMAND_RE = re.compile(
@@ -85,6 +85,29 @@ def validate_command(command: QualityGraphCommand) -> str | None:
 def command_text(command: QualityGraphCommand) -> str:
     suffix = f" {','.join(command.arguments)}" if command.arguments else ""
     return f"/qg {command.name}{suffix}"
+
+
+def admin_command_lines(
+    gate: str,
+    active_ids: Collection[str],
+    approved_ids: Collection[str],
+    file_paths: Collection[str] = (),
+) -> list[str]:
+    """Render copy-paste commands for the findings in one gate report."""
+    active = sorted(set(active_ids))
+    approved = sorted(set(approved_ids))
+    paths = sorted(set(file_paths))
+    lines = ["Post exactly one command as a new pull-request comment:", ""]
+    if active:
+        lines.append(f"- `/qg ignore {','.join(active)}`")
+        lines.append(f"- `/qg ignore {gate}`")
+    if paths:
+        lines.append(f"- `/qg ignore-file {','.join(paths)}`")
+    if approved:
+        lines.append(f"- `/qg remove-ignore {','.join(approved)}`")
+    if not active and not paths and not approved:
+        lines.append("No actionable findings in this run.")
+    return lines
 
 
 type JsonValue = (
