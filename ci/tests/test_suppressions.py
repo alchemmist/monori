@@ -159,6 +159,17 @@ value = 2
         assert findings[0].line == 2
         assert findings[0].text == '"ci/tests/**/*.py" = ['
 
+    def test_finds_single_quoted_toml_key(self) -> None:
+        source = """\
+[tool.ruff.lint.per-file-ignores]
+'server/app/parser.py' = ["RUF001"]
+"""
+
+        findings = scan_file("pyproject.toml", source, {2})
+
+        assert len(findings) == 1
+        assert findings[0].text == "'server/app/parser.py' = [\"RUF001\"]"
+
     def test_admin_can_approve_and_stale_labels_expire(self) -> None:
         github = FakeGitHub("admin")
         finding = Finding("example.py", 1, 0, f"value = 1 {NOQA}", "finding-1")
@@ -243,7 +254,7 @@ value = 2
         assert "<details><summary>For repository administrators</summary>" in body
         assert "/qg ignore suppression-600043a9733a" in body
         assert "/qg ignore-file example.py" in body
-        assert "[`example.py:1`](https://github.com/org/repo/pull/1/changes#diff-" in body
+        assert "[`example.py:1`](https://github.com/org/repo/pull/1/files#diff-" in body
         assert "<!--" not in body
 
 

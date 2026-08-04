@@ -55,8 +55,8 @@ CONFIG_SUPPRESSION_RE = re.compile(
 )
 TOML_SECTION_RE = re.compile(r"^\s*\[([^\]]+)\]\s*$")
 TOML_KEY_RE = re.compile(
-    r'^\s*(?:"[^"]+"|[A-Za-z0-9_-]+)'
-    r'(?:\s*\.\s*(?:"[^"]+"|[A-Za-z0-9_-]+))*\s*='
+    r'^\s*(?:"[^"]+"|\'[^\']+\'|[A-Za-z0-9_-]+)'
+    r'(?:\s*\.\s*(?:"[^"]+"|\'[^\']+\'|[A-Za-z0-9_-]+))*\s*='
 )
 TOML_SUPPRESSION_SECTION_NAMES = {"per-file-ignores", "extend-per-file-ignores"}
 WORKFLOW_RUNS_PER_PAGE = GITHUB_PAGE_SIZE
@@ -515,7 +515,7 @@ def sync_status_label(github: GitHubAPI, number: int, *, has_active_findings: bo
 def finding_url(pr_url: str, finding: Finding) -> str:
     """Build a URL for a suppression finding in the pull request diff."""
     diff_hash = hashlib.sha256(finding.path.encode()).hexdigest()
-    return f"{pr_url}/changes#diff-{diff_hash}R{finding.line}"
+    return f"{pr_url}/files#diff-{diff_hash}R{finding.line}"
 
 
 def summary_body(findings: list[Finding], approved: set[str], pr_url: str) -> str:
