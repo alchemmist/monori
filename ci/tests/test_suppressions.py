@@ -199,12 +199,13 @@ value = 2
     def test_summary_has_collapsed_admin_commands_and_no_comment_marker(self) -> None:
         finding = scan_file("example.py", "value = 1  # noqa\n", {1})[0]
 
-        body = summary_body([finding], set())
+        body = summary_body([finding], set(), "https://github.com/org/repo/pull/1")
 
         assert "❌ FAIL" in body
         assert "<details><summary>For repository administrators</summary>" in body
         assert "/qg ignore suppression-600043a9733a" in body
         assert "/qg ignore-file example.py" in body
+        assert "[`example.py:1`](https://github.com/org/repo/pull/1/changes#diff-" in body
         assert "<!--" not in body
 
 

@@ -471,7 +471,13 @@ def sync_status_label(github: GitHubAPI, number: int, *, has_active_findings: bo
         )
 
 
-def summary_body(findings: list[Finding], approved: set[str]) -> str:
+def finding_url(pr_url: str, finding: Finding) -> str:
+    """Build a URL for a suppression finding in the pull request diff."""
+    diff_hash = hashlib.sha256(finding.path.encode()).hexdigest()
+    return f"{pr_url}/changes#diff-{diff_hash}R{finding.line}"
+
+
+def summary_body(findings: list[Finding], approved: set[str], pr_url: str) -> str:
     """Build the suppressions check summary block for workflow output."""
     active = [finding for finding in findings if finding.finding_id not in approved]
     status = "✅ PASS" if not active else "❌ FAIL"
@@ -491,8 +497,9 @@ def summary_body(findings: list[Finding], approved: set[str]) -> str:
     for finding in findings:
         marker = "✔" if finding.finding_id in approved else "✗"
         text = finding.text.replace("`", "\\`")[:200]
+        location = f"{finding.path}:{finding.line}"
         lines.append(
-            f"- {marker} `{finding.path}:{finding.line}` — `{text}` · "
+            f"- {marker} [`{location}`]({finding_url(pr_url, finding)}) — `{text}` · "
             f"`{display_finding_id(finding.finding_id)}`"
         )
     lines.extend(
@@ -574,7 +581,8 @@ def main() -> int:
     )
     active = [finding for finding in findings if finding.finding_id not in approved]
     sync_status_label(github, number, has_active_findings=bool(active))
-    upsert_comment(github, number, "suppression", summary_body(findings, approved))
+    pr_url = json_string(pull["html_url"], "pull request URL")
+    upsert_comment(github, number, "suppression", summary_body(findings, approved, pr_url))
     if admin:
         rerun_gate(github, number)
     for finding in findings:
