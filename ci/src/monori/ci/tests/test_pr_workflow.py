@@ -5,7 +5,7 @@ from typing import ClassVar, TypedDict, cast, override
 
 import yaml
 
-REPOSITORY_ROOT = Path(__file__).parents[3]
+REPOSITORY_ROOT = Path(__file__).parents[5]
 WORKFLOW = REPOSITORY_ROOT / ".github/workflows/pr-checks.yaml"
 FRONTEND_PERFORMANCE_SCOPE = (
     REPOSITORY_ROOT / ".github/actions/frontend-performance-scope/action.yml"
@@ -147,6 +147,29 @@ class PullRequestWorkflowGraphTest(unittest.TestCase):
             assert block is not None, job
             assert f"uses: ./.github/actions/{action}" in block.group("body"), job
 
+    def test_jobs_request_only_their_python_dependency_profile(self) -> None:
+        """Install job-specific Python tooling instead of the aggregate dev environment."""
+        expected = {
+            "workflow-graph": "ci",
+            "fmt-check": "format",
+            "lint": "lint",
+            "type": "type",
+            "analyze": "analyze",
+            "test-fast": "test",
+            "test-medium": "test",
+            "test-slow": "test",
+            "coverage": "coverage",
+            "audit": "audit",
+        }
+        for job, profile in expected.items():
+            block = re.search(
+                rf"^    {re.escape(job)}:\n(?P<body>.*?)(?=^    \S|\Z)",
+                self.source,
+                re.MULTILINE | re.DOTALL,
+            )
+            assert block is not None, job
+            assert f"python-profile: {profile}" in block.group("body"), job
+
     def test_frontend_performance_is_one_conditional_job(self) -> None:
         block = re.search(
             r"^    frontend-performance:\n(?P<body>.*?)(?=^    \S|\Z)",
@@ -161,8 +184,8 @@ class PullRequestWorkflowGraphTest(unittest.TestCase):
     def test_frontend_performance_scope_covers_the_gate_implementation(self) -> None:
         scope_source = FRONTEND_PERFORMANCE_SCOPE.read_text()
 
-        assert '"monori/ci/quality_graph/checks/frontend_performance.py"' in scope_source
-        assert '"monori/ci/tests/test_frontend_performance.py"' in scope_source
+        assert '"ci/src/monori/ci/quality_graph/checks/frontend_performance.py"' in scope_source
+        assert '"ci/src/monori/ci/tests/test_frontend_performance.py"' in scope_source
 
     def test_reporting_actions_inherit_shared_in_progress_lifecycle(self) -> None:
         for action in REPORTING_ACTIONS:

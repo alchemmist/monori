@@ -5,14 +5,10 @@ inputs:
         description: Install web dependencies and configure Node
         required: false
         default: "false"
-    install-python:
-        description: Install shared Python dependencies and configure uv
+    python-profile:
+        description: Python environment profile
         required: false
-        default: "false"
-    install-server:
-        description: Deprecated alias for install-python
-        required: false
-        default: "false"
+        default: none
 runs:
     using: composite
     steps:
@@ -30,18 +26,18 @@ runs:
           run: npm install --global npm@10.9.2
 
         - name: Setup uv
-          if: inputs.install-python == 'true' || inputs.install-server == 'true'
+          if: inputs.python-profile != 'none'
           uses: astral-sh/setup-uv@v7
           with:
               enable-cache: true
               cache-dependency-glob: uv.lock
 
         - name: Restore Python environment
-          if: inputs.install-python == 'true' || inputs.install-server == 'true'
+          if: inputs.python-profile != 'none'
           uses: actions/cache@v4
           with:
               path: .venv
-              key: uv-venv-${{ runner.os }}-python-3.12-${{ hashFiles('uv.lock') }}
+              key: uv-venv-${{ runner.os }}-python-3.12-${{ inputs.python-profile }}-${{ hashFiles('uv.lock') }}
 
         - name: Install web dependencies
           if: inputs.install-web == 'true'
@@ -49,8 +45,16 @@ runs:
           run: npm ci --no-audit --no-fund
           working-directory: web
 
-        - name: Install server dependencies
-          if: inputs.install-python == 'true' || inputs.install-server == 'true'
+        - name: Install Python dependencies
+          if: inputs.python-profile != 'none'
           shell: bash
-          run: uv sync --locked --all-packages --group dev
+          run: |
+              case "${{ inputs.python-profile }}" in
+                  ci|format|lint|type|analyze|test|audit|mutation|runtime)
+                      uv sync --locked --no-install-project --no-dev --group "${{ inputs.python-profile }}" ;;
+                  coverage)
+                      uv sync --locked --no-install-project --no-dev --group test ;;
+                  *) echo "Unknown Python profile: ${{ inputs.python-profile }}" >&2; exit 2 ;;
+              esac
+              echo "UV_NO_SYNC=1" >> "$GITHUB_ENV"
           working-directory: .

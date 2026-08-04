@@ -6,7 +6,7 @@ runs:
         - name: Setup Python dependencies
           uses: ./.github/actions/setup-project
           with:
-              install-python: true
+              python-profile: ci
         - name: Acknowledge Quality Graph command
           if: github.event.action == 'created' && startsWith(github.event.comment.body, '/')
           shell: bash

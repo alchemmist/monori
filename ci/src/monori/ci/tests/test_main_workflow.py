@@ -1,3 +1,4 @@
+import re
 import unittest
 from pathlib import Path
 from typing import ClassVar, cast, override
@@ -6,7 +7,7 @@ import yaml
 
 from monori.ci.tests.test_pr_workflow import WorkflowDocument
 
-WORKFLOW = Path(__file__).parents[3] / ".github/workflows/main-checks.yaml"
+WORKFLOW = Path(__file__).parents[5] / ".github/workflows/main-checks.yaml"
 
 
 class MainWorkflowGraphTest(unittest.TestCase):
@@ -54,6 +55,29 @@ class MainWorkflowGraphTest(unittest.TestCase):
             needs = jobs[job].get("needs", [])
             needs = [needs] if isinstance(needs, str) else needs
             assert dependency in needs
+
+    def test_main_jobs_request_specific_python_profiles(self) -> None:
+        """Keep main jobs on the same minimal dependency profiles as PR jobs."""
+        expected = {
+            "fmt-check": "format",
+            "lint": "lint",
+            "type": "type",
+            "analyze": "analyze",
+            "test-fast": "test",
+            "test-medium": "test",
+            "test-slow": "test",
+            "coverage": "coverage",
+            "audit": "audit",
+            "mutation-full": "mutation",
+        }
+        for job, profile in expected.items():
+            block = re.search(
+                rf"^    {job}:\n(?P<body>.*?)(?=^    \S|\Z)",
+                self.source,
+                re.MULTILINE | re.DOTALL,
+            )
+            assert block is not None, job
+            assert f"python-profile: {profile}" in block.group("body"), job
 
 
 if __name__ == "__main__":

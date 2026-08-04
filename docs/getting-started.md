@@ -75,8 +75,9 @@ First, install everything the `make` targets need in one command:
 make install   # web (npm) + server (uv) deps + external lint/analyze CLIs
 ```
 
-This installs the web packages (`npm install`), the server packages (`uv sync`),
-and the standalone CLIs the lint/analyze/audit targets shell out to —
+This installs the web packages (`npm install`), all Python workspace/tooling profiles
+(`uv sync --all-packages --all-groups`), and the standalone CLIs the
+lint/analyze/audit targets shell out to —
 `shellcheck`, `shfmt`, `hadolint`, `actionlint`, `semgrep`, `gitleaks`. That last
 part (`make tools`) works the same on Linux and macOS: `semgrep` and
 `shellcheck` come from `uv tool`, the rest are downloaded as pinned release

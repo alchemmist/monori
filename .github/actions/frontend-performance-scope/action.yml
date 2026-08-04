@@ -10,7 +10,7 @@ runs:
         - name: Setup Python dependencies
           uses: ./.github/actions/setup-project
           with:
-              install-python: true
+              python-profile: ci
         - uses: ./.github/actions/report-in-progress
           with:
               marker: frontend-performance
@@ -37,10 +37,10 @@ runs:
                     "deploy/nginx.conf",
                     ".dockerignore",
                     "scripts/frontend-perf.sh",
-                    "monori/ci/quality_graph/checks/frontend_performance.py",
-                    "monori/ci/quality_graph/checks/frontend_measurement.py",
-                    "monori/ci/tests/test_frontend_performance.py",
-                    "monori/ci/tests/test_frontend_measurement.py",
+                    "ci/src/monori/ci/quality_graph/checks/frontend_performance.py",
+                    "ci/src/monori/ci/quality_graph/checks/frontend_measurement.py",
+                    "ci/src/monori/ci/tests/test_frontend_performance.py",
+                    "ci/src/monori/ci/tests/test_frontend_measurement.py",
                     ".github/workflows/pr-checks.yaml",
                   ]);
                   const relevant = files.some((file) => {

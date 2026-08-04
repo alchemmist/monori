@@ -21,10 +21,10 @@ SURVIVED = 0
 OTHER_STATUSES = {-24, 24, 35, 36, 152, 255}
 CLASS_SEPARATOR = "ǁ"
 MUTANT_SOURCE_PATHS = {
-    "app/": "monori/server/app/",
-    "common/": "monori/common/",
-    "lib/": "monori/ci/lib/",
-    "quality_graph/": "monori/ci/quality_graph/",
+    "app/": "server/src/monori/server/app/",
+    "common/": "common/src/monori/common/",
+    "lib/": "ci/src/monori/ci/lib/",
+    "quality_graph/": "ci/src/monori/ci/quality_graph/",
 }
 logger = logging.getLogger(__name__)
 
@@ -87,7 +87,12 @@ def changed_lines(base: str) -> dict[str, set[int]]:
         path: lines
         for path, lines in parse_changed_lines(output.getvalue().decode()).items()
         if path.startswith(
-            ("monori/server/app/", "monori/common/", "monori/ci/lib/", "monori/ci/quality_graph/")
+            (
+                "server/src/monori/server/app/",
+                "common/src/monori/common/",
+                "ci/src/monori/ci/lib/",
+                "ci/src/monori/ci/quality_graph/",
+            )
         )
     }
 

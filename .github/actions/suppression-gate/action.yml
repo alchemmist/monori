@@ -10,14 +10,14 @@ runs:
         - name: Setup Python dependencies
           uses: ./.github/actions/setup-project
           with:
-              install-python: true
+              python-profile: ci
         - uses: ./.github/actions/report-in-progress
           with:
               marker: suppression
               github-token: ${{ inputs.github-token }}
         - name: Test suppression checker
           shell: bash
-          run: uv run --locked python -m unittest discover -s monori/ci/tests -p 'test_suppressions.py'
+          run: uv run --locked python -m unittest discover -s ci/src/monori/ci/tests -p 'test_suppressions.py'
         - name: Check lint suppressions
           shell: bash
           env:

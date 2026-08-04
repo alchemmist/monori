@@ -38,6 +38,17 @@ class NoCommentsTest(unittest.TestCase):
             path.write_text("value = 1  # prose\n", encoding="utf-8")
             assert main([directory]) == 1
 
+    def test_main_scans_multiple_package_roots(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            first = Path(directory) / "first"
+            second = Path(directory) / "second"
+            first.mkdir()
+            second.mkdir()
+            (first / "clean.py").write_text("value = 1\n", encoding="utf-8")
+            (second / "invalid.py").write_text("value = 2  # prose\n", encoding="utf-8")
+
+            assert main([str(first), str(second)]) == 1
+
 
 if __name__ == "__main__":
     unittest.main()

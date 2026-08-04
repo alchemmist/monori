@@ -8,6 +8,7 @@ MUTATION_JOBS ?= $(shell getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.n
 BASE ?= origin/main
 
 WEBBIN := web/node_modules/.bin
+PYTHON_SOURCES := common/src/monori ci/src/monori server/src/monori
 CLOC_EXCLUDE_DIRS := .git,.worktrees,.claude,node_modules,.venv,__pycache__,.pytest_cache,.mypy_cache,.ruff_cache,dist,static,data,reports,coverage,htmlcov,.stryker-tmp,.mutmut-cache,mutants,playwright-report,test-results
 
 .DEFAULT_GOAL := up
@@ -24,7 +25,7 @@ CLOC_EXCLUDE_DIRS := .git,.worktrees,.claude,node_modules,.venv,__pycache__,.pyt
 install:
 	cd web && npm install --no-audit --no-fund
 	cd tools/frontend-perf && npm install --no-audit --no-fund
-	uv sync --locked --all-packages
+	uv sync --locked --all-packages --all-groups
 	@if ! command -v cloc >/dev/null 2>&1; then \
 		sudo apt-get update && sudo apt-get install -y cloc; \
 	fi
@@ -99,7 +100,7 @@ clean:
 	for path in \
 		.coverage coverage.json htmlcov coverage \
 		.stryker-tmp reports .mutmut-cache mutants \
-		.issue197 server/static monori/ci/coverage.json web/dist web/test-results web/playwright-report; do \
+		.issue197 server/static ci/coverage.json web/dist web/test-results web/playwright-report; do \
 		remove_path "$$path"; \
 	done
 	find . \
@@ -126,21 +127,21 @@ fmt-front:
 	$(WEBBIN)/prettier --write web
 
 fmt-back:
-	@(uv run --locked ruff check monori/server server --fix >/dev/null 2>&1 || true)
-	uv run --locked ruff format monori/server server
+	@(uv run --locked --group format ruff check server/src/monori/server server --fix >/dev/null 2>&1 || true)
+	uv run --locked --group format ruff format server/src/monori/server server
 	$(SQLFLUFF) fix server
 
 fmt-ci:
 	@files=$$(git ls-files '*.cjs' '*.css' '*.html' '*.json' '*.jsonc' '*.md' '*.mjs' '*.ts' '*.tsx' '*.yaml' '*.yml' | grep -Ev '^(web|server)/'); [ -z "$$files" ] || $(WEBBIN)/prettier --write $$files
-	@(uv run --locked ruff check monori/common monori/ci --fix >/dev/null 2>&1 || true)
-	uv run --locked ruff format monori/common monori/ci
+	@(uv run --locked --group format ruff check common/src/monori/common ci/src/monori/ci --fix >/dev/null 2>&1 || true)
+	uv run --locked --group format ruff format common/src/monori/common ci/src/monori/ci
 	@-$(WEBBIN)/markdownlint-cli2 --fix >/dev/null 2>&1
 	@files=$$(git ls-files '*.sh'); [ -z "$$files" ] || shfmt -w $$files
 
 fmt-check:
 	$(WEBBIN)/prettier --check .
-	uv run --locked ruff check monori
-	uv run --locked ruff format --check monori
+	uv run --locked --group format ruff check $(PYTHON_SOURCES)
+	uv run --locked --group format ruff format --check $(PYTHON_SOURCES)
 	$(SQLFLUFF) lint .
 
 lint: lint-web lint-css lint-html lint-server lint-sql lint-yaml lint-md lint-docs lint-actions lint-docker lint-shell spell
@@ -156,10 +157,10 @@ lint-html:
 	$(WEBBIN)/htmlhint web/index.html
 
 lint-server: lint-no-comments
-	uv run --locked ruff check monori
+	uv run --locked --group lint ruff check $(PYTHON_SOURCES)
 
 lint-no-comments:
-	python3 -m monori.ci.lib.no_comments monori
+	uv run --locked --group lint python -m monori.ci.lib.no_comments $(PYTHON_SOURCES)
 
 lint-sql:
 	$(SQLFLUFF) lint .
@@ -184,7 +185,7 @@ lint-shell:
 	@files=$$(git ls-files '*.sh'); [ -z "$$files" ] || shfmt -d $$files
 
 spell:
-	uvx codespell web/src monori \
+	uvx codespell web/src $(PYTHON_SOURCES) \
 		README.md web/README.md docs Makefile .github
 
 type: type-back type-front
@@ -195,16 +196,16 @@ type-front:
 	cd web && ./node_modules/.bin/eslint "src/**/*.{ts,tsx}" "e2e/**/*.ts" "*.config.ts" stryker.conf.ts
 
 type-back:
-	uv run --locked --package monori-server --extra connectors mypy monori
+	uv run --locked --group type mypy $(PYTHON_SOURCES)
 
 analyze:
-	uv run --locked bandit -q -r monori
+	uv run --locked --group analyze bandit -q -r $(PYTHON_SOURCES)
 	semgrep --error --quiet --config p/python --config p/javascript \
 		--exclude-rule python.lang.security.insecure-hash-algorithms.insecure-hash-algorithm-sha1 .
 	$(MAKE) analyze-python-dead-code analyze-javascript-dead-code
 
 analyze-python-dead-code:
-	uv run --locked vulture
+	uv run --locked --group analyze vulture
 
 analyze-javascript-dead-code:
 	cd web && ./node_modules/.bin/knip --no-progress
@@ -214,15 +215,15 @@ audit: audit-deps audit-deps-py audit-secrets
 audit-deps:
 	cd web && npm install --no-audit --no-fund --silent
 	(cd web && npm audit --audit-level=high --json) | \
-		uv run --locked python -m monori.ci.lib.npm_audit_gate
+		uv run --locked --group audit python -m monori.ci.lib.npm_audit_gate
 	cd tools/frontend-perf && npm install --no-audit --no-fund --silent
 	(cd tools/frontend-perf && npm audit --audit-level=high --json) | \
-		uv run --locked python -m monori.ci.lib.npm_audit_gate
+		uv run --locked --group audit python -m monori.ci.lib.npm_audit_gate
 
 audit-deps-py:
 	@req=$$(mktemp); \
 	( uv export --package monori-server --no-dev --no-hashes --format requirements-txt -o "$$req" \
-		&& uv run --locked pip-audit -r "$$req" ); code=$$?; \
+		&& uv run --locked --group audit pip-audit -r "$$req" ); code=$$?; \
 	rm -f "$$req"; exit $$code
 
 audit-secrets:
@@ -233,14 +234,14 @@ test: t-front t-back t-e2e
 t-fast:
 	cd web && npx vitest run --exclude "src/**/*.test.tsx"
 	$(MAKE) t-ci
-	uv run --locked pytest -q monori/server/tests -m "not integration"
+	uv run --locked --group test pytest -q server/src/monori/server/tests -m "not integration"
 
 t-medium:
 	cd web && npx vitest run --exclude "src/**/*.test.ts"
-	uv run --locked pytest -q monori/server/tests -m integration
+	uv run --locked --group test pytest -q server/src/monori/server/tests -m integration
 
 t-ci:
-	uv run --locked pytest -q monori/ci/tests
+	uv run --locked --group test pytest -q ci/src/monori/ci/tests
 
 t-slow: t-e2e
 
@@ -250,7 +251,7 @@ t-front:
 	cd web && npx vitest run
 
 t-back:
-	uv run --locked pytest -q monori/server/tests
+	uv run --locked --group test pytest -q server/src/monori/server/tests
 
 t-e2e:
 	COMPOSE="$(COMPOSE)" bash scripts/e2e.sh
@@ -298,10 +299,10 @@ m-front-diff:
 m-back:
 	@set +e; \
 	thr=$(MUTATION_THRESHOLD); \
-	( mkdir -p mutants && uv run --locked mutmut run --max-children $(MUTATION_JOBS) 2>mutants/mutmut-stderr.log ); mutmut=$$?; \
-	( mkdir -p mutants && uv run --locked mutmut export-cicd-stats ); export=$$?; \
+	( mkdir -p mutants && uv run --locked --group mutation mutmut run --max-children $(MUTATION_JOBS) 2>mutants/mutmut-stderr.log ); mutmut=$$?; \
+	( mkdir -p mutants && uv run --locked --group mutation mutmut export-cicd-stats ); export=$$?; \
 	if [ $$export -eq 0 ]; then \
-		uv run --locked python -m monori.ci.lib.mutation_gate mutants/mutmut-cicd-stats.json $$thr; srv=$$?; \
+		uv run --locked --group mutation python -m monori.ci.lib.mutation_gate mutants/mutmut-cicd-stats.json $$thr; srv=$$?; \
 	else \
 		srv=$$export; \
 	fi; \
@@ -314,20 +315,20 @@ mutation-python: m-back
 m-back-diff:
 	@set +e; \
 	git rev-parse --verify --quiet "$(BASE)" >/dev/null || { echo "mutation-diff: BASE='$(BASE)' is not a valid revision"; exit 1; }; \
-	if git diff --quiet "$(BASE)...HEAD" -- monori/server/app monori/ci/lib monori/ci/quality_graph monori/common; then \
+	if git diff --quiet "$(BASE)...HEAD" -- server/src/monori/server/app ci/src/monori/ci/lib ci/src/monori/ci/quality_graph common/src/monori/common; then \
 		echo "mutation-diff: no changed Python files — pass"; exit 0; \
 	fi; \
-	paths=$$(git diff --diff-filter=ACMR --name-only "$(BASE)...HEAD" -- monori/server/app monori/ci/lib monori/ci/quality_graph monori/common '*.py' | sed -e 's#^monori/server/##' -e 's#^monori/ci/##' -e 's#^monori/##' -e 's#\.py$$##' -e 's#/#.#g' -e 's#$$#.*#' | paste -sd' ' -); \
+	paths=$$(git diff --diff-filter=ACMR --name-only "$(BASE)...HEAD" -- server/src/monori/server/app ci/src/monori/ci/lib ci/src/monori/ci/quality_graph common/src/monori/common '*.py' | sed -e 's#^server/src/monori/server/##' -e 's#^ci/src/monori/ci/##' -e 's#^common/src/monori/##' -e 's#\.py$$##' -e 's#/#.#g' -e 's#$$#.*#' | paste -sd' ' -); \
 	if [ -z "$$paths" ]; then \
 		echo "mutation-diff: no changed Python source files — pass"; exit 0; \
 	fi; \
 	set -- $$paths; \
 	baseline=$$(mktemp -d); trap 'rm -rf "$$baseline"' EXIT; \
 	cold_start=0; if [ -d mutants ]; then cp -a mutants "$$baseline/mutants"; else mkdir -p "$$baseline/mutants"; cold_start=1; fi; \
-	( mkdir -p mutants && uv run --locked mutmut run --max-children $(MUTATION_JOBS) "$$@" 2>mutants/mutmut-stderr.log ); mutmut=$$?; \
+	( mkdir -p mutants && uv run --locked --group mutation mutmut run --max-children $(MUTATION_JOBS) "$$@" 2>mutants/mutmut-stderr.log ); mutmut=$$?; \
 	args="--mutants mutants --baseline $$baseline/mutants --base $(BASE) --threshold $(MUTATION_DIFF_THRESHOLD)"; \
 	if [ $$cold_start -eq 1 ]; then args="$$args --skip-new-survivors"; fi; \
-	uv run --locked python -m monori.ci.lib.mutation_diff_gate $$args; gate=$$?; \
+	uv run --locked --group mutation python -m monori.ci.lib.mutation_diff_gate $$args; gate=$$?; \
 	if [ -s mutants/mutmut-stderr.log ]; then echo "── mutmut diagnostics: mutants/mutmut-stderr.log ──"; fi; \
 	echo "── Python diff mutation gate (threshold $(MUTATION_DIFF_THRESHOLD)%, workers $(MUTATION_JOBS)): mutmut run exit=$$mutmut, gate exit=$$gate ──"; \
 	if [ $$mutmut -ne 0 ] || [ $$gate -ne 0 ]; then exit 1; fi

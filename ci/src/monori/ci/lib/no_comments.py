@@ -45,14 +45,15 @@ def main(argv: list[str] | None = None) -> int:
     """Run this module as a CLI entrypoint and return its exit code."""
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     parser = argparse.ArgumentParser()
-    parser.add_argument("root", type=Path)
+    parser.add_argument("roots", type=Path, nargs="+")
     args = parser.parse_args(argv)
 
     found = False
-    for path in python_files(args.root):
-        for line, column, text in violations(path):
-            found = True
-            logger.error("%s:%s:%s: code comment is not allowed: %s", path, line, column, text)
+    for root in args.roots:
+        for path in python_files(root):
+            for line, column, text in violations(path):
+                found = True
+                logger.error("%s:%s:%s: code comment is not allowed: %s", path, line, column, text)
     return int(found)
 
 

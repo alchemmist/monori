@@ -7,7 +7,7 @@ runs:
           uses: ./.github/actions/setup-project
           with:
               install-web: true
-              install-python: true
+              python-profile: ci
         - uses: ./.github/actions/report-in-progress
           with:
               marker: bundle-size

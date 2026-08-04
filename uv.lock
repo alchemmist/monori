@@ -10,10 +10,10 @@ resolution-markers = [
 
 [manifest]
 members = [
-    "monori",
     "monori-ci",
     "monori-common",
     "monori-server",
+    "monori-workspace",
 ]
 
 [[package]]
@@ -1188,93 +1188,44 @@ wheels = [
 ]
 
 [[package]]
-name = "monori"
-version = "0.1.0"
-source = { editable = "." }
-
-[package.dev-dependencies]
-dev = [
-    { name = "bandit" },
-    { name = "dulwich" },
-    { name = "fastapi" },
-    { name = "google-api-python-client" },
-    { name = "google-api-python-client-stubs" },
-    { name = "google-auth" },
-    { name = "google-auth-stubs" },
-    { name = "httpx", extra = ["socks"] },
-    { name = "httpx2" },
-    { name = "mutmut" },
-    { name = "mypy" },
-    { name = "pip-audit" },
-    { name = "pytest" },
-    { name = "pytest-cov" },
-    { name = "pyyaml" },
-    { name = "ruff" },
-    { name = "types-openpyxl" },
-    { name = "types-pyyaml" },
-    { name = "vulture" },
-]
-
-[package.metadata]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "bandit", specifier = ">=1.8" },
-    { name = "dulwich", specifier = ">=0.25.0" },
-    { name = "fastapi", specifier = ">=0.115" },
-    { name = "google-api-python-client", specifier = ">=2.0" },
-    { name = "google-api-python-client-stubs", specifier = ">=1.39.0" },
-    { name = "google-auth", specifier = ">=2.0" },
-    { name = "google-auth-stubs", specifier = ">=0.2" },
-    { name = "httpx", extras = ["socks"], specifier = ">=0.27" },
-    { name = "httpx2", specifier = ">=0.1" },
-    { name = "mutmut", specifier = ">=3.6.0" },
-    { name = "mypy", specifier = ">=1.13" },
-    { name = "pip-audit", specifier = ">=2.10.1" },
-    { name = "pytest", specifier = ">=8" },
-    { name = "pytest-cov", specifier = ">=5" },
-    { name = "pyyaml", specifier = ">=6.0" },
-    { name = "ruff", specifier = "==0.15.22" },
-    { name = "types-openpyxl", specifier = ">=3.1.5.20260724" },
-    { name = "types-pyyaml", specifier = ">=6.0.12.20250516" },
-    { name = "vulture", specifier = ">=2.16" },
-]
-
-[[package]]
 name = "monori-ci"
 version = "0.1.0"
-source = { virtual = "ci" }
+source = { editable = "ci" }
 dependencies = [
+    { name = "dulwich" },
+    { name = "fastapi" },
+    { name = "httpx" },
     { name = "jinja2" },
-    { name = "monori" },
+    { name = "monori-common" },
+    { name = "pydantic" },
 ]
 
 [package.metadata]
 requires-dist = [
+    { name = "dulwich", specifier = ">=0.25.0" },
+    { name = "fastapi", specifier = ">=0.115" },
+    { name = "httpx", specifier = ">=0.27" },
     { name = "jinja2", specifier = ">=3.1" },
-    { name = "monori", editable = "." },
+    { name = "monori-common", editable = "common" },
+    { name = "pydantic", specifier = ">=2" },
 ]
 
 [[package]]
 name = "monori-common"
 version = "0.1.0"
-source = { virtual = "common" }
-dependencies = [
-    { name = "monori" },
-]
-
-[package.metadata]
-requires-dist = [{ name = "monori", editable = "." }]
+source = { editable = "common" }
 
 [[package]]
 name = "monori-server"
 version = "0.1.0"
-source = { virtual = "server" }
+source = { editable = "server" }
 dependencies = [
     { name = "alembic" },
     { name = "argon2-cffi" },
     { name = "cryptography" },
-    { name = "monori" },
+    { name = "fastapi" },
+    { name = "httpx", extra = ["socks"] },
+    { name = "monori-common" },
     { name = "openpyxl" },
     { name = "pyjwt" },
     { name = "python-multipart" },
@@ -1291,7 +1242,9 @@ requires-dist = [
     { name = "alembic", specifier = ">=1.18.5" },
     { name = "argon2-cffi", specifier = ">=23" },
     { name = "cryptography", specifier = ">=50" },
-    { name = "monori", editable = "." },
+    { name = "fastapi", specifier = ">=0.115" },
+    { name = "httpx", extras = ["socks"], specifier = ">=0.27" },
+    { name = "monori-common", editable = "common" },
     { name = "openpyxl", specifier = ">=3.1" },
     { name = "playwright", marker = "extra == 'connectors'", specifier = ">=1.40" },
     { name = "pyjwt", specifier = ">=2.9" },
@@ -1299,6 +1252,109 @@ requires-dist = [
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.30" },
 ]
 provides-extras = ["connectors"]
+
+[[package]]
+name = "monori-workspace"
+version = "0.1.0"
+source = { virtual = "." }
+
+[package.dev-dependencies]
+analyze = [
+    { name = "bandit" },
+    { name = "vulture" },
+]
+audit = [
+    { name = "monori-ci" },
+    { name = "pip-audit" },
+]
+ci = [
+    { name = "monori-ci" },
+]
+format = [
+    { name = "ruff" },
+]
+lint = [
+    { name = "monori-ci" },
+    { name = "ruff" },
+]
+mutation = [
+    { name = "monori-ci" },
+    { name = "monori-server", extra = ["connectors"] },
+    { name = "mutmut" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
+]
+runtime = [
+    { name = "monori-ci" },
+    { name = "monori-server" },
+]
+test = [
+    { name = "monori-ci" },
+    { name = "monori-server", extra = ["connectors"] },
+    { name = "pytest" },
+    { name = "pytest-cov" },
+]
+type = [
+    { name = "google-api-python-client" },
+    { name = "google-api-python-client-stubs" },
+    { name = "google-auth" },
+    { name = "google-auth-stubs" },
+    { name = "httpx2" },
+    { name = "monori-ci" },
+    { name = "monori-server", extra = ["connectors"] },
+    { name = "mypy" },
+    { name = "pyyaml" },
+    { name = "types-openpyxl" },
+    { name = "types-pyyaml" },
+]
+
+[package.metadata]
+
+[package.metadata.requires-dev]
+analyze = [
+    { name = "bandit", specifier = ">=1.8" },
+    { name = "vulture", specifier = ">=2.16" },
+]
+audit = [
+    { name = "monori-ci", editable = "ci" },
+    { name = "pip-audit", specifier = ">=2.10.1" },
+]
+ci = [{ name = "monori-ci", editable = "ci" }]
+format = [{ name = "ruff", specifier = "==0.15.22" }]
+lint = [
+    { name = "monori-ci", editable = "ci" },
+    { name = "ruff", specifier = "==0.15.22" },
+]
+mutation = [
+    { name = "monori-ci", editable = "ci" },
+    { name = "monori-server", extras = ["connectors"], editable = "server" },
+    { name = "mutmut", specifier = ">=3.6.0" },
+    { name = "pytest", specifier = ">=8" },
+    { name = "pytest-cov", specifier = ">=5" },
+]
+runtime = [
+    { name = "monori-ci", editable = "ci" },
+    { name = "monori-server", editable = "server" },
+]
+test = [
+    { name = "monori-ci", editable = "ci" },
+    { name = "monori-server", extras = ["connectors"], editable = "server" },
+    { name = "pytest", specifier = ">=8" },
+    { name = "pytest-cov", specifier = ">=5" },
+]
+type = [
+    { name = "google-api-python-client", specifier = ">=2.0" },
+    { name = "google-api-python-client-stubs", specifier = ">=1.39.0" },
+    { name = "google-auth", specifier = ">=2.0" },
+    { name = "google-auth-stubs", specifier = ">=0.2" },
+    { name = "httpx2", specifier = ">=0.1" },
+    { name = "monori-ci", editable = "ci" },
+    { name = "monori-server", extras = ["connectors"], editable = "server" },
+    { name = "mypy", specifier = ">=1.13" },
+    { name = "pyyaml", specifier = ">=6.0" },
+    { name = "types-openpyxl", specifier = ">=3.1.5.20260724" },
+    { name = "types-pyyaml", specifier = ">=6.0.12.20250516" },
+]
 
 [[package]]
 name = "msgpack"
