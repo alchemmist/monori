@@ -18,12 +18,12 @@ from dataclasses import dataclass
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-SCHEMA = ROOT / "server" / "schema.sql"
+SCHEMA = ROOT / "server" / "src" / "monori" / "server" / "schema.sql"
 DOC = ROOT / "docs" / "data-model.md"
 START = "<!-- schema-diagram:start -->"
 END = "<!-- schema-diagram:end -->"
 GENERATED_NOTE = (
-    "<!-- generated from server/schema.sql by scripts/gen_schema_diagram.py — "
+    "<!-- generated from server/src/monori/server/schema.sql by scripts/gen_schema_diagram.py — "
     "run `make schema-diagram` after changing the schema -->"
 )
 logger = logging.getLogger(__name__)
@@ -156,7 +156,7 @@ def main() -> None:
     if args.check:
         if current != updated:
             sys.exit(
-                f"{DOC.relative_to(ROOT)} is out of date with server/schema.sql"
+                f"{DOC.relative_to(ROOT)} is out of date with server/src/monori/server/schema.sql"
                 " — run `make schema-diagram`"
             )
         return

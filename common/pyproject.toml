@@ -3,10 +3,11 @@ name = "monori-common"
 version = "0.1.0"
 description = "Monori shared Python primitives"
 requires-python = ">=3.12"
-dependencies = ["monori"]
+dependencies = []
 
-[tool.uv]
-package = false
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
-[tool.uv.sources]
-monori = { workspace = true }
+[tool.hatch.build.targets.wheel]
+packages = ["src/monori"]

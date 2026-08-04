@@ -12,10 +12,9 @@ ENV UV_PROJECT_ENVIRONMENT=/opt/venv \
 # Dependencies + Chromium and its OS libraries, in one cached layer keyed by
 # workspace metadata — not reinstalled on every container start.
 COPY pyproject.toml uv.lock ./
-COPY common/pyproject.toml ./common/pyproject.toml
+COPY common ./common
 COPY ci/pyproject.toml ./ci/pyproject.toml
-COPY server/pyproject.toml ./server/pyproject.toml
-COPY monori ./monori
+COPY server ./server
 RUN uv sync --frozen --package monori-server --extra connectors \
     && uv run playwright install --with-deps chromium
 

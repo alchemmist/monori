@@ -1,27 +1,27 @@
 [project]
-name = "monori"
+name = "monori-workspace"
 version = "0.1.0"
 description = "Monori Python workspace"
 requires-python = ">=3.12"
 dependencies = []
 
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+[tool.uv]
+package = false
 
 [dependency-groups]
-dev = [
-  "fastapi>=0.115",
+format = ["ruff==0.15.22"]
+ci = ["monori-ci"]
+lint = ["monori-ci", "ruff==0.15.22"]
+test = [
+  "monori-ci",
+  "monori-server[connectors]",
   "pytest>=8",
   "pytest-cov>=5",
-  "ruff==0.15.22",
+]
+type = [
+  "monori-ci",
+  "monori-server[connectors]",
   "mypy>=1.13",
-  "bandit>=1.8",
-  "dulwich>=0.25.0",
-  "vulture>=2.16",
-  "httpx[socks]>=0.27",
-  "mutmut>=3.6.0",
-  "pip-audit>=2.10.1",
   "types-openpyxl>=3.1.5.20260724",
   "types-PyYAML>=6.0.12.20250516",
   "PyYAML>=6.0",
@@ -31,16 +31,30 @@ dev = [
   "google-auth-stubs>=0.2",
   "httpx2>=0.1",
 ]
+analyze = [
+  "bandit>=1.8",
+  "vulture>=2.16",
+]
+audit = ["monori-ci", "pip-audit>=2.10.1"]
+mutation = [
+  { include-group = "test" },
+  "mutmut>=3.6.0",
+]
+runtime = ["monori-ci", "monori-server"]
+
+[tool.uv.sources]
+monori-ci = { workspace = true }
+monori-server = { workspace = true }
 
 [tool.uv.workspace]
 members = ["common", "server", "ci"]
 
 [tool.pytest.ini_options]
-testpaths = ["monori/server/tests", "monori/ci/tests"]
+testpaths = ["server/src/monori/server/tests", "ci/src/monori/ci/tests"]
 markers = ["integration: integration test that stands up real dependencies"]
 
 [tool.coverage.run]
-source = ["monori"]
+source = ["common/src/monori", "ci/src/monori", "server/src/monori"]
 
 [tool.coverage.report]
 fail_under = 80
@@ -48,7 +62,7 @@ fail_under = 80
 [tool.ruff]
 target-version = "py312"
 line-length = 100
-src = ["monori"]
+src = ["common/src", "ci/src", "server/src"]
 exclude = ["web/prototypes"]
 force-exclude = true
 
@@ -57,21 +71,22 @@ select = ["ALL"]
 ignore = ["COM812", "D203", "D212"]
 
 [tool.ruff.lint.per-file-ignores]
-"monori/server/tests/**/*.py" = [
+"server/src/monori/server/tests/**/*.py" = [
   "D102", "D103", "PLR2004", "S101", "D101", "S106", "S107",
   "D100", "S105", "D107", "D105", "D104", "F401"
 ]
-"monori/ci/tests/**/*.py" = [
+"ci/src/monori/ci/tests/**/*.py" = [
   "D102", "D103", "PLR2004", "S101", "D101", "S106", "S107",
   "D100", "S105", "D107", "D105", "D104", "F401"
 ]
-"server/migrations/**/*.py" = ["S101", "INP001"]
-"monori/server/app/workbook/parser.py" = ["RUF001"]
-"monori/server/app/connectors/tbank_playwright.py" = ["RUF001"]
+"server/src/monori/server/migrations/**/*.py" = ["S101", "INP001"]
+"server/src/monori/server/app/workbook/parser.py" = ["RUF001"]
+"server/src/monori/server/app/connectors/tbank_playwright.py" = ["RUF001"]
 
 [tool.mypy]
 python_version = "3.12"
-files = ["monori"]
+files = ["common/src", "ci/src", "server/src"]
+mypy_path = ["common/src", "ci/src", "server/src"]
 exclude = ['(^|/)mutants/']
 strict = true
 warn_unreachable = true
@@ -91,14 +106,14 @@ enable_error_code = [
 ]
 
 [tool.bandit]
-exclude_dirs = ["monori/server/tests", "monori/ci/tests"]
+exclude_dirs = ["server/src/monori/server/tests", "ci/src/monori/ci/tests"]
 skips = ["B105"]
 
 [tool.vulture]
-paths = ["monori"]
+paths = ["common/src/monori", "ci/src/monori", "server/src/monori"]
 min_confidence = 80
 ignore_names = ["referer", "predicate", "user_data_dir", "user_agent", "accept_downloads"]
 
 [tool.mutmut]
-source_paths = ["monori/server/app", "monori/ci/lib", "monori/ci/quality_graph", "monori/common"]
-also_copy = ["server/schema.sql", "server/migrations", "monori/ci/quality_graph/templates"]
+source_paths = ["server/src/monori/server/app", "ci/src/monori/ci/lib", "ci/src/monori/ci/quality_graph", "common/src/monori/common"]
+also_copy = ["server/src/monori/server/schema.sql", "server/src/monori/server/migrations", "ci/src/monori/ci/quality_graph/templates"]

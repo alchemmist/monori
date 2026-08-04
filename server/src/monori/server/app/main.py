@@ -1,6 +1,7 @@
 """Monori API. Money in/out of this API is integer kopecks everywhere."""
 
 import contextlib
+import os
 import pathlib
 from collections.abc import Awaitable, Callable
 from typing import Annotated
@@ -57,7 +58,7 @@ async def count_feature_usage(
     return response
 
 
-STATIC_DIR = pathlib.Path(__file__).resolve().parents[3] / "server" / "static"
+STATIC_DIR = pathlib.Path(os.environ.get("MONORI_STATIC_DIR", "server/static"))
 
 
 def _serve_spa(base: pathlib.Path, path: str) -> FileResponse:

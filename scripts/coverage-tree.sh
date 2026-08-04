@@ -10,7 +10,7 @@ echo "collecting frontend coverage..." >&2
 (cd "$root/web" && npx vitest run --coverage >/dev/null)
 
 echo "collecting Python coverage..." >&2
-(cd "$root" && uv run --locked pytest -q monori/server/tests monori/ci/tests \
+(cd "$root" && uv run --locked --group test pytest -q server/src/monori/server/tests ci/src/monori/ci/tests \
   --cov=monori \
   --cov-report="json:$be" --cov-report= >/dev/null)
 

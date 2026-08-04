@@ -26,10 +26,10 @@ def stacknode($name; $all):
 ($be[0].files
   | to_entries
   | map(select(.value.summary.num_statements > 0))
-  | map({
-      stack: (if (.key | startswith("ci/")) then "ci" else "backend" end),
-      module: (if (.key | startswith("monori/common/")) then "common" elif (.key | startswith("monori/ci/lib/")) then "lib" elif (.key | startswith("monori/ci/quality_graph/")) then "quality_graph" else "app" end),
-      file: (.key | sub("^monori/common/|^monori/server/app/|^monori/ci/lib/|^monori/ci/quality_graph/"; "")),
+  | map((.key | sub("^(common|ci|server)/src/monori/"; "") | sub("^monori/"; "")) as $path | {
+      stack: (if ($path | startswith("ci/")) then "ci" else "backend" end),
+      module: (if ($path | startswith("common/")) then "common" elif ($path | startswith("ci/lib/")) then "lib" elif ($path | startswith("ci/quality_graph/")) then "quality_graph" elif ($path | test("^(ci|server)/tests/")) then "tests" else "app" end),
+      file: ($path | sub("^common/|^server/(app|tests)/|^ci/(lib|quality_graph|tests)/"; "")),
       c: .value.summary.covered_lines,
       t: .value.summary.num_statements,
     })) as $bf

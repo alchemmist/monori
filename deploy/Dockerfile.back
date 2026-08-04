@@ -3,14 +3,11 @@
 FROM python:3.12-slim
 WORKDIR /app
 COPY pyproject.toml uv.lock ./
-COPY common/pyproject.toml ./common/pyproject.toml
+COPY common ./common
 COPY ci/pyproject.toml ./ci/pyproject.toml
-COPY server/pyproject.toml ./server/pyproject.toml
-COPY monori ./monori
+COPY server ./server
 RUN pip install --no-cache-dir "uv==0.11.26" && \
     uv sync --frozen --package monori-server --no-dev
-COPY server/schema.sql ./server/schema.sql
-COPY server/migrations ./server/migrations
 ENV MONORI_DB=/app/data/monori.db
 EXPOSE 8000
 # on SIGTERM uvicorn stops accepting connections and finishes what is already

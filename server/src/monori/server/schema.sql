@@ -1,7 +1,7 @@
 -- Canonical monori schema: the full, current shape of the database.
 -- Fresh databases are created from this file and stamped at the latest
 -- alembic revision; existing databases reach the same shape by running
--- the migration chain in server/migrations/versions/.
+-- the migration chain in server/src/monori/server/migrations/versions/.
 -- All money amounts are integer kopecks.
 
 PRAGMA journal_mode = WAL;
