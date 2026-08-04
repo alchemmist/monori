@@ -310,7 +310,7 @@ def _header_adds_up(head: Header) -> bool | None:
     income = head.income
     budgeted = head.budgeted
     available = head.available
-    calculated = carried + overspent + income + budgeted
+    calculated = carried + overspent + income - budgeted
     return abs(calculated - available) <= HEADER_RECONCILIATION_TOLERANCE
 
 

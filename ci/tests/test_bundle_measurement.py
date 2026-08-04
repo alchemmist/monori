@@ -1,7 +1,10 @@
 import unittest
 from typing import TypedDict, cast
 
+import pytest
+
 from ci.quality_graph.checks.bundle_measurement import Snapshot, compare, normalized_asset, tier
+from ci.quality_graph.checks.bundle_size import format_kib
 
 
 class BundleEntry(TypedDict):
@@ -35,6 +38,10 @@ class BundleSizeTest(unittest.TestCase):
         growth = cast("list[AssetGrowth]", result["assetGrowth"])
         assert entries[0]["id"] == "bundle-initial-load"
         assert growth[0]["delta"] == 10_000
+
+    def test_format_kib_rejects_boolean_values(self) -> None:
+        with pytest.raises(TypeError, match="numeric bundle size"):
+            format_kib(True)
 
 
 if __name__ == "__main__":

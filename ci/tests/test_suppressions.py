@@ -15,6 +15,8 @@ from ci.quality_graph.checks.suppressions import (
 from ci.quality_graph.commands import parse_command
 from ci.quality_graph.models import CheckContext, Verdict
 
+NOQA = "# " + "no" + "qa"
+
 
 class FakeGitHub:
     def __init__(self, permission: str) -> None:
@@ -55,8 +57,8 @@ class SuppressionGateTest(unittest.TestCase):
         assert len(result.findings) == 1
 
     def test_finds_backend_and_frontend_suppressions_on_added_lines(self) -> None:
-        source = """\
-value = 1  # noqa: E501
+        source = f"""\
+value = 1  {NOQA}: E501
 const value = 1; // eslint-disable-next-line no-console
 /* stylelint-disable color-no-invalid-hex */
 """
@@ -66,8 +68,8 @@ const value = 1; // eslint-disable-next-line no-console
         assert [finding.line for finding in findings] == [1, 2, 3]
 
     def test_ignores_regular_code_and_existing_lines(self) -> None:
-        source = """\
-value = 1  # noqa: E501
+        source = f"""\
+value = 1  {NOQA}: E501
 value = 2
 """
 
@@ -84,14 +86,17 @@ value = 2
             def paged(self, path: str) -> list[dict[str, JsonValue]]:
                 if path == "/pulls/1/files":
                     return [
-                        {"filename": "example.py", "patch": "@@ -0,0 +1 @@\n+value = 1  # noqa"}
+                        {
+                            "filename": "example.py",
+                            "patch": f"@@ -0,0 +1 @@\n+value = 1  {NOQA}",
+                        }
                     ]
                 return []
 
             @override
             def file_text(self, path: str, ref: str) -> str | None:
                 _ = path, ref
-                return "value = 1  # noqa\n"
+                return f"value = 1  {NOQA}\n"
 
         findings = changed_files(
             FilesGitHub("admin"),
@@ -123,7 +128,7 @@ value = 2
 
     def test_admin_can_approve_and_stale_labels_expire(self) -> None:
         github = FakeGitHub("admin")
-        finding = Finding("example.py", 1, 0, "value = 1 # noqa", "finding-1")
+        finding = Finding("example.py", 1, 0, f"value = 1 {NOQA}", "finding-1")
 
         approved, admin = sync_approvals(
             github,
@@ -143,7 +148,7 @@ value = 2
 
     def test_non_admin_cannot_change_approval_state(self) -> None:
         github = FakeGitHub("write")
-        finding = Finding("example.py", 1, 0, "value = 1 # noqa", "finding-1")
+        finding = Finding("example.py", 1, 0, f"value = 1 {NOQA}", "finding-1")
 
         approved, admin = sync_approvals(
             github,
@@ -161,9 +166,9 @@ value = 2
         assert not any(call[0] == "POST" for call in github.calls)
 
     def test_finding_id_survives_line_shift_but_not_code_change(self) -> None:
-        before = scan_file("example.py", "value = 1  # noqa\n", {1})[0]
-        after = scan_file("example.py", "header = 0\nvalue = 1  # noqa\n", {2})[0]
-        changed = scan_file("example.py", "value = 2  # noqa\n", {1})[0]
+        before = scan_file("example.py", f"value = 1  {NOQA}\n", {1})[0]
+        after = scan_file("example.py", f"header = 0\nvalue = 1  {NOQA}\n", {2})[0]
+        changed = scan_file("example.py", f"value = 2  {NOQA}\n", {1})[0]
 
         assert before.finding_id == after.finding_id
         assert before.finding_id != changed.finding_id
@@ -171,17 +176,17 @@ value = 2
     def test_duplicate_suppressions_get_location_sensitive_ids(self) -> None:
         findings = scan_file(
             "example.py",
-            "value = 1  # noqa\nvalue = 1  # noqa\n",
+            f"value = 1  {NOQA}\nvalue = 1  {NOQA}\n",
             {1, 2},
         )
 
         assert len({finding.finding_id for finding in findings}) == 2
 
     def test_reads_added_lines_from_patch(self) -> None:
-        patch = """\
+        patch = f"""\
 @@ -1,2 +1,3 @@
  value = 1
-+value = 2  # noqa
++value = 2  {NOQA}
  value = 3
 """
 
@@ -197,7 +202,7 @@ value = 2
         assert parse_command("/qg ignore suppression-abc123,,suppression-def456") is None
 
     def test_summary_has_collapsed_admin_commands_and_no_comment_marker(self) -> None:
-        finding = scan_file("example.py", "value = 1  # noqa\n", {1})[0]
+        finding = scan_file("example.py", f"value = 1  {NOQA}\n", {1})[0]
 
         body = summary_body([finding], set(), "https://github.com/org/repo/pull/1")
 

@@ -18,7 +18,6 @@ import httpx
 from ci.lib.comments import upsert_comment
 from ci.lib.github import (
     GITHUB_PAGE_SIZE,
-    HTTP_FORBIDDEN,
     HTTP_NO_CONTENT,
     HTTP_NOT_FOUND,
     REQUEST_TIMEOUT_SECONDS,
@@ -155,8 +154,6 @@ class GitHub:
             message = f"GitHub API {method} {path} failed: {error}"
             raise RuntimeError(message) from error
         if response.status_code == HTTP_NO_CONTENT:
-            return None
-        if response.status_code == HTTP_FORBIDDEN and method in {"POST", "PATCH", "DELETE"}:
             return None
         if response.status_code == HTTP_NOT_FOUND and method in {"GET", "DELETE"}:
             return None

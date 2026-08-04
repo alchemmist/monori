@@ -42,7 +42,7 @@ class FrontendPerformanceGateTest(unittest.TestCase):
 
     def test_ignore_all_and_remove_ignore(self) -> None:
         all_command = parse_command("/qg ignore frontend")
-        remove_command = parse_command("/qg remove-ignore frontend-fea774364776")
+        remove_command = parse_command("/qg remove-ignore frontend")
 
         approved = apply_command(all_command, self.entries, set())
         assert apply_command(remove_command, self.entries, approved) == set()

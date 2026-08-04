@@ -4,16 +4,20 @@ The app asks for `?light=1`, the progress ring is visible while chunks land, it
 disappears when the last one does, and the ledger ends up complete and in order.
 """
 
-import pathlib
 import logging
+import os
+import pathlib
+import stat
 import sys
+import tempfile
 from enum import StrEnum
 
 from playwright.sync_api import Browser, Page, Request, sync_playwright
 from pydantic import TypeAdapter
 from pydantic.dataclasses import dataclass as pydantic_dataclass
 
-TOKEN_FILE = pathlib.Path("/tmp/monori-token.txt")
+TOKEN_FILE = pathlib.Path(tempfile.gettempdir()) / f"monori-token-{os.getuid()}.txt"
+TOKEN_FILE_MODE = 0o600
 SNAPSHOT_ROW_COUNT = 500
 logger = logging.getLogger(__name__)
 
@@ -75,14 +79,22 @@ REDUCED_RING_ADAPTER: TypeAdapter[ReducedRing] = TypeAdapter(ReducedRing)
 
 
 def load_token() -> str:
-    """Load token."""
+    """Load a user-owned token file with restrictive permissions."""
     if not TOKEN_FILE.exists():
         sys.exit(
             f"{TOKEN_FILE} not found — mint one first, e.g.:\n"
             "  cd server && uv run python -c "
             "'from app.security import create_access_token; print(create_access_token(1))'"
-            f" > {TOKEN_FILE}"
+            f" > {TOKEN_FILE} && chmod 600 {TOKEN_FILE}"
         )
+    metadata = TOKEN_FILE.lstat()
+    if (
+        TOKEN_FILE.is_symlink()
+        or not stat.S_ISREG(metadata.st_mode)
+        or metadata.st_uid != os.getuid()
+        or metadata.st_mode & 0o777 != TOKEN_FILE_MODE
+    ):
+        sys.exit(f"{TOKEN_FILE} must be a user-owned regular file with mode 0600")
     return TOKEN_FILE.read_text().strip()
 
 
@@ -125,7 +137,7 @@ def open_page(
     return page
 
 
-def main() -> None:
+def main() -> int:
     """Run this module as a CLI entrypoint and return its exit code."""
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     token = load_token()
@@ -170,7 +182,7 @@ def main() -> None:
         # than that would mean a superseded fill kept running
         count = state.count
         assert count is not None
-        expected_chunks = -((count - 500) // 1000)
+        expected_chunks = max(0, (count - SNAPSHOT_ROW_COUNT + 999) // 1000)
         check(
             f"the fill ran exactly once ({expected_chunks} chunks)",
             cond=len(chunks) == expected_chunks,
@@ -182,8 +194,8 @@ def main() -> None:
         check("reduce motion drops the ring", cond=reduced_ring.svg is False)
         check("reduce motion still shows the percentage", cond="%" in reduced_ring.text)
         logger.info("\nRESULT: %s", "ALL PASS" if ok else "SOME FAILED")
-        sys.exit(0 if ok else 1)
+        return 0 if ok else 1
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

@@ -11,7 +11,7 @@ from typing import cast
 
 import httpx
 
-from ci.lib.github import HTTP_FORBIDDEN, HTTP_NO_CONTENT, HTTP_NOT_FOUND, REQUEST_TIMEOUT_SECONDS
+from ci.lib.github import HTTP_NO_CONTENT, HTTP_NOT_FOUND, REQUEST_TIMEOUT_SECONDS
 from ci.quality_graph.commands import (
     QualityGraphCommand,
     admin_command_lines,
@@ -108,8 +108,6 @@ class GitHub:
             raise RuntimeError(message) from error
         if response.status_code == HTTP_NO_CONTENT:
             return None
-        if response.status_code == HTTP_FORBIDDEN and method in {"POST", "PATCH", "DELETE"}:
-            return None
         if response.status_code == HTTP_NOT_FOUND and method in {"GET", "DELETE"}:
             return None
         try:
@@ -168,7 +166,7 @@ def append_commands(summary: str, entries: list[dict[str, JsonValue]], approved:
 
 def format_kib(value: JsonValue) -> str:
     """Format kib for this module."""
-    if not isinstance(value, (int, float)):
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
         message = "Expected numeric bundle size"
         raise TypeError(message)
     return f"{value / 1024:.1f} KiB"

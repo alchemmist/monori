@@ -50,8 +50,6 @@ class GitHub:
             raise RuntimeError(message) from error
         if response.status_code == HTTP_NO_CONTENT:
             return None
-        if response.status_code == HTTP_FORBIDDEN and method in {"POST", "PATCH", "DELETE"}:
-            return None
         try:
             response.raise_for_status()
         except httpx.HTTPStatusError as error:

@@ -10,7 +10,7 @@ from typing import cast
 
 import httpx
 
-from ci.lib.github import HTTP_FORBIDDEN, HTTP_NO_CONTENT, HTTP_NOT_FOUND, REQUEST_TIMEOUT_SECONDS
+from ci.lib.github import HTTP_NO_CONTENT, HTTP_NOT_FOUND, REQUEST_TIMEOUT_SECONDS
 from ci.quality_graph.commands import (
     QualityGraphCommand,
     admin_command_lines,
@@ -103,8 +103,6 @@ class GitHub:
             raise RuntimeError(message) from error
         if response.status_code == HTTP_NO_CONTENT:
             return None
-        if response.status_code == HTTP_FORBIDDEN and method in {"POST", "PATCH", "DELETE"}:
-            return None
         if response.status_code == HTTP_NOT_FOUND and method in {"GET", "DELETE"}:
             return None
         try:
@@ -188,11 +186,9 @@ def apply_command(
     if name in {"help", "status", "ignore-file"}:
         return approved
     ids = entry_ids(entries)
-    if name == "ignore" and "frontend" in arguments:
-        return approved | ids
     selected = (
         ids
-        if name == "ignore" and "frontend" in arguments
+        if name in {"ignore", "remove-ignore"} and "frontend" in arguments
         else {argument for argument in arguments if argument.startswith(FINDING_ID_PREFIX)}
     ) & ids
     return approved - selected if name == "remove-ignore" else approved | selected

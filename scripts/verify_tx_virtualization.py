@@ -4,15 +4,19 @@ Only a windowed slice of the 6802 rows is ever in the DOM; spacers stand in for
 the rest. Scrolling recycles rendered rows while the sticky header stays pinned.
 """
 
-import pathlib
 import logging
+import os
+import pathlib
+import stat
 import sys
+import tempfile
 
 from playwright.sync_api import Page, sync_playwright
 from pydantic import TypeAdapter
 from pydantic.dataclasses import dataclass as pydantic_dataclass
 
-TOKEN_FILE = pathlib.Path("/tmp/monori-token.txt")
+TOKEN_FILE = pathlib.Path(tempfile.gettempdir()) / f"monori-token-{os.getuid()}.txt"
+TOKEN_FILE_MODE = 0o600
 WINDOWED_ROW_LIMIT = 200
 WINDOW_TOP_OFFSET_PX = 2
 TALL_SCROLL_MIN_PX = 200_000
@@ -34,14 +38,22 @@ class Measure:
 
 
 def load_token() -> str:
-    """Load token."""
+    """Load a user-owned token file with restrictive permissions."""
     if not TOKEN_FILE.exists():
         sys.exit(
             f"{TOKEN_FILE} not found — mint one first, e.g.:\n"
             "  cd server && uv run python -c "
             "'from app.security import create_access_token; print(create_access_token(1))'"
-            f" > {TOKEN_FILE}"
+            f" > {TOKEN_FILE} && chmod 600 {TOKEN_FILE}"
         )
+    metadata = TOKEN_FILE.lstat()
+    if (
+        TOKEN_FILE.is_symlink()
+        or not stat.S_ISREG(metadata.st_mode)
+        or metadata.st_uid != os.getuid()
+        or metadata.st_mode & 0o777 != TOKEN_FILE_MODE
+    ):
+        sys.exit(f"{TOKEN_FILE} must be a user-owned regular file with mode 0600")
     return TOKEN_FILE.read_text().strip()
 
 
@@ -71,7 +83,7 @@ def measure(page: Page) -> Measure:
     )
 
 
-def main() -> None:
+def main() -> int:
     """Run this module as a CLI entrypoint and return its exit code."""
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     token = load_token()
@@ -132,7 +144,8 @@ def main() -> None:
         check("filter shrank the set", cond=filt.countText not in TOTAL_TRANSACTIONS_TEXTS)
         check("filter reset scroll to top", cond=filt.scrollY <= WINDOW_TOP_OFFSET_PX)
         logger.info("\nRESULT: %s", "ALL PASS" if ok else "SOME FAILED")
+        return 0 if ok else 1
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

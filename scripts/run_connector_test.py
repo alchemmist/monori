@@ -11,15 +11,20 @@ import base64
 import io
 import logging
 import os
+import pathlib
 import sys
 import tarfile
+import tempfile
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "server"))
 
-from app.connectors.base import JsonObject, SmsRequiredError, SyncResult
+from app.connectors.base import ConnectorError, JsonObject, SmsRequiredError, SyncResult
 from app.connectors.tbank_playwright import TBankPlaywrightConnector
 
-PROFILE_DIR = os.environ.get("PROFILE_DIR", "/tmp/tbank-explore/profile")
+PROFILE_DIR = os.environ.get(
+    "PROFILE_DIR",
+    str(pathlib.Path(tempfile.gettempdir()) / "tbank-explore/profile"),
+)
 logger = logging.getLogger(__name__)
 
 
@@ -52,13 +57,14 @@ def main() -> None:
     conn = TBankPlaywrightConnector(creds, session)
     try:
         result: SyncResult = conn.sync()
-    except SmsRequiredError as e:
-        logger.info("RESULT: SmsRequired -> %s (trusted session lapsed, needs OTP)", e)
+    except SmsRequiredError as error:
+        logger.info("RESULT: SmsRequired -> %s (trusted session lapsed, needs OTP)", error)
         conn.close()
         return
-    except Exception as e:  
-        logger.error("RESULT: ERROR -> %s: %s", type(e).__name__, e)
-        return
+    except ConnectorError as error:
+        logger.exception("RESULT: ERROR -> %s: %s", type(error).__name__, error)
+        conn.close()
+        raise SystemExit(1) from error
     rows = result.rows
     logger.info("RESULT: OK -> %s rows parsed", len(rows))
     if rows:

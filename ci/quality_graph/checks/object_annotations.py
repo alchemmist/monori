@@ -151,8 +151,6 @@ class GitHub:
             raise RuntimeError(message) from error
         if response.status_code == HTTP_NO_CONTENT:
             return None
-        if response.status_code == HTTP_FORBIDDEN and method in {"POST", "PATCH", "DELETE"}:
-            return None
         if method in {"GET", "DELETE"} and response.status_code == HTTP_NOT_FOUND:
             return None
         if response.is_error:

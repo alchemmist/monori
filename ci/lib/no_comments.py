@@ -2,8 +2,7 @@
 Command-line check that rejects inline comments outside allowed markers.
 
 The module scans Python files for comment tokens and reports violations when a
-comment is not an allowed directive such as `# noqa`, `# nosec`, or `# type:
-ignore` / `# type: noqa`.
+comment is not an approved formatter, security, or typing directive.
 """
 
 from __future__ import annotations

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import StrEnum
+from enum import StrEnum, auto
 from typing import TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 class Verdict(StrEnum):
     """Overall result category for a quality check."""
 
-    PASS = "pass"  # noqa: S105
+    PASS = auto()
     FAIL = "fail"
 
 
