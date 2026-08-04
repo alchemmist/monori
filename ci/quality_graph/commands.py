@@ -24,6 +24,7 @@ COMMAND_RE = re.compile(
 GATE_NAME_RE = re.compile(r"^[a-z][a-z0-9-]*$")
 FINDING_ID_RE = re.compile(r"^[a-z][a-z0-9-]*-[a-z0-9-]+$")
 KNOWN_GATES = {"object", "suppression", "bundle", "frontend"}
+WORKFLOW_BOT_LOGINS = {"github-actions[bot]", "monori-bot"}
 
 
 @dataclass(frozen=True)
@@ -152,12 +153,10 @@ class GitHubAPI(Protocol):
         ...
 
 
-def bot_login(github: GitHubAPI) -> str:
-    """Fetch the login of the authenticated GitHub actor."""
-    return string_value(
-        object_value(github.request("GET", "/user"), "authenticated user").get("login"),
-        "bot login",
-    )
+def workflow_bot_logins() -> set[str]:
+    """Return logins used by workflow bots to author managed comments and reactions."""
+    configured_login = os.environ.get("GITHUB_ACTIONS_BOT_LOGIN", "github-actions[bot]")
+    return {configured_login, *WORKFLOW_BOT_LOGINS}
 
 
 def set_comment_reaction(github: GitHubAPI, comment_id: int, content: str) -> None:
@@ -166,12 +165,12 @@ def set_comment_reaction(github: GitHubAPI, comment_id: int, content: str) -> No
         github.request("GET", f"/issues/comments/{comment_id}/reactions"),
         "comment reactions",
     )
-    login = bot_login(github)
+    bot_logins = workflow_bot_logins()
     for item in reactions:
         reaction = object_value(item, "reaction")
         user = object_value(reaction.get("user", {}), "reaction user")
         reaction_id = reaction.get("id")
-        if user.get("login") == login and isinstance(reaction_id, int):
+        if user.get("login") in bot_logins and isinstance(reaction_id, int):
             github.request("DELETE", f"/issues/comments/{comment_id}/reactions/{reaction_id}")
     github.request("POST", f"/issues/comments/{comment_id}/reactions", {"content": content})
 
@@ -180,7 +179,7 @@ def upsert_status(github: GitHubAPI, number: int, body: str) -> None:
     """Update or create the bot-owned quality-graph status comment."""
     marker = "<!-- monori-report: quality-graph -->"
     rendered = f"{marker}\n\n{body.rstrip()}\n"
-    login = bot_login(github)
+    bot_logins = workflow_bot_logins()
     for page in range(1, GITHUB_PAGE_SIZE + 1):
         comments = array_value(
             github.request(
@@ -191,7 +190,7 @@ def upsert_status(github: GitHubAPI, number: int, body: str) -> None:
         for item in comments:
             comment = object_value(item, "pull request comment")
             author = object_value(comment.get("user", {}), "comment author")
-            if marker not in str(comment.get("body", "")) or author.get("login") != login:
+            if marker not in str(comment.get("body", "")) or author.get("login") not in bot_logins:
                 continue
             comment_id = comment.get("id")
             if not isinstance(comment_id, int):
@@ -305,7 +304,7 @@ def process_command(github: GitHubAPI, request: CommandRequest) -> None:
         publish_rejection(
             github,
             request,
-            CommandRejection("❌", "Unknown command. Use `/qg help`.", "-1"),
+            CommandRejection("❌", "Unknown command. Use `/qg help`.", "x"),
         )
         return
     validation_error = validate_command(command)
@@ -313,7 +312,7 @@ def process_command(github: GitHubAPI, request: CommandRequest) -> None:
         publish_rejection(
             github,
             request,
-            CommandRejection("❌", validation_error, "-1", command),
+            CommandRejection("❌", validation_error, "x", command),
         )
         return
     number = request.pull_request_number
@@ -322,26 +321,30 @@ def process_command(github: GitHubAPI, request: CommandRequest) -> None:
             github,
             request,
             CommandRejection(
-                "😕",
+                "🚫",
                 "Only repository administrators may execute Quality Graph commands.",
                 "confused",
                 command,
             ),
         )
         return
-    if command.name == "help":
-        upsert_status(github, number, help_body())
-    elif command.name == "status":
-        upsert_status(
-            github,
-            number,
-            (
-                "## Quality Graph status\n\n"
-                "Command API is available and ready to process administrator commands."
-            ),
-        )
-    else:
-        apply_gate_command(github, number, request.comment_id, command)
+    try:
+        if command.name == "help":
+            upsert_status(github, number, help_body())
+        elif command.name == "status":
+            upsert_status(
+                github,
+                number,
+                (
+                    "## Quality Graph status\n\n"
+                    "Command API is available and ready to process administrator commands."
+                ),
+            )
+        else:
+            apply_gate_command(github, number, request.comment_id, command)
+    except (RuntimeError, TypeError, ValueError):
+        set_comment_reaction(github, request.comment_id, "x")
+        raise
     set_comment_reaction(github, request.comment_id, "hooray")
 
 

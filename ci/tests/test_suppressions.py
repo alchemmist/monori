@@ -126,6 +126,39 @@ value = 2
         assert findings[0].line == 2
         assert '"server/app.py" = ["E501"]' in findings[0].text
 
+    def test_groups_multiline_toml_suppression_entry(self) -> None:
+        source = """\
+[tool.ruff.lint.per-file-ignores]
+"ci/tests/**/*.py" = [
+  "D102", "D103", "PLR2004",
+  "D100", "S105"
+]
+"server/app/parser.py" = ["RUF001"]
+"""
+
+        findings = scan_file("pyproject.toml", source, {2, 3, 4, 5, 6, 7})
+
+        assert [finding.line for finding in findings] == [2, 6]
+        assert [finding.text for finding in findings] == [
+            '"ci/tests/**/*.py" = [',
+            '"server/app/parser.py" = ["RUF001"]',
+        ]
+
+    def test_added_line_inside_existing_multiline_toml_entry_is_reported_once(self) -> None:
+        source = """\
+[tool.ruff.lint.per-file-ignores]
+"ci/tests/**/*.py" = [
+  "D102",
+  "D103",
+]
+"""
+
+        findings = scan_file("pyproject.toml", source, {4})
+
+        assert len(findings) == 1
+        assert findings[0].line == 2
+        assert findings[0].text == '"ci/tests/**/*.py" = ['
+
     def test_admin_can_approve_and_stale_labels_expire(self) -> None:
         github = FakeGitHub("admin")
         finding = Finding("example.py", 1, 0, f"value = 1 {NOQA}", "finding-1")

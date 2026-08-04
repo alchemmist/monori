@@ -54,6 +54,10 @@ CONFIG_SUPPRESSION_RE = re.compile(
     r"|\bzizmor\s*:\s*ignore\b|\bactionlint\s*:\s*ignore\b)"
 )
 TOML_SECTION_RE = re.compile(r"^\s*\[([^\]]+)\]\s*$")
+TOML_KEY_RE = re.compile(
+    r'^\s*(?:"[^"]+"|[A-Za-z0-9_-]+)'
+    r'(?:\s*\.\s*(?:"[^"]+"|[A-Za-z0-9_-]+))*\s*='
+)
 TOML_SUPPRESSION_SECTION_NAMES = {"per-file-ignores", "extend-per-file-ignores"}
 WORKFLOW_RUNS_PER_PAGE = GITHUB_PAGE_SIZE
 
@@ -264,41 +268,81 @@ def added_lines_from_patch(patch: str) -> set[int]:
     return added
 
 
-def scan_file(path: str, source: str, added_lines: set[int]) -> list[Finding]:
-    """Scan changed lines in a file and emit suppression findings."""
+def _is_toml_suppression_section(section: str) -> bool:
+    return section.rsplit(".", 1)[-1].strip('"').lower() in TOML_SUPPRESSION_SECTION_NAMES
+
+
+def _directive_candidates(
+    path: str, lines: list[str], added_lines: set[int], pattern: re.Pattern[str]
+) -> list[tuple[int, int, str, str]]:
     candidates: list[tuple[int, int, str, str]] = []
-    is_toml = path.endswith(".toml")
-    is_config = path.endswith((".toml", ".json", ".jsonc", ".yaml", ".yml")) or any(
-        name in path.lower() for name in ("eslint.config", "stylelint", "knip.config")
-    )
-    pattern = CONFIG_SUPPRESSION_RE if is_config else SOURCE_SUPPRESSION_RE
     toml_section = ""
-    for line_number, line in enumerate(source.splitlines(), 1):
+    is_toml = path.endswith(".toml")
+    for line_number, line in enumerate(lines, 1):
         if is_toml:
             section_match = TOML_SECTION_RE.match(line)
             if section_match:
                 toml_section = section_match.group(1)
-        if line_number not in added_lines:
+        if line_number not in added_lines or _is_toml_suppression_section(toml_section):
             continue
         match = pattern.search(line)
-        if match is not None:
-            code = f"{line[: match.start()]}{line[match.end() :]}"
-            normalized_code = " ".join(code.split())
-            normalized_directive = " ".join(match.group(0).lower().split())
-            column = match.start()
-        elif (
-            is_toml
-            and toml_section.rsplit(".", 1)[-1].strip('"').lower() in TOML_SUPPRESSION_SECTION_NAMES
-            and line.strip()
-            and not line.lstrip().startswith("#")
-        ):
-            normalized_code = " ".join(line.split())
-            normalized_directive = f"toml-section:{toml_section.lower()}"
-            column = len(line) - len(line.lstrip())
-        else:
+        if match is None:
             continue
+        code = f"{line[: match.start()]}{line[match.end() :]}"
+        normalized_code = " ".join(code.split())
+        normalized_directive = " ".join(match.group(0).lower().split())
         raw_id = f"{path}:{normalized_directive}:{normalized_code}"
-        candidates.append((line_number, column, line.strip(), raw_id))
+        candidates.append((line_number, match.start(), line.strip(), raw_id))
+    return candidates
+
+
+def _toml_candidates(
+    path: str, lines: list[str], added_lines: set[int]
+) -> list[tuple[int, int, str, str]]:
+    candidates: list[tuple[int, int, str, str]] = []
+    section = ""
+    line_number = 0
+    while line_number < len(lines):
+        line_number += 1
+        line = lines[line_number - 1]
+        section_match = TOML_SECTION_RE.match(line)
+        if section_match:
+            section = section_match.group(1)
+            if _is_toml_suppression_section(section) and line_number in added_lines:
+                normalized_code = " ".join(line.split())
+                raw_id = f"{path}:toml-section:{section.lower()}:{normalized_code}"
+                candidates.append((line_number, 0, line.strip(), raw_id))
+            continue
+        if not _is_toml_suppression_section(section) or not TOML_KEY_RE.match(line):
+            continue
+
+        start = line_number
+        end = start
+        bracket_depth = line.count("[") - line.count("]")
+        while bracket_depth > 0 and end < len(lines):
+            end += 1
+            continuation = lines[end - 1]
+            bracket_depth += continuation.count("[") - continuation.count("]")
+        if any(number in added_lines for number in range(start, end + 1)):
+            entry = " ".join(" ".join(lines[start - 1 : end]).split())
+            raw_id = f"{path}:toml-section:{section.lower()}:{entry}"
+            first_line = lines[start - 1]
+            column = len(first_line) - len(first_line.lstrip())
+            candidates.append((start, column, first_line.strip(), raw_id))
+        line_number = end
+    return candidates
+
+
+def scan_file(path: str, source: str, added_lines: set[int]) -> list[Finding]:
+    """Scan changed lines in a file and emit suppression findings."""
+    is_config = path.endswith((".toml", ".json", ".jsonc", ".yaml", ".yml")) or any(
+        name in path.lower() for name in ("eslint.config", "stylelint", "knip.config")
+    )
+    lines = source.splitlines()
+    pattern = CONFIG_SUPPRESSION_RE if is_config else SOURCE_SUPPRESSION_RE
+    candidates = _directive_candidates(path, lines, added_lines, pattern)
+    if path.endswith(".toml"):
+        candidates.extend(_toml_candidates(path, lines, added_lines))
     duplicates = Counter(raw_id for _, _, _, raw_id in candidates)
     findings: list[Finding] = []
     for line_number, column, text, raw_id in candidates:

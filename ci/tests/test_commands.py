@@ -79,6 +79,7 @@ class QualityGraphCommandTest(unittest.TestCase):
 
         assert ("DELETE", "/issues/comments/42/reactions/7", None) in github.calls
         assert ("POST", "/issues/comments/42/reactions", {"content": "hooray"}) in github.calls
+        assert not any(path == "/user" for _, path, _ in github.calls)
 
     def test_status_updates_only_the_bot_owned_quality_graph_comment(self) -> None:
         github = FakeGitHub()
