@@ -14,6 +14,7 @@ import httpx
 from monori.ci.lib.github import HTTP_NO_CONTENT, HTTP_NOT_FOUND, REQUEST_TIMEOUT_SECONDS
 from monori.ci.quality_graph.commands import (
     QualityGraphCommand,
+    decode_command,
     parse_command,
     validate_command,
 )
@@ -28,7 +29,7 @@ from monori.common import JsonValue, array_value, number_value, object_value, st
 
 STATUS_LABEL = "monori-bundle-size-failed"
 STATE_RE = re.compile(r"<!-- monori-bundle-size-approvals: ([a-z0-9,-]*) -->")
-PENDING_RE = re.compile(r"<!-- monori-bundle-size-pending: (\d+) -->")
+PENDING_RE = re.compile(r"<!-- monori-bundle-size-pending: (\d+)(?: ([A-Za-z0-9_-]+))? -->")
 
 
 def json_number(value: JsonValue, context: str) -> int | float:
@@ -111,6 +112,8 @@ def command_from_pending(github: GitHub, body: str) -> QualityGraphCommand | Non
     match = PENDING_RE.search(body)
     if not match:
         return None
+    if match.group(2):
+        return decode_command(match.group(2))
     comment = object_value(github.request("GET", f"/issues/comments/{match.group(1)}"), "comment")
     command = parse_command(string_value(comment.get("body"), "comment body").strip())
     if command and validate_command(command) is not None:

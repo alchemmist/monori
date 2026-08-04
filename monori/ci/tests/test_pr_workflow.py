@@ -188,6 +188,9 @@ class PullRequestWorkflowGraphTest(unittest.TestCase):
         assert "github.event_name == 'pull_request'" in self.source
         assert "github.event_name == 'pull_request_target'" not in self.source
         assert "issue_comment:" in self.source
+        assert "types: [created, edited]" in self.source
+        assert "monori-qg-control:" in self.source
+        assert "github.event.sender.type != 'Bot'" in self.source
 
 
 if __name__ == "__main__":

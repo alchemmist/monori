@@ -13,6 +13,7 @@ import httpx
 from monori.ci.lib.github import HTTP_NO_CONTENT, HTTP_NOT_FOUND, REQUEST_TIMEOUT_SECONDS
 from monori.ci.quality_graph.commands import (
     QualityGraphCommand,
+    decode_command,
     parse_command,
     validate_command,
 )
@@ -35,7 +36,9 @@ from monori.common import (
 STATUS_LABEL = "monori-frontend-performance-failed"
 FINDING_ID_PREFIX = "frontend-"
 STATE_RE = re.compile(r"<!-- monori-frontend-performance-approvals: ([0-9a-f,]*) -->")
-PENDING_RE = re.compile(r"<!-- monori-frontend-performance-pending: (\d+) -->")
+PENDING_RE = re.compile(
+    r"<!-- monori-frontend-performance-pending: (\d+)(?: ([A-Za-z0-9_-]+))? -->"
+)
 
 
 def finding_id(entry: dict[str, JsonValue]) -> str:
@@ -133,6 +136,8 @@ def command_from_pending(github: GitHub, body: str) -> QualityGraphCommand | Non
     match = PENDING_RE.search(body)
     if not match:
         return None
+    if match.group(2):
+        return decode_command(match.group(2))
     comment = object_value(github.request("GET", f"/issues/comments/{match.group(1)}"), "comment")
     command = parse_command((optional_string(comment.get("body")) or "").strip())
     if command and validate_command(command) is not None:

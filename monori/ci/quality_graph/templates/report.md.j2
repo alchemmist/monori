@@ -24,11 +24,11 @@
 {% if model.admin %}
 <details><summary>For repository administrators</summary>
 
-{% if model.admin.commands -%}
-Post exactly one command as a new pull-request comment:
+{% if model.admin.controls -%}
+Check an action to apply it; uncheck an applied action to revert it:
 
-{% for command in model.admin.commands -%}
-- `{{ command }}`
+{% for control in model.admin.controls -%}
+- [{{ "x" if control.checked else " " }}] `{{ control.command }}` <!-- {{ control.marker }} -->
 {% endfor %}
 {% else -%}
 No actionable findings in this run.

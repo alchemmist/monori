@@ -26,6 +26,7 @@ from monori.ci.lib.github import (
 from monori.ci.quality_graph.base import QualityCheck
 from monori.ci.quality_graph.commands import (
     QualityGraphCommand,
+    command_request,
     command_targets_gate,
     parse_command,
     validate_command,
@@ -634,14 +635,13 @@ def main() -> int:
     report.mark_in_progress()
     pull = object_value(github.request("GET", f"/pulls/{number}"), "pull request")
     findings = changed_files(github, pull)
-    comment = object_value(event.get("comment", {}), "comment")
-    command = parse_command((optional_string(comment.get("body")) or "").strip())
+    request = command_request(event)
+    command = parse_command(request.body) if request is not None else None
     if command and validate_command(command) is not None:
         command = None
     if command and not command_targets_gate(command, "suppression"):
         command = None
-    author_data = object_value(comment.get("user", {}), "comment user")
-    author = optional_string(author_data.get("login")) if command else None
+    author = request.login if command and request is not None else None
     approved, admin = sync_approvals(
         github, number, pull, findings, SyncApprovalCommandState(command, author)
     )

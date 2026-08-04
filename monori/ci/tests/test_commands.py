@@ -3,14 +3,23 @@ from typing import cast, override
 from unittest import mock
 
 from monori.ci.quality_graph.commands import (
+    CommandRequest,
     QualityGraphCommand,
+    command_request,
     command_targets_gate,
     command_text,
     parse_command,
+    process_command,
     rerun_workflow,
     set_comment_reaction,
     upsert_status,
     validate_command,
+)
+from monori.ci.quality_graph.reporting import (
+    ReportModel,
+    ReportStatus,
+    admin_commands,
+    render_report,
 )
 from monori.common import JsonValue
 
@@ -71,6 +80,120 @@ class QualityGraphCommandTest(unittest.TestCase):
         command = QualityGraphCommand("remove-ignore", ("object-abc123", "suppression-def456"))
 
         assert command_text(command) == "/qg remove-ignore object-abc123,suppression-def456"
+
+    def test_checked_report_control_reuses_the_command_parser(self) -> None:
+        body = render_report(
+            ReportModel(
+                "suppression",
+                ReportStatus.FAIL,
+                admin=admin_commands("suppression", ["suppression-abc123"], []),
+            )
+        )
+        checked = body.replace("- [ ]", "- [x]", 1)
+        event = cast(
+            "dict[str, JsonValue]",
+            {
+                "action": "edited",
+                "issue": {"number": 42, "pull_request": {"url": "pull"}},
+                "comment": {
+                    "id": 8,
+                    "body": checked,
+                    "user": {"login": "github-actions[bot]"},
+                },
+                "sender": {"login": "admin"},
+                "changes": {"body": {"from": body}},
+            },
+        )
+
+        request = command_request(event)
+
+        assert request is not None
+        assert parse_command(request.body) == QualityGraphCommand("ignore", ("suppression-abc123",))
+        assert request.login == "admin"
+        assert request.pull_request_number == 42
+        assert not request.react
+
+    def test_unchecked_report_control_becomes_remove_ignore(self) -> None:
+        checked = render_report(
+            ReportModel(
+                "suppression",
+                ReportStatus.DONE,
+                admin=admin_commands("suppression", [], ["suppression-abc123"]),
+            )
+        )
+        unchecked = checked.replace("- [x]", "- [ ]", 1)
+        event = cast(
+            "dict[str, JsonValue]",
+            {
+                "action": "edited",
+                "issue": {"number": 42, "pull_request": {"url": "pull"}},
+                "comment": {
+                    "id": 8,
+                    "body": unchecked,
+                    "user": {"login": "github-actions[bot]"},
+                },
+                "sender": {"login": "admin"},
+                "changes": {"body": {"from": checked}},
+            },
+        )
+
+        request = command_request(event)
+
+        assert request is not None
+        assert parse_command(request.body) == QualityGraphCommand(
+            "remove-ignore", ("suppression-abc123",)
+        )
+
+    def test_non_admin_checkbox_edit_does_not_write_or_rerun(self) -> None:
+        class NonAdminGitHub(FakeGitHub):
+            @override
+            def request(self, method: str, path: str, payload: JsonValue = None) -> JsonValue:
+                self.calls.append((method, path, payload))
+                if path.endswith("/permission"):
+                    return {"permission": "write"}
+                return None
+
+        github = NonAdminGitHub()
+
+        process_command(
+            github,
+            CommandRequest(
+                8,
+                "/qg ignore suppression-abc123",
+                "contributor",
+                42,
+                react=False,
+            ),
+        )
+
+        assert github.calls == [
+            ("GET", "/collaborators/contributor/permission", None),
+        ]
+
+    def test_checkbox_control_is_ignored_on_user_owned_comment(self) -> None:
+        body = render_report(
+            ReportModel(
+                "suppression",
+                ReportStatus.FAIL,
+                admin=admin_commands("suppression", ["suppression-abc123"], []),
+            )
+        )
+        event = cast(
+            "dict[str, JsonValue]",
+            {
+                "action": "edited",
+                "issue": {"number": 42, "pull_request": {"url": "pull"}},
+                "comment": {
+                    "id": 8,
+                    "body": body.replace("- [ ]", "- [x]", 1),
+                    "user": {"login": "contributor"},
+                },
+                "sender": {"login": "admin"},
+                "changes": {"body": {"from": body}},
+            },
+        )
+
+        assert command_request(event) is None
 
     def test_reaction_replaces_the_bot_reaction(self) -> None:
         github = FakeGitHub()

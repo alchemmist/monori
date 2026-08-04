@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import hashlib
 import re
 from dataclasses import dataclass
@@ -68,10 +69,26 @@ class ReportFinding:
 
 
 @dataclass(frozen=True)
-class AdminCommands:
-    """Copy-paste administrator commands and explanatory notes."""
+class AdminControl:
+    """One reversible administrator action rendered as a Markdown checkbox."""
 
-    commands: tuple[str, ...]
+    command: str
+    reverse_command: str
+    checked: bool = False
+
+    @property
+    def marker(self) -> str:
+        """Encode both canonical commands in a stable hidden marker."""
+        payload = f"{self.command}\n{self.reverse_command}".encode()
+        encoded = base64.urlsafe_b64encode(payload).decode().rstrip("=")
+        return f"monori-qg-control:{encoded}"
+
+
+@dataclass(frozen=True)
+class AdminCommands:
+    """Reversible administrator controls and explanatory notes."""
+
+    controls: tuple[AdminControl, ...]
     notes: tuple[str, ...] = ()
 
 
@@ -138,14 +155,27 @@ def admin_commands(
     active = sorted(set(active_ids))
     approved = sorted(set(approved_ids))
     paths = sorted(set(file_paths))
-    commands: list[str] = []
+    controls: list[AdminControl] = []
     if active:
-        commands.extend((f"/qg ignore {','.join(active)}", f"/qg ignore {gate}"))
-    if paths:
-        commands.append(f"/qg ignore-file {','.join(paths)}")
+        remove_active = f"/qg remove-ignore {','.join(active)}"
+        controls.extend(
+            (
+                AdminControl(f"/qg ignore {','.join(active)}", remove_active),
+                AdminControl(f"/qg ignore {gate}", remove_active),
+            )
+        )
+        if paths:
+            controls.append(AdminControl(f"/qg ignore-file {','.join(paths)}", remove_active))
     if approved:
-        commands.append(f"/qg remove-ignore {','.join(approved)}")
-    return AdminCommands(tuple(commands), tuple(notes))
+        approved_command = f"/qg ignore {','.join(approved)}"
+        controls.append(
+            AdminControl(
+                approved_command,
+                f"/qg remove-ignore {','.join(approved)}",
+                checked=True,
+            )
+        )
+    return AdminCommands(tuple(controls), tuple(notes))
 
 
 def render_report(model: ReportModel) -> str:

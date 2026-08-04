@@ -8,6 +8,7 @@ runs:
           with:
               install-python: true
         - name: Acknowledge Quality Graph command
+          if: github.event.action == 'created' && startsWith(github.event.comment.body, '/')
           shell: bash
           env:
               COMMENT_ID: ${{ github.event.comment.id }}

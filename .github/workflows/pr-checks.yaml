@@ -2,7 +2,7 @@ name: Quality Graph
 
 on:
     issue_comment:
-        types: [created]
+        types: [created, edited]
     pull_request:
         branches: [main]
 
@@ -343,7 +343,14 @@ jobs:
         if: >-
             github.event_name == 'issue_comment'
             && github.event.issue.pull_request
-            && startsWith(github.event.comment.body, '/')
+            && (
+              (github.event.action == 'created' && startsWith(github.event.comment.body, '/'))
+              || (
+                github.event.action == 'edited'
+                && github.event.sender.type != 'Bot'
+                && contains(github.event.comment.body, '<!-- monori-qg-control:')
+              )
+            )
         runs-on: ubuntu-latest
         permissions:
             actions: write

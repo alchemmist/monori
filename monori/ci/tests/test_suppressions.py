@@ -279,7 +279,7 @@ value = 2
         assert parse_command("/qg ignore all") is None
         assert parse_command("/qg ignore suppression-abc123,,suppression-def456") is None
 
-    def test_summary_has_collapsed_admin_commands_and_no_comment_marker(self) -> None:
+    def test_summary_has_collapsed_admin_controls_without_report_marker(self) -> None:
         finding = scan_file("example.py", f"value = 1  {NOQA}\n", {1})[0]
 
         body = summary_body([finding], set(), "https://github.com/org/repo/pull/1")
@@ -290,7 +290,8 @@ value = 2
         assert "/qg ignore suppression-600043a9733a" in body
         assert "/qg ignore-file example.py" in body
         assert "[`example.py:1`](https://github.com/org/repo/pull/1/files#diff-" in body
-        assert "<!--" not in body
+        assert "<!-- monori-qg-control:" in body
+        assert "<!-- monori-report:" not in body
 
 
 if __name__ == "__main__":

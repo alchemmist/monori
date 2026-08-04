@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import json
 import os
 import re
@@ -10,7 +11,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, cast
 
-from monori.ci.lib.comments import CommandReactionLifecycle, Reaction
+from monori.ci.lib.comments import (
+    CommandReactionLifecycle,
+    Reaction,
+    workflow_bot_logins,
+)
 from monori.ci.lib.github import GITHUB_PAGE_SIZE, GitHub, GitHubAPI
 from monori.ci.quality_graph.reporting import (
     PullRequestReport,
@@ -28,6 +33,11 @@ COMMAND_RE = re.compile(
 GATE_NAME_RE = re.compile(r"^[a-z][a-z0-9-]*$")
 FINDING_ID_RE = re.compile(r"^[a-z][a-z0-9-]*-[a-z0-9-]+$")
 KNOWN_GATES = {"object", "suppression", "bundle", "frontend"}
+CONTROL_COMMAND_COUNT = 2
+CONTROL_RE = re.compile(
+    r"^- \[(?P<state>[ xX])] .*?<!-- (?P<marker>monori-qg-control:[A-Za-z0-9_-]+) -->$",
+    re.MULTILINE,
+)
 
 
 @dataclass(frozen=True)
@@ -46,6 +56,7 @@ class CommandRequest:
     body: str
     login: str | None
     pull_request_number: int | None
+    react: bool = True
 
 
 @dataclass(frozen=True)
@@ -124,6 +135,20 @@ def command_text(command: QualityGraphCommand) -> str:
     return f"/qg {command.name}{suffix}"
 
 
+def encode_command(command: QualityGraphCommand) -> str:
+    """Encode a canonical command for storage in a pull-request marker."""
+    return base64.urlsafe_b64encode(command_text(command).encode()).decode().rstrip("=")
+
+
+def decode_command(encoded: str) -> QualityGraphCommand | None:
+    """Decode and parse a canonical command stored in a pull-request marker."""
+    try:
+        body = base64.urlsafe_b64decode(encoded + "=" * (-len(encoded) % 4)).decode()
+    except (ValueError, UnicodeDecodeError):
+        return None
+    return parse_command(body)
+
+
 def set_comment_reaction(github: GitHubAPI, comment_id: int, content: str) -> None:
     """Set a command reaction through the shared lifecycle."""
     CommandReactionLifecycle(github, comment_id).set(Reaction(content))
@@ -197,19 +222,78 @@ def is_quality_graph_command(body: str) -> bool:
 
 def command_request(event: dict[str, JsonValue]) -> CommandRequest | None:
     """Extract a Quality Graph command request from an issue-comment event."""
-    comment = object_value(event.get("comment", {}), "event comment")
+    raw_comment = event.get("comment")
+    if not isinstance(raw_comment, dict):
+        return None
+    comment = object_value(raw_comment, "event comment")
     comment_id = comment.get("id")
     if not isinstance(comment_id, int):
         return None
     comment_body = string_value(comment.get("body"), "comment body").strip()
     if not is_quality_graph_command(comment_body):
-        return None
+        return checkbox_command_request(event, comment_id, comment_body)
     author = object_value(comment.get("user", {}), "comment user")
     return CommandRequest(
         comment_id,
         comment_body,
         optional_string(author.get("login")),
         pull_request_number(event),
+    )
+
+
+def control_states(body: str) -> dict[str, bool]:
+    """Extract checkbox states keyed by their hidden control marker."""
+    return {
+        match.group("marker"): match.group("state").lower() == "x"
+        for match in CONTROL_RE.finditer(body)
+    }
+
+
+def control_commands(marker: str) -> tuple[str, str] | None:
+    """Decode the apply and reverse commands stored in a control marker."""
+    encoded = marker.removeprefix("monori-qg-control:")
+    try:
+        payload = base64.urlsafe_b64decode(encoded + "=" * (-len(encoded) % 4)).decode()
+    except (ValueError, UnicodeDecodeError):
+        return None
+    commands = payload.splitlines()
+    if len(commands) != CONTROL_COMMAND_COUNT or any(
+        parse_command(command) is None for command in commands
+    ):
+        return None
+    return commands[0], commands[1]
+
+
+def checkbox_command_request(
+    event: dict[str, JsonValue], comment_id: int, body: str
+) -> CommandRequest | None:
+    """Convert one administrator checkbox edit into a canonical command request."""
+    if event.get("action") != "edited":
+        return None
+    comment = object_value(event.get("comment", {}), "event comment")
+    author = object_value(comment.get("user", {}), "comment user")
+    if author.get("login") not in workflow_bot_logins():
+        return None
+    changes = object_value(event.get("changes", {}), "event changes")
+    body_change = object_value(changes.get("body", {}), "comment body change")
+    previous_body = string_value(body_change.get("from"), "previous comment body")
+    before = control_states(previous_body)
+    after = control_states(body)
+    changed = [marker for marker in before.keys() & after.keys() if before[marker] != after[marker]]
+    if len(changed) != 1:
+        return None
+    commands = control_commands(changed[0])
+    if commands is None:
+        return None
+    apply_command, reverse_command = commands
+    sender = object_value(event.get("sender", {}), "event sender")
+    selected_command = apply_command if after[changed[0]] else reverse_command
+    return CommandRequest(
+        comment_id,
+        selected_command,
+        optional_string(sender.get("login")),
+        pull_request_number(event),
+        react=False,
     )
 
 
@@ -233,9 +317,10 @@ def process_command(github: GitHubAPI, request: CommandRequest) -> None:
     """Validate, authorize, and dispatch one Quality Graph command request."""
     command = parse_command(request.body)
     reactions = CommandReactionLifecycle(github, request.comment_id)
-    reactions.acknowledge()
+    if request.react:
+        reactions.acknowledge()
     if command is None:
-        publish_rejection(
+        reject_request(
             github,
             request,
             CommandRejection("Unknown command. Use `/qg help`.", Reaction.FAILED),
@@ -243,7 +328,7 @@ def process_command(github: GitHubAPI, request: CommandRequest) -> None:
         return
     validation_error = validate_command(command)
     if validation_error is not None:
-        publish_rejection(
+        reject_request(
             github,
             request,
             CommandRejection(validation_error, Reaction.FAILED, command),
@@ -251,7 +336,7 @@ def process_command(github: GitHubAPI, request: CommandRequest) -> None:
         return
     number = request.pull_request_number
     if number is None or request.login is None or not is_admin(github, request.login):
-        publish_rejection(
+        reject_request(
             github,
             request,
             CommandRejection(
@@ -262,26 +347,45 @@ def process_command(github: GitHubAPI, request: CommandRequest) -> None:
         )
         return
     try:
-        if command.name == "help":
-            upsert_status(github, number, help_body())
-        elif command.name == "status":
-            upsert_status(
-                github,
-                number,
-                render_report(
-                    ReportModel(
-                        "quality-graph",
-                        ReportStatus.DONE,
-                        "Command API is available and ready to process administrator commands.",
-                    )
-                ),
-            )
-        else:
-            apply_gate_command(github, number, request.comment_id, command)
+        dispatch_command(github, number, request.comment_id, command)
     except (RuntimeError, TypeError, ValueError):
-        reactions.fail()
+        if request.react:
+            reactions.fail()
         raise
-    reactions.succeed()
+    if request.react:
+        reactions.succeed()
+
+
+def reject_request(github: GitHubAPI, request: CommandRequest, rejection: CommandRejection) -> None:
+    """Reject a request visibly only when it originated as a command comment."""
+    if request.react:
+        publish_rejection(github, request, rejection)
+
+
+def dispatch_command(
+    github: GitHubAPI,
+    number: int,
+    comment_id: int,
+    command: QualityGraphCommand,
+) -> None:
+    """Dispatch one validated and authorized command."""
+    if command.name == "help":
+        upsert_status(github, number, help_body())
+        return
+    if command.name == "status":
+        upsert_status(
+            github,
+            number,
+            render_report(
+                ReportModel(
+                    "quality-graph",
+                    ReportStatus.DONE,
+                    "Command API is available and ready to process administrator commands.",
+                )
+            ),
+        )
+        return
+    apply_gate_command(github, number, comment_id, command)
 
 
 def apply_gate_command(
@@ -308,8 +412,8 @@ def apply_gate_command(
         "frontend": "monori-frontend-performance-pending",
     }.items():
         if command_targets_gate(command, gate):
-            marker = f"<!-- {marker_name}: {comment_id} -->"
-            body = re.sub(rf"<!-- {marker_name}: \d+ -->", marker, body)
+            marker = f"<!-- {marker_name}: {comment_id} {encode_command(command)} -->"
+            body = re.sub(rf"<!-- {marker_name}: \d+(?: [A-Za-z0-9_-]+)? -->", marker, body)
             if marker not in body:
                 body = f"{body.rstrip()}\n\n{marker}".strip()
     if body != (original_body or ""):
