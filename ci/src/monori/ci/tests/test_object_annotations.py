@@ -3,7 +3,9 @@ import io
 import unittest
 from typing import override
 
+from monori.ci.lib.github import sync_label
 from monori.ci.quality_graph.checks.object_annotations import (
+    FAILURE_LABEL,
     Finding,
     ObjectAnnotationCheck,
     SyncApprovalCommandState,
@@ -13,7 +15,6 @@ from monori.ci.quality_graph.checks.object_annotations import (
     scan_file,
     summary_body,
     sync_approvals,
-    sync_failure_label,
 )
 from monori.ci.quality_graph.commands import parse_command
 from monori.ci.quality_graph.models import CheckContext, Verdict
@@ -44,6 +45,17 @@ class FakeGitHub:
 
     def ensure_label(self, name: str) -> None:
         self.calls.append(("ensure_label", name, None))
+
+    def is_admin(self, login: str) -> bool:
+        _ = login
+        return self.permission == "admin"
+
+    def sync_label(self, number: int, name: str, *, present: bool) -> None:
+        if present:
+            self.ensure_label(name)
+            self.request("POST", f"/issues/{number}/labels", {"labels": [name]})
+        else:
+            self.request("DELETE", f"/issues/{number}/labels/{name}")
 
 
 class ObjectAnnotationGateTest(unittest.TestCase):
@@ -140,10 +152,14 @@ other: "list[object]"
     def test_failure_label_tracks_active_findings(self) -> None:
         github = FakeGitHub()
 
-        sync_failure_label(github, 1, has_active_findings=True)
-        sync_failure_label(github, 1, has_active_findings=False)
+        sync_label(github, 1, FAILURE_LABEL, present=True)
+        sync_label(github, 1, FAILURE_LABEL, present=False)
 
-        assert ("ensure_label", "monori-object-annotation-failed", None) in github.calls
+        assert (
+            "POST",
+            "/labels",
+            {"name": "monori-object-annotation-failed", "color": "b60205"},
+        ) in github.calls
         assert any(call[0] == "DELETE" and "failed" in call[1] for call in github.calls)
 
     def test_rerun_lookup_paginates_past_first_page(self) -> None:

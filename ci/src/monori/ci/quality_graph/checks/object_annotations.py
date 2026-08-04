@@ -1,31 +1,24 @@
 """Check changed Python annotations for uses of the overly broad ``object`` type."""
 
 import ast
-import base64
 import difflib
 import hashlib
-import json
 import os
 import re
 import sys
-import urllib.parse
 from collections import Counter
 from dataclasses import dataclass
 from itertools import count
 from pathlib import Path
-from typing import cast, override
-
-import httpx
+from typing import override
 
 from monori.ci.lib.github import (
     GITHUB_PAGE_SIZE,
-    HTTP_FORBIDDEN,
-    HTTP_NO_CONTENT,
-    HTTP_NOT_FOUND,
-    REQUEST_TIMEOUT_SECONDS,
+    GitHub,
     RepositoryGitHubAPI,
+    sync_label,
 )
-from monori.ci.quality_graph.base import QualityCheck
+from monori.ci.quality_graph.base import ApprovalLifecycle, ApprovalRequest, QualityCheck
 from monori.ci.quality_graph.commands import (
     QualityGraphCommand,
     command_request,
@@ -59,6 +52,13 @@ FINDING_ID_PREFIX = "object-"
 FAILURE_LABEL = "monori-object-annotation-failed"
 APPROVAL_STATE_RE = re.compile(r"<!-- monori-object-annotation-approvals: ([0-9a-f,]*) -->")
 WORKFLOW_RUNS_PER_PAGE = GITHUB_PAGE_SIZE
+APPROVALS = ApprovalLifecycle(
+    "object",
+    FINDING_ID_PREFIX,
+    APPROVAL_STATE_RE,
+    "<!-- monori-object-annotation-approvals: {ids} -->",
+    legacy_label_prefix=IGNORE_LABEL_PREFIX,
+)
 
 
 @dataclass(frozen=True)
@@ -83,109 +83,6 @@ class SyncApprovalCommandState:
 def display_finding_id(finding_id: str) -> str:
     """Return finding id prefixed for command addressing."""
     return f"{FINDING_ID_PREFIX}{finding_id}"
-
-
-class GitHubAPIError(RuntimeError):
-    """Raised when the GitHub API returns an unexpected non-retriable error."""
-
-    def __init__(self, method: str, path: str, status: int) -> None:
-        """Build a typed runtime error for GitHub HTTP failures."""
-        super().__init__(f"GitHub API {method} {path} failed: HTTP {status}")
-        self.status = status
-
-
-class GitHub:
-    """Small typed GitHub API client for annotation checks."""
-
-    def __init__(self) -> None:
-        """Initialize object-annotation gate GitHub client from environment."""
-        self.base_url = os.environ.get("GITHUB_API_URL", "https://api.github.com")
-        self.repository = os.environ["GITHUB_REPOSITORY"]
-        self.token = os.environ["GITHUB_TOKEN"]
-
-    def request(self, method: str, path: str, payload: JsonValue = None) -> JsonValue:
-        """Send GitHub API request and return parsed JSON response."""
-        url = f"{self.base_url}/repos/{self.repository}{path}"
-        data = None if payload is None else json.dumps(payload).encode()
-        try:
-            response = httpx.request(
-                method,
-                url,
-                content=data,
-                timeout=REQUEST_TIMEOUT_SECONDS,
-                headers={
-                    "Accept": "application/vnd.github+json",
-                    "Authorization": f"Bearer {self.token}",
-                    "X-GitHub-Api-Version": "2022-11-28",
-                    "Content-Type": "application/json",
-                },
-            )
-        except httpx.RequestError as error:
-            message = f"GitHub API {method} {path} failed: {error}"
-            raise RuntimeError(message) from error
-        if response.status_code == HTTP_NO_CONTENT:
-            return None
-        if method in {"GET", "DELETE"} and response.status_code == HTTP_NOT_FOUND:
-            return None
-        if response.is_error:
-            raise GitHubAPIError(method, path, response.status_code)
-        return cast("JsonValue", response.json())
-
-    def paged(self, path: str) -> list[dict[str, JsonValue]]:
-        """Read all pages from a GitHub list endpoint."""
-        result: list[dict[str, JsonValue]] = []
-        page = 1
-        while True:
-            separator = "&" if "?" in path else "?"
-            response = self.request(
-                "GET",
-                f"{path}{separator}per_page={WORKFLOW_RUNS_PER_PAGE}&page={page}",
-            )
-            items = array_value(response, path)
-            result.extend(object_value(item, path) for item in items)
-            if len(items) < WORKFLOW_RUNS_PER_PAGE:
-                return result
-            page += 1
-
-    def file_text(self, path: str, ref: str) -> str | None:
-        """Read file content from repository at the given git reference."""
-        encoded = urllib.parse.quote(path, safe="")
-        raw_response = self.request("GET", f"/contents/{encoded}?ref={urllib.parse.quote(ref)}")
-        if raw_response is None:
-            return None
-        response = object_value(raw_response, path)
-        if response.get("encoding") == "base64" and response.get("content"):
-            content = string_value(response["content"], f"{path}.content")
-            return base64.b64decode(content).decode("utf-8")
-        download_url = optional_string(response.get("download_url"))
-        if not download_url:
-            message = f"Cannot read {path} at {ref}"
-            raise RuntimeError(message)
-        try:
-            download_response = httpx.get(
-                download_url,
-                headers={"Authorization": f"Bearer {self.token}"},
-                timeout=REQUEST_TIMEOUT_SECONDS,
-            )
-            download_response.raise_for_status()
-        except httpx.HTTPError as error:
-            message = f"Cannot read {path} at {ref}: {error}"
-            raise RuntimeError(message) from error
-        return download_response.text
-
-    def ensure_label(self, name: str) -> None:
-        """Ensure repository has a label; create it if missing."""
-        encoded = urllib.parse.quote(name, safe="")
-        if self.request("GET", f"/labels/{encoded}") is None:
-            self.request(
-                "POST",
-                "/labels",
-                {
-                    "name": name,
-                    "color": "b60205",
-                    "description": "Object annotation gate state",
-                },
-            )
 
 
 def changed_lines(before: str | None, after: str) -> set[int]:
@@ -288,6 +185,7 @@ class ObjectAnnotationCheck(QualityCheck[Finding]):
 
     gate = "object"
     report_marker = "object-annotations"
+    approval_lifecycle = APPROVALS
 
     @override
     def collect(self, context: CheckContext) -> CheckResult[Finding]:
@@ -340,25 +238,6 @@ def summary_body(findings: list[Finding], approved: set[str], pr_url: str) -> st
     )
 
 
-def approval_state(body: str) -> set[str]:
-    """Extract currently approved finding ids from PR body marker."""
-    match = APPROVAL_STATE_RE.search(body)
-    return set(match.group(1).split(",")) if match and match.group(1) else set()
-
-
-def update_approval_state(
-    github: RepositoryGitHubAPI, number: int, pull: dict[str, JsonValue], approved: set[str]
-) -> None:
-    """Update PR body marker with currently approved finding ids."""
-    body = optional_string(pull.get("body")) or ""
-    marker = f"<!-- monori-object-annotation-approvals: {','.join(sorted(approved))} -->"
-    updated_body = APPROVAL_STATE_RE.sub(marker, body)
-    if updated_body == body:
-        updated_body = f"{body.rstrip()}\n\n{marker}" if body.strip() else marker
-    if updated_body != body:
-        github.request("PATCH", f"/pulls/{number}", {"body": updated_body})
-
-
 def sync_approvals(
     github: RepositoryGitHubAPI,
     number: int,
@@ -367,85 +246,20 @@ def sync_approvals(
     command_state: SyncApprovalCommandState,
 ) -> tuple[set[str], bool, bool]:
     """Sync approvals and optional command modifications."""
-    labels = github.paged(f"/issues/{number}/labels")
-    finding_ids = {finding.finding_id for finding in findings}
     body = optional_string(pull.get("body")) or ""
-    state_exists = APPROVAL_STATE_RE.search(body) is not None
-    legacy_approved = {
-        name[len(IGNORE_LABEL_PREFIX) :]
-        for label in labels
-        if (name := optional_string(label.get("name")))
-        and name.startswith(IGNORE_LABEL_PREFIX)
-        and name[len(IGNORE_LABEL_PREFIX) :] in finding_ids
-    }
-    for label in labels:
-        name = optional_string(label.get("name"))
-        if name and name.startswith(IGNORE_LABEL_PREFIX):
-            github.request("DELETE", f"/issues/{number}/labels/{urllib.parse.quote(name, safe='')}")
-    approved = (approval_state(body) if state_exists else legacy_approved) & finding_ids
-    command = command_state.command
-    author = command_state.author
-    admin = command is not None and author is not None and is_admin(github, author)
-    state_changed = False
-    if not command or not admin:
-        if not state_exists:
-            update_approval_state(github, number, pull, approved)
-        return approved, admin, state_changed
-    name = command.name
-    arguments = command.arguments
-    if name in {"help", "status"}:
-        return approved, admin, state_changed
-    selected = {
-        finding.finding_id
-        for finding in findings
-        if name == "ignore-file" and finding.path in arguments
-    }
-    if name in {"ignore", "remove-ignore"}:
-        selected = (
-            finding_ids
-            if "object" in arguments
-            else {
-                argument[len(FINDING_ID_PREFIX) :]
-                for argument in arguments
-                if argument.startswith(FINDING_ID_PREFIX)
-            }
-        ) & finding_ids
-    for finding_id in selected:
-        if name == "remove-ignore":
-            approved.discard(finding_id)
-        else:
-            approved.add(finding_id)
-        state_changed = True
-    update_approval_state(github, number, pull, approved)
-    return approved, admin, state_changed
-
-
-def sync_failure_label(
-    github: RepositoryGitHubAPI, number: int, *, has_active_findings: bool
-) -> None:
-    """Set or clear failure label depending on active findings."""
-    if has_active_findings:
-        github.ensure_label(FAILURE_LABEL)
-        github.request("POST", f"/issues/{number}/labels", {"labels": [FAILURE_LABEL]})
-    else:
-        github.request(
-            "DELETE",
-            f"/issues/{number}/labels/{urllib.parse.quote(FAILURE_LABEL, safe='')}",
-        )
-
-
-def is_admin(github: RepositoryGitHubAPI, login: str) -> bool:
-    """Check if login has admin rights on repository."""
-    encoded = urllib.parse.quote(login, safe="")
-    try:
-        permission = github.request("GET", f"/collaborators/{encoded}/permission")
-    except GitHubAPIError as error:
-        if error.status == HTTP_FORBIDDEN:
-            return False
-        raise
-    if permission is None:
-        return False
-    return object_value(permission, "collaborator permission").get("permission") == "admin"
+    request = ApprovalRequest(
+        github,
+        number,
+        body,
+        command_state.command,
+        command_state.author,
+        github.paged(f"/issues/{number}/labels"),
+    )
+    result = ObjectAnnotationCheck().sync_approvals(
+        request,
+        findings,
+    )
+    return result.approved, result.authorized, result.changed
 
 
 def pull_request_number(event: dict[str, JsonValue]) -> int | None:
@@ -569,7 +383,7 @@ def main() -> int:
         SyncApprovalCommandState(command, author),
     )
     active = [finding for finding in findings if finding.finding_id not in approved]
-    sync_failure_label(github, number, has_active_findings=bool(active))
+    sync_label(github, number, FAILURE_LABEL, present=bool(active))
 
     pr_url = string_value(pull["html_url"], "pull request URL")
     report.publish(summary_body(findings, approved, pr_url))

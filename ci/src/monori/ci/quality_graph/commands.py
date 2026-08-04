@@ -17,6 +17,7 @@ from monori.ci.lib.comments import (
     workflow_bot_logins,
 )
 from monori.ci.lib.github import GITHUB_PAGE_SIZE, GitHub, GitHubAPI
+from monori.ci.lib.github import is_admin as github_is_admin
 from monori.ci.quality_graph.reporting import (
     PullRequestReport,
     ReportModel,
@@ -160,13 +161,8 @@ def upsert_status(github: GitHubAPI, number: int, body: str) -> None:
 
 
 def is_admin(github: GitHubAPI, login: str) -> bool:
-    """Return whether admin."""
-    encoded = urllib.parse.quote(login, safe="")
-    permission = github.request("GET", f"/collaborators/{encoded}/permission")
-    return (
-        permission is not None
-        and object_value(permission, "collaborator permission").get("permission") == "admin"
-    )
+    """Delegate repository permission checks to the shared GitHub layer."""
+    return github_is_admin(github, login)
 
 
 def pull_request_number(event: dict[str, JsonValue]) -> int | None:

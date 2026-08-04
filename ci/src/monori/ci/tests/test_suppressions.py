@@ -43,6 +43,17 @@ class FakeGitHub:
     def ensure_label(self, name: str) -> None:
         self.calls.append(("ensure_label", name, None))
 
+    def is_admin(self, login: str) -> bool:
+        _ = login
+        return self.permission == "admin"
+
+    def sync_label(self, number: int, name: str, *, present: bool) -> None:
+        if present:
+            self.ensure_label(name)
+            self.request("POST", f"/issues/{number}/labels", {"labels": [name]})
+        else:
+            self.request("DELETE", f"/issues/{number}/labels/{name}")
+
 
 class SuppressionGateTest(unittest.TestCase):
     def test_check_class_collects_typed_result(self) -> None:
@@ -178,7 +189,7 @@ value = 2
         after = """\
 [tool.ruff.lint.per-file-ignores]
 "server/tests/**/*.py" = ["D101", "D102"]
-"server/migrations/**/*.py" = ["S101", "INP001"]
+"server/src/monori/server/migrations/**/*.py" = ["S101", "INP001"]
 "server/app/workbook/parser.py" = ["RUF001"]
 "server/app/connectors/tbank_playwright.py" = ["RUF001"]
 """
