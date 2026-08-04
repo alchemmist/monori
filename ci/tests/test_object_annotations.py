@@ -38,6 +38,7 @@ class FakeGitHub:
         return None
 
     def file_text(self, path: str, ref: str) -> str | None:
+        _ = path, ref
         return None
 
     def ensure_label(self, name: str) -> None:
@@ -53,9 +54,9 @@ class ObjectAnnotationGateTest(unittest.TestCase):
             )
         )
 
-        self.assertEqual(result.verdict, Verdict.FAIL)
-        self.assertEqual(len(result.findings), 1)
-        self.assertIsInstance(result.findings[0], Finding)
+        assert result.verdict == Verdict.FAIL
+        assert len(result.findings) == 1
+        assert isinstance(result.findings[0], Finding)
 
     def test_finds_direct_and_nested_annotations(self) -> None:
         source = """\
@@ -69,15 +70,12 @@ def function(value: list[object]) -> object | None:
 
         findings = scan_file("example.py", source, set(range(1, 20)))
 
-        self.assertEqual(
-            [(finding.line, finding.annotation) for finding in findings],
-            [
-                (2, "object"),
-                (4, "list[object]"),
-                (4, "object | None"),
-                (5, "dict[str, object]"),
-            ],
-        )
+        assert [(finding.line, finding.annotation) for finding in findings] == [
+            (2, "object"),
+            (4, "list[object]"),
+            (4, "object | None"),
+            (5, "dict[str, object]"),
+        ]
 
     def test_ignores_calls_strings_and_comments(self) -> None:
         source = """\
@@ -86,7 +84,7 @@ text = "object"
 # object
 """
 
-        self.assertEqual(scan_file("example.py", source, set(range(1, 10))), [])
+        assert scan_file("example.py", source, set(range(1, 10))) == []
 
     def test_finds_qualified_and_string_annotations(self) -> None:
         source = """\
@@ -96,29 +94,26 @@ other: "list[object]"
 
         findings = scan_file("example.py", source, set(range(1, 10)))
 
-        self.assertEqual(
-            [(finding.line, finding.annotation) for finding in findings],
-            [
-                (1, "builtins.object"),
-                (2, "'list[object]'"),
-            ],
-        )
+        assert [(finding.line, finding.annotation) for finding in findings] == [
+            (1, "builtins.object"),
+            (2, "'list[object]'"),
+        ]
 
     def test_invalid_python_is_reported_without_raising(self) -> None:
         output = io.StringIO()
         with contextlib.redirect_stderr(output):
             findings = scan_file("broken.py", "value: object =", {1})
 
-        self.assertEqual(findings, [])
-        self.assertIn("Cannot parse Python file", output.getvalue())
+        assert findings == []
+        assert "Cannot parse Python file" in output.getvalue()
 
     def test_finding_id_survives_line_shift_but_not_annotation_change(self) -> None:
         before = scan_file("example.py", "value: object\n", {1})[0]
         after = scan_file("example.py", "header = 0\nvalue: object\n", {2})[0]
         changed = scan_file("example.py", "value: list[object]\n", {1})[0]
 
-        self.assertEqual(before.finding_id, after.finding_id)
-        self.assertNotEqual(before.finding_id, changed.finding_id)
+        assert before.finding_id == after.finding_id
+        assert before.finding_id != changed.finding_id
 
     def test_admin_approval_uses_stable_labels_and_removes_stale_labels(self) -> None:
         github = FakeGitHub()
@@ -133,20 +128,20 @@ other: "list[object]"
             "admin",
         )
 
-        self.assertTrue(admin)
-        self.assertTrue(changed)
-        self.assertEqual(approved, {"finding-1"})
-        self.assertTrue(any(call[0] == "DELETE" and "stale" in call[1] for call in github.calls))
-        self.assertTrue(any(call[0] == "PATCH" and call[1] == "/pulls/1" for call in github.calls))
+        assert admin
+        assert changed
+        assert approved == {"finding-1"}
+        assert any(call[0] == "DELETE" and "stale" in call[1] for call in github.calls)
+        assert any(call[0] == "PATCH" and call[1] == "/pulls/1" for call in github.calls)
 
     def test_failure_label_tracks_active_findings(self) -> None:
         github = FakeGitHub()
 
-        sync_failure_label(github, 1, True)
-        sync_failure_label(github, 1, False)
+        sync_failure_label(github, 1, has_active_findings=True)
+        sync_failure_label(github, 1, has_active_findings=False)
 
-        self.assertIn(("ensure_label", "monori-object-annotation-failed", None), github.calls)
-        self.assertTrue(any(call[0] == "DELETE" and "failed" in call[1] for call in github.calls))
+        assert ("ensure_label", "monori-object-annotation-failed", None) in github.calls
+        assert any(call[0] == "DELETE" and "failed" in call[1] for call in github.calls)
 
     def test_rerun_lookup_paginates_past_first_page(self) -> None:
         class WorkflowRunsGitHub(FakeGitHub):
@@ -173,32 +168,27 @@ other: "list[object]"
 
         run = latest_pull_request_run(github, 343)
 
-        self.assertEqual(run and run["id"], 999)
-        self.assertTrue(any("page=2" in call[1] for call in github.calls))
+        assert run is not None
+        assert run["id"] == 999
+        assert any("page=2" in call[1] for call in github.calls)
 
     def test_approval_commands_use_shared_namespace(self) -> None:
-        self.assertIsNotNone(parse_command("/qg ignore object-abc123"))
-        self.assertIsNotNone(parse_command("/qg ignore-file server/app.py"))
-        self.assertIsNotNone(parse_command("/qg ignore object-abc123,suppression-def456"))
-        self.assertIsNotNone(parse_command("/qg remove-ignore object-abc123,suppression-def456"))
-        self.assertEqual(
-            parse_command("/qg ignore object"),
-            parse_command("/quality-graph ignore object"),
-        )
-        self.assertIsNone(parse_command("/ignore object-abc123"))
-        self.assertIsNone(parse_command("/qg ignore object-abc123 extra"))
-        self.assertIsNone(parse_command("/qg ignore all"))
+        assert parse_command("/qg ignore object-abc123") is not None
+        assert parse_command("/qg ignore-file server/app.py") is not None
+        assert parse_command("/qg ignore object-abc123,suppression-def456") is not None
+        assert parse_command("/qg remove-ignore object-abc123,suppression-def456") is not None
+        assert parse_command("/qg ignore object") == parse_command("/quality-graph ignore object")
+        assert parse_command("/ignore object-abc123") is None
+        assert parse_command("/qg ignore object-abc123 extra") is None
+        assert parse_command("/qg ignore all") is None
 
     def test_reports_only_added_lines(self) -> None:
         before = "value: object\n"
         after = "value: object\nother: object\n"
 
-        self.assertEqual(changed_lines(before, after), {2})
+        assert changed_lines(before, after) == {2}
         findings = scan_file("example.py", after, changed_lines(before, after))
-        self.assertEqual(
-            [(finding.line, finding.annotation) for finding in findings],
-            [(2, "object")],
-        )
+        assert [(finding.line, finding.annotation) for finding in findings] == [(2, "object")]
 
     def test_reads_added_lines_from_unified_patch(self) -> None:
         patch = """\
@@ -208,7 +198,7 @@ other: "list[object]"
  value2: str
 """
 
-        self.assertEqual(added_lines_from_patch(patch), {2})
+        assert added_lines_from_patch(patch) == {2}
 
     def test_summary_includes_status_and_finding_links_without_admin_commands(
         self,
@@ -217,11 +207,11 @@ other: "list[object]"
 
         body = summary_body([finding], set(), "https://github.com/org/repo/pull/1")
 
-        self.assertIn("## Python object annotation gate", body)
-        self.assertIn("| Status | ❌ FAIL |", body)
-        self.assertIn("| Findings | 1 |", body)
-        self.assertIn("server/app/example.py:7", body)
-        self.assertIn("/qg ignore object", body)
+        assert "## Python object annotation gate" in body
+        assert "| Status | ❌ FAIL |" in body
+        assert "| Findings | 1 |" in body
+        assert "server/app/example.py:7" in body
+        assert "/qg ignore object" in body
 
 
 if __name__ == "__main__":

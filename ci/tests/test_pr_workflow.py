@@ -46,11 +46,8 @@ class PullRequestWorkflowGraphTest(unittest.TestCase):
             "suppressions",
             "admin-command",
         ):
-            self.assertRegex(
-                self.source,
-                re.compile(rf"^    {re.escape(job)}:\s*$", re.MULTILINE),
-                job,
-            )
+            pattern = re.compile(rf"^    {re.escape(job)}:\s*$", re.MULTILINE)
+            assert pattern.search(self.source), job
 
     def test_checks_have_declared_dependencies_and_no_cycle(self) -> None:
         jobs = self.workflow["jobs"]
@@ -75,14 +72,14 @@ class PullRequestWorkflowGraphTest(unittest.TestCase):
             needs = data.get("needs", [])
             needs = [needs] if isinstance(needs, str) else needs
             expected_needs = dependency if isinstance(dependency, set) else {dependency}
-            self.assertEqual(set(needs), expected_needs, job)
+            assert set(needs) == expected_needs, job
 
         dependencies: dict[str, list[str]] = {}
         for job, data in jobs.items():
             needs = data.get("needs", [])
             dependencies[job] = [needs] if isinstance(needs, str) else list(needs)
             for dependency in dependencies[job]:
-                self.assertIn(dependency, jobs, f"{job} needs unknown job {dependency}")
+                assert dependency in jobs, f"{job} needs unknown job {dependency}"
 
         visiting: set[str] = set()
         visited: set[str] = set()
@@ -109,19 +106,16 @@ class PullRequestWorkflowGraphTest(unittest.TestCase):
         for job, expected in expected_dependencies.items():
             needs = jobs[job].get("needs", [])
             actual = {needs} if isinstance(needs, str) else set(needs)
-            self.assertEqual(actual, expected, job)
+            assert actual == expected, job
 
             block = re.search(
                 rf"^    {re.escape(job)}:\n(?P<body>.*?)(?=^    \S|\Z)",
                 self.source,
                 re.MULTILINE | re.DOTALL,
             )
-            self.assertIsNotNone(block, job)
-            assert block is not None
-            self.assertIn("always()", block.group("body"), job)
-            self.assertIn(
-                "needs.frontend-performance.result == 'success'", block.group("body"), job
-            )
+            assert block is not None, job
+            assert "always()" in block.group("body"), job
+            assert "needs.frontend-performance.result == 'success'" in block.group("body"), job
 
     def test_complex_gates_use_local_actions(self) -> None:
         expected_actions = {
@@ -138,9 +132,8 @@ class PullRequestWorkflowGraphTest(unittest.TestCase):
                 self.source,
                 re.MULTILINE | re.DOTALL,
             )
-            self.assertIsNotNone(block, job)
-            assert block is not None
-            self.assertIn(f"uses: ./.github/actions/{action}", block.group("body"), job)
+            assert block is not None, job
+            assert f"uses: ./.github/actions/{action}" in block.group("body"), job
 
     def test_frontend_performance_is_one_conditional_job(self) -> None:
         block = re.search(
@@ -148,11 +141,10 @@ class PullRequestWorkflowGraphTest(unittest.TestCase):
             self.source,
             re.MULTILINE | re.DOTALL,
         )
-        self.assertIsNotNone(block)
         assert block is not None
-        self.assertIn("uses: ./.github/actions/frontend-performance-scope", block.group("body"))
-        self.assertIn("if: steps.scope.outputs.relevant == 'true'", block.group("body"))
-        self.assertNotIn("frontend-performance-skipped", self.source)
+        assert "uses: ./.github/actions/frontend-performance-scope" in block.group("body")
+        assert "if: steps.scope.outputs.relevant == 'true'" in block.group("body")
+        assert "frontend-performance-skipped" not in self.source
 
     def test_audit_job_runs_aggregate_make_target(self) -> None:
         block = re.search(
@@ -160,14 +152,13 @@ class PullRequestWorkflowGraphTest(unittest.TestCase):
             self.source,
             re.MULTILINE | re.DOTALL,
         )
-        self.assertIsNotNone(block)
         assert block is not None
-        self.assertIn("- run: make audit", block.group("body"))
+        assert "- run: make audit" in block.group("body")
 
     def test_code_and_api_gate_events_are_separated(self) -> None:
-        self.assertIn("github.event_name == 'pull_request'", self.source)
-        self.assertNotIn("github.event_name == 'pull_request_target'", self.source)
-        self.assertIn("issue_comment:", self.source)
+        assert "github.event_name == 'pull_request'" in self.source
+        assert "github.event_name == 'pull_request_target'" not in self.source
+        assert "issue_comment:" in self.source
 
 
 if __name__ == "__main__":

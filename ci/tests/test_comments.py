@@ -21,9 +21,9 @@ class FakeGitHub:
 
 class PullRequestCommentTest(unittest.TestCase):
     def test_comment_body_has_a_stable_report_marker(self) -> None:
-        self.assertEqual(
-            comment_body("bundle-size", "## Bundle size\n"),
-            "<!-- monori-report: bundle-size -->\n\n## Bundle size\n",
+        assert (
+            comment_body("bundle-size", "## Bundle size\n")
+            == "<!-- monori-report: bundle-size -->\n\n## Bundle size\n"
         )
 
     def test_updates_only_a_comment_owned_by_authenticated_user(self) -> None:
@@ -45,22 +45,16 @@ class PullRequestCommentTest(unittest.TestCase):
         with mock.patch.dict(os.environ, {"GITHUB_ACTIONS_BOT_LOGIN": "github-actions[bot]"}):
             upsert_comment(github, 1, "bundle-size", "new")
 
-        self.assertIn(
-            (
-                "PATCH",
-                "/issues/comments/8",
-                {"body": "<!-- monori-report: bundle-size -->\n\nnew\n"},
-            ),
-            github.calls,
-        )
-        self.assertNotIn(
-            (
-                "PATCH",
-                "/issues/comments/7",
-                {"body": "<!-- monori-report: bundle-size -->\n\nnew\n"},
-            ),
-            github.calls,
-        )
+        assert (
+            "PATCH",
+            "/issues/comments/8",
+            {"body": "<!-- monori-report: bundle-size -->\n\nnew\n"},
+        ) in github.calls
+        assert (
+            "PATCH",
+            "/issues/comments/7",
+            {"body": "<!-- monori-report: bundle-size -->\n\nnew\n"},
+        ) not in github.calls
 
     def test_updates_a_legacy_bot_comment(self) -> None:
         github = FakeGitHub(
@@ -76,7 +70,7 @@ class PullRequestCommentTest(unittest.TestCase):
         with mock.patch.dict(os.environ, {"GITHUB_ACTIONS_BOT_LOGIN": "custom-bot"}):
             upsert_comment(github, 1, "bundle-size", "new")
 
-        self.assertIn(("PATCH", "/issues/comments/8", mock.ANY), github.calls)
+        assert ("PATCH", "/issues/comments/8", mock.ANY) in github.calls
 
 
 if __name__ == "__main__":

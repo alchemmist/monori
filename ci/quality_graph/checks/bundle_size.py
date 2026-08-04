@@ -5,12 +5,13 @@ from __future__ import annotations
 import json
 import os
 import re
-import urllib.error
 import urllib.parse
-import urllib.request
 from pathlib import Path
 from typing import cast
 
+import httpx
+
+from ci.lib.github import HTTP_FORBIDDEN, HTTP_NO_CONTENT, HTTP_NOT_FOUND, REQUEST_TIMEOUT_SECONDS
 from ci.quality_graph.commands import (
     QualityGraphCommand,
     admin_command_lines,
@@ -26,30 +27,39 @@ PENDING_RE = re.compile(r"<!-- monori-bundle-size-pending: (\d+) -->")
 
 
 def obj(value: JsonValue, context: str) -> dict[str, JsonValue]:
+    """Obj for this module."""
     if not isinstance(value, dict):
-        raise RuntimeError(f"Expected object for {context}")
+        message = f"Expected object for {context}"
+        raise TypeError(message)
     return value
 
 
 def string(value: JsonValue, context: str) -> str:
+    """String for this module."""
     if not isinstance(value, str):
-        raise RuntimeError(f"Expected string for {context}")
+        message = f"Expected string for {context}"
+        raise TypeError(message)
     return value
 
 
 def json_number(value: JsonValue, context: str) -> int | float:
+    """Json number for this module."""
     if isinstance(value, bool) or not isinstance(value, (int, float)):
-        raise RuntimeError(f"Expected number for {context}")
+        message = f"Expected number for {context}"
+        raise TypeError(message)
     return value
 
 
 def array(value: JsonValue, context: str) -> list[JsonValue]:
+    """Array for this module."""
     if not isinstance(value, list):
-        raise RuntimeError(f"Expected array for {context}")
+        message = f"Expected array for {context}"
+        raise TypeError(message)
     return value
 
 
 def state_from_body(body: str) -> set[str]:
+    """State from body for this module."""
     match = STATE_RE.search(body)
     return set(match.group(1).split(",")) if match and match.group(1) else set()
 
@@ -57,6 +67,7 @@ def state_from_body(body: str) -> set[str]:
 def apply_command(
     command: QualityGraphCommand | None, ids: set[str], approved: set[str]
 ) -> set[str]:
+    """Apply command."""
     if command is None:
         return approved
     name = command.name
@@ -70,37 +81,46 @@ def apply_command(
 
 
 class GitHub:
+    """Minimal GitHub API client for bundle-size approvals and labels."""
+
     def __init__(self) -> None:
+        """Initialize bundle-size gate GitHub client with environment credentials."""
         self.base = os.environ.get("GITHUB_API_URL", "https://api.github.com")
         self.repo = os.environ["GITHUB_REPOSITORY"]
         self.token = os.environ["GITHUB_TOKEN"]
 
     def request(self, method: str, path: str, payload: JsonValue = None) -> JsonValue:
+        """Send GitHub API request and return parsed JSON response."""
         data = None if payload is None else json.dumps(payload).encode()
-        request = urllib.request.Request(
-            f"{self.base}/repos/{self.repo}{path}",
-            data=data,
-            method=method,
-            headers={
-                "Authorization": f"Bearer {self.token}",
-                "Accept": "application/vnd.github+json",
-            },
-        )
         try:
-            with urllib.request.urlopen(request, timeout=30) as response:
-                return (
-                    None
-                    if response.status == 204
-                    else cast("JsonValue", json.loads(response.read()))
-                )
-        except urllib.error.HTTPError as error:
-            if error.code == 403 and method in {"POST", "PATCH", "DELETE"}:
-                return None
-            if error.code == 404 and method in {"GET", "DELETE"}:
-                return None
-            raise RuntimeError(f"GitHub API {method} {path} failed: HTTP {error.code}") from error
+            response = httpx.request(
+                method,
+                f"{self.base}/repos/{self.repo}{path}",
+                content=data,
+                timeout=REQUEST_TIMEOUT_SECONDS,
+                headers={
+                    "Authorization": f"Bearer {self.token}",
+                    "Accept": "application/vnd.github+json",
+                },
+            )
+        except httpx.RequestError as error:
+            message = f"GitHub API {method} {path} failed: {error}"
+            raise RuntimeError(message) from error
+        if response.status_code == HTTP_NO_CONTENT:
+            return None
+        if response.status_code == HTTP_FORBIDDEN and method in {"POST", "PATCH", "DELETE"}:
+            return None
+        if response.status_code == HTTP_NOT_FOUND and method in {"GET", "DELETE"}:
+            return None
+        try:
+            response.raise_for_status()
+        except httpx.HTTPStatusError as error:
+            message = f"GitHub API {method} {path} failed: HTTP {response.status_code}"
+            raise RuntimeError(message) from error
+        return cast("JsonValue", response.json())
 
-    def sync_label(self, number: int, failed: bool) -> None:
+    def sync_label(self, number: int, *, failed: bool) -> None:
+        """Sync failure label state on issue based on check result."""
         encoded = urllib.parse.quote(STATUS_LABEL, safe="")
         if failed:
             if self.request("GET", f"/labels/{encoded}") is None:
@@ -111,6 +131,7 @@ class GitHub:
 
 
 def command_from_pending(github: GitHub, body: str) -> QualityGraphCommand | None:
+    """Command from pending for this module."""
     match = PENDING_RE.search(body)
     if not match:
         return None
@@ -128,6 +149,7 @@ def command_from_pending(github: GitHub, body: str) -> QualityGraphCommand | Non
 
 
 def append_commands(summary: str, entries: list[dict[str, JsonValue]], approved: set[str]) -> str:
+    """Append commands."""
     finding_ids = {
         string(entry.get("id"), "finding id")
         for entry in entries
@@ -145,12 +167,15 @@ def append_commands(summary: str, entries: list[dict[str, JsonValue]], approved:
 
 
 def format_kib(value: JsonValue) -> str:
+    """Format kib for this module."""
     if not isinstance(value, (int, float)):
-        raise RuntimeError("Expected numeric bundle size")
+        message = "Expected numeric bundle size"
+        raise TypeError(message)
     return f"{value / 1024:.1f} KiB"
 
 
-def render_summary(report: dict[str, JsonValue], failed: bool) -> str:
+def render_summary(report: dict[str, JsonValue], *, failed: bool) -> str:
+    """Render summary."""
     entries = [obj(item, "entry") for item in array(report.get("entries"), "entries")]
     lines = [
         f"## {'❌' if failed else '✅'} Bundle size",
@@ -163,8 +188,10 @@ def render_summary(report: dict[str, JsonValue], failed: bool) -> str:
         percent = float(json_number(entry.get("percent"), "percent"))
         sign = "+" if delta > 0 else ""
         lines.append(
-            f"| {string(entry.get('label'), 'finding label')} | {format_kib(entry.get('base'))} | "
-            f"{format_kib(entry.get('current'))} | {sign}{format_kib(delta)} ({sign}{percent:.2f}%) | "
+            f"| {string(entry.get('label'), 'finding label')} | "
+            f"{format_kib(entry.get('base'))} | "
+            f"{format_kib(entry.get('current'))} | "
+            f"{sign}{format_kib(delta)} ({sign}{percent:.2f}%) | "
             f"{string(entry.get('tier'), 'tier')} |"
         )
     growth = [
@@ -172,10 +199,12 @@ def render_summary(report: dict[str, JsonValue], failed: bool) -> str:
     ]
     lines.extend(["", "<details><summary>Largest asset increases</summary>", ""])
     if growth:
-        for item in growth:
-            lines.append(
+        lines.extend(
+            [
                 f"- `{string(item.get('asset'), 'asset')}`: +{format_kib(item.get('delta'))} gzip"
-            )
+                for item in growth
+            ]
+        )
     else:
         lines.append("No individual asset increased after normalizing build hashes.")
     lines.extend(["", "</details>"])
@@ -183,6 +212,7 @@ def render_summary(report: dict[str, JsonValue], failed: bool) -> str:
 
 
 def main() -> int:
+    """Run this module as a CLI entrypoint and return its exit code."""
     github = GitHub()
     report_path = Path(os.environ["REPORT_PATH"])
     report = obj(cast("JsonValue", json.loads(report_path.read_text())), "report")
@@ -211,8 +241,10 @@ def main() -> int:
     report["verdict"] = "critical" if failed else "none"
     report_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
     summary_path = Path(os.environ["SUMMARY_PATH"])
-    summary_path.write_text(append_commands(render_summary(report, failed), entries, approved))
-    github.sync_label(number, failed)
+    summary_path.write_text(
+        append_commands(render_summary(report, failed=failed), entries, approved)
+    )
+    github.sync_label(number, failed=failed)
     return 1 if failed else 0
 
 

@@ -12,10 +12,16 @@ from pydantic import TypeAdapter
 from pydantic.dataclasses import dataclass as pydantic_dataclass
 
 TOKEN_FILE = pathlib.Path("/tmp/monori-token.txt")
+WINDOWED_ROW_LIMIT = 200
+WINDOW_TOP_OFFSET_PX = 2
+TALL_SCROLL_MIN_PX = 200_000
+TOTAL_TRANSACTIONS_TEXTS = ("6802", "6 802")
 
 
 @pydantic_dataclass
 class Measure:
+    """Collected runtime measurement metrics for a page snapshot."""
+
     renderedRows: int
     spacers: int
     scrollHeight: int
@@ -26,6 +32,7 @@ class Measure:
 
 
 def load_token() -> str:
+    """Load token."""
     if not TOKEN_FILE.exists():
         sys.exit(
             f"{TOKEN_FILE} not found — mint one first, e.g.:\n"
@@ -37,6 +44,7 @@ def load_token() -> str:
 
 
 def measure(page: Page) -> Measure:
+    """Measure for this module."""
     return TypeAdapter(Measure).validate_python(
         page.evaluate(
             """() => {
@@ -62,6 +70,7 @@ def measure(page: Page) -> Measure:
 
 
 def main() -> None:
+    """Run this module as a CLI entrypoint and return its exit code."""
     token = load_token()
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
@@ -96,23 +105,29 @@ def main() -> None:
         print("\n=== checks ===")
         ok = True
 
-        def check(name: str, cond: bool) -> None:
+        def check(name: str, *, cond: bool) -> None:
             nonlocal ok
             ok = ok and cond
             print(f"[{'PASS' if cond else 'FAIL'}] {name}")
 
-        check("count shows all 6802", top.countText in ("6802", "6 802"))
-        check("windowed DOM (<200 rows, not 6802)", 0 < top.renderedRows < 200)
-        check("tall scroll height (>200k px)", top.scrollHeight > 200_000)
-        check("spacers present", top.spacers >= 1)
-        check("mid still windowed", 0 < mid.renderedRows < 200)
-        check("mid recycled (date changed vs top)", mid.firstDate != top.firstDate)
+        check("count shows all 6802", cond=top.countText in TOTAL_TRANSACTIONS_TEXTS)
+        check(
+            "windowed DOM (<200 rows, not 6802)",
+            cond=0 < top.renderedRows < WINDOWED_ROW_LIMIT,
+        )
+        check("tall scroll height (>200k px)", cond=top.scrollHeight > TALL_SCROLL_MIN_PX)
+        check("spacers present", cond=top.spacers >= 1)
+        check("mid still windowed", cond=0 < mid.renderedRows < WINDOWED_ROW_LIMIT)
+        check("mid recycled (date changed vs top)", cond=mid.firstDate != top.firstDate)
         header_top = mid.headerTop
         assert header_top is not None
-        check("sticky header pinned at mid (top≈0)", abs(header_top) <= 2)
-        check("bottom still windowed", 0 < bot.renderedRows < 200)
-        check("filter shrank the set", filt.countText not in ("6802", "6 802"))
-        check("filter reset scroll to top", filt.scrollY <= 2)
+        check(
+            "sticky header pinned at mid (top≈0)",
+            cond=abs(header_top) <= WINDOW_TOP_OFFSET_PX,
+        )
+        check("bottom still windowed", cond=0 < bot.renderedRows < WINDOWED_ROW_LIMIT)
+        check("filter shrank the set", cond=filt.countText not in TOTAL_TRANSACTIONS_TEXTS)
+        check("filter reset scroll to top", cond=filt.scrollY <= WINDOW_TOP_OFFSET_PX)
         print("\nRESULT:", "ALL PASS" if ok else "SOME FAILED")
 
 

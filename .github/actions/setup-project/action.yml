@@ -5,8 +5,12 @@ inputs:
         description: Install web dependencies and configure Node
         required: false
         default: "false"
+    install-python:
+        description: Install shared Python dependencies and configure uv
+        required: false
+        default: "false"
     install-server:
-        description: Install server dependencies and configure uv
+        description: Deprecated alias for install-python
         required: false
         default: "false"
 runs:
@@ -26,10 +30,18 @@ runs:
           run: npm install --global npm@10.9.2
 
         - name: Setup uv
-          if: inputs.install-server == 'true'
+          if: inputs.install-python == 'true' || inputs.install-server == 'true'
           uses: astral-sh/setup-uv@v7
           with:
               enable-cache: true
+              cache-dependency-glob: uv.lock
+
+        - name: Restore Python environment
+          if: inputs.install-python == 'true' || inputs.install-server == 'true'
+          uses: actions/cache@v4
+          with:
+              path: .venv
+              key: uv-venv-${{ runner.os }}-python-3.12-${{ hashFiles('uv.lock') }}
 
         - name: Install web dependencies
           if: inputs.install-web == 'true'
@@ -38,7 +50,7 @@ runs:
           working-directory: web
 
         - name: Install server dependencies
-          if: inputs.install-server == 'true'
+          if: inputs.install-python == 'true' || inputs.install-server == 'true'
           shell: bash
-          run: uv sync --locked --all-packages
+          run: uv sync --locked --all-packages --group dev
           working-directory: .

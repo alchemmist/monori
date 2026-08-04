@@ -39,14 +39,12 @@ jobs:
               uses: actions/checkout@v7
               with:
                   persist-credentials: false
-            - name: Setup Python
-              uses: actions/setup-python@v6
+            - name: Setup Python dependencies
+              uses: ./.github/actions/setup-project
               with:
-                  python-version: "3.12"
-            - name: Install workflow test dependencies
-              run: python -m pip install pyyaml types-PyYAML
+                  install-python: true
             - name: Validate PR workflow graph
-              run: python -m unittest ci.tests.test_pr_workflow ci.tests.test_main_workflow
+              run: uv run --locked python -m unittest ci.tests.test_pr_workflow ci.tests.test_main_workflow
 
     fmt-check:
         name: Format check

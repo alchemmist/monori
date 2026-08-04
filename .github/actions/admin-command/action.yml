@@ -3,23 +3,23 @@ description: Apply an administrator command to the pull request Quality Graph
 runs:
     using: composite
     steps:
-        - name: Setup Python
-          uses: actions/setup-python@v6
+        - name: Setup Python dependencies
+          uses: ./.github/actions/setup-project
           with:
-              python-version: "3.12"
+              install-python: true
         - name: Test Quality Graph command API
           shell: bash
-          run: python -m unittest ci.tests.test_commands ci.tests.test_object_annotations ci.tests.test_suppressions
+          run: uv run --locked python -m unittest ci.tests.test_commands ci.tests.test_object_annotations ci.tests.test_suppressions
         - name: Apply object and suppression command
           continue-on-error: true
           shell: bash
           env:
               GITHUB_TOKEN: ${{ github.token }}
           run: |
-              python -m ci.quality_graph.checks.object_annotations || true
-              python -m ci.quality_graph.checks.suppressions || true
+              uv run --locked python -m ci.quality_graph.checks.object_annotations || true
+              uv run --locked python -m ci.quality_graph.checks.suppressions || true
         - name: Process Quality Graph command
           shell: bash
           env:
               GITHUB_TOKEN: ${{ github.token }}
-          run: python -m ci.quality_graph.commands
+          run: uv run --locked python -m ci.quality_graph.commands

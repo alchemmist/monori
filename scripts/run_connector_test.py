@@ -22,6 +22,7 @@ PROFILE_DIR = os.environ.get("PROFILE_DIR", "/tmp/tbank-explore/profile")
 
 
 def archive_profile(work_dir: str) -> str:
+    """Archive profile for this module."""
     buf = io.BytesIO()
     with tarfile.open(fileobj=buf, mode="w:gz") as tar:
         tar.add(work_dir, arcname=".")
@@ -29,6 +30,7 @@ def archive_profile(work_dir: str) -> str:
 
 
 def main() -> None:
+    """Run this module as a CLI entrypoint and return its exit code."""
     session: JsonObject = {"profile": archive_profile(PROFILE_DIR)}
     # phone/password only used if the trusted session lapsed; code is the
     # quick-login pin. Fill from env if you want to exercise a full re-login.
@@ -39,7 +41,8 @@ def main() -> None:
     }
     profile = session["profile"]
     if not isinstance(profile, str):
-        raise RuntimeError("profile archive is not a string")
+        message = "profile archive is not a string"
+        raise TypeError(message)
     print(f"profile blob: {len(profile)} b64 chars")
     print(f"headless: {TBankPlaywrightConnector.headless()}")
 

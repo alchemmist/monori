@@ -4,12 +4,13 @@ import hashlib
 import json
 import os
 import re
-import urllib.error
 import urllib.parse
-import urllib.request
 from pathlib import Path
 from typing import cast
 
+import httpx
+
+from ci.lib.github import HTTP_FORBIDDEN, HTTP_NO_CONTENT, HTTP_NOT_FOUND, REQUEST_TIMEOUT_SECONDS
 from ci.quality_graph.commands import (
     QualityGraphCommand,
     admin_command_lines,
@@ -23,39 +24,48 @@ STATUS_LABEL = "monori-frontend-performance-failed"
 FINDING_ID_PREFIX = "frontend-"
 STATE_RE = re.compile(r"<!-- monori-frontend-performance-approvals: ([0-9a-f,]*) -->")
 PENDING_RE = re.compile(r"<!-- monori-frontend-performance-pending: (\d+) -->")
-REQUEST_TIMEOUT = 30
 
 
 def json_object(value: JsonValue, context: str) -> dict[str, JsonValue]:
+    """Json object for this module."""
     if not isinstance(value, dict):
-        raise RuntimeError(f"Expected an object for {context}")
+        message = f"Expected an object for {context}"
+        raise TypeError(message)
     return value
 
 
 def json_array(value: JsonValue, context: str) -> list[JsonValue]:
+    """Json array for this module."""
     if not isinstance(value, list):
-        raise RuntimeError(f"Expected an array for {context}")
+        message = f"Expected an array for {context}"
+        raise TypeError(message)
     return value
 
 
 def optional_string(value: JsonValue) -> str | None:
+    """Optional string for this module."""
     return value if isinstance(value, str) else None
 
 
 def json_string(value: JsonValue, context: str) -> str:
+    """Json string for this module."""
     value = optional_string(value)
     if value is None:
-        raise RuntimeError(f"Expected a string for {context}")
+        message = f"Expected a string for {context}"
+        raise TypeError(message)
     return value
 
 
 def json_integer(value: JsonValue, context: str) -> int:
+    """Json integer for this module."""
     if isinstance(value, bool) or not isinstance(value, int):
-        raise RuntimeError(f"Expected an integer for {context}")
+        message = f"Expected an integer for {context}"
+        raise TypeError(message)
     return value
 
 
 def finding_id(entry: dict[str, JsonValue]) -> str:
+    """Finding id for this module."""
     route = json_string(entry.get("route_id"), "entry route id")
     metric = json_string(entry.get("metric_id"), "entry metric id")
     digest = hashlib.sha256(f"{route}:{metric}".encode()).hexdigest()[:12]
@@ -63,40 +73,49 @@ def finding_id(entry: dict[str, JsonValue]) -> str:
 
 
 class GitHub:
+    """Minimal GitHub API client for performance check commands."""
+
     def __init__(self) -> None:
+        """Initialize frontend performance gate GitHub client from env."""
         self.base_url = os.environ.get("GITHUB_API_URL", "https://api.github.com")
         self.repository = os.environ["GITHUB_REPOSITORY"]
         self.token = os.environ["GITHUB_TOKEN"]
 
     def request(self, method: str, path: str, payload: JsonValue = None) -> JsonValue:
+        """Send GitHub API request and return parsed JSON response."""
         url = f"{self.base_url}/repos/{self.repository}{path}"
         data = None if payload is None else json.dumps(payload).encode()
-        request = urllib.request.Request(
-            url,
-            data=data,
-            method=method,
-            headers={
-                "Accept": "application/vnd.github+json",
-                "Authorization": f"Bearer {self.token}",
-                "X-GitHub-Api-Version": "2022-11-28",
-                "Content-Type": "application/json",
-            },
-        )
         try:
-            with urllib.request.urlopen(request, timeout=REQUEST_TIMEOUT) as response:
-                return (
-                    None
-                    if response.status == 204
-                    else cast("JsonValue", json.loads(response.read()))
-                )
-        except urllib.error.HTTPError as error:
-            if error.code == 403 and method in {"POST", "PATCH", "DELETE"}:
-                return None
-            if error.code == 404 and method in {"GET", "DELETE"}:
-                return None
-            raise RuntimeError(f"GitHub API {method} {path} failed: HTTP {error.code}") from error
+            response = httpx.request(
+                method,
+                url,
+                content=data,
+                timeout=REQUEST_TIMEOUT_SECONDS,
+                headers={
+                    "Accept": "application/vnd.github+json",
+                    "Authorization": f"Bearer {self.token}",
+                    "X-GitHub-Api-Version": "2022-11-28",
+                    "Content-Type": "application/json",
+                },
+            )
+        except httpx.RequestError as error:
+            message = f"GitHub API {method} {path} failed: {error}"
+            raise RuntimeError(message) from error
+        if response.status_code == HTTP_NO_CONTENT:
+            return None
+        if response.status_code == HTTP_FORBIDDEN and method in {"POST", "PATCH", "DELETE"}:
+            return None
+        if response.status_code == HTTP_NOT_FOUND and method in {"GET", "DELETE"}:
+            return None
+        try:
+            response.raise_for_status()
+        except httpx.HTTPStatusError as error:
+            message = f"GitHub API {method} {path} failed: HTTP {response.status_code}"
+            raise RuntimeError(message) from error
+        return cast("JsonValue", response.json())
 
     def ensure_label(self, name: str) -> None:
+        """Create label if needed and ensure it exists in repository."""
         encoded = urllib.parse.quote(name, safe="")
         if self.request("GET", f"/labels/{encoded}") is None:
             self.request(
@@ -111,6 +130,7 @@ class GitHub:
 
 
 def is_admin(github: GitHub, login: str) -> bool:
+    """Return whether admin."""
     encoded = urllib.parse.quote(login, safe="")
     permission = github.request("GET", f"/collaborators/{encoded}/permission")
     return (
@@ -120,11 +140,13 @@ def is_admin(github: GitHub, login: str) -> bool:
 
 
 def state_from_body(body: str) -> set[str]:
+    """State from body for this module."""
     match = STATE_RE.search(body)
     return set(match.group(1).split(",")) if match and match.group(1) else set()
 
 
 def update_body_state(github: GitHub, number: int, body: str, approved: set[str]) -> str:
+    """Update body state."""
     marker = f"<!-- monori-frontend-performance-approvals: {','.join(sorted(approved))} -->"
     updated = STATE_RE.sub(marker, body)
     if updated == body:
@@ -135,6 +157,7 @@ def update_body_state(github: GitHub, number: int, body: str, approved: set[str]
 
 
 def command_from_pending(github: GitHub, body: str) -> QualityGraphCommand | None:
+    """Command from pending for this module."""
     match = PENDING_RE.search(body)
     if not match:
         return None
@@ -148,6 +171,7 @@ def command_from_pending(github: GitHub, body: str) -> QualityGraphCommand | Non
 
 
 def entry_ids(entries: list[dict[str, JsonValue]]) -> set[str]:
+    """Entry ids for this module."""
     return {finding_id(entry) for entry in entries if entry.get("tier") != "none"}
 
 
@@ -156,6 +180,7 @@ def apply_command(
     entries: list[dict[str, JsonValue]],
     approved: set[str],
 ) -> set[str]:
+    """Apply command."""
     if command is None:
         return approved
     name = command.name
@@ -174,6 +199,7 @@ def apply_command(
 
 
 def append_commands(text: str, entries: list[dict[str, JsonValue]], approved: set[str]) -> str:
+    """Append commands."""
     lines = ["", "<details><summary>For repository administrators</summary>", ""]
     lines.extend(
         admin_command_lines(
@@ -199,6 +225,7 @@ def append_commands(text: str, entries: list[dict[str, JsonValue]], approved: se
 
 
 def main() -> int:
+    """Run this module as a CLI entrypoint and return its exit code."""
     github = GitHub()
     report_path = Path(os.environ["REPORT_PATH"])
     report = json_object(cast("JsonValue", json.loads(report_path.read_text())), "report")

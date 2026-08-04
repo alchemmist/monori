@@ -13,28 +13,11 @@ runs:
         - name: Fetch mutation base
           shell: bash
           run: git fetch --no-tags origin main
-        - name: Setup Node
-          uses: actions/setup-node@v7
+        - name: Setup project dependencies
+          uses: ./.github/actions/setup-project
           with:
-              node-version: 22
-              cache: npm
-              cache-dependency-path: web/package-lock.json
-
-        - name: Pin npm
-          shell: bash
-          run: npm install --global npm@10.9.2
-
-        - name: Setup uv
-          uses: astral-sh/setup-uv@v7
-          with:
-              enable-cache: true
-        - name: Install web deps
-          shell: bash
-          run: npm ci --no-audit --no-fund
-          working-directory: web
-        - name: Install server deps
-          shell: bash
-          run: uv sync --locked --all-packages
+              install-web: true
+              install-python: true
         - name: Restore Stryker cache
           uses: actions/cache@v4
           with:
@@ -45,7 +28,7 @@ runs:
                   mutation-stryker-${{ runner.os }}-${{ hashFiles('web/package-lock.json') }}-main-
         - name: Test diff mutation gate
           shell: bash
-          run: env -u GITHUB_STEP_SUMMARY python3 -m unittest ci.tests.test_mutation_diff_gate
+          run: env -u GITHUB_STEP_SUMMARY uv run --locked python -m unittest ci.tests.test_mutation_diff_gate
         - name: Run frontend diff mutation tests
           id: mutation-front
           continue-on-error: true
@@ -67,7 +50,7 @@ runs:
               if [ ! -s "$MUTATION_SUMMARY_PATH" ]; then
                 printf '%s\n' '## Mutation testing' '' 'No mutation report was produced.' > "$MUTATION_SUMMARY_PATH"
               fi
-              python -m ci.lib.comments \
+              uv run --locked python -m ci.lib.comments \
                 --marker mutation \
                 --body-file "$MUTATION_SUMMARY_PATH" \
                 --pr-number "$PR_NUMBER"

@@ -20,24 +20,21 @@ class MainWorkflowGraphTest(unittest.TestCase):
         cls.workflow = cast("WorkflowDocument", yaml.safe_load(cls.source))
 
     def test_main_checks_are_individual_jobs(self) -> None:
-        self.assertNotIn("matrix:", self.source)
-        self.assertNotIn("${{ matrix.", self.source)
-        self.assertEqual(
-            set(self.workflow["jobs"]),
-            {
-                "fmt-check",
-                "lint",
-                "type",
-                "analyze",
-                "test-fast",
-                "test-medium",
-                "test-slow",
-                "build",
-                "coverage",
-                "audit",
-                "mutation-full",
-            },
-        )
+        assert "matrix:" not in self.source
+        assert "${{ matrix." not in self.source
+        assert set(self.workflow["jobs"]) == {
+            "fmt-check",
+            "lint",
+            "type",
+            "analyze",
+            "test-fast",
+            "test-medium",
+            "test-slow",
+            "build",
+            "coverage",
+            "audit",
+            "mutation-full",
+        }
 
     def test_main_checks_form_a_sequential_graph(self) -> None:
         jobs = self.workflow["jobs"]
@@ -56,7 +53,7 @@ class MainWorkflowGraphTest(unittest.TestCase):
         for job, dependency in expected.items():
             needs = jobs[job].get("needs", [])
             needs = [needs] if isinstance(needs, str) else needs
-            self.assertIn(dependency, needs, job)
+            assert dependency in needs
 
 
 if __name__ == "__main__":

@@ -10,6 +10,7 @@ ALLOWED_COMMENT = re.compile(r"^#\s*(?:noqa|nosec|type:\s*(?:ignore|noqa))\b", r
 
 
 def python_files(root: Path) -> list[Path]:
+    """Python files for this module."""
     return sorted(
         path
         for path in root.rglob("*.py")
@@ -18,6 +19,7 @@ def python_files(root: Path) -> list[Path]:
 
 
 def violations(path: Path) -> list[tuple[int, int, str]]:
+    """Violations for this module."""
     result = []
     with tokenize.open(path) as source:
         for token in tokenize.generate_tokens(source.readline):
@@ -31,6 +33,7 @@ def violations(path: Path) -> list[tuple[int, int, str]]:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Run this module as a CLI entrypoint and return its exit code."""
     parser = argparse.ArgumentParser()
     parser.add_argument("root", type=Path)
     args = parser.parse_args(argv)

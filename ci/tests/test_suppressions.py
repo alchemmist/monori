@@ -4,6 +4,7 @@ from ci.quality_graph.checks.suppressions import (
     Finding,
     JsonValue,
     SuppressionCheck,
+    SyncApprovalCommandState,
     added_lines_from_patch,
     scan_file,
     summary_body,
@@ -32,6 +33,7 @@ class FakeGitHub:
         return None
 
     def file_text(self, path: str, ref: str) -> str | None:
+        _ = path, ref
         return None
 
     def ensure_label(self, name: str) -> None:
@@ -47,8 +49,8 @@ class SuppressionGateTest(unittest.TestCase):
             )
         )
 
-        self.assertEqual(result.verdict, Verdict.FAIL)
-        self.assertEqual(len(result.findings), 1)
+        assert result.verdict == Verdict.FAIL
+        assert len(result.findings) == 1
 
     def test_finds_backend_and_frontend_suppressions_on_added_lines(self) -> None:
         source = """\
@@ -59,7 +61,7 @@ const value = 1; // eslint-disable-next-line no-console
 
         findings = scan_file("example.ts", source, {1, 2, 3})
 
-        self.assertEqual([finding.line for finding in findings], [1, 2, 3])
+        assert [finding.line for finding in findings] == [1, 2, 3]
 
     def test_ignores_regular_code_and_existing_lines(self) -> None:
         source = """\
@@ -67,15 +69,15 @@ value = 1  # noqa: E501
 value = 2
 """
 
-        self.assertEqual(scan_file("example.py", source, {2}), [])
+        assert scan_file("example.py", source, {2}) == []
 
     def test_finds_config_rule_disabled_on_added_line(self) -> None:
         findings = scan_file("web/eslint.config.mjs", '"no-console": "off",\n', {1})
 
-        self.assertEqual(len(findings), 1)
+        assert len(findings) == 1
 
     def test_does_not_treat_numeric_workflow_settings_as_suppressions(self) -> None:
-        self.assertEqual(scan_file(".github/workflows/ci.yml", "fetch-depth: 0\n", {1}), [])
+        assert scan_file(".github/workflows/ci.yml", "fetch-depth: 0\n", {1}) == []
 
     def test_finds_entry_added_to_existing_toml_suppression_section(self) -> None:
         source = """\
@@ -85,9 +87,9 @@ value = 2
 
         findings = scan_file("server/pyproject.toml", source, {2})
 
-        self.assertEqual(len(findings), 1)
-        self.assertEqual(findings[0].line, 2)
-        self.assertIn('"server/app.py" = ["E501"]', findings[0].text)
+        assert len(findings) == 1
+        assert findings[0].line == 2
+        assert '"server/app.py" = ["E501"]' in findings[0].text
 
     def test_admin_can_approve_and_stale_labels_expire(self) -> None:
         github = FakeGitHub("admin")
@@ -98,16 +100,16 @@ value = 2
             334,
             {"body": ""},
             [finding],
-            parse_command("/qg ignore suppression-finding-1"),
-            "admin",
+            SyncApprovalCommandState(
+                parse_command("/qg ignore suppression-finding-1"),
+                "admin",
+            ),
         )
 
-        self.assertTrue(admin)
-        self.assertEqual(approved, {"finding-1"})
-        self.assertTrue(any(call[0] == "DELETE" and "stale" in call[1] for call in github.calls))
-        self.assertTrue(
-            any(call[0] == "PATCH" and call[1] == "/pulls/334" for call in github.calls)
-        )
+        assert admin
+        assert approved == {"finding-1"}
+        assert any(call[0] == "DELETE" and "stale" in call[1] for call in github.calls)
+        assert any(call[0] == "PATCH" and call[1] == "/pulls/334" for call in github.calls)
 
     def test_non_admin_cannot_change_approval_state(self) -> None:
         github = FakeGitHub("write")
@@ -118,21 +120,23 @@ value = 2
             334,
             {"body": ""},
             [finding],
-            parse_command("/qg ignore suppression"),
-            "contributor",
+            SyncApprovalCommandState(
+                parse_command("/qg ignore suppression"),
+                "contributor",
+            ),
         )
 
-        self.assertFalse(admin)
-        self.assertEqual(approved, {"finding-1"})
-        self.assertFalse(any(call[0] == "POST" for call in github.calls))
+        assert not admin
+        assert approved == {"finding-1"}
+        assert not any(call[0] == "POST" for call in github.calls)
 
     def test_finding_id_survives_line_shift_but_not_code_change(self) -> None:
         before = scan_file("example.py", "value = 1  # noqa\n", {1})[0]
         after = scan_file("example.py", "header = 0\nvalue = 1  # noqa\n", {2})[0]
         changed = scan_file("example.py", "value = 2  # noqa\n", {1})[0]
 
-        self.assertEqual(before.finding_id, after.finding_id)
-        self.assertNotEqual(before.finding_id, changed.finding_id)
+        assert before.finding_id == after.finding_id
+        assert before.finding_id != changed.finding_id
 
     def test_duplicate_suppressions_get_location_sensitive_ids(self) -> None:
         findings = scan_file(
@@ -141,7 +145,7 @@ value = 2
             {1, 2},
         )
 
-        self.assertEqual(len({finding.finding_id for finding in findings}), 2)
+        assert len({finding.finding_id for finding in findings}) == 2
 
     def test_reads_added_lines_from_patch(self) -> None:
         patch = """\
@@ -151,27 +155,27 @@ value = 2
  value = 3
 """
 
-        self.assertEqual(added_lines_from_patch(patch), {2})
+        assert added_lines_from_patch(patch) == {2}
 
     def test_commands_are_shared_between_gates(self) -> None:
-        self.assertIsNotNone(parse_command("/qg ignore suppression-abc123"))
-        self.assertIsNotNone(parse_command("/qg ignore-file server/app.py"))
-        self.assertIsNotNone(parse_command("/qg ignore object-abc123,suppression-def456"))
-        self.assertIsNotNone(parse_command("/qg ignore-file server/app.py,web/eslint.config.mjs"))
-        self.assertIsNotNone(parse_command("/qg remove-ignore object-abc123,suppression-def456"))
-        self.assertIsNone(parse_command("/qg ignore all"))
-        self.assertIsNone(parse_command("/qg ignore suppression-abc123,,suppression-def456"))
+        assert parse_command("/qg ignore suppression-abc123") is not None
+        assert parse_command("/qg ignore-file server/app.py") is not None
+        assert parse_command("/qg ignore object-abc123,suppression-def456") is not None
+        assert parse_command("/qg ignore-file server/app.py,web/eslint.config.mjs") is not None
+        assert parse_command("/qg remove-ignore object-abc123,suppression-def456") is not None
+        assert parse_command("/qg ignore all") is None
+        assert parse_command("/qg ignore suppression-abc123,,suppression-def456") is None
 
     def test_summary_has_collapsed_admin_commands_and_no_comment_marker(self) -> None:
         finding = scan_file("example.py", "value = 1  # noqa\n", {1})[0]
 
         body = summary_body([finding], set())
 
-        self.assertIn("❌ FAIL", body)
-        self.assertIn("<details><summary>For repository administrators</summary>", body)
-        self.assertIn("/qg ignore suppression-600043a9733a", body)
-        self.assertIn("/qg ignore-file example.py", body)
-        self.assertNotIn("<!--", body)
+        assert "❌ FAIL" in body
+        assert "<details><summary>For repository administrators</summary>" in body
+        assert "/qg ignore suppression-600043a9733a" in body
+        assert "/qg ignore-file example.py" in body
+        assert "<!--" not in body
 
 
 if __name__ == "__main__":

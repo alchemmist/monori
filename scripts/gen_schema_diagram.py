@@ -31,6 +31,8 @@ GENERATED_NOTE = (
 
 @dataclass(frozen=True, slots=True)
 class ColumnInfo:
+    """Introspection entry for a database column."""
+
     name: str
     declared_type: str | None
     required: bool
@@ -39,6 +41,8 @@ class ColumnInfo:
 
 @dataclass(frozen=True, slots=True)
 class ForeignKeyInfo:
+    """Normalized foreign-key relationship extracted from schema."""
+
     parent_table: str
     child_column: str
     parent_column: str
@@ -46,6 +50,8 @@ class ForeignKeyInfo:
 
 @dataclass(frozen=True, slots=True)
 class TableInfo:
+    """Database table definition used to render ER diagram."""
+
     columns: list[ColumnInfo]
     foreign_keys: list[ForeignKeyInfo]
 
@@ -79,6 +85,7 @@ def introspect(
 
 
 def diagram(tables: Mapping[str, TableInfo]) -> str:
+    """Diagram for this module."""
     lines = ["```mermaid", "erDiagram"]
     for name, table in tables.items():
         # a composite foreign key would repeat the parent per column; mermaid
@@ -124,10 +131,12 @@ def diagram(tables: Mapping[str, TableInfo]) -> str:
 
 
 def render() -> str:
+    """Render for this module."""
     return f"{GENERATED_NOTE}\n\n{diagram(introspect(SCHEMA.read_text()))}"
 
 
 def splice(doc: str, block: str) -> str:
+    """Splice for this module."""
     head, _, rest = doc.partition(START)
     if not rest:
         sys.exit(f"{DOC}: missing the {START} marker")
@@ -136,6 +145,7 @@ def splice(doc: str, block: str) -> str:
 
 
 def main() -> None:
+    """Run this module as a CLI entrypoint and return its exit code."""
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--check", action="store_true", help="verify without writing")
     args = ap.parse_args()

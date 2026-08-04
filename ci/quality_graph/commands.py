@@ -6,13 +6,15 @@ import json
 import os
 import re
 import urllib.parse
-from collections.abc import Collection
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal, Protocol, cast
+from typing import TYPE_CHECKING, Literal, Protocol, cast
 
-from ci.lib.github import GitHub
+from ci.lib.github import GITHUB_PAGE_SIZE, GitHub
 from ci.lib.json import JsonValue, array_value, object_value, string_value
+
+if TYPE_CHECKING:
+    from collections.abc import Collection
 
 CommandName = Literal["help", "status", "ignore", "ignore-file", "remove-ignore"]
 COMMAND_RE = re.compile(
@@ -26,11 +28,14 @@ KNOWN_GATES = {"object", "suppression", "bundle", "frontend"}
 
 @dataclass(frozen=True)
 class QualityGraphCommand:
+    """Parsed `/qg` or `/quality-graph` command and its arguments."""
+
     name: CommandName
     arguments: tuple[str, ...] = ()
 
 
 def parse_command(body: str) -> QualityGraphCommand | None:
+    """Parse a PR comment into a quality-graph command."""
     match = COMMAND_RE.fullmatch(body.strip())
     if not match:
         return None
@@ -47,24 +52,29 @@ def parse_command(body: str) -> QualityGraphCommand | None:
 
 
 def is_finding_id(value: str) -> bool:
+    """Return True when `value` matches the typed finding id format."""
     return FINDING_ID_RE.fullmatch(value) is not None
 
 
 def finding_gate(value: str) -> str | None:
+    """Extract gate name from a finding id, if valid."""
     if not is_finding_id(value):
         return None
     return value.split("-", maxsplit=1)[0]
 
 
 def is_gate_name(value: str) -> bool:
+    """Check whether value is a valid gate name."""
     return GATE_NAME_RE.fullmatch(value) is not None
 
 
 def command_targets_prefix(command: QualityGraphCommand, prefix: str) -> bool:
+    """Check whether command arguments include an entry with given prefix."""
     return any(argument.startswith(prefix) for argument in command.arguments)
 
 
 def command_targets_gate(command: QualityGraphCommand, gate: str) -> bool:
+    """Check whether command targets the specified gate."""
     if command.name == "ignore-file":
         return gate in {"object", "suppression"}
     return gate in command.arguments or any(
@@ -73,6 +83,7 @@ def command_targets_gate(command: QualityGraphCommand, gate: str) -> bool:
 
 
 def validate_command(command: QualityGraphCommand) -> str | None:
+    """Validate command arguments and return an error message or None."""
     if command.name in {"help", "status"}:
         return None
     if command.name == "ignore-file":
@@ -85,6 +96,7 @@ def validate_command(command: QualityGraphCommand) -> str | None:
 
 
 def command_text(command: QualityGraphCommand) -> str:
+    """Render a normalized `/qg ...` command string."""
     suffix = f" {','.join(command.arguments)}" if command.arguments else ""
     return f"/qg {command.name}{suffix}"
 
@@ -113,22 +125,30 @@ def admin_command_lines(
 
 
 def json_object(value: JsonValue, context: str) -> dict[str, JsonValue]:
+    """Assert and return a JSON object from the generic response."""
     return object_value(value, context)
 
 
 def json_array(value: JsonValue, context: str) -> list[JsonValue]:
+    """Assert and return a JSON array from the generic response."""
     return array_value(value, context)
 
 
 def json_string(value: JsonValue, context: str) -> str:
+    """Assert and return a JSON string from the generic response."""
     return string_value(value, context)
 
 
 class GitHubAPI(Protocol):
-    def request(self, method: str, path: str, payload: JsonValue = None) -> JsonValue: ...
+    """Minimal GitHub API surface used by quality-graph helpers."""
+
+    def request(self, method: str, path: str, payload: JsonValue = None) -> JsonValue:
+        """Make a GitHub REST request and return a parsed JSON payload."""
+        ...
 
 
 def bot_login(github: GitHubAPI) -> str:
+    """Fetch the login of the authenticated GitHub actor."""
     return json_string(
         json_object(github.request("GET", "/user"), "authenticated user").get("login"),
         "bot login",
@@ -136,6 +156,7 @@ def bot_login(github: GitHubAPI) -> str:
 
 
 def set_comment_reaction(github: GitHubAPI, comment_id: int, content: str) -> None:
+    """Replace existing bot reactions on a comment and set the requested one."""
     reactions = json_array(
         github.request("GET", f"/issues/comments/{comment_id}/reactions"),
         "comment reactions",
@@ -151,12 +172,15 @@ def set_comment_reaction(github: GitHubAPI, comment_id: int, content: str) -> No
 
 
 def upsert_status(github: GitHubAPI, number: int, body: str) -> None:
+    """Update or create the bot-owned quality-graph status comment."""
     marker = "<!-- monori-report: quality-graph -->"
     rendered = f"{marker}\n\n{body.rstrip()}\n"
     login = bot_login(github)
-    for page in range(1, 101):
+    for page in range(1, GITHUB_PAGE_SIZE + 1):
         comments = json_array(
-            github.request("GET", f"/issues/{number}/comments?per_page=100&page={page}"),
+            github.request(
+                "GET", f"/issues/{number}/comments?per_page={GITHUB_PAGE_SIZE}&page={page}"
+            ),
             "pull request comments",
         )
         for item in comments:
@@ -166,15 +190,17 @@ def upsert_status(github: GitHubAPI, number: int, body: str) -> None:
                 continue
             comment_id = comment.get("id")
             if not isinstance(comment_id, int):
-                raise RuntimeError("Quality Graph comment has no numeric id")
+                message = "Quality Graph comment has no numeric id"
+                raise TypeError(message)
             github.request("PATCH", f"/issues/comments/{comment_id}", {"body": rendered})
             return
-        if len(comments) < 100:
+        if len(comments) < GITHUB_PAGE_SIZE:
             break
     github.request("POST", f"/issues/{number}/comments", {"body": rendered})
 
 
 def is_admin(github: GitHubAPI, login: str) -> bool:
+    """Return whether admin."""
     encoded = urllib.parse.quote(login, safe="")
     permission = github.request("GET", f"/collaborators/{encoded}/permission")
     return (
@@ -184,6 +210,7 @@ def is_admin(github: GitHubAPI, login: str) -> bool:
 
 
 def pull_request_number(event: dict[str, JsonValue]) -> int | None:
+    """Pull request number for this module."""
     issue = json_object(event.get("issue", {}), "event issue")
     if not issue.get("pull_request"):
         return None
@@ -192,6 +219,7 @@ def pull_request_number(event: dict[str, JsonValue]) -> int | None:
 
 
 def command_result(command: QualityGraphCommand, status: str, detail: str) -> str:
+    """Command result for this module."""
     return "\n".join(
         [
             f"## Quality Graph command {status}",
@@ -204,23 +232,21 @@ def command_result(command: QualityGraphCommand, status: str, detail: str) -> st
 
 
 def help_body() -> str:
-    return "\n".join(
-        [
-            "## Quality Graph commands",
-            "",
-            "Only repository administrators may execute state-changing commands.",
-            "",
-            "- `/qg ignore object-<id>,suppression-<id>` — ignore selected findings",
-            "- `/qg ignore object,suppression` — ignore all current findings of selected types",
-            "- `/qg ignore-file path/to/file` — ignore findings in selected files",
-            "- `/qg remove-ignore object-<id>,suppression-<id>` — remove selected ignores",
-            "- `/qg status` — show the current command status",
-            "- `/qg help` — show this help",
-        ]
-    )
+    """Help body for this module."""
+    return """## Quality Graph commands
+
+Only repository administrators may execute state-changing commands.
+
+- `/qg ignore object-<id>,suppression-<id>` — ignore selected findings
+- `/qg ignore object,suppression` — ignore all current findings of selected types
+- `/qg ignore-file path/to/file` — ignore findings in selected files
+- `/qg remove-ignore object-<id>,suppression-<id>` — remove selected ignores
+- `/qg status` — show the current command status
+- `/qg help` — show this help"""
 
 
 def main() -> int:
+    """Run this module as a CLI entrypoint and return its exit code."""
     event = cast(
         "dict[str, JsonValue]",
         json.loads(Path(os.environ["GITHUB_EVENT_PATH"]).read_text()),
@@ -232,9 +258,8 @@ def main() -> int:
     comment_body = json_string(comment.get("body"), "comment body").strip()
     if not (
         comment_body == "/qg"
-        or comment_body.startswith("/qg ")
         or comment_body == "/quality-graph"
-        or comment_body.startswith("/quality-graph ")
+        or comment_body.startswith(("/qg ", "/quality-graph "))
     ):
         return 0
     command = parse_command(comment_body)
@@ -281,7 +306,10 @@ def main() -> int:
         upsert_status(
             github,
             number,
-            "## Quality Graph status\n\nCommand API is available and ready to process administrator commands.",
+            (
+                "## Quality Graph status\n\n"
+                "Command API is available and ready to process administrator commands."
+            ),
         )
         set_comment_reaction(github, comment_id, "hooray")
         return 0
@@ -318,15 +346,16 @@ def main() -> int:
 
 
 def rerun_workflow(github: GitHubAPI, number: int) -> None:
+    """Rerun workflow for this module."""
     pull = json_object(github.request("GET", f"/pulls/{number}"), "pull request")
     head = json_object(pull.get("head", {}), "pull request head")
     sha = json_string(head.get("sha"), "pull request head sha")
     branch = json_string(head.get("ref"), "pull request head branch")
-    for page in range(1, 101):
+    for page in range(1, GITHUB_PAGE_SIZE + 1):
         response = json_object(
             github.request(
                 "GET",
-                f"/actions/workflows/pr-checks.yaml/runs?event=pull_request&branch={urllib.parse.quote(branch)}&per_page=100&page={page}",
+                f"/actions/workflows/pr-checks.yaml/runs?event=pull_request&branch={urllib.parse.quote(branch)}&per_page={GITHUB_PAGE_SIZE}&page={page}",
             ),
             "workflow runs response",
         )
@@ -336,9 +365,10 @@ def rerun_workflow(github: GitHubAPI, number: int) -> None:
             if run.get("head_sha") == sha and isinstance(run.get("id"), int):
                 github.request("POST", f"/actions/runs/{run['id']}/rerun-failed-jobs")
                 return
-        if len(runs) < 100:
+        if len(runs) < GITHUB_PAGE_SIZE:
             break
-    raise RuntimeError(f"No completed pr-checks.yaml run found for PR #{number}")
+    message = f"No completed pr-checks.yaml run found for PR #{number}"
+    raise RuntimeError(message)
 
 
 if __name__ == "__main__":

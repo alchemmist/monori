@@ -7,10 +7,10 @@ outputs:
 runs:
     using: composite
     steps:
-        - name: Setup Python
-          uses: actions/setup-python@v6
+        - name: Setup Python dependencies
+          uses: ./.github/actions/setup-project
           with:
-              python-version: "3.12"
+              install-python: true
         - name: Detect performance-relevant changes
           id: scope
           uses: actions/github-script@v8
@@ -60,7 +60,7 @@ runs:
               else
                 printf '%s\n' '## ✅ Frontend performance' '' 'No performance-relevant files changed; the gate is skipped.' > "$RUNNER_TEMP/frontend-performance-scope.md"
               fi
-              python -m ci.lib.comments \
+              uv run --locked python -m ci.lib.comments \
                 --marker frontend-performance \
                 --body-file "$RUNNER_TEMP/frontend-performance-scope.md" \
                 --pr-number "$PR_NUMBER"

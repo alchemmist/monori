@@ -2,20 +2,28 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
 
 
 class Verdict(StrEnum):
+    """Overall result category for a quality check."""
+
     PASS = "pass"
     FAIL = "fail"
 
 
 class FindingProtocol(Protocol):
+    """Common protocol for all quality-gate finding objects."""
+
     @property
-    def finding_id(self) -> str: ...
+    def finding_id(self) -> str:
+        """Identifier to deduplicate and reference findings."""
+        ...
 
 
 @dataclass(frozen=True)

@@ -45,6 +45,8 @@ def _load_workbook_modules() -> tuple[_SpecModule, dict[str, tuple[str, ...]], P
 spec, TX_ALIASES, parse_workbook = _load_workbook_modules()
 
 OUT = REPO / "web" / "e2e" / "fixtures" / "template-workbook.xlsx"
+LENTA_AMOUNT = -300_000
+PAYROLL_AMOUNT = 5_000_000
 
 TX_HEADER = [
     TX_ALIASES[f][0]
@@ -62,6 +64,7 @@ def tx(
     desc: str,
     kw: tuple[str, str] | None = None,
 ) -> list[WorkbookCell]:
+    """Tx for this module."""
     row: list[WorkbookCell] = [None] * 12
     row[0] = date
     row[1] = card
@@ -78,6 +81,7 @@ def tx(
 
 
 def build() -> Workbook:
+    """Build for this module."""
     wb = Workbook()
     active = wb.active
     assert active is not None
@@ -158,6 +162,7 @@ def build() -> Workbook:
 
 
 def main() -> None:
+    """Run this module as a CLI entrypoint and return its exit code."""
     wb = build()
     buf = BytesIO()
     wb.save(buf)
@@ -184,10 +189,10 @@ def main() -> None:
     # content of one row per domain as well
     by_desc = {t.description: t for t in parsed.transactions}
     lenta = by_desc["LENTA-101"]
-    assert lenta.amount == -300000, lenta
+    assert lenta.amount == LENTA_AMOUNT, lenta
     assert lenta.monori_category == "Groceries", lenta
     assert lenta.marker == "*1111", lenta
-    assert by_desc["PAYROLL JAN"].amount == 5000000, by_desc["PAYROLL JAN"]
+    assert by_desc["PAYROLL JAN"].amount == PAYROLL_AMOUNT, by_desc["PAYROLL JAN"]
     assert by_desc["MISC SHOP"].monori_category == "", by_desc["MISC SHOP"]
     keywords = {c.name: c.keywords for c in parsed.categories}
     assert keywords["Groceries"] == "lenta|okey", keywords

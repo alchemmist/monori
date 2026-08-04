@@ -9,32 +9,42 @@ JsonObject = dict[str, JsonValue]
 
 
 def is_object(value: JsonValue) -> TypeGuard[JsonObject]:
+    """Return whether object."""
     return isinstance(value, dict)
 
 
 def object_value(value: JsonValue, context: str) -> JsonObject:
+    """Object value for this module."""
     if not is_object(value):
-        raise TypeError(f"Expected JSON object for {context}")
+        message = f"Expected JSON object for {context}"
+        raise TypeError(message)
     return value
 
 
 def array_value(value: JsonValue, context: str) -> list[JsonValue]:
+    """Array value for this module."""
     if not isinstance(value, list):
-        raise TypeError(f"Expected JSON array for {context}")
+        message = f"Expected JSON array for {context}"
+        raise TypeError(message)
     return value
 
 
 def string_value(value: JsonValue, context: str) -> str:
+    """String value for this module."""
     if not isinstance(value, str):
-        raise TypeError(f"Expected JSON string for {context}")
+        message = f"Expected JSON string for {context}"
+        raise TypeError(message)
     return value
 
 
 def integer_value(value: JsonValue, context: str) -> int:
+    """Integer value for this module."""
     if isinstance(value, bool) or not isinstance(value, int):
-        raise TypeError(f"Expected JSON integer for {context}")
+        message = f"Expected JSON integer for {context}"
+        raise TypeError(message)
     return value
 
 
 def optional_string(value: JsonValue) -> str | None:
+    """Optional string for this module."""
     return value if isinstance(value, str) else None

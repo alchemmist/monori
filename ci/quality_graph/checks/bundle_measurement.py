@@ -20,16 +20,22 @@ type JsonValue = None | bool | int | float | str | list[JsonValue] | dict[str, J
 
 
 class Asset(TypedDict):
+    """Single asset snapshot entry with raw and gzipped sizes."""
+
     size: int
     gzip: int
 
 
 class Snapshot(TypedDict):
+    """Parsed frontend bundle snapshot."""
+
     assets: dict[str, Asset]
     initial: list[str]
 
 
 class AssetGrowth(TypedDict):
+    """Growth entry describing regression details for a single asset."""
+
     asset: str
     base: int
     current: int
@@ -37,10 +43,12 @@ class AssetGrowth(TypedDict):
 
 
 def gzip_size(path: Path) -> int:
+    """Gzip size for this module."""
     return len(gzip.compress(path.read_bytes(), mtime=0))
 
 
 def snapshot(dist: Path) -> Snapshot:
+    """Snapshot for this module."""
     assets: dict[str, Asset] = {}
     assets_dir = dist / "assets"
     for path in sorted(assets_dir.rglob("*")):
@@ -54,10 +62,12 @@ def snapshot(dist: Path) -> Snapshot:
 
 
 def normalized_asset(path: str) -> str:
+    """Normalized asset for this module."""
     return ASSET_HASH_RE.sub("", path)
 
 
 def tier(delta: int, percent: float) -> str:
+    """Tier for this module."""
     if delta <= 0 or (percent < NOISE_PERCENT and delta < NOISE_BYTES):
         return "none"
     if percent <= INFO_PERCENT:
@@ -68,6 +78,8 @@ def tier(delta: int, percent: float) -> str:
 
 
 def compare(base: Snapshot, current: Snapshot) -> dict[str, JsonValue]:
+    """Compare for this module."""
+
     def total(names: list[str]) -> int:
         return sum(current["assets"].get(name, {"gzip": 0})["gzip"] for name in names)
 
@@ -122,6 +134,7 @@ def compare(base: Snapshot, current: Snapshot) -> dict[str, JsonValue]:
 
 
 def main() -> int:
+    """Run this module as a CLI entrypoint and return its exit code."""
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(dest="command", required=True)
     measure_parser = subparsers.add_parser("measure")

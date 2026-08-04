@@ -14,6 +14,7 @@ from pydantic import TypeAdapter
 from pydantic.dataclasses import dataclass as pydantic_dataclass
 
 TOKEN_FILE = pathlib.Path("/tmp/monori-token.txt")
+SNAPSHOT_ROW_COUNT = 500
 
 # the fill is fast on localhost, so watch the DOM for the ring instead of
 # racing it with polls
@@ -45,6 +46,8 @@ STATE_JS = """() => {
 
 @pydantic_dataclass
 class PageState:
+    """Observed browser state used to verify progress-ring loading behavior."""
+
     count: int | None
     ring: bool
     ringSeen: list[str]
@@ -53,11 +56,15 @@ class PageState:
 
 @pydantic_dataclass
 class ReducedRing:
+    """Observed state of the reduced-motion variant ring."""
+
     text: str
     svg: bool
 
 
 class ReducedMotion(StrEnum):
+    """Client preference values for reduced-motion checks."""
+
     NO_PREFERENCE = "no-preference"
     REDUCE = "reduce"
 
@@ -67,6 +74,7 @@ REDUCED_RING_ADAPTER: TypeAdapter[ReducedRing] = TypeAdapter(ReducedRing)
 
 
 def load_token() -> str:
+    """Load token."""
     if not TOKEN_FILE.exists():
         sys.exit(
             f"{TOKEN_FILE} not found — mint one first, e.g.:\n"
@@ -83,6 +91,7 @@ def open_page(
     requests: list[str] | None = None,
     reduced_motion: ReducedMotion | None = None,
 ) -> Page:
+    """Open page for this module."""
     page = browser.new_page(
         viewport={"width": 1280, "height": 900},
         reduced_motion=reduced_motion.value if reduced_motion is not None else None,
@@ -116,6 +125,7 @@ def open_page(
 
 
 def main() -> None:
+    """Run this module as a CLI entrypoint and return its exit code."""
     token = load_token()
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
@@ -148,12 +158,12 @@ def main() -> None:
         print("\n=== checks ===")
         ok = True
 
-        def check(name: str, cond: bool) -> None:
+        def check(name: str, *, cond: bool) -> None:
             nonlocal ok
             ok = ok and cond
             print(f"[{'PASS' if cond else 'FAIL'}] {name}")
 
-        check("first paint used the light snapshot", all("light=1" in u for u in light))
+        check("first paint used the light snapshot", cond=all("light=1" in u for u in light))
         # 500 rows arrive with the snapshot, the rest in 1000-row chunks; more
         # than that would mean a superseded fill kept running
         count = state.count
@@ -161,14 +171,14 @@ def main() -> None:
         expected_chunks = -((count - 500) // 1000)
         check(
             f"the fill ran exactly once ({expected_chunks} chunks)",
-            len(chunks) == expected_chunks,
+            cond=len(chunks) == expected_chunks,
         )
-        check("progress ring appeared during the fill", len(state.ringSeen) > 0)
-        check("ring reported a percentage", any("%" in s for s in state.ringSeen))
-        check("ring is gone once the fill finished", state.ring is False)
-        check("ledger is fully loaded", count > 500)
-        check("reduce motion drops the ring", reduced_ring.svg is False)
-        check("reduce motion still shows the percentage", "%" in reduced_ring.text)
+        check("progress ring appeared during the fill", cond=len(state.ringSeen) > 0)
+        check("ring reported a percentage", cond=any("%" in s for s in state.ringSeen))
+        check("ring is gone once the fill finished", cond=state.ring is False)
+        check("ledger is fully loaded", cond=count > SNAPSHOT_ROW_COUNT)
+        check("reduce motion drops the ring", cond=reduced_ring.svg is False)
+        check("reduce motion still shows the percentage", cond="%" in reduced_ring.text)
         print("\nRESULT:", "ALL PASS" if ok else "SOME FAILED")
         sys.exit(0 if ok else 1)
 

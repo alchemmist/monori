@@ -21,6 +21,7 @@ TIER_LABELS = {
     "critical": "Critical",
     "error": "Measurement failure",
 }
+MS_PER_SECOND = 1000
 TIER_EMOJI = {
     "none": "✅",
     "info": "💬",
@@ -33,6 +34,8 @@ COMMENT_MARKER = "<!-- monori-frontend-performance -->"
 
 @dataclass(frozen=True)
 class Measurement:
+    """One measured run for a specific metric and route."""
+
     route_id: str
     route_label: str
     metric_id: str
@@ -43,6 +46,8 @@ class Measurement:
 
 @dataclass(frozen=True)
 class Entry:
+    """Single metric comparison row used in performance summary output."""
+
     route_id: str
     route_label: str
     metric_id: str
@@ -57,40 +62,51 @@ class Entry:
 
 
 def decode_json(path: Path) -> JsonValue:
+    """Decode json."""
     value: JsonValue = json.loads(path.read_text())
     return value
 
 
 def json_object(value: JsonValue, context: str) -> dict[str, JsonValue]:
+    """Json object for this module."""
     if not isinstance(value, dict):
-        raise RuntimeError(f"Expected an object for {context}")
+        message = f"Expected an object for {context}"
+        raise TypeError(message)
     return value
 
 
 def json_array(value: JsonValue, context: str) -> list[JsonValue]:
+    """Json array for this module."""
     if not isinstance(value, list):
-        raise RuntimeError(f"Expected an array for {context}")
+        message = f"Expected an array for {context}"
+        raise TypeError(message)
     return value
 
 
 def json_string(value: JsonValue, context: str) -> str:
+    """Json string for this module."""
     if not isinstance(value, str):
-        raise RuntimeError(f"Expected a string for {context}")
+        message = f"Expected a string for {context}"
+        raise TypeError(message)
     return value
 
 
 def json_number(value: JsonValue, context: str) -> float:
+    """Json number for this module."""
     if isinstance(value, bool) or not isinstance(value, int | float):
-        raise RuntimeError(f"Expected a number for {context}")
+        message = f"Expected a number for {context}"
+        raise TypeError(message)
     return float(value)
 
 
 def config_parts(
     config: dict[str, JsonValue],
 ) -> tuple[int, list[dict[str, JsonValue]], dict[str, dict[str, JsonValue]]]:
+    """Config parts for this module."""
     raw_runs = config.get("runs")
     if isinstance(raw_runs, bool) or not isinstance(raw_runs, int) or raw_runs < 1:
-        raise RuntimeError("config.runs must be a positive integer")
+        message = "config.runs must be a positive integer"
+        raise RuntimeError(message)
     routes = [
         json_object(route, "lighthouse route")
         for route in json_array(config.get("lighthouseRoutes"), "lighthouseRoutes")
@@ -104,14 +120,17 @@ def config_parts(
 
 
 def median(values: list[float], expected_runs: int, context: str) -> float:
+    """Median for this module."""
     if len(values) != expected_runs:
-        raise RuntimeError(f"{context} has {len(values)} runs; expected {expected_runs}")
+        message = f"{context} has {len(values)} runs; expected {expected_runs}"
+        raise RuntimeError(message)
     return float(statistics.median(values))
 
 
 def load_lighthouse(
     directory: Path, config: dict[str, JsonValue]
 ) -> dict[MeasurementKey, Measurement]:
+    """Load lighthouse."""
     runs, routes, metrics = config_parts(config)
     route_by_path = {json_string(route.get("path"), "route path"): route for route in routes}
     values: dict[MeasurementKey, list[float]] = {}
@@ -125,7 +144,8 @@ def load_lighthouse(
         route_path = urllib.parse.urlparse(json_string(raw_url, "Lighthouse URL")).path
         route = route_by_path.get(route_path)
         if route is None:
-            raise RuntimeError(f"Unexpected Lighthouse route {route_path}")
+            message = f"Unexpected Lighthouse route {route_path}"
+            raise RuntimeError(message)
         route_id = json_string(route.get("id"), "route id")
         audits = json_object(report.get("audits"), "Lighthouse audits")
         for metric_id in metrics:
@@ -157,6 +177,7 @@ def load_lighthouse(
 
 
 def load_navigation(path: Path, config: dict[str, JsonValue]) -> dict[MeasurementKey, Measurement]:
+    """Load navigation."""
     runs, _, metrics = config_parts(config)
     navigation_metric = metrics["navigation"]
     root = json_object(decode_json(path), str(path))
@@ -172,7 +193,8 @@ def load_navigation(path: Path, config: dict[str, JsonValue]) -> dict[Measuremen
         ]
         key = (scenario_id, "navigation")
         if key in measurements:
-            raise RuntimeError(f"Duplicate navigation scenario {scenario_id}")
+            message = f"Duplicate navigation scenario {scenario_id}"
+            raise RuntimeError(message)
         measurements[key] = Measurement(
             route_id=scenario_id,
             route_label=label,
@@ -193,21 +215,22 @@ def load_navigation(path: Path, config: dict[str, JsonValue]) -> dict[Measuremen
     if measured != configured:
         missing = ", ".join(sorted(configured - measured)) or "none"
         extra = ", ".join(sorted(measured - configured)) or "none"
-        raise RuntimeError(
-            f"Navigation scenarios differ from config; missing={missing}; extra={extra}"
-        )
+        message = f"Navigation scenarios differ from config; missing={missing}; extra={extra}"
+        raise RuntimeError(message)
     return measurements
 
 
 def load_measurements(
     directory: Path, config: dict[str, JsonValue]
 ) -> dict[MeasurementKey, Measurement]:
+    """Load measurements."""
     lighthouse = load_lighthouse(directory / "lighthouse", config)
     navigation = load_navigation(directory / "navigation.json", config)
     return lighthouse | navigation
 
 
 def band(value: float, metric: dict[str, JsonValue]) -> str | None:
+    """Band for this module."""
     raw_good = metric.get("good")
     raw_poor = metric.get("poor")
     if raw_good is None or raw_poor is None:
@@ -222,11 +245,13 @@ def band(value: float, metric: dict[str, JsonValue]) -> str | None:
 
 
 def threshold(metric: dict[str, JsonValue], name: str, default: float = 0) -> float:
+    """Threshold for this module."""
     raw = metric.get(name)
     return default if raw is None else json_number(raw, name)
 
 
 def classify(base: float, current: float, metric: dict[str, JsonValue]) -> tuple[str, str]:
+    """Classify for this module."""
     delta = current - base
     if delta <= 0:
         return "none", "same or better"
@@ -277,15 +302,17 @@ def compare_measurements(
     current: dict[MeasurementKey, Measurement],
     config: dict[str, JsonValue],
 ) -> list[Entry]:
+    """Compare measurements for this module."""
     if set(base) != set(current):
         missing = ", ".join(
             f"{route}/{metric}" for route, metric in sorted(set(base) - set(current))
         )
         extra = ", ".join(f"{route}/{metric}" for route, metric in sorted(set(current) - set(base)))
-        raise RuntimeError(
+        message = (
             "PR measurements differ from main; "
             f"missing={missing or 'none'}; extra={extra or 'none'}"
         )
+        raise RuntimeError(message)
 
     _, _, metrics = config_parts(config)
     entries: list[Entry] = []
@@ -315,18 +342,21 @@ def compare_measurements(
 
 
 def worst_tier(entries: list[Entry]) -> str:
+    """Worst tier for this module."""
     return max((entry.tier for entry in entries), key=lambda tier: TIERS[tier], default="none")
 
 
 def format_value(value: float, unit: str) -> str:
+    """Format value for this module."""
     if unit == "score":
         return f"{value:.3f}"
-    if abs(value) >= 1000:
-        return f"{value / 1000:.2f} s"
+    if abs(value) >= MS_PER_SECOND:
+        return f"{value / MS_PER_SECOND:.2f} s"
     return f"{value:.0f} ms"
 
 
 def format_delta(entry: Entry) -> str:
+    """Format delta for this module."""
     sign = "+" if entry.delta > 0 else ""
     value = format_value(entry.delta, entry.unit)
     percent = "new" if entry.delta_percent is None else f"{entry.delta_percent:+.1f}%"
@@ -334,6 +364,7 @@ def format_delta(entry: Entry) -> str:
 
 
 def format_delta_cell(entry: Entry) -> str:
+    """Format delta cell for this module."""
     delta = format_delta(entry)
     if entry.delta > 0:
         return f'<font color="#c05640">{delta}</font>'
@@ -343,11 +374,13 @@ def format_delta_cell(entry: Entry) -> str:
 
 
 def tier_cell(tier: str) -> str:
+    """Tier cell for this module."""
     symbols = {"none": "✔", "info": "💬", "significant": "⚠", "critical": "✗"}
     return f"{symbols[tier]} {TIER_LABELS[tier]}"
 
 
 def sorted_regressions(entries: list[Entry]) -> list[Entry]:
+    """Sorted regressions for this module."""
     return sorted(
         (entry for entry in entries if entry.tier != "none"),
         key=lambda entry: (
@@ -362,6 +395,7 @@ def sorted_regressions(entries: list[Entry]) -> list[Entry]:
 def report_table(
     entries: list[Entry], *, include_route: bool = True, navigation: bool = False
 ) -> list[str]:
+    """Report table for this module."""
     if navigation:
         lines = [
             "| Navigation | main | PR | Δ | Tier |",
@@ -393,6 +427,7 @@ def report_table(
 
 
 def report_sections(entries: list[Entry]) -> list[str]:
+    """Report sections for this module."""
     lines: list[str] = []
     navigation = [entry for entry in entries if entry.metric_id == "navigation"]
     pages: dict[str, list[Entry]] = {}
@@ -417,6 +452,7 @@ def report_sections(entries: list[Entry]) -> list[str]:
 
 
 def render_standards(config: dict[str, JsonValue]) -> list[str]:
+    """Render standards."""
     _, _, metrics = config_parts(config)
     lines = [
         "<details>",
@@ -477,6 +513,7 @@ def render_report(
     comment: bool,
     config: dict[str, JsonValue] | None = None,
 ) -> str:
+    """Render report."""
     emoji = TIER_EMOJI[verdict]
     if comment:
         lines = [COMMENT_MARKER, "", f"## {emoji} Frontend performance", ""]
@@ -534,6 +571,7 @@ def render_report(
 
 
 def write_json(path: Path, value: JsonValue) -> None:
+    """Write json."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n")
 
@@ -546,6 +584,7 @@ def write_outputs(
     head_sha: str,
     config: dict[str, JsonValue],
 ) -> None:
+    """Write outputs."""
     output.mkdir(parents=True, exist_ok=True)
     report: dict[str, JsonValue] = {
         "schemaVersion": SCHEMA_VERSION,
@@ -565,6 +604,7 @@ def write_outputs(
 
 
 def write_error(output: Path, message: str, pr_number: int, head_sha: str) -> None:
+    """Write error."""
     output.mkdir(parents=True, exist_ok=True)
     longest_backtick_run = max(
         (len(run) for run in re.findall(r"`+", message)),
@@ -600,6 +640,7 @@ def write_error(output: Path, message: str, pr_number: int, head_sha: str) -> No
 
 
 def parse_args() -> argparse.Namespace:
+    """Parse args."""
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(dest="command", required=True)
 
@@ -620,6 +661,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> int:
+    """Run this module as a CLI entrypoint and return its exit code."""
     args = parse_args()
     if args.command == "error":
         write_error(args.output, args.message, args.pr_number, args.head_sha)

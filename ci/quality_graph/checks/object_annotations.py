@@ -8,16 +8,23 @@ import json
 import os
 import re
 import sys
-import urllib.error
 import urllib.parse
-import urllib.request
 from collections import Counter
 from dataclasses import dataclass
 from itertools import count
 from pathlib import Path
 from typing import Protocol, cast, override
 
+import httpx
+
 from ci.lib.comments import upsert_comment
+from ci.lib.github import (
+    GITHUB_PAGE_SIZE,
+    HTTP_FORBIDDEN,
+    HTTP_NO_CONTENT,
+    HTTP_NOT_FOUND,
+    REQUEST_TIMEOUT_SECONDS,
+)
 from ci.quality_graph.base import QualityCheck
 from ci.quality_graph.commands import (
     QualityGraphCommand,
@@ -35,43 +42,55 @@ IGNORE_LABEL_PREFIX = "monori-object-annotation-ignore-"
 FINDING_ID_PREFIX = "object-"
 FAILURE_LABEL = "monori-object-annotation-failed"
 APPROVAL_STATE_RE = re.compile(r"<!-- monori-object-annotation-approvals: ([0-9a-f,]*) -->")
-REQUEST_TIMEOUT = 30
+WORKFLOW_RUNS_PER_PAGE = GITHUB_PAGE_SIZE
 
 
 def decode_json(data: bytes | str) -> JsonValue:
+    """Decode raw JSON payload into typed JSON value."""
     return cast("JsonValue", json.loads(data))
 
 
 def json_object(value: JsonValue, context: str) -> dict[str, JsonValue]:
+    """Parse value as JSON object for the given context."""
     if not isinstance(value, dict):
-        raise RuntimeError(f"Expected a JSON object for {context}")
+        message = f"Expected a JSON object for {context}"
+        raise TypeError(message)
     return value
 
 
 def json_array(value: JsonValue, context: str) -> list[JsonValue]:
+    """Parse value as JSON array for the given context."""
     if not isinstance(value, list):
-        raise RuntimeError(f"Expected a JSON array for {context}")
+        message = f"Expected a JSON array for {context}"
+        raise TypeError(message)
     return value
 
 
 def json_string(value: JsonValue, context: str) -> str:
+    """Parse value as JSON string for the given context."""
     if not isinstance(value, str):
-        raise RuntimeError(f"Expected a JSON string for {context}")
+        message = f"Expected a JSON string for {context}"
+        raise TypeError(message)
     return value
 
 
 def json_integer(value: JsonValue, context: str) -> int:
+    """Parse value as JSON integer for the given context."""
     if isinstance(value, bool) or not isinstance(value, int):
-        raise RuntimeError(f"Expected a JSON integer for {context}")
+        message = f"Expected a JSON integer for {context}"
+        raise TypeError(message)
     return value
 
 
 def optional_string(value: JsonValue) -> str | None:
+    """Return a JSON string value or ``None``."""
     return value if isinstance(value, str) else None
 
 
 @dataclass(frozen=True)
 class Finding:
+    """Object-type finding location and associated detection metadata."""
+
     path: str
     line: int
     column: int
@@ -80,62 +99,76 @@ class Finding:
 
 
 def display_finding_id(finding_id: str) -> str:
+    """Return finding id prefixed for command addressing."""
     return f"{FINDING_ID_PREFIX}{finding_id}"
 
 
 class GitHubAPIError(RuntimeError):
+    """Raised when the GitHub API returns an unexpected non-retriable error."""
+
     def __init__(self, method: str, path: str, status: int) -> None:
+        """Build a typed runtime error for GitHub HTTP failures."""
         super().__init__(f"GitHub API {method} {path} failed: HTTP {status}")
         self.status = status
 
 
 class GitHub:
+    """Small typed GitHub API client for annotation checks."""
+
     def __init__(self) -> None:
+        """Initialize object-annotation gate GitHub client from environment."""
         self.base_url = os.environ.get("GITHUB_API_URL", "https://api.github.com")
         self.repository = os.environ["GITHUB_REPOSITORY"]
         self.token = os.environ["GITHUB_TOKEN"]
 
     def request(self, method: str, path: str, payload: JsonValue = None) -> JsonValue:
+        """Send GitHub API request and return parsed JSON response."""
         url = f"{self.base_url}/repos/{self.repository}{path}"
         data = None if payload is None else json.dumps(payload).encode()
-        request = urllib.request.Request(
-            url,
-            data=data,
-            method=method,
-            headers={
-                "Accept": "application/vnd.github+json",
-                "Authorization": f"Bearer {self.token}",
-                "X-GitHub-Api-Version": "2022-11-28",
-                "Content-Type": "application/json",
-            },
-        )
         try:
-            with urllib.request.urlopen(request, timeout=REQUEST_TIMEOUT) as response:
-                if response.status == 204:
-                    return None
-                return decode_json(response.read())
-        except urllib.error.HTTPError as error:
-            if error.code == 403 and method in {"POST", "PATCH", "DELETE"}:
-                return None
-            if method in {"GET", "DELETE"} and error.code == 404:
-                return None
-            raise GitHubAPIError(method, path, error.code) from error
-        except (TimeoutError, urllib.error.URLError) as error:
-            raise RuntimeError(f"GitHub API {method} {path} failed: {error}") from error
+            response = httpx.request(
+                method,
+                url,
+                content=data,
+                timeout=REQUEST_TIMEOUT_SECONDS,
+                headers={
+                    "Accept": "application/vnd.github+json",
+                    "Authorization": f"Bearer {self.token}",
+                    "X-GitHub-Api-Version": "2022-11-28",
+                    "Content-Type": "application/json",
+                },
+            )
+        except httpx.RequestError as error:
+            message = f"GitHub API {method} {path} failed: {error}"
+            raise RuntimeError(message) from error
+        if response.status_code == HTTP_NO_CONTENT:
+            return None
+        if response.status_code == HTTP_FORBIDDEN and method in {"POST", "PATCH", "DELETE"}:
+            return None
+        if method in {"GET", "DELETE"} and response.status_code == HTTP_NOT_FOUND:
+            return None
+        if response.is_error:
+            raise GitHubAPIError(method, path, response.status_code)
+        return cast("JsonValue", response.json())
 
     def paged(self, path: str) -> list[dict[str, JsonValue]]:
+        """Read all pages from a GitHub list endpoint."""
         result: list[dict[str, JsonValue]] = []
         page = 1
         while True:
             separator = "&" if "?" in path else "?"
-            response = self.request("GET", f"{path}{separator}per_page=100&page={page}")
+            response = self.request(
+                "GET",
+                f"{path}{separator}per_page={WORKFLOW_RUNS_PER_PAGE}&page={page}",
+            )
             items = json_array(response, path)
             result.extend(json_object(item, path) for item in items)
-            if len(items) < 100:
+            if len(items) < WORKFLOW_RUNS_PER_PAGE:
                 return result
             page += 1
 
     def file_text(self, path: str, ref: str) -> str | None:
+        """Read file content from repository at the given git reference."""
         encoded = urllib.parse.quote(path, safe="")
         raw_response = self.request("GET", f"/contents/{encoded}?ref={urllib.parse.quote(ref)}")
         if raw_response is None:
@@ -146,16 +179,22 @@ class GitHub:
             return base64.b64decode(content).decode("utf-8")
         download_url = optional_string(response.get("download_url"))
         if not download_url:
-            raise RuntimeError(f"Cannot read {path} at {ref}")
-        request = urllib.request.Request(
-            download_url,
-            headers={"Authorization": f"Bearer {self.token}"},
-        )
-        with urllib.request.urlopen(request, timeout=REQUEST_TIMEOUT) as result:
-            text: str = result.read().decode("utf-8")
-            return text
+            message = f"Cannot read {path} at {ref}"
+            raise RuntimeError(message)
+        try:
+            download_response = httpx.get(
+                download_url,
+                headers={"Authorization": f"Bearer {self.token}"},
+                timeout=REQUEST_TIMEOUT_SECONDS,
+            )
+            download_response.raise_for_status()
+        except httpx.HTTPError as error:
+            message = f"Cannot read {path} at {ref}: {error}"
+            raise RuntimeError(message) from error
+        return download_response.text
 
     def ensure_label(self, name: str) -> None:
+        """Ensure repository has a label; create it if missing."""
         encoded = urllib.parse.quote(name, safe="")
         if self.request("GET", f"/labels/{encoded}") is None:
             self.request(
@@ -170,16 +209,27 @@ class GitHub:
 
 
 class GitHubAPI(Protocol):
-    def request(self, method: str, path: str, payload: JsonValue = None) -> JsonValue: ...
+    """Public interface required by object-annotation checks for GitHub calls."""
 
-    def paged(self, path: str) -> list[dict[str, JsonValue]]: ...
+    def request(self, method: str, path: str, payload: JsonValue = None) -> JsonValue:
+        """Execute request to GitHub API endpoint."""
+        ...
 
-    def file_text(self, path: str, ref: str) -> str | None: ...
+    def paged(self, path: str) -> list[dict[str, JsonValue]]:
+        """Read all pages from a list-like GitHub endpoint."""
+        ...
 
-    def ensure_label(self, name: str) -> None: ...
+    def file_text(self, path: str, ref: str) -> str | None:
+        """Return file text from repository at a specific reference."""
+        ...
+
+    def ensure_label(self, name: str) -> None:
+        """Ensure the repository label exists."""
+        ...
 
 
 def changed_lines(before: str | None, after: str) -> set[int]:
+    """Compute changed line numbers between two text snapshots."""
     before_lines = [] if before is None else before.splitlines()
     after_lines = after.splitlines()
     changed: set[int] = set()
@@ -191,13 +241,15 @@ def changed_lines(before: str | None, after: str) -> set[int]:
 
 
 def added_lines_from_patch(patch: str) -> set[int]:
+    """Parse unified diff patch and return added line numbers."""
     added: set[int] = set()
     new_line = 0
     for line in patch.splitlines():
         if line.startswith("@@"):
             match = PATCH_HUNK_RE.match(line)
             if not match:
-                raise RuntimeError(f"Cannot parse diff hunk: {line}")
+                message = f"Cannot parse diff hunk: {line}"
+                raise RuntimeError(message)
             new_line = int(match.group(1))
         elif line.startswith("+") and not line.startswith("+++"):
             added.add(new_line)
@@ -210,6 +262,7 @@ def added_lines_from_patch(patch: str) -> set[int]:
 
 
 def annotation_nodes(tree: ast.AST) -> list[ast.expr]:
+    """Collect annotation nodes that can contain ``object`` references."""
     nodes: list[ast.expr] = []
     for node in ast.walk(tree):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
@@ -226,6 +279,7 @@ def annotation_nodes(tree: ast.AST) -> list[ast.expr]:
 
 
 def contains_object(annotation: ast.expr) -> tuple[int, int] | None:
+    """Check annotation expression for a direct or nested ``object`` annotation."""
     for node in ast.walk(annotation):
         if isinstance(node, ast.Name) and node.id == "object":
             return node.lineno, node.col_offset
@@ -242,12 +296,12 @@ def contains_object(annotation: ast.expr) -> tuple[int, int] | None:
 
 
 def scan_file(path: str, source: str, changed: set[int]) -> list[Finding]:
+    """Scan a Python file and return object-typed annotations on changed lines."""
     try:
         tree = ast.parse(source, filename=path)
     except SyntaxError as error:
-        print(
-            f"::error file={path},line={error.lineno or 1}::Cannot parse Python file: {error}",
-            file=sys.stderr,
+        sys.stderr.write(
+            f"::error file={path},line={error.lineno or 1}::Cannot parse Python file: {error}\n"
         )
         return []
 
@@ -290,11 +344,13 @@ class ObjectAnnotationCheck(QualityCheck[Finding]):
 
 
 def finding_url(pr_url: str, finding: Finding) -> str:
+    """Build URL for a finding line in the pull request diff."""
     diff_hash = hashlib.sha256(finding.path.encode()).hexdigest()
     return f"{pr_url}/changes#diff-{diff_hash}R{finding.line}"
 
 
 def summary_body(findings: list[Finding], approved: set[str], pr_url: str) -> str:
+    """Render the summary markdown shown for object annotation check."""
     active = [finding for finding in findings if finding.finding_id not in approved]
     status = "✅ PASS" if not active else "❌ FAIL"
     lines = [
@@ -341,6 +397,7 @@ def summary_body(findings: list[Finding], approved: set[str], pr_url: str) -> st
 
 
 def approval_state(body: str) -> set[str]:
+    """Extract currently approved finding ids from PR body marker."""
     match = APPROVAL_STATE_RE.search(body)
     return set(match.group(1).split(",")) if match and match.group(1) else set()
 
@@ -348,6 +405,7 @@ def approval_state(body: str) -> set[str]:
 def update_approval_state(
     github: GitHubAPI, number: int, pull: dict[str, JsonValue], approved: set[str]
 ) -> None:
+    """Update PR body marker with currently approved finding ids."""
     body = optional_string(pull.get("body")) or ""
     marker = f"<!-- monori-object-annotation-approvals: {','.join(sorted(approved))} -->"
     updated_body = APPROVAL_STATE_RE.sub(marker, body)
@@ -365,6 +423,7 @@ def sync_approvals(
     command: QualityGraphCommand | None,
     author: str | None,
 ) -> tuple[set[str], bool, bool]:
+    """Sync approvals and optional command modifications."""
     labels = github.paged(f"/issues/{number}/labels")
     finding_ids = {finding.finding_id for finding in findings}
     body = optional_string(pull.get("body")) or ""
@@ -416,7 +475,8 @@ def sync_approvals(
     return approved, admin, state_changed
 
 
-def sync_failure_label(github: GitHubAPI, number: int, has_active_findings: bool) -> None:
+def sync_failure_label(github: GitHubAPI, number: int, *, has_active_findings: bool) -> None:
+    """Set or clear failure label depending on active findings."""
     if has_active_findings:
         github.ensure_label(FAILURE_LABEL)
         github.request("POST", f"/issues/{number}/labels", {"labels": [FAILURE_LABEL]})
@@ -428,11 +488,12 @@ def sync_failure_label(github: GitHubAPI, number: int, has_active_findings: bool
 
 
 def is_admin(github: GitHubAPI, login: str) -> bool:
+    """Check if login has admin rights on repository."""
     encoded = urllib.parse.quote(login, safe="")
     try:
         permission = github.request("GET", f"/collaborators/{encoded}/permission")
     except GitHubAPIError as error:
-        if error.status == 403:
+        if error.status == HTTP_FORBIDDEN:
             return False
         raise
     if permission is None:
@@ -441,6 +502,7 @@ def is_admin(github: GitHubAPI, login: str) -> bool:
 
 
 def pull_request_number(event: dict[str, JsonValue]) -> int | None:
+    """Extract pull request number from pull_request or issue event payload."""
     if event.get("pull_request"):
         pull = json_object(event["pull_request"], "event pull request")
         return json_integer(pull["number"], "pull request number")
@@ -449,6 +511,7 @@ def pull_request_number(event: dict[str, JsonValue]) -> int | None:
 
 
 def scan_pull_request(github: GitHub, pull: dict[str, JsonValue]) -> list[Finding]:
+    """Scan pull request diff files for changed `object` annotations."""
     head = json_object(pull["head"], "pull request head")
     base = json_object(pull["base"], "pull request base")
     number = json_integer(pull["number"], "pull request number")
@@ -457,7 +520,8 @@ def scan_pull_request(github: GitHub, pull: dict[str, JsonValue]) -> list[Findin
     files = github.paged(f"/pulls/{number}/files")
     raw_comparison = github.request("GET", f"/compare/{base_sha}...{head_sha}")
     if raw_comparison is None:
-        raise RuntimeError(f"Cannot determine merge base for pull request #{number}")
+        message = f"Cannot determine merge base for pull request #{number}"
+        raise RuntimeError(message)
     comparison = json_object(raw_comparison, "pull request comparison")
     merge_commit = json_object(comparison["merge_base_commit"], "merge base commit")
     merge_base = json_string(merge_commit["sha"], "merge base sha")
@@ -468,7 +532,8 @@ def scan_pull_request(github: GitHub, pull: dict[str, JsonValue]) -> list[Findin
             continue
         source = github.file_text(path, head_sha)
         if source is None:
-            raise RuntimeError(f"Cannot read changed Python file {path} at {head_sha}")
+            message = f"Cannot read changed Python file {path} at {head_sha}"
+            raise RuntimeError(message)
         patch = optional_string(file.get("patch"))
         if patch:
             changed = added_lines_from_patch(patch)
@@ -481,19 +546,23 @@ def scan_pull_request(github: GitHub, pull: dict[str, JsonValue]) -> list[Findin
 
 
 def rerun_pull_request_gate(github: GitHub, number: int) -> None:
+    """Rerun latest object annotation gate run for this pull request."""
     latest = latest_pull_request_run(github, number)
     if latest is None:
-        raise RuntimeError(f"Cannot find a previous gate run for pull request #{number}")
+        message = f"Cannot find a previous gate run for pull request #{number}"
+        raise RuntimeError(message)
     run_id = json_integer(latest["id"], "workflow run id")
     github.request("POST", f"/actions/runs/{run_id}/rerun-failed-jobs")
 
 
 def latest_pull_request_run(github: GitHubAPI, number: int) -> dict[str, JsonValue] | None:
+    """Return latest workflow run for the given pull request number."""
     for page in count(1):
         response = json_object(
             github.request(
                 "GET",
-                f"/actions/workflows/pr-checks.yaml/runs?event=pull_request&per_page=100&page={page}",
+                f"/actions/workflows/pr-checks.yaml/runs?event=pull_request"
+                f"&per_page={WORKFLOW_RUNS_PER_PAGE}&page={page}",
             ),
             "workflow runs",
         )
@@ -511,12 +580,14 @@ def latest_pull_request_run(github: GitHubAPI, number: int) -> dict[str, JsonVal
         ]
         if matching:
             return max(matching, key=lambda run: optional_string(run.get("created_at")) or "")
-        if len(runs) < 100:
+        if len(runs) < WORKFLOW_RUNS_PER_PAGE:
             return None
-    raise RuntimeError("Workflow run pagination terminated unexpectedly")
+    message = "Workflow run pagination terminated unexpectedly"
+    raise RuntimeError(message)
 
 
 def main() -> int:
+    """Run the Python object annotation gate for the current pull request event."""
     github = GitHub()
     event = json_object(
         decode_json(Path(os.environ["GITHUB_EVENT_PATH"]).read_text()), "GitHub event"
@@ -527,7 +598,8 @@ def main() -> int:
 
     raw_pull = github.request("GET", f"/pulls/{number}")
     if raw_pull is None:
-        raise RuntimeError(f"Pull request #{number} was not found")
+        message = f"Pull request #{number} was not found"
+        raise RuntimeError(message)
     pull = json_object(raw_pull, "pull request")
     findings = scan_pull_request(github, pull)
     comment = json_object(event.get("comment", {}), "event comment")
@@ -540,7 +612,7 @@ def main() -> int:
     author = json_string(author_data["login"], "comment author") if command else None
     approved, _, state_changed = sync_approvals(github, number, pull, findings, command, author)
     active = [finding for finding in findings if finding.finding_id not in approved]
-    sync_failure_label(github, number, bool(active))
+    sync_failure_label(github, number, has_active_findings=bool(active))
 
     pr_url = json_string(pull["html_url"], "pull request URL")
     upsert_comment(
@@ -556,9 +628,9 @@ def main() -> int:
         rerun_pull_request_gate(github, number)
     if active:
         for finding in active:
-            print(
+            sys.stderr.write(
                 f"::error file={finding.path},line={finding.line},"
-                f"col={finding.column + 1}::Use a specific type instead of object"
+                f"col={finding.column + 1}::Use a specific type instead of object\n"
             )
         return 1
     return 0

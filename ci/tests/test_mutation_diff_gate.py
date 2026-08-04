@@ -4,15 +4,17 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+import pytest
+
 from ci.lib import mutation_diff_gate as module
 
 
 class MutationDiffGateTest(unittest.TestCase):
     def test_parses_mutmut_function_names(self) -> None:
-        self.assertEqual(module.mutant_function("app.foo.x_run__mutmut_1"), ("run", None))
-        self.assertEqual(
-            module.mutant_function("app.foo.ǁAccountǁx_save__mutmut_2"),
-            ("save", "Account"),
+        assert module.mutant_function("app.foo.x_run__mutmut_1") == ("run", None)
+        assert module.mutant_function("app.foo.ǁAccountǁx_save__mutmut_2") == (
+            "save",
+            "Account",
         )
 
     def test_collects_changed_functions(self) -> None:
@@ -31,7 +33,7 @@ class MutationDiffGateTest(unittest.TestCase):
 
             result = module.changed_functions(root, {"server/app/example.py": {3}})
 
-        self.assertEqual(result, {"server/app/example.py": {("save", "Account")}})
+        assert result == {"server/app/example.py": {("save", "Account")}}
 
     def test_maps_deletion_only_hunks_to_changed_lines(self) -> None:
         diff = """\
@@ -42,7 +44,7 @@ diff --git a/server/app/example.py b/server/app/example.py
 -    removed = True
 """
 
-        self.assertEqual(module.parse_changed_lines(diff), {"server/app/example.py": {4}})
+        assert module.parse_changed_lines(diff) == {"server/app/example.py": {4}}
 
     def test_ignores_deleted_file_before_modified_file(self) -> None:
         diff = """\
@@ -61,7 +63,7 @@ diff --git a/server/app/example.py b/server/app/example.py
 \\ No newline at end of file
 """
 
-        self.assertEqual(module.parse_changed_lines(diff), {"server/app/example.py": {2, 3}})
+        assert module.parse_changed_lines(diff) == {"server/app/example.py": {2, 3}}
 
     @staticmethod
     def write_meta(path: Path, statuses: dict[str, int | None]) -> None:
@@ -91,7 +93,7 @@ diff --git a/server/app/example.py b/server/app/example.py
                 root,
                 "origin/main",
                 50,
-                skip_new_survivors,
+                skip_new_survivors=skip_new_survivors,
             )
         return int(result)
 
@@ -117,10 +119,10 @@ diff --git a/server/app/example.py b/server/app/example.py
                     root,
                     "origin/main",
                     90,
-                    False,
+                    skip_new_survivors=False,
                 )
 
-        self.assertEqual(result, 1)
+        assert result == 1
 
     def test_gate_backend_scores_killed_and_survived_mutants(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -134,7 +136,7 @@ diff --git a/server/app/example.py b/server/app/example.py
                 },
             )
 
-            self.assertEqual(self.run_backend_gate(root, baseline, skip_new_survivors=False), 0)
+            assert self.run_backend_gate(root, baseline, skip_new_survivors=False) == 0
 
     def test_gate_backend_rejects_new_survivors(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -148,23 +150,20 @@ diff --git a/server/app/example.py b/server/app/example.py
                 },
             )
 
-            self.assertEqual(self.run_backend_gate(root, baseline, skip_new_survivors=False), 1)
+            assert self.run_backend_gate(root, baseline, skip_new_survivors=False) == 1
 
     def test_gate_backend_allows_survivors_without_baseline(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
 
-            self.assertEqual(
-                self.run_backend_gate(root, root / "missing", skip_new_survivors=True),
-                0,
-            )
+            assert self.run_backend_gate(root, root / "missing", skip_new_survivors=True) == 0
 
     def test_load_meta_reports_missing_statuses(self) -> None:
         with tempfile.NamedTemporaryFile(mode="w+", suffix=".meta") as metadata:
             metadata.write("{}")
             metadata.flush()
 
-            with self.assertRaisesRegex(TypeError, "missing exit_code_by_key"):
+            with pytest.raises(TypeError, match="missing exit_code_by_key"):
                 module.load_meta(Path(metadata.name))
 
 

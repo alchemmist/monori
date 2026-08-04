@@ -45,70 +45,55 @@ class QualityGraphCommandTest(unittest.TestCase):
     def test_full_name_and_alias_share_the_same_command(self) -> None:
         expected = QualityGraphCommand("ignore", ("object-abc123", "suppression-def456"))
 
-        self.assertEqual(
-            parse_command("/quality-graph ignore object-abc123,suppression-def456"),
-            expected,
-        )
-        self.assertEqual(parse_command("/qg ignore object-abc123,suppression-def456"), expected)
+        assert parse_command("/quality-graph ignore object-abc123,suppression-def456") == expected
+        assert parse_command("/qg ignore object-abc123,suppression-def456") == expected
 
     def test_gate_name_targets_all_findings_of_that_type(self) -> None:
         command = parse_command("/qg ignore object,suppression")
 
-        self.assertIsNotNone(command)
         assert command is not None
-        self.assertTrue(command_targets_gate(command, "object"))
-        self.assertTrue(command_targets_gate(command, "suppression"))
-        self.assertFalse(command_targets_gate(command, "bundle"))
+        assert command_targets_gate(command, "object")
+        assert command_targets_gate(command, "suppression")
+        assert not command_targets_gate(command, "bundle")
 
     def test_old_commands_and_all_selector_are_rejected(self) -> None:
-        self.assertIsNone(parse_command("/ignore object-abc123"))
-        self.assertIsNone(parse_command("/qg ignore all"))
-        self.assertIsNone(parse_command("/qg ignore object-abc123 extra"))
+        assert parse_command("/ignore object-abc123") is None
+        assert parse_command("/qg ignore all") is None
+        assert parse_command("/qg ignore object-abc123 extra") is None
 
     def test_unknown_target_is_reported_by_validation(self) -> None:
         command = parse_command("/qg ignore unknown-target")
 
-        self.assertIsNotNone(command)
         assert command is not None
-        self.assertEqual(
-            validate_command(command), "Unknown Quality Graph target: `unknown-target`"
-        )
+        assert validate_command(command) == "Unknown Quality Graph target: `unknown-target`"
 
     def test_command_text_is_canonical(self) -> None:
         command = QualityGraphCommand("remove-ignore", ("object-abc123", "suppression-def456"))
 
-        self.assertEqual(
-            command_text(command), "/qg remove-ignore object-abc123,suppression-def456"
-        )
+        assert command_text(command) == "/qg remove-ignore object-abc123,suppression-def456"
 
     def test_reaction_replaces_the_bot_reaction(self) -> None:
         github = FakeGitHub()
 
         set_comment_reaction(github, 42, "hooray")
 
-        self.assertIn(("DELETE", "/issues/comments/42/reactions/7", None), github.calls)
-        self.assertIn(
-            ("POST", "/issues/comments/42/reactions", {"content": "hooray"}),
-            github.calls,
-        )
+        assert ("DELETE", "/issues/comments/42/reactions/7", None) in github.calls
+        assert ("POST", "/issues/comments/42/reactions", {"content": "hooray"}) in github.calls
 
     def test_status_updates_only_the_bot_owned_quality_graph_comment(self) -> None:
         github = FakeGitHub()
 
         upsert_status(github, 42, "## Quality Graph status")
 
-        self.assertIn(
-            (
-                "PATCH",
-                "/issues/comments/2",
-                cast(
-                    "JsonValue",
-                    {"body": "<!-- monori-report: quality-graph -->\n\n## Quality Graph status\n"},
-                ),
+        assert (
+            "PATCH",
+            "/issues/comments/2",
+            cast(
+                "JsonValue",
+                {"body": "<!-- monori-report: quality-graph -->\n\n## Quality Graph status\n"},
             ),
-            github.calls,
-        )
-        self.assertNotIn(("PATCH", "/issues/comments/1", mock.ANY), github.calls)
+        ) in github.calls
+        assert ("PATCH", "/issues/comments/1", mock.ANY) not in github.calls
 
     def test_rerun_reads_workflow_runs_from_the_api_response_object(self) -> None:
         class WorkflowGitHub(FakeGitHub):
@@ -128,7 +113,7 @@ class QualityGraphCommandTest(unittest.TestCase):
 
         rerun_workflow(github, 42)
 
-        self.assertIn(("POST", "/actions/runs/9/rerun-failed-jobs", None), github.calls)
+        assert ("POST", "/actions/runs/9/rerun-failed-jobs", None) in github.calls
 
 
 if __name__ == "__main__":

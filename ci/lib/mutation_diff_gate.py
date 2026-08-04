@@ -9,9 +9,6 @@ import sys
 from pathlib import Path
 from typing import override
 
-# mutmut >=3.6.0 stores pytest exit codes in .py.meta files:
-# 0 means survived, 1/3 means killed, and the remaining values below are
-# timeout or suspicious outcomes that still belong in the score denominator.
 KILLED = {1, 3}
 SURVIVED = 0
 OTHER_STATUSES = {-24, 24, 35, 36, 152, 255}
@@ -19,6 +16,7 @@ CLASS_SEPARATOR = "ǁ"
 
 
 def append_step_summary(content: str) -> None:
+    """Append step summary."""
     summary_path = os.environ.get("MUTATION_SUMMARY_PATH") or os.environ.get("GITHUB_STEP_SUMMARY")
     if summary_path:
         with Path(summary_path).open("a") as summary:
@@ -26,6 +24,7 @@ def append_step_summary(content: str) -> None:
 
 
 def parse_changed_lines(diff: str) -> dict[str, set[int]]:
+    """Parse changed lines."""
     paths: dict[str, set[int]] = {}
     current: str | None = None
     new_line = 0
@@ -56,6 +55,7 @@ def parse_changed_lines(diff: str) -> dict[str, set[int]]:
 
 
 def changed_lines(base: str) -> dict[str, set[int]]:
+    """Changed lines for this module."""
     result = subprocess.run(
         [
             "git",
@@ -74,7 +74,10 @@ def changed_lines(base: str) -> dict[str, set[int]]:
 
 
 class ChangedFunctions(ast.NodeVisitor):
+    """Collect Python functions and methods touched by a unified diff."""
+
     def __init__(self, changed: set[int]) -> None:
+        """Store changed line references for change collection."""
         self.changed = changed
         self.classes: list[str] = []
         self.functions: set[tuple[str, str | None]] = set()
@@ -103,6 +106,7 @@ class ChangedFunctions(ast.NodeVisitor):
 def changed_functions(
     root: Path, lines_by_path: dict[str, set[int]]
 ) -> dict[str, set[tuple[str, str | None]]]:
+    """Changed functions for this module."""
     result: dict[str, set[tuple[str, str | None]]] = {}
     for path, lines in lines_by_path.items():
         source_path = root / path
@@ -117,6 +121,7 @@ def changed_functions(
 
 
 def mutant_function(key: str) -> tuple[str, str | None]:
+    """Mutant function for this module."""
     original = key.partition("__mutmut_")[0].rsplit(".", 1)[-1]
     if CLASS_SEPARATOR in original:
         parts = original.split(CLASS_SEPARATOR)
@@ -125,12 +130,12 @@ def mutant_function(key: str) -> tuple[str, str | None]:
 
 
 def load_meta(path: Path) -> dict[str, int | None]:
+    """Load meta."""
     data = json.loads(path.read_text())
     statuses = data.get("exit_code_by_key")
     if not isinstance(statuses, dict):
-        raise TypeError(
-            f"mutation-diff: invalid mutmut metadata in {path}: missing exit_code_by_key"
-        )
+        message = f"mutation-diff: invalid mutmut metadata in {path}: missing exit_code_by_key"
+        raise TypeError(message)
     return dict(statuses)
 
 
@@ -140,8 +145,10 @@ def gate_python(
     root: Path,
     base: str,
     threshold: float,
+    *,
     skip_new_survivors: bool,
 ) -> int:
+    """Gate python for this module."""
     line_changes = changed_lines(base)
     functions = changed_functions(root, line_changes)
     if not functions:
@@ -230,6 +237,7 @@ gate_backend = gate_python
 
 
 def main() -> int:
+    """Run this module as a CLI entrypoint and return its exit code."""
     parser = argparse.ArgumentParser()
     parser.add_argument("--mutants", type=Path, required=True)
     parser.add_argument("--baseline", type=Path, required=True)
@@ -243,7 +251,7 @@ def main() -> int:
         Path.cwd(),
         args.base,
         args.threshold,
-        args.skip_new_survivors,
+        skip_new_survivors=args.skip_new_survivors,
     )
 
 

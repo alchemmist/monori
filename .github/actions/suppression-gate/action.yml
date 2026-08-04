@@ -7,15 +7,15 @@ inputs:
 runs:
     using: composite
     steps:
-        - name: Setup Python
-          uses: actions/setup-python@v6
+        - name: Setup Python dependencies
+          uses: ./.github/actions/setup-project
           with:
-              python-version: "3.12"
+              install-python: true
         - name: Test suppression checker
           shell: bash
-          run: python -m unittest discover -s ci/tests -p 'test_suppressions.py'
+          run: uv run --locked python -m unittest discover -s ci/tests -p 'test_suppressions.py'
         - name: Check lint suppressions
           shell: bash
           env:
               GITHUB_TOKEN: ${{ inputs.github-token }}
-          run: python -m ci.quality_graph.checks.suppressions
+          run: uv run --locked python -m ci.quality_graph.checks.suppressions

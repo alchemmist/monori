@@ -1,19 +1,28 @@
 """Fail pull requests that add a new lint suppression."""
 
+import base64
 import hashlib
 import json
 import os
 import re
-import urllib.error
+import sys
 import urllib.parse
-import urllib.request
 from collections import Counter
 from dataclasses import dataclass
 from itertools import count
 from pathlib import Path
 from typing import Protocol, cast, override
 
+import httpx
+
 from ci.lib.comments import upsert_comment
+from ci.lib.github import (
+    GITHUB_PAGE_SIZE,
+    HTTP_FORBIDDEN,
+    HTTP_NO_CONTENT,
+    HTTP_NOT_FOUND,
+    REQUEST_TIMEOUT_SECONDS,
+)
 from ci.quality_graph.base import QualityCheck
 from ci.quality_graph.commands import (
     QualityGraphCommand,
@@ -47,43 +56,55 @@ CONFIG_SUPPRESSION_RE = re.compile(
 )
 TOML_SECTION_RE = re.compile(r"^\s*\[([^\]]+)\]\s*$")
 TOML_SUPPRESSION_SECTION_NAMES = {"per-file-ignores", "extend-per-file-ignores"}
-REQUEST_TIMEOUT = 30
+WORKFLOW_RUNS_PER_PAGE = GITHUB_PAGE_SIZE
 
 
 def json_object(value: JsonValue, context: str) -> dict[str, JsonValue]:
+    """Parse value as JSON object or raise a type error."""
     if not isinstance(value, dict):
-        raise TypeError(f"Expected a JSON object for {context}")
+        message = f"Expected a JSON object for {context}"
+        raise TypeError(message)
     return value
 
 
 def json_array(value: JsonValue, context: str) -> list[JsonValue]:
+    """Parse value as JSON array or raise a type error."""
     if not isinstance(value, list):
-        raise TypeError(f"Expected a JSON array for {context}")
+        message = f"Expected a JSON array for {context}"
+        raise TypeError(message)
     return value
 
 
 def json_string(value: JsonValue, context: str) -> str:
+    """Parse value as JSON string or raise a type error."""
     if not isinstance(value, str):
-        raise TypeError(f"Expected a JSON string for {context}")
+        message = f"Expected a JSON string for {context}"
+        raise TypeError(message)
     return value
 
 
 def json_integer(value: JsonValue, context: str) -> int:
+    """Parse value as JSON integer or raise a type error."""
     if isinstance(value, bool) or not isinstance(value, int):
-        raise TypeError(f"Expected a JSON integer for {context}")
+        message = f"Expected a JSON integer for {context}"
+        raise TypeError(message)
     return value
 
 
 def optional_string(value: JsonValue) -> str | None:
+    """Return a string value or None."""
     return value if isinstance(value, str) else None
 
 
 def decode_json(data: bytes | str) -> JsonValue:
+    """Decode JSON payload to Python object."""
     return cast("JsonValue", json.loads(data))
 
 
 @dataclass(frozen=True)
 class Finding:
+    """Represents one lint suppression finding."""
+
     path: str
     line: int
     column: int
@@ -91,56 +112,80 @@ class Finding:
     finding_id: str
 
 
+@dataclass(frozen=True)
+class SyncApprovalCommandState:
+    """Input state for approval-sync requests."""
+
+    command: QualityGraphCommand | None
+    author: str | None
+
+
 def display_finding_id(finding_id: str) -> str:
+    """Format finding id for admin command output."""
     return f"{FINDING_ID_PREFIX}{finding_id}"
 
 
 class GitHub:
+    """Thin GitHub API client used by suppression checks."""
+
     def __init__(self) -> None:
+        """Read required GitHub API configuration from environment."""
         self.base_url = os.environ.get("GITHUB_API_URL", "https://api.github.com")
         self.repository = os.environ["GITHUB_REPOSITORY"]
         self.token = os.environ["GITHUB_TOKEN"]
 
     def request(self, method: str, path: str, payload: JsonValue = None) -> JsonValue:
+        """Execute one GitHub request and return decoded JSON."""
         url = f"{self.base_url}/repos/{self.repository}{path}"
         data = None if payload is None else json.dumps(payload).encode()
-        request = urllib.request.Request(
-            url,
-            data=data,
-            method=method,
-            headers={
-                "Accept": "application/vnd.github+json",
-                "Authorization": f"Bearer {self.token}",
-                "X-GitHub-Api-Version": "2022-11-28",
-                "Content-Type": "application/json",
-            },
-        )
         try:
-            with urllib.request.urlopen(request, timeout=REQUEST_TIMEOUT) as response:
-                return None if response.status == 204 else decode_json(response.read())
-        except urllib.error.HTTPError as error:
-            if error.code == 403 and method in {"POST", "PATCH", "DELETE"}:
-                return None
-            if error.code == 404 and method in {"GET", "DELETE"}:
-                return None
-            raise RuntimeError(f"GitHub API {method} {path} failed: HTTP {error.code}") from error
-        except (TimeoutError, urllib.error.URLError) as error:
-            raise RuntimeError(f"GitHub API {method} {path} failed: {error}") from error
+            response = httpx.request(
+                method,
+                url,
+                content=data,
+                timeout=REQUEST_TIMEOUT_SECONDS,
+                headers={
+                    "Accept": "application/vnd.github+json",
+                    "Authorization": f"Bearer {self.token}",
+                    "X-GitHub-Api-Version": "2022-11-28",
+                    "Content-Type": "application/json",
+                },
+            )
+        except httpx.RequestError as error:
+            message = f"GitHub API {method} {path} failed: {error}"
+            raise RuntimeError(message) from error
+        if response.status_code == HTTP_NO_CONTENT:
+            return None
+        if response.status_code == HTTP_FORBIDDEN and method in {"POST", "PATCH", "DELETE"}:
+            return None
+        if response.status_code == HTTP_NOT_FOUND and method in {"GET", "DELETE"}:
+            return None
+        try:
+            response.raise_for_status()
+        except httpx.HTTPStatusError as error:
+            message = f"GitHub API {method} {path} failed: HTTP {response.status_code}"
+            raise RuntimeError(message) from error
+        return cast("JsonValue", response.json())
 
     def paged(self, path: str) -> list[dict[str, JsonValue]]:
+        """Retrieve all pages for a GitHub list endpoint."""
         result: list[dict[str, JsonValue]] = []
         page = 1
         while True:
             separator = "&" if "?" in path else "?"
             items = json_array(
-                self.request("GET", f"{path}{separator}per_page=100&page={page}"), path
+                self.request(
+                    "GET", f"{path}{separator}per_page={WORKFLOW_RUNS_PER_PAGE}&page={page}"
+                ),
+                path,
             )
             result.extend(json_object(item, path) for item in items)
-            if len(items) < 100:
+            if len(items) < WORKFLOW_RUNS_PER_PAGE:
                 return result
             page += 1
 
     def file_text(self, path: str, ref: str) -> str | None:
+        """Load file content at ref from GitHub API, returning None when missing."""
         encoded = urllib.parse.quote(path, safe="")
         response = self.request("GET", f"/contents/{encoded}?ref={urllib.parse.quote(ref)}")
         if response is None:
@@ -148,20 +193,24 @@ class GitHub:
         data = json_object(response, path)
         content = optional_string(data.get("content"))
         if content:
-            import base64
-
             return base64.b64decode(content).decode("utf-8")
         download_url = optional_string(data.get("download_url"))
         if download_url:
-            request = urllib.request.Request(
-                download_url,
-                headers={"Authorization": f"Bearer {self.token}"},
-            )
-            with urllib.request.urlopen(request, timeout=REQUEST_TIMEOUT) as result:
-                return cast("str", result.read().decode("utf-8"))
+            try:
+                download_response = httpx.get(
+                    download_url,
+                    headers={"Authorization": f"Bearer {self.token}"},
+                    timeout=REQUEST_TIMEOUT_SECONDS,
+                )
+                download_response.raise_for_status()
+            except httpx.HTTPError as error:
+                message = f"Cannot read {path} at {ref}: {error}"
+                raise RuntimeError(message) from error
+            return download_response.text
         return None
 
     def ensure_label(self, name: str) -> None:
+        """Ensure a repository label exists, creating it when missing."""
         encoded = urllib.parse.quote(name, safe="")
         if self.request("GET", f"/labels/{encoded}") is None:
             self.request(
@@ -176,23 +225,35 @@ class GitHub:
 
 
 class GitHubAPI(Protocol):
-    def request(self, method: str, path: str, payload: JsonValue = None) -> JsonValue: ...
+    """Protocol for the GitHub API client used by suppression checks."""
 
-    def paged(self, path: str) -> list[dict[str, JsonValue]]: ...
+    def request(self, method: str, path: str, payload: JsonValue = None) -> JsonValue:
+        """Make a GitHub API request and return decoded JSON or None."""
+        ...
 
-    def file_text(self, path: str, ref: str) -> str | None: ...
+    def paged(self, path: str) -> list[dict[str, JsonValue]]:
+        """Request and return all paginated GitHub objects for an endpoint."""
+        ...
 
-    def ensure_label(self, name: str) -> None: ...
+    def file_text(self, path: str, ref: str) -> str | None:
+        """Load file contents from repository at a given ref."""
+        ...
+
+    def ensure_label(self, name: str) -> None:
+        """Ensure a label exists for the current repository."""
+        ...
 
 
 def added_lines_from_patch(patch: str) -> set[int]:
+    """Extract added line numbers from a unified diff patch."""
     added: set[int] = set()
     new_line = 0
     for line in patch.splitlines():
         if line.startswith("@@"):
             match = PATCH_HUNK_RE.match(line)
             if not match:
-                raise RuntimeError(f"Cannot parse diff hunk: {line}")
+                message = f"Cannot parse diff hunk: {line}"
+                raise RuntimeError(message)
             new_line = int(match.group(1))
         elif line.startswith("+") and not line.startswith("+++"):
             added.add(new_line)
@@ -207,6 +268,7 @@ def added_lines_from_patch(patch: str) -> set[int]:
 
 
 def scan_file(path: str, source: str, added_lines: set[int]) -> list[Finding]:
+    """Scan changed lines in a file and emit suppression findings."""
     candidates: list[tuple[int, int, str, str]] = []
     is_toml = path.endswith(".toml")
     is_config = path.endswith((".toml", ".json", ".jsonc", ".yaml", ".yml")) or any(
@@ -233,8 +295,6 @@ def scan_file(path: str, source: str, added_lines: set[int]) -> list[Finding]:
             and line.strip()
             and not line.lstrip().startswith("#")
         ):
-            # Entries and multiline values inside an existing per-file-ignores
-            # section do not repeat the section name on every added line.
             normalized_code = " ".join(line.split())
             normalized_directive = f"toml-section:{toml_section.lower()}"
             column = len(line) - len(line.lstrip())
@@ -272,6 +332,7 @@ class SuppressionCheck(QualityCheck[Finding]):
 
 
 def approval_state(body: str) -> set[str]:
+    """Extract approved finding ids from the suppression approvals marker."""
     match = APPROVAL_STATE_RE.search(body)
     return set(match.group(1).split(",")) if match and match.group(1) else set()
 
@@ -279,6 +340,7 @@ def approval_state(body: str) -> set[str]:
 def update_approval_state(
     github: GitHubAPI, number: int, pull: dict[str, JsonValue], approved: set[str]
 ) -> None:
+    """Update PR body marker that tracks active suppression approvals."""
     body = optional_string(pull.get("body")) or ""
     marker = f"<!-- monori-suppression-approvals: {','.join(sorted(approved))} -->"
     updated_body = APPROVAL_STATE_RE.sub(marker, body)
@@ -289,6 +351,7 @@ def update_approval_state(
 
 
 def changed_files(github: GitHubAPI, pull: dict[str, JsonValue]) -> list[Finding]:
+    """Collect suppression findings from files changed in a pull request."""
     number = json_integer(pull["number"], "pull request number")
     head = json_object(pull["head"], "head")
     head_sha = json_string(head["sha"], "head sha")
@@ -325,6 +388,7 @@ def changed_files(github: GitHubAPI, pull: dict[str, JsonValue]) -> list[Finding
 
 
 def is_admin(github: GitHubAPI, login: str) -> bool:
+    """Return True when login corresponds to repository admin."""
     encoded = urllib.parse.quote(login, safe="")
     permission = github.request("GET", f"/collaborators/{encoded}/permission")
     return (
@@ -338,9 +402,9 @@ def sync_approvals(
     number: int,
     pull: dict[str, JsonValue],
     findings: list[Finding],
-    command: QualityGraphCommand | None,
-    author: str | None,
+    command_state: SyncApprovalCommandState,
 ) -> tuple[set[str], bool]:
+    """Update suppressions approval state and apply admin commands."""
     labels = github.paged(f"/issues/{number}/labels")
     finding_ids = {finding.finding_id for finding in findings}
     body = optional_string(pull.get("body")) or ""
@@ -357,6 +421,8 @@ def sync_approvals(
         if name and name.startswith(LABEL_PREFIX):
             github.request("DELETE", f"/issues/{number}/labels/{urllib.parse.quote(name, safe='')}")
     approved = (approval_state(body) if state_exists else legacy_approved) & finding_ids
+    command = command_state.command
+    author = command_state.author
     admin = command is not None and author is not None and is_admin(github, author)
     if not command or not admin:
         if not state_exists:
@@ -390,7 +456,8 @@ def sync_approvals(
     return approved, admin
 
 
-def sync_status_label(github: GitHubAPI, number: int, has_active_findings: bool) -> None:
+def sync_status_label(github: GitHubAPI, number: int, *, has_active_findings: bool) -> None:
+    """Create or remove suppression-failed status label based on current findings."""
     if has_active_findings:
         github.ensure_label(STATUS_LABEL)
         github.request("POST", f"/issues/{number}/labels", {"labels": [STATUS_LABEL]})
@@ -402,6 +469,7 @@ def sync_status_label(github: GitHubAPI, number: int, has_active_findings: bool)
 
 
 def summary_body(findings: list[Finding], approved: set[str]) -> str:
+    """Build the suppressions check summary block for workflow output."""
     active = [finding for finding in findings if finding.finding_id not in approved]
     status = "✅ PASS" if not active else "❌ FAIL"
     lines = [
@@ -451,12 +519,14 @@ def summary_body(findings: list[Finding], approved: set[str]) -> str:
 
 
 def rerun_gate(github: GitHubAPI, number: int) -> None:
+    """Rerun the latest workflow run that belongs to the pull request."""
     matching: list[dict[str, JsonValue]] = []
     for page in count(1):
         runs = json_object(
             github.request(
                 "GET",
-                f"/actions/workflows/pr-checks.yaml/runs?event=pull_request&per_page=100&page={page}",
+                "/actions/workflows/pr-checks.yaml/runs"
+                f"?event=pull_request&per_page={WORKFLOW_RUNS_PER_PAGE}&page={page}",
             ),
             "workflow runs",
         )
@@ -468,7 +538,7 @@ def rerun_gate(github: GitHubAPI, number: int) -> None:
                 for pull in json_array(run_data.get("pull_requests", []), "workflow pull requests")
             ):
                 matching.append(run_data)
-        if len(page_runs) < 100 or matching:
+        if len(page_runs) < WORKFLOW_RUNS_PER_PAGE or matching:
             break
     if matching:
         latest = max(matching, key=lambda run: optional_string(run.get("created_at")) or "")
@@ -477,6 +547,7 @@ def rerun_gate(github: GitHubAPI, number: int) -> None:
 
 
 def main() -> int:
+    """Run suppression gate and return non-zero exit code on active findings."""
     github = GitHub()
     event = json_object(decode_json(Path(os.environ["GITHUB_EVENT_PATH"]).read_text()), "event")
     pull_event = json_object(event.get("pull_request", {}), "pull request event")
@@ -495,17 +566,19 @@ def main() -> int:
         command = None
     author_data = json_object(comment.get("user", {}), "comment user")
     author = optional_string(author_data.get("login")) if command else None
-    approved, admin = sync_approvals(github, number, pull, findings, command, author)
+    approved, admin = sync_approvals(
+        github, number, pull, findings, SyncApprovalCommandState(command, author)
+    )
     active = [finding for finding in findings if finding.finding_id not in approved]
-    sync_status_label(github, number, bool(active))
+    sync_status_label(github, number, has_active_findings=bool(active))
     upsert_comment(github, number, "suppression", summary_body(findings, approved))
     if admin:
         rerun_gate(github, number)
     for finding in findings:
         if finding.finding_id not in approved:
-            print(
+            sys.stderr.write(
                 f"::error file={finding.path},line={finding.line},col={finding.column + 1}::"
-                f"New lint suppression: {finding.text}"
+                f"New lint suppression: {finding.text}\n"
             )
     return 1 if any(finding.finding_id not in approved for finding in findings) else 0
 

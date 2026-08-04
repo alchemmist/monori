@@ -2,9 +2,12 @@
 import json
 import sys
 
+EXPECTED_ARGC = 3
+
 
 def main() -> int:
-    if len(sys.argv) != 3:
+    """Run this module as a CLI entrypoint and return its exit code."""
+    if len(sys.argv) != EXPECTED_ARGC:
         print("usage: mutation-gate.py <cicd-stats.json> <threshold>", file=sys.stderr)
         return 2
 
