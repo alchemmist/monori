@@ -30,7 +30,7 @@ runs:
           working-directory: tools/frontend-perf
         - name: Test performance comparator
           shell: bash
-          run: uv run --locked python -m unittest ci.tests.test_frontend_measurement ci.tests.test_frontend_performance
+          run: uv run --locked python -m unittest monori.ci.tests.test_frontend_measurement monori.ci.tests.test_frontend_performance
         - name: Compare PR with merge base
           id: performance
           shell: bash
@@ -57,7 +57,7 @@ runs:
               SUMMARY_PATH: ${{ runner.temp }}/frontend-performance/summary.md
           run: |
               set +e
-              uv run --locked python -m ci.quality_graph.checks.frontend_performance
+              uv run --locked python -m monori.ci.quality_graph.checks.frontend_performance
               code=$?
               echo "exit_code=$code" >> "$GITHUB_OUTPUT"
               exit 0
@@ -72,14 +72,14 @@ runs:
           run: |
               mkdir -p "$PERF_OUTPUT_DIR"
               if [ ! -f "$PERF_OUTPUT_DIR/summary.md" ]; then
-                uv run --locked python -m ci.quality_graph.reporting complete \
+                uv run --locked python -m monori.ci.quality_graph.reporting complete \
                   --marker frontend-performance \
                   --status fail \
                   --message 'Frontend performance measurement did not produce a report.' \
                   --pr-number "$PR_NUMBER"
                 exit 0
               fi
-              uv run --locked python -m ci.lib.comments \
+              uv run --locked python -m monori.ci.lib.comments \
                 --marker frontend-performance \
                 --body-file "$PERF_OUTPUT_DIR/summary.md" \
                 --pr-number "$PR_NUMBER"

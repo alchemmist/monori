@@ -17,9 +17,9 @@ runs:
               github-token: ${{ inputs.github-token }}
         - name: Test suppression checker
           shell: bash
-          run: uv run --locked python -m unittest discover -s ci/tests -p 'test_suppressions.py'
+          run: uv run --locked python -m unittest discover -s monori/ci/tests -p 'test_suppressions.py'
         - name: Check lint suppressions
           shell: bash
           env:
               GITHUB_TOKEN: ${{ inputs.github-token }}
-          run: uv run --locked python -m ci.quality_graph.checks.suppressions
+          run: uv run --locked python -m monori.ci.quality_graph.checks.suppressions

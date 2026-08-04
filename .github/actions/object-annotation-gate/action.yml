@@ -17,9 +17,9 @@ runs:
               github-token: ${{ inputs.github-token }}
         - name: Test annotation checker
           shell: bash
-          run: uv run --locked python -m unittest discover -s ci/tests -p 'test_object_annotations.py'
+          run: uv run --locked python -m unittest discover -s monori/ci/tests -p 'test_object_annotations.py'
         - name: Check Python annotations
           shell: bash
           env:
               GITHUB_TOKEN: ${{ inputs.github-token }}
-          run: uv run --locked python -m ci.quality_graph.checks.object_annotations
+          run: uv run --locked python -m monori.ci.quality_graph.checks.object_annotations

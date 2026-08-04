@@ -22,7 +22,7 @@ from typing import Protocol
 from openpyxl import Workbook
 from openpyxl.worksheet.worksheet import Worksheet
 
-from app.workbook.models import ParsedWorkbook
+from monori.server.app.workbook.models import ParsedWorkbook
 
 
 class _SpecModule(Protocol):
@@ -36,9 +36,8 @@ REPO = pathlib.Path(__file__).resolve().parent.parent
 
 
 def _load_workbook_modules() -> tuple[_SpecModule, dict[str, tuple[str, ...]], ParseWorkbook]:
-    sys.path.insert(0, str(REPO / "server"))
-    from app.workbook import spec
-    from app.workbook.parser import TX_ALIASES, parse_workbook
+    from monori.server.app.workbook import spec
+    from monori.server.app.workbook.parser import TX_ALIASES, parse_workbook
 
     return spec, TX_ALIASES, parse_workbook
 

@@ -28,7 +28,8 @@ services:
             # comma-separated emails that get the admin panel (synced on login)
             MONORI_ADMIN_EMAILS: ${MONORI_ADMIN_EMAILS:-}
         volumes:
-            - ../server:/app
+            - ../monori:/app/monori
+            - ../server:/app/server
             - uv-cache:/root/.cache/uv
         ports:
             - "8077:8077"

@@ -25,15 +25,13 @@ import sys
 import tempfile
 from dataclasses import dataclass
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / "server"))
-
 from openpyxl import load_workbook
 from openpyxl.worksheet.worksheet import Worksheet
 
-from app.db import connect
-from app.workbook.apply import apply_workbook
-from app.workbook.models import ParsedWorkbook, WorkbookApplyResult
-from app.workbook.parser import (
+from monori.server.app.db import connect
+from monori.server.app.workbook.apply import apply_workbook
+from monori.server.app.workbook.models import ParsedWorkbook, WorkbookApplyResult
+from monori.server.app.workbook.parser import (
     YEAR_RE,
     _find_layout,
     _parse_year_sheet,
@@ -169,7 +167,7 @@ def sheet_grids(path: str) -> tuple[dict[int, YearGrid], dict[tuple[int, int], H
 def _available(ws: Worksheet, base: int) -> int | None:
     for r in (5, 6):
         if _s(ws.cell(r + 1, base + 1)).startswith(("Available", "Доступный")):
-            from app.workbook.parser import _kop
+            from monori.server.app.workbook.parser import _kop
 
             return _kop(ws.cell(r, base + 1))
     return None

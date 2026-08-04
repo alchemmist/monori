@@ -1,0 +1,12 @@
+[project]
+name = "monori-common"
+version = "0.1.0"
+description = "Monori shared Python primitives"
+requires-python = ">=3.12"
+dependencies = ["monori"]
+
+[tool.uv]
+package = false
+
+[tool.uv.sources]
+monori = { workspace = true }

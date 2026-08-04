@@ -10,8 +10,8 @@ echo "collecting frontend coverage..." >&2
 (cd "$root/web" && npx vitest run --coverage >/dev/null)
 
 echo "collecting Python coverage..." >&2
-(cd "$root" && uv run --locked pytest -q server/tests ci/tests \
-  --cov=server/app --cov=ci/lib --cov=ci/quality_graph \
+(cd "$root" && uv run --locked pytest -q monori/server/tests monori/ci/tests \
+  --cov=monori \
   --cov-report="json:$be" --cov-report= >/dev/null)
 
 cp "$be" "$ci"

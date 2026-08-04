@@ -3,7 +3,10 @@ name = "monori-ci"
 version = "0.1.0"
 description = "Monori CI libraries and checks"
 requires-python = ">=3.12"
-dependencies = ["jinja2>=3.1"]
+dependencies = ["jinja2>=3.1", "monori"]
 
 [tool.uv]
 package = false
+
+[tool.uv.sources]
+monori = { workspace = true }

@@ -10,9 +10,10 @@ resolution-markers = [
 
 [manifest]
 members = [
+    "monori",
     "monori-ci",
+    "monori-common",
     "monori-server",
-    "monori-workspace",
 ]
 
 [[package]]
@@ -821,6 +822,19 @@ wheels = [
 ]
 
 [[package]]
+name = "httpcore2"
+version = "2.9.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "h11" },
+    { name = "truststore" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/39/a8/20ed1ed79cbc2ecdf5301c0968ab7c85547212e2a7bd126ddd2d986e206e/httpcore2-2.9.1.tar.gz", hash = "sha256:4d8acbf8b306f48c9d6046591fd5ba4037d1b1b1000d140fc2c3eab1e9a0c0e2", size = 67089, upload-time = "2026-07-24T09:21:03.867Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/9f/fb/46c52b781975c335a2bcf1072c7bbc007cbdc8d674217f5ee1daba2c848b/httpcore2-2.9.1-py3-none-any.whl", hash = "sha256:6182472379e855fe4221246a2bb7ecede403bc61c6798062ae1787d051ccde26", size = 82809, upload-time = "2026-07-24T09:21:01.178Z" },
+]
+
+[[package]]
 name = "httplib2"
 version = "0.32.0"
 source = { registry = "https://pypi.org/simple" }
@@ -886,6 +900,22 @@ wheels = [
 [package.optional-dependencies]
 socks = [
     { name = "socksio" },
+]
+
+[[package]]
+name = "httpx2"
+version = "2.9.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "anyio" },
+    { name = "httpcore2" },
+    { name = "idna" },
+    { name = "truststore" },
+    { name = "typing-extensions", marker = "python_full_version < '3.13'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/21/14/38128fbafd7e0ed41d874df6c9a653d47c2d111cfe59e2b4ac95161b4abd/httpx2-2.9.1.tar.gz", hash = "sha256:1932a768737e3666291582833da748cc4e563c337cf96706fccc04fa6e58764a", size = 95458, upload-time = "2026-07-24T09:21:04.972Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/13/b8/cfd91c4ab9134d386d48f0b6ac662ff3d4be6efdee59ee1c67ebc3c0487c/httpx2-2.9.1-py3-none-any.whl", hash = "sha256:1820fe14a9ab1107bfeff39259987429450b070ec0ff38cc87eb0d8c97fdc71a", size = 91191, upload-time = "2026-07-24T09:21:02.6Z" },
 ]
 
 [[package]]
@@ -1158,52 +1188,9 @@ wheels = [
 ]
 
 [[package]]
-name = "monori-ci"
+name = "monori"
 version = "0.1.0"
-source = { virtual = "ci" }
-dependencies = [
-    { name = "jinja2" },
-]
-
-[package.metadata]
-requires-dist = [{ name = "jinja2", specifier = ">=3.1" }]
-
-[[package]]
-name = "monori-server"
-version = "0.1.0"
-source = { virtual = "server" }
-dependencies = [
-    { name = "alembic" },
-    { name = "argon2-cffi" },
-    { name = "cryptography" },
-    { name = "openpyxl" },
-    { name = "pyjwt" },
-    { name = "python-multipart" },
-    { name = "uvicorn", extra = ["standard"] },
-]
-
-[package.optional-dependencies]
-connectors = [
-    { name = "playwright" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "alembic", specifier = ">=1.18.5" },
-    { name = "argon2-cffi", specifier = ">=23" },
-    { name = "cryptography", specifier = ">=50" },
-    { name = "openpyxl", specifier = ">=3.1" },
-    { name = "playwright", marker = "extra == 'connectors'", specifier = ">=1.40" },
-    { name = "pyjwt", specifier = ">=2.9" },
-    { name = "python-multipart", specifier = ">=0.0.9" },
-    { name = "uvicorn", extras = ["standard"], specifier = ">=0.30" },
-]
-provides-extras = ["connectors"]
-
-[[package]]
-name = "monori-workspace"
-version = "0.1.0"
-source = { virtual = "." }
+source = { editable = "." }
 
 [package.dev-dependencies]
 dev = [
@@ -1215,6 +1202,7 @@ dev = [
     { name = "google-auth" },
     { name = "google-auth-stubs" },
     { name = "httpx", extra = ["socks"] },
+    { name = "httpx2" },
     { name = "mutmut" },
     { name = "mypy" },
     { name = "pip-audit" },
@@ -1239,6 +1227,7 @@ dev = [
     { name = "google-auth", specifier = ">=2.0" },
     { name = "google-auth-stubs", specifier = ">=0.2" },
     { name = "httpx", extras = ["socks"], specifier = ">=0.27" },
+    { name = "httpx2", specifier = ">=0.1" },
     { name = "mutmut", specifier = ">=3.6.0" },
     { name = "mypy", specifier = ">=1.13" },
     { name = "pip-audit", specifier = ">=2.10.1" },
@@ -1250,6 +1239,66 @@ dev = [
     { name = "types-pyyaml", specifier = ">=6.0.12.20250516" },
     { name = "vulture", specifier = ">=2.16" },
 ]
+
+[[package]]
+name = "monori-ci"
+version = "0.1.0"
+source = { virtual = "ci" }
+dependencies = [
+    { name = "jinja2" },
+    { name = "monori" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "jinja2", specifier = ">=3.1" },
+    { name = "monori", editable = "." },
+]
+
+[[package]]
+name = "monori-common"
+version = "0.1.0"
+source = { virtual = "common" }
+dependencies = [
+    { name = "monori" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "monori", editable = "." }]
+
+[[package]]
+name = "monori-server"
+version = "0.1.0"
+source = { virtual = "server" }
+dependencies = [
+    { name = "alembic" },
+    { name = "argon2-cffi" },
+    { name = "cryptography" },
+    { name = "monori" },
+    { name = "openpyxl" },
+    { name = "pyjwt" },
+    { name = "python-multipart" },
+    { name = "uvicorn", extra = ["standard"] },
+]
+
+[package.optional-dependencies]
+connectors = [
+    { name = "playwright" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "alembic", specifier = ">=1.18.5" },
+    { name = "argon2-cffi", specifier = ">=23" },
+    { name = "cryptography", specifier = ">=50" },
+    { name = "monori", editable = "." },
+    { name = "openpyxl", specifier = ">=3.1" },
+    { name = "playwright", marker = "extra == 'connectors'", specifier = ">=1.40" },
+    { name = "pyjwt", specifier = ">=2.9" },
+    { name = "python-multipart", specifier = ">=0.0.9" },
+    { name = "uvicorn", extras = ["standard"], specifier = ">=0.30" },
+]
+provides-extras = ["connectors"]
 
 [[package]]
 name = "msgpack"
@@ -2082,6 +2131,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/19/75/241269d1da26b624c0d5e110e8149093c759b7a286138f4efd61a60e75fe/tomli_w-1.2.0.tar.gz", hash = "sha256:2dd14fac5a47c27be9cd4c976af5a12d87fb1f0b4512f81d69cce3b35ae25021", size = 7184, upload-time = "2025-01-15T12:07:24.262Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/c7/18/c86eb8e0202e32dd3df50d43d7ff9854f8e0603945ff398974c1d91ac1ef/tomli_w-1.2.0-py3-none-any.whl", hash = "sha256:188306098d013b691fcadc011abd66727d3c414c571bb01b1a174ba8c983cf90", size = 6675, upload-time = "2025-01-15T12:07:22.074Z" },
+]
+
+[[package]]
+name = "truststore"
+version = "0.10.4"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/53/a3/1585216310e344e8102c22482f6060c7a6ea0322b63e026372e6dcefcfd6/truststore-0.10.4.tar.gz", hash = "sha256:9d91bd436463ad5e4ee4aba766628dd6cd7010cf3e2461756b3303710eebc301", size = 26169, upload-time = "2025-08-12T18:49:02.73Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/19/97/56608b2249fe206a67cd573bc93cd9896e1efb9e98bce9c163bcdc704b88/truststore-0.10.4-py3-none-any.whl", hash = "sha256:adaeaecf1cbb5f4de3b1959b42d41f6fab57b2b1666adb59e89cb0b53361d981", size = 18660, upload-time = "2025-08-12T18:49:01.46Z" },
 ]
 
 [[package]]

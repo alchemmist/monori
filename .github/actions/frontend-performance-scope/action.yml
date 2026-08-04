@@ -37,10 +37,10 @@ runs:
                     "deploy/nginx.conf",
                     ".dockerignore",
                     "scripts/frontend-perf.sh",
-                    "ci/quality_graph/checks/frontend_performance.py",
-                    "ci/quality_graph/checks/frontend_measurement.py",
-                    "ci/tests/test_frontend_performance.py",
-                    "ci/tests/test_frontend_measurement.py",
+                    "monori/ci/quality_graph/checks/frontend_performance.py",
+                    "monori/ci/quality_graph/checks/frontend_measurement.py",
+                    "monori/ci/tests/test_frontend_performance.py",
+                    "monori/ci/tests/test_frontend_measurement.py",
                     ".github/workflows/pr-checks.yaml",
                   ]);
                   const relevant = files.some((file) => {
@@ -60,7 +60,7 @@ runs:
               GITHUB_REPOSITORY: ${{ github.repository }}
               PR_NUMBER: ${{ github.event.pull_request.number }}
           run: >-
-              uv run --locked python -m ci.quality_graph.reporting complete
+              uv run --locked python -m monori.ci.quality_graph.reporting complete
               --marker frontend-performance
               --status fail
               --message 'Could not determine frontend performance scope.'
@@ -73,7 +73,7 @@ runs:
               GITHUB_REPOSITORY: ${{ github.repository }}
               PR_NUMBER: ${{ github.event.pull_request.number }}
           run: |
-              uv run --locked python -m ci.quality_graph.reporting complete \
+              uv run --locked python -m monori.ci.quality_graph.reporting complete \
                 --marker frontend-performance \
                 --status done \
                 --message 'No performance-relevant files changed; the gate is skipped.' \

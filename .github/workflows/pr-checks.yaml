@@ -44,7 +44,7 @@ jobs:
               with:
                   install-python: true
             - name: Validate PR workflow graph
-              run: uv run --locked python -m unittest ci.tests.test_pr_workflow ci.tests.test_main_workflow
+              run: uv run --locked python -m unittest monori.ci.tests.test_pr_workflow monori.ci.tests.test_main_workflow
 
     fmt-check:
         name: Format check

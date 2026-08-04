@@ -1,9 +1,13 @@
 [project]
-name = "monori-workspace"
+name = "monori"
 version = "0.1.0"
 description = "Monori Python workspace"
 requires-python = ">=3.12"
 dependencies = []
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [dependency-groups]
 dev = [
@@ -25,20 +29,18 @@ dev = [
   "google-api-python-client-stubs>=1.39.0",
   "google-auth>=2.0",
   "google-auth-stubs>=0.2",
+  "httpx2>=0.1",
 ]
 
-[tool.uv]
-package = false
-
 [tool.uv.workspace]
-members = ["server", "ci"]
+members = ["common", "server", "ci"]
 
 [tool.pytest.ini_options]
-testpaths = ["server/tests", "ci/tests"]
+testpaths = ["monori/server/tests", "monori/ci/tests"]
 markers = ["integration: integration test that stands up real dependencies"]
 
 [tool.coverage.run]
-source = ["server/app", "ci"]
+source = ["monori"]
 
 [tool.coverage.report]
 fail_under = 80
@@ -46,7 +48,7 @@ fail_under = 80
 [tool.ruff]
 target-version = "py312"
 line-length = 100
-src = ["server", "ci"]
+src = ["monori"]
 exclude = ["web/prototypes"]
 force-exclude = true
 
@@ -55,21 +57,21 @@ select = ["ALL"]
 ignore = ["COM812", "D203", "D212"]
 
 [tool.ruff.lint.per-file-ignores]
-"server/tests/**/*.py" = [
+"monori/server/tests/**/*.py" = [
   "D102", "D103", "PLR2004", "S101", "D101", "S106", "S107",
   "D100", "S105", "D107", "D105", "D104", "F401"
 ]
-"ci/tests/**/*.py" = [
+"monori/ci/tests/**/*.py" = [
   "D102", "D103", "PLR2004", "S101", "D101", "S106", "S107",
   "D100", "S105", "D107", "D105", "D104", "F401"
 ]
 "server/migrations/**/*.py" = ["S101", "INP001"]
-"server/app/workbook/parser.py" = ["RUF001"]
-"server/app/connectors/tbank_playwright.py" = ["RUF001"]
+"monori/server/app/workbook/parser.py" = ["RUF001"]
+"monori/server/app/connectors/tbank_playwright.py" = ["RUF001"]
 
 [tool.mypy]
 python_version = "3.12"
-files = ["server/app", "ci"]
+files = ["monori"]
 exclude = ['(^|/)mutants/']
 strict = true
 warn_unreachable = true
@@ -89,14 +91,14 @@ enable_error_code = [
 ]
 
 [tool.bandit]
-exclude_dirs = ["server/tests", "ci/tests"]
+exclude_dirs = ["monori/server/tests", "monori/ci/tests"]
 skips = ["B105"]
 
 [tool.vulture]
-paths = ["server/app", "ci"]
+paths = ["monori"]
 min_confidence = 80
 ignore_names = ["referer", "predicate", "user_data_dir", "user_agent", "accept_downloads"]
 
 [tool.mutmut]
-source_paths = ["server/app", "ci/lib", "ci/quality_graph"]
-also_copy = ["server/schema.sql", "server/migrations", "ci/quality_graph/templates"]
+source_paths = ["monori/server/app", "monori/ci/lib", "monori/ci/quality_graph", "monori/common"]
+also_copy = ["server/schema.sql", "server/migrations", "monori/ci/quality_graph/templates"]

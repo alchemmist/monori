@@ -43,7 +43,8 @@ def load_token() -> str:
         sys.exit(
             f"{TOKEN_FILE} not found — mint one first, e.g.:\n"
             "  cd server && uv run python -c "
-            "'from app.security import create_access_token; print(create_access_token(1))'"
+            "'from monori.server.app.security import create_access_token; "
+            "print(create_access_token(1))'"
             f" > {TOKEN_FILE} && chmod 600 {TOKEN_FILE}"
         )
     metadata = TOKEN_FILE.lstat()

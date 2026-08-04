@@ -16,10 +16,9 @@ import sys
 import tarfile
 import tempfile
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "server"))
-
-from app.connectors.base import ConnectorError, JsonObject, SmsRequiredError, SyncResult
-from app.connectors.tbank_playwright import TBankPlaywrightConnector
+from monori.common import JsonObject
+from monori.server.app.connectors.base import ConnectorError, SmsRequiredError, SyncResult
+from monori.server.app.connectors.tbank_playwright import TBankPlaywrightConnector
 
 PROFILE_DIR = os.environ.get(
     "PROFILE_DIR",

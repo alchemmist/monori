@@ -1,0 +1,43 @@
+import pathlib
+import sys
+
+import pytest
+from fastapi import HTTPException
+
+from monori.server.app.routers.accounts import MAX_ICON_IMAGE, _validate_color, _validate_icon_image
+
+
+def test_validate_color_accepts_six_digit_hex() -> None:
+    _validate_color("#5b6472")
+    _validate_color("#FFFFFF")
+
+
+@pytest.mark.parametrize("bad", ["5b6472", "#5b647", "#5b64722", "#zzzzzz", "", "#5b 472"])
+def test_validate_color_rejects_non_hex(bad: str) -> None:
+    with pytest.raises(HTTPException) as e:
+        _validate_color(bad)
+    assert e.value.status_code == 400
+
+
+def test_validate_icon_image_allows_empty() -> None:
+
+    _validate_icon_image("")
+    _validate_icon_image(None)
+
+
+def test_validate_icon_image_allows_data_url_at_the_size_cap() -> None:
+    image = "data:image/png;base64," + "A" * (MAX_ICON_IMAGE - len("data:image/png;base64,"))
+    assert len(image) == MAX_ICON_IMAGE
+    _validate_icon_image(image)
+
+
+def test_validate_icon_image_rejects_non_image_data() -> None:
+    with pytest.raises(HTTPException) as e:
+        _validate_icon_image("data:text/plain;base64,AAAA")
+    assert e.value.status_code == 400
+
+
+def test_validate_icon_image_rejects_oversize_image() -> None:
+    image = "data:image/png;base64," + "A" * MAX_ICON_IMAGE
+    with pytest.raises(HTTPException):
+        _validate_icon_image(image)

@@ -1,0 +1,189 @@
+import json
+import tempfile
+import unittest
+from pathlib import Path
+from unittest import mock
+
+import pytest
+
+from monori.ci.lib import mutation_diff_gate as module
+
+
+class MutationDiffGateTest(unittest.TestCase):
+    def test_parses_mutmut_function_names(self) -> None:
+        assert module.mutant_function("app.foo.x_run__mutmut_1") == ("run", None)
+        assert module.mutant_function("app.foo.ǁAccountǁx_save__mutmut_2") == (
+            "save",
+            "Account",
+        )
+
+    def test_maps_mutant_metadata_to_its_configured_source_path(self) -> None:
+        assert (
+            module.source_path_for_mutant(Path("app/example.py.meta"))
+            == "monori/server/app/example.py"
+        )
+        assert (
+            module.source_path_for_mutant(Path("quality_graph/app/example.py.meta"))
+            == "monori/ci/quality_graph/app/example.py"
+        )
+        assert (
+            module.source_path_for_mutant(Path("lib/comments.py.meta"))
+            == "monori/ci/lib/comments.py"
+        )
+
+    def test_collects_changed_functions(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "monori/server/app/example.py"
+            source.parent.mkdir(parents=True)
+            source.write_text(
+                "class Account:\n"
+                "    def save(self):\n"
+                "        return True\n"
+                "\n"
+                "def untouched():\n"
+                "    return False\n"
+            )
+
+            result = module.changed_functions(root, {"monori/server/app/example.py": {3}})
+
+        assert result == {"monori/server/app/example.py": {("save", "Account")}}
+
+    def test_maps_deletion_only_hunks_to_changed_lines(self) -> None:
+        diff = """\
+diff --git a/monori/server/app/example.py b/monori/server/app/example.py
+--- a/monori/server/app/example.py
++++ b/monori/server/app/example.py
+@@ -5 +4,0 @@
+-    removed = True
+"""
+
+        assert module.parse_changed_lines(diff) == {"monori/server/app/example.py": {4}}
+
+    def test_ignores_deleted_file_before_modified_file(self) -> None:
+        diff = """\
+diff --git a/monori/server/app/deleted.py b/monori/server/app/deleted.py
+--- a/monori/server/app/deleted.py
++++ /dev/null
+@@ -1 +0,0 @@
+-removed = True
+diff --git a/monori/server/app/example.py b/monori/server/app/example.py
+--- a/monori/server/app/example.py
++++ b/monori/server/app/example.py
+@@ -3 +3 @@
+-old = True
+\\ No newline at end of file
++new = True
+\\ No newline at end of file
+"""
+
+        assert module.parse_changed_lines(diff) == {"monori/server/app/example.py": {2, 3}}
+
+    @staticmethod
+    def write_meta(path: Path, statuses: dict[str, int | None]) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps({"exit_code_by_key": statuses}))
+
+    def run_backend_gate(self, root: Path, baseline: Path, *, skip_new_survivors: bool) -> int:
+        mutants = root / "mutants"
+        self.write_meta(
+            mutants / "app/example.py.meta",
+            {
+                "app.example.x_run__mutmut_1": 1,
+                "app.example.x_run__mutmut_2": 0,
+            },
+        )
+        with (
+            mock.patch.object(module, "changed_lines", return_value={}),
+            mock.patch.object(
+                module,
+                "changed_functions",
+                return_value={"monori/server/app/example.py": {("run", None)}},
+            ),
+        ):
+            result = module.gate_backend(
+                module.GateRequest(
+                    mutants,
+                    baseline,
+                    root,
+                    "origin/main",
+                    50,
+                    skip_new_survivors,
+                )
+            )
+        return int(result)
+
+    def test_gate_backend_rejects_mutants_without_coverage(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            mutants = root / "mutants"
+            self.write_meta(
+                mutants / "app/example.py.meta",
+                {"app.example.x_run__mutmut_1": None},
+            )
+            with (
+                mock.patch.object(module, "changed_lines", return_value={}),
+                mock.patch.object(
+                    module,
+                    "changed_functions",
+                    return_value={"monori/server/app/example.py": {("run", None)}},
+                ),
+            ):
+                result = module.gate_backend(
+                    module.GateRequest(
+                        mutants_dir=mutants,
+                        baseline_dir=root / "baseline",
+                        root=root,
+                        base="origin/main",
+                        threshold=90,
+                        skip_new_survivors=False,
+                    )
+                )
+
+        assert result == 1
+
+    def test_gate_backend_scores_killed_and_survived_mutants(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            baseline = root / "baseline"
+            self.write_meta(
+                baseline / "app/example.py.meta",
+                {
+                    "app.example.x_run__mutmut_1": 1,
+                    "app.example.x_run__mutmut_2": 0,
+                },
+            )
+
+            assert self.run_backend_gate(root, baseline, skip_new_survivors=False) == 0
+
+    def test_gate_backend_rejects_new_survivors(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            baseline = root / "baseline"
+            self.write_meta(
+                baseline / "app/example.py.meta",
+                {
+                    "app.example.x_run__mutmut_1": 1,
+                    "app.example.x_run__mutmut_2": 1,
+                },
+            )
+
+            assert self.run_backend_gate(root, baseline, skip_new_survivors=False) == 1
+
+    def test_gate_backend_allows_survivors_without_baseline(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+
+            assert self.run_backend_gate(root, root / "missing", skip_new_survivors=True) == 0
+
+    def test_load_meta_reports_missing_statuses(self) -> None:
+        with tempfile.NamedTemporaryFile(mode="w+", suffix=".meta") as metadata:
+            metadata.write("{}")
+            metadata.flush()
+
+            with pytest.raises(TypeError, match="missing exit_code_by_key"):
+                module.load_meta(Path(metadata.name))
+
+
+if __name__ == "__main__":
+    unittest.main()

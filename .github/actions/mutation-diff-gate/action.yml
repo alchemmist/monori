@@ -32,7 +32,7 @@ runs:
                   mutation-stryker-${{ runner.os }}-${{ hashFiles('web/package-lock.json') }}-main-
         - name: Test diff mutation gate
           shell: bash
-          run: env -u GITHUB_STEP_SUMMARY uv run --locked python -m unittest ci.tests.test_mutation_diff_gate
+          run: env -u GITHUB_STEP_SUMMARY uv run --locked python -m unittest monori.ci.tests.test_mutation_diff_gate
         - name: Run frontend diff mutation tests
           id: mutation-front
           continue-on-error: true
@@ -58,7 +58,7 @@ runs:
               if [ "${{ steps.mutation-front.outcome }}" = failure ] || [ "${{ steps.mutation-back.outcome }}" = failure ]; then
                 status=fail
               fi
-              uv run --locked python -m ci.quality_graph.reporting complete \
+              uv run --locked python -m monori.ci.quality_graph.reporting complete \
                 --marker mutation \
                 --status "$status" \
                 --body-file "$MUTATION_SUMMARY_PATH" \

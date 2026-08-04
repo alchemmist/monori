@@ -13,22 +13,22 @@ runs:
               COMMENT_ID: ${{ github.event.comment.id }}
               GITHUB_TOKEN: ${{ github.token }}
           run: >-
-              uv run --locked python -m ci.quality_graph.reporting react
+              uv run --locked python -m monori.ci.quality_graph.reporting react
               --comment-id "$COMMENT_ID"
               --reaction eyes
         - name: Test Quality Graph command API
           shell: bash
-          run: uv run --locked python -m unittest ci.tests.test_commands ci.tests.test_object_annotations ci.tests.test_suppressions
+          run: uv run --locked python -m unittest monori.ci.tests.test_commands monori.ci.tests.test_object_annotations monori.ci.tests.test_suppressions
         - name: Apply object and suppression command
           continue-on-error: true
           shell: bash
           env:
               GITHUB_TOKEN: ${{ github.token }}
           run: |
-              uv run --locked python -m ci.quality_graph.checks.object_annotations || true
-              uv run --locked python -m ci.quality_graph.checks.suppressions || true
+              uv run --locked python -m monori.ci.quality_graph.checks.object_annotations || true
+              uv run --locked python -m monori.ci.quality_graph.checks.suppressions || true
         - name: Process Quality Graph command
           shell: bash
           env:
               GITHUB_TOKEN: ${{ github.token }}
-          run: uv run --locked python -m ci.quality_graph.commands
+          run: uv run --locked python -m monori.ci.quality_graph.commands

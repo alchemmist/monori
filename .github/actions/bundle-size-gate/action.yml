@@ -15,14 +15,14 @@ runs:
 
         - name: Test bundle tools
           shell: bash
-          run: uv run --locked python -m unittest ci.tests.test_bundle_measurement
+          run: uv run --locked python -m unittest monori.ci.tests.test_bundle_measurement
         - name: Build pull request
           shell: bash
           run: npm run build
           working-directory: web
         - name: Measure pull-request bundle
           shell: bash
-          run: uv run --locked python -m ci.quality_graph.checks.bundle_measurement measure --dist web/dist --output "$RUNNER_TEMP/current.json"
+          run: uv run --locked python -m monori.ci.quality_graph.checks.bundle_measurement measure --dist web/dist --output "$RUNNER_TEMP/current.json"
         - name: Build merge base
           shell: bash
           env:
@@ -36,7 +36,7 @@ runs:
                 npm install --no-audit --no-fund --prefix "$RUNNER_TEMP/base-repo/web"
               fi
               npm run build --prefix "$RUNNER_TEMP/base-repo/web"
-              uv run --locked python -m ci.quality_graph.checks.bundle_measurement measure --dist "$RUNNER_TEMP/base-repo/web/dist" --output "$RUNNER_TEMP/base.json"
+              uv run --locked python -m monori.ci.quality_graph.checks.bundle_measurement measure --dist "$RUNNER_TEMP/base-repo/web/dist" --output "$RUNNER_TEMP/base.json"
         - name: Compare bundle sizes
           id: compare
           shell: bash
@@ -50,8 +50,8 @@ runs:
           run: |
               set +e
               mkdir -p "$RUNNER_TEMP/bundle-size"
-              uv run --locked python -m ci.quality_graph.checks.bundle_measurement compare --base "$RUNNER_TEMP/base.json" --current "$RUNNER_TEMP/current.json" --output "$RUNNER_TEMP/bundle-size/report.json" --pr-number "$PR_NUMBER" --head-sha "$HEAD_SHA"
-              uv run --locked python -m ci.quality_graph.checks.bundle_size
+              uv run --locked python -m monori.ci.quality_graph.checks.bundle_measurement compare --base "$RUNNER_TEMP/base.json" --current "$RUNNER_TEMP/current.json" --output "$RUNNER_TEMP/bundle-size/report.json" --pr-number "$PR_NUMBER" --head-sha "$HEAD_SHA"
+              uv run --locked python -m monori.ci.quality_graph.checks.bundle_size
               code=$?
               echo "exit_code=$code" >> "$GITHUB_OUTPUT"
               exit 0
@@ -65,14 +65,14 @@ runs:
           run: |
               mkdir -p "$RUNNER_TEMP/bundle-size"
               if [ ! -f "$RUNNER_TEMP/bundle-size/summary.md" ]; then
-                uv run --locked python -m ci.quality_graph.reporting complete \
+                uv run --locked python -m monori.ci.quality_graph.reporting complete \
                   --marker bundle-size \
                   --status fail \
                   --message 'Bundle size measurement did not produce a report.' \
                   --pr-number "$PR_NUMBER"
                 exit 0
               fi
-              uv run --locked python -m ci.lib.comments \
+              uv run --locked python -m monori.ci.lib.comments \
                 --marker bundle-size \
                 --body-file "$RUNNER_TEMP/bundle-size/summary.md" \
                 --pr-number "$PR_NUMBER"

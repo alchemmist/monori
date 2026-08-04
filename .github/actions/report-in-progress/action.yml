@@ -17,6 +17,6 @@ runs:
               REPORT_MARKER: ${{ inputs.marker }}
               PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
           run: >-
-              uv run --locked python -m ci.quality_graph.reporting in-progress
+              uv run --locked python -m monori.ci.quality_graph.reporting in-progress
               --marker "$REPORT_MARKER"
               --pr-number "$PR_NUMBER"
