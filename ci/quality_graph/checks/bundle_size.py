@@ -35,7 +35,7 @@ def obj(value: JsonValue, context: str) -> dict[str, JsonValue]:
 
 
 def string(value: JsonValue, context: str) -> str:
-    """String for this module."""
+    """Return a string from JSON value."""
     if not isinstance(value, str):
         message = f"Expected string for {context}"
         raise TypeError(message)

@@ -13,6 +13,7 @@ dev = [
   "ruff==0.15.22",
   "mypy>=1.13",
   "bandit>=1.8",
+  "dulwich>=0.25.0",
   "vulture>=2.16",
   "httpx[socks]>=0.27",
   "mutmut>=3.6.0",

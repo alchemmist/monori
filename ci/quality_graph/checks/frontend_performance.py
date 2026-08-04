@@ -43,7 +43,7 @@ def json_array(value: JsonValue, context: str) -> list[JsonValue]:
 
 
 def optional_string(value: JsonValue) -> str | None:
-    """Optional string for this module."""
+    """Return a string when JSON value is a string, otherwise ``None``."""
     return value if isinstance(value, str) else None
 
 
@@ -65,7 +65,7 @@ def json_integer(value: JsonValue, context: str) -> int:
 
 
 def finding_id(entry: dict[str, JsonValue]) -> str:
-    """Finding id for this module."""
+    """Build deterministic finding id for a performance entry."""
     route = json_string(entry.get("route_id"), "entry route id")
     metric = json_string(entry.get("metric_id"), "entry metric id")
     digest = hashlib.sha256(f"{route}:{metric}".encode()).hexdigest()[:12]

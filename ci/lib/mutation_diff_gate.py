@@ -3,11 +3,18 @@
 import argparse
 import ast
 import json
+import logging
 import os
-import subprocess
 import sys
+from dataclasses import dataclass, field
+from io import BytesIO
 from pathlib import Path
 from typing import override
+
+from dulwich.graph import find_merge_base
+from dulwich.objects import Commit
+from dulwich.porcelain import diff_tree
+from dulwich.repo import Repo
 
 KILLED = {1, 3}
 SURVIVED = 0
@@ -18,6 +25,7 @@ MUTANT_SOURCE_PATHS = {
     "lib/": "ci/lib/",
     "quality_graph/": "ci/quality_graph/",
 }
+logger = logging.getLogger(__name__)
 
 
 def append_step_summary(content: str) -> None:
@@ -60,22 +68,39 @@ def parse_changed_lines(diff: str) -> dict[str, set[int]]:
 
 
 def changed_lines(base: str) -> dict[str, set[int]]:
-    """Changed lines for this module."""
-    result = subprocess.run(
-        [
-            "git",
-            "diff",
-            "--unified=0",
-            f"{base}...HEAD",
-            "--",
-            "server/app",
-            "ci/quality_graph",
-        ],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    return parse_changed_lines(result.stdout)
+    """Read changed Python lines between the merge base and the current head."""
+    repository = Repo(Path.cwd())
+    head = commit_for_revision(repository, "HEAD")
+    base_commit = commit_for_revision(repository, base)
+    merge_bases = find_merge_base(repository, [base_commit.id, head.id])
+    if not merge_bases:
+        message = f"Cannot find merge base for {base} and HEAD"
+        raise RuntimeError(message)
+    merge_base = repository[merge_bases[0]]
+    if not isinstance(merge_base, Commit):
+        message = f"Merge base for {base} and HEAD is not a commit"
+        raise TypeError(message)
+    output = BytesIO()
+    diff_tree(repository, merge_base.tree, head.tree, output)
+    return {
+        path: lines
+        for path, lines in parse_changed_lines(output.getvalue().decode()).items()
+        if path.startswith(("server/app/", "ci/lib/", "ci/quality_graph/"))
+    }
+
+
+def commit_for_revision(repository: Repo, revision: str) -> Commit:
+    """Resolve a git revision or remote branch name to a commit object."""
+    candidates = (revision.encode(), f"refs/remotes/{revision}".encode())
+    for candidate in candidates:
+        try:
+            resolved = repository[candidate]
+        except KeyError:
+            continue
+        if isinstance(resolved, Commit):
+            return resolved
+    message = f"Cannot resolve git revision {revision}"
+    raise RuntimeError(message)
 
 
 class ChangedFunctions(ast.NodeVisitor):
@@ -111,7 +136,7 @@ class ChangedFunctions(ast.NodeVisitor):
 def changed_functions(
     root: Path, lines_by_path: dict[str, set[int]]
 ) -> dict[str, set[tuple[str, str | None]]]:
-    """Changed functions for this module."""
+    """Collect functions changed in the given diff."""
     result: dict[str, set[tuple[str, str | None]]] = {}
     for path, lines in lines_by_path.items():
         source_path = root / path
@@ -153,92 +178,121 @@ def load_meta(path: Path) -> dict[str, int | None]:
     return dict(statuses)
 
 
-def gate_python(
-    mutants_dir: Path,
-    baseline_dir: Path,
-    root: Path,
-    base: str,
-    threshold: float,
-    *,
-    skip_new_survivors: bool,
-) -> int:
-    """Gate python for this module."""
-    line_changes = changed_lines(base)
-    functions = changed_functions(root, line_changes)
-    if not functions:
-        print("mutation-diff: no changed Python functions — pass")
-        append_step_summary("## Python mutation diff\n\nNo changed Python functions — **pass**.")
-        return 0
+@dataclass(frozen=True)
+class GateRequest:
+    """Inputs required to evaluate changed Python mutants."""
 
-    killed = survived = other = new_survivors = 0
-    survivor_keys: list[str] = []
-    no_coverage_keys: list[str] = []
-    for meta_path in mutants_dir.rglob("*.py.meta"):
-        relative = meta_path.relative_to(mutants_dir)
+    mutants_dir: Path
+    baseline_dir: Path
+    root: Path
+    base: str
+    threshold: float
+    skip_new_survivors: bool
+
+
+@dataclass
+class MutationStats:
+    """Aggregate verdict inputs collected from relevant mutmut metadata."""
+
+    killed: int = 0
+    survived: int = 0
+    other: int = 0
+    new_survivors: int = 0
+    survivor_keys: list[str] = field(default_factory=list)
+    no_coverage_keys: list[str] = field(default_factory=list)
+
+    @property
+    def considered(self) -> int:
+        """Return the number of mutants included in the score."""
+        return self.killed + self.survived + self.other
+
+
+def record_mutant(
+    stats: MutationStats,
+    key: str,
+    status: int | None,
+    baseline: dict[str, int | None],
+) -> None:
+    """Classify one mutant result and update aggregate mutation statistics."""
+    if status is None:
+        stats.other += 1
+        stats.no_coverage_keys.append(key)
+    elif status == SURVIVED:
+        stats.survived += 1
+        stats.survivor_keys.append(key)
+        if baseline.get(key) != SURVIVED:
+            stats.new_survivors += 1
+    elif status in KILLED:
+        stats.killed += 1
+    elif status in OTHER_STATUSES:
+        stats.other += 1
+
+
+def collect_mutation_stats(
+    request: GateRequest,
+    functions: dict[str, set[tuple[str, str | None]]],
+) -> MutationStats:
+    """Collect mutation statuses for functions changed by the current diff."""
+    stats = MutationStats()
+    for meta_path in request.mutants_dir.rglob("*.py.meta"):
+        relative = meta_path.relative_to(request.mutants_dir)
         source_path = source_path_for_mutant(relative)
-        if source_path is None:
+        if source_path is None or (allowed := functions.get(source_path)) is None:
             continue
-        allowed = functions.get(source_path)
-        if not allowed:
-            continue
-        current = load_meta(meta_path)
-        baseline_path = baseline_dir / relative
+        baseline_path = request.baseline_dir / relative
         baseline = load_meta(baseline_path) if baseline_path.exists() else {}
-        for key, status in current.items():
-            if mutant_function(key) not in allowed:
-                continue
-            if status is None:
-                other += 1
-                no_coverage_keys.append(key)
-            elif status == SURVIVED:
-                survived += 1
-                survivor_keys.append(key)
-                if baseline.get(key) != SURVIVED:
-                    new_survivors += 1
-            elif status in KILLED:
-                killed += 1
-            elif status in OTHER_STATUSES:
-                other += 1
+        for key, status in load_meta(meta_path).items():
+            if mutant_function(key) in allowed:
+                record_mutant(stats, key, status, baseline)
+    return stats
 
-    considered = killed + survived + other
-    if considered == 0:
-        print("mutation-diff: changed functions have no tested mutants — pass")
-        append_step_summary(
-            "## Python mutation diff\n\nChanged functions have no tested mutants — **pass**."
-        )
-        return 0
-    score = 100 * killed / considered
-    passed = score >= threshold and (skip_new_survivors or new_survivors == 0)
+
+def append_empty_summary(message: str) -> int:
+    """Publish a passing summary when no mutants are eligible for scoring."""
+    logger.info("mutation-diff: %s — pass", message)
+    append_step_summary(f"## Python mutation diff\n\n{message.capitalize()} — **pass**.")
+    return 0
+
+
+def gate_python(
+    request: GateRequest,
+) -> int:
+    """Evaluate changed Python mutants and return the gate exit code."""
+    functions = changed_functions(request.root, changed_lines(request.base))
+    if not functions:
+        return append_empty_summary("no changed Python functions")
+    stats = collect_mutation_stats(request, functions)
+    if stats.considered == 0:
+        return append_empty_summary("changed functions have no tested mutants")
+    return report_verdict(request, stats)
+
+
+def report_verdict(request: GateRequest, stats: MutationStats) -> int:
+    """Publish the mutation verdict and return its process exit code."""
+    score = 100 * stats.killed / stats.considered
+    passed = score >= request.threshold and (request.skip_new_survivors or stats.new_survivors == 0)
     gate_status = "✅ PASS" if passed else "❌ FAIL"
-    print("── changed Python mutation summary ─────────────────")
-    print(f"killed             {killed}")
-    print(f"survived           {survived}")
-    print(f"new survivors      {new_survivors}")
-    print(f"considered         {considered}")
-    print(f"score              {score:.2f}%")
-    print(f"threshold          {threshold:.0f}%")
-    print(f"mutation-diff gate {'PASS' if passed else 'FAIL'}")
     summary = [
         "## Python mutation diff",
         "",
         "| Metric | Value |",
         "| --- | ---: |",
         f"| Status | {gate_status} |",
-        f"| Killed | {killed} |",
-        f"| Survived | {survived} |",
-        f"| No coverage | {len(no_coverage_keys)} |",
-        f"| New survivors | {new_survivors} |",
-        f"| Considered | {considered} |",
+        f"| Killed | {stats.killed} |",
+        f"| Survived | {stats.survived} |",
+        f"| No coverage | {len(stats.no_coverage_keys)} |",
+        f"| New survivors | {stats.new_survivors} |",
+        f"| Considered | {stats.considered} |",
         f"| Score | {score:.2f}% |",
-        f"| Threshold | {threshold:.0f}% |",
+        f"| Threshold | {request.threshold:.0f}% |",
     ]
-    if survivor_keys:
+    if stats.survivor_keys:
         summary.extend(["", "<details>", "<summary>Surviving mutants</summary>", ""])
-        summary.extend(f"- `{key}`" for key in survivor_keys)
+        summary.extend(f"- `{key}`" for key in stats.survivor_keys)
         summary.extend(["", "</details>"])
-    if no_coverage_keys:
+    if stats.no_coverage_keys:
         summary.extend(["", "<details>", "<summary>Mutants without coverage</summary>", ""])
-        summary.extend(f"- `{key}`" for key in no_coverage_keys)
+        summary.extend(f"- `{key}`" for key in stats.no_coverage_keys)
         summary.extend(["", "</details>"])
     append_step_summary("\n".join(summary))
     return 0 if passed else 1
@@ -249,6 +303,7 @@ gate_backend = gate_python
 
 def main() -> int:
     """Run this module as a CLI entrypoint and return its exit code."""
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
     parser = argparse.ArgumentParser()
     parser.add_argument("--mutants", type=Path, required=True)
     parser.add_argument("--baseline", type=Path, required=True)
@@ -257,12 +312,14 @@ def main() -> int:
     parser.add_argument("--skip-new-survivors", action="store_true")
     args = parser.parse_args()
     return gate_python(
-        args.mutants,
-        args.baseline,
-        Path.cwd(),
-        args.base,
-        args.threshold,
-        skip_new_survivors=args.skip_new_survivors,
+        GateRequest(
+            args.mutants,
+            args.baseline,
+            Path.cwd(),
+            args.base,
+            args.threshold,
+            args.skip_new_survivors,
+        )
     )
 
 

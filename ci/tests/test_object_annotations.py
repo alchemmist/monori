@@ -7,6 +7,7 @@ from ci.quality_graph.checks.object_annotations import (
     Finding,
     JsonValue,
     ObjectAnnotationCheck,
+    SyncApprovalCommandState,
     added_lines_from_patch,
     changed_lines,
     latest_pull_request_run,
@@ -124,8 +125,10 @@ other: "list[object]"
             1,
             {"body": ""},
             [finding],
-            parse_command("/qg ignore object-finding-1"),
-            "admin",
+            SyncApprovalCommandState(
+                parse_command("/qg ignore object-finding-1"),
+                "admin",
+            ),
         )
 
         assert admin

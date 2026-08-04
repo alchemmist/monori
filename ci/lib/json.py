@@ -30,7 +30,7 @@ def array_value(value: JsonValue, context: str) -> list[JsonValue]:
 
 
 def string_value(value: JsonValue, context: str) -> str:
-    """String value for this module."""
+    """Return a string JSON value."""
     if not isinstance(value, str):
         message = f"Expected JSON string for {context}"
         raise TypeError(message)
@@ -46,5 +46,5 @@ def integer_value(value: JsonValue, context: str) -> int:
 
 
 def optional_string(value: JsonValue) -> str | None:
-    """Optional string for this module."""
+    """Return a JSON string if present."""
     return value if isinstance(value, str) else None

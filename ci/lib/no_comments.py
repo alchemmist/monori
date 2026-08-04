@@ -1,12 +1,22 @@
+"""
+Command-line check that rejects inline comments outside allowed markers.
+
+The module scans Python files for comment tokens and reports violations when a
+comment is not an allowed directive such as `# noqa`, `# nosec`, or `# type:
+ignore` / `# type: noqa`.
+"""
+
 from __future__ import annotations
 
 import argparse
+import logging
 import re
 import sys
 import tokenize
 from pathlib import Path
 
 ALLOWED_COMMENT = re.compile(r"^#\s*(?:noqa|nosec|type:\s*(?:ignore|noqa))\b", re.IGNORECASE)
+logger = logging.getLogger(__name__)
 
 
 def python_files(root: Path) -> list[Path]:
@@ -34,6 +44,7 @@ def violations(path: Path) -> list[tuple[int, int, str]]:
 
 def main(argv: list[str] | None = None) -> int:
     """Run this module as a CLI entrypoint and return its exit code."""
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
     parser = argparse.ArgumentParser()
     parser.add_argument("root", type=Path)
     args = parser.parse_args(argv)
@@ -42,7 +53,7 @@ def main(argv: list[str] | None = None) -> int:
     for path in python_files(args.root):
         for line, column, text in violations(path):
             found = True
-            print(f"{path}:{line}:{column}: code comment is not allowed: {text}")
+            logger.error("%s:%s:%s: code comment is not allowed: %s", path, line, column, text)
     return int(found)
 
 

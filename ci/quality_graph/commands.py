@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Literal, Protocol, cast
 
 from ci.lib.github import GITHUB_PAGE_SIZE, GitHub
-from ci.lib.json import JsonValue, array_value, object_value, string_value
+from ci.lib.json import JsonValue, array_value, object_value, optional_string, string_value
 
 if TYPE_CHECKING:
     from collections.abc import Collection
@@ -32,6 +32,26 @@ class QualityGraphCommand:
 
     name: CommandName
     arguments: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class CommandRequest:
+    """Quality Graph command candidate extracted from an issue-comment event."""
+
+    comment_id: int
+    body: str
+    login: str | None
+    pull_request_number: int | None
+
+
+@dataclass(frozen=True)
+class CommandRejection:
+    """Outcome to publish when a Quality Graph command cannot be processed."""
+
+    title: str
+    detail: str
+    reaction: str
+    command: QualityGraphCommand | None = None
 
 
 def parse_command(body: str) -> QualityGraphCommand | None:
@@ -230,64 +250,88 @@ Only repository administrators may execute state-changing commands.
 - `/qg help` — show this help"""
 
 
-def main() -> int:
-    """Run this module as a CLI entrypoint and return its exit code."""
-    event = cast(
+def read_event() -> dict[str, JsonValue]:
+    """Read the GitHub event payload from the path supplied by Actions."""
+    return cast(
         "dict[str, JsonValue]",
         json.loads(Path(os.environ["GITHUB_EVENT_PATH"]).read_text()),
     )
+
+
+def is_quality_graph_command(body: str) -> bool:
+    """Return whether a comment body addresses the Quality Graph command API."""
+    return body in {"/qg", "/quality-graph"} or body.startswith(("/qg ", "/quality-graph "))
+
+
+def command_request(event: dict[str, JsonValue]) -> CommandRequest | None:
+    """Extract a Quality Graph command request from an issue-comment event."""
     comment = object_value(event.get("comment", {}), "event comment")
     comment_id = comment.get("id")
     if not isinstance(comment_id, int):
-        return 0
+        return None
     comment_body = string_value(comment.get("body"), "comment body").strip()
-    if not (
-        comment_body == "/qg"
-        or comment_body == "/quality-graph"
-        or comment_body.startswith(("/qg ", "/quality-graph "))
-    ):
-        return 0
-    command = parse_command(comment_body)
-    github = GitHub()
-    number = pull_request_number(event)
-    if command is None:
-        set_comment_reaction(github, comment_id, "eyes")
-        if number is not None:
-            upsert_status(
-                github,
-                number,
-                "## Quality Graph command ❌\n\nUnknown command. Use `/qg help`.",
-            )
-        set_comment_reaction(github, comment_id, "-1")
-        return 0
-    validation_error = validate_command(command)
+    if not is_quality_graph_command(comment_body):
+        return None
     author = object_value(comment.get("user", {}), "comment user")
-    login = string_value(author.get("login"), "comment author")
+    return CommandRequest(
+        comment_id,
+        comment_body,
+        optional_string(author.get("login")),
+        pull_request_number(event),
+    )
+
+
+def publish_rejection(
+    github: GitHubAPI,
+    request: CommandRequest,
+    rejection: CommandRejection,
+) -> None:
+    """Publish a rejected command result and apply its final reaction."""
+    if request.pull_request_number is not None:
+        body = (
+            command_result(rejection.command, rejection.title, rejection.detail)
+            if rejection.command is not None
+            else f"## Quality Graph command {rejection.title}\n\n{rejection.detail}"
+        )
+        upsert_status(github, request.pull_request_number, body)
+    set_comment_reaction(github, request.comment_id, rejection.reaction)
+
+
+def process_command(github: GitHubAPI, request: CommandRequest) -> None:
+    """Validate, authorize, and dispatch one Quality Graph command request."""
+    command = parse_command(request.body)
+    set_comment_reaction(github, request.comment_id, "eyes")
+    if command is None:
+        publish_rejection(
+            github,
+            request,
+            CommandRejection("❌", "Unknown command. Use `/qg help`.", "-1"),
+        )
+        return
+    validation_error = validate_command(command)
     if validation_error is not None:
-        set_comment_reaction(github, comment_id, "eyes")
-        if number is not None:
-            upsert_status(github, number, command_result(command, "❌", validation_error))
-        set_comment_reaction(github, comment_id, "-1")
-        return 0
-    set_comment_reaction(github, comment_id, "eyes")
-    if number is None or not is_admin(github, login):
-        set_comment_reaction(github, comment_id, "confused")
-        if number is not None:
-            upsert_status(
-                github,
-                number,
-                command_result(
-                    command,
-                    "😕",
-                    "Only repository administrators may execute Quality Graph commands.",
-                ),
-            )
-        return 0
+        publish_rejection(
+            github,
+            request,
+            CommandRejection("❌", validation_error, "-1", command),
+        )
+        return
+    number = request.pull_request_number
+    if number is None or request.login is None or not is_admin(github, request.login):
+        publish_rejection(
+            github,
+            request,
+            CommandRejection(
+                "😕",
+                "Only repository administrators may execute Quality Graph commands.",
+                "confused",
+                command,
+            ),
+        )
+        return
     if command.name == "help":
         upsert_status(github, number, help_body())
-        set_comment_reaction(github, comment_id, "hooray")
-        return 0
-    if command.name == "status":
+    elif command.name == "status":
         upsert_status(
             github,
             number,
@@ -296,37 +340,47 @@ def main() -> int:
                 "Command API is available and ready to process administrator commands."
             ),
         )
-        set_comment_reaction(github, comment_id, "hooray")
-        return 0
+    else:
+        apply_gate_command(github, number, request.comment_id, command)
+    set_comment_reaction(github, request.comment_id, "hooray")
+
+
+def apply_gate_command(
+    github: GitHubAPI,
+    number: int,
+    comment_id: int,
+    command: QualityGraphCommand,
+) -> None:
+    """Store a gate command marker on the pull request and rerun the graph."""
     upsert_status(
         github,
         number,
         command_result(
-            command,
-            "👀",
-            "Command accepted. Applying it and refreshing the Quality Graph.",
+            command, "👀", "Command accepted. Applying it and refreshing the Quality Graph."
         ),
     )
-    set_comment_reaction(github, comment_id, "hooray")
     pull = object_value(github.request("GET", f"/pulls/{number}"), "pull request")
-    body = (
-        string_value(pull.get("body"), "pull request body") if pull.get("body") is not None else ""
-    )
-    markers = {
+    original_body = pull.get("body")
+    body = string_value(original_body, "pull request body") if original_body is not None else ""
+    for gate, marker_name in {
         "bundle": "monori-bundle-size-pending",
         "frontend": "monori-frontend-performance-pending",
-    }
-    for gate, marker_name in markers.items():
+    }.items():
         if command_targets_gate(command, gate):
             marker = f"<!-- {marker_name}: {comment_id} -->"
-            pattern = re.compile(rf"<!-- {marker_name}: \d+ -->")
-            body = pattern.sub(marker, body)
+            body = re.sub(rf"<!-- {marker_name}: \d+ -->", marker, body)
             if marker not in body:
                 body = f"{body.rstrip()}\n\n{marker}".strip()
-    if body != (pull.get("body") or ""):
+    if body != (original_body or ""):
         github.request("PATCH", f"/pulls/{number}", {"body": body})
-    if command.name not in {"help", "status"}:
-        rerun_workflow(github, number)
+    rerun_workflow(github, number)
+
+
+def main() -> int:
+    """Run the Quality Graph command handler for the current GitHub event."""
+    request = command_request(read_event())
+    if request is not None:
+        process_command(GitHub(), request)
     return 0
 
 

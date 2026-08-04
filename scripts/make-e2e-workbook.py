@@ -1,8 +1,8 @@
-"""
-Deterministic generator for web/e2e/fixtures/template-workbook.xlsx — the
-cut-down "live template" workbook the workbook e2e spec migrates through the
-real UI (a miniature of the user's YNAB-like spreadsheet: Russian T-Bank
-transaction headers, keyword side table, a year sheet with a budget grid).
+"""Deterministic generator for web/e2e/fixtures/template-workbook.xlsx — a cut-down
+"live template" workbook for YNAB-like budget fixtures.
+
+It includes Russian T-Bank transaction headers, keyword side table, and a year sheet
+with a budget grid.
 
 Regenerate with:  cd server && uv run python ../scripts/make-e2e-workbook.py
 
@@ -13,6 +13,7 @@ the counts must match what the spec hardcodes.
 
 import datetime
 import pathlib
+import logging
 import sys
 from collections.abc import Callable
 from io import BytesIO
@@ -53,6 +54,7 @@ TX_HEADER = [
     for f in ("date", "card", "status", "amount", "currency", "bank_category", "mcc", "description")
 ]
 type WorkbookCell = datetime.datetime | float | int | str | None
+logger = logging.getLogger(__name__)
 
 
 def tx(
@@ -163,6 +165,7 @@ def build() -> Workbook:
 
 def main() -> None:
     """Run this module as a CLI entrypoint and return its exit code."""
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
     wb = build()
     buf = BytesIO()
     wb.save(buf)
@@ -178,7 +181,7 @@ def main() -> None:
         "transactions": len(parsed.transactions),
         "budget_cells": len(parsed.budgets),
     }
-    print(f"parsed: {counts}, markers={markers}")
+    logger.info("parsed: %s, markers=%s", counts, markers)
     # the miniature must parse spotlessly — a warning means the fixture itself
     # drifted from what the importer expects, so fail instead of narrating
     assert not parsed.warnings, parsed.warnings
@@ -205,7 +208,7 @@ def main() -> None:
 
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_bytes(data)
-    print(f"wrote {OUT} ({len(data)} bytes)")
+    logger.info("wrote %s (%s bytes)", OUT, len(data))
 
 
 if __name__ == "__main__":

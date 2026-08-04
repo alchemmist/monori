@@ -62,7 +62,7 @@ def snapshot(dist: Path) -> Snapshot:
 
 
 def normalized_asset(path: str) -> str:
-    """Normalized asset for this module."""
+    """Normalize an asset path by removing the build hash."""
     return ASSET_HASH_RE.sub("", path)
 
 

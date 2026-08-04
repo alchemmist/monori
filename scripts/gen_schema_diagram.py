@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
-"""
-Render the entity-relationship diagram in docs/data-model.md from the canonical
-schema.
+"""Render the entity-relationship diagram in docs/data-model.md from the canonical schema.
 
 The schema is not parsed by hand: it is executed into an in-memory SQLite
 database and read back through PRAGMA, so the diagram describes what the
@@ -12,6 +10,7 @@ database actually becomes, not what a regex thought the DDL said.
 """
 
 import argparse
+import logging
 import sqlite3
 import sys
 from collections.abc import Mapping
@@ -27,6 +26,7 @@ GENERATED_NOTE = (
     "<!-- generated from server/schema.sql by scripts/gen_schema_diagram.py — "
     "run `make schema-diagram` after changing the schema -->"
 )
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -146,6 +146,7 @@ def splice(doc: str, block: str) -> str:
 
 def main() -> None:
     """Run this module as a CLI entrypoint and return its exit code."""
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--check", action="store_true", help="verify without writing")
     args = ap.parse_args()
@@ -161,7 +162,7 @@ def main() -> None:
         return
     if current != updated:
         DOC.write_text(updated)
-        print(f"updated {DOC.relative_to(ROOT)}")
+        logger.info("updated %s", DOC.relative_to(ROOT))
 
 
 if __name__ == "__main__":

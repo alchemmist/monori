@@ -2,9 +2,9 @@
 
 import argparse
 import json
+import logging
 import re
 import statistics
-import sys
 import urllib.parse
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -30,6 +30,7 @@ TIER_EMOJI = {
     "error": "❌",
 }
 COMMENT_MARKER = "<!-- monori-frontend-performance -->"
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -59,6 +60,15 @@ class Entry:
     delta_percent: float | None
     tier: str
     reason: str
+
+
+@dataclass(frozen=True)
+class PerformanceOutputContext:
+    """Metadata and configuration used to render performance outputs."""
+
+    pr_number: int
+    head_sha: str
+    config: dict[str, JsonValue]
 
 
 def decode_json(path: Path) -> JsonValue:
@@ -250,12 +260,10 @@ def threshold(metric: dict[str, JsonValue], name: str, default: float = 0) -> fl
     return default if raw is None else json_number(raw, name)
 
 
-def classify(base: float, current: float, metric: dict[str, JsonValue]) -> tuple[str, str]:
-    """Classify for this module."""
-    delta = current - base
-    if delta <= 0:
-        return "none", "same or better"
-
+def classify_band_crossing(
+    base: float, current: float, delta: float, metric: dict[str, JsonValue]
+) -> tuple[str, str] | None:
+    """Classify a regression that crosses a configured performance band."""
     base_band = band(base, metric)
     current_band = band(current, metric)
     absolute_noise = threshold(metric, "noiseAbsolute")
@@ -263,38 +271,64 @@ def classify(base: float, current: float, metric: dict[str, JsonValue]) -> tuple
         return "critical", "crossed into the poor band"
     if base_band == "good" and current_band == "needs improvement" and delta >= absolute_noise:
         return "significant", "crossed out of the good band"
+    return None
 
-    delta_percent = float("inf") if base <= 0 else delta / base * 100
-    policy = metric.get("policy")
-    if policy == "ttfb":
-        critical_percent = threshold(metric, "criticalPercent")
-        critical_absolute = threshold(metric, "criticalAbsolute")
-        significant_percent = threshold(metric, "significantPercent")
-        significant_absolute = threshold(metric, "significantAbsolute")
-        if delta_percent > critical_percent and delta >= critical_absolute:
-            return "critical", (
-                f"TTFB grew by more than {critical_percent:.0f}% "
-                f"and at least {critical_absolute:.0f} ms"
-            )
-        if delta_percent > significant_percent and delta >= significant_absolute:
-            return "significant", (
-                f"TTFB grew by more than {significant_percent:.0f}% "
-                f"and at least {significant_absolute:.0f} ms"
-            )
 
+def classify_ttfb(
+    delta: float, delta_percent: float, metric: dict[str, JsonValue]
+) -> tuple[str, str] | None:
+    """Classify a TTFB regression using both relative and absolute thresholds."""
+    if metric.get("policy") != "ttfb":
+        return None
+    critical_percent = threshold(metric, "criticalPercent")
+    critical_absolute = threshold(metric, "criticalAbsolute")
+    significant_percent = threshold(metric, "significantPercent")
+    significant_absolute = threshold(metric, "significantAbsolute")
+    if delta_percent > critical_percent and delta >= critical_absolute:
+        return "critical", (
+            f"TTFB grew by more than {critical_percent:.0f}% "
+            f"and at least {critical_absolute:.0f} ms"
+        )
+    if delta_percent > significant_percent and delta >= significant_absolute:
+        return "significant", (
+            f"TTFB grew by more than {significant_percent:.0f}% "
+            f"and at least {significant_absolute:.0f} ms"
+        )
+    return None
+
+
+def classify_relative(
+    delta: float, delta_percent: float, metric: dict[str, JsonValue]
+) -> tuple[str, str]:
+    """Classify a regression against noise and relative thresholds."""
+    absolute_noise = threshold(metric, "noiseAbsolute")
     if delta_percent <= threshold(metric, "noisePercent") or delta < absolute_noise:
         return "none", "within the noise floor"
-    if policy != "ttfb" and delta_percent > threshold(metric, "criticalPercent"):
-        return (
-            "critical",
-            f"more than {threshold(metric, 'criticalPercent'):.0f}% slower",
-        )
-    if policy != "ttfb" and delta_percent > threshold(metric, "significantPercent"):
-        return (
-            "significant",
-            f"more than {threshold(metric, 'significantPercent'):.0f}% slower",
-        )
+    if metric.get("policy") != "ttfb":
+        critical_percent = threshold(metric, "criticalPercent")
+        if delta_percent > critical_percent:
+            return "critical", f"more than {critical_percent:.0f}% slower"
+        significant_percent = threshold(metric, "significantPercent")
+        if delta_percent > significant_percent:
+            return "significant", f"more than {significant_percent:.0f}% slower"
     return "info", "above the noise floor"
+
+
+def classify(base: float, current: float, metric: dict[str, JsonValue]) -> tuple[str, str]:
+    """Classify a performance change using configured bands and thresholds."""
+    delta = current - base
+    if delta <= 0:
+        return "none", "same or better"
+
+    band_result = classify_band_crossing(base, current, delta, metric)
+    if band_result is not None:
+        return band_result
+
+    delta_percent = float("inf") if base <= 0 else delta / base * 100
+    ttfb_result = classify_ttfb(delta, delta_percent, metric)
+    if ttfb_result is not None:
+        return ttfb_result
+    return classify_relative(delta, delta_percent, metric)
 
 
 def compare_measurements(
@@ -580,23 +614,21 @@ def write_outputs(
     output: Path,
     entries: list[Entry],
     verdict: str,
-    pr_number: int,
-    head_sha: str,
-    config: dict[str, JsonValue],
+    context: PerformanceOutputContext,
 ) -> None:
     """Write outputs."""
     output.mkdir(parents=True, exist_ok=True)
     report: dict[str, JsonValue] = {
         "schemaVersion": SCHEMA_VERSION,
-        "prNumber": pr_number,
-        "headSha": head_sha,
+        "prNumber": context.pr_number,
+        "headSha": context.head_sha,
         "verdict": verdict,
         "commentRequired": verdict != "none",
         "entries": [asdict(entry) for entry in entries],
     }
     write_json(output / "report.json", report)
     (output / "summary.md").write_text(
-        render_report(entries, verdict, comment=False, config=config)
+        render_report(entries, verdict, comment=False, config=context.config)
     )
     (output / "comment.md").write_text(
         "" if verdict == "none" else render_report(entries, verdict, comment=True)
@@ -662,6 +694,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     """Run this module as a CLI entrypoint and return its exit code."""
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
     args = parse_args()
     if args.command == "error":
         write_error(args.output, args.message, args.pr_number, args.head_sha)
@@ -672,7 +705,12 @@ def main() -> int:
     current = load_measurements(args.pr_dir, config)
     entries = compare_measurements(base, current, config)
     verdict = worst_tier(entries)
-    write_outputs(args.output, entries, verdict, args.pr_number, args.head_sha, config)
+    write_outputs(
+        args.output,
+        entries,
+        verdict,
+        PerformanceOutputContext(args.pr_number, args.head_sha, config),
+    )
     return 1 if verdict == "critical" else 0
 
 
@@ -680,5 +718,5 @@ if __name__ == "__main__":
     try:
         raise SystemExit(main())
     except (OSError, ValueError, LookupError, TypeError, RuntimeError) as error:
-        print(f"frontend performance: {error}", file=sys.stderr)
+        logger.exception("frontend performance")
         raise SystemExit(2) from error

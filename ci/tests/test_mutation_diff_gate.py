@@ -96,12 +96,14 @@ diff --git a/server/app/example.py b/server/app/example.py
             ),
         ):
             result = module.gate_backend(
-                mutants,
-                baseline,
-                root,
-                "origin/main",
-                50,
-                skip_new_survivors=skip_new_survivors,
+                module.GateRequest(
+                    mutants,
+                    baseline,
+                    root,
+                    "origin/main",
+                    50,
+                    skip_new_survivors,
+                )
             )
         return int(result)
 
@@ -122,12 +124,14 @@ diff --git a/server/app/example.py b/server/app/example.py
                 ),
             ):
                 result = module.gate_backend(
-                    mutants,
-                    root / "baseline",
-                    root,
-                    "origin/main",
-                    90,
-                    skip_new_survivors=False,
+                    module.GateRequest(
+                        mutants_dir=mutants,
+                        baseline_dir=root / "baseline",
+                        root=root,
+                        base="origin/main",
+                        threshold=90,
+                        skip_new_survivors=False,
+                    )
                 )
 
         assert result == 1

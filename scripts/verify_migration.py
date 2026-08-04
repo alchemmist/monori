@@ -1,6 +1,7 @@
-"""
-End-to-end migration parity: import a workbook the way the server does, then
-check that the budget monori shows equals the one the spreadsheet cached.
+"""End-to-end migration parity for a budget workbook.
+
+Import a workbook as the server does, and check that the budget monori shows
+equals the one the spreadsheet cached.
 
     uv run --project server python scripts/verify_migration.py book.xlsx
     uv run --project server python scripts/verify_migration.py book.xlsx --category Vacation
@@ -17,6 +18,7 @@ Nothing outside the temporary database is written; the workbook is only read.
 """
 
 import argparse
+import logging
 import pathlib
 import sqlite3
 import sys
@@ -47,6 +49,7 @@ MAX_MONTH = 12
 MONTHS_IN_YEAR = 12
 HEADER_RECONCILIATION_TOLERANCE = 5
 SNAPSHOT_RECONCILIATION_TOLERANCE = 2
+logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True, slots=True)
 class DuplicateRow:
@@ -175,7 +178,7 @@ def _available(ws: Worksheet, base: int) -> int | None:
 def import_into_db(
     path: str, db_path: str
 ) -> tuple[sqlite3.Connection, int, ParsedWorkbook, WorkbookApplyResult]:
-    """The server's own path: parse, map every slot onto a matching account, apply."""
+    """Parse workbook, map slots to matching accounts, and apply into DB."""
     parsed = parse_workbook(pathlib.Path(path).read_bytes())
     c = connect(db_path)
     c.execute(
@@ -242,7 +245,8 @@ def snapshot(c: sqlite3.Connection, uid: int) -> LedgerSnapshot:
 
 
 def duplicates(c: sqlite3.Connection, uid: int) -> tuple[list[DuplicateRow], list[DuplicateRow]]:
-    """
+    """Find duplicate ledger rows.
+
     Rows a human would read as the same entry twice — on one account, or the
     same day/amount/description spread over several accounts, which is how a
     feed delivered through two doors looks once routing has split the copies.
@@ -286,7 +290,8 @@ def duplicates(c: sqlite3.Connection, uid: int) -> tuple[list[DuplicateRow], lis
 
 
 def _header_adds_up(head: Header) -> bool | None:
-    """
+    """Check budget-header reconciliation.
+
     Whether the month's own header cells make its Available: carried over +
     overspent + income - budgeted. The template's formula has been edited by
     hand over the years and in places dropped a term, so a month can disagree
@@ -312,7 +317,8 @@ def _header_adds_up(head: Header) -> bool | None:
 def _carried_overspend(
     grids: dict[int, YearGrid], head: Header, year: int, month: int
 ) -> bool | None:
-    """
+    """Check carried overspend consistency.
+
     Whether the month's "Overspent in <previous>" cell equals what the previous
     month's own Balance column actually adds up to. A cell whose formula was
     repointed and never recalculated keeps a figure from a different month.
@@ -329,7 +335,8 @@ def _carried_overspend(
 
 
 def _self_consistent(grids: dict[int, YearGrid], name: str, year: int, month: int) -> bool | None:
-    """
+    """Check whether budget cell fields are internally consistent.
+
     Whether the sheet's own three numbers for this cell agree with each other:
     carried balance + budgeted + outflows == balance. When they do not, the cell
     is a stale cache in the spreadsheet and monori follows the balance, which is
@@ -402,7 +409,7 @@ def trace(
     grids: dict[int, YearGrid], replayed: dict[tuple[int, int], ReplayMonth], name: str
 ) -> None:
     """One category, month by month, the sheet's three numbers beside ours."""
-    print(f"=== {name} ===")
+    logger.info("=== %s ===", name)
     cols = (
         "month",
         "sheet bud",
@@ -412,7 +419,7 @@ def trace(
         "our out",
         "our bal",
     )
-    print(f"{cols[0]:<9}" + "".join(f"{h:>15}" for h in cols[1:]))
+    logger.info("%s", f"{cols[0]:<9}" + "".join(f"{h:>15}" for h in cols[1:]))
     for year in sorted(grids):
         grid = grids[year]
         entry = grid.cats.get(name, YearCat({}, {}, {}))
@@ -425,11 +432,12 @@ def trace(
             mine = [ours.budgeted, ours.outflows, ours.balance]
             if not any(sheet) and not any(mine):
                 continue
-            print(f"{year}-{m:02d}  " + "".join(f"{rub(v):>15}" for v in sheet + mine))
+            logger.info("%s", f"{year}-{m:02d}  " + "".join(f"{rub(v):>15}" for v in sheet + mine))
 
 
 def main() -> int:
     """Run this module as a CLI entrypoint and return its exit code."""
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
     ap = argparse.ArgumentParser()
     ap.add_argument("workbook")
     ap.add_argument("--report", default="", help="write the full mismatch list here")
@@ -558,14 +566,15 @@ def main() -> int:
     if args.report:
         pathlib.Path(args.report).write_text(text + "\n")
     head_text, *rest = text.split("\n\n", 1)
-    print(head_text)
+    logger.info("%s", head_text)
     if rest:
         body = rest[0].split("\n")
-        print("\n".join(body[: args.limit]))
+        logger.info("%s", "\n".join(body[: args.limit]))
         if len(body) > args.limit:
-            print(
-                f"  … {len(body) - args.limit} more lines"
-                + (f" in {args.report}" if args.report else "")
+            logger.info(
+                "  … %s more lines%s",
+                len(body) - args.limit,
+                f" in {args.report}" if args.report else "",
             )
     return 1 if bad_cells or bad_months or dupes or ledger.uncategorized else 0
 

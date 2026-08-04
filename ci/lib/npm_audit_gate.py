@@ -1,13 +1,16 @@
-#!/usr/bin/env python3
 """
+Fail on high/critical npm advisory with limited exceptions.
+
 Fail on any high/critical npm advisory except a small allow-list of ones that
 have no available fix and do not apply to how we ship the dependency. Reads
 ``npm audit --json`` on stdin (``npm audit`` exits non-zero when it finds
 anything, so the Makefile pipes it through this gate instead of trusting the
 exit code directly).
+
 """
 
 import json
+import logging
 import sys
 
 from pydantic import ConfigDict, TypeAdapter
@@ -49,6 +52,7 @@ class AuditPayload:
 
 
 AUDIT_PAYLOAD_ADAPTER: TypeAdapter[AuditPayload] = TypeAdapter(AuditPayload)
+logger = logging.getLogger(__name__)
 
 ALLOWED = {
     "GHSA-qwww-vcr4-c8h2": "react-router RSC-only; N/A to our SPA, no fix released",
@@ -57,15 +61,13 @@ ALLOWED = {
 
 def main() -> int:
     """Run this module as a CLI entrypoint and return its exit code."""
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
     data = AUDIT_PAYLOAD_ADAPTER.validate_python(json.load(sys.stdin))
     if data.error is not None or data.vulnerabilities is None:
         err = data.error
         code = err.code if err else "unknown"
         summary = err.summary if err else "missing vulnerabilities"
-        print(
-            f"npm-audit-gate [FAIL]: npm audit did not run — {code}: {summary}",
-            file=sys.stderr,
-        )
+        logger.error("npm-audit-gate [FAIL]: npm audit did not run — %s: %s", code, summary)
         return 1
     blocking: list[str] = []
     for name, vuln in data.vulnerabilities.items():
@@ -77,16 +79,16 @@ def main() -> int:
             url = via.url
             ghsa = url.rsplit("/", 1)[-1]
             if ghsa in ALLOWED:
-                print(f"npm-audit-gate: allowing {ghsa} ({name}) — {ALLOWED[ghsa]}")
+                logger.warning("npm-audit-gate: allowing %s (%s) — %s", ghsa, name, ALLOWED[ghsa])
                 continue
             blocking.append(f"{via.severity}: {name} — {via.title} ({url})")
 
     if blocking:
-        print("npm-audit-gate [FAIL]: blocking advisories:", file=sys.stderr)
+        logger.error("npm-audit-gate [FAIL]: blocking advisories:")
         for line in sorted(set(blocking)):
-            print(f"  {line}", file=sys.stderr)
+            logger.error("  %s", line)
         return 1
-    print("npm-audit-gate [PASS]: no blocking advisories")
+    logger.info("npm-audit-gate [PASS]: no blocking advisories")
     return 0
 
 

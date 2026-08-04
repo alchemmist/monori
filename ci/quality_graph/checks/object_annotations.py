@@ -98,6 +98,14 @@ class Finding:
     finding_id: str
 
 
+@dataclass(frozen=True)
+class SyncApprovalCommandState:
+    """Input state for an approval-sync command."""
+
+    command: QualityGraphCommand | None
+    author: str | None
+
+
 def display_finding_id(finding_id: str) -> str:
     """Return finding id prefixed for command addressing."""
     return f"{FINDING_ID_PREFIX}{finding_id}"
@@ -420,8 +428,7 @@ def sync_approvals(
     number: int,
     pull: dict[str, JsonValue],
     findings: list[Finding],
-    command: QualityGraphCommand | None,
-    author: str | None,
+    command_state: SyncApprovalCommandState,
 ) -> tuple[set[str], bool, bool]:
     """Sync approvals and optional command modifications."""
     labels = github.paged(f"/issues/{number}/labels")
@@ -440,6 +447,8 @@ def sync_approvals(
         if name and name.startswith(IGNORE_LABEL_PREFIX):
             github.request("DELETE", f"/issues/{number}/labels/{urllib.parse.quote(name, safe='')}")
     approved = (approval_state(body) if state_exists else legacy_approved) & finding_ids
+    command = command_state.command
+    author = command_state.author
     admin = command is not None and author is not None and is_admin(github, author)
     state_changed = False
     if not command or not admin:
@@ -610,7 +619,13 @@ def main() -> int:
         command = None
     author_data = json_object(comment.get("user", {}), "comment user")
     author = json_string(author_data["login"], "comment author") if command else None
-    approved, _, state_changed = sync_approvals(github, number, pull, findings, command, author)
+    approved, _, state_changed = sync_approvals(
+        github,
+        number,
+        pull,
+        findings,
+        SyncApprovalCommandState(command, author),
+    )
     active = [finding for finding in findings if finding.finding_id not in approved]
     sync_failure_label(github, number, has_active_findings=bool(active))
 

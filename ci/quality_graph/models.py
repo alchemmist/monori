@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 class Verdict(StrEnum):
     """Overall result category for a quality check."""
 
-    PASS = "pass"
+    PASS = "pass"  # noqa: S105
     FAIL = "fail"
 
 

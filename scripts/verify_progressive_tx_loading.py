@@ -1,11 +1,11 @@
-"""
-Headless check that the Transactions page paints on the light snapshot and
-fills the rest in the background: the app asks for `?light=1`, the progress ring
-shows up while chunks land, it disappears when the last one does, and the ledger
-ends up complete and in order.
+"""Headless Transactions page smoke check for light snapshot and background fill.
+
+The app asks for `?light=1`, the progress ring is visible while chunks land, it
+disappears when the last one does, and the ledger ends up complete and in order.
 """
 
 import pathlib
+import logging
 import sys
 from enum import StrEnum
 
@@ -15,6 +15,7 @@ from pydantic.dataclasses import dataclass as pydantic_dataclass
 
 TOKEN_FILE = pathlib.Path("/tmp/monori-token.txt")
 SNAPSHOT_ROW_COUNT = 500
+logger = logging.getLogger(__name__)
 
 # the fill is fast on localhost, so watch the DOM for the ring instead of
 # racing it with polls
@@ -126,6 +127,7 @@ def open_page(
 
 def main() -> None:
     """Run this module as a CLI entrypoint and return its exit code."""
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
     token = load_token()
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
@@ -133,7 +135,7 @@ def main() -> None:
         page = open_page(browser, token, requests=requests)
         page.wait_for_function("() => !document.querySelector('.progress-ring')", timeout=60000)
         state = PAGE_STATE_ADAPTER.validate_python(page.evaluate(STATE_JS))
-        print("AFTER FILL:", state)
+        logger.info("AFTER FILL: %s", state)
         page.close()
 
         # prefers-reduced-motion swaps the ring for the bare percentage
@@ -144,24 +146,24 @@ def main() -> None:
                 """() => {
             const ring = document.querySelector('.progress-ring');
             return {text: ring.innerText.trim(), svg: !!ring.querySelector('svg')};
-        }"""
+                }"""
             )
         )
-        print("REDUCED MOTION:", reduced_ring)
+        logger.info("REDUCED MOTION: %s", reduced_ring)
         browser.close()
 
         light = [u for u in requests if "/api/snapshot" in u]
         chunks = [u for u in requests if "/api/transactions?" in u]
-        print("snapshot requests:", light)
-        print("chunk requests:", len(chunks))
+        logger.info("snapshot requests: %s", light)
+        logger.info("chunk requests: %s", len(chunks))
 
-        print("\n=== checks ===")
+        logger.info("\n=== checks ===")
         ok = True
 
         def check(name: str, *, cond: bool) -> None:
             nonlocal ok
             ok = ok and cond
-            print(f"[{'PASS' if cond else 'FAIL'}] {name}")
+            logger.info("[%s] %s", "PASS" if cond else "FAIL", name)
 
         check("first paint used the light snapshot", cond=all("light=1" in u for u in light))
         # 500 rows arrive with the snapshot, the rest in 1000-row chunks; more
@@ -179,7 +181,7 @@ def main() -> None:
         check("ledger is fully loaded", cond=count > SNAPSHOT_ROW_COUNT)
         check("reduce motion drops the ring", cond=reduced_ring.svg is False)
         check("reduce motion still shows the percentage", cond="%" in reduced_ring.text)
-        print("\nRESULT:", "ALL PASS" if ok else "SOME FAILED")
+        logger.info("\nRESULT: %s", "ALL PASS" if ok else "SOME FAILED")
         sys.exit(0 if ok else 1)
 
 

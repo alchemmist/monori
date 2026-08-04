@@ -112,11 +112,20 @@ SQLFLUFF := uvx --from 'sqlfluff==3.4.2' sqlfluff
 schema-diagram:
 	python3 scripts/gen_schema_diagram.py
 
-fmt: schema-diagram
-	$(WEBBIN)/prettier --write .
-	@(uv run --locked ruff check server ci --fix >/dev/null 2>&1 || true)
-	uv run --locked ruff format server ci
-	$(SQLFLUFF) fix .
+fmt: schema-diagram fmt-front fmt-back fmt-ci
+
+fmt-front:
+	$(WEBBIN)/prettier --write web
+
+fmt-back:
+	@(uv run --locked ruff check server --fix >/dev/null 2>&1 || true)
+	uv run --locked ruff format server
+	$(SQLFLUFF) fix server
+
+fmt-ci:
+	@files=$$(git ls-files '*.cjs' '*.css' '*.html' '*.json' '*.jsonc' '*.md' '*.mjs' '*.ts' '*.tsx' '*.yaml' '*.yml' | grep -Ev '^(web|server)/'); [ -z "$$files" ] || $(WEBBIN)/prettier --write $$files
+	@(uv run --locked ruff check ci --fix >/dev/null 2>&1 || true)
+	uv run --locked ruff format ci
 	@-$(WEBBIN)/markdownlint-cli2 --fix >/dev/null 2>&1
 	@files=$$(git ls-files '*.sh'); [ -z "$$files" ] || shfmt -w $$files
 
