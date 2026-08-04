@@ -270,7 +270,7 @@ def main() -> int:
 
     summary_path = Path(os.environ["SUMMARY_PATH"])
     summary = summary_path.read_text()
-    summary = re.sub(r"^## .*\n*", "", summary, count=1, flags=re.MULTILINE)
+    summary = re.sub(r"\A## .*\n*", "", summary, count=1)
     summary_path.write_text(append_commands(summary, entries, approved, failed=failed))
     if failed:
         github.ensure_label(STATUS_LABEL)

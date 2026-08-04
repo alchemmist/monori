@@ -170,6 +170,12 @@ class PullRequestWorkflowGraphTest(unittest.TestCase):
             ).read_text()
             assert "uses: ./.github/actions/report-in-progress" in source, action
 
+    def test_frontend_scope_failure_completes_the_pending_report(self) -> None:
+        source = FRONTEND_PERFORMANCE_SCOPE.read_text()
+
+        assert "if: always() && steps.scope.outcome == 'failure'" in source
+        assert "--status fail" in source
+
     def test_audit_job_runs_aggregate_make_target(self) -> None:
         block = re.search(
             r"^    audit:\n(?P<body>.*?)(?=^    \S|\Z)",

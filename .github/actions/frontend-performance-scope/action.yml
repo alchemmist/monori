@@ -52,6 +52,19 @@ runs:
                     return /(perf-front|PERF_|frontend)/i.test(file.patch);
                   });
                   core.setOutput("relevant", relevant ? "true" : "false");
+        - name: Publish failed performance scope report
+          if: always() && steps.scope.outcome == 'failure'
+          shell: bash
+          env:
+              GITHUB_TOKEN: ${{ github.token }}
+              GITHUB_REPOSITORY: ${{ github.repository }}
+              PR_NUMBER: ${{ github.event.pull_request.number }}
+          run: >-
+              uv run --locked python -m ci.quality_graph.reporting complete
+              --marker frontend-performance
+              --status fail
+              --message 'Could not determine frontend performance scope.'
+              --pr-number "$PR_NUMBER"
         - name: Publish skipped performance report
           if: steps.scope.outcome == 'success' && steps.scope.outputs.relevant != 'true'
           shell: bash

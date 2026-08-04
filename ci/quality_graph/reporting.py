@@ -22,6 +22,7 @@ if TYPE_CHECKING:
 
 DEFAULT_BOT_LOGIN = "github-actions[bot]"
 LEGACY_BOT_LOGIN = "monori-bot"
+GITHUB_COMMENT_BODY_LIMIT = 65_536
 
 
 class Reaction(StrEnum):
@@ -210,6 +211,20 @@ def comment_body(marker: str, body: str) -> str:
     return f"<!-- monori-report: {marker} -->\n\n{body.rstrip()}\n"
 
 
+def bounded_comment_body(body: str) -> str:
+    """Fit a report within GitHub's comment limit and report the omitted size."""
+    if len(body) <= GITHUB_COMMENT_BODY_LIMIT:
+        return body
+    omitted = len(body) - GITHUB_COMMENT_BODY_LIMIT
+    while True:
+        notice = f"\n\n_Report truncated; {omitted} characters omitted._\n"
+        prefix_length = GITHUB_COMMENT_BODY_LIMIT - len(notice)
+        updated_omitted = len(body) - prefix_length
+        if updated_omitted == omitted:
+            return body[:prefix_length] + notice
+        omitted = updated_omitted
+
+
 @dataclass(frozen=True)
 class PullRequestReport:
     """Own the complete lifecycle of one bot-managed pull-request report."""
@@ -229,7 +244,7 @@ class PullRequestReport:
 
     def publish(self, body: str) -> None:
         """Create or update this report's bot-owned comment."""
-        rendered = comment_body(self.definition.marker, body)
+        rendered = bounded_comment_body(comment_body(self.definition.marker, body))
         marker = f"<!-- monori-report: {self.definition.marker} -->"
         bot_logins = workflow_bot_logins()
         for comment in issue_comments(self.github, self.number):

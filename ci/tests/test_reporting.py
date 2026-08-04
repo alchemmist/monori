@@ -1,9 +1,11 @@
 """Tests for shared Quality Graph report and reaction lifecycles."""
 
+import re
 from typing import cast
 
 from ci.lib.json import JsonValue
 from ci.quality_graph.reporting import (
+    GITHUB_COMMENT_BODY_LIMIT,
     CommandReactionLifecycle,
     PullRequestReport,
     ReportFinding,
@@ -11,6 +13,7 @@ from ci.quality_graph.reporting import (
     ReportModel,
     ReportStatus,
     admin_commands,
+    bounded_comment_body,
     finding_location,
     render_report,
 )
@@ -106,3 +109,26 @@ def test_command_reaction_lifecycle_replaces_acknowledgement_with_success() -> N
     assert posts[0][2] == {"content": "eyes"}
     assert posts[1][2] == {"content": "hooray"}
     assert all(path != "/user" for _, path, _ in github.calls)
+
+
+def test_comment_body_is_bounded_with_an_exact_omission_notice() -> None:
+    """Keep oversized reports within GitHub's hard comment-body limit."""
+    original = "x" * (GITHUB_COMMENT_BODY_LIMIT + 500)
+
+    bounded = bounded_comment_body(original)
+
+    assert len(bounded) == GITHUB_COMMENT_BODY_LIMIT
+    match = re.search(r"(\d+) characters omitted", bounded)
+    assert match is not None
+    notice_start = bounded.index("\n\n_Report truncated;")
+    assert int(match.group(1)) == len(original) - notice_start
+
+
+def test_empty_admin_commands_do_not_instruct_the_reader_to_post() -> None:
+    """Avoid contradictory command instructions for a passing report."""
+    body = render_report(
+        ReportModel("bundle-size", ReportStatus.DONE, admin=admin_commands("bundle", [], []))
+    )
+
+    assert "No actionable findings in this run." in body
+    assert "Post exactly one command" not in body
