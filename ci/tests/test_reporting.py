@@ -11,6 +11,7 @@ from ci.quality_graph.reporting import (
     ReportModel,
     ReportStatus,
     admin_commands,
+    finding_location,
     render_report,
 )
 
@@ -49,7 +50,14 @@ def test_renderer_owns_status_heading_findings_and_admin_commands() -> None:
             "suppression",
             ReportStatus.FAIL,
             metrics=(ReportMetric("Active", "1"),),
-            findings=(ReportFinding("`example.py:1` · `example-1`"),),
+            findings=(
+                ReportFinding(
+                    "`example-1`",
+                    location=finding_location(
+                        "https://github.com/org/repo/pull/1", "example.py", 1
+                    ),
+                ),
+            ),
             admin=admin_commands("example", ["example-1"], [], ["example.py"]),
         )
     )
@@ -57,6 +65,7 @@ def test_renderer_owns_status_heading_findings_and_admin_commands() -> None:
     assert body.startswith("## ❌ Lint suppression gate\n")
     assert "| Active | 1 |" in body
     assert "<details><summary>Findings (1)</summary>" in body
+    assert "[`example.py:1`](https://github.com/org/repo/pull/1/files#diff-" in body
     assert "`/qg ignore example-1`" in body
     assert "`/qg ignore example`" in body
     assert "`/qg ignore-file example.py`" in body

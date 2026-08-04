@@ -16,7 +16,7 @@
 <details><summary>{{ model.findings_title }} ({{ model.findings | length }})</summary>
 
 {% for finding in model.findings -%}
-- {{ "✔" if finding.approved else "✗" }} {{ finding.text }}
+- {{ "✔" if finding.approved else "✗" }}{% if finding.location %} [`{{ finding.location.label }}`]({{ finding.location.url }}) —{% endif %} {{ finding.text }}
 {% endfor %}
 
 </details>

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import os
 import re
 from dataclasses import dataclass
@@ -58,11 +59,26 @@ class ReportMetric:
 
 
 @dataclass(frozen=True)
+class ReportLocation:
+    """Clickable source location rendered consistently in report findings."""
+
+    path: str
+    line: int
+    url: str
+
+    @property
+    def label(self) -> str:
+        """Return the compact file-and-line label shown to the reader."""
+        return f"{self.path}:{self.line}"
+
+
+@dataclass(frozen=True)
 class ReportFinding:
     """One rendered finding with its current approval state."""
 
     text: str
     approved: bool = False
+    location: ReportLocation | None = None
 
 
 @dataclass(frozen=True)
@@ -116,6 +132,13 @@ REPORTS = {
     )
 }
 TEMPLATE_DIRECTORY = Path(__file__).with_name("templates")
+
+
+def finding_location(pr_url: str, path: str, line: int) -> ReportLocation:
+    """Build a clickable pull-request diff location for a report finding."""
+    diff_hash = hashlib.sha256(path.encode()).hexdigest()
+    url = f"{pr_url.rstrip('/')}/files#diff-{diff_hash}R{line}"
+    return ReportLocation(path, line, url)
 
 
 def admin_commands(

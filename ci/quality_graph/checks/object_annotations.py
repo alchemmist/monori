@@ -38,6 +38,7 @@ from ci.quality_graph.reporting import (
     ReportModel,
     ReportStatus,
     admin_commands,
+    finding_location,
     render_report,
 )
 
@@ -356,12 +357,6 @@ class ObjectAnnotationCheck(QualityCheck[Finding]):
         return CheckResult(findings, verdict)
 
 
-def finding_url(pr_url: str, finding: Finding) -> str:
-    """Build URL for a finding line in the pull request diff."""
-    diff_hash = hashlib.sha256(finding.path.encode()).hexdigest()
-    return f"{pr_url}/changes#diff-{diff_hash}R{finding.line}"
-
-
 def summary_body(findings: list[Finding], approved: set[str], pr_url: str) -> str:
     """Render the summary markdown shown for object annotation check."""
     active = [finding for finding in findings if finding.finding_id not in approved]
@@ -378,9 +373,9 @@ def summary_body(findings: list[Finding], approved: set[str], pr_url: str) -> st
             findings_title="List of problems",
             findings=tuple(
                 ReportFinding(
-                    f"[`{finding.path}:{finding.line}`]({finding_url(pr_url, finding)}) "
-                    f"— `{finding.annotation}` · `{display_finding_id(finding.finding_id)}`",
-                    finding.finding_id in approved,
+                    f"`{finding.annotation}` · `{display_finding_id(finding.finding_id)}`",
+                    approved=finding.finding_id in approved,
+                    location=finding_location(pr_url, finding.path, finding.line),
                 )
                 for finding in findings
             ),
