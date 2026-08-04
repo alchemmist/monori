@@ -14,9 +14,15 @@ import httpx
 from ci.lib.github import HTTP_NO_CONTENT, HTTP_NOT_FOUND, REQUEST_TIMEOUT_SECONDS
 from ci.quality_graph.commands import (
     QualityGraphCommand,
-    admin_command_lines,
     parse_command,
     validate_command,
+)
+from ci.quality_graph.reporting import (
+    ReportFinding,
+    ReportModel,
+    ReportStatus,
+    admin_commands,
+    render_report,
 )
 
 type JsonValue = bool | int | float | str | list[JsonValue] | dict[str, JsonValue] | None
@@ -147,21 +153,30 @@ def command_from_pending(github: GitHub, body: str) -> QualityGraphCommand | Non
 
 
 def append_commands(summary: str, entries: list[dict[str, JsonValue]], approved: set[str]) -> str:
-    """Append commands."""
+    """Render bundle details and commands through the shared report template."""
     finding_ids = {
         string(entry.get("id"), "finding id")
         for entry in entries
         if entry.get("tier") == "critical"
     }
     active_ids = finding_ids - approved
-    lines = ["", "<details><summary>For repository administrators</summary>", ""]
-    lines.extend(admin_command_lines("bundle", active_ids, finding_ids & approved))
-    lines.extend(["", "Findings:"])
-    for entry in entries:
-        finding = string(entry.get("id"), "finding id")
-        marker = "✔" if finding in approved else "✗"
-        lines.append(f"- {marker} `{string(entry.get('label'), 'finding label')}` · `{finding}`")
-    return summary.rstrip() + "\n" + "\n".join(lines) + "\n\n</details>\n"
+    failed = bool(active_ids)
+    return render_report(
+        ReportModel(
+            "bundle-size",
+            ReportStatus.FAIL if failed else ReportStatus.DONE,
+            content=summary.rstrip(),
+            findings=tuple(
+                ReportFinding(
+                    f"`{string(entry.get('label'), 'finding label')}` · "
+                    f"`{string(entry.get('id'), 'finding id')}`",
+                    string(entry.get("id"), "finding id") in approved,
+                )
+                for entry in entries
+            ),
+            admin=admin_commands("bundle", active_ids, finding_ids & approved),
+        )
+    )
 
 
 def format_kib(value: JsonValue) -> str:
@@ -172,12 +187,10 @@ def format_kib(value: JsonValue) -> str:
     return f"{value / 1024:.1f} KiB"
 
 
-def render_summary(report: dict[str, JsonValue], *, failed: bool) -> str:
+def render_summary(report: dict[str, JsonValue]) -> str:
     """Render summary."""
     entries = [obj(item, "entry") for item in array(report.get("entries"), "entries")]
     lines = [
-        f"## {'❌' if failed else '✅'} Bundle size",
-        "",
         "| Metric | Merge base | Pull request | Change | Tier |",
         "| --- | ---: | ---: | ---: | --- |",
     ]
@@ -239,9 +252,7 @@ def main() -> int:
     report["verdict"] = "critical" if failed else "none"
     report_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
     summary_path = Path(os.environ["SUMMARY_PATH"])
-    summary_path.write_text(
-        append_commands(render_summary(report, failed=failed), entries, approved)
-    )
+    summary_path.write_text(append_commands(render_summary(report), entries, approved))
     github.sync_label(number, failed=failed)
     return 1 if failed else 0
 

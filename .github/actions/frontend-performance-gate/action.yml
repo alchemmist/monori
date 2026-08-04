@@ -7,6 +7,10 @@ runs:
           uses: ./.github/actions/setup-project
           with:
               install-python: true
+        - uses: ./.github/actions/report-in-progress
+          with:
+              marker: frontend-performance
+              github-token: ${{ github.token }}
         - name: Setup Node
           uses: actions/setup-node@v7
           with:
@@ -68,7 +72,12 @@ runs:
           run: |
               mkdir -p "$PERF_OUTPUT_DIR"
               if [ ! -f "$PERF_OUTPUT_DIR/summary.md" ]; then
-                printf '%s\n' '## ❌ Frontend performance measurement did not produce a report' > "$PERF_OUTPUT_DIR/summary.md"
+                uv run --locked python -m ci.quality_graph.reporting complete \
+                  --marker frontend-performance \
+                  --status fail \
+                  --message 'Frontend performance measurement did not produce a report.' \
+                  --pr-number "$PR_NUMBER"
+                exit 0
               fi
               uv run --locked python -m ci.lib.comments \
                 --marker frontend-performance \

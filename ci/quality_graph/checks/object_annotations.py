@@ -17,7 +17,6 @@ from typing import Protocol, cast, override
 
 import httpx
 
-from ci.lib.comments import upsert_comment
 from ci.lib.github import (
     GITHUB_PAGE_SIZE,
     HTTP_FORBIDDEN,
@@ -28,12 +27,19 @@ from ci.lib.github import (
 from ci.quality_graph.base import QualityCheck
 from ci.quality_graph.commands import (
     QualityGraphCommand,
-    admin_command_lines,
     command_targets_gate,
     parse_command,
     validate_command,
 )
 from ci.quality_graph.models import CheckContext, CheckResult, Verdict
+from ci.quality_graph.reporting import (
+    ReportFinding,
+    ReportMetric,
+    ReportModel,
+    ReportStatus,
+    admin_commands,
+    render_report,
+)
 
 type JsonValue = bool | int | float | str | list[JsonValue] | dict[str, JsonValue] | None
 
@@ -333,6 +339,7 @@ class ObjectAnnotationCheck(QualityCheck[Finding]):
     """Find changed annotations that use the overly broad ``object`` type."""
 
     gate = "object"
+    report_marker = "object-annotations"
 
     @override
     def collect(self, context: CheckContext) -> CheckResult[Finding]:
@@ -358,35 +365,26 @@ def finding_url(pr_url: str, finding: Finding) -> str:
 def summary_body(findings: list[Finding], approved: set[str], pr_url: str) -> str:
     """Render the summary markdown shown for object annotation check."""
     active = [finding for finding in findings if finding.finding_id not in approved]
-    status = "✅ PASS" if not active else "❌ FAIL"
-    lines = [
-        "## Python object annotation gate",
-        "",
-        "| Metric | Value |",
-        "| --- | ---: |",
-        f"| Status | {status} |",
-        f"| Findings | {len(findings)} |",
-        f"| Active | {len(active)} |",
-        f"| Approved | {len(findings) - len(active)} |",
-        "",
-        f"<details><summary>List of problems ({len(findings)})</summary>",
-        "",
-    ]
-    for finding in findings:
-        marker = "✔" if finding.finding_id in approved else "✗"
-        location = f"{finding.path}:{finding.line}"
-        lines.append(
-            f"- {marker} [`{location}`]({finding_url(pr_url, finding)}) "
-            f"— `{finding.annotation}` · `{display_finding_id(finding.finding_id)}`"
-        )
-    lines.extend(
-        [
-            "",
-            "</details>",
-            "",
-            "<details><summary>For repository administrators</summary>",
-            "",
-            *admin_command_lines(
+    return render_report(
+        ReportModel(
+            "object-annotations",
+            ReportStatus.DONE if not active else ReportStatus.FAIL,
+            metrics=(
+                ReportMetric("Status", "PASS" if not active else "FAIL"),
+                ReportMetric("Findings", str(len(findings))),
+                ReportMetric("Active", str(len(active))),
+                ReportMetric("Approved", str(len(findings) - len(active))),
+            ),
+            findings_title="List of problems",
+            findings=tuple(
+                ReportFinding(
+                    f"[`{finding.path}:{finding.line}`]({finding_url(pr_url, finding)}) "
+                    f"— `{finding.annotation}` · `{display_finding_id(finding.finding_id)}`",
+                    finding.finding_id in approved,
+                )
+                for finding in findings
+            ),
+            admin=admin_commands(
                 "object",
                 [display_finding_id(finding.finding_id) for finding in active],
                 [
@@ -396,10 +394,8 @@ def summary_body(findings: list[Finding], approved: set[str], pr_url: str) -> st
                 ],
                 [finding.path for finding in active],
             ),
-            "</details>",
-        ]
+        )
     )
-    return "\n".join(lines)
 
 
 def approval_state(body: str) -> set[str]:
@@ -603,6 +599,9 @@ def main() -> int:
     if number is None:
         return 0
 
+    report = ObjectAnnotationCheck().report(github, number)
+    report.mark_in_progress()
+
     raw_pull = github.request("GET", f"/pulls/{number}")
     if raw_pull is None:
         message = f"Pull request #{number} was not found"
@@ -628,12 +627,7 @@ def main() -> int:
     sync_failure_label(github, number, has_active_findings=bool(active))
 
     pr_url = json_string(pull["html_url"], "pull request URL")
-    upsert_comment(
-        github,
-        number,
-        "object-annotations",
-        summary_body(findings, approved, pr_url),
-    )
+    report.publish(summary_body(findings, approved, pr_url))
     if not findings:
         return 0
 

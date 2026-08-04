@@ -11,6 +11,10 @@ runs:
           uses: ./.github/actions/setup-project
           with:
               install-python: true
+        - uses: ./.github/actions/report-in-progress
+          with:
+              marker: frontend-performance
+              github-token: ${{ github.token }}
         - name: Detect performance-relevant changes
           id: scope
           uses: actions/github-script@v8
@@ -48,21 +52,16 @@ runs:
                     return /(perf-front|PERF_|frontend)/i.test(file.patch);
                   });
                   core.setOutput("relevant", relevant ? "true" : "false");
-        - name: Publish performance scope report
-          if: steps.scope.outcome == 'success'
+        - name: Publish skipped performance report
+          if: steps.scope.outcome == 'success' && steps.scope.outputs.relevant != 'true'
           shell: bash
           env:
               GITHUB_TOKEN: ${{ github.token }}
               GITHUB_REPOSITORY: ${{ github.repository }}
               PR_NUMBER: ${{ github.event.pull_request.number }}
-              RELEVANT: ${{ steps.scope.outputs.relevant }}
           run: |
-              if [ "$RELEVANT" = true ]; then
-                printf '%s\n' '## ⏳ Frontend performance' '' 'Performance-relevant files changed; running the gate.' > "$RUNNER_TEMP/frontend-performance-scope.md"
-              else
-                printf '%s\n' '## ✅ Frontend performance' '' 'No performance-relevant files changed; the gate is skipped.' > "$RUNNER_TEMP/frontend-performance-scope.md"
-              fi
-              uv run --locked python -m ci.lib.comments \
+              uv run --locked python -m ci.quality_graph.reporting complete \
                 --marker frontend-performance \
-                --body-file "$RUNNER_TEMP/frontend-performance-scope.md" \
+                --status done \
+                --message 'No performance-relevant files changed; the gate is skipped.' \
                 --pr-number "$PR_NUMBER"

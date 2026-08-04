@@ -8,6 +8,10 @@ runs:
           with:
               install-web: true
               install-python: true
+        - uses: ./.github/actions/report-in-progress
+          with:
+              marker: bundle-size
+              github-token: ${{ github.token }}
 
         - name: Test bundle tools
           shell: bash
@@ -61,7 +65,12 @@ runs:
           run: |
               mkdir -p "$RUNNER_TEMP/bundle-size"
               if [ ! -f "$RUNNER_TEMP/bundle-size/summary.md" ]; then
-                printf '%s\n' '## ❌ Bundle size measurement failed' > "$RUNNER_TEMP/bundle-size/summary.md"
+                uv run --locked python -m ci.quality_graph.reporting complete \
+                  --marker bundle-size \
+                  --status fail \
+                  --message 'Bundle size measurement did not produce a report.' \
+                  --pr-number "$PR_NUMBER"
+                exit 0
               fi
               uv run --locked python -m ci.lib.comments \
                 --marker bundle-size \

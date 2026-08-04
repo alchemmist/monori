@@ -7,6 +7,15 @@ runs:
           uses: ./.github/actions/setup-project
           with:
               install-python: true
+        - name: Acknowledge Quality Graph command
+          shell: bash
+          env:
+              COMMENT_ID: ${{ github.event.comment.id }}
+              GITHUB_TOKEN: ${{ github.token }}
+          run: >-
+              uv run --locked python -m ci.quality_graph.reporting react
+              --comment-id "$COMMENT_ID"
+              --reaction eyes
         - name: Test Quality Graph command API
           shell: bash
           run: uv run --locked python -m unittest ci.tests.test_commands ci.tests.test_object_annotations ci.tests.test_suppressions

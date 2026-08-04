@@ -16,7 +16,6 @@ from typing import Protocol, cast, override
 
 import httpx
 
-from ci.lib.comments import upsert_comment
 from ci.lib.github import (
     GITHUB_PAGE_SIZE,
     HTTP_NO_CONTENT,
@@ -26,12 +25,19 @@ from ci.lib.github import (
 from ci.quality_graph.base import QualityCheck
 from ci.quality_graph.commands import (
     QualityGraphCommand,
-    admin_command_lines,
     command_targets_gate,
     parse_command,
     validate_command,
 )
 from ci.quality_graph.models import CheckContext, CheckResult, Verdict
+from ci.quality_graph.reporting import (
+    ReportFinding,
+    ReportMetric,
+    ReportModel,
+    ReportStatus,
+    admin_commands,
+    render_report,
+)
 
 type JsonValue = bool | int | float | str | list[JsonValue] | dict[str, JsonValue] | None
 
@@ -430,6 +436,7 @@ class SuppressionCheck(QualityCheck[Finding]):
     """Find newly added lint-rule suppressions in changed files."""
 
     gate = "suppression"
+    report_marker = "suppression"
 
     @override
     def collect(self, context: CheckContext) -> CheckResult[Finding]:
@@ -605,36 +612,26 @@ def finding_url(pr_url: str, finding: Finding) -> str:
 def summary_body(findings: list[Finding], approved: set[str], pr_url: str) -> str:
     """Build the suppressions check summary block for workflow output."""
     active = [finding for finding in findings if finding.finding_id not in approved]
-    status = "✅ PASS" if not active else "❌ FAIL"
-    lines = [
-        "## Lint suppression gate",
-        "",
-        "| Metric | Value |",
-        "| --- | ---: |",
-        f"| Status | {status} |",
-        f"| Findings | {len(findings)} |",
-        f"| Active | {len(active)} |",
-        f"| Approved | {len(findings) - len(active)} |",
-        "",
-        f"<details><summary>Findings ({len(findings)})</summary>",
-        "",
-    ]
-    for finding in findings:
-        marker = "✔" if finding.finding_id in approved else "✗"
-        text = finding.text.replace("`", "\\`")[:200]
-        location = f"{finding.path}:{finding.line}"
-        lines.append(
-            f"- {marker} [`{location}`]({finding_url(pr_url, finding)}) — `{text}` · "
-            f"`{display_finding_id(finding.finding_id)}`"
-        )
-    lines.extend(
-        [
-            "",
-            "</details>",
-            "",
-            "<details><summary>For repository administrators</summary>",
-            "",
-            *admin_command_lines(
+    return render_report(
+        ReportModel(
+            "suppression",
+            ReportStatus.DONE if not active else ReportStatus.FAIL,
+            metrics=(
+                ReportMetric("Status", "PASS" if not active else "FAIL"),
+                ReportMetric("Findings", str(len(findings))),
+                ReportMetric("Active", str(len(active))),
+                ReportMetric("Approved", str(len(findings) - len(active))),
+            ),
+            findings=tuple(
+                ReportFinding(
+                    f"[`{finding.path}:{finding.line}`]({finding_url(pr_url, finding)}) — "
+                    f"`{finding.text.replace('`', '\\`')[:200]}` · "
+                    f"`{display_finding_id(finding.finding_id)}`",
+                    finding.finding_id in approved,
+                )
+                for finding in findings
+            ),
+            admin=admin_commands(
                 "suppression",
                 [display_finding_id(finding.finding_id) for finding in active],
                 [
@@ -643,14 +640,13 @@ def summary_body(findings: list[Finding], approved: set[str], pr_url: str) -> st
                     if finding.finding_id in approved
                 ],
                 [finding.path for finding in active],
+                (
+                    "Finding IDs, gate names, and file paths may be comma-separated.",
+                    "Approvals persist while the finding fingerprint stays unchanged.",
+                ),
             ),
-            "",
-            "Finding IDs, gate names, and file paths may be comma-separated.",
-            "Approvals persist while the finding fingerprint stays unchanged.",
-            "</details>",
-        ]
+        )
     )
-    return "\n".join(lines)
 
 
 def rerun_gate(github: GitHubAPI, number: int) -> None:
@@ -691,6 +687,8 @@ def main() -> int:
     if not isinstance(number_value, int) or not (pull_event or issue.get("pull_request")):
         return 0
     number = number_value
+    report = SuppressionCheck().report(github, number)
+    report.mark_in_progress()
     pull = json_object(github.request("GET", f"/pulls/{number}"), "pull request")
     findings = changed_files(github, pull)
     comment = json_object(event.get("comment", {}), "comment")
@@ -707,7 +705,7 @@ def main() -> int:
     active = [finding for finding in findings if finding.finding_id not in approved]
     sync_status_label(github, number, has_active_findings=bool(active))
     pr_url = json_string(pull["html_url"], "pull request URL")
-    upsert_comment(github, number, "suppression", summary_body(findings, approved, pr_url))
+    report.publish(summary_body(findings, approved, pr_url))
     if admin:
         rerun_gate(github, number)
     for finding in findings:

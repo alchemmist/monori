@@ -8,13 +8,18 @@ import re
 import urllib.parse
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal, Protocol, cast
+from typing import Literal, Protocol, cast
 
 from ci.lib.github import GITHUB_PAGE_SIZE, GitHub
 from ci.lib.json import JsonValue, array_value, object_value, optional_string, string_value
-
-if TYPE_CHECKING:
-    from collections.abc import Collection
+from ci.quality_graph.reporting import (
+    CommandReactionLifecycle,
+    PullRequestReport,
+    Reaction,
+    ReportModel,
+    ReportStatus,
+    render_report,
+)
 
 CommandName = Literal["help", "status", "ignore", "ignore-file", "remove-ignore"]
 COMMAND_RE = re.compile(
@@ -24,7 +29,6 @@ COMMAND_RE = re.compile(
 GATE_NAME_RE = re.compile(r"^[a-z][a-z0-9-]*$")
 FINDING_ID_RE = re.compile(r"^[a-z][a-z0-9-]*-[a-z0-9-]+$")
 KNOWN_GATES = {"object", "suppression", "bundle", "frontend"}
-WORKFLOW_BOT_LOGINS = {"github-actions[bot]", "monori-bot"}
 
 
 @dataclass(frozen=True)
@@ -49,9 +53,8 @@ class CommandRequest:
 class CommandRejection:
     """Outcome to publish when a Quality Graph command cannot be processed."""
 
-    title: str
     detail: str
-    reaction: str
+    reaction: Reaction
     command: QualityGraphCommand | None = None
 
 
@@ -122,29 +125,6 @@ def command_text(command: QualityGraphCommand) -> str:
     return f"/qg {command.name}{suffix}"
 
 
-def admin_command_lines(
-    gate: str,
-    active_ids: Collection[str],
-    approved_ids: Collection[str],
-    file_paths: Collection[str] = (),
-) -> list[str]:
-    """Render copy-paste commands for the findings in one gate report."""
-    active = sorted(set(active_ids))
-    approved = sorted(set(approved_ids))
-    paths = sorted(set(file_paths))
-    lines = ["Post exactly one command as a new pull-request comment:", ""]
-    if active:
-        lines.append(f"- `/qg ignore {','.join(active)}`")
-        lines.append(f"- `/qg ignore {gate}`")
-    if paths:
-        lines.append(f"- `/qg ignore-file {','.join(paths)}`")
-    if approved:
-        lines.append(f"- `/qg remove-ignore {','.join(approved)}`")
-    if not active and not paths and not approved:
-        lines.append("No actionable findings in this run.")
-    return lines
-
-
 class GitHubAPI(Protocol):
     """Minimal GitHub API surface used by quality-graph helpers."""
 
@@ -153,54 +133,14 @@ class GitHubAPI(Protocol):
         ...
 
 
-def workflow_bot_logins() -> set[str]:
-    """Return logins used by workflow bots to author managed comments and reactions."""
-    configured_login = os.environ.get("GITHUB_ACTIONS_BOT_LOGIN", "github-actions[bot]")
-    return {configured_login, *WORKFLOW_BOT_LOGINS}
-
-
 def set_comment_reaction(github: GitHubAPI, comment_id: int, content: str) -> None:
-    """Replace existing bot reactions on a comment and set the requested one."""
-    reactions = array_value(
-        github.request("GET", f"/issues/comments/{comment_id}/reactions"),
-        "comment reactions",
-    )
-    bot_logins = workflow_bot_logins()
-    for item in reactions:
-        reaction = object_value(item, "reaction")
-        user = object_value(reaction.get("user", {}), "reaction user")
-        reaction_id = reaction.get("id")
-        if user.get("login") in bot_logins and isinstance(reaction_id, int):
-            github.request("DELETE", f"/issues/comments/{comment_id}/reactions/{reaction_id}")
-    github.request("POST", f"/issues/comments/{comment_id}/reactions", {"content": content})
+    """Set a command reaction through the shared lifecycle."""
+    CommandReactionLifecycle(github, comment_id).set(Reaction(content))
 
 
 def upsert_status(github: GitHubAPI, number: int, body: str) -> None:
-    """Update or create the bot-owned quality-graph status comment."""
-    marker = "<!-- monori-report: quality-graph -->"
-    rendered = f"{marker}\n\n{body.rstrip()}\n"
-    bot_logins = workflow_bot_logins()
-    for page in range(1, GITHUB_PAGE_SIZE + 1):
-        comments = array_value(
-            github.request(
-                "GET", f"/issues/{number}/comments?per_page={GITHUB_PAGE_SIZE}&page={page}"
-            ),
-            "pull request comments",
-        )
-        for item in comments:
-            comment = object_value(item, "pull request comment")
-            author = object_value(comment.get("user", {}), "comment author")
-            if marker not in str(comment.get("body", "")) or author.get("login") not in bot_logins:
-                continue
-            comment_id = comment.get("id")
-            if not isinstance(comment_id, int):
-                message = "Quality Graph comment has no numeric id"
-                raise TypeError(message)
-            github.request("PATCH", f"/issues/comments/{comment_id}", {"body": rendered})
-            return
-        if len(comments) < GITHUB_PAGE_SIZE:
-            break
-    github.request("POST", f"/issues/{number}/comments", {"body": rendered})
+    """Update the Quality Graph status through the shared report lifecycle."""
+    PullRequestReport.registered(github, number, "quality-graph").publish(body)
 
 
 def is_admin(github: GitHubAPI, login: str) -> bool:
@@ -222,31 +162,33 @@ def pull_request_number(event: dict[str, JsonValue]) -> int | None:
     return number if isinstance(number, int) else None
 
 
-def command_result(command: QualityGraphCommand, status: str, detail: str) -> str:
-    """Command result for this module."""
-    return "\n".join(
-        [
-            f"## Quality Graph command {status}",
-            "",
-            f"`{command_text(command)}`",
-            "",
+def command_result(command: QualityGraphCommand, status: ReportStatus, detail: str) -> str:
+    """Render a command result with the shared Quality Graph template."""
+    return render_report(
+        ReportModel(
+            "quality-graph",
+            status,
             detail,
-        ]
+            content=f"Command: `{command_text(command)}`",
+        )
     )
 
 
 def help_body() -> str:
-    """Help body for this module."""
-    return """## Quality Graph commands
-
-Only repository administrators may execute state-changing commands.
-
-- `/qg ignore object-<id>,suppression-<id>` — ignore selected findings
+    """Render command help with the shared Quality Graph template."""
+    return render_report(
+        ReportModel(
+            "quality-graph",
+            ReportStatus.DONE,
+            "Only repository administrators may execute state-changing commands.",
+            content="""- `/qg ignore object-<id>,suppression-<id>` — ignore selected findings
 - `/qg ignore object,suppression` — ignore all current findings of selected types
 - `/qg ignore-file path/to/file` — ignore findings in selected files
 - `/qg remove-ignore object-<id>,suppression-<id>` — remove selected ignores
 - `/qg status` — show the current command status
-- `/qg help` — show this help"""
+- `/qg help` — show this help""",
+        )
+    )
 
 
 def read_event() -> dict[str, JsonValue]:
@@ -288,23 +230,24 @@ def publish_rejection(
     """Publish a rejected command result and apply its final reaction."""
     if request.pull_request_number is not None:
         body = (
-            command_result(rejection.command, rejection.title, rejection.detail)
+            command_result(rejection.command, ReportStatus.FAIL, rejection.detail)
             if rejection.command is not None
-            else f"## Quality Graph command {rejection.title}\n\n{rejection.detail}"
+            else render_report(ReportModel("quality-graph", ReportStatus.FAIL, rejection.detail))
         )
         upsert_status(github, request.pull_request_number, body)
-    set_comment_reaction(github, request.comment_id, rejection.reaction)
+    CommandReactionLifecycle(github, request.comment_id).set(rejection.reaction)
 
 
 def process_command(github: GitHubAPI, request: CommandRequest) -> None:
     """Validate, authorize, and dispatch one Quality Graph command request."""
     command = parse_command(request.body)
-    set_comment_reaction(github, request.comment_id, "eyes")
+    reactions = CommandReactionLifecycle(github, request.comment_id)
+    reactions.acknowledge()
     if command is None:
         publish_rejection(
             github,
             request,
-            CommandRejection("❌", "Unknown command. Use `/qg help`.", "x"),
+            CommandRejection("Unknown command. Use `/qg help`.", Reaction.FAILED),
         )
         return
     validation_error = validate_command(command)
@@ -312,7 +255,7 @@ def process_command(github: GitHubAPI, request: CommandRequest) -> None:
         publish_rejection(
             github,
             request,
-            CommandRejection("❌", validation_error, "x", command),
+            CommandRejection(validation_error, Reaction.FAILED, command),
         )
         return
     number = request.pull_request_number
@@ -321,9 +264,8 @@ def process_command(github: GitHubAPI, request: CommandRequest) -> None:
             github,
             request,
             CommandRejection(
-                "🚫",
                 "Only repository administrators may execute Quality Graph commands.",
-                "confused",
+                Reaction.FORBIDDEN,
                 command,
             ),
         )
@@ -335,17 +277,20 @@ def process_command(github: GitHubAPI, request: CommandRequest) -> None:
             upsert_status(
                 github,
                 number,
-                (
-                    "## Quality Graph status\n\n"
-                    "Command API is available and ready to process administrator commands."
+                render_report(
+                    ReportModel(
+                        "quality-graph",
+                        ReportStatus.DONE,
+                        "Command API is available and ready to process administrator commands.",
+                    )
                 ),
             )
         else:
             apply_gate_command(github, number, request.comment_id, command)
     except (RuntimeError, TypeError, ValueError):
-        set_comment_reaction(github, request.comment_id, "x")
+        reactions.fail()
         raise
-    set_comment_reaction(github, request.comment_id, "hooray")
+    reactions.succeed()
 
 
 def apply_gate_command(
@@ -359,7 +304,9 @@ def apply_gate_command(
         github,
         number,
         command_result(
-            command, "👀", "Command accepted. Applying it and refreshing the Quality Graph."
+            command,
+            ReportStatus.PENDING,
+            "Command accepted. Applying it and refreshing the Quality Graph.",
         ),
     )
     pull = object_value(github.request("GET", f"/pulls/{number}"), "pull request")

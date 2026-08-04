@@ -1,0 +1,22 @@
+name: Mark Quality Graph report in progress
+description: Replace stale report data while a Quality Graph action is running
+inputs:
+    marker:
+        description: Registered Quality Graph report marker
+        required: true
+    github-token:
+        description: GitHub token used to update the pull-request comment
+        required: true
+runs:
+    using: composite
+    steps:
+        - name: Publish in-progress report
+          shell: bash
+          env:
+              GITHUB_TOKEN: ${{ inputs.github-token }}
+              REPORT_MARKER: ${{ inputs.marker }}
+              PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
+          run: >-
+              uv run --locked python -m ci.quality_graph.reporting in-progress
+              --marker "$REPORT_MARKER"
+              --pr-number "$PR_NUMBER"

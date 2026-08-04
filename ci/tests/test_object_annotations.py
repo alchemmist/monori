@@ -210,8 +210,8 @@ other: "list[object]"
 
         body = summary_body([finding], set(), "https://github.com/org/repo/pull/1")
 
-        assert "## Python object annotation gate" in body
-        assert "| Status | ❌ FAIL |" in body
+        assert body.startswith("## ❌ Python object annotation gate\n")
+        assert "| Status | FAIL |" in body
         assert "| Findings | 1 |" in body
         assert "server/app/example.py:7" in body
         assert "/qg ignore object" in body

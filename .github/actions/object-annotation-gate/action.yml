@@ -11,6 +11,10 @@ runs:
           uses: ./.github/actions/setup-project
           with:
               install-python: true
+        - uses: ./.github/actions/report-in-progress
+          with:
+              marker: object-annotations
+              github-token: ${{ inputs.github-token }}
         - name: Test annotation checker
           shell: bash
           run: uv run --locked python -m unittest discover -s ci/tests -p 'test_object_annotations.py'

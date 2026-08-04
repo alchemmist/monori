@@ -13,9 +13,15 @@ import httpx
 from ci.lib.github import HTTP_NO_CONTENT, HTTP_NOT_FOUND, REQUEST_TIMEOUT_SECONDS
 from ci.quality_graph.commands import (
     QualityGraphCommand,
-    admin_command_lines,
     parse_command,
     validate_command,
+)
+from ci.quality_graph.reporting import (
+    ReportFinding,
+    ReportModel,
+    ReportStatus,
+    admin_commands,
+    render_report,
 )
 
 type JsonValue = bool | int | float | str | list[JsonValue] | dict[str, JsonValue] | None
@@ -194,30 +200,40 @@ def apply_command(
     return approved - selected if name == "remove-ignore" else approved | selected
 
 
-def append_commands(text: str, entries: list[dict[str, JsonValue]], approved: set[str]) -> str:
-    """Append commands."""
-    lines = ["", "<details><summary>For repository administrators</summary>", ""]
-    lines.extend(
-        admin_command_lines(
-            "frontend",
-            [
-                finding_id(entry)
-                for entry in entries
-                if entry.get("tier") != "none" and finding_id(entry) not in approved
-            ],
-            [finding_id(entry) for entry in entries if finding_id(entry) in approved],
+def append_commands(
+    text: str,
+    entries: list[dict[str, JsonValue]],
+    approved: set[str],
+    *,
+    failed: bool,
+) -> str:
+    """Render performance details and commands through the shared template."""
+    findings = [entry for entry in entries if entry.get("tier") != "none"]
+    return render_report(
+        ReportModel(
+            "frontend-performance",
+            ReportStatus.FAIL if failed else ReportStatus.DONE,
+            content=text.strip(),
+            findings=tuple(
+                ReportFinding(
+                    f"`{json_string(entry.get('route_label'), 'route label')} · "
+                    f"{json_string(entry.get('metric_label'), 'metric label')}` · "
+                    f"`{finding_id(entry)}`",
+                    finding_id(entry) in approved,
+                )
+                for entry in findings
+            ),
+            admin=admin_commands(
+                "frontend",
+                [
+                    finding_id(entry)
+                    for entry in findings
+                    if entry.get("tier") != "none" and finding_id(entry) not in approved
+                ],
+                [finding_id(entry) for entry in findings if finding_id(entry) in approved],
+            ),
         )
     )
-    lines.append("Performance findings:")
-    for entry in entries:
-        if entry.get("tier") == "none":
-            continue
-        marker = "✔" if finding_id(entry) in approved else "✗"
-        route = json_string(entry.get("route_label"), "route label")
-        metric = json_string(entry.get("metric_label"), "metric label")
-        lines.append(f"- {marker} `{route} · {metric}` · `{finding_id(entry)}`")
-    lines.extend(["", "</details>"])
-    return text.rstrip() + "\n" + "\n".join(lines) + "\n"
 
 
 def main() -> int:
@@ -254,14 +270,8 @@ def main() -> int:
 
     summary_path = Path(os.environ["SUMMARY_PATH"])
     summary = summary_path.read_text()
-    summary = re.sub(
-        r"^## .*$",
-        f"## {'❌' if failed else '✅'} Frontend performance",
-        summary,
-        count=1,
-        flags=re.MULTILINE,
-    )
-    summary_path.write_text(append_commands(summary, entries, approved))
+    summary = re.sub(r"^## .*\n*", "", summary, count=1, flags=re.MULTILINE)
+    summary_path.write_text(append_commands(summary, entries, approved, failed=failed))
     if failed:
         github.ensure_label(STATUS_LABEL)
         github.request("POST", f"/issues/{number}/labels", {"labels": [STATUS_LABEL]})

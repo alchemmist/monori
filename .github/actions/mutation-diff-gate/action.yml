@@ -18,6 +18,10 @@ runs:
           with:
               install-web: true
               install-python: true
+        - uses: ./.github/actions/report-in-progress
+          with:
+              marker: mutation
+              github-token: ${{ github.token }}
         - name: Restore Stryker cache
           uses: actions/cache@v4
           with:
@@ -48,10 +52,15 @@ runs:
               PR_NUMBER: ${{ github.event.pull_request.number }}
           run: |
               if [ ! -s "$MUTATION_SUMMARY_PATH" ]; then
-                printf '%s\n' '## Mutation testing' '' 'No mutation report was produced.' > "$MUTATION_SUMMARY_PATH"
+                printf '%s\n' 'No mutation report was produced.' > "$MUTATION_SUMMARY_PATH"
               fi
-              uv run --locked python -m ci.lib.comments \
+              status=done
+              if [ "${{ steps.mutation-front.outcome }}" = failure ] || [ "${{ steps.mutation-back.outcome }}" = failure ]; then
+                status=fail
+              fi
+              uv run --locked python -m ci.quality_graph.reporting complete \
                 --marker mutation \
+                --status "$status" \
                 --body-file "$MUTATION_SUMMARY_PATH" \
                 --pr-number "$PR_NUMBER"
         - name: Fail if a mutation gate failed

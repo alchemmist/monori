@@ -9,6 +9,14 @@ WORKFLOW = Path(__file__).parents[2] / ".github/workflows/pr-checks.yaml"
 FRONTEND_PERFORMANCE_SCOPE = (
     Path(__file__).parents[2] / ".github/actions/frontend-performance-scope/action.yml"
 )
+REPORTING_ACTIONS = (
+    "bundle-size-gate",
+    "frontend-performance-gate",
+    "frontend-performance-scope",
+    "mutation-diff-gate",
+    "object-annotation-gate",
+    "suppression-gate",
+)
 
 
 class WorkflowJob(TypedDict, total=False):
@@ -154,6 +162,13 @@ class PullRequestWorkflowGraphTest(unittest.TestCase):
 
         assert '"ci/quality_graph/checks/frontend_performance.py"' in scope_source
         assert '"ci/tests/test_frontend_performance.py"' in scope_source
+
+    def test_reporting_actions_inherit_shared_in_progress_lifecycle(self) -> None:
+        for action in REPORTING_ACTIONS:
+            source = (
+                Path(__file__).parents[2] / f".github/actions/{action}/action.yml"
+            ).read_text()
+            assert "uses: ./.github/actions/report-in-progress" in source, action
 
     def test_audit_job_runs_aggregate_make_target(self) -> None:
         block = re.search(

@@ -284,7 +284,8 @@ value = 2
 
         body = summary_body([finding], set(), "https://github.com/org/repo/pull/1")
 
-        assert "❌ FAIL" in body
+        assert body.startswith("## ❌ Lint suppression gate\n")
+        assert "| Status | FAIL |" in body
         assert "<details><summary>For repository administrators</summary>" in body
         assert "/qg ignore suppression-600043a9733a" in body
         assert "/qg ignore-file example.py" in body
