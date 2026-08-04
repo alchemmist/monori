@@ -58,7 +58,7 @@ describe("ImportPanel", () => {
 
     it("previews an uploaded statement, imports the fresh rows and closes", async () => {
         const originalConsoleError = console.error;
-        vi.spyOn(console, "error").mockImplementation((...args) => {
+        vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
             if (
                 args.some(
                     (arg) =>
