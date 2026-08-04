@@ -17,6 +17,14 @@ class MutationDiffGateTest(unittest.TestCase):
             "Account",
         )
 
+    def test_maps_mutant_metadata_to_its_configured_source_path(self) -> None:
+        assert module.source_path_for_mutant(Path("app/example.py.meta")) == "server/app/example.py"
+        assert (
+            module.source_path_for_mutant(Path("quality_graph/app/example.py.meta"))
+            == "ci/quality_graph/app/example.py"
+        )
+        assert module.source_path_for_mutant(Path("lib/comments.py.meta")) == "ci/lib/comments.py"
+
     def test_collects_changed_functions(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

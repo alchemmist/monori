@@ -28,8 +28,8 @@ def stacknode($name; $all):
   | map(select(.value.summary.num_statements > 0))
   | map({
       stack: (if (.key | startswith("ci/")) then "ci" else "backend" end),
-      module: (if (.key | startswith("ci/")) then "quality_graph" else "app" end),
-      file: (.key | sub("^(server/)?(app|ci/quality_graph)/"; "")),
+      module: (if (.key | startswith("ci/lib/")) then "lib" elif (.key | startswith("ci/quality_graph/")) then "quality_graph" else "app" end),
+      file: (.key | sub("^server/app/|^ci/lib/|^ci/quality_graph/"; "")),
       c: .value.summary.covered_lines,
       t: .value.summary.num_statements,
     })) as $bf

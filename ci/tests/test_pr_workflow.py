@@ -6,6 +6,9 @@ from typing import ClassVar, TypedDict, cast, override
 import yaml
 
 WORKFLOW = Path(__file__).parents[2] / ".github/workflows/pr-checks.yaml"
+FRONTEND_PERFORMANCE_SCOPE = (
+    Path(__file__).parents[2] / ".github/actions/frontend-performance-scope/action.yml"
+)
 
 
 class WorkflowJob(TypedDict, total=False):
@@ -145,6 +148,12 @@ class PullRequestWorkflowGraphTest(unittest.TestCase):
         assert "uses: ./.github/actions/frontend-performance-scope" in block.group("body")
         assert "if: steps.scope.outputs.relevant == 'true'" in block.group("body")
         assert "frontend-performance-skipped" not in self.source
+
+    def test_frontend_performance_scope_covers_the_gate_implementation(self) -> None:
+        scope_source = FRONTEND_PERFORMANCE_SCOPE.read_text()
+
+        assert '"ci/quality_graph/checks/frontend_performance.py"' in scope_source
+        assert '"ci/tests/test_frontend_performance.py"' in scope_source
 
     def test_audit_job_runs_aggregate_make_target(self) -> None:
         block = re.search(

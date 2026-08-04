@@ -124,21 +124,6 @@ def admin_command_lines(
     return lines
 
 
-def json_object(value: JsonValue, context: str) -> dict[str, JsonValue]:
-    """Assert and return a JSON object from the generic response."""
-    return object_value(value, context)
-
-
-def json_array(value: JsonValue, context: str) -> list[JsonValue]:
-    """Assert and return a JSON array from the generic response."""
-    return array_value(value, context)
-
-
-def json_string(value: JsonValue, context: str) -> str:
-    """Assert and return a JSON string from the generic response."""
-    return string_value(value, context)
-
-
 class GitHubAPI(Protocol):
     """Minimal GitHub API surface used by quality-graph helpers."""
 
@@ -149,22 +134,22 @@ class GitHubAPI(Protocol):
 
 def bot_login(github: GitHubAPI) -> str:
     """Fetch the login of the authenticated GitHub actor."""
-    return json_string(
-        json_object(github.request("GET", "/user"), "authenticated user").get("login"),
+    return string_value(
+        object_value(github.request("GET", "/user"), "authenticated user").get("login"),
         "bot login",
     )
 
 
 def set_comment_reaction(github: GitHubAPI, comment_id: int, content: str) -> None:
     """Replace existing bot reactions on a comment and set the requested one."""
-    reactions = json_array(
+    reactions = array_value(
         github.request("GET", f"/issues/comments/{comment_id}/reactions"),
         "comment reactions",
     )
     login = bot_login(github)
     for item in reactions:
-        reaction = json_object(item, "reaction")
-        user = json_object(reaction.get("user", {}), "reaction user")
+        reaction = object_value(item, "reaction")
+        user = object_value(reaction.get("user", {}), "reaction user")
         reaction_id = reaction.get("id")
         if user.get("login") == login and isinstance(reaction_id, int):
             github.request("DELETE", f"/issues/comments/{comment_id}/reactions/{reaction_id}")
@@ -177,15 +162,15 @@ def upsert_status(github: GitHubAPI, number: int, body: str) -> None:
     rendered = f"{marker}\n\n{body.rstrip()}\n"
     login = bot_login(github)
     for page in range(1, GITHUB_PAGE_SIZE + 1):
-        comments = json_array(
+        comments = array_value(
             github.request(
                 "GET", f"/issues/{number}/comments?per_page={GITHUB_PAGE_SIZE}&page={page}"
             ),
             "pull request comments",
         )
         for item in comments:
-            comment = json_object(item, "pull request comment")
-            author = json_object(comment.get("user", {}), "comment author")
+            comment = object_value(item, "pull request comment")
+            author = object_value(comment.get("user", {}), "comment author")
             if marker not in str(comment.get("body", "")) or author.get("login") != login:
                 continue
             comment_id = comment.get("id")
@@ -205,13 +190,13 @@ def is_admin(github: GitHubAPI, login: str) -> bool:
     permission = github.request("GET", f"/collaborators/{encoded}/permission")
     return (
         permission is not None
-        and json_object(permission, "collaborator permission").get("permission") == "admin"
+        and object_value(permission, "collaborator permission").get("permission") == "admin"
     )
 
 
 def pull_request_number(event: dict[str, JsonValue]) -> int | None:
     """Pull request number for this module."""
-    issue = json_object(event.get("issue", {}), "event issue")
+    issue = object_value(event.get("issue", {}), "event issue")
     if not issue.get("pull_request"):
         return None
     number = issue.get("number")
@@ -251,11 +236,11 @@ def main() -> int:
         "dict[str, JsonValue]",
         json.loads(Path(os.environ["GITHUB_EVENT_PATH"]).read_text()),
     )
-    comment = json_object(event.get("comment", {}), "event comment")
+    comment = object_value(event.get("comment", {}), "event comment")
     comment_id = comment.get("id")
     if not isinstance(comment_id, int):
         return 0
-    comment_body = json_string(comment.get("body"), "comment body").strip()
+    comment_body = string_value(comment.get("body"), "comment body").strip()
     if not (
         comment_body == "/qg"
         or comment_body == "/quality-graph"
@@ -276,8 +261,8 @@ def main() -> int:
         set_comment_reaction(github, comment_id, "-1")
         return 0
     validation_error = validate_command(command)
-    author = json_object(comment.get("user", {}), "comment user")
-    login = json_string(author.get("login"), "comment author")
+    author = object_value(comment.get("user", {}), "comment user")
+    login = string_value(author.get("login"), "comment author")
     if validation_error is not None:
         set_comment_reaction(github, comment_id, "eyes")
         if number is not None:
@@ -323,9 +308,9 @@ def main() -> int:
         ),
     )
     set_comment_reaction(github, comment_id, "hooray")
-    pull = json_object(github.request("GET", f"/pulls/{number}"), "pull request")
+    pull = object_value(github.request("GET", f"/pulls/{number}"), "pull request")
     body = (
-        json_string(pull.get("body"), "pull request body") if pull.get("body") is not None else ""
+        string_value(pull.get("body"), "pull request body") if pull.get("body") is not None else ""
     )
     markers = {
         "bundle": "monori-bundle-size-pending",
@@ -347,21 +332,21 @@ def main() -> int:
 
 def rerun_workflow(github: GitHubAPI, number: int) -> None:
     """Rerun workflow for this module."""
-    pull = json_object(github.request("GET", f"/pulls/{number}"), "pull request")
-    head = json_object(pull.get("head", {}), "pull request head")
-    sha = json_string(head.get("sha"), "pull request head sha")
-    branch = json_string(head.get("ref"), "pull request head branch")
+    pull = object_value(github.request("GET", f"/pulls/{number}"), "pull request")
+    head = object_value(pull.get("head", {}), "pull request head")
+    sha = string_value(head.get("sha"), "pull request head sha")
+    branch = string_value(head.get("ref"), "pull request head branch")
     for page in range(1, GITHUB_PAGE_SIZE + 1):
-        response = json_object(
+        response = object_value(
             github.request(
                 "GET",
                 f"/actions/workflows/pr-checks.yaml/runs?event=pull_request&branch={urllib.parse.quote(branch)}&per_page={GITHUB_PAGE_SIZE}&page={page}",
             ),
             "workflow runs response",
         )
-        runs = json_array(response.get("workflow_runs"), "workflow runs")
+        runs = array_value(response.get("workflow_runs"), "workflow runs")
         for item in runs:
-            run = json_object(item, "workflow run")
+            run = object_value(item, "workflow run")
             if run.get("head_sha") == sha and isinstance(run.get("id"), int):
                 github.request("POST", f"/actions/runs/{run['id']}/rerun-failed-jobs")
                 return

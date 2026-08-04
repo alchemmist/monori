@@ -13,6 +13,11 @@ KILLED = {1, 3}
 SURVIVED = 0
 OTHER_STATUSES = {-24, 24, 35, 36, 152, 255}
 CLASS_SEPARATOR = "ǁ"
+MUTANT_SOURCE_PATHS = {
+    "app/": "server/app/",
+    "lib/": "ci/lib/",
+    "quality_graph/": "ci/quality_graph/",
+}
 
 
 def append_step_summary(content: str) -> None:
@@ -129,6 +134,15 @@ def mutant_function(key: str) -> tuple[str, str | None]:
     return original.removeprefix("x_"), None
 
 
+def source_path_for_mutant(relative_path: Path) -> str | None:
+    """Map a mutmut metadata path to its configured source path."""
+    relative_source = str(relative_path)[:-5]
+    for mutant_prefix, source_prefix in MUTANT_SOURCE_PATHS.items():
+        if relative_source.startswith(mutant_prefix):
+            return f"{source_prefix}{relative_source.removeprefix(mutant_prefix)}"
+    return None
+
+
 def load_meta(path: Path) -> dict[str, int | None]:
     """Load meta."""
     data = json.loads(path.read_text())
@@ -161,12 +175,9 @@ def gate_python(
     no_coverage_keys: list[str] = []
     for meta_path in mutants_dir.rglob("*.py.meta"):
         relative = meta_path.relative_to(mutants_dir)
-        relative_source = str(relative)[:-5]
-        source_path = (
-            f"server/{relative_source}"
-            if relative_source.startswith("app/")
-            else f"ci/{relative_source}"
-        )
+        source_path = source_path_for_mutant(relative)
+        if source_path is None:
+            continue
         allowed = functions.get(source_path)
         if not allowed:
             continue

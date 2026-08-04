@@ -33,7 +33,9 @@ runs:
                     "deploy/nginx.conf",
                     ".dockerignore",
                     "scripts/frontend-perf.sh",
+                    "ci/quality_graph/checks/frontend_performance.py",
                     "ci/quality_graph/checks/frontend_measurement.py",
+                    "ci/tests/test_frontend_performance.py",
                     "ci/tests/test_frontend_measurement.py",
                     ".github/workflows/pr-checks.yaml",
                   ]);

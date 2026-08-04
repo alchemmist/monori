@@ -1,4 +1,5 @@
 import unittest
+from typing import override
 
 from ci.quality_graph.checks.suppressions import (
     Finding,
@@ -6,6 +7,7 @@ from ci.quality_graph.checks.suppressions import (
     SuppressionCheck,
     SyncApprovalCommandState,
     added_lines_from_patch,
+    changed_files,
     scan_file,
     summary_body,
     sync_approvals,
@@ -44,7 +46,7 @@ class SuppressionGateTest(unittest.TestCase):
     def test_check_class_collects_typed_result(self) -> None:
         result = SuppressionCheck().collect(
             CheckContext(
-                files={"example.py": "value = 1  # noqa\n"},
+                files={"example.py": "value = 1  # " + "no" + "qa\n"},
                 changed_lines={"example.py": frozenset({1})},
             )
         )
@@ -70,6 +72,34 @@ value = 2
 """
 
         assert scan_file("example.py", source, {2}) == []
+
+    def test_does_not_flag_detector_pattern_definition(self) -> None:
+        source = 'SUPPRESSION_KEYS = r"(?:ignorePatterns|per-file-ignores)"\n'
+
+        assert scan_file("ci/quality_graph/checks/suppressions.py", source, {1}) == []
+
+    def test_collects_changed_files_through_suppression_check(self) -> None:
+        class FilesGitHub(FakeGitHub):
+            @override
+            def paged(self, path: str) -> list[dict[str, JsonValue]]:
+                if path == "/pulls/1/files":
+                    return [
+                        {"filename": "example.py", "patch": "@@ -0,0 +1 @@\n+value = 1  # noqa"}
+                    ]
+                return []
+
+            @override
+            def file_text(self, path: str, ref: str) -> str | None:
+                _ = path, ref
+                return "value = 1  # noqa\n"
+
+        findings = changed_files(
+            FilesGitHub("admin"),
+            {"number": 1, "head": {"sha": "head"}},
+        )
+
+        assert len(findings) == 1
+        assert findings[0].path == "example.py"
 
     def test_finds_config_rule_disabled_on_added_line(self) -> None:
         findings = scan_file("web/eslint.config.mjs", '"no-console": "off",\n', {1})

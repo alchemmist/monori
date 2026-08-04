@@ -46,7 +46,7 @@ SOURCE_SUPPRESSION_RE = re.compile(
     r"|#\s*pragma:\s*no cover"
     r"|//\s*(?:eslint-disable|@ts-(?:ignore|nocheck)|stryker\s+disable)"
     r"|/\*\s*(?:eslint-disable|stylelint-disable|@ts-(?:ignore|nocheck)|stryker\s+disable)"
-    rf"|\b{SUPPRESSION_KEYS}\b)"
+    r")"
 )
 CONFIG_SUPPRESSION_RE = re.compile(
     rf"(?:\b{SUPPRESSION_KEYS}\b"
@@ -355,7 +355,8 @@ def changed_files(github: GitHubAPI, pull: dict[str, JsonValue]) -> list[Finding
     number = json_integer(pull["number"], "pull request number")
     head = json_object(pull["head"], "head")
     head_sha = json_string(head["sha"], "head sha")
-    findings: list[Finding] = []
+    files: dict[str, str] = {}
+    changed_lines: dict[str, frozenset[int]] = {}
     for file in github.paged(f"/pulls/{number}/files"):
         path = json_string(file["filename"], "changed filename")
         if file.get("status") == "removed" or not path.endswith(
@@ -383,8 +384,10 @@ def changed_files(github: GitHubAPI, pull: dict[str, JsonValue]) -> list[Finding
         patch = optional_string(file.get("patch"))
         if source is None or not patch:
             continue
-        findings.extend(scan_file(path, source, added_lines_from_patch(patch)))
-    return sorted(findings, key=lambda finding: (finding.path, finding.line, finding.column))
+        files[path] = source
+        changed_lines[path] = frozenset(added_lines_from_patch(patch))
+    result = SuppressionCheck().collect(CheckContext(files, changed_lines))
+    return sorted(result.findings, key=lambda finding: (finding.path, finding.line, finding.column))
 
 
 def is_admin(github: GitHubAPI, login: str) -> bool:

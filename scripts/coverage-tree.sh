@@ -11,7 +11,7 @@ echo "collecting frontend coverage..." >&2
 
 echo "collecting Python coverage..." >&2
 (cd "$root" && uv run --locked pytest -q server/tests ci/tests \
-  --cov=server/app --cov=ci/quality_graph \
+  --cov=server/app --cov=ci/lib --cov=ci/quality_graph \
   --cov-report="json:$be" --cov-report= >/dev/null)
 
 cp "$be" "$ci"

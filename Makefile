@@ -285,7 +285,7 @@ m-back:
 	( mkdir -p mutants && uv run --locked mutmut run --max-children $(MUTATION_JOBS) 2>mutants/mutmut-stderr.log ); mutmut=$$?; \
 	( mkdir -p mutants && uv run --locked mutmut export-cicd-stats ); export=$$?; \
 	if [ $$export -eq 0 ]; then \
-		python3 -m ci.lib.mutation_gate mutants/mutmut-cicd-stats.json $$thr; srv=$$?; \
+		uv run --locked python -m ci.lib.mutation_gate mutants/mutmut-cicd-stats.json $$thr; srv=$$?; \
 	else \
 		srv=$$export; \
 	fi; \
@@ -298,10 +298,10 @@ mutation-python: m-back
 m-back-diff:
 	@set +e; \
 	git rev-parse --verify --quiet "$(BASE)" >/dev/null || { echo "mutation-diff: BASE='$(BASE)' is not a valid revision"; exit 1; }; \
-	if git diff --quiet "$(BASE)...HEAD" -- server/app ci/quality_graph; then \
+	if git diff --quiet "$(BASE)...HEAD" -- server/app ci/lib ci/quality_graph; then \
 		echo "mutation-diff: no changed Python files — pass"; exit 0; \
 	fi; \
-	paths=$$(git diff --diff-filter=ACMR --name-only "$(BASE)...HEAD" -- server/app ci/quality_graph | sed -e 's#^server/##' -e 's#^ci/##' -e 's#\.py$$##' -e 's#/#.#g' -e 's#$$#.*#' | paste -sd' ' -); \
+	paths=$$(git diff --diff-filter=ACMR --name-only "$(BASE)...HEAD" -- server/app ci/lib ci/quality_graph | sed -e 's#^server/##' -e 's#^ci/##' -e 's#\.py$$##' -e 's#/#.#g' -e 's#$$#.*#' | paste -sd' ' -); \
 	if [ -z "$$paths" ]; then \
 		echo "mutation-diff: no changed Python source files — pass"; exit 0; \
 	fi; \
@@ -311,7 +311,7 @@ m-back-diff:
 	( mkdir -p mutants && uv run --locked mutmut run --max-children $(MUTATION_JOBS) "$$@" 2>mutants/mutmut-stderr.log ); mutmut=$$?; \
 	args="--mutants mutants --baseline $$baseline/mutants --base $(BASE) --threshold $(MUTATION_DIFF_THRESHOLD)"; \
 	if [ $$cold_start -eq 1 ]; then args="$$args --skip-new-survivors"; fi; \
-	python3 -m ci.lib.mutation_diff_gate $$args; gate=$$?; \
+	uv run --locked python -m ci.lib.mutation_diff_gate $$args; gate=$$?; \
 	if [ -s mutants/mutmut-stderr.log ]; then echo "── mutmut diagnostics: mutants/mutmut-stderr.log ──"; fi; \
 	echo "── Python diff mutation gate (threshold $(MUTATION_DIFF_THRESHOLD)%, workers $(MUTATION_JOBS)): mutmut run exit=$$mutmut, gate exit=$$gate ──"; \
 	if [ $$mutmut -ne 0 ] || [ $$gate -ne 0 ]; then exit 1; fi

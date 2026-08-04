@@ -97,5 +97,5 @@ min_confidence = 80
 ignore_names = ["referer", "predicate", "user_data_dir", "user_agent", "accept_downloads"]
 
 [tool.mutmut]
-source_paths = ["server/app", "ci/quality_graph"]
+source_paths = ["server/app", "ci/lib", "ci/quality_graph"]
 also_copy = ["server/schema.sql", "server/migrations"]
