@@ -187,6 +187,23 @@ value = 2
 
         assert [finding.line for finding in findings] == [2, 3, 4, 5]
 
+    def test_scopes_duplicate_toml_keys_by_suppression_section(self) -> None:
+        source = """\
+[tool.ruff.lint.per-file-ignores]
+"server/app/parser.py" = ["E501"]
+
+[tool.ruff.lint.extend-per-file-ignores]
+"server/app/parser.py" = ["D100"]
+"""
+
+        findings = scan_file("pyproject.toml", source, {2, 5})
+
+        assert [finding.line for finding in findings] == [2, 5]
+        assert [finding.text for finding in findings] == [
+            '"server/app/parser.py" = ["E501"]',
+            '"server/app/parser.py" = ["D100"]',
+        ]
+
     def test_admin_can_approve_and_stale_labels_expire(self) -> None:
         github = FakeGitHub("admin")
         finding = Finding("example.py", 1, 0, f"value = 1 {NOQA}", "finding-1")

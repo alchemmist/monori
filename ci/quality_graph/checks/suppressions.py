@@ -340,8 +340,8 @@ def _contains_new_value(current: JsonValue, previous: JsonValue) -> bool:
 
 def _toml_entry_spans(
     lines: list[str], added_lines: set[int]
-) -> dict[str, tuple[int, int, int, str]]:
-    spans: dict[str, tuple[int, int, int, str]] = {}
+) -> dict[tuple[str, str], tuple[int, int, int, str]]:
+    spans: dict[tuple[str, str], tuple[int, int, int, str]] = {}
     section = ""
     line_number = 0
     while line_number < len(lines):
@@ -369,7 +369,7 @@ def _toml_entry_spans(
                 raise RuntimeError(message)
             key = next(iter(key_data))
             column = len(line) - len(line.lstrip())
-            spans[key] = (start, end, column, line.strip())
+            spans[(section, key)] = (start, end, column, line.strip())
         line_number = end
     return spans
 
@@ -391,7 +391,7 @@ def _toml_candidates(
         for key, value in current_section.items():
             old_value = previous_section.get(key)
             if key not in previous_section or _contains_new_value(value, old_value):
-                span = spans.get(key)
+                span = spans.get((section, key))
                 if span is None:
                     message = f"Cannot locate changed TOML suppression key {key!r} in {path}"
                     raise RuntimeError(message)
