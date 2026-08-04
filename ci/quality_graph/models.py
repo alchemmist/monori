@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum, auto
 from typing import TYPE_CHECKING, Protocol
 
@@ -32,6 +32,7 @@ class CheckContext:
 
     files: Mapping[str, str]
     changed_lines: Mapping[str, frozenset[int]]
+    previous_files: Mapping[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

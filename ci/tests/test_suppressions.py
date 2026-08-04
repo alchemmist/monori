@@ -170,6 +170,23 @@ value = 2
         assert len(findings) == 1
         assert findings[0].text == "'server/app/parser.py' = [\"RUF001\"]"
 
+    def test_compares_deserialized_toml_values_with_base(self) -> None:
+        before = """\
+[tool.ruff.lint.per-file-ignores]
+"server/tests/**/*.py" = ["D101"]
+"""
+        after = """\
+[tool.ruff.lint.per-file-ignores]
+"server/tests/**/*.py" = ["D101", "D102"]
+"server/migrations/**/*.py" = ["S101", "INP001"]
+"server/app/workbook/parser.py" = ["RUF001"]
+"server/app/connectors/tbank_playwright.py" = ["RUF001"]
+"""
+
+        findings = scan_file("pyproject.toml", after, {2, 3, 4, 5}, before)
+
+        assert [finding.line for finding in findings] == [2, 3, 4, 5]
+
     def test_admin_can_approve_and_stale_labels_expire(self) -> None:
         github = FakeGitHub("admin")
         finding = Finding("example.py", 1, 0, f"value = 1 {NOQA}", "finding-1")

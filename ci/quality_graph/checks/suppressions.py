@@ -6,6 +6,7 @@ import json
 import os
 import re
 import sys
+import tomllib
 import urllib.parse
 from collections import Counter
 from dataclasses import dataclass
@@ -55,8 +56,8 @@ CONFIG_SUPPRESSION_RE = re.compile(
 )
 TOML_SECTION_RE = re.compile(r"^\s*\[([^\]]+)\]\s*$")
 TOML_KEY_RE = re.compile(
-    r'^\s*(?:"[^"]+"|\'[^\']+\'|[A-Za-z0-9_-]+)'
-    r'(?:\s*\.\s*(?:"[^"]+"|\'[^\']+\'|[A-Za-z0-9_-]+))*\s*='
+    r'^\s*((?:"[^"]+"|\'[^\']+\'|[A-Za-z0-9_-]+)'
+    r'(?:\s*\.\s*(?:"[^"]+"|\'[^\']+\'|[A-Za-z0-9_-]+))*)\s*='
 )
 TOML_SUPPRESSION_SECTION_NAMES = {"per-file-ignores", "extend-per-file-ignores"}
 WORKFLOW_RUNS_PER_PAGE = GITHUB_PAGE_SIZE
@@ -296,10 +297,51 @@ def _directive_candidates(
     return candidates
 
 
-def _toml_candidates(
-    path: str, lines: list[str], added_lines: set[int]
-) -> list[tuple[int, int, str, str]]:
-    candidates: list[tuple[int, int, str, str]] = []
+def _toml_data(source: str, path: str) -> dict[str, JsonValue]:
+    try:
+        return cast("dict[str, JsonValue]", tomllib.loads(source))
+    except tomllib.TOMLDecodeError as error:
+        message = f"Cannot parse TOML file {path}: {error}"
+        raise RuntimeError(message) from error
+
+
+def _toml_section(data: dict[str, JsonValue], section: str) -> dict[str, JsonValue]:
+    value: JsonValue = data
+    for part in section.split("."):
+        if not isinstance(value, dict):
+            return {}
+        value = value.get(part)
+    return value if isinstance(value, dict) else {}
+
+
+def _toml_suppression_sections(
+    data: dict[str, JsonValue], prefix: tuple[str, ...] = ()
+) -> list[str]:
+    sections: list[str] = []
+    for key, value in data.items():
+        current = (*prefix, key)
+        if isinstance(value, dict):
+            if key.lower() in TOML_SUPPRESSION_SECTION_NAMES:
+                sections.append(".".join(current))
+            sections.extend(_toml_suppression_sections(value, current))
+    return sections
+
+
+def _contains_new_value(current: JsonValue, previous: JsonValue) -> bool:
+    if isinstance(current, list) and isinstance(previous, list):
+        return any(item not in previous for item in current)
+    if isinstance(current, dict) and isinstance(previous, dict):
+        return any(
+            key not in previous or _contains_new_value(value, previous[key])
+            for key, value in current.items()
+        )
+    return current != previous
+
+
+def _toml_entry_spans(
+    lines: list[str], added_lines: set[int]
+) -> dict[str, tuple[int, int, int, str]]:
+    spans: dict[str, tuple[int, int, int, str]] = {}
     section = ""
     line_number = 0
     while line_number < len(lines):
@@ -308,14 +350,10 @@ def _toml_candidates(
         section_match = TOML_SECTION_RE.match(line)
         if section_match:
             section = section_match.group(1)
-            if _is_toml_suppression_section(section) and line_number in added_lines:
-                normalized_code = " ".join(line.split())
-                raw_id = f"{path}:toml-section:{section.lower()}:{normalized_code}"
-                candidates.append((line_number, 0, line.strip(), raw_id))
             continue
-        if not _is_toml_suppression_section(section) or not TOML_KEY_RE.match(line):
+        match = TOML_KEY_RE.match(line)
+        if not _is_toml_suppression_section(section) or match is None:
             continue
-
         start = line_number
         end = start
         bracket_depth = line.count("[") - line.count("]")
@@ -324,16 +362,52 @@ def _toml_candidates(
             continuation = lines[end - 1]
             bracket_depth += continuation.count("[") - continuation.count("]")
         if any(number in added_lines for number in range(start, end + 1)):
-            entry = " ".join(" ".join(lines[start - 1 : end]).split())
-            raw_id = f"{path}:toml-section:{section.lower()}:{entry}"
-            first_line = lines[start - 1]
-            column = len(first_line) - len(first_line.lstrip())
-            candidates.append((start, column, first_line.strip(), raw_id))
+            key_text = match.group(1)
+            key_data = _toml_data(f"{key_text} = 0\n", "TOML key")
+            if len(key_data) != 1:
+                message = f"Cannot identify TOML suppression key on line {start}"
+                raise RuntimeError(message)
+            key = next(iter(key_data))
+            column = len(line) - len(line.lstrip())
+            spans[key] = (start, end, column, line.strip())
         line_number = end
+    return spans
+
+
+def _toml_candidates(
+    path: str,
+    source: str,
+    previous_source: str | None,
+    added_lines: set[int],
+) -> list[tuple[int, int, str, str]]:
+    current = _toml_data(source, path)
+    previous = _toml_data(previous_source, path) if previous_source is not None else {}
+    candidates: list[tuple[int, int, str, str]] = []
+    lines = source.splitlines()
+    spans = _toml_entry_spans(lines, added_lines)
+    for section in _toml_suppression_sections(current):
+        current_section = _toml_section(current, section)
+        previous_section = _toml_section(previous, section)
+        for key, value in current_section.items():
+            old_value = previous_section.get(key)
+            if key not in previous_section or _contains_new_value(value, old_value):
+                span = spans.get(key)
+                if span is None:
+                    message = f"Cannot locate changed TOML suppression key {key!r} in {path}"
+                    raise RuntimeError(message)
+                start, _, column, text = span
+                entry = " ".join(" ".join(lines[start - 1 : span[1]]).split())
+                raw_id = f"{path}:toml-section:{section}:{entry}"
+                candidates.append((start, column, text, raw_id))
     return candidates
 
 
-def scan_file(path: str, source: str, added_lines: set[int]) -> list[Finding]:
+def scan_file(
+    path: str,
+    source: str,
+    added_lines: set[int],
+    previous_source: str | None = None,
+) -> list[Finding]:
     """Scan changed lines in a file and emit suppression findings."""
     is_config = path.endswith((".toml", ".json", ".jsonc", ".yaml", ".yml")) or any(
         name in path.lower() for name in ("eslint.config", "stylelint", "knip.config")
@@ -342,7 +416,7 @@ def scan_file(path: str, source: str, added_lines: set[int]) -> list[Finding]:
     pattern = CONFIG_SUPPRESSION_RE if is_config else SOURCE_SUPPRESSION_RE
     candidates = _directive_candidates(path, lines, added_lines, pattern)
     if path.endswith(".toml"):
-        candidates.extend(_toml_candidates(path, lines, added_lines))
+        candidates.extend(_toml_candidates(path, source, previous_source, added_lines))
     duplicates = Counter(raw_id for _, _, _, raw_id in candidates)
     findings: list[Finding] = []
     for line_number, column, text, raw_id in candidates:
@@ -366,6 +440,7 @@ class SuppressionCheck(QualityCheck[Finding]):
                 path,
                 source,
                 set(context.changed_lines.get(path, frozenset())),
+                context.previous_files.get(path),
             )
         )
         verdict = Verdict.FAIL if findings else Verdict.PASS
@@ -396,7 +471,12 @@ def changed_files(github: GitHubAPI, pull: dict[str, JsonValue]) -> list[Finding
     number = json_integer(pull["number"], "pull request number")
     head = json_object(pull["head"], "head")
     head_sha = json_string(head["sha"], "head sha")
+    base = pull.get("base")
+    base_sha = None
+    if base is not None:
+        base_sha = json_string(json_object(base, "base")["sha"], "base sha")
     files: dict[str, str] = {}
+    previous_files: dict[str, str] = {}
     changed_lines: dict[str, frozenset[int]] = {}
     for file in github.paged(f"/pulls/{number}/files"):
         path = json_string(file["filename"], "changed filename")
@@ -426,8 +506,12 @@ def changed_files(github: GitHubAPI, pull: dict[str, JsonValue]) -> list[Finding
         if source is None or not patch:
             continue
         files[path] = source
+        if base_sha is not None:
+            previous_source = github.file_text(path, base_sha)
+            if previous_source is not None:
+                previous_files[path] = previous_source
         changed_lines[path] = frozenset(added_lines_from_patch(patch))
-    result = SuppressionCheck().collect(CheckContext(files, changed_lines))
+    result = SuppressionCheck().collect(CheckContext(files, changed_lines, previous_files))
     return sorted(result.findings, key=lambda finding: (finding.path, finding.line, finding.column))
 
 
