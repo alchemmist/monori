@@ -8,10 +8,12 @@ MUTATION_JOBS ?= $(shell getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.n
 BASE ?= origin/main
 
 WEBBIN := web/node_modules/.bin
+CLOC_EXCLUDE_DIRS := .git,.worktrees,.claude,node_modules,.venv,__pycache__,.pytest_cache,.mypy_cache,.ruff_cache,dist,static,data,reports,coverage,htmlcov,.stryker-tmp,.mutmut-cache,mutants,playwright-report,test-results
 
 .DEFAULT_GOAL := up
 
 .PHONY: install setup tools dev down reset-db deploy api web build clean \
+        code-stat \
         precommit-install precommit-uninstall \
         fmt fmt-check \
         lint lint-web lint-css lint-html lint-server lint-no-comments lint-sql lint-yaml lint-md lint-docs lint-actions lint-docker lint-shell spell \
@@ -23,6 +25,9 @@ install:
 	cd web && npm install --no-audit --no-fund
 	cd tools/frontend-perf && npm install --no-audit --no-fund
 	cd server && uv sync --locked
+	@if ! command -v cloc >/dev/null 2>&1; then \
+		sudo apt-get update && sudo apt-get install -y cloc; \
+	fi
 	$(MAKE) tools
 
 setup: install
@@ -106,6 +111,9 @@ clean:
 		-path './.claude/worktrees' -prune -o \
 		-type d -name '__pycache__' -prune -exec rm -rf {} + -o \
 		-type f -name '*.pyc' -delete
+
+code-stat:
+	cloc . --exclude-dir=$(CLOC_EXCLUDE_DIRS)
 
 SQLFLUFF := uvx --from 'sqlfluff==3.4.2' sqlfluff
 
