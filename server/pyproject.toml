@@ -5,7 +5,7 @@ description = "Monori personal budget server"
 requires-python = ">=3.12"
 dependencies = [
   "uvicorn[standard]>=0.30",
-  "cryptography>=44",
+  "cryptography>=50",
   "pyjwt>=2.9",
   "argon2-cffi>=23",
   "python-multipart>=0.0.9",

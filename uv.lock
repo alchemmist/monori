@@ -1173,7 +1173,7 @@ connectors = [
 requires-dist = [
     { name = "alembic", specifier = ">=1.18.5" },
     { name = "argon2-cffi", specifier = ">=23" },
-    { name = "cryptography", specifier = ">=44" },
+    { name = "cryptography", specifier = ">=50" },
     { name = "openpyxl", specifier = ">=3.1" },
     { name = "playwright", marker = "extra == 'connectors'", specifier = ">=1.40" },
     { name = "pyjwt", specifier = ">=2.9" },
