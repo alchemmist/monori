@@ -41,7 +41,7 @@ class BundleSizeTest(unittest.TestCase):
 
     def test_format_kib_rejects_boolean_values(self) -> None:
         with pytest.raises(TypeError, match="numeric bundle size"):
-            format_kib(True)
+            format_kib(value=True)
 
 
 if __name__ == "__main__":
