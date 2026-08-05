@@ -7,12 +7,18 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import ConfigDict, Field
 from pydantic.dataclasses import dataclass as pydantic_dataclass
 
-from app.auth import AuthenticatedUser, current_user
-from app.db import begin_write
-from app.db_records import CategorySignRecord, TransactionRecord
-from app.deps import IdResponse, SplitResponse, TransactionResponse, conn, serialize_transactions
-from app.importer import tx_hash
-from app.transfer_service import detach_leg
+from monori.server.app.auth import AuthenticatedUser, current_user
+from monori.server.app.db import begin_write
+from monori.server.app.db_records import CategorySignRecord, TransactionRecord
+from monori.server.app.deps import (
+    IdResponse,
+    SplitResponse,
+    TransactionResponse,
+    conn,
+    serialize_transactions,
+)
+from monori.server.app.importer import tx_hash
+from monori.server.app.transfer_service import detach_leg
 
 router = APIRouter(prefix="/api/transactions", tags=["transactions"])
 MIN_SPLIT_PARTS = 2

@@ -7,15 +7,32 @@ inputs:
 runs:
     using: composite
     steps:
-        - name: Setup Python
-          uses: actions/setup-python@v6
+        - name: Setup Python dependencies
+          uses: ./.github/actions/setup-project
           with:
-              python-version: "3.12"
+              python-profile: ci
+        - uses: ./.github/actions/report-in-progress
+          with:
+              marker: object-annotations
+              github-token: ${{ inputs.github-token }}
         - name: Test annotation checker
+          id: object-annotation-test
           shell: bash
-          run: python -m unittest discover -s scripts -p 'test_object_annotation_gate.py'
+          run: uv run --locked python -m unittest discover -s ci/tests -p 'test_object_annotations.py'
         - name: Check Python annotations
           shell: bash
           env:
               GITHUB_TOKEN: ${{ inputs.github-token }}
-          run: python -m scripts.object_annotation_gate
+          run: uv run --locked python -m monori.ci.quality_graph.checks.object_annotations
+        - name: Publish failed annotation test report
+          if: always() && steps.object-annotation-test.outcome == 'failure'
+          shell: bash
+          env:
+              GITHUB_TOKEN: ${{ inputs.github-token }}
+              PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
+          run: >-
+              uv run --locked python -m monori.ci.quality_graph.reporting complete
+              --marker object-annotations
+              --status fail
+              --message 'The object annotation checker tests failed.'
+              --pr-number "$PR_NUMBER"

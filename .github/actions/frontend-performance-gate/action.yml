@@ -3,21 +3,23 @@ description: Measure frontend performance against the pull request merge base
 runs:
     using: composite
     steps:
+        - name: Setup Python dependencies
+          uses: ./.github/actions/setup-project
+          with:
+              python-profile: runtime
+        - uses: ./.github/actions/report-in-progress
+          with:
+              marker: frontend-performance
+              github-token: ${{ github.token }}
         - name: Setup Node
           uses: actions/setup-node@v7
           with:
               node-version: 22
               cache: npm
               cache-dependency-path: tools/frontend-perf/package-lock.json
-
         - name: Pin npm
           shell: bash
           run: npm install --global npm@10.9.2
-
-        - name: Setup Python
-          uses: actions/setup-python@v6
-          with:
-              python-version: "3.12"
         - name: Install performance tools
           shell: bash
           run: npm ci --no-audit --no-fund
@@ -28,7 +30,7 @@ runs:
           working-directory: tools/frontend-perf
         - name: Test performance comparator
           shell: bash
-          run: python -m unittest scripts.test_frontend_perf scripts.test_frontend_perf_gate
+          run: uv run --locked python -m unittest monori.ci.tests.test_frontend_measurement monori.ci.tests.test_frontend_performance
         - name: Compare PR with merge base
           id: performance
           shell: bash
@@ -55,7 +57,7 @@ runs:
               SUMMARY_PATH: ${{ runner.temp }}/frontend-performance/summary.md
           run: |
               set +e
-              python -m scripts.frontend_perf_gate
+              uv run --locked python -m monori.ci.quality_graph.checks.frontend_performance
               code=$?
               echo "exit_code=$code" >> "$GITHUB_OUTPUT"
               exit 0
@@ -70,9 +72,14 @@ runs:
           run: |
               mkdir -p "$PERF_OUTPUT_DIR"
               if [ ! -f "$PERF_OUTPUT_DIR/summary.md" ]; then
-                printf '%s\n' '## ❌ Frontend performance measurement did not produce a report' > "$PERF_OUTPUT_DIR/summary.md"
+                uv run --locked python -m monori.ci.quality_graph.reporting complete \
+                  --marker frontend-performance \
+                  --status fail \
+                  --message 'Frontend performance measurement did not produce a report.' \
+                  --pr-number "$PR_NUMBER"
+                exit 0
               fi
-              python -m scripts.pr_comment \
+              uv run --locked python -m monori.ci.lib.comments \
                 --marker frontend-performance \
                 --body-file "$PERF_OUTPUT_DIR/summary.md" \
                 --pr-number "$PR_NUMBER"

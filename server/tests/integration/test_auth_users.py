@@ -2,9 +2,9 @@ import pytest
 from fastapi.testclient import TestClient
 from httpx2 import Response as HTTPXResponse
 
-import app.db as dbmod
-from app.routers.auth_router import _valid_email
-from tests.conftest import Api, login_as
+import monori.server.app.db as dbmod
+from monori.server.app.routers.auth_router import _valid_email
+from monori.server.tests.conftest import Api, login_as
 
 pytestmark = pytest.mark.integration
 

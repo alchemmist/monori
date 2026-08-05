@@ -7,12 +7,15 @@ server/static/
 server/data/
 web/node_modules/
 web/dist/
-server/.venv/
+.venv/
 __pycache__/
 *.pyc
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+*.egg-info/
+build/
+dist/
 .coverage
 coverage.json
 htmlcov/

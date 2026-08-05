@@ -1,0 +1,34 @@
+[project]
+name = "monori-ci"
+version = "0.1.0"
+description = "Monori CI libraries and checks"
+requires-python = ">=3.12"
+dependencies = [
+  "dulwich>=0.25.0",
+  "httpx>=0.27",
+  "jinja2>=3.1",
+  "monori-common",
+  "pydantic>=2",
+]
+
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[tool.uv.sources]
+monori-common = { workspace = true }
+
+[tool.setuptools]
+package-dir = { "monori.ci" = "." }
+packages = [
+  "monori.ci",
+  "monori.ci.lib",
+  "monori.ci.quality_graph",
+  "monori.ci.quality_graph.checks",
+  "monori.ci.quality_graph.templates",
+  "monori.ci.tests",
+]
+
+[tool.setuptools.package-data]
+"monori.ci" = ["py.typed"]
+"monori.ci.quality_graph" = ["templates/*.j2"]

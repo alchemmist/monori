@@ -15,10 +15,10 @@ import pytest
 from openpyxl import Workbook, load_workbook
 from openpyxl.worksheet.worksheet import Worksheet
 
-from app.workbook import spec
-from app.workbook.models import WorkbookGroup as WorkbookGroupRow
-from app.workbook.models import WorkbookParseError as WorkbookParseErrorRow
-from app.workbook.parser import (
+from monori.server.app.workbook import spec
+from monori.server.app.workbook.models import WorkbookGroup as WorkbookGroupRow
+from monori.server.app.workbook.models import WorkbookParseError as WorkbookParseErrorRow
+from monori.server.app.workbook.parser import (
     TX_ALIASES,
     WorkbookError,
     _category_col,

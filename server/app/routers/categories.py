@@ -4,13 +4,14 @@ import sqlite3
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import ConfigDict, Field, JsonValue, model_validator
+from pydantic import ConfigDict, Field, model_validator
 from pydantic.dataclasses import dataclass as pydantic_dataclass
 
-from app.auth import AuthenticatedUser, current_user
-from app.db_records import CategoryOwnershipRecord, GoalGroupRecord
-from app.deps import IdResponse, conn
-from app.domain_types import GoalStatus
+from monori.common import JsonValue
+from monori.server.app.auth import AuthenticatedUser, current_user
+from monori.server.app.db_records import CategoryOwnershipRecord, GoalGroupRecord
+from monori.server.app.deps import IdResponse, conn
+from monori.server.app.domain_types import GoalStatus
 
 router = APIRouter(prefix="/api/categories", tags=["categories"])
 

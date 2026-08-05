@@ -1,8 +1,8 @@
 """
 SQLite access layer. All money amounts are stored as integer kopecks.
 
-The schema has a single canonical definition in ``server/schema.sql``; its
-history lives as alembic revisions in ``server/migrations``. A fresh database
+The schema has a single canonical definition in ``server/schema.sql``; its history lives as
+Alembic revisions in ``server/migrations``. A fresh database
 is created straight from ``schema.sql`` and stamped at head; an existing one is
 upgraded through the migration chain. Databases from before the alembic switch
 carry ``PRAGMA user_version`` — they are adopted by stamping the matching
@@ -17,14 +17,10 @@ import threading
 from alembic import command
 from alembic.config import Config
 
-DB_PATH = os.environ.get(
-    "MONORI_DB",
-    str(pathlib.Path(__file__).resolve().parent.parent / "data" / "monori.db"),
-)
-
-SERVER_DIR = pathlib.Path(__file__).resolve().parent.parent
-SCHEMA_PATH = SERVER_DIR / "schema.sql"
-MIGRATIONS_PATH = SERVER_DIR / "migrations"
+PACKAGE_DIR = pathlib.Path(__file__).resolve().parents[1]
+DB_PATH = os.environ.get("MONORI_DB", str(pathlib.Path.cwd() / "server" / "data" / "monori.db"))
+SCHEMA_PATH = PACKAGE_DIR / "schema.sql"
+MIGRATIONS_PATH = PACKAGE_DIR / "migrations"
 
 
 LEGACY_REVISIONS = ["0001", "0002", "0003", "0004", "0005", "0006"]

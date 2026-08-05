@@ -17,12 +17,12 @@ from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import ConfigDict, Field
 from pydantic.dataclasses import dataclass as pydantic_dataclass
 
-from app.admin import admin_emails
-from app.auth import AuthenticatedUser, current_user
-from app.db_records import UserRecord
-from app.deps import UserResponse, conn, serialize_user
-from app.emails import canonical_email, normalize_email
-from app.security import create_access_token, hash_password, verify_password
+from monori.server.app.admin import admin_emails
+from monori.server.app.auth import AuthenticatedUser, current_user
+from monori.server.app.db_records import UserRecord
+from monori.server.app.deps import UserResponse, conn, serialize_user
+from monori.server.app.emails import canonical_email, normalize_email
+from monori.server.app.security import create_access_token, hash_password, verify_password
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 

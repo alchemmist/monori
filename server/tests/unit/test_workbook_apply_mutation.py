@@ -10,11 +10,9 @@ import re
 import sqlite3
 import sys
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
-
-import app.db as dbmod
-from app.workbook.apply import apply_workbook
-from app.workbook.models import (
+import monori.server.app.db as dbmod
+from monori.server.app.workbook.apply import apply_workbook
+from monori.server.app.workbook.models import (
     ParsedWorkbook,
     WorkbookBudget,
     WorkbookCategory,

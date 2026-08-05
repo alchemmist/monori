@@ -10,10 +10,10 @@ raises :class:`SmsRequiredError`; the caller parks the live connector and later 
 
 from typing import ClassVar
 
-from pydantic import ConfigDict, Field, JsonValue, TypeAdapter
+from pydantic import ConfigDict, Field, TypeAdapter
 from pydantic.dataclasses import dataclass as pydantic_dataclass
 
-type JsonObject = dict[str, JsonValue]
+from monori.common import JsonObject
 
 
 @pydantic_dataclass

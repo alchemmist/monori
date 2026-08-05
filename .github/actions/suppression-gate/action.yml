@@ -7,15 +7,32 @@ inputs:
 runs:
     using: composite
     steps:
-        - name: Setup Python
-          uses: actions/setup-python@v6
+        - name: Setup Python dependencies
+          uses: ./.github/actions/setup-project
           with:
-              python-version: "3.12"
+              python-profile: ci
+        - uses: ./.github/actions/report-in-progress
+          with:
+              marker: suppression
+              github-token: ${{ inputs.github-token }}
         - name: Test suppression checker
+          id: suppression-test
           shell: bash
-          run: python -m unittest discover -s scripts -p 'test_suppression_gate.py'
+          run: uv run --locked python -m unittest discover -s ci/tests -p 'test_suppressions.py'
         - name: Check lint suppressions
           shell: bash
           env:
               GITHUB_TOKEN: ${{ inputs.github-token }}
-          run: python -m scripts.suppression_gate
+          run: uv run --locked python -m monori.ci.quality_graph.checks.suppressions
+        - name: Publish failed suppression test report
+          if: always() && steps.suppression-test.outcome == 'failure'
+          shell: bash
+          env:
+              GITHUB_TOKEN: ${{ inputs.github-token }}
+              PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
+          run: >-
+              uv run --locked python -m monori.ci.quality_graph.reporting complete
+              --marker suppression
+              --status fail
+              --message 'The suppression checker tests failed.'
+              --pr-number "$PR_NUMBER"

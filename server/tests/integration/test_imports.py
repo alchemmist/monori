@@ -5,16 +5,16 @@ from fastapi.testclient import TestClient
 from httpx2 import Response
 from pydantic import TypeAdapter
 
-from app.deps import IdResponse
-from app.routers.imports import (
+from monori.server.app.deps import IdResponse
+from monori.server.app.routers.imports import (
     MAX_STATEMENT_TEXT,
     DuplicatesResponse,
     ImportCommitResponse,
     ImportPreviewResponse,
     ImportRowResponse,
 )
-from app.routers.transactions import TransactionListResponse
-from tests.conftest import AccountOptions, Api, TransactionOptions
+from monori.server.app.routers.transactions import TransactionListResponse
+from monori.server.tests.conftest import AccountOptions, Api, TransactionOptions
 
 pytestmark = pytest.mark.integration
 

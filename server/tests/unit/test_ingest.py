@@ -3,14 +3,12 @@ import sqlite3
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
-
-import app.db as dbmod
-from app.connectors.base import SyncRow
-from app.deps import snapshot
-from app.domain_types import TransactionSource
-from app.importer import CategoryRule
-from app.ingest import (
+import monori.server.app.db as dbmod
+from monori.server.app.connectors.base import SyncRow
+from monori.server.app.deps import snapshot
+from monori.server.app.domain_types import TransactionSource
+from monori.server.app.importer import CategoryRule
+from monori.server.app.ingest import (
     categorize_rows,
     commit_rows,
     drop_already_present,

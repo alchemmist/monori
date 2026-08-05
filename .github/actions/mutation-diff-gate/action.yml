@@ -1,5 +1,5 @@
 name: Mutation diff gate
-description: Run frontend and backend mutation checks for the pull request diff
+description: Run frontend and Python mutation checks for the pull request diff
 runs:
     using: composite
     steps:
@@ -13,29 +13,15 @@ runs:
         - name: Fetch mutation base
           shell: bash
           run: git fetch --no-tags origin main
-        - name: Setup Node
-          uses: actions/setup-node@v7
+        - name: Setup project dependencies
+          uses: ./.github/actions/setup-project
           with:
-              node-version: 22
-              cache: npm
-              cache-dependency-path: web/package-lock.json
-
-        - name: Pin npm
-          shell: bash
-          run: npm install --global npm@10.9.2
-
-        - name: Setup uv
-          uses: astral-sh/setup-uv@v7
+              install-web: true
+              python-profile: mutation
+        - uses: ./.github/actions/report-in-progress
           with:
-              enable-cache: true
-        - name: Install web deps
-          shell: bash
-          run: npm ci --no-audit --no-fund
-          working-directory: web
-        - name: Install server deps
-          shell: bash
-          run: uv sync --locked
-          working-directory: server
+              marker: mutation
+              github-token: ${{ github.token }}
         - name: Restore Stryker cache
           uses: actions/cache@v4
           with:
@@ -45,8 +31,9 @@ runs:
                   mutation-stryker-${{ runner.os }}-${{ hashFiles('web/package-lock.json') }}-pr-${{ github.event.pull_request.number }}-
                   mutation-stryker-${{ runner.os }}-${{ hashFiles('web/package-lock.json') }}-main-
         - name: Test diff mutation gate
+          id: mutation-test
           shell: bash
-          run: env -u GITHUB_STEP_SUMMARY python3 -m unittest scripts/test_mutation_diff_gate.py
+          run: env -u GITHUB_STEP_SUMMARY uv run --locked python -m unittest monori.ci.tests.test_mutation_diff_gate
         - name: Run frontend diff mutation tests
           id: mutation-front
           continue-on-error: true
@@ -66,13 +53,18 @@ runs:
               PR_NUMBER: ${{ github.event.pull_request.number }}
           run: |
               if [ ! -s "$MUTATION_SUMMARY_PATH" ]; then
-                printf '%s\n' '## Mutation testing' '' 'No mutation report was produced.' > "$MUTATION_SUMMARY_PATH"
+                printf '%s\n' 'No mutation report was produced.' > "$MUTATION_SUMMARY_PATH"
               fi
-              python -m scripts.pr_comment \
+              status=done
+              if [ "${{ steps.mutation-test.outcome }}" = failure ] || [ "${{ steps.mutation-front.outcome }}" = failure ] || [ "${{ steps.mutation-back.outcome }}" = failure ]; then
+                status=fail
+              fi
+              uv run --locked python -m monori.ci.quality_graph.reporting complete \
                 --marker mutation \
+                --status "$status" \
                 --body-file "$MUTATION_SUMMARY_PATH" \
                 --pr-number "$PR_NUMBER"
         - name: Fail if a mutation gate failed
-          if: steps.mutation-front.outcome == 'failure' || steps.mutation-back.outcome == 'failure'
+          if: always() && (steps.mutation-test.outcome == 'failure' || steps.mutation-front.outcome == 'failure' || steps.mutation-back.outcome == 'failure')
           shell: bash
           run: exit 1

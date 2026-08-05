@@ -2,7 +2,7 @@ name: Quality Graph
 
 on:
     issue_comment:
-        types: [created]
+        types: [created, edited]
     pull_request:
         branches: [main]
 
@@ -39,14 +39,12 @@ jobs:
               uses: actions/checkout@v7
               with:
                   persist-credentials: false
-            - name: Setup Python
-              uses: actions/setup-python@v6
+            - name: Setup Python dependencies
+              uses: ./.github/actions/setup-project
               with:
-                  python-version: "3.12"
-            - name: Install workflow test dependencies
-              run: python -m pip install pyyaml types-PyYAML
+                  python-profile: ci
             - name: Validate PR workflow graph
-              run: python -m unittest scripts.test_pr_workflow scripts.test_main_workflow
+              run: uv run --locked python -m unittest monori.ci.tests.test_pr_workflow monori.ci.tests.test_main_workflow
 
     fmt-check:
         name: Format check
@@ -60,7 +58,7 @@ jobs:
             - uses: ./.github/actions/setup-project
               with:
                   install-web: true
-                  install-server: true
+                  python-profile: format
             - run: make fmt-check
 
     lint:
@@ -75,7 +73,7 @@ jobs:
             - uses: ./.github/actions/setup-project
               with:
                   install-web: true
-                  install-server: true
+                  python-profile: lint
             - name: Install external linters
               env:
                   HADOLINT_VERSION: "2.12.0"
@@ -117,7 +115,7 @@ jobs:
             - uses: ./.github/actions/setup-project
               with:
                   install-web: true
-                  install-server: true
+                  python-profile: type
             - run: make type
 
     analyze:
@@ -132,7 +130,7 @@ jobs:
             - uses: ./.github/actions/setup-project
               with:
                   install-web: true
-                  install-server: true
+                  python-profile: analyze
             - name: Install semgrep
               run: python -m pip install semgrep
             - run: make analyze
@@ -149,7 +147,7 @@ jobs:
             - uses: ./.github/actions/setup-project
               with:
                   install-web: true
-                  install-server: true
+                  python-profile: test
             - run: make t-fast
 
     test-medium:
@@ -164,7 +162,7 @@ jobs:
             - uses: ./.github/actions/setup-project
               with:
                   install-web: true
-                  install-server: true
+                  python-profile: test
             - run: make t-medium
 
     test-slow:
@@ -179,7 +177,7 @@ jobs:
             - uses: ./.github/actions/setup-project
               with:
                   install-web: true
-                  install-server: true
+                  python-profile: test
             - name: Restore Playwright browser cache
               uses: actions/cache@v4
               with:
@@ -216,95 +214,32 @@ jobs:
             - uses: ./.github/actions/setup-project
               with:
                   install-web: true
-                  install-server: true
+                  python-profile: coverage
             - run: make coverage
 
-    audit-deps:
-        name: Dependency audit
-        needs:
-            [
-                coverage,
-                mutation,
-                bundle-size,
-                frontend-performance-scope,
-                frontend-performance,
-                frontend-performance-skipped,
-            ]
+    audit:
+        name: Dependency and security audit
+        needs: [coverage, mutation, bundle-size, frontend-performance]
         if: >-
             always()
             && needs.coverage.result == 'success'
             && needs.mutation.result == 'success'
             && needs.bundle-size.result == 'success'
-            && needs.frontend-performance-scope.result == 'success'
-            && (needs.frontend-performance.result == 'success' || needs.frontend-performance-skipped.result == 'success')
+            && needs.frontend-performance.result == 'success'
         runs-on: ubuntu-latest
+        permissions:
+            contents: read
+            security-events: write
         steps:
             - uses: actions/checkout@v7
               with:
+                  fetch-depth: 0
                   persist-credentials: false
             - uses: ./.github/actions/setup-project
               with:
                   install-web: true
-                  install-server: true
-            - run: make audit-deps
-
-    audit-deps-py:
-        name: Python dependency audit
-        needs:
-            [
-                coverage,
-                mutation,
-                bundle-size,
-                frontend-performance-scope,
-                frontend-performance,
-                frontend-performance-skipped,
-            ]
-        if: >-
-            always()
-            && needs.coverage.result == 'success'
-            && needs.mutation.result == 'success'
-            && needs.bundle-size.result == 'success'
-            && needs.frontend-performance-scope.result == 'success'
-            && (needs.frontend-performance.result == 'success' || needs.frontend-performance-skipped.result == 'success')
-        runs-on: ubuntu-latest
-        steps:
-            - uses: actions/checkout@v7
-              with:
-                  persist-credentials: false
-            - uses: ./.github/actions/setup-project
-              with:
-                  install-server: true
-            - run: make audit-deps-py
-
-    secrets:
-        name: Secret scan
-        needs:
-            [
-                coverage,
-                mutation,
-                bundle-size,
-                frontend-performance-scope,
-                frontend-performance,
-                frontend-performance-skipped,
-            ]
-        if: >-
-            always()
-            && needs.coverage.result == 'success'
-            && needs.mutation.result == 'success'
-            && needs.bundle-size.result == 'success'
-            && needs.frontend-performance-scope.result == 'success'
-            && (needs.frontend-performance.result == 'success' || needs.frontend-performance-skipped.result == 'success')
-        runs-on: ubuntu-latest
-        steps:
-            - name: Checkout
-              uses: actions/checkout@v7
-              with:
-                  fetch-depth: 0
-                  persist-credentials: false
-            - name: Scan for secrets
-              uses: gitleaks/gitleaks-action@v3
-              env:
-                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  python-profile: audit
+            - run: make audit
 
     mutation:
         name: Mutation testing
@@ -343,29 +278,10 @@ jobs:
                   persist-credentials: false
             - uses: ./.github/actions/bundle-size-gate
 
-    frontend-performance-scope:
-        name: Front performance needed?
+    frontend-performance:
+        name: Frontend performance
         needs: build
         if: github.event_name == 'pull_request' && needs.build.result == 'success'
-        permissions:
-            contents: read
-            issues: write
-            pull-requests: write
-        runs-on: ubuntu-latest
-        outputs:
-            relevant: ${{ steps.scope.outputs.relevant }}
-        steps:
-            - name: Checkout workflow code
-              uses: actions/checkout@v7
-              with:
-                  persist-credentials: false
-            - id: scope
-              uses: ./.github/actions/frontend-performance-scope
-
-    frontend-performance:
-        name: Run frontend performance
-        needs: frontend-performance-scope
-        if: github.event_name == 'pull_request' && needs.frontend-performance-scope.result == 'success' && needs.frontend-performance-scope.outputs.relevant == 'true'
         permissions:
             actions: write
             contents: read
@@ -374,20 +290,15 @@ jobs:
         runs-on: ubuntu-latest
         timeout-minutes: 45
         steps:
-            - name: Checkout
+            - name: Checkout workflow code
               uses: actions/checkout@v7
               with:
                   fetch-depth: 0
                   persist-credentials: false
+            - id: scope
+              uses: ./.github/actions/frontend-performance-scope
             - uses: ./.github/actions/frontend-performance-gate
-
-    frontend-performance-skipped:
-        name: Skip frontend performance
-        needs: frontend-performance-scope
-        if: github.event_name == 'pull_request' && needs.frontend-performance-scope.result == 'success' && needs.frontend-performance-scope.outputs.relevant == 'false'
-        runs-on: ubuntu-latest
-        steps:
-            - run: echo "Frontend performance skipped because the pull request does not affect performance-relevant files."
+              if: steps.scope.outputs.relevant == 'true'
 
     object-annotations:
         name: Python object annotation gate
@@ -432,7 +343,14 @@ jobs:
         if: >-
             github.event_name == 'issue_comment'
             && github.event.issue.pull_request
-            && startsWith(github.event.comment.body, '/')
+            && (
+              (github.event.action == 'created' && startsWith(github.event.comment.body, '/'))
+              || (
+                github.event.action == 'edited'
+                && github.event.sender.type != 'Bot'
+                && contains(github.event.comment.body, '<!-- monori-qg-control:')
+              )
+            )
         runs-on: ubuntu-latest
         permissions:
             actions: write

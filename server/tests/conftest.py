@@ -7,21 +7,18 @@ import pytest
 from fastapi.testclient import TestClient
 from pydantic import TypeAdapter
 
-import app.db as dbmod
-from app.main import app as fastapi_app
-
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
-
-from app.deps import (
+import monori.server.app.db as dbmod
+from monori.server.app.deps import (
     AccountResponse,
     CategoryResponse,
     IdResponse,
     SnapshotResponse,
     TransactionResponse,
 )
-from app.routers.auth_router import TokenResponse
-from app.routers.imports import ImportPreviewResponse, ImportRowResponse
-from app.routers.transfers import TransferIdResponse
+from monori.server.app.main import app as fastapi_app
+from monori.server.app.routers.auth_router import TokenResponse
+from monori.server.app.routers.imports import ImportPreviewResponse, ImportRowResponse
+from monori.server.app.routers.transfers import TransferIdResponse
 
 STATEMENT = (
     "05.01.2026 10:00:00\t05.01.2026\t*1\tOK\t-100,00\tRUB\t-100,00\tRUB\t\t"

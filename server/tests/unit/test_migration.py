@@ -9,8 +9,8 @@ import pytest
 from alembic import command
 from alembic.config import Config
 
-from app.db import LEGACY_REVISIONS, _alembic_config, connect
-from app.importer import tx_hash
+from monori.server.app.db import LEGACY_REVISIONS, _alembic_config, connect
+from monori.server.app.importer import tx_hash
 
 if TYPE_CHECKING:
     from collections.abc import Callable

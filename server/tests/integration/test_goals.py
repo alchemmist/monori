@@ -1,7 +1,7 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from tests.conftest import Api, TransactionOptions
+from monori.server.tests.conftest import Api, TransactionOptions
 
 pytestmark = pytest.mark.integration
 
