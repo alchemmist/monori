@@ -6,6 +6,7 @@ MUTATION_THRESHOLD ?= 85
 MUTATION_DIFF_THRESHOLD ?= 90
 MUTATION_JOBS ?= $(shell getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 1)
 BASE ?= origin/main
+MONORI_TOOLS_BIN ?= $(HOME)/.local/bin
 
 WEBBIN := web/node_modules/.bin
 PYTHON_SOURCES := $(shell python3 -c 'import tomllib; from pathlib import Path; print(*tomllib.loads(Path("pyproject.toml").read_text())["tool"]["uv"]["workspace"]["members"])')
@@ -34,7 +35,7 @@ install:
 setup: install
 
 tools:
-	bash scripts/install-tools.sh
+	MONORI_TOOLS_BIN="$(MONORI_TOOLS_BIN)" bash scripts/install-tools.sh
 	uvx --from 'sqlfluff==3.4.2' sqlfluff --version >/dev/null
 	uvx yamllint --version >/dev/null
 	uvx codespell --version >/dev/null
@@ -227,8 +228,13 @@ audit-deps-py:
 		&& uv run --locked --group audit pip-audit -r "$$req" ); code=$$?; \
 	rm -f "$$req"; exit $$code
 
-audit-secrets:
-	gitleaks detect --no-banner --redact
+audit-secrets: tools
+	@gitleaks_bin="$$(command -v gitleaks || printf '%s/gitleaks' "$(MONORI_TOOLS_BIN)")"; \
+	if [ ! -x "$$gitleaks_bin" ]; then \
+		echo "gitleaks was not installed at $$gitleaks_bin" >&2; \
+		exit 1; \
+	fi; \
+	"$$gitleaks_bin" detect --no-banner --redact
 
 test: t-front t-back t-e2e
 
