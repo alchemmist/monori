@@ -236,6 +236,19 @@ class PullRequestReport:
             )
         )
 
+    def mark_failed(self, message: str) -> None:
+        """Replace a pending report with an explicit infrastructure failure."""
+        self.publish(
+            render_report(
+                ReportModel(
+                    self.definition.marker,
+                    ReportStatus.FAIL,
+                    message,
+                    (ReportMetric("Status", "❌ Failed"),),
+                )
+            )
+        )
+
 
 def main() -> int:
     """Run report and reaction lifecycle operations from a composite action."""

@@ -31,6 +31,7 @@ runs:
                   mutation-stryker-${{ runner.os }}-${{ hashFiles('web/package-lock.json') }}-pr-${{ github.event.pull_request.number }}-
                   mutation-stryker-${{ runner.os }}-${{ hashFiles('web/package-lock.json') }}-main-
         - name: Test diff mutation gate
+          id: mutation-test
           shell: bash
           run: env -u GITHUB_STEP_SUMMARY uv run --locked python -m unittest monori.ci.tests.test_mutation_diff_gate
         - name: Run frontend diff mutation tests
@@ -55,7 +56,7 @@ runs:
                 printf '%s\n' 'No mutation report was produced.' > "$MUTATION_SUMMARY_PATH"
               fi
               status=done
-              if [ "${{ steps.mutation-front.outcome }}" = failure ] || [ "${{ steps.mutation-back.outcome }}" = failure ]; then
+              if [ "${{ steps.mutation-test.outcome }}" = failure ] || [ "${{ steps.mutation-front.outcome }}" = failure ] || [ "${{ steps.mutation-back.outcome }}" = failure ]; then
                 status=fail
               fi
               uv run --locked python -m monori.ci.quality_graph.reporting complete \
@@ -64,6 +65,6 @@ runs:
                 --body-file "$MUTATION_SUMMARY_PATH" \
                 --pr-number "$PR_NUMBER"
         - name: Fail if a mutation gate failed
-          if: steps.mutation-front.outcome == 'failure' || steps.mutation-back.outcome == 'failure'
+          if: always() && (steps.mutation-test.outcome == 'failure' || steps.mutation-front.outcome == 'failure' || steps.mutation-back.outcome == 'failure')
           shell: bash
           run: exit 1

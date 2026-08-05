@@ -78,11 +78,6 @@ def decode_json(path: Path) -> JsonValue:
     return value
 
 
-def json_number(value: JsonValue, context: str) -> float:
-    """Return a numeric JSON measurement as a float."""
-    return float(number_value(value, context))
-
-
 def config_parts(
     config: dict[str, JsonValue],
 ) -> tuple[int, list[dict[str, JsonValue]], dict[str, dict[str, JsonValue]]]:
@@ -136,7 +131,7 @@ def load_lighthouse(
             if metric_id == "navigation":
                 continue
             audit = object_value(audits.get(metric_id), f"Lighthouse audit {metric_id}")
-            value = json_number(audit.get("numericValue"), f"{metric_id}.numericValue")
+            value = number_value(audit.get("numericValue"), f"{metric_id}.numericValue")
             values.setdefault((route_id, metric_id), []).append(value)
 
     measurements: dict[MeasurementKey, Measurement] = {}
@@ -172,7 +167,7 @@ def load_navigation(path: Path, config: dict[str, JsonValue]) -> dict[Measuremen
         scenario_id = string_value(scenario.get("id"), "navigation scenario id")
         label = string_value(scenario.get("label"), "navigation scenario label")
         values = [
-            json_number(value, f"{label} duration")
+            number_value(value, f"{label} duration")
             for value in array_value(scenario.get("valuesMs"), f"{label} values")
         ]
         key = (scenario_id, "navigation")
@@ -219,8 +214,8 @@ def band(value: float, metric: dict[str, JsonValue]) -> str | None:
     raw_poor = metric.get("poor")
     if raw_good is None or raw_poor is None:
         return None
-    good = json_number(raw_good, "good band")
-    poor = json_number(raw_poor, "poor band")
+    good = number_value(raw_good, "good band")
+    poor = number_value(raw_poor, "poor band")
     if value <= good:
         return "good"
     if value >= poor:
@@ -231,7 +226,7 @@ def band(value: float, metric: dict[str, JsonValue]) -> str | None:
 def threshold(metric: dict[str, JsonValue], name: str, default: float = 0) -> float:
     """Return a numeric metric threshold or its default when omitted."""
     raw = metric.get(name)
-    return default if raw is None else json_number(raw, name)
+    return default if raw is None else number_value(raw, name)
 
 
 def classify_band_crossing(
@@ -473,18 +468,18 @@ def render_standards(config: dict[str, JsonValue]) -> list[str]:
     for metric_id, metric in metrics.items():
         label = string_value(metric.get("label"), f"{metric_id} label")
         noise = format_value(
-            json_number(metric.get("noiseAbsolute"), "noiseAbsolute"),
+            number_value(metric.get("noiseAbsolute"), "noiseAbsolute"),
             string_value(metric.get("unit"), "unit"),
         )
         policy = metric.get("policy")
         if policy == "ttfb":
-            critical_percent = json_number(metric.get("criticalPercent"), "criticalPercent")
+            critical_percent = number_value(metric.get("criticalPercent"), "criticalPercent")
             critical_absolute = format_value(
-                json_number(metric.get("criticalAbsolute"), "criticalAbsolute"),
+                number_value(metric.get("criticalAbsolute"), "criticalAbsolute"),
                 string_value(metric.get("unit"), "unit"),
             )
             poor = format_value(
-                json_number(metric.get("poor"), "poor"),
+                number_value(metric.get("poor"), "poor"),
                 string_value(metric.get("unit"), "unit"),
             )
             lines.append(
@@ -493,11 +488,11 @@ def render_standards(config: dict[str, JsonValue]) -> list[str]:
             )
             continue
 
-        critical_percent = json_number(metric.get("criticalPercent"), "criticalPercent")
+        critical_percent = number_value(metric.get("criticalPercent"), "criticalPercent")
         line = f"- **{label}:** more than {critical_percent:.0f}% slower and at least +{noise}"
         if metric.get("poor") is not None:
             poor = format_value(
-                json_number(metric.get("poor"), "poor"),
+                number_value(metric.get("poor"), "poor"),
                 string_value(metric.get("unit"), "unit"),
             )
             line += f", or crosses into the poor band (≥ {poor}) after clearing +{noise}"

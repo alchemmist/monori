@@ -64,11 +64,6 @@ class BundleSizeCheck(QualityCheck[BundleFinding]):
         return CheckResult(findings, Verdict.FAIL if findings else Verdict.PASS)
 
 
-def json_number(value: JsonValue, context: str) -> int | float:
-    """Return a numeric JSON bundle-size value."""
-    return number_value(value, context)
-
-
 def append_commands(summary: str, entries: list[dict[str, JsonValue]], approved: set[str]) -> str:
     """Render bundle details and commands through the shared report template."""
     finding_ids = {
@@ -114,8 +109,8 @@ def render_summary(report: dict[str, JsonValue]) -> str:
         "| --- | ---: | ---: | ---: | --- |",
     ]
     for entry in entries:
-        delta = int(json_number(entry.get("delta"), "delta"))
-        percent = float(json_number(entry.get("percent"), "percent"))
+        delta = int(number_value(entry.get("delta"), "delta"))
+        percent = float(number_value(entry.get("percent"), "percent"))
         sign = "+" if delta > 0 else ""
         lines.append(
             f"| {string_value(entry.get('label'), 'finding label')} | "
@@ -153,7 +148,7 @@ def main() -> int:
     entries = [
         object_value(item, "entry") for item in array_value(report.get("entries"), "entries")
     ]
-    number = int(json_number(report.get("prNumber"), "pull request number"))
+    number = int(number_value(report.get("prNumber"), "pull request number"))
     pull = object_value(github.request("GET", f"/pulls/{number}"), "pull request")
     raw_body = pull.get("body")
     body = raw_body if isinstance(raw_body, str) else ""

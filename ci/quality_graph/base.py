@@ -413,6 +413,20 @@ class PullRequestSourceCheck[FindingType: ApprovableFinding](QualityCheck[Findin
             return 0
         report = self.report(github, number)
         report.mark_in_progress()
+        try:
+            return self._run_pull_request_gate(github, event, number, report)
+        except (LookupError, OSError, RuntimeError, TypeError, ValueError):
+            report.mark_failed("The check stopped before it could produce a report.")
+            raise
+
+    def _run_pull_request_gate(
+        self,
+        github: RepositoryGitHubAPI,
+        event: dict[str, JsonValue],
+        number: int,
+        report: PullRequestReport,
+    ) -> int:
+        """Execute a source check after its report has entered the pending state."""
         raw_pull = github.request("GET", f"/pulls/{number}")
         if raw_pull is None:
             message = f"Pull request #{number} was not found"

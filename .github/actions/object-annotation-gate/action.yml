@@ -16,6 +16,7 @@ runs:
               marker: object-annotations
               github-token: ${{ inputs.github-token }}
         - name: Test annotation checker
+          id: object-annotation-test
           shell: bash
           run: uv run --locked python -m unittest discover -s ci/tests -p 'test_object_annotations.py'
         - name: Check Python annotations
@@ -23,3 +24,15 @@ runs:
           env:
               GITHUB_TOKEN: ${{ inputs.github-token }}
           run: uv run --locked python -m monori.ci.quality_graph.checks.object_annotations
+        - name: Publish failed annotation test report
+          if: always() && steps.object-annotation-test.outcome == 'failure'
+          shell: bash
+          env:
+              GITHUB_TOKEN: ${{ inputs.github-token }}
+              PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
+          run: >-
+              uv run --locked python -m monori.ci.quality_graph.reporting complete
+              --marker object-annotations
+              --status fail
+              --message 'The object annotation checker tests failed.'
+              --pr-number "$PR_NUMBER"
