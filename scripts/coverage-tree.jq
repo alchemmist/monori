@@ -26,7 +26,7 @@ def stacknode($name; $all):
 ($be[0].files
   | to_entries
   | map(select(.value.summary.num_statements > 0))
-  | map((.key | sub("^(common|ci|server)/src/monori/"; "") | sub("^monori/"; "")) as $path | {
+  | map((.key | sub("^monori/"; "")) as $path | {
       stack: (if ($path | startswith("ci/")) then "ci" else "backend" end),
       module: (if ($path | startswith("common/")) then "common" elif ($path | startswith("ci/lib/")) then "lib" elif ($path | startswith("ci/quality_graph/")) then "quality_graph" elif ($path | test("^(ci|server)/tests/")) then "tests" else "app" end),
       file: ($path | sub("^common/|^server/(app|tests)/|^ci/(lib|quality_graph|tests)/"; "")),

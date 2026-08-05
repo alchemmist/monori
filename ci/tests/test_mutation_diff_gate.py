@@ -18,23 +18,17 @@ class MutationDiffGateTest(unittest.TestCase):
         )
 
     def test_maps_mutant_metadata_to_its_configured_source_path(self) -> None:
-        assert (
-            module.source_path_for_mutant(Path("app/example.py.meta"))
-            == "server/src/monori/server/app/example.py"
-        )
+        assert module.source_path_for_mutant(Path("app/example.py.meta")) == "server/app/example.py"
         assert (
             module.source_path_for_mutant(Path("quality_graph/app/example.py.meta"))
-            == "ci/src/monori/ci/quality_graph/app/example.py"
+            == "ci/quality_graph/app/example.py"
         )
-        assert (
-            module.source_path_for_mutant(Path("lib/comments.py.meta"))
-            == "ci/src/monori/ci/lib/comments.py"
-        )
+        assert module.source_path_for_mutant(Path("lib/comments.py.meta")) == "ci/lib/comments.py"
 
     def test_collects_changed_functions(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            source = root / "server/src/monori/server/app/example.py"
+            source = root / "server/app/example.py"
             source.parent.mkdir(parents=True)
             source.write_text(
                 "class Account:\n"
@@ -45,33 +39,31 @@ class MutationDiffGateTest(unittest.TestCase):
                 "    return False\n"
             )
 
-            result = module.changed_functions(
-                root, {"server/src/monori/server/app/example.py": {3}}
-            )
+            result = module.changed_functions(root, {"server/app/example.py": {3}})
 
-        assert result == {"server/src/monori/server/app/example.py": {("save", "Account")}}
+        assert result == {"server/app/example.py": {("save", "Account")}}
 
     def test_maps_deletion_only_hunks_to_changed_lines(self) -> None:
         diff = """\
-diff --git a/server/src/monori/server/app/example.py b/server/src/monori/server/app/example.py
---- a/server/src/monori/server/app/example.py
-+++ b/server/src/monori/server/app/example.py
+diff --git a/server/app/example.py b/server/app/example.py
+--- a/server/app/example.py
++++ b/server/app/example.py
 @@ -5 +4,0 @@
 -    removed = True
 """
 
-        assert module.parse_changed_lines(diff) == {"server/src/monori/server/app/example.py": {4}}
+        assert module.parse_changed_lines(diff) == {"server/app/example.py": {4}}
 
     def test_ignores_deleted_file_before_modified_file(self) -> None:
         diff = """\
-diff --git a/server/src/monori/server/app/deleted.py b/server/src/monori/server/app/deleted.py
---- a/server/src/monori/server/app/deleted.py
+diff --git a/server/app/deleted.py b/server/app/deleted.py
+--- a/server/app/deleted.py
 +++ /dev/null
 @@ -1 +0,0 @@
 -removed = True
-diff --git a/server/src/monori/server/app/example.py b/server/src/monori/server/app/example.py
---- a/server/src/monori/server/app/example.py
-+++ b/server/src/monori/server/app/example.py
+diff --git a/server/app/example.py b/server/app/example.py
+--- a/server/app/example.py
++++ b/server/app/example.py
 @@ -3 +3 @@
 -old = True
 \\ No newline at end of file
@@ -79,9 +71,7 @@ diff --git a/server/src/monori/server/app/example.py b/server/src/monori/server/
 \\ No newline at end of file
 """
 
-        assert module.parse_changed_lines(diff) == {
-            "server/src/monori/server/app/example.py": {2, 3}
-        }
+        assert module.parse_changed_lines(diff) == {"server/app/example.py": {2, 3}}
 
     @staticmethod
     def write_meta(path: Path, statuses: dict[str, int | None]) -> None:
@@ -102,7 +92,7 @@ diff --git a/server/src/monori/server/app/example.py b/server/src/monori/server/
             mock.patch.object(
                 module,
                 "changed_functions",
-                return_value={"server/src/monori/server/app/example.py": {("run", None)}},
+                return_value={"server/app/example.py": {("run", None)}},
             ),
         ):
             result = module.gate_backend(
@@ -130,7 +120,7 @@ diff --git a/server/src/monori/server/app/example.py b/server/src/monori/server/
                 mock.patch.object(
                     module,
                     "changed_functions",
-                    return_value={"server/src/monori/server/app/example.py": {("run", None)}},
+                    return_value={"server/app/example.py": {("run", None)}},
                 ),
             ):
                 result = module.gate_backend(

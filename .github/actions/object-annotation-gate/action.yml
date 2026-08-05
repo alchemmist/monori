@@ -17,7 +17,7 @@ runs:
               github-token: ${{ inputs.github-token }}
         - name: Test annotation checker
           shell: bash
-          run: uv run --locked python -m unittest discover -s ci/src/monori/ci/tests -p 'test_object_annotations.py'
+          run: uv run --locked python -m unittest discover -s ci/tests -p 'test_object_annotations.py'
         - name: Check Python annotations
           shell: bash
           env:

@@ -7,17 +7,17 @@ from typing import cast
 
 from monori.common import JsonValue, array_value, object_value, string_value
 
-REPOSITORY_ROOT = Path(__file__).parents[5]
+REPOSITORY_ROOT = Path.cwd()
 COMPONENT_ROOTS = {
-    "common": REPOSITORY_ROOT / "common" / "src" / "monori" / "common",
-    "ci": REPOSITORY_ROOT / "ci" / "src" / "monori" / "ci",
-    "server": REPOSITORY_ROOT / "server" / "src" / "monori" / "server",
+    "common": REPOSITORY_ROOT / "common",
+    "ci": REPOSITORY_ROOT / "ci",
+    "server": REPOSITORY_ROOT / "server",
 }
 
 
 def python_modules(root: Path) -> list[Path]:
     """Return all Python modules below a package directory."""
-    return sorted(root.rglob("*.py"))
+    return sorted(path for path in root.rglob("*.py") if not path.is_relative_to(root / ".venv"))
 
 
 def parsed_imports(path: Path) -> list[ast.Import | ast.ImportFrom]:
@@ -45,43 +45,22 @@ def project_dependencies(document: dict[str, JsonValue]) -> list[str]:
     return [string_value(value, "dependency") for value in values]
 
 
-def test_root_is_a_virtual_workspace() -> None:
-    """Keep the repository root from building an umbrella Python package."""
+def test_repository_root_defines_the_monori_package() -> None:
+    """Build the repository root as the single Monori Python package."""
     root = project(REPOSITORY_ROOT / "pyproject.toml")
 
-    assert section(root, "project").get("name") == "monori-workspace"
-    assert section(root, "tool", "uv").get("package") is False
-    assert "build-system" not in root
+    assert section(root, "project").get("name") == "monori"
+    assert section(root, "build-system").get("build-backend") == "setuptools.build_meta"
+    assert (REPOSITORY_ROOT / "__init__.py").is_file()
 
 
-def test_components_are_independent_namespace_packages() -> None:
-    """Build every component as its own distribution in the monori namespace."""
-    for component, package_root in COMPONENT_ROOTS.items():
-        metadata = project(REPOSITORY_ROOT / component / "pyproject.toml")
-
-        assert section(metadata, "project").get("name") == f"monori-{component}"
-        assert section(metadata, "build-system").get("build-backend") == "hatchling.build"
-        assert section(metadata, "tool", "hatch", "build", "targets", "wheel").get("packages") == [
-            "src/monori"
-        ]
-        tool = object_value(metadata.get("tool"), "tool")
-        uv = object_value(tool.get("uv", {}), "tool.uv")
-        assert uv.get("package") is not False
+def test_components_live_directly_below_the_repository_root() -> None:
+    """Keep component packages free of nested source and namespace directories."""
+    for package_root in COMPONENT_ROOTS.values():
         assert package_root.is_dir()
-        assert not (package_root.parent / "__init__.py").exists()
-
-
-def test_component_dependency_graph_has_no_umbrella_package() -> None:
-    """Require consumers to depend directly on common instead of all source code."""
-    common = project(REPOSITORY_ROOT / "common" / "pyproject.toml")
-    ci = project(REPOSITORY_ROOT / "ci" / "pyproject.toml")
-    server = project(REPOSITORY_ROOT / "server" / "pyproject.toml")
-
-    assert project_dependencies(common) == []
-    for consumer in (ci, server):
-        dependencies = project_dependencies(consumer)
-        assert "monori-common" in dependencies
-        assert "monori" not in dependencies
+        assert (package_root / "__init__.py").is_file()
+        assert not (package_root / "src").exists()
+        assert not (package_root / "pyproject.toml").exists()
 
 
 def test_internal_imports_are_absolute_and_namespaced() -> None:
@@ -149,14 +128,13 @@ def test_json_value_has_one_definition() -> None:
         )
     ]
 
-    assert definitions == [COMPONENT_ROOTS["common"] / "json.py"]
+    assert definitions == [COMPONENT_ROOTS["common"] / "json_values.py"]
 
 
 def test_coverage_tree_normalizes_source_paths() -> None:
     """Keep report grouping aligned with paths emitted by coverage.py."""
     source = (REPOSITORY_ROOT / "scripts" / "coverage-tree.jq").read_text()
 
-    assert 'sub("^(common|ci|server)/src/monori/"; "")' in source
     assert 'sub("^monori/"; "")' in source
     for path_rule in (
         "common/",
@@ -195,6 +173,7 @@ def test_python_tooling_is_split_into_explicit_ci_profiles() -> None:
     setup = (REPOSITORY_ROOT / ".github/actions/setup-project/action.yml").read_text()
     assert "python-profile:" in setup
     assert '--group "${{ inputs.python-profile }}"' in setup
+    assert "--no-editable" in setup
     assert "--group dev" not in setup
     assert "--all-packages --group dev" not in setup
     assert "${{ inputs.python-profile }}-${{ hashFiles('uv.lock') }}" in setup

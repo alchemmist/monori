@@ -76,7 +76,7 @@ make install   # web (npm) + server (uv) deps + external lint/analyze CLIs
 ```
 
 This installs the web packages (`npm install`), all Python workspace/tooling profiles
-(`uv sync --all-packages --all-groups`), and the standalone CLIs the
+(`uv sync --all-groups`), and the standalone CLIs the
 lint/analyze/audit targets shell out to —
 `shellcheck`, `shfmt`, `hadolint`, `actionlint`, `semgrep`, `gitleaks`. That last
 part (`make tools`) works the same on Linux and macOS: `semgrep` and

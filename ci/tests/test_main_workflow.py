@@ -7,7 +7,7 @@ import yaml
 
 from monori.ci.tests.test_pr_workflow import WorkflowDocument
 
-WORKFLOW = Path(__file__).parents[5] / ".github/workflows/main-checks.yaml"
+WORKFLOW = Path.cwd() / ".github/workflows/main-checks.yaml"
 
 
 class MainWorkflowGraphTest(unittest.TestCase):

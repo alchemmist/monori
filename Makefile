@@ -8,7 +8,7 @@ MUTATION_JOBS ?= $(shell getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.n
 BASE ?= origin/main
 
 WEBBIN := web/node_modules/.bin
-PYTHON_SOURCES := common/src/monori ci/src/monori server/src/monori
+PYTHON_SOURCES := common ci server
 CLOC_EXCLUDE_DIRS := .git,.worktrees,.claude,node_modules,.venv,__pycache__,.pytest_cache,.mypy_cache,.ruff_cache,dist,static,data,reports,coverage,htmlcov,.stryker-tmp,.mutmut-cache,mutants,playwright-report,test-results
 
 .DEFAULT_GOAL := up
@@ -25,7 +25,7 @@ CLOC_EXCLUDE_DIRS := .git,.worktrees,.claude,node_modules,.venv,__pycache__,.pyt
 install:
 	cd web && npm install --no-audit --no-fund
 	cd tools/frontend-perf && npm install --no-audit --no-fund
-	uv sync --locked --all-packages --all-groups
+	uv sync --locked --all-groups
 	@if ! command -v cloc >/dev/null 2>&1; then \
 		sudo apt-get update && sudo apt-get install -y cloc; \
 	fi
@@ -76,7 +76,7 @@ deploy:
 	echo "follow it with: gh run watch \$$(gh run list --workflow deploy.yaml -L1 --json databaseId -q '.[0].databaseId')"
 
 api:
-	cd server && uv run --locked uvicorn monori.server.app.main:app --port $(API_PORT) --reload
+	uv run --locked --group runtime uvicorn monori.server.app.main:app --port $(API_PORT) --reload
 
 web:
 	cd web && API_PORT=$(API_PORT) npm run dev
@@ -127,14 +127,14 @@ fmt-front:
 	$(WEBBIN)/prettier --write web
 
 fmt-back:
-	@(uv run --locked --group format ruff check server/src/monori/server server --fix >/dev/null 2>&1 || true)
-	uv run --locked --group format ruff format server/src/monori/server server
+	@(uv run --locked --group format ruff check server --fix >/dev/null 2>&1 || true)
+	uv run --locked --group format ruff format server
 	$(SQLFLUFF) fix server
 
 fmt-ci:
 	@files=$$(git ls-files '*.cjs' '*.css' '*.html' '*.json' '*.jsonc' '*.md' '*.mjs' '*.ts' '*.tsx' '*.yaml' '*.yml' | grep -Ev '^(web|server)/'); [ -z "$$files" ] || $(WEBBIN)/prettier --write $$files
-	@(uv run --locked --group format ruff check common/src/monori/common ci/src/monori/ci --fix >/dev/null 2>&1 || true)
-	uv run --locked --group format ruff format common/src/monori/common ci/src/monori/ci
+	@(uv run --locked --group format ruff check common ci --fix >/dev/null 2>&1 || true)
+	uv run --locked --group format ruff format common ci
 	@-$(WEBBIN)/markdownlint-cli2 --fix >/dev/null 2>&1
 	@files=$$(git ls-files '*.sh'); [ -z "$$files" ] || shfmt -w $$files
 
@@ -196,7 +196,8 @@ type-front:
 	cd web && ./node_modules/.bin/eslint "src/**/*.{ts,tsx}" "e2e/**/*.ts" "*.config.ts" stryker.conf.ts
 
 type-back:
-	uv run --locked --group type mypy $(PYTHON_SOURCES)
+	uv sync --locked --no-editable --group type
+	UV_NO_SYNC=1 uv run --locked --group type mypy $(PYTHON_SOURCES)
 
 analyze:
 	uv run --locked --group analyze bandit -q -r $(PYTHON_SOURCES)
@@ -222,7 +223,7 @@ audit-deps:
 
 audit-deps-py:
 	@req=$$(mktemp); \
-	( uv export --package monori-server --no-dev --no-hashes --format requirements-txt -o "$$req" \
+	( uv export --group runtime --no-dev --no-hashes --format requirements-txt -o "$$req" \
 		&& uv run --locked --group audit pip-audit -r "$$req" ); code=$$?; \
 	rm -f "$$req"; exit $$code
 
@@ -234,14 +235,14 @@ test: t-front t-back t-e2e
 t-fast:
 	cd web && npx vitest run --exclude "src/**/*.test.tsx"
 	$(MAKE) t-ci
-	uv run --locked --group test pytest -q server/src/monori/server/tests -m "not integration"
+	uv run --locked --group test pytest -q server/tests -m "not integration"
 
 t-medium:
 	cd web && npx vitest run --exclude "src/**/*.test.ts"
-	uv run --locked --group test pytest -q server/src/monori/server/tests -m integration
+	uv run --locked --group test pytest -q server/tests -m integration
 
 t-ci:
-	uv run --locked --group test pytest -q ci/src/monori/ci/tests
+	uv run --locked --group test pytest -q ci/tests
 
 t-slow: t-e2e
 
@@ -251,7 +252,7 @@ t-front:
 	cd web && npx vitest run
 
 t-back:
-	uv run --locked --group test pytest -q server/src/monori/server/tests
+	uv run --locked --group test pytest -q server/tests
 
 t-e2e:
 	COMPOSE="$(COMPOSE)" bash scripts/e2e.sh
@@ -315,10 +316,10 @@ mutation-python: m-back
 m-back-diff:
 	@set +e; \
 	git rev-parse --verify --quiet "$(BASE)" >/dev/null || { echo "mutation-diff: BASE='$(BASE)' is not a valid revision"; exit 1; }; \
-	if git diff --quiet "$(BASE)...HEAD" -- server/src/monori/server/app ci/src/monori/ci/lib ci/src/monori/ci/quality_graph common/src/monori/common; then \
+	if git diff --quiet "$(BASE)...HEAD" -- server/app ci/lib ci/quality_graph common; then \
 		echo "mutation-diff: no changed Python files — pass"; exit 0; \
 	fi; \
-	paths=$$(git diff --diff-filter=ACMR --name-only "$(BASE)...HEAD" -- server/src/monori/server/app ci/src/monori/ci/lib ci/src/monori/ci/quality_graph common/src/monori/common '*.py' | sed -e 's#^server/src/monori/server/##' -e 's#^ci/src/monori/ci/##' -e 's#^common/src/monori/##' -e 's#\.py$$##' -e 's#/#.#g' -e 's#$$#.*#' | paste -sd' ' -); \
+	paths=$$(git diff --diff-filter=ACMR --name-only "$(BASE)...HEAD" -- server/app ci/lib ci/quality_graph common '*.py' | sed -e 's#^server/##' -e 's#^ci/##' -e 's#^common/#common/#' -e 's#\.py$$##' -e 's#/#.#g' -e 's#$$#.*#' | paste -sd' ' -); \
 	if [ -z "$$paths" ]; then \
 		echo "mutation-diff: no changed Python source files — pass"; exit 0; \
 	fi; \

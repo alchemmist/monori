@@ -1,8 +1,8 @@
 """
 SQLite access layer. All money amounts are stored as integer kopecks.
 
-The schema has a single canonical definition in ``server/src/monori/server/schema.sql``; its
-history lives as alembic revisions in ``server/src/monori/server/migrations``. A fresh database
+The schema has a single canonical definition in ``server/schema.sql``; its history lives as
+Alembic revisions in ``server/migrations``. A fresh database
 is created straight from ``schema.sql`` and stamped at head; an existing one is
 upgraded through the migration chain. Databases from before the alembic switch
 carry ``PRAGMA user_version`` — they are adopted by stamping the matching

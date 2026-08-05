@@ -5,7 +5,7 @@ from typing import ClassVar, TypedDict, cast, override
 
 import yaml
 
-REPOSITORY_ROOT = Path(__file__).parents[5]
+REPOSITORY_ROOT = Path.cwd()
 WORKFLOW = REPOSITORY_ROOT / ".github/workflows/pr-checks.yaml"
 FRONTEND_PERFORMANCE_SCOPE = (
     REPOSITORY_ROOT / ".github/actions/frontend-performance-scope/action.yml"
@@ -184,8 +184,8 @@ class PullRequestWorkflowGraphTest(unittest.TestCase):
     def test_frontend_performance_scope_covers_the_gate_implementation(self) -> None:
         scope_source = FRONTEND_PERFORMANCE_SCOPE.read_text()
 
-        assert '"ci/src/monori/ci/quality_graph/checks/frontend_performance.py"' in scope_source
-        assert '"ci/src/monori/ci/tests/test_frontend_performance.py"' in scope_source
+        assert '"ci/quality_graph/checks/frontend_performance.py"' in scope_source
+        assert '"ci/tests/test_frontend_performance.py"' in scope_source
 
     def test_reporting_actions_inherit_shared_in_progress_lifecycle(self) -> None:
         for action in REPORTING_ACTIONS:

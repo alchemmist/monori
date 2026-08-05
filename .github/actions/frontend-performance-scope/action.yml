@@ -37,10 +37,10 @@ runs:
                     "deploy/nginx.conf",
                     ".dockerignore",
                     "scripts/frontend-perf.sh",
-                    "ci/src/monori/ci/quality_graph/checks/frontend_performance.py",
-                    "ci/src/monori/ci/quality_graph/checks/frontend_measurement.py",
-                    "ci/src/monori/ci/tests/test_frontend_performance.py",
-                    "ci/src/monori/ci/tests/test_frontend_measurement.py",
+                    "ci/quality_graph/checks/frontend_performance.py",
+                    "ci/quality_graph/checks/frontend_measurement.py",
+                    "ci/tests/test_frontend_performance.py",
+                    "ci/tests/test_frontend_measurement.py",
                     ".github/workflows/pr-checks.yaml",
                   ]);
                   const relevant = files.some((file) => {

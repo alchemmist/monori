@@ -25,7 +25,7 @@
 - A thin `main.py` mounts five routers (`groups`, `categories`, `transactions`,
   `budgets`, `imports`) plus `/api/snapshot`, and serves the built SPA from
   `server/static` when present.
-- SQLite via the stdlib `sqlite3`; the schema is in `server/src/monori/server/app/db.py`.
+- SQLite via the stdlib `sqlite3`; the schema is in `server/app/db.py`.
 - Lint/format with Ruff, type-check with mypy, security-scan with bandit +
   semgrep, test with pytest, mutation-test with mutmut.
 
@@ -50,7 +50,7 @@ one-to-one — there is no separate CI script to drift out of sync.
 | `make fmt`            | Prettier + Ruff format/fix, and regenerates the schema diagram.                                                                                  |
 | `make fmt-check`      | The same, check-only.                                                                                                                            |
 | `make lint`           | Everything: web (Oxlint), CSS, HTML, server (Ruff), YAML, Markdown, generated docs, GitHub Actions, Dockerfile, shell, and spelling.             |
-| `make schema-diagram` | Regenerates the ER diagram in [data-model.md](data-model.md) from `server/src/monori/server/schema.sql`. `make lint` fails if it is stale.       |
+| `make schema-diagram` | Regenerates the ER diagram in [data-model.md](data-model.md) from `server/schema.sql`. `make lint` fails if it is stale.       |
 | `make type`           | Strict mypy for all tracked Python plus TypeScript compiler and type-aware Oxlint checks.                                                        |
 | `make analyze`        | bandit + semgrep security scans, plus Vulture for Python and Knip for JavaScript/TypeScript dead code.                                           |
 | `make audit`          | Dependency + secret scanning (`audit-deps`, `audit-deps-py`, `audit-secrets`).                                                                   |
@@ -73,7 +73,7 @@ may be comma-separated.
 
 ### Dead-code analysis
 
-`make analyze` runs Vulture against `server/src/monori/server/app` and Knip against the frontend
+`make analyze` runs Vulture against `server/app` and Knip against the frontend
 source, end-to-end tests, and tool configuration files. Vulture uses the
 `[tool.vulture]` section in `server/pyproject.toml`. Its `min_confidence = 80`
 setting means that `make analyze` reports only findings with at least 80%
@@ -102,7 +102,7 @@ dependencies (a real temp SQLite database, the real FastAPI app), not mocks.
 | `make t-back` | Local backend slice with unit and integration tests. |
 | `make t-e2e` | Local end-to-end slice against the real backend and production frontend stack. |
 | `make coverage` | Coverage as a tree (root → back/front → module → file), via `scripts/coverage-tree.sh`. Fails below **90% statements and lines** in `web/src`. |
-| `make mutation` | Full mutation sweep: Stryker on `web/src`, mutmut on `server/src/monori/server/app`. Runs nightly at 05:00 Moscow time and on manual dispatch. |
+| `make mutation` | Full mutation sweep: Stryker on `web/src`, mutmut on `server/app`. Runs nightly at 05:00 Moscow time and on manual dispatch. |
 | `make mutation-diff` | Diff-scoped gate for changed frontend lines and backend functions. Needs full git history. Example: `BASE=origin/main`, threshold 90%. |
 
 ### The pre-commit hook
@@ -143,8 +143,8 @@ points straight at the failing tool.
 ## Tests
 
 - Backend integration tests use a fixture that spins up a temp SQLite file and a
-  FastAPI `TestClient`, split by resource under `server/src/monori/server/tests/integration/`; unit
-  tests (e.g. the importer) live under `server/src/monori/server/tests/unit/`.
+  FastAPI `TestClient`, split by resource under `server/tests/integration/`; unit
+  tests (e.g. the importer) live under `server/tests/unit/`.
 - Frontend logic and store unit tests use the `.test.ts` suffix; component
   integration tests rendered in jsdom use `.test.tsx`.
 - Coverage is gated: pytest fails under 80% on the backend, and Vitest holds

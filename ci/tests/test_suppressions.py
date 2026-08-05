@@ -189,7 +189,7 @@ value = 2
         after = """\
 [tool.ruff.lint.per-file-ignores]
 "server/tests/**/*.py" = ["D101", "D102"]
-"server/src/monori/server/migrations/**/*.py" = ["S101", "INP001"]
+"server/migrations/**/*.py" = ["S101", "INP001"]
 "server/app/workbook/parser.py" = ["RUF001"]
 "server/app/connectors/tbank_playwright.py" = ["RUF001"]
 """

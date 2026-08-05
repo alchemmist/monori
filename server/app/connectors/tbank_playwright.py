@@ -22,7 +22,7 @@ Reality notes (read before relying on it):
   the real site. Set ``MONORI_CONNECTOR_DEBUG=1`` to dump a screenshot + HTML at
   every step (``tbank-01-open.png`` …) so the flow can be followed and tuned.
 
-Requires the optional dependency: ``pip install 'monori-server[connectors]'``
+Requires the connector dependencies installed by ``uv sync --group test``.
 followed by ``playwright install chromium``.
 """
 
@@ -124,7 +124,7 @@ def _load_sync_playwright() -> _SyncPlaywright:
     except ImportError as error:
         msg = (
             "playwright is not installed; run "
-            "`pip install 'monori-server[connectors]'` and `playwright install chromium`"
+            "`uv sync --group test` and `playwright install chromium`"
         )
         raise ConnectorError(msg) from error
     factory = getattr(module, "sync_playwright", None)

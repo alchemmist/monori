@@ -1,6 +1,6 @@
 """Shared Python primitives used throughout Monori."""
 
-from monori.common.json import (
+from monori.common.json_values import (
     JsonObject,
     JsonValue,
     array_value,

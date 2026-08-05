@@ -5,9 +5,9 @@ Everything monori knows lives in one SQLite file (`MONORI_DB`, default
 WAL mode with foreign keys enabled. A handful of tables hold the whole budget —
 the diagram below is generated from the schema itself.
 
-The schema has a single canonical definition in `server/src/monori/server/schema.sql`; its
+The schema has a single canonical definition in `server/schema.sql`; its
 history lives as [Alembic](https://alembic.sqlalchemy.org/) revisions in
-`server/src/monori/server/migrations/versions/`. A fresh database is created straight from
+`server/migrations/versions/`. A fresh database is created straight from
 `schema.sql` and stamped at the latest revision; an existing database is
 upgraded through the migration chain on first connection. Databases created
 before the Alembic switch (which tracked migrations with SQLite's
@@ -16,14 +16,14 @@ matching revision and upgraded from there (see the accounts migration below).
 
 ## Schema diagram
 
-The diagram below is generated from `server/src/monori/server/schema.sql` — it is the real shape
+The diagram below is generated from `server/schema.sql` — it is the real shape
 of the database, read back through `PRAGMA` after executing the schema, not a
 drawing kept in sync by hand. Regenerate it with `make schema-diagram`; CI fails
 if the schema changed and the diagram did not.
 
 <!-- schema-diagram:start -->
 
-<!-- generated from server/src/monori/server/schema.sql by scripts/gen_schema_diagram.py — run `make schema-diagram` after changing the schema -->
+<!-- generated from server/schema.sql by scripts/gen_schema_diagram.py — run `make schema-diagram` after changing the schema -->
 
 ```mermaid
 erDiagram
