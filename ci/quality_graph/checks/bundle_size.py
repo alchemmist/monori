@@ -152,7 +152,7 @@ def main() -> int:
     if command:
         APPROVALS.consume_pending(github, body)
         body = APPROVALS.without_pending(body)
-        APPROVALS.write(github, number, body, approved)
+        APPROVALS.persist_approvals(github, number, body, approved)
     failed = report.get("verdict") == "critical" and ids != approved
     report["approvedFindings"] = cast("JsonValue", sorted(approved))
     report["verdict"] = "critical" if failed else "none"

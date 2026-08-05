@@ -55,7 +55,7 @@ def finding_id(entry: dict[str, JsonValue]) -> str:
 
 def update_body_state(github: GitHub, number: int, body: str, approved: set[str]) -> str:
     """Update body state."""
-    return APPROVALS.write(github, number, body, approved)
+    return APPROVALS.persist_approvals(github, number, body, approved)
 
 
 def entry_ids(entries: list[dict[str, JsonValue]]) -> set[str]:

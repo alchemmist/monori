@@ -5,11 +5,13 @@
 # run never touches the developer's database or dev servers.
 services:
     back:
+        platform: "${CONTAINER_PLATFORM}"
         build:
             context: ..
             dockerfile: deploy/Dockerfile.back
 
     front:
+        platform: "${CONTAINER_PLATFORM}"
         build:
             context: ..
             dockerfile: deploy/Dockerfile.front

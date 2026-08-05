@@ -116,6 +116,7 @@ skips = ["B105"]
 
 [tool.vulture]
 paths = ["common", "ci", "server"]
+exclude = ["*/.venv/*", "*/build/*"]
 min_confidence = 80
 ignore_names = ["referer", "predicate", "user_data_dir", "user_agent", "accept_downloads"]
 

@@ -21,7 +21,6 @@ from typing import ClassVar, Literal, Self, override
 import pytest
 
 from monori.common import JsonObject
-from monori.server.app.connectors import fake as fake_connector
 from monori.server.app.connectors import tbank_playwright as tbank_mod
 from monori.server.app.connectors.base import (
     ConnectorError,

@@ -72,7 +72,9 @@ class ApprovalLifecycle:
         match = self.state_pattern.search(body)
         return set(match.group(1).split(",")) if match and match.group(1) else set()
 
-    def write(self, github: GitHubAPI, number: int, body: str, approved: set[str]) -> str:
+    def persist_approvals(
+        self, github: GitHubAPI, number: int, body: str, approved: set[str]
+    ) -> str:
         """Persist finding IDs in the pull-request state marker."""
         marker = self.state_marker.format(ids=",".join(sorted(approved)))
         updated = self.state_pattern.sub(marker, body)
@@ -168,7 +170,7 @@ class ApprovalLifecycle:
             )
             changed = bool(selected)
         if not state_exists or (request.command is not None and authorized):
-            self.write(request.github, request.number, request.body, approved)
+            self.persist_approvals(request.github, request.number, request.body, approved)
         return ApprovalSyncResult(approved, authorized, changed)
 
     def _selected(
