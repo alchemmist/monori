@@ -14,6 +14,7 @@ from typing import Literal, cast
 from monori.ci.lib.comments import (
     CommandReactionLifecycle,
     Reaction,
+    managed_comment,
     workflow_bot_logins,
 )
 from monori.ci.lib.github import GITHUB_PAGE_SIZE, GitHub, GitHubAPI
@@ -343,7 +344,7 @@ def process_command(github: GitHubAPI, request: CommandRequest) -> None:
         )
         return
     try:
-        dispatch_command(github, number, request.comment_id, command)
+        dispatch_command(github, number, command)
     except (RuntimeError, TypeError, ValueError):
         if request.react:
             reactions.fail()
@@ -361,7 +362,6 @@ def reject_request(github: GitHubAPI, request: CommandRequest, rejection: Comman
 def dispatch_command(
     github: GitHubAPI,
     number: int,
-    comment_id: int,
     command: QualityGraphCommand,
 ) -> None:
     """Dispatch one validated and authorized command."""
@@ -381,13 +381,12 @@ def dispatch_command(
             ),
         )
         return
-    apply_gate_command(github, number, comment_id, command)
+    apply_gate_command(github, number, command)
 
 
 def apply_gate_command(
     github: GitHubAPI,
     number: int,
-    comment_id: int,
     command: QualityGraphCommand,
 ) -> None:
     """Store a gate command marker on the pull request and rerun the graph."""
@@ -403,12 +402,33 @@ def apply_gate_command(
     pull = object_value(github.request("GET", f"/pulls/{number}"), "pull request")
     original_body = pull.get("body")
     body = string_value(original_body, "pull request body") if original_body is not None else ""
-    for gate, marker_name in {
-        "bundle": "monori-bundle-size-pending",
-        "frontend": "monori-frontend-performance-pending",
+    for gate, (marker_name, report_marker) in {
+        "bundle": ("monori-bundle-size-pending", "bundle-size"),
+        "frontend": ("monori-frontend-performance-pending", "frontend-performance"),
     }.items():
         if command_targets_gate(command, gate):
-            marker = f"<!-- {marker_name}: {comment_id} {encode_command(command)} -->"
+            encoded = encode_command(command)
+            report = managed_comment(github, number, report_marker)
+            if report is None:
+                message = f"Cannot authorize {gate} command without its managed report"
+                raise RuntimeError(message)
+            report_id = report.get("id")
+            if not isinstance(report_id, int):
+                message = f"Managed {gate} report has no numeric comment id"
+                raise TypeError(message)
+            report_body = string_value(report.get("body"), "report comment body")
+            authorization = f"<!-- monori-qg-authorized: {gate} {encoded} -->"
+            cleaned = re.sub(
+                rf"\n?<!-- monori-qg-authorized: {gate} [A-Za-z0-9_-]+ -->",
+                "",
+                report_body,
+            )
+            github.request(
+                "PATCH",
+                f"/issues/comments/{report_id}",
+                {"body": f"{cleaned.rstrip()}\n{authorization}\n"},
+            )
+            marker = f"<!-- {marker_name}: {report_id} {encoded} -->"
             body = re.sub(rf"<!-- {marker_name}: \d+(?: [A-Za-z0-9_-]+)? -->", marker, body)
             if marker not in body:
                 body = f"{body.rstrip()}\n\n{marker}".strip()

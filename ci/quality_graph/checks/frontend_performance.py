@@ -135,6 +135,7 @@ def main() -> int:
     command = APPROVALS.pending_command(github, body)
     approved = apply_command(command, entries, approved)
     if command is not None:
+        APPROVALS.consume_pending(github, body)
         body = APPROVALS.without_pending(body)
     if command is not None or STATE_RE.search(body):
         body = update_body_state(github, number, body, approved)

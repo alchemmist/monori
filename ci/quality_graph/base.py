@@ -7,6 +7,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar, Protocol
 
+from monori.ci.lib.comments import workflow_bot_logins
 from monori.ci.lib.github import is_admin
 from monori.ci.quality_graph.commands import (
     QualityGraphCommand,
@@ -85,18 +86,45 @@ class ApprovalLifecycle:
         """Resolve and authorize a command referenced by a pending marker."""
         if self.pending_pattern is None or (match := self.pending_pattern.search(body)) is None:
             return None
-        if match.group(2):
-            command = decode_command(match.group(2))
-            return command if command is not None and validate_command(command) is None else None
-        comment = object_value(
-            github.request("GET", f"/issues/comments/{match.group(1)}"), "command comment"
-        )
-        command = parse_command((optional_string(comment.get("body")) or "").strip())
+        raw_comment = github.request("GET", f"/issues/comments/{match.group(1)}")
+        if not isinstance(raw_comment, dict):
+            return None
+        comment = object_value(raw_comment, "command comment")
         user = object_value(comment.get("user", {}), "command author")
         login = optional_string(user.get("login"))
+        if match.group(2):
+            encoded = match.group(2)
+            command = decode_command(encoded)
+            comment_body = optional_string(comment.get("body")) or ""
+            authorization = self.authorization_marker(encoded)
+            if login not in workflow_bot_logins() or authorization not in comment_body:
+                return None
+            return command if command is not None and validate_command(command) is None else None
+        command = parse_command((optional_string(comment.get("body")) or "").strip())
         if command is None or validate_command(command) is not None or login is None:
             return None
         return command if is_admin(github, login) else None
+
+    def authorization_marker(self, encoded_command: str) -> str:
+        """Render the bot-owned one-time authorization marker for a command."""
+        return f"<!-- monori-qg-authorized: {self.gate} {encoded_command} -->"
+
+    def consume_pending(self, github: GitHubAPI, body: str) -> None:
+        """Remove a consumed command authorization from its bot-owned comment."""
+        if self.pending_pattern is None or (match := self.pending_pattern.search(body)) is None:
+            return
+        encoded = match.group(2)
+        if encoded is None:
+            return
+        comment_id = int(match.group(1))
+        comment = object_value(
+            github.request("GET", f"/issues/comments/{comment_id}"), "command comment"
+        )
+        comment_body = optional_string(comment.get("body")) or ""
+        marker = self.authorization_marker(encoded)
+        updated = comment_body.replace(f"\n{marker}", "").replace(marker, "")
+        if updated != comment_body:
+            github.request("PATCH", f"/issues/comments/{comment_id}", {"body": updated})
 
     def without_pending(self, body: str) -> str:
         """Remove this gate's pending command marker from a PR body."""

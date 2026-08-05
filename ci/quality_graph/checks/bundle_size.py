@@ -150,6 +150,7 @@ def main() -> int:
     command = APPROVALS.pending_command(github, body)
     approved = apply_command(command, ids, approved)
     if command:
+        APPROVALS.consume_pending(github, body)
         body = APPROVALS.without_pending(body)
         APPROVALS.write(github, number, body, approved)
     failed = report.get("verdict") == "critical" and ids != approved

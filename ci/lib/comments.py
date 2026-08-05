@@ -51,6 +51,18 @@ def comment_body(marker: str, body: str) -> str:
     return f"<!-- monori-report: {marker} -->\n\n{body.rstrip()}\n"
 
 
+def managed_comment(github: GitHubAPI, number: int, marker: str) -> dict[str, JsonValue] | None:
+    """Return the bot-owned pull-request comment carrying a report marker."""
+    hidden_marker = f"<!-- monori-report: {marker} -->"
+    bot_logins = workflow_bot_logins()
+    for comment in issue_comments(github, number):
+        body = comment.get("body")
+        author = object_value(comment.get("user", {}), "comment author").get("login")
+        if isinstance(body, str) and hidden_marker in body and author in bot_logins:
+            return comment
+    return None
+
+
 def bounded_comment_body(body: str) -> str:
     """Fit a report within GitHub's comment limit and report the omitted size."""
     if len(body) <= GITHUB_COMMENT_BODY_LIMIT:
@@ -68,15 +80,9 @@ def bounded_comment_body(body: str) -> str:
 def upsert_comment(github: GitHubAPI, number: int, marker: str, body: str) -> None:
     """Create or update one bot-owned marked pull-request comment."""
     rendered = bounded_comment_body(comment_body(marker, body))
-    hidden_marker = f"<!-- monori-report: {marker} -->"
-    bot_logins = workflow_bot_logins()
-    for comment in issue_comments(github, number):
-        comment_text = comment.get("body")
-        author = object_value(comment.get("user", {}), "comment author").get("login")
-        if not isinstance(comment_text, str) or hidden_marker not in comment_text:
-            continue
-        if author not in bot_logins:
-            continue
+    existing = managed_comment(github, number, marker)
+    if existing is not None:
+        comment = existing
         comment_id = comment.get("id")
         if not isinstance(comment_id, int):
             message = "Pull request report comment has no numeric id"
