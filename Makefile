@@ -200,7 +200,7 @@ type-back:
 	UV_NO_SYNC=1 uv run --locked --group type mypy
 
 analyze:
-	uv run --locked --group analyze bandit -q -r $(PYTHON_SOURCES)
+	uv run --locked --group analyze bandit -q -c pyproject.toml -r $(PYTHON_SOURCES)
 	semgrep --error --quiet --config p/python --config p/javascript \
 		--exclude-rule python.lang.security.insecure-hash-algorithms.insecure-hash-algorithm-sha1 .
 	$(MAKE) analyze-python-dead-code analyze-javascript-dead-code

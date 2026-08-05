@@ -76,7 +76,6 @@ ignore = ["COM812", "D203", "D212"]
 known-first-party = ["monori"]
 
 [tool.ruff.lint.per-file-ignores]
-"**/__init__.py" = ["N999"]
 "server/tests/**/*.py" = [
   "D102", "D103", "PLR2004", "S101", "D101", "S106", "S107",
   "D100", "S105", "D107", "D105", "D104", "F401"
@@ -111,7 +110,7 @@ enable_error_code = [
 ]
 
 [tool.bandit]
-exclude_dirs = ["server/tests", "ci/tests"]
+exclude_dirs = ["server/tests", "ci/tests", "**/.venv/**", "**/build/**"]
 skips = ["B105"]
 
 [tool.vulture]
