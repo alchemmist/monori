@@ -1205,6 +1205,10 @@ ci = [
     { name = "monori-ci" },
     { name = "pyyaml" },
 ]
+ci-integration = [
+    { name = "monori-ci" },
+    { name = "pytest" },
+]
 format = [
     { name = "monori-ci" },
     { name = "ruff" },
@@ -1263,6 +1267,10 @@ audit = [
 ci = [
     { name = "monori-ci", editable = "ci" },
     { name = "pyyaml", specifier = ">=6.0" },
+]
+ci-integration = [
+    { name = "monori-ci", editable = "ci" },
+    { name = "pytest", specifier = ">=8" },
 ]
 format = [
     { name = "monori-ci", editable = "ci" },

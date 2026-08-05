@@ -1,0 +1,36 @@
+services:
+    fake-github:
+        image: monori-ci-it:local
+        build:
+            context: ..
+            dockerfile: ci/testkit/Dockerfile
+        command: python -m monori.ci.testkit.fake_github.server
+        environment:
+            FAKE_GITHUB_HOST: 0.0.0.0
+            FAKE_GITHUB_PORT: "8080"
+        healthcheck:
+            test:
+                - CMD
+                - python
+                - -c
+                - >-
+                    import urllib.request;
+                    urllib.request.urlopen('http://127.0.0.1:8080/health').read()
+            interval: 1s
+            timeout: 2s
+            retries: 20
+        stop_grace_period: 1s
+        stop_signal: SIGINT
+
+    tests:
+        image: monori-ci-it:local
+        command: pytest -q ci/tests/integration
+        depends_on:
+            fake-github:
+                condition: service_healthy
+        environment:
+            GITHUB_ACTIONS_BOT_LOGIN: github-actions[bot]
+            GITHUB_API_URL: http://fake-github:8080
+            GITHUB_EVENT_PATH: /app/ci/tests/integration/issue_comment_event.json
+            GITHUB_REPOSITORY: alchemmist/monori
+            GITHUB_TOKEN: fake-token
