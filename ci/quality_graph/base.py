@@ -2,25 +2,27 @@
 
 from __future__ import annotations
 
+import re
 import sys
 import urllib.parse
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar, Protocol, override
 
-from monori.ci.lib.comments import workflow_bot_logins
+from monori.ci.lib.comments import managed_comment, workflow_bot_logins
 from monori.ci.lib.github import is_admin, sync_label
 from monori.ci.quality_graph.commands import (
     QualityGraphCommand,
     command_request,
     command_targets_gate,
     decode_command,
+    encode_command,
     parse_command,
     validate_command,
 )
 from monori.ci.quality_graph.models import CheckContext, CheckResult, FindingProtocol
 from monori.ci.quality_graph.reporting import CHECK_REPORTS, PullRequestReport
-from monori.common import JsonValue, object_value, optional_string
+from monori.common import JsonValue, object_value, optional_string, string_value
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -57,6 +59,19 @@ class ApprovalRequest:
     command: QualityGraphCommand | None
     author: str | None
     labels: list[dict[str, JsonValue]]
+
+
+@dataclass(frozen=True)
+class PendingApprovalRequest:
+    """Bundle the state required to authorize and queue a pending command."""
+
+    github: GitHubAPI
+    number: int
+    report_id: int
+    report_body: str
+    pull_body: str
+    command: QualityGraphCommand
+    pending_marker: str
 
 
 @dataclass(frozen=True)
@@ -115,6 +130,29 @@ class ApprovalLifecycle:
     def authorization_marker(self, encoded_command: str) -> str:
         """Render the bot-owned one-time authorization marker for a command."""
         return f"<!-- monori-qg-authorized: {self.gate} {encoded_command} -->"
+
+    def arm_pending(self, request: PendingApprovalRequest) -> None:
+        """Authorize a command in its report and queue it in the pull-request body."""
+        if self.pending_pattern is None:
+            message = f"{self.gate} does not support pending commands"
+            raise RuntimeError(message)
+        encoded = encode_command(request.command)
+        authorization = self.authorization_marker(encoded)
+        authorization_pattern = re.compile(
+            rf"\n?<!-- monori-qg-authorized: {re.escape(self.gate)} [A-Za-z0-9_-]+ -->"
+        )
+        cleaned_report = authorization_pattern.sub("", request.report_body)
+        request.github.request(
+            "PATCH",
+            f"/issues/comments/{request.report_id}",
+            {"body": f"{cleaned_report.rstrip()}\n{authorization}\n"},
+        )
+        marker = f"<!-- {request.pending_marker}: {request.report_id} {encoded} -->"
+        updated_pull = self.pending_pattern.sub(marker, request.pull_body)
+        if marker not in updated_pull:
+            updated_pull = f"{updated_pull.rstrip()}\n\n{marker}".strip()
+        if updated_pull != request.pull_body:
+            request.github.request("PATCH", f"/pulls/{request.number}", {"body": updated_pull})
 
     def consume_pending(self, github: GitHubAPI, body: str) -> None:
         """Remove a consumed command authorization from its bot-owned comment."""
@@ -283,6 +321,35 @@ class QualityCheckDefinition(ABC):
         if cls.report_marker not in CHECK_REPORTS:
             message = f"Unknown check report marker for {cls.__name__}: {cls.report_marker}"
             raise TypeError(message)
+
+    @classmethod
+    def arm_pending(cls, github: GitHubAPI, number: int, command: QualityGraphCommand) -> None:
+        """Authorize and queue a pending command through this check's lifecycle."""
+        if cls.pending_marker is None:
+            message = f"{cls.gate} does not support pending commands"
+            raise RuntimeError(message)
+        report = managed_comment(github, number, cls.report_marker)
+        if report is None:
+            message = f"Cannot authorize {cls.gate} command without its managed report"
+            raise RuntimeError(message)
+        report_id = report.get("id")
+        if not isinstance(report_id, int):
+            message = f"Managed {cls.gate} report has no numeric comment id"
+            raise TypeError(message)
+        report_body = string_value(report.get("body"), "report comment body")
+        pull = object_value(github.request("GET", f"/pulls/{number}"), "pull request")
+        pull_body = optional_string(pull.get("body")) or ""
+        cls.approval_lifecycle.arm_pending(
+            PendingApprovalRequest(
+                github,
+                number,
+                report_id,
+                report_body,
+                pull_body,
+                command,
+                cls.pending_marker,
+            )
+        )
 
 
 class QualityCheck[FindingType: ApprovableFinding](QualityCheckDefinition, ABC):

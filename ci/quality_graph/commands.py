@@ -13,7 +13,6 @@ from typing import Literal, cast
 from monori.ci.lib.comments import (
     CommandReactionLifecycle,
     Reaction,
-    managed_comment,
     workflow_bot_logins,
 )
 from monori.ci.lib.github import GitHub, GitHubAPI, rerun_latest_pull_request_workflow
@@ -409,41 +408,9 @@ def apply_gate_command(
             "Command accepted. Applying it and refreshing the Quality Graph.",
         ),
     )
-    pull = object_value(github.request("GET", f"/pulls/{number}"), "pull request")
-    original_body = pull.get("body")
-    body = string_value(original_body, "pull request body") if original_body is not None else ""
     for gate, check in registered_checks().items():
-        marker_name = check.pending_marker
-        if marker_name is None:
-            continue
-        if command_targets_gate(command, gate):
-            encoded = encode_command(command)
-            report = managed_comment(github, number, check.report_marker)
-            if report is None:
-                message = f"Cannot authorize {gate} command without its managed report"
-                raise RuntimeError(message)
-            report_id = report.get("id")
-            if not isinstance(report_id, int):
-                message = f"Managed {gate} report has no numeric comment id"
-                raise TypeError(message)
-            report_body = string_value(report.get("body"), "report comment body")
-            authorization = f"<!-- monori-qg-authorized: {gate} {encoded} -->"
-            cleaned = re.sub(
-                rf"\n?<!-- monori-qg-authorized: {gate} [A-Za-z0-9_-]+ -->",
-                "",
-                report_body,
-            )
-            github.request(
-                "PATCH",
-                f"/issues/comments/{report_id}",
-                {"body": f"{cleaned.rstrip()}\n{authorization}\n"},
-            )
-            marker = f"<!-- {marker_name}: {report_id} {encoded} -->"
-            body = re.sub(rf"<!-- {marker_name}: \d+(?: [A-Za-z0-9_-]+)? -->", marker, body)
-            if marker not in body:
-                body = f"{body.rstrip()}\n\n{marker}".strip()
-    if body != (original_body or ""):
-        github.request("PATCH", f"/pulls/{number}", {"body": body})
+        if check.pending_marker is not None and command_targets_gate(command, gate):
+            check.arm_pending(github, number, command)
     rerun_latest_pull_request_workflow(github, number)
 
 
