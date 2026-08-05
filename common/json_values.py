@@ -10,12 +10,12 @@ JsonObject = dict[str, JsonValue]
 
 
 def is_object(value: JsonValue) -> TypeGuard[JsonObject]:
-    """Return whether object."""
+    """Return whether a JSON value is an object mapping."""
     return isinstance(value, dict)
 
 
 def object_value(value: JsonValue, context: str) -> JsonObject:
-    """Object value for this module."""
+    """Return a JSON object or raise `TypeError` naming the invalid context."""
     if not is_object(value):
         message = f"Expected JSON object for {context}"
         raise TypeError(message)
@@ -23,7 +23,7 @@ def object_value(value: JsonValue, context: str) -> JsonObject:
 
 
 def array_value(value: JsonValue, context: str) -> list[JsonValue]:
-    """Array value for this module."""
+    """Return a JSON array or raise `TypeError` naming the invalid context."""
     if not isinstance(value, list):
         message = f"Expected JSON array for {context}"
         raise TypeError(message)
@@ -39,7 +39,7 @@ def string_value(value: JsonValue, context: str) -> str:
 
 
 def integer_value(value: JsonValue, context: str) -> int:
-    """Integer value for this module."""
+    """Return a JSON integer, rejecting booleans with a contextual `TypeError`."""
     if isinstance(value, bool) or not isinstance(value, int):
         message = f"Expected JSON integer for {context}"
         raise TypeError(message)

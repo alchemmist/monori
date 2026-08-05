@@ -6,7 +6,6 @@ import argparse
 import os
 from dataclasses import dataclass
 from enum import StrEnum
-from itertools import count
 from pathlib import Path
 
 from monori.ci.lib.github import GITHUB_PAGE_SIZE, GitHub, GitHubAPI
@@ -35,7 +34,8 @@ def workflow_bot_logins() -> set[str]:
 def issue_comments(github: GitHubAPI, number: int) -> list[dict[str, JsonValue]]:
     """Load every issue comment for a pull request."""
     result: list[dict[str, JsonValue]] = []
-    for page in count(1):
+    page = 1
+    while True:
         raw = github.request(
             "GET", f"/issues/{number}/comments?per_page={GITHUB_PAGE_SIZE}&page={page}"
         )
@@ -43,7 +43,7 @@ def issue_comments(github: GitHubAPI, number: int) -> list[dict[str, JsonValue]]
         result.extend(object_value(item, "pull request comment") for item in items)
         if len(items) < GITHUB_PAGE_SIZE:
             return result
-    return result
+        page += 1
 
 
 def comment_body(marker: str, body: str) -> str:
@@ -82,8 +82,7 @@ def upsert_comment(github: GitHubAPI, number: int, marker: str, body: str) -> No
     rendered = bounded_comment_body(comment_body(marker, body))
     existing = managed_comment(github, number, marker)
     if existing is not None:
-        comment = existing
-        comment_id = comment.get("id")
+        comment_id = existing.get("id")
         if not isinstance(comment_id, int):
             message = "Pull request report comment has no numeric id"
             raise TypeError(message)

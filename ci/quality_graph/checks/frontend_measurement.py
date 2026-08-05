@@ -86,7 +86,7 @@ def json_number(value: JsonValue, context: str) -> float:
 def config_parts(
     config: dict[str, JsonValue],
 ) -> tuple[int, list[dict[str, JsonValue]], dict[str, dict[str, JsonValue]]]:
-    """Config parts for this module."""
+    """Validate and return run count, Lighthouse routes, and metric definitions."""
     raw_runs = config.get("runs")
     if isinstance(raw_runs, bool) or not isinstance(raw_runs, int) or raw_runs < 1:
         message = "config.runs must be a positive integer"
@@ -104,7 +104,7 @@ def config_parts(
 
 
 def median(values: list[float], expected_runs: int, context: str) -> float:
-    """Median for this module."""
+    """Return the median after verifying that every configured run produced a value."""
     if len(values) != expected_runs:
         message = f"{context} has {len(values)} runs; expected {expected_runs}"
         raise RuntimeError(message)
@@ -214,7 +214,7 @@ def load_measurements(
 
 
 def band(value: float, metric: dict[str, JsonValue]) -> str | None:
-    """Band for this module."""
+    """Return the configured performance band for a value, if bands are defined."""
     raw_good = metric.get("good")
     raw_poor = metric.get("poor")
     if raw_good is None or raw_poor is None:
@@ -229,7 +229,7 @@ def band(value: float, metric: dict[str, JsonValue]) -> str | None:
 
 
 def threshold(metric: dict[str, JsonValue], name: str, default: float = 0) -> float:
-    """Threshold for this module."""
+    """Return a numeric metric threshold or its default when omitted."""
     raw = metric.get(name)
     return default if raw is None else json_number(raw, name)
 
@@ -310,7 +310,7 @@ def compare_measurements(
     current: dict[MeasurementKey, Measurement],
     config: dict[str, JsonValue],
 ) -> list[Entry]:
-    """Compare measurements for this module."""
+    """Compare matching baseline and PR measurements and classify every delta."""
     if set(base) != set(current):
         missing = ", ".join(
             f"{route}/{metric}" for route, metric in sorted(set(base) - set(current))
@@ -350,12 +350,12 @@ def compare_measurements(
 
 
 def worst_tier(entries: list[Entry]) -> str:
-    """Worst tier for this module."""
+    """Return the most severe tier present in a collection of report entries."""
     return max((entry.tier for entry in entries), key=lambda tier: TIERS[tier], default="none")
 
 
 def format_value(value: float, unit: str) -> str:
-    """Format value for this module."""
+    """Format a score or millisecond measurement for the Markdown report."""
     if unit == "score":
         return f"{value:.3f}"
     if abs(value) >= MS_PER_SECOND:
@@ -364,7 +364,7 @@ def format_value(value: float, unit: str) -> str:
 
 
 def format_delta(entry: Entry) -> str:
-    """Format delta for this module."""
+    """Format an entry's absolute and relative changes as report text."""
     sign = "+" if entry.delta > 0 else ""
     value = format_value(entry.delta, entry.unit)
     percent = "new" if entry.delta_percent is None else f"{entry.delta_percent:+.1f}%"
@@ -372,7 +372,7 @@ def format_delta(entry: Entry) -> str:
 
 
 def format_delta_cell(entry: Entry) -> str:
-    """Format delta cell for this module."""
+    """Render a delta with the report color associated with its direction."""
     delta = format_delta(entry)
     if entry.delta > 0:
         return f'<font color="#c05640">{delta}</font>'
@@ -382,13 +382,13 @@ def format_delta_cell(entry: Entry) -> str:
 
 
 def tier_cell(tier: str) -> str:
-    """Tier cell for this module."""
+    """Render a performance tier with its status symbol and human-readable label."""
     symbols = {"none": "✔", "info": "💬", "significant": "⚠", "critical": "✗"}
     return f"{symbols[tier]} {TIER_LABELS[tier]}"
 
 
 def sorted_regressions(entries: list[Entry]) -> list[Entry]:
-    """Sorted regressions for this module."""
+    """Return regressed entries ordered from the most to least severe."""
     return sorted(
         (entry for entry in entries if entry.tier != "none"),
         key=lambda entry: (
@@ -403,7 +403,7 @@ def sorted_regressions(entries: list[Entry]) -> list[Entry]:
 def report_table(
     entries: list[Entry], *, include_route: bool = True, navigation: bool = False
 ) -> list[str]:
-    """Report table for this module."""
+    """Render report entries as a navigation, routed, or metric-only Markdown table."""
     if navigation:
         lines = [
             "| Navigation | main | PR | Δ | Tier |",
@@ -435,7 +435,7 @@ def report_table(
 
 
 def report_sections(entries: list[Entry]) -> list[str]:
-    """Report sections for this module."""
+    """Group navigation and page measurements into Markdown report sections."""
     lines: list[str] = []
     navigation = [entry for entry in entries if entry.metric_id == "navigation"]
     pages: dict[str, list[Entry]] = {}

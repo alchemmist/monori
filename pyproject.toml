@@ -49,7 +49,8 @@ mutation = [
   { include-group = "test" },
   "mutmut>=3.6.0",
 ]
-runtime = ["monori-ci", "monori-server"]
+runtime = ["monori-server"]
+sync-runtime = ["monori-server[connectors]"]
 
 [tool.pytest.ini_options]
 testpaths = ["server/tests", "ci/tests"]

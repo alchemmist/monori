@@ -14,7 +14,7 @@ class Verdict(StrEnum):
     """Overall result category for a quality check."""
 
     PASS = auto()
-    FAIL = "fail"
+    FAIL = auto()
 
 
 class FindingProtocol(Protocol):

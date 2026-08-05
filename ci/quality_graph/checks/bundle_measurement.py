@@ -44,12 +44,12 @@ class AssetGrowth(TypedDict):
 
 
 def gzip_size(path: Path) -> int:
-    """Gzip size for this module."""
+    """Return the deterministic gzip-compressed size of a file in bytes."""
     return len(gzip.compress(path.read_bytes(), mtime=0))
 
 
 def snapshot(dist: Path) -> Snapshot:
-    """Snapshot for this module."""
+    """Collect raw and gzip sizes for built assets referenced by the entry HTML."""
     assets: dict[str, Asset] = {}
     assets_dir = dist / "assets"
     for path in sorted(assets_dir.rglob("*")):
@@ -68,7 +68,7 @@ def normalized_asset(path: str) -> str:
 
 
 def tier(delta: int, percent: float) -> str:
-    """Tier for this module."""
+    """Classify bundle growth after applying absolute and relative noise thresholds."""
     if delta <= 0 or (percent < NOISE_PERCENT and delta < NOISE_BYTES):
         return "none"
     if percent <= INFO_PERCENT:
@@ -79,7 +79,7 @@ def tier(delta: int, percent: float) -> str:
 
 
 def compare(base: Snapshot, current: Snapshot) -> dict[str, JsonValue]:
-    """Compare for this module."""
+    """Compare bundle snapshots and return metric, asset-growth, and verdict data."""
 
     def total(names: list[str]) -> int:
         return sum(current["assets"].get(name, {"gzip": 0})["gzip"] for name in names)

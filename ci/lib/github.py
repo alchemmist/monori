@@ -6,10 +6,10 @@ import base64
 import json
 import os
 import urllib.parse
+from http import HTTPStatus
 from typing import TYPE_CHECKING, Protocol, cast
 
 import httpx
-from fastapi import status
 
 from monori.common import array_value, object_value, optional_string
 
@@ -17,9 +17,6 @@ if TYPE_CHECKING:
     from monori.common import JsonValue
 
 REQUEST_TIMEOUT_SECONDS = 30
-HTTP_NO_CONTENT = status.HTTP_204_NO_CONTENT
-HTTP_FORBIDDEN = status.HTTP_403_FORBIDDEN
-HTTP_NOT_FOUND = status.HTTP_404_NOT_FOUND
 GITHUB_PAGE_SIZE = 100
 
 
@@ -82,9 +79,9 @@ class GitHub:
         except httpx.RequestError as error:
             message = f"GitHub API {method} {path} failed: {error}"
             raise RuntimeError(message) from error
-        if response.status_code == HTTP_NO_CONTENT:
+        if response.status_code == HTTPStatus.NO_CONTENT:
             return None
-        if response.status_code == HTTP_NOT_FOUND and method in {"GET", "DELETE"}:
+        if response.status_code == HTTPStatus.NOT_FOUND and method in {"GET", "DELETE"}:
             return None
         if response.is_error:
             raise GitHubAPIError(method, path, response.status_code)
@@ -155,7 +152,7 @@ def is_admin(github: GitHubAPI, login: str) -> bool:
     try:
         response = github.request("GET", f"/collaborators/{encoded}/permission")
     except GitHubAPIError as error:
-        if error.status_code == HTTP_FORBIDDEN:
+        if error.status_code == HTTPStatus.FORBIDDEN:
             return False
         raise
     return (

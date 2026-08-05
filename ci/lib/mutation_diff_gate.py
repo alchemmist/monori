@@ -159,7 +159,7 @@ def changed_functions(
 
 
 def mutant_function(key: str) -> tuple[str, str | None]:
-    """Mutant function for this module."""
+    """Extract the original function and optional class names from a mutmut key."""
     original = key.partition("__mutmut_")[0].rsplit(".", 1)[-1]
     if CLASS_SEPARATOR in original:
         parts = original.split(CLASS_SEPARATOR)

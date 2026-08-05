@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 
 def python_files(root: Path) -> list[Path]:
-    """Python files for this module."""
+    """Return sorted Python files below a root, excluding generated and virtual environments."""
     return sorted(
         path
         for path in root.rglob("*.py")
@@ -28,7 +28,7 @@ def python_files(root: Path) -> list[Path]:
 
 
 def violations(path: Path) -> list[tuple[int, int, str]]:
-    """Violations for this module."""
+    """Return line, column, and text for comments not covered by the allowed directives."""
     result = []
     with tokenize.open(path) as source:
         for token in tokenize.generate_tokens(source.readline):

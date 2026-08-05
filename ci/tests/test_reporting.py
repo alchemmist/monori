@@ -63,7 +63,12 @@ def test_renderer_owns_status_heading_findings_and_admin_commands() -> None:
                     ),
                 ),
             ),
-            admin=admin_commands("example", ["example-1"], [], ["example.py"]),
+            admin=admin_commands(
+                "example",
+                ["example-1"],
+                [],
+                {"example.py": ["example-1"]},
+            ),
         )
     )
 
@@ -74,6 +79,26 @@ def test_renderer_owns_status_heading_findings_and_admin_commands() -> None:
     assert "`/qg ignore example-1`" in body
     assert "`/qg ignore example`" in body
     assert "`/qg ignore-file example.py`" in body
+
+
+def test_file_control_reverses_only_findings_from_its_file() -> None:
+    """Keep each file checkbox reverse command scoped to the same file."""
+    commands = admin_commands(
+        "suppression",
+        ["suppression-a", "suppression-b", "suppression-c"],
+        [],
+        {
+            "a.py": ["suppression-a", "suppression-b"],
+            "b.py": ["suppression-c"],
+        },
+    )
+
+    file_controls = [control for control in commands.controls if "ignore-file" in control.command]
+
+    assert [(control.command, control.reverse_command) for control in file_controls] == [
+        ("/qg ignore-file a.py", "/qg remove-ignore suppression-a,suppression-b"),
+        ("/qg ignore-file b.py", "/qg remove-ignore suppression-c"),
+    ]
 
 
 def test_in_progress_replaces_stale_report_with_pending_template() -> None:

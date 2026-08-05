@@ -410,7 +410,14 @@ def summary_body(findings: list[Finding], approved: set[str], pr_url: str) -> st
                     for finding in findings
                     if finding.finding_id in approved
                 ],
-                [finding.path for finding in active],
+                {
+                    path: [
+                        display_finding_id(finding.finding_id)
+                        for finding in active
+                        if finding.path == path
+                    ]
+                    for path in {finding.path for finding in active}
+                },
                 (
                     "Finding IDs, gate names, and file paths may be comma-separated.",
                     "Approvals persist while the finding fingerprint stays unchanged.",

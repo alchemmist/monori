@@ -1221,8 +1221,10 @@ mutation = [
     { name = "pytest-cov" },
 ]
 runtime = [
-    { name = "monori-ci" },
     { name = "monori-server" },
+]
+sync-runtime = [
+    { name = "monori-server", extra = ["connectors"] },
 ]
 test = [
     { name = "httpx2" },
@@ -1274,10 +1276,8 @@ mutation = [
     { name = "pytest", specifier = ">=8" },
     { name = "pytest-cov", specifier = ">=5" },
 ]
-runtime = [
-    { name = "monori-ci", editable = "ci" },
-    { name = "monori-server", editable = "server" },
-]
+runtime = [{ name = "monori-server", editable = "server" }]
+sync-runtime = [{ name = "monori-server", extras = ["connectors"], editable = "server" }]
 test = [
     { name = "httpx2", specifier = ">=0.1" },
     { name = "monori-ci", editable = "ci" },
@@ -1306,7 +1306,6 @@ version = "0.1.0"
 source = { editable = "ci" }
 dependencies = [
     { name = "dulwich" },
-    { name = "fastapi" },
     { name = "httpx" },
     { name = "jinja2" },
     { name = "monori-common" },
@@ -1316,7 +1315,6 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "dulwich", specifier = ">=0.25.0" },
-    { name = "fastapi", specifier = ">=0.115" },
     { name = "httpx", specifier = ">=0.27" },
     { name = "jinja2", specifier = ">=3.1" },
     { name = "monori-common", editable = "common" },

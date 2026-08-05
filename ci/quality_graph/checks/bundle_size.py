@@ -83,7 +83,7 @@ def append_commands(summary: str, entries: list[dict[str, JsonValue]], approved:
 
 
 def format_kib(value: JsonValue) -> str:
-    """Format kib for this module."""
+    """Format a numeric byte count as kibibytes or reject non-numeric JSON values."""
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         message = "Expected numeric bundle size"
         raise TypeError(message)

@@ -59,7 +59,7 @@ def update_body_state(github: GitHub, number: int, body: str, approved: set[str]
 
 
 def entry_ids(entries: list[dict[str, JsonValue]]) -> set[str]:
-    """Entry ids for this module."""
+    """Return finding IDs for measured entries that contain a regression."""
     return {finding_id(entry) for entry in entries if entry.get("tier") != "none"}
 
 

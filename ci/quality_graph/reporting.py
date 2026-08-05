@@ -17,7 +17,7 @@ from monori.ci.lib.comments import CommandReactionLifecycle, Reaction, upsert_co
 from monori.ci.lib.github import GitHub, GitHubAPI
 
 if TYPE_CHECKING:
-    from collections.abc import Collection
+    from collections.abc import Collection, Mapping
 
 
 class ReportStatus(StrEnum):
@@ -148,13 +148,12 @@ def admin_commands(
     gate: str,
     active_ids: Collection[str],
     approved_ids: Collection[str],
-    file_paths: Collection[str] = (),
+    file_findings: Mapping[str, Collection[str]] | None = None,
     notes: Collection[str] = (),
 ) -> AdminCommands:
     """Build canonical administrator commands from one gate's current data."""
     active = sorted(set(active_ids))
     approved = sorted(set(approved_ids))
-    paths = sorted(set(file_paths))
     controls: list[AdminControl] = []
     if active:
         remove_active = f"/qg remove-ignore {','.join(active)}"
@@ -164,8 +163,15 @@ def admin_commands(
                 AdminControl(f"/qg ignore {gate}", remove_active),
             )
         )
-        if paths:
-            controls.append(AdminControl(f"/qg ignore-file {','.join(paths)}", remove_active))
+        for path, finding_ids in sorted((file_findings or {}).items()):
+            selected = sorted(set(finding_ids))
+            if selected:
+                controls.append(
+                    AdminControl(
+                        f"/qg ignore-file {path}",
+                        f"/qg remove-ignore {','.join(selected)}",
+                    )
+                )
     if approved:
         approved_command = f"/qg ignore {','.join(approved)}"
         controls.append(

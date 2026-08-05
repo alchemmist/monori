@@ -111,7 +111,30 @@ class QualityGraphCommandTest(unittest.TestCase):
         assert parse_command(request.body) == QualityGraphCommand("ignore", ("suppression-abc123",))
         assert request.login == "admin"
         assert request.pull_request_number == 42
-        assert not request.react
+        assert request.react
+
+    def test_checkbox_command_is_acknowledged_before_dispatch(self) -> None:
+        """React with eyes as soon as an administrator checkbox command is accepted."""
+
+        class AdminGitHub(FakeGitHub):
+            @override
+            def request(self, method: str, path: str, payload: JsonValue = None) -> JsonValue:
+                if path.endswith("/permission"):
+                    self.calls.append((method, path, payload))
+                    return {"permission": "admin"}
+                return super().request(method, path, payload)
+
+        github = AdminGitHub()
+        request = CommandRequest(8, "/qg ignore suppression-abc123", "admin", 42)
+
+        with mock.patch("monori.ci.quality_graph.commands.dispatch_command"):
+            process_command(github, request)
+
+        assert (
+            "POST",
+            "/issues/comments/8/reactions",
+            {"content": "eyes"},
+        ) in github.calls
 
     def test_unchecked_report_control_becomes_remove_ignore(self) -> None:
         checked = render_report(

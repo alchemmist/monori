@@ -36,6 +36,7 @@ GATE_NAME_RE = re.compile(r"^[a-z][a-z0-9-]*$")
 FINDING_ID_RE = re.compile(r"^[a-z][a-z0-9-]*-[a-z0-9-]+$")
 KNOWN_GATES = {"object", "suppression", "bundle", "frontend"}
 CONTROL_COMMAND_COUNT = 2
+MAX_WORKFLOW_RUN_PAGES = 100
 CONTROL_RE = re.compile(
     r"^- \[(?P<state>[ xX])] .*?<!-- (?P<marker>monori-qg-control:[A-Za-z0-9_-]+) -->$",
     re.MULTILINE,
@@ -167,7 +168,7 @@ def is_admin(github: GitHubAPI, login: str) -> bool:
 
 
 def pull_request_number(event: dict[str, JsonValue]) -> int | None:
-    """Pull request number for this module."""
+    """Return the pull-request number from an issue event, or `None` for regular issues."""
     issue = object_value(event.get("issue", {}), "event issue")
     if not issue.get("pull_request"):
         return None
@@ -290,7 +291,6 @@ def checkbox_command_request(
         selected_command,
         optional_string(sender.get("login")),
         pull_request_number(event),
-        react=False,
     )
 
 
@@ -446,12 +446,12 @@ def main() -> int:
 
 
 def rerun_workflow(github: GitHubAPI, number: int) -> None:
-    """Rerun workflow for this module."""
+    """Rerun failed jobs in the pull request's latest matching Quality Graph run."""
     pull = object_value(github.request("GET", f"/pulls/{number}"), "pull request")
     head = object_value(pull.get("head", {}), "pull request head")
     sha = string_value(head.get("sha"), "pull request head sha")
     branch = string_value(head.get("ref"), "pull request head branch")
-    for page in range(1, GITHUB_PAGE_SIZE + 1):
+    for page in range(1, MAX_WORKFLOW_RUN_PAGES + 1):
         response = object_value(
             github.request(
                 "GET",
