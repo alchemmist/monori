@@ -12,7 +12,6 @@ ENV UV_PROJECT_ENVIRONMENT=/opt/venv \
 # Dependencies + Chromium and its OS libraries, in one cached layer keyed by
 # workspace metadata — not reinstalled on every container start.
 COPY pyproject.toml uv.lock ./
-COPY __init__.py ./
 COPY common ./common
 COPY ci ./ci
 COPY server ./server

@@ -5,54 +5,30 @@ description = "Monori"
 requires-python = ">=3.12"
 dependencies = []
 
-[build-system]
-requires = ["setuptools>=77"]
-build-backend = "setuptools.build_meta"
+[tool.uv]
+package = false
 
-[tool.setuptools]
-package-dir = { monori = "." }
-packages = [
-  "monori",
-  "monori.common",
-  "monori.ci",
-  "monori.ci.lib",
-  "monori.ci.quality_graph",
-  "monori.ci.quality_graph.checks",
-  "monori.ci.quality_graph.templates",
-  "monori.ci.tests",
-  "monori.server",
-  "monori.server.app",
-  "monori.server.app.connectors",
-  "monori.server.app.routers",
-  "monori.server.app.workbook",
-  "monori.server.migrations",
-  "monori.server.migrations.versions",
-  "monori.server.tests",
-  "monori.server.tests.integration",
-  "monori.server.tests.unit",
-]
-include-package-data = true
+[tool.uv.sources]
+monori-ci = { workspace = true }
+monori-server = { workspace = true }
 
-[tool.setuptools.package-data]
-"monori.ci.quality_graph" = ["templates/*.j2"]
-"monori.server" = ["schema.sql"]
+[tool.uv.workspace]
+members = ["common", "ci", "server"]
 
 [dependency-groups]
 format = ["ruff==0.15.22"]
-ci = ["PyYAML>=6.0"]
-lint = ["ruff==0.15.22", "dulwich>=0.25.0", "fastapi>=0.115", "httpx>=0.27", "jinja2>=3.1", "pydantic>=2"]
+ci = ["monori-ci", "PyYAML>=6.0"]
+lint = ["monori-ci", "ruff==0.15.22"]
 test = [
-  "dulwich>=0.25.0", "fastapi>=0.115", "httpx[socks]>=0.27", "jinja2>=3.1", "pydantic>=2",
-  "uvicorn[standard]>=0.30", "cryptography>=50", "pyjwt>=2.9", "argon2-cffi>=23",
-  "python-multipart>=0.0.9", "alembic>=1.18.5", "openpyxl>=3.1", "playwright>=1.40",
+  "monori-ci",
+  "monori-server[connectors]",
   "httpx2>=0.1",
   "pytest>=8",
   "pytest-cov>=5",
 ]
 type = [
-  "dulwich>=0.25.0", "fastapi>=0.115", "httpx[socks]>=0.27", "jinja2>=3.1", "pydantic>=2",
-  "uvicorn[standard]>=0.30", "cryptography>=50", "pyjwt>=2.9", "argon2-cffi>=23",
-  "python-multipart>=0.0.9", "alembic>=1.18.5", "openpyxl>=3.1", "playwright>=1.40",
+  "monori-ci",
+  "monori-server[connectors]",
   "mypy>=1.13",
   "types-openpyxl>=3.1.5.20260724",
   "types-PyYAML>=6.0.12.20250516",
@@ -68,16 +44,12 @@ analyze = [
   "bandit>=1.8",
   "vulture>=2.16",
 ]
-audit = ["pip-audit>=2.10.1"]
+audit = ["monori-ci", "pip-audit>=2.10.1"]
 mutation = [
   { include-group = "test" },
   "mutmut>=3.6.0",
 ]
-runtime = [
-  "dulwich>=0.25.0", "fastapi>=0.115", "httpx[socks]>=0.27", "jinja2>=3.1", "pydantic>=2",
-  "uvicorn[standard]>=0.30", "cryptography>=50", "pyjwt>=2.9", "argon2-cffi>=23",
-  "python-multipart>=0.0.9", "alembic>=1.18.5", "openpyxl>=3.1",
-]
+runtime = ["monori-ci", "monori-server"]
 
 [tool.pytest.ini_options]
 testpaths = ["server/tests", "ci/tests"]
@@ -119,7 +91,7 @@ known-first-party = ["monori"]
 
 [tool.mypy]
 python_version = "3.12"
-files = ["common", "ci", "server"]
+packages = ["monori.common", "monori.ci", "monori.server"]
 exclude = ['(^|/)mutants/']
 strict = true
 warn_unreachable = true

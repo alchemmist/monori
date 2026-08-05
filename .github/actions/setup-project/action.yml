@@ -51,11 +51,11 @@ runs:
           run: |
               case "${{ inputs.python-profile }}" in
                   type)
-                      uv sync --locked --no-editable --reinstall-package monori --no-dev --group type ;;
+                      uv sync --locked --no-editable --reinstall-package monori-common --reinstall-package monori-ci --reinstall-package monori-server --no-dev --group type ;;
                   ci|format|lint|analyze|test|audit|mutation|runtime)
-                      uv sync --locked --reinstall-package monori --no-dev --group "${{ inputs.python-profile }}" ;;
+                      uv sync --locked --no-dev --group "${{ inputs.python-profile }}" ;;
                   coverage)
-                      uv sync --locked --reinstall-package monori --no-dev --group test ;;
+                      uv sync --locked --no-dev --group test ;;
                   *) echo "Unknown Python profile: ${{ inputs.python-profile }}" >&2; exit 2 ;;
               esac
               echo "UV_NO_SYNC=1" >> "$GITHUB_ENV"

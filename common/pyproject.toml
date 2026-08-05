@@ -1,0 +1,17 @@
+[project]
+name = "monori-common"
+version = "0.1.0"
+description = "Monori shared Python primitives"
+requires-python = ">=3.12"
+dependencies = []
+
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+package-dir = { "monori.common" = "." }
+packages = ["monori.common"]
+
+[tool.setuptools.package-data]
+"monori.common" = ["py.typed"]

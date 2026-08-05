@@ -1,0 +1,45 @@
+[project]
+name = "monori-server"
+version = "0.1.0"
+description = "Monori personal budget server"
+requires-python = ">=3.12"
+dependencies = [
+  "alembic>=1.18.5",
+  "argon2-cffi>=23",
+  "cryptography>=50",
+  "fastapi>=0.115",
+  "httpx[socks]>=0.27",
+  "monori-common",
+  "openpyxl>=3.1",
+  "pyjwt>=2.9",
+  "python-multipart>=0.0.9",
+  "uvicorn[standard]>=0.30",
+]
+
+[project.optional-dependencies]
+connectors = ["playwright>=1.40"]
+
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[tool.uv.sources]
+monori-common = { workspace = true }
+
+[tool.setuptools]
+package-dir = { "monori.server" = "." }
+packages = [
+  "monori.server",
+  "monori.server.app",
+  "monori.server.app.connectors",
+  "monori.server.app.routers",
+  "monori.server.app.workbook",
+  "monori.server.migrations",
+  "monori.server.migrations.versions",
+  "monori.server.tests",
+  "monori.server.tests.integration",
+  "monori.server.tests.unit",
+]
+
+[tool.setuptools.package-data]
+"monori.server" = ["py.typed", "schema.sql"]

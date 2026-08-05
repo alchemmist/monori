@@ -196,8 +196,8 @@ type-front:
 	cd web && ./node_modules/.bin/eslint "src/**/*.{ts,tsx}" "e2e/**/*.ts" "*.config.ts" stryker.conf.ts
 
 type-back:
-	uv sync --locked --no-editable --group type
-	UV_NO_SYNC=1 uv run --locked --group type mypy $(PYTHON_SOURCES)
+	uv sync --locked --no-editable --reinstall-package monori-common --reinstall-package monori-ci --reinstall-package monori-server --group type
+	UV_NO_SYNC=1 uv run --locked --group type mypy
 
 analyze:
 	uv run --locked --group analyze bandit -q -r $(PYTHON_SOURCES)

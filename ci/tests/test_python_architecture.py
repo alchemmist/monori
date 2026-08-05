@@ -17,7 +17,12 @@ COMPONENT_ROOTS = {
 
 def python_modules(root: Path) -> list[Path]:
     """Return all Python modules below a package directory."""
-    return sorted(path for path in root.rglob("*.py") if not path.is_relative_to(root / ".venv"))
+    excluded = {".venv", "build"}
+    return sorted(
+        path
+        for path in root.rglob("*.py")
+        if not excluded.intersection(path.relative_to(root).parts)
+    )
 
 
 def parsed_imports(path: Path) -> list[ast.Import | ast.ImportFrom]:
@@ -45,22 +50,46 @@ def project_dependencies(document: dict[str, JsonValue]) -> list[str]:
     return [string_value(value, "dependency") for value in values]
 
 
-def test_repository_root_defines_the_monori_package() -> None:
-    """Build the repository root as the single Monori Python package."""
+def test_repository_root_defines_the_monori_workspace() -> None:
+    """Keep the root as the Monori workspace rather than a competing namespace wheel."""
     root = project(REPOSITORY_ROOT / "pyproject.toml")
 
     assert section(root, "project").get("name") == "monori"
-    assert section(root, "build-system").get("build-backend") == "setuptools.build_meta"
-    assert (REPOSITORY_ROOT / "__init__.py").is_file()
+    assert section(root, "tool", "uv").get("package") is False
+    assert "build-system" not in root
+    assert section(root, "tool", "uv", "workspace").get("members") == [
+        "common",
+        "ci",
+        "server",
+    ]
+    assert not (REPOSITORY_ROOT / "__init__.py").exists()
 
 
-def test_components_live_directly_below_the_repository_root() -> None:
-    """Keep component packages free of nested source and namespace directories."""
-    for package_root in COMPONENT_ROOTS.values():
+def test_components_are_direct_workspace_packages() -> None:
+    """Package each direct child without nested source or namespace directories."""
+    for component, package_root in COMPONENT_ROOTS.items():
+        metadata = project(package_root / "pyproject.toml")
+
         assert package_root.is_dir()
         assert (package_root / "__init__.py").is_file()
         assert not (package_root / "src").exists()
-        assert not (package_root / "pyproject.toml").exists()
+        assert section(metadata, "project").get("name") == f"monori-{component}"
+        assert section(metadata, "build-system").get("build-backend") == "setuptools.build_meta"
+        package_dir = section(metadata, "tool", "setuptools").get("package-dir")
+        assert package_dir == {f"monori.{component}": "."}
+
+
+def test_component_dependencies_follow_package_boundaries() -> None:
+    """Make consumers depend on common without depending on the root package."""
+    common = project(REPOSITORY_ROOT / "common" / "pyproject.toml")
+    ci = project(REPOSITORY_ROOT / "ci" / "pyproject.toml")
+    server = project(REPOSITORY_ROOT / "server" / "pyproject.toml")
+
+    assert project_dependencies(common) == []
+    for consumer in (ci, server):
+        dependencies = project_dependencies(consumer)
+        assert "monori-common" in dependencies
+        assert "monori" not in dependencies
 
 
 def test_internal_imports_are_absolute_and_namespaced() -> None:
