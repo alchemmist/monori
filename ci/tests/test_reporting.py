@@ -9,6 +9,8 @@ from monori.ci.lib.comments import (
     bounded_comment_body,
 )
 from monori.ci.quality_graph.reporting import (
+    CHECK_REPORTS,
+    SURFACE_REPORTS,
     PullRequestReport,
     ReportFinding,
     ReportMetric,
@@ -159,3 +161,10 @@ def test_empty_admin_commands_do_not_instruct_the_reader_to_post() -> None:
 
     assert "No actionable findings in this run." in body
     assert "Post exactly one command" not in body
+
+
+def test_check_and_command_surface_reports_have_separate_registries() -> None:
+    """Keep command UI definitions out of the check report registry."""
+    assert "quality-graph" in SURFACE_REPORTS
+    assert "quality-graph" not in CHECK_REPORTS
+    assert "suppression" in CHECK_REPORTS

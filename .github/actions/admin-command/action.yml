@@ -7,28 +7,12 @@ runs:
           uses: ./.github/actions/setup-project
           with:
               python-profile: ci
-        - name: Acknowledge Quality Graph command
-          if: github.event.action == 'created' && startsWith(github.event.comment.body, '/')
-          shell: bash
-          env:
-              COMMENT_ID: ${{ github.event.comment.id }}
-              GITHUB_TOKEN: ${{ github.token }}
-          run: >-
-              uv run --locked python -m monori.ci.quality_graph.reporting react
-              --comment-id "$COMMENT_ID"
-              --reaction eyes
         - name: Test Quality Graph command API
           shell: bash
           run: >-
               uv run --locked python -m unittest
               monori.ci.tests.test_commands
               monori.ci.tests.test_quality_check_lifecycle
-        - name: Apply direct Quality Graph commands
-          continue-on-error: true
-          shell: bash
-          env:
-              GITHUB_TOKEN: ${{ github.token }}
-          run: uv run --locked python -m monori.ci.quality_graph.registry
         - name: Process Quality Graph command
           shell: bash
           env:

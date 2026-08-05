@@ -8,7 +8,7 @@ MUTATION_JOBS ?= $(shell getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.n
 BASE ?= origin/main
 
 WEBBIN := web/node_modules/.bin
-PYTHON_SOURCES := common ci server
+PYTHON_SOURCES := $(shell python3 -c 'import tomllib; from pathlib import Path; print(*tomllib.loads(Path("pyproject.toml").read_text())["tool"]["uv"]["workspace"]["members"])')
 CLOC_EXCLUDE_DIRS := .git,.worktrees,.claude,node_modules,.venv,__pycache__,.pytest_cache,.mypy_cache,.ruff_cache,dist,static,data,reports,coverage,htmlcov,.stryker-tmp,.mutmut-cache,mutants,playwright-report,test-results
 
 .DEFAULT_GOAL := up

@@ -2,12 +2,16 @@ import unittest
 from typing import cast, override
 from unittest import mock
 
+import pytest
+
 from monori.ci.quality_graph.commands import (
     CommandRequest,
     QualityGraphCommand,
     command_request,
     command_targets_gate,
     command_text,
+    help_body,
+    is_finding_id,
     parse_command,
     process_command,
     set_comment_reaction,
@@ -84,6 +88,17 @@ class QualityGraphCommandTest(unittest.TestCase):
         assert command is not None
         assert validate_command(command) == "Unknown Quality Graph target: `unknown-target`"
 
+    def test_finding_ids_require_a_registered_gate_prefix(self) -> None:
+        assert is_finding_id("object-abc123")
+        assert not is_finding_id("unknown-abc123")
+
+    def test_help_is_generated_from_registered_check_metadata(self) -> None:
+        body = help_body()
+
+        for gate in ("object", "suppression", "bundle", "frontend"):
+            assert f"{gate}-<id>" in body
+        assert "selected files (object, suppression)" in body
+
     def test_command_text_is_canonical(self) -> None:
         command = QualityGraphCommand("remove-ignore", ("object-abc123", "suppression-def456"))
 
@@ -135,13 +150,46 @@ class QualityGraphCommandTest(unittest.TestCase):
         github = AdminGitHub()
         request = CommandRequest(8, "/qg ignore suppression-abc123", "admin", 42)
 
-        with mock.patch("monori.ci.quality_graph.commands.dispatch_command"):
+        with (
+            mock.patch("monori.ci.quality_graph.commands.run_direct_command_checks"),
+            mock.patch("monori.ci.quality_graph.commands.dispatch_command"),
+        ):
             process_command(github, request)
 
         assert (
             "POST",
             "/issues/comments/8/reactions",
             {"content": "eyes"},
+        ) in github.calls
+
+    def test_refresh_failure_blocks_dispatch_and_marks_the_command_failed(self) -> None:
+        """Do not apply a command when fresh source-check findings are unavailable."""
+
+        class AdminGitHub(FakeGitHub):
+            @override
+            def request(self, method: str, path: str, payload: JsonValue = None) -> JsonValue:
+                if path.endswith("/permission"):
+                    self.calls.append((method, path, payload))
+                    return {"permission": "admin"}
+                return super().request(method, path, payload)
+
+        github = AdminGitHub()
+        request = CommandRequest(8, "/qg ignore suppression-abc123", "admin", 42)
+        with (
+            mock.patch(
+                "monori.ci.quality_graph.commands.run_direct_command_checks",
+                side_effect=RuntimeError("refresh failed"),
+            ),
+            mock.patch("monori.ci.quality_graph.commands.dispatch_command") as dispatch,
+            pytest.raises(RuntimeError, match="refresh failed"),
+        ):
+            process_command(github, request)
+
+        dispatch.assert_not_called()
+        assert (
+            "POST",
+            "/issues/comments/8/reactions",
+            {"content": "x"},
         ) in github.calls
 
     def test_unchecked_report_control_becomes_remove_ignore(self) -> None:

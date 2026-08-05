@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from typing import override
 from unittest import mock
 
+import pytest
+
 from monori.ci.lib.github import RepositoryGitHubAPI
 from monori.ci.quality_graph.base import (
     ApprovalLifecycle,
@@ -91,7 +93,7 @@ class ExampleSourceCheck(PullRequestSourceCheck[Finding]):
     """Exercise the source-check template without domain-specific scanning."""
 
     gate = "example"
-    report_marker = "quality-graph"
+    report_marker = "suppression"
     approval_lifecycle = LIFECYCLE
 
     def __init__(self) -> None:
@@ -142,6 +144,21 @@ def test_all_approval_gates_use_the_quality_check_contract() -> None:
         "bundle",
         "frontend",
     }
+
+
+def test_check_metadata_rejects_a_command_surface_report_marker() -> None:
+    """Fail while defining a check whose report marker is not a check report."""
+    with pytest.raises(TypeError, match="Unknown check report marker"):
+
+        class InvalidCheck(QualityCheck[Finding]):
+            gate = "example"
+            report_marker = "quality-graph"
+            approval_lifecycle = LIFECYCLE
+
+            @override
+            def collect(self, context: CheckContext) -> CheckResult[Finding]:
+                findings = tuple(Finding(path, path) for path in context.files)
+                return CheckResult(findings, Verdict.PASS)
 
 
 def test_source_check_template_runs_the_shared_reporting_lifecycle() -> None:

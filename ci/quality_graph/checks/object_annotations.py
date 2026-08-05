@@ -2,7 +2,6 @@
 
 import ast
 import difflib
-import hashlib
 import os
 import re
 import sys
@@ -11,6 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar, override
 
+from monori.ci.lib.findings import stable_finding_id
 from monori.ci.lib.github import GitHub, RepositoryGitHubAPI, rerun_latest_pull_request_workflow
 from monori.ci.quality_graph.base import ApprovalLifecycle, PullRequestSourceCheck
 from monori.ci.quality_graph.models import CheckContext, CheckResult, Verdict
@@ -153,7 +153,7 @@ def scan_file(path: str, source: str, changed: set[int]) -> list[Finding]:
     findings: list[Finding] = []
     for object_line, object_column, rendered, raw_id in candidates:
         disambiguator = f":{object_line}:{object_column}" if duplicates[raw_id] > 1 else ""
-        finding_id = hashlib.sha256(f"{raw_id}{disambiguator}".encode()).hexdigest()[:12]
+        finding_id = stable_finding_id(raw_id, disambiguator)
         findings.append(Finding(path, object_line, object_column, rendered, finding_id))
     return sorted(findings, key=lambda finding: (finding.line, finding.column, finding.annotation))
 

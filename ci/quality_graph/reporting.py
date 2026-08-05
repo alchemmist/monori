@@ -108,7 +108,7 @@ class ReportModel:
     @property
     def title(self) -> str:
         """Return the registered title for this report type."""
-        definition = REPORTS.get(self.marker)
+        definition = ALL_REPORTS.get(self.marker)
         if definition is None:
             message = f"Unknown Quality Graph report marker: {self.marker}"
             raise ValueError(message)
@@ -123,18 +123,30 @@ class ReportDefinition:
     title: str
 
 
-REPORTS = {
+CHECK_REPORTS = {
     report.marker: report
     for report in (
         ReportDefinition("bundle-size", "Frontend bundle size"),
         ReportDefinition("frontend-performance", "Frontend performance"),
         ReportDefinition("mutation", "Mutation testing"),
         ReportDefinition("object-annotations", "Python object annotation gate"),
-        ReportDefinition("quality-graph", "Quality Graph"),
         ReportDefinition("suppression", "Lint suppression gate"),
     )
 }
+SURFACE_REPORTS = {
+    "quality-graph": ReportDefinition("quality-graph", "Quality Graph"),
+}
+ALL_REPORTS = CHECK_REPORTS | SURFACE_REPORTS
 TEMPLATE_DIRECTORY = Path(__file__).with_name("templates")
+TEMPLATE_ENVIRONMENT = Environment(
+    loader=FileSystemLoader(TEMPLATE_DIRECTORY),
+    undefined=StrictUndefined,
+    autoescape=select_autoescape(default=False),
+    keep_trailing_newline=True,
+    trim_blocks=False,
+    lstrip_blocks=False,
+)
+REPORT_TEMPLATE = TEMPLATE_ENVIRONMENT.get_template("report.md.j2")
 
 
 def finding_location(pr_url: str, path: str, line: int) -> ReportLocation:
@@ -186,16 +198,7 @@ def admin_commands(
 
 def render_report(model: ReportModel) -> str:
     """Render a complete report with the shared strict Jinja template."""
-    environment = Environment(
-        loader=FileSystemLoader(TEMPLATE_DIRECTORY),
-        undefined=StrictUndefined,
-        autoescape=select_autoescape(default=False),
-        keep_trailing_newline=True,
-        trim_blocks=False,
-        lstrip_blocks=False,
-    )
-    template = environment.get_template("report.md.j2")
-    rendered = re.sub(r"\n{3,}", "\n\n", template.render(model=model).strip())
+    rendered = re.sub(r"\n{3,}", "\n\n", REPORT_TEMPLATE.render(model=model).strip())
     return rendered + "\n"
 
 
@@ -210,7 +213,7 @@ class PullRequestReport:
     @classmethod
     def registered(cls, github: GitHubAPI, number: int, marker: str) -> PullRequestReport:
         """Create a report lifecycle from a registered marker."""
-        definition = REPORTS.get(marker)
+        definition = ALL_REPORTS.get(marker)
         if definition is None:
             message = f"Unknown Quality Graph report marker: {marker}"
             raise ValueError(message)
@@ -240,11 +243,11 @@ def main() -> int:
     subparsers = parser.add_subparsers(dest="operation", required=True)
 
     progress = subparsers.add_parser("in-progress")
-    progress.add_argument("--marker", choices=sorted(REPORTS), required=True)
+    progress.add_argument("--marker", choices=sorted(ALL_REPORTS), required=True)
     progress.add_argument("--pr-number", type=int, required=True)
 
     complete = subparsers.add_parser("complete")
-    complete.add_argument("--marker", choices=sorted(REPORTS), required=True)
+    complete.add_argument("--marker", choices=sorted(ALL_REPORTS), required=True)
     complete.add_argument("--pr-number", type=int, required=True)
     complete.add_argument(
         "--status",

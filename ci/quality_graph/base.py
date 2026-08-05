@@ -19,7 +19,7 @@ from monori.ci.quality_graph.commands import (
     validate_command,
 )
 from monori.ci.quality_graph.models import CheckContext, CheckResult, FindingProtocol
-from monori.ci.quality_graph.reporting import REPORTS, PullRequestReport
+from monori.ci.quality_graph.reporting import CHECK_REPORTS, PullRequestReport
 from monori.common import JsonValue, object_value, optional_string
 
 if TYPE_CHECKING:
@@ -280,6 +280,9 @@ class QualityCheckDefinition(ABC):
         if (lifecycle.pending_pattern is not None) != (cls.pending_marker is not None):
             message = f"{cls.__name__} pending-marker metadata does not match its lifecycle"
             raise TypeError(message)
+        if cls.report_marker not in CHECK_REPORTS:
+            message = f"Unknown check report marker for {cls.__name__}: {cls.report_marker}"
+            raise TypeError(message)
 
 
 class QualityCheck[FindingType: ApprovableFinding](QualityCheckDefinition, ABC):
@@ -291,9 +294,6 @@ class QualityCheck[FindingType: ApprovableFinding](QualityCheckDefinition, ABC):
 
     def report(self, github: GitHubAPI, number: int) -> PullRequestReport:
         """Return the shared report lifecycle configured for this check."""
-        if self.report_marker not in REPORTS:
-            message = f"Unknown report marker for {type(self).__name__}: {self.report_marker}"
-            raise ValueError(message)
         return PullRequestReport.registered(github, number, self.report_marker)
 
     def sync_approvals(

@@ -18,7 +18,7 @@ from monori.ci.lib.comments import (
 )
 from monori.ci.lib.github import GitHub, GitHubAPI, rerun_latest_pull_request_workflow
 from monori.ci.lib.github import is_admin as github_is_admin
-from monori.ci.quality_graph.registry import registered_checks
+from monori.ci.quality_graph.registry import registered_checks, run_direct_command_checks
 from monori.ci.quality_graph.reporting import (
     PullRequestReport,
     ReportModel,
@@ -33,7 +33,7 @@ COMMAND_RE = re.compile(
     r"(?:\s+(\S+))?)?$"
 )
 GATE_NAME_RE = re.compile(r"^[a-z][a-z0-9-]*$")
-FINDING_ID_RE = re.compile(r"^[a-z][a-z0-9-]*-[a-z0-9-]+$")
+FINDING_ID_SUFFIX_RE = re.compile(r"^[a-z0-9-]+$")
 CONTROL_COMMAND_COUNT = 2
 CONTROL_RE = re.compile(
     r"^- \[(?P<state>[ xX])] .*?<!-- (?P<marker>monori-qg-control:[A-Za-z0-9_-]+) -->$",
@@ -87,15 +87,17 @@ def parse_command(body: str) -> QualityGraphCommand | None:
 
 
 def is_finding_id(value: str) -> bool:
-    """Return True when `value` matches the typed finding id format."""
-    return FINDING_ID_RE.fullmatch(value) is not None
+    """Return whether a value is a finding ID for a registered check."""
+    return finding_gate(value) is not None
 
 
 def finding_gate(value: str) -> str | None:
-    """Extract gate name from a finding id, if valid."""
-    if not is_finding_id(value):
-        return None
-    return value.split("-", maxsplit=1)[0]
+    """Return the registered gate addressed by a syntactically valid finding ID."""
+    for gate in registered_checks():
+        prefix = f"{gate}-"
+        if value.startswith(prefix) and FINDING_ID_SUFFIX_RE.fullmatch(value.removeprefix(prefix)):
+            return gate
+    return None
 
 
 def is_gate_name(value: str) -> bool:
@@ -192,15 +194,19 @@ def command_result(command: QualityGraphCommand, status: ReportStatus, detail: s
 
 def help_body() -> str:
     """Render command help with the shared Quality Graph template."""
+    checks = registered_checks()
+    gates = ",".join(checks)
+    finding_ids = ",".join(f"{gate}-<id>" for gate in checks)
+    file_gates = ", ".join(gate for gate, check in checks.items() if check.supports_ignore_file)
     return render_report(
         ReportModel(
             "quality-graph",
             ReportStatus.DONE,
             "Only repository administrators may execute state-changing commands.",
-            content="""- `/qg ignore object-<id>,suppression-<id>` — ignore selected findings
-- `/qg ignore object,suppression` — ignore all current findings of selected types
-- `/qg ignore-file path/to/file` — ignore findings in selected files
-- `/qg remove-ignore object-<id>,suppression-<id>` — remove selected ignores
+            content=f"""- `/qg ignore {finding_ids}` — ignore selected findings
+- `/qg ignore {gates}` — ignore all current findings of selected types
+- `/qg ignore-file path/to/file` — ignore findings in selected files ({file_gates})
+- `/qg remove-ignore {finding_ids}` — remove selected ignores
 - `/qg status` — show the current command status
 - `/qg help` — show this help""",
         )
@@ -346,6 +352,8 @@ def process_command(github: GitHubAPI, request: CommandRequest) -> None:
         )
         return
     try:
+        if command.name not in {"help", "status"}:
+            run_direct_command_checks()
         dispatch_command(github, number, command)
     except (RuntimeError, TypeError, ValueError):
         if request.react:

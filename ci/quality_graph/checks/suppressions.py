@@ -1,6 +1,5 @@
 """Fail pull requests that add a new lint suppression."""
 
-import hashlib
 import os
 import re
 import tomllib
@@ -9,6 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar, cast, override
 
+from monori.ci.lib.findings import stable_finding_id
 from monori.ci.lib.github import GitHub, RepositoryGitHubAPI, rerun_latest_pull_request_workflow
 from monori.ci.quality_graph.base import ApprovalLifecycle, PullRequestSourceCheck
 from monori.ci.quality_graph.models import CheckContext, CheckResult, Verdict
@@ -256,7 +256,7 @@ def scan_file(
     findings: list[Finding] = []
     for line_number, column, text, raw_id in candidates:
         disambiguator = f":{line_number}" if duplicates[raw_id] > 1 else ""
-        finding_id = hashlib.sha256(f"{raw_id}{disambiguator}".encode()).hexdigest()[:12]
+        finding_id = stable_finding_id(raw_id, disambiguator)
         findings.append(Finding(path, line_number, column, text, finding_id))
     return findings
 

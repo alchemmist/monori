@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import re
@@ -10,6 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar, cast, override
 
+from monori.ci.lib.findings import stable_finding_id
 from monori.ci.lib.github import GitHub, sync_label
 from monori.ci.quality_graph.base import ApprovalLifecycle, QualityCheck
 from monori.ci.quality_graph.models import CheckContext, CheckResult, Verdict
@@ -79,7 +79,7 @@ def finding_id(entry: dict[str, JsonValue]) -> str:
     """Build deterministic finding id for a performance entry."""
     route = string_value(entry.get("route_id"), "entry route id")
     metric = string_value(entry.get("metric_id"), "entry metric id")
-    digest = hashlib.sha256(f"{route}:{metric}".encode()).hexdigest()[:12]
+    digest = stable_finding_id(f"{route}:{metric}")
     return f"{FINDING_ID_PREFIX}{digest}"
 
 
