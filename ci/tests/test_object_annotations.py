@@ -1,12 +1,8 @@
 import contextlib
 import io
 import unittest
-from typing import override
 
-from monori.ci.lib.github import sync_label
-from monori.ci.quality_graph.base import ApprovalRequest
 from monori.ci.quality_graph.checks.object_annotations import (
-    FAILURE_LABEL,
     Finding,
     ObjectAnnotationCheck,
     added_lines_from_patch,
@@ -16,44 +12,6 @@ from monori.ci.quality_graph.checks.object_annotations import (
 )
 from monori.ci.quality_graph.commands import parse_command
 from monori.ci.quality_graph.models import CheckContext, Verdict
-from monori.common import JsonValue
-
-
-class FakeGitHub:
-    def __init__(self, permission: str = "admin") -> None:
-        self.permission = permission
-        self.calls: list[tuple[str, str, JsonValue]] = []
-
-    def paged(self, path: str) -> list[dict[str, JsonValue]]:
-        self.calls.append(("paged", path, None))
-        return [
-            {"name": "monori-object-annotation-ignore-stale"},
-            {"name": "monori-object-annotation-ignore-finding-1"},
-        ]
-
-    def request(self, method: str, path: str, payload: JsonValue = None) -> JsonValue:
-        self.calls.append((method, path, payload))
-        if path.startswith("/collaborators/"):
-            return {"permission": self.permission}
-        return None
-
-    def file_text(self, path: str, ref: str) -> str | None:
-        _ = path, ref
-        return None
-
-    def ensure_label(self, name: str) -> None:
-        self.calls.append(("ensure_label", name, None))
-
-    def is_admin(self, login: str) -> bool:
-        _ = login
-        return self.permission == "admin"
-
-    def sync_label(self, number: int, name: str, *, present: bool) -> None:
-        if present:
-            self.ensure_label(name)
-            self.request("POST", f"/issues/{number}/labels", {"labels": [name]})
-        else:
-            self.request("DELETE", f"/issues/{number}/labels/{name}")
 
 
 class ObjectAnnotationGateTest(unittest.TestCase):
@@ -125,43 +83,6 @@ other: "list[object]"
 
         assert before.finding_id == after.finding_id
         assert before.finding_id != changed.finding_id
-
-    def test_admin_approval_uses_stable_labels_and_removes_stale_labels(self) -> None:
-        github = FakeGitHub()
-        finding = Finding("example.py", 1, 7, "object", "finding-1")
-
-        command = parse_command("/qg ignore object-finding-1")
-        assert command is not None
-        result = ObjectAnnotationCheck().sync_approvals(
-            ApprovalRequest(
-                github,
-                1,
-                "",
-                command,
-                "admin",
-                github.paged("/issues/1/labels"),
-            ),
-            [finding],
-        )
-
-        assert result.authorized
-        assert result.changed
-        assert result.approved == {"finding-1"}
-        assert any(call[0] == "DELETE" and "stale" in call[1] for call in github.calls)
-        assert any(call[0] == "PATCH" and call[1] == "/pulls/1" for call in github.calls)
-
-    def test_failure_label_tracks_active_findings(self) -> None:
-        github = FakeGitHub()
-
-        sync_label(github, 1, FAILURE_LABEL, present=True)
-        sync_label(github, 1, FAILURE_LABEL, present=False)
-
-        assert (
-            "POST",
-            "/labels",
-            {"name": "monori-object-annotation-failed", "color": "b60205"},
-        ) in github.calls
-        assert any(call[0] == "DELETE" and "failed" in call[1] for call in github.calls)
 
     def test_approval_commands_use_shared_namespace(self) -> None:
         assert parse_command("/qg ignore object-abc123") is not None

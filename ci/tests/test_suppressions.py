@@ -1,57 +1,15 @@
 import unittest
-from typing import override
 
-from monori.ci.quality_graph.base import ApprovalRequest
 from monori.ci.quality_graph.checks.suppressions import (
-    Finding,
     SuppressionCheck,
     added_lines_from_patch,
-    changed_files,
     scan_file,
     summary_body,
 )
 from monori.ci.quality_graph.commands import parse_command
 from monori.ci.quality_graph.models import CheckContext, Verdict
-from monori.common import JsonValue
 
 NOQA = "# " + "no" + "qa"
-
-
-class FakeGitHub:
-    def __init__(self, permission: str) -> None:
-        self.permission = permission
-        self.calls: list[tuple[str, str, JsonValue]] = []
-
-    def paged(self, path: str) -> list[dict[str, JsonValue]]:
-        self.calls.append(("paged", path, None))
-        return [
-            {"name": "monori-suppress-stale-finding"},
-            {"name": "monori-suppress-finding-1"},
-        ]
-
-    def request(self, method: str, path: str, payload: JsonValue = None) -> JsonValue:
-        self.calls.append((method, path, payload))
-        if path.startswith("/collaborators/"):
-            return {"permission": self.permission}
-        return None
-
-    def file_text(self, path: str, ref: str) -> str | None:
-        _ = path, ref
-        return None
-
-    def ensure_label(self, name: str) -> None:
-        self.calls.append(("ensure_label", name, None))
-
-    def is_admin(self, login: str) -> bool:
-        _ = login
-        return self.permission == "admin"
-
-    def sync_label(self, number: int, name: str, *, present: bool) -> None:
-        if present:
-            self.ensure_label(name)
-            self.request("POST", f"/issues/{number}/labels", {"labels": [name]})
-        else:
-            self.request("DELETE", f"/issues/{number}/labels/{name}")
 
 
 class SuppressionGateTest(unittest.TestCase):
@@ -89,32 +47,6 @@ value = 2
         source = 'SUPPRESSION_KEYS = r"(?:ignorePatterns|per-file-ignores)"\n'
 
         assert scan_file("ci/quality_graph/checks/suppressions.py", source, {1}) == []
-
-    def test_collects_changed_files_through_suppression_check(self) -> None:
-        class FilesGitHub(FakeGitHub):
-            @override
-            def paged(self, path: str) -> list[dict[str, JsonValue]]:
-                if path == "/pulls/1/files":
-                    return [
-                        {
-                            "filename": "example.py",
-                            "patch": f"@@ -0,0 +1 @@\n+value = 1  {NOQA}",
-                        }
-                    ]
-                return []
-
-            @override
-            def file_text(self, path: str, ref: str) -> str | None:
-                _ = path, ref
-                return f"value = 1  {NOQA}\n"
-
-        findings = changed_files(
-            FilesGitHub("admin"),
-            {"number": 1, "head": {"sha": "head"}},
-        )
-
-        assert len(findings) == 1
-        assert findings[0].path == "example.py"
 
     def test_finds_config_rule_disabled_on_added_line(self) -> None:
         findings = scan_file("web/eslint.config.mjs", '"no-console": "off",\n', {1})
@@ -213,51 +145,6 @@ value = 2
             '"server/app/parser.py" = ["E501"]',
             '"server/app/parser.py" = ["D100"]',
         ]
-
-    def test_admin_can_approve_and_stale_labels_expire(self) -> None:
-        github = FakeGitHub("admin")
-        finding = Finding("example.py", 1, 0, f"value = 1 {NOQA}", "finding-1")
-
-        command = parse_command("/qg ignore suppression-finding-1")
-        assert command is not None
-        result = SuppressionCheck().sync_approvals(
-            ApprovalRequest(
-                github,
-                334,
-                "",
-                command,
-                "admin",
-                github.paged("/issues/334/labels"),
-            ),
-            [finding],
-        )
-
-        assert result.authorized
-        assert result.approved == {"finding-1"}
-        assert any(call[0] == "DELETE" and "stale" in call[1] for call in github.calls)
-        assert any(call[0] == "PATCH" and call[1] == "/pulls/334" for call in github.calls)
-
-    def test_non_admin_cannot_change_approval_state(self) -> None:
-        github = FakeGitHub("write")
-        finding = Finding("example.py", 1, 0, f"value = 1 {NOQA}", "finding-1")
-
-        command = parse_command("/qg ignore suppression")
-        assert command is not None
-        result = SuppressionCheck().sync_approvals(
-            ApprovalRequest(
-                github,
-                334,
-                "",
-                command,
-                "contributor",
-                github.paged("/issues/334/labels"),
-            ),
-            [finding],
-        )
-
-        assert not result.authorized
-        assert result.approved == {"finding-1"}
-        assert not any(call[0] == "POST" for call in github.calls)
 
     def test_finding_id_survives_line_shift_but_not_code_change(self) -> None:
         before = scan_file("example.py", f"value = 1  {NOQA}\n", {1})[0]

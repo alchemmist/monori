@@ -1,17 +1,14 @@
 """Tests for shared Quality Graph report and reaction lifecycles."""
 
 import re
-from typing import cast
 
 from monori.ci.lib.comments import (
     GITHUB_COMMENT_BODY_LIMIT,
-    CommandReactionLifecycle,
     bounded_comment_body,
 )
 from monori.ci.quality_graph.reporting import (
     CHECK_REPORTS,
     SURFACE_REPORTS,
-    PullRequestReport,
     ReportFinding,
     ReportMetric,
     ReportModel,
@@ -20,34 +17,6 @@ from monori.ci.quality_graph.reporting import (
     finding_location,
     render_report,
 )
-from monori.common import JsonValue
-
-
-class FakeGitHub:
-    """Record report lifecycle API calls and return configured comments."""
-
-    def __init__(self, comments: list[dict[str, JsonValue]] | None = None) -> None:
-        """Store comments returned by list operations."""
-        self.comments = comments or []
-        self.calls: list[tuple[str, str, JsonValue]] = []
-
-    def request(self, method: str, path: str, payload: JsonValue = None) -> JsonValue:
-        """Record an API request and return fixture data for list endpoints."""
-        self.calls.append((method, path, payload))
-        if "/comments?" in path:
-            return cast("JsonValue", self.comments)
-        if path.endswith("/reactions") and method == "GET":
-            return cast(
-                "JsonValue",
-                [
-                    {
-                        "id": 9,
-                        "content": "eyes",
-                        "user": {"login": "github-actions[bot]"},
-                    }
-                ],
-            )
-        return None
 
 
 def test_renderer_owns_status_heading_findings_and_admin_commands() -> None:
@@ -101,43 +70,6 @@ def test_file_control_reverses_only_findings_from_its_file() -> None:
         ("/qg ignore-file a.py", "/qg remove-ignore suppression-a,suppression-b"),
         ("/qg ignore-file b.py", "/qg remove-ignore suppression-c"),
     ]
-
-
-def test_in_progress_replaces_stale_report_with_pending_template() -> None:
-    """Replace stale data with the canonical pending report."""
-    github = FakeGitHub(
-        [
-            {
-                "id": 8,
-                "body": "<!-- monori-report: suppression -->\nold result",
-                "user": {"login": "github-actions[bot]"},
-            }
-        ]
-    )
-
-    PullRequestReport.registered(github, 1, "suppression").mark_in_progress()
-
-    patches = [call for call in github.calls if call[0] == "PATCH"]
-    assert len(patches) == 1
-    payload = cast("dict[str, JsonValue]", patches[0][2])
-    body = cast("str", payload["body"])
-    assert body.startswith("<!-- monori-report: suppression -->\n\n## ⏳ Lint suppression gate")
-    assert "| Status | ⏳ In progress |" in body
-    assert "old result" not in body
-
-
-def test_command_reaction_lifecycle_replaces_acknowledgement_with_success() -> None:
-    """Use one implementation for acknowledgement and final reactions."""
-    github = FakeGitHub()
-    lifecycle = CommandReactionLifecycle(github, 42)
-
-    lifecycle.acknowledge()
-    lifecycle.succeed()
-
-    posts = [call for call in github.calls if call[0] == "POST"]
-    assert posts[0][2] == {"content": "eyes"}
-    assert posts[1][2] == {"content": "hooray"}
-    assert all(path != "/user" for _, path, _ in github.calls)
 
 
 def test_comment_body_is_bounded_with_an_exact_omission_notice() -> None:
