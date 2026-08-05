@@ -1,10 +1,23 @@
 """Test the shared approval and gate-state lifecycle."""
 
+import contextlib
+import io
 import re
 from dataclasses import dataclass
+from typing import override
+from unittest import mock
 
-from monori.ci.quality_graph.base import ApprovalLifecycle, ApprovalRequest
+from monori.ci.lib.github import RepositoryGitHubAPI
+from monori.ci.quality_graph.base import (
+    ApprovalLifecycle,
+    ApprovalRequest,
+    PullRequestSourceCheck,
+    QualityCheck,
+)
 from monori.ci.quality_graph.commands import encode_command, parse_command
+from monori.ci.quality_graph.models import CheckContext, CheckResult, Verdict
+from monori.ci.quality_graph.registry import registered_checks
+from monori.ci.quality_graph.reporting import PullRequestReport
 from monori.common import JsonValue
 
 
@@ -38,6 +51,16 @@ class FakeGitHub:
             return self.comments.get(int(path.rsplit("/", maxsplit=1)[1]))
         return None
 
+    def paged(self, path: str) -> list[dict[str, JsonValue]]:
+        """Return no paginated fixtures for the shared lifecycle tests."""
+        self.calls.append(("paged", path, None))
+        return []
+
+    def file_text(self, path: str, ref: str) -> str | None:
+        """Return no repository file fixture."""
+        self.calls.append(("file_text", f"{path}@{ref}", None))
+        return None
+
 
 LIFECYCLE = ApprovalLifecycle(
     "example",
@@ -53,6 +76,103 @@ PENDING_LIFECYCLE = ApprovalLifecycle(
     "<!-- bundle-approvals: {ids} -->",
     re.compile(r"<!-- bundle-pending: (\d+)(?: ([A-Za-z0-9_-]+))? -->"),
 )
+
+REPORT_LIFECYCLE = ApprovalLifecycle(
+    "bundle",
+    "bundle-",
+    re.compile(r"<!-- report-approvals: ([a-z0-9,-]*) -->"),
+    "<!-- report-approvals: {ids} -->",
+    allow_file_commands=False,
+    finding_ids_include_prefix=True,
+)
+
+
+class ExampleSourceCheck(PullRequestSourceCheck[Finding]):
+    """Exercise the source-check template without domain-specific scanning."""
+
+    gate = "example"
+    report_marker = "quality-graph"
+    approval_lifecycle = LIFECYCLE
+
+    def __init__(self) -> None:
+        """Initialize observable rerun state."""
+        self.rerun_numbers: list[int] = []
+
+    @override
+    def collect(self, context: CheckContext) -> CheckResult[Finding]:
+        """Return a successful empty result for the pure collection contract."""
+        return CheckResult((), Verdict.PASS)
+
+    @override
+    def collect_pull_request(
+        self, github: RepositoryGitHubAPI, pull: dict[str, JsonValue]
+    ) -> list[Finding]:
+        """Return one deterministic source finding."""
+        return [Finding("example.py", "one")]
+
+    @override
+    def render_summary(
+        self, findings: list[Finding], approved: set[str], pull_request_url: str
+    ) -> str:
+        """Render an observable test report."""
+        return f"active={len(findings) - len(approved)} url={pull_request_url}"
+
+    @override
+    def error_annotation(self, finding: Finding) -> str:
+        """Render a deterministic workflow annotation."""
+        return f"::error file={finding.path}::example"
+
+    @override
+    def rerun(self, github: RepositoryGitHubAPI, number: int) -> None:
+        """Record requested reruns."""
+        self.rerun_numbers.append(number)
+
+
+def test_all_approval_gates_use_the_quality_check_contract() -> None:
+    """Require every approvable gate to use the shared QualityCheck lifecycle."""
+    checks = registered_checks()
+
+    assert set(checks) == {"bundle", "frontend", "object", "suppression"}
+    assert all(issubclass(check, QualityCheck) for check in checks.values())
+    assert {gate for gate, check in checks.items() if check.supports_ignore_file} == {
+        "object",
+        "suppression",
+    }
+    assert {gate for gate, check in checks.items() if check.pending_marker is not None} == {
+        "bundle",
+        "frontend",
+    }
+
+
+def test_source_check_template_runs_the_shared_reporting_lifecycle() -> None:
+    """Run collection, approval sync, reporting, and annotations in one template."""
+
+    class PullGitHub(FakeGitHub):
+        @override
+        def request(self, method: str, path: str, payload: JsonValue = None) -> JsonValue:
+            if method == "GET" and path == "/pulls/7":
+                return {
+                    "body": "<!-- example-approvals:  -->",
+                    "html_url": "https://github.com/org/repo/pull/7",
+                }
+            return super().request(method, path, payload)
+
+    github = PullGitHub()
+    check = ExampleSourceCheck()
+    report = mock.create_autospec(PullRequestReport, instance=True)
+    error_output = io.StringIO()
+
+    with (
+        mock.patch.object(check, "report", return_value=report),
+        contextlib.redirect_stderr(error_output),
+    ):
+        exit_code = check.run_pull_request_gate(github, {"pull_request": {"number": 7}})
+
+    assert exit_code == 1
+    report.mark_in_progress.assert_called_once_with()
+    report.publish.assert_called_once_with("active=1 url=https://github.com/org/repo/pull/7")
+    assert "::error file=example.py::example" in error_output.getvalue()
+    assert check.rerun_numbers == []
 
 
 def test_lifecycle_applies_admin_commands_and_persists_state() -> None:
@@ -89,6 +209,18 @@ def test_lifecycle_rejects_state_changes_from_non_admins() -> None:
     assert result.approved == set()
     assert not result.authorized
     assert not any(method == "PATCH" for method, _, _ in github.calls)
+
+
+def test_declarative_report_lifecycle_filters_ids_and_disables_file_commands() -> None:
+    """Honor report-check capabilities without gate-specific command code."""
+    findings = [Finding("web/dist/app.js", "bundle-size")]
+    mixed_command = parse_command("/qg ignore bundle-size,object-other")
+    file_command = parse_command("/qg ignore-file web/dist/app.js")
+    assert mixed_command is not None
+    assert file_command is not None
+
+    assert REPORT_LIFECYCLE.select_findings(mixed_command, findings) == {"bundle-size"}
+    assert REPORT_LIFECYCLE.select_findings(file_command, findings) == set()
 
 
 def test_pending_command_rejects_forged_encoded_marker() -> None:
@@ -135,6 +267,38 @@ def test_pending_command_accepts_bot_owned_one_time_authorization() -> None:
         "/issues/comments/7",
         {"body": "report"},
     )
+
+
+def test_pending_sync_applies_and_consumes_bot_authorization() -> None:
+    """Apply a pending command once and remove both authorization markers."""
+    command = parse_command("/qg ignore bundle")
+    assert command is not None
+    encoded = encode_command(command)
+    github = FakeGitHub(
+        comments={
+            7: {
+                "body": f"report\n<!-- monori-qg-authorized: bundle {encoded} -->",
+                "user": {"login": "github-actions[bot]"},
+            }
+        }
+    )
+    body = f"description\n<!-- bundle-pending: 7 {encoded} -->"
+
+    result = PENDING_LIFECYCLE.sync_pending(github, 9, body, [Finding("report.json", "one")])
+
+    assert result.approved == {"one"}
+    assert result.authorized
+    assert result.changed
+    assert (
+        "PATCH",
+        "/pulls/9",
+        {"body": "description\n\n<!-- bundle-approvals: one -->"},
+    ) in github.calls
+    assert (
+        "PATCH",
+        "/issues/comments/7",
+        {"body": "report"},
+    ) in github.calls
 
 
 def test_pending_command_rejects_missing_source_comment() -> None:

@@ -4,7 +4,8 @@ import unittest
 from typing import TYPE_CHECKING, override
 
 from monori.ci.quality_graph.checks.frontend_performance import (
-    apply_command,
+    APPROVALS,
+    FrontendPerformanceFinding,
     entry_ids,
     finding_id,
 )
@@ -42,14 +43,19 @@ class FrontendPerformanceGateTest(unittest.TestCase):
     def test_ignore_accepts_only_frontend_ids(self) -> None:
         command = parse_command("/qg ignore frontend-fea774364776,object-abc123")
 
-        assert apply_command(command, self.entries, set()) == {"frontend-fea774364776"}
+        assert command is not None
+        findings = [FrontendPerformanceFinding("frontend-fea774364776")]
+        assert APPROVALS.select_findings(command, findings) == {"frontend-fea774364776"}
 
     def test_ignore_all_and_remove_ignore(self) -> None:
         all_command = parse_command("/qg ignore frontend")
         remove_command = parse_command("/qg remove-ignore frontend")
 
-        approved = apply_command(all_command, self.entries, set())
-        assert apply_command(remove_command, self.entries, approved) == set()
+        assert all_command is not None
+        assert remove_command is not None
+        findings = [FrontendPerformanceFinding("frontend-fea774364776")]
+        assert APPROVALS.select_findings(all_command, findings) == {"frontend-fea774364776"}
+        assert APPROVALS.select_findings(remove_command, findings) == {"frontend-fea774364776"}
 
 
 if __name__ == "__main__":

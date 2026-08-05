@@ -1,15 +1,14 @@
 import unittest
 from typing import override
 
+from monori.ci.quality_graph.base import ApprovalRequest
 from monori.ci.quality_graph.checks.suppressions import (
     Finding,
     SuppressionCheck,
-    SyncApprovalCommandState,
     added_lines_from_patch,
     changed_files,
     scan_file,
     summary_body,
-    sync_approvals,
 )
 from monori.ci.quality_graph.commands import parse_command
 from monori.ci.quality_graph.models import CheckContext, Verdict
@@ -219,19 +218,22 @@ value = 2
         github = FakeGitHub("admin")
         finding = Finding("example.py", 1, 0, f"value = 1 {NOQA}", "finding-1")
 
-        approved, admin = sync_approvals(
-            github,
-            334,
-            {"body": ""},
-            [finding],
-            SyncApprovalCommandState(
-                parse_command("/qg ignore suppression-finding-1"),
+        command = parse_command("/qg ignore suppression-finding-1")
+        assert command is not None
+        result = SuppressionCheck().sync_approvals(
+            ApprovalRequest(
+                github,
+                334,
+                "",
+                command,
                 "admin",
+                github.paged("/issues/334/labels"),
             ),
+            [finding],
         )
 
-        assert admin
-        assert approved == {"finding-1"}
+        assert result.authorized
+        assert result.approved == {"finding-1"}
         assert any(call[0] == "DELETE" and "stale" in call[1] for call in github.calls)
         assert any(call[0] == "PATCH" and call[1] == "/pulls/334" for call in github.calls)
 
@@ -239,19 +241,22 @@ value = 2
         github = FakeGitHub("write")
         finding = Finding("example.py", 1, 0, f"value = 1 {NOQA}", "finding-1")
 
-        approved, admin = sync_approvals(
-            github,
-            334,
-            {"body": ""},
-            [finding],
-            SyncApprovalCommandState(
-                parse_command("/qg ignore suppression"),
+        command = parse_command("/qg ignore suppression")
+        assert command is not None
+        result = SuppressionCheck().sync_approvals(
+            ApprovalRequest(
+                github,
+                334,
+                "",
+                command,
                 "contributor",
+                github.paged("/issues/334/labels"),
             ),
+            [finding],
         )
 
-        assert not admin
-        assert approved == {"finding-1"}
+        assert not result.authorized
+        assert result.approved == {"finding-1"}
         assert not any(call[0] == "POST" for call in github.calls)
 
     def test_finding_id_survives_line_shift_but_not_code_change(self) -> None:

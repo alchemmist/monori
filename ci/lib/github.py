@@ -18,6 +18,7 @@ if TYPE_CHECKING:
 
 REQUEST_TIMEOUT_SECONDS = 30
 GITHUB_PAGE_SIZE = 100
+MAX_WORKFLOW_RUN_PAGES = 100
 
 
 class GitHubAPI(Protocol):
@@ -137,6 +138,53 @@ class GitHub:
     def sync_label(self, number: int, name: str, *, present: bool) -> None:
         """Set or remove a pull-request label."""
         sync_label(self, number, name, present=present)
+
+
+def rerun_latest_pull_request_workflow(
+    github: GitHubAPI,
+    number: int,
+    workflow: str = "pr-checks.yaml",
+) -> None:
+    """Rerun failed jobs in the newest workflow run associated with a pull request."""
+    pull = object_value(github.request("GET", f"/pulls/{number}"), "pull request")
+    head = object_value(pull.get("head", {}), "pull request head")
+    head_sha = optional_string(head.get("sha"))
+    workflow_name = urllib.parse.quote(workflow, safe="")
+    for page in range(1, MAX_WORKFLOW_RUN_PAGES + 1):
+        path = (
+            f"/actions/workflows/{workflow_name}/runs?event=pull_request"
+            f"&per_page={GITHUB_PAGE_SIZE}&page={page}"
+        )
+        response = object_value(github.request("GET", path), "workflow runs response")
+        runs = [
+            object_value(run, "workflow run")
+            for run in array_value(response.get("workflow_runs", []), "workflow runs")
+        ]
+        matching = [
+            run
+            for run in runs
+            if _workflow_run_matches_pull_request(run, number, head_sha)
+            and isinstance(run.get("id"), int)
+        ]
+        if matching:
+            latest = max(matching, key=lambda run: optional_string(run.get("created_at")) or "")
+            github.request("POST", f"/actions/runs/{latest['id']}/rerun-failed-jobs")
+            return
+        if len(runs) < GITHUB_PAGE_SIZE:
+            break
+    message = f"No {workflow} run found for PR #{number}"
+    raise RuntimeError(message)
+
+
+def _workflow_run_matches_pull_request(
+    run: dict[str, JsonValue], number: int, head_sha: str | None
+) -> bool:
+    """Match a workflow run by PR association, falling back to its head SHA."""
+    pull_requests = array_value(run.get("pull_requests", []), "workflow pull requests")
+    return any(
+        object_value(pull, "workflow pull request").get("number") == number
+        for pull in pull_requests
+    ) or (head_sha is not None and run.get("head_sha") == head_sha)
 
 
 def ensure_label(github: GitHubAPI, name: str) -> None:

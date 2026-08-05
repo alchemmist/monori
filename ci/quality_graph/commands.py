@@ -6,7 +6,6 @@ import base64
 import json
 import os
 import re
-import urllib.parse
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, cast
@@ -17,15 +16,16 @@ from monori.ci.lib.comments import (
     managed_comment,
     workflow_bot_logins,
 )
-from monori.ci.lib.github import GITHUB_PAGE_SIZE, GitHub, GitHubAPI
+from monori.ci.lib.github import GitHub, GitHubAPI, rerun_latest_pull_request_workflow
 from monori.ci.lib.github import is_admin as github_is_admin
+from monori.ci.quality_graph.registry import registered_checks
 from monori.ci.quality_graph.reporting import (
     PullRequestReport,
     ReportModel,
     ReportStatus,
     render_report,
 )
-from monori.common import JsonValue, array_value, object_value, optional_string, string_value
+from monori.common import JsonValue, object_value, optional_string, string_value
 
 CommandName = Literal["help", "status", "ignore", "ignore-file", "remove-ignore"]
 COMMAND_RE = re.compile(
@@ -34,9 +34,7 @@ COMMAND_RE = re.compile(
 )
 GATE_NAME_RE = re.compile(r"^[a-z][a-z0-9-]*$")
 FINDING_ID_RE = re.compile(r"^[a-z][a-z0-9-]*-[a-z0-9-]+$")
-KNOWN_GATES = {"object", "suppression", "bundle", "frontend"}
 CONTROL_COMMAND_COUNT = 2
-MAX_WORKFLOW_RUN_PAGES = 100
 CONTROL_RE = re.compile(
     r"^- \[(?P<state>[ xX])] .*?<!-- (?P<marker>monori-qg-control:[A-Za-z0-9_-]+) -->$",
     re.MULTILINE,
@@ -112,8 +110,11 @@ def command_targets_prefix(command: QualityGraphCommand, prefix: str) -> bool:
 
 def command_targets_gate(command: QualityGraphCommand, gate: str) -> bool:
     """Check whether command targets the specified gate."""
+    check = registered_checks().get(gate)
+    if check is None:
+        return False
     if command.name == "ignore-file":
-        return gate in {"object", "suppression"}
+        return check.supports_ignore_file
     return gate in command.arguments or any(
         argument.startswith(f"{gate}-") for argument in command.arguments
     )
@@ -121,12 +122,13 @@ def command_targets_gate(command: QualityGraphCommand, gate: str) -> bool:
 
 def validate_command(command: QualityGraphCommand) -> str | None:
     """Validate command arguments and return an error message or None."""
+    checks = registered_checks()
     if command.name in {"help", "status"}:
         return None
     if command.name == "ignore-file":
         return None if all(command.arguments) else "At least one file path is required"
     for argument in command.arguments:
-        if argument in KNOWN_GATES or finding_gate(argument) in KNOWN_GATES:
+        if argument in checks or finding_gate(argument) in checks:
             continue
         return f"Unknown Quality Graph target: `{argument}`"
     return None if command.arguments else "At least one target is required"
@@ -402,13 +404,13 @@ def apply_gate_command(
     pull = object_value(github.request("GET", f"/pulls/{number}"), "pull request")
     original_body = pull.get("body")
     body = string_value(original_body, "pull request body") if original_body is not None else ""
-    for gate, (marker_name, report_marker) in {
-        "bundle": ("monori-bundle-size-pending", "bundle-size"),
-        "frontend": ("monori-frontend-performance-pending", "frontend-performance"),
-    }.items():
+    for gate, check in registered_checks().items():
+        marker_name = check.pending_marker
+        if marker_name is None:
+            continue
         if command_targets_gate(command, gate):
             encoded = encode_command(command)
-            report = managed_comment(github, number, report_marker)
+            report = managed_comment(github, number, check.report_marker)
             if report is None:
                 message = f"Cannot authorize {gate} command without its managed report"
                 raise RuntimeError(message)
@@ -434,7 +436,7 @@ def apply_gate_command(
                 body = f"{body.rstrip()}\n\n{marker}".strip()
     if body != (original_body or ""):
         github.request("PATCH", f"/pulls/{number}", {"body": body})
-    rerun_workflow(github, number)
+    rerun_latest_pull_request_workflow(github, number)
 
 
 def main() -> int:
@@ -443,32 +445,6 @@ def main() -> int:
     if request is not None:
         process_command(GitHub(), request)
     return 0
-
-
-def rerun_workflow(github: GitHubAPI, number: int) -> None:
-    """Rerun failed jobs in the pull request's latest matching Quality Graph run."""
-    pull = object_value(github.request("GET", f"/pulls/{number}"), "pull request")
-    head = object_value(pull.get("head", {}), "pull request head")
-    sha = string_value(head.get("sha"), "pull request head sha")
-    branch = string_value(head.get("ref"), "pull request head branch")
-    for page in range(1, MAX_WORKFLOW_RUN_PAGES + 1):
-        response = object_value(
-            github.request(
-                "GET",
-                f"/actions/workflows/pr-checks.yaml/runs?event=pull_request&branch={urllib.parse.quote(branch)}&per_page={GITHUB_PAGE_SIZE}&page={page}",
-            ),
-            "workflow runs response",
-        )
-        runs = array_value(response.get("workflow_runs"), "workflow runs")
-        for item in runs:
-            run = object_value(item, "workflow run")
-            if run.get("head_sha") == sha and isinstance(run.get("id"), int):
-                github.request("POST", f"/actions/runs/{run['id']}/rerun-failed-jobs")
-                return
-        if len(runs) < GITHUB_PAGE_SIZE:
-            break
-    message = f"No completed pr-checks.yaml run found for PR #{number}"
-    raise RuntimeError(message)
 
 
 if __name__ == "__main__":

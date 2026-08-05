@@ -2,15 +2,18 @@
 
 from __future__ import annotations
 
+import sys
 import urllib.parse
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, ClassVar, Protocol
+from typing import TYPE_CHECKING, ClassVar, Protocol, override
 
 from monori.ci.lib.comments import workflow_bot_logins
-from monori.ci.lib.github import is_admin
+from monori.ci.lib.github import is_admin, sync_label
 from monori.ci.quality_graph.commands import (
     QualityGraphCommand,
+    command_request,
+    command_targets_gate,
     decode_command,
     parse_command,
     validate_command,
@@ -23,7 +26,7 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
     from re import Pattern
 
-    from monori.ci.lib.github import GitHubAPI
+    from monori.ci.lib.github import GitHubAPI, RepositoryGitHubAPI
 
 
 class ApprovableFinding(FindingProtocol, Protocol):
@@ -66,6 +69,8 @@ class ApprovalLifecycle:
     state_marker: str
     pending_pattern: Pattern[str] | None = None
     legacy_label_prefix: str | None = None
+    allow_file_commands: bool = False
+    finding_ids_include_prefix: bool = False
 
     def read(self, body: str) -> set[str]:
         """Read finding IDs from the pull-request state marker."""
@@ -142,6 +147,38 @@ class ApprovalLifecycle:
         findings: Sequence[ApprovableFinding],
     ) -> ApprovalSyncResult:
         """Apply an authorized command and persist effective approvals."""
+        authorized = (
+            request.command is not None
+            and request.author is not None
+            and is_admin(request.github, request.author)
+        )
+        return self._sync(request, findings, authorized=authorized)
+
+    def sync_pending(
+        self,
+        github: GitHubAPI,
+        number: int,
+        body: str,
+        findings: Sequence[ApprovableFinding],
+        labels: list[dict[str, JsonValue]] | None = None,
+    ) -> ApprovalSyncResult:
+        """Resolve a bot-authorized pending command and synchronize approvals."""
+        command = self.pending_command(github, body)
+        effective_body = self.without_pending(body) if command is not None else body
+        request = ApprovalRequest(github, number, effective_body, command, None, labels or [])
+        result = self._sync(request, findings, authorized=command is not None)
+        if command is not None:
+            self.consume_pending(github, body)
+        return result
+
+    def _sync(
+        self,
+        request: ApprovalRequest,
+        findings: Sequence[ApprovableFinding],
+        *,
+        authorized: bool,
+    ) -> ApprovalSyncResult:
+        """Synchronize approvals after the command source has been authorized."""
         finding_ids = {finding.finding_id for finding in findings}
         state_exists = self.state_pattern.search(request.body) is not None
         approved = (
@@ -151,18 +188,13 @@ class ApprovalLifecycle:
         )
         self._remove_legacy_labels(request.github, request.number, request.labels)
         approved &= finding_ids
-        authorized = (
-            request.command is not None
-            and request.author is not None
-            and is_admin(request.github, request.author)
-        )
         changed = False
         if (
             request.command is not None
             and authorized
             and request.command.name not in {"help", "status"}
         ):
-            selected = self._selected(request.command, findings)
+            selected = self.select_findings(request.command, findings)
             approved = (
                 approved - selected
                 if request.command.name == "remove-ignore"
@@ -173,22 +205,27 @@ class ApprovalLifecycle:
             self.persist_approvals(request.github, request.number, request.body, approved)
         return ApprovalSyncResult(approved, authorized, changed)
 
-    def _selected(
+    def select_findings(
         self, command: QualityGraphCommand, findings: Sequence[ApprovableFinding]
     ) -> set[str]:
         """Select findings addressed by a canonical Quality Graph command."""
         all_ids = {finding.finding_id for finding in findings}
         if command.name == "ignore-file":
+            if not self.allow_file_commands:
+                return set()
             return {finding.finding_id for finding in findings if finding.path in command.arguments}
         if command.name not in {"ignore", "remove-ignore"}:
             return set()
         if self.gate in command.arguments:
             return all_ids
-        return {
-            argument.removeprefix(self.finding_prefix)
+        selected = {
+            argument
+            if self.finding_ids_include_prefix
+            else argument.removeprefix(self.finding_prefix)
             for argument in command.arguments
             if argument.startswith(self.finding_prefix)
-        } & all_ids
+        }
+        return selected & all_ids
 
     def _legacy_approvals(
         self, labels: list[dict[str, JsonValue]], finding_ids: set[str]
@@ -217,12 +254,36 @@ class ApprovalLifecycle:
                 github.request("DELETE", f"/issues/{number}/labels/{encoded}")
 
 
-class QualityCheck[FindingType: ApprovableFinding](ABC):
-    """Subject-specific check with a shared, typed execution contract."""
+class QualityCheckDefinition(ABC):
+    """Define registry metadata shared by every Quality Graph check class."""
 
     gate: ClassVar[str]
     report_marker: ClassVar[str]
     approval_lifecycle: ClassVar[ApprovalLifecycle]
+    supports_ignore_file: ClassVar[bool] = False
+    pending_marker: ClassVar[str | None] = None
+    failure_label: ClassVar[str | None] = None
+
+    @override
+    def __init_subclass__(cls) -> None:
+        """Reject check metadata that disagrees with its approval lifecycle."""
+        super().__init_subclass__()
+        lifecycle = getattr(cls, "approval_lifecycle", None)
+        if lifecycle is None:
+            return
+        if lifecycle.gate != cls.gate:
+            message = f"{cls.__name__} gate does not match its approval lifecycle"
+            raise TypeError(message)
+        if lifecycle.allow_file_commands != cls.supports_ignore_file:
+            message = f"{cls.__name__} ignore-file metadata does not match its lifecycle"
+            raise TypeError(message)
+        if (lifecycle.pending_pattern is not None) != (cls.pending_marker is not None):
+            message = f"{cls.__name__} pending-marker metadata does not match its lifecycle"
+            raise TypeError(message)
+
+
+class QualityCheck[FindingType: ApprovableFinding](QualityCheckDefinition, ABC):
+    """Subject-specific check with a shared, typed execution contract."""
 
     @abstractmethod
     def collect(self, context: CheckContext) -> CheckResult[FindingType]:
@@ -240,3 +301,96 @@ class QualityCheck[FindingType: ApprovableFinding](ABC):
     ) -> ApprovalSyncResult:
         """Apply this check's configured approval lifecycle to its findings."""
         return self.approval_lifecycle.sync(request, findings)
+
+    def sync_pending_approvals(
+        self,
+        github: GitHubAPI,
+        number: int,
+        body: str,
+        findings: Sequence[FindingType],
+        labels: list[dict[str, JsonValue]] | None = None,
+    ) -> ApprovalSyncResult:
+        """Apply a bot-authorized pending command through the shared lifecycle."""
+        return self.approval_lifecycle.sync_pending(github, number, body, findings, labels)
+
+
+class PullRequestSourceCheck[FindingType: ApprovableFinding](QualityCheck[FindingType], ABC):
+    """Run a source-oriented check through the shared pull-request lifecycle."""
+
+    @abstractmethod
+    def collect_pull_request(
+        self, github: RepositoryGitHubAPI, pull: dict[str, JsonValue]
+    ) -> list[FindingType]:
+        """Collect findings from the current pull request."""
+
+    @abstractmethod
+    def render_summary(
+        self, findings: list[FindingType], approved: set[str], pull_request_url: str
+    ) -> str:
+        """Render the final managed report for this check."""
+
+    @abstractmethod
+    def error_annotation(self, finding: FindingType) -> str:
+        """Render one GitHub workflow error annotation."""
+
+    @abstractmethod
+    def rerun(self, github: RepositoryGitHubAPI, number: int) -> None:
+        """Rerun the workflow after approval state changes."""
+
+    def run_pull_request_gate(
+        self, github: RepositoryGitHubAPI, event: dict[str, JsonValue]
+    ) -> int:
+        """Execute the shared source-check lifecycle for a pull-request event."""
+        number = self._pull_request_number(event)
+        if number is None:
+            return 0
+        report = self.report(github, number)
+        report.mark_in_progress()
+        raw_pull = github.request("GET", f"/pulls/{number}")
+        if raw_pull is None:
+            message = f"Pull request #{number} was not found"
+            raise RuntimeError(message)
+        pull = object_value(raw_pull, "pull request")
+        findings = self.collect_pull_request(github, pull)
+        request = command_request(event)
+        command = parse_command(request.body) if request is not None else None
+        if command is not None and (
+            validate_command(command) is not None or not command_targets_gate(command, self.gate)
+        ):
+            command = None
+        author = request.login if command is not None and request is not None else None
+        body = optional_string(pull.get("body")) or ""
+        sync = self.sync_approvals(
+            ApprovalRequest(
+                github,
+                number,
+                body,
+                command,
+                author,
+                github.paged(f"/issues/{number}/labels"),
+            ),
+            findings,
+        )
+        active = [finding for finding in findings if finding.finding_id not in sync.approved]
+        if self.failure_label is not None:
+            sync_label(github, number, self.failure_label, present=bool(active))
+        pull_request_url = optional_string(pull.get("html_url")) or ""
+        report.publish(self.render_summary(findings, sync.approved, pull_request_url))
+        if sync.changed:
+            self.rerun(github, number)
+        for finding in active:
+            sys.stderr.write(f"{self.error_annotation(finding)}\n")
+        return 1 if active else 0
+
+    @staticmethod
+    def _pull_request_number(event: dict[str, JsonValue]) -> int | None:
+        """Extract a pull-request number from pull-request or issue events."""
+        pull = event.get("pull_request")
+        if isinstance(pull, dict):
+            number = pull.get("number")
+            return number if isinstance(number, int) else None
+        issue = event.get("issue")
+        if not isinstance(issue, dict) or not issue.get("pull_request"):
+            return None
+        number = issue.get("number")
+        return number if isinstance(number, int) else None

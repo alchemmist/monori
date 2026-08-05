@@ -6,11 +6,13 @@ import hashlib
 import json
 import os
 import re
+from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, cast
+from typing import ClassVar, cast, override
 
 from monori.ci.lib.github import GitHub, sync_label
-from monori.ci.quality_graph.base import ApprovalLifecycle
+from monori.ci.quality_graph.base import ApprovalLifecycle, QualityCheck
+from monori.ci.quality_graph.models import CheckContext, CheckResult, Verdict
 from monori.ci.quality_graph.reporting import (
     ReportFinding,
     ReportModel,
@@ -27,12 +29,9 @@ from monori.common import (
     string_value,
 )
 
-if TYPE_CHECKING:
-    from monori.ci.quality_graph.commands import QualityGraphCommand
-
 STATUS_LABEL = "monori-frontend-performance-failed"
 FINDING_ID_PREFIX = "frontend-"
-STATE_RE = re.compile(r"<!-- monori-frontend-performance-approvals: ([0-9a-f,]*) -->")
+STATE_RE = re.compile(r"<!-- monori-frontend-performance-approvals: ([a-z0-9,-]*) -->")
 PENDING_RE = re.compile(
     r"<!-- monori-frontend-performance-pending: (\d+)(?: ([A-Za-z0-9_-]+))? -->"
 )
@@ -42,7 +41,38 @@ APPROVALS = ApprovalLifecycle(
     STATE_RE,
     "<!-- monori-frontend-performance-approvals: {ids} -->",
     PENDING_RE,
+    allow_file_commands=False,
+    finding_ids_include_prefix=True,
 )
+
+
+@dataclass(frozen=True)
+class FrontendPerformanceFinding:
+    """Represent one regressed frontend metric as an approvable finding."""
+
+    finding_id: str
+    path: str = ""
+
+
+class FrontendPerformanceCheck(QualityCheck[FrontendPerformanceFinding]):
+    """Collect frontend regressions and use the shared approval lifecycle."""
+
+    gate = "frontend"
+    report_marker = "frontend-performance"
+    approval_lifecycle = APPROVALS
+    pending_marker: ClassVar[str | None] = "monori-frontend-performance-pending"
+
+    @override
+    def collect(self, context: CheckContext) -> CheckResult[FrontendPerformanceFinding]:
+        """Parse the performance report and return all regressed metric findings."""
+        report = object_value(cast("JsonValue", json.loads(context.files["report"])), "report")
+        entries = array_value(report.get("entries"), "entries")
+        findings = tuple(
+            FrontendPerformanceFinding(finding_id(object_value(entry, "report entry")))
+            for entry in entries
+            if object_value(entry, "report entry").get("tier") != "none"
+        )
+        return CheckResult(findings, Verdict.FAIL if findings else Verdict.PASS)
 
 
 def finding_id(entry: dict[str, JsonValue]) -> str:
@@ -53,35 +83,9 @@ def finding_id(entry: dict[str, JsonValue]) -> str:
     return f"{FINDING_ID_PREFIX}{digest}"
 
 
-def update_body_state(github: GitHub, number: int, body: str, approved: set[str]) -> str:
-    """Update body state."""
-    return APPROVALS.persist_approvals(github, number, body, approved)
-
-
 def entry_ids(entries: list[dict[str, JsonValue]]) -> set[str]:
     """Return finding IDs for measured entries that contain a regression."""
     return {finding_id(entry) for entry in entries if entry.get("tier") != "none"}
-
-
-def apply_command(
-    command: QualityGraphCommand | None,
-    entries: list[dict[str, JsonValue]],
-    approved: set[str],
-) -> set[str]:
-    """Apply command."""
-    if command is None:
-        return approved
-    name = command.name
-    arguments = command.arguments
-    if name in {"help", "status", "ignore-file"}:
-        return approved
-    ids = entry_ids(entries)
-    selected = (
-        ids
-        if name in {"ignore", "remove-ignore"} and "frontend" in arguments
-        else {argument for argument in arguments if argument.startswith(FINDING_ID_PREFIX)}
-    ) & ids
-    return approved - selected if name == "remove-ignore" else approved | selected
 
 
 def append_commands(
@@ -125,20 +129,16 @@ def main() -> int:
     github = GitHub()
     report_path = Path(os.environ["REPORT_PATH"])
     report = object_value(cast("JsonValue", json.loads(report_path.read_text())), "report")
+    check = FrontendPerformanceCheck()
+    result = check.collect(CheckContext({"report": report_path.read_text()}, {}))
     entries = [
         object_value(item, "report entry") for item in array_value(report.get("entries"), "entries")
     ]
     number = integer_value(report.get("prNumber"), "pull request number")
     pull = object_value(github.request("GET", f"/pulls/{number}"), "pull request")
     body = optional_string(pull.get("body")) or ""
-    approved = APPROVALS.read(body) & entry_ids(entries)
-    command = APPROVALS.pending_command(github, body)
-    approved = apply_command(command, entries, approved)
-    if command is not None:
-        APPROVALS.consume_pending(github, body)
-        body = APPROVALS.without_pending(body)
-    if command is not None or STATE_RE.search(body):
-        body = update_body_state(github, number, body, approved)
+    synced = check.sync_pending_approvals(github, number, body, result.findings)
+    approved = synced.approved
 
     original_verdict = string_value(report.get("verdict"), "verdict")
     active = {

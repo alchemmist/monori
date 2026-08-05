@@ -3,28 +3,14 @@
 import hashlib
 import os
 import re
-import sys
 import tomllib
 from collections import Counter
 from dataclasses import dataclass
-from itertools import count
 from pathlib import Path
-from typing import cast, override
+from typing import ClassVar, cast, override
 
-from monori.ci.lib.github import (
-    GITHUB_PAGE_SIZE,
-    GitHub,
-    RepositoryGitHubAPI,
-    sync_label,
-)
-from monori.ci.quality_graph.base import ApprovalLifecycle, ApprovalRequest, QualityCheck
-from monori.ci.quality_graph.commands import (
-    QualityGraphCommand,
-    command_request,
-    command_targets_gate,
-    parse_command,
-    validate_command,
-)
+from monori.ci.lib.github import GitHub, RepositoryGitHubAPI, rerun_latest_pull_request_workflow
+from monori.ci.quality_graph.base import ApprovalLifecycle, PullRequestSourceCheck
 from monori.ci.quality_graph.models import CheckContext, CheckResult, Verdict
 from monori.ci.quality_graph.reporting import (
     ReportFinding,
@@ -37,7 +23,6 @@ from monori.ci.quality_graph.reporting import (
 )
 from monori.common import (
     JsonValue,
-    array_value,
     decode_json,
     integer_value,
     object_value,
@@ -70,13 +55,13 @@ TOML_KEY_RE = re.compile(
     r'(?:\s*\.\s*(?:"[^"]+"|\'[^\']+\'|[A-Za-z0-9_-]+))*)\s*='
 )
 TOML_SUPPRESSION_SECTION_NAMES = {"per-file-ignores", "extend-per-file-ignores"}
-WORKFLOW_RUNS_PER_PAGE = GITHUB_PAGE_SIZE
 APPROVALS = ApprovalLifecycle(
     "suppression",
     FINDING_ID_PREFIX,
     APPROVAL_STATE_RE,
     "<!-- monori-suppression-approvals: {ids} -->",
     legacy_label_prefix=LABEL_PREFIX,
+    allow_file_commands=True,
 )
 
 
@@ -89,14 +74,6 @@ class Finding:
     column: int
     text: str
     finding_id: str
-
-
-@dataclass(frozen=True)
-class SyncApprovalCommandState:
-    """Input state for approval-sync requests."""
-
-    command: QualityGraphCommand | None
-    author: str | None
 
 
 def display_finding_id(finding_id: str) -> str:
@@ -284,12 +261,14 @@ def scan_file(
     return findings
 
 
-class SuppressionCheck(QualityCheck[Finding]):
+class SuppressionCheck(PullRequestSourceCheck[Finding]):
     """Find newly added lint-rule suppressions in changed files."""
 
     gate = "suppression"
     report_marker = "suppression"
     approval_lifecycle = APPROVALS
+    supports_ignore_file = True
+    failure_label: ClassVar[str | None] = STATUS_LABEL
 
     @override
     def collect(self, context: CheckContext) -> CheckResult[Finding]:
@@ -305,6 +284,33 @@ class SuppressionCheck(QualityCheck[Finding]):
         )
         verdict = Verdict.FAIL if findings else Verdict.PASS
         return CheckResult(findings, verdict)
+
+    @override
+    def collect_pull_request(
+        self, github: RepositoryGitHubAPI, pull: dict[str, JsonValue]
+    ) -> list[Finding]:
+        """Collect newly introduced suppressions from the pull request."""
+        return changed_files(github, pull)
+
+    @override
+    def render_summary(
+        self, findings: list[Finding], approved: set[str], pull_request_url: str
+    ) -> str:
+        """Render the lint-suppression report."""
+        return summary_body(findings, approved, pull_request_url)
+
+    @override
+    def error_annotation(self, finding: Finding) -> str:
+        """Render an error annotation for a new lint suppression."""
+        return (
+            f"::error file={finding.path},line={finding.line},col={finding.column + 1}::"
+            f"New lint suppression: {finding.text}"
+        )
+
+    @override
+    def rerun(self, github: RepositoryGitHubAPI, number: int) -> None:
+        """Rerun the pull-request workflow after approvals change."""
+        rerun_latest_pull_request_workflow(github, number)
 
 
 def changed_files(github: RepositoryGitHubAPI, pull: dict[str, JsonValue]) -> list[Finding]:
@@ -356,30 +362,6 @@ def changed_files(github: RepositoryGitHubAPI, pull: dict[str, JsonValue]) -> li
     return sorted(result.findings, key=lambda finding: (finding.path, finding.line, finding.column))
 
 
-def sync_approvals(
-    github: RepositoryGitHubAPI,
-    number: int,
-    pull: dict[str, JsonValue],
-    findings: list[Finding],
-    command_state: SyncApprovalCommandState,
-) -> tuple[set[str], bool]:
-    """Update suppressions approval state and apply admin commands."""
-    body = optional_string(pull.get("body")) or ""
-    request = ApprovalRequest(
-        github,
-        number,
-        body,
-        command_state.command,
-        command_state.author,
-        github.paged(f"/issues/{number}/labels"),
-    )
-    result = SuppressionCheck().sync_approvals(
-        request,
-        findings,
-    )
-    return result.approved, result.authorized
-
-
 def summary_body(findings: list[Finding], approved: set[str], pr_url: str) -> str:
     """Build the suppressions check summary block for workflow output."""
     active = [finding for finding in findings if finding.finding_id not in approved]
@@ -427,71 +409,11 @@ def summary_body(findings: list[Finding], approved: set[str], pr_url: str) -> st
     )
 
 
-def rerun_gate(github: RepositoryGitHubAPI, number: int) -> None:
-    """Rerun the latest workflow run that belongs to the pull request."""
-    matching: list[dict[str, JsonValue]] = []
-    for page in count(1):
-        runs = object_value(
-            github.request(
-                "GET",
-                "/actions/workflows/pr-checks.yaml/runs"
-                f"?event=pull_request&per_page={WORKFLOW_RUNS_PER_PAGE}&page={page}",
-            ),
-            "workflow runs",
-        )
-        page_runs = array_value(runs.get("workflow_runs", []), "workflow runs")
-        for run in page_runs:
-            run_data = object_value(run, "workflow run")
-            if any(
-                object_value(pull, "workflow pull request").get("number") == number
-                for pull in array_value(run_data.get("pull_requests", []), "workflow pull requests")
-            ):
-                matching.append(run_data)
-        if len(page_runs) < WORKFLOW_RUNS_PER_PAGE or matching:
-            break
-    if matching:
-        latest = max(matching, key=lambda run: optional_string(run.get("created_at")) or "")
-        run_id = integer_value(latest["id"], "workflow run id")
-        github.request("POST", f"/actions/runs/{run_id}/rerun-failed-jobs")
-
-
 def main() -> int:
     """Run suppression gate and return non-zero exit code on active findings."""
     github = GitHub()
     event = object_value(decode_json(Path(os.environ["GITHUB_EVENT_PATH"]).read_text()), "event")
-    pull_event = object_value(event.get("pull_request", {}), "pull request event")
-    issue = object_value(event.get("issue", {}), "issue event")
-    number_value = pull_event.get("number") or issue.get("number")
-    if not isinstance(number_value, int) or not (pull_event or issue.get("pull_request")):
-        return 0
-    number = number_value
-    report = SuppressionCheck().report(github, number)
-    report.mark_in_progress()
-    pull = object_value(github.request("GET", f"/pulls/{number}"), "pull request")
-    findings = changed_files(github, pull)
-    request = command_request(event)
-    command = parse_command(request.body) if request is not None else None
-    if command and validate_command(command) is not None:
-        command = None
-    if command and not command_targets_gate(command, "suppression"):
-        command = None
-    author = request.login if command and request is not None else None
-    approved, admin = sync_approvals(
-        github, number, pull, findings, SyncApprovalCommandState(command, author)
-    )
-    active = [finding for finding in findings if finding.finding_id not in approved]
-    sync_label(github, number, STATUS_LABEL, present=bool(active))
-    pr_url = string_value(pull["html_url"], "pull request URL")
-    report.publish(summary_body(findings, approved, pr_url))
-    if admin:
-        rerun_gate(github, number)
-    for finding in findings:
-        if finding.finding_id not in approved:
-            sys.stderr.write(
-                f"::error file={finding.path},line={finding.line},col={finding.column + 1}::"
-                f"New lint suppression: {finding.text}\n"
-            )
-    return 1 if any(finding.finding_id not in approved for finding in findings) else 0
+    return SuppressionCheck().run_pull_request_gate(github, event)
 
 
 if __name__ == "__main__":

@@ -4,17 +4,15 @@ import unittest
 from typing import override
 
 from monori.ci.lib.github import sync_label
+from monori.ci.quality_graph.base import ApprovalRequest
 from monori.ci.quality_graph.checks.object_annotations import (
     FAILURE_LABEL,
     Finding,
     ObjectAnnotationCheck,
-    SyncApprovalCommandState,
     added_lines_from_patch,
     changed_lines,
-    latest_pull_request_run,
     scan_file,
     summary_body,
-    sync_approvals,
 )
 from monori.ci.quality_graph.commands import parse_command
 from monori.ci.quality_graph.models import CheckContext, Verdict
@@ -132,20 +130,23 @@ other: "list[object]"
         github = FakeGitHub()
         finding = Finding("example.py", 1, 7, "object", "finding-1")
 
-        approved, admin, changed = sync_approvals(
-            github,
-            1,
-            {"body": ""},
-            [finding],
-            SyncApprovalCommandState(
-                parse_command("/qg ignore object-finding-1"),
+        command = parse_command("/qg ignore object-finding-1")
+        assert command is not None
+        result = ObjectAnnotationCheck().sync_approvals(
+            ApprovalRequest(
+                github,
+                1,
+                "",
+                command,
                 "admin",
+                github.paged("/issues/1/labels"),
             ),
+            [finding],
         )
 
-        assert admin
-        assert changed
-        assert approved == {"finding-1"}
+        assert result.authorized
+        assert result.changed
+        assert result.approved == {"finding-1"}
         assert any(call[0] == "DELETE" and "stale" in call[1] for call in github.calls)
         assert any(call[0] == "PATCH" and call[1] == "/pulls/1" for call in github.calls)
 
@@ -161,35 +162,6 @@ other: "list[object]"
             {"name": "monori-object-annotation-failed", "color": "b60205"},
         ) in github.calls
         assert any(call[0] == "DELETE" and "failed" in call[1] for call in github.calls)
-
-    def test_rerun_lookup_paginates_past_first_page(self) -> None:
-        class WorkflowRunsGitHub(FakeGitHub):
-            @override
-            def request(self, method: str, path: str, payload: JsonValue = None) -> JsonValue:
-                self.calls.append((method, path, payload))
-                if path.endswith("page=1"):
-                    return {
-                        "workflow_runs": [
-                            {"id": index, "pull_requests": []} for index in range(100)
-                        ]
-                    }
-                return {
-                    "workflow_runs": [
-                        {
-                            "id": 999,
-                            "created_at": "2026-01-01",
-                            "pull_requests": [{"number": 343}],
-                        }
-                    ]
-                }
-
-        github = WorkflowRunsGitHub()
-
-        run = latest_pull_request_run(github, 343)
-
-        assert run is not None
-        assert run["id"] == 999
-        assert any("page=2" in call[1] for call in github.calls)
 
     def test_approval_commands_use_shared_namespace(self) -> None:
         assert parse_command("/qg ignore object-abc123") is not None

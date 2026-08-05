@@ -8,24 +8,11 @@ import re
 import sys
 from collections import Counter
 from dataclasses import dataclass
-from itertools import count
 from pathlib import Path
-from typing import override
+from typing import ClassVar, override
 
-from monori.ci.lib.github import (
-    GITHUB_PAGE_SIZE,
-    GitHub,
-    RepositoryGitHubAPI,
-    sync_label,
-)
-from monori.ci.quality_graph.base import ApprovalLifecycle, ApprovalRequest, QualityCheck
-from monori.ci.quality_graph.commands import (
-    QualityGraphCommand,
-    command_request,
-    command_targets_gate,
-    parse_command,
-    validate_command,
-)
+from monori.ci.lib.github import GitHub, RepositoryGitHubAPI, rerun_latest_pull_request_workflow
+from monori.ci.quality_graph.base import ApprovalLifecycle, PullRequestSourceCheck
 from monori.ci.quality_graph.models import CheckContext, CheckResult, Verdict
 from monori.ci.quality_graph.reporting import (
     ReportFinding,
@@ -38,7 +25,6 @@ from monori.ci.quality_graph.reporting import (
 )
 from monori.common import (
     JsonValue,
-    array_value,
     decode_json,
     integer_value,
     object_value,
@@ -51,13 +37,13 @@ IGNORE_LABEL_PREFIX = "monori-object-annotation-ignore-"
 FINDING_ID_PREFIX = "object-"
 FAILURE_LABEL = "monori-object-annotation-failed"
 APPROVAL_STATE_RE = re.compile(r"<!-- monori-object-annotation-approvals: ([0-9a-f,]*) -->")
-WORKFLOW_RUNS_PER_PAGE = GITHUB_PAGE_SIZE
 APPROVALS = ApprovalLifecycle(
     "object",
     FINDING_ID_PREFIX,
     APPROVAL_STATE_RE,
     "<!-- monori-object-annotation-approvals: {ids} -->",
     legacy_label_prefix=IGNORE_LABEL_PREFIX,
+    allow_file_commands=True,
 )
 
 
@@ -70,14 +56,6 @@ class Finding:
     column: int
     annotation: str
     finding_id: str
-
-
-@dataclass(frozen=True)
-class SyncApprovalCommandState:
-    """Input state for an approval-sync command."""
-
-    command: QualityGraphCommand | None
-    author: str | None
 
 
 def display_finding_id(finding_id: str) -> str:
@@ -180,12 +158,14 @@ def scan_file(path: str, source: str, changed: set[int]) -> list[Finding]:
     return sorted(findings, key=lambda finding: (finding.line, finding.column, finding.annotation))
 
 
-class ObjectAnnotationCheck(QualityCheck[Finding]):
+class ObjectAnnotationCheck(PullRequestSourceCheck[Finding]):
     """Find changed annotations that use the overly broad ``object`` type."""
 
     gate = "object"
     report_marker = "object-annotations"
     approval_lifecycle = APPROVALS
+    supports_ignore_file = True
+    failure_label: ClassVar[str | None] = FAILURE_LABEL
 
     @override
     def collect(self, context: CheckContext) -> CheckResult[Finding]:
@@ -200,6 +180,33 @@ class ObjectAnnotationCheck(QualityCheck[Finding]):
         )
         verdict = Verdict.FAIL if findings else Verdict.PASS
         return CheckResult(findings, verdict)
+
+    @override
+    def collect_pull_request(
+        self, github: RepositoryGitHubAPI, pull: dict[str, JsonValue]
+    ) -> list[Finding]:
+        """Collect changed object annotations from the pull request."""
+        return scan_pull_request(github, pull)
+
+    @override
+    def render_summary(
+        self, findings: list[Finding], approved: set[str], pull_request_url: str
+    ) -> str:
+        """Render the object-annotation report."""
+        return summary_body(findings, approved, pull_request_url)
+
+    @override
+    def error_annotation(self, finding: Finding) -> str:
+        """Render an error annotation for an overly broad type."""
+        return (
+            f"::error file={finding.path},line={finding.line},col={finding.column + 1}::"
+            "Use a specific type instead of object"
+        )
+
+    @override
+    def rerun(self, github: RepositoryGitHubAPI, number: int) -> None:
+        """Rerun the pull-request workflow after approvals change."""
+        rerun_latest_pull_request_workflow(github, number)
 
 
 def summary_body(findings: list[Finding], approved: set[str], pr_url: str) -> str:
@@ -245,40 +252,7 @@ def summary_body(findings: list[Finding], approved: set[str], pr_url: str) -> st
     )
 
 
-def sync_approvals(
-    github: RepositoryGitHubAPI,
-    number: int,
-    pull: dict[str, JsonValue],
-    findings: list[Finding],
-    command_state: SyncApprovalCommandState,
-) -> tuple[set[str], bool, bool]:
-    """Sync approvals and optional command modifications."""
-    body = optional_string(pull.get("body")) or ""
-    request = ApprovalRequest(
-        github,
-        number,
-        body,
-        command_state.command,
-        command_state.author,
-        github.paged(f"/issues/{number}/labels"),
-    )
-    result = ObjectAnnotationCheck().sync_approvals(
-        request,
-        findings,
-    )
-    return result.approved, result.authorized, result.changed
-
-
-def pull_request_number(event: dict[str, JsonValue]) -> int | None:
-    """Extract pull request number from pull_request or issue event payload."""
-    if event.get("pull_request"):
-        pull = object_value(event["pull_request"], "event pull request")
-        return integer_value(pull["number"], "pull request number")
-    issue = object_value(event.get("issue", {}), "event issue")
-    return integer_value(issue["number"], "issue number") if issue.get("pull_request") else None
-
-
-def scan_pull_request(github: GitHub, pull: dict[str, JsonValue]) -> list[Finding]:
+def scan_pull_request(github: RepositoryGitHubAPI, pull: dict[str, JsonValue]) -> list[Finding]:
     """Scan pull request diff files for changed `object` annotations."""
     head = object_value(pull["head"], "pull request head")
     base = object_value(pull["base"], "pull request base")
@@ -313,100 +287,13 @@ def scan_pull_request(github: GitHub, pull: dict[str, JsonValue]) -> list[Findin
     return sorted(findings, key=lambda finding: (finding.path, finding.line, finding.column))
 
 
-def rerun_pull_request_gate(github: GitHub, number: int) -> None:
-    """Rerun latest object annotation gate run for this pull request."""
-    latest = latest_pull_request_run(github, number)
-    if latest is None:
-        message = f"Cannot find a previous gate run for pull request #{number}"
-        raise RuntimeError(message)
-    run_id = integer_value(latest["id"], "workflow run id")
-    github.request("POST", f"/actions/runs/{run_id}/rerun-failed-jobs")
-
-
-def latest_pull_request_run(
-    github: RepositoryGitHubAPI, number: int
-) -> dict[str, JsonValue] | None:
-    """Return latest workflow run for the given pull request number."""
-    for page in count(1):
-        response = object_value(
-            github.request(
-                "GET",
-                f"/actions/workflows/pr-checks.yaml/runs?event=pull_request"
-                f"&per_page={WORKFLOW_RUNS_PER_PAGE}&page={page}",
-            ),
-            "workflow runs",
-        )
-        raw_runs = array_value(response.get("workflow_runs", []), "workflow runs")
-        runs = [object_value(run, "workflow run") for run in raw_runs]
-        matching = [
-            run
-            for run in runs
-            if any(
-                object_value(pull_request, "workflow pull request").get("number") == number
-                for pull_request in array_value(
-                    run.get("pull_requests", []), "workflow pull requests"
-                )
-            )
-        ]
-        if matching:
-            return max(matching, key=lambda run: optional_string(run.get("created_at")) or "")
-        if len(runs) < WORKFLOW_RUNS_PER_PAGE:
-            return None
-    message = "Workflow run pagination terminated unexpectedly"
-    raise RuntimeError(message)
-
-
 def main() -> int:
     """Run the Python object annotation gate for the current pull request event."""
     github = GitHub()
     event = object_value(
         decode_json(Path(os.environ["GITHUB_EVENT_PATH"]).read_text()), "GitHub event"
     )
-    number = pull_request_number(event)
-    if number is None:
-        return 0
-
-    report = ObjectAnnotationCheck().report(github, number)
-    report.mark_in_progress()
-
-    raw_pull = github.request("GET", f"/pulls/{number}")
-    if raw_pull is None:
-        message = f"Pull request #{number} was not found"
-        raise RuntimeError(message)
-    pull = object_value(raw_pull, "pull request")
-    findings = scan_pull_request(github, pull)
-    request = command_request(event)
-    command = parse_command(request.body) if request is not None else None
-    if command and validate_command(command) is not None:
-        command = None
-    if command and not command_targets_gate(command, "object"):
-        command = None
-    author = request.login if command and request is not None else None
-    approved, _, state_changed = sync_approvals(
-        github,
-        number,
-        pull,
-        findings,
-        SyncApprovalCommandState(command, author),
-    )
-    active = [finding for finding in findings if finding.finding_id not in approved]
-    sync_label(github, number, FAILURE_LABEL, present=bool(active))
-
-    pr_url = string_value(pull["html_url"], "pull request URL")
-    report.publish(summary_body(findings, approved, pr_url))
-    if not findings:
-        return 0
-
-    if state_changed:
-        rerun_pull_request_gate(github, number)
-    if active:
-        for finding in active:
-            sys.stderr.write(
-                f"::error file={finding.path},line={finding.line},"
-                f"col={finding.column + 1}::Use a specific type instead of object\n"
-            )
-        return 1
-    return 0
+    return ObjectAnnotationCheck().run_pull_request_gate(github, event)
 
 
 if __name__ == "__main__":

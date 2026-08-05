@@ -10,7 +10,6 @@ from monori.ci.quality_graph.commands import (
     command_text,
     parse_command,
     process_command,
-    rerun_workflow,
     set_comment_reaction,
     upsert_status,
     validate_command,
@@ -64,6 +63,15 @@ class QualityGraphCommandTest(unittest.TestCase):
         assert command_targets_gate(command, "object")
         assert command_targets_gate(command, "suppression")
         assert not command_targets_gate(command, "bundle")
+
+    def test_ignore_file_targets_only_checks_with_file_approvals(self) -> None:
+        command = parse_command("/qg ignore-file server/app.py")
+
+        assert command is not None
+        assert command_targets_gate(command, "object")
+        assert command_targets_gate(command, "suppression")
+        assert not command_targets_gate(command, "bundle")
+        assert not command_targets_gate(command, "frontend")
 
     def test_old_commands_and_all_selector_are_rejected(self) -> None:
         assert parse_command("/ignore object-abc123") is None
@@ -241,26 +249,6 @@ class QualityGraphCommandTest(unittest.TestCase):
             ),
         ) in github.calls
         assert ("PATCH", "/issues/comments/1", mock.ANY) not in github.calls
-
-    def test_rerun_reads_workflow_runs_from_the_api_response_object(self) -> None:
-        class WorkflowGitHub(FakeGitHub):
-            @override
-            def request(self, method: str, path: str, payload: JsonValue = None) -> JsonValue:
-                self.calls.append((method, path, payload))
-                if path == "/pulls/42":
-                    return {"head": {"sha": "abc", "ref": "feature"}}
-                if path.startswith("/actions/workflows/pr-checks.yaml/runs?"):
-                    return {
-                        "total_count": 1,
-                        "workflow_runs": [{"id": 9, "head_sha": "abc"}],
-                    }
-                return None
-
-        github = WorkflowGitHub()
-
-        rerun_workflow(github, 42)
-
-        assert ("POST", "/actions/runs/9/rerun-failed-jobs", None) in github.calls
 
 
 if __name__ == "__main__":

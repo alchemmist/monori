@@ -5,11 +5,13 @@ from __future__ import annotations
 import json
 import os
 import re
+from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, cast
+from typing import ClassVar, cast, override
 
 from monori.ci.lib.github import GitHub, sync_label
-from monori.ci.quality_graph.base import ApprovalLifecycle
+from monori.ci.quality_graph.base import ApprovalLifecycle, QualityCheck
+from monori.ci.quality_graph.models import CheckContext, CheckResult, Verdict
 from monori.ci.quality_graph.reporting import (
     ReportFinding,
     ReportModel,
@@ -18,9 +20,6 @@ from monori.ci.quality_graph.reporting import (
     render_report,
 )
 from monori.common import JsonValue, array_value, number_value, object_value, string_value
-
-if TYPE_CHECKING:
-    from monori.ci.quality_graph.commands import QualityGraphCommand
 
 STATUS_LABEL = "monori-bundle-size-failed"
 STATE_RE = re.compile(r"<!-- monori-bundle-size-approvals: ([a-z0-9,-]*) -->")
@@ -31,28 +30,43 @@ APPROVALS = ApprovalLifecycle(
     STATE_RE,
     "<!-- monori-bundle-size-approvals: {ids} -->",
     PENDING_RE,
+    allow_file_commands=False,
+    finding_ids_include_prefix=True,
 )
+
+
+@dataclass(frozen=True)
+class BundleFinding:
+    """Represent one critical bundle-size metric as an approvable finding."""
+
+    finding_id: str
+    path: str = ""
+
+
+class BundleSizeCheck(QualityCheck[BundleFinding]):
+    """Collect bundle-size findings and use the shared approval lifecycle."""
+
+    gate = "bundle"
+    report_marker = "bundle-size"
+    approval_lifecycle = APPROVALS
+    pending_marker: ClassVar[str | None] = "monori-bundle-size-pending"
+
+    @override
+    def collect(self, context: CheckContext) -> CheckResult[BundleFinding]:
+        """Parse the bundle report and return critical metric findings."""
+        report = object_value(cast("JsonValue", json.loads(context.files["report"])), "report")
+        entries = array_value(report.get("entries"), "entries")
+        findings = tuple(
+            BundleFinding(string_value(object_value(entry, "entry").get("id"), "finding id"))
+            for entry in entries
+            if object_value(entry, "entry").get("tier") == "critical"
+        )
+        return CheckResult(findings, Verdict.FAIL if findings else Verdict.PASS)
 
 
 def json_number(value: JsonValue, context: str) -> int | float:
     """Return a numeric JSON bundle-size value."""
     return number_value(value, context)
-
-
-def apply_command(
-    command: QualityGraphCommand | None, ids: set[str], approved: set[str]
-) -> set[str]:
-    """Apply command."""
-    if command is None:
-        return approved
-    name = command.name
-    arguments = command.arguments
-    if name in {"help", "status", "ignore-file"}:
-        return approved
-    if name == "ignore" and "bundle" in arguments:
-        return approved | ids
-    selected = (ids if name == "ignore" and "bundle" in arguments else set(arguments)) & ids
-    return approved - selected if name == "remove-ignore" else approved | selected
 
 
 def append_commands(summary: str, entries: list[dict[str, JsonValue]], approved: set[str]) -> str:
@@ -134,6 +148,8 @@ def main() -> int:
     github = GitHub()
     report_path = Path(os.environ["REPORT_PATH"])
     report = object_value(cast("JsonValue", json.loads(report_path.read_text())), "report")
+    check = BundleSizeCheck()
+    result = check.collect(CheckContext({"report": report_path.read_text()}, {}))
     entries = [
         object_value(item, "entry") for item in array_value(report.get("entries"), "entries")
     ]
@@ -141,18 +157,9 @@ def main() -> int:
     pull = object_value(github.request("GET", f"/pulls/{number}"), "pull request")
     raw_body = pull.get("body")
     body = raw_body if isinstance(raw_body, str) else ""
-    ids = {
-        string_value(entry.get("id"), "finding id")
-        for entry in entries
-        if entry.get("tier") == "critical"
-    }
-    approved = APPROVALS.read(body) & ids
-    command = APPROVALS.pending_command(github, body)
-    approved = apply_command(command, ids, approved)
-    if command:
-        APPROVALS.consume_pending(github, body)
-        body = APPROVALS.without_pending(body)
-        APPROVALS.persist_approvals(github, number, body, approved)
+    synced = check.sync_pending_approvals(github, number, body, result.findings)
+    approved = synced.approved
+    ids = {finding.finding_id for finding in result.findings}
     failed = report.get("verdict") == "critical" and ids != approved
     report["approvedFindings"] = cast("JsonValue", sorted(approved))
     report["verdict"] = "critical" if failed else "none"
