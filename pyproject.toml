@@ -10,7 +10,7 @@ package = false
 
 [dependency-groups]
 format = ["ruff==0.15.22"]
-ci = ["monori-ci"]
+ci = ["monori-ci", "PyYAML>=6.0"]
 lint = ["monori-ci", "ruff==0.15.22"]
 test = [
   "monori-ci",

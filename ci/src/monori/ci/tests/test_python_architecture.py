@@ -186,6 +186,11 @@ def test_python_tooling_is_split_into_explicit_ci_profiles() -> None:
         "mutation",
         "runtime",
     } <= groups.keys()
+    ci_dependencies = array_value(groups.get("ci"), "ci dependency group")
+    assert any(
+        string_value(dependency, "ci dependency").startswith("PyYAML")
+        for dependency in ci_dependencies
+    )
 
     setup = (REPOSITORY_ROOT / ".github/actions/setup-project/action.yml").read_text()
     assert "python-profile:" in setup

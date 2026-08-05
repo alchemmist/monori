@@ -1269,6 +1269,7 @@ audit = [
 ]
 ci = [
     { name = "monori-ci" },
+    { name = "pyyaml" },
 ]
 format = [
     { name = "ruff" },
@@ -1319,7 +1320,10 @@ audit = [
     { name = "monori-ci", editable = "ci" },
     { name = "pip-audit", specifier = ">=2.10.1" },
 ]
-ci = [{ name = "monori-ci", editable = "ci" }]
+ci = [
+    { name = "monori-ci", editable = "ci" },
+    { name = "pyyaml", specifier = ">=6.0" },
+]
 format = [{ name = "ruff", specifier = "==0.15.22" }]
 lint = [
     { name = "monori-ci", editable = "ci" },
