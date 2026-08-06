@@ -4,6 +4,7 @@ set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 compose_file="$root/ci/docker-compose.integration.yml"
 project="monori-ci-tests"
+export FAKE_GITHUB_HOST_PORT="${FAKE_GITHUB_HOST_PORT:-18080}"
 read -r -a compose_command <<<"${COMPOSE:-docker compose}"
 
 cleanup() {
