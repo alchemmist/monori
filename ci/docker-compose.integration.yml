@@ -9,7 +9,7 @@ services:
             FAKE_GITHUB_HOST: 0.0.0.0
             FAKE_GITHUB_PORT: "8080"
         ports:
-            - "127.0.0.1:${FAKE_GITHUB_PORT:-18080}:8080"
+            - "127.0.0.1:${FAKE_GITHUB_HOST_PORT:-18080}:8080"
         healthcheck:
             test:
                 - CMD

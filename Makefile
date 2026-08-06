@@ -241,14 +241,15 @@ test: t-front t-back t-e2e
 t-fast:
 	cd web && npx vitest run --exclude "src/**/*.test.tsx"
 	uv run --locked --group test pytest -q server/tests -m "not integration"
+	$(MAKE) t-ci
 
 t-medium:
 	cd web && npx vitest run --exclude "src/**/*.test.ts"
 	uv run --locked --group test pytest -q server/tests -m integration
-	$(MAKE) t-ci
+	COMPOSE="$(COMPOSE)" bash scripts/ci-tests.sh
 
 t-ci:
-	COMPOSE="$(COMPOSE)" bash scripts/ci-tests.sh
+	uv run --locked --group test pytest -q ci/tests --ignore=ci/tests/integration
 
 t-slow: t-e2e
 
