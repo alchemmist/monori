@@ -475,6 +475,35 @@ def test_repository_client_helpers_converge_real_http_state() -> None:
         rerun_latest_pull_request_workflow(github, PULL_REQUEST_NUMBER)
 
 
+def test_repository_client_reads_all_comment_and_file_pages() -> None:
+    """Follow fake GitHub pagination with the production repository client."""
+    comments = [
+        {
+            "id": identifier,
+            "issue_number": PULL_REQUEST_NUMBER,
+            "body": f"comment-{identifier}",
+            "user": {"login": "contributor"},
+            "reactions": [],
+        }
+        for identifier in range(1, 102)
+    ]
+    files = [
+        {"filename": f"file-{identifier}.py", "status": "modified", "patch": ""}
+        for identifier in range(1, 102)
+    ]
+    reset_fake_github(
+        {
+            "comments": cast("JsonValue", comments),
+            "pull_files": {str(PULL_REQUEST_NUMBER): cast("JsonValue", files)},
+        }
+    )
+
+    github = GitHub()
+
+    assert len(github.paged(f"/issues/{PULL_REQUEST_NUMBER}/comments")) == 101
+    assert len(github.paged(f"/pulls/{PULL_REQUEST_NUMBER}/files")) == 101
+
+
 def test_repository_client_surfaces_transport_failure() -> None:
     """Convert a real connection failure into the reusable client error contract."""
     with environment({"GITHUB_API_URL": "http://127.0.0.1:1"}):
