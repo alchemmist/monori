@@ -12,13 +12,13 @@ echo "collecting frontend coverage..." >&2
 echo "collecting Python coverage..." >&2
 (cd "$root" && uv run --locked --group test coverage erase)
 (cd "$root" && uv run --locked --group test pytest -q server/tests \
-  --cov=monori.server --cov=monori.common \
+  --cov=server/app --cov=common \
   --cov-report="json:$be" --cov-report= --cov-fail-under=0 >/dev/null)
 (cd "$root" && uv run --locked --group test coverage erase)
 (cd "$root" && uv run --locked --group test pytest -q ci/tests \
-  --ignore=ci/tests/integration --cov=monori.ci --cov-report= --cov-fail-under=0 >/dev/null)
+  --ignore=ci/tests/integration --cov=ci --cov-report= --cov-fail-under=0 >/dev/null)
 (cd "$root" && COMPOSE="${COMPOSE:-docker compose}" bash scripts/ci-tests.sh \
-  --cov=monori.ci --cov-report="json:$ci" --cov-report= --cov-append >/dev/null)
+  --cov=ci --cov-report="json:$ci" --cov-report= --cov-append >/dev/null)
 (cd "$root" && uv run --locked --group test coverage report --include="ci/*" --fail-under=90)
 
 jq -rn --slurpfile fe "$fe" --slurpfile be "$be" --slurpfile ci "$ci" \
