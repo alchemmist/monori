@@ -1,6 +1,5 @@
 import contextlib
 import io
-import unittest
 
 from monori.ci.quality_graph.checks.object_annotations import (
     Finding,
@@ -14,7 +13,7 @@ from monori.ci.quality_graph.commands import parse_command
 from monori.ci.quality_graph.models import CheckContext, Verdict
 
 
-class ObjectAnnotationGateTest(unittest.TestCase):
+class TestObjectAnnotationGate:
     def test_check_class_collects_typed_result(self) -> None:
         result = ObjectAnnotationCheck().collect(
             CheckContext(
@@ -124,7 +123,3 @@ other: "list[object]"
         assert "| Findings | 1 |" in body
         assert "server/app/example.py:7" in body
         assert "/qg ignore object" in body
-
-
-if __name__ == "__main__":
-    unittest.main()

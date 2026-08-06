@@ -1,4 +1,3 @@
-import unittest
 from typing import TYPE_CHECKING, cast
 
 from monori.ci.quality_graph.commands import (
@@ -22,7 +21,7 @@ if TYPE_CHECKING:
     from monori.common import JsonValue
 
 
-class QualityGraphCommandTest(unittest.TestCase):
+class TestQualityGraphCommand:
     def test_full_name_and_alias_share_the_same_command(self) -> None:
         expected = QualityGraphCommand("ignore", ("object-abc123", "suppression-def456"))
 
@@ -160,7 +159,3 @@ class QualityGraphCommandTest(unittest.TestCase):
         )
 
         assert command_request(event) is None
-
-
-if __name__ == "__main__":
-    unittest.main()

@@ -18,7 +18,7 @@ runs:
         - name: Test annotation checker
           id: object-annotation-test
           shell: bash
-          run: uv run --locked python -m unittest discover -s ci/tests -p 'test_object_annotations.py'
+          run: uv run --locked pytest -q ci/tests/test_object_annotations.py
         - name: Check Python annotations
           shell: bash
           env:

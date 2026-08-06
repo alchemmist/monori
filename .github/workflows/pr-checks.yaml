@@ -44,7 +44,10 @@ jobs:
               with:
                   python-profile: ci
             - name: Validate PR workflow graph
-              run: uv run --locked python -m unittest monori.ci.tests.test_pr_workflow monori.ci.tests.test_main_workflow
+              run: >-
+                  uv run --locked pytest -q
+                  ci/tests/test_pr_workflow.py
+                  ci/tests/test_main_workflow.py
 
     fmt-check:
         name: Format check

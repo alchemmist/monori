@@ -1,7 +1,6 @@
 import json
 import sys
 import tempfile
-import unittest
 from pathlib import Path
 
 import pytest
@@ -43,7 +42,7 @@ def metric(
     return result
 
 
-class ClassificationTest(unittest.TestCase):
+class TestClassification:
     def test_duration_tiers_respect_absolute_and_relative_noise(self) -> None:
         config = metric()
 
@@ -95,7 +94,7 @@ class ClassificationTest(unittest.TestCase):
         assert classify(1700, 1800, config)[0] == "critical"
 
 
-class MeasurementTest(unittest.TestCase):
+class TestMeasurement:
     def test_median_requires_the_configured_number_of_runs(self) -> None:
         assert median([30, 10, 20], 3, "example") == 20
         with pytest.raises(RuntimeError, match="expected 3"):
@@ -132,7 +131,7 @@ class MeasurementTest(unittest.TestCase):
         assert measurements[("nav", "navigation")].value == 50
 
 
-class ReportTest(unittest.TestCase):
+class TestReport:
     def entry(self, tier: str, delta: float, percent: float) -> Entry:
         return Entry(
             route_id="budget",
@@ -238,7 +237,7 @@ class ReportTest(unittest.TestCase):
             compare_measurements({}, {("extra", "navigation"): extra}, {})
 
 
-class CommandTest(unittest.TestCase):
+class TestCommand:
     def test_error_command_writes_an_error_report(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             output = Path(temporary)
@@ -323,7 +322,3 @@ class CommandTest(unittest.TestCase):
                 assert main() == 0
             finally:
                 sys.argv = old_argv
-
-
-if __name__ == "__main__":
-    unittest.main()

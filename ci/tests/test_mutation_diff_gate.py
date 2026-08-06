@@ -1,7 +1,6 @@
 import json
 import os
 import tempfile
-import unittest
 from pathlib import Path
 
 import pytest
@@ -10,7 +9,7 @@ from dulwich.repo import Repo
 from monori.ci.lib import mutation_diff_gate as module
 
 
-class MutationDiffGateTest(unittest.TestCase):
+class TestMutationDiffGate:
     def test_parses_mutmut_function_names(self) -> None:
         assert module.mutant_function("app.foo.x_run__mutmut_1") == ("run", None)
         assert module.mutant_function("app.foo.ǁAccountǁx_save__mutmut_2") == (
@@ -184,7 +183,3 @@ diff --git a/server/app/example.py b/server/app/example.py
         assert module.commit_for_revision(repository, "HEAD").id
         with pytest.raises(RuntimeError, match="Cannot resolve git revision"):
             module.commit_for_revision(repository, "missing-revision")
-
-
-if __name__ == "__main__":
-    unittest.main()

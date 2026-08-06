@@ -1,5 +1,4 @@
 import re
-import unittest
 from pathlib import Path
 from typing import ClassVar, TypedDict, cast, override
 
@@ -29,13 +28,13 @@ class WorkflowDocument(TypedDict):
     jobs: dict[str, WorkflowJob]
 
 
-class PullRequestWorkflowGraphTest(unittest.TestCase):
+class TestPullRequestWorkflowGraph:
     source: ClassVar[str]
     workflow: ClassVar[WorkflowDocument]
 
     @override
     @classmethod
-    def setUpClass(cls) -> None:
+    def setup_class(cls) -> None:
         cls.source = WORKFLOW.read_text()
         cls.workflow = cast("WorkflowDocument", yaml.safe_load(cls.source))
 
@@ -99,7 +98,8 @@ class PullRequestWorkflowGraphTest(unittest.TestCase):
 
         def visit(job: str) -> None:
             if job in visiting:
-                self.fail(f"workflow graph contains a cycle at {job}")
+                message = f"workflow graph contains a cycle at {job}"
+                raise AssertionError(message)
             if job in visited:
                 return
             visiting.add(job)
@@ -153,7 +153,7 @@ class PullRequestWorkflowGraphTest(unittest.TestCase):
         source = ADMIN_COMMAND_ACTION.read_text()
 
         assert "Process Quality Graph command" in source
-        assert "python -m unittest" not in source
+        assert "unittest" not in source
 
     def test_jobs_request_only_their_python_dependency_profile(self) -> None:
         """Install job-specific Python tooling instead of the aggregate dev environment."""
@@ -222,7 +222,3 @@ class PullRequestWorkflowGraphTest(unittest.TestCase):
         assert "types: [created, edited]" in self.source
         assert "monori-qg-control:" in self.source
         assert "github.event.sender.type != 'Bot'" in self.source
-
-
-if __name__ == "__main__":
-    unittest.main()

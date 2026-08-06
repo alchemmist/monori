@@ -15,7 +15,7 @@ runs:
 
         - name: Test bundle tools
           shell: bash
-          run: uv run --locked python -m unittest monori.ci.tests.test_bundle_measurement
+          run: uv run --locked pytest -q ci/tests/test_bundle_measurement.py
         - name: Build pull request
           shell: bash
           run: npm run build

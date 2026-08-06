@@ -1,7 +1,6 @@
 import json
 import sys
 import tempfile
-import unittest
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
@@ -39,7 +38,7 @@ def arguments(values: list[str]) -> Iterator[None]:
         sys.argv = previous
 
 
-class BundleSizeTest(unittest.TestCase):
+class TestBundleSize:
     def test_hashes_are_removed_for_asset_comparison(self) -> None:
         assert normalized_asset("assets/index-AbCdEf12.js") == "assets/index.js"
 
@@ -126,7 +125,3 @@ class BundleSizeTest(unittest.TestCase):
             report = json.loads(output.read_text())
             assert report["prNumber"] == 7
             assert report["headSha"] == "head-sha"
-
-
-if __name__ == "__main__":
-    unittest.main()

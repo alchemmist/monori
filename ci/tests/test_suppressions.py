@@ -1,5 +1,3 @@
-import unittest
-
 from monori.ci.quality_graph.checks.suppressions import (
     SuppressionCheck,
     added_lines_from_patch,
@@ -12,7 +10,7 @@ from monori.ci.quality_graph.models import CheckContext, Verdict
 NOQA = "# " + "no" + "qa"
 
 
-class SuppressionGateTest(unittest.TestCase):
+class TestSuppressionGate:
     def test_check_class_collects_typed_result(self) -> None:
         result = SuppressionCheck().collect(
             CheckContext(
@@ -195,7 +193,3 @@ value = 2
         assert "[`example.py:1`](https://github.com/org/repo/pull/1/files#diff-" in body
         assert "<!-- monori-qg-control:" in body
         assert "<!-- monori-report:" not in body
-
-
-if __name__ == "__main__":
-    unittest.main()
