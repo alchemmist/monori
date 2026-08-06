@@ -26,6 +26,7 @@ class FakeGitHubState:
     rerun_requests: list[int] = field(default_factory=list)
     pull_files: dict[int, list[dict[str, JsonValue]]] = field(default_factory=dict)
     comparisons: dict[str, dict[str, JsonValue]] = field(default_factory=dict)
+    contents: dict[str, str] = field(default_factory=dict)
     failures: dict[tuple[str, str], int] = field(default_factory=dict)
     next_comment_id: int = 1
     next_reaction_id: int = 1
@@ -53,6 +54,11 @@ class FakeGitHubState:
             for reference, comparison in object_value(
                 payload.get("comparisons", {}), "comparisons"
             ).items()
+        }
+        self.contents = {
+            key: content
+            for key, value in object_value(payload.get("contents", {}), "contents").items()
+            if isinstance((content := value), str)
         }
         self.failures = self._failures(payload.get("failures"))
         self.rerun_requests = []
@@ -90,6 +96,7 @@ class FakeGitHubState:
                 str(number): cast("JsonValue", files) for number, files in self.pull_files.items()
             },
             "comparisons": cast("JsonValue", self.comparisons),
+            "contents": cast("JsonValue", self.contents),
         }
 
     def create_comment(self, number: int, body: str) -> dict[str, JsonValue]:

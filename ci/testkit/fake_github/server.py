@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import json
 import os
 import re
@@ -119,6 +120,7 @@ class FakeGitHubHandler(BaseHTTPRequestHandler):
             ("PATCH", re.compile(r"^/pulls/(?P<number>\d+)$"), self._patch_pull),
             ("GET", re.compile(r"^/pulls/(?P<number>\d+)/files$"), self._pull_files),
             ("GET", re.compile(r"^/compare/(?P<reference>.+)$"), self._comparison),
+            ("GET", re.compile(r"^/contents/(?P<path>.+)$"), self._contents),
             ("GET", re.compile(r"^/issues/(?P<number>\d+)/comments$"), self._issue_comments),
             ("POST", re.compile(r"^/issues/(?P<number>\d+)/comments$"), self._create_comment),
             ("GET", re.compile(r"^/issues/comments/(?P<identifier>\d+)$"), self._get_comment),
@@ -186,6 +188,15 @@ class FakeGitHubHandler(BaseHTTPRequestHandler):
         return (
             (HTTPStatus.OK, comparison) if comparison is not None else (HTTPStatus.NOT_FOUND, None)
         )
+
+    def _contents(self, request: RouteRequest) -> tuple[int, JsonValue]:
+        path = urllib.parse.unquote(request.match.group("path"))
+        ref = request.query.get("ref", [""])[0]
+        content = STATE.contents.get(f"{ref}:{path}")
+        if content is None:
+            return HTTPStatus.NOT_FOUND, None
+        encoded = base64.b64encode(content.encode()).decode()
+        return HTTPStatus.OK, {"content": encoded}
 
     def _issue_comments(self, request: RouteRequest) -> tuple[int, JsonValue]:
         number = int(request.match.group("number"))

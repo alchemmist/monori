@@ -165,25 +165,13 @@ jobs:
                   python-profile: test
             - run: make t-medium
 
-    test-ci-integration:
-        name: CI integration tests
-        needs: analyze
-        if: github.event_name == 'pull_request' && needs.analyze.result == 'success'
-        runs-on: ubuntu-latest
-        steps:
-            - uses: actions/checkout@v7
-              with:
-                  persist-credentials: false
-            - run: make t-ci-it
-
     test-slow:
         name: Slow tests
-        needs: [test-fast, test-medium, test-ci-integration]
+        needs: [test-fast, test-medium]
         if: >-
             github.event_name == 'pull_request'
             && needs.test-fast.result == 'success'
             && needs.test-medium.result == 'success'
-            && needs.test-ci-integration.result == 'success'
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@v7

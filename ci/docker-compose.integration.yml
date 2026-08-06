@@ -8,6 +8,8 @@ services:
         environment:
             FAKE_GITHUB_HOST: 0.0.0.0
             FAKE_GITHUB_PORT: "8080"
+        ports:
+            - "127.0.0.1:18080:8080"
         healthcheck:
             test:
                 - CMD
@@ -21,16 +23,3 @@ services:
             retries: 20
         stop_grace_period: 1s
         stop_signal: SIGINT
-
-    tests:
-        image: monori-ci-it:local
-        command: pytest -q ci/tests/integration
-        depends_on:
-            fake-github:
-                condition: service_healthy
-        environment:
-            GITHUB_ACTIONS_BOT_LOGIN: github-actions[bot]
-            GITHUB_API_URL: http://fake-github:8080
-            GITHUB_EVENT_PATH: /app/ci/tests/integration/issue_comment_event.json
-            GITHUB_REPOSITORY: alchemmist/monori
-            GITHUB_TOKEN: fake-token

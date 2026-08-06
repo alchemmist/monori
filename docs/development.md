@@ -96,8 +96,8 @@ dependencies (a real temp SQLite database, the real FastAPI app), not mocks.
 | --- | --- |
 | `make test` | The whole suite (`t-front` + `t-back` + `t-e2e`). |
 | `make t-fast` | CI fast lane: frontend logic/store tests (`.test.ts`) plus backend tests without the `integration` marker. |
-| `make t-medium` | CI medium lane: frontend component tests (`.test.tsx`) plus backend tests marked `integration`. |
-| `make t-ci-it` | Quality Graph integration tests against the stateful fake GitHub service over real HTTP. |
+| `make t-medium` | CI medium lane: frontend component tests, backend integration tests, and the complete CI test suite. |
+| `make t-ci` | CI unit and integration tests against the stateful fake GitHub service over real HTTP. |
 | `make t-slow` | CI slow lane: end-to-end Playwright tests against the real backend and production frontend stack. |
 | `make t-front` | Local frontend slice via Vitest. |
 | `make t-back` | Local backend slice with unit and integration tests. |

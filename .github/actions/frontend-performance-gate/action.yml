@@ -6,7 +6,7 @@ runs:
         - name: Setup Python dependencies
           uses: ./.github/actions/setup-project
           with:
-              python-profile: runtime
+              python-profile: ci
         - uses: ./.github/actions/report-in-progress
           with:
               marker: frontend-performance

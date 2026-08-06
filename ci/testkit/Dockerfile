@@ -8,6 +8,6 @@ COPY ci ./ci
 COPY server/pyproject.toml ./server/pyproject.toml
 
 RUN python -m pip install --no-cache-dir "uv==0.11.26" && \
-    uv sync --frozen --group ci-integration --no-dev
+    uv sync --frozen --group ci --no-dev
 
 ENV PATH="/app/.venv/bin:${PATH}"

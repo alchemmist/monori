@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import json
 import os
 import re
+import sys
+from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar, cast, override
 
@@ -13,11 +16,21 @@ import pytest
 from monori.ci.lib.github import GitHub, GitHubAPIError, rerun_latest_pull_request_workflow
 from monori.ci.quality_graph.base import ApprovalLifecycle, PullRequestSourceCheck
 from monori.ci.quality_graph.checks.bundle_size import BundleFinding, BundleSizeCheck
+from monori.ci.quality_graph.checks.bundle_size import main as bundle_size_main
+from monori.ci.quality_graph.checks.frontend_performance import (
+    main as frontend_performance_main,
+)
+from monori.ci.quality_graph.checks.object_annotations import main as object_annotations_main
+from monori.ci.quality_graph.checks.suppressions import main as suppressions_main
 from monori.ci.quality_graph.commands import CommandRequest, process_command
 from monori.ci.quality_graph.models import CheckContext, CheckResult, Verdict
+from monori.ci.quality_graph.reporting import main as reporting_main
 from monori.common import JsonValue, array_value, object_value, string_value
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
+    from pathlib import Path
+
     from monori.ci.lib.github import RepositoryGitHubAPI
 
 FAKE_GITHUB_URL = os.environ.get("GITHUB_API_URL", "http://fake-github.invalid")
@@ -151,6 +164,32 @@ def state_objects(state: dict[str, JsonValue], key: str) -> list[dict[str, JsonV
 def pull_request_event() -> dict[str, JsonValue]:
     """Build the pull-request event consumed by source checks."""
     return {"pull_request": {"number": PULL_REQUEST_NUMBER}}
+
+
+@contextmanager
+def environment(values: dict[str, str]) -> Iterator[None]:
+    """Temporarily set process environment values for a CLI scenario."""
+    previous = {key: os.environ.get(key) for key in values}
+    os.environ.update(values)
+    try:
+        yield
+    finally:
+        for key, value in previous.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+
+
+@contextmanager
+def arguments(values: list[str]) -> Iterator[None]:
+    """Temporarily replace command-line arguments for a CLI scenario."""
+    previous = sys.argv
+    sys.argv = values
+    try:
+        yield
+    finally:
+        sys.argv = previous
 
 
 def test_source_gate_converges_labels_and_updates_one_report_comment() -> None:
@@ -293,3 +332,189 @@ def test_client_surfaces_typed_server_errors(status_code: int) -> None:
         GitHub().request("GET", f"/pulls/{PULL_REQUEST_NUMBER}")
 
     assert error.value.status_code == status_code
+
+
+def test_bundle_and_performance_gates_publish_real_http_state(tmp_path: Path) -> None:
+    """Apply report gates through files and the real HTTP client."""
+    reset_fake_github()
+    bundle_report = tmp_path / "bundle.json"
+    bundle_summary = tmp_path / "bundle.md"
+    bundle_report.write_text(
+        json.dumps(
+            {
+                "prNumber": PULL_REQUEST_NUMBER,
+                "verdict": "critical",
+                "entries": [
+                    {
+                        "id": "bundle-initial-load",
+                        "label": "Initial load",
+                        "base": 1000,
+                        "current": 2000,
+                        "delta": 1000,
+                        "percent": 100.0,
+                        "tier": "critical",
+                    }
+                ],
+                "assetGrowth": [],
+            }
+        )
+    )
+    with environment({"REPORT_PATH": str(bundle_report), "SUMMARY_PATH": str(bundle_summary)}):
+        assert bundle_size_main() == 1
+    assert "Initial load" in bundle_summary.read_text()
+
+    performance_report = tmp_path / "performance.json"
+    performance_summary = tmp_path / "performance.md"
+    performance_report.write_text(
+        json.dumps(
+            {
+                "prNumber": PULL_REQUEST_NUMBER,
+                "verdict": "critical",
+                "entries": [
+                    {
+                        "route_id": "dashboard",
+                        "route_label": "Dashboard",
+                        "metric_id": "lcp",
+                        "metric_label": "LCP",
+                        "tier": "critical",
+                    }
+                ],
+            }
+        )
+    )
+    performance_summary.write_text("## Previous heading\n\nMeasured details.\n")
+    with environment(
+        {"REPORT_PATH": str(performance_report), "SUMMARY_PATH": str(performance_summary)}
+    ):
+        assert frontend_performance_main() == 1
+    assert "Dashboard · LCP" in performance_summary.read_text()
+    state = fake_state()
+    assert set(array_value(state["labels"], "labels")) == {
+        "monori-bundle-size-failed",
+        "monori-frontend-performance-failed",
+    }
+
+
+def test_reporting_cli_updates_one_comment_and_reaction(tmp_path: Path) -> None:
+    """Exercise report and reaction CLI operations over the fake service."""
+    command_comment: dict[str, JsonValue] = {
+        "id": COMMAND_COMMENT_ID,
+        "issue_number": PULL_REQUEST_NUMBER,
+        "body": "/qg status",
+        "user": {"login": "admin"},
+        "reactions": [],
+    }
+    reset_fake_github({"comments": cast("JsonValue", [command_comment])})
+    body = tmp_path / "body.md"
+    body.write_text("Measured details.\n")
+
+    with arguments(
+        [
+            "reporting",
+            "in-progress",
+            "--marker",
+            "bundle-size",
+            "--pr-number",
+            str(PULL_REQUEST_NUMBER),
+        ]
+    ):
+        assert reporting_main() == 0
+    with arguments(
+        [
+            "reporting",
+            "complete",
+            "--marker",
+            "bundle-size",
+            "--pr-number",
+            str(PULL_REQUEST_NUMBER),
+            "--status",
+            "done",
+            "--body-file",
+            str(body),
+        ]
+    ):
+        assert reporting_main() == 0
+    with arguments(
+        [
+            "reporting",
+            "react",
+            "--comment-id",
+            str(COMMAND_COMMENT_ID),
+            "--reaction",
+            "hooray",
+        ]
+    ):
+        assert reporting_main() == 0
+
+    state = fake_state()
+    comments = state_objects(state, "comments")
+    reports = [item for item in comments if "monori-report: bundle-size" in str(item.get("body"))]
+    assert len(reports) == 1
+    command = next(item for item in comments if item.get("id") == COMMAND_COMMENT_ID)
+    reactions = state_objects(command, "reactions")
+    assert [item.get("content") for item in reactions] == ["hooray"]
+
+
+def test_repository_client_helpers_converge_real_http_state() -> None:
+    """Exercise pagination, permissions, labels, missing data, and absent reruns."""
+    reset_fake_github()
+    github = GitHub()
+
+    assert github.paged(f"/issues/{PULL_REQUEST_NUMBER}/comments") == []
+    github.ensure_label("scenario-label")
+    github.ensure_label("scenario-label")
+    assert github.is_admin("admin")
+    assert not github.is_admin("unknown")
+    github.sync_label(PULL_REQUEST_NUMBER, "scenario-label", present=True)
+    github.sync_label(PULL_REQUEST_NUMBER, "scenario-label", present=False)
+    assert github.request("GET", "/pulls/999") is None
+    assert github.request("DELETE", f"/issues/{PULL_REQUEST_NUMBER}/labels/missing") is None
+
+    reset_fake_github({"workflow_runs": []})
+    with pytest.raises(RuntimeError, match=re.escape("No pr-checks.yaml run found")):
+        rerun_latest_pull_request_workflow(github, PULL_REQUEST_NUMBER)
+
+
+def test_repository_client_surfaces_transport_failure() -> None:
+    """Convert a real connection failure into the reusable client error contract."""
+    with environment({"GITHUB_API_URL": "http://127.0.0.1:1"}):
+        github = GitHub()
+        with pytest.raises(RuntimeError, match="GitHub API GET /pulls/7 failed"):
+            github.request("GET", f"/pulls/{PULL_REQUEST_NUMBER}")
+
+
+def test_concrete_source_gates_scan_repository_contents_over_http() -> None:
+    """Run both source gates against changed files served by the fake repository."""
+    object_source = "value: object\n"
+    suppression_source = "value = 1  # noqa\n"
+    reset_fake_github(
+        {
+            "pull_files": {
+                str(PULL_REQUEST_NUMBER): [
+                    {
+                        "filename": "example.py",
+                        "status": "modified",
+                        "patch": "@@ -0,0 +1 @@\n+value: object",
+                    },
+                    {
+                        "filename": "suppressed.py",
+                        "status": "modified",
+                        "patch": "@@ -0,0 +1 @@\n+value = 1  # noqa",
+                    },
+                ]
+            },
+            "contents": {
+                "head-sha:example.py": object_source,
+                "head-sha:suppressed.py": suppression_source,
+                "base-sha:example.py": "",
+                "base-sha:suppressed.py": "",
+            },
+        }
+    )
+
+    assert object_annotations_main() == 1
+    assert suppressions_main() == 1
+    state = fake_state()
+    labels = set(array_value(state["labels"], "labels"))
+    assert "monori-object-annotation-failed" in labels
+    assert "monori-suppression-failed" in labels
