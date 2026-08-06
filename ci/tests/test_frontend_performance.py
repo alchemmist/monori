@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-import unittest
-from typing import TYPE_CHECKING, override
+from typing import TYPE_CHECKING
 
 from monori.ci.quality_graph.checks.frontend_performance import (
     APPROVALS,
@@ -15,9 +14,8 @@ if TYPE_CHECKING:
     from monori.common import JsonValue
 
 
-class FrontendPerformanceGateTest(unittest.TestCase):
-    @override
-    def setUp(self) -> None:
+class TestFrontendPerformanceGate:
+    def setup_method(self) -> None:
         self.entries: list[dict[str, JsonValue]]
         self.entries = [
             {
@@ -56,7 +54,3 @@ class FrontendPerformanceGateTest(unittest.TestCase):
         findings = [FrontendPerformanceFinding("frontend-fea774364776")]
         assert APPROVALS.select_findings(all_command, findings) == {"frontend-fea774364776"}
         assert APPROVALS.select_findings(remove_command, findings) == {"frontend-fea774364776"}
-
-
-if __name__ == "__main__":
-    unittest.main()

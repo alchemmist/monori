@@ -64,7 +64,7 @@ finish() {
   code=$?
   cleanup
   if [ "$code" -ne 0 ] && [ ! -f "$PERF_OUTPUT_DIR/report.json" ]; then
-    "$PYTHON" scripts/frontend_perf.py error \
+    "$PYTHON" -m monori.ci.quality_graph.checks.frontend_measurement error \
       --output "$PERF_OUTPUT_DIR" \
       --message "The collector exited with status $code. See the workflow log for the failing step." \
       --pr-number "$PR_NUMBER" \
@@ -160,7 +160,7 @@ collect_revision base "$base_worktree" 8178
 collect_revision pr "$PWD" 8178
 
 set +e
-GITHUB_RUN_URL=${GITHUB_RUN_URL:-} "$PYTHON" scripts/frontend_perf.py compare \
+GITHUB_RUN_URL=${GITHUB_RUN_URL:-} "$PYTHON" -m monori.ci.quality_graph.checks.frontend_measurement compare \
   --base-dir "$PERF_OUTPUT_DIR/base" \
   --pr-dir "$PERF_OUTPUT_DIR/pr" \
   --config "$CONFIG" \

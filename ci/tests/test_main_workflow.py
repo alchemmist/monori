@@ -1,7 +1,6 @@
 import re
-import unittest
 from pathlib import Path
-from typing import ClassVar, cast, override
+from typing import ClassVar, cast
 
 import yaml
 
@@ -10,13 +9,12 @@ from monori.ci.tests.test_pr_workflow import WorkflowDocument
 WORKFLOW = Path.cwd() / ".github/workflows/main-checks.yaml"
 
 
-class MainWorkflowGraphTest(unittest.TestCase):
+class TestMainWorkflowGraph:
     source: ClassVar[str]
     workflow: ClassVar[WorkflowDocument]
 
-    @override
     @classmethod
-    def setUpClass(cls) -> None:
+    def setup_class(cls) -> None:
         cls.source = WORKFLOW.read_text()
         cls.workflow = cast("WorkflowDocument", yaml.safe_load(cls.source))
 
@@ -78,7 +76,3 @@ class MainWorkflowGraphTest(unittest.TestCase):
             )
             assert block is not None, job
             assert f"python-profile: {profile}" in block.group("body"), job
-
-
-if __name__ == "__main__":
-    unittest.main()

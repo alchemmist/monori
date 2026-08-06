@@ -1203,6 +1203,7 @@ audit = [
 ]
 ci = [
     { name = "monori-ci" },
+    { name = "pytest" },
     { name = "pyyaml" },
 ]
 format = [
@@ -1262,6 +1263,7 @@ audit = [
 ]
 ci = [
     { name = "monori-ci", editable = "ci" },
+    { name = "pytest", specifier = ">=8" },
     { name = "pyyaml", specifier = ">=6.0" },
 ]
 format = [

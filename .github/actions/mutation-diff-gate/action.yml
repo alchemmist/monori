@@ -33,7 +33,7 @@ runs:
         - name: Test diff mutation gate
           id: mutation-test
           shell: bash
-          run: env -u GITHUB_STEP_SUMMARY uv run --locked python -m unittest monori.ci.tests.test_mutation_diff_gate
+          run: env -u GITHUB_STEP_SUMMARY uv run --locked pytest -q ci/tests/test_mutation_diff_gate.py
         - name: Run frontend diff mutation tests
           id: mutation-front
           continue-on-error: true

@@ -6,7 +6,7 @@ runs:
         - name: Setup Python dependencies
           uses: ./.github/actions/setup-project
           with:
-              python-profile: runtime
+              python-profile: ci
         - uses: ./.github/actions/report-in-progress
           with:
               marker: frontend-performance
@@ -30,7 +30,10 @@ runs:
           working-directory: tools/frontend-perf
         - name: Test performance comparator
           shell: bash
-          run: uv run --locked python -m unittest monori.ci.tests.test_frontend_measurement monori.ci.tests.test_frontend_performance
+          run: >-
+              uv run --locked pytest -q
+              ci/tests/test_frontend_measurement.py
+              ci/tests/test_frontend_performance.py
         - name: Compare PR with merge base
           id: performance
           shell: bash

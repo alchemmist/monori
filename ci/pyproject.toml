@@ -26,9 +26,15 @@ packages = [
   "monori.ci.quality_graph",
   "monori.ci.quality_graph.checks",
   "monori.ci.quality_graph.templates",
+  "monori.ci.testkit",
+  "monori.ci.testkit.fake_github",
   "monori.ci.tests",
+  "monori.ci.tests.integration",
 ]
 
 [tool.setuptools.package-data]
 "monori.ci" = ["py.typed"]
 "monori.ci.quality_graph" = ["templates/*.j2"]
+
+[tool.pytest.ini_options]
+markers = ["integration: integration test that stands up real dependencies"]

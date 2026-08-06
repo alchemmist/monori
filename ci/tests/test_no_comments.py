@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 import tempfile
-import unittest
 from pathlib import Path
 
 from monori.ci.lib.no_comments import main, violations
 
 
-class NoCommentsTest(unittest.TestCase):
+class TestNoComments:
     def test_rejects_standalone_and_inline_comments(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "sample.py"
@@ -48,7 +47,3 @@ class NoCommentsTest(unittest.TestCase):
             (second / "invalid.py").write_text("value = 2  # prose\n", encoding="utf-8")
 
             assert main([str(first), str(second)]) == 1
-
-
-if __name__ == "__main__":
-    unittest.main()

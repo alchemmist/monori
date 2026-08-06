@@ -1,6 +1,7 @@
 import contextlib
 import io
-import unittest
+
+import pytest
 
 from monori.ci.quality_graph.checks.object_annotations import (
     Finding,
@@ -14,7 +15,7 @@ from monori.ci.quality_graph.commands import parse_command
 from monori.ci.quality_graph.models import CheckContext, Verdict
 
 
-class ObjectAnnotationGateTest(unittest.TestCase):
+class TestObjectAnnotationGate:
     def test_check_class_collects_typed_result(self) -> None:
         result = ObjectAnnotationCheck().collect(
             CheckContext(
@@ -112,6 +113,13 @@ other: "list[object]"
 
         assert added_lines_from_patch(patch) == {2}
 
+    def test_malformed_hunk_is_rejected(self) -> None:
+        with pytest.raises(RuntimeError, match="Cannot parse diff hunk"):
+            added_lines_from_patch("@@ malformed @@\n+value: object")
+
+    def test_invalid_forward_reference_is_ignored(self) -> None:
+        assert scan_file("example.py", 'value: "list["\n', {1}) == []
+
     def test_summary_includes_status_and_finding_links_without_admin_commands(
         self,
     ) -> None:
@@ -124,7 +132,3 @@ other: "list[object]"
         assert "| Findings | 1 |" in body
         assert "server/app/example.py:7" in body
         assert "/qg ignore object" in body
-
-
-if __name__ == "__main__":
-    unittest.main()

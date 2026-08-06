@@ -20,7 +20,7 @@ CLOC_EXCLUDE_DIRS := .git,.worktrees,.claude,node_modules,.venv,__pycache__,.pyt
         fmt fmt-check \
         lint lint-web lint-css lint-html lint-server lint-no-comments lint-sql lint-yaml lint-md lint-docs lint-actions lint-docker lint-shell spell \
         type type-front type-back analyze analyze-python-dead-code analyze-javascript-dead-code audit audit-deps audit-deps-py audit-secrets \
-        test t-fast t-medium t-ci t-slow t-slow-ui t-front t-back t-e2e t-e2e-ui coverage perf-front-diff mutation mutation-diff mutation-python m-front m-front-diff m-front-file m-back m-back-diff \
+        test t-fast t-medium t-ci t-ci-unit t-ci-integration t-slow t-slow-ui t-front t-back t-e2e t-e2e-ui coverage perf-front-diff mutation mutation-diff mutation-python m-front m-front-diff m-front-file m-back m-back-diff \
         schema-diagram check
 
 install:
@@ -140,7 +140,7 @@ fmt-ci:
 	@files=$$(git ls-files '*.sh'); [ -z "$$files" ] || shfmt -w $$files
 
 fmt-check:
-	$(WEBBIN)/prettier --check .
+	@files=$$(git ls-files '*.cjs' '*.css' '*.html' '*.json' '*.jsonc' '*.md' '*.mjs' '*.ts' '*.tsx' '*.yaml' '*.yml'); [ -z "$$files" ] || $(WEBBIN)/prettier --check $$files
 	uv run --locked --group format ruff check $(PYTHON_SOURCES)
 	uv run --locked --group format ruff format --check $(PYTHON_SOURCES)
 	$(SQLFLUFF) lint .
@@ -179,7 +179,7 @@ lint-actions:
 	actionlint
 
 lint-docker:
-	hadolint deploy/Dockerfile.front deploy/Dockerfile.back deploy/Dockerfile.sync deploy/Dockerfile.dev
+	hadolint deploy/Dockerfile.front deploy/Dockerfile.back deploy/Dockerfile.sync deploy/Dockerfile.dev ci/testkit/Dockerfile
 
 lint-shell:
 	@files=$$(git ls-files '*.sh'); [ -z "$$files" ] || shellcheck $$files
@@ -240,15 +240,23 @@ test: t-front t-back t-e2e
 
 t-fast:
 	cd web && npx vitest run --exclude "src/**/*.test.tsx"
-	$(MAKE) t-ci
 	uv run --locked --group test pytest -q server/tests -m "not integration"
+	$(MAKE) t-ci-unit
 
 t-medium:
 	cd web && npx vitest run --exclude "src/**/*.test.ts"
 	uv run --locked --group test pytest -q server/tests -m integration
+	$(MAKE) t-ci-integration
 
 t-ci:
-	uv run --locked --group test pytest -q ci/tests
+	$(MAKE) t-ci-unit
+	$(MAKE) t-ci-integration
+
+t-ci-unit:
+	uv run --locked --group test pytest -q ci/tests --ignore=ci/tests/integration
+
+t-ci-integration:
+	COMPOSE="$(COMPOSE)" bash scripts/ci-tests.sh
 
 t-slow: t-e2e
 
@@ -267,7 +275,7 @@ t-e2e-ui:
 	COMPOSE="$(COMPOSE)" bash scripts/e2e.sh --ui
 
 coverage:
-	bash scripts/coverage-tree.sh
+	COMPOSE="$(COMPOSE)" bash scripts/coverage-tree.sh
 
 perf-front-diff:
 	BASE="$(BASE)" COMPOSE="$(COMPOSE)" bash scripts/frontend-perf.sh

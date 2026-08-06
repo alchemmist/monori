@@ -1,7 +1,6 @@
 import json
 import sys
 import tempfile
-import unittest
 from pathlib import Path
 
 import pytest
@@ -12,10 +11,14 @@ from monori.ci.quality_graph.checks.frontend_measurement import (
     Measurement,
     classify,
     compare_measurements,
+    config_parts,
+    format_value,
     load_measurements,
+    load_navigation,
     main,
     median,
     render_report,
+    render_standards,
     worst_tier,
     write_error,
 )
@@ -43,7 +46,7 @@ def metric(
     return result
 
 
-class ClassificationTest(unittest.TestCase):
+class TestClassification:
     def test_duration_tiers_respect_absolute_and_relative_noise(self) -> None:
         config = metric()
 
@@ -95,7 +98,7 @@ class ClassificationTest(unittest.TestCase):
         assert classify(1700, 1800, config)[0] == "critical"
 
 
-class MeasurementTest(unittest.TestCase):
+class TestMeasurement:
     def test_median_requires_the_configured_number_of_runs(self) -> None:
         assert median([30, 10, 20], 3, "example") == 20
         with pytest.raises(RuntimeError, match="expected 3"):
@@ -131,8 +134,47 @@ class MeasurementTest(unittest.TestCase):
         assert measurements[("login", "largest-contentful-paint")].value == 200
         assert measurements[("nav", "navigation")].value == 50
 
+    @pytest.mark.parametrize("runs", [True, 0, "3"])
+    def test_config_rejects_invalid_run_counts(self, runs: JsonValue) -> None:
+        with pytest.raises(RuntimeError, match="positive integer"):
+            config_parts({"runs": runs, "lighthouseRoutes": [], "metrics": {}})
 
-class ReportTest(unittest.TestCase):
+    def test_loaders_reject_unknown_and_duplicate_scenarios(self, tmp_path: Path) -> None:
+        config: dict[str, JsonValue] = {
+            "runs": 1,
+            "lighthouseRoutes": [],
+            "navigationScenarios": [{"id": "nav", "label": "Navigation"}],
+            "metrics": {"navigation": metric()},
+        }
+        lighthouse = tmp_path / "lighthouse"
+        lighthouse.mkdir()
+        (lighthouse / "metadata.json").write_text("[]")
+        (lighthouse / "unknown.json").write_text(
+            json.dumps({"finalUrl": "http://localhost/unknown", "audits": {}})
+        )
+        with pytest.raises(RuntimeError, match="Unexpected Lighthouse route"):
+            load_measurements(tmp_path, config)
+
+        navigation = tmp_path / "navigation.json"
+        navigation.write_text(
+            json.dumps(
+                {
+                    "scenarios": [
+                        {"id": "nav", "label": "Navigation", "valuesMs": [1]},
+                        {"id": "nav", "label": "Navigation", "valuesMs": [1]},
+                    ]
+                }
+            )
+        )
+        with pytest.raises(RuntimeError, match="Duplicate navigation scenario"):
+            load_navigation(navigation, config)
+
+        navigation.write_text(json.dumps({"scenarios": []}))
+        with pytest.raises(RuntimeError, match="differ from config"):
+            load_navigation(navigation, config)
+
+
+class TestReport:
     def entry(self, tier: str, delta: float, percent: float) -> Entry:
         return Entry(
             route_id="budget",
@@ -232,13 +274,34 @@ class ReportTest(unittest.TestCase):
 
         assert body.startswith("## ❌ Frontend performance\n")
 
+    def test_score_format_and_info_report_are_rendered(self) -> None:
+        assert format_value(0.98765, "score") == "0.988"
+        body = render_report([self.entry("info", 100, 10)], "info", comment=False)
+        assert "A small regression exceeded" in body
+
+    def test_standards_render_ttfb_and_poor_band_policies(self) -> None:
+        ttfb: dict[str, JsonValue] = {
+            **metric(poor=1800),
+            "policy": "ttfb",
+            "criticalAbsolute": 300,
+        }
+        regular = metric(poor=4000)
+        config: dict[str, JsonValue] = {
+            "runs": 1,
+            "lighthouseRoutes": [],
+            "metrics": {"ttfb": ttfb, "lcp": regular},
+        }
+        body = "\n".join(render_standards(config))
+        assert "enters the poor band" in body
+        assert "crosses into the poor band" in body
+
     def test_comparison_rejects_different_measurement_sets(self) -> None:
         extra = Measurement("extra", "Extra", "navigation", "Navigation", "ms", 100)
         with pytest.raises(RuntimeError, match="differ from main"):
             compare_measurements({}, {("extra", "navigation"): extra}, {})
 
 
-class CommandTest(unittest.TestCase):
+class TestCommand:
     def test_error_command_writes_an_error_report(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             output = Path(temporary)
@@ -323,7 +386,3 @@ class CommandTest(unittest.TestCase):
                 assert main() == 0
             finally:
                 sys.argv = old_argv
-
-
-if __name__ == "__main__":
-    unittest.main()

@@ -23,7 +23,7 @@ def stacknode($name; $all):
         })) as $mods
   | {label: $name, c: ($recs | map(.c) | add), t: ($recs | map(.t) | add), children: $mods};
 
-($be[0].files
+(($be[0].files + $ci[0].files)
   | to_entries
   | map(select(.value.summary.num_statements > 0))
   | map((.key | sub("^monori/"; "")) as $path | {

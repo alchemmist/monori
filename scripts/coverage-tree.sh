@@ -10,10 +10,16 @@ echo "collecting frontend coverage..." >&2
 (cd "$root/web" && npx vitest run --coverage >/dev/null)
 
 echo "collecting Python coverage..." >&2
-(cd "$root" && uv run --locked --group test pytest -q server/tests ci/tests \
-  --cov=monori \
-  --cov-report="json:$be" --cov-report= >/dev/null)
+(cd "$root" && uv run --locked --group test coverage erase)
+(cd "$root" && uv run --locked --group test pytest -q server/tests \
+  --cov=server/app --cov=common \
+  --cov-report="json:$be" --cov-report= --cov-fail-under=0 >/dev/null)
+(cd "$root" && uv run --locked --group test coverage erase)
+(cd "$root" && uv run --locked --group test pytest -q ci/tests \
+  --ignore=ci/tests/integration --cov=ci --cov-report= --cov-fail-under=0 >/dev/null)
+(cd "$root" && COMPOSE="${COMPOSE:-docker compose}" bash scripts/ci-tests.sh \
+  --cov=ci --cov-report="json:$ci" --cov-report= --cov-append >/dev/null)
+(cd "$root" && uv run --locked --group test coverage report --include="ci/*" --fail-under=90)
 
-cp "$be" "$ci"
-
-jq -rn --slurpfile fe "$fe" --slurpfile be "$be" -f "$root/scripts/coverage-tree.jq"
+jq -rn --slurpfile fe "$fe" --slurpfile be "$be" --slurpfile ci "$ci" \
+  -f "$root/scripts/coverage-tree.jq"

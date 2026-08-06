@@ -1,4 +1,4 @@
-import unittest
+import pytest
 
 from monori.ci.quality_graph.checks.suppressions import (
     SuppressionCheck,
@@ -12,7 +12,7 @@ from monori.ci.quality_graph.models import CheckContext, Verdict
 NOQA = "# " + "no" + "qa"
 
 
-class SuppressionGateTest(unittest.TestCase):
+class TestSuppressionGate:
     def test_check_class_collects_typed_result(self) -> None:
         result = SuppressionCheck().collect(
             CheckContext(
@@ -173,6 +173,26 @@ value = 2
 
         assert added_lines_from_patch(patch) == {2}
 
+    def test_malformed_patch_and_toml_are_rejected(self) -> None:
+        with pytest.raises(RuntimeError, match="Cannot parse diff hunk"):
+            added_lines_from_patch("@@ malformed @@\n+value = 1")
+        with pytest.raises(RuntimeError, match="Cannot parse TOML file"):
+            scan_file("pyproject.toml", "[invalid\n", {1})
+
+    def test_nested_toml_changes_are_detected(self) -> None:
+        before = """\
+[tool.ruff.lint.per-file-ignores]
+"example.py" = { rules = ["E501"] }
+"""
+        after = """\
+[tool.ruff.lint.per-file-ignores]
+"example.py" = { rules = ["E501", "D100"] }
+"""
+
+        findings = scan_file("pyproject.toml", after, {2}, before)
+
+        assert len(findings) == 1
+
     def test_commands_are_shared_between_gates(self) -> None:
         assert parse_command("/qg ignore suppression-abc123") is not None
         assert parse_command("/qg ignore-file server/app.py") is not None
@@ -195,7 +215,3 @@ value = 2
         assert "[`example.py:1`](https://github.com/org/repo/pull/1/files#diff-" in body
         assert "<!-- monori-qg-control:" in body
         assert "<!-- monori-report:" not in body
-
-
-if __name__ == "__main__":
-    unittest.main()

@@ -17,7 +17,7 @@ members = ["common", "ci", "server"]
 
 [dependency-groups]
 format = ["monori-ci", "ruff==0.15.22"]
-ci = ["monori-ci", "PyYAML>=6.0"]
+ci = ["monori-ci", "PyYAML>=6.0", "pytest>=8"]
 lint = ["monori-ci", "ruff==0.15.22"]
 test = [
   "monori-ci",
@@ -58,6 +58,7 @@ markers = ["integration: integration test that stands up real dependencies"]
 
 [tool.coverage.run]
 source = ["common", "ci", "server"]
+omit = ["*/tests/*", "ci/testkit/*"]
 
 [tool.coverage.report]
 fail_under = 80

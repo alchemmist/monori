@@ -7,12 +7,6 @@ runs:
           uses: ./.github/actions/setup-project
           with:
               python-profile: ci
-        - name: Test Quality Graph command API
-          shell: bash
-          run: >-
-              uv run --locked python -m unittest
-              monori.ci.tests.test_commands
-              monori.ci.tests.test_quality_check_lifecycle
         - name: Process Quality Graph command
           shell: bash
           env:

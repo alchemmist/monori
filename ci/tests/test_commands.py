@@ -1,4 +1,3 @@
-import unittest
 from typing import TYPE_CHECKING, cast
 
 from monori.ci.quality_graph.commands import (
@@ -6,9 +5,12 @@ from monori.ci.quality_graph.commands import (
     command_request,
     command_targets_gate,
     command_text,
+    control_commands,
+    finding_gate,
     help_body,
     is_finding_id,
     parse_command,
+    pull_request_number,
     validate_command,
 )
 from monori.ci.quality_graph.reporting import (
@@ -22,7 +24,7 @@ if TYPE_CHECKING:
     from monori.common import JsonValue
 
 
-class QualityGraphCommandTest(unittest.TestCase):
+class TestQualityGraphCommand:
     def test_full_name_and_alias_share_the_same_command(self) -> None:
         expected = QualityGraphCommand("ignore", ("object-abc123", "suppression-def456"))
 
@@ -161,6 +163,61 @@ class QualityGraphCommandTest(unittest.TestCase):
 
         assert command_request(event) is None
 
+    def test_parser_rejects_arguments_for_read_only_commands(self) -> None:
+        assert parse_command("/qg help object") is None
+        assert parse_command("/qg status object") is None
+        assert parse_command("/qg ignore") is None
+        assert parse_command("/qg ignore object,,suppression") is None
 
-if __name__ == "__main__":
-    unittest.main()
+    def test_validation_handles_empty_and_malformed_targets(self) -> None:
+        assert validate_command(QualityGraphCommand("ignore")) == "At least one target is required"
+        assert (
+            validate_command(QualityGraphCommand("ignore-file", ()))
+            == "At least one file path is required"
+        )
+        assert finding_gate("object-") is None
+        assert finding_gate("missing-value") is None
+        assert not command_targets_gate(QualityGraphCommand("ignore", ("object-a",)), "missing")
+
+    def test_control_decoder_rejects_invalid_payloads(self) -> None:
+        assert control_commands("monori-qg-control:not-base64!") is None
+        assert control_commands("monori-qg-control:b25lLWxpbmU") is None
+
+    def test_event_parser_rejects_incomplete_and_ambiguous_edits(self) -> None:
+        assert command_request({}) is None
+        assert command_request({"comment": {"id": "invalid"}}) is None
+        assert pull_request_number({"issue": {"number": 42}}) is None
+        assert pull_request_number({"issue": {"number": "42", "pull_request": {}}}) is None
+
+        body = render_report(
+            ReportModel(
+                "suppression",
+                ReportStatus.FAIL,
+                admin=admin_commands(
+                    "suppression",
+                    ["suppression-first", "suppression-second"],
+                    [],
+                ),
+            )
+        )
+        unchanged = cast(
+            "dict[str, JsonValue]",
+            {
+                "action": "created",
+                "comment": {
+                    "id": 8,
+                    "body": body,
+                    "user": {"login": "github-actions[bot]"},
+                },
+                "changes": {"body": {"from": body}},
+                "issue": {"number": 42, "pull_request": {}},
+                "sender": {"login": "admin"},
+            },
+        )
+        assert command_request(unchanged) is None
+
+        changed_twice = body.replace("- [ ]", "- [x]")
+        unchanged["action"] = "edited"
+        comment = cast("dict[str, JsonValue]", unchanged["comment"])
+        comment["body"] = changed_twice
+        assert command_request(unchanged) is None

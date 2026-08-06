@@ -44,7 +44,10 @@ jobs:
               with:
                   python-profile: ci
             - name: Validate PR workflow graph
-              run: uv run --locked python -m unittest monori.ci.tests.test_pr_workflow monori.ci.tests.test_main_workflow
+              run: >-
+                  uv run --locked pytest -q
+                  ci/tests/test_pr_workflow.py
+                  ci/tests/test_main_workflow.py
 
     fmt-check:
         name: Format check
@@ -168,7 +171,10 @@ jobs:
     test-slow:
         name: Slow tests
         needs: [test-fast, test-medium]
-        if: github.event_name == 'pull_request' && needs.test-fast.result == 'success' && needs.test-medium.result == 'success'
+        if: >-
+            github.event_name == 'pull_request'
+            && needs.test-fast.result == 'success'
+            && needs.test-medium.result == 'success'
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@v7

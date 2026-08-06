@@ -1,7 +1,6 @@
 import re
-import unittest
 from pathlib import Path
-from typing import ClassVar, TypedDict, cast, override
+from typing import ClassVar, TypedDict, cast
 
 import yaml
 
@@ -10,6 +9,7 @@ WORKFLOW = REPOSITORY_ROOT / ".github/workflows/pr-checks.yaml"
 FRONTEND_PERFORMANCE_SCOPE = (
     REPOSITORY_ROOT / ".github/actions/frontend-performance-scope/action.yml"
 )
+ADMIN_COMMAND_ACTION = REPOSITORY_ROOT / ".github/actions/admin-command/action.yml"
 REPORTING_ACTIONS = (
     "bundle-size-gate",
     "frontend-performance-gate",
@@ -28,13 +28,12 @@ class WorkflowDocument(TypedDict):
     jobs: dict[str, WorkflowJob]
 
 
-class PullRequestWorkflowGraphTest(unittest.TestCase):
+class TestPullRequestWorkflowGraph:
     source: ClassVar[str]
     workflow: ClassVar[WorkflowDocument]
 
-    @override
     @classmethod
-    def setUpClass(cls) -> None:
+    def setup_class(cls) -> None:
         cls.source = WORKFLOW.read_text()
         cls.workflow = cast("WorkflowDocument", yaml.safe_load(cls.source))
 
@@ -98,7 +97,8 @@ class PullRequestWorkflowGraphTest(unittest.TestCase):
 
         def visit(job: str) -> None:
             if job in visiting:
-                self.fail(f"workflow graph contains a cycle at {job}")
+                message = f"workflow graph contains a cycle at {job}"
+                raise AssertionError(message)
             if job in visited:
                 return
             visiting.add(job)
@@ -146,6 +146,14 @@ class PullRequestWorkflowGraphTest(unittest.TestCase):
             )
             assert block is not None, job
             assert f"uses: ./.github/actions/{action}" in block.group("body"), job
+
+    def test_admin_command_action_does_not_run_tests_at_runtime(self) -> None:
+        """Keep command handling independent from the test dependency profile."""
+        source = ADMIN_COMMAND_ACTION.read_text()
+
+        assert "Process Quality Graph command" in source
+        assert "unittest" not in source
+        assert "pytest" not in source
 
     def test_jobs_request_only_their_python_dependency_profile(self) -> None:
         """Install job-specific Python tooling instead of the aggregate dev environment."""
@@ -214,7 +222,3 @@ class PullRequestWorkflowGraphTest(unittest.TestCase):
         assert "types: [created, edited]" in self.source
         assert "monori-qg-control:" in self.source
         assert "github.event.sender.type != 'Bot'" in self.source
-
-
-if __name__ == "__main__":
-    unittest.main()
