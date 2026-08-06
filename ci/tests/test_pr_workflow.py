@@ -10,6 +10,7 @@ WORKFLOW = REPOSITORY_ROOT / ".github/workflows/pr-checks.yaml"
 FRONTEND_PERFORMANCE_SCOPE = (
     REPOSITORY_ROOT / ".github/actions/frontend-performance-scope/action.yml"
 )
+ADMIN_COMMAND_ACTION = REPOSITORY_ROOT / ".github/actions/admin-command/action.yml"
 REPORTING_ACTIONS = (
     "bundle-size-gate",
     "frontend-performance-gate",
@@ -146,6 +147,13 @@ class PullRequestWorkflowGraphTest(unittest.TestCase):
             )
             assert block is not None, job
             assert f"uses: ./.github/actions/{action}" in block.group("body"), job
+
+    def test_admin_command_action_does_not_run_tests_before_acknowledgement(self) -> None:
+        """Keep command handling independent from the test dependency profile."""
+        source = ADMIN_COMMAND_ACTION.read_text()
+
+        assert "Process Quality Graph command" in source
+        assert "python -m unittest" not in source
 
     def test_jobs_request_only_their_python_dependency_profile(self) -> None:
         """Install job-specific Python tooling instead of the aggregate dev environment."""
