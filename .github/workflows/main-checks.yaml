@@ -205,15 +205,12 @@ jobs:
                   python-profile: audit
             - run: make audit
 
-    mutation-full:
-        name: Full mutation sweep
+    mutation-full-frontend:
+        name: Full frontend mutation sweep
         needs: audit
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
         runs-on: ubuntu-latest
         timeout-minutes: 180
-        permissions:
-            contents: read
-            issues: write
         steps:
             - name: Checkout
               uses: actions/checkout@v7
@@ -223,18 +220,69 @@ jobs:
             - uses: ./.github/actions/setup-project
               with:
                   install-web: true
+            - name: Restore Stryker incremental state
+              uses: actions/cache@v4
+              with:
+                  path: web/reports/stryker-incremental.json
+                  key: mutation-stryker-${{ runner.os }}-${{ hashFiles('web/package-lock.json') }}-main-${{ hashFiles('web/stryker.conf.ts') }}-${{ github.sha }}
+                  restore-keys: |
+                      mutation-stryker-${{ runner.os }}-${{ hashFiles('web/package-lock.json') }}-main-${{ hashFiles('web/stryker.conf.ts') }}-
+                      mutation-stryker-${{ runner.os }}-${{ hashFiles('web/package-lock.json') }}-main-
+            - name: Run full frontend mutation tests
+              run: make m-front
+
+    mutation-full-backend:
+        name: Full backend mutation sweep
+        needs: audit
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        runs-on: ubuntu-latest
+        timeout-minutes: 180
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v7
+              with:
+                  fetch-depth: 0
+                  persist-credentials: false
+            - uses: ./.github/actions/setup-project
+              with:
                   python-profile: mutation
-            - name: Run full mutation tests
-              run: make mutation
+            - name: Restore mutmut state
+              uses: actions/cache@v4
+              with:
+                  path: mutants
+                  key: mutation-mutmut-${{ runner.os }}-${{ hashFiles('uv.lock') }}-main-${{ hashFiles('pyproject.toml') }}-${{ github.sha }}
+                  restore-keys: |
+                      mutation-mutmut-${{ runner.os }}-${{ hashFiles('uv.lock') }}-main-${{ hashFiles('pyproject.toml') }}-
+                      mutation-mutmut-${{ runner.os }}-${{ hashFiles('uv.lock') }}-main-
+            - name: Run full backend mutation tests
+              run: make m-back
+
+    mutation-full-report:
+        name: Report nightly mutation failure
+        needs: [mutation-full-frontend, mutation-full-backend]
+        if: always() && github.event_name == 'schedule' && (needs.mutation-full-frontend.result == 'failure' || needs.mutation-full-backend.result == 'failure')
+        runs-on: ubuntu-latest
+        permissions:
+            issues: write
+        steps:
             - name: Report scheduled mutation failure
-              if: failure() && github.event_name == 'schedule'
               uses: actions/github-script@v9
+              env:
+                  FRONTEND_RESULT: ${{ needs.mutation-full-frontend.result }}
+                  BACKEND_RESULT: ${{ needs.mutation-full-backend.result }}
               with:
                   script: |
                       const title = "Nightly mutation sweep failed";
                       const { owner, repo } = context.repo;
                       const { data: openIssues } = await github.rest.issues.listForRepo({ owner, repo, state: "open" });
-                      const body = ["The scheduled full mutation sweep failed.", "", `Run: ${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`].join("\n");
+                      const body = [
+                          "The scheduled full mutation sweep failed.",
+                          "",
+                          `Frontend: ${process.env.FRONTEND_RESULT}`,
+                          `Backend: ${process.env.BACKEND_RESULT}`,
+                          "",
+                          `Run: ${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`,
+                      ].join("\n");
                       const existing = openIssues.find((issue) => issue.title === title);
                       if (existing) await github.rest.issues.createComment({ owner, repo, issue_number: existing.number, body });
                       else await github.rest.issues.create({ owner, repo, title, body });
