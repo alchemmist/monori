@@ -76,3 +76,14 @@ class TestMainWorkflowGraph:
             )
             assert block is not None, job
             assert f"python-profile: {profile}" in block.group("body"), job
+
+    def test_main_coverage_publishes_the_trusted_baseline(self) -> None:
+        block = re.search(
+            r"^    coverage:\n(?P<body>.*?)(?=^    \S|\Z)",
+            self.source,
+            re.MULTILINE | re.DOTALL,
+        )
+        assert block is not None
+        assert "run: make coverage-baseline" in block.group("body")
+        assert "uses: actions/cache/save@v4" in block.group("body")
+        assert "key: coverage-baseline-v1-${{ github.sha }}" in block.group("body")

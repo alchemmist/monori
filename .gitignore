@@ -20,6 +20,9 @@ dist/
 coverage.json
 htmlcov/
 coverage/
+coverage-baseline/
+coverage-report/
+coverage.xml
 .stryker-tmp/
 reports/
 .mutmut-cache
