@@ -1,9 +1,11 @@
+import contextlib
 import json
 import os
 import tempfile
 from pathlib import Path
 
 import pytest
+from dulwich import porcelain
 from dulwich.repo import Repo
 
 from monori.ci.lib import mutation_diff_gate as module
@@ -183,3 +185,80 @@ diff --git a/server/app/example.py b/server/app/example.py
         assert module.commit_for_revision(repository, "HEAD").id
         with pytest.raises(RuntimeError, match="Cannot resolve git revision"):
             module.commit_for_revision(repository, "missing-revision")
+
+    def test_reads_changed_lines_from_a_real_repository(self, tmp_path: Path) -> None:
+        repository = Repo.init(tmp_path)
+        source = tmp_path / "server/app/example.py"
+        source.parent.mkdir(parents=True)
+        source.write_text("def value():\n    return 1\n")
+        porcelain.add(repository, paths=["server/app/example.py"])
+        base = porcelain.commit(
+            repository,
+            message=b"base",
+            author=b"Test <test@example.com>",
+            committer=b"Test <test@example.com>",
+        )
+        source.write_text("def value():\n    return 2\n")
+        ignored = tmp_path / "docs/example.py"
+        ignored.parent.mkdir()
+        ignored.write_text("value = 2\n")
+        porcelain.add(repository, paths=["server/app/example.py", "docs/example.py"])
+        porcelain.commit(
+            repository,
+            message=b"head",
+            author=b"Test <test@example.com>",
+            committer=b"Test <test@example.com>",
+        )
+
+        with contextlib.chdir(tmp_path):
+            lines = module.changed_lines(base.decode())
+
+        assert lines == {"server/app/example.py": {1, 2}}
+
+    def test_gate_scores_real_git_diff_and_mutant_metadata(self, tmp_path: Path) -> None:
+        repository = Repo.init(tmp_path)
+        source = tmp_path / "server/app/example.py"
+        source.parent.mkdir(parents=True)
+        source.write_text("def value():\n    return 1\n")
+        porcelain.add(repository, paths=["server/app/example.py"])
+        base = porcelain.commit(
+            repository,
+            message=b"base",
+            author=b"Test <test@example.com>",
+            committer=b"Test <test@example.com>",
+        )
+        source.write_text("def value():\n    return 2\n")
+        porcelain.add(repository, paths=["server/app/example.py"])
+        porcelain.commit(
+            repository,
+            message=b"head",
+            author=b"Test <test@example.com>",
+            committer=b"Test <test@example.com>",
+        )
+        mutants = tmp_path / "mutants"
+        metadata = mutants / "app/example.py.meta"
+        metadata.parent.mkdir(parents=True)
+        metadata.write_text(json.dumps({"exit_code_by_key": {"app.example.x_value__mutmut_1": 1}}))
+        summary = tmp_path / "summary.md"
+        previous = os.environ.get("MUTATION_SUMMARY_PATH")
+        os.environ["MUTATION_SUMMARY_PATH"] = str(summary)
+        try:
+            with contextlib.chdir(tmp_path):
+                result = module.gate_python(
+                    module.GateRequest(
+                        mutants_dir=mutants,
+                        baseline_dir=tmp_path / "baseline",
+                        root=tmp_path,
+                        base=base.decode(),
+                        threshold=90,
+                        skip_new_survivors=False,
+                    )
+                )
+        finally:
+            if previous is None:
+                os.environ.pop("MUTATION_SUMMARY_PATH", None)
+            else:
+                os.environ["MUTATION_SUMMARY_PATH"] = previous
+
+        assert result == 0
+        assert "100.00%" in summary.read_text()

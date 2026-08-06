@@ -140,7 +140,7 @@ fmt-ci:
 	@files=$$(git ls-files '*.sh'); [ -z "$$files" ] || shfmt -w $$files
 
 fmt-check:
-	$(WEBBIN)/prettier --check .
+	@files=$$(git ls-files '*.cjs' '*.css' '*.html' '*.json' '*.jsonc' '*.md' '*.mjs' '*.ts' '*.tsx' '*.yaml' '*.yml'); [ -z "$$files" ] || $(WEBBIN)/prettier --check $$files
 	uv run --locked --group format ruff check $(PYTHON_SOURCES)
 	uv run --locked --group format ruff format --check $(PYTHON_SOURCES)
 	$(SQLFLUFF) lint .

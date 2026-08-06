@@ -1,6 +1,6 @@
 import re
 from pathlib import Path
-from typing import ClassVar, cast, override
+from typing import ClassVar, cast
 
 import yaml
 
@@ -13,7 +13,6 @@ class TestMainWorkflowGraph:
     source: ClassVar[str]
     workflow: ClassVar[WorkflowDocument]
 
-    @override
     @classmethod
     def setup_class(cls) -> None:
         cls.source = WORKFLOW.read_text()

@@ -470,7 +470,7 @@ def test_forged_pending_marker_is_not_applied() -> None:
     command = parse_command("/qg ignore bundle")
     assert command is not None
     encoded = encode_command(command)
-    report = {
+    report: dict[str, JsonValue] = {
         "id": BUNDLE_REPORT_COMMENT_ID,
         "issue_number": PULL_REQUEST_NUMBER,
         "body": "<!-- monori-report: bundle-size -->\n\nBundle report\n",
@@ -536,6 +536,51 @@ def test_non_admin_command_is_rejected_with_a_final_reaction() -> None:
     reactions = state_objects(command, "reactions")
     assert [reaction.get("content") for reaction in reactions] == ["confused"]
     assert state["rerun_requests"] == []
+
+
+def test_invalid_command_and_missing_report_fail_visibly() -> None:
+    """Publish command validation and dispatch failures through final reactions."""
+    comment = {
+        "id": COMMAND_COMMENT_ID,
+        "issue_number": PULL_REQUEST_NUMBER,
+        "body": "/qg ignore unknown-target",
+        "user": {"login": "admin"},
+        "reactions": [],
+    }
+    reset_fake_github({"comments": cast("JsonValue", [comment])})
+    process_command(
+        GitHub(),
+        CommandRequest(
+            COMMAND_COMMENT_ID,
+            "/qg ignore unknown-target",
+            "admin",
+            PULL_REQUEST_NUMBER,
+        ),
+    )
+    state = fake_state()
+    rejected = next(
+        item for item in state_objects(state, "comments") if item.get("id") == COMMAND_COMMENT_ID
+    )
+    assert [reaction.get("content") for reaction in state_objects(rejected, "reactions")] == ["x"]
+
+    comment["body"] = "/qg ignore bundle"
+    comment["reactions"] = []
+    reset_fake_github({"comments": cast("JsonValue", [comment])})
+    with pytest.raises(RuntimeError, match="without its managed report"):
+        process_command(
+            GitHub(),
+            CommandRequest(
+                COMMAND_COMMENT_ID,
+                "/qg ignore bundle",
+                "admin",
+                PULL_REQUEST_NUMBER,
+            ),
+        )
+    state = fake_state()
+    failed = next(
+        item for item in state_objects(state, "comments") if item.get("id") == COMMAND_COMMENT_ID
+    )
+    assert [reaction.get("content") for reaction in state_objects(failed, "reactions")] == ["x"]
 
 
 @pytest.mark.parametrize("status_code", [403, SERVICE_UNAVAILABLE])
@@ -691,7 +736,19 @@ def test_repository_client_helpers_converge_real_http_state() -> None:
     github.sync_label(PULL_REQUEST_NUMBER, "scenario-label", present=True)
     github.sync_label(PULL_REQUEST_NUMBER, "scenario-label", present=False)
     assert github.request("GET", "/pulls/999") is None
+    assert github.file_text("missing.py", "head-sha") is None
     assert github.request("DELETE", f"/issues/{PULL_REQUEST_NUMBER}/labels/missing") is None
+
+    permission_path = f"/repos/{REPOSITORY}/collaborators/blocked/permission"
+    reset_fake_github(
+        {
+            "failures": cast(
+                "JsonValue",
+                [{"method": "GET", "path": permission_path, "status": 403}],
+            )
+        }
+    )
+    assert not github.is_admin("blocked")
 
     reset_fake_github({"workflow_runs": []})
     with pytest.raises(RuntimeError, match=re.escape("No pr-checks.yaml run found")):
@@ -809,6 +866,21 @@ def test_source_gate_failure_replaces_pending_report() -> None:
     assert "In progress" not in body
 
 
+def test_missing_pull_request_replaces_pending_report() -> None:
+    """Publish a failed report when GitHub returns no pull request."""
+    reset_fake_github({"pulls": []})
+
+    with pytest.raises(RuntimeError, match="Pull request #7 was not found"):
+        ScenarioCheck([]).run_pull_request_gate(GitHub(), pull_request_event())
+
+    report = next(
+        comment
+        for comment in state_objects(fake_state(), "comments")
+        if "monori-report: object-annotations" in str(comment.get("body"))
+    )
+    assert "## ❌" in string_value(report.get("body"), "failed report")
+
+
 def test_repository_client_surfaces_transport_failure() -> None:
     """Convert a real connection failure into the reusable client error contract."""
     with environment({"GITHUB_API_URL": "http://127.0.0.1:1"}):
@@ -852,3 +924,58 @@ def test_concrete_source_gates_scan_repository_contents_over_http() -> None:
     labels = set(array_value(state["labels"], "labels"))
     assert "monori-object-annotation-failed" in labels
     assert "monori-suppression-failed" in labels
+
+
+def test_object_gate_handles_unpatched_renames_and_skips_irrelevant_files() -> None:
+    """Compare renamed Python files when GitHub omits their patch."""
+    reset_fake_github(
+        {
+            "pull_files": {
+                str(PULL_REQUEST_NUMBER): [
+                    {"filename": "removed.py", "status": "removed", "patch": ""},
+                    {"filename": "README.md", "status": "modified", "patch": ""},
+                    {
+                        "filename": "renamed.py",
+                        "previous_filename": "old.py",
+                        "status": "renamed",
+                    },
+                ]
+            },
+            "contents": {
+                "head-sha:renamed.py": "value: object\n",
+                "base-sha:old.py": "value: str\n",
+            },
+        }
+    )
+
+    assert object_annotations_main() == 1
+    report = next(
+        comment
+        for comment in state_objects(fake_state(), "comments")
+        if "monori-report: object-annotations" in str(comment.get("body"))
+    )
+    assert "renamed.py:1" in string_value(report.get("body"), "object report")
+
+
+def test_object_gate_reports_missing_comparison_as_infrastructure_failure() -> None:
+    """Fail the managed report when GitHub cannot provide a merge base."""
+    reset_fake_github(
+        {
+            "pull_files": {
+                str(PULL_REQUEST_NUMBER): [
+                    {"filename": "example.py", "status": "modified", "patch": ""}
+                ]
+            },
+            "comparisons": {},
+        }
+    )
+
+    with pytest.raises(RuntimeError, match="Cannot determine merge base"):
+        object_annotations_main()
+
+    report = next(
+        comment
+        for comment in state_objects(fake_state(), "comments")
+        if "monori-report: object-annotations" in str(comment.get("body"))
+    )
+    assert "## ❌" in string_value(report.get("body"), "object report")

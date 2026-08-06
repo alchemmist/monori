@@ -39,6 +39,14 @@ REPORT_LIFECYCLE = ApprovalLifecycle(
     finding_ids_include_prefix=True,
 )
 
+PENDING_LIFECYCLE = ApprovalLifecycle(
+    "example",
+    "example-",
+    re.compile(r"<!-- pending-approvals: ([a-z0-9,-]*) -->"),
+    "<!-- pending-approvals: {ids} -->",
+    re.compile(r"<!-- example-pending: (\d+)(?: ([A-Za-z0-9_-]+))? -->"),
+)
+
 
 def test_all_approval_gates_use_the_quality_check_contract() -> None:
     """Require every approvable gate to use the shared QualityCheck lifecycle."""
@@ -69,6 +77,43 @@ def test_check_metadata_rejects_a_command_surface_report_marker() -> None:
             def collect(self, context: CheckContext) -> CheckResult[Finding]:
                 findings = tuple(Finding(path, path) for path in context.files)
                 return CheckResult(findings, Verdict.PASS)
+
+
+def test_check_metadata_rejects_lifecycle_capability_mismatches() -> None:
+    """Reject gate, file-command, and pending-marker metadata mismatches."""
+    with pytest.raises(TypeError, match="gate does not match"):
+
+        class InvalidGate(QualityCheck[Finding]):
+            gate = "other"
+            report_marker = "bundle-size"
+            approval_lifecycle = LIFECYCLE
+
+            @override
+            def collect(self, context: CheckContext) -> CheckResult[Finding]:
+                return CheckResult((), Verdict.PASS)
+
+    with pytest.raises(TypeError, match="ignore-file metadata"):
+
+        class InvalidFileCapability(QualityCheck[Finding]):
+            gate = "example"
+            report_marker = "bundle-size"
+            approval_lifecycle = LIFECYCLE
+            supports_ignore_file = True
+
+            @override
+            def collect(self, context: CheckContext) -> CheckResult[Finding]:
+                return CheckResult((), Verdict.PASS)
+
+    with pytest.raises(TypeError, match="pending-marker metadata"):
+
+        class InvalidPendingCapability(QualityCheck[Finding]):
+            gate = "example"
+            report_marker = "bundle-size"
+            approval_lifecycle = PENDING_LIFECYCLE
+
+            @override
+            def collect(self, context: CheckContext) -> CheckResult[Finding]:
+                return CheckResult((), Verdict.PASS)
 
 
 def test_declarative_report_lifecycle_filters_ids_and_disables_file_commands() -> None:

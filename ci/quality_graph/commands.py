@@ -127,7 +127,11 @@ def validate_command(command: QualityGraphCommand) -> str | None:
     if command.name in {"help", "status"}:
         return None
     if command.name == "ignore-file":
-        return None if all(command.arguments) else "At least one file path is required"
+        return (
+            None
+            if command.arguments and all(command.arguments)
+            else "At least one file path is required"
+        )
     for argument in command.arguments:
         if argument in checks or finding_gate(argument) in checks:
             continue

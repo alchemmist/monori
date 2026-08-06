@@ -1,3 +1,5 @@
+import pytest
+
 from monori.ci.quality_graph.checks.suppressions import (
     SuppressionCheck,
     added_lines_from_patch,
@@ -170,6 +172,26 @@ value = 2
 """
 
         assert added_lines_from_patch(patch) == {2}
+
+    def test_malformed_patch_and_toml_are_rejected(self) -> None:
+        with pytest.raises(RuntimeError, match="Cannot parse diff hunk"):
+            added_lines_from_patch("@@ malformed @@\n+value = 1")
+        with pytest.raises(RuntimeError, match="Cannot parse TOML file"):
+            scan_file("pyproject.toml", "[invalid\n", {1})
+
+    def test_nested_toml_changes_are_detected(self) -> None:
+        before = """\
+[tool.ruff.lint.per-file-ignores]
+"example.py" = { rules = ["E501"] }
+"""
+        after = """\
+[tool.ruff.lint.per-file-ignores]
+"example.py" = { rules = ["E501", "D100"] }
+"""
+
+        findings = scan_file("pyproject.toml", after, {2}, before)
+
+        assert len(findings) == 1
 
     def test_commands_are_shared_between_gates(self) -> None:
         assert parse_command("/qg ignore suppression-abc123") is not None

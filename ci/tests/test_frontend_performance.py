@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, override
+from typing import TYPE_CHECKING
 
 from monori.ci.quality_graph.checks.frontend_performance import (
     APPROVALS,
@@ -15,7 +15,6 @@ if TYPE_CHECKING:
 
 
 class TestFrontendPerformanceGate:
-    @override
     def setup_method(self) -> None:
         self.entries: list[dict[str, JsonValue]]
         self.entries = [

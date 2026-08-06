@@ -1,6 +1,8 @@
 import contextlib
 import io
 
+import pytest
+
 from monori.ci.quality_graph.checks.object_annotations import (
     Finding,
     ObjectAnnotationCheck,
@@ -110,6 +112,13 @@ other: "list[object]"
 """
 
         assert added_lines_from_patch(patch) == {2}
+
+    def test_malformed_hunk_is_rejected(self) -> None:
+        with pytest.raises(RuntimeError, match="Cannot parse diff hunk"):
+            added_lines_from_patch("@@ malformed @@\n+value: object")
+
+    def test_invalid_forward_reference_is_ignored(self) -> None:
+        assert scan_file("example.py", 'value: "list["\n', {1}) == []
 
     def test_summary_includes_status_and_finding_links_without_admin_commands(
         self,
