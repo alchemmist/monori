@@ -17,7 +17,7 @@ COMPONENT_ROOTS = {
 
 def python_modules(root: Path) -> list[Path]:
     """Return all Python modules below a package directory."""
-    excluded = {".venv", "build"}
+    excluded = {".venv", "build", "mutants"}
     return sorted(
         path
         for path in root.rglob("*.py")

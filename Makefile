@@ -186,7 +186,7 @@ lint-shell:
 	@files=$$(git ls-files '*.sh'); [ -z "$$files" ] || shfmt -d $$files
 
 spell:
-	uvx codespell web/src $(PYTHON_SOURCES) \
+	uvx codespell --skip='*/mutants/*' web/src $(PYTHON_SOURCES) \
 		README.md web/README.md docs Makefile .github
 
 type: type-back type-front

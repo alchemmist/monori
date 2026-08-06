@@ -58,7 +58,7 @@ markers = ["integration: integration test that stands up real dependencies"]
 
 [tool.coverage.run]
 source = ["common", "ci", "server"]
-omit = ["*/tests/*", "ci/testkit/*"]
+omit = ["*/tests/*", "ci/testkit/*", "**/mutants/**"]
 
 [tool.coverage.report]
 fail_under = 80
@@ -67,7 +67,7 @@ fail_under = 80
 target-version = "py312"
 line-length = 100
 src = ["common", "ci", "server"]
-exclude = ["web/prototypes"]
+exclude = ["web/prototypes", "**/mutants/**"]
 force-exclude = true
 
 [tool.ruff.lint]
@@ -112,12 +112,12 @@ enable_error_code = [
 ]
 
 [tool.bandit]
-exclude_dirs = ["server/tests", "ci/tests", "**/.venv/**", "**/build/**"]
+exclude_dirs = ["server/tests", "ci/tests", "**/.venv/**", "**/build/**", "**/mutants/**"]
 skips = ["B105"]
 
 [tool.vulture]
 paths = ["common", "ci", "server"]
-exclude = ["*/.venv/*", "*/build/*"]
+exclude = ["*/.venv/*", "*/build/*", "*/mutants/*"]
 min_confidence = 80
 ignore_names = ["referer", "predicate", "user_data_dir", "user_agent", "accept_downloads"]
 
