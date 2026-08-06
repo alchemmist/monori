@@ -105,7 +105,7 @@ dependencies (a real temp SQLite database, the real FastAPI app), not mocks.
 | `make t-back` | Local backend slice with unit and integration tests. |
 | `make t-e2e` | Local end-to-end slice against the real backend and production frontend stack. |
 | `make coverage` | Coverage as a tree (root → back/front → module → file), via `scripts/coverage-tree.sh`. Fails below **90% statements and lines** in `web/src`. |
-| `make mutation` | Full mutation sweep: Stryker on `web/src`, mutmut on `server/app`. Runs nightly at 05:00 Moscow time and on manual dispatch. |
+| `make mutation` | Full local mutation sweep: Stryker on `web/src`, then mutmut on `server/app`. CI runs the two cached halves in parallel nightly at 05:00 Moscow time and on manual dispatch. |
 | `make mutation-diff` | Diff-scoped gate for changed frontend lines and backend functions. Needs full git history. Example: `BASE=origin/main`, threshold 90%. |
 
 ### The pre-commit hook
