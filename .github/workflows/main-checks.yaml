@@ -148,7 +148,7 @@ jobs:
                   install-web: true
                   python-profile: test
             - name: Restore Playwright browser cache
-              uses: actions/cache@v4
+              uses: actions/cache@v6
               with:
                   path: ~/.cache/ms-playwright
                   key: playwright-${{ runner.os }}-${{ hashFiles('web/package-lock.json') }}
