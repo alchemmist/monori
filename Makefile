@@ -21,6 +21,7 @@ CLOC_EXCLUDE_DIRS := .git,.worktrees,.claude,node_modules,.venv,__pycache__,.pyt
         lint lint-web lint-css lint-html lint-server lint-no-comments lint-sql lint-yaml lint-md lint-docs lint-actions lint-docker lint-shell spell \
         type type-front type-back analyze analyze-python-dead-code analyze-javascript-dead-code audit audit-deps audit-deps-py audit-secrets \
         test t-fast t-medium t-ci t-ci-unit t-ci-integration t-slow t-slow-ui t-front t-back t-e2e t-e2e-ui coverage perf-front-diff mutation mutation-diff mutation-python m-front m-front-diff m-front-file m-back m-back-diff \
+        load load-api load-api-auth load-api-read load-api-write load-api-import load-e2e load-fe load-sqlite load-report \
         schema-diagram check
 
 install:
@@ -279,6 +280,43 @@ coverage:
 
 perf-front-diff:
 	BASE="$(BASE)" COMPOSE="$(COMPOSE)" bash scripts/frontend-perf.sh
+
+load:
+	@set +e; \
+	$(MAKE) load-api; api=$$?; \
+	$(MAKE) load-e2e; e2e=$$?; \
+	$(MAKE) load-fe; frontend=$$?; \
+	exit $$((api || e2e || frontend))
+
+load-api:
+	COMPOSE="$(COMPOSE)" bash scripts/load.sh api
+
+load-api-auth:
+	COMPOSE="$(COMPOSE)" bash scripts/load.sh auth
+
+load-api-read:
+	COMPOSE="$(COMPOSE)" bash scripts/load.sh read
+
+load-api-write:
+	COMPOSE="$(COMPOSE)" bash scripts/load.sh write
+
+load-api-import:
+	COMPOSE="$(COMPOSE)" bash scripts/load.sh import
+
+load-e2e:
+	COMPOSE="$(COMPOSE)" bash scripts/load.sh e2e
+
+load-fe:
+	COMPOSE="$(COMPOSE)" bash scripts/load-frontend.sh
+
+load-sqlite:
+	@set +e; \
+	MONORI_SQLITE_JOURNAL_MODE=DELETE COMPOSE="$(COMPOSE)" bash scripts/load.sh write; delete=$$?; \
+	MONORI_SQLITE_JOURNAL_MODE=WAL COMPOSE="$(COMPOSE)" bash scripts/load.sh write; wal=$$?; \
+	exit $$((delete || wal))
+
+load-report:
+	python3 performance/report.py --input reports/perf --output reports/perf/summary.md
 
 m-front:
 	@set +e; \
