@@ -185,6 +185,12 @@ jobs:
                   install-web: true
                   python-profile: coverage
             - run: make coverage
+            - run: make coverage-baseline
+            - name: Save coverage baseline
+              uses: actions/cache/save@v5
+              with:
+                  path: coverage-baseline
+                  key: coverage-baseline-v1-${{ github.sha }}
 
     audit:
         name: Dependency and security audit

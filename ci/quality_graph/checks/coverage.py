@@ -3,7 +3,7 @@
 from monori.ci.quality_graph.registry import WORKFLOW_JOB_BY_ID
 from monori.ci.quality_graph.run_job import MakeCheck
 
-CHECK = MakeCheck(WORKFLOW_JOB_BY_ID["coverage"], "coverage")
+CHECK = MakeCheck(WORKFLOW_JOB_BY_ID["coverage"], "coverage-diff")
 
 
 def main() -> int:

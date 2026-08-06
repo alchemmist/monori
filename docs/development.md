@@ -105,8 +105,15 @@ dependencies (a real temp SQLite database, the real FastAPI app), not mocks.
 | `make t-back` | Local backend slice with unit and integration tests. |
 | `make t-e2e` | Local end-to-end slice against the real backend and production frontend stack. |
 | `make coverage` | Coverage as a tree (root → back/front → module → file), via `scripts/coverage-tree.sh`. Fails below **90% statements and lines** in `web/src`. |
+| `make coverage-diff BASE=origin/main` | Runs coverage plus a 100% changed-line gate for backend and frontend, comparing total coverage with `coverage-baseline/baseline.json` when available. |
 | `make mutation` | Full local mutation sweep: Stryker on `web/src`, then mutmut on `server/app`. CI runs the two cached halves in parallel nightly at 05:00 Moscow time and on manual dispatch. |
 | `make mutation-diff` | Diff-scoped gate for changed frontend lines and backend functions. Needs full git history. Example: `BASE=origin/main`, threshold 90%. |
+
+Pull-request coverage runs without write permissions and uploads a validated JSON artifact.
+The trusted `Coverage report` workflow runs from `main` after CI, updates one bot comment,
+and publishes the `coverage / patch` commit status. Main-branch coverage saves the baseline in
+the Actions cache. A cache miss rebuilds the baseline from the exact base SHA; pull-request
+coverage fails closed if that baseline cannot be produced or validated.
 
 ### The pre-commit hook
 

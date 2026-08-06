@@ -25,6 +25,8 @@ FRONTEND_PERFORMANCE_SCOPE = (
 )
 ADMIN_COMMAND_ACTION = REPOSITORY_ROOT / ".github/actions/admin-command/action.yml"
 MUTATION_ACTION = REPOSITORY_ROOT / ".github/actions/mutation-diff-gate/action.yml"
+COVERAGE_REPORT_WORKFLOW = REPOSITORY_ROOT / ".github/workflows/coverage-report.yaml"
+COVERAGE_CHECK = REPOSITORY_ROOT / "ci/quality_graph/checks/coverage.py"
 TEST_RUNNERS = (
     REPOSITORY_ROOT / "Makefile",
     REPOSITORY_ROOT / "scripts/ci-tests.sh",
@@ -490,6 +492,48 @@ class TestPullRequestWorkflowGraph:
         )
         assert "actions/cache@v4" not in action_sources
         assert "actions/cache@v5" in action_sources
+
+    def test_coverage_uses_an_unprivileged_artifact_handoff(self) -> None:
+        block = re.search(
+            r"^    coverage:\n(?P<body>.*?)(?=^    \S|\Z)",
+            self.source,
+            re.MULTILINE | re.DOTALL,
+        )
+        assert block is not None
+        body = block.group("body")
+        assert "uses: actions/cache/restore@v5" in body
+        assert "restore-keys:" not in body
+        assert "if: steps.coverage-baseline.outputs.cache-hit != 'true'" in body
+        assert 'git switch --detach "$BASE_SHA"' in body
+        assert 'git switch --detach "$HEAD_SHA"' in body
+        assert "make coverage-baseline" in body
+        assert "uses: ./.github/actions/quality-job" in body
+        assert "check-id: coverage" in body
+        assert "BASE: origin/main" in body
+        assert "PR_NUMBER: ${{ github.event.pull_request.number }}" in body
+        assert "HEAD_SHA: ${{ github.event.pull_request.head.sha }}" in body
+        assert 'MakeCheck(WORKFLOW_JOB_BY_ID["coverage"], "coverage-diff")' in (
+            COVERAGE_CHECK.read_text()
+        )
+        assert "uses: actions/upload-artifact@v7" in body
+        assert "issues: write" not in body
+        assert "statuses: write" not in body
+
+    def test_privileged_coverage_reporter_never_checks_out_pull_request_code(self) -> None:
+        source = COVERAGE_REPORT_WORKFLOW.read_text()
+
+        assert "workflow_run:" in source
+        assert "workflows: [Quality Graph]" in source
+        assert (
+            "group: coverage-report-${{ github.event.workflow_run.pull_requests[0].number" in source
+        )
+        assert "ref: main" in source
+        assert "uses: actions/download-artifact@v8" in source
+        assert "run-id: ${{ github.event.workflow_run.id }}" in source
+        assert '--pr-number "$PR_NUMBER"' in source
+        assert "ref: ${{ github.event.workflow_run.head_sha }}" not in source
+        assert "issues: write" in source
+        assert "statuses: write" in source
 
     def test_code_and_api_gate_events_are_separated(self) -> None:
         assert "github.event_name == 'pull_request'" in self.source

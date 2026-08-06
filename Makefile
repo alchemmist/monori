@@ -10,7 +10,7 @@ MONORI_TOOLS_BIN ?= $(HOME)/.local/bin
 
 WEBBIN := web/node_modules/.bin
 PYTHON_SOURCES := $(shell python3 -c 'import tomllib; from pathlib import Path; print(*tomllib.loads(Path("pyproject.toml").read_text())["tool"]["uv"]["workspace"]["members"])')
-CLOC_EXCLUDE_DIRS := .git,.worktrees,.claude,node_modules,.venv,__pycache__,.pytest_cache,.mypy_cache,.ruff_cache,dist,static,data,reports,coverage,htmlcov,.stryker-tmp,.mutmut-cache,mutants,playwright-report,test-results
+CLOC_EXCLUDE_DIRS := .git,.worktrees,.claude,node_modules,.venv,__pycache__,.pytest_cache,.mypy_cache,.ruff_cache,dist,static,data,reports,coverage,coverage-baseline,coverage-report,htmlcov,.stryker-tmp,.mutmut-cache,mutants,playwright-report,test-results
 
 .DEFAULT_GOAL := up
 
@@ -20,7 +20,7 @@ CLOC_EXCLUDE_DIRS := .git,.worktrees,.claude,node_modules,.venv,__pycache__,.pyt
         fmt fmt-check \
         lint lint-web lint-css lint-html lint-server lint-no-comments lint-sql lint-yaml lint-md lint-docs lint-actions lint-docker lint-shell spell \
         type type-front type-back analyze analyze-python-dead-code analyze-javascript-dead-code audit audit-deps audit-deps-py audit-secrets \
-        test t-workflow t-fast t-medium t-ci t-ci-unit t-ci-integration t-slow t-slow-ui t-front t-back t-e2e t-e2e-ui coverage perf-front-diff mutation mutation-diff mutation-python m-front m-front-diff m-front-file m-back m-back-diff \
+        test t-workflow t-fast t-medium t-ci t-ci-unit t-ci-integration t-slow t-slow-ui t-front t-back t-e2e t-e2e-ui coverage coverage-baseline coverage-diff perf-front-diff mutation mutation-diff mutation-python m-front m-front-diff m-front-file m-back m-back-diff \
         load load-api load-api-auth load-api-read load-api-write load-api-import load-e2e load-fe load-sqlite load-report \
         schema-diagram check
 
@@ -100,7 +100,7 @@ clean:
 		esac; \
 	}; \
 	for path in \
-		.coverage coverage.json htmlcov coverage \
+		.coverage coverage.json server/coverage.xml htmlcov coverage coverage-baseline coverage-report \
 		.stryker-tmp reports .mutmut-cache mutants \
 		common/build common/monori_common.egg-info \
 		ci/build ci/monori_ci.egg-info \
@@ -283,6 +283,36 @@ t-e2e-ui:
 
 coverage:
 	COMPOSE="$(COMPOSE)" bash scripts/coverage-tree.sh
+
+coverage-baseline:
+	uv run --locked --group test python -m monori.ci.lib.coverage_diff baseline \
+		--frontend web/coverage/coverage-summary.json \
+		--backend server/coverage.json \
+		--output coverage-baseline/baseline.json
+
+coverage-diff:
+	@set +e; \
+	$(MAKE) coverage; coverage=$$?; \
+	mkdir -p coverage-report; \
+	uv run --locked --group test python -m monori.ci.lib.coverage_diff normalize-lcov \
+		--input web/coverage/lcov.info --output coverage-report/frontend.lcov; normalize=$$?; \
+	uv run --locked --group test diff-cover server/coverage.xml \
+		--compare-branch "$(BASE)" --include 'server/app/**' 'common/**' \
+		--format json:coverage-report/backend-diff.json --fail-under=100 \
+		--total-percent-float --quiet; back=$$?; \
+	uv run --locked --group test diff-cover coverage-report/frontend.lcov \
+		--compare-branch "$(BASE)" --include 'web/src/**' \
+		--format json:coverage-report/frontend-diff.json --fail-under=100 \
+		--total-percent-float --quiet; front=$$?; \
+	uv run --locked --group test python -m monori.ci.lib.coverage_diff report \
+		--frontend web/coverage/coverage-summary.json --backend server/coverage.json \
+		--frontend-diff coverage-report/frontend-diff.json \
+		--backend-diff coverage-report/backend-diff.json \
+		--baseline coverage-baseline/baseline.json --base "$(BASE)" \
+		--pr-number "$${PR_NUMBER:-1}" --head-sha "$${HEAD_SHA:-$$(git rev-parse HEAD)}" \
+		--coverage-exit $$coverage --output coverage-report/report.json; report=$$?; \
+	echo "── coverage gates: suite=$$coverage normalize=$$normalize backend=$$back frontend=$$front report=$$report ──"; \
+	if [ $$coverage -ne 0 ] || [ $$normalize -ne 0 ] || [ $$back -ne 0 ] || [ $$front -ne 0 ] || [ $$report -ne 0 ]; then exit 1; fi
 
 perf-front-diff:
 	BASE="$(BASE)" COMPOSE="$(COMPOSE)" bash scripts/frontend-perf.sh
