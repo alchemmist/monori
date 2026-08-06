@@ -19,6 +19,7 @@ from dulwich.repo import Repo
 KILLED = {1, 3}
 SURVIVED = 0
 OTHER_STATUSES = {-24, 24, 35, 36, 152, 255}
+MAX_MUTATION_ANNOTATIONS = 10
 CLASS_SEPARATOR = "ǁ"
 MUTANT_SOURCE_PATHS = {
     "app/": "server/app/",
@@ -141,6 +142,34 @@ class ChangedFunctions(ast.NodeVisitor):
         self._visit_function(node)
 
 
+class FunctionLocations(ast.NodeVisitor):
+    """Index function and method definitions by their mutation identity."""
+
+    def __init__(self) -> None:
+        """Initialize an empty source-location index."""
+        self.classes: list[str] = []
+        self.lines: dict[tuple[str, str | None], int] = {}
+
+    @override
+    def visit_ClassDef(self, node: ast.ClassDef) -> None:
+        self.classes.append(node.name)
+        self.generic_visit(node)
+        self.classes.pop()
+
+    def _visit_function(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
+        identity = (node.name, self.classes[-1] if self.classes else None)
+        self.lines[identity] = node.lineno
+        self.generic_visit(node)
+
+    @override
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+        self._visit_function(node)
+
+    @override
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+        self._visit_function(node)
+
+
 def changed_functions(
     root: Path, lines_by_path: dict[str, set[int]]
 ) -> dict[str, set[tuple[str, str | None]]]:
@@ -208,6 +237,7 @@ class MutationStats:
     new_survivors: int = 0
     survivor_keys: list[str] = field(default_factory=list)
     no_coverage_keys: list[str] = field(default_factory=list)
+    source_findings: list[tuple[str, int, str]] = field(default_factory=list)
 
     @property
     def considered(self) -> int:
@@ -220,14 +250,20 @@ def record_mutant(
     key: str,
     status: int | None,
     baseline: dict[str, int | None],
+    source: tuple[str, int | None] = ("", None),
 ) -> None:
     """Classify one mutant result and update aggregate mutation statistics."""
+    source_path, source_line = source
     if status is None:
         stats.other += 1
         stats.no_coverage_keys.append(key)
+        if source_line is not None:
+            stats.source_findings.append((source_path, source_line, f"No coverage: {key}"))
     elif status == SURVIVED:
         stats.survived += 1
         stats.survivor_keys.append(key)
+        if source_line is not None:
+            stats.source_findings.append((source_path, source_line, f"Surviving mutant: {key}"))
         if baseline.get(key) != SURVIVED:
             stats.new_survivors += 1
     elif status in KILLED:
@@ -242,6 +278,7 @@ def collect_mutation_stats(
 ) -> MutationStats:
     """Collect mutation statuses for functions changed by the current diff."""
     stats = MutationStats()
+    location_cache: dict[str, dict[tuple[str, str | None], int]] = {}
     for meta_path in request.mutants_dir.rglob("*.py.meta"):
         relative = meta_path.relative_to(request.mutants_dir)
         source_path = source_path_for_mutant(relative)
@@ -249,9 +286,26 @@ def collect_mutation_stats(
             continue
         baseline_path = request.baseline_dir / relative
         baseline = load_meta(baseline_path) if baseline_path.exists() else {}
+        locations = location_cache.get(source_path)
+        if locations is None:
+            source_file = request.root / source_path
+            if source_file.exists():
+                collector = FunctionLocations()
+                collector.visit(ast.parse(source_file.read_text(), filename=source_path))
+                locations = collector.lines
+            else:
+                locations = {}
+            location_cache[source_path] = locations
         for key, status in load_meta(meta_path).items():
-            if mutant_function(key) in allowed:
-                record_mutant(stats, key, status, baseline)
+            identity = mutant_function(key)
+            if identity in allowed:
+                record_mutant(
+                    stats,
+                    key,
+                    status,
+                    baseline,
+                    (source_path, locations.get(identity)),
+                )
     return stats
 
 
@@ -303,6 +357,14 @@ def report_verdict(request: GateRequest, stats: MutationStats) -> int:
         summary.extend(f"- `{key}`" for key in stats.no_coverage_keys)
         summary.extend(["", "</details>"])
     append_step_summary("\n".join(summary))
+    if not passed:
+        for path, line, message in stats.source_findings[:MAX_MUTATION_ANNOTATIONS]:
+            escaped = message.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+            sys.stderr.write(f"::error file={path},line={line},endLine={line}::{escaped}\n")
+        if len(stats.source_findings) > MAX_MUTATION_ANNOTATIONS:
+            sys.stderr.write(
+                "::notice::Additional mutation findings are available in the Job Summary.\n"
+            )
     return 0 if passed else 1
 
 

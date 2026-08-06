@@ -129,6 +129,11 @@ class FakeGitHubHandler(BaseHTTPRequestHandler):
             ("GET", re.compile(r"^/issues/comments/(?P<identifier>\d+)$"), self._get_comment),
             ("PATCH", re.compile(r"^/issues/comments/(?P<identifier>\d+)$"), self._patch_comment),
             (
+                "DELETE",
+                re.compile(r"^/issues/comments/(?P<identifier>\d+)$"),
+                self._delete_comment,
+            ),
+            (
                 "GET",
                 re.compile(r"^/issues/comments/(?P<identifier>\d+)/reactions$"),
                 self._get_reactions,
@@ -158,6 +163,11 @@ class FakeGitHubHandler(BaseHTTPRequestHandler):
                 self._permission,
             ),
             ("GET", re.compile(r"^/actions/workflows/[^/]+/runs$"), self._workflow_runs),
+            (
+                "GET",
+                re.compile(r"^/actions/runs/(?P<identifier>\d+)/jobs$"),
+                self._workflow_jobs,
+            ),
             (
                 "POST",
                 re.compile(r"^/actions/runs/(?P<identifier>\d+)/rerun-failed-jobs$"),
@@ -240,6 +250,13 @@ class FakeGitHubHandler(BaseHTTPRequestHandler):
         comment.update(object_value(request.payload, "comment update"))
         return HTTPStatus.OK, comment
 
+    def _delete_comment(self, request: RouteRequest) -> tuple[int, JsonValue]:
+        identifier = int(request.match.group("identifier"))
+        if identifier not in STATE.comments:
+            return HTTPStatus.NOT_FOUND, None
+        del STATE.comments[identifier]
+        return HTTPStatus.NO_CONTENT, None
+
     def _get_reactions(self, request: RouteRequest) -> tuple[int, JsonValue]:
         comment = STATE.comments.get(int(request.match.group("identifier")))
         if comment is None:
@@ -313,6 +330,13 @@ class FakeGitHubHandler(BaseHTTPRequestHandler):
         if status != HTTPStatus.OK:
             return status, runs
         return HTTPStatus.OK, {"workflow_runs": runs}
+
+    def _workflow_jobs(self, request: RouteRequest) -> tuple[int, JsonValue]:
+        run_id = int(request.match.group("identifier"))
+        status, jobs = self._page(STATE.workflow_jobs.get(run_id, []), request.query, 100)
+        if status != HTTPStatus.OK:
+            return status, jobs
+        return HTTPStatus.OK, {"jobs": jobs}
 
     def _rerun(self, request: RouteRequest) -> tuple[int, JsonValue]:
         STATE.rerun_requests.append(int(request.match.group("identifier")))

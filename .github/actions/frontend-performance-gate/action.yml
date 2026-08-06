@@ -7,10 +7,6 @@ runs:
           uses: ./.github/actions/setup-project
           with:
               python-profile: ci
-        - uses: ./.github/actions/report-in-progress
-          with:
-              marker: frontend-performance
-              github-token: ${{ github.token }}
         - name: Setup Node
           uses: actions/setup-node@v7
           with:
@@ -58,34 +54,33 @@ runs:
               GITHUB_REPOSITORY: ${{ github.repository }}
               REPORT_PATH: ${{ runner.temp }}/frontend-performance/report.json
               SUMMARY_PATH: ${{ runner.temp }}/frontend-performance/summary.md
+              QUALITY_RESULT_PATH: ${{ runner.temp }}/quality-results/frontend-performance.json
           run: |
               set +e
               uv run --locked python -m monori.ci.quality_graph.checks.frontend_performance
               code=$?
               echo "exit_code=$code" >> "$GITHUB_OUTPUT"
               exit 0
-        - name: Publish frontend-performance report
+        - name: Publish frontend-performance infrastructure failure
           if: always()
           shell: bash
-          env:
-              PERF_OUTPUT_DIR: ${{ runner.temp }}/frontend-performance
-              GITHUB_TOKEN: ${{ github.token }}
-              GITHUB_REPOSITORY: ${{ github.repository }}
-              PR_NUMBER: ${{ github.event.pull_request.number }}
           run: |
-              mkdir -p "$PERF_OUTPUT_DIR"
-              if [ ! -f "$PERF_OUTPUT_DIR/summary.md" ]; then
-                uv run --locked python -m monori.ci.quality_graph.reporting complete \
-                  --marker frontend-performance \
-                  --status fail \
+              if [ ! -f "$RUNNER_TEMP/quality-results/frontend-performance.json" ]; then
+                uv run --locked python -m monori.ci.quality_graph.result_cli \
+                  --check-id frontend-performance \
+                  --title 'Frontend performance' \
+                  --status failed \
                   --message 'Frontend performance measurement did not produce a report.' \
-                  --pr-number "$PR_NUMBER"
-                exit 0
+                  --output "$RUNNER_TEMP/quality-results/frontend-performance.json"
               fi
-              uv run --locked python -m monori.ci.lib.comments \
-                --marker frontend-performance \
-                --body-file "$PERF_OUTPUT_DIR/summary.md" \
-                --pr-number "$PR_NUMBER"
+        - name: Upload frontend-performance result
+          if: always()
+          uses: actions/upload-artifact@v7
+          with:
+              name: quality-result-frontend-performance-${{ github.run_attempt }}
+              path: ${{ runner.temp }}/quality-results/frontend-performance.json
+              if-no-files-found: error
+              retention-days: 7
         - name: Upload raw performance reports
           if: always()
           uses: actions/upload-artifact@v7

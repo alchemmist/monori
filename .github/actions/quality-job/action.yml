@@ -1,0 +1,58 @@
+name: Quality Graph make job
+description: Run one make target and publish its detailed Quality Graph result
+inputs:
+    check-id:
+        description: Stable Quality Graph job identifier
+        required: true
+    title:
+        description: Human-readable job title
+        required: true
+    make-target:
+        description: Make target to execute
+        required: true
+runs:
+    using: composite
+    steps:
+        - name: Run ${{ inputs.title }}
+          id: command
+          shell: bash
+          env:
+              CHECK_ID: ${{ inputs.check-id }}
+              MAKE_TARGET: ${{ inputs.make-target }}
+          run: |
+              set +e
+              log_path="$RUNNER_TEMP/quality-results/$CHECK_ID.log"
+              mkdir -p "$(dirname "$log_path")"
+              make "$MAKE_TARGET" 2>&1 | tee "$log_path"
+              code=${PIPESTATUS[0]}
+              echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+              exit 0
+        - name: Publish ${{ inputs.title }} summary and annotations
+          if: always()
+          shell: bash
+          env:
+              CHECK_ID: ${{ inputs.check-id }}
+              CHECK_TITLE: ${{ inputs.title }}
+              EXIT_CODE: ${{ steps.command.outputs.exit_code }}
+          run: >-
+              uv run --locked python -m monori.ci.quality_graph.job_report
+              --check-id "$CHECK_ID"
+              --title "$CHECK_TITLE"
+              --exit-code "${EXIT_CODE:-2}"
+              --log "$RUNNER_TEMP/quality-results/$CHECK_ID.log"
+              --output "$RUNNER_TEMP/quality-results/$CHECK_ID.json"
+              --summary "$GITHUB_STEP_SUMMARY"
+        - name: Upload ${{ inputs.title }} result
+          if: always()
+          uses: actions/upload-artifact@v7
+          with:
+              name: quality-result-${{ inputs.check-id }}-${{ github.run_attempt }}
+              path: ${{ runner.temp }}/quality-results/${{ inputs.check-id }}.json
+              if-no-files-found: error
+              retention-days: 7
+        - name: Enforce ${{ inputs.title }} verdict
+          if: always()
+          shell: bash
+          env:
+              EXIT_CODE: ${{ steps.command.outputs.exit_code }}
+          run: exit "${EXIT_CODE:-2}"

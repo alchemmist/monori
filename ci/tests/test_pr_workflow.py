@@ -56,6 +56,7 @@ class TestPullRequestWorkflowGraph:
             "object-annotations",
             "suppressions",
             "admin-command",
+            "quality-report",
         ):
             pattern = re.compile(rf"^    {re.escape(job)}:\s*$", re.MULTILINE)
             assert pattern.search(self.source), job
@@ -166,8 +167,10 @@ class TestPullRequestWorkflowGraph:
             "test-fast": "test",
             "test-medium": "test",
             "test-slow": "test",
+            "build": "ci",
             "coverage": "coverage",
             "audit": "audit",
+            "quality-report": "ci",
         }
         for job, profile in expected.items():
             block = re.search(
@@ -195,10 +198,11 @@ class TestPullRequestWorkflowGraph:
         assert '"ci/quality_graph/checks/frontend_performance.py"' in scope_source
         assert '"ci/tests/test_frontend_performance.py"' in scope_source
 
-    def test_reporting_actions_inherit_shared_in_progress_lifecycle(self) -> None:
+    def test_reporting_actions_publish_portable_results(self) -> None:
         for action in REPORTING_ACTIONS:
             source = (REPOSITORY_ROOT / f".github/actions/{action}/action.yml").read_text()
-            assert "uses: ./.github/actions/report-in-progress" in source, action
+            assert "quality-result-" in source, action
+            assert "actions/upload-artifact@v7" in source, action
 
     def test_frontend_scope_failure_completes_the_pending_report(self) -> None:
         source = FRONTEND_PERFORMANCE_SCOPE.read_text()
@@ -213,7 +217,22 @@ class TestPullRequestWorkflowGraph:
             re.MULTILINE | re.DOTALL,
         )
         assert block is not None
-        assert "- run: make audit" in block.group("body")
+        assert "uses: ./.github/actions/quality-job" in block.group("body")
+        assert "make-target: audit" in block.group("body")
+
+    def test_final_dashboard_runs_after_the_complete_graph(self) -> None:
+        """Collect all result artifacts even when an earlier check failed."""
+        block = re.search(
+            r"^    quality-report:\n(?P<body>.*?)(?=^    \S|\Z)",
+            self.source,
+            re.MULTILINE | re.DOTALL,
+        )
+        assert block is not None
+        body = block.group("body")
+        assert "needs: audit" in body
+        assert "if: always()" in body
+        assert "actions/download-artifact@v8" in body
+        assert "monori.ci.quality_graph.dashboard finish" in body
 
     def test_code_and_api_gate_events_are_separated(self) -> None:
         assert "github.event_name == 'pull_request'" in self.source

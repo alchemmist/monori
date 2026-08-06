@@ -11,6 +11,15 @@ from typing import ClassVar, cast, override
 
 from monori.ci.lib.github import GitHub, sync_label
 from monori.ci.quality_graph.base import ApprovalLifecycle, QualityCheck
+from monori.ci.quality_graph.job_results import (
+    JobMetric,
+    JobResult,
+    JobStatus,
+    append_job_summary,
+    controls_from_markdown,
+    without_admin_controls,
+    write_job_result,
+)
 from monori.ci.quality_graph.models import CheckContext, CheckResult, Verdict
 from monori.ci.quality_graph.reporting import (
     ReportFinding,
@@ -47,6 +56,7 @@ class BundleSizeCheck(QualityCheck[BundleFinding]):
     """Collect bundle-size findings and use the shared approval lifecycle."""
 
     gate = "bundle"
+    job_id = "bundle-size"
     report_marker = "bundle-size"
     approval_lifecycle = APPROVALS
     pending_marker: ClassVar[str | None] = "monori-bundle-size-pending"
@@ -160,7 +170,26 @@ def main() -> int:
     report["verdict"] = "critical" if failed else "none"
     report_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
     summary_path = Path(os.environ["SUMMARY_PATH"])
-    summary_path.write_text(append_commands(render_summary(report), entries, approved))
+    rendered = append_commands(render_summary(report), entries, approved)
+    summary = without_admin_controls(rendered)
+    summary_path.write_text(summary)
+    job_result = JobResult(
+        check.job_id,
+        "Frontend bundle size",
+        JobStatus.FAILED if failed else JobStatus.PASSED,
+        summary,
+        (
+            JobMetric("Regressions", str(len(ids))),
+            JobMetric("Active", str(len(ids - approved))),
+        ),
+        controls=controls_from_markdown(rendered),
+    )
+    result_path = os.environ.get("QUALITY_RESULT_PATH")
+    if result_path:
+        write_job_result(Path(result_path), job_result)
+    step_summary = os.environ.get("GITHUB_STEP_SUMMARY")
+    if step_summary:
+        append_job_summary(Path(step_summary), job_result)
     sync_label(github, number, STATUS_LABEL, present=failed)
     return 1 if failed else 0
 

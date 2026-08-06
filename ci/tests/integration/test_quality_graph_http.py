@@ -32,6 +32,14 @@ from monori.ci.quality_graph.commands import (
     parse_command,
     process_command,
 )
+from monori.ci.quality_graph.dashboard import DashboardLifecycle
+from monori.ci.quality_graph.job_results import (
+    JobResult,
+    JobStatus,
+    SourceAnnotation,
+    read_job_result,
+    write_job_result,
+)
 from monori.ci.quality_graph.models import CheckContext, CheckResult, Verdict
 from monori.ci.quality_graph.reporting import main as reporting_main
 from monori.common import JsonValue, array_value, object_value, string_value
@@ -70,6 +78,7 @@ class ScenarioCheck(PullRequestSourceCheck[ScenarioFinding]):
     """Drive the shared source-check lifecycle with configured findings."""
 
     gate = "object"
+    job_id = "object-annotations"
     report_marker = "object-annotations"
     approval_lifecycle = SCENARIO_APPROVALS
     failure_label: ClassVar[str | None] = FAILURE_LABEL
@@ -112,14 +121,9 @@ class ScenarioCheck(PullRequestSourceCheck[ScenarioFinding]):
         )
 
     @override
-    def error_annotation(self, finding: ScenarioFinding) -> str:
-        """Render one workflow annotation for an active scenario finding."""
-        return f"::error file={finding.path}::{finding.finding_id}"
-
-    @override
-    def rerun(self, github: RepositoryGitHubAPI, number: int) -> None:
-        """Rerun the latest fake workflow when an approval changes."""
-        rerun_latest_pull_request_workflow(github, number)
+    def source_annotation(self, finding: ScenarioFinding) -> SourceAnnotation:
+        """Build one source annotation for an active scenario finding."""
+        return SourceAnnotation(finding.path, 1, 1, finding.finding_id)
 
 
 def reset_fake_github(overrides: dict[str, JsonValue] | None = None) -> None:
@@ -146,6 +150,8 @@ def reset_fake_github(overrides: dict[str, JsonValue] | None = None) -> None:
                     "id": 99,
                     "created_at": "2026-08-06T00:00:00Z",
                     "head_sha": "head-sha",
+                    "run_attempt": 1,
+                    "html_url": "https://example.test/runs/99",
                     "pull_requests": [{"number": PULL_REQUEST_NUMBER}],
                 }
             ],
@@ -199,6 +205,13 @@ def checkbox_body(body: str, *, checked: bool) -> str:
     return body.replace(source, target, 1)
 
 
+def result_control_body(path: Path) -> str:
+    """Render the first portable result control as dashboard Markdown."""
+    control = read_job_result(path).controls[0]
+    state = "x" if control.checked else " "
+    return f"- [{state}] `{control.command}` <!-- {control.marker} -->\n"
+
+
 @contextmanager
 def environment(values: dict[str, str]) -> Iterator[None]:
     """Temporarily set process environment values for a CLI scenario."""
@@ -225,28 +238,189 @@ def arguments(values: list[str]) -> Iterator[None]:
         sys.argv = previous
 
 
-def test_source_gate_converges_labels_and_updates_one_report_comment() -> None:
-    """Publish red and green runs without duplicating the managed report."""
+def test_source_gate_converges_labels_and_writes_job_results(tmp_path: Path) -> None:
+    """Publish red and green results without creating gate-specific comments."""
     reset_fake_github()
     github = GitHub()
+    result_path = tmp_path / "result.json"
+    summary_path = tmp_path / "summary.md"
 
-    failed = ScenarioCheck([ScenarioFinding("finding-1", "example.py")])
-    assert failed.run_pull_request_gate(github, pull_request_event()) == 1
+    with environment(
+        {
+            "QUALITY_RESULT_PATH": str(result_path),
+            "GITHUB_STEP_SUMMARY": str(summary_path),
+        }
+    ):
+        failed = ScenarioCheck([ScenarioFinding("finding-1", "example.py")])
+        assert failed.run_pull_request_gate(github, pull_request_event()) == 1
+        passed = ScenarioCheck([])
+        assert passed.run_pull_request_gate(github, pull_request_event()) == 0
     after_failure = fake_state()
-    assert after_failure["issue_labels"] == {str(PULL_REQUEST_NUMBER): [FAILURE_LABEL]}
+    assert after_failure["issue_labels"] == {str(PULL_REQUEST_NUMBER): []}
+    assert state_objects(after_failure, "comments") == []
+    assert '"status": "passed"' in result_path.read_text()
+    assert "0 findings" in summary_path.read_text()
 
-    passed = ScenarioCheck([])
-    assert passed.run_pull_request_gate(github, pull_request_event()) == 0
-    after_success = fake_state()
-    report_comments = [
+
+def test_dashboard_replaces_legacy_comments_and_collects_job_results(tmp_path: Path) -> None:
+    """Publish one comment from isolated job artifacts and real Actions API state."""
+    reset_fake_github(
+        {
+            "comments": [
+                {
+                    "id": 30,
+                    "issue_number": PULL_REQUEST_NUMBER,
+                    "body": "<!-- monori-report: suppression -->\n\nOld report",
+                    "user": {"login": "github-actions[bot]"},
+                    "reactions": [],
+                }
+            ],
+            "workflow_jobs": {
+                "99": [
+                    {
+                        "name": "Lint",
+                        "status": "completed",
+                        "conclusion": "failure",
+                        "html_url": "https://example.test/jobs/lint",
+                    }
+                ]
+            },
+        }
+    )
+    lifecycle = DashboardLifecycle(
+        GitHub(),
+        PULL_REQUEST_NUMBER,
+        99,
+        1,
+        "head-sha",
+        "https://example.test/runs/99",
+    )
+
+    lifecycle.start()
+    write_job_result(
+        tmp_path / "lint.json",
+        JobResult("lint", "Lint", JobStatus.FAILED, "Detailed lint output"),
+    )
+    lifecycle.finish(tmp_path)
+
+    comments = state_objects(fake_state(), "comments")
+    assert len(comments) == 1
+    body = string_value(comments[0].get("body"), "dashboard body")
+    assert "monori-report: quality-graph" in body
+    assert "| Lint | ❌ failed |" in body
+    assert "example.test/jobs/lint" in body
+    assert "monori-report: suppression" not in body
+
+
+def test_stale_dashboard_run_cannot_overwrite_the_current_comment(tmp_path: Path) -> None:
+    """Ignore a final renderer whose head SHA no longer belongs to the pull request."""
+    reset_fake_github()
+    current = DashboardLifecycle(
+        GitHub(),
+        PULL_REQUEST_NUMBER,
+        99,
+        1,
+        "head-sha",
+        "https://example.test/runs/99",
+    )
+    current.start()
+    before = string_value(state_objects(fake_state(), "comments")[0].get("body"), "dashboard body")
+
+    stale = DashboardLifecycle(
+        GitHub(),
+        PULL_REQUEST_NUMBER,
+        98,
+        1,
+        "old-sha",
+        "https://example.test/runs/98",
+    )
+    stale.finish(tmp_path)
+
+    after = string_value(state_objects(fake_state(), "comments")[0].get("body"), "dashboard body")
+    assert after == before
+
+
+def test_stale_run_attempt_cannot_replace_the_current_dashboard() -> None:
+    """Reject an older rerun attempt even when GitHub reuses its workflow run ID."""
+    reset_fake_github(
+        {
+            "workflow_runs": [
+                {
+                    "id": 99,
+                    "created_at": "2026-08-06T00:00:00Z",
+                    "head_sha": "head-sha",
+                    "run_attempt": 2,
+                    "html_url": "https://example.test/runs/99",
+                    "pull_requests": [{"number": PULL_REQUEST_NUMBER}],
+                }
+            ]
+        }
+    )
+
+    DashboardLifecycle(
+        GitHub(),
+        PULL_REQUEST_NUMBER,
+        99,
+        1,
+        "head-sha",
+        "https://example.test/runs/99",
+    ).start()
+
+    assert state_objects(fake_state(), "comments") == []
+
+
+def test_dashboard_aggregation_failure_replaces_pending_status() -> None:
+    """Avoid leaving an indefinitely pending dashboard after renderer failure."""
+    reset_fake_github()
+    lifecycle = DashboardLifecycle(
+        GitHub(),
+        PULL_REQUEST_NUMBER,
+        99,
+        1,
+        "head-sha",
+        "https://example.test/runs/99",
+    )
+    lifecycle.start()
+
+    lifecycle.fail("Could not load workflow jobs.")
+
+    body = string_value(state_objects(fake_state(), "comments")[0].get("body"), "dashboard body")
+    assert "## ❌ Quality Graph" in body
+    assert "Could not load workflow jobs." in body
+
+
+def test_command_status_updates_notice_without_replacing_dashboard() -> None:
+    """Keep the status table and controls when command feedback is published."""
+    command_comment: dict[str, JsonValue] = {
+        "id": COMMAND_COMMENT_ID,
+        "issue_number": PULL_REQUEST_NUMBER,
+        "body": "/qg status",
+        "user": {"login": "admin"},
+        "reactions": [],
+    }
+    reset_fake_github({"comments": cast("JsonValue", [command_comment])})
+    DashboardLifecycle(
+        GitHub(),
+        PULL_REQUEST_NUMBER,
+        99,
+        1,
+        "head-sha",
+        "https://example.test/runs/99",
+    ).start()
+
+    process_command(
+        GitHub(),
+        CommandRequest(COMMAND_COMMENT_ID, "/qg status", "admin", PULL_REQUEST_NUMBER),
+    )
+
+    dashboard = next(
         comment
-        for comment in state_objects(after_success, "comments")
-        if "<!-- monori-report: object-annotations -->"
-        in string_value(comment.get("body"), "comment body")
-    ]
-    assert after_success["issue_labels"] == {str(PULL_REQUEST_NUMBER): []}
-    assert len(report_comments) == 1
-    assert "0 findings" in string_value(report_comments[0].get("body"), "comment body")
+        for comment in state_objects(fake_state(), "comments")
+        if "monori-report: quality-graph" in str(comment.get("body"))
+    )
+    body = string_value(dashboard.get("body"), "dashboard body")
+    assert "| Workflow graph validation |" in body
+    assert "Command API is available" in body
 
 
 def test_pending_admin_command_is_reacted_to_consumed_and_rerun() -> None:
@@ -254,7 +428,7 @@ def test_pending_admin_command_is_reacted_to_consumed_and_rerun() -> None:
     bundle_report: dict[str, JsonValue] = {
         "id": BUNDLE_REPORT_COMMENT_ID,
         "issue_number": PULL_REQUEST_NUMBER,
-        "body": "<!-- monori-report: bundle-size -->\n\nBundle report\n",
+        "body": "<!-- monori-report: quality-graph -->\n\nBundle report\n",
         "user": {"login": "github-actions[bot]"},
         "reactions": [],
     }
@@ -336,16 +510,25 @@ def test_checkbox_applies_and_reverses_bundle_approval(tmp_path: Path) -> None:
     }
     report_path = tmp_path / "bundle.json"
     summary_path = tmp_path / "bundle.md"
+    result_path = tmp_path / "bundle-result.json"
     report_path.write_text(json.dumps(report_data))
-    with environment({"REPORT_PATH": str(report_path), "SUMMARY_PATH": str(summary_path)}):
+    with environment(
+        {
+            "REPORT_PATH": str(report_path),
+            "SUMMARY_PATH": str(summary_path),
+            "QUALITY_RESULT_PATH": str(result_path),
+        }
+    ):
         reset_fake_github()
         assert bundle_size_main() == 1
-        upsert_comment(GitHub(), PULL_REQUEST_NUMBER, "bundle-size", summary_path.read_text())
+        upsert_comment(
+            GitHub(), PULL_REQUEST_NUMBER, "quality-graph", result_control_body(result_path)
+        )
         state = fake_state()
         report = next(
             comment
             for comment in state_objects(state, "comments")
-            if "monori-report: bundle-size" in str(comment.get("body"))
+            if "monori-report: quality-graph" in str(comment.get("body"))
         )
         unchecked = string_value(report.get("body"), "bundle report")
         checked = checkbox_body(unchecked, checked=True)
@@ -373,7 +556,9 @@ def test_checkbox_applies_and_reverses_bundle_approval(tmp_path: Path) -> None:
 
         report_path.write_text(json.dumps(report_data))
         assert bundle_size_main() == 0
-        upsert_comment(GitHub(), PULL_REQUEST_NUMBER, "bundle-size", summary_path.read_text())
+        upsert_comment(
+            GitHub(), PULL_REQUEST_NUMBER, "quality-graph", result_control_body(result_path)
+        )
         approved = fake_state()
         pull = state_objects(approved, "pulls")[0]
         assert "monori-bundle-size-approvals: bundle-initial-load" in string_value(
@@ -432,6 +617,8 @@ def test_ignore_file_approves_only_findings_from_selected_file(tmp_path: Path) -
         }
     )
     event_path = tmp_path / "event.json"
+    result_path = tmp_path / "result.json"
+    summary_path = tmp_path / "summary.md"
     event_path.write_text(
         json.dumps(
             {
@@ -446,19 +633,20 @@ def test_ignore_file_approves_only_findings_from_selected_file(tmp_path: Path) -
             }
         )
     )
-    with environment({"GITHUB_EVENT_PATH": str(event_path)}):
+    with environment(
+        {
+            "GITHUB_EVENT_PATH": str(event_path),
+            "QUALITY_RESULT_PATH": str(result_path),
+            "GITHUB_STEP_SUMMARY": str(summary_path),
+        }
+    ):
         assert suppressions_main() == 1
 
     state = fake_state()
     pull = state_objects(state, "pulls")[0]
     body = string_value(pull.get("body"), "pull request body")
     approvals = SUPPRESSION_APPROVALS.read(body)
-    report = next(
-        comment
-        for comment in state_objects(state, "comments")
-        if "monori-report: suppression" in str(comment.get("body"))
-    )
-    report_body = string_value(report.get("body"), "suppression report")
+    report_body = summary_path.read_text()
     assert len(approvals) == 1
     assert "first.py" in report_body
     assert "second.py" in report_body
@@ -474,7 +662,7 @@ def test_forged_pending_marker_is_not_applied() -> None:
     report: dict[str, JsonValue] = {
         "id": BUNDLE_REPORT_COMMENT_ID,
         "issue_number": PULL_REQUEST_NUMBER,
-        "body": "<!-- monori-report: bundle-size -->\n\nBundle report\n",
+        "body": "<!-- monori-report: quality-graph -->\n\nBundle report\n",
         "user": {"login": "github-actions[bot]"},
         "reactions": [],
     }
@@ -567,7 +755,7 @@ def test_invalid_command_and_missing_report_fail_visibly() -> None:
     comment["body"] = "/qg ignore bundle"
     comment["reactions"] = []
     reset_fake_github({"comments": cast("JsonValue", [comment])})
-    with pytest.raises(RuntimeError, match="without its managed report"):
+    with pytest.raises(RuntimeError, match="without the Quality Graph dashboard"):
         process_command(
             GitHub(),
             CommandRequest(
@@ -862,8 +1050,8 @@ def test_workflow_rerun_follows_pagination_and_replaces_reaction() -> None:
     ]
 
 
-def test_source_gate_failure_replaces_pending_report() -> None:
-    """Publish a failed report when source collection raises after entering progress."""
+def test_source_gate_failure_does_not_publish_a_stale_comment() -> None:
+    """Leave the shared dashboard untouched when source collection raises."""
     path = f"/repos/{REPOSITORY}/pulls/{PULL_REQUEST_NUMBER}"
     reset_fake_github(
         {
@@ -877,31 +1065,17 @@ def test_source_gate_failure_replaces_pending_report() -> None:
     with pytest.raises(GitHubAPIError):
         ScenarioCheck([]).run_pull_request_gate(GitHub(), pull_request_event())
 
-    state = fake_state()
-    report = next(
-        comment
-        for comment in state_objects(state, "comments")
-        if "monori-report: object-annotations" in str(comment.get("body"))
-    )
-    body = string_value(report.get("body"), "failed report")
-    assert body.startswith("<!-- monori-report: object-annotations -->\n\n## ❌")
-    assert "The check stopped before it could produce a report." in body
-    assert "In progress" not in body
+    assert state_objects(fake_state(), "comments") == []
 
 
-def test_missing_pull_request_replaces_pending_report() -> None:
-    """Publish a failed report when GitHub returns no pull request."""
+def test_missing_pull_request_does_not_publish_a_stale_comment() -> None:
+    """Leave the shared dashboard untouched when the pull request disappeared."""
     reset_fake_github({"pulls": []})
 
     with pytest.raises(RuntimeError, match="Pull request #7 was not found"):
         ScenarioCheck([]).run_pull_request_gate(GitHub(), pull_request_event())
 
-    report = next(
-        comment
-        for comment in state_objects(fake_state(), "comments")
-        if "monori-report: object-annotations" in str(comment.get("body"))
-    )
-    assert "## ❌" in string_value(report.get("body"), "failed report")
+    assert state_objects(fake_state(), "comments") == []
 
 
 def test_repository_client_surfaces_transport_failure() -> None:
@@ -949,7 +1123,9 @@ def test_concrete_source_gates_scan_repository_contents_over_http() -> None:
     assert "monori-suppression-failed" in labels
 
 
-def test_object_gate_handles_unpatched_renames_and_skips_irrelevant_files() -> None:
+def test_object_gate_handles_unpatched_renames_and_skips_irrelevant_files(
+    tmp_path: Path,
+) -> None:
     """Compare renamed Python files when GitHub omits their patch."""
     reset_fake_github(
         {
@@ -971,17 +1147,14 @@ def test_object_gate_handles_unpatched_renames_and_skips_irrelevant_files() -> N
         }
     )
 
-    assert object_annotations_main() == 1
-    report = next(
-        comment
-        for comment in state_objects(fake_state(), "comments")
-        if "monori-report: object-annotations" in str(comment.get("body"))
-    )
-    assert "renamed.py:1" in string_value(report.get("body"), "object report")
+    summary_path = tmp_path / "summary.md"
+    with environment({"GITHUB_STEP_SUMMARY": str(summary_path)}):
+        assert object_annotations_main() == 1
+    assert "renamed.py:1" in summary_path.read_text()
 
 
 def test_object_gate_reports_missing_comparison_as_infrastructure_failure() -> None:
-    """Fail the managed report when GitHub cannot provide a merge base."""
+    """Raise an infrastructure failure without overwriting the shared dashboard."""
     reset_fake_github(
         {
             "pull_files": {
@@ -996,9 +1169,4 @@ def test_object_gate_reports_missing_comparison_as_infrastructure_failure() -> N
     with pytest.raises(RuntimeError, match="Cannot determine merge base"):
         object_annotations_main()
 
-    report = next(
-        comment
-        for comment in state_objects(fake_state(), "comments")
-        if "monori-report: object-annotations" in str(comment.get("body"))
-    )
-    assert "## ❌" in string_value(report.get("body"), "object report")
+    assert state_objects(fake_state(), "comments") == []
