@@ -36,9 +36,6 @@ packages = [
   "monori.server.app.workbook",
   "monori.server.migrations",
   "monori.server.migrations.versions",
-  "monori.server.tests",
-  "monori.server.tests.integration",
-  "monori.server.tests.unit",
 ]
 
 [tool.setuptools.package-data]

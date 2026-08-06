@@ -92,6 +92,17 @@ def test_component_dependencies_follow_package_boundaries() -> None:
         assert "monori" not in dependencies
 
 
+def test_server_distribution_excludes_test_packages() -> None:
+    """Keep test modules out of the production server distribution."""
+    metadata = project(REPOSITORY_ROOT / "server" / "pyproject.toml")
+    packages = array_value(section(metadata, "tool", "setuptools").get("packages"), "packages")
+
+    assert all(
+        not string_value(package, "package").startswith("monori.server.tests")
+        for package in packages
+    )
+
+
 def test_internal_imports_are_absolute_and_namespaced() -> None:
     """Reject relative imports and legacy top-level package names."""
     violations: list[str] = []
