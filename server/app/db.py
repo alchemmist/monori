@@ -24,6 +24,7 @@ MIGRATIONS_PATH = PACKAGE_DIR / "migrations"
 
 
 LEGACY_REVISIONS = ["0001", "0002", "0003", "0004", "0005", "0006"]
+JOURNAL_MODES = {"DELETE", "WAL"}
 
 _bootstrapped: set[str] = set()
 _bootstrap_lock = threading.Lock()
@@ -58,6 +59,19 @@ def _bootstrap(path: pathlib.Path) -> None:
         finally:
             conn.close()
         command.stamp(cfg, "head")
+
+    journal_mode = os.environ.get("MONORI_SQLITE_JOURNAL_MODE", "DELETE").upper()
+    if journal_mode not in JOURNAL_MODES:
+        msg = f"unsupported SQLite journal mode: {journal_mode}"
+        raise ValueError(msg)
+    conn = sqlite3.connect(path)
+    try:
+        actual_mode = str(conn.execute(f"PRAGMA journal_mode={journal_mode}").fetchone()[0]).upper()
+        if actual_mode != journal_mode:
+            msg = f"SQLite refused journal mode {journal_mode}: using {actual_mode}"
+            raise RuntimeError(msg)
+    finally:
+        conn.close()
 
 
 def connect(db_path: str | os.PathLike[str] | None = None) -> sqlite3.Connection:
