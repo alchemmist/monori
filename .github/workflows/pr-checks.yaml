@@ -216,12 +216,37 @@ jobs:
         steps:
             - uses: actions/checkout@v7
               with:
+                  fetch-depth: 0
                   persist-credentials: false
             - uses: ./.github/actions/setup-project
               with:
                   install-web: true
                   python-profile: coverage
-            - run: make coverage
+            - name: Restore main coverage baseline
+              uses: actions/cache/restore@v4
+              with:
+                  path: coverage-baseline
+                  key: coverage-baseline-v1-${{ github.event.pull_request.base.sha }}
+                  restore-keys: coverage-baseline-v1-
+            - name: Run coverage gates
+              id: coverage-gates
+              continue-on-error: true
+              env:
+                  BASE: origin/main
+                  PR_NUMBER: ${{ github.event.pull_request.number }}
+                  HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+              run: make coverage-diff
+            - name: Upload coverage evidence
+              if: always()
+              uses: actions/upload-artifact@v7
+              with:
+                  name: coverage-report
+                  path: coverage-report/report.json
+                  if-no-files-found: warn
+                  retention-days: 7
+            - name: Enforce coverage gates
+              if: always() && steps.coverage-gates.outcome == 'failure'
+              run: exit 1
 
     audit:
         name: Dependency and security audit

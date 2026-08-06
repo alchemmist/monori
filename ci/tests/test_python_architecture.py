@@ -226,3 +226,6 @@ def test_clean_removes_the_current_ci_coverage_output() -> None:
 
     assert "ci/coverage.json" in makefile
     assert "monori/ci/coverage.json" not in makefile
+    assert "coverage-baseline" in makefile
+    assert "coverage-report" in makefile
+    assert "coverage.xml" in makefile
