@@ -16,6 +16,8 @@ if TYPE_CHECKING:
     from collections.abc import Iterator
     from pathlib import Path
 
+    from monori.common import JsonValue
+
 
 @contextmanager
 def process_io(arguments: list[str], stdin: str = "") -> Iterator[None]:
@@ -105,7 +107,7 @@ def test_mutation_gate_rejects_invalid_invocation_and_missing_file(tmp_path: Pat
     ],
 )
 def test_npm_audit_gate_handles_real_audit_payloads(
-    payload: dict[str, object], expected: int
+    payload: dict[str, JsonValue], expected: int
 ) -> None:
     """Accept safe audit data and reject tool or advisory failures."""
     with process_io(["npm-audit-gate"], json.dumps(payload)):

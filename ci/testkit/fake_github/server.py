@@ -24,6 +24,7 @@ if TYPE_CHECKING:
 HOST = os.environ.get("FAKE_GITHUB_HOST", "127.0.0.1")
 PORT = int(os.environ.get("FAKE_GITHUB_PORT", "8080"))
 STATE = FakeGitHubState()
+STATE_LOCK = threading.RLock()
 REPOSITORY_PATH = re.compile(r"^/repos/(?P<repository>[^/]+/[^/]+)(?P<path>/.*)$")
 
 
@@ -69,23 +70,25 @@ class FakeGitHubHandler(BaseHTTPRequestHandler):
     def _dispatch(self, method: str) -> None:
         parsed = urllib.parse.urlsplit(self.path)
         payload = self._read_payload()
-        failure = STATE.failures.get((method, parsed.path))
-        if failure is not None:
-            response: tuple[int, JsonValue] | None = (
-                failure,
-                {"message": "configured failure"},
-            )
-        else:
-            response = self._special_response(method, parsed.path, payload)
-            if response is None:
-                response = self._repository_response(
-                    method,
-                    parsed.path,
-                    payload,
-                    urllib.parse.parse_qs(parsed.query),
+        with STATE_LOCK:
+            failure = STATE.failures.get((method, parsed.path))
+            if failure is not None:
+                response: tuple[int, JsonValue] | None = (
+                    failure,
+                    {"message": "configured failure"},
                 )
-        status, body = response or (HTTPStatus.NOT_FOUND, {"message": "not found"})
-        self._respond(status, body)
+            else:
+                response = self._special_response(method, parsed.path, payload)
+                if response is None:
+                    response = self._repository_response(
+                        method,
+                        parsed.path,
+                        payload,
+                        urllib.parse.parse_qs(parsed.query),
+                    )
+            status, body = response or (HTTPStatus.NOT_FOUND, {"message": "not found"})
+            data = b"" if body is None else json.dumps(body).encode()
+        self._respond(status, data)
 
     @staticmethod
     def _special_response(
@@ -306,8 +309,7 @@ class FakeGitHubHandler(BaseHTTPRequestHandler):
             return None
         return cast("JsonValue", json.loads(self.rfile.read(length)))
 
-    def _respond(self, status: int, body: JsonValue = None) -> None:
-        data = b"" if body is None else json.dumps(body).encode()
+    def _respond(self, status: int, data: bytes) -> None:
         self.send_response(status)
         if data:
             self.send_header("Content-Type", "application/json")

@@ -13,11 +13,11 @@ echo "collecting Python coverage..." >&2
 (cd "$root" && uv run --locked --group test coverage erase)
 (cd "$root" && uv run --locked --group test pytest -q server/tests \
   --cov=monori.server --cov=monori.common \
-  --cov-report= --cov-append --cov-fail-under=0 >/dev/null)
+  --cov-report="json:$be" --cov-report= --cov-fail-under=0 >/dev/null)
+(cd "$root" && uv run --locked --group test coverage erase)
 (cd "$root" && COMPOSE="${COMPOSE:-docker compose}" bash scripts/ci-tests.sh \
-  --cov=monori.ci --cov-report="json:$be" --cov-report= --cov-append >/dev/null)
+  --cov=monori.ci --cov-report="json:$ci" --cov-report= >/dev/null)
 (cd "$root" && uv run --locked --group test coverage report --include="ci/*" --fail-under=90)
 
-cp "$be" "$ci"
-
-jq -rn --slurpfile fe "$fe" --slurpfile be "$be" -f "$root/scripts/coverage-tree.jq"
+jq -rn --slurpfile fe "$fe" --slurpfile be "$be" --slurpfile ci "$ci" \
+  -f "$root/scripts/coverage-tree.jq"
