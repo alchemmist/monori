@@ -8,6 +8,7 @@ import re
 import sys
 from contextlib import contextmanager
 from dataclasses import dataclass
+from http import HTTPStatus
 from typing import TYPE_CHECKING, ClassVar, cast, override
 
 import httpx
@@ -782,6 +783,28 @@ def test_repository_client_reads_all_comment_and_file_pages() -> None:
 
     assert len(github.paged(f"/issues/{PULL_REQUEST_NUMBER}/comments")) == 101
     assert len(github.paged(f"/pulls/{PULL_REQUEST_NUMBER}/files")) == 101
+
+
+@pytest.mark.parametrize(
+    ("parameter", "value"),
+    [
+        ("page", "invalid"),
+        ("page", "0"),
+        ("page", "-1"),
+        ("per_page", "invalid"),
+        ("per_page", "0"),
+        ("per_page", "-1"),
+    ],
+)
+def test_fake_github_rejects_invalid_pagination(parameter: str, value: str) -> None:
+    """Return a client error for malformed or non-positive pagination values."""
+    response = httpx.get(
+        f"{FAKE_GITHUB_URL}/repos/{REPOSITORY}/issues/{PULL_REQUEST_NUMBER}/comments",
+        params={parameter: value},
+    )
+
+    assert response.status_code == HTTPStatus.BAD_REQUEST
+    assert response.json() == {"message": "invalid pagination parameters"}
 
 
 def test_workflow_rerun_follows_pagination_and_replaces_reaction() -> None:

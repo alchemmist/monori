@@ -183,7 +183,7 @@ class FakeGitHubHandler(BaseHTTPRequestHandler):
 
     def _pull_files(self, request: RouteRequest) -> tuple[int, JsonValue]:
         files = STATE.pull_files.get(int(request.match.group("number")), [])
-        return HTTPStatus.OK, self._page(files, request.query)
+        return self._page(files, request.query)
 
     def _comparison(self, request: RouteRequest) -> tuple[int, JsonValue]:
         reference = urllib.parse.unquote(request.match.group("reference"))
@@ -206,14 +206,23 @@ class FakeGitHubHandler(BaseHTTPRequestHandler):
         comments = [
             comment for comment in STATE.comments.values() if comment.get("issue_number") == number
         ]
-        return HTTPStatus.OK, self._page(comments, request.query)
+        return self._page(comments, request.query)
 
     @staticmethod
-    def _page(items: list[dict[str, JsonValue]], query: dict[str, list[str]]) -> JsonValue:
-        page = int(query.get("page", ["1"])[0])
-        per_page = int(query.get("per_page", ["30"])[0])
+    def _page(
+        items: list[dict[str, JsonValue]],
+        query: dict[str, list[str]],
+        default_per_page: int = 30,
+    ) -> tuple[int, JsonValue]:
+        try:
+            page = int(query.get("page", ["1"])[0])
+            per_page = int(query.get("per_page", [str(default_per_page)])[0])
+        except ValueError:
+            return HTTPStatus.BAD_REQUEST, {"message": "invalid pagination parameters"}
+        if page < 1 or per_page < 1:
+            return HTTPStatus.BAD_REQUEST, {"message": "invalid pagination parameters"}
         start = (page - 1) * per_page
-        return cast("JsonValue", items[start : start + per_page])
+        return HTTPStatus.OK, cast("JsonValue", items[start : start + per_page])
 
     def _create_comment(self, request: RouteRequest) -> tuple[int, JsonValue]:
         body = optional_string(object_value(request.payload, "comment").get("body")) or ""
@@ -300,11 +309,10 @@ class FakeGitHubHandler(BaseHTTPRequestHandler):
         )
 
     def _workflow_runs(self, request: RouteRequest) -> tuple[int, JsonValue]:
-        page = int(request.query.get("page", ["1"])[0])
-        per_page = int(request.query.get("per_page", ["100"])[0])
-        start = (page - 1) * per_page
-        runs = STATE.workflow_runs[start : start + per_page]
-        return HTTPStatus.OK, {"workflow_runs": cast("JsonValue", runs)}
+        status, runs = self._page(STATE.workflow_runs, request.query, 100)
+        if status != HTTPStatus.OK:
+            return status, runs
+        return HTTPStatus.OK, {"workflow_runs": runs}
 
     def _rerun(self, request: RouteRequest) -> tuple[int, JsonValue]:
         STATE.rerun_requests.append(int(request.match.group("identifier")))
