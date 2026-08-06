@@ -12,6 +12,15 @@ from typing import ClassVar, cast, override
 from monori.ci.lib.findings import stable_finding_id
 from monori.ci.lib.github import GitHub, sync_label
 from monori.ci.quality_graph.base import ApprovalLifecycle, QualityCheck
+from monori.ci.quality_graph.job_results import (
+    JobMetric,
+    JobResult,
+    JobStatus,
+    append_job_summary,
+    controls_from_markdown,
+    without_admin_controls,
+    write_job_result,
+)
 from monori.ci.quality_graph.models import CheckContext, CheckResult, Verdict
 from monori.ci.quality_graph.reporting import (
     ReportFinding,
@@ -58,6 +67,7 @@ class FrontendPerformanceCheck(QualityCheck[FrontendPerformanceFinding]):
     """Collect frontend regressions and use the shared approval lifecycle."""
 
     gate = "frontend"
+    job_id = "frontend-performance"
     report_marker = "frontend-performance"
     approval_lifecycle = APPROVALS
     pending_marker: ClassVar[str | None] = "monori-frontend-performance-pending"
@@ -156,7 +166,26 @@ def main() -> int:
     summary_path = Path(os.environ["SUMMARY_PATH"])
     summary = summary_path.read_text()
     summary = re.sub(r"\A## .*\n*", "", summary, count=1)
-    summary_path.write_text(append_commands(summary, entries, approved, failed=failed))
+    rendered = append_commands(summary, entries, approved, failed=failed)
+    summary = without_admin_controls(rendered)
+    summary_path.write_text(summary)
+    job_result = JobResult(
+        check.job_id,
+        "Frontend performance",
+        JobStatus.FAILED if failed else JobStatus.PASSED,
+        summary,
+        (
+            JobMetric("Regressions", str(len(entry_ids(entries)))),
+            JobMetric("Active", str(len(active))),
+        ),
+        controls=controls_from_markdown(rendered),
+    )
+    result_path = os.environ.get("QUALITY_RESULT_PATH")
+    if result_path:
+        write_job_result(Path(result_path), job_result)
+    step_summary = os.environ.get("GITHUB_STEP_SUMMARY")
+    if step_summary:
+        append_job_summary(Path(step_summary), job_result)
     sync_label(github, number, STATUS_LABEL, present=failed)
     return 1 if failed else 0
 

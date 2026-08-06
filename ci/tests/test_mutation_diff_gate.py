@@ -125,6 +125,9 @@ diff --git a/server/app/example.py b/server/app/example.py
             unrelated = mutants / "unknown/example.py.meta"
             unrelated.parent.mkdir(parents=True)
             unrelated.write_text(json.dumps({"exit_code_by_key": {}}))
+            source = root / "server/app/example.py"
+            source.parent.mkdir(parents=True)
+            source.write_text("def changed():\n    return True\n")
             request = module.GateRequest(
                 mutants_dir=mutants,
                 baseline_dir=baseline,
@@ -141,8 +144,17 @@ diff --git a/server/app/example.py b/server/app/example.py
 
         assert stats.survived == 1
         assert stats.new_survivors == 1
+        assert stats.source_findings == [
+            (
+                "server/app/example.py",
+                1,
+                "Surviving mutant: app.example.x_changed__mutmut_1",
+            )
+        ]
 
-    def test_verdict_and_empty_results_write_step_summaries(self) -> None:
+    def test_verdict_and_empty_results_write_step_summaries(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
         with tempfile.TemporaryDirectory() as directory:
             summary = Path(directory) / "summary.md"
             previous = os.environ.get("MUTATION_SUMMARY_PATH")
@@ -163,6 +175,7 @@ diff --git a/server/app/example.py b/server/app/example.py
                     new_survivors=1,
                     survivor_keys=["survivor"],
                     no_coverage_keys=["uncovered"],
+                    source_findings=[("server/app/example.py", 2, "Surviving mutant")],
                 )
                 assert module.report_verdict(request, passing) == 0
                 assert module.report_verdict(request, failing) == 1
@@ -179,6 +192,7 @@ diff --git a/server/app/example.py b/server/app/example.py
             assert "Surviving mutants" in content
             assert "Mutants without coverage" in content
             assert "No changed functions" in content
+            assert "::error file=server/app/example.py,line=2" in capsys.readouterr().err
 
     def test_revision_resolution_rejects_unknown_reference(self) -> None:
         repository = Repo(Path.cwd())

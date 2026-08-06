@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import base64
 import hashlib
 import re
 from dataclasses import dataclass
@@ -15,6 +14,7 @@ from jinja2 import Environment, FileSystemLoader, StrictUndefined, select_autoes
 
 from monori.ci.lib.comments import CommandReactionLifecycle, Reaction, upsert_comment
 from monori.ci.lib.github import GitHub, GitHubAPI
+from monori.ci.quality_graph.job_results import JobControl
 
 if TYPE_CHECKING:
     from collections.abc import Collection, Mapping
@@ -69,26 +69,10 @@ class ReportFinding:
 
 
 @dataclass(frozen=True)
-class AdminControl:
-    """One reversible administrator action rendered as a Markdown checkbox."""
-
-    command: str
-    reverse_command: str
-    checked: bool = False
-
-    @property
-    def marker(self) -> str:
-        """Encode both canonical commands in a stable hidden marker."""
-        payload = f"{self.command}\n{self.reverse_command}".encode()
-        encoded = base64.urlsafe_b64encode(payload).decode().rstrip("=")
-        return f"monori-qg-control:{encoded}"
-
-
-@dataclass(frozen=True)
 class AdminCommands:
     """Reversible administrator controls and explanatory notes."""
 
-    controls: tuple[AdminControl, ...]
+    controls: tuple[JobControl, ...]
     notes: tuple[str, ...] = ()
 
 
@@ -166,20 +150,20 @@ def admin_commands(
     """Build canonical administrator commands from one gate's current data."""
     active = sorted(set(active_ids))
     approved = sorted(set(approved_ids))
-    controls: list[AdminControl] = []
+    controls: list[JobControl] = []
     if active:
         remove_active = f"/qg remove-ignore {','.join(active)}"
         controls.extend(
             (
-                AdminControl(f"/qg ignore {','.join(active)}", remove_active),
-                AdminControl(f"/qg ignore {gate}", remove_active),
+                JobControl(f"/qg ignore {','.join(active)}", remove_active),
+                JobControl(f"/qg ignore {gate}", remove_active),
             )
         )
         for path, finding_ids in sorted((file_findings or {}).items()):
             selected = sorted(set(finding_ids))
             if selected:
                 controls.append(
-                    AdminControl(
+                    JobControl(
                         f"/qg ignore-file {path}",
                         f"/qg remove-ignore {','.join(selected)}",
                     )
@@ -187,7 +171,7 @@ def admin_commands(
     if approved:
         approved_command = f"/qg ignore {','.join(approved)}"
         controls.append(
-            AdminControl(
+            JobControl(
                 approved_command,
                 f"/qg remove-ignore {','.join(approved)}",
                 checked=True,

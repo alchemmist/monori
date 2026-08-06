@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib
+from dataclasses import dataclass
 from functools import cache
 from typing import TYPE_CHECKING, Protocol, cast
 
@@ -16,6 +17,45 @@ class CommandHandler(Protocol):
     def __call__(self) -> int:
         """Process the event and return the check exit code."""
         ...
+
+
+@dataclass(frozen=True)
+class WorkflowJobDefinition:
+    """Describe one user-facing check in the pull-request workflow graph."""
+
+    job_id: str
+    title: str
+    gate: str | None = None
+
+    @property
+    def summary_anchor(self) -> str:
+        """Return the stable Markdown heading anchor for this job summary."""
+        return f"quality-graph-{self.job_id}"
+
+
+WORKFLOW_JOBS = (
+    WorkflowJobDefinition("workflow-graph", "Workflow graph validation"),
+    WorkflowJobDefinition("fmt-check", "Format check"),
+    WorkflowJobDefinition("suppressions", "Lint suppression gate", "suppression"),
+    WorkflowJobDefinition("lint", "Lint"),
+    WorkflowJobDefinition("object-annotations", "Python object annotation gate", "object"),
+    WorkflowJobDefinition("type", "Type check"),
+    WorkflowJobDefinition("analyze", "Static analysis"),
+    WorkflowJobDefinition("test-fast", "Fast tests"),
+    WorkflowJobDefinition("test-medium", "Medium tests"),
+    WorkflowJobDefinition("test-slow", "Slow tests"),
+    WorkflowJobDefinition("build", "Build"),
+    WorkflowJobDefinition("coverage", "Coverage"),
+    WorkflowJobDefinition("mutation", "Mutation testing"),
+    WorkflowJobDefinition("bundle-size", "Frontend bundle size", "bundle"),
+    WorkflowJobDefinition("frontend-performance", "Frontend performance", "frontend"),
+    WorkflowJobDefinition("audit", "Dependency and security audit"),
+)
+
+
+def workflow_jobs() -> dict[str, WorkflowJobDefinition]:
+    """Return user-facing workflow jobs in dashboard display order."""
+    return {definition.job_id: definition for definition in WORKFLOW_JOBS}
 
 
 @cache

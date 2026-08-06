@@ -11,8 +11,9 @@ from pathlib import Path
 from typing import ClassVar, override
 
 from monori.ci.lib.findings import stable_finding_id
-from monori.ci.lib.github import GitHub, RepositoryGitHubAPI, rerun_latest_pull_request_workflow
+from monori.ci.lib.github import GitHub, RepositoryGitHubAPI
 from monori.ci.quality_graph.base import ApprovalLifecycle, PullRequestSourceCheck
+from monori.ci.quality_graph.job_results import AnnotationLevel, SourceAnnotation
 from monori.ci.quality_graph.models import CheckContext, CheckResult, Verdict
 from monori.ci.quality_graph.reporting import (
     ReportFinding,
@@ -162,6 +163,7 @@ class ObjectAnnotationCheck(PullRequestSourceCheck[Finding]):
     """Find changed annotations that use the overly broad ``object`` type."""
 
     gate = "object"
+    job_id = "object-annotations"
     report_marker = "object-annotations"
     approval_lifecycle = APPROVALS
     supports_ignore_file = True
@@ -196,17 +198,17 @@ class ObjectAnnotationCheck(PullRequestSourceCheck[Finding]):
         return summary_body(findings, approved, pull_request_url)
 
     @override
-    def error_annotation(self, finding: Finding) -> str:
-        """Render an error annotation for an overly broad type."""
-        return (
-            f"::error file={finding.path},line={finding.line},col={finding.column + 1}::"
-            "Use a specific type instead of object"
+    def source_annotation(self, finding: Finding) -> SourceAnnotation:
+        """Build an error annotation for an overly broad type."""
+        return SourceAnnotation(
+            finding.path,
+            finding.line,
+            finding.line,
+            "Use a specific type instead of object",
+            AnnotationLevel.FAILURE,
+            start_column=finding.column + 1,
+            end_column=finding.column + len("object"),
         )
-
-    @override
-    def rerun(self, github: RepositoryGitHubAPI, number: int) -> None:
-        """Rerun the pull-request workflow after approvals change."""
-        rerun_latest_pull_request_workflow(github, number)
 
 
 def summary_body(findings: list[Finding], approved: set[str], pr_url: str) -> str:

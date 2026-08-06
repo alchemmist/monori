@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import os
 import re
 import sys
 import urllib.parse
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Protocol, override
 
 from monori.ci.lib.comments import managed_comment, workflow_bot_logins
@@ -20,8 +22,20 @@ from monori.ci.quality_graph.commands import (
     parse_command,
     validate_command,
 )
+from monori.ci.quality_graph.job_results import (
+    JobMetric,
+    JobResult,
+    JobStatus,
+    SourceAnnotation,
+    append_job_summary,
+    controls_from_markdown,
+    grouped_annotations,
+    without_admin_controls,
+    workflow_annotation_command,
+    write_job_result,
+)
 from monori.ci.quality_graph.models import CheckContext, CheckResult, FindingProtocol
-from monori.ci.quality_graph.reporting import CHECK_REPORTS, PullRequestReport
+from monori.ci.quality_graph.reporting import CHECK_REPORTS
 from monori.common import JsonValue, object_value, optional_string, string_value
 
 if TYPE_CHECKING:
@@ -296,6 +310,7 @@ class QualityCheckDefinition(ABC):
     """Define registry metadata shared by every Quality Graph check class."""
 
     gate: ClassVar[str]
+    job_id: ClassVar[str]
     report_marker: ClassVar[str]
     approval_lifecycle: ClassVar[ApprovalLifecycle]
     supports_ignore_file: ClassVar[bool] = False
@@ -328,9 +343,9 @@ class QualityCheckDefinition(ABC):
         if cls.pending_marker is None:
             message = f"{cls.gate} does not support pending commands"
             raise RuntimeError(message)
-        report = managed_comment(github, number, cls.report_marker)
+        report = managed_comment(github, number, "quality-graph")
         if report is None:
-            message = f"Cannot authorize {cls.gate} command without its managed report"
+            message = f"Cannot authorize {cls.gate} command without the Quality Graph dashboard"
             raise RuntimeError(message)
         report_id = report.get("id")
         if not isinstance(report_id, int):
@@ -358,10 +373,6 @@ class QualityCheck[FindingType: ApprovableFinding](QualityCheckDefinition, ABC):
     @abstractmethod
     def collect(self, context: CheckContext) -> CheckResult[FindingType]:
         """Collect findings without mutating GitHub state."""
-
-    def report(self, github: GitHubAPI, number: int) -> PullRequestReport:
-        """Return the shared report lifecycle configured for this check."""
-        return PullRequestReport.registered(github, number, self.report_marker)
 
     def sync_approvals(
         self, request: ApprovalRequest, findings: Sequence[FindingType]
@@ -397,12 +408,8 @@ class PullRequestSourceCheck[FindingType: ApprovableFinding](QualityCheck[Findin
         """Render the final managed report for this check."""
 
     @abstractmethod
-    def error_annotation(self, finding: FindingType) -> str:
-        """Render one GitHub workflow error annotation."""
-
-    @abstractmethod
-    def rerun(self, github: RepositoryGitHubAPI, number: int) -> None:
-        """Rerun the workflow after approval state changes."""
+    def source_annotation(self, finding: FindingType) -> SourceAnnotation:
+        """Build one typed source annotation for an active finding."""
 
     def run_pull_request_gate(
         self, github: RepositoryGitHubAPI, event: dict[str, JsonValue]
@@ -411,22 +418,15 @@ class PullRequestSourceCheck[FindingType: ApprovableFinding](QualityCheck[Findin
         number = self._pull_request_number(event)
         if number is None:
             return 0
-        report = self.report(github, number)
-        report.mark_in_progress()
-        try:
-            return self._run_pull_request_gate(github, event, number, report)
-        except (LookupError, OSError, RuntimeError, TypeError, ValueError):
-            report.mark_failed("The check stopped before it could produce a report.")
-            raise
+        return self._run_pull_request_gate(github, event, number)
 
     def _run_pull_request_gate(
         self,
         github: RepositoryGitHubAPI,
         event: dict[str, JsonValue],
         number: int,
-        report: PullRequestReport,
     ) -> int:
-        """Execute a source check after its report has entered the pending state."""
+        """Execute a source check and publish its portable job result."""
         raw_pull = github.request("GET", f"/pulls/{number}")
         if raw_pull is None:
             message = f"Pull request #{number} was not found"
@@ -456,12 +456,36 @@ class PullRequestSourceCheck[FindingType: ApprovableFinding](QualityCheck[Findin
         if self.failure_label is not None:
             sync_label(github, number, self.failure_label, present=bool(active))
         pull_request_url = optional_string(pull.get("html_url")) or ""
-        report.publish(self.render_summary(findings, sync.approved, pull_request_url))
-        if sync.changed:
-            self.rerun(github, number)
-        for finding in active:
-            sys.stderr.write(f"{self.error_annotation(finding)}\n")
+        summary = self.render_summary(findings, sync.approved, pull_request_url)
+        annotations = tuple(self.source_annotation(finding) for finding in active)
+        result = JobResult(
+            self.job_id,
+            CHECK_REPORTS[self.report_marker].title,
+            JobStatus.PASSED if not active else JobStatus.FAILED,
+            without_admin_controls(summary),
+            (
+                JobMetric("Findings", str(len(findings))),
+                JobMetric("Active", str(len(active))),
+            ),
+            annotations,
+            controls_from_markdown(summary),
+        )
+        self._publish_result(result)
+        for annotation in grouped_annotations(annotations):
+            sys.stderr.write(f"{workflow_annotation_command(annotation)}\n")
+        if len(annotations) > len(grouped_annotations(annotations)):
+            sys.stderr.write("::notice::Additional findings are available in the Job Summary.\n")
         return 1 if active else 0
+
+    @staticmethod
+    def _publish_result(result: JobResult) -> None:
+        """Write configured summary and artifact paths for the current job."""
+        result_path = os.environ.get("QUALITY_RESULT_PATH")
+        if result_path:
+            write_job_result(Path(result_path), result)
+        summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
+        if summary_path:
+            append_job_summary(Path(summary_path), result)
 
     @staticmethod
     def _pull_request_number(event: dict[str, JsonValue]) -> int | None:

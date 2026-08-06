@@ -1,0 +1,30 @@
+<!-- monori-qg-run: {{ model.run_id }}:{{ model.run_attempt }}:{{ model.head_sha }} -->
+
+## {{ model.status.emoji }} Quality Graph
+
+<!-- monori-qg-notice:start -->
+{{ model.message }}
+<!-- monori-qg-notice:end -->
+
+| Check | Status | Key result | Details |
+| --- | :---: | --- | --- |
+{% for job in model.jobs -%}
+| {{ job.title }} | {{ job.status.emoji }} {{ job.status.value }} | {{ job.metric }} | [Summary]({{ job.summary_url }}) · [Logs]({{ job.logs_url }}) |
+{% endfor %}
+{% if model.control_groups %}
+<details><summary>Administrator controls</summary>
+
+Check an action to apply it; uncheck an applied action to revert it.
+
+{% for group in model.control_groups -%}
+### {{ group.title }}
+
+{% for control in group.controls -%}
+- [{{ "x" if control.checked else " " }}] `{{ control.command }}` <!-- {{ control.marker }} -->
+{% endfor %}
+{% for note in group.notes -%}
+{{ note }}
+{% endfor %}
+{% endfor %}
+</details>
+{% endif %}
