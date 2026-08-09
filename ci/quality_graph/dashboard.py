@@ -72,7 +72,7 @@ class DashboardJob:
     title: str
     status: JobStatus
     summary_url: str
-    logs_url: str | None
+    logs_url: str
     metric: str = "—"
 
 
@@ -297,7 +297,8 @@ class DashboardLifecycle:
                     optional_string(api_jobs[definition.title].get("html_url"))
                     if definition.title in api_jobs
                     else None
-                ),
+                )
+                or self.run_url,
             )
             for definition in workflow_jobs().values()
         )
@@ -331,7 +332,9 @@ class DashboardLifecycle:
             status = api_job_status(api_job) if api_job is not None else JobStatus.SKIPPED
             if result is not None and status is JobStatus.PASSED:
                 status = result.status
-            job_url = optional_string(api_job.get("html_url")) if api_job is not None else None
+            job_url = (
+                optional_string(api_job.get("html_url")) if api_job is not None else None
+            ) or self.run_url
             metric = dashboard_metric(result)
             rows.append(
                 DashboardJob(
@@ -439,8 +442,13 @@ class DashboardLifecycle:
         latest = self._latest_run()
         if latest is None:
             return True
+        latest_id = latest.get("id")
         attempt = latest.get("run_attempt")
-        return latest.get("id") == self.run_id and (attempt is None or attempt == self.run_attempt)
+        if not isinstance(latest_id, int):
+            return False
+        if self.run_id != latest_id:
+            return self.run_id > latest_id
+        return attempt is None or (isinstance(attempt, int) and self.run_attempt >= attempt)
 
     def _latest_run(self) -> dict[str, JsonValue] | None:
         """Return the latest Quality Graph run associated with this pull request."""

@@ -46,6 +46,7 @@ from monori.ci.quality_graph.job_results import (
     write_job_result,
 )
 from monori.ci.quality_graph.models import CheckContext, CheckResult, Verdict
+from monori.ci.quality_graph.registry import workflow_jobs
 from monori.ci.quality_graph.reporting import main as reporting_main
 from monori.common import JsonValue, array_value, object_value, string_value
 
@@ -402,6 +403,47 @@ def test_stale_dashboard_run_cannot_overwrite_the_current_comment(tmp_path: Path
 
     after = string_value(state_objects(fake_state(), "comments")[0].get("body"), "dashboard body")
     assert after == before
+
+
+def test_new_run_resets_stale_dashboard_while_runs_api_is_delayed() -> None:
+    """Publish pending state when GitHub has not indexed the newly started run yet."""
+    reset_fake_github(
+        {
+            "workflow_runs": [
+                {
+                    "id": 98,
+                    "created_at": "2026-08-06T00:00:00Z",
+                    "head_sha": "previous-sha",
+                    "run_attempt": 1,
+                    "html_url": "https://example.test/runs/98",
+                    "pull_requests": [{"number": PULL_REQUEST_NUMBER}],
+                }
+            ]
+        }
+    )
+    github = GitHub()
+    upsert_comment(
+        github,
+        PULL_REQUEST_NUMBER,
+        "quality-graph",
+        "## ❌ Quality Graph\n\n| Check | Status |\n| --- | --- |\n| Format check | ❌ failed |",
+    )
+
+    DashboardLifecycle(
+        github,
+        PULL_REQUEST_NUMBER,
+        99,
+        1,
+        "head-sha",
+        "https://example.test/runs/99",
+    ).start()
+
+    body = string_value(state_objects(fake_state(), "comments")[0].get("body"), "dashboard")
+    assert "## ⏳ Quality Graph" in body
+    assert "| Workflow graph validation | ⏳ pending |" in body
+    assert "| Format check | ⏳ pending |" in body
+    assert body.count("[Logs](https://example.test/runs/99)") == len(workflow_jobs())
+    assert "❌" not in body
 
 
 def test_stale_run_attempt_cannot_replace_the_current_dashboard() -> None:

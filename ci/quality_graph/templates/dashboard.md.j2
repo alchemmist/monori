@@ -9,7 +9,7 @@
 | Check | Status | Key result | Details |
 | --- | :---: | --- | --- |
 {% for job in model.jobs -%}
-| {{ job.title }} | {{ job.status.emoji }} {{ job.status.value }} | {{ job.metric }} | [Summary]({{ job.summary_url }}){% if job.logs_url %} · [Logs]({{ job.logs_url }}){% endif %} |
+| {{ job.title }} | {{ job.status.emoji }} {{ job.status.value }} | {{ job.metric }} | [Summary]({{ job.summary_url }}) · [Logs]({{ job.logs_url }}) |
 {% endfor %}
 <details><summary>For administrators</summary>
 
