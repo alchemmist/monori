@@ -132,9 +132,8 @@ source_paths = [
 also_copy = ["server/tests", "ci/tests"]
 pytest_add_cli_args_test_selection = [
   "--import-mode=importlib",
+  "-m",
+  "not integration",
   "server/tests",
   "ci/tests",
-  "--ignore=ci/tests/integration",
-  "--ignore=ci/tests/test_main_workflow.py",
-  "--ignore=ci/tests/test_pr_workflow.py",
 ]

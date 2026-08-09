@@ -15,6 +15,7 @@ cp -R server/migrations "$workspace/monori/server/migrations"
 cp server/__init__.py server/schema.sql "$workspace/monori/server/"
 cp -R server/tests "$workspace/server/tests"
 cp -R ci/tests "$workspace/ci/tests"
+cp -R .github "$workspace/.github"
 cp pyproject.toml "$workspace/pyproject.toml"
 
 if [ -d mutants ]; then
