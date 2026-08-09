@@ -55,6 +55,8 @@ runs:
                 --check-id mutation \
                 --title 'Mutation testing' \
                 --status "$status" \
+                --metric "Frontend=${{ steps.mutation-front.outcome }}" \
+                --metric "Python=${{ steps.mutation-back.outcome }}" \
                 --summary "$MUTATION_SUMMARY_PATH" \
                 --output "$RUNNER_TEMP/quality-results/mutation.json"
         - name: Upload mutation result

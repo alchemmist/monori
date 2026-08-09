@@ -307,6 +307,8 @@ class TestPullRequestWorkflowGraph:
         for step in ("mutation-test", "mutation-front", "mutation-back"):
             assert f'"${{{{ steps.{step}.outcome }}}}" = success' in source
             assert f"steps.{step}.outcome != 'success'" in source
+        assert '--metric "Frontend=${{ steps.mutation-front.outcome }}"' in source
+        assert '--metric "Python=${{ steps.mutation-back.outcome }}"' in source
 
     def test_code_and_api_gate_events_are_separated(self) -> None:
         assert "github.event_name == 'pull_request'" in self.source
