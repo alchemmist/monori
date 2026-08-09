@@ -325,10 +325,7 @@ class TestPullRequestWorkflowGraph:
         )
         assert block is not None
         body = block.group("body")
-        assert set(self.workflow["jobs"]["quality-report"]["needs"]) == {
-            "audit",
-            "quality-dashboard-live",
-        }
+        assert self.workflow["jobs"]["quality-report"]["needs"] == "audit"
         assert "always()" in body
         assert "actions/download-artifact@v8" in body
         assert "pattern: quality-result-*" in body
@@ -348,6 +345,7 @@ class TestPullRequestWorkflowGraph:
         )
         assert block is not None
         body = block.group("body")
+        assert "needs" not in self.workflow["jobs"]["quality-dashboard-live"]
         assert "monori.ci.quality_graph.dashboard start" in body
         assert "monori.ci.quality_graph.dashboard watch" in body
         assert "update-quality-dashboard" not in self.source

@@ -34,8 +34,7 @@ jobs:
                   check-id: workflow-graph
 
     quality-dashboard-live:
-        name: Quality Graph live dashboard
-        needs: workflow-graph
+        name: Update PR quality dashboard
         if: >-
             always()
             && github.event_name == 'pull_request'
@@ -299,8 +298,8 @@ jobs:
                   check-id: audit
 
     quality-report:
-        name: Quality Graph dashboard
-        needs: [audit, quality-dashboard-live]
+        name: Finalize PR quality dashboard
+        needs: audit
         if: >-
             always()
             && github.event_name == 'pull_request'
