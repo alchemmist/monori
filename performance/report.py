@@ -2,6 +2,7 @@ import argparse
 import json
 import pathlib
 import re
+from typing import cast
 from dataclasses import dataclass
 
 
@@ -27,21 +28,28 @@ class Result:
 NAME = re.compile(r"^(DELETE|WAL)-(auth|read|write|import|e2e)-(\d+)\.json$")
 
 
-def value(values: dict[str, float], *keys: str) -> float:
+def value(values: dict[str, object], *keys: str) -> float:
     for key in keys:
-        if key in values:
-            return float(values[key])
+        raw = values.get(key)
+        if isinstance(raw, int | float):
+            return float(raw)
     return 0.0
 
 
-def metric_values(metric: dict) -> dict:
-    return metric.get("values", metric)
+def metric_values(metric: dict[str, object]) -> dict[str, object]:
+    values = metric.get("values")
+    if isinstance(values, dict):
+        return cast(dict[str, object], values)
+    return metric
 
 
-def thresholds_pass(metric: dict | None) -> bool:
+def thresholds_pass(metric: dict[str, object] | None) -> bool:
     if not metric:
         return True
-    for threshold in metric.get("thresholds", {}).values():
+    thresholds = metric.get("thresholds")
+    if not isinstance(thresholds, dict):
+        return True
+    for threshold in thresholds.values():
         if isinstance(threshold, dict):
             if not threshold.get("ok", False):
                 return False
