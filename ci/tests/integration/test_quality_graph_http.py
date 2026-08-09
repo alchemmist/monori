@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, ClassVar, cast, override
 import httpx
 import pytest
 
+from monori.ci.lib.annotations import SourceAnnotation
 from monori.ci.lib.comments import comment_body, upsert_comment
 from monori.ci.lib.github import GitHub, GitHubAPIError, rerun_latest_pull_request_workflow
 from monori.ci.quality_graph.base import ApprovalLifecycle, PullRequestSourceCheck
@@ -41,7 +42,6 @@ from monori.ci.quality_graph.job_results import (
     JobControl,
     JobResult,
     JobStatus,
-    SourceAnnotation,
     read_job_result,
     write_job_result,
 )

@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import re
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -181,7 +182,7 @@ def refresh_dashboard_body(
                 re.MULTILINE,
             )
             updated = logs_link.sub(
-                lambda match, url=logs_url: f"{match.group(1)}[Logs]({url}){match.group(2)}",
+                partial(render_logs_link, logs_url=logs_url),
                 updated,
                 count=1,
             )
@@ -195,6 +196,11 @@ def refresh_dashboard_body(
         flags=re.MULTILINE,
     )
     return refresh_dashboard_controls(updated, result)
+
+
+def render_logs_link(match: re.Match[str], *, logs_url: str) -> str:
+    """Replace one dashboard details link with a concrete workflow job URL."""
+    return f"{match.group(1)}[Logs]({logs_url}){match.group(2)}"
 
 
 def mark_jobs_pending(github: GitHubAPI, number: int, job_ids: set[str]) -> None:

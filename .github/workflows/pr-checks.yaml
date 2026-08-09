@@ -72,6 +72,7 @@ jobs:
                   check-id: fmt-check
                   title: Format check
                   make-target: fmt-check
+                  fix-target: fmt
 
     lint:
         name: Lint

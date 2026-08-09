@@ -8,10 +8,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar, cast, override
 
+from monori.ci.lib.annotations import AnnotationLevel, SourceAnnotation
 from monori.ci.lib.findings import stable_finding_id
 from monori.ci.lib.github import GitHub, RepositoryGitHubAPI
 from monori.ci.quality_graph.base import ApprovalLifecycle, PullRequestSourceCheck
-from monori.ci.quality_graph.job_results import AnnotationLevel, SourceAnnotation
 from monori.ci.quality_graph.models import CheckContext, CheckResult, Verdict
 from monori.ci.quality_graph.reporting import (
     ReportFinding,

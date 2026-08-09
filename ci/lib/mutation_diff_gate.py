@@ -16,10 +16,15 @@ from dulwich.objects import Commit
 from dulwich.porcelain import diff_tree
 from dulwich.repo import Repo
 
+from monori.ci.lib.annotations import (
+    MAX_STEP_ANNOTATIONS,
+    SourceAnnotation,
+    workflow_annotation_command,
+)
+
 KILLED = {1, 3}
 SURVIVED = 0
 OTHER_STATUSES = {-24, 24, 35, 36, 152, 255}
-MAX_MUTATION_ANNOTATIONS = 10
 CLASS_SEPARATOR = "ǁ"
 MUTANT_SOURCE_PATHS = {
     "app/": "server/app/",
@@ -358,17 +363,10 @@ def report_verdict(request: GateRequest, stats: MutationStats) -> int:
         summary.extend(["", "</details>"])
     append_step_summary("\n".join(summary))
     if not passed:
-        for path, line, message in stats.source_findings[:MAX_MUTATION_ANNOTATIONS]:
-            escaped_path = (
-                path.replace("%", "%25")
-                .replace("\r", "%0D")
-                .replace("\n", "%0A")
-                .replace(":", "%3A")
-                .replace(",", "%2C")
-            )
-            escaped = message.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
-            sys.stderr.write(f"::error file={escaped_path},line={line},endLine={line}::{escaped}\n")
-        if len(stats.source_findings) > MAX_MUTATION_ANNOTATIONS:
+        for path, line, message in stats.source_findings[:MAX_STEP_ANNOTATIONS]:
+            annotation = SourceAnnotation(path, line, line, message)
+            sys.stderr.write(f"{workflow_annotation_command(annotation)}\n")
+        if len(stats.source_findings) > MAX_STEP_ANNOTATIONS:
             sys.stderr.write(
                 "::notice::Additional mutation findings are available in the Job Summary.\n"
             )

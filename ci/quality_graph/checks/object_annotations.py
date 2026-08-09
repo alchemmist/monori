@@ -10,10 +10,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar, override
 
+from monori.ci.lib.annotations import (
+    AnnotationLevel,
+    SourceAnnotation,
+    workflow_annotation_command,
+)
 from monori.ci.lib.findings import stable_finding_id
 from monori.ci.lib.github import GitHub, RepositoryGitHubAPI
 from monori.ci.quality_graph.base import ApprovalLifecycle, PullRequestSourceCheck
-from monori.ci.quality_graph.job_results import AnnotationLevel, SourceAnnotation
 from monori.ci.quality_graph.models import CheckContext, CheckResult, Verdict
 from monori.ci.quality_graph.reporting import (
     ReportFinding,
@@ -136,9 +140,13 @@ def scan_file(path: str, source: str, changed: set[int]) -> list[Finding]:
     try:
         tree = ast.parse(source, filename=path)
     except SyntaxError as error:
-        sys.stderr.write(
-            f"::error file={path},line={error.lineno or 1}::Cannot parse Python file: {error}\n"
+        syntax_annotation = SourceAnnotation(
+            path,
+            error.lineno or 1,
+            error.lineno or 1,
+            f"Cannot parse Python file: {error}",
         )
+        sys.stderr.write(f"{workflow_annotation_command(syntax_annotation)}\n")
         return []
 
     candidates: list[tuple[int, int, str, str]] = []

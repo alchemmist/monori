@@ -22,9 +22,12 @@ REPORTING_ACTIONS = (
     "suppression-gate",
 )
 
+WorkflowStep = TypedDict("WorkflowStep", {"with": dict[str, str]}, total=False)
+
 
 class WorkflowJob(TypedDict, total=False):
     needs: str | list[str]
+    steps: list[WorkflowStep]
 
 
 class WorkflowDocument(TypedDict):
@@ -216,6 +219,10 @@ class TestPullRequestWorkflowGraph:
 
         quality_job = (REPOSITORY_ROOT / ".github/actions/quality-job/action.yml").read_text()
         assert "uses: ./.github/actions/update-quality-dashboard" in quality_job
+        assert "git diff --unified=0" in quality_job
+        assert '--diff "$RUNNER_TEMP/quality-results/$CHECK_ID.diff"' in quality_job
+        fmt = self.workflow["jobs"]["fmt-check"]
+        assert fmt["steps"][-1]["with"]["fix-target"] == "fmt"
 
     def test_frontend_scope_failure_completes_the_pending_report(self) -> None:
         source = FRONTEND_PERFORMANCE_SCOPE.read_text()

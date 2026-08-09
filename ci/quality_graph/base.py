@@ -11,6 +11,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Protocol, override
 
+from monori.ci.lib.annotations import (
+    SourceAnnotation,
+    grouped_annotations,
+    workflow_annotation_command,
+)
 from monori.ci.lib.comments import managed_comment, workflow_bot_logins
 from monori.ci.lib.github import is_admin, sync_label
 from monori.ci.quality_graph.commands import (
@@ -26,12 +31,9 @@ from monori.ci.quality_graph.job_results import (
     JobMetric,
     JobResult,
     JobStatus,
-    SourceAnnotation,
     append_job_summary,
     controls_from_markdown,
-    grouped_annotations,
     without_admin_controls,
-    workflow_annotation_command,
     write_job_result,
 )
 from monori.ci.quality_graph.models import CheckContext, CheckResult, FindingProtocol

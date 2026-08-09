@@ -7,61 +7,17 @@ import re
 import sys
 from pathlib import Path
 
+from monori.ci.lib.annotations import grouped_annotations, workflow_annotation_command
+from monori.ci.lib.diagnostics import ANSI_RE, parse_diagnostics, parse_diff_annotations
 from monori.ci.quality_graph.job_results import (
-    AnnotationLevel,
     JobMetric,
     JobResult,
     JobStatus,
-    SourceAnnotation,
     append_job_summary,
-    grouped_annotations,
-    workflow_annotation_command,
     write_job_result,
 )
 
-ANSI_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
-COLON_DIAGNOSTIC_RE = re.compile(
-    r"^(?P<path>[^:\n]+\.(?:py|pyi|ts|tsx|js|jsx|css|html|sql|ya?ml|md|toml|jsonc?))"
-    r":(?P<line>\d+)(?::(?P<column>\d+))?"
-    r"(?::|\s+-)\s*(?P<message>.+)$"
-)
-PAREN_DIAGNOSTIC_RE = re.compile(
-    r"^(?P<path>[^()\n]+\.(?:ts|tsx|js|jsx))"
-    r"\((?P<line>\d+),(?P<column>\d+)\):\s*(?P<message>.+)$"
-)
-PYTEST_FAILURE_RE = re.compile(r"^(?P<path>[^:\n]+\.py):(?P<line>\d+):\s+(?P<message>.+)$")
 MAX_SUMMARY_LOG_CHARACTERS = 200_000
-
-
-def parse_diagnostics(log: str) -> tuple[SourceAnnotation, ...]:
-    """Extract trustworthy source locations from common project tool output."""
-    annotations: list[SourceAnnotation] = []
-    for raw_line in ANSI_RE.sub("", log).splitlines():
-        line = raw_line.strip()
-        match = (
-            COLON_DIAGNOSTIC_RE.match(line)
-            or PAREN_DIAGNOSTIC_RE.match(line)
-            or PYTEST_FAILURE_RE.match(line)
-        )
-        if match is None:
-            continue
-        path = match.group("path")
-        source_line = int(match.group("line"))
-        raw_column = match.groupdict().get("column")
-        column = int(raw_column) if raw_column is not None else None
-        message = match.group("message").strip()
-        annotations.append(
-            SourceAnnotation(
-                path,
-                source_line,
-                source_line,
-                message,
-                AnnotationLevel.FAILURE,
-                start_column=column,
-                end_column=column,
-            )
-        )
-    return tuple(dict.fromkeys(annotations))
 
 
 def diagnostic_summary(log: str, annotation_count: int) -> str:
@@ -84,9 +40,15 @@ def diagnostic_summary(log: str, annotation_count: int) -> str:
     )
 
 
-def build_result(check_id: str, title: str, exit_code: int, log: str) -> JobResult:
+def build_result(
+    check_id: str,
+    title: str,
+    exit_code: int,
+    log: str,
+    diff: str = "",
+) -> JobResult:
     """Build one job result from a completed make invocation."""
-    annotations = parse_diagnostics(log)
+    annotations = tuple(dict.fromkeys((*parse_diagnostics(log), *parse_diff_annotations(diff))))
     status = JobStatus.PASSED if exit_code == 0 else JobStatus.FAILED
     return JobResult(
         check_id,
@@ -107,8 +69,10 @@ def main() -> int:
     parser.add_argument("--log", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--summary", required=True, type=Path)
+    parser.add_argument("--diff", type=Path)
     args = parser.parse_args()
-    result = build_result(args.check_id, args.title, args.exit_code, args.log.read_text())
+    diff = args.diff.read_text() if args.diff is not None and args.diff.exists() else ""
+    result = build_result(args.check_id, args.title, args.exit_code, args.log.read_text(), diff)
     write_job_result(args.output, result)
     append_job_summary(args.summary, result)
     for annotation in grouped_annotations(result.annotations):

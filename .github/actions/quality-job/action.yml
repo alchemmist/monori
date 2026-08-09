@@ -10,6 +10,10 @@ inputs:
     make-target:
         description: Make target to execute
         required: true
+    fix-target:
+        description: Optional make target used to produce a formatter diff after failure
+        required: false
+        default: ""
 runs:
     using: composite
     steps:
@@ -19,12 +23,17 @@ runs:
           env:
               CHECK_ID: ${{ inputs.check-id }}
               MAKE_TARGET: ${{ inputs.make-target }}
+              FIX_TARGET: ${{ inputs.fix-target }}
           run: |
               set +e
               log_path="$RUNNER_TEMP/quality-results/$CHECK_ID.log"
               mkdir -p "$(dirname "$log_path")"
               make "$MAKE_TARGET" 2>&1 | tee "$log_path"
               code=${PIPESTATUS[0]}
+              if [ "$code" -ne 0 ] && [ -n "$FIX_TARGET" ]; then
+                make "$FIX_TARGET" >/dev/null 2>&1 || true
+                git diff --unified=0 --no-ext-diff > "$RUNNER_TEMP/quality-results/$CHECK_ID.diff"
+              fi
               echo "exit_code=$code" >> "$GITHUB_OUTPUT"
               exit 0
         - name: Publish ${{ inputs.title }} summary and annotations
@@ -40,6 +49,7 @@ runs:
               --title "$CHECK_TITLE"
               --exit-code "${EXIT_CODE:-2}"
               --log "$RUNNER_TEMP/quality-results/$CHECK_ID.log"
+              --diff "$RUNNER_TEMP/quality-results/$CHECK_ID.diff"
               --output "$RUNNER_TEMP/quality-results/$CHECK_ID.json"
               --summary "$GITHUB_STEP_SUMMARY"
         - name: Upload ${{ inputs.title }} result

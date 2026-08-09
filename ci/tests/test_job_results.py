@@ -9,20 +9,23 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from monori.ci.quality_graph.job_report import build_result, parse_diagnostics
-from monori.ci.quality_graph.job_report import main as job_report_main
-from monori.ci.quality_graph.job_results import (
+from monori.ci.lib.annotations import (
     MAX_STEP_ANNOTATIONS,
     AnnotationLevel,
+    SourceAnnotation,
+    grouped_annotations,
+    workflow_annotation_command,
+)
+from monori.ci.lib.diagnostics import parse_diagnostics, parse_diff_annotations
+from monori.ci.quality_graph.job_report import build_result
+from monori.ci.quality_graph.job_report import main as job_report_main
+from monori.ci.quality_graph.job_results import (
     JobControl,
     JobResult,
     JobStatus,
-    SourceAnnotation,
     append_job_summary,
     controls_from_markdown,
-    grouped_annotations,
     read_job_result,
-    workflow_annotation_command,
     write_job_result,
 )
 from monori.ci.quality_graph.result_cli import main as result_cli_main
@@ -110,6 +113,57 @@ def test_common_diagnostics_become_source_annotations() -> None:
     assert [(item.path, item.start_line, item.start_column) for item in annotations] == [
         ("server/app.py", 4, 7),
         ("web/src/app.tsx", 8, 2),
+    ]
+
+
+def test_multiline_tool_diagnostics_become_source_annotations() -> None:
+    """Parse ESLint, SQLFluff, Bandit, and Semgrep output through one library API."""
+    annotations = parse_diagnostics(
+        """/home/runner/work/monori/monori/web/src/app.tsx
+  28:15  error  Unsafe assignment  @typescript-eslint/no-unsafe-assignment
+== [server/query.sql] FAIL
+L:  12 | P:   4 | LT01 | Unexpected whitespace.
+>> Issue: [B101:assert_used] Use of assert detected.
+Location: server/app/service.py:42:5
+ci/quality_graph/base.py
+\u276f\u2771 python.security.example
+171┆ dangerous_call()
+"""
+    )
+
+    assert [(item.path, item.start_line, item.start_column) for item in annotations] == [
+        ("web/src/app.tsx", 28, 15),
+        ("server/query.sql", 12, 4),
+        ("server/app/service.py", 42, 5),
+        ("ci/quality_graph/base.py", 171, None),
+    ]
+    assert annotations[1].title == "LT01"
+    assert annotations[2].message.startswith("[B101:assert_used]")
+    assert annotations[3].message == "python.security.example"
+
+
+def test_formatter_diff_hunks_become_precise_source_annotations() -> None:
+    """Annotate every changed range produced by an optional formatter fix target."""
+    annotations = parse_diff_annotations(
+        """diff --git a/web/src/app.tsx b/web/src/app.tsx
+--- a/web/src/app.tsx
++++ b/web/src/app.tsx
+@@ -4,2 +4,3 @@
+-old
++new
++line
+diff --git a/server/app.py b/server/app.py
+--- a/server/app.py
++++ b/server/app.py
+@@ -10 +10 @@
+-old
++new
+"""
+    )
+
+    assert [(item.path, item.start_line, item.end_line) for item in annotations] == [
+        ("web/src/app.tsx", 4, 6),
+        ("server/app.py", 10, 10),
     ]
 
 
