@@ -20,12 +20,18 @@ class TestMutationDiffGate:
         )
 
     def test_maps_mutant_metadata_to_its_configured_source_path(self) -> None:
-        assert module.source_path_for_mutant(Path("app/example.py.meta")) == "server/app/example.py"
         assert (
-            module.source_path_for_mutant(Path("quality_graph/app/example.py.meta"))
+            module.source_path_for_mutant(Path("monori/server/app/example.py.meta"))
+            == "server/app/example.py"
+        )
+        assert (
+            module.source_path_for_mutant(Path("monori/ci/quality_graph/app/example.py.meta"))
             == "ci/quality_graph/app/example.py"
         )
-        assert module.source_path_for_mutant(Path("lib/comments.py.meta")) == "ci/lib/comments.py"
+        assert (
+            module.source_path_for_mutant(Path("monori/ci/lib/comments.py.meta"))
+            == "ci/lib/comments.py"
+        )
 
     def test_collects_changed_functions(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -105,22 +111,24 @@ diff --git a/server/app/example.py b/server/app/example.py
             root = Path(directory)
             mutants = root / "mutants"
             baseline = root / "baseline"
-            current_meta = mutants / "app/example.py.meta"
-            baseline_meta = baseline / "app/example.py.meta"
+            current_meta = mutants / "monori/server/app/example.py.meta"
+            baseline_meta = baseline / "monori/server/app/example.py.meta"
             current_meta.parent.mkdir(parents=True)
             baseline_meta.parent.mkdir(parents=True)
             current_meta.write_text(
                 json.dumps(
                     {
                         "exit_code_by_key": {
-                            "app.example.x_changed__mutmut_1": 0,
-                            "app.example.x_untouched__mutmut_2": 1,
+                            "monori.server.app.example.x_changed__mutmut_1": 0,
+                            "monori.server.app.example.x_untouched__mutmut_2": 1,
                         }
                     }
                 )
             )
             baseline_meta.write_text(
-                json.dumps({"exit_code_by_key": {"app.example.x_changed__mutmut_1": 1}})
+                json.dumps(
+                    {"exit_code_by_key": {"monori.server.app.example.x_changed__mutmut_1": 1}}
+                )
             )
             unrelated = mutants / "unknown/example.py.meta"
             unrelated.parent.mkdir(parents=True)
@@ -148,7 +156,7 @@ diff --git a/server/app/example.py b/server/app/example.py
             (
                 "server/app/example.py",
                 1,
-                "Surviving mutant: app.example.x_changed__mutmut_1",
+                "Surviving mutant: monori.server.app.example.x_changed__mutmut_1",
             )
         ]
 
@@ -194,8 +202,17 @@ diff --git a/server/app/example.py b/server/app/example.py
             assert "No changed functions" in content
             assert "::error file=server/a%3Ab%2Cc.py,line=2" in capsys.readouterr().err
 
-    def test_revision_resolution_rejects_unknown_reference(self) -> None:
-        repository = Repo(Path.cwd())
+    def test_revision_resolution_rejects_unknown_reference(self, tmp_path: Path) -> None:
+        repository = Repo.init(tmp_path)
+        source = tmp_path / "example.py"
+        source.write_text("value = 1\n")
+        porcelain.add(repository, paths=["example.py"])
+        porcelain.commit(
+            repository,
+            message=b"initial",
+            author=b"Test <test@example.com>",
+            committer=b"Test <test@example.com>",
+        )
         assert module.commit_for_revision(repository, "HEAD").id
         with pytest.raises(RuntimeError, match="Cannot resolve git revision"):
             module.commit_for_revision(repository, "missing-revision")
@@ -250,9 +267,11 @@ diff --git a/server/app/example.py b/server/app/example.py
             committer=b"Test <test@example.com>",
         )
         mutants = tmp_path / "mutants"
-        metadata = mutants / "app/example.py.meta"
+        metadata = mutants / "monori/server/app/example.py.meta"
         metadata.parent.mkdir(parents=True)
-        metadata.write_text(json.dumps({"exit_code_by_key": {"app.example.x_value__mutmut_1": 1}}))
+        metadata.write_text(
+            json.dumps({"exit_code_by_key": {"monori.server.app.example.x_value__mutmut_1": 1}})
+        )
         summary = tmp_path / "summary.md"
         previous = os.environ.get("MUTATION_SUMMARY_PATH")
         os.environ["MUTATION_SUMMARY_PATH"] = str(summary)

@@ -27,10 +27,10 @@ SURVIVED = 0
 OTHER_STATUSES = {-24, 24, 35, 36, 152, 255}
 CLASS_SEPARATOR = "ǁ"
 MUTANT_SOURCE_PATHS = {
-    "app/": "server/app/",
-    "common/": "common/",
-    "lib/": "ci/lib/",
-    "quality_graph/": "ci/quality_graph/",
+    "monori/server/app/": "server/app/",
+    "monori/common/": "common/",
+    "monori/ci/lib/": "ci/lib/",
+    "monori/ci/quality_graph/": "ci/quality_graph/",
 }
 logger = logging.getLogger(__name__)
 

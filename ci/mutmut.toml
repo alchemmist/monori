@@ -1,0 +1,20 @@
+[tool.pytest.ini_options]
+testpaths = ["server/tests", "ci/tests"]
+markers = ["integration: integration test that stands up real dependencies"]
+
+[tool.mutmut]
+source_paths = [
+  "monori/server/app",
+  "monori/ci/lib",
+  "monori/ci/quality_graph",
+  "monori/common",
+]
+also_copy = ["server/tests", "ci/tests"]
+pytest_add_cli_args_test_selection = [
+  "--import-mode=importlib",
+  "server/tests",
+  "ci/tests",
+  "--ignore=ci/tests/integration",
+  "--ignore=ci/tests/test_main_workflow.py",
+  "--ignore=ci/tests/test_pr_workflow.py",
+]

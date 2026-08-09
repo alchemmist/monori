@@ -176,7 +176,9 @@ lint-docs:
 	python3 scripts/gen_schema_diagram.py --check
 
 lint-actions:
-	actionlint
+	actionlint -shellcheck=
+	scripts/workflow-shellcheck.sh \
+		.github/workflows/*.yaml .github/actions/*/action.yml
 
 lint-docker:
 	hadolint deploy/Dockerfile.front deploy/Dockerfile.back deploy/Dockerfile.sync deploy/Dockerfile.dev ci/testkit/Dockerfile
@@ -317,8 +319,9 @@ m-front-diff:
 m-back:
 	@set +e; \
 	thr=$(MUTATION_THRESHOLD); \
-	( mkdir -p mutants && uv run --locked --group mutation mutmut run --max-children $(MUTATION_JOBS) 2>mutants/mutmut-stderr.log ); mutmut=$$?; \
-	( mkdir -p mutants && uv run --locked --group mutation mutmut export-cicd-stats ); export=$$?; \
+	( mkdir -p mutants && uv run --locked --group mutation scripts/mutmut.sh run --max-children $(MUTATION_JOBS) 2>mutmut-stderr.log ); mutmut=$$?; \
+	mv mutmut-stderr.log mutants/mutmut-stderr.log; \
+	( mkdir -p mutants && uv run --locked --group mutation scripts/mutmut.sh export-cicd-stats ); export=$$?; \
 	if [ $$export -eq 0 ]; then \
 		uv run --locked --group mutation python -m monori.ci.lib.mutation_gate mutants/mutmut-cicd-stats.json $$thr; srv=$$?; \
 	else \
@@ -336,14 +339,15 @@ m-back-diff:
 	if git diff --quiet "$(BASE)...HEAD" -- server/app ci/lib ci/quality_graph common; then \
 		echo "mutation-diff: no changed Python files — pass"; exit 0; \
 	fi; \
-	paths=$$(git diff --diff-filter=ACMR --name-only "$(BASE)...HEAD" -- server/app ci/lib ci/quality_graph common '*.py' | sed -e 's#^server/##' -e 's#^ci/##' -e 's#^common/#common/#' -e 's#\.py$$##' -e 's#/#.#g' -e 's#$$#.*#' | paste -sd' ' -); \
+	paths=$$(git diff --diff-filter=ACMR --name-only "$(BASE)...HEAD" -- server/app ci/lib ci/quality_graph common '*.py' | sed -e 's#^server/#monori.server.#' -e 's#^ci/#monori.ci.#' -e 's#^common/#monori.common.#' -e 's#\.py$$##' -e 's#/#.#g' -e 's#$$#.*#' | paste -sd' ' -); \
 	if [ -z "$$paths" ]; then \
 		echo "mutation-diff: no changed Python source files — pass"; exit 0; \
 	fi; \
 	set -- $$paths; \
 	baseline=$$(mktemp -d); trap 'rm -rf "$$baseline"' EXIT; \
 	cold_start=0; if [ -d mutants ]; then cp -a mutants "$$baseline/mutants"; else mkdir -p "$$baseline/mutants"; cold_start=1; fi; \
-	( mkdir -p mutants && uv run --locked --group mutation mutmut run --max-children $(MUTATION_JOBS) "$$@" 2>mutants/mutmut-stderr.log ); mutmut=$$?; \
+	( mkdir -p mutants && uv run --locked --group mutation scripts/mutmut.sh run --max-children $(MUTATION_JOBS) "$$@" 2>mutmut-stderr.log ); mutmut=$$?; \
+	mv mutmut-stderr.log mutants/mutmut-stderr.log; \
 	args="--mutants mutants --baseline $$baseline/mutants --base $(BASE) --threshold $(MUTATION_DIFF_THRESHOLD)"; \
 	if [ $$cold_start -eq 1 ]; then args="$$args --skip-new-survivors"; fi; \
 	uv run --locked --group mutation python -m monori.ci.lib.mutation_diff_gate $$args; gate=$$?; \
