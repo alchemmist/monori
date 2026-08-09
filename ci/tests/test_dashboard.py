@@ -64,10 +64,12 @@ def test_dashboard_status_prefers_pending_then_failure() -> None:
     pending = DashboardJob("a", "A", JobStatus.PENDING, "summary", "logs")
     failed = DashboardJob("b", "B", JobStatus.FAILED, "summary", "logs")
     passed = DashboardJob("c", "C", JobStatus.PASSED, "summary", "logs")
+    waiting = DashboardJob("d", "D", JobStatus.WAITING, "summary", "logs")
 
     assert dashboard_status((failed, pending)) is JobStatus.PENDING
     assert dashboard_status((failed, passed)) is JobStatus.FAILED
     assert dashboard_status((passed,)) is JobStatus.PASSED
+    assert dashboard_status((waiting, passed)) is JobStatus.PENDING
 
 
 def test_dashboard_metric_escapes_markdown_table_delimiters() -> None:
@@ -132,7 +134,7 @@ def test_live_refresh_updates_completed_and_api_reported_rows() -> None:
 
     assert "| Workflow graph validation | ✅ passed |" in refreshed
     assert "| Format check | ✅ passed |" in refreshed
-    assert "## ⏳ Quality Graph" in refreshed
+    assert "## 🟡 Quality Graph" in refreshed
 
 
 def test_live_refresh_adds_and_removes_job_admin_controls() -> None:

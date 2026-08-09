@@ -140,7 +140,7 @@ def load_results(directory: Path) -> dict[str, JobResult]:
 def dashboard_status(jobs: Iterable[DashboardJob]) -> JobStatus:
     """Derive the dashboard verdict from all displayed jobs."""
     statuses = {job.status for job in jobs}
-    if JobStatus.PENDING in statuses:
+    if JobStatus.PENDING in statuses or JobStatus.WAITING in statuses:
         return JobStatus.PENDING
     if JobStatus.FAILED in statuses:
         return JobStatus.FAILED
@@ -157,7 +157,7 @@ def refresh_dashboard_body(
     observed: list[DashboardJob] = []
     for definition in workflow_jobs().values():
         api_job = api_jobs.get(definition.title)
-        status = api_job_status(api_job) if api_job is not None else JobStatus.PENDING
+        status = api_job_status(api_job) if api_job is not None else JobStatus.WAITING
         metric: str | None = None
         if definition.job_id == result.check_id:
             status = result.status
@@ -226,7 +226,7 @@ def mark_jobs_pending(github: GitHubAPI, number: int, job_ids: set[str]) -> None
             rf"^(\| {re.escape(definition.title)} \|) [^|]+(\|.*)$",
             re.MULTILINE,
         )
-        updated = row.sub(r"\1 ⏳ pending \2", updated)
+        updated = row.sub(rf"\1 {JobStatus.PENDING.emoji} {JobStatus.PENDING.value} \2", updated)
     unwrapped = MANAGED_MARKER_RE.sub("", updated)
     upsert_comment(github, number, DASHBOARD_MARKER, unwrapped)
 
@@ -258,8 +258,10 @@ def update_dashboard_notice(github: GitHubAPI, number: int, message: str) -> Non
 
 def api_job_status(job: dict[str, JsonValue]) -> JobStatus:
     """Map one Actions API job state to the dashboard domain."""
-    if job.get("status") != "completed":
+    if job.get("status") == "in_progress":
         return JobStatus.PENDING
+    if job.get("status") != "completed":
+        return JobStatus.WAITING
     conclusion = optional_string(job.get("conclusion"))
     if conclusion == "success":
         return JobStatus.PASSED
@@ -291,7 +293,13 @@ class DashboardLifecycle:
             DashboardJob(
                 definition.job_id,
                 definition.title,
-                JobStatus.PENDING,
+                (
+                    JobStatus.PENDING
+                    if definition.job_id == "workflow-graph"
+                    else api_job_status(api_jobs[definition.title])
+                    if definition.title in api_jobs
+                    else JobStatus.WAITING
+                ),
                 f"{self.run_url}#{definition.summary_anchor}",
                 (
                     optional_string(api_jobs[definition.title].get("html_url"))

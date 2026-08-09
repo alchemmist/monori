@@ -34,7 +34,8 @@ ADMIN_DETAILS_RE = re.compile(
 class JobStatus(StrEnum):
     """Represent the dashboard state of one workflow job."""
 
-    PENDING = "pending"
+    PENDING = "in progress"
+    WAITING = "wait"
     PASSED = "passed"
     FAILED = "failed"
     SKIPPED = "skipped"
@@ -43,7 +44,8 @@ class JobStatus(StrEnum):
     def emoji(self) -> str:
         """Return the visual marker for this job state."""
         return {
-            JobStatus.PENDING: "⏳",
+            JobStatus.PENDING: "🟡",
+            JobStatus.WAITING: "⏸️",
             JobStatus.PASSED: "✅",
             JobStatus.FAILED: "❌",
             JobStatus.SKIPPED: "⏭️",

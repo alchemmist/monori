@@ -368,7 +368,7 @@ def test_dashboard_updates_each_completed_job_before_final_aggregation() -> None
 
     body = string_value(state_objects(fake_state(), "comments")[0].get("body"), "dashboard")
     assert "| Workflow graph validation | ✅ passed |" in body
-    assert "| Format check | ⏳ pending |" in body
+    assert "| Format check | ⏸️ wait |" in body
     assert "[Logs](https://example.test/jobs/workflow-graph)" in body
     assert "[Logs](https://example.test/jobs/suppressions)" in body
     assert "| Lint suppression gate | ❌ failed |" in body
@@ -439,9 +439,9 @@ def test_new_run_resets_stale_dashboard_while_runs_api_is_delayed() -> None:
     ).start()
 
     body = string_value(state_objects(fake_state(), "comments")[0].get("body"), "dashboard")
-    assert "## ⏳ Quality Graph" in body
-    assert "| Workflow graph validation | ⏳ pending |" in body
-    assert "| Format check | ⏳ pending |" in body
+    assert "## 🟡 Quality Graph" in body
+    assert "| Workflow graph validation | 🟡 in progress |" in body
+    assert "| Format check | ⏸️ wait |" in body
     assert body.count("[Logs](https://example.test/runs/99)") == len(workflow_jobs())
     assert "❌" not in body
 
@@ -546,7 +546,7 @@ def test_dashboard_pending_update_ignores_unknown_jobs_and_preserves_backslashes
     update_dashboard_notice(github, PULL_REQUEST_NUMBER, r"Command contains \1 literally")
 
     body = string_value(state_objects(fake_state(), "comments")[0].get("body"), "dashboard")
-    assert "| Format check | ⏳ pending |" in body
+    assert "| Format check | 🟡 in progress |" in body
     assert r"Command contains \1 literally" in body
 
 
