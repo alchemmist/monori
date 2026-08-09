@@ -181,7 +181,7 @@ def refresh_dashboard_body(
                 re.MULTILINE,
             )
             updated = logs_link.sub(
-                lambda match: f"{match.group(1)}[Logs]({logs_url}){match.group(2)}",
+                lambda match, url=logs_url: f"{match.group(1)}[Logs]({url}){match.group(2)}",
                 updated,
                 count=1,
             )
