@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from monori.ci.lib.annotations import AnnotationLevel, SourceAnnotation
 
 ANSI_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
+PLAYWRIGHT_RESULT_RE = re.compile(r"^[\u2713\u2718\u00d7]\s+\d+\s+\[[^]]+]\s+\u203a\s+")
 COLON_RE = re.compile(
     r"^(?P<path>[^:\n]+\.(?:py|pyi|ts|tsx|js|jsx|css|html|sql|ya?ml|md|toml|jsonc?))"
     r":(?P<line>\d+)(?::(?P<column>\d+))?(?::|\s+-)\s*(?P<message>.+)$"
@@ -45,6 +46,8 @@ def parse_diagnostics(log: str) -> tuple[SourceAnnotation, ...]:
     context = DiagnosticContext()
     for raw_line in ANSI_RE.sub("", log).splitlines():
         line = raw_line.strip()
+        if PLAYWRIGHT_RESULT_RE.match(line) is not None:
+            continue
         context, contextual_annotation, handled = parse_context_line(line, context)
         if contextual_annotation is not None:
             annotations.append(contextual_annotation)

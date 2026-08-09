@@ -182,6 +182,18 @@ def test_warning_diagnostic_keeps_warning_annotation_level() -> None:
     assert annotations[0].level is AnnotationLevel.WARNING
 
 
+def test_playwright_results_do_not_become_source_annotations() -> None:
+    """Keep Playwright list-reporter results out of GitHub source annotations."""
+    annotations = parse_diagnostics(
+        "\u2713  10 [chromium] \u203a e2e/dashboard.spec.ts:3:1 \u203a dashboard shows the "
+        "seeded balances\n"
+        "\u2718   2 [chromium] \u203a e2e/auth.spec.ts:20:1 \u203a signing in through the login "
+        "page\n"
+    )
+
+    assert annotations == ()
+
+
 def test_multiline_tool_diagnostics_become_source_annotations() -> None:
     """Parse ESLint, SQLFluff, Bandit, and Semgrep output through one library API."""
     annotations = parse_diagnostics(
