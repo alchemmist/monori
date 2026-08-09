@@ -1195,6 +1195,7 @@ source = { virtual = "." }
 [package.dev-dependencies]
 analyze = [
     { name = "bandit" },
+    { name = "monori-ci" },
     { name = "vulture" },
 ]
 audit = [
@@ -1255,6 +1256,7 @@ type = [
 [package.metadata.requires-dev]
 analyze = [
     { name = "bandit", specifier = ">=1.8" },
+    { name = "monori-ci", editable = "ci" },
     { name = "vulture", specifier = ">=2.16" },
 ]
 audit = [

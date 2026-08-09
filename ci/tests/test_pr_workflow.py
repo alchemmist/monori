@@ -1,4 +1,5 @@
 import re
+import tomllib
 from pathlib import Path
 from typing import ClassVar, TypedDict, cast
 
@@ -6,6 +7,7 @@ import yaml
 
 REPOSITORY_ROOT = Path.cwd()
 WORKFLOW = REPOSITORY_ROOT / ".github/workflows/pr-checks.yaml"
+ROOT_PYPROJECT = REPOSITORY_ROOT / "pyproject.toml"
 FRONTEND_PERFORMANCE_SCOPE = (
     REPOSITORY_ROOT / ".github/actions/frontend-performance-scope/action.yml"
 )
@@ -180,6 +182,12 @@ class TestPullRequestWorkflowGraph:
             )
             assert block is not None, job
             assert f"python-profile: {profile}" in block.group("body"), job
+
+    def test_analysis_profile_can_publish_quality_results(self) -> None:
+        """Install the shared CI package used after the analysis command finishes."""
+        configuration = tomllib.loads(ROOT_PYPROJECT.read_text())
+
+        assert "monori-ci" in configuration["dependency-groups"]["analyze"]
 
     def test_frontend_performance_is_one_conditional_job(self) -> None:
         block = re.search(
