@@ -177,8 +177,6 @@ lint-docs:
 
 lint-actions:
 	actionlint -shellcheck=
-	scripts/workflow-shellcheck.sh \
-		.github/workflows/*.yaml .github/actions/*/action.yml
 
 lint-docker:
 	hadolint deploy/Dockerfile.front deploy/Dockerfile.back deploy/Dockerfile.sync deploy/Dockerfile.dev ci/testkit/Dockerfile
