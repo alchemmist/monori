@@ -5,7 +5,17 @@ from typing import ClassVar, TypedDict, cast
 
 import yaml
 
-REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
+
+def find_repository_root(path: Path) -> Path:
+    """Find the checkout containing the workflow files used by these tests."""
+    for parent in (path, *path.parents):
+        if (parent / ".github").is_dir():
+            return parent
+    message = f"Cannot find repository root from {path}"
+    raise RuntimeError(message)
+
+
+REPOSITORY_ROOT = find_repository_root(Path(__file__).resolve())
 WORKFLOW = REPOSITORY_ROOT / ".github/workflows/pr-checks.yaml"
 ROOT_PYPROJECT = REPOSITORY_ROOT / "pyproject.toml"
 FRONTEND_PERFORMANCE_SCOPE = (
