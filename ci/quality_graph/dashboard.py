@@ -494,8 +494,7 @@ class DashboardLifecycle:
     def _all_jobs_complete(api_jobs: dict[str, dict[str, JsonValue]]) -> bool:
         """Return whether every dashboard check has reached a terminal Actions state."""
         return all(
-            definition.title in api_jobs
-            and api_jobs[definition.title].get("status") == "completed"
+            definition.title in api_jobs and api_jobs[definition.title].get("status") == "completed"
             for definition in workflow_jobs().values()
         )
 
