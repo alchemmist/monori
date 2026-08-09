@@ -11,28 +11,55 @@ runs:
           uses: ./.github/actions/setup-project
           with:
               python-profile: ci
-        - uses: ./.github/actions/report-in-progress
-          with:
-              marker: object-annotations
-              github-token: ${{ inputs.github-token }}
         - name: Test annotation checker
           id: object-annotation-test
           shell: bash
-          run: uv run --locked pytest -q ci/tests/test_object_annotations.py
+          run: |
+              set +e
+              log_path="$RUNNER_TEMP/quality-results/object-annotations-test.log"
+              mkdir -p "$(dirname "$log_path")"
+              env -u GITHUB_STEP_SUMMARY -u MUTATION_SUMMARY_PATH uv run --locked pytest -q ci/tests/test_object_annotations.py 2>&1 | tee "$log_path"
+              echo "exit_code=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
+              exit 0
         - name: Check Python annotations
+          id: object-annotations
+          if: steps.object-annotation-test.outputs.exit_code == '0'
           shell: bash
           env:
               GITHUB_TOKEN: ${{ inputs.github-token }}
-          run: uv run --locked python -m monori.ci.quality_graph.checks.object_annotations
-        - name: Publish failed annotation test report
-          if: always() && steps.object-annotation-test.outcome == 'failure'
+              QUALITY_RESULT_PATH: ${{ runner.temp }}/quality-results/object-annotations.json
+          run: |
+              set +e
+              uv run --locked python -m monori.ci.quality_graph.checks.object_annotations
+              echo "exit_code=$?" >> "$GITHUB_OUTPUT"
+              exit 0
+        - name: Publish failed annotation test summary
+          if: steps.object-annotation-test.outputs.exit_code != '0'
           shell: bash
-          env:
-              GITHUB_TOKEN: ${{ inputs.github-token }}
-              PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
           run: >-
-              uv run --locked python -m monori.ci.quality_graph.reporting complete
-              --marker object-annotations
-              --status fail
-              --message 'The object annotation checker tests failed.'
-              --pr-number "$PR_NUMBER"
+              uv run --locked python -m monori.ci.quality_graph.job_report
+              --check-id object-annotations
+              --title 'Python object annotation gate'
+              --exit-code "${{ steps.object-annotation-test.outputs.exit_code }}"
+              --log "$RUNNER_TEMP/quality-results/object-annotations-test.log"
+              --output "$RUNNER_TEMP/quality-results/object-annotations.json"
+              --summary "$GITHUB_STEP_SUMMARY"
+        - name: Upload object-annotation result
+          if: always()
+          uses: actions/upload-artifact@v7
+          with:
+              name: quality-result-object-annotations-${{ github.run_attempt }}
+              path: ${{ runner.temp }}/quality-results/object-annotations.json
+              if-no-files-found: error
+              retention-days: 7
+        - name: Enforce object-annotation verdict
+          if: always()
+          shell: bash
+          env:
+              TEST_EXIT: ${{ steps.object-annotation-test.outputs.exit_code }}
+              CHECK_EXIT: ${{ steps.object-annotations.outputs.exit_code }}
+          run: |
+              if [ "${TEST_EXIT:-2}" -ne 0 ]; then
+                exit "${TEST_EXIT:-2}"
+              fi
+              exit "${CHECK_EXIT:-2}"

@@ -11,10 +11,6 @@ runs:
           uses: ./.github/actions/setup-project
           with:
               python-profile: ci
-        - uses: ./.github/actions/report-in-progress
-          with:
-              marker: frontend-performance
-              github-token: ${{ github.token }}
         - name: Detect performance-relevant changes
           id: scope
           uses: actions/github-script@v8
@@ -52,29 +48,33 @@ runs:
                     return /(perf-front|PERF_|frontend)/i.test(file.patch);
                   });
                   core.setOutput("relevant", relevant ? "true" : "false");
-        - name: Publish failed performance scope report
+        - name: Publish failed performance scope summary
           if: always() && steps.scope.outcome == 'failure'
           shell: bash
-          env:
-              GITHUB_TOKEN: ${{ github.token }}
-              GITHUB_REPOSITORY: ${{ github.repository }}
-              PR_NUMBER: ${{ github.event.pull_request.number }}
           run: >-
-              uv run --locked python -m monori.ci.quality_graph.reporting complete
-              --marker frontend-performance
-              --status fail
+              uv run --locked python -m monori.ci.quality_graph.result_cli
+              --check-id frontend-performance
+              --title 'Frontend performance'
+              --status failed
               --message 'Could not determine frontend performance scope.'
-              --pr-number "$PR_NUMBER"
-        - name: Publish skipped performance report
+              --job-summary "$GITHUB_STEP_SUMMARY"
+              --output "$RUNNER_TEMP/quality-results/frontend-performance.json"
+        - name: Publish skipped performance summary
           if: steps.scope.outcome == 'success' && steps.scope.outputs.relevant != 'true'
           shell: bash
-          env:
-              GITHUB_TOKEN: ${{ github.token }}
-              GITHUB_REPOSITORY: ${{ github.repository }}
-              PR_NUMBER: ${{ github.event.pull_request.number }}
-          run: |
-              uv run --locked python -m monori.ci.quality_graph.reporting complete \
-                --marker frontend-performance \
-                --status done \
-                --message 'No performance-relevant files changed; the gate is skipped.' \
-                --pr-number "$PR_NUMBER"
+          run: >-
+              uv run --locked python -m monori.ci.quality_graph.result_cli
+              --check-id frontend-performance
+              --title 'Frontend performance'
+              --status skipped
+              --message 'No performance-relevant files changed; the gate is not applicable.'
+              --job-summary "$GITHUB_STEP_SUMMARY"
+              --output "$RUNNER_TEMP/quality-results/frontend-performance.json"
+        - name: Upload frontend-performance scope result
+          if: always() && steps.scope.outputs.relevant != 'true'
+          uses: actions/upload-artifact@v7
+          with:
+              name: quality-result-frontend-performance-${{ github.run_attempt }}
+              path: ${{ runner.temp }}/quality-results/frontend-performance.json
+              if-no-files-found: error
+              retention-days: 7

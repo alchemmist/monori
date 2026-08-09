@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib
+from dataclasses import dataclass
 from functools import cache
 from typing import TYPE_CHECKING, Protocol, cast
 
@@ -16,6 +17,78 @@ class CommandHandler(Protocol):
     def __call__(self) -> int:
         """Process the event and return the check exit code."""
         ...
+
+
+@dataclass(frozen=True)
+class WorkflowJobDefinition:
+    """Describe one user-facing check in the pull-request workflow graph."""
+
+    job_id: str
+    title: str
+    module: str
+    gate: str | None = None
+    report_marker: str | None = None
+
+    @property
+    def summary_anchor(self) -> str:
+        """Return the stable Markdown heading anchor for this job summary."""
+        return f"quality-graph-{self.job_id}"
+
+
+WORKFLOW_JOBS = (
+    WorkflowJobDefinition("workflow-graph", "Workflow graph validation", "workflow_graph"),
+    WorkflowJobDefinition("fmt-check", "Format check", "fmt_check"),
+    WorkflowJobDefinition(
+        "suppressions", "Lint suppression gate", "suppressions", "suppression", "suppression"
+    ),
+    WorkflowJobDefinition("lint", "Lint", "lint"),
+    WorkflowJobDefinition(
+        "object-annotations",
+        "Python object annotation gate",
+        "object_annotations",
+        "object",
+        "object-annotations",
+    ),
+    WorkflowJobDefinition("type", "Type check", "type_check"),
+    WorkflowJobDefinition("analyze", "Static analysis", "analyze"),
+    WorkflowJobDefinition("test-fast", "Fast tests", "test_fast"),
+    WorkflowJobDefinition("test-medium", "Medium tests", "test_medium"),
+    WorkflowJobDefinition("test-slow", "Slow tests", "test_slow"),
+    WorkflowJobDefinition("build", "Build", "build"),
+    WorkflowJobDefinition("coverage", "Coverage", "coverage"),
+    WorkflowJobDefinition("mutation", "Mutation testing", "mutation", report_marker="mutation"),
+    WorkflowJobDefinition(
+        "bundle-size", "Frontend bundle size", "bundle_size", "bundle", "bundle-size"
+    ),
+    WorkflowJobDefinition(
+        "frontend-performance",
+        "Frontend performance",
+        "frontend_performance",
+        "frontend",
+        "frontend-performance",
+    ),
+    WorkflowJobDefinition("audit", "Dependency and security audit", "audit"),
+)
+WORKFLOW_JOB_BY_ID = {definition.job_id: definition for definition in WORKFLOW_JOBS}
+
+
+def workflow_jobs() -> dict[str, WorkflowJobDefinition]:
+    """Return user-facing workflow jobs in dashboard display order."""
+    return dict(WORKFLOW_JOB_BY_ID)
+
+
+def workflow_job_for_report(marker: str) -> WorkflowJobDefinition:
+    """Return the workflow job that owns a report marker."""
+    for definition in WORKFLOW_JOBS:
+        if definition.report_marker == marker:
+            return definition
+    message = f"Unknown Quality Graph report marker: {marker}"
+    raise ValueError(message)
+
+
+def workflow_job_module(definition: WorkflowJobDefinition) -> str:
+    """Return the import path implementing one registered workflow check."""
+    return f"monori.ci.quality_graph.checks.{definition.module}"
 
 
 @cache
@@ -36,7 +109,7 @@ def registered_checks() -> dict[str, type[QualityCheckDefinition]]:
         BundleSizeCheck,
         FrontendPerformanceCheck,
     )
-    return {check.gate: check for check in checks}
+    return {check.definition.gate: check for check in checks if check.definition.gate is not None}
 
 
 def run_direct_command_checks() -> None:

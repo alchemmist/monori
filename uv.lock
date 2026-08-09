@@ -1195,6 +1195,7 @@ source = { virtual = "." }
 [package.dev-dependencies]
 analyze = [
     { name = "bandit" },
+    { name = "monori-ci" },
     { name = "vulture" },
 ]
 audit = [
@@ -1204,7 +1205,6 @@ audit = [
 ci = [
     { name = "monori-ci" },
     { name = "pytest" },
-    { name = "pyyaml" },
 ]
 format = [
     { name = "monori-ci" },
@@ -1255,6 +1255,7 @@ type = [
 [package.metadata.requires-dev]
 analyze = [
     { name = "bandit", specifier = ">=1.8" },
+    { name = "monori-ci", editable = "ci" },
     { name = "vulture", specifier = ">=2.16" },
 ]
 audit = [
@@ -1264,7 +1265,6 @@ audit = [
 ci = [
     { name = "monori-ci", editable = "ci" },
     { name = "pytest", specifier = ">=8" },
-    { name = "pyyaml", specifier = ">=6.0" },
 ]
 format = [
     { name = "monori-ci", editable = "ci" },
@@ -1316,6 +1316,7 @@ dependencies = [
     { name = "jinja2" },
     { name = "monori-common" },
     { name = "pydantic" },
+    { name = "pyyaml" },
 ]
 
 [package.metadata]
@@ -1325,6 +1326,7 @@ requires-dist = [
     { name = "jinja2", specifier = ">=3.1" },
     { name = "monori-common", editable = "common" },
     { name = "pydantic", specifier = ">=2" },
+    { name = "pyyaml", specifier = ">=6.0" },
 ]
 
 [[package]]

@@ -11,7 +11,7 @@ from monori.ci.quality_graph.checks.object_annotations import (
     scan_file,
     summary_body,
 )
-from monori.ci.quality_graph.commands import parse_command
+from monori.ci.quality_graph.job_results import JobControl
 from monori.ci.quality_graph.models import CheckContext, Verdict
 
 
@@ -85,16 +85,6 @@ other: "list[object]"
         assert before.finding_id == after.finding_id
         assert before.finding_id != changed.finding_id
 
-    def test_approval_commands_use_shared_namespace(self) -> None:
-        assert parse_command("/qg ignore object-abc123") is not None
-        assert parse_command("/qg ignore-file server/app.py") is not None
-        assert parse_command("/qg ignore object-abc123,suppression-def456") is not None
-        assert parse_command("/qg remove-ignore object-abc123,suppression-def456") is not None
-        assert parse_command("/qg ignore object") == parse_command("/quality-graph ignore object")
-        assert parse_command("/ignore object-abc123") is None
-        assert parse_command("/qg ignore object-abc123 extra") is None
-        assert parse_command("/qg ignore all") is None
-
     def test_reports_only_added_lines(self) -> None:
         before = "value: object\n"
         after = "value: object\nother: object\n"
@@ -125,10 +115,47 @@ other: "list[object]"
     ) -> None:
         finding = Finding("server/app/example.py", 7, 2, "object", "finding-1")
 
-        body = summary_body([finding], set(), "https://github.com/org/repo/pull/1")
+        report = summary_body([finding], set(), "https://github.com/org/repo/pull/1")
+        body = report.summary
 
         assert body.startswith("## ❌ Python object annotation gate\n")
         assert "| Status | FAIL |" in body
         assert "| Findings | 1 |" in body
         assert "server/app/example.py:7" in body
         assert "/qg ignore object" in body
+        assert report.controls == (
+            JobControl(
+                "/qg ignore object-finding-1",
+                "/qg remove-ignore object-finding-1",
+            ),
+            JobControl(
+                "/qg ignore object",
+                "/qg remove-ignore object-finding-1",
+            ),
+            JobControl(
+                "/qg ignore-file server/app/example.py",
+                "/qg remove-ignore object-finding-1",
+            ),
+        )
+
+    def test_summary_renders_an_approved_finding_as_passed(self) -> None:
+        """Keep approved object annotations visible and reversible."""
+        finding = Finding("server/app/example.py", 7, 2, "object", "finding-1")
+
+        report = summary_body(
+            [finding],
+            {finding.finding_id},
+            "https://github.com/org/repo/pull/1",
+        )
+        body = report.summary
+
+        assert body.startswith("## ✅ Python object annotation gate\n")
+        assert "| Status | PASS |\n| Findings | 1 |\n| Active | 0 |\n| Approved | 1 |" in body
+        assert "- ✔ [`server/app/example.py:7`]" in body
+        assert report.controls == (
+            JobControl(
+                "/qg ignore object-finding-1",
+                "/qg remove-ignore object-finding-1",
+                checked=True,
+            ),
+        )

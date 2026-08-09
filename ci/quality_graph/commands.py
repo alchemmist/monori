@@ -17,13 +17,12 @@ from monori.ci.lib.comments import (
 )
 from monori.ci.lib.github import GitHub, GitHubAPI, rerun_latest_pull_request_workflow
 from monori.ci.lib.github import is_admin as github_is_admin
-from monori.ci.quality_graph.registry import registered_checks, run_direct_command_checks
-from monori.ci.quality_graph.reporting import (
-    PullRequestReport,
-    ReportModel,
-    ReportStatus,
-    render_report,
+from monori.ci.quality_graph.dashboard import (
+    mark_jobs_pending,
+    restore_dashboard_controls,
+    update_dashboard_notice,
 )
+from monori.ci.quality_graph.registry import registered_checks, run_direct_command_checks
 from monori.common import JsonValue, object_value, optional_string, string_value
 
 CommandName = Literal["help", "status", "ignore", "ignore-file", "remove-ignore"]
@@ -57,6 +56,8 @@ class CommandRequest:
     login: str | None
     pull_request_number: int | None
     react: bool = True
+    dashboard_edited_body: str | None = None
+    dashboard_previous_body: str | None = None
 
 
 @dataclass(frozen=True)
@@ -164,11 +165,6 @@ def set_comment_reaction(github: GitHubAPI, comment_id: int, content: str) -> No
     CommandReactionLifecycle(github, comment_id).set(Reaction(content))
 
 
-def upsert_status(github: GitHubAPI, number: int, body: str) -> None:
-    """Update the Quality Graph status through the shared report lifecycle."""
-    PullRequestReport.registered(github, number, "quality-graph").publish(body)
-
-
 def is_admin(github: GitHubAPI, login: str) -> bool:
     """Delegate repository permission checks to the shared GitHub layer."""
     return github_is_admin(github, login)
@@ -183,37 +179,25 @@ def pull_request_number(event: dict[str, JsonValue]) -> int | None:
     return number if isinstance(number, int) else None
 
 
-def command_result(command: QualityGraphCommand, status: ReportStatus, detail: str) -> str:
-    """Render a command result with the shared Quality Graph template."""
-    return render_report(
-        ReportModel(
-            "quality-graph",
-            status,
-            detail,
-            content=f"Command: `{command_text(command)}`",
-        )
-    )
-
-
 def help_body() -> str:
-    """Render command help with the shared Quality Graph template."""
+    """Render concise command help for the dashboard notice."""
     checks = registered_checks()
     gates = ",".join(checks)
     finding_ids = ",".join(f"{gate}-<id>" for gate in checks)
     file_gates = ", ".join(gate for gate, check in checks.items() if check.supports_ignore_file)
-    return render_report(
-        ReportModel(
-            "quality-graph",
-            ReportStatus.DONE,
-            "Only repository administrators may execute state-changing commands.",
-            content=f"""- `/qg ignore {finding_ids}` — ignore selected findings
+    file_help = (
+        f"- `/qg ignore-file path/to/file` — ignore findings in selected files ({file_gates})\n"
+        if file_gates
+        else ""
+    )
+    return f"""Only repository administrators may execute state-changing commands.
+
+- `/qg ignore {finding_ids}` — ignore selected findings
 - `/qg ignore {gates}` — ignore all current findings of selected types
-- `/qg ignore-file path/to/file` — ignore findings in selected files ({file_gates})
+{file_help.rstrip()}
 - `/qg remove-ignore {finding_ids}` — remove selected ignores
 - `/qg status` — show the current command status
-- `/qg help` — show this help""",
-        )
-    )
+- `/qg help` — show this help"""
 
 
 def read_event() -> dict[str, JsonValue]:
@@ -302,6 +286,8 @@ def checkbox_command_request(
         selected_command,
         optional_string(sender.get("login")),
         pull_request_number(event),
+        dashboard_edited_body=body,
+        dashboard_previous_body=previous_body,
     )
 
 
@@ -312,17 +298,32 @@ def publish_rejection(
 ) -> None:
     """Publish a rejected command result and apply its final reaction."""
     if request.pull_request_number is not None:
-        body = (
-            command_result(rejection.command, ReportStatus.FAIL, rejection.detail)
+        command = (
+            f" Command: `{command_text(rejection.command)}`"
             if rejection.command is not None
-            else render_report(ReportModel("quality-graph", ReportStatus.FAIL, rejection.detail))
+            else ""
         )
-        upsert_status(github, request.pull_request_number, body)
+        update_dashboard_notice(
+            github,
+            request.pull_request_number,
+            f"❌ {rejection.detail}{command}",
+        )
     CommandReactionLifecycle(github, request.comment_id).set(rejection.reaction)
+
+
+def rollback_checkbox_edit(github: GitHubAPI, request: CommandRequest) -> None:
+    """Restore the prior checkbox state before command authorization."""
+    if request.dashboard_previous_body is not None:
+        restore_dashboard_controls(
+            github,
+            request.comment_id,
+            request.dashboard_previous_body,
+        )
 
 
 def process_command(github: GitHubAPI, request: CommandRequest) -> None:
     """Validate, authorize, and dispatch one Quality Graph command request."""
+    rollback_checkbox_edit(github, request)
     command = parse_command(request.body)
     reactions = CommandReactionLifecycle(github, request.comment_id)
     if request.react:
@@ -355,6 +356,8 @@ def process_command(github: GitHubAPI, request: CommandRequest) -> None:
         )
         return
     try:
+        if request.dashboard_edited_body is not None:
+            restore_dashboard_controls(github, request.comment_id, request.dashboard_edited_body)
         if command.name not in {"help", "status"}:
             run_direct_command_checks()
         dispatch_command(github, number, command)
@@ -379,19 +382,13 @@ def dispatch_command(
 ) -> None:
     """Dispatch one validated and authorized command."""
     if command.name == "help":
-        upsert_status(github, number, help_body())
+        update_dashboard_notice(github, number, help_body())
         return
     if command.name == "status":
-        upsert_status(
+        update_dashboard_notice(
             github,
             number,
-            render_report(
-                ReportModel(
-                    "quality-graph",
-                    ReportStatus.DONE,
-                    "Command API is available and ready to process administrator commands.",
-                )
-            ),
+            "✅ Command API is available and ready to process administrator commands.",
         )
         return
     apply_gate_command(github, number, command)
@@ -403,18 +400,15 @@ def apply_gate_command(
     command: QualityGraphCommand,
 ) -> None:
     """Store a gate command marker on the pull request and rerun the graph."""
-    upsert_status(
-        github,
-        number,
-        command_result(
-            command,
-            ReportStatus.PENDING,
-            "Command accepted. Applying it and refreshing the Quality Graph.",
-        ),
-    )
+    pending_jobs: set[str] = set()
     for gate, check in registered_checks().items():
-        if check.pending_marker is not None and command_targets_gate(command, gate):
+        if not command_targets_gate(command, gate):
+            continue
+        pending_jobs.add(check.job_id)
+        if check.pending_marker is not None:
             check.arm_pending(github, number, command)
+    if pending_jobs:
+        mark_jobs_pending(github, number, pending_jobs)
     rerun_latest_pull_request_workflow(github, number)
 
 

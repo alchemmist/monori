@@ -17,7 +17,8 @@ trap cleanup EXIT
   --build --detach --wait fake-github
 
 cd "$root"
-GITHUB_ACTIONS_BOT_LOGIN='github-actions[bot]' \
+env -u GITHUB_STEP_SUMMARY -u MUTATION_SUMMARY_PATH \
+  GITHUB_ACTIONS_BOT_LOGIN='github-actions[bot]' \
   GITHUB_API_URL="http://127.0.0.1:${FAKE_GITHUB_HOST_PORT:-18080}" \
   GITHUB_EVENT_PATH="$root/ci/tests/integration/issue_comment_event.json" \
   GITHUB_REPOSITORY='alchemmist/monori' \

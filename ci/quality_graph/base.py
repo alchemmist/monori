@@ -2,15 +2,19 @@
 
 from __future__ import annotations
 
-import re
-import sys
+import os
 import urllib.parse
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, ClassVar, Protocol, override
+from pathlib import Path
+from typing import TYPE_CHECKING, ClassVar, Protocol, Self, override
 
+from monori.ci.lib.annotations import (
+    SourceAnnotation,
+    publish_workflow_annotations,
+)
 from monori.ci.lib.comments import managed_comment, workflow_bot_logins
-from monori.ci.lib.github import is_admin, sync_label
+from monori.ci.lib.github import GitHub, is_admin, sync_label
 from monori.ci.quality_graph.commands import (
     QualityGraphCommand,
     command_request,
@@ -20,15 +24,23 @@ from monori.ci.quality_graph.commands import (
     parse_command,
     validate_command,
 )
-from monori.ci.quality_graph.models import CheckContext, CheckResult, FindingProtocol
-from monori.ci.quality_graph.reporting import CHECK_REPORTS, PullRequestReport
-from monori.common import JsonValue, object_value, optional_string, string_value
+from monori.ci.quality_graph.job_results import (
+    JobControl,
+    JobResult,
+    JobResultPublisher,
+    JobStatus,
+    without_admin_controls,
+)
+from monori.ci.quality_graph.models import CheckContext, CheckResult, FindingProtocol, Metric
+from monori.ci.quality_graph.registry import WORKFLOW_JOB_BY_ID, WorkflowJobDefinition
+from monori.common import JsonValue, decode_json, object_value, optional_string
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Callable, Sequence
     from re import Pattern
 
     from monori.ci.lib.github import GitHubAPI, RepositoryGitHubAPI
+    from monori.ci.quality_graph.reporting import RenderedCheckReport
 
 
 class ApprovableFinding(FindingProtocol, Protocol):
@@ -67,8 +79,6 @@ class PendingApprovalRequest:
 
     github: GitHubAPI
     number: int
-    report_id: int
-    report_body: str
     pull_body: str
     command: QualityGraphCommand
     pending_marker: str
@@ -132,44 +142,40 @@ class ApprovalLifecycle:
         return f"<!-- monori-qg-authorized: {self.gate} {encoded_command} -->"
 
     def arm_pending(self, request: PendingApprovalRequest) -> None:
-        """Authorize a command in its report and queue it in the pull-request body."""
+        """Create isolated authorization state and queue a pull-request command."""
         if self.pending_pattern is None:
             message = f"{self.gate} does not support pending commands"
             raise RuntimeError(message)
         encoded = encode_command(request.command)
         authorization = self.authorization_marker(encoded)
-        authorization_pattern = re.compile(
-            rf"\n?<!-- monori-qg-authorized: {re.escape(self.gate)} [A-Za-z0-9_-]+ -->"
+        raw_authorization = request.github.request(
+            "POST", f"/issues/{request.number}/comments", {"body": authorization}
         )
-        cleaned_report = authorization_pattern.sub("", request.report_body)
-        request.github.request(
-            "PATCH",
-            f"/issues/comments/{request.report_id}",
-            {"body": f"{cleaned_report.rstrip()}\n{authorization}\n"},
-        )
-        marker = f"<!-- {request.pending_marker}: {request.report_id} {encoded} -->"
+        authorization_comment = object_value(raw_authorization, "authorization comment")
+        authorization_id = authorization_comment.get("id")
+        if not isinstance(authorization_id, int):
+            message = f"Authorization comment for {self.gate} has no numeric id"
+            raise TypeError(message)
+        marker = f"<!-- {request.pending_marker}: {authorization_id} {encoded} -->"
         updated_pull = self.pending_pattern.sub(marker, request.pull_body)
         if marker not in updated_pull:
             updated_pull = f"{updated_pull.rstrip()}\n\n{marker}".strip()
-        if updated_pull != request.pull_body:
-            request.github.request("PATCH", f"/pulls/{request.number}", {"body": updated_pull})
+        try:
+            if updated_pull != request.pull_body:
+                request.github.request("PATCH", f"/pulls/{request.number}", {"body": updated_pull})
+        except RuntimeError:
+            request.github.request("DELETE", f"/issues/comments/{authorization_id}")
+            raise
 
     def consume_pending(self, github: GitHubAPI, body: str) -> None:
-        """Remove a consumed command authorization from its bot-owned comment."""
+        """Delete the isolated authorization after consuming its command."""
         if self.pending_pattern is None or (match := self.pending_pattern.search(body)) is None:
             return
         encoded = match.group(2)
         if encoded is None:
             return
         comment_id = int(match.group(1))
-        comment = object_value(
-            github.request("GET", f"/issues/comments/{comment_id}"), "command comment"
-        )
-        comment_body = optional_string(comment.get("body")) or ""
-        marker = self.authorization_marker(encoded)
-        updated = comment_body.replace(f"\n{marker}", "").replace(marker, "")
-        if updated != comment_body:
-            github.request("PATCH", f"/issues/comments/{comment_id}", {"body": updated})
+        github.request("DELETE", f"/issues/comments/{comment_id}")
 
     def without_pending(self, body: str) -> str:
         """Remove this gate's pending command marker from a PR body."""
@@ -295,7 +301,9 @@ class ApprovalLifecycle:
 class QualityCheckDefinition(ABC):
     """Define registry metadata shared by every Quality Graph check class."""
 
+    definition: ClassVar[WorkflowJobDefinition]
     gate: ClassVar[str]
+    job_id: ClassVar[str]
     report_marker: ClassVar[str]
     approval_lifecycle: ClassVar[ApprovalLifecycle]
     supports_ignore_file: ClassVar[bool] = False
@@ -309,7 +317,17 @@ class QualityCheckDefinition(ABC):
         lifecycle = getattr(cls, "approval_lifecycle", None)
         if lifecycle is None:
             return
-        if lifecycle.gate != cls.gate:
+        definition = cls.definition
+        if WORKFLOW_JOB_BY_ID.get(definition.job_id) is not definition:
+            message = f"{cls.__name__} must reference registered workflow metadata"
+            raise TypeError(message)
+        if definition.gate is None or definition.report_marker is None:
+            message = f"{cls.__name__} must reference check workflow metadata"
+            raise TypeError(message)
+        cls.gate = definition.gate
+        cls.job_id = definition.job_id
+        cls.report_marker = definition.report_marker
+        if lifecycle.gate != definition.gate:
             message = f"{cls.__name__} gate does not match its approval lifecycle"
             raise TypeError(message)
         if lifecycle.allow_file_commands != cls.supports_ignore_file:
@@ -318,9 +336,6 @@ class QualityCheckDefinition(ABC):
         if (lifecycle.pending_pattern is not None) != (cls.pending_marker is not None):
             message = f"{cls.__name__} pending-marker metadata does not match its lifecycle"
             raise TypeError(message)
-        if cls.report_marker not in CHECK_REPORTS:
-            message = f"Unknown check report marker for {cls.__name__}: {cls.report_marker}"
-            raise TypeError(message)
 
     @classmethod
     def arm_pending(cls, github: GitHubAPI, number: int, command: QualityGraphCommand) -> None:
@@ -328,23 +343,16 @@ class QualityCheckDefinition(ABC):
         if cls.pending_marker is None:
             message = f"{cls.gate} does not support pending commands"
             raise RuntimeError(message)
-        report = managed_comment(github, number, cls.report_marker)
+        report = managed_comment(github, number, "quality-graph")
         if report is None:
-            message = f"Cannot authorize {cls.gate} command without its managed report"
+            message = "Cannot authorize command without a Quality Graph dashboard"
             raise RuntimeError(message)
-        report_id = report.get("id")
-        if not isinstance(report_id, int):
-            message = f"Managed {cls.gate} report has no numeric comment id"
-            raise TypeError(message)
-        report_body = string_value(report.get("body"), "report comment body")
         pull = object_value(github.request("GET", f"/pulls/{number}"), "pull request")
         pull_body = optional_string(pull.get("body")) or ""
         cls.approval_lifecycle.arm_pending(
             PendingApprovalRequest(
                 github,
                 number,
-                report_id,
-                report_body,
                 pull_body,
                 command,
                 cls.pending_marker,
@@ -358,10 +366,6 @@ class QualityCheck[FindingType: ApprovableFinding](QualityCheckDefinition, ABC):
     @abstractmethod
     def collect(self, context: CheckContext) -> CheckResult[FindingType]:
         """Collect findings without mutating GitHub state."""
-
-    def report(self, github: GitHubAPI, number: int) -> PullRequestReport:
-        """Return the shared report lifecycle configured for this check."""
-        return PullRequestReport.registered(github, number, self.report_marker)
 
     def sync_approvals(
         self, request: ApprovalRequest, findings: Sequence[FindingType]
@@ -380,6 +384,120 @@ class QualityCheck[FindingType: ApprovableFinding](QualityCheckDefinition, ABC):
         """Apply a bot-authorized pending command through the shared lifecycle."""
         return self.approval_lifecycle.sync_pending(github, number, body, findings, labels)
 
+    def read_approvals(self, body: str, findings: Sequence[FindingType]) -> set[str]:
+        """Return persisted approvals that still match current findings."""
+        finding_ids = {finding.finding_id for finding in findings}
+        return self.approval_lifecycle.read(body) & finding_ids
+
+
+@dataclass(frozen=True)
+class CheckExecution:
+    """Describe a completed domain check before shared publication."""
+
+    status: JobStatus
+    summary: str
+    metrics: tuple[Metric, ...]
+    controls: tuple[JobControl, ...] = ()
+    control_notes: tuple[str, ...] = ()
+    annotations: tuple[SourceAnnotation, ...] = ()
+
+
+@dataclass(frozen=True)
+class QualityRuntime:
+    """Provide GitHub transport and explicit publication sinks to check entrypoints."""
+
+    github: GitHub
+    publisher: JobResultPublisher
+    read_only: bool
+
+    @classmethod
+    def from_environment(cls) -> Self:
+        """Create a check runtime from the GitHub Actions process environment."""
+        result_path = os.environ.get("QUALITY_RESULT_PATH")
+        summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
+        return cls(
+            GitHub(),
+            JobResultPublisher(
+                Path(result_path) if result_path else None,
+                Path(summary_path) if summary_path else None,
+            ),
+            os.environ.get("QUALITY_GRAPH_READ_ONLY", "").lower() == "true",
+        )
+
+
+def read_github_event() -> dict[str, JsonValue]:
+    """Read the GitHub Actions event payload configured for the current process."""
+    value = decode_json(Path(os.environ["GITHUB_EVENT_PATH"]).read_text())
+    return object_value(value, "GitHub event")
+
+
+@dataclass(frozen=True)
+class ReportCheckRequest[FindingType: ApprovableFinding]:
+    """Bundle shared state required to execute a pull-request report check."""
+
+    github: GitHubAPI
+    number: int
+    findings: Sequence[FindingType]
+    publisher: JobResultPublisher
+    read_only: bool = False
+
+
+def run_report_check[FindingType: ApprovableFinding](
+    check: QualityCheck[FindingType],
+    request: ReportCheckRequest[FindingType],
+    build_execution: Callable[[set[str]], CheckExecution],
+) -> int:
+    """Resolve approvals and publish one report check through the shared lifecycle."""
+    pull = object_value(
+        request.github.request("GET", f"/pulls/{request.number}"),
+        "pull request",
+    )
+    body = optional_string(pull.get("body")) or ""
+    approved = (
+        check.read_approvals(body, request.findings)
+        if request.read_only
+        else check.sync_pending_approvals(
+            request.github,
+            request.number,
+            body,
+            request.findings,
+        ).approved
+    )
+    execution = build_execution(approved)
+    if check.failure_label is not None and not request.read_only:
+        sync_label(
+            request.github,
+            request.number,
+            check.failure_label,
+            present=execution.status is JobStatus.FAILED,
+        )
+    return publish_check_execution(check, request.publisher, execution)
+
+
+def publish_check_execution(
+    check: QualityCheckDefinition,
+    publisher: JobResultPublisher,
+    execution: CheckExecution,
+) -> int:
+    """Publish one completed check according to the shared workflow policy."""
+    publisher.publish(
+        JobResult(
+            check.definition.job_id,
+            check.definition.title,
+            execution.status,
+            execution.summary,
+            execution.metrics,
+            execution.annotations,
+            execution.controls,
+            execution.control_notes,
+        )
+    )
+    publish_workflow_annotations(
+        execution.annotations,
+        omitted_message="Additional findings are available in the Job Summary.",
+    )
+    return 1 if execution.status is JobStatus.FAILED else 0
+
 
 class PullRequestSourceCheck[FindingType: ApprovableFinding](QualityCheck[FindingType], ABC):
     """Run a source-oriented check through the shared pull-request lifecycle."""
@@ -393,40 +511,37 @@ class PullRequestSourceCheck[FindingType: ApprovableFinding](QualityCheck[Findin
     @abstractmethod
     def render_summary(
         self, findings: list[FindingType], approved: set[str], pull_request_url: str
-    ) -> str:
+    ) -> RenderedCheckReport:
         """Render the final managed report for this check."""
 
     @abstractmethod
-    def error_annotation(self, finding: FindingType) -> str:
-        """Render one GitHub workflow error annotation."""
-
-    @abstractmethod
-    def rerun(self, github: RepositoryGitHubAPI, number: int) -> None:
-        """Rerun the workflow after approval state changes."""
+    def source_annotation(self, finding: FindingType) -> SourceAnnotation:
+        """Build one typed source annotation for an active finding."""
 
     def run_pull_request_gate(
-        self, github: RepositoryGitHubAPI, event: dict[str, JsonValue]
+        self,
+        github: RepositoryGitHubAPI,
+        event: dict[str, JsonValue],
+        publisher: JobResultPublisher,
+        *,
+        read_only: bool = False,
     ) -> int:
         """Execute the shared source-check lifecycle for a pull-request event."""
         number = self._pull_request_number(event)
         if number is None:
             return 0
-        report = self.report(github, number)
-        report.mark_in_progress()
-        try:
-            return self._run_pull_request_gate(github, event, number, report)
-        except (LookupError, OSError, RuntimeError, TypeError, ValueError):
-            report.mark_failed("The check stopped before it could produce a report.")
-            raise
+        return self._run_pull_request_gate(github, event, number, publisher, read_only=read_only)
 
     def _run_pull_request_gate(
         self,
         github: RepositoryGitHubAPI,
         event: dict[str, JsonValue],
         number: int,
-        report: PullRequestReport,
+        publisher: JobResultPublisher,
+        *,
+        read_only: bool,
     ) -> int:
-        """Execute a source check after its report has entered the pending state."""
+        """Execute a source check and publish its portable job result."""
         raw_pull = github.request("GET", f"/pulls/{number}")
         if raw_pull is None:
             message = f"Pull request #{number} was not found"
@@ -441,27 +556,41 @@ class PullRequestSourceCheck[FindingType: ApprovableFinding](QualityCheck[Findin
             command = None
         author = request.login if command is not None and request is not None else None
         body = optional_string(pull.get("body")) or ""
-        sync = self.sync_approvals(
-            ApprovalRequest(
-                github,
-                number,
-                body,
-                command,
-                author,
-                github.paged(f"/issues/{number}/labels"),
-            ),
-            findings,
-        )
-        active = [finding for finding in findings if finding.finding_id not in sync.approved]
-        if self.failure_label is not None:
+        if read_only:
+            approved = self.approval_lifecycle.read(body) & {
+                finding.finding_id for finding in findings
+            }
+        else:
+            sync = self.sync_approvals(
+                ApprovalRequest(
+                    github,
+                    number,
+                    body,
+                    command,
+                    author,
+                    github.paged(f"/issues/{number}/labels"),
+                ),
+                findings,
+            )
+            approved = sync.approved
+        active = [finding for finding in findings if finding.finding_id not in approved]
+        if self.failure_label is not None and not read_only:
             sync_label(github, number, self.failure_label, present=bool(active))
         pull_request_url = optional_string(pull.get("html_url")) or ""
-        report.publish(self.render_summary(findings, sync.approved, pull_request_url))
-        if sync.changed:
-            self.rerun(github, number)
-        for finding in active:
-            sys.stderr.write(f"{self.error_annotation(finding)}\n")
-        return 1 if active else 0
+        report = self.render_summary(findings, approved, pull_request_url)
+        annotations = tuple(self.source_annotation(finding) for finding in active)
+        execution = CheckExecution(
+            JobStatus.PASSED if not active else JobStatus.FAILED,
+            without_admin_controls(report.summary),
+            (
+                Metric("Findings", str(len(findings))),
+                Metric("Active", str(len(active))),
+            ),
+            report.controls,
+            report.control_notes,
+            annotations,
+        )
+        return publish_check_execution(self, publisher, execution)
 
     @staticmethod
     def _pull_request_number(event: dict[str, JsonValue]) -> int | None:

@@ -27,6 +27,14 @@ class FindingProtocol(Protocol):
 
 
 @dataclass(frozen=True)
+class Metric:
+    """Store one label-value measurement shared by reports and dashboards."""
+
+    label: str
+    value: str
+
+
+@dataclass(frozen=True)
 class CheckContext:
     """Pure input for a check, independent of GitHub API transport."""
 

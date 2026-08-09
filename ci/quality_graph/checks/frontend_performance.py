@@ -10,10 +10,19 @@ from pathlib import Path
 from typing import ClassVar, cast, override
 
 from monori.ci.lib.findings import stable_finding_id
-from monori.ci.lib.github import GitHub, sync_label
-from monori.ci.quality_graph.base import ApprovalLifecycle, QualityCheck
-from monori.ci.quality_graph.models import CheckContext, CheckResult, Verdict
+from monori.ci.quality_graph.base import (
+    ApprovalLifecycle,
+    CheckExecution,
+    QualityCheck,
+    QualityRuntime,
+    ReportCheckRequest,
+    run_report_check,
+)
+from monori.ci.quality_graph.job_results import JobStatus, without_admin_controls
+from monori.ci.quality_graph.models import CheckContext, CheckResult, Metric, Verdict
+from monori.ci.quality_graph.registry import WORKFLOW_JOB_BY_ID
 from monori.ci.quality_graph.reporting import (
+    RenderedCheckReport,
     ReportFinding,
     ReportModel,
     ReportStatus,
@@ -25,7 +34,6 @@ from monori.common import (
     array_value,
     integer_value,
     object_value,
-    optional_string,
     string_value,
 )
 
@@ -57,10 +65,10 @@ class FrontendPerformanceFinding:
 class FrontendPerformanceCheck(QualityCheck[FrontendPerformanceFinding]):
     """Collect frontend regressions and use the shared approval lifecycle."""
 
-    gate = "frontend"
-    report_marker = "frontend-performance"
+    definition = WORKFLOW_JOB_BY_ID["frontend-performance"]
     approval_lifecycle = APPROVALS
     pending_marker: ClassVar[str | None] = "monori-frontend-performance-pending"
+    failure_label: ClassVar[str | None] = STATUS_LABEL
 
     @override
     def collect(self, context: CheckContext) -> CheckResult[FrontendPerformanceFinding]:
@@ -94,13 +102,13 @@ def append_commands(
     approved: set[str],
     *,
     failed: bool,
-) -> str:
+) -> RenderedCheckReport:
     """Render performance details and commands through the shared template."""
     findings = [entry for entry in entries if entry.get("tier") != "none"]
     return render_report(
         ReportModel(
             "frontend-performance",
-            ReportStatus.FAIL if failed else ReportStatus.DONE,
+            ReportStatus.FAILED if failed else ReportStatus.PASSED,
             content=text.strip(),
             findings=tuple(
                 ReportFinding(
@@ -124,9 +132,49 @@ def append_commands(
     )
 
 
+@dataclass(frozen=True)
+class FrontendExecutionContext:
+    """Carry parsed performance report data into shared lifecycle publication."""
+
+    report_path: Path
+    summary_path: Path
+    report: dict[str, JsonValue]
+    entries: list[dict[str, JsonValue]]
+    source_summary: str
+
+
+def build_execution(context: FrontendExecutionContext, approved: set[str]) -> CheckExecution:
+    """Build the performance result after shared lifecycle approval resolution."""
+    original_verdict = string_value(context.report.get("verdict"), "verdict")
+    active = {
+        finding_id(entry)
+        for entry in context.entries
+        if entry.get("tier") in {"critical", "error"} and finding_id(entry) not in approved
+    }
+    failed = bool(active) or original_verdict == "error"
+    context.report["verdict"] = original_verdict if failed else "none"
+    context.report["commentRequired"] = failed
+    context.report["approvedFindings"] = cast("JsonValue", sorted(approved))
+    context.report_path.write_text(json.dumps(context.report, indent=2, sort_keys=True) + "\n")
+    source_summary = re.sub(r"\A## .*\n*", "", context.source_summary, count=1)
+    rendered = append_commands(source_summary, context.entries, approved, failed=failed)
+    summary = without_admin_controls(rendered.summary)
+    context.summary_path.write_text(summary)
+    return CheckExecution(
+        JobStatus.FAILED if failed else JobStatus.PASSED,
+        summary,
+        (
+            Metric("Regressions", str(len(entry_ids(context.entries)))),
+            Metric("Active", str(len(active))),
+        ),
+        rendered.controls,
+        rendered.control_notes,
+    )
+
+
 def main() -> int:
     """Run this module as a CLI entrypoint and return its exit code."""
-    github = GitHub()
+    runtime = QualityRuntime.from_environment()
     report_path = Path(os.environ["REPORT_PATH"])
     report = object_value(cast("JsonValue", json.loads(report_path.read_text())), "report")
     check = FrontendPerformanceCheck()
@@ -135,30 +183,22 @@ def main() -> int:
         object_value(item, "report entry") for item in array_value(report.get("entries"), "entries")
     ]
     number = integer_value(report.get("prNumber"), "pull request number")
-    pull = object_value(github.request("GET", f"/pulls/{number}"), "pull request")
-    body = optional_string(pull.get("body")) or ""
-    synced = check.sync_pending_approvals(github, number, body, result.findings)
-    approved = synced.approved
-
-    original_verdict = string_value(report.get("verdict"), "verdict")
-    active = {
-        finding_id(entry)
-        for entry in entries
-        if entry.get("tier") in {"critical", "error"} and finding_id(entry) not in approved
-    }
-    failed = bool(active) or original_verdict == "error"
-    effective_verdict = original_verdict if failed else "none"
-    report["verdict"] = effective_verdict
-    report["commentRequired"] = failed
-    report["approvedFindings"] = cast("JsonValue", sorted(approved))
-    report_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
-
     summary_path = Path(os.environ["SUMMARY_PATH"])
-    summary = summary_path.read_text()
-    summary = re.sub(r"\A## .*\n*", "", summary, count=1)
-    summary_path.write_text(append_commands(summary, entries, approved, failed=failed))
-    sync_label(github, number, STATUS_LABEL, present=failed)
-    return 1 if failed else 0
+    context = FrontendExecutionContext(
+        report_path,
+        summary_path,
+        report,
+        entries,
+        summary_path.read_text(),
+    )
+    request = ReportCheckRequest(
+        runtime.github,
+        number,
+        result.findings,
+        runtime.publisher,
+        runtime.read_only,
+    )
+    return run_report_check(check, request, lambda approved: build_execution(context, approved))
 
 
 if __name__ == "__main__":

@@ -9,10 +9,19 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar, cast, override
 
-from monori.ci.lib.github import GitHub, sync_label
-from monori.ci.quality_graph.base import ApprovalLifecycle, QualityCheck
-from monori.ci.quality_graph.models import CheckContext, CheckResult, Verdict
+from monori.ci.quality_graph.base import (
+    ApprovalLifecycle,
+    CheckExecution,
+    QualityCheck,
+    QualityRuntime,
+    ReportCheckRequest,
+    run_report_check,
+)
+from monori.ci.quality_graph.job_results import JobStatus, without_admin_controls
+from monori.ci.quality_graph.models import CheckContext, CheckResult, Metric, Verdict
+from monori.ci.quality_graph.registry import WORKFLOW_JOB_BY_ID
 from monori.ci.quality_graph.reporting import (
+    RenderedCheckReport,
     ReportFinding,
     ReportModel,
     ReportStatus,
@@ -46,10 +55,10 @@ class BundleFinding:
 class BundleSizeCheck(QualityCheck[BundleFinding]):
     """Collect bundle-size findings and use the shared approval lifecycle."""
 
-    gate = "bundle"
-    report_marker = "bundle-size"
+    definition = WORKFLOW_JOB_BY_ID["bundle-size"]
     approval_lifecycle = APPROVALS
     pending_marker: ClassVar[str | None] = "monori-bundle-size-pending"
+    failure_label: ClassVar[str | None] = STATUS_LABEL
 
     @override
     def collect(self, context: CheckContext) -> CheckResult[BundleFinding]:
@@ -64,7 +73,9 @@ class BundleSizeCheck(QualityCheck[BundleFinding]):
         return CheckResult(findings, Verdict.FAIL if findings else Verdict.PASS)
 
 
-def append_commands(summary: str, entries: list[dict[str, JsonValue]], approved: set[str]) -> str:
+def append_commands(
+    summary: str, entries: list[dict[str, JsonValue]], approved: set[str]
+) -> RenderedCheckReport:
     """Render bundle details and commands through the shared report template."""
     finding_ids = {
         string_value(entry.get("id"), "finding id")
@@ -76,7 +87,7 @@ def append_commands(summary: str, entries: list[dict[str, JsonValue]], approved:
     return render_report(
         ReportModel(
             "bundle-size",
-            ReportStatus.FAIL if failed else ReportStatus.DONE,
+            ReportStatus.FAILED if failed else ReportStatus.PASSED,
             content=summary.rstrip(),
             findings=tuple(
                 ReportFinding(
@@ -138,9 +149,41 @@ def render_summary(report: dict[str, JsonValue]) -> str:
     return "\n".join(lines) + "\n"
 
 
+@dataclass(frozen=True)
+class BundleExecutionContext:
+    """Carry parsed bundle report data into shared lifecycle publication."""
+
+    report_path: Path
+    summary_path: Path
+    report: dict[str, JsonValue]
+    entries: list[dict[str, JsonValue]]
+    finding_ids: set[str]
+
+
+def build_execution(context: BundleExecutionContext, approved: set[str]) -> CheckExecution:
+    """Build the bundle result after the shared lifecycle resolves approvals."""
+    failed = context.report.get("verdict") == "critical" and context.finding_ids != approved
+    context.report["approvedFindings"] = cast("JsonValue", sorted(approved))
+    context.report["verdict"] = "critical" if failed else "none"
+    context.report_path.write_text(json.dumps(context.report, indent=2, sort_keys=True) + "\n")
+    rendered = append_commands(render_summary(context.report), context.entries, approved)
+    summary = without_admin_controls(rendered.summary)
+    context.summary_path.write_text(summary)
+    return CheckExecution(
+        JobStatus.FAILED if failed else JobStatus.PASSED,
+        summary,
+        (
+            Metric("Regressions", str(len(context.finding_ids))),
+            Metric("Active", str(len(context.finding_ids - approved))),
+        ),
+        rendered.controls,
+        rendered.control_notes,
+    )
+
+
 def main() -> int:
     """Run this module as a CLI entrypoint and return its exit code."""
-    github = GitHub()
+    runtime = QualityRuntime.from_environment()
     report_path = Path(os.environ["REPORT_PATH"])
     report = object_value(cast("JsonValue", json.loads(report_path.read_text())), "report")
     check = BundleSizeCheck()
@@ -149,20 +192,17 @@ def main() -> int:
         object_value(item, "entry") for item in array_value(report.get("entries"), "entries")
     ]
     number = int(number_value(report.get("prNumber"), "pull request number"))
-    pull = object_value(github.request("GET", f"/pulls/{number}"), "pull request")
-    raw_body = pull.get("body")
-    body = raw_body if isinstance(raw_body, str) else ""
-    synced = check.sync_pending_approvals(github, number, body, result.findings)
-    approved = synced.approved
     ids = {finding.finding_id for finding in result.findings}
-    failed = report.get("verdict") == "critical" and ids != approved
-    report["approvedFindings"] = cast("JsonValue", sorted(approved))
-    report["verdict"] = "critical" if failed else "none"
-    report_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
     summary_path = Path(os.environ["SUMMARY_PATH"])
-    summary_path.write_text(append_commands(render_summary(report), entries, approved))
-    sync_label(github, number, STATUS_LABEL, present=failed)
-    return 1 if failed else 0
+    context = BundleExecutionContext(report_path, summary_path, report, entries, ids)
+    request = ReportCheckRequest(
+        runtime.github,
+        number,
+        result.findings,
+        runtime.publisher,
+        runtime.read_only,
+    )
+    return run_report_check(check, request, lambda approved: build_execution(context, approved))
 
 
 if __name__ == "__main__":

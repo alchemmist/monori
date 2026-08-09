@@ -17,24 +17,10 @@ jobs:
     workflow-graph:
         name: Workflow graph validation
         if: github.event_name == 'pull_request'
+        permissions:
+            contents: read
         runs-on: ubuntu-latest
         steps:
-            - name: Quality Graph command reference
-              run: |
-                  cat >> "$GITHUB_STEP_SUMMARY" <<'EOF'
-                  ## Quality Graph commands
-
-                  Repository administrators can use these commands in a pull-request comment:
-
-                  - `/qg ignore <type>-<finding-id>[,<type>-<finding-id>...]` — ignore selected findings
-                  - `/qg ignore <type>[,<type>...]` — ignore all current findings of selected types
-                  - `/qg ignore-file path/to/file[,path/to/file...]` — ignore findings in selected files
-                  - `/qg remove-ignore <type>-<finding-id>[,<type>-<finding-id>...]` — remove selected ignores
-                  - `/qg status` — show command status
-                  - `/qg help` — show this reference
-
-                  `/quality-graph` is an alias for `/qg`.
-                  EOF
             - name: Checkout
               uses: actions/checkout@v7
               with:
@@ -43,11 +29,58 @@ jobs:
               uses: ./.github/actions/setup-project
               with:
                   python-profile: ci
-            - name: Validate PR workflow graph
+            - uses: ./.github/actions/quality-job
+              with:
+                  check-id: workflow-graph
+
+    quality-dashboard-live:
+        name: Quality Graph live dashboard
+        needs: workflow-graph
+        if: >-
+            always()
+            && github.event_name == 'pull_request'
+            && github.event.pull_request.head.repo.full_name == github.repository
+            && github.event.pull_request.user.login != 'dependabot[bot]'
+        permissions:
+            actions: read
+            contents: read
+            issues: write
+            pull-requests: read
+        runs-on: ubuntu-latest
+        timeout-minutes: 185
+        steps:
+            - uses: actions/checkout@v7
+              with:
+                  persist-credentials: false
+            - uses: ./.github/actions/setup-project
+              with:
+                  python-profile: ci
+            - name: Start Quality Graph dashboard
+              env:
+                  GITHUB_TOKEN: ${{ github.token }}
+                  PR_NUMBER: ${{ github.event.pull_request.number }}
+                  HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+                  RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
               run: >-
-                  uv run --locked pytest -q
-                  ci/tests/test_pr_workflow.py
-                  ci/tests/test_main_workflow.py
+                  uv run --locked python -m monori.ci.quality_graph.dashboard start
+                  --pr-number "$PR_NUMBER"
+                  --run-id "${{ github.run_id }}"
+                  --run-attempt "${{ github.run_attempt }}"
+                  --head-sha "$HEAD_SHA"
+                  --run-url "$RUN_URL"
+            - name: Synchronize live Quality Graph status
+              env:
+                  GITHUB_TOKEN: ${{ github.token }}
+                  PR_NUMBER: ${{ github.event.pull_request.number }}
+                  HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+                  RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+              run: >-
+                  uv run --locked python -m monori.ci.quality_graph.dashboard watch
+                  --pr-number "$PR_NUMBER"
+                  --run-id "${{ github.run_id }}"
+                  --run-attempt "${{ github.run_attempt }}"
+                  --head-sha "$HEAD_SHA"
+                  --run-url "$RUN_URL"
 
     fmt-check:
         name: Format check
@@ -62,7 +95,9 @@ jobs:
               with:
                   install-web: true
                   python-profile: format
-            - run: make fmt-check
+            - uses: ./.github/actions/quality-job
+              with:
+                  check-id: fmt-check
 
     lint:
         name: Lint
@@ -104,7 +139,9 @@ jobs:
                   grep " ${tarball}\$" actionlint_checksums.txt | sha256sum -c -
                   tar -xzf "${tarball}" actionlint
                   sudo install -m 0755 actionlint /usr/local/bin/actionlint
-            - run: make lint
+            - uses: ./.github/actions/quality-job
+              with:
+                  check-id: lint
 
     type:
         name: Type check
@@ -119,7 +156,9 @@ jobs:
               with:
                   install-web: true
                   python-profile: type
-            - run: make type
+            - uses: ./.github/actions/quality-job
+              with:
+                  check-id: type
 
     analyze:
         name: Static analysis
@@ -136,7 +175,9 @@ jobs:
                   python-profile: analyze
             - name: Install semgrep
               run: python -m pip install semgrep
-            - run: make analyze
+            - uses: ./.github/actions/quality-job
+              with:
+                  check-id: analyze
 
     test-fast:
         name: Fast tests
@@ -151,7 +192,9 @@ jobs:
               with:
                   install-web: true
                   python-profile: test
-            - run: make t-fast
+            - uses: ./.github/actions/quality-job
+              with:
+                  check-id: test-fast
 
     test-medium:
         name: Medium tests
@@ -166,7 +209,9 @@ jobs:
               with:
                   install-web: true
                   python-profile: test
-            - run: make t-medium
+            - uses: ./.github/actions/quality-job
+              with:
+                  check-id: test-medium
 
     test-slow:
         name: Slow tests
@@ -185,14 +230,16 @@ jobs:
                   install-web: true
                   python-profile: test
             - name: Restore Playwright browser cache
-              uses: actions/cache@v4
+              uses: actions/cache@v5
               with:
                   path: ~/.cache/ms-playwright
                   key: playwright-${{ runner.os }}-${{ hashFiles('web/package-lock.json') }}
             - name: Install Playwright browsers
               run: npx playwright install --with-deps chromium
               working-directory: web
-            - run: make t-slow
+            - uses: ./.github/actions/quality-job
+              with:
+                  check-id: test-slow
 
     build:
         name: Build
@@ -206,7 +253,10 @@ jobs:
             - uses: ./.github/actions/setup-project
               with:
                   install-web: true
-            - run: make build
+                  python-profile: ci
+            - uses: ./.github/actions/quality-job
+              with:
+                  check-id: build
 
     coverage:
         name: Coverage
@@ -221,7 +271,9 @@ jobs:
               with:
                   install-web: true
                   python-profile: coverage
-            - run: make coverage
+            - uses: ./.github/actions/quality-job
+              with:
+                  check-id: coverage
 
     audit:
         name: Dependency and security audit
@@ -233,9 +285,6 @@ jobs:
             && needs.bundle-size.result == 'success'
             && needs.frontend-performance.result == 'success'
         runs-on: ubuntu-latest
-        permissions:
-            contents: read
-            security-events: write
         steps:
             - uses: actions/checkout@v7
               with:
@@ -245,16 +294,79 @@ jobs:
               with:
                   install-web: true
                   python-profile: audit
-            - run: make audit
+            - uses: ./.github/actions/quality-job
+              with:
+                  check-id: audit
+
+    quality-report:
+        name: Quality Graph dashboard
+        needs: [audit, quality-dashboard-live]
+        if: >-
+            always()
+            && github.event_name == 'pull_request'
+            && github.event.pull_request.head.repo.full_name == github.repository
+            && github.event.pull_request.user.login != 'dependabot[bot]'
+        permissions:
+            actions: read
+            contents: read
+            issues: write
+            pull-requests: read
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v7
+              with:
+                  persist-credentials: false
+            - uses: ./.github/actions/setup-project
+              with:
+                  python-profile: ci
+            - name: Download Quality Graph results
+              id: quality-results
+              uses: actions/download-artifact@v8
+              with:
+                  pattern: quality-result-*
+                  path: ${{ runner.temp }}/quality-results
+            - name: Publish Quality Graph dashboard
+              id: dashboard
+              if: steps.quality-results.outcome == 'success'
+              env:
+                  GITHUB_TOKEN: ${{ github.token }}
+                  PR_NUMBER: ${{ github.event.pull_request.number }}
+                  HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+                  RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+              run: >-
+                  uv run --locked python -m monori.ci.quality_graph.dashboard finish
+                  --pr-number "$PR_NUMBER"
+                  --run-id "${{ github.run_id }}"
+                  --run-attempt "${{ github.run_attempt }}"
+                  --head-sha "$HEAD_SHA"
+                  --run-url "$RUN_URL"
+                  --results "$RUNNER_TEMP/quality-results"
+            - name: Mark Quality Graph dashboard failed
+              if: >-
+                  always()
+                  && (
+                    cancelled()
+                    || failure()
+                    || steps.quality-results.outcome != 'success'
+                    || steps.dashboard.outcome == 'failure'
+                  )
+              env:
+                  GITHUB_TOKEN: ${{ github.token }}
+                  PR_NUMBER: ${{ github.event.pull_request.number }}
+                  HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+                  RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+              run: >-
+                  uv run --locked python -m monori.ci.quality_graph.dashboard fail
+                  --pr-number "$PR_NUMBER"
+                  --run-id "${{ github.run_id }}"
+                  --run-attempt "${{ github.run_attempt }}"
+                  --head-sha "$HEAD_SHA"
+                  --run-url "$RUN_URL"
 
     mutation:
         name: Mutation testing
         needs: test-slow
         if: github.event_name == 'pull_request' && needs.test-slow.result == 'success'
-        permissions:
-            issues: write
-            pull-requests: write
-            contents: read
         runs-on: ubuntu-latest
         timeout-minutes: 45
         steps:
@@ -269,8 +381,9 @@ jobs:
         name: Frontend bundle size
         needs: build
         if: github.event_name == 'pull_request' && needs.build.result == 'success'
+        env:
+            QUALITY_GRAPH_READ_ONLY: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.event.pull_request.user.login == 'dependabot[bot]' }}
         permissions:
-            actions: write
             contents: read
             issues: write
             pull-requests: write
@@ -288,8 +401,9 @@ jobs:
         name: Frontend performance
         needs: build
         if: github.event_name == 'pull_request' && needs.build.result == 'success'
+        env:
+            QUALITY_GRAPH_READ_ONLY: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.event.pull_request.user.login == 'dependabot[bot]' }}
         permissions:
-            actions: write
             contents: read
             issues: write
             pull-requests: write
@@ -312,6 +426,8 @@ jobs:
         if: github.event_name == 'pull_request' && needs.fmt-check.result == 'success'
         runs-on: ubuntu-latest
         timeout-minutes: 10
+        env:
+            QUALITY_GRAPH_READ_ONLY: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.event.pull_request.user.login == 'dependabot[bot]' }}
         permissions:
             contents: read
             issues: write
@@ -331,6 +447,8 @@ jobs:
         if: github.event_name == 'pull_request' && needs.fmt-check.result == 'success'
         runs-on: ubuntu-latest
         timeout-minutes: 10
+        env:
+            QUALITY_GRAPH_READ_ONLY: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.event.pull_request.user.login == 'dependabot[bot]' }}
         permissions:
             contents: read
             issues: write

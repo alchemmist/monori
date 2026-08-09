@@ -8,6 +8,7 @@ import os
 import re
 import signal
 import threading
+import time
 import urllib.parse
 from dataclasses import dataclass
 from http import HTTPStatus
@@ -25,6 +26,8 @@ HOST = os.environ.get("FAKE_GITHUB_HOST", "127.0.0.1")
 PORT = int(os.environ.get("FAKE_GITHUB_PORT", "8080"))
 STATE = FakeGitHubState()
 STATE_LOCK = threading.RLock()
+DELAY_LOCK = threading.Lock()
+REQUEST_DELAYS: dict[tuple[str, str], float] = {}
 REPOSITORY_PATH = re.compile(r"^/repos/(?P<repository>[^/]+/[^/]+)(?P<path>/.*)$")
 
 
@@ -70,7 +73,17 @@ class FakeGitHubHandler(BaseHTTPRequestHandler):
     def _dispatch(self, method: str) -> None:
         parsed = urllib.parse.urlsplit(self.path)
         payload = self._read_payload()
+        delayed = False
+        with DELAY_LOCK:
+            delay = REQUEST_DELAYS.pop((method, parsed.path), 0)
+        if delay:
+            with STATE_LOCK:
+                STATE.record_request(method, parsed.path)
+            delayed = True
+            time.sleep(delay)
         with STATE_LOCK:
+            if not delayed and REPOSITORY_PATH.fullmatch(parsed.path) is not None:
+                STATE.record_request(method, parsed.path)
             failure = STATE.failures.get((method, parsed.path))
             if failure is not None:
                 response: tuple[int, JsonValue] | None = (
@@ -98,7 +111,23 @@ class FakeGitHubHandler(BaseHTTPRequestHandler):
         if path == "/health" and method == "GET":
             return HTTPStatus.OK, {"status": "ok"}
         if path == "/_test/reset" and method == "POST":
-            STATE.reset(object_value(payload, "reset payload"))
+            data = object_value(payload, "reset payload")
+            delays: dict[tuple[str, str], float] = {}
+            for value in array_value(data.get("request_delays", []), "request delays"):
+                delay = object_value(value, "request delay")
+                delay_method = optional_string(delay.get("method"))
+                delay_path = optional_string(delay.get("path"))
+                seconds = delay.get("seconds")
+                if (
+                    delay_method is not None
+                    and delay_path is not None
+                    and isinstance(seconds, (int, float))
+                ):
+                    delays[(delay_method, delay_path)] = float(seconds)
+            with DELAY_LOCK:
+                REQUEST_DELAYS.clear()
+                REQUEST_DELAYS.update(delays)
+            STATE.reset(data)
             return HTTPStatus.NO_CONTENT, None
         if path == "/_test/state" and method == "GET":
             return HTTPStatus.OK, STATE.snapshot()
@@ -129,6 +158,11 @@ class FakeGitHubHandler(BaseHTTPRequestHandler):
             ("GET", re.compile(r"^/issues/comments/(?P<identifier>\d+)$"), self._get_comment),
             ("PATCH", re.compile(r"^/issues/comments/(?P<identifier>\d+)$"), self._patch_comment),
             (
+                "DELETE",
+                re.compile(r"^/issues/comments/(?P<identifier>\d+)$"),
+                self._delete_comment,
+            ),
+            (
                 "GET",
                 re.compile(r"^/issues/comments/(?P<identifier>\d+)/reactions$"),
                 self._get_reactions,
@@ -158,6 +192,11 @@ class FakeGitHubHandler(BaseHTTPRequestHandler):
                 self._permission,
             ),
             ("GET", re.compile(r"^/actions/workflows/[^/]+/runs$"), self._workflow_runs),
+            (
+                "GET",
+                re.compile(r"^/actions/runs/(?P<identifier>\d+)/jobs$"),
+                self._workflow_jobs,
+            ),
             (
                 "POST",
                 re.compile(r"^/actions/runs/(?P<identifier>\d+)/rerun-failed-jobs$"),
@@ -240,6 +279,13 @@ class FakeGitHubHandler(BaseHTTPRequestHandler):
         comment.update(object_value(request.payload, "comment update"))
         return HTTPStatus.OK, comment
 
+    def _delete_comment(self, request: RouteRequest) -> tuple[int, JsonValue]:
+        identifier = int(request.match.group("identifier"))
+        if identifier not in STATE.comments:
+            return HTTPStatus.NOT_FOUND, None
+        del STATE.comments[identifier]
+        return HTTPStatus.NO_CONTENT, None
+
     def _get_reactions(self, request: RouteRequest) -> tuple[int, JsonValue]:
         comment = STATE.comments.get(int(request.match.group("identifier")))
         if comment is None:
@@ -313,6 +359,13 @@ class FakeGitHubHandler(BaseHTTPRequestHandler):
         if status != HTTPStatus.OK:
             return status, runs
         return HTTPStatus.OK, {"workflow_runs": runs}
+
+    def _workflow_jobs(self, request: RouteRequest) -> tuple[int, JsonValue]:
+        run_id = int(request.match.group("identifier"))
+        status, jobs = self._page(STATE.workflow_jobs.get(run_id, []), request.query, 100)
+        if status != HTTPStatus.OK:
+            return status, jobs
+        return HTTPStatus.OK, {"jobs": jobs}
 
     def _rerun(self, request: RouteRequest) -> tuple[int, JsonValue]:
         STATE.rerun_requests.append(int(request.match.group("identifier")))

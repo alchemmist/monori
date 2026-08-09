@@ -34,7 +34,7 @@ runs:
 
         - name: Restore Python environment
           if: inputs.python-profile != 'none'
-          uses: actions/cache@v4
+          uses: actions/cache@v5
           with:
               path: .venv
               key: uv-venv-${{ runner.os }}-python-3.12-${{ inputs.python-profile }}-${{ hashFiles('uv.lock') }}

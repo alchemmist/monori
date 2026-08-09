@@ -17,7 +17,7 @@ members = ["common", "ci", "server"]
 
 [dependency-groups]
 format = ["monori-ci", "ruff==0.15.22"]
-ci = ["monori-ci", "PyYAML>=6.0", "pytest>=8"]
+ci = ["monori-ci", "pytest>=8"]
 lint = ["monori-ci", "ruff==0.15.22"]
 test = [
   "monori-ci",
@@ -42,6 +42,7 @@ type = [
 ]
 analyze = [
   "bandit>=1.8",
+  "monori-ci",
   "vulture>=2.16",
 ]
 audit = ["monori-ci", "pip-audit>=2.10.1"]
@@ -122,5 +123,23 @@ min_confidence = 80
 ignore_names = ["referer", "predicate", "user_data_dir", "user_agent", "accept_downloads"]
 
 [tool.mutmut]
-source_paths = ["server/app", "ci/lib", "ci/quality_graph", "common"]
-also_copy = ["server/schema.sql", "server/migrations", "ci/quality_graph/templates"]
+source_paths = [
+  "monori/server/app",
+  "monori/ci/lib",
+  "monori/ci/quality_graph",
+  "monori/common",
+]
+also_copy = [
+  "server/tests",
+  "ci/tests",
+  "monori/server/schema.sql",
+  "monori/server/migrations",
+  "monori/ci/quality_graph/templates",
+]
+pytest_add_cli_args_test_selection = [
+  "--import-mode=importlib",
+  "-m",
+  "not integration",
+  "server/tests",
+  "ci/tests",
+]

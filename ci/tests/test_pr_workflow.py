@@ -1,31 +1,52 @@
 import re
+import tomllib
 from pathlib import Path
 from typing import ClassVar, TypedDict, cast
 
 import yaml
 
-REPOSITORY_ROOT = Path.cwd()
+from monori.ci.quality_graph.dashboard import SUPPORTED_WORKFLOW_DURATION_SECONDS
+
+
+def find_repository_root(path: Path) -> Path:
+    """Find the checkout containing the workflow files used by these tests."""
+    for parent in (path, *path.parents):
+        if (parent / ".github").is_dir():
+            return parent
+    message = f"Cannot find repository root from {path}"
+    raise RuntimeError(message)
+
+
+REPOSITORY_ROOT = find_repository_root(Path(__file__).resolve())
 WORKFLOW = REPOSITORY_ROOT / ".github/workflows/pr-checks.yaml"
+ROOT_PYPROJECT = REPOSITORY_ROOT / "pyproject.toml"
 FRONTEND_PERFORMANCE_SCOPE = (
     REPOSITORY_ROOT / ".github/actions/frontend-performance-scope/action.yml"
 )
 ADMIN_COMMAND_ACTION = REPOSITORY_ROOT / ".github/actions/admin-command/action.yml"
-REPORTING_ACTIONS = (
-    "bundle-size-gate",
-    "frontend-performance-gate",
-    "frontend-performance-scope",
-    "mutation-diff-gate",
-    "object-annotation-gate",
-    "suppression-gate",
+MUTATION_ACTION = REPOSITORY_ROOT / ".github/actions/mutation-diff-gate/action.yml"
+TEST_RUNNERS = (
+    REPOSITORY_ROOT / "Makefile",
+    REPOSITORY_ROOT / "scripts/ci-tests.sh",
+    REPOSITORY_ROOT / "scripts/coverage-tree.sh",
+    REPOSITORY_ROOT / ".github/actions/bundle-size-gate/action.yml",
+    REPOSITORY_ROOT / ".github/actions/frontend-performance-gate/action.yml",
+    REPOSITORY_ROOT / ".github/actions/mutation-diff-gate/action.yml",
+    REPOSITORY_ROOT / ".github/actions/object-annotation-gate/action.yml",
+    REPOSITORY_ROOT / ".github/actions/suppression-gate/action.yml",
 )
+WorkflowStep = TypedDict("WorkflowStep", {"uses": str, "with": dict[str, str]}, total=False)
 
 
 class WorkflowJob(TypedDict, total=False):
     needs: str | list[str]
+    permissions: dict[str, str]
+    steps: list[WorkflowStep]
 
 
 class WorkflowDocument(TypedDict):
     jobs: dict[str, WorkflowJob]
+    permissions: dict[str, str]
 
 
 class TestPullRequestWorkflowGraph:
@@ -56,9 +77,60 @@ class TestPullRequestWorkflowGraph:
             "object-annotations",
             "suppressions",
             "admin-command",
+            "quality-dashboard-live",
+            "quality-report",
         ):
             pattern = re.compile(rf"^    {re.escape(job)}:\s*$", re.MULTILINE)
             assert pattern.search(self.source), job
+
+    def test_workflow_uses_job_level_write_permissions(self) -> None:
+        assert self.workflow["permissions"] == {"contents": "read"}
+        expected = {
+            "admin-command": {
+                "actions": "write",
+                "contents": "read",
+                "issues": "write",
+                "pull-requests": "write",
+            },
+            "bundle-size": {
+                "contents": "read",
+                "issues": "write",
+                "pull-requests": "write",
+            },
+            "frontend-performance": {
+                "contents": "read",
+                "issues": "write",
+                "pull-requests": "write",
+            },
+            "object-annotations": {
+                "contents": "read",
+                "issues": "write",
+                "pull-requests": "write",
+            },
+            "quality-dashboard-live": {
+                "actions": "read",
+                "contents": "read",
+                "issues": "write",
+                "pull-requests": "read",
+            },
+            "quality-report": {
+                "actions": "read",
+                "contents": "read",
+                "issues": "write",
+                "pull-requests": "read",
+            },
+            "suppressions": {
+                "contents": "read",
+                "issues": "write",
+                "pull-requests": "write",
+            },
+        }
+        for job, definition in self.workflow["jobs"].items():
+            permissions = definition.get("permissions", {})
+            if job in expected:
+                assert permissions == expected[job], job
+            else:
+                assert "write" not in permissions.values(), job
 
     def test_checks_have_declared_dependencies_and_no_cycle(self) -> None:
         jobs = self.workflow["jobs"]
@@ -166,8 +238,10 @@ class TestPullRequestWorkflowGraph:
             "test-fast": "test",
             "test-medium": "test",
             "test-slow": "test",
+            "build": "ci",
             "coverage": "coverage",
             "audit": "audit",
+            "quality-report": "ci",
         }
         for job, profile in expected.items():
             block = re.search(
@@ -177,6 +251,12 @@ class TestPullRequestWorkflowGraph:
             )
             assert block is not None, job
             assert f"python-profile: {profile}" in block.group("body"), job
+
+    def test_analysis_profile_can_publish_quality_results(self) -> None:
+        """Install the shared CI package used after the analysis command finishes."""
+        configuration = tomllib.loads(ROOT_PYPROJECT.read_text())
+
+        assert "monori-ci" in configuration["dependency-groups"]["analyze"]
 
     def test_frontend_performance_is_one_conditional_job(self) -> None:
         block = re.search(
@@ -195,10 +275,30 @@ class TestPullRequestWorkflowGraph:
         assert '"ci/quality_graph/checks/frontend_performance.py"' in scope_source
         assert '"ci/tests/test_frontend_performance.py"' in scope_source
 
-    def test_reporting_actions_inherit_shared_in_progress_lifecycle(self) -> None:
-        for action in REPORTING_ACTIONS:
+    def test_reporting_actions_publish_portable_results(self) -> None:
+        actions = (
+            "bundle-size-gate",
+            "frontend-performance-gate",
+            "frontend-performance-scope",
+            "mutation-diff-gate",
+            "object-annotation-gate",
+            "suppression-gate",
+        )
+        for action in actions:
             source = (REPOSITORY_ROOT / f".github/actions/{action}/action.yml").read_text()
-            assert "uses: ./.github/actions/report-in-progress" in source, action
+            assert "quality-result-" in source, action
+            assert "actions/upload-artifact@v7" in source, action
+
+        quality_action = yaml.safe_load(
+            (REPOSITORY_ROOT / ".github/actions/quality-job/action.yml").read_text()
+        )
+        command_step = quality_action["runs"]["steps"][0]
+        assert "monori.ci.quality_graph.checks" in command_step["run"]
+        fmt = self.workflow["jobs"]["fmt-check"]
+        quality_step = next(
+            step for step in fmt["steps"] if step.get("uses") == "./.github/actions/quality-job"
+        )
+        assert quality_step["with"] == {"check-id": "fmt-check"}
 
     def test_frontend_scope_failure_completes_the_pending_report(self) -> None:
         source = FRONTEND_PERFORMANCE_SCOPE.read_text()
@@ -213,7 +313,132 @@ class TestPullRequestWorkflowGraph:
             re.MULTILINE | re.DOTALL,
         )
         assert block is not None
-        assert "- run: make audit" in block.group("body")
+        assert "uses: ./.github/actions/quality-job" in block.group("body")
+        assert "check-id: audit" in block.group("body")
+
+    def test_final_dashboard_runs_after_the_complete_graph(self) -> None:
+        """Collect all result artifacts even when an earlier check failed."""
+        block = re.search(
+            r"^    quality-report:\n(?P<body>.*?)(?=^    \S|\Z)",
+            self.source,
+            re.MULTILINE | re.DOTALL,
+        )
+        assert block is not None
+        body = block.group("body")
+        assert set(self.workflow["jobs"]["quality-report"]["needs"]) == {
+            "audit",
+            "quality-dashboard-live",
+        }
+        assert "always()" in body
+        assert "actions/download-artifact@v8" in body
+        assert "pattern: quality-result-*" in body
+        assert "github.run_attempt" not in body.split("path:", maxsplit=1)[0]
+        assert "merge-multiple: true" not in body
+        assert "continue-on-error: true" not in body
+        assert "id: quality-results" in body
+        assert "if: steps.quality-results.outcome == 'success'" in body
+        assert "monori.ci.quality_graph.dashboard finish" in body
+
+    def test_live_dashboard_has_one_serial_writer(self) -> None:
+        """Keep parallel check jobs from replacing the shared comment body."""
+        block = re.search(
+            r"^    quality-dashboard-live:\n(?P<body>.*?)(?=^    \S|\Z)",
+            self.source,
+            re.MULTILINE | re.DOTALL,
+        )
+        assert block is not None
+        body = block.group("body")
+        assert "monori.ci.quality_graph.dashboard start" in body
+        assert "monori.ci.quality_graph.dashboard watch" in body
+        assert "update-quality-dashboard" not in self.source
+
+    def test_read_only_pull_requests_do_not_depend_on_dashboard_writes(self) -> None:
+        """Run the validation graph for fork and Dependabot PRs without write permissions."""
+        graph_source = re.search(
+            r"^    workflow-graph:\n(?P<body>.*?)(?=^    \S|\Z)",
+            self.source,
+            re.MULTILINE | re.DOTALL,
+        )
+        assert graph_source is not None
+        assert "dashboard start" not in graph_source.group("body")
+        assert "issues: write" not in graph_source.group("body")
+        assert "pull-requests: write" not in graph_source.group("body")
+        for job_id in ("quality-dashboard-live", "quality-report"):
+            job_source = re.search(
+                rf"^    {job_id}:\n(?P<body>.*?)(?=^    \S|\Z)",
+                self.source,
+                re.MULTILINE | re.DOTALL,
+            )
+            assert job_source is not None
+            assert "head.repo.full_name == github.repository" in job_source.group("body")
+            assert "pull_request.user.login != 'dependabot[bot]'" in job_source.group("body")
+        for job_id in (
+            "bundle-size",
+            "frontend-performance",
+            "object-annotations",
+            "suppressions",
+        ):
+            job_source = re.search(
+                rf"^    {job_id}:\n(?P<body>.*?)(?=^    \S|\Z)",
+                self.source,
+                re.MULTILINE | re.DOTALL,
+            )
+            assert job_source is not None
+            assert "QUALITY_GRAPH_READ_ONLY:" in job_source.group("body")
+
+    def test_live_dashboard_covers_the_supported_workflow_duration(self) -> None:
+        """Keep the watcher alive beyond valid workflows lasting over 45 minutes."""
+        block = re.search(
+            r"^    quality-dashboard-live:\n(?P<body>.*?)(?=^    \S|\Z)",
+            self.source,
+            re.MULTILINE | re.DOTALL,
+        )
+        assert block is not None
+        timeout = re.search(
+            r"^        timeout-minutes: (?P<minutes>\d+)$", block.group("body"), re.MULTILINE
+        )
+        assert timeout is not None
+        timeout_seconds = int(timeout.group("minutes")) * 60
+        assert SUPPORTED_WORKFLOW_DURATION_SECONDS > 45 * 60
+        assert timeout_seconds > SUPPORTED_WORKFLOW_DURATION_SECONDS
+
+    def test_mutation_result_requires_every_gate_step_to_succeed(self) -> None:
+        """Treat skipped and cancelled mutation steps as failed results."""
+        source = MUTATION_ACTION.read_text()
+
+        for step in ("mutation-test", "mutation-front", "mutation-back"):
+            assert f'"${{{{ steps.{step}.outcome }}}}" = success' in source
+            assert f"steps.{step}.outcome != 'success'" in source
+        assert '--metric "Frontend=${{ steps.mutation-front.outcome }}"' in source
+        assert '--metric "Python=${{ steps.mutation-back.outcome }}"' in source
+
+    def test_test_runners_cannot_publish_fixture_reports(self) -> None:
+        """Prevent pytest and mutmut fixtures from polluting live job summaries."""
+        for path in TEST_RUNNERS:
+            source = path.read_text()
+            assert "env -u GITHUB_STEP_SUMMARY -u MUTATION_SUMMARY_PATH" in source, path
+            if path.name == "Makefile":
+                for line in source.splitlines():
+                    if re.search(r"\bpytest(?:\s|$)", line):
+                        assert "env -u GITHUB_STEP_SUMMARY -u MUTATION_SUMMARY_PATH" in line
+        mutmut_runner = (REPOSITORY_ROOT / "scripts/mutmut.sh").read_text()
+        assert (
+            'env -u GITHUB_STEP_SUMMARY -u MUTATION_SUMMARY_PATH "$repository/.venv/bin/mutmut"'
+            in mutmut_runner
+        )
+
+    def test_actions_use_the_node_24_cache_runtime(self) -> None:
+        """Keep cache actions off the deprecated Node.js 20 runtime."""
+        action_sources = "\n".join(
+            path.read_text()
+            for directory in (
+                REPOSITORY_ROOT / ".github/actions",
+                REPOSITORY_ROOT / ".github/workflows",
+            )
+            for path in directory.rglob("*.y*ml")
+        )
+        assert "actions/cache@v4" not in action_sources
+        assert "actions/cache@v5" in action_sources
 
     def test_code_and_api_gate_events_are_separated(self) -> None:
         assert "github.event_name == 'pull_request'" in self.source

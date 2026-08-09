@@ -23,11 +23,13 @@ class FakeGitHubState:
     issue_labels: dict[int, set[str]] = field(default_factory=dict)
     permissions: dict[str, str] = field(default_factory=dict)
     workflow_runs: list[dict[str, JsonValue]] = field(default_factory=list)
+    workflow_jobs: dict[int, list[dict[str, JsonValue]]] = field(default_factory=dict)
     rerun_requests: list[int] = field(default_factory=list)
     pull_files: dict[int, list[dict[str, JsonValue]]] = field(default_factory=dict)
     comparisons: dict[str, dict[str, JsonValue]] = field(default_factory=dict)
     contents: dict[str, str] = field(default_factory=dict)
     failures: dict[tuple[str, str], int] = field(default_factory=dict)
+    requests: list[dict[str, JsonValue]] = field(default_factory=list)
     next_comment_id: int = 1
     next_reaction_id: int = 1
 
@@ -48,6 +50,7 @@ class FakeGitHubState:
             object_value(item, "workflow run")
             for item in array_value(payload.get("workflow_runs", []), "workflow runs")
         ]
+        self.workflow_jobs = self._workflow_jobs(payload.get("workflow_jobs"))
         self.pull_files = self._pull_files(payload.get("pull_files"))
         self.comparisons = {
             reference: object_value(comparison, "comparison")
@@ -61,6 +64,7 @@ class FakeGitHubState:
             if isinstance((content := value), str)
         }
         self.failures = self._failures(payload.get("failures"))
+        self.requests = []
         self.rerun_requests = []
         self.next_comment_id = max(self.comments, default=0) + 1
         reaction_ids = [
@@ -91,13 +95,21 @@ class FakeGitHubState:
             },
             "permissions": cast("JsonValue", dict(self.permissions)),
             "workflow_runs": cast("JsonValue", self.workflow_runs),
+            "workflow_jobs": {
+                str(run_id): cast("JsonValue", jobs) for run_id, jobs in self.workflow_jobs.items()
+            },
             "rerun_requests": cast("JsonValue", list(self.rerun_requests)),
             "pull_files": {
                 str(number): cast("JsonValue", files) for number, files in self.pull_files.items()
             },
             "comparisons": cast("JsonValue", self.comparisons),
             "contents": cast("JsonValue", self.contents),
+            "requests": cast("JsonValue", self.requests),
         }
+
+    def record_request(self, method: str, path: str) -> None:
+        """Record one repository API request for observable budget assertions."""
+        self.requests.append({"method": method, "path": path})
 
     def create_comment(self, number: int, body: str) -> dict[str, JsonValue]:
         """Create one bot-authored issue comment and return it."""
@@ -170,6 +182,16 @@ class FakeGitHubState:
                 for item in array_value(files, "pull request files")
             ]
             for number, files in object_value(value or {}, "pull files").items()
+        }
+
+    @staticmethod
+    def _workflow_jobs(value: JsonValue) -> dict[int, list[dict[str, JsonValue]]]:
+        """Decode workflow jobs keyed by workflow run identifier."""
+        return {
+            int(run_id): [
+                object_value(item, "workflow job") for item in array_value(jobs, "workflow jobs")
+            ]
+            for run_id, jobs in object_value(value or {}, "workflow jobs").items()
         }
 
     @staticmethod

@@ -79,10 +79,10 @@ class TestQualityGraphCommand:
         body = render_report(
             ReportModel(
                 "suppression",
-                ReportStatus.FAIL,
+                ReportStatus.FAILED,
                 admin=admin_commands("suppression", ["suppression-abc123"], []),
             )
-        )
+        ).summary
         checked = body.replace("- [ ]", "- [x]", 1)
         event = cast(
             "dict[str, JsonValue]",
@@ -111,10 +111,10 @@ class TestQualityGraphCommand:
         checked = render_report(
             ReportModel(
                 "suppression",
-                ReportStatus.DONE,
+                ReportStatus.PASSED,
                 admin=admin_commands("suppression", [], ["suppression-abc123"]),
             )
-        )
+        ).summary
         unchecked = checked.replace("- [x]", "- [ ]", 1)
         event = cast(
             "dict[str, JsonValue]",
@@ -142,10 +142,10 @@ class TestQualityGraphCommand:
         body = render_report(
             ReportModel(
                 "suppression",
-                ReportStatus.FAIL,
+                ReportStatus.FAILED,
                 admin=admin_commands("suppression", ["suppression-abc123"], []),
             )
-        )
+        ).summary
         event = cast(
             "dict[str, JsonValue]",
             {
@@ -192,14 +192,14 @@ class TestQualityGraphCommand:
         body = render_report(
             ReportModel(
                 "suppression",
-                ReportStatus.FAIL,
+                ReportStatus.FAILED,
                 admin=admin_commands(
                     "suppression",
                     ["suppression-first", "suppression-second"],
                     [],
                 ),
             )
-        )
+        ).summary
         unchanged = cast(
             "dict[str, JsonValue]",
             {

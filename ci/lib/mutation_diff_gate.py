@@ -4,7 +4,6 @@ import argparse
 import ast
 import json
 import logging
-import os
 import sys
 from dataclasses import dataclass, field
 from io import BytesIO
@@ -16,24 +15,28 @@ from dulwich.objects import Commit
 from dulwich.porcelain import diff_tree
 from dulwich.repo import Repo
 
+from monori.ci.lib.annotations import (
+    SourceAnnotation,
+    publish_workflow_annotations,
+)
+
 KILLED = {1, 3}
 SURVIVED = 0
 OTHER_STATUSES = {-24, 24, 35, 36, 152, 255}
 CLASS_SEPARATOR = "ǁ"
 MUTANT_SOURCE_PATHS = {
-    "app/": "server/app/",
-    "common/": "common/",
-    "lib/": "ci/lib/",
-    "quality_graph/": "ci/quality_graph/",
+    "monori/server/app/": "server/app/",
+    "monori/common/": "common/",
+    "monori/ci/lib/": "ci/lib/",
+    "monori/ci/quality_graph/": "ci/quality_graph/",
 }
 logger = logging.getLogger(__name__)
 
 
-def append_step_summary(content: str) -> None:
-    """Append step summary."""
-    summary_path = os.environ.get("MUTATION_SUMMARY_PATH") or os.environ.get("GITHUB_STEP_SUMMARY")
-    if summary_path:
-        with Path(summary_path).open("a") as summary:
+def append_step_summary(summary_path: Path | None, content: str) -> None:
+    """Append rendered mutation details to an explicit summary sink."""
+    if summary_path is not None:
+        with summary_path.open("a") as summary:
             summary.write(content.rstrip() + "\n")
 
 
@@ -141,6 +144,34 @@ class ChangedFunctions(ast.NodeVisitor):
         self._visit_function(node)
 
 
+class FunctionLocations(ast.NodeVisitor):
+    """Index function and method definitions by their mutation identity."""
+
+    def __init__(self) -> None:
+        """Initialize an empty source-location index."""
+        self.classes: list[str] = []
+        self.lines: dict[tuple[str, str | None], int] = {}
+
+    @override
+    def visit_ClassDef(self, node: ast.ClassDef) -> None:
+        self.classes.append(node.name)
+        self.generic_visit(node)
+        self.classes.pop()
+
+    def _visit_function(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
+        identity = (node.name, self.classes[-1] if self.classes else None)
+        self.lines[identity] = node.lineno
+        self.generic_visit(node)
+
+    @override
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+        self._visit_function(node)
+
+    @override
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+        self._visit_function(node)
+
+
 def changed_functions(
     root: Path, lines_by_path: dict[str, set[int]]
 ) -> dict[str, set[tuple[str, str | None]]]:
@@ -208,6 +239,7 @@ class MutationStats:
     new_survivors: int = 0
     survivor_keys: list[str] = field(default_factory=list)
     no_coverage_keys: list[str] = field(default_factory=list)
+    source_findings: list[tuple[str, int, str]] = field(default_factory=list)
 
     @property
     def considered(self) -> int:
@@ -220,14 +252,20 @@ def record_mutant(
     key: str,
     status: int | None,
     baseline: dict[str, int | None],
+    source: tuple[str, int | None] = ("", None),
 ) -> None:
     """Classify one mutant result and update aggregate mutation statistics."""
+    source_path, source_line = source
     if status is None:
         stats.other += 1
         stats.no_coverage_keys.append(key)
+        if source_line is not None:
+            stats.source_findings.append((source_path, source_line, f"No coverage: {key}"))
     elif status == SURVIVED:
         stats.survived += 1
         stats.survivor_keys.append(key)
+        if source_line is not None:
+            stats.source_findings.append((source_path, source_line, f"Surviving mutant: {key}"))
         if baseline.get(key) != SURVIVED:
             stats.new_survivors += 1
     elif status in KILLED:
@@ -242,6 +280,7 @@ def collect_mutation_stats(
 ) -> MutationStats:
     """Collect mutation statuses for functions changed by the current diff."""
     stats = MutationStats()
+    location_cache: dict[str, dict[tuple[str, str | None], int]] = {}
     for meta_path in request.mutants_dir.rglob("*.py.meta"):
         relative = meta_path.relative_to(request.mutants_dir)
         source_path = source_path_for_mutant(relative)
@@ -249,33 +288,55 @@ def collect_mutation_stats(
             continue
         baseline_path = request.baseline_dir / relative
         baseline = load_meta(baseline_path) if baseline_path.exists() else {}
+        locations = location_cache.get(source_path)
+        if locations is None:
+            source_file = request.root / source_path
+            if source_file.exists():
+                collector = FunctionLocations()
+                collector.visit(ast.parse(source_file.read_text(), filename=source_path))
+                locations = collector.lines
+            else:
+                locations = {}
+            location_cache[source_path] = locations
         for key, status in load_meta(meta_path).items():
-            if mutant_function(key) in allowed:
-                record_mutant(stats, key, status, baseline)
+            identity = mutant_function(key)
+            if identity in allowed:
+                record_mutant(
+                    stats,
+                    key,
+                    status,
+                    baseline,
+                    (source_path, locations.get(identity)),
+                )
     return stats
 
 
-def append_empty_summary(message: str) -> int:
+def append_empty_summary(message: str, summary_path: Path | None = None) -> int:
     """Publish a passing summary when no mutants are eligible for scoring."""
     logger.info("mutation-diff: %s — pass", message)
-    append_step_summary(f"## Python mutation diff\n\n{message.capitalize()} — **pass**.")
+    append_step_summary(
+        summary_path, f"## Python mutation diff\n\n{message.capitalize()} — **pass**."
+    )
     return 0
 
 
 def gate_python(
     request: GateRequest,
+    summary_path: Path | None = None,
 ) -> int:
     """Evaluate changed Python mutants and return the gate exit code."""
     functions = changed_functions(request.root, changed_lines(request.base))
     if not functions:
-        return append_empty_summary("no changed Python functions")
+        return append_empty_summary("no changed Python functions", summary_path)
     stats = collect_mutation_stats(request, functions)
     if stats.considered == 0:
-        return append_empty_summary("changed functions have no tested mutants")
-    return report_verdict(request, stats)
+        return append_empty_summary("changed functions have no tested mutants", summary_path)
+    return report_verdict(request, stats, summary_path)
 
 
-def report_verdict(request: GateRequest, stats: MutationStats) -> int:
+def report_verdict(
+    request: GateRequest, stats: MutationStats, summary_path: Path | None = None
+) -> int:
     """Publish the mutation verdict and return its process exit code."""
     score = 100 * stats.killed / stats.considered
     passed = score >= request.threshold and (request.skip_new_survivors or stats.new_survivors == 0)
@@ -302,7 +363,15 @@ def report_verdict(request: GateRequest, stats: MutationStats) -> int:
         summary.extend(["", "<details>", "<summary>Mutants without coverage</summary>", ""])
         summary.extend(f"- `{key}`" for key in stats.no_coverage_keys)
         summary.extend(["", "</details>"])
-    append_step_summary("\n".join(summary))
+    append_step_summary(summary_path, "\n".join(summary))
+    if not passed:
+        publish_workflow_annotations(
+            (
+                SourceAnnotation(path, line, line, message)
+                for path, line, message in stats.source_findings
+            ),
+            omitted_message="Additional mutation findings are available in the Job Summary.",
+        )
     return 0 if passed else 1
 
 
@@ -318,6 +387,7 @@ def main() -> int:
     parser.add_argument("--base", required=True)
     parser.add_argument("--threshold", type=float, required=True)
     parser.add_argument("--skip-new-survivors", action="store_true")
+    parser.add_argument("--summary", type=Path)
     args = parser.parse_args()
     return gate_python(
         GateRequest(
@@ -327,7 +397,8 @@ def main() -> int:
             args.base,
             args.threshold,
             args.skip_new_survivors,
-        )
+        ),
+        args.summary,
     )
 
 

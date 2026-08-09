@@ -20,7 +20,7 @@ CLOC_EXCLUDE_DIRS := .git,.worktrees,.claude,node_modules,.venv,__pycache__,.pyt
         fmt fmt-check \
         lint lint-web lint-css lint-html lint-server lint-no-comments lint-sql lint-yaml lint-md lint-docs lint-actions lint-docker lint-shell spell \
         type type-front type-back analyze analyze-python-dead-code analyze-javascript-dead-code audit audit-deps audit-deps-py audit-secrets \
-        test t-fast t-medium t-ci t-ci-unit t-ci-integration t-slow t-slow-ui t-front t-back t-e2e t-e2e-ui coverage perf-front-diff mutation mutation-diff mutation-python m-front m-front-diff m-front-file m-back m-back-diff \
+        test t-workflow t-fast t-medium t-ci t-ci-unit t-ci-integration t-slow t-slow-ui t-front t-back t-e2e t-e2e-ui coverage perf-front-diff mutation mutation-diff mutation-python m-front m-front-diff m-front-file m-back m-back-diff \
         schema-diagram check
 
 install:
@@ -101,6 +101,9 @@ clean:
 	for path in \
 		.coverage coverage.json htmlcov coverage \
 		.stryker-tmp reports .mutmut-cache mutants \
+		common/build common/monori_common.egg-info \
+		ci/build ci/monori_ci.egg-info \
+		server/build server/monori_server.egg-info \
 		.issue197 server/static ci/coverage.json web/dist web/test-results web/playwright-report; do \
 		remove_path "$$path"; \
 	done
@@ -176,7 +179,7 @@ lint-docs:
 	python3 scripts/gen_schema_diagram.py --check
 
 lint-actions:
-	actionlint
+	actionlint -shellcheck=
 
 lint-docker:
 	hadolint deploy/Dockerfile.front deploy/Dockerfile.back deploy/Dockerfile.sync deploy/Dockerfile.dev ci/testkit/Dockerfile
@@ -215,10 +218,10 @@ analyze-javascript-dead-code:
 audit: audit-deps audit-deps-py audit-secrets
 
 audit-deps:
-	cd web && npm install --no-audit --no-fund --silent
+	cd web && npm ci --no-audit --no-fund --silent
 	(cd web && npm audit --audit-level=high --json) | \
 		uv run --locked --group audit python -m monori.ci.lib.npm_audit_gate
-	cd tools/frontend-perf && npm install --no-audit --no-fund --silent
+	cd tools/frontend-perf && npm ci --no-audit --no-fund --silent
 	(cd tools/frontend-perf && npm audit --audit-level=high --json) | \
 		uv run --locked --group audit python -m monori.ci.lib.npm_audit_gate
 
@@ -238,14 +241,17 @@ audit-secrets: tools
 
 test: t-front t-back t-e2e
 
+t-workflow:
+	env -u GITHUB_STEP_SUMMARY -u MUTATION_SUMMARY_PATH uv run --locked pytest -q ci/tests/test_pr_workflow.py ci/tests/test_main_workflow.py
+
 t-fast:
 	cd web && npx vitest run --exclude "src/**/*.test.tsx"
-	uv run --locked --group test pytest -q server/tests -m "not integration"
+	env -u GITHUB_STEP_SUMMARY -u MUTATION_SUMMARY_PATH uv run --locked --group test pytest -q server/tests -m "not integration"
 	$(MAKE) t-ci-unit
 
 t-medium:
 	cd web && npx vitest run --exclude "src/**/*.test.ts"
-	uv run --locked --group test pytest -q server/tests -m integration
+	env -u GITHUB_STEP_SUMMARY -u MUTATION_SUMMARY_PATH uv run --locked --group test pytest -q server/tests -m integration
 	$(MAKE) t-ci-integration
 
 t-ci:
@@ -253,7 +259,7 @@ t-ci:
 	$(MAKE) t-ci-integration
 
 t-ci-unit:
-	uv run --locked --group test pytest -q ci/tests --ignore=ci/tests/integration
+	env -u GITHUB_STEP_SUMMARY -u MUTATION_SUMMARY_PATH uv run --locked --group test pytest -q ci/tests --ignore=ci/tests/integration
 
 t-ci-integration:
 	COMPOSE="$(COMPOSE)" bash scripts/ci-tests.sh
@@ -266,7 +272,7 @@ t-front:
 	cd web && npx vitest run
 
 t-back:
-	uv run --locked --group test pytest -q server/tests
+	env -u GITHUB_STEP_SUMMARY -u MUTATION_SUMMARY_PATH uv run --locked --group test pytest -q server/tests
 
 t-e2e:
 	COMPOSE="$(COMPOSE)" bash scripts/e2e.sh
@@ -314,8 +320,9 @@ m-front-diff:
 m-back:
 	@set +e; \
 	thr=$(MUTATION_THRESHOLD); \
-	( mkdir -p mutants && uv run --locked --group mutation mutmut run --max-children $(MUTATION_JOBS) 2>mutants/mutmut-stderr.log ); mutmut=$$?; \
-	( mkdir -p mutants && uv run --locked --group mutation mutmut export-cicd-stats ); export=$$?; \
+	( mkdir -p mutants && uv run --locked --group mutation scripts/mutmut.sh run --max-children $(MUTATION_JOBS) 2>mutmut-stderr.log ); mutmut=$$?; \
+	mv mutmut-stderr.log mutants/mutmut-stderr.log; \
+	( mkdir -p mutants && uv run --locked --group mutation scripts/mutmut.sh export-cicd-stats ); export=$$?; \
 	if [ $$export -eq 0 ]; then \
 		uv run --locked --group mutation python -m monori.ci.lib.mutation_gate mutants/mutmut-cicd-stats.json $$thr; srv=$$?; \
 	else \
@@ -333,16 +340,18 @@ m-back-diff:
 	if git diff --quiet "$(BASE)...HEAD" -- server/app ci/lib ci/quality_graph common; then \
 		echo "mutation-diff: no changed Python files — pass"; exit 0; \
 	fi; \
-	paths=$$(git diff --diff-filter=ACMR --name-only "$(BASE)...HEAD" -- server/app ci/lib ci/quality_graph common '*.py' | sed -e 's#^server/##' -e 's#^ci/##' -e 's#^common/#common/#' -e 's#\.py$$##' -e 's#/#.#g' -e 's#$$#.*#' | paste -sd' ' -); \
+	paths=$$(git diff --diff-filter=ACMR --name-only "$(BASE)...HEAD" -- server/app ci/lib ci/quality_graph common '*.py' | sed -e 's#^server/#monori.server.#' -e 's#^ci/#monori.ci.#' -e 's#^common/#monori.common.#' -e 's#\.py$$##' -e 's#/#.#g' -e 's#$$#.*#' | paste -sd' ' -); \
 	if [ -z "$$paths" ]; then \
 		echo "mutation-diff: no changed Python source files — pass"; exit 0; \
 	fi; \
 	set -- $$paths; \
 	baseline=$$(mktemp -d); trap 'rm -rf "$$baseline"' EXIT; \
 	cold_start=0; if [ -d mutants ]; then cp -a mutants "$$baseline/mutants"; else mkdir -p "$$baseline/mutants"; cold_start=1; fi; \
-	( mkdir -p mutants && uv run --locked --group mutation mutmut run --max-children $(MUTATION_JOBS) "$$@" 2>mutants/mutmut-stderr.log ); mutmut=$$?; \
+	( mkdir -p mutants && uv run --locked --group mutation scripts/mutmut.sh run --max-children $(MUTATION_JOBS) "$$@" 2>mutmut-stderr.log ); mutmut=$$?; \
+	mv mutmut-stderr.log mutants/mutmut-stderr.log; \
 	args="--mutants mutants --baseline $$baseline/mutants --base $(BASE) --threshold $(MUTATION_DIFF_THRESHOLD)"; \
 	if [ $$cold_start -eq 1 ]; then args="$$args --skip-new-survivors"; fi; \
+	if [ -n "$${MUTATION_SUMMARY_PATH:-}" ]; then args="$$args --summary $$MUTATION_SUMMARY_PATH"; fi; \
 	uv run --locked --group mutation python -m monori.ci.lib.mutation_diff_gate $$args; gate=$$?; \
 	if [ -s mutants/mutmut-stderr.log ]; then echo "── mutmut diagnostics: mutants/mutmut-stderr.log ──"; fi; \
 	echo "── Python diff mutation gate (threshold $(MUTATION_DIFF_THRESHOLD)%, workers $(MUTATION_JOBS)): mutmut run exit=$$mutmut, gate exit=$$gate ──"; \

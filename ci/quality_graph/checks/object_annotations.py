@@ -2,21 +2,29 @@
 
 import ast
 import difflib
-import os
 import re
-import sys
 from collections import Counter
 from dataclasses import dataclass
-from pathlib import Path
 from typing import ClassVar, override
 
+from monori.ci.lib.annotations import (
+    AnnotationLevel,
+    SourceAnnotation,
+    publish_workflow_annotations,
+)
 from monori.ci.lib.findings import stable_finding_id
-from monori.ci.lib.github import GitHub, RepositoryGitHubAPI, rerun_latest_pull_request_workflow
-from monori.ci.quality_graph.base import ApprovalLifecycle, PullRequestSourceCheck
-from monori.ci.quality_graph.models import CheckContext, CheckResult, Verdict
+from monori.ci.lib.github import RepositoryGitHubAPI
+from monori.ci.quality_graph.base import (
+    ApprovalLifecycle,
+    PullRequestSourceCheck,
+    QualityRuntime,
+    read_github_event,
+)
+from monori.ci.quality_graph.models import CheckContext, CheckResult, Metric, Verdict
+from monori.ci.quality_graph.registry import WORKFLOW_JOB_BY_ID
 from monori.ci.quality_graph.reporting import (
+    RenderedCheckReport,
     ReportFinding,
-    ReportMetric,
     ReportModel,
     ReportStatus,
     admin_commands,
@@ -25,7 +33,6 @@ from monori.ci.quality_graph.reporting import (
 )
 from monori.common import (
     JsonValue,
-    decode_json,
     integer_value,
     object_value,
     optional_string,
@@ -135,8 +142,15 @@ def scan_file(path: str, source: str, changed: set[int]) -> list[Finding]:
     try:
         tree = ast.parse(source, filename=path)
     except SyntaxError as error:
-        sys.stderr.write(
-            f"::error file={path},line={error.lineno or 1}::Cannot parse Python file: {error}\n"
+        syntax_annotation = SourceAnnotation(
+            path,
+            error.lineno or 1,
+            error.lineno or 1,
+            f"Cannot parse Python file: {error}",
+        )
+        publish_workflow_annotations(
+            (syntax_annotation,),
+            omitted_message="Additional syntax errors are available in the Job Summary.",
         )
         return []
 
@@ -161,8 +175,7 @@ def scan_file(path: str, source: str, changed: set[int]) -> list[Finding]:
 class ObjectAnnotationCheck(PullRequestSourceCheck[Finding]):
     """Find changed annotations that use the overly broad ``object`` type."""
 
-    gate = "object"
-    report_marker = "object-annotations"
+    definition = WORKFLOW_JOB_BY_ID["object-annotations"]
     approval_lifecycle = APPROVALS
     supports_ignore_file = True
     failure_label: ClassVar[str | None] = FAILURE_LABEL
@@ -191,36 +204,36 @@ class ObjectAnnotationCheck(PullRequestSourceCheck[Finding]):
     @override
     def render_summary(
         self, findings: list[Finding], approved: set[str], pull_request_url: str
-    ) -> str:
+    ) -> RenderedCheckReport:
         """Render the object-annotation report."""
         return summary_body(findings, approved, pull_request_url)
 
     @override
-    def error_annotation(self, finding: Finding) -> str:
-        """Render an error annotation for an overly broad type."""
-        return (
-            f"::error file={finding.path},line={finding.line},col={finding.column + 1}::"
-            "Use a specific type instead of object"
+    def source_annotation(self, finding: Finding) -> SourceAnnotation:
+        """Build an error annotation for an overly broad type."""
+        return SourceAnnotation(
+            finding.path,
+            finding.line,
+            finding.line,
+            "Use a specific type instead of object",
+            AnnotationLevel.FAILURE,
+            start_column=finding.column + 1,
+            end_column=finding.column + len("object"),
         )
 
-    @override
-    def rerun(self, github: RepositoryGitHubAPI, number: int) -> None:
-        """Rerun the pull-request workflow after approvals change."""
-        rerun_latest_pull_request_workflow(github, number)
 
-
-def summary_body(findings: list[Finding], approved: set[str], pr_url: str) -> str:
+def summary_body(findings: list[Finding], approved: set[str], pr_url: str) -> RenderedCheckReport:
     """Render the summary markdown shown for object annotation check."""
     active = [finding for finding in findings if finding.finding_id not in approved]
     return render_report(
         ReportModel(
             "object-annotations",
-            ReportStatus.DONE if not active else ReportStatus.FAIL,
+            ReportStatus.PASSED if not active else ReportStatus.FAILED,
             metrics=(
-                ReportMetric("Status", "PASS" if not active else "FAIL"),
-                ReportMetric("Findings", str(len(findings))),
-                ReportMetric("Active", str(len(active))),
-                ReportMetric("Approved", str(len(findings) - len(active))),
+                Metric("Status", "PASS" if not active else "FAIL"),
+                Metric("Findings", str(len(findings))),
+                Metric("Active", str(len(active))),
+                Metric("Approved", str(len(findings) - len(active))),
             ),
             findings_title="List of problems",
             findings=tuple(
@@ -289,11 +302,13 @@ def scan_pull_request(github: RepositoryGitHubAPI, pull: dict[str, JsonValue]) -
 
 def main() -> int:
     """Run the Python object annotation gate for the current pull request event."""
-    github = GitHub()
-    event = object_value(
-        decode_json(Path(os.environ["GITHUB_EVENT_PATH"]).read_text()), "GitHub event"
+    runtime = QualityRuntime.from_environment()
+    return ObjectAnnotationCheck().run_pull_request_gate(
+        runtime.github,
+        read_github_event(),
+        runtime.publisher,
+        read_only=runtime.read_only,
     )
-    return ObjectAnnotationCheck().run_pull_request_gate(github, event)
 
 
 if __name__ == "__main__":

@@ -1,12 +1,11 @@
 import re
-from pathlib import Path
 from typing import ClassVar, cast
 
 import yaml
 
-from monori.ci.tests.test_pr_workflow import WorkflowDocument
+from monori.ci.tests.test_pr_workflow import REPOSITORY_ROOT, WorkflowDocument
 
-WORKFLOW = Path.cwd() / ".github/workflows/main-checks.yaml"
+WORKFLOW = REPOSITORY_ROOT / ".github/workflows/main-checks.yaml"
 
 
 class TestMainWorkflowGraph:

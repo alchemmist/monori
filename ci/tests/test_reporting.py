@@ -2,15 +2,18 @@
 
 import re
 
+import pytest
+
 from monori.ci.lib.comments import (
     GITHUB_COMMENT_BODY_LIMIT,
     bounded_comment_body,
 )
+from monori.ci.quality_graph.job_results import JobControl
+from monori.ci.quality_graph.models import Metric
+from monori.ci.quality_graph.registry import WORKFLOW_JOB_BY_ID, workflow_job_for_report
 from monori.ci.quality_graph.reporting import (
-    CHECK_REPORTS,
-    SURFACE_REPORTS,
+    AdminCommands,
     ReportFinding,
-    ReportMetric,
     ReportModel,
     ReportStatus,
     admin_commands,
@@ -21,11 +24,11 @@ from monori.ci.quality_graph.reporting import (
 
 def test_renderer_owns_status_heading_findings_and_admin_commands() -> None:
     """Render the complete common report frame from typed gate data."""
-    body = render_report(
+    report = render_report(
         ReportModel(
             "suppression",
-            ReportStatus.FAIL,
-            metrics=(ReportMetric("Active", "1"),),
+            ReportStatus.FAILED,
+            metrics=(Metric("Active", "1"),),
             findings=(
                 ReportFinding(
                     "`example-1`",
@@ -43,6 +46,16 @@ def test_renderer_owns_status_heading_findings_and_admin_commands() -> None:
         )
     )
 
+    body = report.summary
+    assert (
+        report.controls
+        == admin_commands(
+            "example",
+            ["example-1"],
+            [],
+            {"example.py": ["example-1"]},
+        ).controls
+    )
     assert body.startswith("## ❌ Lint suppression gate\n")
     assert "| Active | 1 |" in body
     assert "<details><summary>Findings (1)</summary>" in body
@@ -72,6 +85,54 @@ def test_file_control_reverses_only_findings_from_its_file() -> None:
     ]
 
 
+def test_admin_commands_preserve_all_ids_notes_and_reverse_operations() -> None:
+    """Build deterministic controls without dropping command state."""
+    commands = admin_commands(
+        "suppression",
+        ["suppression-b", "suppression-a"],
+        ["suppression-d", "suppression-c"],
+        notes=["Repository administrators only."],
+    )
+
+    assert commands == AdminCommands(
+        (
+            JobControl(
+                "/qg ignore suppression-a,suppression-b",
+                "/qg remove-ignore suppression-a,suppression-b",
+            ),
+            JobControl(
+                "/qg ignore suppression",
+                "/qg remove-ignore suppression-a,suppression-b",
+            ),
+            JobControl(
+                "/qg ignore suppression-c,suppression-d",
+                "/qg remove-ignore suppression-c,suppression-d",
+                checked=True,
+            ),
+        ),
+        ("Repository administrators only.",),
+    )
+
+
+def test_renderer_normalizes_blank_lines_and_ends_with_one_newline() -> None:
+    """Keep rendered report Markdown stable for comments and summaries."""
+    report = render_report(
+        ReportModel("bundle-size", ReportStatus.PASSED, content="first\n\n\nsecond")
+    )
+    body = report.summary
+
+    assert "first\n\nsecond" in body
+    assert "\n\n\n" not in body
+    assert body.endswith("\n")
+    assert not body.endswith("\n\n")
+
+
+def test_unknown_report_marker_has_an_actionable_error() -> None:
+    """Identify an unregistered report marker in renderer failures."""
+    with pytest.raises(ValueError, match="Unknown Quality Graph report marker: missing"):
+        render_report(ReportModel("missing", ReportStatus.FAILED))
+
+
 def test_comment_body_is_bounded_with_an_exact_omission_notice() -> None:
     """Keep oversized reports within GitHub's hard comment-body limit."""
     original = "x" * (GITHUB_COMMENT_BODY_LIMIT + 500)
@@ -87,16 +148,15 @@ def test_comment_body_is_bounded_with_an_exact_omission_notice() -> None:
 
 def test_empty_admin_commands_do_not_instruct_the_reader_to_post() -> None:
     """Avoid contradictory command instructions for a passing report."""
-    body = render_report(
-        ReportModel("bundle-size", ReportStatus.DONE, admin=admin_commands("bundle", [], []))
+    report = render_report(
+        ReportModel("bundle-size", ReportStatus.PASSED, admin=admin_commands("bundle", [], []))
     )
+    body = report.summary
 
     assert "No actionable findings in this run." in body
     assert "Post exactly one command" not in body
 
 
-def test_check_and_command_surface_reports_have_separate_registries() -> None:
-    """Keep command UI definitions out of the check report registry."""
-    assert "quality-graph" in SURFACE_REPORTS
-    assert "quality-graph" not in CHECK_REPORTS
-    assert "suppression" in CHECK_REPORTS
+def test_report_metadata_comes_from_the_workflow_registry() -> None:
+    """Resolve report titles and markers from the canonical workflow definition."""
+    assert workflow_job_for_report("suppression") is WORKFLOW_JOB_BY_ID["suppressions"]

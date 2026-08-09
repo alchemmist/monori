@@ -1,18 +1,31 @@
 """Test the shared approval and gate-state lifecycle."""
 
+from __future__ import annotations
+
 import re
 from dataclasses import dataclass
-from typing import override
+from typing import TYPE_CHECKING, override
 
 import pytest
 
 from monori.ci.quality_graph.base import (
     ApprovalLifecycle,
+    CheckExecution,
     QualityCheck,
+    publish_check_execution,
 )
-from monori.ci.quality_graph.commands import parse_command
-from monori.ci.quality_graph.models import CheckContext, CheckResult, Verdict
-from monori.ci.quality_graph.registry import registered_checks
+from monori.ci.quality_graph.checks.bundle_size import BundleFinding, BundleSizeCheck
+from monori.ci.quality_graph.commands import QualityGraphCommand
+from monori.ci.quality_graph.job_results import JobResultPublisher, JobStatus, read_job_result
+from monori.ci.quality_graph.models import CheckContext, CheckResult, Metric, Verdict
+from monori.ci.quality_graph.registry import (
+    WORKFLOW_JOB_BY_ID,
+    WorkflowJobDefinition,
+    registered_checks,
+)
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 @dataclass(frozen=True)
@@ -40,8 +53,8 @@ REPORT_LIFECYCLE = ApprovalLifecycle(
 )
 
 PENDING_LIFECYCLE = ApprovalLifecycle(
-    "example",
-    "example-",
+    "bundle",
+    "bundle-",
     re.compile(r"<!-- pending-approvals: ([a-z0-9,-]*) -->"),
     "<!-- pending-approvals: {ids} -->",
     re.compile(r"<!-- example-pending: (\d+)(?: ([A-Za-z0-9_-]+))? -->"),
@@ -64,13 +77,12 @@ def test_all_approval_gates_use_the_quality_check_contract() -> None:
     }
 
 
-def test_check_metadata_rejects_a_command_surface_report_marker() -> None:
-    """Fail while defining a check whose report marker is not a check report."""
-    with pytest.raises(TypeError, match="Unknown check report marker"):
+def test_check_metadata_must_reference_the_workflow_registry() -> None:
+    """Reject metadata constructed outside the declarative workflow registry."""
+    with pytest.raises(TypeError, match="registered workflow metadata"):
 
         class InvalidCheck(QualityCheck[Finding]):
-            gate = "example"
-            report_marker = "quality-graph"
+            definition = WorkflowJobDefinition("example", "Example", "example", "example")
             approval_lifecycle = LIFECYCLE
 
             @override
@@ -84,8 +96,7 @@ def test_check_metadata_rejects_lifecycle_capability_mismatches() -> None:
     with pytest.raises(TypeError, match="gate does not match"):
 
         class InvalidGate(QualityCheck[Finding]):
-            gate = "other"
-            report_marker = "bundle-size"
+            definition = WORKFLOW_JOB_BY_ID["bundle-size"]
             approval_lifecycle = LIFECYCLE
 
             @override
@@ -95,9 +106,8 @@ def test_check_metadata_rejects_lifecycle_capability_mismatches() -> None:
     with pytest.raises(TypeError, match="ignore-file metadata"):
 
         class InvalidFileCapability(QualityCheck[Finding]):
-            gate = "example"
-            report_marker = "bundle-size"
-            approval_lifecycle = LIFECYCLE
+            definition = WORKFLOW_JOB_BY_ID["bundle-size"]
+            approval_lifecycle = REPORT_LIFECYCLE
             supports_ignore_file = True
 
             @override
@@ -107,8 +117,7 @@ def test_check_metadata_rejects_lifecycle_capability_mismatches() -> None:
     with pytest.raises(TypeError, match="pending-marker metadata"):
 
         class InvalidPendingCapability(QualityCheck[Finding]):
-            gate = "example"
-            report_marker = "bundle-size"
+            definition = WORKFLOW_JOB_BY_ID["bundle-size"]
             approval_lifecycle = PENDING_LIFECYCLE
 
             @override
@@ -119,10 +128,65 @@ def test_check_metadata_rejects_lifecycle_capability_mismatches() -> None:
 def test_declarative_report_lifecycle_filters_ids_and_disables_file_commands() -> None:
     """Honor report-check capabilities without gate-specific command code."""
     findings = [Finding("web/dist/app.js", "bundle-size")]
-    mixed_command = parse_command("/qg ignore bundle-size,object-other")
-    file_command = parse_command("/qg ignore-file web/dist/app.js")
-    assert mixed_command is not None
-    assert file_command is not None
+    mixed_command = QualityGraphCommand("ignore", ("bundle-size", "object-other"))
+    file_command = QualityGraphCommand("ignore-file", ("web/dist/app.js",))
 
     assert REPORT_LIFECYCLE.select_findings(mixed_command, findings) == {"bundle-size"}
     assert REPORT_LIFECYCLE.select_findings(file_command, findings) == set()
+
+
+def test_report_gate_reads_only_approvals_for_current_findings() -> None:
+    """Filter persisted approvals against the current report findings."""
+    findings = [BundleFinding("bundle-initial-load"), BundleFinding("bundle-other")]
+
+    approved = BundleSizeCheck().read_approvals(
+        "<!-- monori-bundle-size-approvals: bundle-initial-load,object-other -->",
+        findings,
+    )
+
+    assert approved == {"bundle-initial-load"}
+
+
+@pytest.mark.parametrize(
+    ("gate", "finding_id"),
+    [
+        ("bundle", "bundle-example"),
+        ("frontend", "frontend-example"),
+        ("object", "object-example"),
+        ("suppression", "suppression-example"),
+    ],
+)
+def test_registered_gate_lifecycles_select_their_own_findings(gate: str, finding_id: str) -> None:
+    """Apply the same declarative selection contract to every registered gate."""
+    check = registered_checks()[gate]
+    second_id = f"{gate}-other"
+    findings = [Finding("example.py", finding_id), Finding("other.py", second_id)]
+
+    selected = check.approval_lifecycle.select_findings(
+        QualityGraphCommand("ignore", (gate,)),
+        findings,
+    )
+
+    assert selected == {finding_id, second_id}
+
+
+def test_check_execution_uses_one_publication_policy(tmp_path: Path) -> None:
+    """Derive artifact identity, title, and exit code through the shared publisher."""
+    result_path = tmp_path / "bundle-size.json"
+    execution = CheckExecution(
+        JobStatus.FAILED,
+        "Bundle regression",
+        (Metric("Active", "1"),),
+    )
+
+    exit_code = publish_check_execution(
+        BundleSizeCheck(),
+        JobResultPublisher(result_path),
+        execution,
+    )
+
+    result = read_job_result(result_path)
+    assert exit_code == 1
+    assert result.check_id == "bundle-size"
+    assert result.title == "Frontend bundle size"
+    assert result.status is JobStatus.FAILED
