@@ -266,6 +266,37 @@ def test_source_gate_converges_labels_and_writes_job_results(tmp_path: Path) -> 
     assert "0 findings" in summary_path.read_text()
 
 
+def test_source_gate_read_only_mode_avoids_pull_request_mutations(tmp_path: Path) -> None:
+    """Evaluate fork findings without requiring labels or pull-request write access."""
+    reset_fake_github(
+        {
+            "failures": [
+                {
+                    "method": "PATCH",
+                    "path": f"/repos/{REPOSITORY}/pulls/{PULL_REQUEST_NUMBER}",
+                    "status": HTTPStatus.FORBIDDEN,
+                },
+                {
+                    "method": "POST",
+                    "path": f"/repos/{REPOSITORY}/issues/{PULL_REQUEST_NUMBER}/labels",
+                    "status": HTTPStatus.FORBIDDEN,
+                },
+            ]
+        }
+    )
+    result_path = tmp_path / "result.json"
+
+    exit_code = ScenarioCheck([ScenarioFinding("finding-1", "example.py")]).run_pull_request_gate(
+        GitHub(),
+        pull_request_event(),
+        JobResultPublisher(result_path),
+        read_only=True,
+    )
+
+    assert exit_code == 1
+    assert read_job_result(result_path).status is JobStatus.FAILED
+
+
 def test_dashboard_replaces_legacy_comments_and_collects_job_results(tmp_path: Path) -> None:
     """Publish one comment from isolated job artifacts and real Actions API state."""
     reset_fake_github(

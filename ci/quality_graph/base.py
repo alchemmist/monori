@@ -401,12 +401,14 @@ class PullRequestSourceCheck[FindingType: ApprovableFinding](QualityCheck[Findin
         github: RepositoryGitHubAPI,
         event: dict[str, JsonValue],
         publisher: JobResultPublisher,
+        *,
+        read_only: bool = False,
     ) -> int:
         """Execute the shared source-check lifecycle for a pull-request event."""
         number = self._pull_request_number(event)
         if number is None:
             return 0
-        return self._run_pull_request_gate(github, event, number, publisher)
+        return self._run_pull_request_gate(github, event, number, publisher, read_only=read_only)
 
     def _run_pull_request_gate(
         self,
@@ -414,6 +416,8 @@ class PullRequestSourceCheck[FindingType: ApprovableFinding](QualityCheck[Findin
         event: dict[str, JsonValue],
         number: int,
         publisher: JobResultPublisher,
+        *,
+        read_only: bool,
     ) -> int:
         """Execute a source check and publish its portable job result."""
         raw_pull = github.request("GET", f"/pulls/{number}")
@@ -430,22 +434,28 @@ class PullRequestSourceCheck[FindingType: ApprovableFinding](QualityCheck[Findin
             command = None
         author = request.login if command is not None and request is not None else None
         body = optional_string(pull.get("body")) or ""
-        sync = self.sync_approvals(
-            ApprovalRequest(
-                github,
-                number,
-                body,
-                command,
-                author,
-                github.paged(f"/issues/{number}/labels"),
-            ),
-            findings,
-        )
-        active = [finding for finding in findings if finding.finding_id not in sync.approved]
-        if self.failure_label is not None:
+        if read_only:
+            approved = self.approval_lifecycle.read(body) & {
+                finding.finding_id for finding in findings
+            }
+        else:
+            sync = self.sync_approvals(
+                ApprovalRequest(
+                    github,
+                    number,
+                    body,
+                    command,
+                    author,
+                    github.paged(f"/issues/{number}/labels"),
+                ),
+                findings,
+            )
+            approved = sync.approved
+        active = [finding for finding in findings if finding.finding_id not in approved]
+        if self.failure_label is not None and not read_only:
             sync_label(github, number, self.failure_label, present=bool(active))
         pull_request_url = optional_string(pull.get("html_url")) or ""
-        summary = self.render_summary(findings, sync.approved, pull_request_url)
+        summary = self.render_summary(findings, approved, pull_request_url)
         annotations = tuple(self.source_annotation(finding) for finding in active)
         result = JobResult(
             self.job_id,

@@ -276,7 +276,7 @@ class TestPullRequestWorkflowGraph:
             "audit",
             "quality-dashboard-live",
         }
-        assert "if: always()" in body
+        assert "always()" in body
         assert "actions/download-artifact@v8" in body
         assert "pattern: quality-result-*" in body
         assert "github.run_attempt" not in body.split("path:", maxsplit=1)[0]
@@ -294,8 +294,39 @@ class TestPullRequestWorkflowGraph:
             re.MULTILINE | re.DOTALL,
         )
         assert block is not None
-        assert "monori.ci.quality_graph.dashboard watch" in block.group("body")
+        body = block.group("body")
+        assert "monori.ci.quality_graph.dashboard start" in body
+        assert "monori.ci.quality_graph.dashboard watch" in body
         assert "update-quality-dashboard" not in self.source
+
+    def test_read_only_pull_requests_do_not_depend_on_dashboard_writes(self) -> None:
+        """Run the validation graph for fork and Dependabot PRs without write permissions."""
+        graph_source = re.search(
+            r"^    workflow-graph:\n(?P<body>.*?)(?=^    \S|\Z)",
+            self.source,
+            re.MULTILINE | re.DOTALL,
+        )
+        assert graph_source is not None
+        assert "dashboard start" not in graph_source.group("body")
+        assert "issues: write" not in graph_source.group("body")
+        assert "pull-requests: write" not in graph_source.group("body")
+        for job_id in ("quality-dashboard-live", "quality-report"):
+            job_source = re.search(
+                rf"^    {job_id}:\n(?P<body>.*?)(?=^    \S|\Z)",
+                self.source,
+                re.MULTILINE | re.DOTALL,
+            )
+            assert job_source is not None
+            assert "head.repo.full_name == github.repository" in job_source.group("body")
+            assert "pull_request.user.login != 'dependabot[bot]'" in job_source.group("body")
+        for job_id in ("object-annotations", "suppressions"):
+            job_source = re.search(
+                rf"^    {job_id}:\n(?P<body>.*?)(?=^    \S|\Z)",
+                self.source,
+                re.MULTILINE | re.DOTALL,
+            )
+            assert job_source is not None
+            assert "QUALITY_GRAPH_READ_ONLY:" in job_source.group("body")
 
     def test_live_dashboard_covers_the_supported_workflow_duration(self) -> None:
         """Keep the watcher alive beyond valid workflows lasting over 45 minutes."""

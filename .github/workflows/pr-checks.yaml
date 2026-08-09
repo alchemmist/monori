@@ -23,8 +23,6 @@ jobs:
         permissions:
             actions: read
             contents: read
-            issues: write
-            pull-requests: write
         runs-on: ubuntu-latest
         steps:
             - name: Checkout
@@ -33,6 +31,34 @@ jobs:
                   persist-credentials: false
             - name: Setup Python dependencies
               uses: ./.github/actions/setup-project
+              with:
+                  python-profile: ci
+            - uses: ./.github/actions/quality-job
+              with:
+                  check-id: workflow-graph
+                  title: Workflow graph validation
+                  make-target: t-workflow
+
+    quality-dashboard-live:
+        name: Quality Graph live dashboard
+        needs: workflow-graph
+        if: >-
+            always()
+            && github.event_name == 'pull_request'
+            && github.event.pull_request.head.repo.full_name == github.repository
+            && github.event.pull_request.user.login != 'dependabot[bot]'
+        permissions:
+            actions: read
+            contents: read
+            issues: write
+            pull-requests: read
+        runs-on: ubuntu-latest
+        timeout-minutes: 185
+        steps:
+            - uses: actions/checkout@v7
+              with:
+                  persist-credentials: false
+            - uses: ./.github/actions/setup-project
               with:
                   python-profile: ci
             - name: Start Quality Graph dashboard
@@ -48,30 +74,6 @@ jobs:
                   --run-attempt "${{ github.run_attempt }}"
                   --head-sha "$HEAD_SHA"
                   --run-url "$RUN_URL"
-            - uses: ./.github/actions/quality-job
-              with:
-                  check-id: workflow-graph
-                  title: Workflow graph validation
-                  make-target: t-workflow
-
-    quality-dashboard-live:
-        name: Quality Graph live dashboard
-        needs: workflow-graph
-        if: always() && github.event_name == 'pull_request'
-        permissions:
-            actions: read
-            contents: read
-            issues: write
-            pull-requests: read
-        runs-on: ubuntu-latest
-        timeout-minutes: 185
-        steps:
-            - uses: actions/checkout@v7
-              with:
-                  persist-credentials: false
-            - uses: ./.github/actions/setup-project
-              with:
-                  python-profile: ci
             - name: Synchronize live Quality Graph status
               env:
                   GITHUB_TOKEN: ${{ github.token }}
@@ -332,7 +334,11 @@ jobs:
     quality-report:
         name: Quality Graph dashboard
         needs: [audit, quality-dashboard-live]
-        if: always() && github.event_name == 'pull_request'
+        if: >-
+            always()
+            && github.event_name == 'pull_request'
+            && github.event.pull_request.head.repo.full_name == github.repository
+            && github.event.pull_request.user.login != 'dependabot[bot]'
         permissions:
             actions: read
             contents: read
@@ -456,6 +462,8 @@ jobs:
         if: github.event_name == 'pull_request' && needs.fmt-check.result == 'success'
         runs-on: ubuntu-latest
         timeout-minutes: 10
+        env:
+            QUALITY_GRAPH_READ_ONLY: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.event.pull_request.user.login == 'dependabot[bot]' }}
         permissions:
             actions: read
             contents: read
@@ -476,6 +484,8 @@ jobs:
         if: github.event_name == 'pull_request' && needs.fmt-check.result == 'success'
         runs-on: ubuntu-latest
         timeout-minutes: 10
+        env:
+            QUALITY_GRAPH_READ_ONLY: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.event.pull_request.user.login == 'dependabot[bot]' }}
         permissions:
             actions: read
             contents: read

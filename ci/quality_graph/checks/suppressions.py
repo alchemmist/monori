@@ -422,7 +422,12 @@ def main() -> int:
         Path(result_path) if result_path else None,
         Path(summary_path) if summary_path else None,
     )
-    return SuppressionCheck().run_pull_request_gate(github, event, publisher)
+    return SuppressionCheck().run_pull_request_gate(
+        github,
+        event,
+        publisher,
+        read_only=os.environ.get("QUALITY_GRAPH_READ_ONLY", "").lower() == "true",
+    )
 
 
 if __name__ == "__main__":
