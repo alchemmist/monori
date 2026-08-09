@@ -420,6 +420,48 @@ def test_dashboard_single_writer_preserves_concurrent_job_completions() -> None:
     assert "| Lint suppression gate | ❌ failed |" in body
 
 
+def test_dashboard_watcher_does_not_patch_an_unchanged_comment() -> None:
+    """Avoid content writes when one polling iteration observes no status changes."""
+    reset_fake_github(
+        {
+            "workflow_jobs": {
+                "99": [
+                    {
+                        "name": "Workflow graph validation",
+                        "status": "in_progress",
+                        "conclusion": None,
+                        "html_url": "https://example.test/jobs/workflow-graph",
+                    }
+                ]
+            }
+        }
+    )
+    lifecycle = DashboardLifecycle(
+        GitHub(),
+        PULL_REQUEST_NUMBER,
+        99,
+        1,
+        "head-sha",
+        "https://example.test/runs/99",
+    )
+    lifecycle.start()
+    state = fake_state()
+    dashboard = state_objects(state, "comments")[0]
+    dashboard_id = dashboard.get("id")
+    assert isinstance(dashboard_id, int)
+    state["failures"] = [
+        {
+            "method": "PATCH",
+            "path": f"/repos/{REPOSITORY}/issues/comments/{dashboard_id}",
+            "status": SERVICE_UNAVAILABLE,
+        }
+    ]
+    reset_fake_github(state)
+
+    with pytest.raises(TimeoutError):
+        lifecycle.watch(0, 0.01)
+
+
 def test_stale_dashboard_run_cannot_overwrite_the_current_comment(tmp_path: Path) -> None:
     """Ignore a final renderer whose head SHA no longer belongs to the pull request."""
     reset_fake_github()

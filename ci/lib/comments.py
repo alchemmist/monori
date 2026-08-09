@@ -91,6 +91,15 @@ def upsert_comment(github: GitHubAPI, number: int, marker: str, body: str) -> No
     github.request("POST", f"/issues/{number}/comments", {"body": rendered})
 
 
+def update_comment_body(github: GitHubAPI, comment_id: int, body: str) -> None:
+    """Replace a known comment directly without repeating issue-comment discovery."""
+    github.request(
+        "PATCH",
+        f"/issues/comments/{comment_id}",
+        {"body": bounded_comment_body(body)},
+    )
+
+
 def delete_managed_comments(github: GitHubAPI, number: int, markers: set[str]) -> None:
     """Delete bot-owned managed comments carrying any selected marker."""
     hidden_markers = {f"<!-- monori-report: {marker} -->" for marker in markers}

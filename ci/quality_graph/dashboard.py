@@ -17,6 +17,7 @@ from monori.ci.lib.comments import (
     comment_body,
     delete_managed_comments,
     managed_comment,
+    update_comment_body,
     upsert_comment,
 )
 from monori.ci.lib.github import GITHUB_PAGE_SIZE, GitHub, GitHubAPI
@@ -53,7 +54,7 @@ NOTICE_RE = re.compile(
     r"<!-- monori-qg-notice:start -->.*?<!-- monori-qg-notice:end -->",
     re.DOTALL,
 )
-DEFAULT_WATCH_INTERVAL = 5.0
+DEFAULT_WATCH_INTERVAL = 60.0
 SUPPORTED_WORKFLOW_DURATION_SECONDS = 3 * 60 * 60
 DEFAULT_WATCH_TIMEOUT = float(SUPPORTED_WORKFLOW_DURATION_SECONDS)
 ARTIFACT_ATTEMPT_RE = re.compile(r"-(?P<attempt>\d+)$")
@@ -386,22 +387,26 @@ class DashboardLifecycle:
 
     def watch(self, poll_interval: float, timeout: float) -> None:
         """Continuously publish Actions job states through one dashboard writer."""
+        initial = managed_comment(self.github, self.number, DASHBOARD_MARKER)
+        if initial is None:
+            return
+        comment_id = initial.get("id")
+        if not isinstance(comment_id, int):
+            message = "Quality Graph dashboard comment has no numeric id"
+            raise TypeError(message)
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
             if not self._head_is_current() or not self._is_latest_run():
                 return
             api_jobs = self._api_jobs(required=False)
-            comment = managed_comment(self.github, self.number, DASHBOARD_MARKER)
-            if comment is None:
+            raw_comment = self.github.request("GET", f"/issues/comments/{comment_id}")
+            if raw_comment is None:
                 return
+            comment = object_value(raw_comment, "dashboard comment")
             body = string_value(comment.get("body"), "dashboard body")
             updated = refresh_running_jobs(body, api_jobs, self.run_url)
-            upsert_comment(
-                self.github,
-                self.number,
-                DASHBOARD_MARKER,
-                MANAGED_MARKER_RE.sub("", updated),
-            )
+            if updated != body:
+                update_comment_body(self.github, comment_id, updated)
             if self._all_jobs_complete(api_jobs):
                 return
             time.sleep(poll_interval)

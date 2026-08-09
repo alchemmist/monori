@@ -9,6 +9,7 @@ import pytest
 from monori.ci.lib.comments import GITHUB_COMMENT_BODY_LIMIT, comment_body
 from monori.ci.quality_graph.dashboard import (
     DASHBOARD_MARKER,
+    DEFAULT_WATCH_INTERVAL,
     DashboardControlGroup,
     DashboardJob,
     DashboardModel,
@@ -146,6 +147,11 @@ def test_dashboard_status_prefers_pending_then_failure() -> None:
     assert dashboard_status((failed, passed)) is JobStatus.FAILED
     assert dashboard_status((passed,)) is JobStatus.PASSED
     assert dashboard_status((waiting, passed)) is JobStatus.IN_PROGRESS
+
+
+def test_dashboard_watcher_uses_a_rate_limit_safe_interval() -> None:
+    """Keep status polling infrequent while checkbox events remain event-driven."""
+    assert DEFAULT_WATCH_INTERVAL >= 60
 
 
 def test_dashboard_metric_escapes_markdown_table_delimiters() -> None:
