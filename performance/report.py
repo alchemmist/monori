@@ -2,8 +2,9 @@ import argparse
 import json
 import pathlib
 import re
-from typing import cast
 from dataclasses import dataclass
+
+from monori.common import JsonObject, JsonValue, decode_json, is_object, object_value
 
 
 @dataclass(frozen=True)
@@ -28,29 +29,28 @@ class Result:
 NAME = re.compile(r"^(DELETE|WAL)-(auth|read|write|import|e2e)-(\d+)\.json$")
 
 
-def value(values: dict[str, object], *keys: str) -> float:
+def value(values: JsonObject, *keys: str) -> float:
     for key in keys:
         raw = values.get(key)
-        if isinstance(raw, int | float):
+        if not isinstance(raw, bool) and isinstance(raw, int | float):
             return float(raw)
     return 0.0
 
 
-def metric_values(metric: dict[str, object]) -> dict[str, object]:
-    values = metric.get("values")
-    if isinstance(values, dict):
-        return cast(dict[str, object], values)
-    return metric
+def metric_values(metric: JsonValue) -> JsonObject:
+    metric_object = object_value(metric, "performance metric")
+    values = metric_object.get("values")
+    return values if is_object(values) else metric_object
 
 
-def thresholds_pass(metric: dict[str, object] | None) -> bool:
-    if not metric:
+def thresholds_pass(metric: JsonValue) -> bool:
+    if not is_object(metric):
         return True
     thresholds = metric.get("thresholds")
-    if not isinstance(thresholds, dict):
+    if not is_object(thresholds):
         return True
     for threshold in thresholds.values():
-        if isinstance(threshold, dict):
+        if is_object(threshold):
             if not threshold.get("ok", False):
                 return False
         elif threshold:
@@ -150,8 +150,8 @@ def load(path: pathlib.Path) -> Result | None:
     if not match:
         return None
     journal, workload, vus_raw = match.groups()
-    payload = json.loads(path.read_text())
-    metrics = payload["metrics"]
+    payload = object_value(decode_json(path.read_text()), "performance summary")
+    metrics = object_value(payload.get("metrics"), "performance metrics")
     duration_metric = metrics.get(
         "operation_duration",
         metrics.get("journey_duration", metrics["http_req_duration"]),
