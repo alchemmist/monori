@@ -40,11 +40,13 @@ WorkflowStep = TypedDict("WorkflowStep", {"uses": str, "with": dict[str, str]}, 
 
 class WorkflowJob(TypedDict, total=False):
     needs: str | list[str]
+    permissions: dict[str, str]
     steps: list[WorkflowStep]
 
 
 class WorkflowDocument(TypedDict):
     jobs: dict[str, WorkflowJob]
+    permissions: dict[str, str]
 
 
 class TestPullRequestWorkflowGraph:
@@ -80,6 +82,55 @@ class TestPullRequestWorkflowGraph:
         ):
             pattern = re.compile(rf"^    {re.escape(job)}:\s*$", re.MULTILINE)
             assert pattern.search(self.source), job
+
+    def test_workflow_uses_job_level_write_permissions(self) -> None:
+        assert self.workflow["permissions"] == {"contents": "read"}
+        expected = {
+            "admin-command": {
+                "actions": "write",
+                "contents": "read",
+                "issues": "write",
+                "pull-requests": "write",
+            },
+            "bundle-size": {
+                "contents": "read",
+                "issues": "write",
+                "pull-requests": "write",
+            },
+            "frontend-performance": {
+                "contents": "read",
+                "issues": "write",
+                "pull-requests": "write",
+            },
+            "object-annotations": {
+                "contents": "read",
+                "issues": "write",
+                "pull-requests": "write",
+            },
+            "quality-dashboard-live": {
+                "actions": "read",
+                "contents": "read",
+                "issues": "write",
+                "pull-requests": "read",
+            },
+            "quality-report": {
+                "actions": "read",
+                "contents": "read",
+                "issues": "write",
+                "pull-requests": "read",
+            },
+            "suppressions": {
+                "contents": "read",
+                "issues": "write",
+                "pull-requests": "write",
+            },
+        }
+        for job, definition in self.workflow["jobs"].items():
+            permissions = definition.get("permissions", {})
+            if job in expected:
+                assert permissions == expected[job], job
+            else:
+                assert "write" not in permissions.values(), job
 
     def test_checks_have_declared_dependencies_and_no_cycle(self) -> None:
         jobs = self.workflow["jobs"]
