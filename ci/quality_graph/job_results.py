@@ -175,6 +175,20 @@ def append_job_summary(path: Path, result: JobResult) -> None:
             content.extend(f"| {metric.label} | {metric.value} |" for metric in result.metrics)
         if result.summary:
             content.extend(("", result.summary.rstrip()))
+    if result.controls:
+        content.extend(
+            (
+                "",
+                "<details><summary>Administrative command reference "
+                f"({len(result.controls)})</summary>",
+                "",
+            )
+        )
+        content.extend(
+            f"- `{control.command}` — reverse with `{control.reverse_command}`"
+            for control in result.controls
+        )
+        content.extend(("", "</details>"))
     with path.open("a") as summary_file:
         summary_file.write("\n".join(content) + "\n")
 

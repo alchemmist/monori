@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 import re
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -13,6 +13,8 @@ from typing import TYPE_CHECKING
 from jinja2 import Environment, FileSystemLoader, StrictUndefined, select_autoescape
 
 from monori.ci.lib.comments import (
+    GITHUB_COMMENT_BODY_LIMIT,
+    comment_body,
     delete_managed_comments,
     managed_comment,
     upsert_comment,
@@ -93,8 +95,67 @@ class DashboardModel:
 
 
 def render_dashboard(model: DashboardModel) -> str:
-    """Render the compact pull-request dashboard."""
+    """Render a complete dashboard that fits GitHub's comment-body limit."""
+    rendered = render_dashboard_model(model)
+    if dashboard_fits_comment(rendered):
+        return rendered
+    return render_dashboard_model(replace(model, control_groups=bounded_control_groups(model)))
+
+
+def render_dashboard_model(model: DashboardModel) -> str:
+    """Render one dashboard model without applying the comment-size policy."""
     return re.sub(r"\n{3,}", "\n\n", DASHBOARD_TEMPLATE.render(model=model).strip()) + "\n"
+
+
+def dashboard_fits_comment(body: str) -> bool:
+    """Return whether a rendered dashboard fits after adding its managed marker."""
+    return len(comment_body(DASHBOARD_MARKER, body)) <= GITHUB_COMMENT_BODY_LIMIT
+
+
+def bounded_control_groups(model: DashboardModel) -> tuple[DashboardControlGroup, ...]:
+    """Keep the most useful controls while preserving valid dashboard Markdown."""
+    selected: dict[int, set[int]] = {index: set() for index, _ in enumerate(model.control_groups)}
+    candidates = sorted(
+        (
+            (control.command.startswith("/qg ignore-file "), group_index, control_index)
+            for group_index, group in enumerate(model.control_groups)
+            for control_index, control in enumerate(group.controls)
+        ),
+        key=lambda candidate: candidate[0],
+    )
+    for _, group_index, control_index in candidates:
+        proposed = {index: set(indices) for index, indices in selected.items()}
+        proposed[group_index].add(control_index)
+        groups = control_groups_with_omission_notes(model, proposed)
+        if dashboard_fits_comment(render_dashboard_model(replace(model, control_groups=groups))):
+            selected = proposed
+    return control_groups_with_omission_notes(model, selected)
+
+
+def control_groups_with_omission_notes(
+    model: DashboardModel,
+    selected: dict[int, set[int]],
+) -> tuple[DashboardControlGroup, ...]:
+    """Build control groups with links to details for actions omitted by the size budget."""
+    summary_urls = {job.job_id: job.summary_url for job in model.jobs}
+    groups: list[DashboardControlGroup] = []
+    for group_index, group in enumerate(model.control_groups):
+        selected_indices = selected[group_index]
+        controls = tuple(
+            control for index, control in enumerate(group.controls) if index in selected_indices
+        )
+        omitted = len(group.controls) - len(controls)
+        notes = group.notes
+        if omitted:
+            summary_url = summary_urls.get(group.job_id)
+            details = (
+                f"[{group.title} Job Summary]({summary_url})"
+                if summary_url is not None
+                else "the Job Summary"
+            )
+            notes = (*notes, f"_{omitted} additional actions are available in {details}._")
+        groups.append(DashboardControlGroup(group.job_id, group.title, controls, notes))
+    return tuple(groups)
 
 
 def load_results(directory: Path) -> dict[str, JobResult]:

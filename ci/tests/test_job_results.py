@@ -396,6 +396,29 @@ def test_complete_report_is_not_wrapped_in_a_duplicate_summary(tmp_path: Path) -
     assert body.count("| Metric | Value |") == 1
 
 
+def test_job_summary_keeps_the_full_noninteractive_command_reference(tmp_path: Path) -> None:
+    """Publish every command outside the size-constrained dashboard comment."""
+    controls = tuple(
+        JobControl(
+            f"/qg ignore-file server/example_{index}.py",
+            f"/qg remove-ignore suppression-{index}",
+        )
+        for index in range(500)
+    )
+    path = tmp_path / "summary.md"
+
+    append_job_summary(
+        path,
+        JobResult("suppressions", "Lint suppression gate", JobStatus.FAILED, controls=controls),
+    )
+
+    body = path.read_text()
+    assert "Administrative command reference (500)" in body
+    assert "/qg ignore-file server/example_499.py" in body
+    assert "/qg remove-ignore suppression-499" in body
+    assert "- [ ]" not in body
+
+
 def test_result_cli_writes_summary_metrics_and_artifact(tmp_path: Path) -> None:
     """Publish a simple composite-action result through the real CLI boundary."""
     output = tmp_path / "result.json"

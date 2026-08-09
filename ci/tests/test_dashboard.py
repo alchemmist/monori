@@ -6,7 +6,9 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+from monori.ci.lib.comments import GITHUB_COMMENT_BODY_LIMIT, comment_body
 from monori.ci.quality_graph.dashboard import (
+    DASHBOARD_MARKER,
     DashboardControlGroup,
     DashboardJob,
     DashboardModel,
@@ -83,6 +85,54 @@ def test_dashboard_renderer_normalizes_blank_lines_and_final_newline() -> None:
     assert "\n\n\n" not in body
     assert body.endswith("\n")
     assert not body.endswith("\n\n")
+
+
+def test_dashboard_limits_file_controls_without_breaking_admin_markdown() -> None:
+    """Keep aggregate actions and structural markers when file controls exceed the limit."""
+    aggregate = JobControl(
+        "/qg ignore suppression",
+        "/qg remove-ignore suppression",
+    )
+    file_controls = tuple(
+        JobControl(
+            f"/qg ignore-file server/package_{index:03d}/module_with_a_long_name.py",
+            f"/qg remove-ignore suppression-{index:012d}",
+        )
+        for index in range(500)
+    )
+    body = render_dashboard(
+        DashboardModel(
+            JobStatus.FAILED,
+            "Detailed reports are available.",
+            12,
+            1,
+            "head-sha",
+            (
+                DashboardJob(
+                    "suppressions",
+                    "Lint suppression gate",
+                    JobStatus.FAILED,
+                    "https://example.test/run#suppressions",
+                    "https://example.test/job",
+                ),
+            ),
+            (
+                DashboardControlGroup(
+                    "suppressions",
+                    "Lint suppression gate",
+                    (aggregate, *file_controls),
+                ),
+            ),
+        )
+    )
+
+    assert len(comment_body(DASHBOARD_MARKER, body)) <= GITHUB_COMMENT_BODY_LIMIT
+    assert f"<!-- {aggregate.marker} -->" in body
+    assert body.count("/qg ignore-file ") < len(file_controls)
+    assert "additional actions are available" in body
+    assert "[Lint suppression gate Job Summary](https://example.test/run#suppressions)" in body
+    assert "<!-- monori-qg-controls:end -->" in body
+    assert body.rstrip().endswith("</details>")
 
 
 def test_dashboard_status_prefers_pending_then_failure() -> None:
