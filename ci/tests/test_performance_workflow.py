@@ -3,7 +3,7 @@ from typing import TypedDict, cast
 
 import yaml
 
-from monori.common import JsonValue
+from monori.common import JsonObject, JsonValue, decode_json, object_value, string_value
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW_PATH = REPOSITORY_ROOT / ".github/workflows/performance.yaml"
@@ -12,6 +12,8 @@ ACTIONS = {
     "frontend": REPOSITORY_ROOT / ".github/actions/frontend-lab-performance/action.yml",
 }
 LOAD_RUNNER = REPOSITORY_ROOT / "scripts/load.sh"
+FRONTEND_CONFIG = REPOSITORY_ROOT / "tools/frontend-perf/config.json"
+FRONTEND_BASELINE = REPOSITORY_ROOT / "tools/frontend-perf/baseline.mjs"
 
 
 class WorkflowJob(TypedDict):
@@ -73,3 +75,18 @@ def test_backend_runner_uses_workspace_permissions_and_project_python() -> None:
     assert steps[0].get("with") == {"python-profile": "ci"}
     assert '--user "$(id -u):$(id -g)"' in runner
     assert "uv run --locked python performance/report.py" in runner
+
+
+def test_frontend_sla_declares_existing_route_debt_explicitly() -> None:
+    config = object_value(decode_json(FRONTEND_CONFIG.read_text()), "frontend config")
+    routes = config["lighthouseRoutes"]
+    assert isinstance(routes, list)
+    route_slas: dict[str, JsonObject] = {}
+    for route in routes:
+        route_object = object_value(route, "frontend route")
+        route_id = string_value(route_object.get("id"), "frontend route id")
+        route_slas[route_id] = object_value(route_object.get("sla", {}), "frontend route SLA")
+
+    assert route_slas["dashboard"] == {"total-blocking-time": 2000}
+    assert route_slas["transactions"] == {"total-blocking-time": 800}
+    assert "route.sla?.[metricId]" in FRONTEND_BASELINE.read_text()

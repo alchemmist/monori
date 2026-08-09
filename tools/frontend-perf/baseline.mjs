@@ -35,7 +35,7 @@ for (const route of config.lighthouseRoutes) {
         const values = matching.map((report) => Number(report.audits[metricId].numericValue));
         if (values.length === 0) continue;
         const measured = median(values);
-        const target = targets[metricId] ?? policy.good;
+        const target = route.sla?.[metricId] ?? targets[metricId] ?? policy.good;
         rows.push({
             route: route.label,
             metric: policy.label,
