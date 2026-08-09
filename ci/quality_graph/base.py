@@ -345,7 +345,7 @@ class QualityCheckDefinition(ABC):
             raise RuntimeError(message)
         report = managed_comment(github, number, "quality-graph")
         if report is None:
-            message = f"Cannot authorize {cls.gate} command without the Quality Graph dashboard"
+            message = "Cannot authorize command without a Quality Graph dashboard"
             raise RuntimeError(message)
         report_id = report.get("id")
         if not isinstance(report_id, int):

@@ -160,7 +160,7 @@ def refresh_dashboard_body(
         metric: str | None = None
         if definition.job_id == result.check_id:
             status = result.status
-            metric = " · ".join(f"{item.label}: {item.value}" for item in result.metrics[:2]) or "—"
+            metric = dashboard_metric(result)
         row = re.compile(
             rf"^(?P<prefix>\| {re.escape(definition.title)} \|) [^|]+"
             r"\| (?P<metric>[^|]*?) (?P<suffix>\|.*)$",
@@ -201,7 +201,9 @@ def mark_jobs_pending(github: GitHubAPI, number: int, job_ids: set[str]) -> None
     )
     definitions = workflow_jobs()
     for job_id in job_ids:
-        definition = definitions[job_id]
+        definition = definitions.get(job_id)
+        if definition is None:
+            continue
         row = re.compile(
             rf"^(\| {re.escape(definition.title)} \|) [^|]+(\|.*)$",
             re.MULTILINE,
@@ -211,6 +213,19 @@ def mark_jobs_pending(github: GitHubAPI, number: int, job_ids: set[str]) -> None
     upsert_comment(github, number, DASHBOARD_MARKER, unwrapped)
 
 
+def dashboard_metric(result: JobResult | None) -> str:
+    """Render a Markdown-safe compact metric cell for one job result."""
+    if result is None:
+        return "—"
+    return (
+        " · ".join(
+            f"{item.label.replace('|', '&#124;')}: {item.value.replace('|', '&#124;')}"
+            for item in result.metrics[:2]
+        )
+        or "—"
+    )
+
+
 def update_dashboard_notice(github: GitHubAPI, number: int, message: str) -> None:
     """Replace only the command notice in the existing dashboard."""
     comment = managed_comment(github, number, DASHBOARD_MARKER)
@@ -218,7 +233,7 @@ def update_dashboard_notice(github: GitHubAPI, number: int, message: str) -> Non
         return
     body = string_value(comment.get("body"), "dashboard body")
     notice = f"<!-- monori-qg-notice:start -->\n{message}\n<!-- monori-qg-notice:end -->"
-    updated = NOTICE_RE.sub(notice, body, count=1)
+    updated = NOTICE_RE.sub(lambda _: notice, body, count=1)
     unwrapped = MANAGED_MARKER_RE.sub("", updated)
     upsert_comment(github, number, DASHBOARD_MARKER, unwrapped)
 
@@ -296,12 +311,7 @@ class DashboardLifecycle:
             job_url = (
                 optional_string(api_job.get("html_url")) if api_job is not None else None
             ) or self.run_url
-            metric = (
-                " · ".join(
-                    f"{item.label}: {item.value}" for item in (result.metrics[:2] if result else ())
-                )
-                or "—"
-            )
+            metric = dashboard_metric(result)
             rows.append(
                 DashboardJob(
                     definition.job_id,
@@ -381,7 +391,7 @@ class DashboardLifecycle:
             flags=re.MULTILINE,
         )
         notice = f"<!-- monori-qg-notice:start -->\n❌ {message}\n<!-- monori-qg-notice:end -->"
-        updated = NOTICE_RE.sub(notice, updated, count=1)
+        updated = NOTICE_RE.sub(lambda _: notice, updated, count=1)
         upsert_comment(
             self.github,
             self.number,

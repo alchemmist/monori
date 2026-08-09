@@ -12,6 +12,7 @@ import pytest
 from monori.ci.quality_graph.job_report import build_result, parse_diagnostics
 from monori.ci.quality_graph.job_report import main as job_report_main
 from monori.ci.quality_graph.job_results import (
+    MAX_STEP_ANNOTATIONS,
     AnnotationLevel,
     JobControl,
     JobResult,
@@ -84,7 +85,7 @@ def test_grouped_annotations_merge_one_location_and_apply_limit() -> None:
 
     grouped = grouped_annotations(annotations)
 
-    assert len(grouped) == 10
+    assert len(grouped) == MAX_STEP_ANNOTATIONS
     assert grouped[0].message == "first\nsecond"
 
 

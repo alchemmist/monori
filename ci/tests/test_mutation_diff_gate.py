@@ -175,7 +175,7 @@ diff --git a/server/app/example.py b/server/app/example.py
                     new_survivors=1,
                     survivor_keys=["survivor"],
                     no_coverage_keys=["uncovered"],
-                    source_findings=[("server/app/example.py", 2, "Surviving mutant")],
+                    source_findings=[("server/a:b,c.py", 2, "Surviving mutant")],
                 )
                 assert module.report_verdict(request, passing) == 0
                 assert module.report_verdict(request, failing) == 1
@@ -192,7 +192,7 @@ diff --git a/server/app/example.py b/server/app/example.py
             assert "Surviving mutants" in content
             assert "Mutants without coverage" in content
             assert "No changed functions" in content
-            assert "::error file=server/app/example.py,line=2" in capsys.readouterr().err
+            assert "::error file=server/a%3Ab%2Cc.py,line=2" in capsys.readouterr().err
 
     def test_revision_resolution_rejects_unknown_reference(self) -> None:
         repository = Repo(Path.cwd())

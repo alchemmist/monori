@@ -179,11 +179,16 @@ def help_body() -> str:
     gates = ",".join(checks)
     finding_ids = ",".join(f"{gate}-<id>" for gate in checks)
     file_gates = ", ".join(gate for gate, check in checks.items() if check.supports_ignore_file)
+    file_help = (
+        f"- `/qg ignore-file path/to/file` — ignore findings in selected files ({file_gates})\n"
+        if file_gates
+        else ""
+    )
     return f"""Only repository administrators may execute state-changing commands.
 
 - `/qg ignore {finding_ids}` — ignore selected findings
 - `/qg ignore {gates}` — ignore all current findings of selected types
-- `/qg ignore-file path/to/file` — ignore findings in selected files ({file_gates})
+{file_help.rstrip()}
 - `/qg remove-ignore {finding_ids}` — remove selected ignores
 - `/qg status` — show the current command status
 - `/qg help` — show this help"""

@@ -8,6 +8,7 @@ from monori.ci.quality_graph.dashboard import (
     DashboardControlGroup,
     DashboardJob,
     DashboardModel,
+    dashboard_metric,
     dashboard_status,
     load_results,
     refresh_dashboard_body,
@@ -15,6 +16,7 @@ from monori.ci.quality_graph.dashboard import (
 )
 from monori.ci.quality_graph.job_results import (
     JobControl,
+    JobMetric,
     JobResult,
     JobStatus,
     write_job_result,
@@ -66,6 +68,18 @@ def test_dashboard_status_prefers_pending_then_failure() -> None:
     assert dashboard_status((failed, pending)) is JobStatus.PENDING
     assert dashboard_status((failed, passed)) is JobStatus.FAILED
     assert dashboard_status((passed,)) is JobStatus.PASSED
+
+
+def test_dashboard_metric_escapes_markdown_table_delimiters() -> None:
+    """Keep result-provided labels and values inside one dashboard table cell."""
+    result = JobResult(
+        "lint",
+        "Lint",
+        JobStatus.PASSED,
+        metrics=(JobMetric("Rules | checked", "10 | 10"),),
+    )
+
+    assert dashboard_metric(result) == "Rules &#124; checked: 10 &#124; 10"
 
 
 def test_result_loader_merges_downloaded_artifact_directories(tmp_path: Path) -> None:

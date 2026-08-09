@@ -12,6 +12,7 @@ FRONTEND_PERFORMANCE_SCOPE = (
     REPOSITORY_ROOT / ".github/actions/frontend-performance-scope/action.yml"
 )
 ADMIN_COMMAND_ACTION = REPOSITORY_ROOT / ".github/actions/admin-command/action.yml"
+MUTATION_ACTION = REPOSITORY_ROOT / ".github/actions/mutation-diff-gate/action.yml"
 REPORTING_ACTIONS = (
     "bundle-size-gate",
     "frontend-performance-gate",
@@ -241,10 +242,21 @@ class TestPullRequestWorkflowGraph:
         )
         assert block is not None
         body = block.group("body")
-        assert "needs: audit" in body
+        assert self.workflow["jobs"]["quality-report"]["needs"] == "audit"
         assert "if: always()" in body
         assert "actions/download-artifact@v8" in body
+        assert "continue-on-error: true" not in body
+        assert "id: quality-results" in body
+        assert "if: steps.quality-results.outcome == 'success'" in body
         assert "monori.ci.quality_graph.dashboard finish" in body
+
+    def test_mutation_result_requires_every_gate_step_to_succeed(self) -> None:
+        """Treat skipped and cancelled mutation steps as failed results."""
+        source = MUTATION_ACTION.read_text()
+
+        for step in ("mutation-test", "mutation-front", "mutation-back"):
+            assert f'"${{{{ steps.{step}.outcome }}}}" = success' in source
+            assert f"steps.{step}.outcome != 'success'" in source
 
     def test_code_and_api_gate_events_are_separated(self) -> None:
         assert "github.event_name == 'pull_request'" in self.source

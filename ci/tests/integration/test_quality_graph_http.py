@@ -32,7 +32,11 @@ from monori.ci.quality_graph.commands import (
     parse_command,
     process_command,
 )
-from monori.ci.quality_graph.dashboard import DashboardLifecycle
+from monori.ci.quality_graph.dashboard import (
+    DashboardLifecycle,
+    mark_jobs_pending,
+    update_dashboard_notice,
+)
 from monori.ci.quality_graph.job_results import (
     JobControl,
     JobResult,
@@ -254,11 +258,13 @@ def test_source_gate_converges_labels_and_writes_job_results(tmp_path: Path) -> 
     ):
         failed = ScenarioCheck([ScenarioFinding("finding-1", "example.py")])
         assert failed.run_pull_request_gate(github, pull_request_event()) == 1
+        failed_result = result_path.read_text()
+        assert '"status": "failed"' in failed_result
         passed = ScenarioCheck([])
         assert passed.run_pull_request_gate(github, pull_request_event()) == 0
-    after_failure = fake_state()
-    assert after_failure["issue_labels"] == {str(PULL_REQUEST_NUMBER): []}
-    assert state_objects(after_failure, "comments") == []
+    final_state = fake_state()
+    assert final_state["issue_labels"] == {str(PULL_REQUEST_NUMBER): []}
+    assert state_objects(final_state, "comments") == []
     assert '"status": "passed"' in result_path.read_text()
     assert "0 findings" in summary_path.read_text()
 
@@ -477,6 +483,27 @@ def test_command_status_updates_notice_without_replacing_dashboard() -> None:
     body = string_value(dashboard.get("body"), "dashboard body")
     assert "| Workflow graph validation |" in body
     assert "Command API is available" in body
+
+
+def test_dashboard_pending_update_ignores_unknown_jobs_and_preserves_backslashes() -> None:
+    """Update valid rows and notices even when a caller supplies stale job metadata."""
+    reset_fake_github()
+    github = GitHub()
+    DashboardLifecycle(
+        github,
+        PULL_REQUEST_NUMBER,
+        99,
+        1,
+        "head-sha",
+        "https://example.test/runs/99",
+    ).start()
+
+    mark_jobs_pending(github, PULL_REQUEST_NUMBER, {"fmt-check", "removed-job"})
+    update_dashboard_notice(github, PULL_REQUEST_NUMBER, r"Command contains \1 literally")
+
+    body = string_value(state_objects(fake_state(), "comments")[0].get("body"), "dashboard")
+    assert "| Format check | ⏳ pending |" in body
+    assert r"Command contains \1 literally" in body
 
 
 def test_pending_admin_command_is_reacted_to_consumed_and_rerun() -> None:
@@ -811,7 +838,7 @@ def test_invalid_command_and_missing_report_fail_visibly() -> None:
     comment["body"] = "/qg ignore bundle"
     comment["reactions"] = []
     reset_fake_github({"comments": cast("JsonValue", [comment])})
-    with pytest.raises(RuntimeError, match="without the Quality Graph dashboard"):
+    with pytest.raises(RuntimeError, match="without a Quality Graph dashboard"):
         process_command(
             GitHub(),
             CommandRequest(

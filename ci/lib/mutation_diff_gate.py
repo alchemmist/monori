@@ -359,8 +359,15 @@ def report_verdict(request: GateRequest, stats: MutationStats) -> int:
     append_step_summary("\n".join(summary))
     if not passed:
         for path, line, message in stats.source_findings[:MAX_MUTATION_ANNOTATIONS]:
+            escaped_path = (
+                path.replace("%", "%25")
+                .replace("\r", "%0D")
+                .replace("\n", "%0A")
+                .replace(":", "%3A")
+                .replace(",", "%2C")
+            )
             escaped = message.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
-            sys.stderr.write(f"::error file={path},line={line},endLine={line}::{escaped}\n")
+            sys.stderr.write(f"::error file={escaped_path},line={line},endLine={line}::{escaped}\n")
         if len(stats.source_findings) > MAX_MUTATION_ANNOTATIONS:
             sys.stderr.write(
                 "::notice::Additional mutation findings are available in the Job Summary.\n"
