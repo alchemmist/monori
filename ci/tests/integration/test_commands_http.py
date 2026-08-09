@@ -32,6 +32,7 @@ from monori.ci.quality_graph.commands import (
     CommandRequest,
     QualityGraphCommand,
     command_request,
+    control_states,
     encode_command,
     process_command,
 )
@@ -393,6 +394,64 @@ def test_non_admin_command_is_rejected_with_a_final_reaction() -> None:
     )
     reactions = state_objects(command, "reactions")
     assert [reaction.get("content") for reaction in reactions] == ["confused"]
+    assert state["rerun_requests"] == []
+
+
+def test_non_admin_checkbox_edit_is_rolled_back_without_rerun() -> None:
+    """Restore dashboard controls when a contributor cannot apply their command."""
+    control = JobControl(
+        "/qg ignore bundle-initial-load",
+        "/qg remove-ignore bundle-initial-load",
+    )
+    unchecked = render_dashboard(
+        DashboardModel(
+            JobStatus.FAILED,
+            "Bundle regression",
+            99,
+            1,
+            "head-sha",
+            (),
+            (DashboardControlGroup("bundle-size", "Frontend bundle size", (control,)),),
+        )
+    )
+    report: dict[str, JsonValue] = {
+        "id": BUNDLE_REPORT_COMMENT_ID,
+        "issue_number": PULL_REQUEST_NUMBER,
+        "body": comment_body("quality-graph", unchecked),
+        "user": {"login": "github-actions[bot]"},
+        "reactions": [],
+    }
+    reset_fake_github({"comments": [report]})
+    checked = checkbox_body(string_value(report["body"], "dashboard body"), checked=True)
+    GitHub().request(
+        "PATCH",
+        f"/issues/comments/{BUNDLE_REPORT_COMMENT_ID}",
+        {"body": checked},
+    )
+    request = command_request(
+        checkbox_event(
+            BUNDLE_REPORT_COMMENT_ID,
+            checked,
+            string_value(report["body"], "dashboard body"),
+            sender="contributor",
+        )
+    )
+    assert request is not None
+
+    process_command(GitHub(), request)
+
+    state = fake_state()
+    dashboard = next(
+        comment
+        for comment in state_objects(state, "comments")
+        if comment.get("id") == BUNDLE_REPORT_COMMENT_ID
+    )
+    dashboard_body = string_value(dashboard.get("body"), "dashboard body")
+    assert control_states(dashboard_body)[control.marker] is False
+    assert "monori-bundle-size-pending" not in string_value(
+        state_objects(state, "pulls")[0].get("body"),
+        "pull request body",
+    )
     assert state["rerun_requests"] == []
 
 

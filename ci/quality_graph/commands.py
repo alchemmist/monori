@@ -56,7 +56,8 @@ class CommandRequest:
     login: str | None
     pull_request_number: int | None
     react: bool = True
-    dashboard_body: str | None = None
+    dashboard_edited_body: str | None = None
+    dashboard_previous_body: str | None = None
 
 
 @dataclass(frozen=True)
@@ -285,7 +286,8 @@ def checkbox_command_request(
         selected_command,
         optional_string(sender.get("login")),
         pull_request_number(event),
-        dashboard_body=body,
+        dashboard_edited_body=body,
+        dashboard_previous_body=previous_body,
     )
 
 
@@ -309,8 +311,19 @@ def publish_rejection(
     CommandReactionLifecycle(github, request.comment_id).set(rejection.reaction)
 
 
+def rollback_checkbox_edit(github: GitHubAPI, request: CommandRequest) -> None:
+    """Restore the prior checkbox state before command authorization."""
+    if request.dashboard_previous_body is not None:
+        restore_dashboard_controls(
+            github,
+            request.comment_id,
+            request.dashboard_previous_body,
+        )
+
+
 def process_command(github: GitHubAPI, request: CommandRequest) -> None:
     """Validate, authorize, and dispatch one Quality Graph command request."""
+    rollback_checkbox_edit(github, request)
     command = parse_command(request.body)
     reactions = CommandReactionLifecycle(github, request.comment_id)
     if request.react:
@@ -343,8 +356,8 @@ def process_command(github: GitHubAPI, request: CommandRequest) -> None:
         )
         return
     try:
-        if request.dashboard_body is not None:
-            restore_dashboard_controls(github, request.comment_id, request.dashboard_body)
+        if request.dashboard_edited_body is not None:
+            restore_dashboard_controls(github, request.comment_id, request.dashboard_edited_body)
         if command.name not in {"help", "status"}:
             run_direct_command_checks()
         dispatch_command(github, number, command)
