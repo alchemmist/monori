@@ -21,7 +21,7 @@ jobs:
             actions: read
             contents: read
             issues: write
-            pull-requests: read
+            pull-requests: write
         runs-on: ubuntu-latest
         steps:
             - name: Checkout
@@ -298,7 +298,7 @@ jobs:
             actions: read
             contents: read
             issues: write
-            pull-requests: read
+            pull-requests: write
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@v7
