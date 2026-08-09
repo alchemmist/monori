@@ -61,15 +61,15 @@ def test_dashboard_renders_status_links_metrics_and_controls() -> None:
 
 def test_dashboard_status_prefers_pending_then_failure() -> None:
     """Represent running work before rendering a final failure verdict."""
-    pending = DashboardJob("a", "A", JobStatus.PENDING, "summary", "logs")
+    pending = DashboardJob("a", "A", JobStatus.IN_PROGRESS, "summary", "logs")
     failed = DashboardJob("b", "B", JobStatus.FAILED, "summary", "logs")
     passed = DashboardJob("c", "C", JobStatus.PASSED, "summary", "logs")
     waiting = DashboardJob("d", "D", JobStatus.WAITING, "summary", "logs")
 
-    assert dashboard_status((failed, pending)) is JobStatus.PENDING
+    assert dashboard_status((failed, pending)) is JobStatus.IN_PROGRESS
     assert dashboard_status((failed, passed)) is JobStatus.FAILED
     assert dashboard_status((passed,)) is JobStatus.PASSED
-    assert dashboard_status((waiting, passed)) is JobStatus.PENDING
+    assert dashboard_status((waiting, passed)) is JobStatus.IN_PROGRESS
 
 
 def test_dashboard_metric_escapes_markdown_table_delimiters() -> None:
@@ -104,7 +104,7 @@ def test_live_refresh_updates_completed_and_api_reported_rows() -> None:
     """Reflect job completion before the final dashboard aggregation runs."""
     body = render_dashboard(
         DashboardModel(
-            JobStatus.PENDING,
+            JobStatus.IN_PROGRESS,
             "The current Quality Graph run is in progress.",
             12,
             1,
@@ -113,11 +113,11 @@ def test_live_refresh_updates_completed_and_api_reported_rows() -> None:
                 DashboardJob(
                     "workflow-graph",
                     "Workflow graph validation",
-                    JobStatus.PENDING,
+                    JobStatus.IN_PROGRESS,
                     "summary",
                     "logs",
                 ),
-                DashboardJob("fmt-check", "Format check", JobStatus.PENDING, "summary", "logs"),
+                DashboardJob("fmt-check", "Format check", JobStatus.IN_PROGRESS, "summary", "logs"),
             ),
         )
     )
@@ -134,14 +134,14 @@ def test_live_refresh_updates_completed_and_api_reported_rows() -> None:
 
     assert "| Workflow graph validation | ✅ passed |" in refreshed
     assert "| Format check | ✅ passed |" in refreshed
-    assert "## 🟡 Quality Graph" in refreshed
+    assert "## 🚀 Quality Graph" in refreshed
 
 
 def test_live_refresh_adds_and_removes_job_admin_controls() -> None:
     """Keep failed-job checkboxes grouped under the administrator disclosure."""
     body = render_dashboard(
         DashboardModel(
-            JobStatus.PENDING,
+            JobStatus.IN_PROGRESS,
             "The current Quality Graph run is in progress.",
             12,
             1,
@@ -150,7 +150,7 @@ def test_live_refresh_adds_and_removes_job_admin_controls() -> None:
                 DashboardJob(
                     "suppressions",
                     "Lint suppression gate",
-                    JobStatus.PENDING,
+                    JobStatus.IN_PROGRESS,
                     "summary",
                     "logs",
                 ),

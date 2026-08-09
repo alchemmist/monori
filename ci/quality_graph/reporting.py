@@ -6,7 +6,6 @@ import argparse
 import hashlib
 import re
 from dataclasses import dataclass
-from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -14,27 +13,13 @@ from jinja2 import Environment, FileSystemLoader, StrictUndefined, select_autoes
 
 from monori.ci.lib.comments import CommandReactionLifecycle, Reaction, upsert_comment
 from monori.ci.lib.github import GitHub, GitHubAPI
+from monori.ci.lib.status import QualityStatus
 from monori.ci.quality_graph.job_results import JobControl
 
 if TYPE_CHECKING:
     from collections.abc import Collection, Mapping
 
-
-class ReportStatus(StrEnum):
-    """Allowed visual states for every Quality Graph report."""
-
-    PENDING = "pending"
-    FAIL = "fail"
-    DONE = "done"
-
-    @property
-    def emoji(self) -> str:
-        """Return the only emoji allowed for this report state."""
-        return {
-            ReportStatus.PENDING: "⏳",
-            ReportStatus.FAIL: "❌",
-            ReportStatus.DONE: "✅",
-        }[self]
+ReportStatus = QualityStatus
 
 
 @dataclass(frozen=True)
@@ -81,7 +66,7 @@ class ReportModel:
     """Typed data consumed by the shared Jinja report template."""
 
     marker: str
-    status: ReportStatus
+    status: QualityStatus
     message: str = ""
     metrics: tuple[ReportMetric, ...] = ()
     content: str = ""
@@ -213,9 +198,9 @@ class PullRequestReport:
             render_report(
                 ReportModel(
                     self.definition.marker,
-                    ReportStatus.PENDING,
+                    QualityStatus.IN_PROGRESS,
                     "The check is running. This report will be updated when it finishes.",
-                    (ReportMetric("Status", "⏳ In progress"),),
+                    (ReportMetric("Status", QualityStatus.IN_PROGRESS.label),),
                 )
             )
         )
@@ -226,9 +211,9 @@ class PullRequestReport:
             render_report(
                 ReportModel(
                     self.definition.marker,
-                    ReportStatus.FAIL,
+                    QualityStatus.FAILED,
                     message,
-                    (ReportMetric("Status", "❌ Failed"),),
+                    (ReportMetric("Status", QualityStatus.FAILED.label),),
                 )
             )
         )
@@ -248,7 +233,7 @@ def main() -> int:
     complete.add_argument("--pr-number", type=int, required=True)
     complete.add_argument(
         "--status",
-        choices=[ReportStatus.DONE.value, ReportStatus.FAIL.value],
+        choices=[QualityStatus.PASSED.value, QualityStatus.FAILED.value],
         required=True,
     )
     complete.add_argument("--body-file", type=Path)
@@ -276,7 +261,7 @@ def main() -> int:
             render_report(
                 ReportModel(
                     report.definition.marker,
-                    ReportStatus(args.status),
+                    QualityStatus(args.status),
                     args.message,
                     content=content,
                 )

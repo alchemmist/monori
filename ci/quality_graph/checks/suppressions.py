@@ -370,7 +370,7 @@ def summary_body(findings: list[Finding], approved: set[str], pr_url: str) -> st
     return render_report(
         ReportModel(
             "suppression",
-            ReportStatus.DONE if not active else ReportStatus.FAIL,
+            ReportStatus.PASSED if not active else ReportStatus.FAILED,
             metrics=(
                 ReportMetric("Status", "PASS" if not active else "FAIL"),
                 ReportMetric("Findings", str(len(findings))),

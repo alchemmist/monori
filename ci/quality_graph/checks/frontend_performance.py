@@ -110,7 +110,7 @@ def append_commands(
     return render_report(
         ReportModel(
             "frontend-performance",
-            ReportStatus.FAIL if failed else ReportStatus.DONE,
+            ReportStatus.FAILED if failed else ReportStatus.PASSED,
             content=text.strip(),
             findings=tuple(
                 ReportFinding(

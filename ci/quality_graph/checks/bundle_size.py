@@ -86,7 +86,7 @@ def append_commands(summary: str, entries: list[dict[str, JsonValue]], approved:
     return render_report(
         ReportModel(
             "bundle-size",
-            ReportStatus.FAIL if failed else ReportStatus.DONE,
+            ReportStatus.FAILED if failed else ReportStatus.PASSED,
             content=summary.rstrip(),
             findings=tuple(
                 ReportFinding(

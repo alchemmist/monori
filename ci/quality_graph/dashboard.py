@@ -140,8 +140,8 @@ def load_results(directory: Path) -> dict[str, JobResult]:
 def dashboard_status(jobs: Iterable[DashboardJob]) -> JobStatus:
     """Derive the dashboard verdict from all displayed jobs."""
     statuses = {job.status for job in jobs}
-    if JobStatus.PENDING in statuses or JobStatus.WAITING in statuses:
-        return JobStatus.PENDING
+    if JobStatus.IN_PROGRESS in statuses or JobStatus.WAITING in statuses:
+        return JobStatus.IN_PROGRESS
     if JobStatus.FAILED in statuses:
         return JobStatus.FAILED
     return JobStatus.PASSED
@@ -212,7 +212,7 @@ def mark_jobs_pending(github: GitHubAPI, number: int, job_ids: set[str]) -> None
     body = string_value(comment.get("body"), "dashboard body")
     updated = re.sub(
         r"^## .* Quality Graph$",
-        "## ⏳ Quality Graph",
+        f"## {JobStatus.IN_PROGRESS.emoji} Quality Graph",
         body,
         count=1,
         flags=re.MULTILINE,
@@ -226,7 +226,9 @@ def mark_jobs_pending(github: GitHubAPI, number: int, job_ids: set[str]) -> None
             rf"^(\| {re.escape(definition.title)} \|) [^|]+(\|.*)$",
             re.MULTILINE,
         )
-        updated = row.sub(rf"\1 {JobStatus.PENDING.emoji} {JobStatus.PENDING.value} \2", updated)
+        updated = row.sub(
+            rf"\1 {JobStatus.IN_PROGRESS.emoji} {JobStatus.IN_PROGRESS.value} \2", updated
+        )
     unwrapped = MANAGED_MARKER_RE.sub("", updated)
     upsert_comment(github, number, DASHBOARD_MARKER, unwrapped)
 
@@ -259,7 +261,7 @@ def update_dashboard_notice(github: GitHubAPI, number: int, message: str) -> Non
 def api_job_status(job: dict[str, JsonValue]) -> JobStatus:
     """Map one Actions API job state to the dashboard domain."""
     if job.get("status") == "in_progress":
-        return JobStatus.PENDING
+        return JobStatus.IN_PROGRESS
     if job.get("status") != "completed":
         return JobStatus.WAITING
     conclusion = optional_string(job.get("conclusion"))
@@ -294,7 +296,7 @@ class DashboardLifecycle:
                 definition.job_id,
                 definition.title,
                 (
-                    JobStatus.PENDING
+                    JobStatus.IN_PROGRESS
                     if definition.job_id == "workflow-graph"
                     else api_job_status(api_jobs[definition.title])
                     if definition.title in api_jobs
@@ -315,7 +317,7 @@ class DashboardLifecycle:
         )
         self._publish(
             DashboardModel(
-                JobStatus.PENDING,
+                JobStatus.IN_PROGRESS,
                 "The current Quality Graph run is in progress.",
                 self.run_id,
                 self.run_attempt,
@@ -417,12 +419,16 @@ class DashboardLifecycle:
         body = string_value(comment.get("body"), "dashboard body")
         updated = re.sub(
             r"^## .* Quality Graph$",
-            "## ❌ Quality Graph",
+            f"## {JobStatus.FAILED.emoji} Quality Graph",
             body,
             count=1,
             flags=re.MULTILINE,
         )
-        notice = f"<!-- monori-qg-notice:start -->\n❌ {message}\n<!-- monori-qg-notice:end -->"
+        notice = (
+            "<!-- monori-qg-notice:start -->\n"
+            f"{JobStatus.FAILED.emoji} {message}\n"
+            "<!-- monori-qg-notice:end -->"
+        )
         updated = NOTICE_RE.sub(lambda _: notice, updated, count=1)
         upsert_comment(
             self.github,

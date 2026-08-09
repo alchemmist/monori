@@ -24,7 +24,7 @@ def test_renderer_owns_status_heading_findings_and_admin_commands() -> None:
     body = render_report(
         ReportModel(
             "suppression",
-            ReportStatus.FAIL,
+            ReportStatus.FAILED,
             metrics=(ReportMetric("Active", "1"),),
             findings=(
                 ReportFinding(
@@ -88,7 +88,7 @@ def test_comment_body_is_bounded_with_an_exact_omission_notice() -> None:
 def test_empty_admin_commands_do_not_instruct_the_reader_to_post() -> None:
     """Avoid contradictory command instructions for a passing report."""
     body = render_report(
-        ReportModel("bundle-size", ReportStatus.DONE, admin=admin_commands("bundle", [], []))
+        ReportModel("bundle-size", ReportStatus.PASSED, admin=admin_commands("bundle", [], []))
     )
 
     assert "No actionable findings in this run." in body

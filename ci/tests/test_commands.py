@@ -79,7 +79,7 @@ class TestQualityGraphCommand:
         body = render_report(
             ReportModel(
                 "suppression",
-                ReportStatus.FAIL,
+                ReportStatus.FAILED,
                 admin=admin_commands("suppression", ["suppression-abc123"], []),
             )
         )
@@ -111,7 +111,7 @@ class TestQualityGraphCommand:
         checked = render_report(
             ReportModel(
                 "suppression",
-                ReportStatus.DONE,
+                ReportStatus.PASSED,
                 admin=admin_commands("suppression", [], ["suppression-abc123"]),
             )
         )
@@ -142,7 +142,7 @@ class TestQualityGraphCommand:
         body = render_report(
             ReportModel(
                 "suppression",
-                ReportStatus.FAIL,
+                ReportStatus.FAILED,
                 admin=admin_commands("suppression", ["suppression-abc123"], []),
             )
         )
@@ -192,7 +192,7 @@ class TestQualityGraphCommand:
         body = render_report(
             ReportModel(
                 "suppression",
-                ReportStatus.FAIL,
+                ReportStatus.FAILED,
                 admin=admin_commands(
                     "suppression",
                     ["suppression-first", "suppression-second"],

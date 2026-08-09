@@ -6,10 +6,10 @@ import base64
 import json
 import re
 from dataclasses import dataclass
-from enum import StrEnum
 from typing import TYPE_CHECKING, Self, cast
 
 from monori.ci.lib.annotations import SourceAnnotation
+from monori.ci.lib.status import QualityStatus
 from monori.common import (
     JsonValue,
     array_value,
@@ -31,25 +31,7 @@ ADMIN_DETAILS_RE = re.compile(
 )
 
 
-class JobStatus(StrEnum):
-    """Represent the dashboard state of one workflow job."""
-
-    PENDING = "in progress"
-    WAITING = "wait"
-    PASSED = "passed"
-    FAILED = "failed"
-    SKIPPED = "skipped"
-
-    @property
-    def emoji(self) -> str:
-        """Return the visual marker for this job state."""
-        return {
-            JobStatus.PENDING: "🟡",
-            JobStatus.WAITING: "⏸️",
-            JobStatus.PASSED: "✅",
-            JobStatus.FAILED: "❌",
-            JobStatus.SKIPPED: "⏭️",
-        }[self]
+JobStatus = QualityStatus
 
 
 @dataclass(frozen=True)
