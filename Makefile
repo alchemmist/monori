@@ -243,7 +243,7 @@ audit-secrets: tools
 test: t-front t-back t-e2e
 
 t-workflow:
-	env -u GITHUB_STEP_SUMMARY -u MUTATION_SUMMARY_PATH uv run --locked pytest -q ci/tests/test_pr_workflow.py ci/tests/test_main_workflow.py
+	env -u GITHUB_STEP_SUMMARY -u MUTATION_SUMMARY_PATH uv run --locked pytest -q ci/tests/test_pr_workflow.py ci/tests/test_main_workflow.py ci/tests/test_performance_workflow.py
 
 t-fast:
 	cd web && npx vitest run --exclude "src/**/*.test.tsx"

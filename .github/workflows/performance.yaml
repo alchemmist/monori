@@ -20,76 +20,23 @@ jobs:
         name: Backend and full-stack load
         runs-on: ubuntu-latest
         timeout-minutes: 90
-        env:
-            LOAD_LEVELS: ${{ inputs.levels }}
-            LOAD_DURATION: ${{ inputs.duration }}
-            LOAD_OUTPUT_DIR: ${{ github.workspace }}/reports/perf
         steps:
-            - uses: actions/checkout@v7
+            - name: Checkout
+              uses: actions/checkout@v7
               with:
                   persist-credentials: false
-            - name: Run default-journal API scenarios
-              id: api
-              continue-on-error: true
-              run: make load-api
-            - name: Run full-stack journeys
-              id: e2e
-              continue-on-error: true
-              run: make load-e2e
-            - name: Run WAL write scenarios
-              id: wal
-              continue-on-error: true
-              env:
-                  MONORI_SQLITE_JOURNAL_MODE: WAL
-              run: make load-api-write
-            - name: Add summary
-              if: always()
-              run: test ! -f "$LOAD_OUTPUT_DIR/summary.md" || cat "$LOAD_OUTPUT_DIR/summary.md" >> "$GITHUB_STEP_SUMMARY"
-            - name: Upload load reports
-              if: always()
-              uses: actions/upload-artifact@v7
+            - uses: ./.github/actions/backend-performance
               with:
-                  name: backend-and-e2e-performance
-                  path: ${{ github.workspace }}/reports/perf
-                  if-no-files-found: error
-                  retention-days: 30
-            - name: Enforce performance verdicts
-              if: always()
-              env:
-                  API_OUTCOME: ${{ steps.api.outcome }}
-                  E2E_OUTCOME: ${{ steps.e2e.outcome }}
-                  WAL_OUTCOME: ${{ steps.wal.outcome }}
-              run: test "$API_OUTCOME" = success && test "$E2E_OUTCOME" = success && test "$WAL_OUTCOME" = success
+                  levels: ${{ inputs.levels }}
+                  duration: ${{ inputs.duration }}
 
     frontend:
         name: Frontend lab performance
         runs-on: ubuntu-latest
         timeout-minutes: 45
-        env:
-            LOAD_OUTPUT_DIR: ${{ github.workspace }}/reports/perf
         steps:
-            - uses: actions/checkout@v7
+            - name: Checkout
+              uses: actions/checkout@v7
               with:
                   persist-credentials: false
-            - uses: actions/setup-node@v7
-              with:
-                  node-version: 22
-                  cache: npm
-                  cache-dependency-path: tools/frontend-perf/package-lock.json
-            - run: npm install --global npm@10.9.2
-            - run: npm ci --no-audit --no-fund
-              working-directory: tools/frontend-perf
-            - run: npx playwright install --with-deps chromium
-              working-directory: tools/frontend-perf
-            - run: make load-fe
-            - name: Add summary
-              if: always()
-              run: test ! -f "$LOAD_OUTPUT_DIR/frontend.md" || cat "$LOAD_OUTPUT_DIR/frontend.md" >> "$GITHUB_STEP_SUMMARY"
-            - name: Upload frontend reports
-              if: always()
-              uses: actions/upload-artifact@v7
-              with:
-                  name: frontend-performance
-                  path: ${{ github.workspace }}/reports/perf
-                  if-no-files-found: error
-                  retention-days: 30
+            - uses: ./.github/actions/frontend-lab-performance
