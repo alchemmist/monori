@@ -4,10 +4,9 @@ from __future__ import annotations
 
 import argparse
 import re
-import sys
 from pathlib import Path
 
-from monori.ci.lib.annotations import grouped_annotations, workflow_annotation_command
+from monori.ci.lib.annotations import publish_workflow_annotations
 from monori.ci.lib.diagnostics import ANSI_RE, parse_diagnostics, parse_diff_annotations
 from monori.ci.quality_graph.job_results import (
     JobMetric,
@@ -73,12 +72,10 @@ def main() -> int:
     diff = args.diff.read_text() if args.diff is not None and args.diff.exists() else ""
     result = build_result(args.check_id, args.title, args.exit_code, args.log.read_text(), diff)
     JobResultPublisher(args.output, args.summary).publish(result)
-    for annotation in grouped_annotations(result.annotations):
-        sys.stderr.write(f"{workflow_annotation_command(annotation)}\n")
-    if len(result.annotations) > len(grouped_annotations(result.annotations)):
-        sys.stderr.write(
-            "::notice::Additional source diagnostics are available in the Job Summary.\n"
-        )
+    publish_workflow_annotations(
+        result.annotations,
+        omitted_message="Additional source diagnostics are available in the Job Summary.",
+    )
     return 0
 
 

@@ -6,7 +6,10 @@ import base64
 import json
 import re
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Self, cast
+from pathlib import Path
+from typing import Self, cast
+
+from jinja2 import Environment, FileSystemLoader, StrictUndefined, select_autoescape
 
 from monori.ci.lib.annotations import SourceAnnotation
 from monori.ci.lib.status import QualityStatus
@@ -17,9 +20,6 @@ from monori.common import (
     string_value,
 )
 
-if TYPE_CHECKING:
-    from pathlib import Path
-
 CONTROL_COMMAND_COUNT = 2
 CONTROL_RE = re.compile(
     r"^- \[(?P<state>[ xX])] .*?<!-- monori-qg-control:(?P<payload>[A-Za-z0-9_-]+) -->$",
@@ -29,6 +29,15 @@ ADMIN_DETAILS_RE = re.compile(
     r"\n?<details><summary>For repository administrators</summary>.*?</details>\n?",
     re.DOTALL,
 )
+TEMPLATE_ENVIRONMENT = Environment(
+    loader=FileSystemLoader(Path(__file__).with_name("templates")),
+    undefined=StrictUndefined,
+    autoescape=select_autoescape(default=False),
+    keep_trailing_newline=True,
+    trim_blocks=True,
+    lstrip_blocks=True,
+)
+JOB_SUMMARY_TEMPLATE = TEMPLATE_ENVIRONMENT.get_template("job_summary.md.j2")
 
 
 JobStatus = QualityStatus
@@ -165,32 +174,9 @@ def read_job_result(path: Path) -> JobResult:
 
 def append_job_summary(path: Path, result: JobResult) -> None:
     """Append one complete job report to its GitHub summary file."""
-    content = [f'<a id="quality-graph-{result.check_id}"></a>', ""]
-    if result.summary.lstrip().startswith("## "):
-        content.append(result.summary.strip())
-    else:
-        content.append(f"## {result.status.emoji} {result.title}")
-        if result.metrics:
-            content.extend(("", "| Metric | Value |", "| --- | ---: |"))
-            content.extend(f"| {metric.label} | {metric.value} |" for metric in result.metrics)
-        if result.summary:
-            content.extend(("", result.summary.rstrip()))
-    if result.controls:
-        content.extend(
-            (
-                "",
-                "<details><summary>Administrative command reference "
-                f"({len(result.controls)})</summary>",
-                "",
-            )
-        )
-        content.extend(
-            f"- `{control.command}` — reverse with `{control.reverse_command}`"
-            for control in result.controls
-        )
-        content.extend(("", "</details>"))
+    content = re.sub(r"\n{3,}", "\n\n", JOB_SUMMARY_TEMPLATE.render(result=result).strip())
     with path.open("a") as summary_file:
-        summary_file.write("\n".join(content) + "\n")
+        summary_file.write(content + "\n")
 
 
 @dataclass(frozen=True)

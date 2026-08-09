@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import sys
 import urllib.parse
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -10,8 +9,7 @@ from typing import TYPE_CHECKING, ClassVar, Protocol, override
 
 from monori.ci.lib.annotations import (
     SourceAnnotation,
-    grouped_annotations,
-    workflow_annotation_command,
+    publish_workflow_annotations,
 )
 from monori.ci.lib.comments import managed_comment, workflow_bot_logins
 from monori.ci.lib.github import is_admin, sync_label
@@ -25,19 +23,19 @@ from monori.ci.quality_graph.commands import (
     validate_command,
 )
 from monori.ci.quality_graph.job_results import (
+    JobControl,
     JobMetric,
     JobResult,
     JobResultPublisher,
     JobStatus,
-    controls_from_markdown,
     without_admin_controls,
 )
 from monori.ci.quality_graph.models import CheckContext, CheckResult, FindingProtocol
-from monori.ci.quality_graph.reporting import CHECK_REPORTS
+from monori.ci.quality_graph.reporting import CHECK_REPORTS, RenderedCheckReport
 from monori.common import JsonValue, object_value, optional_string
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Callable, Sequence
     from re import Pattern
 
     from monori.ci.lib.github import GitHubAPI, RepositoryGitHubAPI
@@ -382,6 +380,76 @@ class QualityCheck[FindingType: ApprovableFinding](QualityCheckDefinition, ABC):
         return self.approval_lifecycle.read(body) & finding_ids
 
 
+@dataclass(frozen=True)
+class CheckExecution:
+    """Describe a completed domain check before shared publication."""
+
+    status: JobStatus
+    summary: str
+    metrics: tuple[JobMetric, ...]
+    controls: tuple[JobControl, ...] = ()
+    control_notes: tuple[str, ...] = ()
+    annotations: tuple[SourceAnnotation, ...] = ()
+
+
+@dataclass(frozen=True)
+class ReportCheckRequest[FindingType: ApprovableFinding]:
+    """Bundle shared state required to execute a pull-request report check."""
+
+    github: GitHubAPI
+    number: int
+    findings: Sequence[FindingType]
+    publisher: JobResultPublisher
+    read_only: bool = False
+
+
+def run_report_check[FindingType: ApprovableFinding](
+    check: QualityCheck[FindingType],
+    request: ReportCheckRequest[FindingType],
+    build_execution: Callable[[set[str]], CheckExecution],
+) -> int:
+    """Resolve approvals and publish one report check through the shared lifecycle."""
+    pull = object_value(
+        request.github.request("GET", f"/pulls/{request.number}"),
+        "pull request",
+    )
+    body = optional_string(pull.get("body")) or ""
+    approved = (
+        check.read_approvals(body, request.findings)
+        if request.read_only
+        else check.sync_pending_approvals(
+            request.github,
+            request.number,
+            body,
+            request.findings,
+        ).approved
+    )
+    execution = build_execution(approved)
+    if check.failure_label is not None and not request.read_only:
+        sync_label(
+            request.github,
+            request.number,
+            check.failure_label,
+            present=execution.status is JobStatus.FAILED,
+        )
+    result = JobResult(
+        check.job_id,
+        CHECK_REPORTS[check.report_marker].title,
+        execution.status,
+        execution.summary,
+        execution.metrics,
+        execution.annotations,
+        execution.controls,
+        execution.control_notes,
+    )
+    request.publisher.publish(result)
+    publish_workflow_annotations(
+        execution.annotations,
+        omitted_message="Additional findings are available in the Job Summary.",
+    )
+    return 1 if execution.status is JobStatus.FAILED else 0
+
+
 class PullRequestSourceCheck[FindingType: ApprovableFinding](QualityCheck[FindingType], ABC):
     """Run a source-oriented check through the shared pull-request lifecycle."""
 
@@ -394,7 +462,7 @@ class PullRequestSourceCheck[FindingType: ApprovableFinding](QualityCheck[Findin
     @abstractmethod
     def render_summary(
         self, findings: list[FindingType], approved: set[str], pull_request_url: str
-    ) -> str:
+    ) -> RenderedCheckReport:
         """Render the final managed report for this check."""
 
     @abstractmethod
@@ -460,25 +528,26 @@ class PullRequestSourceCheck[FindingType: ApprovableFinding](QualityCheck[Findin
         if self.failure_label is not None and not read_only:
             sync_label(github, number, self.failure_label, present=bool(active))
         pull_request_url = optional_string(pull.get("html_url")) or ""
-        summary = self.render_summary(findings, approved, pull_request_url)
+        report = self.render_summary(findings, approved, pull_request_url)
         annotations = tuple(self.source_annotation(finding) for finding in active)
         result = JobResult(
             self.job_id,
             CHECK_REPORTS[self.report_marker].title,
             JobStatus.PASSED if not active else JobStatus.FAILED,
-            without_admin_controls(summary),
+            without_admin_controls(report.summary),
             (
                 JobMetric("Findings", str(len(findings))),
                 JobMetric("Active", str(len(active))),
             ),
             annotations,
-            controls_from_markdown(summary),
+            controls=report.controls,
+            control_notes=report.control_notes,
         )
         publisher.publish(result)
-        for annotation in grouped_annotations(annotations):
-            sys.stderr.write(f"{workflow_annotation_command(annotation)}\n")
-        if len(annotations) > len(grouped_annotations(annotations)):
-            sys.stderr.write("::notice::Additional findings are available in the Job Summary.\n")
+        publish_workflow_annotations(
+            annotations,
+            omitted_message="Additional findings are available in the Job Summary.",
+        )
         return 1 if active else 0
 
     @staticmethod

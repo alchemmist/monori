@@ -16,9 +16,8 @@ from dulwich.porcelain import diff_tree
 from dulwich.repo import Repo
 
 from monori.ci.lib.annotations import (
-    MAX_STEP_ANNOTATIONS,
     SourceAnnotation,
-    workflow_annotation_command,
+    publish_workflow_annotations,
 )
 
 KILLED = {1, 3}
@@ -366,13 +365,13 @@ def report_verdict(
         summary.extend(["", "</details>"])
     append_step_summary(summary_path, "\n".join(summary))
     if not passed:
-        for path, line, message in stats.source_findings[:MAX_STEP_ANNOTATIONS]:
-            annotation = SourceAnnotation(path, line, line, message)
-            sys.stderr.write(f"{workflow_annotation_command(annotation)}\n")
-        if len(stats.source_findings) > MAX_STEP_ANNOTATIONS:
-            sys.stderr.write(
-                "::notice::Additional mutation findings are available in the Job Summary.\n"
-            )
+        publish_workflow_annotations(
+            (
+                SourceAnnotation(path, line, line, message)
+                for path, line, message in stats.source_findings
+            ),
+            omitted_message="Additional mutation findings are available in the Job Summary.",
+        )
     return 0 if passed else 1
 
 

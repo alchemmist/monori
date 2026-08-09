@@ -7,7 +7,7 @@ from monori.ci.quality_graph.checks.suppressions import (
     summary_body,
 )
 from monori.ci.quality_graph.commands import parse_command
-from monori.ci.quality_graph.job_results import JobControl, controls_from_markdown
+from monori.ci.quality_graph.job_results import JobControl
 from monori.ci.quality_graph.models import CheckContext, Verdict
 
 NOQA = "# " + "no" + "qa"
@@ -206,7 +206,8 @@ value = 2
     def test_summary_has_collapsed_admin_controls_without_report_marker(self) -> None:
         finding = scan_file("example.py", f"value = 1  {NOQA}\n", {1})[0]
 
-        body = summary_body([finding], set(), "https://github.com/org/repo/pull/1")
+        report = summary_body([finding], set(), "https://github.com/org/repo/pull/1")
+        body = report.summary
 
         assert body.startswith("## ❌ Lint suppression gate\n")
         assert "| Status | FAIL |" in body
@@ -216,7 +217,7 @@ value = 2
         assert "[`example.py:1`](https://github.com/org/repo/pull/1/files#diff-" in body
         assert "<!-- monori-qg-control:" in body
         assert "<!-- monori-report:" not in body
-        assert controls_from_markdown(body) == (
+        assert report.controls == (
             JobControl(
                 "/qg ignore suppression-600043a9733a",
                 "/qg remove-ignore suppression-600043a9733a",
@@ -235,16 +236,17 @@ value = 2
         """Keep approved findings visible with their reversible control."""
         finding = scan_file("example.py", f"value = 1  {NOQA}\n", {1})[0]
 
-        body = summary_body(
+        report = summary_body(
             [finding],
             {finding.finding_id},
             "https://github.com/org/repo/pull/1",
         )
+        body = report.summary
 
         assert body.startswith("## ✅ Lint suppression gate\n")
         assert "| Status | PASS |\n| Findings | 1 |\n| Active | 0 |\n| Approved | 1 |" in body
         assert "- ✔ [`example.py:1`]" in body
-        assert controls_from_markdown(body) == (
+        assert report.controls == (
             JobControl(
                 "/qg ignore suppression-600043a9733a",
                 "/qg remove-ignore suppression-600043a9733a",

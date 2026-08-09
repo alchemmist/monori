@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import TYPE_CHECKING, Self, cast
@@ -10,6 +11,7 @@ from monori.common import JsonValue, integer_value, object_value, optional_strin
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
+    from typing import TextIO
 
 MAX_STEP_ANNOTATIONS = 10
 
@@ -140,6 +142,21 @@ def workflow_annotation_command(annotation: SourceAnnotation) -> str:
         properties["endColumn"] = str(annotation.end_column)
     encoded = ",".join(f"{key}={escape_property(value)}" for key, value in properties.items())
     return f"::{annotation.level.command} {encoded}::{escape_data(annotation.message)}"
+
+
+def publish_workflow_annotations(
+    annotations: Iterable[SourceAnnotation],
+    *,
+    omitted_message: str,
+    stream: TextIO | None = None,
+) -> None:
+    """Publish grouped annotations and report diagnostics omitted by GitHub's limit."""
+    output = stream or sys.stderr
+    source = tuple(annotations)
+    grouped = grouped_annotations(source)
+    output.writelines(f"{workflow_annotation_command(annotation)}\n" for annotation in grouped)
+    if len(source) > len(grouped):
+        output.write(f"::notice::{escape_data(omitted_message)}\n")
 
 
 def escape_property(value: str) -> str:

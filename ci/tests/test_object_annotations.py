@@ -12,7 +12,7 @@ from monori.ci.quality_graph.checks.object_annotations import (
     summary_body,
 )
 from monori.ci.quality_graph.commands import parse_command
-from monori.ci.quality_graph.job_results import JobControl, controls_from_markdown
+from monori.ci.quality_graph.job_results import JobControl
 from monori.ci.quality_graph.models import CheckContext, Verdict
 
 
@@ -126,14 +126,15 @@ other: "list[object]"
     ) -> None:
         finding = Finding("server/app/example.py", 7, 2, "object", "finding-1")
 
-        body = summary_body([finding], set(), "https://github.com/org/repo/pull/1")
+        report = summary_body([finding], set(), "https://github.com/org/repo/pull/1")
+        body = report.summary
 
         assert body.startswith("## ❌ Python object annotation gate\n")
         assert "| Status | FAIL |" in body
         assert "| Findings | 1 |" in body
         assert "server/app/example.py:7" in body
         assert "/qg ignore object" in body
-        assert controls_from_markdown(body) == (
+        assert report.controls == (
             JobControl(
                 "/qg ignore object-finding-1",
                 "/qg remove-ignore object-finding-1",
@@ -152,16 +153,17 @@ other: "list[object]"
         """Keep approved object annotations visible and reversible."""
         finding = Finding("server/app/example.py", 7, 2, "object", "finding-1")
 
-        body = summary_body(
+        report = summary_body(
             [finding],
             {finding.finding_id},
             "https://github.com/org/repo/pull/1",
         )
+        body = report.summary
 
         assert body.startswith("## ✅ Python object annotation gate\n")
         assert "| Status | PASS |\n| Findings | 1 |\n| Active | 0 |\n| Approved | 1 |" in body
         assert "- ✔ [`server/app/example.py:7`]" in body
-        assert controls_from_markdown(body) == (
+        assert report.controls == (
             JobControl(
                 "/qg ignore object-finding-1",
                 "/qg remove-ignore object-finding-1",

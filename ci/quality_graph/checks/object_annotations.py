@@ -4,7 +4,6 @@ import ast
 import difflib
 import os
 import re
-import sys
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
@@ -13,7 +12,7 @@ from typing import ClassVar, override
 from monori.ci.lib.annotations import (
     AnnotationLevel,
     SourceAnnotation,
-    workflow_annotation_command,
+    publish_workflow_annotations,
 )
 from monori.ci.lib.findings import stable_finding_id
 from monori.ci.lib.github import GitHub, RepositoryGitHubAPI
@@ -21,6 +20,7 @@ from monori.ci.quality_graph.base import ApprovalLifecycle, PullRequestSourceChe
 from monori.ci.quality_graph.job_results import JobResultPublisher
 from monori.ci.quality_graph.models import CheckContext, CheckResult, Verdict
 from monori.ci.quality_graph.reporting import (
+    RenderedCheckReport,
     ReportFinding,
     ReportMetric,
     ReportModel,
@@ -147,7 +147,10 @@ def scan_file(path: str, source: str, changed: set[int]) -> list[Finding]:
             error.lineno or 1,
             f"Cannot parse Python file: {error}",
         )
-        sys.stderr.write(f"{workflow_annotation_command(syntax_annotation)}\n")
+        publish_workflow_annotations(
+            (syntax_annotation,),
+            omitted_message="Additional syntax errors are available in the Job Summary.",
+        )
         return []
 
     candidates: list[tuple[int, int, str, str]] = []
@@ -202,7 +205,7 @@ class ObjectAnnotationCheck(PullRequestSourceCheck[Finding]):
     @override
     def render_summary(
         self, findings: list[Finding], approved: set[str], pull_request_url: str
-    ) -> str:
+    ) -> RenderedCheckReport:
         """Render the object-annotation report."""
         return summary_body(findings, approved, pull_request_url)
 
@@ -220,7 +223,7 @@ class ObjectAnnotationCheck(PullRequestSourceCheck[Finding]):
         )
 
 
-def summary_body(findings: list[Finding], approved: set[str], pr_url: str) -> str:
+def summary_body(findings: list[Finding], approved: set[str], pr_url: str) -> RenderedCheckReport:
     """Render the summary markdown shown for object annotation check."""
     active = [finding for finding in findings if finding.finding_id not in approved]
     return render_report(

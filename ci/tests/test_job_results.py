@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import sys
 from contextlib import contextmanager
+from io import StringIO
 from typing import TYPE_CHECKING
 
 import pytest
@@ -15,6 +16,7 @@ from monori.ci.lib.annotations import (
     SourceAnnotation,
     escape_data,
     grouped_annotations,
+    publish_workflow_annotations,
     workflow_annotation_command,
 )
 from monori.ci.lib.diagnostics import (
@@ -149,6 +151,27 @@ def test_grouped_annotations_preserve_distinct_titles() -> None:
         ("rule-a", "first"),
         ("rule-b", "second"),
     ]
+
+
+def test_annotation_publisher_groups_limits_and_reports_omissions() -> None:
+    """Publish workflow commands through the single annotation boundary."""
+    stream = StringIO()
+    annotations = [
+        SourceAnnotation("same.py", 1, 1, "first"),
+        SourceAnnotation("same.py", 1, 1, "second"),
+        *(SourceAnnotation(f"file-{index}.py", 1, 1, "failure") for index in range(20)),
+    ]
+
+    publish_workflow_annotations(
+        annotations,
+        omitted_message="More findings are in the summary.",
+        stream=stream,
+    )
+
+    output = stream.getvalue()
+    assert output.count("::error ") == MAX_STEP_ANNOTATIONS
+    assert "first%0Asecond" in output
+    assert "::notice::More findings are in the summary." in output
 
 
 def test_control_markers_restore_reversible_checkbox_state() -> None:

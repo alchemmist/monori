@@ -15,6 +15,7 @@ from monori.ci.quality_graph.base import ApprovalLifecycle, PullRequestSourceChe
 from monori.ci.quality_graph.job_results import JobResultPublisher
 from monori.ci.quality_graph.models import CheckContext, CheckResult, Verdict
 from monori.ci.quality_graph.reporting import (
+    RenderedCheckReport,
     ReportFinding,
     ReportMetric,
     ReportModel,
@@ -298,7 +299,7 @@ class SuppressionCheck(PullRequestSourceCheck[Finding]):
     @override
     def render_summary(
         self, findings: list[Finding], approved: set[str], pull_request_url: str
-    ) -> str:
+    ) -> RenderedCheckReport:
         """Render the lint-suppression report."""
         return summary_body(findings, approved, pull_request_url)
 
@@ -365,7 +366,7 @@ def changed_files(github: RepositoryGitHubAPI, pull: dict[str, JsonValue]) -> li
     return sorted(result.findings, key=lambda finding: (finding.path, finding.line, finding.column))
 
 
-def summary_body(findings: list[Finding], approved: set[str], pr_url: str) -> str:
+def summary_body(findings: list[Finding], approved: set[str], pr_url: str) -> RenderedCheckReport:
     """Build the suppressions check summary block for workflow output."""
     active = [finding for finding in findings if finding.finding_id not in approved]
     return render_report(

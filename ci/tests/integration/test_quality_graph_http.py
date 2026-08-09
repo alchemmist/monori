@@ -48,7 +48,7 @@ from monori.ci.quality_graph.job_results import (
 )
 from monori.ci.quality_graph.models import CheckContext, CheckResult, Verdict
 from monori.ci.quality_graph.registry import workflow_jobs
-from monori.ci.quality_graph.reporting import main as reporting_main
+from monori.ci.quality_graph.reporting import RenderedCheckReport
 from monori.common import JsonValue, array_value, object_value, string_value
 
 if TYPE_CHECKING:
@@ -120,9 +120,9 @@ class ScenarioCheck(PullRequestSourceCheck[ScenarioFinding]):
         findings: list[ScenarioFinding],
         approved: set[str],
         pull_request_url: str,
-    ) -> str:
+    ) -> RenderedCheckReport:
         """Render enough domain state to verify report replacement semantics."""
-        return (
+        return RenderedCheckReport(
             f"Scenario report for {pull_request_url}: "
             f"{len(findings)} findings, {len(approved)} approved."
         )
@@ -1153,66 +1153,6 @@ def test_bundle_and_performance_read_only_gates_preserve_failed_verdicts(
     with environment(environment_values):
         assert frontend_performance_main() == 1
     assert '"verdict": "critical"' in performance_report.read_text()
-
-
-def test_reporting_cli_updates_one_comment_and_reaction(tmp_path: Path) -> None:
-    """Exercise report and reaction CLI operations over the fake service."""
-    command_comment: dict[str, JsonValue] = {
-        "id": COMMAND_COMMENT_ID,
-        "issue_number": PULL_REQUEST_NUMBER,
-        "body": "/qg status",
-        "user": {"login": "admin"},
-        "reactions": [],
-    }
-    reset_fake_github({"comments": cast("JsonValue", [command_comment])})
-    body = tmp_path / "body.md"
-    body.write_text("Measured details.\n")
-
-    with arguments(
-        [
-            "reporting",
-            "in-progress",
-            "--marker",
-            "bundle-size",
-            "--pr-number",
-            str(PULL_REQUEST_NUMBER),
-        ]
-    ):
-        assert reporting_main() == 0
-    with arguments(
-        [
-            "reporting",
-            "complete",
-            "--marker",
-            "bundle-size",
-            "--pr-number",
-            str(PULL_REQUEST_NUMBER),
-            "--status",
-            "passed",
-            "--body-file",
-            str(body),
-        ]
-    ):
-        assert reporting_main() == 0
-    with arguments(
-        [
-            "reporting",
-            "react",
-            "--comment-id",
-            str(COMMAND_COMMENT_ID),
-            "--reaction",
-            "hooray",
-        ]
-    ):
-        assert reporting_main() == 0
-
-    state = fake_state()
-    comments = state_objects(state, "comments")
-    reports = [item for item in comments if "monori-report: bundle-size" in str(item.get("body"))]
-    assert len(reports) == 1
-    command = next(item for item in comments if item.get("id") == COMMAND_COMMENT_ID)
-    reactions = state_objects(command, "reactions")
-    assert [item.get("content") for item in reactions] == ["hooray"]
 
 
 def test_repository_client_helpers_converge_real_http_state() -> None:

@@ -1,8 +1,7 @@
-"""Provide shared pull-request report and command-reaction lifecycles."""
+"""Render typed Quality Graph check reports."""
 
 from __future__ import annotations
 
-import argparse
 import hashlib
 import re
 from dataclasses import dataclass
@@ -11,8 +10,6 @@ from typing import TYPE_CHECKING
 
 from jinja2 import Environment, FileSystemLoader, StrictUndefined, select_autoescape
 
-from monori.ci.lib.comments import CommandReactionLifecycle, Reaction, upsert_comment
-from monori.ci.lib.github import GitHub, GitHubAPI
 from monori.ci.lib.status import QualityStatus
 from monori.ci.quality_graph.job_results import JobControl
 
@@ -62,6 +59,15 @@ class AdminCommands:
 
 
 @dataclass(frozen=True)
+class RenderedCheckReport:
+    """Carry rendered Markdown together with its original typed controls."""
+
+    summary: str
+    controls: tuple[JobControl, ...] = ()
+    control_notes: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
 class ReportModel:
     """Typed data consumed by the shared Jinja report template."""
 
@@ -77,7 +83,7 @@ class ReportModel:
     @property
     def title(self) -> str:
         """Return the registered title for this report type."""
-        definition = ALL_REPORTS.get(self.marker)
+        definition = CHECK_REPORTS.get(self.marker)
         if definition is None:
             message = f"Unknown Quality Graph report marker: {self.marker}"
             raise ValueError(message)
@@ -102,10 +108,6 @@ CHECK_REPORTS = {
         ReportDefinition("suppression", "Lint suppression gate"),
     )
 }
-SURFACE_REPORTS = {
-    "quality-graph": ReportDefinition("quality-graph", "Quality Graph"),
-}
-ALL_REPORTS = CHECK_REPORTS | SURFACE_REPORTS
 TEMPLATE_DIRECTORY = Path(__file__).with_name("templates")
 TEMPLATE_ENVIRONMENT = Environment(
     loader=FileSystemLoader(TEMPLATE_DIRECTORY),
@@ -165,110 +167,8 @@ def admin_commands(
     return AdminCommands(tuple(controls), tuple(notes))
 
 
-def render_report(model: ReportModel) -> str:
-    """Render a complete report with the shared strict Jinja template."""
+def render_report(model: ReportModel) -> RenderedCheckReport:
+    """Render Markdown while preserving administrator controls as typed data."""
     rendered = re.sub(r"\n{3,}", "\n\n", REPORT_TEMPLATE.render(model=model).strip())
-    return rendered + "\n"
-
-
-@dataclass(frozen=True)
-class PullRequestReport:
-    """Own the complete lifecycle of one bot-managed pull-request report."""
-
-    github: GitHubAPI
-    number: int
-    definition: ReportDefinition
-
-    @classmethod
-    def registered(cls, github: GitHubAPI, number: int, marker: str) -> PullRequestReport:
-        """Create a report lifecycle from a registered marker."""
-        definition = ALL_REPORTS.get(marker)
-        if definition is None:
-            message = f"Unknown Quality Graph report marker: {marker}"
-            raise ValueError(message)
-        return cls(github, number, definition)
-
-    def publish(self, body: str) -> None:
-        """Create or update this report's bot-owned comment."""
-        upsert_comment(self.github, self.number, self.definition.marker, body)
-
-    def mark_in_progress(self) -> None:
-        """Replace stale report data with an explicit in-progress status."""
-        self.publish(
-            render_report(
-                ReportModel(
-                    self.definition.marker,
-                    QualityStatus.IN_PROGRESS,
-                    "The check is running. This report will be updated when it finishes.",
-                    (ReportMetric("Status", QualityStatus.IN_PROGRESS.label),),
-                )
-            )
-        )
-
-    def mark_failed(self, message: str) -> None:
-        """Replace a pending report with an explicit infrastructure failure."""
-        self.publish(
-            render_report(
-                ReportModel(
-                    self.definition.marker,
-                    QualityStatus.FAILED,
-                    message,
-                    (ReportMetric("Status", QualityStatus.FAILED.label),),
-                )
-            )
-        )
-
-
-def main() -> int:
-    """Run report and reaction lifecycle operations from a composite action."""
-    parser = argparse.ArgumentParser()
-    subparsers = parser.add_subparsers(dest="operation", required=True)
-
-    progress = subparsers.add_parser("in-progress")
-    progress.add_argument("--marker", choices=sorted(ALL_REPORTS), required=True)
-    progress.add_argument("--pr-number", type=int, required=True)
-
-    complete = subparsers.add_parser("complete")
-    complete.add_argument("--marker", choices=sorted(ALL_REPORTS), required=True)
-    complete.add_argument("--pr-number", type=int, required=True)
-    complete.add_argument(
-        "--status",
-        choices=[QualityStatus.PASSED.value, QualityStatus.FAILED.value],
-        required=True,
-    )
-    complete.add_argument("--body-file", type=Path)
-    complete.add_argument("--message", default="")
-
-    react = subparsers.add_parser("react")
-    react.add_argument("--comment-id", type=int, required=True)
-    react.add_argument(
-        "--reaction",
-        choices=[reaction.value for reaction in Reaction],
-        required=True,
-    )
-
-    args = parser.parse_args()
-    github = GitHub()
-    if args.operation == "react":
-        CommandReactionLifecycle(github, args.comment_id).set(Reaction(args.reaction))
-        return 0
-    report = PullRequestReport.registered(github, args.pr_number, args.marker)
-    if args.operation == "in-progress":
-        report.mark_in_progress()
-    else:
-        content = args.body_file.read_text() if args.body_file is not None else ""
-        report.publish(
-            render_report(
-                ReportModel(
-                    report.definition.marker,
-                    QualityStatus(args.status),
-                    args.message,
-                    content=content,
-                )
-            )
-        )
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())
+    admin = model.admin or AdminCommands(())
+    return RenderedCheckReport(rendered + "\n", admin.controls, admin.notes)
