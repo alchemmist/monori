@@ -425,6 +425,19 @@ class TestPullRequestWorkflowGraph:
             in mutmut_runner
         )
 
+    def test_mutation_workspace_includes_test_support_files(self) -> None:
+        """Keep unit tests runnable from both mutmut staging directories."""
+        configuration = tomllib.loads(ROOT_PYPROJECT.read_text())
+        mutmut_runner = (REPOSITORY_ROOT / "scripts/mutmut.sh").read_text()
+        copied_paths = set(configuration["tool"]["mutmut"]["also_copy"])
+
+        assert {".github", "scripts", "Makefile", "performance"} <= copied_paths
+        assert (
+            "--ignore=ci/tests/integration"
+            in configuration["tool"]["mutmut"]["pytest_add_cli_args_test_selection"]
+        )
+        assert 'cp -R performance "$workspace/performance"' in mutmut_runner
+
     def test_actions_use_the_node_24_cache_runtime(self) -> None:
         """Keep cache actions off the deprecated Node.js 20 runtime."""
         action_sources = "\n".join(

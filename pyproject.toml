@@ -130,14 +130,19 @@ source_paths = [
   "monori/common",
 ]
 also_copy = [
+  ".github",
+  "scripts",
+  "Makefile",
   "server/tests",
   "ci/tests",
+  "performance",
   "monori/server/schema.sql",
   "monori/server/migrations",
   "monori/ci/quality_graph/templates",
 ]
 pytest_add_cli_args_test_selection = [
   "--import-mode=importlib",
+  "--ignore=ci/tests/integration",
   "-m",
   "not integration",
   "server/tests",
