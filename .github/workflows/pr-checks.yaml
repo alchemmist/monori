@@ -350,9 +350,8 @@ jobs:
               id: quality-results
               uses: actions/download-artifact@v8
               with:
-                  pattern: quality-result-*-${{ github.run_attempt }}
+                  pattern: quality-result-*
                   path: ${{ runner.temp }}/quality-results
-                  merge-multiple: true
             - name: Publish Quality Graph dashboard
               id: dashboard
               if: steps.quality-results.outcome == 'success'

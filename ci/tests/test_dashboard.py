@@ -160,6 +160,32 @@ def test_result_loader_merges_downloaded_artifact_directories(tmp_path: Path) ->
     assert set(results) == {"lint", "type"}
 
 
+def test_result_loader_keeps_latest_check_result_across_rerun_attempts(tmp_path: Path) -> None:
+    """Preserve successful jobs while replacing rerun checks with their newest artifact."""
+    write_job_result(
+        tmp_path / "quality-result-object-annotations-1" / "object-annotations.json",
+        JobResult(
+            "object-annotations",
+            "Python object annotation gate",
+            JobStatus.PASSED,
+            controls=(JobControl("/qg ignore object", "/qg remove-ignore object-a"),),
+        ),
+    )
+    write_job_result(
+        tmp_path / "quality-result-bundle-size-1" / "bundle-size.json",
+        JobResult("bundle-size", "Frontend bundle size", JobStatus.FAILED),
+    )
+    write_job_result(
+        tmp_path / "quality-result-bundle-size-2" / "bundle-size.json",
+        JobResult("bundle-size", "Frontend bundle size", JobStatus.PASSED),
+    )
+
+    results = load_results(tmp_path)
+
+    assert results["object-annotations"].controls[0].command == "/qg ignore object"
+    assert results["bundle-size"].status is JobStatus.PASSED
+
+
 def test_running_refresh_marks_current_job_and_observed_parallel_jobs() -> None:
     """Publish all current Actions states from the single live writer."""
     body = render_dashboard(

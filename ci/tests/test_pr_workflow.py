@@ -278,6 +278,9 @@ class TestPullRequestWorkflowGraph:
         }
         assert "if: always()" in body
         assert "actions/download-artifact@v8" in body
+        assert "pattern: quality-result-*" in body
+        assert "github.run_attempt" not in body.split("path:", maxsplit=1)[0]
+        assert "merge-multiple: true" not in body
         assert "continue-on-error: true" not in body
         assert "id: quality-results" in body
         assert "if: steps.quality-results.outcome == 'success'" in body

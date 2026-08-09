@@ -54,6 +54,7 @@ NOTICE_RE = re.compile(
 DEFAULT_WATCH_INTERVAL = 5.0
 SUPPORTED_WORKFLOW_DURATION_SECONDS = 3 * 60 * 60
 DEFAULT_WATCH_TIMEOUT = float(SUPPORTED_WORKFLOW_DURATION_SECONDS)
+ARTIFACT_ATTEMPT_RE = re.compile(r"-(?P<attempt>\d+)$")
 
 
 @dataclass(frozen=True)
@@ -97,13 +98,20 @@ def render_dashboard(model: DashboardModel) -> str:
 
 
 def load_results(directory: Path) -> dict[str, JobResult]:
-    """Load every result artifact downloaded for the current workflow run."""
+    """Load the newest artifact for every check across workflow rerun attempts."""
     results: dict[str, JobResult] = {}
+    attempts: dict[str, int] = {}
     if not directory.exists():
         return results
     for path in sorted(directory.rglob("*.json")):
         result = read_job_result(path)
-        results[result.check_id] = result
+        relative = path.relative_to(directory)
+        artifact_name = relative.parts[0] if len(relative.parts) > 1 else ""
+        match = ARTIFACT_ATTEMPT_RE.search(artifact_name)
+        attempt = int(match.group("attempt")) if match is not None else 0
+        if attempt >= attempts.get(result.check_id, -1):
+            results[result.check_id] = result
+            attempts[result.check_id] = attempt
     return results
 
 
