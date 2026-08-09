@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-import os
 import re
 import sys
 import urllib.parse
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Protocol, override
 
 from monori.ci.lib.annotations import (
@@ -30,11 +28,10 @@ from monori.ci.quality_graph.commands import (
 from monori.ci.quality_graph.job_results import (
     JobMetric,
     JobResult,
+    JobResultPublisher,
     JobStatus,
-    append_job_summary,
     controls_from_markdown,
     without_admin_controls,
-    write_job_result,
 )
 from monori.ci.quality_graph.models import CheckContext, CheckResult, FindingProtocol
 from monori.ci.quality_graph.reporting import CHECK_REPORTS
@@ -414,19 +411,23 @@ class PullRequestSourceCheck[FindingType: ApprovableFinding](QualityCheck[Findin
         """Build one typed source annotation for an active finding."""
 
     def run_pull_request_gate(
-        self, github: RepositoryGitHubAPI, event: dict[str, JsonValue]
+        self,
+        github: RepositoryGitHubAPI,
+        event: dict[str, JsonValue],
+        publisher: JobResultPublisher,
     ) -> int:
         """Execute the shared source-check lifecycle for a pull-request event."""
         number = self._pull_request_number(event)
         if number is None:
             return 0
-        return self._run_pull_request_gate(github, event, number)
+        return self._run_pull_request_gate(github, event, number, publisher)
 
     def _run_pull_request_gate(
         self,
         github: RepositoryGitHubAPI,
         event: dict[str, JsonValue],
         number: int,
+        publisher: JobResultPublisher,
     ) -> int:
         """Execute a source check and publish its portable job result."""
         raw_pull = github.request("GET", f"/pulls/{number}")
@@ -472,22 +473,12 @@ class PullRequestSourceCheck[FindingType: ApprovableFinding](QualityCheck[Findin
             annotations,
             controls_from_markdown(summary),
         )
-        self._publish_result(result)
+        publisher.publish(result)
         for annotation in grouped_annotations(annotations):
             sys.stderr.write(f"{workflow_annotation_command(annotation)}\n")
         if len(annotations) > len(grouped_annotations(annotations)):
             sys.stderr.write("::notice::Additional findings are available in the Job Summary.\n")
         return 1 if active else 0
-
-    @staticmethod
-    def _publish_result(result: JobResult) -> None:
-        """Write configured summary and artifact paths for the current job."""
-        result_path = os.environ.get("QUALITY_RESULT_PATH")
-        if result_path:
-            write_job_result(Path(result_path), result)
-        summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
-        if summary_path:
-            append_job_summary(Path(summary_path), result)
 
     @staticmethod
     def _pull_request_number(event: dict[str, JsonValue]) -> int | None:

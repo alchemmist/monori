@@ -1,6 +1,5 @@
 import contextlib
 import json
-import os
 import tempfile
 from pathlib import Path
 
@@ -165,34 +164,26 @@ diff --git a/server/app/example.py b/server/app/example.py
     ) -> None:
         with tempfile.TemporaryDirectory() as directory:
             summary = Path(directory) / "summary.md"
-            previous = os.environ.get("MUTATION_SUMMARY_PATH")
-            os.environ["MUTATION_SUMMARY_PATH"] = str(summary)
-            try:
-                request = module.GateRequest(
-                    mutants_dir=Path(),
-                    baseline_dir=Path(),
-                    root=Path(),
-                    base="main",
-                    threshold=80,
-                    skip_new_survivors=False,
-                )
-                passing = module.MutationStats(killed=9, survived=1)
-                failing = module.MutationStats(
-                    killed=1,
-                    survived=1,
-                    new_survivors=1,
-                    survivor_keys=["survivor"],
-                    no_coverage_keys=["uncovered"],
-                    source_findings=[("server/a:b,c.py", 2, "Surviving mutant")],
-                )
-                assert module.report_verdict(request, passing) == 0
-                assert module.report_verdict(request, failing) == 1
-                assert module.append_empty_summary("no changed functions") == 0
-            finally:
-                if previous is None:
-                    os.environ.pop("MUTATION_SUMMARY_PATH", None)
-                else:
-                    os.environ["MUTATION_SUMMARY_PATH"] = previous
+            request = module.GateRequest(
+                mutants_dir=Path(),
+                baseline_dir=Path(),
+                root=Path(),
+                base="main",
+                threshold=80,
+                skip_new_survivors=False,
+            )
+            passing = module.MutationStats(killed=9, survived=1)
+            failing = module.MutationStats(
+                killed=1,
+                survived=1,
+                new_survivors=1,
+                survivor_keys=["survivor"],
+                no_coverage_keys=["uncovered"],
+                source_findings=[("server/a:b,c.py", 2, "Surviving mutant")],
+            )
+            assert module.report_verdict(request, passing, summary) == 0
+            assert module.report_verdict(request, failing, summary) == 1
+            assert module.append_empty_summary("no changed functions", summary) == 0
 
             content = summary.read_text()
             assert "✅ PASS" in content
@@ -229,25 +220,18 @@ diff --git a/server/app/example.py b/server/app/example.py
     ) -> None:
         """Keep the score threshold and survivor regression policy independent."""
         summary = tmp_path / "summary.md"
-        previous = os.environ.get("MUTATION_SUMMARY_PATH")
-        os.environ["MUTATION_SUMMARY_PATH"] = str(summary)
-        try:
-            result = module.report_verdict(
-                module.GateRequest(
-                    Path(),
-                    Path(),
-                    Path(),
-                    "main",
-                    80,
-                    skip_new_survivors,
-                ),
-                stats,
-            )
-        finally:
-            if previous is None:
-                os.environ.pop("MUTATION_SUMMARY_PATH", None)
-            else:
-                os.environ["MUTATION_SUMMARY_PATH"] = previous
+        result = module.report_verdict(
+            module.GateRequest(
+                Path(),
+                Path(),
+                Path(),
+                "main",
+                80,
+                skip_new_survivors,
+            ),
+            stats,
+            summary,
+        )
 
         assert result == expected
         expected_status = "✅ PASS" if expected == 0 else "❌ FAIL"
@@ -337,25 +321,18 @@ diff --git a/server/app/example.py b/server/app/example.py
             json.dumps({"exit_code_by_key": {"monori.server.app.example.x_value__mutmut_1": 1}})
         )
         summary = tmp_path / "summary.md"
-        previous = os.environ.get("MUTATION_SUMMARY_PATH")
-        os.environ["MUTATION_SUMMARY_PATH"] = str(summary)
-        try:
-            with contextlib.chdir(tmp_path):
-                result = module.gate_python(
-                    module.GateRequest(
-                        mutants_dir=mutants,
-                        baseline_dir=tmp_path / "baseline",
-                        root=tmp_path,
-                        base=base.decode(),
-                        threshold=90,
-                        skip_new_survivors=False,
-                    )
-                )
-        finally:
-            if previous is None:
-                os.environ.pop("MUTATION_SUMMARY_PATH", None)
-            else:
-                os.environ["MUTATION_SUMMARY_PATH"] = previous
+        with contextlib.chdir(tmp_path):
+            result = module.gate_python(
+                module.GateRequest(
+                    mutants_dir=mutants,
+                    baseline_dir=tmp_path / "baseline",
+                    root=tmp_path,
+                    base=base.decode(),
+                    threshold=90,
+                    skip_new_survivors=False,
+                ),
+                summary,
+            )
 
         assert result == 0
         assert "100.00%" in summary.read_text()

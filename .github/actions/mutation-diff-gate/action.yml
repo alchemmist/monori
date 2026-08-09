@@ -58,6 +58,7 @@ runs:
                 --metric "Frontend=${{ steps.mutation-front.outcome }}" \
                 --metric "Python=${{ steps.mutation-back.outcome }}" \
                 --summary "$MUTATION_SUMMARY_PATH" \
+                --job-summary "$GITHUB_STEP_SUMMARY" \
                 --output "$RUNNER_TEMP/quality-results/mutation.json"
         - name: Upload mutation result
           if: always()

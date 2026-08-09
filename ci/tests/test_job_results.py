@@ -36,6 +36,7 @@ from monori.ci.quality_graph.job_results import (
     JobControl,
     JobMetric,
     JobResult,
+    JobResultPublisher,
     JobStatus,
     append_job_summary,
     controls_from_markdown,
@@ -351,6 +352,20 @@ def test_job_summary_has_a_stable_heading(tmp_path: Path) -> None:
     assert path.read_text() == ('<a id="quality-graph-coverage"></a>\n\n## ✅ Coverage\n')
 
 
+def test_result_publisher_uses_only_explicit_sinks(tmp_path: Path) -> None:
+    """Ignore ambient GitHub paths unless the CLI explicitly supplies them."""
+    ambient = tmp_path / "ambient.md"
+    explicit = tmp_path / "explicit.md"
+    result = JobResult("build", "Build", JobStatus.PASSED)
+
+    with environment({"GITHUB_STEP_SUMMARY": str(ambient)}):
+        JobResultPublisher().publish(result)
+        JobResultPublisher(summary_path=explicit).publish(result)
+
+    assert not ambient.exists()
+    assert explicit.read_text() == '<a id="quality-graph-build"></a>\n\n## ✅ Build\n'
+
+
 def test_complete_report_is_not_wrapped_in_a_duplicate_summary(tmp_path: Path) -> None:
     """Preserve a check-rendered heading and metrics without generic duplication."""
     result = JobResult(
@@ -373,25 +388,24 @@ def test_result_cli_writes_summary_metrics_and_artifact(tmp_path: Path) -> None:
     """Publish a simple composite-action result through the real CLI boundary."""
     output = tmp_path / "result.json"
     summary = tmp_path / "summary.md"
-    with (
-        environment({"GITHUB_STEP_SUMMARY": str(summary)}),
-        arguments(
-            [
-                "result-cli",
-                "--check-id",
-                "mutation",
-                "--title",
-                "Mutation testing",
-                "--status",
-                "failed",
-                "--message",
-                "A mutant survived.",
-                "--metric",
-                "Score=80%",
-                "--output",
-                str(output),
-            ]
-        ),
+    with arguments(
+        [
+            "result-cli",
+            "--check-id",
+            "mutation",
+            "--title",
+            "Mutation testing",
+            "--status",
+            "failed",
+            "--message",
+            "A mutant survived.",
+            "--metric",
+            "Score=80%",
+            "--output",
+            str(output),
+            "--job-summary",
+            str(summary),
+        ]
     ):
         assert result_cli_main() == 0
 

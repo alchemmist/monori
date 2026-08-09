@@ -61,6 +61,7 @@ runs:
                   --title 'Frontend bundle size' \
                   --status failed \
                   --message 'Bundle size measurement did not produce a report.' \
+                  --job-summary "$GITHUB_STEP_SUMMARY" \
                   --output "$RUNNER_TEMP/quality-results/bundle-size.json"
               fi
         - name: Upload bundle-size result

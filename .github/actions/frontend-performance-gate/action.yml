@@ -71,6 +71,7 @@ runs:
                   --title 'Frontend performance' \
                   --status failed \
                   --message 'Frontend performance measurement did not produce a report.' \
+                  --job-summary "$GITHUB_STEP_SUMMARY" \
                   --output "$RUNNER_TEMP/quality-results/frontend-performance.json"
               fi
         - name: Upload frontend-performance result

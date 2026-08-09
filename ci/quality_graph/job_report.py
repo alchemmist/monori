@@ -12,9 +12,8 @@ from monori.ci.lib.diagnostics import ANSI_RE, parse_diagnostics, parse_diff_ann
 from monori.ci.quality_graph.job_results import (
     JobMetric,
     JobResult,
+    JobResultPublisher,
     JobStatus,
-    append_job_summary,
-    write_job_result,
 )
 
 MAX_SUMMARY_LOG_CHARACTERS = 200_000
@@ -73,8 +72,7 @@ def main() -> int:
     args = parser.parse_args()
     diff = args.diff.read_text() if args.diff is not None and args.diff.exists() else ""
     result = build_result(args.check_id, args.title, args.exit_code, args.log.read_text(), diff)
-    write_job_result(args.output, result)
-    append_job_summary(args.summary, result)
+    JobResultPublisher(args.output, args.summary).publish(result)
     for annotation in grouped_annotations(result.annotations):
         sys.stderr.write(f"{workflow_annotation_command(annotation)}\n")
     if len(result.annotations) > len(grouped_annotations(result.annotations)):

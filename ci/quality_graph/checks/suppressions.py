@@ -12,6 +12,7 @@ from monori.ci.lib.annotations import AnnotationLevel, SourceAnnotation
 from monori.ci.lib.findings import stable_finding_id
 from monori.ci.lib.github import GitHub, RepositoryGitHubAPI
 from monori.ci.quality_graph.base import ApprovalLifecycle, PullRequestSourceCheck
+from monori.ci.quality_graph.job_results import JobResultPublisher
 from monori.ci.quality_graph.models import CheckContext, CheckResult, Verdict
 from monori.ci.quality_graph.reporting import (
     ReportFinding,
@@ -415,7 +416,13 @@ def main() -> int:
     """Run suppression gate and return non-zero exit code on active findings."""
     github = GitHub()
     event = object_value(decode_json(Path(os.environ["GITHUB_EVENT_PATH"]).read_text()), "event")
-    return SuppressionCheck().run_pull_request_gate(github, event)
+    result_path = os.environ.get("QUALITY_RESULT_PATH")
+    summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
+    publisher = JobResultPublisher(
+        Path(result_path) if result_path else None,
+        Path(summary_path) if summary_path else None,
+    )
+    return SuppressionCheck().run_pull_request_gate(github, event, publisher)
 
 
 if __name__ == "__main__":

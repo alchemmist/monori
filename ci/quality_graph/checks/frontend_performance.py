@@ -15,11 +15,10 @@ from monori.ci.quality_graph.base import ApprovalLifecycle, QualityCheck
 from monori.ci.quality_graph.job_results import (
     JobMetric,
     JobResult,
+    JobResultPublisher,
     JobStatus,
-    append_job_summary,
     controls_from_markdown,
     without_admin_controls,
-    write_job_result,
 )
 from monori.ci.quality_graph.models import CheckContext, CheckResult, Verdict
 from monori.ci.quality_graph.reporting import (
@@ -181,11 +180,11 @@ def main() -> int:
         controls=controls_from_markdown(rendered),
     )
     result_path = os.environ.get("QUALITY_RESULT_PATH")
-    if result_path:
-        write_job_result(Path(result_path), job_result)
     step_summary = os.environ.get("GITHUB_STEP_SUMMARY")
-    if step_summary:
-        append_job_summary(Path(step_summary), job_result)
+    JobResultPublisher(
+        Path(result_path) if result_path else None,
+        Path(step_summary) if step_summary else None,
+    ).publish(job_result)
     sync_label(github, number, STATUS_LABEL, present=failed)
     return 1 if failed else 0
 

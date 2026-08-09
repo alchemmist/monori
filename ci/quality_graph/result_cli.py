@@ -3,16 +3,14 @@
 from __future__ import annotations
 
 import argparse
-import os
 import sys
 from pathlib import Path
 
 from monori.ci.quality_graph.job_results import (
     JobMetric,
     JobResult,
+    JobResultPublisher,
     JobStatus,
-    append_job_summary,
-    write_job_result,
 )
 
 
@@ -26,6 +24,7 @@ def main() -> int:
     parser.add_argument("--message", default="")
     parser.add_argument("--metric", action="append", default=[])
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--job-summary", type=Path)
     args = parser.parse_args()
     metrics: list[JobMetric] = []
     for raw_metric in args.metric:
@@ -41,10 +40,7 @@ def main() -> int:
         summary,
         tuple(metrics),
     )
-    write_job_result(args.output, result)
-    summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
-    if summary_path:
-        append_job_summary(Path(summary_path), result)
+    JobResultPublisher(args.output, args.job_summary).publish(result)
     return 0
 
 

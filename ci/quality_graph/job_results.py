@@ -177,3 +177,18 @@ def append_job_summary(path: Path, result: JobResult) -> None:
             content.extend(("", result.summary.rstrip()))
     with path.open("a") as summary_file:
         summary_file.write("\n".join(content) + "\n")
+
+
+@dataclass(frozen=True)
+class JobResultPublisher:
+    """Publish typed job results to explicitly configured output sinks."""
+
+    result_path: Path | None = None
+    summary_path: Path | None = None
+
+    def publish(self, result: JobResult) -> None:
+        """Write the artifact and summary without consulting process state."""
+        if self.result_path is not None:
+            write_job_result(self.result_path, result)
+        if self.summary_path is not None:
+            append_job_summary(self.summary_path, result)

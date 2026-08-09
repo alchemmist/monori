@@ -4,7 +4,6 @@ import argparse
 import ast
 import json
 import logging
-import os
 import sys
 from dataclasses import dataclass, field
 from io import BytesIO
@@ -35,11 +34,10 @@ MUTANT_SOURCE_PATHS = {
 logger = logging.getLogger(__name__)
 
 
-def append_step_summary(content: str) -> None:
-    """Append step summary."""
-    summary_path = os.environ.get("MUTATION_SUMMARY_PATH") or os.environ.get("GITHUB_STEP_SUMMARY")
-    if summary_path:
-        with Path(summary_path).open("a") as summary:
+def append_step_summary(summary_path: Path | None, content: str) -> None:
+    """Append rendered mutation details to an explicit summary sink."""
+    if summary_path is not None:
+        with summary_path.open("a") as summary:
             summary.write(content.rstrip() + "\n")
 
 
@@ -314,27 +312,32 @@ def collect_mutation_stats(
     return stats
 
 
-def append_empty_summary(message: str) -> int:
+def append_empty_summary(message: str, summary_path: Path | None = None) -> int:
     """Publish a passing summary when no mutants are eligible for scoring."""
     logger.info("mutation-diff: %s — pass", message)
-    append_step_summary(f"## Python mutation diff\n\n{message.capitalize()} — **pass**.")
+    append_step_summary(
+        summary_path, f"## Python mutation diff\n\n{message.capitalize()} — **pass**."
+    )
     return 0
 
 
 def gate_python(
     request: GateRequest,
+    summary_path: Path | None = None,
 ) -> int:
     """Evaluate changed Python mutants and return the gate exit code."""
     functions = changed_functions(request.root, changed_lines(request.base))
     if not functions:
-        return append_empty_summary("no changed Python functions")
+        return append_empty_summary("no changed Python functions", summary_path)
     stats = collect_mutation_stats(request, functions)
     if stats.considered == 0:
-        return append_empty_summary("changed functions have no tested mutants")
-    return report_verdict(request, stats)
+        return append_empty_summary("changed functions have no tested mutants", summary_path)
+    return report_verdict(request, stats, summary_path)
 
 
-def report_verdict(request: GateRequest, stats: MutationStats) -> int:
+def report_verdict(
+    request: GateRequest, stats: MutationStats, summary_path: Path | None = None
+) -> int:
     """Publish the mutation verdict and return its process exit code."""
     score = 100 * stats.killed / stats.considered
     passed = score >= request.threshold and (request.skip_new_survivors or stats.new_survivors == 0)
@@ -361,7 +364,7 @@ def report_verdict(request: GateRequest, stats: MutationStats) -> int:
         summary.extend(["", "<details>", "<summary>Mutants without coverage</summary>", ""])
         summary.extend(f"- `{key}`" for key in stats.no_coverage_keys)
         summary.extend(["", "</details>"])
-    append_step_summary("\n".join(summary))
+    append_step_summary(summary_path, "\n".join(summary))
     if not passed:
         for path, line, message in stats.source_findings[:MAX_STEP_ANNOTATIONS]:
             annotation = SourceAnnotation(path, line, line, message)
@@ -385,6 +388,7 @@ def main() -> int:
     parser.add_argument("--base", required=True)
     parser.add_argument("--threshold", type=float, required=True)
     parser.add_argument("--skip-new-survivors", action="store_true")
+    parser.add_argument("--summary", type=Path)
     args = parser.parse_args()
     return gate_python(
         GateRequest(
@@ -394,7 +398,8 @@ def main() -> int:
             args.base,
             args.threshold,
             args.skip_new_survivors,
-        )
+        ),
+        args.summary,
     )
 
 

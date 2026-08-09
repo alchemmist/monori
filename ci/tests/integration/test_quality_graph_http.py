@@ -41,6 +41,7 @@ from monori.ci.quality_graph.dashboard import (
 from monori.ci.quality_graph.job_results import (
     JobControl,
     JobResult,
+    JobResultPublisher,
     JobStatus,
     read_job_result,
     write_job_result,
@@ -251,18 +252,13 @@ def test_source_gate_converges_labels_and_writes_job_results(tmp_path: Path) -> 
     result_path = tmp_path / "result.json"
     summary_path = tmp_path / "summary.md"
 
-    with environment(
-        {
-            "QUALITY_RESULT_PATH": str(result_path),
-            "GITHUB_STEP_SUMMARY": str(summary_path),
-        }
-    ):
-        failed = ScenarioCheck([ScenarioFinding("finding-1", "example.py")])
-        assert failed.run_pull_request_gate(github, pull_request_event()) == 1
-        failed_result = result_path.read_text()
-        assert '"status": "failed"' in failed_result
-        passed = ScenarioCheck([])
-        assert passed.run_pull_request_gate(github, pull_request_event()) == 0
+    publisher = JobResultPublisher(result_path, summary_path)
+    failed = ScenarioCheck([ScenarioFinding("finding-1", "example.py")])
+    assert failed.run_pull_request_gate(github, pull_request_event(), publisher) == 1
+    failed_result = result_path.read_text()
+    assert '"status": "failed"' in failed_result
+    passed = ScenarioCheck([])
+    assert passed.run_pull_request_gate(github, pull_request_event(), publisher) == 0
     final_state = fake_state()
     assert final_state["issue_labels"] == {str(PULL_REQUEST_NUMBER): []}
     assert state_objects(final_state, "comments") == []
@@ -1169,7 +1165,9 @@ def test_source_gate_failure_does_not_publish_a_stale_comment() -> None:
     )
 
     with pytest.raises(GitHubAPIError):
-        ScenarioCheck([]).run_pull_request_gate(GitHub(), pull_request_event())
+        ScenarioCheck([]).run_pull_request_gate(
+            GitHub(), pull_request_event(), JobResultPublisher()
+        )
 
     assert state_objects(fake_state(), "comments") == []
 
@@ -1179,7 +1177,9 @@ def test_missing_pull_request_does_not_publish_a_stale_comment() -> None:
     reset_fake_github({"pulls": []})
 
     with pytest.raises(RuntimeError, match="Pull request #7 was not found"):
-        ScenarioCheck([]).run_pull_request_gate(GitHub(), pull_request_event())
+        ScenarioCheck([]).run_pull_request_gate(
+            GitHub(), pull_request_event(), JobResultPublisher()
+        )
 
     assert state_objects(fake_state(), "comments") == []
 

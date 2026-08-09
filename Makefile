@@ -348,6 +348,7 @@ m-back-diff:
 	mv mutmut-stderr.log mutants/mutmut-stderr.log; \
 	args="--mutants mutants --baseline $$baseline/mutants --base $(BASE) --threshold $(MUTATION_DIFF_THRESHOLD)"; \
 	if [ $$cold_start -eq 1 ]; then args="$$args --skip-new-survivors"; fi; \
+	if [ -n "$${MUTATION_SUMMARY_PATH:-}" ]; then args="$$args --summary $$MUTATION_SUMMARY_PATH"; fi; \
 	uv run --locked --group mutation python -m monori.ci.lib.mutation_diff_gate $$args; gate=$$?; \
 	if [ -s mutants/mutmut-stderr.log ]; then echo "── mutmut diagnostics: mutants/mutmut-stderr.log ──"; fi; \
 	echo "── Python diff mutation gate (threshold $(MUTATION_DIFF_THRESHOLD)%, workers $(MUTATION_JOBS)): mutmut run exit=$$mutmut, gate exit=$$gate ──"; \
