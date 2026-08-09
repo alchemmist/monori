@@ -2,13 +2,17 @@
 
 import re
 
+import pytest
+
 from monori.ci.lib.comments import (
     GITHUB_COMMENT_BODY_LIMIT,
     bounded_comment_body,
 )
+from monori.ci.quality_graph.job_results import JobControl
 from monori.ci.quality_graph.reporting import (
     CHECK_REPORTS,
     SURFACE_REPORTS,
+    AdminCommands,
     ReportFinding,
     ReportMetric,
     ReportModel,
@@ -70,6 +74,53 @@ def test_file_control_reverses_only_findings_from_its_file() -> None:
         ("/qg ignore-file a.py", "/qg remove-ignore suppression-a,suppression-b"),
         ("/qg ignore-file b.py", "/qg remove-ignore suppression-c"),
     ]
+
+
+def test_admin_commands_preserve_all_ids_notes_and_reverse_operations() -> None:
+    """Build deterministic controls without dropping command state."""
+    commands = admin_commands(
+        "suppression",
+        ["suppression-b", "suppression-a"],
+        ["suppression-d", "suppression-c"],
+        notes=["Repository administrators only."],
+    )
+
+    assert commands == AdminCommands(
+        (
+            JobControl(
+                "/qg ignore suppression-a,suppression-b",
+                "/qg remove-ignore suppression-a,suppression-b",
+            ),
+            JobControl(
+                "/qg ignore suppression",
+                "/qg remove-ignore suppression-a,suppression-b",
+            ),
+            JobControl(
+                "/qg ignore suppression-c,suppression-d",
+                "/qg remove-ignore suppression-c,suppression-d",
+                checked=True,
+            ),
+        ),
+        ("Repository administrators only.",),
+    )
+
+
+def test_renderer_normalizes_blank_lines_and_ends_with_one_newline() -> None:
+    """Keep rendered report Markdown stable for comments and summaries."""
+    body = render_report(
+        ReportModel("bundle-size", ReportStatus.PASSED, content="first\n\n\nsecond")
+    )
+
+    assert "first\n\nsecond" in body
+    assert "\n\n\n" not in body
+    assert body.endswith("\n")
+    assert not body.endswith("\n\n")
+
+
+def test_unknown_report_marker_has_an_actionable_error() -> None:
+    """Identify an unregistered report marker in renderer failures."""
+    with pytest.raises(ValueError, match="Unknown Quality Graph report marker: missing"):
+        render_report(ReportModel("missing", ReportStatus.FAILED))
 
 
 def test_comment_body_is_bounded_with_an_exact_omission_notice() -> None:

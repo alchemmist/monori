@@ -4,14 +4,12 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from monori.ci.quality_graph.dashboard import (
-    EMPTY_CONTROLS_MESSAGE,
     DashboardControlGroup,
     DashboardJob,
     DashboardModel,
     dashboard_metric,
     dashboard_status,
     load_results,
-    refresh_dashboard_body,
     refresh_running_jobs,
     render_dashboard,
 )
@@ -22,6 +20,7 @@ from monori.ci.quality_graph.job_results import (
     JobStatus,
     write_job_result,
 )
+from monori.ci.quality_graph.registry import workflow_jobs
 
 if TYPE_CHECKING:
     from monori.common import JsonValue
@@ -58,6 +57,25 @@ def test_dashboard_renders_status_links_metrics_and_controls() -> None:
     assert f"<!-- {control.marker} -->" in body
     assert "<details><summary>For administrators</summary>" in body
     assert "### Frontend bundle size" in body
+
+
+def test_dashboard_renderer_normalizes_blank_lines_and_final_newline() -> None:
+    """Produce stable Markdown when dashboard messages contain extra spacing."""
+    body = render_dashboard(
+        DashboardModel(
+            JobStatus.PASSED,
+            "first\n\n\nsecond",
+            12,
+            1,
+            "head-sha",
+            (),
+        )
+    )
+
+    assert "first\n\nsecond" in body
+    assert "\n\n\n" not in body
+    assert body.endswith("\n")
+    assert not body.endswith("\n\n")
 
 
 def test_dashboard_status_prefers_pending_then_failure() -> None:
@@ -101,51 +119,8 @@ def test_result_loader_merges_downloaded_artifact_directories(tmp_path: Path) ->
     assert set(results) == {"lint", "type"}
 
 
-def test_live_refresh_updates_completed_and_api_reported_rows() -> None:
-    """Reflect job completion before the final dashboard aggregation runs."""
-    body = render_dashboard(
-        DashboardModel(
-            JobStatus.IN_PROGRESS,
-            "The current Quality Graph run is in progress.",
-            12,
-            1,
-            "head-sha",
-            (
-                DashboardJob(
-                    "workflow-graph",
-                    "Workflow graph validation",
-                    JobStatus.IN_PROGRESS,
-                    "summary",
-                    "logs",
-                ),
-                DashboardJob("fmt-check", "Format check", JobStatus.IN_PROGRESS, "summary", "logs"),
-            ),
-        )
-    )
-    api_jobs: dict[str, dict[str, JsonValue]] = {
-        "Workflow graph validation": {"status": "completed", "conclusion": "success"},
-        "Format check": {"status": "in_progress", "conclusion": None},
-    }
-
-    refreshed = refresh_dashboard_body(
-        body,
-        JobResult(
-            "fmt-check",
-            "Format check",
-            JobStatus.PASSED,
-            metrics=(JobMetric("Result", r"literal \1"),),
-        ),
-        api_jobs,
-    )
-
-    assert "| Workflow graph validation | ✅ passed |" in refreshed
-    assert "| Format check | ✅ passed |" in refreshed
-    assert r"Result: literal \1" in refreshed
-    assert "## 🚀 Quality Graph" in refreshed
-
-
 def test_running_refresh_marks_current_job_and_observed_parallel_jobs() -> None:
-    """Publish current Actions states whenever a shared job action starts."""
+    """Publish all current Actions states from the single live writer."""
     body = render_dashboard(
         DashboardModel(
             JobStatus.IN_PROGRESS,
@@ -176,19 +151,25 @@ def test_running_refresh_marks_current_job_and_observed_parallel_jobs() -> None:
             "status": "completed",
             "conclusion": "success",
             "html_url": "https://example.test/jobs/fmt",
-        }
+        },
+        "Slow tests": {
+            "status": "in_progress",
+            "conclusion": None,
+            "html_url": "https://example.test/jobs/slow",
+        },
     }
 
-    refreshed = refresh_running_jobs(body, api_jobs, "test-slow", "https://example.test/run")
+    refreshed = refresh_running_jobs(body, api_jobs, "https://example.test/run")
 
     assert "| Format check | ✅ passed |" in refreshed
     assert "[Logs](https://example.test/jobs/fmt)" in refreshed
     assert "| Slow tests | 🚀 in progress |" in refreshed
+    assert "[Logs](https://example.test/jobs/slow)" in refreshed
     assert "## 🚀 Quality Graph" in refreshed
 
 
-def test_live_refresh_adds_and_removes_job_admin_controls() -> None:
-    """Keep failed-job checkboxes grouped under the administrator disclosure."""
+def test_running_refresh_publishes_a_terminal_dashboard_status() -> None:
+    """Replace the pending heading after every registered job has passed."""
     body = render_dashboard(
         DashboardModel(
             JobStatus.IN_PROGRESS,
@@ -196,43 +177,28 @@ def test_live_refresh_adds_and_removes_job_admin_controls() -> None:
             12,
             1,
             "head-sha",
-            (
+            tuple(
                 DashboardJob(
-                    "suppressions",
-                    "Lint suppression gate",
-                    JobStatus.IN_PROGRESS,
+                    definition.job_id,
+                    definition.title,
+                    JobStatus.WAITING,
                     "summary",
-                    "logs",
-                ),
+                    "run",
+                )
+                for definition in workflow_jobs().values()
             ),
         )
     )
-    control = JobControl(
-        "/qg ignore suppression-abc123",
-        "/qg remove-ignore suppression-abc123",
-    )
+    api_jobs: dict[str, dict[str, JsonValue]] = {
+        definition.title: {
+            "status": "completed",
+            "conclusion": "success",
+            "html_url": f"https://example.test/jobs/{definition.job_id}",
+        }
+        for definition in workflow_jobs().values()
+    }
 
-    failed = refresh_dashboard_body(
-        body,
-        JobResult(
-            "suppressions",
-            "Lint suppression gate",
-            JobStatus.FAILED,
-            controls=(control,),
-        ),
-        {},
-    )
+    refreshed = refresh_running_jobs(body, api_jobs, "https://example.test/run")
 
-    assert "<details><summary>For administrators</summary>" in failed
-    assert "### Lint suppression gate" in failed
-    assert "- [ ] `/qg ignore suppression-abc123`" in failed
-    assert EMPTY_CONTROLS_MESSAGE not in failed
-
-    passed = refresh_dashboard_body(
-        failed,
-        JobResult("suppressions", "Lint suppression gate", JobStatus.PASSED),
-        {},
-    )
-
-    assert "### Lint suppression gate" not in passed
-    assert EMPTY_CONTROLS_MESSAGE in passed
+    assert "## ✅ Quality Graph" in refreshed
+    assert "## 🚀 Quality Graph" not in refreshed

@@ -12,7 +12,7 @@ HEAD_SHA=${HEAD_SHA:-$(git rev-parse HEAD)}
 HARNESS="$PWD/tools/frontend-perf"
 CONFIG="$HARNESS/config.json"
 LHCI_BIN="$HARNESS/node_modules/.bin/lhci"
-PYTHON=${PYTHON:-python3}
+PYTHON=${PYTHON:-"$PWD/.venv/bin/python"}
 
 case "$PERF_OUTPUT_DIR" in
 "" | "/" | "$PWD")

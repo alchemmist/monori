@@ -63,6 +63,7 @@ class TestPullRequestWorkflowGraph:
             "object-annotations",
             "suppressions",
             "admin-command",
+            "quality-dashboard-live",
             "quality-report",
         ):
             pattern = re.compile(rf"^    {re.escape(job)}:\s*$", re.MULTILINE)
@@ -212,28 +213,20 @@ class TestPullRequestWorkflowGraph:
         assert '"ci/tests/test_frontend_performance.py"' in scope_source
 
     def test_reporting_actions_publish_portable_results(self) -> None:
-        check_ids = {
-            "bundle-size-gate": "bundle-size",
-            "frontend-performance-gate": "frontend-performance",
-            "frontend-performance-scope": "frontend-performance",
-            "mutation-diff-gate": "mutation",
-            "object-annotation-gate": "object-annotations",
-            "suppression-gate": "suppressions",
-        }
-        for action, check_id in check_ids.items():
+        actions = (
+            "bundle-size-gate",
+            "frontend-performance-gate",
+            "frontend-performance-scope",
+            "mutation-diff-gate",
+            "object-annotation-gate",
+            "suppression-gate",
+        )
+        for action in actions:
             source = (REPOSITORY_ROOT / f".github/actions/{action}/action.yml").read_text()
             assert "quality-result-" in source, action
             assert "actions/upload-artifact@v7" in source, action
-            assert "uses: ./.github/actions/update-quality-dashboard" in source, action
-            assert f"check-id: {check_id}" in source, action
-            assert source.index(f"check-id: {check_id}") < source.index("quality-result-"), action
 
         quality_job = (REPOSITORY_ROOT / ".github/actions/quality-job/action.yml").read_text()
-        assert "uses: ./.github/actions/update-quality-dashboard" in quality_job
-        assert "check-id: ${{ inputs.check-id }}" in quality_job
-        assert quality_job.index("check-id: ${{ inputs.check-id }}") < quality_job.index(
-            "Run ${{ inputs.title }}"
-        )
         assert "git diff --unified=0" in quality_job
         assert '--diff "$RUNNER_TEMP/quality-results/$CHECK_ID.diff"' in quality_job
         fmt = self.workflow["jobs"]["fmt-check"]
@@ -267,13 +260,27 @@ class TestPullRequestWorkflowGraph:
         )
         assert block is not None
         body = block.group("body")
-        assert self.workflow["jobs"]["quality-report"]["needs"] == "audit"
+        assert set(self.workflow["jobs"]["quality-report"]["needs"]) == {
+            "audit",
+            "quality-dashboard-live",
+        }
         assert "if: always()" in body
         assert "actions/download-artifact@v8" in body
         assert "continue-on-error: true" not in body
         assert "id: quality-results" in body
         assert "if: steps.quality-results.outcome == 'success'" in body
         assert "monori.ci.quality_graph.dashboard finish" in body
+
+    def test_live_dashboard_has_one_serial_writer(self) -> None:
+        """Keep parallel check jobs from replacing the shared comment body."""
+        block = re.search(
+            r"^    quality-dashboard-live:\n(?P<body>.*?)(?=^    \S|\Z)",
+            self.source,
+            re.MULTILINE | re.DOTALL,
+        )
+        assert block is not None
+        assert "monori.ci.quality_graph.dashboard watch" in block.group("body")
+        assert "update-quality-dashboard" not in self.source
 
     def test_mutation_result_requires_every_gate_step_to_succeed(self) -> None:
         """Treat skipped and cancelled mutation steps as failed results."""

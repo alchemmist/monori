@@ -54,6 +54,38 @@ jobs:
                   title: Workflow graph validation
                   make-target: t-workflow
 
+    quality-dashboard-live:
+        name: Quality Graph live dashboard
+        needs: workflow-graph
+        if: always() && github.event_name == 'pull_request'
+        permissions:
+            actions: read
+            contents: read
+            issues: write
+            pull-requests: read
+        runs-on: ubuntu-latest
+        timeout-minutes: 50
+        steps:
+            - uses: actions/checkout@v7
+              with:
+                  persist-credentials: false
+            - uses: ./.github/actions/setup-project
+              with:
+                  python-profile: ci
+            - name: Synchronize live Quality Graph status
+              env:
+                  GITHUB_TOKEN: ${{ github.token }}
+                  PR_NUMBER: ${{ github.event.pull_request.number }}
+                  HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+                  RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+              run: >-
+                  uv run --locked python -m monori.ci.quality_graph.dashboard watch
+                  --pr-number "$PR_NUMBER"
+                  --run-id "${{ github.run_id }}"
+                  --run-attempt "${{ github.run_attempt }}"
+                  --head-sha "$HEAD_SHA"
+                  --run-url "$RUN_URL"
+
     fmt-check:
         name: Format check
         needs: workflow-graph
@@ -299,7 +331,7 @@ jobs:
 
     quality-report:
         name: Quality Graph dashboard
-        needs: audit
+        needs: [audit, quality-dashboard-live]
         if: always() && github.event_name == 'pull_request'
         permissions:
             actions: read

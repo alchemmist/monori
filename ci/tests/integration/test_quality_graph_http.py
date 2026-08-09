@@ -320,28 +320,9 @@ def test_dashboard_replaces_legacy_comments_and_collects_job_results(tmp_path: P
     assert "monori-report: suppression" not in body
 
 
-def test_dashboard_updates_each_completed_job_before_final_aggregation() -> None:
-    """Publish live row changes while later workflow jobs remain in progress."""
-    reset_fake_github(
-        {
-            "workflow_jobs": {
-                "99": [
-                    {
-                        "name": "Workflow graph validation",
-                        "status": "completed",
-                        "conclusion": "success",
-                        "html_url": "https://example.test/jobs/workflow-graph",
-                    },
-                    {
-                        "name": "Lint suppression gate",
-                        "status": "in_progress",
-                        "conclusion": None,
-                        "html_url": "https://example.test/jobs/suppressions",
-                    },
-                ]
-            }
-        }
-    )
+def test_dashboard_single_writer_preserves_concurrent_job_completions() -> None:
+    """Publish one API snapshot containing two concurrently completed jobs."""
+    reset_fake_github()
     lifecycle = DashboardLifecycle(
         GitHub(),
         PULL_REQUEST_NUMBER,
@@ -352,29 +333,27 @@ def test_dashboard_updates_each_completed_job_before_final_aggregation() -> None
     )
     lifecycle.start()
 
-    lifecycle.update(
-        JobResult(
-            "suppressions",
-            "Lint suppression gate",
-            JobStatus.FAILED,
-            controls=(
-                JobControl(
-                    "/qg ignore suppression-abc123",
-                    "/qg remove-ignore suppression-abc123",
-                ),
-            ),
-        )
-    )
+    jobs: list[JsonValue] = [
+        {
+            "name": definition.title,
+            "status": "completed",
+            "conclusion": "failure" if definition.job_id == "suppressions" else "success",
+            "html_url": f"https://example.test/jobs/{definition.job_id}",
+        }
+        for definition in workflow_jobs().values()
+    ]
+    state = fake_state()
+    state["workflow_jobs"] = {"99": jobs}
+    reset_fake_github(state)
+
+    lifecycle.watch(0, 1)
 
     body = string_value(state_objects(fake_state(), "comments")[0].get("body"), "dashboard")
     assert "| Workflow graph validation | ✅ passed |" in body
-    assert "| Format check | ⏳ wait |" in body
+    assert "| Format check | ✅ passed |" in body
     assert "[Logs](https://example.test/jobs/workflow-graph)" in body
     assert "[Logs](https://example.test/jobs/suppressions)" in body
     assert "| Lint suppression gate | ❌ failed |" in body
-    assert "<details><summary>For administrators</summary>" in body
-    assert "### Lint suppression gate" in body
-    assert "- [ ] `/qg ignore suppression-abc123`" in body
 
 
 def test_stale_dashboard_run_cannot_overwrite_the_current_comment(tmp_path: Path) -> None:

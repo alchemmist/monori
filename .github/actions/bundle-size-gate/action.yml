@@ -8,9 +8,6 @@ runs:
           with:
               install-web: true
               python-profile: ci
-        - uses: ./.github/actions/update-quality-dashboard
-          with:
-              check-id: bundle-size
         - name: Test bundle tools
           shell: bash
           run: uv run --locked pytest -q ci/tests/test_bundle_measurement.py
@@ -74,10 +71,6 @@ runs:
               path: ${{ runner.temp }}/quality-results/bundle-size.json
               if-no-files-found: error
               retention-days: 7
-        - uses: ./.github/actions/update-quality-dashboard
-          if: always()
-          with:
-              result: ${{ runner.temp }}/quality-results/bundle-size.json
         - name: Enforce bundle-size verdict
           if: always()
           shell: bash

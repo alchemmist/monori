@@ -11,9 +11,6 @@ runs:
           uses: ./.github/actions/setup-project
           with:
               python-profile: ci
-        - uses: ./.github/actions/update-quality-dashboard
-          with:
-              check-id: frontend-performance
         - name: Detect performance-relevant changes
           id: scope
           uses: actions/github-script@v8
@@ -79,7 +76,3 @@ runs:
               path: ${{ runner.temp }}/quality-results/frontend-performance.json
               if-no-files-found: error
               retention-days: 7
-        - uses: ./.github/actions/update-quality-dashboard
-          if: always() && steps.scope.outputs.relevant != 'true'
-          with:
-              result: ${{ runner.temp }}/quality-results/frontend-performance.json

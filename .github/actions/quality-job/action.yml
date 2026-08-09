@@ -17,9 +17,6 @@ inputs:
 runs:
     using: composite
     steps:
-        - uses: ./.github/actions/update-quality-dashboard
-          with:
-              check-id: ${{ inputs.check-id }}
         - name: Run ${{ inputs.title }}
           id: command
           shell: bash
@@ -63,10 +60,6 @@ runs:
               path: ${{ runner.temp }}/quality-results/${{ inputs.check-id }}.json
               if-no-files-found: error
               retention-days: 7
-        - uses: ./.github/actions/update-quality-dashboard
-          if: always()
-          with:
-              result: ${{ runner.temp }}/quality-results/${{ inputs.check-id }}.json
         - name: Enforce ${{ inputs.title }} verdict
           if: always()
           shell: bash
