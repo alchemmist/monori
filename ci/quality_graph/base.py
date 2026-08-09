@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 import sys
 import urllib.parse
 from abc import ABC, abstractmethod
@@ -35,7 +34,7 @@ from monori.ci.quality_graph.job_results import (
 )
 from monori.ci.quality_graph.models import CheckContext, CheckResult, FindingProtocol
 from monori.ci.quality_graph.reporting import CHECK_REPORTS
-from monori.common import JsonValue, object_value, optional_string, string_value
+from monori.common import JsonValue, object_value, optional_string
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -80,8 +79,6 @@ class PendingApprovalRequest:
 
     github: GitHubAPI
     number: int
-    report_id: int
-    report_body: str
     pull_body: str
     command: QualityGraphCommand
     pending_marker: str
@@ -145,44 +142,40 @@ class ApprovalLifecycle:
         return f"<!-- monori-qg-authorized: {self.gate} {encoded_command} -->"
 
     def arm_pending(self, request: PendingApprovalRequest) -> None:
-        """Authorize a command in its report and queue it in the pull-request body."""
+        """Create isolated authorization state and queue a pull-request command."""
         if self.pending_pattern is None:
             message = f"{self.gate} does not support pending commands"
             raise RuntimeError(message)
         encoded = encode_command(request.command)
         authorization = self.authorization_marker(encoded)
-        authorization_pattern = re.compile(
-            rf"\n?<!-- monori-qg-authorized: {re.escape(self.gate)} [A-Za-z0-9_-]+ -->"
+        raw_authorization = request.github.request(
+            "POST", f"/issues/{request.number}/comments", {"body": authorization}
         )
-        cleaned_report = authorization_pattern.sub("", request.report_body)
-        request.github.request(
-            "PATCH",
-            f"/issues/comments/{request.report_id}",
-            {"body": f"{cleaned_report.rstrip()}\n{authorization}\n"},
-        )
-        marker = f"<!-- {request.pending_marker}: {request.report_id} {encoded} -->"
+        authorization_comment = object_value(raw_authorization, "authorization comment")
+        authorization_id = authorization_comment.get("id")
+        if not isinstance(authorization_id, int):
+            message = f"Authorization comment for {self.gate} has no numeric id"
+            raise TypeError(message)
+        marker = f"<!-- {request.pending_marker}: {authorization_id} {encoded} -->"
         updated_pull = self.pending_pattern.sub(marker, request.pull_body)
         if marker not in updated_pull:
             updated_pull = f"{updated_pull.rstrip()}\n\n{marker}".strip()
-        if updated_pull != request.pull_body:
-            request.github.request("PATCH", f"/pulls/{request.number}", {"body": updated_pull})
+        try:
+            if updated_pull != request.pull_body:
+                request.github.request("PATCH", f"/pulls/{request.number}", {"body": updated_pull})
+        except RuntimeError:
+            request.github.request("DELETE", f"/issues/comments/{authorization_id}")
+            raise
 
     def consume_pending(self, github: GitHubAPI, body: str) -> None:
-        """Remove a consumed command authorization from its bot-owned comment."""
+        """Delete the isolated authorization after consuming its command."""
         if self.pending_pattern is None or (match := self.pending_pattern.search(body)) is None:
             return
         encoded = match.group(2)
         if encoded is None:
             return
         comment_id = int(match.group(1))
-        comment = object_value(
-            github.request("GET", f"/issues/comments/{comment_id}"), "command comment"
-        )
-        comment_body = optional_string(comment.get("body")) or ""
-        marker = self.authorization_marker(encoded)
-        updated = comment_body.replace(f"\n{marker}", "").replace(marker, "")
-        if updated != comment_body:
-            github.request("PATCH", f"/issues/comments/{comment_id}", {"body": updated})
+        github.request("DELETE", f"/issues/comments/{comment_id}")
 
     def without_pending(self, body: str) -> str:
         """Remove this gate's pending command marker from a PR body."""
@@ -346,19 +339,12 @@ class QualityCheckDefinition(ABC):
         if report is None:
             message = "Cannot authorize command without a Quality Graph dashboard"
             raise RuntimeError(message)
-        report_id = report.get("id")
-        if not isinstance(report_id, int):
-            message = f"Managed {cls.gate} report has no numeric comment id"
-            raise TypeError(message)
-        report_body = string_value(report.get("body"), "report comment body")
         pull = object_value(github.request("GET", f"/pulls/{number}"), "pull request")
         pull_body = optional_string(pull.get("body")) or ""
         cls.approval_lifecycle.arm_pending(
             PendingApprovalRequest(
                 github,
                 number,
-                report_id,
-                report_body,
                 pull_body,
                 command,
                 cls.pending_marker,

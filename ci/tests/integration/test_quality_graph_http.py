@@ -563,13 +563,24 @@ def test_pending_admin_command_is_reacted_to_consumed_and_rerun() -> None:
     comments = state_objects(armed, "comments")
     report = next(comment for comment in comments if comment.get("id") == BUNDLE_REPORT_COMMENT_ID)
     command = next(comment for comment in comments if comment.get("id") == COMMAND_COMMENT_ID)
+    authorization = next(
+        comment
+        for comment in comments
+        if "monori-qg-authorized: bundle" in string_value(comment.get("body"), "comment body")
+    )
     pull_body = string_value(pull.get("body"), "pull request body")
     report_body = string_value(report.get("body"), "report body")
     reactions = state_objects(command, "reactions")
     assert "monori-bundle-size-pending" in pull_body
-    assert "monori-qg-authorized: bundle" in report_body
+    assert "monori-qg-authorized" not in report_body
     assert [reaction.get("content") for reaction in reactions] == ["hooray"]
     assert armed["rerun_requests"] == [99]
+
+    GitHub().request(
+        "PATCH",
+        f"/issues/comments/{BUNDLE_REPORT_COMMENT_ID}",
+        {"body": "<!-- monori-report: quality-graph -->\n\nWatcher refresh\n"},
+    )
 
     sync = BundleSizeCheck().sync_pending_approvals(
         GitHub(),
@@ -579,17 +590,14 @@ def test_pending_admin_command_is_reacted_to_consumed_and_rerun() -> None:
     )
     consumed = fake_state()
     consumed_pull = state_objects(consumed, "pulls")[0]
-    consumed_report = next(
-        comment
-        for comment in state_objects(consumed, "comments")
-        if comment.get("id") == BUNDLE_REPORT_COMMENT_ID
-    )
     consumed_pull_body = string_value(consumed_pull.get("body"), "pull request body")
-    consumed_report_body = string_value(consumed_report.get("body"), "report body")
     assert sync.approved == {"bundle-initial-load"}
     assert "monori-bundle-size-pending" not in consumed_pull_body
     assert "monori-bundle-size-approvals: bundle-initial-load" in consumed_pull_body
-    assert "monori-qg-authorized" not in consumed_report_body
+    assert all(
+        comment.get("id") != authorization.get("id")
+        for comment in state_objects(consumed, "comments")
+    )
 
 
 def test_checkbox_applies_and_reverses_bundle_approval(tmp_path: Path) -> None:
