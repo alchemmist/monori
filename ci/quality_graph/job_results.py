@@ -181,17 +181,15 @@ def read_job_result(path: Path) -> JobResult:
 
 def append_job_summary(path: Path, result: JobResult) -> None:
     """Append one complete job report to its GitHub summary file."""
-    content = [
-        f'<a id="quality-graph-{result.check_id}"></a>',
-        "",
-        f"## {result.status.emoji} Quality Graph · {result.check_id}",
-        "",
-        f"**{result.title}** — {result.status.value}",
-    ]
-    if result.metrics:
-        content.extend(("", "| Metric | Value |", "| --- | ---: |"))
-        content.extend(f"| {metric.label} | {metric.value} |" for metric in result.metrics)
-    if result.summary:
-        content.extend(("", result.summary.rstrip()))
+    content = [f'<a id="quality-graph-{result.check_id}"></a>', ""]
+    if result.summary.lstrip().startswith("## "):
+        content.append(result.summary.strip())
+    else:
+        content.append(f"## {result.status.emoji} {result.title}")
+        if result.metrics:
+            content.extend(("", "| Metric | Value |", "| --- | ---: |"))
+            content.extend(f"| {metric.label} | {metric.value} |" for metric in result.metrics)
+        if result.summary:
+            content.extend(("", result.summary.rstrip()))
     with path.open("a") as summary_file:
         summary_file.write("\n".join(content) + "\n")

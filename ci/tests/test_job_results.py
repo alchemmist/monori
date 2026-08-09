@@ -21,6 +21,7 @@ from monori.ci.quality_graph.job_report import build_result
 from monori.ci.quality_graph.job_report import main as job_report_main
 from monori.ci.quality_graph.job_results import (
     JobControl,
+    JobMetric,
     JobResult,
     JobStatus,
     append_job_summary,
@@ -193,9 +194,25 @@ def test_job_summary_has_a_stable_heading(tmp_path: Path) -> None:
 
     append_job_summary(path, JobResult("coverage", "Coverage", JobStatus.PASSED))
 
-    assert path.read_text().startswith(
-        '<a id="quality-graph-coverage"></a>\n\n## ✅ Quality Graph · coverage\n'
+    assert path.read_text().startswith('<a id="quality-graph-coverage"></a>\n\n## ✅ Coverage\n')
+
+
+def test_complete_report_is_not_wrapped_in_a_duplicate_summary(tmp_path: Path) -> None:
+    """Preserve a check-rendered heading and metrics without generic duplication."""
+    result = JobResult(
+        "suppressions",
+        "Lint suppression gate",
+        JobStatus.PASSED,
+        "## ✅ Lint suppression gate\n\n| Metric | Value |\n| --- | ---: |\n| Status | PASS |\n",
+        (JobMetric("Findings", "0"),),
     )
+    path = tmp_path / "summary.md"
+    append_job_summary(path, result)
+    body = path.read_text()
+
+    assert body.count("## ✅ Lint suppression gate") == 1
+    assert "Quality Graph ·" not in body
+    assert body.count("| Metric | Value |") == 1
 
 
 def test_result_cli_writes_summary_metrics_and_artifact(tmp_path: Path) -> None:
