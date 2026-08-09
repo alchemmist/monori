@@ -56,7 +56,7 @@ for (const route of config.lighthouseRoutes) {
             value: median(values),
             target: null,
             unit,
-            passed: true,
+            passed: null,
         });
     }
 }
@@ -72,11 +72,14 @@ for (const scenario of config.navigationScenarios) {
         value: measured,
         target: null,
         unit: "ms",
-        passed: true,
+        passed: null,
     });
 }
 
-const report = { passed: rows.every((row) => row.passed), rows };
+const report = {
+    passed: rows.filter((row) => row.target !== null).every((row) => row.passed),
+    rows,
+};
 await fs.mkdir(outputDir, { recursive: true });
 await fs.writeFile(path.join(outputDir, "frontend.json"), `${JSON.stringify(report, null, 2)}\n`);
 const markdown = [

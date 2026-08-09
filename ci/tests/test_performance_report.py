@@ -1,6 +1,7 @@
 import json
 import pathlib
 
+import pytest
 from performance import report
 
 
@@ -25,10 +26,52 @@ def test_report_renders_percentiles_and_verdict(tmp_path: pathlib.Path) -> None:
     }
     source = tmp_path / "DELETE-read-10.json"
     source.write_text(json.dumps(payload))
+    resources = tmp_path / "DELETE-read-10-resources.jsonl"
+    resources.write_text(
+        "\n".join(
+            json.dumps(sample)
+            for sample in (
+                {
+                    "sampled_at": 1,
+                    "containers": [
+                        {
+                            "Name": "monori-load-delete-back-1",
+                            "cpu_time": "1s",
+                            "MemUsage": "80MiB / 2GiB",
+                        },
+                        {
+                            "Name": "monori-load-delete-front-1",
+                            "cpu_time": "0.5s",
+                            "MemUsage": "40MiB / 2GiB",
+                        },
+                    ],
+                },
+                {
+                    "sampled_at": 2,
+                    "containers": [
+                        {
+                            "Name": "monori-load-delete-back-1",
+                            "cpu_time": "3.5s",
+                            "MemUsage": "100MiB / 2GiB",
+                        },
+                        {
+                            "Name": "monori-load-delete-front-1",
+                            "cpu_time": "1.5s",
+                            "MemUsage": "50MiB / 2GiB",
+                        },
+                    ],
+                },
+            )
+        )
+    )
     result = report.load(source)
     assert result is not None
     assert result.p95 == 31
     assert result.passed
+    assert result.cpu_seconds == pytest.approx(3.5)
+    assert result.peak_memory_mb == pytest.approx(157.2864)
+    assert "back 2.5s/104.9MB" in result.service_resources
+    assert "front 1.0s/52.4MB" in result.service_resources
     assert "| DELETE | read | 10 |" in report.render([result])
 
 

@@ -32,28 +32,29 @@ export function setup() {
     return seed(workload);
 }
 
-function measured(requestCount, run) {
+function measured(run) {
     const started = Date.now();
-    const ok = run();
+    const result = run();
     operationDuration.add(Date.now() - started);
-    errorRate.add(!ok);
-    workloadRequests.add(requestCount);
+    errorRate.add(!result.ok);
+    workloadRequests.add(result.requests);
 }
 
 function auth(data) {
-    measured(1, () => Boolean(login(data.email)));
+    measured(() => ({ ok: Boolean(login(data.email)), requests: 1 }));
 }
 
 function read(data) {
-    measured(2, () => {
+    measured(() => {
         const snapshot = request("GET", "/api/snapshot?light=1&limit=500", undefined, data.token, { operation: "snapshot" });
         const transactions = request("GET", `/api/transactions?limit=100&offset=${(__ITER % 5) * 100}`, undefined, data.token, { operation: "transactions-list" });
-        return check(snapshot, { "snapshot read is 200": (response) => response.status === 200 }) && check(transactions, { "transaction page is 200": (response) => response.status === 200 });
+        const ok = check(snapshot, { "snapshot read is 200": (response) => response.status === 200 }) && check(transactions, { "transaction page is 200": (response) => response.status === 200 });
+        return { ok, requests: 2 };
     });
 }
 
 function write(data) {
-    measured(3, () => {
+    measured(() => {
         const month = (__ITER % 12) + 1;
         const budget = request(
             "PUT",
@@ -74,7 +75,7 @@ function write(data) {
             data.token,
             { operation: "transaction-create" },
         );
-        if (created.status !== 200) return false;
+        if (created.status !== 200) return { ok: false, requests: 2 };
         const transactionId = created.json().id;
         const edited = request(
             "PATCH",
@@ -83,12 +84,12 @@ function write(data) {
             data.token,
             { operation: "transaction-categorize" },
         );
-        return budget.status === 200 && edited.status === 200;
+        return { ok: budget.status === 200 && edited.status === 200, requests: 3 };
     });
 }
 
 function importStatement(data) {
-    measured(2, () => {
+    measured(() => {
         const preview = request(
             "POST",
             "/api/import/preview",
@@ -96,7 +97,7 @@ function importStatement(data) {
             data.token,
             { operation: "import-preview" },
         );
-        if (preview.status !== 200) return false;
+        if (preview.status !== 200) return { ok: false, requests: 1 };
         const rows = preview.json().rows.map((row) => ({ ...row, accountId: data.accountId }));
         const commit = request(
             "POST",
@@ -105,7 +106,7 @@ function importStatement(data) {
             data.token,
             { operation: "import-commit" },
         );
-        return commit.status === 200;
+        return { ok: commit.status === 200, requests: 2 };
     });
 }
 

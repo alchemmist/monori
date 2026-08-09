@@ -66,9 +66,14 @@ wait_for_stack
 capture_resources() {
   output=$1
   while :; do
-    printf '{"sampled_at":%s,"containers":' "$(date +%s)" >>"$output"
-    stack stats --no-stream --format json back front 2>/dev/null | tr '\n' ' ' >>"$output" || printf '[]' >>"$output"
-    printf '}\n' >>"$output"
+    stats=$(stack stats --no-stream --format json back front 2>/dev/null) || stats=""
+    case "$stats" in
+    "") stats="[]" ;;
+    \[*\]) ;;
+    *) stats="[$(printf '%s\n' "$stats" | paste -sd, -)]" ;;
+    esac
+    stats=$(printf '%s' "$stats" | tr -d '\r\n')
+    printf '{"sampled_at":%s,"containers":%s}\n' "$(date +%s)" "$stats" >>"$output"
     sleep 1
   done
 }

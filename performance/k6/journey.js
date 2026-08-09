@@ -1,6 +1,6 @@
 import { sleep } from "k6";
 import { Counter, Rate, Trend } from "k6/metrics";
-import { request } from "./lib/client.js";
+import { login, request } from "./lib/client.js";
 import { seed, statement } from "./lib/seed.js";
 
 const journeyErrors = new Rate("journey_errors");
@@ -30,36 +30,46 @@ export function setup() {
 
 export default function (data) {
     const started = Date.now();
-    const snapshot = request("GET", "/api/snapshot?light=1", undefined, data.token, { operation: "journey-budget" });
+    const token = login(data.email);
+    if (!token) {
+        journeyErrors.add(true);
+        journeyDuration.add(Date.now() - started);
+        workloadRequests.add(1);
+        sleep(Number(__ENV.THINK_TIME || 0.5));
+        return;
+    }
+    const snapshot = request("GET", "/api/snapshot?light=1", undefined, token, { operation: "journey-budget" });
     const budget = request(
         "PUT",
         "/api/budgets",
         { categoryId: data.expenseCategoryId, year: 2026, month: (__ITER % 12) + 1, amount: 120000 + __ITER },
-        data.token,
+        token,
         { operation: "journey-budget-write" },
     );
     const preview = request(
         "POST",
         "/api/import/preview",
         { text: statement(__ITER, __VU, 10), accountId: data.accountId },
-        data.token,
+        token,
         { operation: "journey-import-preview" },
     );
     let commitStatus = 500;
+    let requestCount = 5;
     if (preview.status === 200) {
         const rows = preview.json().rows.map((row) => ({ ...row, accountId: data.accountId }));
         commitStatus = request(
             "POST",
             "/api/import/commit",
             { rows, accountId: data.accountId },
-            data.token,
+            token,
             { operation: "journey-import-commit" },
         ).status;
+        requestCount += 1;
     }
-    const dashboard = request("GET", "/api/snapshot?light=1", undefined, data.token, { operation: "journey-dashboard" });
+    const dashboard = request("GET", "/api/snapshot?light=1", undefined, token, { operation: "journey-dashboard" });
     const failed = [snapshot.status, budget.status, preview.status, commitStatus, dashboard.status].some((status) => status !== 200);
     journeyErrors.add(failed);
     journeyDuration.add(Date.now() - started);
-    workloadRequests.add(5);
+    workloadRequests.add(requestCount);
     sleep(Number(__ENV.THINK_TIME || 0.5));
 }

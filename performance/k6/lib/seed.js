@@ -47,26 +47,32 @@ export function seed(workload) {
         ),
         "income category",
     ).id;
-    request(
-        "POST",
-        "/api/import/commit",
-        { rows: importRows(accountId, Number(__ENV.SEED_TRANSACTIONS || 500), `seed-${workload}`), accountId },
-        token,
-        headers.tags,
+    json(
+        request(
+            "POST",
+            "/api/import/commit",
+            { rows: importRows(accountId, Number(__ENV.SEED_TRANSACTIONS || 500), `seed-${workload}`), accountId },
+            token,
+            headers.tags,
+        ),
+        "transaction seed",
     );
-    request(
-        "POST",
-        "/api/budgets/bulk",
-        {
-            cells: Array.from({ length: 12 }, (_, index) => ({
-                categoryId: expenseCategoryId,
-                year: 2026,
-                month: index + 1,
-                amount: 100000,
-            })),
-        },
-        token,
-        headers.tags,
+    json(
+        request(
+            "POST",
+            "/api/budgets/bulk",
+            {
+                cells: Array.from({ length: 12 }, (_, index) => ({
+                    categoryId: expenseCategoryId,
+                    year: 2026,
+                    month: index + 1,
+                    amount: 100000,
+                })),
+            },
+            token,
+            headers.tags,
+        ),
+        "budget seed",
     );
     return { email, token, accountId, expenseCategoryId, incomeCategoryId, baseUrl: BASE_URL };
 }

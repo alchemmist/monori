@@ -69,9 +69,9 @@ def seconds(raw: str) -> float | None:
 
 
 def service_name(name: str) -> str:
-    if "_back_" in name or name.endswith("-back"):
+    if re.search(r"(?:^|[_-])back(?:[_-]\d+)?$", name):
         return "back"
-    if "_front_" in name or name.endswith("-front"):
+    if re.search(r"(?:^|[_-])front(?:[_-]\d+)?$", name):
         return "front"
     return name
 

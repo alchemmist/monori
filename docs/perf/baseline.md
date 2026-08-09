@@ -1,6 +1,6 @@
 # Performance baseline
 
-Measured on 2026-08-07 on an Apple Silicon macOS host with Podman 6.0.2 and a Linux VM limited to approximately 2 GB RAM. Backend scenarios used k6 2.0.0, a deterministic 500-transaction seed, 30 seconds per level, and 10, 25, and 50 virtual users. Frontend values are medians of three production-build runs.
+Measured on 2026-08-07 on an Apple Silicon macOS host with Podman 6.0.2 and a Linux VM limited to approximately 2 GB RAM. The e2e rows were remeasured on 2026-08-10 after adding per-iteration authentication. Backend scenarios used k6 2.0.0, a deterministic 500-transaction seed, 30 seconds per level, and 10, 25, and 50 virtual users. Frontend values are medians of three production-build runs.
 
 These are reference-host results, not portable capacity claims. Compare future measurements on the same host class, runtime, VM limits, seed, and scenario duration.
 
@@ -20,9 +20,9 @@ These are reference-host results, not portable capacity claims. Compare future m
 | DELETE | import | 10 | 22.7 | 2545 | 4313 | 0.00% | 30.1 | 228.8 | pass |
 | DELETE | import | 25 | 21.6 | 5629 | 6924 | 2.55% | 31.3 | 265.6 | fail |
 | DELETE | import | 50 | 22.9 | 9089 | 10788 | 6.99% | 32.5 | 304.4 | fail |
-| DELETE | e2e | 10 | 45.8 | 1186 | 1551 | 0.00% | 27.6 | 166.5 | pass |
-| DELETE | e2e | 25 | 44.7 | 4999 | 6694 | 0.00% | 30.0 | 197.8 | pass |
-| DELETE | e2e | 50 | 43.5 | 10207 | 12146 | 1.97% | 33.4 | 221.5 | fail |
+| DELETE | e2e | 10 | 74.8 | 564 | 630 | 0.00% | 58.5 | 297.8 | pass |
+| DELETE | e2e | 25 | 87.3 | 2569 | 3582 | 0.00% | 77.1 | 1022.7 | pass |
+| DELETE | e2e | 50 | 1.2 | 467 | 467 | 100.00% | 136.1 | 155.9 | fail |
 | WAL | write | 10 | 80.9 | 451 | 901 | 0.00% | 20.5 | 96.2 | pass |
 | WAL | write | 25 | 106.4 | 1615 | 2404 | 0.00% | 24.9 | 105.6 | fail |
 | WAL | write | 50 | 96.3 | 3959 | 5283 | 0.00% | 24.5 | 114.4 | fail |
