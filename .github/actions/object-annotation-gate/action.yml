@@ -52,6 +52,10 @@ runs:
               path: ${{ runner.temp }}/quality-results/object-annotations.json
               if-no-files-found: error
               retention-days: 7
+        - uses: ./.github/actions/update-quality-dashboard
+          if: always()
+          with:
+              result: ${{ runner.temp }}/quality-results/object-annotations.json
         - name: Enforce object-annotation verdict
           if: always()
           shell: bash

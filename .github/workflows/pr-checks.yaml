@@ -7,7 +7,10 @@ on:
         branches: [main]
 
 permissions:
+    actions: read
     contents: read
+    issues: write
+    pull-requests: write
 
 concurrency:
     group: ci-${{ github.event_name }}-${{ github.event.pull_request.number || github.event.issue.number || github.ref }}
@@ -273,7 +276,10 @@ jobs:
             && needs.frontend-performance.result == 'success'
         runs-on: ubuntu-latest
         permissions:
+            actions: read
             contents: read
+            issues: write
+            pull-requests: write
             security-events: write
         steps:
             - uses: actions/checkout@v7
@@ -349,6 +355,7 @@ jobs:
         needs: test-slow
         if: github.event_name == 'pull_request' && needs.test-slow.result == 'success'
         permissions:
+            actions: read
             issues: write
             pull-requests: write
             contents: read
@@ -410,6 +417,7 @@ jobs:
         runs-on: ubuntu-latest
         timeout-minutes: 10
         permissions:
+            actions: read
             contents: read
             issues: write
             pull-requests: write
@@ -429,6 +437,7 @@ jobs:
         runs-on: ubuntu-latest
         timeout-minutes: 10
         permissions:
+            actions: read
             contents: read
             issues: write
             pull-requests: write

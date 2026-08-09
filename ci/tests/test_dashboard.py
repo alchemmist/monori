@@ -1,6 +1,7 @@
 """Test the compact Quality Graph dashboard model and renderer."""
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from monori.ci.quality_graph.dashboard import (
     DashboardControlGroup,
@@ -8,6 +9,7 @@ from monori.ci.quality_graph.dashboard import (
     DashboardModel,
     dashboard_status,
     load_results,
+    refresh_dashboard_body,
     render_dashboard,
 )
 from monori.ci.quality_graph.job_results import (
@@ -16,6 +18,9 @@ from monori.ci.quality_graph.job_results import (
     JobStatus,
     write_job_result,
 )
+
+if TYPE_CHECKING:
+    from monori.common import JsonValue
 
 
 def test_dashboard_renders_status_links_metrics_and_controls() -> None:
@@ -74,3 +79,40 @@ def test_result_loader_merges_downloaded_artifact_directories(tmp_path: Path) ->
     results = load_results(tmp_path)
 
     assert set(results) == {"lint", "type"}
+
+
+def test_live_refresh_updates_completed_and_api_reported_rows() -> None:
+    """Reflect job completion before the final dashboard aggregation runs."""
+    body = render_dashboard(
+        DashboardModel(
+            JobStatus.PENDING,
+            "The current Quality Graph run is in progress.",
+            12,
+            1,
+            "head-sha",
+            (
+                DashboardJob(
+                    "workflow-graph",
+                    "Workflow graph validation",
+                    JobStatus.PENDING,
+                    "summary",
+                    "logs",
+                ),
+                DashboardJob("fmt-check", "Format check", JobStatus.PENDING, "summary", "logs"),
+            ),
+        )
+    )
+    api_jobs: dict[str, dict[str, JsonValue]] = {
+        "Workflow graph validation": {"status": "completed", "conclusion": "success"},
+        "Format check": {"status": "in_progress", "conclusion": None},
+    }
+
+    refreshed = refresh_dashboard_body(
+        body,
+        JobResult("fmt-check", "Format check", JobStatus.PASSED),
+        api_jobs,
+    )
+
+    assert "| Workflow graph validation | ✅ passed |" in refreshed
+    assert "| Format check | ✅ passed |" in refreshed
+    assert "## ⏳ Quality Graph" in refreshed

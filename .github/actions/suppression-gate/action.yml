@@ -52,6 +52,10 @@ runs:
               path: ${{ runner.temp }}/quality-results/suppressions.json
               if-no-files-found: error
               retention-days: 7
+        - uses: ./.github/actions/update-quality-dashboard
+          if: always()
+          with:
+              result: ${{ runner.temp }}/quality-results/suppressions.json
         - name: Enforce lint-suppression verdict
           if: always()
           shell: bash

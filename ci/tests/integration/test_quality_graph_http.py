@@ -312,6 +312,46 @@ def test_dashboard_replaces_legacy_comments_and_collects_job_results(tmp_path: P
     assert "monori-report: suppression" not in body
 
 
+def test_dashboard_updates_each_completed_job_before_final_aggregation() -> None:
+    """Publish live row changes while later workflow jobs remain in progress."""
+    reset_fake_github(
+        {
+            "workflow_jobs": {
+                "99": [
+                    {
+                        "name": "Workflow graph validation",
+                        "status": "completed",
+                        "conclusion": "success",
+                        "html_url": "https://example.test/jobs/workflow-graph",
+                    },
+                    {
+                        "name": "Format check",
+                        "status": "in_progress",
+                        "conclusion": None,
+                        "html_url": "https://example.test/jobs/fmt-check",
+                    },
+                ]
+            }
+        }
+    )
+    lifecycle = DashboardLifecycle(
+        GitHub(),
+        PULL_REQUEST_NUMBER,
+        99,
+        1,
+        "head-sha",
+        "https://example.test/runs/99",
+    )
+    lifecycle.start()
+
+    lifecycle.update(JobResult("fmt-check", "Format check", JobStatus.PASSED))
+
+    body = string_value(state_objects(fake_state(), "comments")[0].get("body"), "dashboard")
+    assert "| Workflow graph validation | ✅ passed |" in body
+    assert "| Format check | ✅ passed |" in body
+    assert "| Lint suppression gate | ⏳ pending |" in body
+
+
 def test_stale_dashboard_run_cannot_overwrite_the_current_comment(tmp_path: Path) -> None:
     """Ignore a final renderer whose head SHA no longer belongs to the pull request."""
     reset_fake_github()

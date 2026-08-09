@@ -1,0 +1,25 @@
+name: Update Quality Graph dashboard
+description: Publish one completed job in the live pull-request dashboard
+inputs:
+    result:
+        description: Path to the completed Quality Graph job result
+        required: true
+runs:
+    using: composite
+    steps:
+        - name: Refresh live Quality Graph status
+          if: github.event_name == 'pull_request'
+          shell: bash
+          env:
+              GITHUB_TOKEN: ${{ github.token }}
+              PR_NUMBER: ${{ github.event.pull_request.number }}
+              HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+              RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          run: >-
+              uv run --locked python -m monori.ci.quality_graph.dashboard update
+              --pr-number "$PR_NUMBER"
+              --run-id "${{ github.run_id }}"
+              --run-attempt "${{ github.run_attempt }}"
+              --head-sha "$HEAD_SHA"
+              --run-url "$RUN_URL"
+              --result "${{ inputs.result }}"

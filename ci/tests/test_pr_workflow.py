@@ -203,6 +203,10 @@ class TestPullRequestWorkflowGraph:
             source = (REPOSITORY_ROOT / f".github/actions/{action}/action.yml").read_text()
             assert "quality-result-" in source, action
             assert "actions/upload-artifact@v7" in source, action
+            assert "uses: ./.github/actions/update-quality-dashboard" in source, action
+
+        quality_job = (REPOSITORY_ROOT / ".github/actions/quality-job/action.yml").read_text()
+        assert "uses: ./.github/actions/update-quality-dashboard" in quality_job
 
     def test_frontend_scope_failure_completes_the_pending_report(self) -> None:
         source = FRONTEND_PERFORMANCE_SCOPE.read_text()
