@@ -15,10 +15,10 @@ cp -R server/migrations "$workspace/monori/server/migrations"
 cp server/__init__.py server/schema.sql "$workspace/monori/server/"
 cp -R server/tests "$workspace/server/tests"
 cp -R ci/tests "$workspace/ci/tests"
-cp ci/mutmut.toml "$workspace/pyproject.toml"
+cp pyproject.toml "$workspace/pyproject.toml"
 
 if [ -d mutants ]; then
-    cp -R mutants "$workspace/mutants"
+  cp -R mutants "$workspace/mutants"
 fi
 
 set +e
@@ -27,11 +27,11 @@ status=$?
 set -e
 
 if [ -d "$workspace/mutants" ]; then
-    replacement="$repository/mutants.replacement"
-    rm -rf "$replacement"
-    mv "$workspace/mutants" "$replacement"
-    rm -rf "$repository/mutants"
-    mv "$replacement" "$repository/mutants"
+  replacement="$repository/mutants.replacement"
+  rm -rf "$replacement"
+  mv "$workspace/mutants" "$replacement"
+  rm -rf "$repository/mutants"
+  mv "$replacement" "$repository/mutants"
 fi
 
 exit "$status"
