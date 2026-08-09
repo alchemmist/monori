@@ -1,12 +1,16 @@
 """Test the compact Quality Graph dashboard model and renderer."""
 
-from pathlib import Path
+from __future__ import annotations
+
 from typing import TYPE_CHECKING
+
+import pytest
 
 from monori.ci.quality_graph.dashboard import (
     DashboardControlGroup,
     DashboardJob,
     DashboardModel,
+    api_job_status,
     dashboard_metric,
     dashboard_status,
     load_results,
@@ -23,6 +27,8 @@ from monori.ci.quality_graph.job_results import (
 from monori.ci.quality_graph.registry import workflow_jobs
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from monori.common import JsonValue
 
 
@@ -101,6 +107,41 @@ def test_dashboard_metric_escapes_markdown_table_delimiters() -> None:
     )
 
     assert dashboard_metric(result) == "Rules &#124; checked: 10 &#124; 10"
+
+
+def test_dashboard_metric_is_bounded_and_has_an_empty_placeholder() -> None:
+    """Show at most two ordered metrics and a stable placeholder otherwise."""
+    result = JobResult(
+        "coverage",
+        "Coverage",
+        JobStatus.PASSED,
+        metrics=(
+            JobMetric("Lines", "99%"),
+            JobMetric("Branches", "98%"),
+            JobMetric("Ignored", "97%"),
+        ),
+    )
+
+    assert dashboard_metric(None) == "—"
+    assert dashboard_metric(JobResult("build", "Build", JobStatus.PASSED)) == "—"
+    assert dashboard_metric(result) == "Lines: 99% · Branches: 98%"
+
+
+@pytest.mark.parametrize(
+    ("job", "expected"),
+    [
+        ({"status": "queued", "conclusion": None}, JobStatus.WAITING),
+        ({"status": "in_progress", "conclusion": None}, JobStatus.IN_PROGRESS),
+        ({"status": "completed", "conclusion": "success"}, JobStatus.PASSED),
+        ({"status": "completed", "conclusion": "skipped"}, JobStatus.SKIPPED),
+        ({"status": "completed", "conclusion": "failure"}, JobStatus.FAILED),
+    ],
+)
+def test_api_job_status_maps_every_actions_state(
+    job: dict[str, JsonValue], expected: JobStatus
+) -> None:
+    """Map queued, running, and terminal Actions states without ambiguity."""
+    assert api_job_status(job) is expected
 
 
 def test_result_loader_merges_downloaded_artifact_directories(tmp_path: Path) -> None:

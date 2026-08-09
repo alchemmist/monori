@@ -13,11 +13,24 @@ from monori.ci.lib.annotations import (
     MAX_STEP_ANNOTATIONS,
     AnnotationLevel,
     SourceAnnotation,
+    escape_data,
     grouped_annotations,
     workflow_annotation_command,
 )
-from monori.ci.lib.diagnostics import parse_diagnostics, parse_diff_annotations
-from monori.ci.quality_graph.job_report import build_result
+from monori.ci.lib.diagnostics import (
+    COLON_RE,
+    DiagnosticContext,
+    annotation_from_match,
+    normalize_source_path,
+    parse_context_line,
+    parse_diagnostics,
+    parse_diff_annotations,
+)
+from monori.ci.quality_graph.job_report import (
+    MAX_SUMMARY_LOG_CHARACTERS,
+    build_result,
+    diagnostic_summary,
+)
 from monori.ci.quality_graph.job_report import main as job_report_main
 from monori.ci.quality_graph.job_results import (
     JobControl,
@@ -77,6 +90,35 @@ def test_job_result_round_trips_through_json(tmp_path: Path) -> None:
     write_job_result(path, result)
 
     assert read_job_result(path) == result
+    assert path.read_text() == (
+        "{\n"
+        '  "annotations": [\n'
+        "    {\n"
+        '      "endColumn": null,\n'
+        '      "endLine": 2,\n'
+        '      "level": "failure",\n'
+        '      "message": "broken",\n'
+        '      "path": "example.py",\n'
+        '      "startColumn": null,\n'
+        '      "startLine": 2,\n'
+        '      "title": null\n'
+        "    }\n"
+        "  ],\n"
+        '  "checkId": "lint",\n'
+        '  "controlNotes": [],\n'
+        '  "controls": [\n'
+        "    {\n"
+        '      "checked": false,\n'
+        '      "command": "/qg ignore object-a",\n'
+        '      "reverseCommand": "/qg remove-ignore object-a"\n'
+        "    }\n"
+        "  ],\n"
+        '  "metrics": [],\n'
+        '  "status": "failed",\n'
+        '  "summary": "Complete diagnostics",\n'
+        '  "title": "Lint"\n'
+        "}\n"
+    )
 
 
 def test_grouped_annotations_merge_one_location_and_apply_limit() -> None:
@@ -165,6 +207,59 @@ ci/quality_graph/base.py
     assert annotations[3].message == "python.security.example"
 
 
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        ("/runner/project/common/json.py", "common/json.py"),
+        ("/runner/project/ci/lib/github.py", "ci/lib/github.py"),
+        ("/runner/project/server/app/main.py", "server/app/main.py"),
+        ("/runner/project/web/src/main.tsx", "web/src/main.tsx"),
+        ("./relative.py", "relative.py"),
+        ("already/relative.py", "already/relative.py"),
+    ],
+)
+def test_diagnostic_paths_are_normalized(source: str, expected: str) -> None:
+    """Normalize every supported workspace root without changing relative paths."""
+    assert normalize_source_path(source) == expected
+
+
+def test_context_parser_preserves_state_and_fallback_messages() -> None:
+    """Carry file and issue context across multiline diagnostic formats."""
+    context, annotation, handled = parse_context_line(
+        "/runner/project/server/app/main.py",
+        DiagnosticContext(message="saved issue"),
+    )
+    assert (context, annotation, handled) == (
+        DiagnosticContext("server/app/main.py", "saved issue"),
+        None,
+        True,
+    )
+    context, annotation, handled = parse_context_line(
+        "17┆ dangerous_call()",
+        DiagnosticContext("ci/example.py"),
+    )
+    assert (context, annotation, handled) == (
+        DiagnosticContext("ci/example.py"),
+        SourceAnnotation("ci/example.py", 17, 17, "Static analysis finding"),
+        True,
+    )
+    assert parse_context_line("ordinary output", context) == (context, None, False)
+
+
+def test_annotation_conversion_handles_warning_and_missing_column() -> None:
+    """Derive severity and optional columns from a supported regex match."""
+    match = COLON_RE.match("./example.py:4: warning: deprecated")
+    assert match is not None
+    assert annotation_from_match("./example.py", match, title="rule") == SourceAnnotation(
+        "example.py",
+        4,
+        4,
+        "warning: deprecated",
+        AnnotationLevel.WARNING,
+        title="rule",
+    )
+
+
 def test_formatter_diff_hunks_become_precise_source_annotations() -> None:
     """Annotate every changed range produced by an optional formatter fix target."""
     annotations = parse_diff_annotations(
@@ -190,6 +285,27 @@ diff --git a/server/app.py b/server/app.py
     ]
 
 
+def test_formatter_diff_ignores_deletions_and_requires_a_target_file() -> None:
+    """Ignore deletion-only and orphaned hunks while defaulting an omitted count."""
+    annotations = parse_diff_annotations(
+        """@@ -1 +2 @@
++++ b/example.py
+@@ -1 +7 @@
+@@ -9 +10,0 @@
+"""
+    )
+
+    assert annotations == (
+        SourceAnnotation(
+            "example.py",
+            7,
+            7,
+            "This source range is not formatted.",
+            title="Formatting",
+        ),
+    )
+
+
 def test_failed_make_result_keeps_diagnostics_in_detailed_summary() -> None:
     """Keep full command output in the job summary while exposing compact metrics."""
     result = build_result("lint", "Lint", 1, "example.py:2: failure")
@@ -199,15 +315,31 @@ def test_failed_make_result_keeps_diagnostics_in_detailed_summary() -> None:
     assert "example.py:2: failure" in result.summary
 
 
+def test_diagnostic_summary_handles_empty_backticks_and_truncation() -> None:
+    """Render safe bounded Markdown for every command-output shape."""
+    assert diagnostic_summary("\x1b[31m  \x1b[0m", 0) == "No diagnostic output was produced."
+    assert diagnostic_summary("failure with ``` inside", 2) == (
+        "Detected source diagnostics: **2**\n\n"
+        "<details><summary>Command output</summary>\n\n"
+        "````text\nfailure with ``` inside\n````\n\n</details>"
+    )
+    oversized = "x" * (MAX_SUMMARY_LOG_CHARACTERS + 3)
+    rendered = diagnostic_summary(oversized, 0)
+    assert "x" * MAX_SUMMARY_LOG_CHARACTERS in rendered
+    assert "x" * (MAX_SUMMARY_LOG_CHARACTERS + 1) not in rendered
+    assert "_Output truncated; 3 characters remain available in the job log._" in rendered
+
+
 def test_workflow_command_escapes_untrusted_annotation_data() -> None:
     """Prevent source diagnostics from breaking GitHub workflow command syntax."""
     rendered = workflow_annotation_command(
         SourceAnnotation("a,b.py", 1, 1, "line one\nline two", title="bad:title")
     )
 
-    assert "file=a%2Cb.py" in rendered
-    assert "title=bad%3Atitle" in rendered
-    assert "line one%0Aline two" in rendered
+    assert rendered == (
+        "::error file=a%2Cb.py,line=1,endLine=1,title=bad%3Atitle::line one%0Aline two"
+    )
+    assert escape_data("100%\r\nnext") == "100%25%0D%0Anext"
 
 
 def test_job_summary_has_a_stable_heading(tmp_path: Path) -> None:
@@ -216,7 +348,7 @@ def test_job_summary_has_a_stable_heading(tmp_path: Path) -> None:
 
     append_job_summary(path, JobResult("coverage", "Coverage", JobStatus.PASSED))
 
-    assert path.read_text().startswith('<a id="quality-graph-coverage"></a>\n\n## ✅ Coverage\n')
+    assert path.read_text() == ('<a id="quality-graph-coverage"></a>\n\n## ✅ Coverage\n')
 
 
 def test_complete_report_is_not_wrapped_in_a_duplicate_summary(tmp_path: Path) -> None:
@@ -264,9 +396,21 @@ def test_result_cli_writes_summary_metrics_and_artifact(tmp_path: Path) -> None:
         assert result_cli_main() == 0
 
     result = read_job_result(output)
-    assert result.status is JobStatus.FAILED
-    assert result.metrics[0].value == "80%"
-    assert "A mutant survived." in summary.read_text()
+    assert result == JobResult(
+        "mutation",
+        "Mutation testing",
+        JobStatus.FAILED,
+        "A mutant survived.",
+        (JobMetric("Score", "80%"),),
+    )
+    assert summary.read_text() == (
+        '<a id="quality-graph-mutation"></a>\n\n'
+        "## ❌ Mutation testing\n\n"
+        "| Metric | Value |\n"
+        "| --- | ---: |\n"
+        "| Score | 80% |\n\n"
+        "A mutant survived.\n"
+    )
 
 
 def test_result_cli_rejects_malformed_metric(tmp_path: Path) -> None:
@@ -290,6 +434,85 @@ def test_result_cli_rejects_malformed_metric(tmp_path: Path) -> None:
         pytest.raises(SystemExit),
     ):
         result_cli_main()
+
+
+@pytest.mark.parametrize("missing", ["--check-id", "--title", "--status", "--output"])
+def test_result_cli_requires_its_public_contract(tmp_path: Path, missing: str) -> None:
+    """Reject invocations that omit any required result field."""
+    values = [
+        "result-cli",
+        "--check-id",
+        "build",
+        "--title",
+        "Build",
+        "--status",
+        "passed",
+        "--output",
+        str(tmp_path / "result.json"),
+    ]
+    index = values.index(missing)
+    del values[index : index + 2]
+
+    with arguments(values), pytest.raises(SystemExit):
+        result_cli_main()
+
+
+def test_result_cli_rejects_an_unknown_status(tmp_path: Path) -> None:
+    """Restrict serialized statuses to the shared JobStatus domain."""
+    with (
+        arguments(
+            [
+                "result-cli",
+                "--check-id",
+                "build",
+                "--title",
+                "Build",
+                "--status",
+                "unknown",
+                "--output",
+                str(tmp_path / "result.json"),
+            ]
+        ),
+        pytest.raises(SystemExit),
+    ):
+        result_cli_main()
+
+
+def test_result_cli_reads_summary_file_and_multiple_metrics(tmp_path: Path) -> None:
+    """Prefer a summary file and preserve every ordered metric."""
+    source = tmp_path / "source.md"
+    output = tmp_path / "result.json"
+    source.write_text("Detailed report.\n")
+    with arguments(
+        [
+            "result-cli",
+            "--check-id",
+            "coverage",
+            "--title",
+            "Coverage",
+            "--status",
+            "passed",
+            "--summary",
+            str(source),
+            "--message",
+            "ignored",
+            "--metric",
+            "Lines=99%",
+            "--metric",
+            "Branches=98%",
+            "--output",
+            str(output),
+        ]
+    ):
+        assert result_cli_main() == 0
+
+    assert read_job_result(output) == JobResult(
+        "coverage",
+        "Coverage",
+        JobStatus.PASSED,
+        "Detailed report.\n",
+        (JobMetric("Lines", "99%"), JobMetric("Branches", "98%")),
+    )
 
 
 def test_job_report_cli_reads_a_real_log_and_emits_artifact(
@@ -319,5 +542,66 @@ def test_job_report_cli_reads_a_real_log_and_emits_artifact(
     ):
         assert job_report_main() == 0
 
-    assert read_job_result(output).status is JobStatus.FAILED
-    assert "::error file=example.py,line=3" in capsys.readouterr().err
+    assert read_job_result(output) == JobResult(
+        "lint",
+        "Lint",
+        JobStatus.FAILED,
+        "Detected source diagnostics: **1**\n\n"
+        "<details><summary>Command output</summary>\n\n"
+        "```text\nexample.py:3:2: invalid type\n```\n\n</details>",
+        (JobMetric("Exit code", "1"), JobMetric("Diagnostics", "1")),
+        (
+            SourceAnnotation(
+                "example.py",
+                3,
+                3,
+                "invalid type",
+                start_column=2,
+                end_column=2,
+            ),
+        ),
+    )
+    assert summary.read_text() == (
+        '<a id="quality-graph-lint"></a>\n\n'
+        "## ❌ Lint\n\n"
+        "| Metric | Value |\n"
+        "| --- | ---: |\n"
+        "| Exit code | 1 |\n"
+        "| Diagnostics | 1 |\n\n"
+        "Detected source diagnostics: **1**\n\n"
+        "<details><summary>Command output</summary>\n\n"
+        "```text\nexample.py:3:2: invalid type\n```\n\n</details>\n"
+    )
+    assert capsys.readouterr().err == (
+        "::error file=example.py,line=3,endLine=3,col=2,endColumn=2::invalid type\n"
+    )
+
+
+@pytest.mark.parametrize(
+    "missing",
+    ["--check-id", "--title", "--exit-code", "--log", "--output", "--summary"],
+)
+def test_job_report_cli_requires_its_public_contract(tmp_path: Path, missing: str) -> None:
+    """Reject invocations missing any required report input or destination."""
+    log = tmp_path / "lint.log"
+    log.write_text("clean\n")
+    values = [
+        "job-report",
+        "--check-id",
+        "lint",
+        "--title",
+        "Lint",
+        "--exit-code",
+        "0",
+        "--log",
+        str(log),
+        "--output",
+        str(tmp_path / "result.json"),
+        "--summary",
+        str(tmp_path / "summary.md"),
+    ]
+    index = values.index(missing)
+    del values[index : index + 2]
+
+    with arguments(values), pytest.raises(SystemExit):
+        job_report_main()

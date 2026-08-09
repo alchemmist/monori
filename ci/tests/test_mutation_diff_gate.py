@@ -202,6 +202,70 @@ diff --git a/server/app/example.py b/server/app/example.py
             assert "No changed functions" in content
             assert "::error file=server/a%3Ab%2Cc.py,line=2" in capsys.readouterr().err
 
+    @pytest.mark.parametrize(
+        ("stats", "skip_new_survivors", "expected"),
+        [
+            (module.MutationStats(killed=9, survived=1), False, 0),
+            (
+                module.MutationStats(killed=9, survived=1, new_survivors=1),
+                False,
+                1,
+            ),
+            (
+                module.MutationStats(killed=9, survived=1, new_survivors=1),
+                True,
+                0,
+            ),
+            (module.MutationStats(killed=7, survived=3), False, 1),
+        ],
+    )
+    def test_verdict_enforces_score_and_new_survivors_independently(
+        self,
+        tmp_path: Path,
+        stats: module.MutationStats,
+        *,
+        skip_new_survivors: bool,
+        expected: int,
+    ) -> None:
+        """Keep the score threshold and survivor regression policy independent."""
+        summary = tmp_path / "summary.md"
+        previous = os.environ.get("MUTATION_SUMMARY_PATH")
+        os.environ["MUTATION_SUMMARY_PATH"] = str(summary)
+        try:
+            result = module.report_verdict(
+                module.GateRequest(
+                    Path(),
+                    Path(),
+                    Path(),
+                    "main",
+                    80,
+                    skip_new_survivors,
+                ),
+                stats,
+            )
+        finally:
+            if previous is None:
+                os.environ.pop("MUTATION_SUMMARY_PATH", None)
+            else:
+                os.environ["MUTATION_SUMMARY_PATH"] = previous
+
+        assert result == expected
+        expected_status = "✅ PASS" if expected == 0 else "❌ FAIL"
+        score = 100 * stats.killed / stats.considered
+        assert summary.read_text() == (
+            "## Python mutation diff\n\n"
+            "| Metric | Value |\n"
+            "| --- | ---: |\n"
+            f"| Status | {expected_status} |\n"
+            f"| Killed | {stats.killed} |\n"
+            f"| Survived | {stats.survived} |\n"
+            "| No coverage | 0 |\n"
+            f"| New survivors | {stats.new_survivors} |\n"
+            f"| Considered | {stats.considered} |\n"
+            f"| Score | {score:.2f}% |\n"
+            "| Threshold | 80% |\n"
+        )
+
     def test_revision_resolution_rejects_unknown_reference(self, tmp_path: Path) -> None:
         repository = Repo.init(tmp_path)
         source = tmp_path / "example.py"

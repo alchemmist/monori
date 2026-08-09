@@ -7,6 +7,7 @@ from monori.ci.quality_graph.checks.suppressions import (
     summary_body,
 )
 from monori.ci.quality_graph.commands import parse_command
+from monori.ci.quality_graph.job_results import JobControl, controls_from_markdown
 from monori.ci.quality_graph.models import CheckContext, Verdict
 
 NOQA = "# " + "no" + "qa"
@@ -215,3 +216,38 @@ value = 2
         assert "[`example.py:1`](https://github.com/org/repo/pull/1/files#diff-" in body
         assert "<!-- monori-qg-control:" in body
         assert "<!-- monori-report:" not in body
+        assert controls_from_markdown(body) == (
+            JobControl(
+                "/qg ignore suppression-600043a9733a",
+                "/qg remove-ignore suppression-600043a9733a",
+            ),
+            JobControl(
+                "/qg ignore suppression",
+                "/qg remove-ignore suppression-600043a9733a",
+            ),
+            JobControl(
+                "/qg ignore-file example.py",
+                "/qg remove-ignore suppression-600043a9733a",
+            ),
+        )
+
+    def test_summary_renders_an_approved_finding_as_passed(self) -> None:
+        """Keep approved findings visible with their reversible control."""
+        finding = scan_file("example.py", f"value = 1  {NOQA}\n", {1})[0]
+
+        body = summary_body(
+            [finding],
+            {finding.finding_id},
+            "https://github.com/org/repo/pull/1",
+        )
+
+        assert body.startswith("## ✅ Lint suppression gate\n")
+        assert "| Status | PASS |\n| Findings | 1 |\n| Active | 0 |\n| Approved | 1 |" in body
+        assert "- ✔ [`example.py:1`]" in body
+        assert controls_from_markdown(body) == (
+            JobControl(
+                "/qg ignore suppression-600043a9733a",
+                "/qg remove-ignore suppression-600043a9733a",
+                checked=True,
+            ),
+        )
