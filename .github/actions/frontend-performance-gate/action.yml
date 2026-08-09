@@ -1,5 +1,9 @@
 name: Frontend performance gate
-description: Measure frontend performance against the pull request merge base
+description: Compare the cached pull request measurements with the target branch
+inputs:
+    current-results:
+        description: Cached raw pull request performance measurements
+        required: true
 runs:
     using: composite
     steps:
@@ -30,7 +34,7 @@ runs:
               env -u GITHUB_STEP_SUMMARY -u MUTATION_SUMMARY_PATH uv run --locked pytest -q
               ci/tests/test_frontend_measurement.py
               ci/tests/test_frontend_performance.py
-        - name: Compare PR with merge base
+        - name: Compare target branch with cached pull request
           id: performance
           shell: bash
           env:
@@ -38,6 +42,7 @@ runs:
               HEAD_SHA: ${{ github.event.pull_request.head.sha }}
               PR_NUMBER: ${{ github.event.pull_request.number }}
               PERF_OUTPUT_DIR: ${{ runner.temp }}/frontend-performance
+              PERF_PR_RESULTS_DIR: ${{ inputs.current-results }}
               GITHUB_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           run: |
               set +e
@@ -68,7 +73,7 @@ runs:
               if [ ! -f "$RUNNER_TEMP/quality-results/frontend-performance.json" ]; then
                 uv run --locked python -m monori.ci.quality_graph.result_cli \
                   --check-id frontend-performance \
-                  --title 'Frontend performance' \
+                  --title 'Frontend performance regression' \
                   --status failed \
                   --message 'Frontend performance measurement did not produce a report.' \
                   --job-summary "$GITHUB_STEP_SUMMARY" \

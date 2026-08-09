@@ -37,7 +37,7 @@ runs:
           if: always()
           uses: actions/upload-artifact@v7
           with:
-              name: frontend-performance-${{ github.run_attempt }}
+              name: frontend-performance-sla-${{ github.run_attempt }}
               path: ${{ github.workspace }}/reports/perf
               if-no-files-found: error
               retention-days: 30

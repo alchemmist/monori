@@ -26,7 +26,7 @@ make load-sqlite
 
 Docker Compose is used by default. Podman users can pass `COMPOSE="podman compose --in-pod=false"`. `LOAD_LEVELS="10 25 50 75 100"` changes the concurrency ladder and `LOAD_DURATION=1m` changes the time spent at each level. Raw k6 summaries, logs, Lighthouse reports, navigation timings, and container resource samples are written to `reports/perf`.
 
-The `Performance suite` GitHub workflow exposes the concurrency levels and duration as manual inputs and uploads every report as an artifact. It is deliberately absent from pull-request and scheduled triggers because measurements are resource-heavy and runner-dependent.
+The `Performance suite` GitHub workflow exposes the concurrency levels and duration as manual inputs and uploads every report as an artifact. Pull requests run a shorter SLA chain after coverage: a one-VU k6 pass, then the frontend absolute-budget pass. The frontend job caches its raw Lighthouse and Playwright measurements for the regression job, which only measures the target branch before comparing both revisions. Bundle-size measurement runs in parallel with the frontend SLA pass.
 
 ## Workloads and SLOs
 
