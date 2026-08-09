@@ -316,6 +316,43 @@ def test_dashboard_replaces_legacy_comments_and_collects_job_results(tmp_path: P
     assert "monori-report: suppression" not in body
 
 
+def test_dashboard_uses_saved_result_when_partial_rerun_omits_a_job(tmp_path: Path) -> None:
+    """Keep a prior successful job passed when the latest attempt does not rerun it."""
+    reset_fake_github(
+        {
+            "workflow_jobs": {
+                "99": [
+                    {
+                        "id": 20,
+                        "name": "Frontend bundle size",
+                        "run_attempt": 2,
+                        "status": "completed",
+                        "conclusion": "success",
+                        "html_url": "https://example.test/jobs/bundle-size",
+                    }
+                ]
+            }
+        }
+    )
+    lifecycle = DashboardLifecycle(
+        GitHub(),
+        PULL_REQUEST_NUMBER,
+        99,
+        2,
+        "head-sha",
+        "https://example.test/runs/99",
+    )
+    write_job_result(
+        tmp_path / "quality-result-fmt-check-1" / "fmt-check.json",
+        JobResult("fmt-check", "Format check", JobStatus.PASSED),
+    )
+
+    lifecycle.finish(tmp_path)
+
+    body = string_value(state_objects(fake_state(), "comments")[0].get("body"), "dashboard body")
+    assert "| Format check | ✅ passed |" in body
+
+
 def test_dashboard_single_writer_preserves_concurrent_job_completions() -> None:
     """Publish one API snapshot containing two concurrently completed jobs."""
     reset_fake_github()

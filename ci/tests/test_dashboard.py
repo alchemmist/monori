@@ -13,6 +13,7 @@ from monori.ci.quality_graph.dashboard import (
     api_job_status,
     dashboard_metric,
     dashboard_status,
+    latest_jobs_by_name,
     load_results,
     refresh_running_jobs,
     render_dashboard,
@@ -142,6 +143,38 @@ def test_api_job_status_maps_every_actions_state(
 ) -> None:
     """Map queued, running, and terminal Actions states without ambiguity."""
     assert api_job_status(job) is expected
+
+
+def test_latest_jobs_by_name_prefers_the_newest_rerun_attempt() -> None:
+    """Retain old successful jobs while replacing jobs present in a partial rerun."""
+    jobs = latest_jobs_by_name(
+        [
+            {
+                "id": 10,
+                "name": "Format check",
+                "run_attempt": 1,
+                "status": "completed",
+                "conclusion": "success",
+            },
+            {
+                "id": 11,
+                "name": "Frontend bundle size",
+                "run_attempt": 1,
+                "status": "completed",
+                "conclusion": "failure",
+            },
+            {
+                "id": 20,
+                "name": "Frontend bundle size",
+                "run_attempt": 2,
+                "status": "in_progress",
+                "conclusion": None,
+            },
+        ]
+    )
+
+    assert jobs["Format check"]["id"] == 10
+    assert jobs["Frontend bundle size"]["id"] == 20
 
 
 def test_result_loader_merges_downloaded_artifact_directories(tmp_path: Path) -> None:

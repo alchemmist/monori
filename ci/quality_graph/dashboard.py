@@ -248,6 +248,25 @@ def api_job_status(job: dict[str, JsonValue]) -> JobStatus:
     return JobStatus.FAILED
 
 
+def latest_jobs_by_name(items: Iterable[JsonValue]) -> dict[str, dict[str, JsonValue]]:
+    """Select the newest workflow attempt for every named Actions job."""
+    jobs: dict[str, dict[str, JsonValue]] = {}
+    versions: dict[str, tuple[int, int]] = {}
+    for item in items:
+        job = object_value(item, "workflow job")
+        name = string_value(job.get("name"), "workflow job name")
+        raw_attempt = job.get("run_attempt")
+        raw_id = job.get("id")
+        version = (
+            raw_attempt if isinstance(raw_attempt, int) else 0,
+            raw_id if isinstance(raw_id, int) else 0,
+        )
+        if version >= versions.get(name, (-1, -1)):
+            jobs[name] = job
+            versions[name] = version
+    return jobs
+
+
 @dataclass(frozen=True)
 class DashboardLifecycle:
     """Own race-safe publication of the single Quality Graph comment."""
@@ -339,7 +358,13 @@ class DashboardLifecycle:
         for definition in workflow_jobs().values():
             api_job = api_jobs.get(definition.title)
             result = results.get(definition.job_id)
-            status = api_job_status(api_job) if api_job is not None else JobStatus.SKIPPED
+            status = (
+                api_job_status(api_job)
+                if api_job is not None
+                else result.status
+                if result is not None
+                else JobStatus.SKIPPED
+            )
             if result is not None and status is JobStatus.PASSED:
                 status = result.status
             job_url = (
@@ -508,18 +533,15 @@ class DashboardLifecycle:
         )
 
     def _api_jobs(self, *, required: bool = True) -> dict[str, dict[str, JsonValue]]:
-        """Load current workflow jobs indexed by their display name."""
+        """Load the newest attempt of every workflow job indexed by display name."""
         response = object_value(
             self.github.request(
-                "GET", f"/actions/runs/{self.run_id}/jobs?per_page={GITHUB_PAGE_SIZE}&page=1"
+                "GET",
+                f"/actions/runs/{self.run_id}/jobs?filter=all&per_page={GITHUB_PAGE_SIZE}&page=1",
             ),
             "workflow jobs response",
         )
-        jobs = {
-            string_value(job.get("name"), "workflow job name"): job
-            for item in array_value(response.get("jobs", []), "workflow jobs")
-            for job in (object_value(item, "workflow job"),)
-        }
+        jobs = latest_jobs_by_name(array_value(response.get("jobs", []), "workflow jobs"))
         if required and not jobs:
             message = f"Workflow run {self.run_id} returned no jobs"
             raise RuntimeError(message)
