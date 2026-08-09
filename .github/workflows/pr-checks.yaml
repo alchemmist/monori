@@ -32,8 +32,6 @@ jobs:
             - uses: ./.github/actions/quality-job
               with:
                   check-id: workflow-graph
-                  title: Workflow graph validation
-                  make-target: t-workflow
 
     quality-dashboard-live:
         name: Quality Graph live dashboard
@@ -100,9 +98,6 @@ jobs:
             - uses: ./.github/actions/quality-job
               with:
                   check-id: fmt-check
-                  title: Format check
-                  make-target: fmt-check
-                  fix-target: fmt
 
     lint:
         name: Lint
@@ -147,8 +142,6 @@ jobs:
             - uses: ./.github/actions/quality-job
               with:
                   check-id: lint
-                  title: Lint
-                  make-target: lint
 
     type:
         name: Type check
@@ -166,8 +159,6 @@ jobs:
             - uses: ./.github/actions/quality-job
               with:
                   check-id: type
-                  title: Type check
-                  make-target: type
 
     analyze:
         name: Static analysis
@@ -187,8 +178,6 @@ jobs:
             - uses: ./.github/actions/quality-job
               with:
                   check-id: analyze
-                  title: Static analysis
-                  make-target: analyze
 
     test-fast:
         name: Fast tests
@@ -206,8 +195,6 @@ jobs:
             - uses: ./.github/actions/quality-job
               with:
                   check-id: test-fast
-                  title: Fast tests
-                  make-target: t-fast
 
     test-medium:
         name: Medium tests
@@ -225,8 +212,6 @@ jobs:
             - uses: ./.github/actions/quality-job
               with:
                   check-id: test-medium
-                  title: Medium tests
-                  make-target: t-medium
 
     test-slow:
         name: Slow tests
@@ -255,8 +240,6 @@ jobs:
             - uses: ./.github/actions/quality-job
               with:
                   check-id: test-slow
-                  title: Slow tests
-                  make-target: t-slow
 
     build:
         name: Build
@@ -274,8 +257,6 @@ jobs:
             - uses: ./.github/actions/quality-job
               with:
                   check-id: build
-                  title: Build
-                  make-target: build
 
     coverage:
         name: Coverage
@@ -293,8 +274,6 @@ jobs:
             - uses: ./.github/actions/quality-job
               with:
                   check-id: coverage
-                  title: Coverage
-                  make-target: coverage
 
     audit:
         name: Dependency and security audit
@@ -318,8 +297,6 @@ jobs:
             - uses: ./.github/actions/quality-job
               with:
                   check-id: audit
-                  title: Dependency and security audit
-                  make-target: audit
 
     quality-report:
         name: Quality Graph dashboard

@@ -25,6 +25,7 @@ class WorkflowJobDefinition:
 
     job_id: str
     title: str
+    module: str
     gate: str | None = None
     report_marker: str | None = None
 
@@ -35,32 +36,38 @@ class WorkflowJobDefinition:
 
 
 WORKFLOW_JOBS = (
-    WorkflowJobDefinition("workflow-graph", "Workflow graph validation"),
-    WorkflowJobDefinition("fmt-check", "Format check"),
-    WorkflowJobDefinition("suppressions", "Lint suppression gate", "suppression", "suppression"),
-    WorkflowJobDefinition("lint", "Lint"),
+    WorkflowJobDefinition("workflow-graph", "Workflow graph validation", "workflow_graph"),
+    WorkflowJobDefinition("fmt-check", "Format check", "fmt_check"),
+    WorkflowJobDefinition(
+        "suppressions", "Lint suppression gate", "suppressions", "suppression", "suppression"
+    ),
+    WorkflowJobDefinition("lint", "Lint", "lint"),
     WorkflowJobDefinition(
         "object-annotations",
         "Python object annotation gate",
+        "object_annotations",
         "object",
         "object-annotations",
     ),
-    WorkflowJobDefinition("type", "Type check"),
-    WorkflowJobDefinition("analyze", "Static analysis"),
-    WorkflowJobDefinition("test-fast", "Fast tests"),
-    WorkflowJobDefinition("test-medium", "Medium tests"),
-    WorkflowJobDefinition("test-slow", "Slow tests"),
-    WorkflowJobDefinition("build", "Build"),
-    WorkflowJobDefinition("coverage", "Coverage"),
-    WorkflowJobDefinition("mutation", "Mutation testing", report_marker="mutation"),
-    WorkflowJobDefinition("bundle-size", "Frontend bundle size", "bundle", "bundle-size"),
+    WorkflowJobDefinition("type", "Type check", "type_check"),
+    WorkflowJobDefinition("analyze", "Static analysis", "analyze"),
+    WorkflowJobDefinition("test-fast", "Fast tests", "test_fast"),
+    WorkflowJobDefinition("test-medium", "Medium tests", "test_medium"),
+    WorkflowJobDefinition("test-slow", "Slow tests", "test_slow"),
+    WorkflowJobDefinition("build", "Build", "build"),
+    WorkflowJobDefinition("coverage", "Coverage", "coverage"),
+    WorkflowJobDefinition("mutation", "Mutation testing", "mutation", report_marker="mutation"),
+    WorkflowJobDefinition(
+        "bundle-size", "Frontend bundle size", "bundle_size", "bundle", "bundle-size"
+    ),
     WorkflowJobDefinition(
         "frontend-performance",
         "Frontend performance",
+        "frontend_performance",
         "frontend",
         "frontend-performance",
     ),
-    WorkflowJobDefinition("audit", "Dependency and security audit"),
+    WorkflowJobDefinition("audit", "Dependency and security audit", "audit"),
 )
 WORKFLOW_JOB_BY_ID = {definition.job_id: definition for definition in WORKFLOW_JOBS}
 
@@ -77,6 +84,11 @@ def workflow_job_for_report(marker: str) -> WorkflowJobDefinition:
             return definition
     message = f"Unknown Quality Graph report marker: {marker}"
     raise ValueError(message)
+
+
+def workflow_job_module(definition: WorkflowJobDefinition) -> str:
+    """Return the import path implementing one registered workflow check."""
+    return f"monori.ci.quality_graph.checks.{definition.module}"
 
 
 @cache

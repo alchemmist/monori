@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib
 from pathlib import Path
 
 import pytest
@@ -24,8 +25,10 @@ from monori.ci.quality_graph.job_results import (
 from monori.ci.quality_graph.registry import (
     WorkflowJobDefinition,
     registered_checks,
+    workflow_job_module,
     workflow_jobs,
 )
+from monori.ci.quality_graph.run_job import MakeCheck
 from monori.common import JsonValue, array_value, object_value, string_value
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
@@ -73,7 +76,7 @@ def upload_artifact_name(definition: WorkflowJobDefinition) -> str:
     if quality_step is not None:
         command = action_steps[0]
         assert command.get("id") == "command"
-        assert "monori.ci.quality_graph.run_job" in string_value(command.get("run"), "job runner")
+        assert "monori.ci.quality_graph.checks" in string_value(command.get("run"), "job runner")
         enforce = action_steps[-1]
         assert enforce.get("if") == "always()"
         environment = object_value(enforce.get("env"), "enforcement environment")
@@ -96,6 +99,20 @@ def test_registered_job_contract(definition: WorkflowJobDefinition, tmp_path: Pa
     jobs = object_value(workflow_document().get("jobs"), "workflow jobs")
     job = object_value(jobs.get(definition.job_id), definition.job_id)
     assert string_value(job.get("name"), "job name") == definition.title
+    module = importlib.import_module(workflow_job_module(definition))
+    assert callable(getattr(module, "main", None))
+    quality_step = next(
+        (
+            step
+            for step in array_value(job.get("steps"), "steps")
+            if object_value(step, "workflow step").get("uses") == "./.github/actions/quality-job"
+        ),
+        None,
+    )
+    if quality_step is not None:
+        implementation = getattr(module, "CHECK", None)
+        assert isinstance(implementation, MakeCheck)
+        assert implementation.definition is definition
     if definition.gate is not None:
         check = registered_checks()[definition.gate]
         assert check.definition is definition

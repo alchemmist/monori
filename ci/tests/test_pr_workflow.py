@@ -293,12 +293,12 @@ class TestPullRequestWorkflowGraph:
             (REPOSITORY_ROOT / ".github/actions/quality-job/action.yml").read_text()
         )
         command_step = quality_action["runs"]["steps"][0]
-        assert "monori.ci.quality_graph.run_job" in command_step["run"]
+        assert "monori.ci.quality_graph.checks" in command_step["run"]
         fmt = self.workflow["jobs"]["fmt-check"]
         quality_step = next(
             step for step in fmt["steps"] if step.get("uses") == "./.github/actions/quality-job"
         )
-        assert quality_step["with"]["fix-target"] == "fmt"
+        assert quality_step["with"] == {"check-id": "fmt-check"}
 
     def test_frontend_scope_failure_completes_the_pending_report(self) -> None:
         source = FRONTEND_PERFORMANCE_SCOPE.read_text()
@@ -314,7 +314,7 @@ class TestPullRequestWorkflowGraph:
         )
         assert block is not None
         assert "uses: ./.github/actions/quality-job" in block.group("body")
-        assert "make-target: audit" in block.group("body")
+        assert "check-id: audit" in block.group("body")
 
     def test_final_dashboard_runs_after_the_complete_graph(self) -> None:
         """Collect all result artifacts even when an earlier check failed."""

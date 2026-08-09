@@ -4,38 +4,22 @@ inputs:
     check-id:
         description: Stable Quality Graph job identifier
         required: true
-    title:
-        description: Human-readable job title
-        required: true
-    make-target:
-        description: Make target to execute
-        required: true
-    fix-target:
-        description: Optional make target used to produce a formatter diff after failure
-        required: false
-        default: ""
 runs:
     using: composite
     steps:
-        - name: Run and publish ${{ inputs.title }}
+        - name: Run and publish ${{ inputs.check-id }}
           id: command
           shell: bash
           env:
               CHECK_ID: ${{ inputs.check-id }}
-              CHECK_TITLE: ${{ inputs.title }}
-              MAKE_TARGET: ${{ inputs.make-target }}
-              FIX_TARGET: ${{ inputs.fix-target }}
           run: >-
-              uv run --locked python -m monori.ci.quality_graph.run_job
+              uv run --locked python -m monori.ci.quality_graph.checks
               --check-id "$CHECK_ID"
-              --title "$CHECK_TITLE"
-              --make-target "$MAKE_TARGET"
-              --fix-target "$FIX_TARGET"
               --log "$RUNNER_TEMP/quality-results/$CHECK_ID.log"
               --diff "$RUNNER_TEMP/quality-results/$CHECK_ID.diff"
               --output "$RUNNER_TEMP/quality-results/$CHECK_ID.json"
               --summary "$GITHUB_STEP_SUMMARY"
-        - name: Upload ${{ inputs.title }} result
+        - name: Upload ${{ inputs.check-id }} result
           if: always()
           uses: actions/upload-artifact@v7
           with:
@@ -43,7 +27,7 @@ runs:
               path: ${{ runner.temp }}/quality-results/${{ inputs.check-id }}.json
               if-no-files-found: error
               retention-days: 7
-        - name: Enforce ${{ inputs.title }} verdict
+        - name: Enforce ${{ inputs.check-id }} verdict
           if: always()
           shell: bash
           env:

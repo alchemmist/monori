@@ -8,13 +8,16 @@ import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 import anyio
 
 from monori.ci.lib.annotations import publish_workflow_annotations
 from monori.ci.quality_graph.job_report import build_result
 from monori.ci.quality_graph.job_results import JobResultPublisher
+
+if TYPE_CHECKING:
+    from monori.ci.quality_graph.registry import WorkflowJobDefinition
 
 TARGET_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_.-]*$")
 
@@ -63,6 +66,43 @@ class RunJobRequest:
     fix_target: str = ""
 
 
+@dataclass(frozen=True)
+class MakeCheck:
+    """Describe a Quality Graph check implemented by one Make target."""
+
+    definition: WorkflowJobDefinition
+    make_target: str
+    fix_target: str = ""
+
+    def main(self) -> int:
+        """Parse publication paths and run this check through the shared lifecycle."""
+        parser = argparse.ArgumentParser()
+        parser.add_argument("--log", type=Path, required=True)
+        parser.add_argument("--diff", type=Path, required=True)
+        parser.add_argument("--output", type=Path, required=True)
+        parser.add_argument("--summary", type=Path, required=True)
+        parser.add_argument(
+            "--github-output",
+            type=Path,
+            default=Path(os.environ.get("GITHUB_OUTPUT", "github-output.txt")),
+        )
+        args = parser.parse_args()
+        return execute_job(
+            RunJobRequest(
+                self.definition.job_id,
+                self.definition.title,
+                self.make_target,
+                args.log,
+                args.output,
+                args.summary,
+                args.github_output,
+                args.diff,
+                self.fix_target,
+            ),
+            SubprocessCommandRunner(),
+        )
+
+
 def validated_target(target: str) -> str:
     """Return a safe make target or reject shell-like input."""
     if not TARGET_RE.fullmatch(target):
@@ -99,38 +139,3 @@ def execute_job(request: RunJobRequest, runner: CommandRunner) -> int:
     with request.github_output_path.open("a") as github_output:
         github_output.write(f"exit_code={command.returncode}\n")
     return 0
-
-
-def main() -> int:
-    """Parse action inputs and execute one Quality Graph job."""
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--check-id", required=True)
-    parser.add_argument("--title", required=True)
-    parser.add_argument("--make-target", required=True)
-    parser.add_argument("--fix-target", default="")
-    parser.add_argument("--log", type=Path, required=True)
-    parser.add_argument("--diff", type=Path, required=True)
-    parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--summary", type=Path, required=True)
-    parser.add_argument(
-        "--github-output",
-        type=Path,
-        default=Path(os.environ.get("GITHUB_OUTPUT", "github-output.txt")),
-    )
-    args = parser.parse_args()
-    request = RunJobRequest(
-        args.check_id,
-        args.title,
-        args.make_target,
-        args.log,
-        args.output,
-        args.summary,
-        args.github_output,
-        args.diff,
-        args.fix_target,
-    )
-    return execute_job(request, SubprocessCommandRunner())
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())

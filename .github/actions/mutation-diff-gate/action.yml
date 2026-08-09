@@ -51,9 +51,7 @@ runs:
               if [ "${{ steps.mutation-test.outcome }}" = success ] && [ "${{ steps.mutation-front.outcome }}" = success ] && [ "${{ steps.mutation-back.outcome }}" = success ]; then
                 status=passed
               fi
-              uv run --locked python -m monori.ci.quality_graph.result_cli \
-                --check-id mutation \
-                --title 'Mutation testing' \
+              uv run --locked python -m monori.ci.quality_graph.checks.mutation \
                 --status "$status" \
                 --metric "Frontend=${{ steps.mutation-front.outcome }}" \
                 --metric "Python=${{ steps.mutation-back.outcome }}" \
