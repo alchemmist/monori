@@ -215,10 +215,10 @@ analyze-javascript-dead-code:
 audit: audit-deps audit-deps-py audit-secrets
 
 audit-deps:
-	cd web && npm install --no-audit --no-fund --silent
+	cd web && npm ci --no-audit --no-fund --silent
 	(cd web && npm audit --audit-level=high --json) | \
 		uv run --locked --group audit python -m monori.ci.lib.npm_audit_gate
-	cd tools/frontend-perf && npm install --no-audit --no-fund --silent
+	cd tools/frontend-perf && npm ci --no-audit --no-fund --silent
 	(cd tools/frontend-perf && npm audit --audit-level=high --json) | \
 		uv run --locked --group audit python -m monori.ci.lib.npm_audit_gate
 

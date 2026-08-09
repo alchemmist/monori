@@ -64,7 +64,7 @@ jobs:
             issues: write
             pull-requests: read
         runs-on: ubuntu-latest
-        timeout-minutes: 50
+        timeout-minutes: 185
         steps:
             - uses: actions/checkout@v7
               with:

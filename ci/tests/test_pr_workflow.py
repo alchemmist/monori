@@ -5,6 +5,8 @@ from typing import ClassVar, TypedDict, cast
 
 import yaml
 
+from monori.ci.quality_graph.dashboard import SUPPORTED_WORKFLOW_DURATION_SECONDS
+
 
 def find_repository_root(path: Path) -> Path:
     """Find the checkout containing the workflow files used by these tests."""
@@ -281,6 +283,22 @@ class TestPullRequestWorkflowGraph:
         assert block is not None
         assert "monori.ci.quality_graph.dashboard watch" in block.group("body")
         assert "update-quality-dashboard" not in self.source
+
+    def test_live_dashboard_covers_the_supported_workflow_duration(self) -> None:
+        """Keep the watcher alive beyond valid workflows lasting over 45 minutes."""
+        block = re.search(
+            r"^    quality-dashboard-live:\n(?P<body>.*?)(?=^    \S|\Z)",
+            self.source,
+            re.MULTILINE | re.DOTALL,
+        )
+        assert block is not None
+        timeout = re.search(
+            r"^        timeout-minutes: (?P<minutes>\d+)$", block.group("body"), re.MULTILINE
+        )
+        assert timeout is not None
+        timeout_seconds = int(timeout.group("minutes")) * 60
+        assert SUPPORTED_WORKFLOW_DURATION_SECONDS > 45 * 60
+        assert timeout_seconds > SUPPORTED_WORKFLOW_DURATION_SECONDS
 
     def test_mutation_result_requires_every_gate_step_to_succeed(self) -> None:
         """Treat skipped and cancelled mutation steps as failed results."""
