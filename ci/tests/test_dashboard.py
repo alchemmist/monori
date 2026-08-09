@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from monori.ci.quality_graph.dashboard import (
+    EMPTY_CONTROLS_MESSAGE,
     DashboardControlGroup,
     DashboardJob,
     DashboardModel,
@@ -43,7 +44,7 @@ def test_dashboard_renders_status_links_metrics_and_controls() -> None:
                     "Active: 1",
                 ),
             ),
-            (DashboardControlGroup("Frontend bundle size", (control,)),),
+            (DashboardControlGroup("bundle-size", "Frontend bundle size", (control,)),),
         )
     )
 
@@ -52,6 +53,8 @@ def test_dashboard_renders_status_links_metrics_and_controls() -> None:
     assert "[Summary](https://example.test/run#bundle-size)" in body
     assert "[Logs](https://example.test/job)" in body
     assert f"<!-- {control.marker} -->" in body
+    assert "<details><summary>For administrators</summary>" in body
+    assert "### Frontend bundle size" in body
 
 
 def test_dashboard_status_prefers_pending_then_failure() -> None:
@@ -116,3 +119,54 @@ def test_live_refresh_updates_completed_and_api_reported_rows() -> None:
     assert "| Workflow graph validation | ✅ passed |" in refreshed
     assert "| Format check | ✅ passed |" in refreshed
     assert "## ⏳ Quality Graph" in refreshed
+
+
+def test_live_refresh_adds_and_removes_job_admin_controls() -> None:
+    """Keep failed-job checkboxes grouped under the administrator disclosure."""
+    body = render_dashboard(
+        DashboardModel(
+            JobStatus.PENDING,
+            "The current Quality Graph run is in progress.",
+            12,
+            1,
+            "head-sha",
+            (
+                DashboardJob(
+                    "suppressions",
+                    "Lint suppression gate",
+                    JobStatus.PENDING,
+                    "summary",
+                    "logs",
+                ),
+            ),
+        )
+    )
+    control = JobControl(
+        "/qg ignore suppression-abc123",
+        "/qg remove-ignore suppression-abc123",
+    )
+
+    failed = refresh_dashboard_body(
+        body,
+        JobResult(
+            "suppressions",
+            "Lint suppression gate",
+            JobStatus.FAILED,
+            controls=(control,),
+        ),
+        {},
+    )
+
+    assert "<details><summary>For administrators</summary>" in failed
+    assert "### Lint suppression gate" in failed
+    assert "- [ ] `/qg ignore suppression-abc123`" in failed
+    assert EMPTY_CONTROLS_MESSAGE not in failed
+
+    passed = refresh_dashboard_body(
+        failed,
+        JobResult("suppressions", "Lint suppression gate", JobStatus.PASSED),
+        {},
+    )
+
+    assert "### Lint suppression gate" not in passed
+    assert EMPTY_CONTROLS_MESSAGE in passed

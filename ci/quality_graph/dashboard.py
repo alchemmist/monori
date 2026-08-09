@@ -44,11 +44,22 @@ TEMPLATE_ENVIRONMENT = Environment(
     keep_trailing_newline=True,
 )
 DASHBOARD_TEMPLATE = TEMPLATE_ENVIRONMENT.get_template("dashboard.md.j2")
+CONTROL_GROUP_TEMPLATE = TEMPLATE_ENVIRONMENT.get_template("control_group.md.j2")
 MANAGED_MARKER_RE = re.compile(r"\A<!-- monori-report: quality-graph -->\s*")
 NOTICE_RE = re.compile(
     r"<!-- monori-qg-notice:start -->.*?<!-- monori-qg-notice:end -->",
     re.DOTALL,
 )
+CONTROL_GROUP_RE_TEMPLATE = (
+    r"<!-- monori-qg-control-group:{job_id}:start -->.*?"
+    r"<!-- monori-qg-control-group:{job_id}:end -->\n?"
+)
+CONTROL_GROUP_RE = re.compile(
+    r"<!-- monori-qg-control-group:[a-z0-9-]+:start -->.*?"
+    r"<!-- monori-qg-control-group:[a-z0-9-]+:end -->",
+    re.DOTALL,
+)
+EMPTY_CONTROLS_MESSAGE = "No administrative actions are currently available."
 ROW_UPDATE_ATTEMPTS = 3
 
 
@@ -68,6 +79,7 @@ class DashboardJob:
 class DashboardControlGroup:
     """Group administrator controls belonging to one check."""
 
+    job_id: str
     title: str
     controls: tuple[JobControl, ...]
     notes: tuple[str, ...] = ()
@@ -89,6 +101,28 @@ class DashboardModel:
 def render_dashboard(model: DashboardModel) -> str:
     """Render the compact pull-request dashboard."""
     return re.sub(r"\n{3,}", "\n\n", DASHBOARD_TEMPLATE.render(model=model).strip()) + "\n"
+
+
+def refresh_dashboard_controls(body: str, result: JobResult) -> str:
+    """Replace one job's administrator section with its latest controls."""
+    pattern = re.compile(
+        CONTROL_GROUP_RE_TEMPLATE.format(job_id=re.escape(result.check_id)),
+        re.DOTALL,
+    )
+    updated = pattern.sub("", body, count=1)
+    updated = updated.replace(EMPTY_CONTROLS_MESSAGE, "")
+    if result.controls:
+        group = DashboardControlGroup(
+            result.check_id,
+            result.title,
+            result.controls,
+            result.control_notes,
+        )
+        rendered = CONTROL_GROUP_TEMPLATE.render(group=group).strip()
+        updated = updated.replace("</details>", f"{rendered}\n</details>", 1)
+    if CONTROL_GROUP_RE.search(updated) is None:
+        updated = updated.replace("</details>", f"{EMPTY_CONTROLS_MESSAGE}\n</details>", 1)
+    return re.sub(r"\n{3,}", "\n\n", updated)
 
 
 def load_results(directory: Path) -> dict[str, JobResult]:
@@ -141,13 +175,14 @@ def refresh_dashboard_body(
         updated = row.sub(replacement, updated, count=1)
         observed.append(DashboardJob(definition.job_id, definition.title, status, "", ""))
     status = dashboard_status(observed)
-    return re.sub(
+    updated = re.sub(
         r"^## .* Quality Graph$",
         f"## {status.emoji} Quality Graph",
         updated,
         count=1,
         flags=re.MULTILINE,
     )
+    return refresh_dashboard_controls(updated, result)
 
 
 def mark_jobs_pending(github: GitHubAPI, number: int, job_ids: set[str]) -> None:
@@ -228,7 +263,9 @@ class DashboardLifecycle:
             )
             for definition in workflow_jobs().values()
         )
-        groups = (DashboardControlGroup("Current approvals", controls),) if controls else ()
+        groups = (
+            (DashboardControlGroup("existing", "Current approvals", controls),) if controls else ()
+        )
         self._publish(
             DashboardModel(
                 JobStatus.PENDING,
@@ -278,6 +315,7 @@ class DashboardLifecycle:
             if result is not None and result.controls:
                 control_groups.append(
                     DashboardControlGroup(
+                        definition.job_id,
                         definition.title,
                         result.controls,
                         result.control_notes,

@@ -11,20 +11,15 @@
 {% for job in model.jobs -%}
 | {{ job.title }} | {{ job.status.emoji }} {{ job.status.value }} | {{ job.metric }} | [Summary]({{ job.summary_url }}) · [Logs]({{ job.logs_url }}) |
 {% endfor %}
-{% if model.control_groups %}
-<details><summary>Administrator controls</summary>
+<details><summary>For administrators</summary>
 
 Check an action to apply it; uncheck an applied action to revert it.
 
+{% if model.control_groups %}
 {% for group in model.control_groups -%}
-### {{ group.title }}
-
-{% for control in group.controls -%}
-- [{{ "x" if control.checked else " " }}] `{{ control.command }}` <!-- {{ control.marker }} -->
+{% include "control_group.md.j2" %}
 {% endfor %}
-{% for note in group.notes -%}
-{{ note }}
-{% endfor %}
-{% endfor %}
-</details>
+{% else %}
+No administrative actions are currently available.
 {% endif %}
+</details>

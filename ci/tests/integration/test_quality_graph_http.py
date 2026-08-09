@@ -34,6 +34,7 @@ from monori.ci.quality_graph.commands import (
 )
 from monori.ci.quality_graph.dashboard import DashboardLifecycle
 from monori.ci.quality_graph.job_results import (
+    JobControl,
     JobResult,
     JobStatus,
     SourceAnnotation,
@@ -325,10 +326,10 @@ def test_dashboard_updates_each_completed_job_before_final_aggregation() -> None
                         "html_url": "https://example.test/jobs/workflow-graph",
                     },
                     {
-                        "name": "Format check",
+                        "name": "Lint suppression gate",
                         "status": "in_progress",
                         "conclusion": None,
-                        "html_url": "https://example.test/jobs/fmt-check",
+                        "html_url": "https://example.test/jobs/suppressions",
                     },
                 ]
             }
@@ -344,12 +345,27 @@ def test_dashboard_updates_each_completed_job_before_final_aggregation() -> None
     )
     lifecycle.start()
 
-    lifecycle.update(JobResult("fmt-check", "Format check", JobStatus.PASSED))
+    lifecycle.update(
+        JobResult(
+            "suppressions",
+            "Lint suppression gate",
+            JobStatus.FAILED,
+            controls=(
+                JobControl(
+                    "/qg ignore suppression-abc123",
+                    "/qg remove-ignore suppression-abc123",
+                ),
+            ),
+        )
+    )
 
     body = string_value(state_objects(fake_state(), "comments")[0].get("body"), "dashboard")
     assert "| Workflow graph validation | ✅ passed |" in body
-    assert "| Format check | ✅ passed |" in body
-    assert "| Lint suppression gate | ⏳ pending |" in body
+    assert "| Format check | ⏳ pending |" in body
+    assert "| Lint suppression gate | ❌ failed |" in body
+    assert "<details><summary>For administrators</summary>" in body
+    assert "### Lint suppression gate" in body
+    assert "- [ ] `/qg ignore suppression-abc123`" in body
 
 
 def test_stale_dashboard_run_cannot_overwrite_the_current_comment(tmp_path: Path) -> None:
