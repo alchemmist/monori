@@ -161,8 +161,12 @@ def main() -> int:
     pull = object_value(github.request("GET", f"/pulls/{number}"), "pull request")
     raw_body = pull.get("body")
     body = raw_body if isinstance(raw_body, str) else ""
-    synced = check.sync_pending_approvals(github, number, body, result.findings)
-    approved = synced.approved
+    read_only = os.environ.get("QUALITY_GRAPH_READ_ONLY", "").lower() == "true"
+    approved = (
+        check.read_approvals(body, result.findings)
+        if read_only
+        else check.sync_pending_approvals(github, number, body, result.findings).approved
+    )
     ids = {finding.finding_id for finding in result.findings}
     failed = report.get("verdict") == "critical" and ids != approved
     report["approvedFindings"] = cast("JsonValue", sorted(approved))
@@ -189,7 +193,8 @@ def main() -> int:
         Path(result_path) if result_path else None,
         Path(step_summary) if step_summary else None,
     ).publish(job_result)
-    sync_label(github, number, STATUS_LABEL, present=failed)
+    if not read_only:
+        sync_label(github, number, STATUS_LABEL, present=failed)
     return 1 if failed else 0
 
 

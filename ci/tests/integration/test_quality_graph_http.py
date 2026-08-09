@@ -1072,6 +1072,89 @@ def test_bundle_and_performance_gates_publish_real_http_state(tmp_path: Path) ->
     }
 
 
+def test_bundle_and_performance_read_only_gates_preserve_failed_verdicts(
+    tmp_path: Path,
+) -> None:
+    """Publish measurement failures without mutating a read-only pull request."""
+    failures: JsonValue = [
+        {
+            "method": "PATCH",
+            "path": f"/repos/{REPOSITORY}/pulls/{PULL_REQUEST_NUMBER}",
+            "status": HTTPStatus.FORBIDDEN,
+        },
+        {
+            "method": "POST",
+            "path": f"/repos/{REPOSITORY}/labels",
+            "status": HTTPStatus.FORBIDDEN,
+        },
+        {
+            "method": "POST",
+            "path": f"/repos/{REPOSITORY}/issues/{PULL_REQUEST_NUMBER}/labels",
+            "status": HTTPStatus.FORBIDDEN,
+        },
+    ]
+    reset_fake_github({"failures": failures})
+    bundle_report = tmp_path / "bundle.json"
+    bundle_summary = tmp_path / "bundle.md"
+    bundle_report.write_text(
+        json.dumps(
+            {
+                "prNumber": PULL_REQUEST_NUMBER,
+                "verdict": "critical",
+                "entries": [
+                    {
+                        "id": "bundle-initial-load",
+                        "label": "Initial load",
+                        "base": 1000,
+                        "current": 2000,
+                        "delta": 1000,
+                        "percent": 100.0,
+                        "tier": "critical",
+                    }
+                ],
+                "assetGrowth": [],
+            }
+        )
+    )
+    environment_values = {
+        "REPORT_PATH": str(bundle_report),
+        "SUMMARY_PATH": str(bundle_summary),
+        "QUALITY_GRAPH_READ_ONLY": "true",
+    }
+    with environment(environment_values):
+        assert bundle_size_main() == 1
+    assert '"verdict": "critical"' in bundle_report.read_text()
+
+    performance_report = tmp_path / "performance.json"
+    performance_summary = tmp_path / "performance.md"
+    performance_report.write_text(
+        json.dumps(
+            {
+                "prNumber": PULL_REQUEST_NUMBER,
+                "verdict": "critical",
+                "entries": [
+                    {
+                        "route_id": "dashboard",
+                        "route_label": "Dashboard",
+                        "metric_id": "lcp",
+                        "metric_label": "LCP",
+                        "tier": "critical",
+                    }
+                ],
+            }
+        )
+    )
+    performance_summary.write_text("## Previous heading\n\nMeasured details.\n")
+    environment_values = {
+        "REPORT_PATH": str(performance_report),
+        "SUMMARY_PATH": str(performance_summary),
+        "QUALITY_GRAPH_READ_ONLY": "true",
+    }
+    with environment(environment_values):
+        assert frontend_performance_main() == 1
+    assert '"verdict": "critical"' in performance_report.read_text()
+
+
 def test_reporting_cli_updates_one_comment_and_reaction(tmp_path: Path) -> None:
     """Exercise report and reaction CLI operations over the fake service."""
     command_comment: dict[str, JsonValue] = {

@@ -376,6 +376,11 @@ class QualityCheck[FindingType: ApprovableFinding](QualityCheckDefinition, ABC):
         """Apply a bot-authorized pending command through the shared lifecycle."""
         return self.approval_lifecycle.sync_pending(github, number, body, findings, labels)
 
+    def read_approvals(self, body: str, findings: Sequence[FindingType]) -> set[str]:
+        """Return persisted approvals that still match current findings."""
+        finding_ids = {finding.finding_id for finding in findings}
+        return self.approval_lifecycle.read(body) & finding_ids
+
 
 class PullRequestSourceCheck[FindingType: ApprovableFinding](QualityCheck[FindingType], ABC):
     """Run a source-oriented check through the shared pull-request lifecycle."""

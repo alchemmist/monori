@@ -370,7 +370,12 @@ class TestPullRequestWorkflowGraph:
             assert job_source is not None
             assert "head.repo.full_name == github.repository" in job_source.group("body")
             assert "pull_request.user.login != 'dependabot[bot]'" in job_source.group("body")
-        for job_id in ("object-annotations", "suppressions"):
+        for job_id in (
+            "bundle-size",
+            "frontend-performance",
+            "object-annotations",
+            "suppressions",
+        ):
             job_source = re.search(
                 rf"^    {job_id}:\n(?P<body>.*?)(?=^    \S|\Z)",
                 self.source,

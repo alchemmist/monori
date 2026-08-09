@@ -10,6 +10,7 @@ from monori.ci.quality_graph.base import (
     ApprovalLifecycle,
     QualityCheck,
 )
+from monori.ci.quality_graph.checks.bundle_size import BundleFinding, BundleSizeCheck
 from monori.ci.quality_graph.commands import parse_command
 from monori.ci.quality_graph.models import CheckContext, CheckResult, Verdict
 from monori.ci.quality_graph.registry import registered_checks
@@ -126,3 +127,15 @@ def test_declarative_report_lifecycle_filters_ids_and_disables_file_commands() -
 
     assert REPORT_LIFECYCLE.select_findings(mixed_command, findings) == {"bundle-size"}
     assert REPORT_LIFECYCLE.select_findings(file_command, findings) == set()
+
+
+def test_report_gate_reads_only_approvals_for_current_findings() -> None:
+    """Filter persisted approvals against the current report findings."""
+    findings = [BundleFinding("bundle-initial-load"), BundleFinding("bundle-other")]
+
+    approved = BundleSizeCheck().read_approvals(
+        "<!-- monori-bundle-size-approvals: bundle-initial-load,object-other -->",
+        findings,
+    )
+
+    assert approved == {"bundle-initial-load"}
