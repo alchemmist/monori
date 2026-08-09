@@ -92,7 +92,7 @@ run_level() {
   capture_resources "$resources" &
   sampler=$!
   set +e
-  stack run --rm --no-deps \
+  stack run --rm --no-deps --user "$(id -u):$(id -g)" \
     -e WORKLOAD="$workload" \
     -e VUS="$level" \
     -e DURATION="$LOAD_DURATION" \
@@ -112,5 +112,5 @@ for workload in $workloads; do
   done
 done
 
-python3 performance/report.py --input "$LOAD_OUTPUT_DIR" --output "$LOAD_OUTPUT_DIR/summary.md"
+uv run --locked python performance/report.py --input "$LOAD_OUTPUT_DIR" --output "$LOAD_OUTPUT_DIR/summary.md"
 exit "$failed"

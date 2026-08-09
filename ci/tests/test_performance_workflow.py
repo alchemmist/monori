@@ -11,6 +11,7 @@ ACTIONS = {
     "backend-and-e2e": REPOSITORY_ROOT / ".github/actions/backend-performance/action.yml",
     "frontend": REPOSITORY_ROOT / ".github/actions/frontend-lab-performance/action.yml",
 }
+LOAD_RUNNER = REPOSITORY_ROOT / "scripts/load.sh"
 
 
 class WorkflowJob(TypedDict):
@@ -60,3 +61,15 @@ def test_performance_actions_preserve_reports_before_enforcement() -> None:
         assert steps[upload_index]["if"] == "always()"
         assert steps[enforce_index]["if"] == "always()"
         assert upload_index < enforce_index
+
+
+def test_backend_runner_uses_workspace_permissions_and_project_python() -> None:
+    action = load_yaml(ACTIONS["backend-and-e2e"])
+    runs = cast("dict[str, JsonValue]", action["runs"])
+    steps = cast("list[dict[str, JsonValue]]", runs["steps"])
+    runner = LOAD_RUNNER.read_text()
+
+    assert steps[0].get("uses") == "./.github/actions/setup-project"
+    assert steps[0].get("with") == {"python-profile": "ci"}
+    assert '--user "$(id -u):$(id -g)"' in runner
+    assert "uv run --locked python performance/report.py" in runner

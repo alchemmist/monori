@@ -10,6 +10,10 @@ inputs:
 runs:
     using: composite
     steps:
+        - name: Setup Python dependencies
+          uses: ./.github/actions/setup-project
+          with:
+              python-profile: ci
         - name: Run default-journal API scenarios
           id: api
           continue-on-error: true
