@@ -343,7 +343,7 @@ class TestPullRequestWorkflowGraph:
                 REPOSITORY_ROOT / ".github/actions",
                 REPOSITORY_ROOT / ".github/workflows",
             )
-            for path in directory.glob("*.y*ml")
+            for path in directory.rglob("*.y*ml")
         )
         assert "actions/cache@v4" not in action_sources
         assert "actions/cache@v5" in action_sources
