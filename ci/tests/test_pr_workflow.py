@@ -111,13 +111,13 @@ class TestPullRequestWorkflowGraph:
                 "actions": "read",
                 "contents": "read",
                 "issues": "write",
-                "pull-requests": "read",
+                "pull-requests": "write",
             },
             "quality-report": {
                 "actions": "read",
                 "contents": "read",
                 "issues": "write",
-                "pull-requests": "read",
+                "pull-requests": "write",
             },
             "suppressions": {
                 "contents": "read",

@@ -44,7 +44,7 @@ jobs:
             actions: read
             contents: read
             issues: write
-            pull-requests: read
+            pull-requests: write
         runs-on: ubuntu-latest
         timeout-minutes: 185
         steps:
@@ -309,7 +309,7 @@ jobs:
             actions: read
             contents: read
             issues: write
-            pull-requests: read
+            pull-requests: write
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@v7
