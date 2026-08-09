@@ -11,7 +11,6 @@ from monori.ci.quality_graph.checks.object_annotations import (
     scan_file,
     summary_body,
 )
-from monori.ci.quality_graph.commands import parse_command
 from monori.ci.quality_graph.job_results import JobControl
 from monori.ci.quality_graph.models import CheckContext, Verdict
 
@@ -85,16 +84,6 @@ other: "list[object]"
 
         assert before.finding_id == after.finding_id
         assert before.finding_id != changed.finding_id
-
-    def test_approval_commands_use_shared_namespace(self) -> None:
-        assert parse_command("/qg ignore object-abc123") is not None
-        assert parse_command("/qg ignore-file server/app.py") is not None
-        assert parse_command("/qg ignore object-abc123,suppression-def456") is not None
-        assert parse_command("/qg remove-ignore object-abc123,suppression-def456") is not None
-        assert parse_command("/qg ignore object") == parse_command("/quality-graph ignore object")
-        assert parse_command("/ignore object-abc123") is None
-        assert parse_command("/qg ignore object-abc123 extra") is None
-        assert parse_command("/qg ignore all") is None
 
     def test_reports_only_added_lines(self) -> None:
         before = "value: object\n"

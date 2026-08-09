@@ -2,11 +2,9 @@
 
 import ast
 import difflib
-import os
 import re
 from collections import Counter
 from dataclasses import dataclass
-from pathlib import Path
 from typing import ClassVar, override
 
 from monori.ci.lib.annotations import (
@@ -15,14 +13,18 @@ from monori.ci.lib.annotations import (
     publish_workflow_annotations,
 )
 from monori.ci.lib.findings import stable_finding_id
-from monori.ci.lib.github import GitHub, RepositoryGitHubAPI
-from monori.ci.quality_graph.base import ApprovalLifecycle, PullRequestSourceCheck
-from monori.ci.quality_graph.job_results import JobResultPublisher
-from monori.ci.quality_graph.models import CheckContext, CheckResult, Verdict
+from monori.ci.lib.github import RepositoryGitHubAPI
+from monori.ci.quality_graph.base import (
+    ApprovalLifecycle,
+    PullRequestSourceCheck,
+    QualityRuntime,
+    read_github_event,
+)
+from monori.ci.quality_graph.models import CheckContext, CheckResult, Metric, Verdict
+from monori.ci.quality_graph.registry import WORKFLOW_JOB_BY_ID
 from monori.ci.quality_graph.reporting import (
     RenderedCheckReport,
     ReportFinding,
-    ReportMetric,
     ReportModel,
     ReportStatus,
     admin_commands,
@@ -31,7 +33,6 @@ from monori.ci.quality_graph.reporting import (
 )
 from monori.common import (
     JsonValue,
-    decode_json,
     integer_value,
     object_value,
     optional_string,
@@ -174,9 +175,7 @@ def scan_file(path: str, source: str, changed: set[int]) -> list[Finding]:
 class ObjectAnnotationCheck(PullRequestSourceCheck[Finding]):
     """Find changed annotations that use the overly broad ``object`` type."""
 
-    gate = "object"
-    job_id = "object-annotations"
-    report_marker = "object-annotations"
+    definition = WORKFLOW_JOB_BY_ID["object-annotations"]
     approval_lifecycle = APPROVALS
     supports_ignore_file = True
     failure_label: ClassVar[str | None] = FAILURE_LABEL
@@ -231,10 +230,10 @@ def summary_body(findings: list[Finding], approved: set[str], pr_url: str) -> Re
             "object-annotations",
             ReportStatus.PASSED if not active else ReportStatus.FAILED,
             metrics=(
-                ReportMetric("Status", "PASS" if not active else "FAIL"),
-                ReportMetric("Findings", str(len(findings))),
-                ReportMetric("Active", str(len(active))),
-                ReportMetric("Approved", str(len(findings) - len(active))),
+                Metric("Status", "PASS" if not active else "FAIL"),
+                Metric("Findings", str(len(findings))),
+                Metric("Active", str(len(active))),
+                Metric("Approved", str(len(findings) - len(active))),
             ),
             findings_title="List of problems",
             findings=tuple(
@@ -303,21 +302,12 @@ def scan_pull_request(github: RepositoryGitHubAPI, pull: dict[str, JsonValue]) -
 
 def main() -> int:
     """Run the Python object annotation gate for the current pull request event."""
-    github = GitHub()
-    event = object_value(
-        decode_json(Path(os.environ["GITHUB_EVENT_PATH"]).read_text()), "GitHub event"
-    )
-    result_path = os.environ.get("QUALITY_RESULT_PATH")
-    summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
-    publisher = JobResultPublisher(
-        Path(result_path) if result_path else None,
-        Path(summary_path) if summary_path else None,
-    )
+    runtime = QualityRuntime.from_environment()
     return ObjectAnnotationCheck().run_pull_request_gate(
-        github,
-        event,
-        publisher,
-        read_only=os.environ.get("QUALITY_GRAPH_READ_ONLY", "").lower() == "true",
+        runtime.github,
+        read_github_event(),
+        runtime.publisher,
+        read_only=runtime.read_only,
     )
 
 

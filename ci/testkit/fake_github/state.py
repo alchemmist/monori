@@ -29,6 +29,7 @@ class FakeGitHubState:
     comparisons: dict[str, dict[str, JsonValue]] = field(default_factory=dict)
     contents: dict[str, str] = field(default_factory=dict)
     failures: dict[tuple[str, str], int] = field(default_factory=dict)
+    requests: list[dict[str, JsonValue]] = field(default_factory=list)
     next_comment_id: int = 1
     next_reaction_id: int = 1
 
@@ -63,6 +64,7 @@ class FakeGitHubState:
             if isinstance((content := value), str)
         }
         self.failures = self._failures(payload.get("failures"))
+        self.requests = []
         self.rerun_requests = []
         self.next_comment_id = max(self.comments, default=0) + 1
         reaction_ids = [
@@ -102,7 +104,12 @@ class FakeGitHubState:
             },
             "comparisons": cast("JsonValue", self.comparisons),
             "contents": cast("JsonValue", self.contents),
+            "requests": cast("JsonValue", self.requests),
         }
+
+    def record_request(self, method: str, path: str) -> None:
+        """Record one repository API request for observable budget assertions."""
+        self.requests.append({"method": method, "path": path})
 
     def create_comment(self, number: int, body: str) -> dict[str, JsonValue]:
         """Create one bot-authored issue comment and return it."""

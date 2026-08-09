@@ -17,7 +17,11 @@ from monori.ci.lib.comments import (
 )
 from monori.ci.lib.github import GitHub, GitHubAPI, rerun_latest_pull_request_workflow
 from monori.ci.lib.github import is_admin as github_is_admin
-from monori.ci.quality_graph.dashboard import mark_jobs_pending, update_dashboard_notice
+from monori.ci.quality_graph.dashboard import (
+    mark_jobs_pending,
+    restore_dashboard_controls,
+    update_dashboard_notice,
+)
 from monori.ci.quality_graph.registry import registered_checks, run_direct_command_checks
 from monori.common import JsonValue, object_value, optional_string, string_value
 
@@ -52,6 +56,7 @@ class CommandRequest:
     login: str | None
     pull_request_number: int | None
     react: bool = True
+    dashboard_body: str | None = None
 
 
 @dataclass(frozen=True)
@@ -280,6 +285,7 @@ def checkbox_command_request(
         selected_command,
         optional_string(sender.get("login")),
         pull_request_number(event),
+        dashboard_body=body,
     )
 
 
@@ -337,6 +343,8 @@ def process_command(github: GitHubAPI, request: CommandRequest) -> None:
         )
         return
     try:
+        if request.dashboard_body is not None:
+            restore_dashboard_controls(github, request.comment_id, request.dashboard_body)
         if command.name not in {"help", "status"}:
             run_direct_command_checks()
         dispatch_command(github, number, command)

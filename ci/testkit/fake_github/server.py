@@ -8,6 +8,7 @@ import os
 import re
 import signal
 import threading
+import time
 import urllib.parse
 from dataclasses import dataclass
 from http import HTTPStatus
@@ -25,6 +26,8 @@ HOST = os.environ.get("FAKE_GITHUB_HOST", "127.0.0.1")
 PORT = int(os.environ.get("FAKE_GITHUB_PORT", "8080"))
 STATE = FakeGitHubState()
 STATE_LOCK = threading.RLock()
+DELAY_LOCK = threading.Lock()
+REQUEST_DELAYS: dict[tuple[str, str], float] = {}
 REPOSITORY_PATH = re.compile(r"^/repos/(?P<repository>[^/]+/[^/]+)(?P<path>/.*)$")
 
 
@@ -70,7 +73,17 @@ class FakeGitHubHandler(BaseHTTPRequestHandler):
     def _dispatch(self, method: str) -> None:
         parsed = urllib.parse.urlsplit(self.path)
         payload = self._read_payload()
+        delayed = False
+        with DELAY_LOCK:
+            delay = REQUEST_DELAYS.pop((method, parsed.path), 0)
+        if delay:
+            with STATE_LOCK:
+                STATE.record_request(method, parsed.path)
+            delayed = True
+            time.sleep(delay)
         with STATE_LOCK:
+            if not delayed and REPOSITORY_PATH.fullmatch(parsed.path) is not None:
+                STATE.record_request(method, parsed.path)
             failure = STATE.failures.get((method, parsed.path))
             if failure is not None:
                 response: tuple[int, JsonValue] | None = (
@@ -98,7 +111,23 @@ class FakeGitHubHandler(BaseHTTPRequestHandler):
         if path == "/health" and method == "GET":
             return HTTPStatus.OK, {"status": "ok"}
         if path == "/_test/reset" and method == "POST":
-            STATE.reset(object_value(payload, "reset payload"))
+            data = object_value(payload, "reset payload")
+            delays: dict[tuple[str, str], float] = {}
+            for value in array_value(data.get("request_delays", []), "request delays"):
+                delay = object_value(value, "request delay")
+                delay_method = optional_string(delay.get("method"))
+                delay_path = optional_string(delay.get("path"))
+                seconds = delay.get("seconds")
+                if (
+                    delay_method is not None
+                    and delay_path is not None
+                    and isinstance(seconds, (int, float))
+                ):
+                    delays[(delay_method, delay_path)] = float(seconds)
+            with DELAY_LOCK:
+                REQUEST_DELAYS.clear()
+                REQUEST_DELAYS.update(delays)
+            STATE.reset(data)
             return HTTPStatus.NO_CONTENT, None
         if path == "/_test/state" and method == "GET":
             return HTTPStatus.OK, STATE.snapshot()

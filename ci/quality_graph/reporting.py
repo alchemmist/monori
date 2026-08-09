@@ -12,19 +12,14 @@ from jinja2 import Environment, FileSystemLoader, StrictUndefined, select_autoes
 
 from monori.ci.lib.status import QualityStatus
 from monori.ci.quality_graph.job_results import JobControl
+from monori.ci.quality_graph.registry import workflow_job_for_report
 
 if TYPE_CHECKING:
     from collections.abc import Collection, Mapping
 
+    from monori.ci.quality_graph.models import Metric
+
 ReportStatus = QualityStatus
-
-
-@dataclass(frozen=True)
-class ReportMetric:
-    """One label-value row in the standard report metrics table."""
-
-    label: str
-    value: str
 
 
 @dataclass(frozen=True)
@@ -74,7 +69,7 @@ class ReportModel:
     marker: str
     status: QualityStatus
     message: str = ""
-    metrics: tuple[ReportMetric, ...] = ()
+    metrics: tuple[Metric, ...] = ()
     content: str = ""
     findings_title: str = "Findings"
     findings: tuple[ReportFinding, ...] = ()
@@ -83,31 +78,9 @@ class ReportModel:
     @property
     def title(self) -> str:
         """Return the registered title for this report type."""
-        definition = CHECK_REPORTS.get(self.marker)
-        if definition is None:
-            message = f"Unknown Quality Graph report marker: {self.marker}"
-            raise ValueError(message)
-        return definition.title
+        return workflow_job_for_report(self.marker).title
 
 
-@dataclass(frozen=True)
-class ReportDefinition:
-    """Stable marker and human-readable title for one Quality Graph report."""
-
-    marker: str
-    title: str
-
-
-CHECK_REPORTS = {
-    report.marker: report
-    for report in (
-        ReportDefinition("bundle-size", "Frontend bundle size"),
-        ReportDefinition("frontend-performance", "Frontend performance"),
-        ReportDefinition("mutation", "Mutation testing"),
-        ReportDefinition("object-annotations", "Python object annotation gate"),
-        ReportDefinition("suppression", "Lint suppression gate"),
-    )
-}
 TEMPLATE_DIRECTORY = Path(__file__).with_name("templates")
 TEMPLATE_ENVIRONMENT = Environment(
     loader=FileSystemLoader(TEMPLATE_DIRECTORY),

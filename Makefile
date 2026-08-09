@@ -101,6 +101,9 @@ clean:
 	for path in \
 		.coverage coverage.json htmlcov coverage \
 		.stryker-tmp reports .mutmut-cache mutants \
+		common/build common/monori_common.egg-info \
+		ci/build ci/monori_ci.egg-info \
+		server/build server/monori_server.egg-info \
 		.issue197 server/static ci/coverage.json web/dist web/test-results web/playwright-report; do \
 		remove_path "$$path"; \
 	done

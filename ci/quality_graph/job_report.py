@@ -9,11 +9,11 @@ from pathlib import Path
 from monori.ci.lib.annotations import publish_workflow_annotations
 from monori.ci.lib.diagnostics import ANSI_RE, parse_diagnostics, parse_diff_annotations
 from monori.ci.quality_graph.job_results import (
-    JobMetric,
     JobResult,
     JobResultPublisher,
     JobStatus,
 )
+from monori.ci.quality_graph.models import Metric
 
 MAX_SUMMARY_LOG_CHARACTERS = 200_000
 
@@ -53,7 +53,7 @@ def build_result(
         title,
         status,
         diagnostic_summary(log, len(annotations)),
-        (JobMetric("Exit code", str(exit_code)), JobMetric("Diagnostics", str(len(annotations)))),
+        (Metric("Exit code", str(exit_code)), Metric("Diagnostics", str(len(annotations)))),
         annotations,
     )
 

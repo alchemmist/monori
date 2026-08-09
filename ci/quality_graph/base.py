@@ -2,17 +2,19 @@
 
 from __future__ import annotations
 
+import os
 import urllib.parse
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, ClassVar, Protocol, override
+from pathlib import Path
+from typing import TYPE_CHECKING, ClassVar, Protocol, Self, override
 
 from monori.ci.lib.annotations import (
     SourceAnnotation,
     publish_workflow_annotations,
 )
 from monori.ci.lib.comments import managed_comment, workflow_bot_logins
-from monori.ci.lib.github import is_admin, sync_label
+from monori.ci.lib.github import GitHub, is_admin, sync_label
 from monori.ci.quality_graph.commands import (
     QualityGraphCommand,
     command_request,
@@ -24,21 +26,21 @@ from monori.ci.quality_graph.commands import (
 )
 from monori.ci.quality_graph.job_results import (
     JobControl,
-    JobMetric,
     JobResult,
     JobResultPublisher,
     JobStatus,
     without_admin_controls,
 )
-from monori.ci.quality_graph.models import CheckContext, CheckResult, FindingProtocol
-from monori.ci.quality_graph.reporting import CHECK_REPORTS, RenderedCheckReport
-from monori.common import JsonValue, object_value, optional_string
+from monori.ci.quality_graph.models import CheckContext, CheckResult, FindingProtocol, Metric
+from monori.ci.quality_graph.registry import WORKFLOW_JOB_BY_ID, WorkflowJobDefinition
+from monori.common import JsonValue, decode_json, object_value, optional_string
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
     from re import Pattern
 
     from monori.ci.lib.github import GitHubAPI, RepositoryGitHubAPI
+    from monori.ci.quality_graph.reporting import RenderedCheckReport
 
 
 class ApprovableFinding(FindingProtocol, Protocol):
@@ -299,6 +301,7 @@ class ApprovalLifecycle:
 class QualityCheckDefinition(ABC):
     """Define registry metadata shared by every Quality Graph check class."""
 
+    definition: ClassVar[WorkflowJobDefinition]
     gate: ClassVar[str]
     job_id: ClassVar[str]
     report_marker: ClassVar[str]
@@ -314,7 +317,17 @@ class QualityCheckDefinition(ABC):
         lifecycle = getattr(cls, "approval_lifecycle", None)
         if lifecycle is None:
             return
-        if lifecycle.gate != cls.gate:
+        definition = cls.definition
+        if WORKFLOW_JOB_BY_ID.get(definition.job_id) is not definition:
+            message = f"{cls.__name__} must reference registered workflow metadata"
+            raise TypeError(message)
+        if definition.gate is None or definition.report_marker is None:
+            message = f"{cls.__name__} must reference check workflow metadata"
+            raise TypeError(message)
+        cls.gate = definition.gate
+        cls.job_id = definition.job_id
+        cls.report_marker = definition.report_marker
+        if lifecycle.gate != definition.gate:
             message = f"{cls.__name__} gate does not match its approval lifecycle"
             raise TypeError(message)
         if lifecycle.allow_file_commands != cls.supports_ignore_file:
@@ -322,9 +335,6 @@ class QualityCheckDefinition(ABC):
             raise TypeError(message)
         if (lifecycle.pending_pattern is not None) != (cls.pending_marker is not None):
             message = f"{cls.__name__} pending-marker metadata does not match its lifecycle"
-            raise TypeError(message)
-        if cls.report_marker not in CHECK_REPORTS:
-            message = f"Unknown check report marker for {cls.__name__}: {cls.report_marker}"
             raise TypeError(message)
 
     @classmethod
@@ -386,10 +396,39 @@ class CheckExecution:
 
     status: JobStatus
     summary: str
-    metrics: tuple[JobMetric, ...]
+    metrics: tuple[Metric, ...]
     controls: tuple[JobControl, ...] = ()
     control_notes: tuple[str, ...] = ()
     annotations: tuple[SourceAnnotation, ...] = ()
+
+
+@dataclass(frozen=True)
+class QualityRuntime:
+    """Provide GitHub transport and explicit publication sinks to check entrypoints."""
+
+    github: GitHub
+    publisher: JobResultPublisher
+    read_only: bool
+
+    @classmethod
+    def from_environment(cls) -> Self:
+        """Create a check runtime from the GitHub Actions process environment."""
+        result_path = os.environ.get("QUALITY_RESULT_PATH")
+        summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
+        return cls(
+            GitHub(),
+            JobResultPublisher(
+                Path(result_path) if result_path else None,
+                Path(summary_path) if summary_path else None,
+            ),
+            os.environ.get("QUALITY_GRAPH_READ_ONLY", "").lower() == "true",
+        )
+
+
+def read_github_event() -> dict[str, JsonValue]:
+    """Read the GitHub Actions event payload configured for the current process."""
+    value = decode_json(Path(os.environ["GITHUB_EVENT_PATH"]).read_text())
+    return object_value(value, "GitHub event")
 
 
 @dataclass(frozen=True)
@@ -432,17 +471,27 @@ def run_report_check[FindingType: ApprovableFinding](
             check.failure_label,
             present=execution.status is JobStatus.FAILED,
         )
-    result = JobResult(
-        check.job_id,
-        CHECK_REPORTS[check.report_marker].title,
-        execution.status,
-        execution.summary,
-        execution.metrics,
-        execution.annotations,
-        execution.controls,
-        execution.control_notes,
+    return publish_check_execution(check, request.publisher, execution)
+
+
+def publish_check_execution(
+    check: QualityCheckDefinition,
+    publisher: JobResultPublisher,
+    execution: CheckExecution,
+) -> int:
+    """Publish one completed check according to the shared workflow policy."""
+    publisher.publish(
+        JobResult(
+            check.definition.job_id,
+            check.definition.title,
+            execution.status,
+            execution.summary,
+            execution.metrics,
+            execution.annotations,
+            execution.controls,
+            execution.control_notes,
+        )
     )
-    request.publisher.publish(result)
     publish_workflow_annotations(
         execution.annotations,
         omitted_message="Additional findings are available in the Job Summary.",
@@ -530,25 +579,18 @@ class PullRequestSourceCheck[FindingType: ApprovableFinding](QualityCheck[Findin
         pull_request_url = optional_string(pull.get("html_url")) or ""
         report = self.render_summary(findings, approved, pull_request_url)
         annotations = tuple(self.source_annotation(finding) for finding in active)
-        result = JobResult(
-            self.job_id,
-            CHECK_REPORTS[self.report_marker].title,
+        execution = CheckExecution(
             JobStatus.PASSED if not active else JobStatus.FAILED,
             without_admin_controls(report.summary),
             (
-                JobMetric("Findings", str(len(findings))),
-                JobMetric("Active", str(len(active))),
+                Metric("Findings", str(len(findings))),
+                Metric("Active", str(len(active))),
             ),
+            report.controls,
+            report.control_notes,
             annotations,
-            controls=report.controls,
-            control_notes=report.control_notes,
         )
-        publisher.publish(result)
-        publish_workflow_annotations(
-            annotations,
-            omitted_message="Additional findings are available in the Job Summary.",
-        )
-        return 1 if active else 0
+        return publish_check_execution(self, publisher, execution)
 
     @staticmethod
     def _pull_request_number(event: dict[str, JsonValue]) -> int | None:

@@ -9,21 +9,17 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar, cast, override
 
-from monori.ci.lib.github import GitHub
 from monori.ci.quality_graph.base import (
     ApprovalLifecycle,
     CheckExecution,
     QualityCheck,
+    QualityRuntime,
     ReportCheckRequest,
     run_report_check,
 )
-from monori.ci.quality_graph.job_results import (
-    JobMetric,
-    JobResultPublisher,
-    JobStatus,
-    without_admin_controls,
-)
-from monori.ci.quality_graph.models import CheckContext, CheckResult, Verdict
+from monori.ci.quality_graph.job_results import JobStatus, without_admin_controls
+from monori.ci.quality_graph.models import CheckContext, CheckResult, Metric, Verdict
+from monori.ci.quality_graph.registry import WORKFLOW_JOB_BY_ID
 from monori.ci.quality_graph.reporting import (
     RenderedCheckReport,
     ReportFinding,
@@ -59,9 +55,7 @@ class BundleFinding:
 class BundleSizeCheck(QualityCheck[BundleFinding]):
     """Collect bundle-size findings and use the shared approval lifecycle."""
 
-    gate = "bundle"
-    job_id = "bundle-size"
-    report_marker = "bundle-size"
+    definition = WORKFLOW_JOB_BY_ID["bundle-size"]
     approval_lifecycle = APPROVALS
     pending_marker: ClassVar[str | None] = "monori-bundle-size-pending"
     failure_label: ClassVar[str | None] = STATUS_LABEL
@@ -179,8 +173,8 @@ def build_execution(context: BundleExecutionContext, approved: set[str]) -> Chec
         JobStatus.FAILED if failed else JobStatus.PASSED,
         summary,
         (
-            JobMetric("Regressions", str(len(context.finding_ids))),
-            JobMetric("Active", str(len(context.finding_ids - approved))),
+            Metric("Regressions", str(len(context.finding_ids))),
+            Metric("Active", str(len(context.finding_ids - approved))),
         ),
         rendered.controls,
         rendered.control_notes,
@@ -189,7 +183,7 @@ def build_execution(context: BundleExecutionContext, approved: set[str]) -> Chec
 
 def main() -> int:
     """Run this module as a CLI entrypoint and return its exit code."""
-    github = GitHub()
+    runtime = QualityRuntime.from_environment()
     report_path = Path(os.environ["REPORT_PATH"])
     report = object_value(cast("JsonValue", json.loads(report_path.read_text())), "report")
     check = BundleSizeCheck()
@@ -198,17 +192,16 @@ def main() -> int:
         object_value(item, "entry") for item in array_value(report.get("entries"), "entries")
     ]
     number = int(number_value(report.get("prNumber"), "pull request number"))
-    read_only = os.environ.get("QUALITY_GRAPH_READ_ONLY", "").lower() == "true"
     ids = {finding.finding_id for finding in result.findings}
     summary_path = Path(os.environ["SUMMARY_PATH"])
-    result_path = os.environ.get("QUALITY_RESULT_PATH")
-    step_summary = os.environ.get("GITHUB_STEP_SUMMARY")
-    publisher = JobResultPublisher(
-        Path(result_path) if result_path else None,
-        Path(step_summary) if step_summary else None,
-    )
     context = BundleExecutionContext(report_path, summary_path, report, entries, ids)
-    request = ReportCheckRequest(github, number, result.findings, publisher, read_only)
+    request = ReportCheckRequest(
+        runtime.github,
+        number,
+        result.findings,
+        runtime.publisher,
+        runtime.read_only,
+    )
     return run_report_check(check, request, lambda approved: build_execution(context, approved))
 
 

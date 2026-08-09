@@ -289,9 +289,11 @@ class TestPullRequestWorkflowGraph:
             assert "quality-result-" in source, action
             assert "actions/upload-artifact@v7" in source, action
 
-        quality_job = (REPOSITORY_ROOT / ".github/actions/quality-job/action.yml").read_text()
-        assert "git diff --unified=0" in quality_job
-        assert '--diff "$RUNNER_TEMP/quality-results/$CHECK_ID.diff"' in quality_job
+        quality_action = yaml.safe_load(
+            (REPOSITORY_ROOT / ".github/actions/quality-job/action.yml").read_text()
+        )
+        command_step = quality_action["runs"]["steps"][0]
+        assert "monori.ci.quality_graph.run_job" in command_step["run"]
         fmt = self.workflow["jobs"]["fmt-check"]
         quality_step = next(
             step for step in fmt["steps"] if step.get("uses") == "./.github/actions/quality-job"

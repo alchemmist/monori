@@ -1,4 +1,4 @@
-"""Test portable Quality Graph job results."""
+"""Test portable Quality Graph job summaries and result CLIs."""
 
 from __future__ import annotations
 
@@ -36,7 +36,6 @@ from monori.ci.quality_graph.job_report import (
 from monori.ci.quality_graph.job_report import main as job_report_main
 from monori.ci.quality_graph.job_results import (
     JobControl,
-    JobMetric,
     JobResult,
     JobResultPublisher,
     JobStatus,
@@ -45,6 +44,7 @@ from monori.ci.quality_graph.job_results import (
     read_job_result,
     write_job_result,
 )
+from monori.ci.quality_graph.models import Metric
 from monori.ci.quality_graph.result_cli import main as result_cli_main
 
 if TYPE_CHECKING:
@@ -78,270 +78,6 @@ def environment(values: dict[str, str]) -> Iterator[None]:
                 os.environ[key] = value
 
 
-def test_job_result_round_trips_through_json(tmp_path: Path) -> None:
-    """Preserve dashboard, summary, annotation, and control data between jobs."""
-    result = JobResult(
-        "lint",
-        "Lint",
-        JobStatus.FAILED,
-        "Complete diagnostics",
-        annotations=(SourceAnnotation("example.py", 2, 2, "broken"),),
-        controls=(JobControl("/qg ignore object-a", "/qg remove-ignore object-a"),),
-    )
-    path = tmp_path / "result.json"
-
-    write_job_result(path, result)
-
-    assert read_job_result(path) == result
-    assert path.read_text() == (
-        "{\n"
-        '  "annotations": [\n'
-        "    {\n"
-        '      "endColumn": null,\n'
-        '      "endLine": 2,\n'
-        '      "level": "failure",\n'
-        '      "message": "broken",\n'
-        '      "path": "example.py",\n'
-        '      "startColumn": null,\n'
-        '      "startLine": 2,\n'
-        '      "title": null\n'
-        "    }\n"
-        "  ],\n"
-        '  "checkId": "lint",\n'
-        '  "controlNotes": [],\n'
-        '  "controls": [\n'
-        "    {\n"
-        '      "checked": false,\n'
-        '      "command": "/qg ignore object-a",\n'
-        '      "reverseCommand": "/qg remove-ignore object-a"\n'
-        "    }\n"
-        "  ],\n"
-        '  "metrics": [],\n'
-        '  "status": "failed",\n'
-        '  "summary": "Complete diagnostics",\n'
-        '  "title": "Lint"\n'
-        "}\n"
-    )
-
-
-def test_grouped_annotations_merge_one_location_and_apply_limit() -> None:
-    """Avoid noisy repeated annotations while retaining every source location."""
-    annotations = [
-        SourceAnnotation("same.py", 1, 1, "first"),
-        SourceAnnotation("same.py", 1, 1, "second"),
-        *(SourceAnnotation(f"file-{index}.py", 1, 1, "failure") for index in range(20)),
-    ]
-
-    grouped = grouped_annotations(annotations)
-
-    assert len(grouped) == MAX_STEP_ANNOTATIONS
-    assert grouped[0].message == "first\nsecond"
-
-
-def test_grouped_annotations_preserve_distinct_titles() -> None:
-    """Keep diagnostics from different rules separate at one source range."""
-    grouped = grouped_annotations(
-        (
-            SourceAnnotation("same.py", 1, 1, "first", title="rule-a"),
-            SourceAnnotation("same.py", 1, 1, "second", title="rule-b"),
-        )
-    )
-
-    assert [(item.title, item.message) for item in grouped] == [
-        ("rule-a", "first"),
-        ("rule-b", "second"),
-    ]
-
-
-def test_annotation_publisher_groups_limits_and_reports_omissions() -> None:
-    """Publish workflow commands through the single annotation boundary."""
-    stream = StringIO()
-    annotations = [
-        SourceAnnotation("same.py", 1, 1, "first"),
-        SourceAnnotation("same.py", 1, 1, "second"),
-        *(SourceAnnotation(f"file-{index}.py", 1, 1, "failure") for index in range(20)),
-    ]
-
-    publish_workflow_annotations(
-        annotations,
-        omitted_message="More findings are in the summary.",
-        stream=stream,
-    )
-
-    output = stream.getvalue()
-    assert output.count("::error ") == MAX_STEP_ANNOTATIONS
-    assert "first%0Asecond" in output
-    assert "::notice::More findings are in the summary." in output
-
-
-def test_control_markers_restore_reversible_checkbox_state() -> None:
-    """Recover both commands from a rendered administrator checkbox."""
-    control = JobControl(
-        "/qg ignore suppression-a",
-        "/qg remove-ignore suppression-a",
-        checked=True,
-    )
-    body = f"- [x] `{control.command}` <!-- {control.marker} -->"
-
-    assert controls_from_markdown(body) == (control,)
-
-
-def test_common_diagnostics_become_source_annotations() -> None:
-    """Parse Python and frontend diagnostic locations from a make command log."""
-    annotations = parse_diagnostics(
-        "server/app.py:4:7: invalid type\nweb/src/app.tsx(8,2): unsafe call"
-    )
-
-    assert [(item.path, item.start_line, item.start_column) for item in annotations] == [
-        ("server/app.py", 4, 7),
-        ("web/src/app.tsx", 8, 2),
-    ]
-
-
-def test_warning_diagnostic_keeps_warning_annotation_level() -> None:
-    """Avoid presenting an explicit tool warning as an error annotation."""
-    annotations = parse_diagnostics("server/app.py:4:7: warning: deprecated call")
-
-    assert annotations[0].level is AnnotationLevel.WARNING
-
-
-def test_playwright_results_do_not_become_source_annotations() -> None:
-    """Keep Playwright list-reporter results out of GitHub source annotations."""
-    annotations = parse_diagnostics(
-        "\u2713  10 [chromium] \u203a e2e/dashboard.spec.ts:3:1 \u203a dashboard shows the "
-        "seeded balances\n"
-        "\u2718   2 [chromium] \u203a e2e/auth.spec.ts:20:1 \u203a signing in through the login "
-        "page\n"
-    )
-
-    assert annotations == ()
-
-
-def test_multiline_tool_diagnostics_become_source_annotations() -> None:
-    """Parse ESLint, SQLFluff, Bandit, and Semgrep output through one library API."""
-    annotations = parse_diagnostics(
-        """/home/runner/work/monori/monori/web/src/app.tsx
-  28:15  error  Unsafe assignment  @typescript-eslint/no-unsafe-assignment
-== [server/query.sql] FAIL
-L:  12 | P:   4 | LT01 | Unexpected whitespace.
->> Issue: [B101:assert_used] Use of assert detected.
-Location: server/app/service.py:42:5
-ci/quality_graph/base.py
-\u276f\u2771 python.security.example
-171┆ dangerous_call()
-"""
-    )
-
-    assert [(item.path, item.start_line, item.start_column) for item in annotations] == [
-        ("web/src/app.tsx", 28, 15),
-        ("server/query.sql", 12, 4),
-        ("server/app/service.py", 42, 5),
-        ("ci/quality_graph/base.py", 171, None),
-    ]
-    assert annotations[1].title == "LT01"
-    assert annotations[2].message.startswith("[B101:assert_used]")
-    assert annotations[3].message == "python.security.example"
-
-
-@pytest.mark.parametrize(
-    ("source", "expected"),
-    [
-        ("/runner/project/common/json.py", "common/json.py"),
-        ("/runner/project/ci/lib/github.py", "ci/lib/github.py"),
-        ("/runner/project/server/app/main.py", "server/app/main.py"),
-        ("/runner/project/web/src/main.tsx", "web/src/main.tsx"),
-        ("./relative.py", "relative.py"),
-        ("already/relative.py", "already/relative.py"),
-    ],
-)
-def test_diagnostic_paths_are_normalized(source: str, expected: str) -> None:
-    """Normalize every supported workspace root without changing relative paths."""
-    assert normalize_source_path(source) == expected
-
-
-def test_context_parser_preserves_state_and_fallback_messages() -> None:
-    """Carry file and issue context across multiline diagnostic formats."""
-    context, annotation, handled = parse_context_line(
-        "/runner/project/server/app/main.py",
-        DiagnosticContext(message="saved issue"),
-    )
-    assert (context, annotation, handled) == (
-        DiagnosticContext("server/app/main.py", "saved issue"),
-        None,
-        True,
-    )
-    context, annotation, handled = parse_context_line(
-        "17┆ dangerous_call()",
-        DiagnosticContext("ci/example.py"),
-    )
-    assert (context, annotation, handled) == (
-        DiagnosticContext("ci/example.py"),
-        SourceAnnotation("ci/example.py", 17, 17, "Static analysis finding"),
-        True,
-    )
-    assert parse_context_line("ordinary output", context) == (context, None, False)
-
-
-def test_annotation_conversion_handles_warning_and_missing_column() -> None:
-    """Derive severity and optional columns from a supported regex match."""
-    match = COLON_RE.match("./example.py:4: warning: deprecated")
-    assert match is not None
-    assert annotation_from_match("./example.py", match, title="rule") == SourceAnnotation(
-        "example.py",
-        4,
-        4,
-        "warning: deprecated",
-        AnnotationLevel.WARNING,
-        title="rule",
-    )
-
-
-def test_formatter_diff_hunks_become_precise_source_annotations() -> None:
-    """Annotate every changed range produced by an optional formatter fix target."""
-    annotations = parse_diff_annotations(
-        """diff --git a/web/src/app.tsx b/web/src/app.tsx
---- a/web/src/app.tsx
-+++ b/web/src/app.tsx
-@@ -4,2 +4,3 @@
--old
-+new
-+line
-diff --git a/server/app.py b/server/app.py
---- a/server/app.py
-+++ b/server/app.py
-@@ -10 +10 @@
--old
-+new
-"""
-    )
-
-    assert [(item.path, item.start_line, item.end_line) for item in annotations] == [
-        ("web/src/app.tsx", 4, 6),
-        ("server/app.py", 10, 10),
-    ]
-
-
-def test_formatter_diff_ignores_deletions_and_requires_a_target_file() -> None:
-    """Ignore deletion-only and orphaned hunks while defaulting an omitted count."""
-    annotations = parse_diff_annotations(
-        """@@ -1 +2 @@
-+++ b/example.py
-@@ -1 +7 @@
-@@ -9 +10,0 @@
-"""
-    )
-
-    assert annotations == (
-        SourceAnnotation(
-            "example.py",
-            7,
-            7,
-            "This source range is not formatted.",
-            title="Formatting",
-        ),
-    )
-
-
 def test_failed_make_result_keeps_diagnostics_in_detailed_summary() -> None:
     """Keep full command output in the job summary while exposing compact metrics."""
     result = build_result("lint", "Lint", 1, "example.py:2: failure")
@@ -364,18 +100,6 @@ def test_diagnostic_summary_handles_empty_backticks_and_truncation() -> None:
     assert "x" * MAX_SUMMARY_LOG_CHARACTERS in rendered
     assert "x" * (MAX_SUMMARY_LOG_CHARACTERS + 1) not in rendered
     assert "_Output truncated; 3 characters remain available in the job log._" in rendered
-
-
-def test_workflow_command_escapes_untrusted_annotation_data() -> None:
-    """Prevent source diagnostics from breaking GitHub workflow command syntax."""
-    rendered = workflow_annotation_command(
-        SourceAnnotation("a,b.py", 1, 1, "line one\nline two", title="bad:title")
-    )
-
-    assert rendered == (
-        "::error file=a%2Cb.py,line=1,endLine=1,title=bad%3Atitle::line one%0Aline two"
-    )
-    assert escape_data("100%\r\nnext") == "100%25%0D%0Anext"
 
 
 def test_job_summary_has_a_stable_heading(tmp_path: Path) -> None:
@@ -408,7 +132,7 @@ def test_complete_report_is_not_wrapped_in_a_duplicate_summary(tmp_path: Path) -
         "Lint suppression gate",
         JobStatus.PASSED,
         "## ✅ Lint suppression gate\n\n| Metric | Value |\n| --- | ---: |\n| Status | PASS |\n",
-        (JobMetric("Findings", "0"),),
+        (Metric("Findings", "0"),),
     )
     path = tmp_path / "summary.md"
     append_job_summary(path, result)
@@ -473,7 +197,7 @@ def test_result_cli_writes_summary_metrics_and_artifact(tmp_path: Path) -> None:
         "Mutation testing",
         JobStatus.FAILED,
         "A mutant survived.",
-        (JobMetric("Score", "80%"),),
+        (Metric("Score", "80%"),),
     )
     assert summary.read_text() == (
         '<a id="quality-graph-mutation"></a>\n\n'
@@ -583,7 +307,7 @@ def test_result_cli_reads_summary_file_and_multiple_metrics(tmp_path: Path) -> N
         "Coverage",
         JobStatus.PASSED,
         "Detailed report.\n",
-        (JobMetric("Lines", "99%"), JobMetric("Branches", "98%")),
+        (Metric("Lines", "99%"), Metric("Branches", "98%")),
     )
 
 
@@ -621,7 +345,7 @@ def test_job_report_cli_reads_a_real_log_and_emits_artifact(
         "Detected source diagnostics: **1**\n\n"
         "<details><summary>Command output</summary>\n\n"
         "```text\nexample.py:3:2: invalid type\n```\n\n</details>",
-        (JobMetric("Exit code", "1"), JobMetric("Diagnostics", "1")),
+        (Metric("Exit code", "1"), Metric("Diagnostics", "1")),
         (
             SourceAnnotation(
                 "example.py",

@@ -22,6 +22,7 @@ from monori.ci.lib.comments import (
 )
 from monori.ci.lib.github import GITHUB_PAGE_SIZE, GitHub, GitHubAPI
 from monori.ci.quality_graph.job_results import (
+    CONTROL_RE,
     JobControl,
     JobResult,
     JobStatus,
@@ -296,6 +297,32 @@ def update_dashboard_notice(github: GitHubAPI, number: int, message: str) -> Non
     upsert_comment(github, number, DASHBOARD_MARKER, unwrapped)
 
 
+def restore_dashboard_controls(github: GitHubAPI, comment_id: int, edited_body: str) -> None:
+    """Merge checkbox state from an edit event into the latest dashboard body."""
+    edited_states = {
+        match.group("payload"): match.group("state").lower() == "x"
+        for match in CONTROL_RE.finditer(edited_body)
+    }
+    if not edited_states:
+        return
+    raw_comment = github.request("GET", f"/issues/comments/{comment_id}")
+    if raw_comment is None:
+        return
+    comment = object_value(raw_comment, "dashboard comment")
+    current = string_value(comment.get("body"), "dashboard body")
+
+    def restore(match: re.Match[str]) -> str:
+        checked = edited_states.get(match.group("payload"))
+        if checked is None:
+            return match.group()
+        state = "x" if checked else " "
+        return f"- [{state}]{match.group()[5:]}"
+
+    updated = CONTROL_RE.sub(restore, current)
+    if updated != current:
+        update_comment_body(github, comment_id, updated)
+
+
 def api_job_status(job: dict[str, JsonValue]) -> JobStatus:
     """Map one Actions API job state to the dashboard domain."""
     if job.get("status") == "in_progress":
@@ -396,22 +423,26 @@ class DashboardLifecycle:
             raise TypeError(message)
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
-            if not self._head_is_current() or not self._is_latest_run():
-                return
-            api_jobs = self._api_jobs(required=False)
-            raw_comment = self.github.request("GET", f"/issues/comments/{comment_id}")
-            if raw_comment is None:
-                return
-            comment = object_value(raw_comment, "dashboard comment")
-            body = string_value(comment.get("body"), "dashboard body")
-            updated = refresh_running_jobs(body, api_jobs, self.run_url)
-            if updated != body:
-                update_comment_body(self.github, comment_id, updated)
-            if self._all_jobs_complete(api_jobs):
+            if self.refresh_once(comment_id):
                 return
             time.sleep(poll_interval)
         message = f"Quality Graph dashboard watcher timed out after {timeout:g} seconds"
         raise TimeoutError(message)
+
+    def refresh_once(self, comment_id: int) -> bool:
+        """Refresh one dashboard snapshot and report whether watching should stop."""
+        if not self._head_is_current() or not self._is_latest_run():
+            return True
+        api_jobs = self._api_jobs(required=False)
+        raw_comment = self.github.request("GET", f"/issues/comments/{comment_id}")
+        if raw_comment is None:
+            return True
+        comment = object_value(raw_comment, "dashboard comment")
+        body = string_value(comment.get("body"), "dashboard body")
+        updated = refresh_running_jobs(body, api_jobs, self.run_url)
+        if updated != body:
+            update_comment_body(self.github, comment_id, updated)
+        return self._all_jobs_complete(api_jobs)
 
     def finish(self, results_directory: Path) -> None:
         """Publish final job states unless this workflow result is stale."""

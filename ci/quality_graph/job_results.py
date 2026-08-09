@@ -13,6 +13,7 @@ from jinja2 import Environment, FileSystemLoader, StrictUndefined, select_autoes
 
 from monori.ci.lib.annotations import SourceAnnotation
 from monori.ci.lib.status import QualityStatus
+from monori.ci.quality_graph.models import Metric
 from monori.common import (
     JsonValue,
     array_value,
@@ -44,14 +45,6 @@ JobStatus = QualityStatus
 
 
 @dataclass(frozen=True)
-class JobMetric:
-    """Store one compact metric for a dashboard or job summary."""
-
-    label: str
-    value: str
-
-
-@dataclass(frozen=True)
 class JobControl:
     """Store one reversible administrator command rendered as a checkbox."""
 
@@ -75,7 +68,7 @@ class JobResult:
     title: str
     status: JobStatus
     summary: str = ""
-    metrics: tuple[JobMetric, ...] = ()
+    metrics: tuple[Metric, ...] = ()
     annotations: tuple[SourceAnnotation, ...] = ()
     controls: tuple[JobControl, ...] = ()
     control_notes: tuple[str, ...] = ()
@@ -105,7 +98,7 @@ class JobResult:
         """Deserialize a job result produced by another runner."""
         data = object_value(value, "job result")
         metrics = tuple(
-            JobMetric(
+            Metric(
                 string_value(item.get("label"), "metric label"),
                 string_value(item.get("value"), "metric value"),
             )

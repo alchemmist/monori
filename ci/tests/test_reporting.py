@@ -9,11 +9,11 @@ from monori.ci.lib.comments import (
     bounded_comment_body,
 )
 from monori.ci.quality_graph.job_results import JobControl
+from monori.ci.quality_graph.models import Metric
+from monori.ci.quality_graph.registry import WORKFLOW_JOB_BY_ID, workflow_job_for_report
 from monori.ci.quality_graph.reporting import (
-    CHECK_REPORTS,
     AdminCommands,
     ReportFinding,
-    ReportMetric,
     ReportModel,
     ReportStatus,
     admin_commands,
@@ -28,7 +28,7 @@ def test_renderer_owns_status_heading_findings_and_admin_commands() -> None:
         ReportModel(
             "suppression",
             ReportStatus.FAILED,
-            metrics=(ReportMetric("Active", "1"),),
+            metrics=(Metric("Active", "1"),),
             findings=(
                 ReportFinding(
                     "`example-1`",
@@ -157,7 +157,6 @@ def test_empty_admin_commands_do_not_instruct_the_reader_to_post() -> None:
     assert "Post exactly one command" not in body
 
 
-def test_report_registry_contains_only_checks() -> None:
-    """Keep command UI definitions out of the check report registry."""
-    assert "quality-graph" not in CHECK_REPORTS
-    assert "suppression" in CHECK_REPORTS
+def test_report_metadata_comes_from_the_workflow_registry() -> None:
+    """Resolve report titles and markers from the canonical workflow definition."""
+    assert workflow_job_for_report("suppression") is WORKFLOW_JOB_BY_ID["suppressions"]

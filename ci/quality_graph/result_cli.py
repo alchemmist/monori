@@ -7,11 +7,11 @@ import sys
 from pathlib import Path
 
 from monori.ci.quality_graph.job_results import (
-    JobMetric,
     JobResult,
     JobResultPublisher,
     JobStatus,
 )
+from monori.ci.quality_graph.models import Metric
 
 
 def main() -> int:
@@ -26,12 +26,12 @@ def main() -> int:
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--job-summary", type=Path)
     args = parser.parse_args()
-    metrics: list[JobMetric] = []
+    metrics: list[Metric] = []
     for raw_metric in args.metric:
         label, separator, value = raw_metric.partition("=")
         if not separator:
             parser.error("--metric must use label=value")
-        metrics.append(JobMetric(label, value))
+        metrics.append(Metric(label, value))
     summary = args.summary.read_text() if args.summary is not None else args.message
     result = JobResult(
         args.check_id,

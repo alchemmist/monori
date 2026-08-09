@@ -10,21 +10,17 @@ from pathlib import Path
 from typing import ClassVar, cast, override
 
 from monori.ci.lib.findings import stable_finding_id
-from monori.ci.lib.github import GitHub
 from monori.ci.quality_graph.base import (
     ApprovalLifecycle,
     CheckExecution,
     QualityCheck,
+    QualityRuntime,
     ReportCheckRequest,
     run_report_check,
 )
-from monori.ci.quality_graph.job_results import (
-    JobMetric,
-    JobResultPublisher,
-    JobStatus,
-    without_admin_controls,
-)
-from monori.ci.quality_graph.models import CheckContext, CheckResult, Verdict
+from monori.ci.quality_graph.job_results import JobStatus, without_admin_controls
+from monori.ci.quality_graph.models import CheckContext, CheckResult, Metric, Verdict
+from monori.ci.quality_graph.registry import WORKFLOW_JOB_BY_ID
 from monori.ci.quality_graph.reporting import (
     RenderedCheckReport,
     ReportFinding,
@@ -69,9 +65,7 @@ class FrontendPerformanceFinding:
 class FrontendPerformanceCheck(QualityCheck[FrontendPerformanceFinding]):
     """Collect frontend regressions and use the shared approval lifecycle."""
 
-    gate = "frontend"
-    job_id = "frontend-performance"
-    report_marker = "frontend-performance"
+    definition = WORKFLOW_JOB_BY_ID["frontend-performance"]
     approval_lifecycle = APPROVALS
     pending_marker: ClassVar[str | None] = "monori-frontend-performance-pending"
     failure_label: ClassVar[str | None] = STATUS_LABEL
@@ -170,8 +164,8 @@ def build_execution(context: FrontendExecutionContext, approved: set[str]) -> Ch
         JobStatus.FAILED if failed else JobStatus.PASSED,
         summary,
         (
-            JobMetric("Regressions", str(len(entry_ids(context.entries)))),
-            JobMetric("Active", str(len(active))),
+            Metric("Regressions", str(len(entry_ids(context.entries)))),
+            Metric("Active", str(len(active))),
         ),
         rendered.controls,
         rendered.control_notes,
@@ -180,7 +174,7 @@ def build_execution(context: FrontendExecutionContext, approved: set[str]) -> Ch
 
 def main() -> int:
     """Run this module as a CLI entrypoint and return its exit code."""
-    github = GitHub()
+    runtime = QualityRuntime.from_environment()
     report_path = Path(os.environ["REPORT_PATH"])
     report = object_value(cast("JsonValue", json.loads(report_path.read_text())), "report")
     check = FrontendPerformanceCheck()
@@ -189,14 +183,7 @@ def main() -> int:
         object_value(item, "report entry") for item in array_value(report.get("entries"), "entries")
     ]
     number = integer_value(report.get("prNumber"), "pull request number")
-    read_only = os.environ.get("QUALITY_GRAPH_READ_ONLY", "").lower() == "true"
     summary_path = Path(os.environ["SUMMARY_PATH"])
-    result_path = os.environ.get("QUALITY_RESULT_PATH")
-    step_summary = os.environ.get("GITHUB_STEP_SUMMARY")
-    publisher = JobResultPublisher(
-        Path(result_path) if result_path else None,
-        Path(step_summary) if step_summary else None,
-    )
     context = FrontendExecutionContext(
         report_path,
         summary_path,
@@ -204,7 +191,13 @@ def main() -> int:
         entries,
         summary_path.read_text(),
     )
-    request = ReportCheckRequest(github, number, result.findings, publisher, read_only)
+    request = ReportCheckRequest(
+        runtime.github,
+        number,
+        result.findings,
+        runtime.publisher,
+        runtime.read_only,
+    )
     return run_report_check(check, request, lambda approved: build_execution(context, approved))
 
 

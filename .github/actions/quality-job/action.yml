@@ -17,37 +17,20 @@ inputs:
 runs:
     using: composite
     steps:
-        - name: Run ${{ inputs.title }}
+        - name: Run and publish ${{ inputs.title }}
           id: command
           shell: bash
           env:
               CHECK_ID: ${{ inputs.check-id }}
+              CHECK_TITLE: ${{ inputs.title }}
               MAKE_TARGET: ${{ inputs.make-target }}
               FIX_TARGET: ${{ inputs.fix-target }}
-          run: |
-              set +e
-              log_path="$RUNNER_TEMP/quality-results/$CHECK_ID.log"
-              mkdir -p "$(dirname "$log_path")"
-              make "$MAKE_TARGET" 2>&1 | tee "$log_path"
-              code=${PIPESTATUS[0]}
-              if [ "$code" -ne 0 ] && [ -n "$FIX_TARGET" ]; then
-                make "$FIX_TARGET" >/dev/null 2>&1 || true
-                git diff --unified=0 --no-ext-diff > "$RUNNER_TEMP/quality-results/$CHECK_ID.diff"
-              fi
-              echo "exit_code=$code" >> "$GITHUB_OUTPUT"
-              exit 0
-        - name: Publish ${{ inputs.title }} summary and annotations
-          if: always()
-          shell: bash
-          env:
-              CHECK_ID: ${{ inputs.check-id }}
-              CHECK_TITLE: ${{ inputs.title }}
-              EXIT_CODE: ${{ steps.command.outputs.exit_code }}
           run: >-
-              uv run --locked python -m monori.ci.quality_graph.job_report
+              uv run --locked python -m monori.ci.quality_graph.run_job
               --check-id "$CHECK_ID"
               --title "$CHECK_TITLE"
-              --exit-code "${EXIT_CODE:-2}"
+              --make-target "$MAKE_TARGET"
+              --fix-target "$FIX_TARGET"
               --log "$RUNNER_TEMP/quality-results/$CHECK_ID.log"
               --diff "$RUNNER_TEMP/quality-results/$CHECK_ID.diff"
               --output "$RUNNER_TEMP/quality-results/$CHECK_ID.json"

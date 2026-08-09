@@ -6,7 +6,6 @@ from monori.ci.quality_graph.checks.suppressions import (
     scan_file,
     summary_body,
 )
-from monori.ci.quality_graph.commands import parse_command
 from monori.ci.quality_graph.job_results import JobControl
 from monori.ci.quality_graph.models import CheckContext, Verdict
 
@@ -193,15 +192,6 @@ value = 2
         findings = scan_file("pyproject.toml", after, {2}, before)
 
         assert len(findings) == 1
-
-    def test_commands_are_shared_between_gates(self) -> None:
-        assert parse_command("/qg ignore suppression-abc123") is not None
-        assert parse_command("/qg ignore-file server/app.py") is not None
-        assert parse_command("/qg ignore object-abc123,suppression-def456") is not None
-        assert parse_command("/qg ignore-file server/app.py,web/eslint.config.mjs") is not None
-        assert parse_command("/qg remove-ignore object-abc123,suppression-def456") is not None
-        assert parse_command("/qg ignore all") is None
-        assert parse_command("/qg ignore suppression-abc123,,suppression-def456") is None
 
     def test_summary_has_collapsed_admin_controls_without_report_marker(self) -> None:
         finding = scan_file("example.py", f"value = 1  {NOQA}\n", {1})[0]

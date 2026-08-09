@@ -26,6 +26,7 @@ class WorkflowJobDefinition:
     job_id: str
     title: str
     gate: str | None = None
+    report_marker: str | None = None
 
     @property
     def summary_anchor(self) -> str:
@@ -36,9 +37,14 @@ class WorkflowJobDefinition:
 WORKFLOW_JOBS = (
     WorkflowJobDefinition("workflow-graph", "Workflow graph validation"),
     WorkflowJobDefinition("fmt-check", "Format check"),
-    WorkflowJobDefinition("suppressions", "Lint suppression gate", "suppression"),
+    WorkflowJobDefinition("suppressions", "Lint suppression gate", "suppression", "suppression"),
     WorkflowJobDefinition("lint", "Lint"),
-    WorkflowJobDefinition("object-annotations", "Python object annotation gate", "object"),
+    WorkflowJobDefinition(
+        "object-annotations",
+        "Python object annotation gate",
+        "object",
+        "object-annotations",
+    ),
     WorkflowJobDefinition("type", "Type check"),
     WorkflowJobDefinition("analyze", "Static analysis"),
     WorkflowJobDefinition("test-fast", "Fast tests"),
@@ -46,16 +52,31 @@ WORKFLOW_JOBS = (
     WorkflowJobDefinition("test-slow", "Slow tests"),
     WorkflowJobDefinition("build", "Build"),
     WorkflowJobDefinition("coverage", "Coverage"),
-    WorkflowJobDefinition("mutation", "Mutation testing"),
-    WorkflowJobDefinition("bundle-size", "Frontend bundle size", "bundle"),
-    WorkflowJobDefinition("frontend-performance", "Frontend performance", "frontend"),
+    WorkflowJobDefinition("mutation", "Mutation testing", report_marker="mutation"),
+    WorkflowJobDefinition("bundle-size", "Frontend bundle size", "bundle", "bundle-size"),
+    WorkflowJobDefinition(
+        "frontend-performance",
+        "Frontend performance",
+        "frontend",
+        "frontend-performance",
+    ),
     WorkflowJobDefinition("audit", "Dependency and security audit"),
 )
+WORKFLOW_JOB_BY_ID = {definition.job_id: definition for definition in WORKFLOW_JOBS}
 
 
 def workflow_jobs() -> dict[str, WorkflowJobDefinition]:
     """Return user-facing workflow jobs in dashboard display order."""
-    return {definition.job_id: definition for definition in WORKFLOW_JOBS}
+    return dict(WORKFLOW_JOB_BY_ID)
+
+
+def workflow_job_for_report(marker: str) -> WorkflowJobDefinition:
+    """Return the workflow job that owns a report marker."""
+    for definition in WORKFLOW_JOBS:
+        if definition.report_marker == marker:
+            return definition
+    message = f"Unknown Quality Graph report marker: {marker}"
+    raise ValueError(message)
 
 
 @cache
@@ -76,7 +97,7 @@ def registered_checks() -> dict[str, type[QualityCheckDefinition]]:
         BundleSizeCheck,
         FrontendPerformanceCheck,
     )
-    return {check.gate: check for check in checks}
+    return {check.definition.gate: check for check in checks if check.definition.gate is not None}
 
 
 def run_direct_command_checks() -> None:
