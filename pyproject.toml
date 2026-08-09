@@ -142,7 +142,6 @@ also_copy = [
 ]
 pytest_add_cli_args_test_selection = [
   "--import-mode=importlib",
-  "--ignore=ci/tests/integration",
   "-m",
   "not integration",
   "server/tests",

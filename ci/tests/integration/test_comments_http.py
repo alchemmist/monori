@@ -86,6 +86,8 @@ from monori.ci.tests.integration.quality_graph_http_support import (
     state_objects,
 )
 
+pytestmark = pytest.mark.integration
+
 
 def test_repository_client_helpers_converge_real_http_state() -> None:
     """Exercise pagination, permissions, labels, missing data, and absent reruns."""

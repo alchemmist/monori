@@ -84,6 +84,8 @@ from monori.ci.tests.integration.quality_graph_http_support import (
     state_objects,
 )
 
+pytestmark = pytest.mark.integration
+
 
 def test_dashboard_replaces_legacy_comments_and_collects_job_results(tmp_path: Path) -> None:
     """Publish one comment from isolated job artifacts and real Actions API state."""
