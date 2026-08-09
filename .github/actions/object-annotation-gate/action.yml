@@ -11,6 +11,9 @@ runs:
           uses: ./.github/actions/setup-project
           with:
               python-profile: ci
+        - uses: ./.github/actions/update-quality-dashboard
+          with:
+              check-id: object-annotations
         - name: Test annotation checker
           id: object-annotation-test
           shell: bash

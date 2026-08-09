@@ -12,6 +12,7 @@ from monori.ci.quality_graph.dashboard import (
     dashboard_status,
     load_results,
     refresh_dashboard_body,
+    refresh_running_jobs,
     render_dashboard,
 )
 from monori.ci.quality_graph.job_results import (
@@ -128,12 +129,61 @@ def test_live_refresh_updates_completed_and_api_reported_rows() -> None:
 
     refreshed = refresh_dashboard_body(
         body,
-        JobResult("fmt-check", "Format check", JobStatus.PASSED),
+        JobResult(
+            "fmt-check",
+            "Format check",
+            JobStatus.PASSED,
+            metrics=(JobMetric("Result", r"literal \1"),),
+        ),
         api_jobs,
     )
 
     assert "| Workflow graph validation | ✅ passed |" in refreshed
     assert "| Format check | ✅ passed |" in refreshed
+    assert r"Result: literal \1" in refreshed
+    assert "## 🚀 Quality Graph" in refreshed
+
+
+def test_running_refresh_marks_current_job_and_observed_parallel_jobs() -> None:
+    """Publish current Actions states whenever a shared job action starts."""
+    body = render_dashboard(
+        DashboardModel(
+            JobStatus.IN_PROGRESS,
+            "The current Quality Graph run is in progress.",
+            12,
+            1,
+            "head-sha",
+            (
+                DashboardJob(
+                    "fmt-check",
+                    "Format check",
+                    JobStatus.WAITING,
+                    "summary",
+                    "run",
+                ),
+                DashboardJob(
+                    "test-slow",
+                    "Slow tests",
+                    JobStatus.WAITING,
+                    "summary",
+                    "run",
+                ),
+            ),
+        )
+    )
+    api_jobs: dict[str, dict[str, JsonValue]] = {
+        "Format check": {
+            "status": "completed",
+            "conclusion": "success",
+            "html_url": "https://example.test/jobs/fmt",
+        }
+    }
+
+    refreshed = refresh_running_jobs(body, api_jobs, "test-slow", "https://example.test/run")
+
+    assert "| Format check | ✅ passed |" in refreshed
+    assert "[Logs](https://example.test/jobs/fmt)" in refreshed
+    assert "| Slow tests | 🚀 in progress |" in refreshed
     assert "## 🚀 Quality Graph" in refreshed
 
 

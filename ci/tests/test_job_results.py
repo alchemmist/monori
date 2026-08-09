@@ -93,6 +93,21 @@ def test_grouped_annotations_merge_one_location_and_apply_limit() -> None:
     assert grouped[0].message == "first\nsecond"
 
 
+def test_grouped_annotations_preserve_distinct_titles() -> None:
+    """Keep diagnostics from different rules separate at one source range."""
+    grouped = grouped_annotations(
+        (
+            SourceAnnotation("same.py", 1, 1, "first", title="rule-a"),
+            SourceAnnotation("same.py", 1, 1, "second", title="rule-b"),
+        )
+    )
+
+    assert [(item.title, item.message) for item in grouped] == [
+        ("rule-a", "first"),
+        ("rule-b", "second"),
+    ]
+
+
 def test_control_markers_restore_reversible_checkbox_state() -> None:
     """Recover both commands from a rendered administrator checkbox."""
     control = JobControl(
@@ -115,6 +130,13 @@ def test_common_diagnostics_become_source_annotations() -> None:
         ("server/app.py", 4, 7),
         ("web/src/app.tsx", 8, 2),
     ]
+
+
+def test_warning_diagnostic_keeps_warning_annotation_level() -> None:
+    """Avoid presenting an explicit tool warning as an error annotation."""
+    annotations = parse_diagnostics("server/app.py:4:7: warning: deprecated call")
+
+    assert annotations[0].level is AnnotationLevel.WARNING
 
 
 def test_multiline_tool_diagnostics_become_source_annotations() -> None:

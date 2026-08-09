@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import re
+import time
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
@@ -60,8 +61,14 @@ CONTROL_GROUP_RE = re.compile(
     r"<!-- monori-qg-control-group:[a-z0-9-]+:end -->",
     re.DOTALL,
 )
+CONTROLS_RE = re.compile(
+    r"(?P<start><!-- monori-qg-controls:start -->)(?P<body>.*?)"
+    r"(?P<end><!-- monori-qg-controls:end -->)",
+    re.DOTALL,
+)
 EMPTY_CONTROLS_MESSAGE = "No administrative actions are currently available."
 ROW_UPDATE_ATTEMPTS = 3
+ROW_UPDATE_RETRY_DELAY = 0.1
 
 
 @dataclass(frozen=True)
@@ -106,12 +113,16 @@ def render_dashboard(model: DashboardModel) -> str:
 
 def refresh_dashboard_controls(body: str, result: JobResult) -> str:
     """Replace one job's administrator section with its latest controls."""
+    controls_match = CONTROLS_RE.search(body)
+    if controls_match is None:
+        message = "Quality Graph dashboard has no administrator controls section"
+        raise ValueError(message)
     pattern = re.compile(
         CONTROL_GROUP_RE_TEMPLATE.format(job_id=re.escape(result.check_id)),
         re.DOTALL,
     )
-    updated = pattern.sub("", body, count=1)
-    updated = updated.replace(EMPTY_CONTROLS_MESSAGE, "")
+    controls = pattern.sub("", controls_match.group("body"), count=1)
+    controls = controls.replace(EMPTY_CONTROLS_MESSAGE, "", 1)
     if result.controls:
         group = DashboardControlGroup(
             result.check_id,
@@ -120,9 +131,14 @@ def refresh_dashboard_controls(body: str, result: JobResult) -> str:
             result.control_notes,
         )
         rendered = CONTROL_GROUP_TEMPLATE.render(group=group).strip()
-        updated = updated.replace("</details>", f"{rendered}\n</details>", 1)
-    if CONTROL_GROUP_RE.search(updated) is None:
-        updated = updated.replace("</details>", f"{EMPTY_CONTROLS_MESSAGE}\n</details>", 1)
+        controls = f"{controls.rstrip()}\n\n{rendered}\n"
+    if CONTROL_GROUP_RE.search(controls) is None:
+        controls = f"\n{EMPTY_CONTROLS_MESSAGE}\n"
+    updated = CONTROLS_RE.sub(
+        lambda match: f"{match.group('start')}{controls}{match.group('end')}",
+        body,
+        count=1,
+    )
     return re.sub(r"\n{3,}", "\n\n", updated)
 
 
@@ -147,6 +163,57 @@ def dashboard_status(jobs: Iterable[DashboardJob]) -> JobStatus:
     return JobStatus.PASSED
 
 
+def refresh_running_jobs(
+    body: str,
+    api_jobs: dict[str, dict[str, JsonValue]],
+    current_job_id: str,
+    run_url: str,
+) -> str:
+    """Refresh live job states while forcing the current job to in progress."""
+    updated = body
+    observed: list[DashboardJob] = []
+    for definition in workflow_jobs().values():
+        api_job = api_jobs.get(definition.title)
+        status = (
+            JobStatus.IN_PROGRESS
+            if definition.job_id == current_job_id
+            else api_job_status(api_job)
+            if api_job is not None
+            else JobStatus.WAITING
+        )
+        row = re.compile(
+            rf"^(?P<prefix>\| {re.escape(definition.title)} \|) [^|]+(?P<suffix>\|.*)$",
+            re.MULTILINE,
+        )
+        updated = row.sub(
+            rf"\g<prefix> {status.label} \g<suffix>",
+            updated,
+            count=1,
+        )
+        logs_url = (
+            optional_string(api_job.get("html_url")) if api_job is not None else None
+        ) or run_url
+        logs_link = re.compile(
+            rf"^(\| {re.escape(definition.title)} \|.*\[Summary\]\([^)]+\) · )"
+            r"\[Logs\]\([^)]+\)( \|)$",
+            re.MULTILINE,
+        )
+        updated = logs_link.sub(
+            partial(render_logs_link, logs_url=logs_url),
+            updated,
+            count=1,
+        )
+        observed.append(DashboardJob(definition.job_id, definition.title, status, "", ""))
+    status = dashboard_status(observed)
+    return re.sub(
+        r"^## .* Quality Graph$",
+        f"## {status.emoji} Quality Graph",
+        updated,
+        count=1,
+        flags=re.MULTILINE,
+    )
+
+
 def refresh_dashboard_body(
     body: str,
     result: JobResult,
@@ -168,12 +235,11 @@ def refresh_dashboard_body(
             re.MULTILINE,
         )
 
-        replacement_metric = metric if metric is not None else r"\g<metric>"
-        replacement = (
-            rf"\g<prefix> {status.emoji} {status.value} | "
-            rf"{replacement_metric} \g<suffix>"
+        updated = row.sub(
+            partial(render_status_row, status=status, metric=metric),
+            updated,
+            count=1,
         )
-        updated = row.sub(replacement, updated, count=1)
         logs_url = optional_string(api_job.get("html_url")) if api_job is not None else None
         if logs_url is not None:
             logs_link = re.compile(
@@ -201,6 +267,12 @@ def refresh_dashboard_body(
 def render_logs_link(match: re.Match[str], *, logs_url: str) -> str:
     """Replace one dashboard details link with a concrete workflow job URL."""
     return f"{match.group(1)}[Logs]({logs_url}){match.group(2)}"
+
+
+def render_status_row(match: re.Match[str], *, status: JobStatus, metric: str | None) -> str:
+    """Replace a dashboard status and metric without regex interpolation."""
+    rendered_metric = metric if metric is not None else match.group("metric")
+    return f"{match.group('prefix')} {status.label} | {rendered_metric} {match.group('suffix')}"
 
 
 def mark_jobs_pending(github: GitHubAPI, number: int, job_ids: set[str]) -> None:
@@ -328,6 +400,27 @@ class DashboardLifecycle:
         )
         delete_managed_comments(self.github, self.number, LEGACY_REPORT_MARKERS)
 
+    def running(self, check_id: str) -> None:
+        """Refresh all live job states and mark the current job in progress."""
+        if not self._head_is_current() or not self._is_latest_run():
+            return
+        definitions = workflow_jobs()
+        if check_id not in definitions:
+            message = f"Unknown Quality Graph job: {check_id}"
+            raise ValueError(message)
+        comment = managed_comment(self.github, self.number, DASHBOARD_MARKER)
+        if comment is None:
+            return
+        api_jobs = self._api_jobs(required=False)
+        body = string_value(comment.get("body"), "dashboard body")
+        updated = refresh_running_jobs(body, api_jobs, check_id, self.run_url)
+        upsert_comment(
+            self.github,
+            self.number,
+            DASHBOARD_MARKER,
+            MANAGED_MARKER_RE.sub("", updated),
+        )
+
     def finish(self, results_directory: Path) -> None:
         """Publish final job states unless this workflow result is stale."""
         if not self._may_publish_final():
@@ -406,6 +499,7 @@ class DashboardLifecycle:
                 result,
             ):
                 return
+            time.sleep(ROW_UPDATE_RETRY_DELAY)
         message = f"Could not publish the live status for {result.title}"
         raise RuntimeError(message)
 
@@ -553,7 +647,7 @@ class DashboardLifecycle:
 def main() -> int:
     """Publish the start or final state of the current dashboard."""
     parser = argparse.ArgumentParser()
-    parser.add_argument("operation", choices=("start", "update", "finish", "fail"))
+    parser.add_argument("operation", choices=("start", "running", "update", "finish", "fail"))
     parser.add_argument("--pr-number", type=int, required=True)
     parser.add_argument("--run-id", type=int, required=True)
     parser.add_argument("--run-attempt", type=int, required=True)
@@ -561,6 +655,7 @@ def main() -> int:
     parser.add_argument("--run-url", required=True)
     parser.add_argument("--results", type=Path)
     parser.add_argument("--result", type=Path)
+    parser.add_argument("--check-id")
     parser.add_argument("--message", default="The final dashboard could not be assembled.")
     args = parser.parse_args()
     lifecycle = DashboardLifecycle(
@@ -573,6 +668,10 @@ def main() -> int:
     )
     if args.operation == "start":
         lifecycle.start()
+    elif args.operation == "running":
+        if args.check_id is None:
+            parser.error("--check-id is required for running")
+        lifecycle.running(args.check_id)
     elif args.operation == "update":
         if args.result is None:
             parser.error("--result is required for update")

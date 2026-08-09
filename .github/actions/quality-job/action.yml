@@ -17,6 +17,9 @@ inputs:
 runs:
     using: composite
     steps:
+        - uses: ./.github/actions/update-quality-dashboard
+          with:
+              check-id: ${{ inputs.check-id }}
         - name: Run ${{ inputs.title }}
           id: command
           shell: bash

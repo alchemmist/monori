@@ -8,6 +8,9 @@ runs:
           with:
               install-web: true
               python-profile: ci
+        - uses: ./.github/actions/update-quality-dashboard
+          with:
+              check-id: bundle-size
         - name: Test bundle tools
           shell: bash
           run: uv run --locked pytest -q ci/tests/test_bundle_measurement.py

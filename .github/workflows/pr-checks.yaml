@@ -338,7 +338,14 @@ jobs:
                   --run-url "$RUN_URL"
                   --results "$RUNNER_TEMP/quality-results"
             - name: Mark Quality Graph dashboard failed
-              if: failure() && (steps.quality-results.outcome == 'failure' || steps.dashboard.outcome == 'failure')
+              if: >-
+                  always()
+                  && (
+                    cancelled()
+                    || failure()
+                    || steps.quality-results.outcome != 'success'
+                    || steps.dashboard.outcome == 'failure'
+                  )
               env:
                   GITHUB_TOKEN: ${{ github.token }}
                   PR_NUMBER: ${{ github.event.pull_request.number }}

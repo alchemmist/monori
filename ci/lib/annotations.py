@@ -94,7 +94,7 @@ def grouped_annotations(
 ) -> tuple[SourceAnnotation, ...]:
     """Group diagnostics by source range and apply the GitHub step limit."""
     grouped: dict[
-        tuple[str, int, int, AnnotationLevel, int | None, int | None],
+        tuple[str, int, int, AnnotationLevel, str | None, int | None, int | None],
         list[SourceAnnotation],
     ] = {}
     for annotation in annotations:
@@ -103,6 +103,7 @@ def grouped_annotations(
             annotation.start_line,
             annotation.end_line,
             annotation.level,
+            annotation.title,
             annotation.start_column,
             annotation.end_column,
         )

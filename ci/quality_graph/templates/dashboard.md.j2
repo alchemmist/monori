@@ -15,6 +15,7 @@
 
 Check an action to apply it; uncheck an applied action to revert it.
 
+<!-- monori-qg-controls:start -->
 {% if model.control_groups %}
 {% for group in model.control_groups -%}
 {% include "control_group.md.j2" %}
@@ -22,4 +23,5 @@ Check an action to apply it; uncheck an applied action to revert it.
 {% else %}
 No administrative actions are currently available.
 {% endif %}
+<!-- monori-qg-controls:end -->
 </details>

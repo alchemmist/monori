@@ -110,12 +110,14 @@ def annotation_from_match(
     raw_column = match.groupdict().get("column")
     column = int(raw_column) if raw_column is not None else None
     annotation_message = message or match.groupdict().get("message") or "Source diagnostic"
+    severity = annotation_message.split(maxsplit=1)[0].rstrip(":").lower()
+    level = AnnotationLevel.WARNING if severity == "warning" else AnnotationLevel.FAILURE
     return SourceAnnotation(
         normalize_source_path(path),
         line,
         line,
         annotation_message.strip(),
-        AnnotationLevel.FAILURE,
+        level,
         title=title,
         start_column=column,
         end_column=column,

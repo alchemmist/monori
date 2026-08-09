@@ -18,6 +18,9 @@ runs:
           with:
               install-web: true
               python-profile: mutation
+        - uses: ./.github/actions/update-quality-dashboard
+          with:
+              check-id: mutation
         - name: Restore Stryker cache
           uses: actions/cache@v4
           with:
