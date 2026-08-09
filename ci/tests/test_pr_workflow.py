@@ -25,6 +25,16 @@ FRONTEND_PERFORMANCE_SCOPE = (
 )
 ADMIN_COMMAND_ACTION = REPOSITORY_ROOT / ".github/actions/admin-command/action.yml"
 MUTATION_ACTION = REPOSITORY_ROOT / ".github/actions/mutation-diff-gate/action.yml"
+TEST_RUNNERS = (
+    REPOSITORY_ROOT / "Makefile",
+    REPOSITORY_ROOT / "scripts/ci-tests.sh",
+    REPOSITORY_ROOT / "scripts/coverage-tree.sh",
+    REPOSITORY_ROOT / ".github/actions/bundle-size-gate/action.yml",
+    REPOSITORY_ROOT / ".github/actions/frontend-performance-gate/action.yml",
+    REPOSITORY_ROOT / ".github/actions/mutation-diff-gate/action.yml",
+    REPOSITORY_ROOT / ".github/actions/object-annotation-gate/action.yml",
+    REPOSITORY_ROOT / ".github/actions/suppression-gate/action.yml",
+)
 WorkflowStep = TypedDict("WorkflowStep", {"uses": str, "with": dict[str, str]}, total=False)
 
 
@@ -309,6 +319,34 @@ class TestPullRequestWorkflowGraph:
             assert f"steps.{step}.outcome != 'success'" in source
         assert '--metric "Frontend=${{ steps.mutation-front.outcome }}"' in source
         assert '--metric "Python=${{ steps.mutation-back.outcome }}"' in source
+
+    def test_test_runners_cannot_publish_fixture_reports(self) -> None:
+        """Prevent pytest and mutmut fixtures from polluting live job summaries."""
+        for path in TEST_RUNNERS:
+            source = path.read_text()
+            assert "env -u GITHUB_STEP_SUMMARY -u MUTATION_SUMMARY_PATH" in source, path
+            if path.name == "Makefile":
+                for line in source.splitlines():
+                    if re.search(r"\bpytest(?:\s|$)", line):
+                        assert "env -u GITHUB_STEP_SUMMARY -u MUTATION_SUMMARY_PATH" in line
+        mutmut_runner = (REPOSITORY_ROOT / "scripts/mutmut.sh").read_text()
+        assert (
+            'env -u GITHUB_STEP_SUMMARY -u MUTATION_SUMMARY_PATH "$repository/.venv/bin/mutmut"'
+            in mutmut_runner
+        )
+
+    def test_actions_use_the_node_24_cache_runtime(self) -> None:
+        """Keep cache actions off the deprecated Node.js 20 runtime."""
+        action_sources = "\n".join(
+            path.read_text()
+            for directory in (
+                REPOSITORY_ROOT / ".github/actions",
+                REPOSITORY_ROOT / ".github/workflows",
+            )
+            for path in directory.glob("*.y*ml")
+        )
+        assert "actions/cache@v4" not in action_sources
+        assert "actions/cache@v5" in action_sources
 
     def test_code_and_api_gate_events_are_separated(self) -> None:
         assert "github.event_name == 'pull_request'" in self.source

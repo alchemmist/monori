@@ -239,16 +239,16 @@ audit-secrets: tools
 test: t-front t-back t-e2e
 
 t-workflow:
-	uv run --locked pytest -q ci/tests/test_pr_workflow.py ci/tests/test_main_workflow.py
+	env -u GITHUB_STEP_SUMMARY -u MUTATION_SUMMARY_PATH uv run --locked pytest -q ci/tests/test_pr_workflow.py ci/tests/test_main_workflow.py
 
 t-fast:
 	cd web && npx vitest run --exclude "src/**/*.test.tsx"
-	uv run --locked --group test pytest -q server/tests -m "not integration"
+	env -u GITHUB_STEP_SUMMARY -u MUTATION_SUMMARY_PATH uv run --locked --group test pytest -q server/tests -m "not integration"
 	$(MAKE) t-ci-unit
 
 t-medium:
 	cd web && npx vitest run --exclude "src/**/*.test.ts"
-	uv run --locked --group test pytest -q server/tests -m integration
+	env -u GITHUB_STEP_SUMMARY -u MUTATION_SUMMARY_PATH uv run --locked --group test pytest -q server/tests -m integration
 	$(MAKE) t-ci-integration
 
 t-ci:
@@ -256,7 +256,7 @@ t-ci:
 	$(MAKE) t-ci-integration
 
 t-ci-unit:
-	uv run --locked --group test pytest -q ci/tests --ignore=ci/tests/integration
+	env -u GITHUB_STEP_SUMMARY -u MUTATION_SUMMARY_PATH uv run --locked --group test pytest -q ci/tests --ignore=ci/tests/integration
 
 t-ci-integration:
 	COMPOSE="$(COMPOSE)" bash scripts/ci-tests.sh
@@ -269,7 +269,7 @@ t-front:
 	cd web && npx vitest run
 
 t-back:
-	uv run --locked --group test pytest -q server/tests
+	env -u GITHUB_STEP_SUMMARY -u MUTATION_SUMMARY_PATH uv run --locked --group test pytest -q server/tests
 
 t-e2e:
 	COMPOSE="$(COMPOSE)" bash scripts/e2e.sh

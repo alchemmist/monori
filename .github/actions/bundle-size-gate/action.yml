@@ -10,7 +10,7 @@ runs:
               python-profile: ci
         - name: Test bundle tools
           shell: bash
-          run: uv run --locked pytest -q ci/tests/test_bundle_measurement.py
+          run: env -u GITHUB_STEP_SUMMARY -u MUTATION_SUMMARY_PATH uv run --locked pytest -q ci/tests/test_bundle_measurement.py
         - name: Build pull request
           shell: bash
           run: npm run build

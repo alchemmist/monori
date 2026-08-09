@@ -18,7 +18,7 @@ runs:
               set +e
               log_path="$RUNNER_TEMP/quality-results/suppression-test.log"
               mkdir -p "$(dirname "$log_path")"
-              uv run --locked pytest -q ci/tests/test_suppressions.py 2>&1 | tee "$log_path"
+              env -u GITHUB_STEP_SUMMARY -u MUTATION_SUMMARY_PATH uv run --locked pytest -q ci/tests/test_suppressions.py 2>&1 | tee "$log_path"
               echo "exit_code=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
               exit 0
         - name: Check lint suppressions

@@ -23,7 +23,7 @@ if [ -d mutants ]; then
 fi
 
 set +e
-(cd "$workspace" && "$repository/.venv/bin/mutmut" "$@")
+(cd "$workspace" && env -u GITHUB_STEP_SUMMARY -u MUTATION_SUMMARY_PATH "$repository/.venv/bin/mutmut" "$@")
 status=$?
 set -e
 

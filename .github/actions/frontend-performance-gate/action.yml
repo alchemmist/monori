@@ -27,7 +27,7 @@ runs:
         - name: Test performance comparator
           shell: bash
           run: >-
-              uv run --locked pytest -q
+              env -u GITHUB_STEP_SUMMARY -u MUTATION_SUMMARY_PATH uv run --locked pytest -q
               ci/tests/test_frontend_measurement.py
               ci/tests/test_frontend_performance.py
         - name: Compare PR with merge base

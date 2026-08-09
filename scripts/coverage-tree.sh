@@ -11,11 +11,11 @@ echo "collecting frontend coverage..." >&2
 
 echo "collecting Python coverage..." >&2
 (cd "$root" && uv run --locked --group test coverage erase)
-(cd "$root" && uv run --locked --group test pytest -q server/tests \
+(cd "$root" && env -u GITHUB_STEP_SUMMARY -u MUTATION_SUMMARY_PATH uv run --locked --group test pytest -q server/tests \
   --cov=server/app --cov=common \
   --cov-report="json:$be" --cov-report= --cov-fail-under=0 >/dev/null)
 (cd "$root" && uv run --locked --group test coverage erase)
-(cd "$root" && uv run --locked --group test pytest -q ci/tests \
+(cd "$root" && env -u GITHUB_STEP_SUMMARY -u MUTATION_SUMMARY_PATH uv run --locked --group test pytest -q ci/tests \
   --ignore=ci/tests/integration --cov=ci --cov-report= --cov-fail-under=0 >/dev/null)
 (cd "$root" && COMPOSE="${COMPOSE:-docker compose}" bash scripts/ci-tests.sh \
   --cov=ci --cov-report="json:$ci" --cov-report= --cov-append >/dev/null)
