@@ -71,7 +71,7 @@ class DashboardJob:
     title: str
     status: JobStatus
     summary_url: str
-    logs_url: str
+    logs_url: str | None
     metric: str = "—"
 
 
@@ -173,6 +173,18 @@ def refresh_dashboard_body(
             rf"{replacement_metric} \g<suffix>"
         )
         updated = row.sub(replacement, updated, count=1)
+        logs_url = optional_string(api_job.get("html_url")) if api_job is not None else None
+        if logs_url is not None:
+            logs_link = re.compile(
+                rf"^(\| {re.escape(definition.title)} \|.*\[Summary\]\([^)]+\) · )"
+                r"\[Logs\]\([^)]+\)( \|)$",
+                re.MULTILINE,
+            )
+            updated = logs_link.sub(
+                lambda match: f"{match.group(1)}[Logs]({logs_url}){match.group(2)}",
+                updated,
+                count=1,
+            )
         observed.append(DashboardJob(definition.job_id, definition.title, status, "", ""))
     status = dashboard_status(observed)
     updated = re.sub(
@@ -268,13 +280,18 @@ class DashboardLifecycle:
         existing = managed_comment(self.github, self.number, DASHBOARD_MARKER)
         body = optional_string(existing.get("body")) if existing is not None else ""
         controls = controls_from_markdown(body or "")
+        api_jobs = self._api_jobs(required=False)
         jobs = tuple(
             DashboardJob(
                 definition.job_id,
                 definition.title,
                 JobStatus.PENDING,
                 f"{self.run_url}#{definition.summary_anchor}",
-                self.run_url,
+                (
+                    optional_string(api_jobs[definition.title].get("html_url"))
+                    if definition.title in api_jobs
+                    else None
+                ),
             )
             for definition in workflow_jobs().values()
         )
@@ -308,9 +325,7 @@ class DashboardLifecycle:
             status = api_job_status(api_job) if api_job is not None else JobStatus.SKIPPED
             if result is not None and status is JobStatus.PASSED:
                 status = result.status
-            job_url = (
-                optional_string(api_job.get("html_url")) if api_job is not None else None
-            ) or self.run_url
+            job_url = optional_string(api_job.get("html_url")) if api_job is not None else None
             metric = dashboard_metric(result)
             rows.append(
                 DashboardJob(
@@ -488,7 +503,7 @@ class DashboardLifecycle:
         expected = f"| {result.title} | {result.status.emoji} {result.status.value} |"
         return expected in body
 
-    def _api_jobs(self) -> dict[str, dict[str, JsonValue]]:
+    def _api_jobs(self, *, required: bool = True) -> dict[str, dict[str, JsonValue]]:
         """Load current workflow jobs indexed by their display name."""
         response = object_value(
             self.github.request(
@@ -501,7 +516,7 @@ class DashboardLifecycle:
             for item in array_value(response.get("jobs", []), "workflow jobs")
             for job in (object_value(item, "workflow job"),)
         }
-        if not jobs:
+        if required and not jobs:
             message = f"Workflow run {self.run_id} returned no jobs"
             raise RuntimeError(message)
         return jobs

@@ -368,6 +368,8 @@ def test_dashboard_updates_each_completed_job_before_final_aggregation() -> None
     body = string_value(state_objects(fake_state(), "comments")[0].get("body"), "dashboard")
     assert "| Workflow graph validation | ✅ passed |" in body
     assert "| Format check | ⏳ pending |" in body
+    assert "[Logs](https://example.test/jobs/workflow-graph)" in body
+    assert "[Logs](https://example.test/jobs/suppressions)" in body
     assert "| Lint suppression gate | ❌ failed |" in body
     assert "<details><summary>For administrators</summary>" in body
     assert "### Lint suppression gate" in body
