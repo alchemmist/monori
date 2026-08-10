@@ -5,7 +5,7 @@ repository=$PWD
 workspace=$(mktemp -d)
 trap 'rm -rf "$workspace"' EXIT
 
-mkdir -p "$workspace/monori/ci" "$workspace/monori/server" "$workspace/server" "$workspace/ci"
+mkdir -p "$workspace/monori/ci" "$workspace/monori/server" "$workspace/server" "$workspace/ci" "$workspace/tools"
 cp -R common "$workspace/monori/common"
 cp -R ci/lib "$workspace/monori/ci/lib"
 cp -R ci/quality_graph "$workspace/monori/ci/quality_graph"
@@ -16,6 +16,7 @@ cp server/__init__.py server/schema.sql "$workspace/monori/server/"
 cp -R server/tests "$workspace/server/tests"
 cp -R ci/tests "$workspace/ci/tests"
 cp -R performance "$workspace/performance"
+cp -R tools/frontend-perf "$workspace/tools/frontend-perf"
 cp -R .github "$workspace/.github"
 cp -R scripts "$workspace/scripts"
 cp Makefile "$workspace/Makefile"

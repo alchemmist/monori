@@ -461,8 +461,15 @@ class TestPullRequestWorkflowGraph:
         mutmut_runner = (REPOSITORY_ROOT / "scripts/mutmut.sh").read_text()
         copied_paths = set(configuration["tool"]["mutmut"]["also_copy"])
 
-        assert {".github", "scripts", "Makefile", "performance"} <= copied_paths
+        assert {
+            ".github",
+            "scripts",
+            "Makefile",
+            "performance",
+            "tools/frontend-perf",
+        } <= copied_paths
         assert 'cp -R performance "$workspace/performance"' in mutmut_runner
+        assert 'cp -R tools/frontend-perf "$workspace/tools/frontend-perf"' in mutmut_runner
 
     def test_actions_use_the_node_24_cache_runtime(self) -> None:
         """Keep cache actions off the deprecated Node.js 20 runtime."""

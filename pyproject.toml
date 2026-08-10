@@ -136,6 +136,7 @@ also_copy = [
   "server/tests",
   "ci/tests",
   "performance",
+  "tools/frontend-perf",
   "monori/server/schema.sql",
   "monori/server/migrations",
   "monori/ci/quality_graph/templates",
