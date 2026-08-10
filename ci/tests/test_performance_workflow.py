@@ -77,6 +77,18 @@ def test_backend_runner_uses_workspace_permissions_and_project_python() -> None:
     assert "uv run --locked python performance/report.py" in runner
 
 
+def test_backend_runner_resets_state_before_each_level() -> None:
+    runner = LOAD_RUNNER.read_text()
+    setup, level_runner = runner.split("run_level() {", 1)
+    level_runner = level_runner.split("\n}", 1)[0]
+
+    assert "stack build back front" in setup
+    reset = "stack down --volumes --remove-orphans"
+    start = "stack up --detach back front"
+    assert reset in level_runner
+    assert level_runner.index(reset) < level_runner.index(start)
+
+
 def test_frontend_sla_declares_existing_route_debt_explicitly() -> None:
     config = object_value(decode_json(FRONTEND_CONFIG.read_text()), "frontend config")
     routes = config["lighthouseRoutes"]

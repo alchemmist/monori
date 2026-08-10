@@ -60,8 +60,7 @@ wait_for_stack() {
   fi
 }
 
-stack up --build --detach back front
-wait_for_stack
+stack build back front
 
 capture_resources() {
   output=$1
@@ -81,6 +80,7 @@ capture_resources() {
 run_level() {
   workload=$1
   level=$2
+  stack down --volumes --remove-orphans >/dev/null
   stack up --detach back front >/dev/null
   stack restart front >/dev/null
   wait_for_stack

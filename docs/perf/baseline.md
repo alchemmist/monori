@@ -1,6 +1,6 @@
 # Performance baseline
 
-Measured on 2026-08-07 on an Apple Silicon macOS host with Podman 6.0.2 and a Linux VM limited to approximately 2 GB RAM. The e2e rows were remeasured on 2026-08-10 after adding per-iteration authentication. Backend scenarios used k6 2.0.0, a deterministic 500-transaction seed, 30 seconds per level, and 10, 25, and 50 virtual users. Frontend values are medians of three production-build runs.
+Measured on 2026-08-07 on an Apple Silicon macOS host with Podman 6.0.2 and a Linux VM limited to approximately 2 GB RAM. The e2e rows were remeasured on 2026-08-10 Europe/Moscow time after adding per-iteration authentication. Backend scenarios used k6 2.0.0, a deterministic 500-transaction seed, 30 seconds per level, and 10, 25, and 50 virtual users. Frontend values are medians of three production-build runs.
 
 These are reference-host results, not portable capacity claims. Compare future measurements on the same host class, runtime, VM limits, seed, and scenario duration.
 
