@@ -2,7 +2,7 @@ name: Quality Graph
 
 on:
     issue_comment:
-        types: [created]
+        types: [created, edited]
     pull_request:
         branches: [main]
 
@@ -17,36 +17,69 @@ jobs:
     workflow-graph:
         name: Workflow graph validation
         if: github.event_name == 'pull_request'
+        permissions:
+            contents: read
         runs-on: ubuntu-latest
         steps:
-            - name: Quality Graph command reference
-              run: |
-                  cat >> "$GITHUB_STEP_SUMMARY" <<'EOF'
-                  ## Quality Graph commands
-
-                  Repository administrators can use these commands in a pull-request comment:
-
-                  - `/qg ignore <type>-<finding-id>[,<type>-<finding-id>...]` — ignore selected findings
-                  - `/qg ignore <type>[,<type>...]` — ignore all current findings of selected types
-                  - `/qg ignore-file path/to/file[,path/to/file...]` — ignore findings in selected files
-                  - `/qg remove-ignore <type>-<finding-id>[,<type>-<finding-id>...]` — remove selected ignores
-                  - `/qg status` — show command status
-                  - `/qg help` — show this reference
-
-                  `/quality-graph` is an alias for `/qg`.
-                  EOF
             - name: Checkout
               uses: actions/checkout@v7
               with:
                   persist-credentials: false
-            - name: Setup Python
-              uses: actions/setup-python@v6
+            - name: Setup Python dependencies
+              uses: ./.github/actions/setup-project
               with:
-                  python-version: "3.12"
-            - name: Install workflow test dependencies
-              run: python -m pip install pyyaml types-PyYAML
-            - name: Validate PR workflow graph
-              run: python -m unittest scripts.test_pr_workflow scripts.test_main_workflow
+                  python-profile: ci
+            - uses: ./.github/actions/quality-job
+              with:
+                  check-id: workflow-graph
+
+    quality-dashboard-live:
+        name: Update PR quality dashboard
+        if: >-
+            always()
+            && github.event_name == 'pull_request'
+            && github.event.pull_request.head.repo.full_name == github.repository
+            && github.event.pull_request.user.login != 'dependabot[bot]'
+        permissions:
+            actions: read
+            contents: read
+            issues: write
+            pull-requests: write
+        runs-on: ubuntu-latest
+        timeout-minutes: 185
+        steps:
+            - uses: actions/checkout@v7
+              with:
+                  persist-credentials: false
+            - uses: ./.github/actions/setup-project
+              with:
+                  python-profile: ci
+            - name: Start Quality Graph dashboard
+              env:
+                  GITHUB_TOKEN: ${{ github.token }}
+                  PR_NUMBER: ${{ github.event.pull_request.number }}
+                  HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+                  RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+              run: >-
+                  uv run --locked python -m monori.ci.quality_graph.dashboard start
+                  --pr-number "$PR_NUMBER"
+                  --run-id "${{ github.run_id }}"
+                  --run-attempt "${{ github.run_attempt }}"
+                  --head-sha "$HEAD_SHA"
+                  --run-url "$RUN_URL"
+            - name: Synchronize live Quality Graph status
+              env:
+                  GITHUB_TOKEN: ${{ github.token }}
+                  PR_NUMBER: ${{ github.event.pull_request.number }}
+                  HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+                  RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+              run: >-
+                  uv run --locked python -m monori.ci.quality_graph.dashboard watch
+                  --pr-number "$PR_NUMBER"
+                  --run-id "${{ github.run_id }}"
+                  --run-attempt "${{ github.run_attempt }}"
+                  --head-sha "$HEAD_SHA"
+                  --run-url "$RUN_URL"
 
     fmt-check:
         name: Format check
@@ -60,8 +93,10 @@ jobs:
             - uses: ./.github/actions/setup-project
               with:
                   install-web: true
-                  install-server: true
-            - run: make fmt-check
+                  python-profile: format
+            - uses: ./.github/actions/quality-job
+              with:
+                  check-id: fmt-check
 
     lint:
         name: Lint
@@ -75,7 +110,7 @@ jobs:
             - uses: ./.github/actions/setup-project
               with:
                   install-web: true
-                  install-server: true
+                  python-profile: lint
             - name: Install external linters
               env:
                   HADOLINT_VERSION: "2.12.0"
@@ -103,7 +138,9 @@ jobs:
                   grep " ${tarball}\$" actionlint_checksums.txt | sha256sum -c -
                   tar -xzf "${tarball}" actionlint
                   sudo install -m 0755 actionlint /usr/local/bin/actionlint
-            - run: make lint
+            - uses: ./.github/actions/quality-job
+              with:
+                  check-id: lint
 
     type:
         name: Type check
@@ -117,8 +154,10 @@ jobs:
             - uses: ./.github/actions/setup-project
               with:
                   install-web: true
-                  install-server: true
-            - run: make type
+                  python-profile: type
+            - uses: ./.github/actions/quality-job
+              with:
+                  check-id: type
 
     analyze:
         name: Static analysis
@@ -132,10 +171,12 @@ jobs:
             - uses: ./.github/actions/setup-project
               with:
                   install-web: true
-                  install-server: true
+                  python-profile: analyze
             - name: Install semgrep
               run: python -m pip install semgrep
-            - run: make analyze
+            - uses: ./.github/actions/quality-job
+              with:
+                  check-id: analyze
 
     test-fast:
         name: Fast tests
@@ -149,8 +190,10 @@ jobs:
             - uses: ./.github/actions/setup-project
               with:
                   install-web: true
-                  install-server: true
-            - run: make t-fast
+                  python-profile: test
+            - uses: ./.github/actions/quality-job
+              with:
+                  check-id: test-fast
 
     test-medium:
         name: Medium tests
@@ -164,13 +207,18 @@ jobs:
             - uses: ./.github/actions/setup-project
               with:
                   install-web: true
-                  install-server: true
-            - run: make t-medium
+                  python-profile: test
+            - uses: ./.github/actions/quality-job
+              with:
+                  check-id: test-medium
 
     test-slow:
         name: Slow tests
         needs: [test-fast, test-medium]
-        if: github.event_name == 'pull_request' && needs.test-fast.result == 'success' && needs.test-medium.result == 'success'
+        if: >-
+            github.event_name == 'pull_request'
+            && needs.test-fast.result == 'success'
+            && needs.test-medium.result == 'success'
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@v7
@@ -179,7 +227,7 @@ jobs:
             - uses: ./.github/actions/setup-project
               with:
                   install-web: true
-                  install-server: true
+                  python-profile: test
             - name: Restore Playwright browser cache
               uses: actions/cache@v6
               with:
@@ -188,7 +236,9 @@ jobs:
             - name: Install Playwright browsers
               run: npx playwright install --with-deps chromium
               working-directory: web
-            - run: make t-slow
+            - uses: ./.github/actions/quality-job
+              with:
+                  check-id: test-slow
 
     build:
         name: Build
@@ -202,7 +252,10 @@ jobs:
             - uses: ./.github/actions/setup-project
               with:
                   install-web: true
-            - run: make build
+                  python-profile: ci
+            - uses: ./.github/actions/quality-job
+              with:
+                  check-id: build
 
     coverage:
         name: Coverage
@@ -216,56 +269,47 @@ jobs:
             - uses: ./.github/actions/setup-project
               with:
                   install-web: true
-                  install-server: true
-            - run: make coverage
+                  python-profile: coverage
+            - uses: ./.github/actions/quality-job
+              with:
+                  check-id: coverage
 
-    audit-deps:
-        name: Dependency audit
-        needs:
-            [
-                coverage,
-                mutation,
-                bundle-size,
-                frontend-performance-scope,
-                frontend-performance,
-                frontend-performance-skipped,
-            ]
+    audit:
+        name: Dependency and security audit
+        needs: [coverage, mutation, bundle-size, frontend-performance]
         if: >-
             always()
             && needs.coverage.result == 'success'
             && needs.mutation.result == 'success'
             && needs.bundle-size.result == 'success'
-            && needs.frontend-performance-scope.result == 'success'
-            && (needs.frontend-performance.result == 'success' || needs.frontend-performance-skipped.result == 'success')
+            && needs.frontend-performance.result == 'success'
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@v7
               with:
+                  fetch-depth: 0
                   persist-credentials: false
             - uses: ./.github/actions/setup-project
               with:
                   install-web: true
-                  install-server: true
-            - run: make audit-deps
+                  python-profile: audit
+            - uses: ./.github/actions/quality-job
+              with:
+                  check-id: audit
 
-    audit-deps-py:
-        name: Python dependency audit
-        needs:
-            [
-                coverage,
-                mutation,
-                bundle-size,
-                frontend-performance-scope,
-                frontend-performance,
-                frontend-performance-skipped,
-            ]
+    quality-report:
+        name: Finalize PR quality dashboard
+        needs: audit
         if: >-
             always()
-            && needs.coverage.result == 'success'
-            && needs.mutation.result == 'success'
-            && needs.bundle-size.result == 'success'
-            && needs.frontend-performance-scope.result == 'success'
-            && (needs.frontend-performance.result == 'success' || needs.frontend-performance-skipped.result == 'success')
+            && github.event_name == 'pull_request'
+            && github.event.pull_request.head.repo.full_name == github.repository
+            && github.event.pull_request.user.login != 'dependabot[bot]'
+        permissions:
+            actions: read
+            contents: read
+            issues: write
+            pull-requests: write
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@v7
@@ -273,47 +317,55 @@ jobs:
                   persist-credentials: false
             - uses: ./.github/actions/setup-project
               with:
-                  install-server: true
-            - run: make audit-deps-py
-
-    secrets:
-        name: Secret scan
-        needs:
-            [
-                coverage,
-                mutation,
-                bundle-size,
-                frontend-performance-scope,
-                frontend-performance,
-                frontend-performance-skipped,
-            ]
-        if: >-
-            always()
-            && needs.coverage.result == 'success'
-            && needs.mutation.result == 'success'
-            && needs.bundle-size.result == 'success'
-            && needs.frontend-performance-scope.result == 'success'
-            && (needs.frontend-performance.result == 'success' || needs.frontend-performance-skipped.result == 'success')
-        runs-on: ubuntu-latest
-        steps:
-            - name: Checkout
-              uses: actions/checkout@v7
+                  python-profile: ci
+            - name: Download Quality Graph results
+              id: quality-results
+              uses: actions/download-artifact@v8
               with:
-                  fetch-depth: 0
-                  persist-credentials: false
-            - name: Scan for secrets
-              uses: gitleaks/gitleaks-action@v3
+                  pattern: quality-result-*
+                  path: ${{ runner.temp }}/quality-results
+            - name: Publish Quality Graph dashboard
+              id: dashboard
+              if: steps.quality-results.outcome == 'success'
               env:
-                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  GITHUB_TOKEN: ${{ github.token }}
+                  PR_NUMBER: ${{ github.event.pull_request.number }}
+                  HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+                  RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+              run: >-
+                  uv run --locked python -m monori.ci.quality_graph.dashboard finish
+                  --pr-number "$PR_NUMBER"
+                  --run-id "${{ github.run_id }}"
+                  --run-attempt "${{ github.run_attempt }}"
+                  --head-sha "$HEAD_SHA"
+                  --run-url "$RUN_URL"
+                  --results "$RUNNER_TEMP/quality-results"
+            - name: Mark Quality Graph dashboard failed
+              if: >-
+                  always()
+                  && (
+                    cancelled()
+                    || failure()
+                    || steps.quality-results.outcome != 'success'
+                    || steps.dashboard.outcome == 'failure'
+                  )
+              env:
+                  GITHUB_TOKEN: ${{ github.token }}
+                  PR_NUMBER: ${{ github.event.pull_request.number }}
+                  HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+                  RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+              run: >-
+                  uv run --locked python -m monori.ci.quality_graph.dashboard fail
+                  --pr-number "$PR_NUMBER"
+                  --run-id "${{ github.run_id }}"
+                  --run-attempt "${{ github.run_attempt }}"
+                  --head-sha "$HEAD_SHA"
+                  --run-url "$RUN_URL"
 
     mutation:
         name: Mutation testing
         needs: test-slow
         if: github.event_name == 'pull_request' && needs.test-slow.result == 'success'
-        permissions:
-            issues: write
-            pull-requests: write
-            contents: read
         runs-on: ubuntu-latest
         timeout-minutes: 45
         steps:
@@ -328,8 +380,9 @@ jobs:
         name: Frontend bundle size
         needs: build
         if: github.event_name == 'pull_request' && needs.build.result == 'success'
+        env:
+            QUALITY_GRAPH_READ_ONLY: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.event.pull_request.user.login == 'dependabot[bot]' }}
         permissions:
-            actions: write
             contents: read
             issues: write
             pull-requests: write
@@ -343,51 +396,28 @@ jobs:
                   persist-credentials: false
             - uses: ./.github/actions/bundle-size-gate
 
-    frontend-performance-scope:
-        name: Front performance needed?
+    frontend-performance:
+        name: Frontend performance
         needs: build
         if: github.event_name == 'pull_request' && needs.build.result == 'success'
+        env:
+            QUALITY_GRAPH_READ_ONLY: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.event.pull_request.user.login == 'dependabot[bot]' }}
         permissions:
-            contents: read
-            issues: write
-            pull-requests: write
-        runs-on: ubuntu-latest
-        outputs:
-            relevant: ${{ steps.scope.outputs.relevant }}
-        steps:
-            - name: Checkout workflow code
-              uses: actions/checkout@v7
-              with:
-                  persist-credentials: false
-            - id: scope
-              uses: ./.github/actions/frontend-performance-scope
-
-    frontend-performance:
-        name: Run frontend performance
-        needs: frontend-performance-scope
-        if: github.event_name == 'pull_request' && needs.frontend-performance-scope.result == 'success' && needs.frontend-performance-scope.outputs.relevant == 'true'
-        permissions:
-            actions: write
             contents: read
             issues: write
             pull-requests: write
         runs-on: ubuntu-latest
         timeout-minutes: 45
         steps:
-            - name: Checkout
+            - name: Checkout workflow code
               uses: actions/checkout@v7
               with:
                   fetch-depth: 0
                   persist-credentials: false
+            - id: scope
+              uses: ./.github/actions/frontend-performance-scope
             - uses: ./.github/actions/frontend-performance-gate
-
-    frontend-performance-skipped:
-        name: Skip frontend performance
-        needs: frontend-performance-scope
-        if: github.event_name == 'pull_request' && needs.frontend-performance-scope.result == 'success' && needs.frontend-performance-scope.outputs.relevant == 'false'
-        runs-on: ubuntu-latest
-        steps:
-            - run: echo "Frontend performance skipped because the pull request does not affect performance-relevant files."
+              if: steps.scope.outputs.relevant == 'true'
 
     object-annotations:
         name: Python object annotation gate
@@ -395,6 +425,8 @@ jobs:
         if: github.event_name == 'pull_request' && needs.fmt-check.result == 'success'
         runs-on: ubuntu-latest
         timeout-minutes: 10
+        env:
+            QUALITY_GRAPH_READ_ONLY: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.event.pull_request.user.login == 'dependabot[bot]' }}
         permissions:
             contents: read
             issues: write
@@ -414,6 +446,8 @@ jobs:
         if: github.event_name == 'pull_request' && needs.fmt-check.result == 'success'
         runs-on: ubuntu-latest
         timeout-minutes: 10
+        env:
+            QUALITY_GRAPH_READ_ONLY: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.event.pull_request.user.login == 'dependabot[bot]' }}
         permissions:
             contents: read
             issues: write
@@ -432,7 +466,14 @@ jobs:
         if: >-
             github.event_name == 'issue_comment'
             && github.event.issue.pull_request
-            && startsWith(github.event.comment.body, '/')
+            && (
+              (github.event.action == 'created' && startsWith(github.event.comment.body, '/'))
+              || (
+                github.event.action == 'edited'
+                && github.event.sender.type != 'Bot'
+                && contains(github.event.comment.body, '<!-- monori-qg-control:')
+              )
+            )
         runs-on: ubuntu-latest
         permissions:
             actions: write
