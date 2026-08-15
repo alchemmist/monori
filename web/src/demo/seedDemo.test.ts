@@ -22,6 +22,21 @@ vi.mock("../api.js", () => ({
 
 const emptySnapshot = () => buildSnapshot({ accounts: [], groups: [], categories: [] });
 
+describe("demo snapshot", () => {
+    it("does not overdraw the cash account", () => {
+        const cash = demoSnapshot.accounts.find((account) => account.name === "Cash");
+        if (!cash) throw new Error("demo cash account is missing");
+
+        const balance =
+            (cash.openingBalance ?? 0) +
+            demoSnapshot.transactions
+                .filter((transaction) => transaction.accountId === cash.id)
+                .reduce((total, transaction) => total + transaction.amount, 0);
+
+        expect(balance).toBeGreaterThanOrEqual(0);
+    });
+});
+
 beforeEach(() => {
     vi.clearAllMocks();
     let nextId = 1000;

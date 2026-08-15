@@ -178,6 +178,7 @@ function build(): Snapshot {
     const transactions: Transaction[] = [];
     const transfers: Transfer[] = [];
     let tid = 1;
+    let cashBalance = R(8000);
     const day2 = (n: number) => String(n).padStart(2, "0");
 
     for (const [y, m] of months) {
@@ -237,6 +238,7 @@ function build(): Snapshot {
             comment: "Cash withdrawal",
             source: "transfer",
         });
+        cashBalance += withdrawal;
         transactions.push({
             id: tid++,
             date: `${y}-${day2(m)}-03`,
@@ -258,11 +260,14 @@ function build(): Snapshot {
             const n = Math.max(1, Math.round(perMonth * between(0.7, 1.15)));
             for (let k = 0; k < n; k++) {
                 const rub = Math.round(between(lo, hi));
-                const accountId = cashCats.has(name) && rand() < 0.35 ? 2 : 1;
+                const amount = R(rub);
+                const cashCandidate = cashCats.has(name) && rand() < 0.35;
+                const accountId = cashCandidate && cashBalance >= amount ? 2 : 1;
+                if (accountId === 2) cashBalance -= amount;
                 transactions.push({
                     id: tid++,
                     date: `${y}-${day2(m)}-${day2(1 + Math.floor(rand() * 27))}`,
-                    amount: -R(rub),
+                    amount: -amount,
                     description: pick(merchants),
                     bankCategory: name,
                     categoryId: categoryId(name),
