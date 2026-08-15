@@ -1,16 +1,13 @@
 import os
 import pathlib
 import sys
-
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
-
 from pathlib import Path
 
 import jwt
 import pytest
 
-import app.db as dbmod
-from app import security
+import monori.server.app.db as dbmod
+from monori.server.app import security
 
 
 def test_hash_and_verify_password() -> None:
@@ -143,5 +140,5 @@ def test_auth_secret_lost_create_race_reads_winner(
         secret_file.write_text("winner-secret")
         raise FileExistsError
 
-    monkeypatch.setattr("app.security.os.open", lose_race)
+    monkeypatch.setattr("monori.server.app.security.os.open", lose_race)
     assert security.auth_secret() == "winner-secret"

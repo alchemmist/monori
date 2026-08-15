@@ -12,9 +12,15 @@ import json
 import sqlite3
 from collections.abc import Iterable, Mapping
 
-from .connectors.base import SyncRow
-from .domain_types import TransactionSource
-from .importer import CategoryDefinition, CategoryRule, build_rules, categorize, tx_hash
+from monori.server.app.connectors.base import SyncRow
+from monori.server.app.domain_types import TransactionSource
+from monori.server.app.importer import (
+    CategoryDefinition,
+    CategoryRule,
+    build_rules,
+    categorize,
+    tx_hash,
+)
 
 INSERT_SQL = """INSERT INTO transactions
    (date, amount, description, bank_category, mcc, category_id, account_id,

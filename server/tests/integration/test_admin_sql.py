@@ -2,7 +2,7 @@ import pytest
 from fastapi.testclient import TestClient
 from httpx2 import Response as HTTPXResponse
 
-from tests.conftest import login_as
+from monori.server.tests.conftest import login_as
 
 pytestmark = pytest.mark.integration
 
@@ -197,7 +197,7 @@ def test_a_timed_out_statement_is_refused_and_still_audited(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     anon.headers.update(_make_admin(anon, monkeypatch))
-    monkeypatch.setattr("app.routers.admin_sql.QUERY_TIMEOUT_S", 0.05)
+    monkeypatch.setattr("monori.server.app.routers.admin_sql.QUERY_TIMEOUT_S", 0.05)
     runaway = (
         "WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 50000000)"
         " SELECT COUNT(*) FROM n"
@@ -206,7 +206,7 @@ def test_a_timed_out_statement_is_refused_and_still_audited(
     assert r.status_code == 400
     assert "interrupted" in r.json()["detail"]
 
-    monkeypatch.setattr("app.routers.admin_sql.QUERY_TIMEOUT_S", 15.0)
+    monkeypatch.setattr("monori.server.app.routers.admin_sql.QUERY_TIMEOUT_S", 15.0)
     audited = _sql(anon, "SELECT detail FROM activity_events WHERE kind='admin_sql_failed'").json()[
         "rows"
     ]

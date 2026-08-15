@@ -10,11 +10,11 @@ from fastapi.concurrency import run_in_threadpool
 from pydantic import ConfigDict, Field, ValidationError
 from pydantic.dataclasses import dataclass as pydantic_dataclass
 
-from app.auth import AuthenticatedUser, current_user
-from app.connectors.base import SyncRow
-from app.deps import conn
-from app.domain_types import TransactionSource
-from app.importer import (
+from monori.server.app.auth import AuthenticatedUser, current_user
+from monori.server.app.connectors.base import SyncRow
+from monori.server.app.deps import conn
+from monori.server.app.domain_types import TransactionSource
+from monori.server.app.importer import (
     CategoryDefinition,
     CategoryRule,
     ImportRow,
@@ -24,17 +24,22 @@ from app.importer import (
     parse_statement,
     tx_hash,
 )
-from app.ingest import commit_rows, existing_hash_counts
-from app.transfer_service import detect
-from app.workbook.apply import apply_workbook, budget_conflicts
-from app.workbook.models import (
+from monori.server.app.ingest import commit_rows, existing_hash_counts
+from monori.server.app.transfer_service import detect
+from monori.server.app.workbook.apply import apply_workbook, budget_conflicts
+from monori.server.app.workbook.models import (
     ACCOUNT_MAPPING_ADAPTER,
     ParsedWorkbook,
     WorkbookAccountSlot,
     WorkbookParseError,
     WorkbookTransaction,
 )
-from app.workbook.parser import DEFAULT_CURRENCY, WorkbookError, account_slot, parse_workbook
+from monori.server.app.workbook.parser import (
+    DEFAULT_CURRENCY,
+    WorkbookError,
+    account_slot,
+    parse_workbook,
+)
 
 router = APIRouter(prefix="/api/import", tags=["import"])
 

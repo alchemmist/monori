@@ -2,8 +2,8 @@ import pytest
 from fastapi.testclient import TestClient
 from pydantic import TypeAdapter
 
-from app.deps import IdResponse, SnapshotResponse
-from tests.conftest import login_as
+from monori.server.app.deps import IdResponse, SnapshotResponse
+from monori.server.tests.conftest import login_as
 
 pytestmark = pytest.mark.integration
 

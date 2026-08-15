@@ -1,6 +1,7 @@
-"""
-End-to-end migration parity: import a workbook the way the server does, then
-check that the budget monori shows equals the one the spreadsheet cached.
+"""End-to-end migration parity for a budget workbook.
+
+Import a workbook as the server does, and check that the budget monori shows
+equals the one the spreadsheet cached.
 
     uv run --project server python scripts/verify_migration.py book.xlsx
     uv run --project server python scripts/verify_migration.py book.xlsx --category Vacation
@@ -17,21 +18,20 @@ Nothing outside the temporary database is written; the workbook is only read.
 """
 
 import argparse
+import logging
 import pathlib
 import sqlite3
 import sys
 import tempfile
 from dataclasses import dataclass
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / "server"))
-
 from openpyxl import load_workbook
 from openpyxl.worksheet.worksheet import Worksheet
 
-from app.db import connect
-from app.workbook.apply import apply_workbook
-from app.workbook.models import ParsedWorkbook, WorkbookApplyResult
-from app.workbook.parser import (
+from monori.server.app.db import connect
+from monori.server.app.workbook.apply import apply_workbook
+from monori.server.app.workbook.models import ParsedWorkbook, WorkbookApplyResult
+from monori.server.app.workbook.parser import (
     YEAR_RE,
     _find_layout,
     _parse_year_sheet,
@@ -43,9 +43,16 @@ from app.workbook.parser import (
 
 MONEY = 100
 
+MAX_MONTH = 12
+MONTHS_IN_YEAR = 12
+HEADER_RECONCILIATION_TOLERANCE = 5
+SNAPSHOT_RECONCILIATION_TOLERANCE = 2
+logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True, slots=True)
 class DuplicateRow:
+    """Detected duplicate workbook row used in import idempotence checks."""
+
     accounts: str
     date: str
     amount: int
@@ -55,6 +62,8 @@ class DuplicateRow:
 
 @dataclass(frozen=True, slots=True)
 class LedgerSnapshot:
+    """In-memory snapshot of workbook-derived ledger data."""
+
     categories: dict[int, tuple[str, str]]
     transactions: dict[tuple[str, int, int], int]
     budgets: dict[tuple[str, int, int], int]
@@ -63,6 +72,8 @@ class LedgerSnapshot:
 
 @dataclass(frozen=True, slots=True)
 class Header:
+    """Year-header summary values used as reconciliation anchors."""
+
     overspent: int | None
     budgeted: int | None
     income: int | None
@@ -72,6 +83,8 @@ class Header:
 
 @dataclass(frozen=True, slots=True)
 class YearCat:
+    """Per-category monthly aggregates for a given year."""
+
     budgets: dict[int, int]
     outflows: dict[int, int]
     balances: dict[int, int]
@@ -79,12 +92,16 @@ class YearCat:
 
 @dataclass(frozen=True, slots=True)
 class YearGrid:
+    """Parsed year-wide budget grid keyed by category."""
+
     months: list[int]
     cats: dict[str, YearCat]
 
 
 @dataclass(frozen=True, slots=True)
 class ReplayCell:
+    """Replay validation value for one cell."""
+
     budgeted: int
     outflows: int
     balance: int
@@ -92,6 +109,8 @@ class ReplayCell:
 
 @dataclass(frozen=True, slots=True)
 class ReplayMonth:
+    """Aggregated monthly totals for reconciliation against UI state."""
+
     income: int
     budgeted: int
     overspent: int
@@ -100,6 +119,7 @@ class ReplayMonth:
 
 
 def rub(kop: int | None) -> str:
+    """Rub for this module."""
     return "." if kop is None else f"{kop / MONEY:,.2f}"
 
 
@@ -130,7 +150,7 @@ def sheet_grids(path: str) -> tuple[dict[int, YearGrid], dict[tuple[int, int], H
             )
             for i, base in enumerate(layout.bases):
                 month = layout.start_month + i
-                if month > 12:
+                if month > MAX_MONTH:
                     break
                 headers[(year, month)] = Header(
                     overspent=_summary_value(ws, base, ("Overspent in", "Перерасход")),
@@ -147,7 +167,7 @@ def sheet_grids(path: str) -> tuple[dict[int, YearGrid], dict[tuple[int, int], H
 def _available(ws: Worksheet, base: int) -> int | None:
     for r in (5, 6):
         if _s(ws.cell(r + 1, base + 1)).startswith(("Available", "Доступный")):
-            from app.workbook.parser import _kop
+            from monori.server.app.workbook.parser import _kop
 
             return _kop(ws.cell(r, base + 1))
     return None
@@ -156,7 +176,7 @@ def _available(ws: Worksheet, base: int) -> int | None:
 def import_into_db(
     path: str, db_path: str
 ) -> tuple[sqlite3.Connection, int, ParsedWorkbook, WorkbookApplyResult]:
-    """The server's own path: parse, map every slot onto a matching account, apply."""
+    """Parse workbook, map slots to matching accounts, and apply into DB."""
     parsed = parse_workbook(pathlib.Path(path).read_bytes())
     c = connect(db_path)
     c.execute(
@@ -176,7 +196,8 @@ def import_into_db(
         )
         lastrowid = cur.lastrowid
         if lastrowid is None:
-            raise RuntimeError("inserted account did not return a row id")
+            message = "inserted account did not return a row id"
+            raise RuntimeError(message)
         mapping[key] = lastrowid
     result = apply_workbook(c, uid, parsed, mapping, "overwrite")
     c.commit()
@@ -184,6 +205,7 @@ def import_into_db(
 
 
 def snapshot(c: sqlite3.Connection, uid: int) -> LedgerSnapshot:
+    """Snapshot for this module."""
     kinds = {
         r["id"]: r["kind"]
         for r in c.execute("SELECT id, kind FROM category_groups WHERE user_id=?", (uid,))
@@ -221,7 +243,8 @@ def snapshot(c: sqlite3.Connection, uid: int) -> LedgerSnapshot:
 
 
 def duplicates(c: sqlite3.Connection, uid: int) -> tuple[list[DuplicateRow], list[DuplicateRow]]:
-    """
+    """Find duplicate ledger rows.
+
     Rows a human would read as the same entry twice — on one account, or the
     same day/amount/description spread over several accounts, which is how a
     feed delivered through two doors looks once routing has split the copies.
@@ -265,7 +288,8 @@ def duplicates(c: sqlite3.Connection, uid: int) -> tuple[list[DuplicateRow], lis
 
 
 def _header_adds_up(head: Header) -> bool | None:
-    """
+    """Check budget-header reconciliation.
+
     Whether the month's own header cells make its Available: carried over +
     overspent + income - budgeted. The template's formula has been edited by
     hand over the years and in places dropped a term, so a month can disagree
@@ -284,13 +308,15 @@ def _header_adds_up(head: Header) -> bool | None:
     income = head.income
     budgeted = head.budgeted
     available = head.available
-    return abs(carried + overspent + income + budgeted - available) <= 5
+    calculated = carried + overspent + income - budgeted
+    return abs(calculated - available) <= HEADER_RECONCILIATION_TOLERANCE
 
 
 def _carried_overspend(
     grids: dict[int, YearGrid], head: Header, year: int, month: int
 ) -> bool | None:
-    """
+    """Check carried overspend consistency.
+
     Whether the month's "Overspent in <previous>" cell equals what the previous
     month's own Balance column actually adds up to. A cell whose formula was
     repointed and never recalculated keeps a figure from a different month.
@@ -303,11 +329,12 @@ def _carried_overspend(
     if grid is None or prev_month not in grid.months:
         return None
     total = sum(min(entry.balances.get(prev_month, 0), 0) for entry in grid.cats.values())
-    return abs(total - cached) <= 2
+    return abs(total - cached) <= SNAPSHOT_RECONCILIATION_TOLERANCE
 
 
 def _self_consistent(grids: dict[int, YearGrid], name: str, year: int, month: int) -> bool | None:
-    """
+    """Check whether budget cell fields are internally consistent.
+
     Whether the sheet's own three numbers for this cell agree with each other:
     carried balance + budgeted + outflows == balance. When they do not, the cell
     is a stale cache in the spreadsheet and monori follows the balance, which is
@@ -332,7 +359,8 @@ def _self_consistent(grids: dict[int, YearGrid], name: str, year: int, month: in
     assert outflows is not None
     assert balance is not None
     prev_value = 0 if prev is None else prev
-    return abs(max(prev_value, 0) + budgeted + outflows - balance) <= 2
+    calculated = max(prev_value, 0) + budgeted + outflows
+    return abs(calculated - balance) <= SNAPSHOT_RECONCILIATION_TOLERANCE
 
 
 def replay(
@@ -350,7 +378,7 @@ def replay(
     prev_overspent = 0
     out: dict[tuple[int, int], ReplayMonth] = {}
     for year in range(first_year, last_year + 1):
-        for m in range(1, 13):
+        for m in range(1, MONTHS_IN_YEAR + 1):
             income = sum(tx.get((n, year, m), 0) for n in income_cats)
             budgeted = sum(budgets.get((n, year, m), 0) for n in expense)
             overspent = 0
@@ -379,7 +407,7 @@ def trace(
     grids: dict[int, YearGrid], replayed: dict[tuple[int, int], ReplayMonth], name: str
 ) -> None:
     """One category, month by month, the sheet's three numbers beside ours."""
-    print(f"=== {name} ===")
+    logger.info("=== %s ===", name)
     cols = (
         "month",
         "sheet bud",
@@ -389,7 +417,7 @@ def trace(
         "our out",
         "our bal",
     )
-    print(f"{cols[0]:<9}" + "".join(f"{h:>15}" for h in cols[1:]))
+    logger.info("%s", f"{cols[0]:<9}" + "".join(f"{h:>15}" for h in cols[1:]))
     for year in sorted(grids):
         grid = grids[year]
         entry = grid.cats.get(name, YearCat({}, {}, {}))
@@ -402,10 +430,12 @@ def trace(
             mine = [ours.budgeted, ours.outflows, ours.balance]
             if not any(sheet) and not any(mine):
                 continue
-            print(f"{year}-{m:02d}  " + "".join(f"{rub(v):>15}" for v in sheet + mine))
+            logger.info("%s", f"{year}-{m:02d}  " + "".join(f"{rub(v):>15}" for v in sheet + mine))
 
 
 def main() -> int:
+    """Run this module as a CLI entrypoint and return its exit code."""
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
     ap = argparse.ArgumentParser()
     ap.add_argument("workbook")
     ap.add_argument("--report", default="", help="write the full mismatch list here")
@@ -454,7 +484,7 @@ def main() -> int:
                 ):
                     if want is None:
                         continue
-                    if abs(want - ours_value) > 2:
+                    if abs(want - ours_value) > SNAPSHOT_RECONCILIATION_TOLERANCE:
                         bad_cells.append(
                             (
                                 year,
@@ -477,7 +507,7 @@ def main() -> int:
         if avail_ours is None or want is None:
             continue
         gap = want - avail_ours.available
-        if abs(gap - carried_gap) > 5:
+        if abs(gap - carried_gap) > HEADER_RECONCILIATION_TOLERANCE:
             stale = _header_adds_up(head)
             if stale is not False and _carried_overspend(grids, head, year, m) is False:
                 stale = False
@@ -495,8 +525,7 @@ def main() -> int:
     lines.append(f"grid cells wrong      : {len(bad_cells)}")
     lines.append(f"months where the Available gap changes: {len(bad_months)}")
     lines.append("")
-    for w in [*parsed.warnings, *result.warnings]:
-        lines.append(f"  warning: {w}")
+    lines.extend(f"  warning: {w}" for w in [*parsed.warnings, *result.warnings])
     if dupes:
         lines.append("\n-- duplicate rows (account, date, amount, description, count) --")
         lines += [
@@ -535,14 +564,15 @@ def main() -> int:
     if args.report:
         pathlib.Path(args.report).write_text(text + "\n")
     head_text, *rest = text.split("\n\n", 1)
-    print(head_text)
+    logger.info("%s", head_text)
     if rest:
         body = rest[0].split("\n")
-        print("\n".join(body[: args.limit]))
+        logger.info("%s", "\n".join(body[: args.limit]))
         if len(body) > args.limit:
-            print(
-                f"  … {len(body) - args.limit} more lines"
-                + (f" in {args.report}" if args.report else "")
+            logger.info(
+                "  … %s more lines%s",
+                len(body) - args.limit,
+                f" in {args.report}" if args.report else "",
             )
     return 1 if bad_cells or bad_months or dupes or ledger.uncategorized else 0
 

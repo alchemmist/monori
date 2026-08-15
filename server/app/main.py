@@ -1,6 +1,7 @@
 """Monori API. Money in/out of this API is integer kopecks everywhere."""
 
 import contextlib
+import os
 import pathlib
 from collections.abc import Awaitable, Callable
 from typing import Annotated
@@ -12,10 +13,10 @@ from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import Response
 
-from .admin import record_api_usage
-from .auth import AuthenticatedUser, current_user
-from .deps import LIGHT_SNAPSHOT_TX_LIMIT, SnapshotResponse, conn, snapshot
-from .routers import (
+from monori.server.app.admin import record_api_usage
+from monori.server.app.auth import AuthenticatedUser, current_user
+from monori.server.app.deps import LIGHT_SNAPSHOT_TX_LIMIT, SnapshotResponse, conn, snapshot
+from monori.server.app.routers import (
     accounts,
     admin,
     admin_sql,
@@ -57,7 +58,7 @@ async def count_feature_usage(
     return response
 
 
-STATIC_DIR = pathlib.Path(__file__).resolve().parent.parent / "static"
+STATIC_DIR = pathlib.Path(os.environ.get("MONORI_STATIC_DIR", "server/static"))
 
 
 def _serve_spa(base: pathlib.Path, path: str) -> FileResponse:

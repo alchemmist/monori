@@ -2,10 +2,10 @@ import pytest
 from fastapi.testclient import TestClient
 from pydantic import TypeAdapter
 
-import app.db as dbmod
-from app.importer import tx_hash
-from app.routers.imports import ImportRowResponse
-from tests.conftest import AccountOptions, Api, TransactionOptions
+import monori.server.app.db as dbmod
+from monori.server.app.importer import tx_hash
+from monori.server.app.routers.imports import ImportRowResponse
+from monori.server.tests.conftest import AccountOptions, Api, TransactionOptions
 
 pytestmark = pytest.mark.integration
 

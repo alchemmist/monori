@@ -13,6 +13,17 @@ COMPOSE=${COMPOSE:-"docker compose"}
 # port the probe and Playwright talk to
 export E2E_PORT=${E2E_PORT:-8078}
 BASE_URL=${E2E_BASE_URL:-"http://localhost:${E2E_PORT}"}
+if [ -z "${CONTAINER_PLATFORM:-}" ]; then
+  case "$(uname -m)" in
+  arm64 | aarch64) CONTAINER_PLATFORM=linux/arm64 ;;
+  x86_64 | amd64) CONTAINER_PLATFORM=linux/amd64 ;;
+  *)
+    echo "unsupported container architecture: $(uname -m)" >&2
+    exit 1
+    ;;
+  esac
+fi
+export CONTAINER_PLATFORM
 
 stack() {
   # shellcheck disable=SC2086 # COMPOSE is intentionally two words ("docker compose")
@@ -44,4 +55,8 @@ fi
 
 # subshell: the cleanup trap resolves the compose file relative to the repo
 # root, so the script's own cwd must not move
-(cd web && E2E_BASE_URL="$BASE_URL" npx playwright test "$@")
+(
+  cd web
+  npx playwright install chromium
+  E2E_BASE_URL="$BASE_URL" npx playwright test "$@"
+)

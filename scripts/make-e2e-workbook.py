@@ -1,8 +1,8 @@
-"""
-Deterministic generator for web/e2e/fixtures/template-workbook.xlsx — the
-cut-down "live template" workbook the workbook e2e spec migrates through the
-real UI (a miniature of the user's YNAB-like spreadsheet: Russian T-Bank
-transaction headers, keyword side table, a year sheet with a budget grid).
+"""Deterministic generator for web/e2e/fixtures/template-workbook.xlsx — a cut-down
+"live template" workbook for YNAB-like budget fixtures.
+
+It includes Russian T-Bank transaction headers, keyword side table, and a year sheet
+with a budget grid.
 
 Regenerate with:  cd server && uv run python ../scripts/make-e2e-workbook.py
 
@@ -13,6 +13,7 @@ the counts must match what the spec hardcodes.
 
 import datetime
 import pathlib
+import logging
 import sys
 from collections.abc import Callable
 from io import BytesIO
@@ -21,7 +22,7 @@ from typing import Protocol
 from openpyxl import Workbook
 from openpyxl.worksheet.worksheet import Worksheet
 
-from app.workbook.models import ParsedWorkbook
+from monori.server.app.workbook.models import ParsedWorkbook
 
 
 class _SpecModule(Protocol):
@@ -35,9 +36,8 @@ REPO = pathlib.Path(__file__).resolve().parent.parent
 
 
 def _load_workbook_modules() -> tuple[_SpecModule, dict[str, tuple[str, ...]], ParseWorkbook]:
-    sys.path.insert(0, str(REPO / "server"))
-    from app.workbook import spec
-    from app.workbook.parser import TX_ALIASES, parse_workbook
+    from monori.server.app.workbook import spec
+    from monori.server.app.workbook.parser import TX_ALIASES, parse_workbook
 
     return spec, TX_ALIASES, parse_workbook
 
@@ -45,12 +45,15 @@ def _load_workbook_modules() -> tuple[_SpecModule, dict[str, tuple[str, ...]], P
 spec, TX_ALIASES, parse_workbook = _load_workbook_modules()
 
 OUT = REPO / "web" / "e2e" / "fixtures" / "template-workbook.xlsx"
+LENTA_AMOUNT = -300_000
+PAYROLL_AMOUNT = 5_000_000
 
 TX_HEADER = [
     TX_ALIASES[f][0]
     for f in ("date", "card", "status", "amount", "currency", "bank_category", "mcc", "description")
 ]
 type WorkbookCell = datetime.datetime | float | int | str | None
+logger = logging.getLogger(__name__)
 
 
 def tx(
@@ -62,6 +65,7 @@ def tx(
     desc: str,
     kw: tuple[str, str] | None = None,
 ) -> list[WorkbookCell]:
+    """Tx for this module."""
     row: list[WorkbookCell] = [None] * 12
     row[0] = date
     row[1] = card
@@ -78,6 +82,7 @@ def tx(
 
 
 def build() -> Workbook:
+    """Build for this module."""
     wb = Workbook()
     active = wb.active
     assert active is not None
@@ -158,6 +163,8 @@ def build() -> Workbook:
 
 
 def main() -> None:
+    """Run this module as a CLI entrypoint and return its exit code."""
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
     wb = build()
     buf = BytesIO()
     wb.save(buf)
@@ -173,7 +180,7 @@ def main() -> None:
         "transactions": len(parsed.transactions),
         "budget_cells": len(parsed.budgets),
     }
-    print(f"parsed: {counts}, markers={markers}")
+    logger.info("parsed: %s, markers=%s", counts, markers)
     # the miniature must parse spotlessly — a warning means the fixture itself
     # drifted from what the importer expects, so fail instead of narrating
     assert not parsed.warnings, parsed.warnings
@@ -184,10 +191,10 @@ def main() -> None:
     # content of one row per domain as well
     by_desc = {t.description: t for t in parsed.transactions}
     lenta = by_desc["LENTA-101"]
-    assert lenta.amount == -300000, lenta
+    assert lenta.amount == LENTA_AMOUNT, lenta
     assert lenta.monori_category == "Groceries", lenta
     assert lenta.marker == "*1111", lenta
-    assert by_desc["PAYROLL JAN"].amount == 5000000, by_desc["PAYROLL JAN"]
+    assert by_desc["PAYROLL JAN"].amount == PAYROLL_AMOUNT, by_desc["PAYROLL JAN"]
     assert by_desc["MISC SHOP"].monori_category == "", by_desc["MISC SHOP"]
     keywords = {c.name: c.keywords for c in parsed.categories}
     assert keywords["Groceries"] == "lenta|okey", keywords
@@ -200,7 +207,7 @@ def main() -> None:
 
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_bytes(data)
-    print(f"wrote {OUT} ({len(data)} bytes)")
+    logger.info("wrote %s (%s bytes)", OUT, len(data))
 
 
 if __name__ == "__main__":

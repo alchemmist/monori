@@ -3,8 +3,8 @@ from pathlib import Path
 import pytest
 from cryptography.fernet import Fernet
 
-import app.db as dbmod
-from app import crypto
+import monori.server.app.db as dbmod
+from monori.server.app import crypto
 
 
 def _use_tmp_db(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

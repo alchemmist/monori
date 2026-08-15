@@ -1,9 +1,14 @@
 import pytest
 from fastapi import HTTPException
 
-from app.admin import admin_emails, admin_user, feature_from_path, user_id_from_auth_header
-from app.auth import AuthenticatedUser
-from app.security import create_access_token
+from monori.server.app.admin import (
+    admin_emails,
+    admin_user,
+    feature_from_path,
+    user_id_from_auth_header,
+)
+from monori.server.app.auth import AuthenticatedUser
+from monori.server.app.security import create_access_token
 
 
 def test_admin_emails_parses_and_normalizes(monkeypatch: pytest.MonkeyPatch) -> None:

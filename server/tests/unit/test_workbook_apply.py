@@ -4,12 +4,10 @@ import sys
 from dataclasses import replace
 from pathlib import Path
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
-
-import app.db as dbmod
-from app.workbook.apply import apply_workbook as _apply_workbook
-from app.workbook.apply import budget_conflicts as _budget_conflicts
-from app.workbook.models import (
+import monori.server.app.db as dbmod
+from monori.server.app.workbook.apply import apply_workbook as _apply_workbook
+from monori.server.app.workbook.apply import budget_conflicts as _budget_conflicts
+from monori.server.app.workbook.models import (
     ParsedWorkbook,
     WorkbookApplyResult,
     WorkbookBudget,

@@ -2,7 +2,7 @@ import time
 
 import pytest
 
-from app.routers.admin_sql import BLOB_PREVIEW, cell, leading_keyword
+from monori.server.app.routers.admin_sql import BLOB_PREVIEW, cell, leading_keyword
 
 
 @pytest.mark.parametrize(

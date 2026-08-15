@@ -8,8 +8,8 @@ import jwt
 from fastapi import Depends, HTTPException
 from fastapi.security import OAuth2PasswordBearer
 
-from .deps import UserResponse, conn
-from .security import decode_access_token
+from monori.server.app.deps import UserResponse, conn
+from monori.server.app.security import decode_access_token
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/auth/token", auto_error=True)
 

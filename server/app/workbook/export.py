@@ -20,9 +20,13 @@ from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.worksheet import Worksheet
 
-from app.deps import CategoryResponse, GroupResponse, SnapshotResponse, TransactionResponse
-
-from . import spec
+from monori.server.app.deps import (
+    CategoryResponse,
+    GroupResponse,
+    SnapshotResponse,
+    TransactionResponse,
+)
+from monori.server.app.workbook import spec
 
 
 @dataclass(frozen=True, slots=True)

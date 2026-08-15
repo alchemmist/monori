@@ -15,9 +15,9 @@ from typing import Annotated
 import jwt
 from fastapi import Depends, HTTPException
 
-from .auth import AuthenticatedUser, current_user
-from .deps import conn
-from .security import decode_access_token
+from monori.server.app.auth import AuthenticatedUser, current_user
+from monori.server.app.deps import conn
+from monori.server.app.security import decode_access_token
 
 UNTRACKED_FEATURES = {"auth"}
 MIN_API_PATH_PARTS = 3

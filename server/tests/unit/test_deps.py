@@ -1,6 +1,6 @@
 import sqlite3
 
-from app.deps import serialize_transactions
+from monori.server.app.deps import serialize_transactions
 
 
 def test_serialize_transactions_chunks_split_lookup() -> None:

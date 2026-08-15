@@ -8,8 +8,8 @@ from itertools import batched
 from pydantic import ConfigDict, Field
 from pydantic.dataclasses import dataclass as pydantic_dataclass
 
-from . import db as dbmod
-from .db_records import (
+from monori.server.app import db as dbmod
+from monori.server.app.db_records import (
     AccountRecord,
     BudgetRecord,
     CategoryRecord,
@@ -19,14 +19,14 @@ from .db_records import (
     TransactionRecord,
     UserRecord,
 )
-from .domain_types import (
+from monori.server.app.domain_types import (
     AccountType,
     CategoryGroupKind,
     ConnectionStatus,
     GoalStatus,
     TransactionSource,
 )
-from .transfer_service import TransferResponse, list_transfers
+from monori.server.app.transfer_service import TransferResponse, list_transfers
 
 SPLIT_FETCH_BATCH_SIZE = 500
 
