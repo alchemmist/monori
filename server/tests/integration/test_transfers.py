@@ -3,8 +3,8 @@ import re
 import pytest
 from fastapi.testclient import TestClient
 
-from app.deps import TransactionResponse
-from tests.conftest import Api, TransactionOptions, login_as
+from monori.server.app.deps import TransactionResponse
+from monori.server.tests.conftest import Api, TransactionOptions, login_as
 
 pytestmark = pytest.mark.integration
 

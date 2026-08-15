@@ -1,7 +1,7 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from tests.conftest import Api
+from monori.server.tests.conftest import Api
 
 pytestmark = pytest.mark.integration
 

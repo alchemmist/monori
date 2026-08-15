@@ -1,8 +1,8 @@
 import pytest
 from fastapi.testclient import TestClient
 
-import app.db as dbmod
-from tests.conftest import login_as
+import monori.server.app.db as dbmod
+from monori.server.tests.conftest import login_as
 
 pytestmark = pytest.mark.integration
 

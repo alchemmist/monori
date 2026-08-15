@@ -7,8 +7,8 @@ from fastapi.testclient import TestClient
 from openpyxl import Workbook
 from pydantic import TypeAdapter
 
-from app.deps import IdResponse, SnapshotResponse
-from tests.conftest import AccountOptions, Api, TransactionOptions, login_as
+from monori.server.app.deps import IdResponse, SnapshotResponse
+from monori.server.tests.conftest import AccountOptions, Api, TransactionOptions, login_as
 
 pytestmark = pytest.mark.integration
 

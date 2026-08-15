@@ -8,11 +8,10 @@ import datetime
 import sqlite3
 from collections.abc import Iterable, Mapping
 
-from app.domain_types import TransactionSource
-from app.importer import ImportRow
-from app.ingest import commit_rows, dedup_text, historical_day_counts
-
-from .models import (
+from monori.server.app.domain_types import TransactionSource
+from monori.server.app.importer import ImportRow
+from monori.server.app.ingest import commit_rows, dedup_text, historical_day_counts
+from monori.server.app.workbook.models import (
     ParsedWorkbook,
     WorkbookApplyResult,
     WorkbookBatchResult,
@@ -21,7 +20,7 @@ from .models import (
     WorkbookGroup,
     WorkbookTransaction,
 )
-from .parser import account_slot
+from monori.server.app.workbook.parser import account_slot
 
 
 def _now() -> str:

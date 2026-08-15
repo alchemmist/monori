@@ -12,7 +12,9 @@ def run_migrations() -> None:
         with context.begin_transaction():
             context.run_migrations()
     else:
-        assert url is not None
+        if url is None:
+            message = "Alembic requires sqlalchemy.url for online migrations"
+            raise RuntimeError(message)
         engine = create_engine(url)
         with engine.connect() as connection:
             context.configure(connection=connection)

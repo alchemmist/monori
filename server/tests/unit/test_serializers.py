@@ -2,8 +2,7 @@ import pathlib
 import sys
 from dataclasses import asdict
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
-from app.db_records import (
+from monori.server.app.db_records import (
     AccountRecord,
     BudgetRecord,
     CategoryRecord,
@@ -11,7 +10,7 @@ from app.db_records import (
     GroupRecord,
     TransactionRecord,
 )
-from app.deps import (
+from monori.server.app.deps import (
     serialize_account,
     serialize_budget,
     serialize_category,
@@ -19,7 +18,12 @@ from app.deps import (
     serialize_group,
     serialize_tx,
 )
-from app.domain_types import AccountType, CategoryGroupKind, ConnectionStatus, TransactionSource
+from monori.server.app.domain_types import (
+    AccountType,
+    CategoryGroupKind,
+    ConnectionStatus,
+    TransactionSource,
+)
 
 
 def test_serialize_group() -> None:

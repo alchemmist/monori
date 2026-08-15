@@ -8,7 +8,7 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from app.main import _serve_spa
+from monori.server.app.main import _serve_spa
 
 
 def test_unknown_api_path_returns_json_404(anon: TestClient) -> None:

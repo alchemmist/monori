@@ -1,6 +1,6 @@
 import pytest
 
-from app.emails import canonical_email, normalize_email
+from monori.server.app.emails import canonical_email, normalize_email
 
 
 @pytest.mark.parametrize(

@@ -17,8 +17,13 @@ from fastapi import FastAPI, HTTPException
 from pydantic import ConfigDict, Field
 from pydantic.dataclasses import dataclass as pydantic_dataclass
 
-from .connectors import base as connectors
-from .connectors.base import ConnectorError, JsonObject, SmsRequiredError, SyncResult
+from monori.common import JsonObject
+from monori.server.app.connectors import base as connectors
+from monori.server.app.connectors.base import (
+    ConnectorError,
+    SmsRequiredError,
+    SyncResult,
+)
 
 app = FastAPI(title="monori-sync")
 

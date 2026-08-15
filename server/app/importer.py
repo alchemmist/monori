@@ -19,7 +19,7 @@ from typing import Literal, overload
 from pydantic import ConfigDict
 from pydantic.dataclasses import dataclass as pydantic_dataclass
 
-from .connectors.base import SyncRow
+from monori.server.app.connectors.base import SyncRow
 
 type ImportValue = str | int | bool | None
 type RuleValue = str | list[str] | int

@@ -19,7 +19,7 @@ from argon2.exceptions import Argon2Error
 from pydantic import ConfigDict, TypeAdapter
 from pydantic.dataclasses import dataclass as pydantic_dataclass
 
-from . import db as dbmod
+from monori.server.app import db as dbmod
 
 _hasher = PasswordHasher()
 

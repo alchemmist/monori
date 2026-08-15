@@ -6,11 +6,22 @@ import pytest
 from fastapi.testclient import TestClient
 from pydantic import TypeAdapter
 
-import app.connectors.fake
-from app import sync_service
-from app.connectors import base
-from app.connectors.base import ConnectorError, JsonObject, SmsRequiredError, SyncResult
-from app.sync_runner import LocalRunner, NoPendingLoginError, RemoteRunner, SyncRequest, get_runner
+import monori.server.app.connectors.fake
+from monori.common import JsonObject
+from monori.server.app import sync_service
+from monori.server.app.connectors import base
+from monori.server.app.connectors.base import (
+    ConnectorError,
+    SmsRequiredError,
+    SyncResult,
+)
+from monori.server.app.sync_runner import (
+    LocalRunner,
+    NoPendingLoginError,
+    RemoteRunner,
+    SyncRequest,
+    get_runner,
+)
 
 CREDS: JsonObject = {"phone": "+70000000000", "password": "pw"}
 type Runner = LocalRunner | RemoteRunner

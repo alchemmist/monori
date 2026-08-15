@@ -66,6 +66,23 @@ class IntersectionObserverStub implements IntersectionObserver {
     }
 }
 window.IntersectionObserver = IntersectionObserverStub;
+Object.defineProperty(window, "visualViewport", {
+    configurable: true,
+    value: {
+        width: 1200,
+        height: 900,
+        offsetLeft: 0,
+        offsetTop: 0,
+        pageLeft: 0,
+        pageTop: 0,
+        scale: 1,
+        onresize: null,
+        onscroll: null,
+        addEventListener() {},
+        removeEventListener() {},
+        dispatchEvent: () => false,
+    },
+});
 function defineMissingMethod(target: object, name: string, value: () => unknown) {
     if (!(name in target)) {
         Object.defineProperty(target, name, { configurable: true, value, writable: true });

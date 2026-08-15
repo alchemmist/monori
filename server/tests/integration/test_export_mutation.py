@@ -14,7 +14,7 @@ from fastapi.testclient import TestClient
 from openpyxl import Workbook, load_workbook
 from openpyxl.worksheet.worksheet import Worksheet
 
-from tests.conftest import AccountOptions, Api, TransactionOptions
+from monori.server.tests.conftest import AccountOptions, Api, TransactionOptions
 
 pytestmark = pytest.mark.integration
 

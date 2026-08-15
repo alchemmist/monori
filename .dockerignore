@@ -1,5 +1,6 @@
 .git
 .worktrees
+ci/coverage.json
 reports
 server/.venv
 server/data

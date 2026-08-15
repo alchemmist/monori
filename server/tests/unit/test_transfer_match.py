@@ -1,6 +1,6 @@
 from dataclasses import replace
 
-from app.transfer_match import (
+from monori.server.app.transfer_match import (
     TransferCandidate,
     TransferMatchRow,
     day_number,

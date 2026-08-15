@@ -8,12 +8,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import ConfigDict, Field
 from pydantic.dataclasses import dataclass as pydantic_dataclass
 
-from app.auth import AuthenticatedUser, current_user
-from app.db_records import TransactionRecord
-from app.deps import TransactionResponse, conn, serialize_tx
-from app.importer import tx_hash
-from app.transfer_match import AUTO_DAYS, SUGGEST_DAYS, split_confident
-from app.transfer_service import (
+from monori.server.app.auth import AuthenticatedUser, current_user
+from monori.server.app.db_records import TransactionRecord
+from monori.server.app.deps import TransactionResponse, conn, serialize_tx
+from monori.server.app.importer import tx_hash
+from monori.server.app.transfer_match import AUTO_DAYS, SUGGEST_DAYS, split_confident
+from monori.server.app.transfer_service import (
     LinkError,
     LinkRequest,
     MergedTransfer,
@@ -23,8 +23,8 @@ from app.transfer_service import (
     list_transfers,
     reject,
 )
-from app.transfer_service import link as link_pair
-from app.transfer_service import split as split_transfer
+from monori.server.app.transfer_service import link as link_pair
+from monori.server.app.transfer_service import split as split_transfer
 
 router = APIRouter(prefix="/api/transfers", tags=["transfers"])
 

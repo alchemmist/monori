@@ -6,7 +6,7 @@ import pytest
 from openpyxl import Workbook
 from openpyxl.worksheet.worksheet import Worksheet
 
-from app.workbook.parser import (
+from monori.server.app.workbook.parser import (
     WorkbookError,
     _amount,
     _parse_dt,

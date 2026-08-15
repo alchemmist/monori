@@ -3,8 +3,7 @@ web/dist/
 web/package-lock.json
 server/static/
 server/data/
-server/.venv/
-server/uv.lock
+.venv/
 docs/
 **/*.woff2
 **/*.png

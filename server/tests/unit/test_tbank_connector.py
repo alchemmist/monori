@@ -20,17 +20,16 @@ from typing import ClassVar, Literal, Self, override
 
 import pytest
 
-from app.connectors import fake as fake_connector
-from app.connectors import tbank_playwright as tbank_mod
-from app.connectors.base import (
+from monori.common import JsonObject
+from monori.server.app.connectors import tbank_playwright as tbank_mod
+from monori.server.app.connectors.base import (
     ConnectorError,
-    JsonObject,
     SmsRequiredError,
     SyncResult,
     get_connector_class,
 )
-from app.connectors.fake import FIXTURE_ROWS, _rows
-from app.connectors.tbank_playwright import TBankPlaywrightConnector as TBankConnector
+from monori.server.app.connectors.fake import FIXTURE_ROWS, _rows
+from monori.server.app.connectors.tbank_playwright import TBankPlaywrightConnector as TBankConnector
 
 STATEMENT = (
     "05.01.2026 10:00:00\t05.01.2026\t*1\tOK\t-100,00\tRUB\t-100,00\tRUB\t\tSuper\t5411\t"

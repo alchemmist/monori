@@ -14,12 +14,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import ConfigDict, Field
 from pydantic.dataclasses import dataclass as pydantic_dataclass
 
-from app import auth
-from app.admin import admin_user
-from app.db_records import UserRecord
-from app.deps import UserResponse, conn, serialize_user
-
-from .auth_router import create_user
+from monori.server.app import auth
+from monori.server.app.admin import admin_user
+from monori.server.app.db_records import UserRecord
+from monori.server.app.deps import UserResponse, conn, serialize_user
+from monori.server.app.routers.auth_router import create_user
 
 router = APIRouter(
     prefix="/api/admin",

@@ -8,8 +8,8 @@ import pytest
 from openpyxl import Workbook, load_workbook
 from openpyxl.worksheet.worksheet import Worksheet
 
-from app.workbook import spec
-from app.workbook.parser import (
+from monori.server.app.workbook import spec
+from monori.server.app.workbook.parser import (
     MONTH_ABBREVS,
     TX_ALIASES,
     LayoutRow,
@@ -34,7 +34,7 @@ from app.workbook.parser import (
 )
 
 if TYPE_CHECKING:
-    from app.workbook.models import WorkbookParseError as WorkbookParseErrorRow
+    from monori.server.app.workbook.models import WorkbookParseError as WorkbookParseErrorRow
 
 TX_HEADER: list[str] = [
     TX_ALIASES[f][0]

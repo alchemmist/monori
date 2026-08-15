@@ -1,4 +1,4 @@
-import { Button, Modal } from "@mantine/core";
+import { Button, Modal, useMantineEnv } from "@mantine/core";
 import type { ReactNode } from "react";
 
 const WIDTHS = { s: 480, l: 900 };
@@ -36,12 +36,15 @@ export default function AppDialog({
     cancelText = "Cancel",
     onCancel,
 }: AppDialogProps) {
+    const env = useMantineEnv();
+
     return (
         <Modal
             opened
             onClose={onClose}
             title={title}
             size={isDialogSize(size) ? WIDTHS[size] : size}
+            {...(env === "test" ? { transitionProps: { duration: 0, exitDuration: 0 } } : {})}
         >
             {children}
             {applyText != null && applyText !== "" && (

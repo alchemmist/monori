@@ -35,7 +35,9 @@ def upgrade() -> None:
             "INSERT INTO accounts (name, type, currency, sort) VALUES ('T-Bank', 'card', 'RUB', 1)",
         )
     row = conn.exec_driver_sql("SELECT MIN(id) FROM accounts").fetchone()
-    assert row is not None
+    if row is None:
+        message = "Failed to select the default account"
+        raise RuntimeError(message)
     default_id = row[0]
     if not _has_column(conn, "transactions", "account_id"):
         conn.exec_driver_sql("""CREATE TABLE transactions_new (

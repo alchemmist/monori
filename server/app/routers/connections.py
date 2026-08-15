@@ -25,23 +25,28 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import ConfigDict, Field
 from pydantic.dataclasses import dataclass as pydantic_dataclass
 
-from app import crypto
-from app.auth import AuthenticatedUser, current_user
-from app.connectors import base as connectors
-from app.connectors.base import (
+from monori.common import JsonObject
+from monori.server.app import crypto
+from monori.server.app.auth import AuthenticatedUser, current_user
+from monori.server.app.connectors import base as connectors
+from monori.server.app.connectors.base import (
     ConnectorError,
     ConnectorInfo,
-    JsonObject,
     SmsRequiredError,
     SyncResult,
     SyncRow,
 )
-from app.deps import conn
-from app.domain_types import ConnectionStatus, TransactionSource
-from app.importer import CategoryDefinition, CategoryRule, build_rules
-from app.ingest import categorize_rows, commit_rows, drop_already_present, historical_day_counts
-from app.sync_runner import NoPendingLoginError, SyncRequest, get_runner
-from app.transfer_service import detect
+from monori.server.app.deps import conn
+from monori.server.app.domain_types import ConnectionStatus, TransactionSource
+from monori.server.app.importer import CategoryDefinition, CategoryRule, build_rules
+from monori.server.app.ingest import (
+    categorize_rows,
+    commit_rows,
+    drop_already_present,
+    historical_day_counts,
+)
+from monori.server.app.sync_runner import NoPendingLoginError, SyncRequest, get_runner
+from monori.server.app.transfer_service import detect
 
 router = APIRouter(prefix="/api/connections", tags=["connections"])
 

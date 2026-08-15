@@ -7,8 +7,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import ConfigDict, Field
 from pydantic.dataclasses import dataclass as pydantic_dataclass
 
-from app.auth import AuthenticatedUser, current_user
-from app.deps import conn
+from monori.server.app.auth import AuthenticatedUser, current_user
+from monori.server.app.deps import conn
 
 router = APIRouter(prefix="/api/budgets", tags=["budgets"])
 MONTHS_IN_YEAR = 12
