@@ -2,9 +2,9 @@ import pytest
 from fastapi.testclient import TestClient
 from pydantic import TypeAdapter
 
-from app.deps import SnapshotResponse, TransactionResponse
-from app.routers.transactions import TransactionListResponse
-from tests.conftest import Api
+from monori.server.app.deps import SnapshotResponse, TransactionResponse
+from monori.server.app.routers.transactions import TransactionListResponse
+from monori.server.tests.conftest import Api
 
 pytestmark = pytest.mark.integration
 

@@ -1,0 +1,27 @@
+<!-- monori-qg-run: {{ model.run_id }}:{{ model.run_attempt }}:{{ model.head_sha }} -->
+
+## {{ model.status.emoji }} Quality Graph
+
+<!-- monori-qg-notice:start -->
+{{ model.message }}
+<!-- monori-qg-notice:end -->
+
+| Check | Status | Key result | Details |
+| --- | :---: | --- | --- |
+{% for job in model.jobs -%}
+| {{ job.title }} | {{ job.status.emoji }} {{ job.status.value }} | {{ job.metric }} | [Summary]({{ job.summary_url }}) · [Logs]({{ job.logs_url }}) |
+{% endfor %}
+<details><summary>For administrators</summary>
+
+Check an action to apply it; uncheck an applied action to revert it.
+
+<!-- monori-qg-controls:start -->
+{% if model.control_groups %}
+{% for group in model.control_groups -%}
+{% include "control_group.md.j2" %}
+{% endfor %}
+{% else %}
+No administrative actions are currently available.
+{% endif %}
+<!-- monori-qg-controls:end -->
+</details>

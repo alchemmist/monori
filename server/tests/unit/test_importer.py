@@ -1,8 +1,7 @@
 import pathlib
 import sys
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
-from app.importer import (
+from monori.server.app.importer import (
     CategoryDefinition,
     build_rules,
     categorize,

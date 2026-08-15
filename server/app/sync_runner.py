@@ -19,11 +19,11 @@ from functools import lru_cache
 
 import httpx
 
-from .connectors import base as connectors
-from .connectors.base import (
+from monori.common import JsonObject
+from monori.server.app.connectors import base as connectors
+from monori.server.app.connectors.base import (
     SYNC_RESULT_ADAPTER,
     ConnectorError,
-    JsonObject,
     SmsRequiredError,
     SyncResult,
 )

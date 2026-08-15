@@ -8,9 +8,7 @@ from typing import cast
 
 import pytest
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
-
-from app.db_records import (
+from monori.server.app.db_records import (
     RowTypeError,
     RowValueError,
     row_bool,
@@ -20,7 +18,7 @@ from app.db_records import (
     row_optional_str,
     row_str,
 )
-from app.domain_types import AccountType
+from monori.server.app.domain_types import AccountType
 
 
 def _row() -> sqlite3.Row:

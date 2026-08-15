@@ -1,6 +1,6 @@
-"""
-Run the REAL TBankPlaywrightConnector against a prepared profile, headless,
-exactly as prod does — to reproduce/confirm sync errors locally.
+"""Run the REAL TBankPlaywrightConnector against a prepared profile, headless.
+
+Run it exactly as prod does to reproduce/confirm sync errors locally.
 
 Feeds it the trusted-device profile captured by explore_tbank.py as its session
 blob, so it should skip login (cookies still valid) and go straight to the
@@ -9,19 +9,26 @@ operations export. Prints each stage and any error.
 
 import base64
 import io
+import logging
 import os
+import pathlib
 import sys
 import tarfile
+import tempfile
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "server"))
+from monori.common import JsonObject
+from monori.server.app.connectors.base import ConnectorError, SmsRequiredError, SyncResult
+from monori.server.app.connectors.tbank_playwright import TBankPlaywrightConnector
 
-from app.connectors.base import JsonObject, SmsRequiredError, SyncResult
-from app.connectors.tbank_playwright import TBankPlaywrightConnector
-
-PROFILE_DIR = os.environ.get("PROFILE_DIR", "/tmp/tbank-explore/profile")
+PROFILE_DIR = os.environ.get(
+    "PROFILE_DIR",
+    str(pathlib.Path(tempfile.gettempdir()) / "tbank-explore/profile"),
+)
+logger = logging.getLogger(__name__)
 
 
 def archive_profile(work_dir: str) -> str:
+    """Archive profile for this module."""
     buf = io.BytesIO()
     with tarfile.open(fileobj=buf, mode="w:gz") as tar:
         tar.add(work_dir, arcname=".")
@@ -29,6 +36,8 @@ def archive_profile(work_dir: str) -> str:
 
 
 def main() -> None:
+    """Run this module as a CLI entrypoint and return its exit code."""
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
     session: JsonObject = {"profile": archive_profile(PROFILE_DIR)}
     # phone/password only used if the trusted session lapsed; code is the
     # quick-login pin. Fill from env if you want to exercise a full re-login.
@@ -39,26 +48,28 @@ def main() -> None:
     }
     profile = session["profile"]
     if not isinstance(profile, str):
-        raise RuntimeError("profile archive is not a string")
-    print(f"profile blob: {len(profile)} b64 chars")
-    print(f"headless: {TBankPlaywrightConnector.headless()}")
+        message = "profile archive is not a string"
+        raise TypeError(message)
+    logger.info("profile blob: %s b64 chars", len(profile))
+    logger.info("headless: %s", TBankPlaywrightConnector.headless())
 
     conn = TBankPlaywrightConnector(creds, session)
     try:
         result: SyncResult = conn.sync()
-    except SmsRequiredError as e:
-        print(f"RESULT: SmsRequired -> {e} (trusted session lapsed, needs OTP)")
+    except SmsRequiredError as error:
+        logger.info("RESULT: SmsRequired -> %s (trusted session lapsed, needs OTP)", error)
         conn.close()
         return
-    except Exception as e:  
-        print(f"RESULT: ERROR -> {type(e).__name__}: {e}")
-        return
+    except ConnectorError as error:
+        logger.exception("RESULT: ERROR -> %s: %s", type(error).__name__, error)
+        conn.close()
+        raise SystemExit(1) from error
     rows = result.rows
-    print(f"RESULT: OK -> {len(rows)} rows parsed")
+    logger.info("RESULT: OK -> %s rows parsed", len(rows))
     if rows:
         ds = sorted(row.date for row in rows)
-        print(f"  span {ds[0]} .. {ds[-1]}")
-        print(f"  session updated: {'profile' in (result.session or {})}")
+        logger.info("  span %s .. %s", ds[0], ds[-1])
+        logger.info("  session updated: %s", "profile" in (result.session or {}))
 
 
 if __name__ == "__main__":

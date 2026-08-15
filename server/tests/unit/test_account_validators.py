@@ -4,8 +4,7 @@ import sys
 import pytest
 from fastapi import HTTPException
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
-from app.routers.accounts import MAX_ICON_IMAGE, _validate_color, _validate_icon_image
+from monori.server.app.routers.accounts import MAX_ICON_IMAGE, _validate_color, _validate_icon_image
 
 
 def test_validate_color_accepts_six_digit_hex() -> None:

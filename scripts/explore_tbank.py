@@ -32,6 +32,7 @@ ATTR_RE = re.compile(r'(automation-id|data-qa-type|data-qa-file)="([^"]+)"')
 
 
 def dump(page: Page) -> str:
+    """Dump for this module."""
     html = page.content()
     (CTL / "page.html").write_text(f"<!-- url: {page.url} -->\n{html}", encoding="utf-8")
     seen = []
@@ -44,6 +45,7 @@ def dump(page: Page) -> str:
 
 
 def handle(page: Page, line: str) -> str:
+    """Handle for this module."""
     parts = line.split(" ", 1)
     cmd = parts[0]
     arg = parts[1].strip() if len(parts) > 1 else ""
@@ -89,6 +91,7 @@ def handle(page: Page, line: str) -> str:
 
 
 def main() -> None:
+    """Run this module as a CLI entrypoint and return its exit code."""
     CTL.mkdir(parents=True, exist_ok=True)
     profile = CTL / "profile"
     profile.mkdir(exist_ok=True)

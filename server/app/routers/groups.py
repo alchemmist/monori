@@ -3,13 +3,14 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import ConfigDict, JsonValue, field_validator
+from pydantic import ConfigDict, field_validator
 from pydantic.dataclasses import dataclass as pydantic_dataclass
 
-from app.auth import AuthenticatedUser, current_user
-from app.db_records import GroupRecord
-from app.deps import GroupResponse, IdResponse, conn, serialize_group
-from app.domain_types import CategoryGroupKind
+from monori.common import JsonValue
+from monori.server.app.auth import AuthenticatedUser, current_user
+from monori.server.app.db_records import GroupRecord
+from monori.server.app.deps import GroupResponse, IdResponse, conn, serialize_group
+from monori.server.app.domain_types import CategoryGroupKind
 
 router = APIRouter(prefix="/api/groups", tags=["groups"])
 

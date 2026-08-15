@@ -7,9 +7,9 @@ connector registry's parameter declarations.
 import pytest
 from fastapi import HTTPException
 
-import app.connectors.fake
-from app.connectors.base import available_connectors
-from app.routers.connections import _validate_credentials
+import monori.server.app.connectors.fake
+from monori.server.app.connectors.base import available_connectors
+from monori.server.app.routers.connections import _validate_credentials
 
 
 def test_validate_credentials_requires_declared_fields() -> None:

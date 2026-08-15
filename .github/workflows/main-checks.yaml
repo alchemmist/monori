@@ -42,7 +42,7 @@ jobs:
             - uses: ./.github/actions/setup-project
               with:
                   install-web: true
-                  install-server: true
+                  python-profile: format
             - run: make fmt-check
 
     lint:
@@ -57,7 +57,7 @@ jobs:
             - uses: ./.github/actions/setup-project
               with:
                   install-web: true
-                  install-server: true
+                  python-profile: lint
             - name: Install external linters
               run: |
                   set -euo pipefail
@@ -84,7 +84,7 @@ jobs:
             - uses: ./.github/actions/setup-project
               with:
                   install-web: true
-                  install-server: true
+                  python-profile: type
             - run: make type
 
     analyze:
@@ -99,7 +99,7 @@ jobs:
             - uses: ./.github/actions/setup-project
               with:
                   install-web: true
-                  install-server: true
+                  python-profile: analyze
             - name: Install semgrep
               run: pipx install semgrep
             - run: make analyze
@@ -116,7 +116,7 @@ jobs:
             - uses: ./.github/actions/setup-project
               with:
                   install-web: true
-                  install-server: true
+                  python-profile: test
             - run: make t-fast
 
     test-medium:
@@ -131,7 +131,7 @@ jobs:
             - uses: ./.github/actions/setup-project
               with:
                   install-web: true
-                  install-server: true
+                  python-profile: test
             - run: make t-medium
 
     test-slow:
@@ -146,9 +146,9 @@ jobs:
             - uses: ./.github/actions/setup-project
               with:
                   install-web: true
-                  install-server: true
+                  python-profile: test
             - name: Restore Playwright browser cache
-              uses: actions/cache@v4
+              uses: actions/cache@v5
               with:
                   path: ~/.cache/ms-playwright
                   key: playwright-${{ runner.os }}-${{ hashFiles('web/package-lock.json') }}
@@ -183,41 +183,12 @@ jobs:
             - uses: ./.github/actions/setup-project
               with:
                   install-web: true
-                  install-server: true
+                  python-profile: coverage
             - run: make coverage
 
-    audit-deps:
-        name: Dependency audit
+    audit:
+        name: Dependency and security audit
         needs: coverage
-        runs-on: ubuntu-latest
-        steps:
-            - name: Checkout
-              uses: actions/checkout@v7
-              with:
-                  persist-credentials: false
-            - uses: ./.github/actions/setup-project
-              with:
-                  install-web: true
-                  install-server: true
-            - run: make audit-deps
-
-    audit-deps-py:
-        name: Python dependency audit
-        needs: audit-deps
-        runs-on: ubuntu-latest
-        steps:
-            - name: Checkout
-              uses: actions/checkout@v7
-              with:
-                  persist-credentials: false
-            - uses: ./.github/actions/setup-project
-              with:
-                  install-server: true
-            - run: make audit-deps-py
-
-    secrets:
-        name: Secret scan
-        needs: audit-deps-py
         runs-on: ubuntu-latest
         permissions:
             contents: read
@@ -228,14 +199,15 @@ jobs:
               with:
                   fetch-depth: 0
                   persist-credentials: false
-            - name: Scan for secrets
-              uses: gitleaks/gitleaks-action@v3
-              env:
-                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+            - uses: ./.github/actions/setup-project
+              with:
+                  install-web: true
+                  python-profile: audit
+            - run: make audit
 
     mutation-full:
         name: Full mutation sweep
-        needs: secrets
+        needs: audit
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
         runs-on: ubuntu-latest
         timeout-minutes: 180
@@ -251,7 +223,7 @@ jobs:
             - uses: ./.github/actions/setup-project
               with:
                   install-web: true
-                  install-server: true
+                  python-profile: mutation
             - name: Run full mutation tests
               run: make mutation
             - name: Report scheduled mutation failure

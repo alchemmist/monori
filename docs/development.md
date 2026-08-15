@@ -45,15 +45,15 @@ one-to-one — there is no separate CI script to drift out of sync.
 
 ### Format & lint
 
-| Target                | Does                                                                                                                                 |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `make fmt`            | Prettier + Ruff format/fix, and regenerates the schema diagram.                                                                      |
-| `make fmt-check`      | The same, check-only.                                                                                                                |
-| `make lint`           | Everything: web (Oxlint), CSS, HTML, server (Ruff), YAML, Markdown, generated docs, GitHub Actions, Dockerfile, shell, and spelling. |
-| `make schema-diagram` | Regenerates the ER diagram in [data-model.md](data-model.md) from `server/schema.sql`. `make lint` fails if it is stale.             |
-| `make type`           | Strict mypy for all tracked Python plus TypeScript compiler and type-aware Oxlint checks.                                            |
-| `make analyze`        | bandit + semgrep security scans, plus Vulture for Python and Knip for JavaScript/TypeScript dead code.                               |
-| `make audit`          | Dependency + secret scanning (`audit-deps`, `audit-deps-py`, `audit-secrets`).                                                       |
+| Target                | Does                                                                                                                                             |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `make fmt`            | Prettier + Ruff format/fix, and regenerates the schema diagram.                                                                                  |
+| `make fmt-check`      | The same, check-only.                                                                                                                            |
+| `make lint`           | Everything: web (Oxlint), CSS, HTML, server (Ruff), YAML, Markdown, generated docs, GitHub Actions, Dockerfile, shell, and spelling.             |
+| `make schema-diagram` | Regenerates the ER diagram in [data-model.md](data-model.md) from `server/schema.sql`. `make lint` fails if it is stale.                         |
+| `make type`           | Strict mypy for all tracked Python plus TypeScript compiler and type-aware Oxlint checks.                                                        |
+| `make analyze`        | bandit + semgrep security scans, plus Vulture for Python and Knip for JavaScript/TypeScript dead code.                                           |
+| `make audit`          | Dependency + secret scanning (`audit-deps`, `audit-deps-py`, `audit-secrets`).                                                                   |
 
 Pull requests also run a CI-only Python annotation gate. It rejects new uses of
 `object` as an annotation, including nested types such as `list[object]`. Use a
@@ -95,8 +95,11 @@ dependencies (a real temp SQLite database, the real FastAPI app), not mocks.
 | Target | Does |
 | --- | --- |
 | `make test` | The whole suite (`t-front` + `t-back` + `t-e2e`). |
-| `make t-fast` | CI fast lane: frontend logic/store tests (`.test.ts`) plus backend tests without the `integration` marker. |
-| `make t-medium` | CI medium lane: frontend component tests (`.test.tsx`) plus backend tests marked `integration`. |
+| `make t-fast` | CI fast lane: frontend logic/store tests (`.test.ts`), backend unit tests, and CI unit tests without Docker. |
+| `make t-medium` | CI medium lane: frontend component tests, backend integration tests, and CI integration tests against the fake GitHub service. |
+| `make t-ci` | Complete CI suite: unit tests first, then integration tests against fake GitHub. |
+| `make t-ci-unit` | CI unit tests without Docker or external services. |
+| `make t-ci-integration` | CI integration tests against the fake GitHub service. |
 | `make t-slow` | CI slow lane: end-to-end Playwright tests against the real backend and production frontend stack. |
 | `make t-front` | Local frontend slice via Vitest. |
 | `make t-back` | Local backend slice with unit and integration tests. |

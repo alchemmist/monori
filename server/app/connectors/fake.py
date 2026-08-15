@@ -11,7 +11,14 @@ rows directly with no OTP. It is registered only when this module is imported
 from dataclasses import replace
 from typing import override
 
-from .base import Connector, ConnectorError, SmsRequiredError, SyncResult, SyncRow, register
+from monori.server.app.connectors.base import (
+    Connector,
+    ConnectorError,
+    SmsRequiredError,
+    SyncResult,
+    SyncRow,
+    register,
+)
 
 FIXTURE_ROWS: list[SyncRow] = [
     SyncRow("2026-02-01T09:00:00", -50000, "Lenta", "Supermarkets", "5411", "*1111"),

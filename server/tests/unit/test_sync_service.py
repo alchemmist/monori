@@ -1,8 +1,8 @@
 import pytest
 from fastapi.testclient import TestClient
 
-import app.connectors.fake
-from app import sync_service
+import monori.server.app.connectors.fake
+from monori.server.app import sync_service
 
 CREDS = {"phone": "+70000000000", "password": "pw"}
 

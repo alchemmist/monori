@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import cast
 
-from .domain_types import (
+from monori.server.app.domain_types import (
     AccountType,
     CategoryGroupKind,
     ConnectionStatus,

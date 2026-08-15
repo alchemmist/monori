@@ -1,0 +1,41 @@
+## {{ model.status.emoji }} {{ model.title }}
+{% if model.message %}
+{{ model.message }}
+{% endif %}
+{% if model.metrics %}
+| Metric | Value |
+| --- | ---: |
+{% for metric in model.metrics -%}
+| {{ metric.label }} | {{ metric.value }} |
+{% endfor %}
+{% endif %}
+{% if model.content %}
+{{ model.content }}
+{% endif %}
+{% if model.findings %}
+<details><summary>{{ model.findings_title }} ({{ model.findings | length }})</summary>
+
+{% for finding in model.findings -%}
+- {{ "✔" if finding.approved else "✗" }}{% if finding.location %} [`{{ finding.location.label }}`]({{ finding.location.url }}) —{% endif %} {{ finding.text }}
+{% endfor %}
+
+</details>
+{% endif %}
+{% if model.admin %}
+<details><summary>For repository administrators</summary>
+
+{% if model.admin.controls -%}
+Check an action to apply it; uncheck an applied action to revert it:
+
+{% for control in model.admin.controls -%}
+- [{{ "x" if control.checked else " " }}] `{{ control.command }}` <!-- {{ control.marker }} -->
+{% endfor %}
+{% else -%}
+No actionable findings in this run.
+{% endif %}
+{% for line in model.admin.notes -%}
+{{ line }}
+{% endfor %}
+
+</details>
+{% endif %}

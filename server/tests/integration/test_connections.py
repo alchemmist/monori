@@ -6,13 +6,14 @@ from fastapi.testclient import TestClient
 from httpx2 import Response as HTTPXResponse
 from pydantic import TypeAdapter
 
-import app.connectors.fake
-import app.db as dbmod
-from app.connectors import base
-from app.connectors.base import JsonObject, SmsRequiredError, SyncResult, SyncRow
-from app.routers import connections
-from app.routers.connections import ConnectionResponse
-from tests.conftest import AccountOptions, Api
+import monori.server.app.connectors.fake
+import monori.server.app.db as dbmod
+from monori.common import JsonObject
+from monori.server.app.connectors import base
+from monori.server.app.connectors.base import SmsRequiredError, SyncResult, SyncRow
+from monori.server.app.routers import connections
+from monori.server.app.routers.connections import ConnectionResponse
+from monori.server.tests.conftest import AccountOptions, Api
 
 
 @pytest.fixture(autouse=True)

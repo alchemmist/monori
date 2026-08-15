@@ -4,11 +4,22 @@ set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 fe="$root/web/coverage/coverage-summary.json"
 be="$root/server/coverage.json"
+ci="$root/ci/coverage.json"
 
 echo "collecting frontend coverage..." >&2
 (cd "$root/web" && npx vitest run --coverage >/dev/null)
 
-echo "collecting backend coverage..." >&2
-(cd "$root/server" && uv run --locked pytest -q --cov --cov-report="json:$be" --cov-report= >/dev/null)
+echo "collecting Python coverage..." >&2
+(cd "$root" && uv run --locked --group test coverage erase)
+(cd "$root" && env -u GITHUB_STEP_SUMMARY -u MUTATION_SUMMARY_PATH uv run --locked --group test pytest -q server/tests \
+  --cov=server/app --cov=common \
+  --cov-report="json:$be" --cov-report= --cov-fail-under=0 >/dev/null)
+(cd "$root" && uv run --locked --group test coverage erase)
+(cd "$root" && env -u GITHUB_STEP_SUMMARY -u MUTATION_SUMMARY_PATH uv run --locked --group test pytest -q ci/tests \
+  --ignore=ci/tests/integration --cov=ci --cov-report= --cov-fail-under=0 >/dev/null)
+(cd "$root" && COMPOSE="${COMPOSE:-docker compose}" bash scripts/ci-tests.sh \
+  --cov=ci --cov-report="json:$ci" --cov-report= --cov-append >/dev/null)
+(cd "$root" && uv run --locked --group test coverage report --include="ci/*" --fail-under=90)
 
-jq -rn --slurpfile fe "$fe" --slurpfile be "$be" -f "$root/scripts/coverage-tree.jq"
+jq -rn --slurpfile fe "$fe" --slurpfile be "$be" --slurpfile ci "$ci" \
+  -f "$root/scripts/coverage-tree.jq"
