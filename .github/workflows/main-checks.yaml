@@ -148,7 +148,7 @@ jobs:
                   install-web: true
                   python-profile: test
             - name: Restore Playwright browser cache
-              uses: actions/cache@v5
+              uses: actions/cache@v6
               with:
                   path: ~/.cache/ms-playwright
                   key: playwright-${{ runner.os }}-${{ hashFiles('web/package-lock.json') }}
@@ -228,7 +228,7 @@ jobs:
               run: make mutation
             - name: Report scheduled mutation failure
               if: failure() && github.event_name == 'schedule'
-              uses: actions/github-script@v8
+              uses: actions/github-script@v9
               with:
                   script: |
                       const title = "Nightly mutation sweep failed";
