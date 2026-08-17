@@ -16,9 +16,9 @@ monori-server = { workspace = true }
 members = ["common", "ci", "server"]
 
 [dependency-groups]
-format = ["monori-ci", "ruff==0.15.22"]
+format = ["monori-ci", "ruff==0.16.3"]
 ci = ["monori-ci", "pytest>=8"]
-lint = ["monori-ci", "ruff==0.15.22"]
+lint = ["monori-ci", "ruff==0.16.3"]
 test = [
   "monori-ci",
   "monori-server[connectors]",
