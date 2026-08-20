@@ -8,6 +8,7 @@ raises :class:`SmsRequiredError`; the caller parks the live connector and later 
 :meth:`resume_sync` with the code the user entered.
 """
 
+import importlib
 from typing import ClassVar
 
 from pydantic import ConfigDict, Field, TypeAdapter
@@ -135,6 +136,14 @@ class Connector:
 
 
 REGISTRY: dict[tuple[str, str], type[Connector]] = {}
+_BUILTINS_LOADED = False
+
+
+def _load_builtin_connectors() -> None:
+    global _BUILTINS_LOADED
+    if not _BUILTINS_LOADED:
+        importlib.import_module("monori.server.app.connectors.tbank_playwright")
+        _BUILTINS_LOADED = True
 
 
 def register(cls: type[Connector]) -> type[Connector]:
@@ -145,6 +154,7 @@ def register(cls: type[Connector]) -> type[Connector]:
 
 def get_connector_class(bank: str, kind: str) -> type[Connector]:
     """Handle get connector class."""
+    _load_builtin_connectors()
     cls = REGISTRY.get((bank, kind))
     if cls is None:
         msg = f"no connector registered for {bank}/{kind}"
@@ -154,6 +164,7 @@ def get_connector_class(bank: str, kind: str) -> type[Connector]:
 
 def available_connectors() -> list[ConnectorInfo]:
     """Handle The connectors offered in the UI (registration order, demos excluded)."""
+    _load_builtin_connectors()
     return [
         ConnectorInfo(
             bank=cls.bank,
