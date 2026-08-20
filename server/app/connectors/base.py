@@ -9,6 +9,7 @@ raises :class:`SmsRequiredError`; the caller parks the live connector and later 
 """
 
 import importlib
+from functools import cache
 from typing import ClassVar
 
 from pydantic import ConfigDict, Field, TypeAdapter
@@ -136,14 +137,11 @@ class Connector:
 
 
 REGISTRY: dict[tuple[str, str], type[Connector]] = {}
-_BUILTINS_LOADED = False
 
 
+@cache
 def _load_builtin_connectors() -> None:
-    global _BUILTINS_LOADED
-    if not _BUILTINS_LOADED:
-        importlib.import_module("monori.server.app.connectors.tbank_playwright")
-        _BUILTINS_LOADED = True
+    importlib.import_module("monori.server.app.connectors.tbank_playwright")
 
 
 def register(cls: type[Connector]) -> type[Connector]:
