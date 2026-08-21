@@ -344,7 +344,7 @@ def test_job_report_cli_reads_a_real_log_and_emits_artifact(
         JobStatus.FAILED,
         "Detected source diagnostics: **1**\n\n"
         "<details><summary>Command output</summary>\n\n"
-        "```text\nexample.py:3:2: invalid type\n```\n\n</details>",
+        "````text\nexample.py:3:2: invalid type\n````\n\n</details>",
         (Metric("Exit code", "1"), Metric("Diagnostics", "1")),
         (
             SourceAnnotation(
@@ -366,7 +366,7 @@ def test_job_report_cli_reads_a_real_log_and_emits_artifact(
         "| Diagnostics | 1 |\n\n"
         "Detected source diagnostics: **1**\n\n"
         "<details><summary>Command output</summary>\n\n"
-        "```text\nexample.py:3:2: invalid type\n```\n\n</details>\n"
+        "````text\nexample.py:3:2: invalid type\n````\n\n</details>\n"
     )
     assert capsys.readouterr().err == (
         "::error file=example.py,line=3,endLine=3,col=2,endColumn=2::invalid type\n"

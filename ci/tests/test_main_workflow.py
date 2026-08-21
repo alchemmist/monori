@@ -102,12 +102,20 @@ class TestMainWorkflowGraph:
         assert "hashFiles('web/stryker.conf.ts')" in frontend.group("body")
         assert "${{ github.sha }}" in frontend.group("body")
         assert "restore-keys:" in frontend.group("body")
+        assert "uses: actions/cache/restore@v5" in frontend.group("body")
+        assert "id: restore-stryker" in frontend.group("body")
+        assert "uses: actions/cache/save@v5" in frontend.group("body")
+        assert "steps.restore-stryker.outputs.cache-hit != 'true'" in frontend.group("body")
         assert "run: make m-front" in frontend.group("body")
         assert "path: mutants" in backend.group("body")
         assert "hashFiles('uv.lock')" in backend.group("body")
         assert "hashFiles('pyproject.toml')" in backend.group("body")
         assert "${{ github.sha }}" in backend.group("body")
         assert "restore-keys:" in backend.group("body")
+        assert "uses: actions/cache/restore@v5" in backend.group("body")
+        assert "id: restore-mutmut" in backend.group("body")
+        assert "uses: actions/cache/save@v5" in backend.group("body")
+        assert "steps.restore-mutmut.outputs.cache-hit != 'true'" in backend.group("body")
         assert "run: make m-back" in backend.group("body")
 
         report_needs = jobs["mutation-full-report"].get("needs")
@@ -115,3 +123,21 @@ class TestMainWorkflowGraph:
             "mutation-full-frontend",
             "mutation-full-backend",
         }
+        report = self.workflow["jobs"]["mutation-full-report"]
+        assert report["if"] == (
+            "always() && github.event_name == 'schedule' && "
+            "(needs.mutation-full-frontend.result == 'failure' || "
+            "needs.mutation-full-backend.result == 'failure')"
+        )
+        assert report["permissions"] == {"issues": "write"}
+        report_source = re.search(
+            r"^    mutation-full-report:\n(?P<body>.*?)(?=^    \S|\Z)",
+            self.source,
+            re.MULTILINE | re.DOTALL,
+        )
+        assert report_source is not None
+        assert "uses: actions/github-script@v9" in report_source.group("body")
+        assert "FRONTEND_RESULT:" in report_source.group("body")
+        assert "BACKEND_RESULT:" in report_source.group("body")
+        assert "github.paginate" in report_source.group("body")
+        assert "!issue.pull_request" in report_source.group("body")

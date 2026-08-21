@@ -221,7 +221,8 @@ jobs:
               with:
                   install-web: true
             - name: Restore Stryker incremental state
-              uses: actions/cache@v4
+              id: restore-stryker
+              uses: actions/cache/restore@v5
               with:
                   path: web/reports/stryker-incremental.json
                   key: mutation-stryker-${{ runner.os }}-${{ hashFiles('web/package-lock.json') }}-main-${{ hashFiles('web/stryker.conf.ts') }}-${{ github.sha }}
@@ -230,6 +231,12 @@ jobs:
                       mutation-stryker-${{ runner.os }}-${{ hashFiles('web/package-lock.json') }}-main-
             - name: Run full frontend mutation tests
               run: make m-front
+            - name: Save Stryker incremental state
+              if: always() && steps.restore-stryker.outputs.cache-hit != 'true'
+              uses: actions/cache/save@v5
+              with:
+                  path: web/reports/stryker-incremental.json
+                  key: mutation-stryker-${{ runner.os }}-${{ hashFiles('web/package-lock.json') }}-main-${{ hashFiles('web/stryker.conf.ts') }}-${{ github.sha }}
 
     mutation-full-backend:
         name: Full backend mutation sweep
@@ -247,7 +254,8 @@ jobs:
               with:
                   python-profile: mutation
             - name: Restore mutmut state
-              uses: actions/cache@v4
+              id: restore-mutmut
+              uses: actions/cache/restore@v5
               with:
                   path: mutants
                   key: mutation-mutmut-${{ runner.os }}-${{ hashFiles('uv.lock') }}-main-${{ hashFiles('pyproject.toml') }}-${{ github.sha }}
@@ -256,6 +264,12 @@ jobs:
                       mutation-mutmut-${{ runner.os }}-${{ hashFiles('uv.lock') }}-main-
             - name: Run full backend mutation tests
               run: make m-back
+            - name: Save mutmut state
+              if: always() && steps.restore-mutmut.outputs.cache-hit != 'true'
+              uses: actions/cache/save@v5
+              with:
+                  path: mutants
+                  key: mutation-mutmut-${{ runner.os }}-${{ hashFiles('uv.lock') }}-main-${{ hashFiles('pyproject.toml') }}-${{ github.sha }}
 
     mutation-full-report:
         name: Report nightly mutation failure
@@ -274,7 +288,12 @@ jobs:
                   script: |
                       const title = "Nightly mutation sweep failed";
                       const { owner, repo } = context.repo;
-                      const { data: openIssues } = await github.rest.issues.listForRepo({ owner, repo, state: "open" });
+                      const openIssues = await github.paginate(github.rest.issues.listForRepo, {
+                          owner,
+                          repo,
+                          state: "open",
+                          per_page: 100,
+                      });
                       const body = [
                           "The scheduled full mutation sweep failed.",
                           "",
@@ -283,6 +302,6 @@ jobs:
                           "",
                           `Run: ${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`,
                       ].join("\n");
-                      const existing = openIssues.find((issue) => issue.title === title);
+                      const existing = openIssues.find((issue) => !issue.pull_request && issue.title === title);
                       if (existing) await github.rest.issues.createComment({ owner, repo, issue_number: existing.number, body });
                       else await github.rest.issues.create({ owner, repo, title, body });

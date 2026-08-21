@@ -25,7 +25,8 @@ def diagnostic_summary(log: str, annotation_count: int) -> str:
         return "No diagnostic output was produced."
     omitted = max(0, len(clean) - MAX_SUMMARY_LOG_CHARACTERS)
     clean = clean[:MAX_SUMMARY_LOG_CHARACTERS]
-    fence = "`" * (max((len(match.group()) for match in re.finditer(r"`+", clean)), default=2) + 1)
+    max_backticks = max((len(match.group()) for match in re.finditer(r"`+", clean)), default=2)
+    fence = "`" * max(4, max_backticks + 1)
     notice = (
         f"\n\n_Output truncated; {omitted} characters remain available in the job log._"
         if omitted
