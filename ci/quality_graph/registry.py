@@ -54,7 +54,7 @@ WORKFLOW_JOBS = (
     WorkflowJobDefinition("test-fast", "Fast tests", "test_fast"),
     WorkflowJobDefinition("test-medium", "Medium tests", "test_medium"),
     WorkflowJobDefinition("test-slow", "Slow tests", "test_slow"),
-    WorkflowJobDefinition("build", "Build", "build"),
+    WorkflowJobDefinition("build", "Build frontend", "build"),
     WorkflowJobDefinition("coverage", "Coverage", "coverage"),
     WorkflowJobDefinition("mutation", "Mutation testing", "mutation", report_marker="mutation"),
     WorkflowJobDefinition(

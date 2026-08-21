@@ -156,7 +156,7 @@ class TestPullRequestWorkflowGraph:
             "mutation": "test-slow",
             "build": "test-slow",
             "backend-performance": "coverage",
-            "frontend-performance-sla": "backend-performance",
+            "frontend-performance-sla": {"backend-performance", "build"},
             "bundle-size": {"build", "backend-performance"},
             "frontend-performance": "frontend-performance-sla",
         }
@@ -166,6 +166,8 @@ class TestPullRequestWorkflowGraph:
             needs = [needs] if isinstance(needs, str) else needs
             expected_needs = dependency if isinstance(dependency, set) else {dependency}
             assert set(needs) == expected_needs, job
+
+        assert jobs["build"]["name"] == "Build frontend"
 
         dependencies: dict[str, list[str]] = {}
         for job, data in jobs.items():

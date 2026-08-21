@@ -241,7 +241,7 @@ jobs:
                   check-id: test-slow
 
     build:
-        name: Build
+        name: Build frontend
         needs: test-slow
         if: github.event_name == 'pull_request' && needs.test-slow.result == 'success'
         runs-on: ubuntu-latest
@@ -394,8 +394,11 @@ jobs:
 
     frontend-performance-sla:
         name: Frontend performance SLA
-        needs: backend-performance
-        if: github.event_name == 'pull_request' && needs.backend-performance.result == 'success'
+        needs: [backend-performance, build]
+        if: >-
+            github.event_name == 'pull_request'
+            && needs.backend-performance.result == 'success'
+            && needs.build.result == 'success'
         runs-on: ubuntu-latest
         timeout-minutes: 45
         steps:
