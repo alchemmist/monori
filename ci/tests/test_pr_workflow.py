@@ -276,10 +276,9 @@ class TestPullRequestWorkflowGraph:
             for step in regression["steps"]
             if step.get("uses") == "./.github/actions/frontend-performance-gate"
         )
-        cache_key = (
-            "frontend-performance-${{ github.run_id }}-${{ github.run_attempt }}-"
-            "${{ github.event.pull_request.head.sha }}"
-        )
+        run_id = "${{ github.run_id }}"
+        head_sha = "${{ github.event.pull_request.head.sha }}"
+        cache_key = f"frontend-performance-{run_id}-{head_sha}"
 
         assert save["with"] == {
             "path": "reports/perf",

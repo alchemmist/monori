@@ -408,7 +408,7 @@ jobs:
               uses: actions/cache/save@v5
               with:
                   path: reports/perf
-                  key: frontend-performance-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.event.pull_request.head.sha }}
+                  key: frontend-performance-${{ github.run_id }}-${{ github.event.pull_request.head.sha }}
 
     bundle-size:
         name: Frontend bundle size
@@ -457,7 +457,7 @@ jobs:
               uses: actions/cache/restore@v5
               with:
                   path: reports/perf
-                  key: frontend-performance-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.event.pull_request.head.sha }}
+                  key: frontend-performance-${{ github.run_id }}-${{ github.event.pull_request.head.sha }}
                   fail-on-cache-miss: true
             - uses: ./.github/actions/frontend-performance-gate
               with:
