@@ -119,6 +119,7 @@ class TestMainWorkflowGraph:
         assert "run: make m-back" in backend.group("body")
 
         report_needs = jobs["mutation-full-report"].get("needs")
+        assert isinstance(report_needs, list)
         assert set(report_needs) == {
             "mutation-full-frontend",
             "mutation-full-backend",
