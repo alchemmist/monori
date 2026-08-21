@@ -376,10 +376,47 @@ jobs:
                   persist-credentials: false
             - uses: ./.github/actions/mutation-diff-gate
 
+    backend-performance:
+        name: Backend performance SLA (k6)
+        needs: coverage
+        if: github.event_name == 'pull_request' && needs.coverage.result == 'success'
+        runs-on: ubuntu-latest
+        timeout-minutes: 30
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v7
+              with:
+                  persist-credentials: false
+            - uses: ./.github/actions/backend-performance
+              with:
+                  levels: "1"
+                  duration: 10s
+
+    frontend-performance-sla:
+        name: Frontend performance SLA
+        needs: backend-performance
+        if: github.event_name == 'pull_request' && needs.backend-performance.result == 'success'
+        runs-on: ubuntu-latest
+        timeout-minutes: 45
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v7
+              with:
+                  persist-credentials: false
+            - uses: ./.github/actions/frontend-lab-performance
+            - name: Cache pull-request performance measurements
+              uses: actions/cache/save@v5
+              with:
+                  path: reports/perf
+                  key: frontend-performance-${{ github.run_id }}-${{ github.event.pull_request.head.sha }}
+
     bundle-size:
         name: Frontend bundle size
-        needs: build
-        if: github.event_name == 'pull_request' && needs.build.result == 'success'
+        needs: [build, backend-performance]
+        if: >-
+            github.event_name == 'pull_request'
+            && needs.build.result == 'success'
+            && needs.backend-performance.result == 'success'
         env:
             QUALITY_GRAPH_READ_ONLY: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.event.pull_request.user.login == 'dependabot[bot]' }}
         permissions:
@@ -397,9 +434,11 @@ jobs:
             - uses: ./.github/actions/bundle-size-gate
 
     frontend-performance:
-        name: Frontend performance
-        needs: build
-        if: github.event_name == 'pull_request' && needs.build.result == 'success'
+        name: Frontend performance regression
+        needs: frontend-performance-sla
+        if: >-
+            github.event_name == 'pull_request'
+            && needs.frontend-performance-sla.result == 'success'
         env:
             QUALITY_GRAPH_READ_ONLY: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.event.pull_request.user.login == 'dependabot[bot]' }}
         permissions:
@@ -414,10 +453,15 @@ jobs:
               with:
                   fetch-depth: 0
                   persist-credentials: false
-            - id: scope
-              uses: ./.github/actions/frontend-performance-scope
+            - name: Restore pull-request performance measurements
+              uses: actions/cache/restore@v5
+              with:
+                  path: reports/perf
+                  key: frontend-performance-${{ github.run_id }}-${{ github.event.pull_request.head.sha }}
+                  fail-on-cache-miss: true
             - uses: ./.github/actions/frontend-performance-gate
-              if: steps.scope.outputs.relevant == 'true'
+              with:
+                  current-results: ${{ github.workspace }}/reports/perf
 
     object-annotations:
         name: Python object annotation gate

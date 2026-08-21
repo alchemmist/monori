@@ -7,6 +7,7 @@ cd "$(dirname "$0")/.."
 BASE=${BASE:-origin/main}
 COMPOSE=${COMPOSE:-"docker compose"}
 PERF_OUTPUT_DIR=${PERF_OUTPUT_DIR:-"$PWD/reports/frontend-perf"}
+PERF_PR_RESULTS_DIR=${PERF_PR_RESULTS_DIR:-}
 PR_NUMBER=${PR_NUMBER:-0}
 HEAD_SHA=${HEAD_SHA:-$(git rev-parse HEAD)}
 HARNESS="$PWD/tools/frontend-perf"
@@ -132,6 +133,17 @@ collect_revision() {
   cleanup_stack
 }
 
+restore_revision() {
+  label=$1
+  source=$2
+  output="$PERF_OUTPUT_DIR/$label"
+  test -d "$source/lighthouse"
+  test -f "$source/navigation.json"
+  mkdir -p "$output/lighthouse"
+  cp "$source"/lighthouse/*.json "$output/lighthouse/"
+  cp "$source/navigation.json" "$output/navigation.json"
+}
+
 git rev-parse --verify --quiet "$BASE" >/dev/null || {
   echo "frontend performance: BASE='$BASE' is not a valid revision" >&2
   exit 2
@@ -151,13 +163,17 @@ if [ ! -x "$chrome_path" ]; then
   exit 2
 fi
 
-merge_base=$(git merge-base "$BASE" HEAD)
+base_revision=$(git rev-parse "$BASE^{commit}")
 mkdir -p "$PERF_OUTPUT_DIR"
-git worktree add --detach "$base_worktree" "$merge_base" >/dev/null
+git worktree add --detach "$base_worktree" "$base_revision" >/dev/null
 worktree_added=1
 
 collect_revision base "$base_worktree" 8178
-collect_revision pr "$PWD" 8178
+if [ -n "$PERF_PR_RESULTS_DIR" ]; then
+  restore_revision pr "$PERF_PR_RESULTS_DIR"
+else
+  collect_revision pr "$PWD" 8178
+fi
 
 set +e
 GITHUB_RUN_URL=${GITHUB_RUN_URL:-} "$PYTHON" -m monori.ci.quality_graph.checks.frontend_measurement compare \

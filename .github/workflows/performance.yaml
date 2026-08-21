@@ -1,0 +1,42 @@
+name: Performance suite
+
+on:
+    workflow_dispatch:
+        inputs:
+            levels:
+                description: Space-separated virtual-user levels
+                required: true
+                default: "10 25 50"
+            duration:
+                description: Duration per workload and level
+                required: true
+                default: 30s
+
+permissions:
+    contents: read
+
+jobs:
+    backend-and-e2e:
+        name: Backend and full-stack load
+        runs-on: ubuntu-latest
+        timeout-minutes: 90
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v7
+              with:
+                  persist-credentials: false
+            - uses: ./.github/actions/backend-performance
+              with:
+                  levels: ${{ inputs.levels }}
+                  duration: ${{ inputs.duration }}
+
+    frontend:
+        name: Frontend lab performance
+        runs-on: ubuntu-latest
+        timeout-minutes: 45
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v7
+              with:
+                  persist-credentials: false
+            - uses: ./.github/actions/frontend-lab-performance

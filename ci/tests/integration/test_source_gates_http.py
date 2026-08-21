@@ -84,6 +84,8 @@ from monori.ci.tests.integration.quality_graph_http_support import (
     state_objects,
 )
 
+pytestmark = pytest.mark.integration
+
 
 def test_source_gate_converges_labels_and_writes_job_results(tmp_path: Path) -> None:
     """Publish red and green results without creating gate-specific comments."""

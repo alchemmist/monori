@@ -62,7 +62,7 @@ WORKFLOW_JOBS = (
     ),
     WorkflowJobDefinition(
         "frontend-performance",
-        "Frontend performance",
+        "Frontend performance regression",
         "frontend_performance",
         "frontend",
         "frontend-performance",

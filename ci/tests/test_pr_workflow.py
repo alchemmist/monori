@@ -72,6 +72,8 @@ class TestPullRequestWorkflowGraph:
             "coverage",
             "audit",
             "mutation",
+            "backend-performance",
+            "frontend-performance-sla",
             "bundle-size",
             "frontend-performance",
             "object-annotations",
@@ -147,8 +149,10 @@ class TestPullRequestWorkflowGraph:
             "coverage": "test-slow",
             "mutation": "test-slow",
             "build": "test-slow",
-            "bundle-size": "build",
-            "frontend-performance": "build",
+            "backend-performance": "coverage",
+            "frontend-performance-sla": "backend-performance",
+            "bundle-size": {"build", "backend-performance"},
+            "frontend-performance": "frontend-performance-sla",
         }
         for job, dependency in expected.items():
             data = jobs[job]
@@ -204,6 +208,8 @@ class TestPullRequestWorkflowGraph:
     def test_complex_gates_use_local_actions(self) -> None:
         expected_actions = {
             "mutation": "mutation-diff-gate",
+            "backend-performance": "backend-performance",
+            "frontend-performance-sla": "frontend-lab-performance",
             "bundle-size": "bundle-size-gate",
             "frontend-performance": "frontend-performance-gate",
             "object-annotations": "object-annotation-gate",
@@ -258,16 +264,39 @@ class TestPullRequestWorkflowGraph:
 
         assert "monori-ci" in configuration["dependency-groups"]["analyze"]
 
-    def test_frontend_performance_is_one_conditional_job(self) -> None:
-        block = re.search(
-            r"^    frontend-performance:\n(?P<body>.*?)(?=^    \S|\Z)",
-            self.source,
-            re.MULTILINE | re.DOTALL,
+    def test_frontend_performance_reuses_sla_measurements(self) -> None:
+        sla = self.workflow["jobs"]["frontend-performance-sla"]
+        regression = self.workflow["jobs"]["frontend-performance"]
+        save = next(step for step in sla["steps"] if step.get("uses") == "actions/cache/save@v5")
+        restore = next(
+            step for step in regression["steps"] if step.get("uses") == "actions/cache/restore@v5"
         )
-        assert block is not None
-        assert "uses: ./.github/actions/frontend-performance-scope" in block.group("body")
-        assert "if: steps.scope.outputs.relevant == 'true'" in block.group("body")
-        assert "frontend-performance-skipped" not in self.source
+        gate = next(
+            step
+            for step in regression["steps"]
+            if step.get("uses") == "./.github/actions/frontend-performance-gate"
+        )
+        run_id = "${{ github.run_id }}"
+        head_sha = "${{ github.event.pull_request.head.sha }}"
+        cache_key = f"frontend-performance-{run_id}-{head_sha}"
+
+        assert save["with"] == {
+            "path": "reports/perf",
+            "key": cache_key,
+        }
+        assert restore["with"] == {**save["with"], "fail-on-cache-miss": True}
+        assert gate["with"] == {"current-results": "${{ github.workspace }}/reports/perf"}
+
+    def test_frontend_regression_collects_only_the_target_branch(self) -> None:
+        action = (
+            REPOSITORY_ROOT / ".github/actions/frontend-performance-gate/action.yml"
+        ).read_text()
+        runner = (REPOSITORY_ROOT / "scripts/frontend-perf.sh").read_text()
+
+        assert "PERF_PR_RESULTS_DIR: ${{ inputs.current-results }}" in action
+        assert 'if [ -n "$PERF_PR_RESULTS_DIR" ]; then' in runner
+        assert 'restore_revision pr "$PERF_PR_RESULTS_DIR"' in runner
+        assert 'base_revision=$(git rev-parse "$BASE^{commit}")' in runner
 
     def test_frontend_performance_scope_covers_the_gate_implementation(self) -> None:
         scope_source = FRONTEND_PERFORMANCE_SCOPE.read_text()
@@ -424,6 +453,22 @@ class TestPullRequestWorkflowGraph:
             'env -u GITHUB_STEP_SUMMARY -u MUTATION_SUMMARY_PATH "$repository/.venv/bin/mutmut"'
             in mutmut_runner
         )
+
+    def test_mutation_workspace_includes_test_support_files(self) -> None:
+        """Keep unit tests runnable from both mutmut staging directories."""
+        configuration = tomllib.loads(ROOT_PYPROJECT.read_text())
+        mutmut_runner = (REPOSITORY_ROOT / "scripts/mutmut.sh").read_text()
+        copied_paths = set(configuration["tool"]["mutmut"]["also_copy"])
+
+        assert {
+            ".github",
+            "scripts",
+            "Makefile",
+            "performance",
+            "tools/frontend-perf",
+        } <= copied_paths
+        assert 'cp -R performance "$workspace/performance"' in mutmut_runner
+        assert 'cp -R tools/frontend-perf "$workspace/tools/frontend-perf"' in mutmut_runner
 
     def test_actions_use_the_node_24_cache_runtime(self) -> None:
         """Keep cache actions off the deprecated Node.js 20 runtime."""

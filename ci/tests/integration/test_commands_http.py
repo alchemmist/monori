@@ -85,6 +85,8 @@ from monori.ci.tests.integration.quality_graph_http_support import (
     state_objects,
 )
 
+pytestmark = pytest.mark.integration
+
 
 def test_pending_admin_command_is_reacted_to_consumed_and_rerun() -> None:
     """Apply an administrator command through reactions and pending approval state."""

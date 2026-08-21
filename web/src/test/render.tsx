@@ -1,4 +1,4 @@
-import { MantineProvider } from "@mantine/core";
+import { MantineProvider, mergeThemeOverrides } from "@mantine/core";
 import { Notifications } from "@mantine/notifications";
 import { render, type RenderOptions } from "@testing-library/react";
 import type { PropsWithChildren, ReactElement } from "react";
@@ -18,6 +18,12 @@ import type {
     Transfer,
 } from "../types.js";
 
+const testTheme = mergeThemeOverrides(theme, {
+    components: {
+        Popover: { defaultProps: { transitionProps: { duration: 0 } } },
+    },
+});
+
 /**
  * Component tests render one screen in jsdom against the zustand store, which
  * is the app's only source of data. Two ways to fill it:
@@ -33,7 +39,7 @@ import type {
 
 function Wrap({ children }: PropsWithChildren) {
     return (
-        <MantineProvider theme={theme} forceColorScheme="light" env="test">
+        <MantineProvider theme={testTheme} forceColorScheme="light" env="test">
             {children}
             <Notifications position="bottom-right" />
         </MantineProvider>
@@ -41,8 +47,8 @@ function Wrap({ children }: PropsWithChildren) {
 }
 
 /**
- * `env="test"` drops Mantine's mount transitions, and `delay: null` drops
- * user-event's inter-keystroke wait. Both are timers, and timers under a
+ * The test theme drops Mantine's Popover transitions, and `delay: null` drops
+ * user-event's inter-keystroke wait. Both use timers, and timers under a
  * parallel vitest run get starved: without this the dropdown-and-type tests
  * fail a handful at a time depending on machine load.
  */
