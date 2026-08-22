@@ -142,3 +142,14 @@ class TestMainWorkflowGraph:
         assert "BACKEND_RESULT:" in report_source.group("body")
         assert "github.paginate" in report_source.group("body")
         assert "!issue.pull_request" in report_source.group("body")
+
+    def test_main_coverage_publishes_the_trusted_baseline(self) -> None:
+        block = re.search(
+            r"^    coverage:\n(?P<body>.*?)(?=^    \S|\Z)",
+            self.source,
+            re.MULTILINE | re.DOTALL,
+        )
+        assert block is not None
+        assert "run: make coverage-baseline" in block.group("body")
+        assert "uses: actions/cache/save@v5" in block.group("body")
+        assert "key: coverage-baseline-v1-${{ github.sha }}" in block.group("body")

@@ -46,7 +46,7 @@ export default defineConfig({
                 "src/components/Meadow.tsx",
                 "src/components/GlyphFlower.tsx",
             ],
-            reporter: ["text", "json-summary"],
+            reporter: ["text", "json-summary", "lcov"],
             reportsDirectory: "./coverage",
             // the global gate is what stops coverage leaking away between
             // features; the engine keeps its own line so the budgeting math

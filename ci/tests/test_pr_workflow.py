@@ -5,7 +5,10 @@ from typing import ClassVar, TypedDict, cast
 
 import yaml
 
+from monori.ci.quality_graph.checks.coverage import CHECK as COVERAGE_CHECK
+from monori.ci.quality_graph.checks.coverage import CoverageResultAdapter
 from monori.ci.quality_graph.dashboard import SUPPORTED_WORKFLOW_DURATION_SECONDS
+from monori.ci.quality_graph.registry import WORKFLOW_JOB_BY_ID
 
 
 def find_repository_root(path: Path) -> Path:
@@ -42,6 +45,7 @@ WorkflowJob = TypedDict(
     "WorkflowJob",
     {
         "if": str,
+        "name": str,
         "needs": str | list[str],
         "permissions": dict[str, str],
         "steps": list[WorkflowStep],
@@ -490,6 +494,30 @@ class TestPullRequestWorkflowGraph:
         )
         assert "actions/cache@v4" not in action_sources
         assert "actions/cache@v5" in action_sources
+
+    def test_coverage_uses_the_standard_quality_graph_contract(self) -> None:
+        block = re.search(
+            r"^    coverage:\n(?P<body>.*?)(?=^    \S|\Z)",
+            self.source,
+            re.MULTILINE | re.DOTALL,
+        )
+        assert block is not None
+        body = block.group("body")
+        assert "uses: actions/cache/restore@v5" in body
+        assert "restore-keys:" not in body
+        assert "Build missing main coverage baseline" not in body
+        assert "git switch" not in body
+        assert "make coverage-baseline" not in body
+        assert "uses: ./.github/actions/quality-job" in body
+        assert "check-id: coverage" in body
+        assert "BASE: ${{ github.event.pull_request.base.sha }}" in body
+        assert COVERAGE_CHECK.definition is WORKFLOW_JOB_BY_ID["coverage"]
+        assert COVERAGE_CHECK.make_target == "coverage-diff"
+        assert isinstance(COVERAGE_CHECK.result_adapter, CoverageResultAdapter)
+        assert COVERAGE_CHECK.result_adapter.report_path == Path("coverage-report/report.json")
+        assert "name: coverage-report" not in body
+        assert "issues: write" not in body
+        assert "statuses: write" not in body
 
     def test_code_and_api_gate_events_are_separated(self) -> None:
         assert "github.event_name == 'pull_request'" in self.source
