@@ -309,7 +309,6 @@ coverage-diff:
 		--frontend-diff coverage-report/frontend-diff.json \
 		--backend-diff coverage-report/backend-diff.json \
 		--baseline coverage-baseline/baseline.json --base "$(BASE)" \
-		--pr-number "$${PR_NUMBER:-1}" --head-sha "$${HEAD_SHA:-$$(git rev-parse HEAD)}" \
 		--coverage-exit $$coverage --output coverage-report/report.json; report=$$?; \
 	echo "── coverage gates: suite=$$coverage normalize=$$normalize backend=$$back frontend=$$front report=$$report ──"; \
 	if [ $$coverage -ne 0 ] || [ $$normalize -ne 0 ] || [ $$back -ne 0 ] || [ $$front -ne 0 ] || [ $$report -ne 0 ]; then exit 1; fi

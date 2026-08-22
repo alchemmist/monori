@@ -279,18 +279,8 @@ jobs:
             - uses: ./.github/actions/quality-job
               env:
                   BASE: ${{ github.event.pull_request.base.sha }}
-                  PR_NUMBER: ${{ github.event.pull_request.number }}
-                  HEAD_SHA: ${{ github.event.pull_request.head.sha }}
               with:
                   check-id: coverage
-            - name: Upload coverage evidence
-              if: always()
-              uses: actions/upload-artifact@v7
-              with:
-                  name: coverage-report
-                  path: coverage-report/report.json
-                  if-no-files-found: warn
-                  retention-days: 7
 
     audit:
         name: Dependency and security audit

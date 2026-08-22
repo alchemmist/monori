@@ -6,6 +6,7 @@ from typing import ClassVar, TypedDict, cast
 import yaml
 
 from monori.ci.quality_graph.checks.coverage import CHECK as COVERAGE_CHECK
+from monori.ci.quality_graph.checks.coverage import CoverageResultAdapter
 from monori.ci.quality_graph.dashboard import SUPPORTED_WORKFLOW_DURATION_SECONDS
 from monori.ci.quality_graph.registry import WORKFLOW_JOB_BY_ID
 
@@ -27,7 +28,6 @@ FRONTEND_PERFORMANCE_SCOPE = (
 )
 ADMIN_COMMAND_ACTION = REPOSITORY_ROOT / ".github/actions/admin-command/action.yml"
 MUTATION_ACTION = REPOSITORY_ROOT / ".github/actions/mutation-diff-gate/action.yml"
-COVERAGE_REPORT_WORKFLOW = REPOSITORY_ROOT / ".github/workflows/coverage-report.yaml"
 TEST_RUNNERS = (
     REPOSITORY_ROOT / "Makefile",
     REPOSITORY_ROOT / "scripts/ci-tests.sh",
@@ -495,7 +495,7 @@ class TestPullRequestWorkflowGraph:
         assert "actions/cache@v4" not in action_sources
         assert "actions/cache@v5" in action_sources
 
-    def test_coverage_uses_an_unprivileged_artifact_handoff(self) -> None:
+    def test_coverage_uses_the_standard_quality_graph_contract(self) -> None:
         block = re.search(
             r"^    coverage:\n(?P<body>.*?)(?=^    \S|\Z)",
             self.source,
@@ -511,29 +511,13 @@ class TestPullRequestWorkflowGraph:
         assert "uses: ./.github/actions/quality-job" in body
         assert "check-id: coverage" in body
         assert "BASE: ${{ github.event.pull_request.base.sha }}" in body
-        assert "PR_NUMBER: ${{ github.event.pull_request.number }}" in body
-        assert "HEAD_SHA: ${{ github.event.pull_request.head.sha }}" in body
         assert COVERAGE_CHECK.definition is WORKFLOW_JOB_BY_ID["coverage"]
         assert COVERAGE_CHECK.make_target == "coverage-diff"
-        assert "uses: actions/upload-artifact@v7" in body
+        assert isinstance(COVERAGE_CHECK.result_adapter, CoverageResultAdapter)
+        assert COVERAGE_CHECK.result_adapter.report_path == Path("coverage-report/report.json")
+        assert "name: coverage-report" not in body
         assert "issues: write" not in body
         assert "statuses: write" not in body
-
-    def test_privileged_coverage_reporter_never_checks_out_pull_request_code(self) -> None:
-        source = COVERAGE_REPORT_WORKFLOW.read_text()
-
-        assert "workflow_run:" in source
-        assert "workflows: [Quality Graph]" in source
-        assert "github.event.workflow_run.head_repository.full_name" in source
-        assert "github.event.workflow_run.head_branch" in source
-        assert "ref: main" in source
-        assert "uses: actions/download-artifact@v8" in source
-        assert "run-id: ${{ github.event.workflow_run.id }}" in source
-        assert "PR_NUMBER:" not in source
-        assert "--pr-number" not in source
-        assert "ref: ${{ github.event.workflow_run.head_sha }}" not in source
-        assert "issues: write" in source
-        assert "statuses: write" in source
 
     def test_code_and_api_gate_events_are_separated(self) -> None:
         assert "github.event_name == 'pull_request'" in self.source

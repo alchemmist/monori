@@ -109,11 +109,11 @@ dependencies (a real temp SQLite database, the real FastAPI app), not mocks.
 | `make mutation` | Full local mutation sweep: Stryker on `web/src`, then mutmut on `server/app`. CI runs the two cached halves in parallel nightly at 05:00 Moscow time and on manual dispatch. |
 | `make mutation-diff` | Diff-scoped gate for changed frontend lines and backend functions. Needs full git history. Example: `BASE=origin/main`, threshold 90%. |
 
-Pull-request coverage runs without write permissions and uploads a validated JSON artifact.
-The trusted `Coverage report` workflow runs from `main` after CI, updates one bot comment,
-and publishes the `coverage / patch` commit status. Main-branch coverage saves the baseline in
-the Actions cache. A cache miss rebuilds the baseline from the exact base SHA; pull-request
-coverage fails closed if that baseline cannot be produced or validated.
+Pull-request coverage uses the same portable `JobResult` protocol as every other Quality Graph
+check. Detailed metrics and uncovered source ranges are published in the Coverage job summary,
+while the single Quality Graph comment carries its compact status and links. Main-branch coverage
+saves the baseline in the Actions cache; when a baseline is not available, patch coverage
+still blocks uncovered changes while the total-coverage delta remains neutral.
 
 ### The pre-commit hook
 

@@ -14,7 +14,7 @@ import anyio
 
 from monori.ci.lib.annotations import publish_workflow_annotations
 from monori.ci.quality_graph.job_report import build_result
-from monori.ci.quality_graph.job_results import JobResultPublisher
+from monori.ci.quality_graph.job_results import JobResult, JobResultPublisher
 
 if TYPE_CHECKING:
     from monori.ci.quality_graph.registry import WorkflowJobDefinition
@@ -38,6 +38,42 @@ class CommandRunner(Protocol):
         ...
 
 
+class CommandResultAdapter(Protocol):
+    """Convert one command execution into the portable Quality Graph format."""
+
+    def build(
+        self,
+        definition: WorkflowJobDefinition,
+        command: CommandResult,
+        diff: str,
+    ) -> JobResult:
+        """Return the complete typed result consumed by shared publishers."""
+        ...
+
+
+@dataclass(frozen=True)
+class DiagnosticResultAdapter:
+    """Build the standard diagnostic result used by ordinary make checks."""
+
+    def build(
+        self,
+        definition: WorkflowJobDefinition,
+        command: CommandResult,
+        diff: str,
+    ) -> JobResult:
+        """Map command output and an optional fix diff into one job result."""
+        return build_result(
+            definition.job_id,
+            definition.title,
+            command.returncode,
+            command.output,
+            diff,
+        )
+
+
+DIAGNOSTIC_RESULT_ADAPTER = DiagnosticResultAdapter()
+
+
 class SubprocessCommandRunner:
     """Execute commands through the operating system without shell expansion."""
 
@@ -55,8 +91,7 @@ class SubprocessCommandRunner:
 class RunJobRequest:
     """Describe one make target and every explicit publication sink."""
 
-    check_id: str
-    title: str
+    definition: WorkflowJobDefinition
     make_target: str
     log_path: Path
     result_path: Path
@@ -64,6 +99,7 @@ class RunJobRequest:
     github_output_path: Path
     diff_path: Path
     fix_target: str = ""
+    result_adapter: CommandResultAdapter = DIAGNOSTIC_RESULT_ADAPTER
 
 
 @dataclass(frozen=True)
@@ -73,6 +109,7 @@ class MakeCheck:
     definition: WorkflowJobDefinition
     make_target: str
     fix_target: str = ""
+    result_adapter: CommandResultAdapter = DIAGNOSTIC_RESULT_ADAPTER
 
     def main(self) -> int:
         """Parse publication paths and run this check through the shared lifecycle."""
@@ -89,15 +126,15 @@ class MakeCheck:
         args = parser.parse_args()
         return execute_job(
             RunJobRequest(
-                self.definition.job_id,
-                self.definition.title,
-                self.make_target,
-                args.log,
-                args.output,
-                args.summary,
-                args.github_output,
-                args.diff,
-                self.fix_target,
+                definition=self.definition,
+                make_target=self.make_target,
+                log_path=args.log,
+                result_path=args.output,
+                summary_path=args.summary,
+                github_output_path=args.github_output,
+                diff_path=args.diff,
+                fix_target=self.fix_target,
+                result_adapter=self.result_adapter,
             ),
             SubprocessCommandRunner(),
         )
@@ -124,13 +161,7 @@ def execute_job(request: RunJobRequest, runner: CommandRunner) -> int:
         diff = diff_result.output
         request.diff_path.parent.mkdir(parents=True, exist_ok=True)
         request.diff_path.write_text(diff)
-    result = build_result(
-        request.check_id,
-        request.title,
-        command.returncode,
-        command.output,
-        diff,
-    )
+    result = request.result_adapter.build(request.definition, command, diff)
     JobResultPublisher(request.result_path, request.summary_path).publish(result)
     publish_workflow_annotations(
         result.annotations,

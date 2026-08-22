@@ -1,4 +1,4 @@
-"""Build and publish the pull-request coverage gate report."""
+"""Build the pull-request coverage gate report."""
 
 from __future__ import annotations
 
@@ -17,11 +17,9 @@ from dulwich.graph import find_merge_base
 from dulwich.objects import Commit
 from dulwich.porcelain import diff_tree
 from dulwich.repo import Repo
-from pydantic import ConfigDict, Field, TypeAdapter, ValidationError
+from pydantic import ConfigDict, Field, TypeAdapter
 from pydantic.dataclasses import dataclass as pydantic_dataclass
 
-from monori.ci.lib.comments import upsert_comment
-from monori.ci.lib.github import GitHub, GitHubAPI
 from monori.ci.lib.mutation_diff_gate import commit_for_revision, parse_changed_lines
 from monori.common import array_value, decode_json, integer_value, number_value, object_value
 
@@ -31,9 +29,6 @@ if TYPE_CHECKING:
     from monori.common import JsonValue
 
 SCHEMA_VERSION: Literal[1] = 1
-MAX_REPORT_BYTES = 1_000_000
-MAX_JOB_PAGES = 10
-STATUS_CONTEXT = "coverage / patch"
 PATCH_THRESHOLD = 100.0
 STACK_PATHS: dict[Literal["backend", "frontend"], tuple[str, ...]] = {
     "backend": ("server/app", "common"),
@@ -83,8 +78,6 @@ class CoverageReport:
     """Validate the complete untrusted coverage artifact."""
 
     schema_version: Literal[1]
-    pr_number: Annotated[int, Field(ge=1)]
-    head_sha: Annotated[str, Field(pattern=r"^[0-9a-f]{40}$")]
     coverage_ok: bool
     stacks: Annotated[list[StackReport], Field(min_length=2, max_length=2)]
 
@@ -249,12 +242,12 @@ def group_findings(raw: dict[str, JsonValue]) -> list[Finding]:
     """Group consecutive uncovered lines by file and function."""
     src_stats = object_value(raw.get("src_stats", {}), "diff-cover src_stats")
     findings: list[Finding] = []
-    for path, value in sorted(src_stats.items()):
-        stats = object_value(value, f"diff-cover stats for {path}")
+    for path, entry in sorted(src_stats.items()):
+        stats = object_value(entry, f"diff-cover stats for {path}")
         lines = sorted(
-            value
-            for value in array_value(stats.get("violation_lines", []), path)
-            if isinstance(value, int)
+            line
+            for line in array_value(stats.get("violation_lines", []), path)
+            if isinstance(line, int)
         )
         current: Finding | None = None
         for line in lines:
@@ -297,8 +290,6 @@ class ReportInputs:
     backend_diff: Path
     baseline_path: Path
     base: str
-    pr_number: int
-    head_sha: str
     coverage_exit: int
 
 
@@ -327,8 +318,6 @@ def build_report(inputs: ReportInputs) -> CoverageReport:
         )
     return CoverageReport(
         schema_version=SCHEMA_VERSION,
-        pr_number=inputs.pr_number,
-        head_sha=inputs.head_sha,
         coverage_ok=inputs.coverage_exit == 0,
         stacks=stacks,
     )
@@ -366,12 +355,18 @@ def failure_reasons(report: CoverageReport, *, workflow_passed: bool) -> list[st
     return reasons or ["the coverage verdict was unavailable"]
 
 
-def render_report(report: CoverageReport, *, workflow_passed: bool) -> str:
-    """Render the sticky pull-request coverage comment."""
+def render_summary(report: CoverageReport, *, workflow_passed: bool) -> str:
+    """Render the detailed coverage job summary."""
     passed = workflow_passed and report.passed
     touched = [stack for stack in report.stacks if stack.touched]
     if passed:
-        return "✅ New code covered, total coverage did not drop — all good.\n"
+        summary = "✅ New code covered, total coverage did not drop — all good.\n"
+        if any(stack.baseline is None for stack in touched):
+            summary += (
+                "\n⚠️ Total-coverage regression gate inactive: "
+                "the base coverage baseline was unavailable.\n"
+            )
+        return summary
     lines = ["## ❌ Coverage", "", "This check failed because:"]
     lines.extend(
         f"- {reason}" for reason in failure_reasons(report, workflow_passed=workflow_passed)
@@ -404,94 +399,6 @@ def render_report(report: CoverageReport, *, workflow_passed: bool) -> str:
     return "\n".join(lines) + "\n"
 
 
-def load_artifact(path: Path, head_sha: str, pr_number: int) -> CoverageReport:
-    """Validate untrusted artifact size, schema, and workflow metadata."""
-    if path.stat().st_size > MAX_REPORT_BYTES:
-        message = "Coverage artifact exceeds the size limit"
-        raise ValueError(message)
-    report = COVERAGE_REPORT_ADAPTER.validate_json(path.read_bytes(), strict=True)
-    if report.head_sha != head_sha or report.pr_number != pr_number:
-        message = "Coverage artifact metadata does not match the workflow run"
-        raise ValueError(message)
-    return report
-
-
-def resolve_pull_request(github: GitHubAPI, head_sha: str) -> int:
-    """Resolve the authoritative open pull request for a workflow head commit."""
-    pulls = array_value(github.request("GET", f"/commits/{head_sha}/pulls"), "commit pulls")
-    matches = []
-    for item in pulls:
-        pull = object_value(item, "commit pull request")
-        number = pull.get("number")
-        head = object_value(pull.get("head", {}), "pull request head")
-        if (
-            pull.get("state") == "open"
-            and isinstance(number, int)
-            and not isinstance(number, bool)
-            and head.get("sha") == head_sha
-        ):
-            matches.append(number)
-    if len(matches) == 1:
-        return matches[0]
-    message = f"Expected one open pull request for {head_sha}, found {len(matches)}"
-    raise RuntimeError(message)
-
-
-def coverage_job_passed(github: GitHubAPI, run_id: int) -> bool:
-    """Read the authoritative coverage job conclusion from GitHub."""
-    for page in range(1, MAX_JOB_PAGES + 1):
-        response = object_value(
-            github.request("GET", f"/actions/runs/{run_id}/jobs?page={page}&per_page=100"),
-            "workflow jobs",
-        )
-        jobs = array_value(response.get("jobs", []), "workflow jobs")
-        for item in jobs:
-            job = object_value(item, "workflow job")
-            if job.get("name") == "Coverage":
-                return job.get("conclusion") == "success"
-        if not jobs:
-            return False
-    return False
-
-
-@dataclass(frozen=True)
-class PublishInputs:
-    """Collect trusted workflow inputs for coverage publication."""
-
-    artifact: Path
-    run_id: int
-    head_sha: str
-    run_url: str
-
-
-def publish_report(github: GitHubAPI, inputs: PublishInputs) -> bool:
-    """Publish one sticky comment and one blocking commit status."""
-    pr_number = None
-    try:
-        pr_number = resolve_pull_request(github, inputs.head_sha)
-        workflow_passed = coverage_job_passed(github, inputs.run_id)
-        report = load_artifact(inputs.artifact, inputs.head_sha, pr_number)
-        body = render_report(report, workflow_passed=workflow_passed)
-        passed = workflow_passed and report.passed
-    except (OSError, RuntimeError, ValueError, ValidationError, json.JSONDecodeError) as error:
-        detail = markdown_cell(str(error))[:300]
-        body = f"## ❌ Coverage\n\nCoverage evidence could not be validated: {detail}.\n"
-        passed = False
-    if pr_number is not None:
-        upsert_comment(github, pr_number, "coverage", body)
-    github.request(
-        "POST",
-        f"/statuses/{inputs.head_sha}",
-        {
-            "state": "success" if passed else "failure",
-            "target_url": inputs.run_url,
-            "description": "Coverage passed" if passed else "Coverage failed; see PR comment",
-            "context": STATUS_CONTEXT,
-        },
-    )
-    return passed
-
-
 def main() -> int:
     """Run coverage artifact lifecycle operations."""
     parser = argparse.ArgumentParser()
@@ -513,16 +420,8 @@ def main() -> int:
     report.add_argument("--backend-diff", type=Path, required=True)
     report.add_argument("--baseline", type=Path, required=True)
     report.add_argument("--base", required=True)
-    report.add_argument("--pr-number", type=int, required=True)
-    report.add_argument("--head-sha", required=True)
     report.add_argument("--coverage-exit", type=int, required=True)
     report.add_argument("--output", type=Path, required=True)
-
-    publish = commands.add_parser("publish")
-    publish.add_argument("--artifact", type=Path, required=True)
-    publish.add_argument("--run-id", type=int, required=True)
-    publish.add_argument("--head-sha", required=True)
-    publish.add_argument("--run-url", required=True)
 
     args = parser.parse_args()
     if args.command == "baseline":
@@ -531,35 +430,19 @@ def main() -> int:
     if args.command == "normalize-lcov":
         normalize_lcov(args.input, args.output)
         return 0
-    if args.command == "report":
-        built = build_report(
-            ReportInputs(
-                frontend=args.frontend,
-                backend=args.backend,
-                frontend_diff=args.frontend_diff,
-                backend_diff=args.backend_diff,
-                baseline_path=args.baseline,
-                base=args.base,
-                pr_number=args.pr_number,
-                head_sha=args.head_sha,
-                coverage_exit=args.coverage_exit,
-            )
+    built = build_report(
+        ReportInputs(
+            frontend=args.frontend,
+            backend=args.backend,
+            frontend_diff=args.frontend_diff,
+            backend_diff=args.backend_diff,
+            baseline_path=args.baseline,
+            base=args.base,
+            coverage_exit=args.coverage_exit,
         )
-        write_report(built, args.output)
-        return 0 if built.passed else 1
-    return (
-        0
-        if publish_report(
-            GitHub(),
-            PublishInputs(
-                artifact=args.artifact,
-                run_id=args.run_id,
-                head_sha=args.head_sha,
-                run_url=args.run_url,
-            ),
-        )
-        else 1
     )
+    write_report(built, args.output)
+    return 0 if built.passed else 1
 
 
 if __name__ == "__main__":
