@@ -23,6 +23,7 @@ from monori.ci.lib.coverage_diff import (
 from monori.common import JsonValue
 
 HEAD_SHA = "a" * 40
+JOBS_UNAVAILABLE = "jobs unavailable"
 
 
 def report(*, passed: bool = True) -> CoverageReport:
@@ -103,6 +104,12 @@ def test_normalizes_frontend_lcov_paths(tmp_path: Path) -> None:
 
 def test_clean_removes_backend_coverage_xml() -> None:
     assert "server/coverage.xml" in Path("Makefile").read_text()
+
+
+def test_coverage_diff_discards_stale_report_artifacts() -> None:
+    makefile = Path("Makefile").read_text()
+
+    assert "rm -rf coverage-report && mkdir -p coverage-report || exit 1" in makefile
 
 
 def test_groups_uncovered_python_lines_by_function(tmp_path: Path) -> None:
@@ -189,7 +196,7 @@ def test_privileged_publisher_uses_job_conclusion_and_upserts_one_comment(
 
     assert publish_report(
         github,
-        PublishInputs(artifact, 11, 7, HEAD_SHA, "https://example.test/run/11"),
+        PublishInputs(artifact, 11, HEAD_SHA, "https://example.test/run/11"),
     )
 
     comment = next(request for request in github.requests if request[1] == "/issues/7/comments")
@@ -203,7 +210,7 @@ def test_privileged_publisher_fails_closed_when_artifact_is_missing(tmp_path: Pa
 
     assert not publish_report(
         github,
-        PublishInputs(tmp_path / "missing.json", 11, 7, HEAD_SHA, "https://example.test/run/11"),
+        PublishInputs(tmp_path / "missing.json", 11, HEAD_SHA, "https://example.test/run/11"),
     )
 
     comment = next(request for request in github.requests if request[1] == "/issues/7/comments")
@@ -246,8 +253,33 @@ def test_privileged_publisher_rejects_a_mismatched_pull_head(tmp_path: Path) -> 
 
     assert not publish_report(
         github,
-        PublishInputs(artifact, 11, 7, HEAD_SHA, "https://example.test/run/11"),
+        PublishInputs(artifact, 11, HEAD_SHA, "https://example.test/run/11"),
+    )
+
+    assert not any(request[1] == "/issues/7/comments" for request in github.requests)
+    status = next(request for request in github.requests if request[1] == f"/statuses/{HEAD_SHA}")
+    assert cast("dict[str, str]", status[2])["state"] == "failure"
+
+
+class BrokenJobsGitHub(FakeGitHub):
+    @override
+    def request(self, method: str, path: str, payload: JsonValue = None) -> JsonValue:
+        if path.startswith("/actions/runs/11/jobs?"):
+            raise RuntimeError(JOBS_UNAVAILABLE)
+        return super().request(method, path, payload)
+
+
+def test_privileged_publisher_fails_closed_when_jobs_are_unreadable(tmp_path: Path) -> None:
+    artifact = tmp_path / "report.json"
+    artifact.write_bytes(COVERAGE_REPORT_ADAPTER.dump_json(report()))
+    github = BrokenJobsGitHub()
+
+    assert not publish_report(
+        github,
+        PublishInputs(artifact, 11, HEAD_SHA, "https://example.test/run/11"),
     )
 
     comment = next(request for request in github.requests if request[1] == "/issues/7/comments")
-    assert "does not match" in cast("dict[str, str]", comment[2])["body"]
+    status = next(request for request in github.requests if request[1] == f"/statuses/{HEAD_SHA}")
+    assert "jobs unavailable" in cast("dict[str, str]", comment[2])["body"]
+    assert cast("dict[str, str]", status[2])["state"] == "failure"

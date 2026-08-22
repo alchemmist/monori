@@ -524,13 +524,13 @@ class TestPullRequestWorkflowGraph:
 
         assert "workflow_run:" in source
         assert "workflows: [Quality Graph]" in source
-        assert (
-            "group: coverage-report-${{ github.event.workflow_run.pull_requests[0].number" in source
-        )
+        assert "github.event.workflow_run.head_repository.full_name" in source
+        assert "github.event.workflow_run.head_branch" in source
         assert "ref: main" in source
         assert "uses: actions/download-artifact@v8" in source
         assert "run-id: ${{ github.event.workflow_run.id }}" in source
-        assert '--pr-number "$PR_NUMBER"' in source
+        assert "PR_NUMBER:" not in source
+        assert "--pr-number" not in source
         assert "ref: ${{ github.event.workflow_run.head_sha }}" not in source
         assert "issues: write" in source
         assert "statuses: write" in source

@@ -293,7 +293,7 @@ coverage-baseline:
 coverage-diff:
 	@set +e; \
 	$(MAKE) coverage; coverage=$$?; \
-	mkdir -p coverage-report; \
+	rm -rf coverage-report && mkdir -p coverage-report || exit 1; \
 	uv run --locked --group test python -m monori.ci.lib.coverage_diff normalize-lcov \
 		--input web/coverage/lcov.info --output coverage-report/frontend.lcov; normalize=$$?; \
 	uv run --locked --group test diff-cover server/coverage.xml \

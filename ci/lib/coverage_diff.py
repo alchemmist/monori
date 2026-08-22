@@ -416,9 +416,10 @@ def load_artifact(path: Path, head_sha: str, pr_number: int) -> CoverageReport:
     return report
 
 
-def resolve_pull_request(github: GitHubAPI, head_sha: str, pr_number: int) -> int:
+def resolve_pull_request(github: GitHubAPI, head_sha: str) -> int:
     """Resolve the authoritative open pull request for a workflow head commit."""
     pulls = array_value(github.request("GET", f"/commits/{head_sha}/pulls"), "commit pulls")
+    matches = []
     for item in pulls:
         pull = object_value(item, "commit pull request")
         number = pull.get("number")
@@ -427,11 +428,12 @@ def resolve_pull_request(github: GitHubAPI, head_sha: str, pr_number: int) -> in
             pull.get("state") == "open"
             and isinstance(number, int)
             and not isinstance(number, bool)
-            and number == pr_number
             and head.get("sha") == head_sha
         ):
-            return number
-    message = f"Pull request {pr_number} does not match {head_sha}"
+            matches.append(number)
+    if len(matches) == 1:
+        return matches[0]
+    message = f"Expected one open pull request for {head_sha}, found {len(matches)}"
     raise RuntimeError(message)
 
 
@@ -459,24 +461,25 @@ class PublishInputs:
 
     artifact: Path
     run_id: int
-    pr_number: int
     head_sha: str
     run_url: str
 
 
 def publish_report(github: GitHubAPI, inputs: PublishInputs) -> bool:
     """Publish one sticky comment and one blocking commit status."""
-    workflow_passed = coverage_job_passed(github, inputs.run_id)
+    pr_number = None
     try:
-        resolve_pull_request(github, inputs.head_sha, inputs.pr_number)
-        report = load_artifact(inputs.artifact, inputs.head_sha, inputs.pr_number)
+        pr_number = resolve_pull_request(github, inputs.head_sha)
+        workflow_passed = coverage_job_passed(github, inputs.run_id)
+        report = load_artifact(inputs.artifact, inputs.head_sha, pr_number)
         body = render_report(report, workflow_passed=workflow_passed)
         passed = workflow_passed and report.passed
     except (OSError, RuntimeError, ValueError, ValidationError, json.JSONDecodeError) as error:
         detail = markdown_cell(str(error))[:300]
         body = f"## ❌ Coverage\n\nCoverage evidence could not be validated: {detail}.\n"
         passed = False
-    upsert_comment(github, inputs.pr_number, "coverage", body)
+    if pr_number is not None:
+        upsert_comment(github, pr_number, "coverage", body)
     github.request(
         "POST",
         f"/statuses/{inputs.head_sha}",
@@ -519,7 +522,6 @@ def main() -> int:
     publish = commands.add_parser("publish")
     publish.add_argument("--artifact", type=Path, required=True)
     publish.add_argument("--run-id", type=int, required=True)
-    publish.add_argument("--pr-number", type=int, required=True)
     publish.add_argument("--head-sha", required=True)
     publish.add_argument("--run-url", required=True)
 
@@ -553,7 +555,6 @@ def main() -> int:
             PublishInputs(
                 artifact=args.artifact,
                 run_id=args.run_id,
-                pr_number=args.pr_number,
                 head_sha=args.head_sha,
                 run_url=args.run_url,
             ),
