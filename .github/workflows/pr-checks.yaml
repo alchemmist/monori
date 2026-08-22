@@ -272,26 +272,13 @@ jobs:
                   install-web: true
                   python-profile: coverage
             - name: Restore main coverage baseline
-              id: coverage-baseline
               uses: actions/cache/restore@v5
               with:
                   path: coverage-baseline
                   key: coverage-baseline-v1-${{ github.event.pull_request.base.sha }}
-            - name: Build missing main coverage baseline
-              if: steps.coverage-baseline.outputs.cache-hit != 'true'
-              continue-on-error: true
-              env:
-                  BASE_SHA: ${{ github.event.pull_request.base.sha }}
-                  HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-              run: |
-                  restore_head() { git switch --detach "$HEAD_SHA"; }
-                  trap restore_head EXIT
-                  git switch --detach "$BASE_SHA"
-                  make coverage
-                  make coverage-baseline
             - uses: ./.github/actions/quality-job
               env:
-                  BASE: origin/main
+                  BASE: ${{ github.event.pull_request.base.sha }}
                   PR_NUMBER: ${{ github.event.pull_request.number }}
                   HEAD_SHA: ${{ github.event.pull_request.head.sha }}
               with:

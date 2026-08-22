@@ -5,7 +5,9 @@ from typing import ClassVar, TypedDict, cast
 
 import yaml
 
+from monori.ci.quality_graph.checks.coverage import CHECK as COVERAGE_CHECK
 from monori.ci.quality_graph.dashboard import SUPPORTED_WORKFLOW_DURATION_SECONDS
+from monori.ci.quality_graph.registry import WORKFLOW_JOB_BY_ID
 
 
 def find_repository_root(path: Path) -> Path:
@@ -26,7 +28,6 @@ FRONTEND_PERFORMANCE_SCOPE = (
 ADMIN_COMMAND_ACTION = REPOSITORY_ROOT / ".github/actions/admin-command/action.yml"
 MUTATION_ACTION = REPOSITORY_ROOT / ".github/actions/mutation-diff-gate/action.yml"
 COVERAGE_REPORT_WORKFLOW = REPOSITORY_ROOT / ".github/workflows/coverage-report.yaml"
-COVERAGE_CHECK = REPOSITORY_ROOT / "ci/quality_graph/checks/coverage.py"
 TEST_RUNNERS = (
     REPOSITORY_ROOT / "Makefile",
     REPOSITORY_ROOT / "scripts/ci-tests.sh",
@@ -44,6 +45,7 @@ WorkflowJob = TypedDict(
     "WorkflowJob",
     {
         "if": str,
+        "name": str,
         "needs": str | list[str],
         "permissions": dict[str, str],
         "steps": list[WorkflowStep],
@@ -503,18 +505,16 @@ class TestPullRequestWorkflowGraph:
         body = block.group("body")
         assert "uses: actions/cache/restore@v5" in body
         assert "restore-keys:" not in body
-        assert "if: steps.coverage-baseline.outputs.cache-hit != 'true'" in body
-        assert 'git switch --detach "$BASE_SHA"' in body
-        assert 'git switch --detach "$HEAD_SHA"' in body
-        assert "make coverage-baseline" in body
+        assert "Build missing main coverage baseline" not in body
+        assert "git switch" not in body
+        assert "make coverage-baseline" not in body
         assert "uses: ./.github/actions/quality-job" in body
         assert "check-id: coverage" in body
-        assert "BASE: origin/main" in body
+        assert "BASE: ${{ github.event.pull_request.base.sha }}" in body
         assert "PR_NUMBER: ${{ github.event.pull_request.number }}" in body
         assert "HEAD_SHA: ${{ github.event.pull_request.head.sha }}" in body
-        assert 'MakeCheck(WORKFLOW_JOB_BY_ID["coverage"], "coverage-diff")' in (
-            COVERAGE_CHECK.read_text()
-        )
+        assert COVERAGE_CHECK.definition is WORKFLOW_JOB_BY_ID["coverage"]
+        assert COVERAGE_CHECK.make_target == "coverage-diff"
         assert "uses: actions/upload-artifact@v7" in body
         assert "issues: write" not in body
         assert "statuses: write" not in body

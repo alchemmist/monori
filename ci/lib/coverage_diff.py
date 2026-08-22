@@ -32,6 +32,7 @@ if TYPE_CHECKING:
 
 SCHEMA_VERSION: Literal[1] = 1
 MAX_REPORT_BYTES = 1_000_000
+MAX_JOB_PAGES = 10
 STATUS_CONTEXT = "coverage / patch"
 PATCH_THRESHOLD = 100.0
 STACK_PATHS: dict[Literal["backend", "frontend"], tuple[str, ...]] = {
@@ -133,11 +134,10 @@ def write_baseline(frontend: Path, backend: Path, output: Path) -> None:
     )
 
 
-def load_baseline(path: Path) -> dict[str, float]:
+def load_baseline(path: Path) -> dict[str, float] | None:
     """Load a complete trusted main-branch baseline."""
     if not path.is_file():
-        message = "Coverage baseline is missing"
-        raise ValueError(message)
+        return None
     try:
         root = object_value(load_json(path), "coverage baseline")
         if root.get("schema_version") != SCHEMA_VERSION:
@@ -317,7 +317,7 @@ def build_report(inputs: ReportInputs) -> CoverageReport:
                 name=name,
                 touched=touched,
                 total=totals[name],
-                baseline=baseline[name],
+                baseline=None if baseline is None else baseline[name],
                 patch=patch if touched else 100,
                 covered_lines=covered if touched else 0,
                 changed_lines=changed_count if touched else 0,
@@ -439,8 +439,7 @@ def resolve_pull_request(github: GitHubAPI, head_sha: str) -> int:
 
 def coverage_job_passed(github: GitHubAPI, run_id: int) -> bool:
     """Read the authoritative coverage job conclusion from GitHub."""
-    page = 1
-    while True:
+    for page in range(1, MAX_JOB_PAGES + 1):
         response = object_value(
             github.request("GET", f"/actions/runs/{run_id}/jobs?page={page}&per_page=100"),
             "workflow jobs",
@@ -452,7 +451,7 @@ def coverage_job_passed(github: GitHubAPI, run_id: int) -> bool:
                 return job.get("conclusion") == "success"
         if not jobs:
             return False
-        page += 1
+    return False
 
 
 @dataclass(frozen=True)
