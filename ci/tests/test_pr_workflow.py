@@ -38,10 +38,16 @@ TEST_RUNNERS = (
 WorkflowStep = TypedDict("WorkflowStep", {"uses": str, "with": dict[str, str]}, total=False)
 
 
-class WorkflowJob(TypedDict, total=False):
-    needs: str | list[str]
-    permissions: dict[str, str]
-    steps: list[WorkflowStep]
+WorkflowJob = TypedDict(
+    "WorkflowJob",
+    {
+        "if": str,
+        "needs": str | list[str],
+        "permissions": dict[str, str],
+        "steps": list[WorkflowStep],
+    },
+    total=False,
+)
 
 
 class WorkflowDocument(TypedDict):
