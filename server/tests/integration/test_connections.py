@@ -10,7 +10,12 @@ import monori.server.app.connectors.fake
 import monori.server.app.db as dbmod
 from monori.common import JsonObject
 from monori.server.app.connectors import base
-from monori.server.app.connectors.base import SmsRequiredError, SyncResult, SyncRow
+from monori.server.app.connectors.base import (
+    PublicConnectorError,
+    SmsRequiredError,
+    SyncResult,
+    SyncRow,
+)
 from monori.server.app.routers import connections
 from monori.server.app.routers.connections import ConnectionResponse
 from monori.server.tests.conftest import AccountOptions, Api
@@ -120,6 +125,26 @@ def test_two_phase_sync_then_incremental_dedup(api: Api, client: TestClient) -> 
     assert body["status"] == "connected"
     assert body["inserted"] == 0
     assert body["skipped"] == 2
+
+
+def test_public_connector_error_is_returned_to_client(
+    api: Api,
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    message = "Start bank sync again."
+
+    class PublicFailureRunner:
+        def start(self, _request: object) -> SyncResult:
+            raise PublicConnectorError(message)
+
+    cid = _connect(client, api.default_account()).json()["id"]
+    monkeypatch.setattr(connections, "get_runner", PublicFailureRunner)
+
+    response = client.post(f"/api/connections/{cid}/sync")
+
+    assert response.status_code == 502
+    assert response.json()["detail"] == message
 
 
 def test_sms_without_pending_login_conflicts(api: Api, client: TestClient) -> None:

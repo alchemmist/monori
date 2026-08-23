@@ -21,6 +21,7 @@ from monori.common import JsonObject
 from monori.server.app.connectors import base as connectors
 from monori.server.app.connectors.base import (
     ConnectorError,
+    PublicConnectorError,
     SmsRequiredError,
     SyncResult,
 )
@@ -55,6 +56,8 @@ class RunDoneResponse:
 
 def _error(cid: int, error: Exception) -> RunStatusResponse:
     log.warning("sync run %s failed: %s", cid, error)
+    if isinstance(error, PublicConnectorError):
+        return RunStatusResponse(status=connectors.PUBLIC_ERROR_STATUS, message=str(error))
     return RunStatusResponse(status="error", message=SYNC_FAILED)
 
 

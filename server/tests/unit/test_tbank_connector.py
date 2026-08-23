@@ -410,6 +410,27 @@ def test_login_waits_for_existing_auth_redirect() -> None:
     )
 
 
+def test_login_fails_when_auth_expires_while_waiting_for_sms(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    connector = _connector()
+    page = FakePage()
+
+    def receive_sms(_message: str) -> str:
+        page.stage = "error"
+        page.url = "https://id.tbank.ru/auth/error?cid=test"
+        return "9999"
+
+    monkeypatch.setattr(connector, "ask_sms", receive_sms)
+
+    with pytest.raises(ConnectorError, match="login session expired"):
+        connector.ensure_logged_in(page)
+
+    assert not any(
+        event.kind == "fill" and event.argument == TBankConnector.SEL_OTP for event in page.log
+    )
+
+
 def test_quick_login_uses_stored_code() -> None:
     c = _connector()
     page = FakePage(scenario="quick")

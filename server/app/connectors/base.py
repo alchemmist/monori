@@ -17,6 +17,8 @@ from pydantic.dataclasses import dataclass as pydantic_dataclass
 
 from monori.common import JsonObject
 
+PUBLIC_ERROR_STATUS = "public_error"
+
 
 @pydantic_dataclass
 class ConnectorParam:
@@ -66,6 +68,10 @@ class SyncRow:
 
 class ConnectorError(Exception):
     """A sync failed for a reason the user should see (auth rejected, bank down)."""
+
+
+class PublicConnectorError(ConnectorError):
+    """A sync failed with a sanitized message safe to return through the API."""
 
 
 class SmsRequiredError(Exception):

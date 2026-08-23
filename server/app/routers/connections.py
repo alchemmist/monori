@@ -32,6 +32,7 @@ from monori.server.app.connectors import base as connectors
 from monori.server.app.connectors.base import (
     ConnectorError,
     ConnectorInfo,
+    PublicConnectorError,
     SmsRequiredError,
     SyncResult,
     SyncRow,
@@ -307,13 +308,14 @@ def _mark_error(c: sqlite3.Connection, cid: int, message: str) -> None:
 
 def _fail(c: sqlite3.Connection, cid: int, error: Exception) -> NoReturn:
     """
-    Record a failed sync and surface it to the client without leaking the raw.
+    Record a failed sync without leaking raw connector details.
 
-    connector error: the detail is logged, the user sees a fixed message.
+    Explicitly sanitized errors remain actionable through the API.
     """
     log.warning("bank connection %s sync failed: %s", cid, error)
-    _mark_error(c, cid, SYNC_FAILED)
-    raise HTTPException(502, SYNC_FAILED) from error
+    message = str(error) if isinstance(error, PublicConnectorError) else SYNC_FAILED
+    _mark_error(c, cid, message)
+    raise HTTPException(502, message) from error
 
 
 def _card_digits(card: str) -> str:

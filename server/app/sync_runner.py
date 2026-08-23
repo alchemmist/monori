@@ -22,8 +22,10 @@ import httpx
 from monori.common import JsonObject
 from monori.server.app.connectors import base as connectors
 from monori.server.app.connectors.base import (
+    PUBLIC_ERROR_STATUS,
     SYNC_RESULT_ADAPTER,
     ConnectorError,
+    PublicConnectorError,
     SmsRequiredError,
     SyncResult,
 )
@@ -116,6 +118,8 @@ class RemoteRunner:
             )
         if status == "awaiting_sms":
             raise SmsRequiredError(payload.get("message") or "code sent")
+        if status == PUBLIC_ERROR_STATUS:
+            raise PublicConnectorError(payload.get("message") or "sync failed")
         raise ConnectorError(payload.get("message") or "sync failed")
 
     def start(self, request: SyncRequest) -> SyncResult:

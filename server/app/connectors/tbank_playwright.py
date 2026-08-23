@@ -50,6 +50,7 @@ from monori.server.app.connectors.base import (
     Connector,
     ConnectorError,
     ConnectorParam,
+    PublicConnectorError,
     SmsRequiredError,
     SyncResult,
     SyncRow,
@@ -357,6 +358,7 @@ USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/122.0 Safari/537.36"
 )
+LOGIN_EXPIRED = "The TBank login session expired or rejected the code. Start bank sync again."
 
 
 @register
@@ -720,6 +722,7 @@ class TBankPlaywrightConnector(Connector):
             self.shot(page, f"step-{step:02d}")
 
     def _drive_sso_step(self, page: _Page, state: _LoginState) -> None:
+        self._raise_if_auth_error(page)
         self._raise_if_access_denied(page)
         if page.query_selector(self.SEL_PHONE):
             self._fill_credential(page, self.SEL_PHONE, "phone")
@@ -737,6 +740,11 @@ class TBankPlaywrightConnector(Connector):
             msg = f"the bank blocked the login: {blocked}"
             raise ConnectorError(msg)
 
+    @staticmethod
+    def _raise_if_auth_error(page: _Page) -> None:
+        if "/auth/error" in page.url:
+            raise PublicConnectorError(LOGIN_EXPIRED)
+
     def _fill_credential(self, page: _Page, selector: str, name: str) -> None:
         value = self.credentials.get(name)
         if not isinstance(value, str):
@@ -746,7 +754,9 @@ class TBankPlaywrightConnector(Connector):
         self.submit(page)
 
     def _submit_otp(self, page: _Page, state: _LoginState) -> None:
-        page.fill(self.SEL_OTP, self.ask_sms(state.otp_prompt))
+        code = self.ask_sms(state.otp_prompt)
+        self._raise_if_auth_error(page)
+        page.fill(self.SEL_OTP, code)
         state.otp_prompt = "the bank rejected the code — check it and try again"
         self.submit(page)
 

@@ -12,6 +12,7 @@ from monori.server.app import sync_service
 from monori.server.app.connectors import base
 from monori.server.app.connectors.base import (
     ConnectorError,
+    PublicConnectorError,
     SmsRequiredError,
     SyncResult,
 )
@@ -24,6 +25,7 @@ from monori.server.app.sync_runner import (
 )
 
 CREDS: JsonObject = {"phone": "+70000000000", "password": "pw"}
+PUBLIC_ERROR = "Start bank sync again."
 type Runner = LocalRunner | RemoteRunner
 
 
@@ -69,6 +71,39 @@ def test_connector_error(runner: Runner) -> None:
     with pytest.raises(ConnectorError) as ei:
         runner.start(SyncRequest(1, "fake", "fake", {}, None, None))
     assert expected in str(ei.value)
+
+
+class PublicFailureConnector(base.Connector):
+    bank = "public-failure"
+    kind = "public-failure"
+    hidden = True
+
+    @override
+    def sync(self, since: str | None = None) -> SyncResult:
+        raise PublicConnectorError(PUBLIC_ERROR)
+
+
+def test_public_connector_error_is_preserved(
+    runner: Runner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setitem(
+        base.REGISTRY,
+        (PublicFailureConnector.bank, PublicFailureConnector.kind),
+        PublicFailureConnector,
+    )
+
+    with pytest.raises(PublicConnectorError, match=PUBLIC_ERROR):
+        runner.start(
+            SyncRequest(
+                1,
+                PublicFailureConnector.bank,
+                PublicFailureConnector.kind,
+                CREDS,
+                None,
+                None,
+            )
+        )
 
 
 def test_resume_without_login(runner: Runner) -> None:
