@@ -1,4 +1,6 @@
-"""Reject newly introduced Python casts and TypeScript type assertions."""
+"""
+Reject newly introduced Python casts and TypeScript type assertions.
+"""
 
 from __future__ import annotations
 
@@ -71,7 +73,9 @@ ANGLE_PREFIXES = {"=", "(", "[", "{", ",", ":", ";", "!", "&&", "||", "??", "=>"
 
 @dataclass(frozen=True)
 class Finding:
-    """Describe one cast with enough detail for reports and suppressions."""
+    """
+    Describe one cast with enough detail for reports and suppressions.
+    """
 
     path: str
     line: int
@@ -84,7 +88,9 @@ class Finding:
 
 @dataclass(frozen=True)
 class Token:
-    """Store one TypeScript token and its source location."""
+    """
+    Store one TypeScript token and its source location.
+    """
 
     value: str
     start: int
@@ -94,19 +100,25 @@ class Token:
 
 
 def display_finding_id(finding_id: str) -> str:
-    """Return a command-addressable finding identifier."""
+    """
+    Return a command-addressable finding identifier.
+    """
     return f"{FINDING_ID_PREFIX}{finding_id}"
 
 
 def is_generated(path: str, source: str) -> bool:
-    """Return whether a source file is generated and outside the gate's scope."""
+    """
+    Return whether a source file is generated and outside the gate's scope.
+    """
     parts = set(Path(path).parts)
     header = "\n".join(source.splitlines()[:3]).lower()
     return bool(parts & GENERATED_PARTS) or "@generated" in header or "code generated" in header
 
 
 def python_cast_names(tree: ast.Module) -> tuple[set[str], set[str]]:
-    """Resolve direct and module-qualified names that definitely refer to typing.cast."""
+    """
+    Resolve direct and module-qualified names that definitely refer to typing.cast.
+    """
     direct: set[str] = set()
     modules: set[str] = set()
     for node in tree.body:
@@ -122,7 +134,9 @@ def python_cast_names(tree: ast.Module) -> tuple[set[str], set[str]]:
 
 
 def python_cast_form(call: ast.Call, direct: set[str], modules: set[str]) -> str | None:
-    """Return the resolved cast form for a Python call, if it is typing.cast."""
+    """
+    Return the resolved cast form for a Python call, if it is typing.cast.
+    """
     function = call.func
     if isinstance(function, ast.Name) and function.id in direct:
         return function.id
@@ -137,7 +151,9 @@ def python_cast_form(call: ast.Call, direct: set[str], modules: set[str]) -> str
 
 
 def scan_python(path: str, source: str, selected_lines: set[int]) -> list[Finding]:
-    """Find resolved typing.cast calls on selected Python lines."""
+    """
+    Find resolved typing.cast calls on selected Python lines.
+    """
     try:
         tree = ast.parse(source, filename=path)
     except SyntaxError:
@@ -157,7 +173,9 @@ def scan_python(path: str, source: str, selected_lines: set[int]) -> list[Findin
 
 
 def mask_typescript_non_code(source: str) -> str:
-    """Mask comments and string literals while preserving offsets and newlines."""
+    """
+    Mask comments and string literals while preserving offsets and newlines.
+    """
     return NON_CODE_RE.sub(
         lambda match: "".join("\n" if character == "\n" else " " for character in match.group()),
         source,
@@ -165,7 +183,9 @@ def mask_typescript_non_code(source: str) -> str:
 
 
 def typescript_tokens(source: str, *, jsx: bool) -> list[Token]:
-    """Tokenize masked TypeScript source with precise one-based locations."""
+    """
+    Tokenize masked TypeScript source with precise one-based locations.
+    """
     masked = mask_typescript_non_code(source)
     if jsx:
         masked = JSX_TEXT_RE.sub(
@@ -194,7 +214,9 @@ def typescript_tokens(source: str, *, jsx: bool) -> list[Token]:
 
 
 def is_import_alias(source: str, token: Token) -> bool:
-    """Exclude import and export alias syntax that also uses the `as` keyword."""
+    """
+    Exclude import and export alias syntax that also uses the `as` keyword.
+    """
     line_start = source.rfind("\n", 0, token.start) + 1
     prefix = source[line_start : token.start].lstrip()
     return prefix.startswith(("import ", "export ")) or bool(
@@ -203,7 +225,9 @@ def is_import_alias(source: str, token: Token) -> bool:
 
 
 def assertion_end(tokens: list[Token], start: int) -> int:
-    """Find a conservative end token for an `as Type` assertion."""
+    """
+    Find a conservative end token for an `as Type` assertion.
+    """
     depth = 0
     end = start
     for index in range(start, len(tokens)):
@@ -223,7 +247,9 @@ def assertion_end(tokens: list[Token], start: int) -> int:
 
 
 def is_jsx_text(source: str, token: Token) -> bool:
-    """Return whether a token is plain text between JSX tags rather than code."""
+    """
+    Return whether a token is plain text between JSX tags rather than code.
+    """
     prefix = source[: token.start]
     opening = prefix.rfind("<")
     closing = prefix.rfind(">")
@@ -234,7 +260,9 @@ def is_jsx_text(source: str, token: Token) -> bool:
 
 
 def scan_typescript(path: str, source: str, selected_lines: set[int]) -> list[Finding]:
-    """Find TypeScript `as` and angle-bracket assertions on selected lines."""
+    """
+    Find TypeScript `as` and angle-bracket assertions on selected lines.
+    """
     tokens = typescript_tokens(source, jsx=Path(path).suffix == ".tsx")
     candidates: list[tuple[int, int, str, str]] = []
     for index, token in enumerate(tokens):
@@ -293,7 +321,9 @@ def build_findings(
     candidates: list[tuple[int, int, str, str]],
     suggestion: str,
 ) -> list[Finding]:
-    """Assign stable, collision-safe identities to scanner candidates."""
+    """
+    Assign stable, collision-safe identities to scanner candidates.
+    """
     duplicates = Counter(identity for _, _, _, identity in candidates)
     findings = []
     for line, column, form, identity in candidates:
@@ -313,7 +343,9 @@ def build_findings(
 
 
 def scan_file(path: str, source: str, selected_lines: set[int]) -> list[Finding]:
-    """Scan one supported, non-generated source file."""
+    """
+    Scan one supported, non-generated source file.
+    """
     if is_generated(path, source):
         return []
     suffix = Path(path).suffix
@@ -325,7 +357,9 @@ def scan_file(path: str, source: str, selected_lines: set[int]) -> list[Finding]
 
 
 class TypeCastCheck(PullRequestSourceCheck[Finding]):
-    """Find newly introduced Python and TypeScript casts."""
+    """
+    Find newly introduced Python and TypeScript casts.
+    """
 
     definition = WORKFLOW_JOB_BY_ID["type-casts"]
     approval_lifecycle = APPROVALS
@@ -371,7 +405,9 @@ class TypeCastCheck(PullRequestSourceCheck[Finding]):
 
 
 def summary_body(findings: list[Finding], approved: set[str], pr_url: str) -> RenderedCheckReport:
-    """Render all casts, including approved exceptions, in the job report."""
+    """
+    Render all casts, including approved exceptions, in the job report.
+    """
     active = [finding for finding in findings if finding.finding_id not in approved]
     return render_report(
         ReportModel(
@@ -415,7 +451,9 @@ def summary_body(findings: list[Finding], approved: set[str], pr_url: str) -> Re
 
 
 def scan_pull_request(github: RepositoryGitHubAPI, pull: dict[str, JsonValue]) -> list[Finding]:
-    """Scan only added or replaced lines in supported pull-request files."""
+    """
+    Scan only added or replaced lines in supported pull-request files.
+    """
     head = object_value(pull["head"], "pull request head")
     base = object_value(pull["base"], "pull request base")
     number = integer_value(pull["number"], "pull request number")
@@ -450,7 +488,9 @@ def scan_pull_request(github: RepositoryGitHubAPI, pull: dict[str, JsonValue]) -
 
 
 def scan_repository(root: Path) -> list[Finding]:
-    """Scan every tracked source file for scheduled and manual checks."""
+    """
+    Scan every tracked source file for scheduled and manual checks.
+    """
     findings = []
     repository = Repo.discover(str(root))
     tracked = sorted(path.decode() for path in repository.open_index())
@@ -463,7 +503,9 @@ def scan_repository(root: Path) -> list[Finding]:
 
 
 def repository_main(arguments: list[str]) -> int:
-    """Run a full repository scan and optionally emit deterministic JSON."""
+    """
+    Run a full repository scan and optionally emit deterministic JSON.
+    """
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", type=Path)
     parser.add_argument("--fail", action="store_true")
@@ -479,7 +521,9 @@ def repository_main(arguments: list[str]) -> int:
 
 
 def main() -> int:
-    """Run the pull-request gate or an explicit full repository scan."""
+    """
+    Run the pull-request gate or an explicit full repository scan.
+    """
     if "--all" in sys.argv[1:]:
         arguments = [argument for argument in sys.argv[1:] if argument != "--all"]
         return repository_main(arguments)

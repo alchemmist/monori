@@ -124,15 +124,18 @@ def registered_checks() -> dict[str, type[QualityCheckDefinition]]:
         ObjectAnnotationCheck,
     )
     from monori.ci.quality_graph.checks.suppressions import SuppressionCheck  # noqa: PLC0415
-    from monori.ci.quality_graph.checks.type_casts import TypeCastCheck  # noqa: PLC0415
 
     flaky_check = cast(
         "type[QualityCheckDefinition]",
         importlib.import_module("monori.ci.quality_graph.checks.flaky_tests").FlakyTestCheck,
     )
+    type_cast_check = cast(
+        "type[QualityCheckDefinition]",
+        importlib.import_module("monori.ci.quality_graph.checks.type_casts").TypeCastCheck,
+    )
     checks = (
         ObjectAnnotationCheck,
-        TypeCastCheck,
+        type_cast_check,
         SuppressionCheck,
         BundleSizeCheck,
         FrontendPerformanceCheck,

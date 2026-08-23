@@ -33,17 +33,17 @@ class TestTypeCastGate:
         assert {finding.language for finding in result.findings} == {"python", "typescript"}
 
     def test_resolves_python_cast_imports_and_aliases(self) -> None:
-        source = """\
-import typing
-import typing_extensions as te
-from typing import cast
-from typing_extensions import cast as force_type
-
-one = typing.cast(str, raw)
-two = te.cast(int, raw)
-three = cast(float, raw)
-four = force_type(bytes, raw)
-"""
+        source = (
+            "import typing\n"
+            "import typing_extensions as te\n"
+            "from typing import cast\n"
+            "from typing_extensions import cast as force_type\n"
+            "\n"
+            "one = typing.cast(str, raw)\n"
+            "two = te.cast(int, raw)\n"
+            "three = cast(float, raw)\n"
+            "four = force_type(bytes, raw)\n"
+        )
 
         findings = scan_file("example.py", source, set(range(1, 20)))
 
@@ -55,25 +55,25 @@ four = force_type(bytes, raw)
         ]
 
     def test_ignores_unresolved_python_cast_comments_and_strings(self) -> None:
-        source = """\
-def cast(value):
-    return value
-
-text = "typing.cast(str, raw)"
-# from typing import cast
-value = cast(raw)
-"""
+        source = (
+            "def cast(value):\n"
+            "    return value\n"
+            "\n"
+            'text = "typing.cast(str, raw)"\n'
+            "# from typing import cast\n"
+            "value = cast(raw)\n"
+        )
 
         assert scan_file("example.py", source, set(range(1, 20))) == []
 
     def test_finds_typescript_assertion_forms_and_allows_as_const(self) -> None:
-        source = """\
-const one = raw as Model;
-const two = raw as any;
-const three = raw as unknown as Model;
-const four = <Model>raw;
-const safe = {value: 1} as const;
-"""
+        source = (
+            "const one = raw as Model;\n"
+            "const two = raw as any;\n"
+            "const three = raw as unknown as Model;\n"
+            "const four = <Model>raw;\n"
+            "const safe = {value: 1} as const;\n"
+        )
 
         findings = scan_file("example.ts", source, set(range(1, 20)))
 
@@ -86,12 +86,12 @@ const safe = {value: 1} as const;
         ]
 
     def test_ignores_typescript_comments_strings_import_aliases_and_tsx_angles(self) -> None:
-        source = """\
-import {value as renamed} from './module';
-const text = "raw as Model";
-// raw as Model
-const view = <Component value={raw} />;
-"""
+        source = (
+            "import {value as renamed} from './module';\n"
+            'const text = "raw as Model";\n'
+            "// raw as Model\n"
+            "const view = <Component value={raw} />;\n"
+        )
 
         assert scan_file("example.tsx", source, set(range(1, 20))) == []
 
