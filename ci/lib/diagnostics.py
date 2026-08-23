@@ -10,15 +10,20 @@ from monori.ci.lib.annotations import AnnotationLevel, SourceAnnotation
 ANSI_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 PLAYWRIGHT_RESULT_RE = re.compile(r"^[\u2713\u2718\u00d7]\s+\d+\s+\[[^]]+]\s+\u203a\s+")
 COLON_RE = re.compile(
-    r"^(?P<path>[^:\n]+\.(?:py|pyi|ts|tsx|js|jsx|css|html|sql|ya?ml|md|toml|jsonc?))"
-    r":(?P<line>\d+)(?::(?P<column>\d+))?(?::|\s+-)\s*(?P<message>.+)$"
+    r"^(?P<path>[^:\n]+\.(?:py|pyi|ts|tsx|js|jsx|mjs|cjs|sh|css|html|sql|ya?ml|md|toml|jsonc?))"
+    r":(?P<line>\d+)(?::(?P<column>\d+))?(?::|\s+-)\s*(?P<message>.+)$",
+    re.IGNORECASE,
 )
 PAREN_RE = re.compile(
     r"^(?P<path>[^()\n]+\.(?:ts|tsx|js|jsx))"
-    r"\((?P<line>\d+),(?P<column>\d+)\):\s*(?P<message>.+)$"
+    r"\((?P<line>\d+),(?P<column>\d+)\):\s*(?P<message>.+)$",
+    re.IGNORECASE,
 )
 POSITION_RE = re.compile(r"^(?P<line>\d+):(?P<column>\d+)\s+(?P<message>(?:error|warning)\s+.+)$")
-FILE_RE = re.compile(r"^(?P<path>.+\.(?:py|pyi|ts|tsx|js|jsx|css|html|sql|ya?ml|md|toml|jsonc?))$")
+FILE_RE = re.compile(
+    r"^(?P<path>.+\.(?:py|pyi|ts|tsx|js|jsx|mjs|cjs|sh|css|html|sql|ya?ml|md|toml|jsonc?))$",
+    re.IGNORECASE,
+)
 SQLFLUFF_PATH_RE = re.compile(r"^== \[(?P<path>.+)] FAIL$")
 SQLFLUFF_DIAGNOSTIC_RE = re.compile(
     r"^L:\s*(?P<line>\d+)\s*\|\s*P:\s*(?P<column>\d+)\s*\|\s*"

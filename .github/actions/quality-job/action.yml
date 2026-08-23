@@ -1,5 +1,5 @@
-name: Quality Graph make job
-description: Run one make target and publish its detailed Quality Graph result
+name: Quality Graph job
+description: Run one registered check and publish its detailed Quality Graph result
 inputs:
     check-id:
         description: Stable Quality Graph job identifier

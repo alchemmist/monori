@@ -51,6 +51,7 @@ WORKFLOW_JOBS = (
     ),
     WorkflowJobDefinition("type", "Type check", "type_check"),
     WorkflowJobDefinition("analyze", "Static analysis", "analyze"),
+    WorkflowJobDefinition("time-bombs", "Time bomb guardrail", "time_bombs"),
     WorkflowJobDefinition("test-fast", "Fast tests", "test_fast"),
     WorkflowJobDefinition("test-medium", "Medium tests", "test_medium"),
     WorkflowJobDefinition("test-slow", "Slow tests", "test_slow"),

@@ -8,6 +8,7 @@ class QualityStatus(StrEnum):
 
     WAITING = "wait"
     IN_PROGRESS = "in progress"
+    WARNING = "warning"
     PASSED = "passed"
     FAILED = "failed"
     SKIPPED = "skipped"
@@ -18,6 +19,7 @@ class QualityStatus(StrEnum):
         return {
             QualityStatus.WAITING: "⏳",
             QualityStatus.IN_PROGRESS: "🚀",
+            QualityStatus.WARNING: "⚠️",
             QualityStatus.PASSED: "✅",
             QualityStatus.FAILED: "❌",
             QualityStatus.SKIPPED: "⏭️",

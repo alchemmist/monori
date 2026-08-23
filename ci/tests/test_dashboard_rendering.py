@@ -88,6 +88,13 @@ def test_dashboard_renderer_normalizes_blank_lines_and_final_newline() -> None:
     assert not body.endswith("\n\n")
 
 
+def test_dashboard_preserves_non_blocking_warning_status() -> None:
+    warning = DashboardJob("time-bombs", "Time bomb guardrail", JobStatus.WARNING, "", "")
+
+    assert dashboard_status((warning,)) is JobStatus.WARNING
+    assert JobStatus.WARNING.label == "⚠️ warning"
+
+
 def test_dashboard_limits_file_controls_without_breaking_admin_markdown() -> None:
     """Keep aggregate actions and structural markers when file controls exceed the limit."""
     aggregate = JobControl(
