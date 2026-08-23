@@ -51,6 +51,9 @@ WORKFLOW_JOBS = (
         "object",
         "object-annotations",
     ),
+    WorkflowJobDefinition(
+        "type-casts", "Unsafe type cast gate", "type_casts", "cast", "type-casts"
+    ),
     WorkflowJobDefinition("type", "Type check", "type_check"),
     WorkflowJobDefinition("analyze", "Static analysis", "analyze"),
     WorkflowJobDefinition("time-bombs", "Time bomb guardrail", "time_bombs"),
@@ -121,6 +124,7 @@ def registered_checks() -> dict[str, type[QualityCheckDefinition]]:
         ObjectAnnotationCheck,
     )
     from monori.ci.quality_graph.checks.suppressions import SuppressionCheck  # noqa: PLC0415
+    from monori.ci.quality_graph.checks.type_casts import TypeCastCheck  # noqa: PLC0415
 
     flaky_check = cast(
         "type[QualityCheckDefinition]",
@@ -128,6 +132,7 @@ def registered_checks() -> dict[str, type[QualityCheckDefinition]]:
     )
     checks = (
         ObjectAnnotationCheck,
+        TypeCastCheck,
         SuppressionCheck,
         BundleSizeCheck,
         FrontendPerformanceCheck,

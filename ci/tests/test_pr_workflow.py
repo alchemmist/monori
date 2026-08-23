@@ -40,6 +40,7 @@ TEST_RUNNERS = (
     REPOSITORY_ROOT / ".github/actions/mutation-diff-gate/action.yml",
     REPOSITORY_ROOT / ".github/actions/object-annotation-gate/action.yml",
     REPOSITORY_ROOT / ".github/actions/suppression-gate/action.yml",
+    REPOSITORY_ROOT / ".github/actions/type-cast-gate/action.yml",
 )
 WorkflowStep = TypedDict("WorkflowStep", {"uses": str, "with": dict[str, str]}, total=False)
 
@@ -94,6 +95,7 @@ class TestPullRequestWorkflowGraph:
             "bundle-size",
             "frontend-performance",
             "object-annotations",
+            "type-casts",
             "suppressions",
             "admin-command",
             "quality-dashboard-live",
@@ -127,6 +129,11 @@ class TestPullRequestWorkflowGraph:
                 "pull-requests": "write",
             },
             "object-annotations": {
+                "contents": "read",
+                "issues": "write",
+                "pull-requests": "write",
+            },
+            "type-casts": {
                 "contents": "read",
                 "issues": "write",
                 "pull-requests": "write",
@@ -165,7 +172,8 @@ class TestPullRequestWorkflowGraph:
             "docs-links": "workflow-graph",
             "lint": "suppressions",
             "object-annotations": "suppressions",
-            "type": "object-annotations",
+            "type-casts": "suppressions",
+            "type": {"object-annotations", "type-casts"},
             "analyze": "lint",
             "time-bombs": {"analyze", "type"},
             "test-fast": "analyze",
@@ -241,6 +249,7 @@ class TestPullRequestWorkflowGraph:
             "bundle-size": "bundle-size-gate",
             "frontend-performance": "frontend-performance-gate",
             "object-annotations": "object-annotation-gate",
+            "type-casts": "type-cast-gate",
             "suppressions": "suppression-gate",
             "admin-command": "admin-command",
             "flaky-tests": "flaky-test-gate",
@@ -369,6 +378,7 @@ class TestPullRequestWorkflowGraph:
             "mutation-diff-gate",
             "object-annotation-gate",
             "suppression-gate",
+            "type-cast-gate",
         )
         for action in actions:
             source = (REPOSITORY_ROOT / f".github/actions/{action}/action.yml").read_text()
@@ -483,6 +493,7 @@ class TestPullRequestWorkflowGraph:
             "frontend-performance",
             "object-annotations",
             "suppressions",
+            "type-casts",
         ):
             job_source = re.search(
                 rf"^    {job_id}:\n(?P<body>.*?)(?=^    \S|\Z)",

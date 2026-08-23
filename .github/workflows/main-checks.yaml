@@ -94,9 +94,23 @@ jobs:
                   sudo install -m 0755 "$RUNNER_TEMP/lychee" /usr/local/bin/lychee
             - run: make docs-links
 
+    type-casts:
+        name: Unsafe type cast gate
+        needs: lint
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v7
+              with:
+                  persist-credentials: false
+            - uses: ./.github/actions/setup-project
+              with:
+                  python-profile: ci
+            - run: make type-casts
+
     type:
         name: Type check
-        needs: lint
+        needs: type-casts
         runs-on: ubuntu-latest
         steps:
             - name: Checkout

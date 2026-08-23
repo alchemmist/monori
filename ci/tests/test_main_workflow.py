@@ -25,6 +25,7 @@ class TestMainWorkflowGraph:
             "lint",
             "docs-links",
             "type",
+            "type-casts",
             "analyze",
             "test-fast",
             "test-medium",
@@ -42,7 +43,8 @@ class TestMainWorkflowGraph:
         expected = {
             "lint": "fmt-check",
             "docs-links": "fmt-check",
-            "type": "lint",
+            "type-casts": "lint",
+            "type": "type-casts",
             "analyze": "type",
             "test-fast": "analyze",
             "test-medium": "test-fast",
@@ -60,7 +62,8 @@ class TestMainWorkflowGraph:
 
         assert jobs["lint"]["needs"] == "fmt-check"
         assert jobs["docs-links"]["needs"] == "fmt-check"
-        assert jobs["type"]["needs"] == "lint"
+        assert jobs["type-casts"]["needs"] == "lint"
+        assert jobs["type"]["needs"] == "type-casts"
         assert set(jobs["audit"]["needs"]) == {"coverage", "docs-links"}
 
     def test_main_jobs_request_specific_python_profiles(self) -> None:
@@ -69,6 +72,7 @@ class TestMainWorkflowGraph:
             "fmt-check": "format",
             "lint": "lint",
             "type": "type",
+            "type-casts": "ci",
             "analyze": "analyze",
             "test-fast": "test",
             "test-medium": "test",
