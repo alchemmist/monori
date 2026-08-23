@@ -174,7 +174,7 @@ class TestPullRequestWorkflowGraph:
             "mutation": "test-slow",
             "build": "test-slow",
             "backend-performance": "coverage",
-            "frontend-performance-sla": {"backend-performance", "build"},
+            "frontend-performance-sla": {"backend-performance", "bundle-size"},
             "bundle-size": "build",
             "frontend-performance": "frontend-performance-sla",
         }

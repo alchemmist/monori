@@ -502,11 +502,11 @@ jobs:
 
     frontend-performance-sla:
         name: Frontend performance SLA
-        needs: [backend-performance, build]
+        needs: [backend-performance, bundle-size]
         if: >-
             github.event_name == 'pull_request'
             && needs.backend-performance.result == 'success'
-            && needs.build.result == 'success'
+            && needs.bundle-size.result == 'success'
         runs-on: ubuntu-latest
         timeout-minutes: 45
         steps:
