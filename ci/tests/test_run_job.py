@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from monori.ci.quality_graph.job_results import JobStatus, read_job_result
+from monori.ci.quality_graph.registry import WORKFLOW_JOB_BY_ID
 from monori.ci.quality_graph.run_job import (
     CommandResult,
     RunJobRequest,
@@ -36,8 +37,7 @@ class RecordingCommandRunner:
 def request(tmp_path: Path, *, fix_target: str = "") -> RunJobRequest:
     """Build one isolated orchestration request."""
     return RunJobRequest(
-        "lint",
-        "Lint",
+        WORKFLOW_JOB_BY_ID["lint"],
         "lint",
         tmp_path / "lint.log",
         tmp_path / "lint.json",

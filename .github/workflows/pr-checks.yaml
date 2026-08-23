@@ -265,12 +265,20 @@ jobs:
         steps:
             - uses: actions/checkout@v7
               with:
+                  fetch-depth: 0
                   persist-credentials: false
             - uses: ./.github/actions/setup-project
               with:
                   install-web: true
                   python-profile: coverage
+            - name: Restore main coverage baseline
+              uses: actions/cache/restore@v5
+              with:
+                  path: coverage-baseline
+                  key: coverage-baseline-v1-${{ github.event.pull_request.base.sha }}
             - uses: ./.github/actions/quality-job
+              env:
+                  BASE: ${{ github.event.pull_request.base.sha }}
               with:
                   check-id: coverage
 
