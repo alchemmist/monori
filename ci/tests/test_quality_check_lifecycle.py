@@ -65,14 +65,16 @@ def test_all_approval_gates_use_the_quality_check_contract() -> None:
     """Require every approvable gate to use the shared QualityCheck lifecycle."""
     checks = registered_checks()
 
-    assert set(checks) == {"bundle", "frontend", "object", "suppression"}
+    assert set(checks) == {"bundle", "flaky", "frontend", "object", "suppression"}
     assert all(issubclass(check, QualityCheck) for check in checks.values())
     assert {gate for gate, check in checks.items() if check.supports_ignore_file} == {
         "object",
         "suppression",
+        "flaky",
     }
     assert {gate for gate, check in checks.items() if check.pending_marker is not None} == {
         "bundle",
+        "flaky",
         "frontend",
     }
 
@@ -154,6 +156,7 @@ def test_report_gate_reads_only_approvals_for_current_findings() -> None:
         ("frontend", "frontend-example"),
         ("object", "object-example"),
         ("suppression", "suppression-example"),
+        ("flaky", "flaky-example"),
     ],
 )
 def test_registered_gate_lifecycles_select_their_own_findings(gate: str, finding_id: str) -> None:

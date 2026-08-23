@@ -46,7 +46,7 @@ jobs:
             issues: write
             pull-requests: write
         runs-on: ubuntu-latest
-        timeout-minutes: 185
+        timeout-minutes: 355
         steps:
             - uses: actions/checkout@v7
               with:
@@ -290,6 +290,28 @@ jobs:
               with:
                   check-id: test-slow
 
+    flaky-tests:
+        name: Flaky test detection
+        needs: test-slow
+        if: github.event_name == 'pull_request' && needs.test-slow.result == 'success'
+        env:
+            QUALITY_GRAPH_READ_ONLY: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.event.pull_request.user.login == 'dependabot[bot]' }}
+        permissions:
+            contents: read
+            issues: write
+            pull-requests: write
+        runs-on: ubuntu-latest
+        timeout-minutes: 180
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v7
+              with:
+                  fetch-depth: 0
+                  persist-credentials: false
+            - uses: ./.github/actions/flaky-test-gate
+              with:
+                  github-token: ${{ secrets.GITHUB_TOKEN }}
+
     build:
         name: Build frontend
         needs: test-slow
@@ -334,13 +356,14 @@ jobs:
 
     audit:
         name: Dependency and security audit
-        needs: [coverage, mutation, bundle-size, frontend-performance]
+        needs: [coverage, mutation, bundle-size, frontend-performance, flaky-tests]
         if: >-
             always()
             && needs.coverage.result == 'success'
             && needs.mutation.result == 'success'
             && needs.bundle-size.result == 'success'
             && needs.frontend-performance.result == 'success'
+            && needs.flaky-tests.result == 'success'
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@v7

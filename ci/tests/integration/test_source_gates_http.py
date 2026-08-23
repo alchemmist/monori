@@ -18,10 +18,20 @@ import pytest
 
 from monori.ci.lib.annotations import SourceAnnotation
 from monori.ci.lib.comments import comment_body, upsert_comment
+from monori.ci.lib.flaky_tests import (
+    AttemptResult,
+    AttemptStatus,
+    CollectedTest,
+    Lane,
+    RepetitionResult,
+    RunnerStack,
+)
 from monori.ci.lib.github import GitHub, GitHubAPIError, rerun_latest_pull_request_workflow
-from monori.ci.quality_graph.base import ApprovalLifecycle, PullRequestSourceCheck
+from monori.ci.quality_graph.base import ApprovalLifecycle, PullRequestSourceCheck, QualityRuntime
+from monori.ci.quality_graph.checks import flaky_tests as flaky_tests_module
 from monori.ci.quality_graph.checks.bundle_size import BundleFinding, BundleSizeCheck
 from monori.ci.quality_graph.checks.bundle_size import main as bundle_size_main
+from monori.ci.quality_graph.checks.flaky_tests import run_check as flaky_tests_run_check
 from monori.ci.quality_graph.checks.frontend_performance import (
     main as frontend_performance_main,
 )
@@ -85,6 +95,205 @@ from monori.ci.tests.integration.quality_graph_http_support import (
 )
 
 pytestmark = pytest.mark.integration
+
+
+def test_flaky_gate_persists_sticky_evidence_and_publishes_annotations(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """
+    Keep observed instability blocking across a green rerun on the same head.
+    """
+    head_sha = "a" * 40
+    reset_fake_github(
+        {
+            "pulls": [
+                {
+                    "number": PULL_REQUEST_NUMBER,
+                    "body": "Pull request body",
+                    "html_url": f"https://github.com/{REPOSITORY}/pull/{PULL_REQUEST_NUMBER}",
+                    "head": {"sha": head_sha},
+                    "base": {"sha": "base-sha"},
+                }
+            ],
+            "comments": [
+                {
+                    "id": BUNDLE_REPORT_COMMENT_ID,
+                    "issue_number": PULL_REQUEST_NUMBER,
+                    "body": comment_body("quality-graph", "Initial dashboard"),
+                    "user": {"login": "github-actions[bot]"},
+                    "reactions": [],
+                }
+            ],
+        }
+    )
+    test = CollectedTest(
+        RunnerStack.PYTEST,
+        Lane.FAST,
+        "server/tests/test_budget.py",
+        11,
+        "server/tests/test_budget.py::test_new_budget",
+        "test_new_budget",
+    )
+    failed = RepetitionResult(
+        test,
+        tuple(
+            AttemptResult(
+                number,
+                AttemptStatus.FAILED if number == 4 else AttemptStatus.PASSED,
+                0.1,
+                "boom",
+            )
+            for number in range(1, 11)
+        ),
+    )
+    passed = RepetitionResult(
+        test,
+        tuple(AttemptResult(number, AttemptStatus.PASSED, 0.1) for number in range(1, 11)),
+    )
+    manifest = tmp_path / "manifest.json"
+    manifest.write_text("[]\n")
+    event_path = tmp_path / "event.json"
+    event_path.write_text(
+        json.dumps(
+            {
+                "pull_request": {
+                    "number": PULL_REQUEST_NUMBER,
+                    "head": {"sha": head_sha},
+                }
+            }
+        )
+    )
+    result_path = tmp_path / "result.json"
+    publisher = JobResultPublisher(result_path)
+    runtime = QualityRuntime(GitHub(), publisher, read_only=False)
+    monkeypatch.setattr(flaky_tests_module, "execute_manifest", lambda _path: (failed,))
+
+    with environment({"GITHUB_EVENT_PATH": str(event_path)}):
+        assert flaky_tests_run_check(manifest, runtime) == 1
+    first_state = fake_state()
+    dashboard = state_objects(first_state, "comments")[0]
+    assert "monori-qg-sticky: flaky-tests" in string_value(dashboard["body"], "body")
+    assert "monori-flaky-test-failed" in array_value(first_state["labels"], "labels")
+    assert read_job_result(result_path).annotations[0].path == "server/tests/test_budget.py"
+
+    upsert_comment(GitHub(), PULL_REQUEST_NUMBER, "quality-graph", "Replaced dashboard")
+    replaced = state_objects(fake_state(), "comments")[0]
+    assert "monori-qg-sticky: flaky-tests" in string_value(replaced["body"], "body")
+
+    monkeypatch.setattr(flaky_tests_module, "execute_manifest", lambda _path: (passed,))
+
+    with environment({"GITHUB_EVENT_PATH": str(event_path)}):
+        assert flaky_tests_run_check(manifest, runtime) == 1
+    assert read_job_result(result_path).status is JobStatus.FAILED
+
+
+def test_flaky_gate_skips_state_publication_for_a_stale_event_head(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """
+    Prevent an older workflow from publishing state for a newer pull-request head.
+    """
+    event_head = "a" * 40
+    current_head = "b" * 40
+    reset_fake_github(
+        {
+            "pulls": [
+                {
+                    "number": PULL_REQUEST_NUMBER,
+                    "body": "Pull request body",
+                    "html_url": f"https://github.com/{REPOSITORY}/pull/{PULL_REQUEST_NUMBER}",
+                    "head": {"sha": current_head},
+                    "base": {"sha": "base-sha"},
+                }
+            ]
+        }
+    )
+    event_path = tmp_path / "event.json"
+    event_path.write_text(
+        json.dumps(
+            {
+                "pull_request": {
+                    "number": PULL_REQUEST_NUMBER,
+                    "head": {"sha": event_head},
+                }
+            }
+        )
+    )
+    result_path = tmp_path / "result.json"
+    runtime = QualityRuntime(GitHub(), JobResultPublisher(result_path), read_only=False)
+
+    def unexpected_execution(path: Path) -> tuple[RepetitionResult, ...]:
+        raise AssertionError(path)
+
+    monkeypatch.setattr(flaky_tests_module, "execute_manifest", unexpected_execution)
+
+    with environment({"GITHUB_EVENT_PATH": str(event_path)}):
+        assert flaky_tests_run_check(tmp_path / "manifest.json", runtime) == 0
+
+    assert read_job_result(result_path).status is JobStatus.SKIPPED
+    assert array_value(fake_state()["labels"], "labels") == []
+
+
+def test_flaky_gate_rechecks_the_head_after_repetitions(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """
+    Discard results when a new commit arrives while repetitions are running.
+    """
+    event_head = "a" * 40
+    next_head = "b" * 40
+    reset_fake_github(
+        {
+            "pulls": [
+                {
+                    "number": PULL_REQUEST_NUMBER,
+                    "body": "Pull request body",
+                    "html_url": f"https://github.com/{REPOSITORY}/pull/{PULL_REQUEST_NUMBER}",
+                    "head": {"sha": event_head},
+                    "base": {"sha": "base-sha"},
+                }
+            ]
+        }
+    )
+    event_path = tmp_path / "event.json"
+    event_path.write_text(
+        json.dumps(
+            {
+                "pull_request": {
+                    "number": PULL_REQUEST_NUMBER,
+                    "head": {"sha": event_head},
+                }
+            }
+        )
+    )
+
+    def push_new_head(path: Path) -> tuple[RepetitionResult, ...]:
+        assert path == tmp_path / "manifest.json"
+        reset_fake_github(
+            {
+                "pulls": [
+                    {
+                        "number": PULL_REQUEST_NUMBER,
+                        "body": "New head body",
+                        "html_url": f"https://github.com/{REPOSITORY}/pull/{PULL_REQUEST_NUMBER}",
+                        "head": {"sha": next_head},
+                        "base": {"sha": "base-sha"},
+                    }
+                ]
+            }
+        )
+        return ()
+
+    monkeypatch.setattr(flaky_tests_module, "execute_manifest", push_new_head)
+    result_path = tmp_path / "result.json"
+    runtime = QualityRuntime(GitHub(), JobResultPublisher(result_path), read_only=False)
+
+    with environment({"GITHUB_EVENT_PATH": str(event_path)}):
+        assert flaky_tests_run_check(tmp_path / "manifest.json", runtime) == 0
+
+    assert read_job_result(result_path).status is JobStatus.SKIPPED
+    pull = object_value(array_value(fake_state()["pulls"], "pulls")[0], "pull")
+    assert string_value(pull["body"], "body") == "New head body"
 
 
 def test_source_gate_converges_labels_and_writes_job_results(tmp_path: Path) -> None:

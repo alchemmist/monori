@@ -56,6 +56,13 @@ WORKFLOW_JOBS = (
     WorkflowJobDefinition("test-fast", "Fast tests", "test_fast"),
     WorkflowJobDefinition("test-medium", "Medium tests", "test_medium"),
     WorkflowJobDefinition("test-slow", "Slow tests", "test_slow"),
+    WorkflowJobDefinition(
+        "flaky-tests",
+        "Flaky test detection",
+        "flaky_tests",
+        "flaky",
+        "flaky-tests",
+    ),
     WorkflowJobDefinition("build", "Build frontend", "build"),
     WorkflowJobDefinition("coverage", "Coverage", "coverage"),
     WorkflowJobDefinition("mutation", "Mutation testing", "mutation", report_marker="mutation"),
@@ -114,11 +121,16 @@ def registered_checks() -> dict[str, type[QualityCheckDefinition]]:
     )
     from monori.ci.quality_graph.checks.suppressions import SuppressionCheck  # noqa: PLC0415
 
+    flaky_check = cast(
+        "type[QualityCheckDefinition]",
+        importlib.import_module("monori.ci.quality_graph.checks.flaky_tests").FlakyTestCheck,
+    )
     checks = (
         ObjectAnnotationCheck,
         SuppressionCheck,
         BundleSizeCheck,
         FrontendPerformanceCheck,
+        flaky_check,
     )
     return {check.definition.gate: check for check in checks if check.definition.gate is not None}
 
