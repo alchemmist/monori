@@ -551,13 +551,19 @@
     box-shadow: 0 0 0 3px var(--m-accent-soft);
 }
 
-.budget-cell {
-    cursor: pointer;
-    border-radius: var(--m-radius-sm);
+.budget-cell,
+.budget-cell__input {
+    box-sizing: border-box;
+    display: inline-block;
+    width: 88px;
     padding: 4px 8px;
     margin: -4px -8px;
-    display: inline-block;
-    min-width: 72px;
+    border: 0;
+    border-radius: var(--m-radius-sm);
+}
+
+.budget-cell {
+    cursor: pointer;
     transition:
         background 0.12s ease,
         box-shadow 0.12s ease;
@@ -569,17 +575,15 @@
 }
 
 .budget-cell__input {
-    width: 96px;
     background: var(--m-bg);
-    border: 1px solid var(--m-accent);
-    border-radius: var(--m-radius-sm);
     color: var(--m-text);
     font: inherit;
     font-variant-numeric: tabular-nums;
     text-align: right;
-    padding: 3px 7px;
     outline: none;
-    box-shadow: 0 0 0 3px var(--m-accent-soft);
+    box-shadow:
+        inset 0 0 0 1px var(--m-accent),
+        0 0 0 3px var(--m-accent-soft);
 }
 
 /* placed last so it wins over the base .budget-hero / .hero-card rules above */
