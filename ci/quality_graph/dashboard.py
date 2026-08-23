@@ -190,6 +190,8 @@ def aggregate_status(statuses: Iterable[JobStatus]) -> JobStatus:
         return JobStatus.IN_PROGRESS
     if JobStatus.FAILED in observed:
         return JobStatus.FAILED
+    if JobStatus.WARNING in observed:
+        return JobStatus.WARNING
     return JobStatus.PASSED
 
 

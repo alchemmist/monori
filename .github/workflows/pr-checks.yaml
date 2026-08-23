@@ -178,10 +178,35 @@ jobs:
               with:
                   check-id: analyze
 
+    time-bombs:
+        name: Time bomb guardrail
+        needs: [lint, type]
+        if: >-
+            github.event_name == 'pull_request'
+            && needs.lint.result == 'success'
+            && needs.type.result == 'success'
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v7
+              with:
+                  fetch-depth: 0
+                  persist-credentials: false
+            - uses: ./.github/actions/setup-project
+              with:
+                  python-profile: ci
+            - uses: ./.github/actions/quality-job
+              env:
+                  BASE: ${{ github.event.pull_request.base.sha }}
+              with:
+                  check-id: time-bombs
+
     test-fast:
         name: Fast tests
-        needs: analyze
-        if: github.event_name == 'pull_request' && needs.analyze.result == 'success'
+        needs: [analyze, time-bombs]
+        if: >-
+            github.event_name == 'pull_request'
+            && needs.analyze.result == 'success'
+            && needs.time-bombs.result == 'success'
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@v7
@@ -197,8 +222,11 @@ jobs:
 
     test-medium:
         name: Medium tests
-        needs: analyze
-        if: github.event_name == 'pull_request' && needs.analyze.result == 'success'
+        needs: [analyze, time-bombs]
+        if: >-
+            github.event_name == 'pull_request'
+            && needs.analyze.result == 'success'
+            && needs.time-bombs.result == 'success'
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@v7

@@ -90,6 +90,21 @@ def test_common_diagnostics_become_source_annotations() -> None:
     ]
 
 
+def test_diagnostic_filename_patterns_are_case_insensitive() -> None:
+    annotations = parse_diagnostics(
+        "SERVER/APP.PY:4:7: warning: uppercase colon suffix\n"
+        "WEB/SRC/APP.TS(8,2): warning: uppercase parenthesized suffix\n"
+        "SCRIPTS/CHECK.MJS\n"
+        "9:3 warning uppercase contextual suffix"
+    )
+
+    assert [(item.path, item.start_line, item.start_column) for item in annotations] == [
+        ("SERVER/APP.PY", 4, 7),
+        ("WEB/SRC/APP.TS", 8, 2),
+        ("SCRIPTS/CHECK.MJS", 9, 3),
+    ]
+
+
 def test_warning_diagnostic_keeps_warning_annotation_level() -> None:
     """Avoid presenting an explicit tool warning as an error annotation."""
     annotations = parse_diagnostics("server/app.py:4:7: warning: deprecated call")
