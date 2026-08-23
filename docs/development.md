@@ -119,6 +119,9 @@ dependencies (a real temp SQLite database, the real FastAPI app), not mocks.
 | `make t-front` | Local frontend slice via Vitest. |
 | `make t-back` | Local backend slice with unit and integration tests. |
 | `make t-e2e` | Local end-to-end slice against the real backend and production frontend stack. |
+| `make docs-links` | Check repository Markdown links, including local anchors, with Lychee. Localhost URLs are the only allowlisted targets because the documented services are intentionally offline during this check. |
+| `make docs-examples` | Validate the example Compose deployment and execute representative getting-started and REST API examples against the isolated E2E stack. |
+| `make docs` | Run both documentation checks. |
 | `make coverage` | Coverage as a tree (root → back/front → module → file), via `scripts/coverage-tree.sh`. Fails below **90% statements and lines** in `web/src`. |
 | `make coverage-diff BASE=origin/main` | Runs coverage plus a 100% changed-line gate for backend and frontend, comparing total coverage with `coverage-baseline/baseline.json` when available. |
 | `make mutation` | Full local mutation sweep: Stryker on `web/src`, then mutmut on `server/app`. CI runs the two cached halves in parallel nightly at 05:00 Moscow time and on manual dispatch. |
@@ -129,6 +132,12 @@ check. Detailed metrics and uncovered source ranges are published in the Coverag
 while the single Quality Graph comment carries its compact status and links. Main-branch coverage
 saves the baseline in the Actions cache; when a baseline is not available, patch coverage
 still blocks uncovered changes while the total-coverage delta remains neutral.
+
+Executable documentation cases live in `web/e2e/docs-examples.spec.ts`. Add a focused case there
+when a setup, configuration, or API example becomes part of the supported documentation contract;
+name the source document in the test title so failures identify the stale example. Link exclusions
+belong in `.lychee.toml` and must name one intentionally unavailable target class rather than hide a
+whole domain or status code.
 
 After the fast, medium, and slow lanes pass, the `Flaky test detection` Quality Graph check finds
 test definitions added under `server/tests`, `web/src`, and `web/e2e`. Every collected runner case,

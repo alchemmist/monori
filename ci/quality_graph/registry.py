@@ -43,6 +43,7 @@ WORKFLOW_JOBS = (
         "suppressions", "Lint suppression gate", "suppressions", "suppression", "suppression"
     ),
     WorkflowJobDefinition("lint", "Lint", "lint"),
+    WorkflowJobDefinition("docs", "Documentation", "docs"),
     WorkflowJobDefinition(
         "object-annotations",
         "Python object annotation gate",

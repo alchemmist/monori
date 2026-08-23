@@ -5,6 +5,7 @@ SHFMT_VERSION=3.10.0
 HADOLINT_VERSION=2.12.0
 ACTIONLINT_VERSION=1.7.7
 GITLEAKS_VERSION=8.21.2
+LYCHEE_VERSION=0.24.2
 
 bindir="${MONORI_TOOLS_BIN:-$HOME/.local/bin}"
 mkdir -p "$bindir"
@@ -78,6 +79,20 @@ if ! have hadolint; then
   fi
   curl -sSfL "https://github.com/hadolint/hadolint/releases/download/v${HADOLINT_VERSION}/hadolint-${kernel}-${hmachine}" -o "$tmp/hadolint"
   install -m 0755 "$tmp/hadolint" "$bindir/hadolint"
+fi
+
+if ! have lychee; then
+  echo "installing lychee ${LYCHEE_VERSION}"
+  case "$goos-$goarch" in
+  darwin-amd64) lychee_target=x86_64-apple-darwin ;;
+  darwin-arm64) lychee_target=aarch64-apple-darwin ;;
+  linux-amd64) lychee_target=x86_64-unknown-linux-gnu ;;
+  linux-arm64) lychee_target=aarch64-unknown-linux-gnu ;;
+  esac
+  archive="lychee-${lychee_target}.tar.gz"
+  curl -sSfL "https://github.com/lycheeverse/lychee/releases/download/lychee-v${LYCHEE_VERSION}/${archive}" -o "$tmp/lychee.tgz"
+  tar -xzf "$tmp/lychee.tgz" -C "$tmp" --strip-components=1 "lychee-${lychee_target}/lychee"
+  install -m 0755 "$tmp/lychee" "$bindir/lychee"
 fi
 
 case ":$PATH:" in
