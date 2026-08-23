@@ -226,10 +226,10 @@ jobs:
 
     time-bombs:
         name: Time bomb guardrail
-        needs: [lint, type]
+        needs: [analyze, type]
         if: >-
             github.event_name == 'pull_request'
-            && needs.lint.result == 'success'
+            && needs.analyze.result == 'success'
             && needs.type.result == 'success'
         runs-on: ubuntu-latest
         steps:
@@ -248,11 +248,8 @@ jobs:
 
     test-fast:
         name: Fast tests
-        needs: [analyze, time-bombs]
-        if: >-
-            github.event_name == 'pull_request'
-            && needs.analyze.result == 'success'
-            && needs.time-bombs.result == 'success'
+        needs: analyze
+        if: github.event_name == 'pull_request' && needs.analyze.result == 'success'
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@v7
@@ -268,11 +265,8 @@ jobs:
 
     test-medium:
         name: Medium tests
-        needs: [analyze, time-bombs]
-        if: >-
-            github.event_name == 'pull_request'
-            && needs.analyze.result == 'success'
-            && needs.time-bombs.result == 'success'
+        needs: analyze
+        if: github.event_name == 'pull_request' && needs.analyze.result == 'success'
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@v7
@@ -403,13 +397,14 @@ jobs:
 
     quality-report:
         name: Finalize PR quality dashboard
-        needs: [audit, docs-links, fmt-check, triple-quotes]
+        needs: [audit, docs-links, fmt-check, triple-quotes, time-bombs]
         if: >-
             github.event_name == 'pull_request'
             && needs.audit.result == 'success'
             && needs.docs-links.result == 'success'
             && needs.fmt-check.result == 'success'
             && needs.triple-quotes.result == 'success'
+            && needs.time-bombs.result == 'success'
             && github.event.pull_request.head.repo.full_name == github.repository
             && github.event.pull_request.user.login != 'dependabot[bot]'
         permissions:

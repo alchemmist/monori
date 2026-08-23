@@ -165,9 +165,9 @@ class TestPullRequestWorkflowGraph:
             "object-annotations": "suppressions",
             "type": "object-annotations",
             "analyze": "lint",
-            "time-bombs": {"lint", "type"},
-            "test-fast": {"analyze", "time-bombs"},
-            "test-medium": {"analyze", "time-bombs"},
+            "time-bombs": {"analyze", "type"},
+            "test-fast": "analyze",
+            "test-medium": "analyze",
             "test-slow": {"test-fast", "test-medium"},
             "flaky-tests": "test-slow",
             "coverage": "test-slow",
@@ -405,6 +405,7 @@ class TestPullRequestWorkflowGraph:
             "docs-links",
             "fmt-check",
             "triple-quotes",
+            "time-bombs",
         }
         condition = self.workflow["jobs"]["quality-report"]["if"]
         assert "always()" not in condition
@@ -412,6 +413,7 @@ class TestPullRequestWorkflowGraph:
         assert "needs.docs-links.result == 'success'" in condition
         assert "needs.fmt-check.result == 'success'" in condition
         assert "needs.triple-quotes.result == 'success'" in condition
+        assert "needs.time-bombs.result == 'success'" in condition
         assert "actions/download-artifact@v8" in body
         assert "pattern: quality-result-*" in body
         assert "github.run_attempt" not in body.split("path:", maxsplit=1)[0]
