@@ -119,11 +119,14 @@ jobs:
 
     lint:
         name: Lint
-        needs: [suppressions, triple-quotes]
+        needs: [fmt-check, triple-quotes, suppressions, object-annotations, docs-links]
         if: >-
             github.event_name == 'pull_request'
-            && needs.suppressions.result == 'success'
+            && needs.fmt-check.result == 'success'
             && needs.triple-quotes.result == 'success'
+            && needs.suppressions.result == 'success'
+            && needs.object-annotations.result == 'success'
+            && needs.docs-links.result == 'success'
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@v7
@@ -164,13 +167,10 @@ jobs:
               with:
                   check-id: lint
 
-    docs:
-        name: Documentation
-        needs: [suppressions, triple-quotes]
-        if: >-
-            github.event_name == 'pull_request'
-            && needs.suppressions.result == 'success'
-            && needs.triple-quotes.result == 'success'
+    docs-links:
+        name: Documentation links
+        needs: workflow-graph
+        if: github.event_name == 'pull_request' && needs.workflow-graph.result == 'success'
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@v7
@@ -178,8 +178,7 @@ jobs:
                   persist-credentials: false
             - uses: ./.github/actions/setup-project
               with:
-                  install-web: true
-                  python-profile: test
+                  python-profile: ci
             - name: Install Lychee
               env:
                   LYCHEE_VERSION: "0.24.2"
@@ -193,12 +192,18 @@ jobs:
                   sudo install -m 0755 "$RUNNER_TEMP/lychee" /usr/local/bin/lychee
             - uses: ./.github/actions/quality-job
               with:
-                  check-id: docs
+                  check-id: docs-links
 
     type:
         name: Type check
-        needs: object-annotations
-        if: github.event_name == 'pull_request' && needs.object-annotations.result == 'success'
+        needs: [fmt-check, triple-quotes, suppressions, object-annotations, docs-links]
+        if: >-
+            github.event_name == 'pull_request'
+            && needs.fmt-check.result == 'success'
+            && needs.triple-quotes.result == 'success'
+            && needs.suppressions.result == 'success'
+            && needs.object-annotations.result == 'success'
+            && needs.docs-links.result == 'success'
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@v7
@@ -214,10 +219,9 @@ jobs:
 
     analyze:
         name: Static analysis
-        needs: [docs, lint, type]
+        needs: [lint, type]
         if: >-
             github.event_name == 'pull_request'
-            && needs.docs.result == 'success'
             && needs.lint.result == 'success'
             && needs.type.result == 'success'
         runs-on: ubuntu-latest
@@ -325,6 +329,26 @@ jobs:
               with:
                   check-id: test-slow
 
+    docs-examples:
+        name: Documentation examples
+        needs: [test-fast, test-medium]
+        if: >-
+            github.event_name == 'pull_request'
+            && needs.test-fast.result == 'success'
+            && needs.test-medium.result == 'success'
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v7
+              with:
+                  persist-credentials: false
+            - uses: ./.github/actions/setup-project
+              with:
+                  install-web: true
+                  python-profile: test
+            - uses: ./.github/actions/quality-job
+              with:
+                  check-id: docs-examples
+
     flaky-tests:
         name: Flaky test detection
         needs: test-slow
@@ -391,7 +415,7 @@ jobs:
 
     audit:
         name: Dependency and security audit
-        needs: [coverage, mutation, bundle-size, frontend-performance, flaky-tests]
+        needs: [coverage, mutation, bundle-size, frontend-performance, flaky-tests, docs-examples]
         if: >-
             always()
             && needs.coverage.result == 'success'
@@ -399,6 +423,7 @@ jobs:
             && needs.bundle-size.result == 'success'
             && needs.frontend-performance.result == 'success'
             && needs.flaky-tests.result == 'success'
+            && needs.docs-examples.result == 'success'
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@v7
@@ -584,11 +609,8 @@ jobs:
 
     object-annotations:
         name: Python object annotation gate
-        needs: [fmt-check, triple-quotes]
-        if: >-
-            github.event_name == 'pull_request'
-            && needs.fmt-check.result == 'success'
-            && needs.triple-quotes.result == 'success'
+        needs: workflow-graph
+        if: github.event_name == 'pull_request' && needs.workflow-graph.result == 'success'
         runs-on: ubuntu-latest
         timeout-minutes: 10
         env:
@@ -608,11 +630,8 @@ jobs:
 
     suppressions:
         name: Lint suppression gate
-        needs: [fmt-check, triple-quotes]
-        if: >-
-            github.event_name == 'pull_request'
-            && needs.fmt-check.result == 'success'
-            && needs.triple-quotes.result == 'success'
+        needs: workflow-graph
+        if: github.event_name == 'pull_request' && needs.workflow-graph.result == 'success'
         runs-on: ubuntu-latest
         timeout-minutes: 10
         env:

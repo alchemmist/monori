@@ -23,12 +23,13 @@ class TestMainWorkflowGraph:
         assert set(self.workflow["jobs"]) == {
             "fmt-check",
             "lint",
-            "docs",
+            "docs-links",
             "type",
             "analyze",
             "test-fast",
             "test-medium",
             "test-slow",
+            "docs-examples",
             "build",
             "coverage",
             "audit",
@@ -41,12 +42,13 @@ class TestMainWorkflowGraph:
         jobs = self.workflow["jobs"]
         expected = {
             "lint": "fmt-check",
-            "docs": "fmt-check",
+            "docs-links": "fmt-check",
             "type": "lint",
             "analyze": "type",
             "test-fast": "analyze",
             "test-medium": "test-fast",
             "test-slow": "test-medium",
+            "docs-examples": "test-medium",
             "build": "test-slow",
             "coverage": "build",
             "audit": "coverage",
@@ -59,20 +61,21 @@ class TestMainWorkflowGraph:
             assert dependency in needs
 
         assert jobs["lint"]["needs"] == "fmt-check"
-        assert jobs["docs"]["needs"] == "fmt-check"
-        assert set(jobs["type"]["needs"]) == {"docs", "lint"}
+        assert jobs["docs-links"]["needs"] == "fmt-check"
+        assert set(jobs["type"]["needs"]) == {"docs-links", "lint"}
+        assert set(jobs["audit"]["needs"]) == {"coverage", "docs-examples"}
 
     def test_main_jobs_request_specific_python_profiles(self) -> None:
         """Keep main jobs on the same minimal dependency profiles as PR jobs."""
         expected = {
             "fmt-check": "format",
             "lint": "lint",
-            "docs": "test",
             "type": "type",
             "analyze": "analyze",
             "test-fast": "test",
             "test-medium": "test",
             "test-slow": "test",
+            "docs-examples": "test",
             "coverage": "coverage",
             "audit": "audit",
             "mutation-full-backend": "mutation",

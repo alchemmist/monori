@@ -42,8 +42,8 @@ WORKFLOW_JOBS = (
     WorkflowJobDefinition(
         "suppressions", "Lint suppression gate", "suppressions", "suppression", "suppression"
     ),
+    WorkflowJobDefinition("docs-links", "Documentation links", "docs_links"),
     WorkflowJobDefinition("lint", "Lint", "lint"),
-    WorkflowJobDefinition("docs", "Documentation", "docs"),
     WorkflowJobDefinition(
         "object-annotations",
         "Python object annotation gate",
@@ -57,6 +57,7 @@ WORKFLOW_JOBS = (
     WorkflowJobDefinition("test-fast", "Fast tests", "test_fast"),
     WorkflowJobDefinition("test-medium", "Medium tests", "test_medium"),
     WorkflowJobDefinition("test-slow", "Slow tests", "test_slow"),
+    WorkflowJobDefinition("docs-examples", "Documentation examples", "docs_examples"),
     WorkflowJobDefinition(
         "flaky-tests",
         "Flaky test detection",
