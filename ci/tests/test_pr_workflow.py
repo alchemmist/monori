@@ -173,7 +173,7 @@ class TestPullRequestWorkflowGraph:
             "coverage": "test-slow",
             "mutation": "test-slow",
             "build": "test-slow",
-            "backend-performance": "coverage",
+            "backend-performance": "test-slow",
             "frontend-performance-sla": {"backend-performance", "bundle-size"},
             "bundle-size": "build",
             "frontend-performance": "frontend-performance-sla",
@@ -212,15 +212,10 @@ class TestPullRequestWorkflowGraph:
         for job in jobs:
             visit(job)
 
-    def test_final_audits_converge_after_all_expensive_checks(self) -> None:
+    def test_dependency_audit_follows_bundle_measurement(self) -> None:
         jobs = self.workflow["jobs"]
         expected_dependencies = {
-            "audit": {
-                "coverage",
-                "mutation",
-                "frontend-performance",
-                "flaky-tests",
-            },
+            "audit": {"bundle-size"},
         }
         for job, expected in expected_dependencies.items():
             needs = jobs[job].get("needs", [])
@@ -233,8 +228,8 @@ class TestPullRequestWorkflowGraph:
                 re.MULTILINE | re.DOTALL,
             )
             assert block is not None, job
-            assert "always()" in block.group("body"), job
-            assert "needs.frontend-performance.result == 'success'" in block.group("body"), job
+            assert "always()" not in block.group("body"), job
+            assert "needs.bundle-size.result == 'success'" in block.group("body"), job
 
     def test_complex_gates_use_local_actions(self) -> None:
         expected_actions = {
@@ -402,16 +397,24 @@ class TestPullRequestWorkflowGraph:
         body = block.group("body")
         assert set(self.workflow["jobs"]["quality-report"]["needs"]) == {
             "audit",
+            "coverage",
             "docs-links",
+            "flaky-tests",
             "fmt-check",
+            "frontend-performance",
+            "mutation",
             "triple-quotes",
             "time-bombs",
         }
         condition = self.workflow["jobs"]["quality-report"]["if"]
         assert "always()" not in condition
         assert "needs.audit.result == 'success'" in condition
+        assert "needs.coverage.result == 'success'" in condition
         assert "needs.docs-links.result == 'success'" in condition
+        assert "needs.flaky-tests.result == 'success'" in condition
         assert "needs.fmt-check.result == 'success'" in condition
+        assert "needs.frontend-performance.result == 'success'" in condition
+        assert "needs.mutation.result == 'success'" in condition
         assert "needs.triple-quotes.result == 'success'" in condition
         assert "needs.time-bombs.result == 'success'" in condition
         assert "actions/download-artifact@v8" in body

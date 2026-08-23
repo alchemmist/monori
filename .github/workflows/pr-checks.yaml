@@ -374,13 +374,8 @@ jobs:
 
     audit:
         name: Dependency and security audit
-        needs: [coverage, mutation, frontend-performance, flaky-tests]
-        if: >-
-            always()
-            && needs.coverage.result == 'success'
-            && needs.mutation.result == 'success'
-            && needs.frontend-performance.result == 'success'
-            && needs.flaky-tests.result == 'success'
+        needs: bundle-size
+        if: github.event_name == 'pull_request' && needs.bundle-size.result == 'success'
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@v7
@@ -397,14 +392,29 @@ jobs:
 
     quality-report:
         name: Finalize PR quality dashboard
-        needs: [audit, docs-links, fmt-check, triple-quotes, time-bombs]
+        needs:
+            [
+                audit,
+                coverage,
+                docs-links,
+                flaky-tests,
+                fmt-check,
+                frontend-performance,
+                mutation,
+                time-bombs,
+                triple-quotes,
+            ]
         if: >-
             github.event_name == 'pull_request'
             && needs.audit.result == 'success'
+            && needs.coverage.result == 'success'
             && needs.docs-links.result == 'success'
+            && needs.flaky-tests.result == 'success'
             && needs.fmt-check.result == 'success'
-            && needs.triple-quotes.result == 'success'
+            && needs.frontend-performance.result == 'success'
+            && needs.mutation.result == 'success'
             && needs.time-bombs.result == 'success'
+            && needs.triple-quotes.result == 'success'
             && github.event.pull_request.head.repo.full_name == github.repository
             && github.event.pull_request.user.login != 'dependabot[bot]'
         permissions:
@@ -480,8 +490,8 @@ jobs:
 
     backend-performance:
         name: Backend performance SLA (k6)
-        needs: coverage
-        if: github.event_name == 'pull_request' && needs.coverage.result == 'success'
+        needs: test-slow
+        if: github.event_name == 'pull_request' && needs.test-slow.result == 'success'
         runs-on: ubuntu-latest
         timeout-minutes: 30
         steps:
