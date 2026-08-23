@@ -119,13 +119,12 @@ jobs:
 
     lint:
         name: Lint
-        needs: [fmt-check, triple-quotes, suppressions, docs-links]
+        needs: [fmt-check, triple-quotes, suppressions]
         if: >-
             github.event_name == 'pull_request'
             && needs.fmt-check.result == 'success'
             && needs.triple-quotes.result == 'success'
             && needs.suppressions.result == 'success'
-            && needs.docs-links.result == 'success'
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@v7
@@ -405,7 +404,16 @@ jobs:
 
     audit:
         name: Dependency and security audit
-        needs: [coverage, mutation, bundle-size, frontend-performance, flaky-tests, docs-examples]
+        needs:
+            [
+                coverage,
+                mutation,
+                bundle-size,
+                frontend-performance,
+                flaky-tests,
+                docs-links,
+                docs-examples,
+            ]
         if: >-
             always()
             && needs.coverage.result == 'success'
@@ -413,6 +421,7 @@ jobs:
             && needs.bundle-size.result == 'success'
             && needs.frontend-performance.result == 'success'
             && needs.flaky-tests.result == 'success'
+            && needs.docs-links.result == 'success'
             && needs.docs-examples.result == 'success'
         runs-on: ubuntu-latest
         steps:
@@ -599,13 +608,12 @@ jobs:
 
     object-annotations:
         name: Python object annotation gate
-        needs: [fmt-check, triple-quotes, suppressions, docs-links]
+        needs: [fmt-check, triple-quotes, suppressions]
         if: >-
             github.event_name == 'pull_request'
             && needs.fmt-check.result == 'success'
             && needs.triple-quotes.result == 'success'
             && needs.suppressions.result == 'success'
-            && needs.docs-links.result == 'success'
         runs-on: ubuntu-latest
         timeout-minutes: 10
         env:

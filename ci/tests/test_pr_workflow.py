@@ -166,13 +166,11 @@ class TestPullRequestWorkflowGraph:
                 "fmt-check",
                 "triple-quotes",
                 "suppressions",
-                "docs-links",
             },
             "object-annotations": {
                 "fmt-check",
                 "triple-quotes",
                 "suppressions",
-                "docs-links",
             },
             "type": "object-annotations",
             "analyze": "lint",
@@ -233,6 +231,7 @@ class TestPullRequestWorkflowGraph:
                 "bundle-size",
                 "frontend-performance",
                 "flaky-tests",
+                "docs-links",
                 "docs-examples",
             },
         }

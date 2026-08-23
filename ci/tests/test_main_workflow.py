@@ -62,8 +62,8 @@ class TestMainWorkflowGraph:
 
         assert jobs["lint"]["needs"] == "fmt-check"
         assert jobs["docs-links"]["needs"] == "fmt-check"
-        assert set(jobs["type"]["needs"]) == {"docs-links", "lint"}
-        assert set(jobs["audit"]["needs"]) == {"coverage", "docs-examples"}
+        assert jobs["type"]["needs"] == "lint"
+        assert set(jobs["audit"]["needs"]) == {"coverage", "docs-links", "docs-examples"}
 
     def test_main_jobs_request_specific_python_profiles(self) -> None:
         """Keep main jobs on the same minimal dependency profiles as PR jobs."""

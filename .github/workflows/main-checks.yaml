@@ -96,7 +96,7 @@ jobs:
 
     type:
         name: Type check
-        needs: [docs-links, lint]
+        needs: lint
         runs-on: ubuntu-latest
         steps:
             - name: Checkout
@@ -231,7 +231,7 @@ jobs:
 
     audit:
         name: Dependency and security audit
-        needs: [coverage, docs-examples]
+        needs: [coverage, docs-links, docs-examples]
         runs-on: ubuntu-latest
         permissions:
             contents: read
