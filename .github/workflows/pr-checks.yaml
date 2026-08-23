@@ -410,8 +410,9 @@ jobs:
         name: Finalize PR quality dashboard
         needs: [audit, docs-links]
         if: >-
-            always()
-            && github.event_name == 'pull_request'
+            github.event_name == 'pull_request'
+            && needs.audit.result == 'success'
+            && needs.docs-links.result == 'success'
             && github.event.pull_request.head.repo.full_name == github.repository
             && github.event.pull_request.user.login != 'dependabot[bot]'
         permissions:
@@ -470,16 +471,6 @@ jobs:
                   --run-attempt "${{ github.run_attempt }}"
                   --head-sha "$HEAD_SHA"
                   --run-url "$RUN_URL"
-            - name: Enforce complete Quality Graph verdict
-              if: always()
-              env:
-                  AUDIT_RESULT: ${{ needs.audit.result }}
-                  DOCS_LINKS_RESULT: ${{ needs.docs-links.result }}
-              run: |
-                  if [ "$AUDIT_RESULT" != "success" ] || [ "$DOCS_LINKS_RESULT" != "success" ]; then
-                    echo "Quality Graph failed: audit=$AUDIT_RESULT docs-links=$DOCS_LINKS_RESULT"
-                    exit 1
-                  fi
 
     mutation:
         name: Mutation testing

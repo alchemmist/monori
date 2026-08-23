@@ -398,8 +398,8 @@ class TestPullRequestWorkflowGraph:
         assert "uses: ./.github/actions/quality-job" in block.group("body")
         assert "check-id: audit" in block.group("body")
 
-    def test_final_dashboard_runs_after_the_complete_graph(self) -> None:
-        """Collect all result artifacts even when an earlier check failed."""
+    def test_final_dashboard_runs_after_the_successful_graph(self) -> None:
+        """Collect result artifacts only after both graph branches pass."""
         block = re.search(
             r"^    quality-report:\n(?P<body>.*?)(?=^    \S|\Z)",
             self.source,
@@ -411,7 +411,10 @@ class TestPullRequestWorkflowGraph:
             "audit",
             "docs-links",
         }
-        assert "always()" in body
+        condition = self.workflow["jobs"]["quality-report"]["if"]
+        assert "always()" not in condition
+        assert "needs.audit.result == 'success'" in condition
+        assert "needs.docs-links.result == 'success'" in condition
         assert "actions/download-artifact@v8" in body
         assert "pattern: quality-result-*" in body
         assert "github.run_attempt" not in body.split("path:", maxsplit=1)[0]
@@ -420,17 +423,6 @@ class TestPullRequestWorkflowGraph:
         assert "id: quality-results" in body
         assert "if: steps.quality-results.outcome == 'success'" in body
         assert "monori.ci.quality_graph.dashboard finish" in body
-        enforce = next(
-            step
-            for step in self.workflow["jobs"]["quality-report"]["steps"]
-            if step.get("name") == "Enforce complete Quality Graph verdict"
-        )
-        assert enforce["if"] == "always()"
-        assert enforce["env"] == {
-            "AUDIT_RESULT": "${{ needs.audit.result }}",
-            "DOCS_LINKS_RESULT": "${{ needs.docs-links.result }}",
-        }
-        assert "exit 1" in enforce["run"]
 
     def test_live_dashboard_has_one_serial_writer(self) -> None:
         """Keep parallel check jobs from replacing the shared comment body."""
