@@ -1,77 +1,79 @@
 import pytest
+from fastapi.testclient import TestClient
+
+from monori.server.tests.conftest import Api, TransactionOptions
 
 pytestmark = pytest.mark.integration
 
 
-def test_category_create_sort_and_conflicts(api, client):
+def test_category_create_sort_and_conflicts(api: Api, client: TestClient) -> None:
     g = api.group("Expenses")
     a = api.category("A", g)
     b = api.category("B", g)
-    assert [c["sort"] for c in api.snapshot()["categories"]] == [1, 2]
+    assert [category.sort for category in api.snapshot().categories] == [1, 2]
     assert client.post("/api/categories", json={"name": "A", "groupId": g}).status_code == 409
     assert client.post("/api/categories", json={"name": "X", "groupId": 999}).status_code == 400
     assert client.post("/api/categories", json={"name": "", "groupId": g}).status_code == 422
     assert a != b
 
 
-def test_category_patch_move_group_and_name(api, client):
+def test_category_patch_move_group_and_name(api: Api, client: TestClient) -> None:
     g1 = api.group("Expenses", "expense")
     g2 = api.group("Income", "income")
     a = api.category("A", g1)
     api.category("B", g1)
     assert client.patch(f"/api/categories/{a}", json={"groupId": g2}).status_code == 200
-    assert api.cat(a)["groupId"] == g2
+    assert api.cat(a).group_id == g2
     assert client.patch(f"/api/categories/{a}", json={"groupId": 999}).status_code == 400
     assert client.patch(f"/api/categories/{a}", json={"name": "B"}).status_code == 409
     assert client.patch("/api/categories/999", json={"name": "z"}).status_code == 404
     assert client.patch(f"/api/categories/{a}", json={"keywords": "x|y"}).status_code == 200
-    assert api.cat(a)["keywords"] == "x|y"
+    assert api.cat(a).keywords == "x|y"
 
 
-def test_category_reorder_and_archive_roundtrip(api, client):
+def test_category_reorder_and_archive_roundtrip(api: Api, client: TestClient) -> None:
     g = api.group("Expenses")
     a = api.category("A", g)
     b = api.category("B", g)
     assert client.post("/api/categories/reorder", json={"ids": [b, a]}).status_code == 200
-    assert [c["id"] for c in api.snapshot()["categories"]] == [b, a]
+    assert [category.id for category in api.snapshot().categories] == [b, a]
     assert client.post("/api/categories/reorder", json={"ids": [a]}).status_code == 400
 
     assert client.patch(f"/api/categories/{a}", json={"archived": True}).status_code == 200
-    assert api.cat(a)["archived"] is True
+    assert api.cat(a).archived is True
     client.patch(f"/api/categories/{a}", json={"archived": False})
-    assert api.cat(a)["archived"] is False
+    assert api.cat(a).archived is False
 
 
-def test_category_delete_never_reassigns(api, client):
-    # moving transactions is /merge's job now; delete only ever uncategorizes,
-    # and a leftover reassignTo from an old client must not resurrect the move
+def test_category_delete_never_reassigns(api: Api, client: TestClient) -> None:
+
     g = api.group("Expenses")
     a = api.category("A", g)
     b = api.category("B", g)
-    tx = api.tx("2026-01-01T00:00:00", -500, categoryId=a)
+    tx = api.tx("2026-01-01T00:00:00", -500, TransactionOptions(category_id=a))
     client.put("/api/budgets", json={"categoryId": a, "year": 2026, "month": 1, "amount": 1000})
     client.put("/api/budgets", json={"categoryId": b, "year": 2026, "month": 1, "amount": 2000})
 
     assert client.delete(f"/api/categories/{a}?reassignTo={b}").status_code == 200
     snap = api.snapshot()
-    assert api.tx_by(tx)["categoryId"] is None
-    assert {x["categoryId"]: x["amount"] for x in snap["budgets"]} == {b: 2000}
+    assert api.tx_by(tx).category_id is None
+    assert {budget.category_id: budget.amount for budget in snap.budgets} == {b: 2000}
 
 
-def test_category_delete_without_reassign_uncategorizes(api, client):
+def test_category_delete_without_reassign_uncategorizes(api: Api, client: TestClient) -> None:
     g = api.group("Expenses")
     a = api.category("A", g)
-    tx = api.tx("2026-01-01T00:00:00", -500, categoryId=a)
+    tx = api.tx("2026-01-01T00:00:00", -500, TransactionOptions(category_id=a))
     assert client.delete(f"/api/categories/{a}").status_code == 200
-    assert api.tx_by(tx)["categoryId"] is None
+    assert api.tx_by(tx).category_id is None
     assert client.delete("/api/categories/999").status_code == 404
 
 
-def test_category_merge_moves_tx_and_unions_keywords(api, client):
+def test_category_merge_moves_tx_and_unions_keywords(api: Api, client: TestClient) -> None:
     g = api.group("Expenses")
     src = api.category("Coffee", g, "cofix|STARBUCKS")
     dst = api.category("Cafe", g, "starbucks|shokoladnitsa")
-    tx = api.tx("2026-01-01T00:00:00", -500, categoryId=src)
+    tx = api.tx("2026-01-01T00:00:00", -500, TransactionOptions(category_id=src))
     client.put("/api/budgets", json={"categoryId": src, "year": 2026, "month": 1, "amount": 900})
     client.put("/api/budgets", json={"categoryId": src, "year": 2026, "month": 2, "amount": 200})
     client.put("/api/budgets", json={"categoryId": dst, "year": 2026, "month": 1, "amount": 100})
@@ -82,44 +84,41 @@ def test_category_merge_moves_tx_and_unions_keywords(api, client):
 
     assert client.post(f"/api/categories/{src}/merge", json={"into": dst}).status_code == 200
     snap = api.snapshot()
-    assert [c["id"] for c in snap["categories"]] == [dst]
-    assert api.tx_by(tx)["categoryId"] == dst
-    assert api.cat(dst)["keywords"].split("|") == ["starbucks", "shokoladnitsa", "cofix"]
-    # the spending moved across, so the plan has to move with it: overlapping
-    # months are summed, months only the source had are carried over as they are
-    assert sorted((b["year"], b["month"], b["amount"]) for b in snap["budgets"]) == [
+    assert [category.id for category in snap.categories] == [dst]
+    assert api.tx_by(tx).category_id == dst
+    assert api.cat(dst).keywords.split("|") == ["starbucks", "shokoladnitsa", "cofix"]
+
+    assert sorted((budget.year, budget.month, budget.amount) for budget in snap.budgets) == [
         (2026, 1, 1000),
         (2026, 2, 200),
     ]
-    assert {b["categoryId"] for b in snap["budgets"]} == {dst}
+    assert {budget.category_id for budget in snap.budgets} == {dst}
 
 
-def test_merge_across_income_and_expense_is_refused(api, client):
-    # budgeting and analytics read the sign off the group kind, so this merge
-    # would reinterpret the whole moved history — the server refuses it even
-    # though the picker never offers it
+def test_merge_across_income_and_expense_is_refused(api: Api, client: TestClient) -> None:
+
     salary = api.category("Salary", api.group("Income", kind="income"))
     rent = api.category("Rent", api.group("Fixed", kind="expense"))
-    tx = api.tx("2026-01-01T00:00:00", 90000, categoryId=salary)
+    tx = api.tx("2026-01-01T00:00:00", 90000, TransactionOptions(category_id=salary))
     client.put("/api/budgets", json={"categoryId": salary, "year": 2026, "month": 1, "amount": 700})
 
     assert client.post(f"/api/categories/{salary}/merge", json={"into": rent}).status_code == 400
     assert client.post(f"/api/categories/{rent}/merge", json={"into": salary}).status_code == 400
 
     snap = api.snapshot()
-    assert sorted(c["id"] for c in snap["categories"]) == sorted([salary, rent])
-    assert api.tx_by(tx)["categoryId"] == salary
-    assert [(b["categoryId"], b["amount"]) for b in snap["budgets"]] == [(salary, 700)]
+    assert sorted(category.id for category in snap.categories) == sorted([salary, rent])
+    assert api.tx_by(tx).category_id == salary
+    assert [(budget.category_id, budget.amount) for budget in snap.budgets] == [(salary, 700)]
 
 
-def test_merge_with_empty_keywords(api, client):
+def test_merge_with_empty_keywords(api: Api, client: TestClient) -> None:
     g = api.group("Expenses")
     src = api.category("Src", g, "")
     dst = api.category("Dst", g, "coffee")
     client.post(f"/api/categories/{src}/merge", json={"into": dst})
-    assert api.cat(dst)["keywords"] == "coffee"
+    assert api.cat(dst).keywords == "coffee"
 
     src2 = api.category("Src2", g, "tea")
     dst2 = api.category("Dst2", g, "")
     client.post(f"/api/categories/{src2}/merge", json={"into": dst2})
-    assert api.cat(dst2)["keywords"] == "tea"
+    assert api.cat(dst2).keywords == "tea"

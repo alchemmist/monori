@@ -1,3 +1,5 @@
+"""Provide backend functionality."""
+
 GLYPH_IN = "▲"
 GLYPH_OUT = "▼"
 
@@ -54,14 +56,17 @@ CURRENCY_SYMBOLS = {"RUB": "₽", "USD": "$", "EUR": "€"}
 
 
 def kop_to_rub(kop: int) -> float:
+    """Handle kop to rub."""
     return round(kop / 100, 2)
 
 
 def kop_from_rub(value: float) -> int:
+    """Handle kop from rub."""
     return round(round(float(value), 2) * 100)
 
 
 def strip_glyph(display: str) -> tuple[str, str | None]:
+    """Handle strip glyph."""
     if display.startswith(GLYPH_IN):
         return display[len(GLYPH_IN) :], "income"
     if display.startswith(GLYPH_OUT):
@@ -70,14 +75,17 @@ def strip_glyph(display: str) -> tuple[str, str | None]:
 
 
 def amount_display(value: float, currency: str) -> str:
+    """Handle amount display."""
     symbol = CURRENCY_SYMBOLS.get(currency, currency)
     return f"{value:.2f} {symbol}"
 
 
 def group_display(name: str, kind: str) -> str:
+    """Handle group display."""
     glyph = GLYPH_IN if kind == "income" else GLYPH_OUT
     return f"{glyph}{name}"
 
 
 def group_type(kind: str) -> str:
+    """Handle group type."""
     return TYPE_IN if kind == "income" else TYPE_OUT

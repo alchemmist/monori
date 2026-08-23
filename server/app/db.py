@@ -1,8 +1,8 @@
 """
 SQLite access layer. All money amounts are stored as integer kopecks.
 
-The schema has a single canonical definition in ``server/schema.sql``; its
-history lives as alembic revisions in ``server/migrations``. A fresh database
+The schema has a single canonical definition in ``server/schema.sql``; its history lives as
+Alembic revisions in ``server/migrations``. A fresh database
 is created straight from ``schema.sql`` and stamped at head; an existing one is
 upgraded through the migration chain. Databases from before the alembic switch
 carry ``PRAGMA user_version`` — they are adopted by stamping the matching
@@ -14,33 +14,30 @@ import pathlib
 import sqlite3
 import threading
 
-DB_PATH = os.environ.get(
-    "MONORI_DB", str(pathlib.Path(__file__).resolve().parent.parent / "data" / "monori.db")
-)
+from alembic import command
+from alembic.config import Config
 
-SERVER_DIR = pathlib.Path(__file__).resolve().parent.parent
-SCHEMA_PATH = SERVER_DIR / "schema.sql"
-MIGRATIONS_PATH = SERVER_DIR / "migrations"
+PACKAGE_DIR = pathlib.Path(__file__).resolve().parents[1]
+DB_PATH = os.environ.get("MONORI_DB", str(pathlib.Path.cwd() / "server" / "data" / "monori.db"))
+SCHEMA_PATH = PACKAGE_DIR / "schema.sql"
+MIGRATIONS_PATH = PACKAGE_DIR / "migrations"
 
-# alembic revision reached after applying N legacy user_version steps
+
 LEGACY_REVISIONS = ["0001", "0002", "0003", "0004", "0005", "0006"]
+JOURNAL_MODES = {"DELETE", "WAL"}
 
 _bootstrapped: set[str] = set()
 _bootstrap_lock = threading.Lock()
 
 
-def _alembic_config(path):
-    from alembic.config import Config
-
+def _alembic_config(path: pathlib.Path) -> Config:
     cfg = Config()
     cfg.set_main_option("script_location", str(MIGRATIONS_PATH))
     cfg.set_main_option("sqlalchemy.url", f"sqlite:///{path}")
     return cfg
 
 
-def _bootstrap(path):
-    from alembic import command
-
+def _bootstrap(path: pathlib.Path) -> None:
     conn = sqlite3.connect(path)
     try:
         tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
@@ -63,8 +60,22 @@ def _bootstrap(path):
             conn.close()
         command.stamp(cfg, "head")
 
+    journal_mode = os.environ.get("MONORI_SQLITE_JOURNAL_MODE", "DELETE").upper()
+    if journal_mode not in JOURNAL_MODES:
+        msg = f"unsupported SQLite journal mode: {journal_mode}"
+        raise ValueError(msg)
+    conn = sqlite3.connect(path)
+    try:
+        actual_mode = str(conn.execute(f"PRAGMA journal_mode={journal_mode}").fetchone()[0]).upper()
+        if actual_mode != journal_mode:
+            msg = f"SQLite refused journal mode {journal_mode}: using {actual_mode}"
+            raise RuntimeError(msg)
+    finally:
+        conn.close()
 
-def connect(db_path=None):
+
+def connect(db_path: str | os.PathLike[str] | None = None) -> sqlite3.Connection:
+    """Handle connect."""
     path = pathlib.Path(db_path or DB_PATH)
     path.parent.mkdir(parents=True, exist_ok=True)
     key = str(path.resolve())
@@ -79,7 +90,7 @@ def connect(db_path=None):
     return conn
 
 
-def begin_write(conn):
+def begin_write(conn: sqlite3.Connection) -> None:
     """Acquire SQLite's write reservation before correlated reads and writes."""
     if not conn.in_transaction:
         conn.execute("BEGIN IMMEDIATE")

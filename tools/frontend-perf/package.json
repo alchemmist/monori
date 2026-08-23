@@ -1,0 +1,16 @@
+{
+    "name": "monori-frontend-performance-tools",
+    "private": true,
+    "packageManager": "npm@10.9.2",
+    "version": "0.0.0",
+    "dependencies": {
+        "@lhci/cli": "^0.15.1",
+        "@playwright/test": "^1.62.0",
+        "puppeteer-core": "^25.4.0"
+    },
+    "overrides": {
+        "lighthouse": "13.4.1",
+        "tmp": "^0.2.6",
+        "uuid": "^11.1.1"
+    }
+}

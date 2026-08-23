@@ -19,20 +19,20 @@ Command protocol — write one line to <ctl>/cmd; the result lands in
   stop                      -> close and exit
 """
 
-import json
 import os
 import pathlib
 import re
 import time
 
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import Page, sync_playwright
 
 CTL = pathlib.Path(os.environ.get("TBANK_CTL", "/tmp/tbank-explore"))
 LOGIN = "https://www.tbank.ru/auth/login/"
 ATTR_RE = re.compile(r'(automation-id|data-qa-type|data-qa-file)="([^"]+)"')
 
 
-def dump(page):
+def dump(page: Page) -> str:
+    """Dump for this module."""
     html = page.content()
     (CTL / "page.html").write_text(f"<!-- url: {page.url} -->\n{html}", encoding="utf-8")
     seen = []
@@ -40,13 +40,12 @@ def dump(page):
         key = f"{m.group(1)}={m.group(2)}"
         if key not in seen:
             seen.append(key)
-    (CTL / "summary.txt").write_text(
-        "\n".join([f"URL: {page.url}", ""] + seen), encoding="utf-8"
-    )
+    (CTL / "summary.txt").write_text("\n".join([f"URL: {page.url}", ""] + seen), encoding="utf-8")
     return f"dumped {len(html)} bytes, url={page.url}"
 
 
-def handle(page, line):
+def handle(page: Page, line: str) -> str:
+    """Handle for this module."""
     parts = line.split(" ", 1)
     cmd = parts[0]
     arg = parts[1].strip() if len(parts) > 1 else ""
@@ -91,7 +90,8 @@ def handle(page, line):
     return f"unknown command: {cmd}"
 
 
-def main():
+def main() -> None:
+    """Run this module as a CLI entrypoint and return its exit code."""
     CTL.mkdir(parents=True, exist_ok=True)
     profile = CTL / "profile"
     profile.mkdir(exist_ok=True)
@@ -126,7 +126,7 @@ def main():
                 break
             try:
                 result = handle(page, line)
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:  
                 result = f"ERROR: {type(e).__name__}: {e}"
             (CTL / "result").write_text(result, encoding="utf-8")
             (CTL / "done").write_text(str(time.time()), encoding="utf-8")

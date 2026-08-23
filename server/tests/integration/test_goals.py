@@ -1,4 +1,15 @@
-def test_goal_crud_accepts_spending_and_archive_preserves_history(api, client):
+import pytest
+from fastapi.testclient import TestClient
+
+from monori.server.tests.conftest import Api, TransactionOptions
+
+pytestmark = pytest.mark.integration
+
+
+def test_goal_crud_accepts_spending_and_archive_preserves_history(
+    api: Api,
+    client: TestClient,
+) -> None:
     group = api.group("Goals", kind="goal")
     created = client.post(
         "/api/categories",
@@ -15,35 +26,38 @@ def test_goal_crud_accepts_spending_and_archive_preserves_history(api, client):
         "/api/budgets",
         json={"categoryId": goal, "year": 2026, "month": 1, "amount": 30_000},
     )
-    purchase = api.tx("2026-02-20T10:00:00", -40_000, categoryId=goal)
+    purchase = api.tx("2026-02-20T10:00:00", -40_000, TransactionOptions(category_id=goal))
     client.put(
         "/api/budgets",
         json={"categoryId": goal, "year": 2026, "month": 2, "amount": 20_000},
     )
 
     snap = api.snapshot()
-    cat = next(c for c in snap["categories"] if c["id"] == goal)
-    assert cat["goalTarget"] == 100_000
-    assert cat["goalStatus"] == "active"
-    assert cat["goalTargetDate"] == "2026-12-31"
+    cat = next(category for category in snap.categories if category.id == goal)
+    assert cat.goal_target == 100_000
+    assert cat.goal_status == "active"
+    assert cat.goal_target_date == "2026-12-31"
 
     archived = client.post(f"/api/categories/{goal}/archive-goal", json={})
     assert archived.status_code == 200, archived.text
     snap = api.snapshot()
-    cat = next(c for c in snap["categories"] if c["id"] == goal)
-    assert cat["archived"] is True
-    assert cat["goalStatus"] == "archived"
-    assert sum(b["amount"] for b in snap["budgets"] if b["categoryId"] == goal) == 50_000
-    assert next(t for t in snap["transactions"] if t["id"] == purchase)["categoryId"] == goal
+    cat = next(category for category in snap.categories if category.id == goal)
+    assert cat.archived is True
+    assert cat.goal_status == "archived"
+    assert sum(budget.amount for budget in snap.budgets if budget.category_id == goal) == 50_000
+    purchase_row = next(
+        transaction for transaction in snap.transactions if transaction.id == purchase
+    )
+    assert purchase_row.category_id == goal
 
 
-def test_goal_requires_target(api, client):
+def test_goal_requires_target(api: Api, client: TestClient) -> None:
     group = api.group("Goals", kind="goal")
     r = client.post("/api/categories", json={"name": "Trip", "groupId": group})
     assert r.status_code == 400
 
 
-def test_moving_goal_to_expense_group_clears_goal_metadata(api, client):
+def test_moving_goal_to_expense_group_clears_goal_metadata(api: Api, client: TestClient) -> None:
     goals = api.group("Goals", kind="goal")
     expenses = api.group("Expenses")
     created = client.post(
@@ -59,7 +73,35 @@ def test_moving_goal_to_expense_group_clears_goal_metadata(api, client):
 
     moved = client.patch(f"/api/categories/{goal}", json={"groupId": expenses})
     assert moved.status_code == 200, moved.text
-    category = next(c for c in api.snapshot()["categories"] if c["id"] == goal)
-    assert category["goalTarget"] is None
-    assert category["goalStatus"] is None
-    assert category["goalTargetDate"] is None
+    category = next(category for category in api.snapshot().categories if category.id == goal)
+    assert category.goal_target is None
+    assert category.goal_status is None
+    assert category.goal_target_date is None
+
+
+def test_moving_expense_to_goal_sets_complete_goal_metadata(
+    api: Api,
+    client: TestClient,
+) -> None:
+    expenses = api.group("Expenses")
+    goals = api.group("Goals", kind="goal")
+    created = client.post("/api/categories", json={"name": "Camera", "groupId": expenses})
+    category_id = created.json()["id"]
+
+    moved = client.patch(
+        f"/api/categories/{category_id}",
+        json={
+            "groupId": goals,
+            "goalTarget": 100_000,
+            "goalTargetDate": "2026-12-31",
+        },
+    )
+
+    assert moved.status_code == 200, moved.text
+    category = next(
+        category for category in api.snapshot().categories if category.id == category_id
+    )
+    assert category.group_id == goals
+    assert category.goal_target == 100_000
+    assert category.goal_target_date == "2026-12-31"
+    assert category.goal_status == "active"

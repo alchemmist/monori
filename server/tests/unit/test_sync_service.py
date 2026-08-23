@@ -1,23 +1,23 @@
 import pytest
 from fastapi.testclient import TestClient
 
-import app.connectors.fake  # noqa: F401  (registers the FakeConnector)
-from app import sync_service
+import monori.server.app.connectors.fake
+from monori.server.app import sync_service
 
 CREDS = {"phone": "+70000000000", "password": "pw"}
 
 
-@pytest.fixture()
-def client():
+@pytest.fixture
+def client() -> TestClient:
     sync_service.PENDING.clear()
     return TestClient(sync_service.app)
 
 
-def test_health(client):
+def test_health(client: TestClient) -> None:
     assert client.get("/health").json() == {"ok": True}
 
 
-def test_otp_flow(client):
+def test_otp_flow(client: TestClient) -> None:
     r = client.post("/runs/1", json={"bank": "fake", "kind": "fake", "credentials": CREDS})
     assert r.json() == {"status": "awaiting_sms", "message": sync_service.SMS_SENT}
     assert 1 in sync_service.PENDING
@@ -30,7 +30,7 @@ def test_otp_flow(client):
     assert 1 not in sync_service.PENDING
 
 
-def test_cached_session_skips_otp(client):
+def test_cached_session_skips_otp(client: TestClient) -> None:
     r = client.post(
         "/runs/1",
         json={"bank": "fake", "kind": "fake", "credentials": CREDS, "session": {"token": "ok"}},
@@ -38,27 +38,27 @@ def test_cached_session_skips_otp(client):
     assert r.json()["status"] == "done"
 
 
-def test_connector_error_is_reported(client):
+def test_connector_error_is_reported(client: TestClient) -> None:
     r = client.post("/runs/1", json={"bank": "fake", "kind": "fake", "credentials": {}})
     assert r.json() == {"status": "error", "message": sync_service.SYNC_FAILED}
 
 
-def test_unknown_connector(client):
+def test_unknown_connector(client: TestClient) -> None:
     r = client.post("/runs/1", json={"bank": "nope", "kind": "nope", "credentials": CREDS})
     assert r.json()["status"] == "error"
 
 
-def test_sms_without_login_is_409(client):
+def test_sms_without_login_is_409(client: TestClient) -> None:
     assert client.post("/runs/9/sms", json={"code": "0000"}).status_code == 409
 
 
-def test_cancel_clears_pending(client):
+def test_cancel_clears_pending(client: TestClient) -> None:
     client.post("/runs/1", json={"bank": "fake", "kind": "fake", "credentials": CREDS})
     assert client.post("/runs/1/cancel").json() == {"cancelled": 1}
     assert client.post("/runs/1/sms", json={"code": "0000"}).status_code == 409
 
 
-def test_new_run_replaces_pending_login(client):
+def test_new_run_replaces_pending_login(client: TestClient) -> None:
     client.post("/runs/1", json={"bank": "fake", "kind": "fake", "credentials": CREDS})
     first = sync_service.PENDING[1]
     client.post("/runs/1", json={"bank": "fake", "kind": "fake", "credentials": CREDS})

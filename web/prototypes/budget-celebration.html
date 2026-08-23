@@ -1,0 +1,1162 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>Budget · zero-reached celebration — prototypes</title>
+        <style>
+            :root {
+                --m-radius: 6px;
+                --m-radius-sm: 5px;
+                --m-accent-contrast: #fff;
+                --font:
+                    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial,
+                    sans-serif;
+            }
+            [data-theme="light"] {
+                --m-bg: #fff;
+                --m-surface: #fff;
+                --m-surface-hover: #f7f7f6;
+                --m-surface-raised: #f5f5f4;
+                --m-border: #e7e6e3;
+                --m-border-soft: #efefed;
+                --m-text: #0a0a0a;
+                --m-text-dim: #5c5c58;
+                --m-text-faint: #a3a29d;
+                --m-accent: #ef5a17;
+                --m-accent-soft: #ffe6d9;
+                --m-income: #15803d;
+                --m-expense: #dc2626;
+                --page: #fafaf9;
+            }
+            [data-theme="dark"] {
+                --m-bg: #08070d;
+                --m-surface: #0d0b15;
+                --m-surface-hover: #2a242a;
+                --m-surface-raised: #141020;
+                --m-border: #221d31;
+                --m-border-soft: #2c252c;
+                --m-text: #f2f1f6;
+                --m-text-dim: #a3a0b0;
+                --m-text-faint: #6c6980;
+                --m-accent: #ff7a3c;
+                --m-accent-soft: #3a1e10;
+                --m-income: #4ade80;
+                --m-expense: #f87171;
+                --page: #050409;
+            }
+
+            * {
+                box-sizing: border-box;
+            }
+            body {
+                margin: 0;
+                font-family: var(--font);
+                background: var(--page);
+                color: var(--m-text);
+                -webkit-font-smoothing: antialiased;
+            }
+
+            /* ---------- top bar ---------- */
+            header {
+                position: sticky;
+                top: 0;
+                z-index: 50;
+                display: flex;
+                align-items: center;
+                gap: 16px;
+                flex-wrap: wrap;
+                padding: 14px 28px;
+                background: color-mix(in srgb, var(--page) 82%, transparent);
+                backdrop-filter: blur(10px);
+                border-bottom: 1px solid var(--m-border);
+            }
+            header h1 {
+                font-size: 15px;
+                margin: 0;
+                font-weight: 700;
+                letter-spacing: -0.01em;
+            }
+            header .sub {
+                font-size: 12px;
+                color: var(--m-text-dim);
+                margin-right: auto;
+            }
+            .ctrl {
+                display: inline-flex;
+                align-items: center;
+                gap: 7px;
+                font-size: 12.5px;
+                font-weight: 600;
+                padding: 7px 12px;
+                border: 1px solid var(--m-border);
+                border-radius: 8px;
+                background: var(--m-surface);
+                color: var(--m-text);
+                cursor: pointer;
+                user-select: none;
+            }
+            .ctrl:hover {
+                border-color: var(--m-accent);
+            }
+            .ctrl_accent {
+                background: var(--m-accent);
+                color: var(--m-accent-contrast);
+                border-color: var(--m-accent);
+            }
+            .ctrl_on {
+                background: var(--m-accent-soft);
+                border-color: var(--m-accent);
+                color: var(--m-accent);
+            }
+
+            .intro {
+                max-width: 900px;
+                margin: 26px auto 6px;
+                padding: 0 28px;
+                color: var(--m-text-dim);
+                font-size: 13px;
+                line-height: 1.6;
+            }
+            .intro b {
+                color: var(--m-text);
+            }
+
+            /* ---------- gallery ---------- */
+            .gallery {
+                display: grid;
+                grid-template-columns: repeat(auto-fill, minmax(430px, 1fr));
+                gap: 20px;
+                padding: 20px 28px 80px;
+                max-width: 1500px;
+                margin: 0 auto;
+            }
+            .variant {
+                background: var(--m-surface);
+                border: 1px solid var(--m-border);
+                border-radius: 14px;
+                padding: 16px 16px 18px;
+                display: flex;
+                flex-direction: column;
+                gap: 14px;
+            }
+            .variant__head {
+                display: flex;
+                align-items: flex-start;
+                justify-content: space-between;
+                gap: 12px;
+            }
+            .variant__head h2 {
+                margin: 0 0 3px;
+                font-size: 13.5px;
+                font-weight: 700;
+                letter-spacing: 0.01em;
+            }
+            .variant__head .idx {
+                color: var(--m-accent);
+                font-variant-numeric: tabular-nums;
+            }
+            .variant__head p {
+                margin: 0;
+                font-size: 11.5px;
+                line-height: 1.45;
+                color: var(--m-text-dim);
+                max-width: 34ch;
+            }
+            .replay {
+                flex: none;
+                font-size: 11.5px;
+                font-weight: 600;
+                padding: 6px 10px;
+                border: 1px solid var(--m-border);
+                border-radius: 7px;
+                background: var(--m-surface);
+                color: var(--m-text-dim);
+                cursor: pointer;
+                white-space: nowrap;
+            }
+            .replay:hover {
+                border-color: var(--m-accent);
+                color: var(--m-accent);
+            }
+
+            .stages {
+                display: grid;
+                grid-template-columns: 1fr;
+                gap: 12px;
+            }
+            .stage__tag {
+                display: block;
+                font-size: 9.5px;
+                letter-spacing: 0.08em;
+                text-transform: uppercase;
+                color: var(--m-text-faint);
+                font-weight: 700;
+                margin-bottom: 6px;
+            }
+            .stage__frame {
+                background: var(--page);
+                border: 1px dashed var(--m-border);
+                border-radius: 10px;
+                padding: 16px;
+                display: flex;
+                justify-content: center;
+            }
+
+            /* ---------- faithful month hero card ---------- */
+            .card {
+                background: var(--m-surface);
+                border: 1px solid var(--m-border);
+                border-radius: var(--m-radius);
+            }
+            .hero-card {
+                padding: 14px 18px;
+                min-width: 170px;
+                position: relative;
+                isolation: isolate;
+                overflow: visible;
+            }
+            .hero-card__label {
+                display: flex;
+                align-items: center;
+                gap: 4px;
+                font-size: 11px;
+                font-weight: 600;
+                letter-spacing: 0.7px;
+                text-transform: uppercase;
+                color: var(--m-text-faint);
+                margin-bottom: 4px;
+            }
+            .hero-card__value {
+                font-size: 22px;
+                font-weight: 700;
+                line-height: 1.2;
+                font-variant-numeric: tabular-nums;
+                position: relative;
+            }
+            .hero-card__hint {
+                font-size: 12px;
+                color: var(--m-text-dim);
+                margin-top: 2px;
+            }
+            .check {
+                width: 14px;
+                height: 14px;
+                fill: none;
+                stroke: var(--m-accent);
+                stroke-width: 2;
+                stroke-linecap: round;
+                stroke-linejoin: round;
+            }
+
+            /* ---------- faithful year-table month strip ---------- */
+            .yg-strip {
+                display: flex;
+                border: 1px solid var(--m-border);
+                border-radius: 8px;
+                overflow: hidden;
+                background: var(--m-surface-raised);
+            }
+            .yg-msum {
+                position: relative;
+                text-align: center;
+                padding: 9px 12px 8px;
+                border-left: 1px solid var(--m-border);
+                min-width: 74px;
+                isolation: isolate;
+                overflow: visible;
+            }
+            .yg-msum:first-child {
+                border-left: 0;
+            }
+            .yg-msum__mon {
+                font-size: 10px;
+                font-weight: 700;
+                letter-spacing: 0.6px;
+                text-transform: uppercase;
+                color: var(--m-text-faint);
+            }
+            .yg-msum__av {
+                font-size: 18px;
+                font-weight: 800;
+                font-variant-numeric: tabular-nums;
+                line-height: 1.2;
+                margin-top: 3px;
+                white-space: nowrap;
+            }
+            .yg-msum__check {
+                width: 13px;
+                height: 13px;
+                margin-right: 3px;
+                vertical-align: -2px;
+                fill: none;
+                stroke: var(--m-accent);
+                stroke-width: 2;
+                stroke-linecap: round;
+                stroke-linejoin: round;
+            }
+
+            /* particle / fx layer */
+            .fx {
+                position: absolute;
+                inset: 0;
+                pointer-events: none;
+                overflow: visible;
+                z-index: 5;
+            }
+            .p {
+                position: absolute;
+                left: 50%;
+                top: 50%;
+                will-change: transform, opacity;
+            }
+
+            /* ======================================================= */
+            /* shared check-draw (used by several)                     */
+            /* ======================================================= */
+            .cel .check path,
+            .cel .yg-msum__check path {
+                stroke-dasharray: 16;
+                stroke-dashoffset: 16;
+            }
+            .cel.play .check path,
+            .cel.play .yg-msum__check path {
+                animation: draw 380ms 120ms ease-out both;
+            }
+            @keyframes draw {
+                to {
+                    stroke-dashoffset: 0;
+                }
+            }
+
+            /* ======================================================= */
+            /* 01 · baseline — ring pulse + draw (current in PR)       */
+            /* ======================================================= */
+            [data-fx="baseline"] .cel.play::after {
+                content: "";
+                position: absolute;
+                z-index: -1;
+                inset: -1px;
+                border: 1px solid color-mix(in srgb, var(--m-accent) 65%, transparent);
+                border-radius: inherit;
+                animation: ringpulse 600ms ease-out both;
+            }
+            @keyframes ringpulse {
+                from {
+                    opacity: 0.7;
+                    transform: scale(0.96);
+                    box-shadow: 0 0 0 0 color-mix(in srgb, var(--m-accent) 24%, transparent);
+                }
+                to {
+                    opacity: 0;
+                    transform: scale(1.08);
+                    box-shadow: 0 0 0 12px transparent;
+                }
+            }
+
+            /* ======================================================= */
+            /* 02 · confetti burst (JS particles)                     */
+            /* ======================================================= */
+            [data-fx="confetti"] .p {
+                width: 7px;
+                height: 10px;
+                border-radius: 2px;
+                animation: confetti 900ms cubic-bezier(0.2, 0.7, 0.3, 1) forwards;
+            }
+            @keyframes confetti {
+                0% {
+                    transform: translate(-50%, -50%) rotate(0deg) scale(0.3);
+                    opacity: 1;
+                }
+                100% {
+                    transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy)))
+                        rotate(var(--rot)) scale(1);
+                    opacity: 0;
+                }
+            }
+
+            /* ======================================================= */
+            /* 03 · coin cascade (JS particles)                       */
+            /* ======================================================= */
+            [data-fx="coins"] .p {
+                font-size: 15px;
+                font-weight: 800;
+                color: var(--m-accent);
+                animation: coin 1000ms cubic-bezier(0.3, 0.5, 0.2, 1) forwards;
+            }
+            @keyframes coin {
+                0% {
+                    transform: translate(calc(-50% + var(--sx)), -220%) rotate(0deg);
+                    opacity: 0;
+                }
+                12% {
+                    opacity: 1;
+                }
+                78% {
+                    transform: translate(calc(-50% + var(--dx)), 90%) rotate(var(--rot));
+                    opacity: 1;
+                }
+                100% {
+                    transform: translate(calc(-50% + var(--dx)), 60%) rotate(var(--rot));
+                    opacity: 0;
+                }
+            }
+
+            /* ======================================================= */
+            /* 04 · concentric ripples                                */
+            /* ======================================================= */
+            [data-fx="ripple"] .cel.play .fx::before,
+            [data-fx="ripple"] .cel.play .fx::after {
+                content: "";
+                position: absolute;
+                left: 50%;
+                top: 50%;
+                width: 20px;
+                height: 20px;
+                margin: -10px 0 0 -10px;
+                border-radius: 50%;
+                border: 1.5px solid var(--m-accent);
+                opacity: 0;
+                animation: ripple 1100ms ease-out forwards;
+            }
+            [data-fx="ripple"] .cel.play .fx::after {
+                animation-delay: 220ms;
+            }
+            @keyframes ripple {
+                0% {
+                    transform: scale(0.4);
+                    opacity: 0.7;
+                }
+                100% {
+                    transform: scale(9);
+                    opacity: 0;
+                }
+            }
+
+            /* ======================================================= */
+            /* 05 · golden shimmer sweep                              */
+            /* ======================================================= */
+            [data-fx="shimmer"] .cel {
+                overflow: hidden;
+            }
+            [data-fx="shimmer"] .cel.play::before {
+                content: "";
+                position: absolute;
+                inset: 0;
+                background: linear-gradient(
+                    105deg,
+                    transparent 30%,
+                    color-mix(in srgb, var(--m-accent) 42%, transparent) 48%,
+                    #ffd9a8aa 52%,
+                    transparent 70%
+                );
+                transform: translateX(-120%);
+                animation: sweep 900ms ease-in-out both;
+                z-index: 4;
+            }
+            [data-fx="shimmer"] .cel.play .hero-card__value,
+            [data-fx="shimmer"] .cel.play .yg-msum__av {
+                animation: goldtext 900ms ease-out both;
+            }
+            @keyframes sweep {
+                to {
+                    transform: translateX(120%);
+                }
+            }
+            @keyframes goldtext {
+                0%,
+                100% {
+                    color: inherit;
+                }
+                45% {
+                    color: var(--m-accent);
+                    text-shadow: 0 0 10px color-mix(in srgb, var(--m-accent) 45%, transparent);
+                }
+            }
+
+            /* ======================================================= */
+            /* 06 · count-down to zero (JS tween) + settle glow       */
+            /* ======================================================= */
+            [data-fx="odometer"] .cel.play .hero-card__value,
+            [data-fx="odometer"] .cel.play .yg-msum__av {
+                animation: none;
+            }
+            [data-fx="odometer"] .cel.settle .hero-card__value,
+            [data-fx="odometer"] .cel.settle .yg-msum__av {
+                animation: settleglow 620ms ease-out both;
+            }
+            @keyframes settleglow {
+                0% {
+                    transform: scale(1.14);
+                    color: var(--m-accent);
+                    text-shadow: 0 0 14px color-mix(in srgb, var(--m-accent) 55%, transparent);
+                }
+                100% {
+                    transform: scale(1);
+                    text-shadow: 0 0 0 transparent;
+                }
+            }
+
+            /* ======================================================= */
+            /* 07 · firework spark burst (JS particles)               */
+            /* ======================================================= */
+            [data-fx="fireworks"] .p {
+                width: var(--len, 22px);
+                height: 2px;
+                border-radius: 2px;
+                transform-origin: left center;
+                animation: spark 780ms cubic-bezier(0.15, 0.75, 0.3, 1) forwards;
+            }
+            @keyframes spark {
+                0% {
+                    transform: translate(-50%, -50%) rotate(var(--ang)) scaleX(0);
+                    opacity: 1;
+                }
+                70% {
+                    transform: translate(-50%, -50%) rotate(var(--ang)) translateX(var(--r))
+                        scaleX(1);
+                    opacity: 1;
+                }
+                100% {
+                    transform: translate(-50%, -50%) rotate(var(--ang))
+                        translateX(calc(var(--r) * 1.25)) scaleX(0.2);
+                    opacity: 0;
+                }
+            }
+
+            /* ======================================================= */
+            /* 08 · approval stamp (scale-slam bounce)                */
+            /* ======================================================= */
+            [data-fx="stamp"] .stamp {
+                position: absolute;
+                right: 12px;
+                top: 50%;
+                width: 34px;
+                height: 34px;
+                margin-top: -17px;
+                border-radius: 50%;
+                border: 2px solid var(--m-accent);
+                display: grid;
+                place-items: center;
+                opacity: 0;
+                z-index: 6;
+            }
+            .yg-msum .stamp {
+                right: 4px;
+                top: 4px;
+                width: 20px;
+                height: 20px;
+                margin-top: 0;
+                border-width: 1.5px;
+            }
+            .stamp svg {
+                width: 60%;
+                height: 60%;
+                stroke: var(--m-accent);
+                fill: none;
+                stroke-width: 2.5;
+                stroke-linecap: round;
+                stroke-linejoin: round;
+            }
+            [data-fx="stamp"] .cel.play .stamp {
+                animation: stamp 1250ms ease-out both;
+            }
+            @keyframes stamp {
+                0% {
+                    opacity: 0;
+                    transform: scale(2.6) rotate(-18deg);
+                }
+                22% {
+                    opacity: 1;
+                    transform: scale(0.9) rotate(4deg);
+                }
+                30% {
+                    transform: scale(1) rotate(0deg);
+                }
+                65% {
+                    opacity: 1;
+                    transform: scale(1) rotate(0deg);
+                }
+                100% {
+                    opacity: 0;
+                    transform: scale(1.08) rotate(0deg);
+                }
+            }
+            [data-fx="stamp"] .cel.play::after {
+                content: "";
+                position: absolute;
+                inset: -1px;
+                border-radius: inherit;
+                box-shadow: 0 0 0 0 color-mix(in srgb, var(--m-accent) 40%, transparent);
+                animation: thud 520ms ease-out both;
+                z-index: -1;
+            }
+            @keyframes thud {
+                0%,
+                55% {
+                    box-shadow: 0 0 0 0 color-mix(in srgb, var(--m-accent) 40%, transparent);
+                }
+                100% {
+                    box-shadow: 0 0 0 10px transparent;
+                }
+            }
+
+            /* ======================================================= */
+            /* 09 · liquid fill up                                    */
+            /* ======================================================= */
+            [data-fx="liquid"] .cel {
+                overflow: hidden;
+            }
+            [data-fx="liquid"] .liquid {
+                position: absolute;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                height: 0;
+                background: linear-gradient(
+                    color-mix(in srgb, var(--m-accent) 22%, transparent),
+                    color-mix(in srgb, var(--m-accent) 10%, transparent)
+                );
+                z-index: -1;
+            }
+            [data-fx="liquid"] .liquid::before {
+                content: "";
+                position: absolute;
+                left: 0;
+                right: 0;
+                top: -6px;
+                height: 8px;
+                background: color-mix(in srgb, var(--m-accent) 35%, transparent);
+                border-radius: 50%;
+            }
+            [data-fx="liquid"] .cel.play .liquid {
+                animation: fillup 1700ms ease-out both;
+            }
+            @keyframes fillup {
+                0% {
+                    height: 0;
+                    opacity: 1;
+                }
+                52% {
+                    height: 100%;
+                    opacity: 1;
+                }
+                66% {
+                    height: 88%;
+                }
+                78% {
+                    height: 100%;
+                    opacity: 1;
+                }
+                100% {
+                    height: 100%;
+                    opacity: 0;
+                }
+            }
+
+            /* ======================================================= */
+            /* 10 · radial bloom glow                                 */
+            /* ======================================================= */
+            [data-fx="bloom"] .cel.play::before {
+                content: "";
+                position: absolute;
+                inset: 0;
+                background: radial-gradient(
+                    circle at center,
+                    color-mix(in srgb, var(--m-accent) 45%, transparent),
+                    transparent 62%
+                );
+                z-index: 4;
+                opacity: 0;
+                animation: bloom 950ms ease-out both;
+            }
+            @keyframes bloom {
+                0% {
+                    opacity: 0;
+                    transform: scale(0.5);
+                }
+                35% {
+                    opacity: 0.9;
+                }
+                100% {
+                    opacity: 0;
+                    transform: scale(1.4);
+                }
+            }
+
+            /* ======================================================= */
+            /* 11 · twinkle sparkles (JS particles)                   */
+            /* ======================================================= */
+            [data-fx="sparkles"] .p {
+                color: var(--m-accent);
+                font-size: var(--sz, 12px);
+                animation: twinkle 1000ms ease-in-out forwards;
+                animation-delay: var(--d, 0ms);
+            }
+            @keyframes twinkle {
+                0% {
+                    transform: translate(-50%, -50%) scale(0) rotate(0deg);
+                    opacity: 0;
+                }
+                40% {
+                    transform: translate(-50%, -50%) scale(1) rotate(90deg);
+                    opacity: 1;
+                }
+                100% {
+                    transform: translate(-50%, -50%) scale(0.2) rotate(160deg);
+                    opacity: 0;
+                }
+            }
+
+            /* ======================================================= */
+            /* 12 · elastic badge pop                                 */
+            /* ======================================================= */
+            [data-fx="spring"] .popdisc {
+                position: absolute;
+                left: 50%;
+                top: 50%;
+                width: 90px;
+                height: 90px;
+                margin: -45px 0 0 -45px;
+                border-radius: 50%;
+                background: radial-gradient(
+                    circle,
+                    color-mix(in srgb, var(--m-accent) 30%, transparent),
+                    transparent 68%
+                );
+                transform: scale(0);
+                opacity: 0;
+                z-index: -1;
+            }
+            .yg-msum .popdisc {
+                width: 54px;
+                height: 54px;
+                margin: -27px 0 0 -27px;
+            }
+            [data-fx="spring"] .cel.play .popdisc {
+                animation: discpop 900ms cubic-bezier(0.2, 1.5, 0.35, 1) both;
+            }
+            @keyframes discpop {
+                0% {
+                    transform: scale(0);
+                    opacity: 0;
+                }
+                45% {
+                    transform: scale(1);
+                    opacity: 1;
+                }
+                100% {
+                    transform: scale(1.15);
+                    opacity: 0;
+                }
+            }
+            [data-fx="spring"] .cel.play .hero-card__value,
+            [data-fx="spring"] .cel.play .yg-msum__av {
+                animation: nudge 720ms ease-out both;
+            }
+            @keyframes nudge {
+                0%,
+                100% {
+                    transform: translateY(0);
+                }
+                30% {
+                    transform: translateY(2px);
+                }
+            }
+
+            /* ======================================================= */
+            /* 13 · travelling gradient border                        */
+            /* ======================================================= */
+            [data-fx="aurora"] .cel.play::after {
+                content: "";
+                position: absolute;
+                inset: -1.5px;
+                border-radius: inherit;
+                padding: 1.5px;
+                background: conic-gradient(
+                    from var(--a, 0deg),
+                    transparent 0deg,
+                    var(--m-accent) 40deg,
+                    #ffce9e 70deg,
+                    transparent 110deg,
+                    transparent 360deg
+                );
+                -webkit-mask:
+                    linear-gradient(#000 0 0) content-box,
+                    linear-gradient(#000 0 0);
+                -webkit-mask-composite: xor;
+                mask-composite: exclude;
+                animation: spin 1200ms linear both;
+                z-index: 6;
+            }
+            @property --a {
+                syntax: "<angle>";
+                inherits: false;
+                initial-value: 0deg;
+            }
+            @keyframes spin {
+                from {
+                    --a: 0deg;
+                }
+                to {
+                    --a: 360deg;
+                }
+            }
+
+            /* ======================================================= */
+            /* 14 · soft breathing halo (minimal / calm)              */
+            /* ======================================================= */
+            [data-fx="breath"] .cel.play::after {
+                content: "";
+                position: absolute;
+                inset: -3px;
+                border-radius: inherit;
+                box-shadow: 0 0 0 1px color-mix(in srgb, var(--m-accent) 50%, transparent);
+                opacity: 0;
+                animation: breath 1600ms ease-in-out both;
+                z-index: -1;
+            }
+            @keyframes breath {
+                0% {
+                    opacity: 0;
+                    box-shadow: 0 0 0 0 color-mix(in srgb, var(--m-accent) 30%, transparent);
+                }
+                45% {
+                    opacity: 1;
+                    box-shadow: 0 0 18px 2px color-mix(in srgb, var(--m-accent) 30%, transparent);
+                }
+                100% {
+                    opacity: 0;
+                    box-shadow: 0 0 0 0 color-mix(in srgb, var(--m-accent) 0%, transparent);
+                }
+            }
+
+            /* reduced-motion simulation toggle */
+            body.rm .cel *,
+            body.rm .cel::after,
+            body.rm .cel::before,
+            body.rm .fx::after,
+            body.rm .fx::before {
+                animation: none !important;
+            }
+            body.rm .p {
+                display: none !important;
+            }
+        </style>
+    </head>
+    <body>
+        <header>
+            <h1>Budget · celebrate reaching&nbsp;0</h1>
+            <span class="sub">Each card shows the same effect in both views · click to replay</span>
+            <button class="ctrl ctrl_accent" onclick="replayAll()">↺ Replay all</button>
+            <button class="ctrl" id="rmBtn" onclick="toggleRM()">Reduced motion: off</button>
+            <button class="ctrl" id="themeBtn" onclick="toggleTheme()">🌙 Dark</button>
+        </header>
+
+        <p class="intro">
+            The moment a user's assignment drives
+            <b>Available&nbsp;to&nbsp;budget</b> to exactly <b>0</b>, we celebrate — in
+            <b>both</b> the month view (the hero card) and the year table (that month's summary
+            cell). It fires for <b>whichever month</b> was just zeroed, current or not. Pick the
+            feel you like; some are loud, some are calm.
+        </p>
+
+        <main class="gallery" id="gallery"></main>
+
+        <script>
+            const CHECK = `<svg viewBox="0 0 16 16" class="check"><path d="M3.5 8.5 L6.5 11.5 L12.5 4.5"/></svg>`;
+            const CHECK_YG = `<svg viewBox="0 0 16 16" class="yg-msum__check"><path d="M3.5 8.5 L6.5 11.5 L12.5 4.5"/></svg>`;
+
+            // month hero card (available card at zero) — no persistent check/label swap
+            function heroCard(extra = "") {
+                return `
+        <div class="card hero-card cel" data-role="month">
+          <div class="fx"></div>
+          ${extra}
+          <div class="hero-card__label"><span>Available to budget</span></div>
+          <div class="hero-card__value num">0 ₽</div>
+          <div class="hero-card__hint">end of March</div>
+        </div>`;
+            }
+
+            // year strip: Feb / Mar(celebrating) / Apr
+            function yearStrip(extra = "") {
+                const cell = (mon, val, cel) => `
+          <div class="yg-msum ${cel ? "cel" : ""}" ${cel ? 'data-role="year"' : ""}>
+            ${cel ? '<div class="fx"></div>' + extra : ""}
+            <div class="yg-msum__mon">${mon}</div>
+            <div class="yg-msum__av">${val}</div>
+          </div>`;
+                return `<div class="yg-strip">
+          ${cell("Feb", "3 400 ₽", false)}
+          ${cell("Mar", "0 ₽", true)}
+          ${cell("Apr", "8 900 ₽", false)}
+        </div>`;
+            }
+
+            const stampSVG = `<div class="stamp"><svg viewBox="0 0 16 16"><path d="M3.5 8.5 L6.5 11.5 L12.5 4.5"/></svg></div>`;
+            const popDisc = `<div class="popdisc"></div>`;
+            const liquid = `<div class="liquid"></div>`;
+
+            const VARIANTS = [
+                {
+                    fx: "baseline",
+                    name: "Ring pulse",
+                    desc: "A single orange ring pulses outward once and fades. Restrained, on-brand — the calmest of the ring family.",
+                },
+                {
+                    fx: "confetti",
+                    name: "Confetti burst",
+                    desc: "A short pop of orange-tinted confetti from the number. Playful, celebratory, unmistakable.",
+                },
+                {
+                    fx: "coins",
+                    name: "Coin cascade",
+                    desc: "A few ₽ coins tumble down and settle — literally 'the money landed where it should'.",
+                },
+                {
+                    fx: "ripple",
+                    name: "Concentric ripples",
+                    desc: "Two rings expand from the centre like a drop hitting water. Clean and physical.",
+                },
+                {
+                    fx: "shimmer",
+                    name: "Golden shimmer sweep",
+                    desc: "A gloss of light sweeps across the card while the number briefly turns to gold. Premium feel.",
+                },
+                {
+                    fx: "odometer",
+                    name: "Count down to zero",
+                    desc: "The value rolls down to 0, then gives a small warm glow as it lands. Reinforces the meaning.",
+                },
+                {
+                    fx: "fireworks",
+                    name: "Firework spark burst",
+                    desc: "Radial sparks shoot out and fade. The loudest, most festive option.",
+                },
+                {
+                    fx: "stamp",
+                    name: "Approval stamp",
+                    desc: "A round check-stamp slams down with a springy bounce and a soft thud ring. 'Approved.'",
+                },
+                {
+                    fx: "liquid",
+                    name: "Liquid fill up",
+                    desc: "The card fills with a translucent orange wash from the bottom — the envelope is full.",
+                },
+                {
+                    fx: "bloom",
+                    name: "Radial bloom glow",
+                    desc: "A soft warm glow blooms out of the centre and fades. Gentle but noticeable.",
+                },
+                {
+                    fx: "sparkles",
+                    name: "Twinkle sparkles",
+                    desc: "Little four-point sparkles twinkle around the card. Delicate, magical, low-key.",
+                },
+                {
+                    fx: "spring",
+                    name: "Elastic pop",
+                    desc: "A soft disc springs out behind the number with an overshoot and fades, while the number gives a tiny bounce.",
+                },
+                {
+                    fx: "aurora",
+                    name: "Travelling gradient border",
+                    desc: "A bright gradient runs once around the border like a lap of honour. Modern and slick.",
+                },
+                {
+                    fx: "breath",
+                    name: "Soft breathing halo",
+                    desc: "A single calm halo swells and settles. The most minimal — for those who want a whisper, not a party.",
+                },
+            ];
+
+            const gallery = document.getElementById("gallery");
+            VARIANTS.forEach((v, i) => {
+                let extraMonth = "",
+                    extraYear = "";
+                if (v.fx === "stamp") {
+                    extraMonth = stampSVG;
+                    extraYear = stampSVG;
+                }
+                if (v.fx === "spring") {
+                    extraMonth = popDisc;
+                    extraYear = popDisc;
+                }
+                if (v.fx === "liquid") {
+                    extraMonth = liquid;
+                    extraYear = liquid;
+                }
+                const sec = document.createElement("section");
+                sec.className = "variant";
+                sec.dataset.fx = v.fx;
+                sec.innerHTML = `
+          <div class="variant__head">
+            <div>
+              <h2><span class="idx">${String(i + 1).padStart(2, "0")}</span> · ${v.name}</h2>
+              <p>${v.desc}</p>
+            </div>
+            <button class="replay" onclick="replayCard(this)">↺ Replay</button>
+          </div>
+          <div class="stages">
+            <div class="stage">
+              <span class="stage__tag">Month view — available card</span>
+              <div class="stage__frame">${heroCard(extraMonth)}</div>
+            </div>
+            <div class="stage">
+              <span class="stage__tag">Year table — month summary</span>
+              <div class="stage__frame">${yearStrip(extraYear)}</div>
+            </div>
+          </div>`;
+                gallery.appendChild(sec);
+            });
+
+            /* ---------------- particle generators ---------------- */
+            const rand = (a, b) => a + Math.random() * (b - a);
+            const CONFETTI_COLORS = ["#ef5a17", "#ff7a3c", "#ffb27a", "#f5a623", "#e7e6e3"];
+
+            const generators = {
+                confetti(cel, fx) {
+                    const big = cel.dataset.role === "month";
+                    const n = big ? 22 : 12;
+                    for (let k = 0; k < n; k++) {
+                        const p = document.createElement("span");
+                        p.className = "p";
+                        const ang = rand(-Math.PI, 0); // upward-ish fan
+                        const dist = rand(big ? 40 : 22, big ? 95 : 46);
+                        p.style.setProperty("--dx", (Math.cos(ang) * dist).toFixed(1) + "px");
+                        p.style.setProperty("--dy", (Math.sin(ang) * dist).toFixed(1) + "px");
+                        p.style.setProperty("--rot", rand(-220, 220).toFixed(0) + "deg");
+                        p.style.background = CONFETTI_COLORS[(Math.random() * 5) | 0];
+                        p.style.animationDelay = rand(0, 90).toFixed(0) + "ms";
+                        fx.appendChild(p);
+                    }
+                },
+                coins(cel, fx) {
+                    const big = cel.dataset.role === "month";
+                    const n = big ? 9 : 5;
+                    for (let k = 0; k < n; k++) {
+                        const p = document.createElement("span");
+                        p.className = "p";
+                        p.textContent = "₽";
+                        const spread = big ? 60 : 26;
+                        p.style.setProperty("--sx", rand(-spread, spread).toFixed(0) + "px");
+                        p.style.setProperty("--dx", rand(-spread, spread).toFixed(0) + "px");
+                        p.style.setProperty("--rot", rand(-40, 40).toFixed(0) + "deg");
+                        p.style.animationDelay = rand(0, 260).toFixed(0) + "ms";
+                        fx.appendChild(p);
+                    }
+                },
+                fireworks(cel, fx) {
+                    const big = cel.dataset.role === "month";
+                    const n = big ? 16 : 10;
+                    for (let k = 0; k < n; k++) {
+                        const p = document.createElement("span");
+                        p.className = "p";
+                        p.style.setProperty("--ang", ((360 / n) * k).toFixed(1) + "deg");
+                        p.style.setProperty(
+                            "--r",
+                            rand(big ? 34 : 18, big ? 60 : 32).toFixed(0) + "px",
+                        );
+                        p.style.setProperty("--len", rand(10, big ? 24 : 14).toFixed(0) + "px");
+                        p.style.background = CONFETTI_COLORS[(Math.random() * 4) | 0];
+                        fx.appendChild(p);
+                    }
+                },
+                sparkles(cel, fx) {
+                    const big = cel.dataset.role === "month";
+                    const n = big ? 10 : 6;
+                    for (let k = 0; k < n; k++) {
+                        const p = document.createElement("span");
+                        p.className = "p";
+                        p.textContent = "✦";
+                        p.style.left = rand(8, 92) + "%";
+                        p.style.top = rand(6, 94) + "%";
+                        p.style.setProperty("--sz", rand(8, big ? 16 : 12).toFixed(0) + "px");
+                        p.style.setProperty("--d", rand(0, 380).toFixed(0) + "ms");
+                        fx.appendChild(p);
+                    }
+                },
+                odometer(cel) {
+                    const el = cel.querySelector(
+                        cel.dataset.role === "month" ? ".hero-card__value" : ".yg-msum__av",
+                    );
+                    if (!el) return;
+                    const isYear = cel.dataset.role === "year";
+                    const start = isYear ? 14200 : 26500;
+                    const dur = 760;
+                    const t0 = performance.now();
+                    const fmt = (n) =>
+                        Math.max(0, Math.round(n)).toLocaleString("ru-RU").replace(/,/g, " ") +
+                        " ₽";
+                    function step(now) {
+                        const t = Math.min(1, (now - t0) / dur);
+                        const eased = 1 - Math.pow(1 - t, 3);
+                        el.textContent = fmt(start * (1 - eased));
+                        if (t < 1) requestAnimationFrame(step);
+                        else {
+                            el.textContent = fmt(0);
+                            cel.classList.add("settle");
+                        }
+                    }
+                    requestAnimationFrame(step);
+                },
+            };
+
+            /* ---------------- replay plumbing ---------------- */
+            function triggerCel(cel, fx) {
+                cel.classList.remove("play", "settle");
+                const fxLayer = cel.querySelector(".fx");
+                if (fxLayer) fxLayer.innerHTML = "";
+                // reset odometer number to 0 baseline
+                void cel.offsetWidth;
+                cel.classList.add("play");
+                if (!document.body.classList.contains("rm") && generators[fx]) {
+                    generators[fx](cel, fxLayer);
+                }
+            }
+            function replayCard(btn) {
+                const sec = btn.closest(".variant");
+                sec.querySelectorAll(".cel").forEach((c) => triggerCel(c, sec.dataset.fx));
+            }
+            function replayAll() {
+                document.querySelectorAll(".variant").forEach((sec, i) => {
+                    setTimeout(() => {
+                        sec.querySelectorAll(".cel").forEach((c) => triggerCel(c, sec.dataset.fx));
+                    }, i * 90);
+                });
+            }
+            function toggleRM() {
+                document.body.classList.toggle("rm");
+                document.getElementById("rmBtn").textContent =
+                    "Reduced motion: " + (document.body.classList.contains("rm") ? "on" : "off");
+                document
+                    .getElementById("rmBtn")
+                    .classList.toggle("ctrl_on", document.body.classList.contains("rm"));
+            }
+            function toggleTheme() {
+                const html = document.documentElement;
+                const dark = html.dataset.theme === "dark";
+                html.dataset.theme = dark ? "light" : "dark";
+                document.getElementById("themeBtn").textContent = dark ? "🌙 Dark" : "☀️ Light";
+            }
+
+            // gentle staggered autoplay on load, then replay when scrolled into view
+            window.addEventListener("load", () => setTimeout(replayAll, 300));
+            const io = new IntersectionObserver(
+                (entries) => {
+                    entries.forEach((e) => {
+                        if (e.isIntersecting) {
+                            const sec = e.target;
+                            sec.querySelectorAll(".cel").forEach((c) =>
+                                triggerCel(c, sec.dataset.fx),
+                            );
+                        }
+                    });
+                },
+                { threshold: 0.55 },
+            );
+            document.querySelectorAll(".variant").forEach((s) => io.observe(s));
+        </script>
+    </body>
+</html>

@@ -8,7 +8,8 @@ branch_labels = None
 depends_on = None
 
 
-def upgrade():
+def upgrade() -> None:
+    """Handle upgrade."""
     op.execute("""CREATE TABLE category_group_types (
       id INTEGER PRIMARY KEY,
       type TEXT NOT NULL UNIQUE,
@@ -17,11 +18,9 @@ def upgrade():
     )""")
     op.execute(
         "INSERT INTO category_group_types(id, type, transaction_sign, is_goal)"
-        " VALUES (1, 'income', 1, 0), (2, 'expense', -1, 0), (3, 'goal', -1, 1)"
+        " VALUES (1, 'income', 1, 0), (2, 'expense', -1, 0), (3, 'goal', -1, 1)",
     )
-    # SQLite cannot alter the old CHECK in place. Rebuilding it also replaces
-    # the closed enum with a lookup FK, so another kind won't require another
-    # constraint rewrite.
+
     op.execute("""CREATE TABLE category_groups_new (
       id INTEGER PRIMARY KEY,
       user_id INTEGER REFERENCES users(id),
@@ -33,7 +32,7 @@ def upgrade():
     op.execute(
         "INSERT INTO category_groups_new (id, user_id, name, sort, type_id)"
         " SELECT g.id, g.user_id, g.name, g.sort, t.id FROM category_groups g"
-        " JOIN category_group_types t ON t.type = g.kind"
+        " JOIN category_group_types t ON t.type = g.kind",
     )
     op.execute("DROP TABLE category_groups")
     op.execute("ALTER TABLE category_groups_new RENAME TO category_groups")
@@ -41,10 +40,12 @@ def upgrade():
     op.execute("ALTER TABLE categories ADD COLUMN goal_target INTEGER")
     op.execute(
         "ALTER TABLE categories ADD COLUMN goal_status TEXT"
-        " CHECK (goal_status IN ('active', 'achieved', 'archived'))"
+        " CHECK (goal_status IN ('active', 'achieved', 'archived'))",
     )
     op.execute("ALTER TABLE categories ADD COLUMN goal_target_date TEXT")
 
 
-def downgrade():
-    raise NotImplementedError("forward-only migrations")
+def downgrade() -> None:
+    """Handle downgrade."""
+    msg = "forward-only migrations"
+    raise NotImplementedError(msg)

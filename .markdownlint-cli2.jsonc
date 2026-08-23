@@ -1,6 +1,7 @@
 {
     "config": {
         "default": true,
+        "MD007": { "indent": 4 },
         "MD013": false,
         "MD033": false,
         "MD041": false,
@@ -15,5 +16,7 @@
         "server/static",
         "migration",
         "**/CHANGELOG.md",
+        ".claude/worktrees",
+        ".worktrees",
     ],
 }

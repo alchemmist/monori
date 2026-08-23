@@ -1,67 +1,144 @@
+"""Provide backend functionality."""
+
+import sqlite3
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import ConfigDict, Field
+from pydantic.dataclasses import dataclass as pydantic_dataclass
 
-from ..auth import current_user
-from ..db import begin_write
-from ..deps import conn, serialize_transactions
-from ..importer import tx_hash
-from ..transfer_service import detach_leg
+from monori.server.app.auth import AuthenticatedUser, current_user
+from monori.server.app.db import begin_write
+from monori.server.app.db_records import CategorySignRecord, TransactionRecord
+from monori.server.app.deps import (
+    IdResponse,
+    SplitResponse,
+    TransactionResponse,
+    conn,
+    serialize_transactions,
+)
+from monori.server.app.importer import tx_hash
+from monori.server.app.transfer_service import detach_leg
 
 router = APIRouter(prefix="/api/transactions", tags=["transactions"])
+MIN_SPLIT_PARTS = 2
 
 
-class TxCreate(BaseModel):
+_CONFIG = ConfigDict(extra="forbid", populate_by_name=True)
+
+
+@pydantic_dataclass(config=_CONFIG)
+class TxCreate:
+    """Represent TxCreate."""
+
     date: str
     amount: int
-    accountId: int
+    account_id: int = Field(alias="accountId")
     description: str = ""
-    bankCategory: str = ""
+    bank_category: str = Field(default="", alias="bankCategory")
     mcc: str = ""
-    categoryId: int | None = None
+    category_id: int | None = Field(default=None, alias="categoryId")
     comment: str = ""
 
 
-class TxPatch(BaseModel):
+@pydantic_dataclass(config=_CONFIG)
+class TxPatch:
+    """Represent TxPatch."""
+
     date: str | None = None
     amount: int | None = None
-    accountId: int | None = None
+    account_id: int | None = Field(default=None, alias="accountId")
     description: str | None = None
-    bankCategory: str | None = None
+    bank_category: str | None = Field(default=None, alias="bankCategory")
     mcc: str | None = None
-    categoryId: int | None = None
+    category_id: int | None = Field(default=None, alias="categoryId")
     comment: str | None = None
     hidden: bool | None = None
 
 
-class BulkBody(BaseModel):
+@pydantic_dataclass(config=_CONFIG)
+class BulkBody:
+    """Represent BulkBody."""
+
     action: str
     ids: list[int]
-    categoryId: int | None = None
+    category_id: int | None = Field(default=None, alias="categoryId")
 
 
-class SplitPart(BaseModel):
-    categoryId: int
+@pydantic_dataclass(config=_CONFIG)
+class SplitPart:
+    """Represent SplitPart."""
+
     amount: int
+    category_id: int = Field(alias="categoryId")
     comment: str = ""
 
 
-class SplitBody(BaseModel):
+@pydantic_dataclass(config=_CONFIG)
+class SplitBody:
+    """Represent SplitBody."""
+
     parts: list[SplitPart]
 
 
-def _validate_category_type(transaction_sign, amount):
+@pydantic_dataclass(config=_CONFIG)
+class TransactionListResponse:
+    """Represent TransactionListResponse."""
+
+    total: int
+    rows: list[TransactionResponse]
+
+
+@pydantic_dataclass(config=_CONFIG)
+class TransactionListFilters:
+    """Represent query parameters for the transaction list."""
+
+    from_: Annotated[str | None, Query(alias="from")] = None
+    to: str | None = None
+    category_id: Annotated[int | None, Query(alias="categoryId")] = None
+    account_id: Annotated[int | None, Query(alias="accountId")] = None
+    uncategorized: bool = False
+    hidden: bool = False
+    q: str | None = None
+    limit: Annotated[int, Query(ge=1, le=1000)] = 100
+    offset: Annotated[int, Query(ge=0)] = 0
+
+
+@pydantic_dataclass(config=_CONFIG)
+class OkResponse:
+    """Represent OkResponse."""
+
+    ok: bool
+
+
+@pydantic_dataclass(config=_CONFIG)
+class SplitsResponse:
+    """Represent SplitsResponse."""
+
+    splits: list[SplitResponse]
+
+
+@pydantic_dataclass(config=_CONFIG)
+class BulkResponse:
+    """Represent BulkResponse."""
+
+    affected: int
+
+
+def _validate_category_type(transaction_sign: int, amount: int) -> None:
     if amount < 0 and transaction_sign != -1:
         raise HTTPException(400, "expense transaction requires an expense category")
     if amount > 0 and transaction_sign != 1:
         raise HTTPException(400, "income transaction requires an income category")
 
 
-def _resolve_category(c, category_id, uid, amount=None):
-    """
-    0 (or None handled by caller) means uncategorized; else must exist.
-    """
+def _resolve_category(
+    c: sqlite3.Connection,
+    category_id: int | None,
+    uid: int,
+    amount: int | None = None,
+) -> int | None:
+    """0 (or None handled by caller) means uncategorized; else must exist."""
     if category_id in (None, 0):
         return None
     category = c.execute(
@@ -74,13 +151,14 @@ def _resolve_category(c, category_id, uid, amount=None):
     if not category:
         raise HTTPException(400, "unknown category")
     if amount is not None:
-        _validate_category_type(category["transaction_sign"], amount)
+        _validate_category_type(CategorySignRecord.from_row(category).transaction_sign, amount)
     return category_id
 
 
-def _resolve_account(c, account_id, uid):
+def _resolve_account(c: sqlite3.Connection, account_id: int, uid: int) -> int:
     if not c.execute(
-        "SELECT id FROM accounts WHERE id=? AND user_id=?", (account_id, uid)
+        "SELECT id FROM accounts WHERE id=? AND user_id=?",
+        (account_id, uid),
     ).fetchone():
         raise HTTPException(400, "unknown account")
     return account_id
@@ -88,29 +166,22 @@ def _resolve_account(c, account_id, uid):
 
 @router.get("")
 def list_transactions(
-    user: Annotated[dict, Depends(current_user)],
-    from_: str | None = Query(default=None, alias="from"),
-    to: str | None = None,
-    categoryId: int | None = None,
-    accountId: int | None = None,
-    uncategorized: bool = False,
-    hidden: bool = False,
-    q: str | None = None,
-    limit: int = Query(default=100, ge=1, le=1000),
-    offset: int = Query(default=0, ge=0),
-):
-    uid = user["id"]
+    user: Annotated[AuthenticatedUser, Depends(current_user)],
+    filters: Annotated[TransactionListFilters, Depends()],
+) -> TransactionListResponse:
+    """Handle list transactions."""
+    uid = user.id
     params = {
         "uid": uid,
-        "from": from_,
-        "to": to,
-        "uncat": 1 if uncategorized else 0,
-        "hidden": 1 if hidden else 0,
-        "cat": categoryId,
-        "acct": accountId,
-        "q": f"%{q.lower()}%" if q else None,
-        "limit": limit,
-        "offset": offset,
+        "from": filters.from_,
+        "to": filters.to,
+        "uncat": 1 if filters.uncategorized else 0,
+        "hidden": 1 if filters.hidden else 0,
+        "cat": filters.category_id,
+        "acct": filters.account_id,
+        "q": f"%{filters.q.lower()}%" if filters.q else None,
+        "limit": filters.limit,
+        "offset": filters.offset,
     }
     c = conn()
     try:
@@ -135,18 +206,25 @@ def list_transactions(
             "SELECT *" + where + " ORDER BY date DESC, id DESC LIMIT :limit OFFSET :offset",
             params,
         )
-        return {"total": total, "rows": serialize_transactions(c, rows)}
+        if not isinstance(total, int):
+            msg = "transaction count must be an integer"
+            raise TypeError(msg)
+        return TransactionListResponse(total=total, rows=serialize_transactions(c.cursor(), rows))
     finally:
         c.close()
 
 
 @router.post("")
-def create_transaction(body: TxCreate, user: Annotated[dict, Depends(current_user)]):
-    uid = user["id"]
+def create_transaction(
+    body: TxCreate,
+    user: Annotated[AuthenticatedUser, Depends(current_user)],
+) -> IdResponse:
+    """Handle create transaction."""
+    uid = user.id
     c = conn()
     try:
-        category = _resolve_category(c, body.categoryId, uid, body.amount)
-        account = _resolve_account(c, body.accountId, uid)
+        category = _resolve_category(c, body.category_id, uid, body.amount)
+        account = _resolve_account(c, body.account_id, uid)
         cur = c.execute(
             """INSERT INTO transactions
                (date, amount, description, bank_category, mcc, category_id, account_id,
@@ -156,7 +234,7 @@ def create_transaction(body: TxCreate, user: Annotated[dict, Depends(current_use
                 body.date,
                 body.amount,
                 body.description,
-                body.bankCategory,
+                body.bank_category,
                 body.mcc,
                 category,
                 account,
@@ -165,14 +243,19 @@ def create_transaction(body: TxCreate, user: Annotated[dict, Depends(current_use
             ),
         )
         c.commit()
-        return {"id": cur.lastrowid}
+        return IdResponse(id=cur.lastrowid)
     finally:
         c.close()
 
 
 @router.patch("/{tx_id}")
-def patch_transaction(tx_id: int, patch: TxPatch, user: Annotated[dict, Depends(current_user)]):
-    uid = user["id"]
+def patch_transaction(
+    tx_id: int,
+    patch: TxPatch,
+    user: Annotated[AuthenticatedUser, Depends(current_user)],
+) -> OkResponse:
+    """Handle patch transaction."""
+    uid = user.id
     c = conn()
     try:
         begin_write(c)
@@ -183,30 +266,37 @@ def patch_transaction(tx_id: int, patch: TxPatch, user: Annotated[dict, Depends(
         ).fetchone()
         if not row:
             raise HTTPException(404, "transaction not found")
-        date = patch.date if patch.date is not None else row["date"]
-        amount = patch.amount if patch.amount is not None else row["amount"]
+        transaction = TransactionRecord.from_row(row)
+        date = patch.date if patch.date is not None else transaction.date
+        amount = patch.amount if patch.amount is not None else transaction.amount
         split_total = c.execute(
-            "SELECT SUM(amount) FROM splits WHERE transaction_id=?", (tx_id,)
+            "SELECT SUM(amount) FROM splits WHERE transaction_id=?",
+            (tx_id,),
         ).fetchone()[0]
+        if split_total is not None and not isinstance(split_total, int):
+            msg = "split total must be an integer"
+            raise RuntimeError(msg)
         if split_total is not None and amount != split_total:
             raise HTTPException(400, "edit the split parts before changing the total amount")
-        description = patch.description if patch.description is not None else row["description"]
-        bank_category = (
-            patch.bankCategory if patch.bankCategory is not None else row["bank_category"]
+        description = (
+            patch.description if patch.description is not None else transaction.description
         )
-        mcc = patch.mcc if patch.mcc is not None else row["mcc"]
-        comment = patch.comment if patch.comment is not None else row["comment"]
-        category = row["category_id"]
-        if patch.categoryId is not None:
+        bank_category = (
+            patch.bank_category if patch.bank_category is not None else transaction.bank_category
+        )
+        mcc = patch.mcc if patch.mcc is not None else transaction.mcc
+        comment = patch.comment if patch.comment is not None else transaction.comment
+        category = transaction.category_id
+        if patch.category_id is not None:
             if split_total is not None:
                 raise HTTPException(400, "remove the split before categorizing the parent")
-            category = _resolve_category(c, patch.categoryId, uid, amount)
+            category = _resolve_category(c, patch.category_id, uid, amount)
         elif patch.amount is not None and category is not None:
             _resolve_category(c, category, uid, amount)
-        account = row["account_id"]
-        if patch.accountId is not None:
-            account = _resolve_account(c, patch.accountId, uid)
-        hidden = int(patch.hidden) if patch.hidden is not None else row["hidden"]
+        account = transaction.account_id
+        if patch.account_id is not None:
+            account = _resolve_account(c, patch.account_id, uid)
+        hidden = int(patch.hidden) if patch.hidden is not None else int(transaction.hidden)
         c.execute(
             """UPDATE transactions
                SET date=?, amount=?, description=?, bank_category=?, mcc=?, category_id=?,
@@ -227,71 +317,101 @@ def patch_transaction(tx_id: int, patch: TxPatch, user: Annotated[dict, Depends(
             ),
         )
         c.commit()
-        return {"ok": True}
+        return OkResponse(ok=True)
     finally:
         c.close()
 
 
 @router.put("/{tx_id}/splits")
-def replace_splits(tx_id: int, body: SplitBody, user: Annotated[dict, Depends(current_user)]):
+def replace_splits(
+    tx_id: int,
+    body: SplitBody,
+    user: Annotated[AuthenticatedUser, Depends(current_user)],
+) -> SplitsResponse:
     """Atomically replace every categorized part, or clear the split with an empty list."""
-    uid = user["id"]
+    uid = user.id
     c = conn()
     try:
         begin_write(c)
-        row = c.execute(
-            "SELECT t.* FROM transactions t JOIN accounts a ON a.id=t.account_id"
-            " WHERE t.id=? AND a.user_id=?",
-            (tx_id, uid),
-        ).fetchone()
-        if not row:
-            raise HTTPException(404, "transaction not found")
-        if row["transfer_id"] is not None:
-            raise HTTPException(400, "transfer transactions cannot be split")
-        if body.parts:
-            if len(body.parts) < 2:
-                raise HTTPException(400, "a split requires at least two parts")
-            if any(part.amount == 0 for part in body.parts):
-                raise HTTPException(400, "split amounts cannot be zero")
-            if any((part.amount > 0) != (row["amount"] > 0) for part in body.parts):
-                raise HTTPException(400, "split parts must have the transaction's sign")
-            if sum(part.amount for part in body.parts) != row["amount"]:
-                raise HTTPException(400, "split amounts must equal the transaction amount")
-            for part in body.parts:
-                _resolve_category(c, part.categoryId, uid, part.amount)
-        c.execute("DELETE FROM splits WHERE transaction_id=?", (tx_id,))
-        for sort, part in enumerate(body.parts):
-            c.execute(
-                "INSERT INTO splits"
-                " (transaction_id, category_id, amount, comment, sort) VALUES (?, ?, ?, ?, ?)",
-                (tx_id, part.categoryId, part.amount, part.comment, sort),
-            )
-        if body.parts:
-            c.execute("UPDATE transactions SET category_id=NULL WHERE id=?", (tx_id,))
+        transaction = _split_parent(c, tx_id, uid)
+        _validate_split_parts(c, transaction, body.parts, uid)
+        _replace_split_rows(c, tx_id, body.parts)
         c.commit()
-        splits = c.execute(
-            "SELECT id, category_id, amount, comment FROM splits"
-            " WHERE transaction_id=? ORDER BY sort, id",
-            (tx_id,),
-        )
-        return {
-            "splits": [
-                {
-                    "id": part["id"],
-                    "categoryId": part["category_id"],
-                    "amount": part["amount"],
-                    "comment": part["comment"],
-                }
-                for part in splits
-            ]
-        }
+        return SplitsResponse(splits=_serialized_splits(c, tx_id))
     finally:
         c.close()
 
 
+def _split_parent(c: sqlite3.Connection, tx_id: int, uid: int) -> TransactionRecord:
+    row = c.execute(
+        "SELECT t.* FROM transactions t JOIN accounts a ON a.id=t.account_id"
+        " WHERE t.id=? AND a.user_id=?",
+        (tx_id, uid),
+    ).fetchone()
+    if row is None:
+        raise HTTPException(404, "transaction not found")
+    transaction = TransactionRecord.from_row(row)
+    if transaction.transfer_id is not None:
+        raise HTTPException(400, "transfer transactions cannot be split")
+    return transaction
+
+
+def _validate_split_parts(
+    c: sqlite3.Connection,
+    transaction: TransactionRecord,
+    parts: list[SplitPart],
+    uid: int,
+) -> None:
+    if not parts:
+        return
+    if len(parts) < MIN_SPLIT_PARTS:
+        raise HTTPException(400, "a split requires at least two parts")
+    if any(part.amount == 0 for part in parts):
+        raise HTTPException(400, "split amounts cannot be zero")
+    if any((part.amount > 0) != (transaction.amount > 0) for part in parts):
+        raise HTTPException(400, "split parts must have the transaction's sign")
+    if sum(part.amount for part in parts) != transaction.amount:
+        raise HTTPException(400, "split amounts must equal the transaction amount")
+    for part in parts:
+        _resolve_category(c, part.category_id, uid, part.amount)
+
+
+def _replace_split_rows(c: sqlite3.Connection, tx_id: int, parts: list[SplitPart]) -> None:
+    c.execute("DELETE FROM splits WHERE transaction_id=?", (tx_id,))
+    for sort, part in enumerate(parts):
+        c.execute(
+            "INSERT INTO splits"
+            " (transaction_id, category_id, amount, comment, sort) VALUES (?, ?, ?, ?, ?)",
+            (tx_id, part.category_id, part.amount, part.comment, sort),
+        )
+    if parts:
+        c.execute("UPDATE transactions SET category_id=NULL WHERE id=?", (tx_id,))
+
+
+def _serialized_splits(c: sqlite3.Connection, tx_id: int) -> list[SplitResponse]:
+    rows = c.execute(
+        "SELECT id, category_id, amount, comment FROM splits"
+        " WHERE transaction_id=? ORDER BY sort, id",
+        (tx_id,),
+    )
+    return [
+        SplitResponse(
+            id=row["id"],
+            category_id=row["category_id"],
+            amount=row["amount"],
+            comment=row["comment"],
+        )
+        for row in rows
+    ]
+
+
 @router.delete("/{tx_id}")
-def delete_transaction(tx_id: int, user: Annotated[dict, Depends(current_user)]):
-    uid = user["id"]
+def delete_transaction(
+    tx_id: int,
+    user: Annotated[AuthenticatedUser, Depends(current_user)],
+) -> OkResponse:
+    """Handle delete transaction."""
+    uid = user.id
     c = conn()
     try:
         detach_leg(c, uid, tx_id)
@@ -303,14 +423,18 @@ def delete_transaction(tx_id: int, user: Annotated[dict, Depends(current_user)])
         c.commit()
         if cur.rowcount == 0:
             raise HTTPException(404, "transaction not found")
-        return {"ok": True}
+        return OkResponse(ok=True)
     finally:
         c.close()
 
 
 @router.post("/bulk")
-def bulk_transactions(body: BulkBody, user: Annotated[dict, Depends(current_user)]):
-    uid = user["id"]
+def bulk_transactions(
+    body: BulkBody,
+    user: Annotated[AuthenticatedUser, Depends(current_user)],
+) -> BulkResponse:
+    """Handle bulk transactions."""
+    uid = user.id
     if body.action not in ("categorize", "move", "delete"):
         raise HTTPException(400, "action must be 'categorize', 'move' or 'delete'")
     c = conn()
@@ -326,10 +450,8 @@ def bulk_transactions(body: BulkBody, user: Annotated[dict, Depends(current_user
                     (tx_id, uid),
                 ).rowcount
         else:
-            category = _resolve_category(c, body.categoryId, uid)
-            # Validate the complete selection before updating anything. This
-            # keeps a mixed bulk selection atomic when one row has the other
-            # direction.
+            category = _resolve_category(c, body.category_id, uid)
+
             for tx_id in body.ids:
                 row = c.execute(
                     "SELECT t.amount, EXISTS(SELECT 1 FROM splits s"
@@ -349,6 +471,6 @@ def bulk_transactions(body: BulkBody, user: Annotated[dict, Depends(current_user
                     (category, tx_id, uid),
                 ).rowcount
         c.commit()
-        return {"affected": affected}
+        return BulkResponse(affected=affected)
     finally:
         c.close()

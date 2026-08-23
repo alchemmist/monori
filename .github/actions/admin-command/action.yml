@@ -1,0 +1,14 @@
+name: Process Quality Graph command
+description: Apply an administrator command to the pull request Quality Graph
+runs:
+    using: composite
+    steps:
+        - name: Setup Python dependencies
+          uses: ./.github/actions/setup-project
+          with:
+              python-profile: ci
+        - name: Process Quality Graph command
+          shell: bash
+          env:
+              GITHUB_TOKEN: ${{ github.token }}
+          run: uv run --locked python -m monori.ci.quality_graph.commands

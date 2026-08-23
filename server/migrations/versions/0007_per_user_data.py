@@ -1,11 +1,13 @@
 """
-Multi-tenancy: accounts and category groups gain an owning user_id, and name
-uniqueness becomes per-user. Categories lose their global unique name (they are
+Multi-tenancy: accounts and category groups gain an owning user_id, and name.
+
+uniqueness becomes per-user. Categories lose their global unique name (they are.
 scoped through their group's owner). Rows predating registration keep a NULL
 user_id and are claimed by the first user who registers.
 """
 
 from alembic import op
+from sqlalchemy.engine import Connection
 
 revision = "0007"
 down_revision = "0006"
@@ -13,11 +15,12 @@ branch_labels = None
 depends_on = None
 
 
-def _has_column(conn, table, column):
+def _has_column(conn: Connection, table: str, column: str) -> bool:
     return any(r[1] == column for r in conn.exec_driver_sql(f"PRAGMA table_info({table})"))
 
 
-def upgrade():
+def upgrade() -> None:
+    """Handle upgrade."""
     conn = op.get_bind()
     if not _has_column(conn, "accounts", "user_id"):
         conn.exec_driver_sql("""CREATE TABLE accounts_new (
@@ -39,7 +42,7 @@ def upgrade():
             "INSERT INTO accounts_new (id, user_id, name, type, currency, sort, archived,"
             " opening_balance, opening_date, icon, color, icon_image)"
             " SELECT id, NULL, name, type, currency, sort, archived,"
-            " opening_balance, opening_date, icon, color, icon_image FROM accounts"
+            " opening_balance, opening_date, icon, color, icon_image FROM accounts",
         )
         conn.exec_driver_sql("DROP TABLE accounts")
         conn.exec_driver_sql("ALTER TABLE accounts_new RENAME TO accounts")
@@ -55,12 +58,12 @@ def upgrade():
         )""")
         conn.exec_driver_sql(
             "INSERT INTO category_groups_new (id, user_id, name, sort, kind)"
-            " SELECT id, NULL, name, sort, kind FROM category_groups"
+            " SELECT id, NULL, name, sort, kind FROM category_groups",
         )
         conn.exec_driver_sql("DROP TABLE category_groups")
         conn.exec_driver_sql("ALTER TABLE category_groups_new RENAME TO category_groups")
         conn.exec_driver_sql(
-            "CREATE INDEX IF NOT EXISTS idx_groups_user ON category_groups(user_id)"
+            "CREATE INDEX IF NOT EXISTS idx_groups_user ON category_groups(user_id)",
         )
     unique_cat_name = any(
         "sqlite_autoindex" in (r[1] or "")
@@ -77,19 +80,25 @@ def upgrade():
         )""")
         conn.exec_driver_sql(
             "INSERT INTO categories_new (id, group_id, name, keywords, sort, archived)"
-            " SELECT id, group_id, name, keywords, sort, archived FROM categories"
+            " SELECT id, group_id, name, keywords, sort, archived FROM categories",
         )
         conn.exec_driver_sql("DROP TABLE categories")
         conn.exec_driver_sql("ALTER TABLE categories_new RENAME TO categories")
         conn.exec_driver_sql(
-            "CREATE INDEX IF NOT EXISTS idx_categories_group ON categories(group_id)"
+            "CREATE INDEX IF NOT EXISTS idx_categories_group ON categories(group_id)",
         )
-    for table in ("accounts", "category_groups"):
+    for statement in (
+        "UPDATE accounts SET user_id=(SELECT MIN(id) FROM users)"
+        " WHERE user_id IS NULL AND EXISTS (SELECT 1 FROM users)",
+        "UPDATE category_groups SET user_id=(SELECT MIN(id) FROM users)"
+        " WHERE user_id IS NULL AND EXISTS (SELECT 1 FROM users)",
+    ):
         conn.exec_driver_sql(
-            f"UPDATE {table} SET user_id=(SELECT MIN(id) FROM users)"
-            " WHERE user_id IS NULL AND EXISTS (SELECT 1 FROM users)"
+            statement,
         )
 
 
-def downgrade():
-    raise NotImplementedError("monori migrations are forward-only")
+def downgrade() -> None:
+    """Handle downgrade."""
+    msg = "monori migrations are forward-only"
+    raise NotImplementedError(msg)

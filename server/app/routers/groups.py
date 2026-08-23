@@ -1,35 +1,77 @@
+"""Provide backend functionality."""
+
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import ConfigDict, field_validator
+from pydantic.dataclasses import dataclass as pydantic_dataclass
 
-from ..auth import current_user
-from ..deps import conn, serialize_group
+from monori.common import JsonValue
+from monori.server.app.auth import AuthenticatedUser, current_user
+from monori.server.app.db_records import GroupRecord
+from monori.server.app.deps import GroupResponse, IdResponse, conn, serialize_group
+from monori.server.app.domain_types import CategoryGroupKind
 
 router = APIRouter(prefix="/api/groups", tags=["groups"])
 
 
-class GroupBody(BaseModel):
-    name: str = Field(min_length=1, max_length=80)
-    kind: str
+@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+class GroupBody:
+    """Represent GroupBody."""
+
+    name: str
+    kind: CategoryGroupKind
+
+    @field_validator("kind", mode="before")
+    @classmethod
+    def validate_kind(cls, value: JsonValue) -> CategoryGroupKind:
+        """Preserve the existing 400 response for unsupported group kinds."""
+        if not isinstance(value, str):
+            raise HTTPException(400, "kind must be 'income', 'expense', or 'goal'")
+        try:
+            return CategoryGroupKind(value)
+        except ValueError as error:
+            raise HTTPException(400, "kind must be 'income', 'expense', or 'goal'") from error
 
 
-class GroupPatch(BaseModel):
-    name: str | None = Field(default=None, min_length=1, max_length=80)
-    kind: str | None = None
+@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+class GroupPatch:
+    """Represent GroupPatch."""
+
+    name: str | None = None
+    kind: CategoryGroupKind | None = None
+
+    @field_validator("kind", mode="before")
+    @classmethod
+    def validate_kind(cls, value: JsonValue) -> CategoryGroupKind | None:
+        """Preserve the existing 400 response for unsupported group kinds."""
+        if value is None:
+            return None
+        if not isinstance(value, str):
+            raise HTTPException(400, "kind must be 'income', 'expense', or 'goal'")
+        try:
+            return CategoryGroupKind(value)
+        except ValueError as error:
+            raise HTTPException(400, "kind must be 'income', 'expense', or 'goal'") from error
 
 
-class Reorder(BaseModel):
+@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+class Reorder:
+    """Represent Reorder."""
+
     ids: list[int]
 
 
 @router.get("")
-def list_groups(user: Annotated[dict, Depends(current_user)]):
-    uid = user["id"]
+def list_groups(
+    user: Annotated[AuthenticatedUser, Depends(current_user)],
+) -> list[GroupResponse]:
+    """Handle list groups."""
+    uid = user.id
     c = conn()
     try:
         return [
-            serialize_group(r)
+            serialize_group(GroupRecord.from_row(r))
             for r in c.execute(
                 "SELECT g.id, g.name, g.sort, t.type AS kind FROM category_groups g"
                 " JOIN category_group_types t ON t.id=g.type_id"
@@ -42,57 +84,77 @@ def list_groups(user: Annotated[dict, Depends(current_user)]):
 
 
 @router.post("")
-def create_group(body: GroupBody, user: Annotated[dict, Depends(current_user)]):
-    uid = user["id"]
+def create_group(
+    body: GroupBody,
+    user: Annotated[AuthenticatedUser, Depends(current_user)],
+) -> IdResponse:
+    """Handle create group."""
+    uid = user.id
+    name = body.name.strip()
+    if not name:
+        raise HTTPException(422, "name cannot be empty")
     c = conn()
     try:
         group_type = c.execute(
-            "SELECT id FROM category_group_types WHERE type=?", (body.kind,)
+            "SELECT id FROM category_group_types WHERE type=?",
+            (body.kind,),
         ).fetchone()
         if not group_type:
             raise HTTPException(400, "kind must be 'income', 'expense', or 'goal'")
         if c.execute(
-            "SELECT id FROM category_groups WHERE user_id=? AND name=?", (uid, body.name)
+            "SELECT id FROM category_groups WHERE user_id=? AND name=?",
+            (uid, name),
         ).fetchone():
             raise HTTPException(409, "group with this name already exists")
         max_sort = c.execute(
-            "SELECT COALESCE(MAX(sort),0) FROM category_groups WHERE user_id=?", (uid,)
+            "SELECT COALESCE(MAX(sort),0) FROM category_groups WHERE user_id=?",
+            (uid,),
         ).fetchone()[0]
         cur = c.execute(
             "INSERT INTO category_groups (user_id, name, sort, type_id) VALUES (?, ?, ?, ?)",
-            (uid, body.name, max_sort + 1, group_type["id"]),
+            (uid, name, max_sort + 1, group_type["id"]),
         )
         c.commit()
-        return {"id": cur.lastrowid}
+        return IdResponse(id=cur.lastrowid)
     finally:
         c.close()
 
 
 @router.patch("/{group_id}")
-def patch_group(group_id: int, patch: GroupPatch, user: Annotated[dict, Depends(current_user)]):
-    uid = user["id"]
+def patch_group(
+    group_id: int,
+    patch: GroupPatch,
+    user: Annotated[AuthenticatedUser, Depends(current_user)],
+) -> dict[str, bool]:
+    """Handle patch group."""
+    uid = user.id
     c = conn()
     try:
         if not c.execute(
-            "SELECT id FROM category_groups WHERE id=? AND user_id=?", (group_id, uid)
+            "SELECT id FROM category_groups WHERE id=? AND user_id=?",
+            (group_id, uid),
         ).fetchone():
             raise HTTPException(404, "group not found")
-        if patch.name is not None:
+        patch_name = patch.name
+        if patch_name is not None:
             dup = c.execute(
                 "SELECT id FROM category_groups WHERE user_id=? AND name=? AND id<>?",
-                (uid, patch.name, group_id),
+                (uid, patch_name, group_id),
             ).fetchone()
             if dup:
                 raise HTTPException(409, "group with this name already exists")
-            c.execute("UPDATE category_groups SET name=? WHERE id=?", (patch.name, group_id))
-        if patch.kind is not None:
+            c.execute("UPDATE category_groups SET name=? WHERE id=?", (patch_name, group_id))
+        patch_kind = patch.kind
+        if patch_kind is not None:
             group_type = c.execute(
-                "SELECT id FROM category_group_types WHERE type=?", (patch.kind,)
+                "SELECT id FROM category_group_types WHERE type=?",
+                (patch_kind,),
             ).fetchone()
             if not group_type:
                 raise HTTPException(400, "kind must be 'income', 'expense', or 'goal'")
             c.execute(
-                "UPDATE category_groups SET type_id=? WHERE id=?", (group_type["id"], group_id)
+                "UPDATE category_groups SET type_id=? WHERE id=?",
+                (group_type["id"], group_id),
             )
         c.commit()
         return {"ok": True}
@@ -101,12 +163,17 @@ def patch_group(group_id: int, patch: GroupPatch, user: Annotated[dict, Depends(
 
 
 @router.delete("/{group_id}")
-def delete_group(group_id: int, user: Annotated[dict, Depends(current_user)]):
-    uid = user["id"]
+def delete_group(
+    group_id: int,
+    user: Annotated[AuthenticatedUser, Depends(current_user)],
+) -> dict[str, bool]:
+    """Handle delete group."""
+    uid = user.id
     c = conn()
     try:
         if not c.execute(
-            "SELECT id FROM category_groups WHERE id=? AND user_id=?", (group_id, uid)
+            "SELECT id FROM category_groups WHERE id=? AND user_id=?",
+            (group_id, uid),
         ).fetchone():
             raise HTTPException(404, "group not found")
         cur = c.execute(
@@ -123,8 +190,12 @@ def delete_group(group_id: int, user: Annotated[dict, Depends(current_user)]):
 
 
 @router.post("/reorder")
-def reorder_groups(body: Reorder, user: Annotated[dict, Depends(current_user)]):
-    uid = user["id"]
+def reorder_groups(
+    body: Reorder,
+    user: Annotated[AuthenticatedUser, Depends(current_user)],
+) -> dict[str, bool]:
+    """Handle reorder groups."""
+    uid = user.id
     c = conn()
     try:
         known = {

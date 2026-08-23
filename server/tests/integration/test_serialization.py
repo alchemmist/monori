@@ -1,84 +1,88 @@
 import pytest
+from fastapi.testclient import TestClient
+from pydantic import TypeAdapter
+
+from monori.server.app.deps import SnapshotResponse
+from monori.server.tests.conftest import Api, TransactionOptions
 
 pytestmark = pytest.mark.integration
 
 
-def test_snapshot_serialization_contract(api, client):
-    """
-    Pin the exact shape every serializer emits — API consumers depend on it.
-    """
+def test_snapshot_serialization_contract(api: Api, client: TestClient) -> None:
+    """Pin the exact shape every serializer emits — API consumers depend on it."""
     g = api.group("Expenses", "expense")
     cat = api.category("Food", g, "lenta|okey")
     client.patch(f"/api/categories/{cat}", json={"archived": True})
     tx = api.tx(
         "2026-01-05T10:00:00",
         -12345,
-        description="Lenta",
-        bankCategory="Super",
-        mcc="5411",
-        categoryId=cat,
-        comment="note",
+        TransactionOptions(
+            description="Lenta",
+            bank_category="Super",
+            mcc="5411",
+            category_id=cat,
+            comment="note",
+        ),
     )
     client.put("/api/budgets", json={"categoryId": cat, "year": 2026, "month": 3, "amount": 5000})
     snap = api.snapshot()
-    assert snap["accounts"] == [
+    serialized = TypeAdapter(SnapshotResponse).dump_python(snap, mode="json")
+    assert serialized["accounts"] == [
         {
             "id": 1,
             "name": "Cash",
             "type": "cash",
             "icon": "wallet",
             "color": "#5b6472",
-            "iconImage": None,
+            "icon_image": None,
             "currency": "RUB",
             "sort": 1,
             "archived": False,
-            "openingBalance": 0,
-            "openingDate": None,
-            "connectionId": None,
-            "bankRef": "",
-            "cardTails": [],
-        }
+            "opening_balance": 0,
+            "opening_date": None,
+            "connection_id": None,
+            "bank_ref": "",
+            "card_tails": [],
+        },
     ]
-    assert snap["groups"] == [{"id": g, "name": "Expenses", "sort": 1, "kind": "expense"}]
-    assert snap["categories"] == [
+    assert serialized["groups"] == [{"id": g, "name": "Expenses", "sort": 1, "kind": "expense"}]
+    assert serialized["categories"] == [
         {
             "id": cat,
-            "groupId": g,
+            "group_id": g,
             "name": "Food",
             "keywords": "lenta|okey",
             "sort": 1,
             "archived": True,
-            "goalTarget": None,
-            "goalStatus": None,
-            "goalTargetDate": None,
-        }
+            "goal_target": None,
+            "goal_status": None,
+            "goal_target_date": None,
+        },
     ]
-    assert snap["transactions"] == [
+    assert serialized["transactions"] == [
         {
             "id": tx,
             "date": "2026-01-05T10:00:00",
             "amount": -12345,
             "description": "Lenta",
-            "bankCategory": "Super",
+            "bank_category": "Super",
             "mcc": "5411",
-            "categoryId": cat,
-            "accountId": 1,
-            "transferId": None,
+            "category_id": cat,
+            "account_id": 1,
+            "transfer_id": None,
             "comment": "note",
             "source": "manual",
             "hidden": False,
             "splits": [],
-        }
+        },
     ]
-    assert snap["budgets"] == [{"categoryId": cat, "year": 2026, "month": 3, "amount": 5000}]
+    assert serialized["budgets"] == [{"category_id": cat, "year": 2026, "month": 3, "amount": 5000}]
 
 
-def test_snapshot_ordering_is_deterministic(api):
-    """
-    Rows sharing a sort key fall back to id, so the order is stable.
-    """
+def test_snapshot_ordering_is_deterministic(api: Api) -> None:
+    """Rows sharing a sort key fall back to id, so the order is stable."""
     a = api.tx("2026-01-01T00:00:00", -1)
-    b = api.tx("2026-01-01T00:00:00", -2)  # same timestamp as a
+    b = api.tx("2026-01-01T00:00:00", -2)
     c = api.tx("2026-01-01T00:00:00", -3)
-    ids = [t["id"] for t in api.snapshot()["transactions"]]
+    ids = [transaction.id for transaction in api.snapshot().transactions]
     assert ids == [a, b, c]

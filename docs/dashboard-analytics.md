@@ -50,8 +50,8 @@ Pick a year and get a structured review:
 - **Yearly report, all time** — a table of income, expense, net, and savings rate
   per year.
 - **Spending patterns**:
-  - **By weekday** — the expense distribution across Monday–Sunday.
-  - **By day of month** — a 1–31 profile of when in the month money goes out.
+    - **By weekday** — the expense distribution across Monday–Sunday.
+    - **By day of month** — a 1–31 profile of when in the month money goes out.
 - **Top merchants** — the top 10 by spend, with counts. Merchants are grouped by a
   normalized key (uppercased description, digits stripped, first few words).
 - **Transaction stats** — count, median expense, and largest single transaction.

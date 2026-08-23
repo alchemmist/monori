@@ -1,11 +1,13 @@
 import pytest
+from fastapi.testclient import TestClient
 
-from tests.conftest import login_as
+import monori.server.app.db as dbmod
+from monori.server.tests.conftest import login_as
 
 pytestmark = pytest.mark.integration
 
 
-def test_data_routes_require_jwt(anon):
+def test_data_routes_require_jwt(anon: TestClient) -> None:
     assert anon.get("/api/snapshot").status_code == 401
     assert anon.get("/api/groups").status_code == 401
     assert anon.post("/api/groups", json={"name": "X", "kind": "expense"}).status_code == 401
@@ -19,7 +21,7 @@ def test_data_routes_require_jwt(anon):
     )
 
 
-def test_users_are_isolated(anon):
+def test_users_are_isolated(anon: TestClient) -> None:
     a = login_as(anon, "alice@example.com")
     b = login_as(anon, "bob@example.com")
 
@@ -27,7 +29,9 @@ def test_users_are_isolated(anon):
     assert r.status_code == 200
     gid = r.json()["id"]
     r = anon.post(
-        "/api/categories", json={"name": "Rent", "groupId": gid, "keywords": ""}, headers=a
+        "/api/categories",
+        json={"name": "Rent", "groupId": gid, "keywords": ""},
+        headers=a,
     )
     assert r.status_code == 200
     cid = r.json()["id"]
@@ -67,7 +71,7 @@ def test_users_are_isolated(anon):
     assert bob_acct != alice_acct
 
 
-def test_same_names_allowed_across_users(anon):
+def test_same_names_allowed_across_users(anon: TestClient) -> None:
     a = login_as(anon, "u1@example.com")
     b = login_as(anon, "u2@example.com")
     assert (
@@ -78,23 +82,30 @@ def test_same_names_allowed_across_users(anon):
         anon.post("/api/groups", json={"name": "Bills", "kind": "expense"}, headers=b).status_code
         == 200
     )
-    assert anon.post("/api/accounts", json={"name": "Vault"}, headers=a).status_code == 200
-    assert anon.post("/api/accounts", json={"name": "Vault"}, headers=b).status_code == 200
-    assert anon.post("/api/accounts", json={"name": "Vault"}, headers=b).status_code == 409
+    body = {
+        "name": "Vault",
+        "type": "cash",
+        "icon": "wallet",
+        "color": "#5b6472",
+        "currency": "RUB",
+        "openingBalance": 0,
+        "bankRef": "",
+    }
+    assert anon.post("/api/accounts", json=body, headers=a).status_code == 200
+    assert anon.post("/api/accounts", json=body, headers=b).status_code == 200
+    assert anon.post("/api/accounts", json=body, headers=b).status_code == 409
 
 
-def test_first_user_claims_legacy_data(anon):
-    import app.db as dbmod
-
+def test_first_user_claims_legacy_data(anon: TestClient) -> None:
     c = dbmod.connect()
     c.execute(
         "INSERT INTO accounts (user_id, name, type, currency, sort)"
-        " VALUES (NULL, 'T-Bank', 'card', 'RUB', 1)"
+        " VALUES (NULL, 'T-Bank', 'card', 'RUB', 1)",
     )
     c.execute(
         "INSERT INTO category_groups (user_id, name, sort, type_id)"
         " VALUES (NULL, 'Legacy', 1,"
-        " (SELECT id FROM category_group_types WHERE type='expense'))"
+        " (SELECT id FROM category_group_types WHERE type='expense'))",
     )
     c.commit()
     c.close()

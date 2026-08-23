@@ -1,0 +1,108 @@
+name: Frontend performance gate
+description: Compare the cached pull request measurements with the target branch
+inputs:
+    current-results:
+        description: Cached raw pull request performance measurements
+        required: true
+runs:
+    using: composite
+    steps:
+        - name: Setup Python dependencies
+          uses: ./.github/actions/setup-project
+          with:
+              python-profile: ci
+        - name: Setup Node
+          uses: actions/setup-node@v7
+          with:
+              node-version: 22
+              cache: npm
+              cache-dependency-path: tools/frontend-perf/package-lock.json
+        - name: Pin npm
+          shell: bash
+          run: npm install --global npm@10.9.2
+        - name: Install performance tools
+          shell: bash
+          run: npm ci --no-audit --no-fund
+          working-directory: tools/frontend-perf
+        - name: Install Chromium
+          shell: bash
+          run: npx playwright install --with-deps chromium
+          working-directory: tools/frontend-perf
+        - name: Test performance comparator
+          shell: bash
+          run: >-
+              env -u GITHUB_STEP_SUMMARY -u MUTATION_SUMMARY_PATH uv run --locked pytest -q
+              ci/tests/test_frontend_measurement.py
+              ci/tests/test_frontend_performance.py
+        - name: Compare target branch with cached pull request
+          id: performance
+          shell: bash
+          env:
+              BASE: ${{ github.event.pull_request.base.sha }}
+              HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+              PR_NUMBER: ${{ github.event.pull_request.number }}
+              PERF_OUTPUT_DIR: ${{ runner.temp }}/frontend-performance
+              PERF_PR_RESULTS_DIR: ${{ inputs.current-results }}
+              GITHUB_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          run: |
+              set +e
+              make perf-front-diff
+              code=$?
+              echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+              exit 0
+        - name: Apply performance approvals
+          id: approvals
+          if: always()
+          shell: bash
+          env:
+              GITHUB_TOKEN: ${{ github.token }}
+              GITHUB_REPOSITORY: ${{ github.repository }}
+              REPORT_PATH: ${{ runner.temp }}/frontend-performance/report.json
+              SUMMARY_PATH: ${{ runner.temp }}/frontend-performance/summary.md
+              QUALITY_RESULT_PATH: ${{ runner.temp }}/quality-results/frontend-performance.json
+          run: |
+              set +e
+              uv run --locked python -m monori.ci.quality_graph.checks.frontend_performance
+              code=$?
+              echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+              exit 0
+        - name: Publish frontend-performance infrastructure failure
+          if: always()
+          shell: bash
+          run: |
+              if [ ! -f "$RUNNER_TEMP/quality-results/frontend-performance.json" ]; then
+                uv run --locked python -m monori.ci.quality_graph.result_cli \
+                  --check-id frontend-performance \
+                  --title 'Frontend performance regression' \
+                  --status failed \
+                  --message 'Frontend performance measurement did not produce a report.' \
+                  --job-summary "$GITHUB_STEP_SUMMARY" \
+                  --output "$RUNNER_TEMP/quality-results/frontend-performance.json"
+              fi
+        - name: Upload frontend-performance result
+          if: always()
+          uses: actions/upload-artifact@v7
+          with:
+              name: quality-result-frontend-performance-${{ github.run_attempt }}
+              path: ${{ runner.temp }}/quality-results/frontend-performance.json
+              if-no-files-found: error
+              retention-days: 7
+        - name: Upload raw performance reports
+          if: always()
+          uses: actions/upload-artifact@v7
+          with:
+              name: frontend-performance-${{ github.event.pull_request.number }}
+              path: ${{ runner.temp }}/frontend-performance
+              if-no-files-found: error
+              retention-days: 7
+        - name: Enforce performance verdict
+          if: always()
+          shell: bash
+          env:
+              PERFORMANCE_EXIT: ${{ steps.performance.outputs.exit_code }}
+              APPROVAL_EXIT: ${{ steps.approvals.outputs.exit_code }}
+          run: |
+              if [ -n "$PERFORMANCE_EXIT" ] && [ "$PERFORMANCE_EXIT" -ne 0 ]; then
+                exit "$PERFORMANCE_EXIT"
+              fi
+              exit "${APPROVAL_EXIT:-2}"

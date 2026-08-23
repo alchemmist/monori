@@ -1,0 +1,49 @@
+name: Frontend lab performance suite
+description: Measure production frontend routes and publish their reports
+runs:
+    using: composite
+    steps:
+        - name: Setup Node
+          uses: actions/setup-node@v7
+          with:
+              node-version: 22
+              cache: npm
+              cache-dependency-path: tools/frontend-perf/package-lock.json
+        - name: Pin npm
+          shell: bash
+          run: npm install --global npm@10.9.2
+        - name: Install performance tools
+          shell: bash
+          run: npm ci --no-audit --no-fund
+          working-directory: tools/frontend-perf
+        - name: Install Chromium
+          shell: bash
+          run: npx playwright install --with-deps chromium
+          working-directory: tools/frontend-perf
+        - name: Run frontend lab performance
+          id: performance
+          continue-on-error: true
+          shell: bash
+          env:
+              LOAD_OUTPUT_DIR: ${{ github.workspace }}/reports/perf
+          run: make load-fe
+        - name: Add summary
+          if: always()
+          shell: bash
+          env:
+              LOAD_OUTPUT_DIR: ${{ github.workspace }}/reports/perf
+          run: test ! -f "$LOAD_OUTPUT_DIR/frontend.md" || cat "$LOAD_OUTPUT_DIR/frontend.md" >> "$GITHUB_STEP_SUMMARY"
+        - name: Upload frontend reports
+          if: always()
+          uses: actions/upload-artifact@v7
+          with:
+              name: frontend-performance-sla-${{ github.run_attempt }}
+              path: ${{ github.workspace }}/reports/perf
+              if-no-files-found: error
+              retention-days: 30
+        - name: Enforce frontend verdict
+          if: always()
+          shell: bash
+          env:
+              PERFORMANCE_OUTCOME: ${{ steps.performance.outcome }}
+          run: test "$PERFORMANCE_OUTCOME" = success
