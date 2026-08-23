@@ -86,6 +86,15 @@ def workflow_job_for_report(marker: str) -> WorkflowJobDefinition:
     raise ValueError(message)
 
 
+def workflow_job_for_gate(gate: str) -> WorkflowJobDefinition:
+    """Return the workflow job addressed by one internal command gate."""
+    for definition in WORKFLOW_JOBS:
+        if definition.gate == gate:
+            return definition
+    message = f"Unknown Quality Graph gate: {gate}"
+    raise ValueError(message)
+
+
 def workflow_job_module(definition: WorkflowJobDefinition) -> str:
     """Return the import path implementing one registered workflow check."""
     return f"monori.ci.quality_graph.checks.{definition.module}"

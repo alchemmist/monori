@@ -40,7 +40,7 @@ afterEach(() => {
 describe("optimistic edits outside the demo", () => {
     it("persists a budget cell with its exact coordinates", async () => {
         const put = vi.spyOn(api, "putBudget").mockResolvedValue({});
-        useStore.getState().setBudget(4, 2026, 1, 35);
+        await useStore.getState().setBudget(4, 2026, 1, 35);
         expect(put).toHaveBeenCalledExactlyOnceWith({
             categoryId: 4,
             year: 2026,
@@ -52,7 +52,7 @@ describe("optimistic edits outside the demo", () => {
 
     it("warns but keeps the optimistic budget when the save fails", async () => {
         vi.spyOn(api, "putBudget").mockRejectedValue(new Error("offline"));
-        useStore.getState().setBudget(4, 2026, 1, 35);
+        void useStore.getState().setBudget(4, 2026, 1, 35);
         await vi.waitFor(() => expect(useStore.getState().toast).not.toBeNull());
         expect(useStore.getState().toast).toEqual({
             title: "Failed to save budget",

@@ -39,6 +39,7 @@ import {
     adminUserSummarySchema,
     authTokenSchema,
     availableConnectorsSchema,
+    budgetCellSchema,
     cancelledResponseSchema,
     connectionSchema,
     deletedCountResponseSchema,
@@ -128,6 +129,17 @@ interface SplitResponse {
     splits: TransactionSplit[];
 }
 
+async function copyBudgetYear(
+    fromYear: number,
+    toYear: number,
+): Promise<{ copied: number; budgets: BudgetCell[] }> {
+    return apiFetch("/api/budgets/copy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fromYear, toYear }),
+    }).then(json(z.object({ copied: z.number(), budgets: z.array(budgetCellSchema) })));
+}
+
 export const api = {
     snapshot: ({
         light = false,
@@ -152,6 +164,7 @@ export const api = {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(cell),
         }).then(json(okResponseSchema)),
+    copyBudgetYear,
     bulkBudgets: (cells: BudgetCell[]): Promise<OkResponse> =>
         apiFetch("/api/budgets/bulk", {
             method: "POST",

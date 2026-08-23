@@ -62,9 +62,10 @@ interface StoreState {
     load: () => Promise<void>;
     fillTransactions: (generation?: number) => Promise<void>;
     notify: (toast: ToastMessage) => void;
-    setBudget: (categoryId: Id, year: number, month: number, amount: number) => void;
+    setBudget: (categoryId: Id, year: number, month: number, amount: number) => Promise<void>;
     fillBudgetForward: (categoryId: Id, year: number, month: number) => Promise<number>;
     setBudgets: (cells: BudgetCell[]) => Promise<void>;
+    copyBudgetYear: (fromYear: number, toYear: number) => Promise<number>;
     setTxCategory: (txId: Id, categoryId: Id | null) => void;
     addTransaction: (body: TransactionCreate) => Promise<Transaction>;
     updateTransaction: (txId: Id, patch: TransactionPatch) => Promise<void>;
@@ -143,6 +144,52 @@ function chainedPatchTx(id: Id, patch: TransactionPatch) {
     return next;
 }
 
+let budgetOperationTail: Promise<void> = Promise.resolve();
+let nextBudgetRevision = 0;
+const budgetRevisions = new Map<string, number>();
+const failedBudgetWrites = new Map<string, unknown>();
+let sessionEpoch = {};
+
+class SessionChangedError extends Error {}
+
+function resetBudgetSession() {
+    sessionEpoch = {};
+    nextBudgetRevision = 0;
+    budgetRevisions.clear();
+    failedBudgetWrites.clear();
+}
+
+function sessionStamp() {
+    return { epoch: sessionEpoch, token: localStorage.getItem("monori_token") };
+}
+
+function assertCurrentSession(stamp: ReturnType<typeof sessionStamp>) {
+    if (stamp.epoch !== sessionEpoch || stamp.token !== localStorage.getItem("monori_token")) {
+        throw new SessionChangedError("session changed before budget operation completed");
+    }
+}
+
+function chainedBudgetOperation<T>(
+    stamp: ReturnType<typeof sessionStamp>,
+    operation: () => Promise<T>,
+): Promise<T> {
+    const result = budgetOperationTail.then(async () => {
+        assertCurrentSession(stamp);
+        const value = await operation();
+        assertCurrentSession(stamp);
+        return value;
+    });
+    budgetOperationTail = result.then(
+        () => undefined,
+        () => undefined,
+    );
+    return result;
+}
+
+function budgetKey(categoryId: Id, year: number, month: number) {
+    return `${categoryId}-${year}-${month}`;
+}
+
 // Each optimistic transaction edit owns revisions for the fields it changes.
 // A failed older request must never undo a newer edit to the same field.
 let nextTxFieldRevision = 0;
@@ -219,13 +266,16 @@ export const useStore = create<StoreState>((set, get) => ({
             // no session — drop any restored tabs so they cannot resurface for
             // whoever signs in on this browser next
             get().setTabs([]);
+            resetBudgetSession();
             set({ authChecked: true });
             return;
         }
         try {
             const user = await api.authMe(token);
+            resetBudgetSession();
             set({ user, authChecked: true });
         } catch {
+            resetBudgetSession();
             localStorage.removeItem("monori_token");
             get().setTabs([]);
             set({ user: null, authChecked: true });
@@ -234,6 +284,7 @@ export const useStore = create<StoreState>((set, get) => ({
 
     async login(email, password) {
         const { access_token } = await api.authLogin(email, password);
+        resetBudgetSession();
         localStorage.setItem("monori_token", access_token);
         const user = await api.authMe(access_token);
         set({ user });
@@ -251,6 +302,7 @@ export const useStore = create<StoreState>((set, get) => ({
     },
 
     logout() {
+        resetBudgetSession();
         localStorage.removeItem("monori_token");
         get().setTabs([]);
         set({ user: null, hiddenTx: null });
@@ -357,16 +409,33 @@ export const useStore = create<StoreState>((set, get) => ({
 
     /** Optimistic budget edit: local state changes instantly, server call follows. */
     setBudget(categoryId, year, month, amount) {
+        const stamp = sessionStamp();
+        const key = budgetKey(categoryId, year, month);
+        budgetRevisions.set(key, ++nextBudgetRevision);
         const snapshot = requireSnapshot(get().snapshot);
         const budgets = snapshot.budgets.filter(
             (b) => !(b.categoryId === categoryId && b.year === year && b.month === month),
         );
         if (amount !== 0) budgets.push({ categoryId, year, month, amount });
         set({ snapshot: { ...snapshot, budgets } });
-        if (isDemo()) return;
-        api.putBudget({ categoryId, year, month, amount }).catch((e) =>
-            set({ toast: { title: "Failed to save budget", theme: "danger", content: String(e) } }),
-        );
+        if (isDemo()) return Promise.resolve();
+        const write = chainedBudgetOperation(stamp, async () => {
+            try {
+                await api.putBudget({ categoryId, year, month, amount });
+                failedBudgetWrites.delete(key);
+            } catch (error) {
+                if (stamp.epoch === sessionEpoch) failedBudgetWrites.set(key, error);
+                throw error;
+            }
+        });
+        write.catch((e) => {
+            if (!(e instanceof SessionChangedError)) {
+                set({
+                    toast: { title: "Failed to save budget", theme: "danger", content: String(e) },
+                });
+            }
+        });
+        return write;
     },
 
     /** Copy one category's current month into every later month of the year.
@@ -407,6 +476,38 @@ export const useStore = create<StoreState>((set, get) => ({
         );
         budgets.push(...cells.filter((c) => c.amount !== 0));
         set({ snapshot: { ...snapshot, budgets } });
+    },
+
+    copyBudgetYear(fromYear, toYear) {
+        const stamp = sessionStamp();
+        const revision = nextBudgetRevision;
+        return chainedBudgetOperation(stamp, async () => {
+            const failedWrite = failedBudgetWrites.values().next();
+            if (failedWrite.done === false) throw failedWrite.value;
+
+            let copied: number;
+            let targetBudgets: BudgetCell[];
+            if (isDemo()) {
+                targetBudgets = requireSnapshot(get().snapshot)
+                    .budgets.filter((b) => b.year === fromYear)
+                    .map((b) => ({ ...b, year: toYear }));
+                copied = targetBudgets.length;
+            } else {
+                const response = await api.copyBudgetYear(fromYear, toYear);
+                copied = response.copied;
+                targetBudgets = response.budgets;
+            }
+
+            const changedAfterRequest = (b: BudgetCell) =>
+                (budgetRevisions.get(budgetKey(b.categoryId, b.year, b.month)) ?? 0) > revision;
+            const snapshot = requireSnapshot(get().snapshot);
+            const budgets = snapshot.budgets.filter(
+                (b) => b.year !== toYear || changedAfterRequest(b),
+            );
+            budgets.push(...targetBudgets.filter((b) => !changedAfterRequest(b)));
+            set({ snapshot: { ...snapshot, budgets } });
+            return copied;
+        });
     },
 
     setTxCategory(txId, categoryId) {
@@ -1140,6 +1241,11 @@ export function resetStoreForTests() {
     txPatchChain.clear();
     nextTxFieldRevision = 0;
     txFieldRevisions.clear();
+    budgetOperationTail = Promise.resolve();
+    sessionEpoch = {};
+    nextBudgetRevision = 0;
+    budgetRevisions.clear();
+    failedBudgetWrites.clear();
     nextTabId = initialNextTabId;
     useStore.setState(
         {

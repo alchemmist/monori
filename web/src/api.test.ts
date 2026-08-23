@@ -132,6 +132,7 @@ const responseFor = (url: string, method?: string): unknown => {
     if (url === "/api/admin/activity") return { features: [], daily: [], recentLogins: [] };
     if (url === "/api/admin/sql")
         return { kind: "read", columns: [], rows: [], rowCount: 0, truncated: false, elapsedMs: 0 };
+    if (url === "/api/budgets/copy") return { copied: 0, budgets: [] };
     if (
         url === "/api/transactions" ||
         url === "/api/accounts" ||
@@ -173,6 +174,13 @@ const ENDPOINTS: Endpoint[] = [
         "/api/budgets/bulk",
         "POST",
         { cells: [{ categoryId: 1, year: 2026, month: 1, amount: 10 }] },
+    ],
+    [
+        "copyBudgetYear",
+        () => api.copyBudgetYear(2027, 2028),
+        "/api/budgets/copy",
+        "POST",
+        { fromYear: 2027, toYear: 2028 },
     ],
     [
         "hiddenTx",
@@ -473,6 +481,16 @@ describe("api", () => {
     it.each(ENDPOINTS)("rejects an invalid %s response at runtime", async (_label, call) => {
         fetch.mockResolvedValueOnce(ok(null));
         await expect(call()).rejects.toThrow();
+    });
+
+    it("returns the persisted cells from a budget year copy", async () => {
+        const response = {
+            copied: 1,
+            budgets: [{ categoryId: 2, year: 2028, month: 1, amount: 50_000 }],
+        };
+        fetch.mockResolvedValueOnce(ok(response));
+
+        await expect(api.copyBudgetYear(2027, 2028)).resolves.toEqual(response);
     });
 
     it.each([

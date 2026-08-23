@@ -38,7 +38,7 @@ def test_renderer_owns_status_heading_findings_and_admin_commands() -> None:
                 ),
             ),
             admin=admin_commands(
-                "example",
+                "suppression",
                 ["example-1"],
                 [],
                 {"example.py": ["example-1"]},
@@ -50,7 +50,7 @@ def test_renderer_owns_status_heading_findings_and_admin_commands() -> None:
     assert (
         report.controls
         == admin_commands(
-            "example",
+            "suppression",
             ["example-1"],
             [],
             {"example.py": ["example-1"]},
@@ -61,7 +61,7 @@ def test_renderer_owns_status_heading_findings_and_admin_commands() -> None:
     assert "<details><summary>Findings (1)</summary>" in body
     assert "[`example.py:1`](https://github.com/org/repo/pull/1/files#diff-" in body
     assert "`/qg ignore example-1`" in body
-    assert "`/qg ignore example`" in body
+    assert "`/qg ignore suppressions`" in body
     assert "`/qg ignore-file example.py`" in body
 
 
@@ -101,7 +101,7 @@ def test_admin_commands_preserve_all_ids_notes_and_reverse_operations() -> None:
                 "/qg remove-ignore suppression-a,suppression-b",
             ),
             JobControl(
-                "/qg ignore suppression",
+                "/qg ignore suppressions",
                 "/qg remove-ignore suppression-a,suppression-b",
             ),
             JobControl(

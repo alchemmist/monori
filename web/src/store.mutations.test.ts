@@ -31,8 +31,8 @@ afterEach(() => {
 describe("store demo mutations", () => {
     it("edits budgets and transaction category/account optimistically", () => {
         const store = useStore.getState();
-        store.setBudget(2, 2026, 1, 30);
-        store.setBudget(2, 2026, 2, 10);
+        void store.setBudget(2, 2026, 1, 30);
+        void store.setBudget(2, 2026, 2, 10);
         store.setTxCategory(1, null);
         store.setTxAccount(1, 9);
         expect(useStore.getState().snapshot!.budgets).toEqual(

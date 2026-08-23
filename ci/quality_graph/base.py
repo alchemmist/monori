@@ -18,6 +18,7 @@ from monori.ci.lib.github import GitHub, is_admin, sync_label
 from monori.ci.quality_graph.commands import (
     QualityGraphCommand,
     command_request,
+    command_target_gate,
     command_targets_gate,
     decode_command,
     encode_command,
@@ -260,7 +261,7 @@ class ApprovalLifecycle:
             return {finding.finding_id for finding in findings if finding.path in command.arguments}
         if command.name not in {"ignore", "remove-ignore"}:
             return set()
-        if self.gate in command.arguments:
+        if any(command_target_gate(argument) == self.gate for argument in command.arguments):
             return all_ids
         selected = {
             argument
