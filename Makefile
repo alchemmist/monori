@@ -17,7 +17,7 @@ CLOC_EXCLUDE_DIRS := .git,.worktrees,.claude,node_modules,.venv,__pycache__,.pyt
 .PHONY: install setup tools dev down reset-db deploy api web build clean \
         code-stat \
         precommit-install precommit-uninstall \
-        fmt fmt-check \
+        fmt fmt-check triple-quotes \
         lint lint-web lint-css lint-html lint-server lint-no-comments lint-sql lint-yaml lint-md lint-docs lint-actions lint-docker lint-shell spell \
         type type-front type-back analyze analyze-python-dead-code analyze-javascript-dead-code time-bombs audit audit-deps audit-deps-py audit-secrets \
         test t-workflow t-fast t-medium t-ci t-ci-unit t-ci-integration t-slow t-slow-ui t-front t-back t-e2e t-e2e-ui coverage coverage-baseline coverage-diff perf-front-diff mutation mutation-diff mutation-python m-front m-front-diff m-front-file m-back m-back-diff \
@@ -148,6 +148,9 @@ fmt-check:
 	uv run --locked --group format ruff check $(PYTHON_SOURCES)
 	uv run --locked --group format ruff format --check $(PYTHON_SOURCES)
 	$(SQLFLUFF) lint .
+
+triple-quotes:
+	uv run --locked python -m monori.ci.lib.triple_quotes --base "$(BASE)"
 
 lint: lint-web lint-css lint-html lint-server lint-sql lint-yaml lint-md lint-docs lint-actions lint-docker lint-shell spell
 

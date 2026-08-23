@@ -49,11 +49,26 @@ one-to-one — there is no separate CI script to drift out of sync.
 | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `make fmt`            | Prettier + Ruff format/fix, and regenerates the schema diagram.                                                                                  |
 | `make fmt-check`      | The same, check-only.                                                                                                                            |
+| `make triple-quotes`  | Reject changed multiline Python strings whose opening or closing delimiter shares a line with content.                                           |
 | `make lint`           | Everything: web (Oxlint), CSS, HTML, server (Ruff), YAML, Markdown, generated docs, GitHub Actions, Dockerfile, shell, and spelling.             |
 | `make schema-diagram` | Regenerates the ER diagram in [data-model.md](data-model.md) from `server/schema.sql`. `make lint` fails if it is stale.                         |
 | `make type`           | Strict mypy for all tracked Python plus TypeScript compiler and type-aware Oxlint checks.                                                        |
 | `make analyze`        | bandit + semgrep security scans, plus Vulture for Python and Knip for JavaScript/TypeScript dead code.                                           |
 | `make audit`          | Dependency + secret scanning (`audit-deps`, `audit-deps-py`, `audit-secrets`).                                                                   |
+
+Multiline Python strings keep both triple-quote delimiters on content-free lines:
+
+```python
+message = """
+Readable multiline content.
+"""
+```
+
+One-line non-docstring strings use ordinary single or double quotes instead of triple quotes.
+Docstrings remain triple-double-quoted under Ruff `D300`, with their delimiters formatted as the
+block above. Pull requests run this rule only against added Python lines, using the same
+`make triple-quotes BASE=origin/main` target available locally. The custom checker replaces only
+Ruff's conflicting `D200` layout rule; all other pydocstyle checks remain enabled.
 
 Pull requests also run a CI-only Python annotation gate. It rejects new uses of
 `object` as an annotation, including nested types such as `list[object]`. Use a

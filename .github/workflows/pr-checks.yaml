@@ -98,10 +98,32 @@ jobs:
               with:
                   check-id: fmt-check
 
+    triple-quotes:
+        name: Triple-quoted string style
+        needs: workflow-graph
+        if: github.event_name == 'pull_request' && needs.workflow-graph.result == 'success'
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v7
+              with:
+                  fetch-depth: 0
+                  persist-credentials: false
+            - uses: ./.github/actions/setup-project
+              with:
+                  python-profile: ci
+            - uses: ./.github/actions/quality-job
+              env:
+                  BASE: ${{ github.event.pull_request.base.sha }}
+              with:
+                  check-id: triple-quotes
+
     lint:
         name: Lint
-        needs: suppressions
-        if: github.event_name == 'pull_request' && needs.suppressions.result == 'success'
+        needs: [suppressions, triple-quotes]
+        if: >-
+            github.event_name == 'pull_request'
+            && needs.suppressions.result == 'success'
+            && needs.triple-quotes.result == 'success'
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@v7
