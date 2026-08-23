@@ -248,7 +248,11 @@ def _update_goal_fields(
     if not allowed:
         return
     if patch.goal_target is not None:
-        c.execute("UPDATE categories SET goal_target=? WHERE id=?", (patch.goal_target, cat_id))
+        c.execute(
+            "UPDATE categories SET goal_target=?,"
+            " goal_status=COALESCE(goal_status, 'active') WHERE id=?",
+            (patch.goal_target, cat_id),
+        )
     if patch.goal_target_date_provided:
         c.execute(
             "UPDATE categories SET goal_target_date=? WHERE id=?",

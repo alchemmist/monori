@@ -93,7 +93,12 @@ interface StoreState {
     archiveGoal: (id: Id) => Promise<void>;
     deleteCategory: (id: Id) => Promise<void>;
     mergeCategory: (id: Id, into: Id) => Promise<void>;
-    moveCategory: (id: Id, toGroupId: Id, orderedIds: Id[]) => Promise<void>;
+    moveCategory: (
+        id: Id,
+        toGroupId: Id,
+        orderedIds: Id[],
+        categoryPatch?: CategoryPatch,
+    ) => Promise<void>;
     createGroup: (body: { name: string; kind: string }) => Promise<Id>;
     patchGroup: (id: Id, patch: { name?: string; kind?: string }) => Promise<void>;
     deleteGroup: (id: Id) => Promise<void>;
@@ -1015,7 +1020,7 @@ export const useStore = create<StoreState>((set, get) => ({
     /** Kanban drop: move a card to `toGroupId` and lay out every category by the
      *  global order in `orderedIds` (assigns 1..N to sort). Optimistic; the group
      *  change and the reorder are both persisted, then resynced on failure. */
-    async moveCategory(id, toGroupId, orderedIds) {
+    async moveCategory(id, toGroupId, orderedIds, categoryPatch = {}) {
         const snapshot = requireSnapshot(get().snapshot);
         const cat = snapshot.categories.find((c) => c.id === id);
         const groupChanged = cat != null && cat.groupId !== toGroupId;
@@ -1023,16 +1028,21 @@ export const useStore = create<StoreState>((set, get) => ({
         const categories = snapshot.categories.map((c) => ({
             ...c,
             groupId: c.id === id ? toGroupId : c.groupId,
+            ...(c.id === id ? categoryPatch : {}),
             sort: sortById.get(c.id) ?? c.sort,
         }));
         set({ snapshot: { ...snapshot, categories } });
         if (isDemo()) return;
         try {
-            if (groupChanged) await api.patchCategory(id, { groupId: toGroupId });
+            const patchBody = cat
+                ? { ...(groupChanged ? { groupId: toGroupId } : {}), ...categoryPatch }
+                : {};
+            if (Object.keys(patchBody).length > 0) await api.patchCategory(id, patchBody);
             await api.reorderCategories(orderedIds);
         } catch (e) {
             get().notify({ title: "Failed to move category", theme: "danger", content: String(e) });
             await get().load();
+            throw e;
         }
     },
 

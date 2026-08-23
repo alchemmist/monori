@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { act } from "@testing-library/react";
 import { renderUI, resetStore, screen, seed, waitFor } from "../test/render.jsx";
 import { useStore } from "../store.js";
-import { CategoryDeleteDialog, CategoryEditDialog } from "./CategoryDialogs.jsx";
+import { CategoryDeleteDialog, CategoryEditDialog, GoalTargetDialog } from "./CategoryDialogs.jsx";
 import { GroupDeleteDialog, GroupEditDialog } from "./GroupDialogs.jsx";
 
 const groups = [
@@ -38,6 +39,52 @@ describe("category and group dialogs", () => {
             }),
         );
         expect(close).toHaveBeenCalled();
+    });
+
+    it("submits a goal once and closes only after persistence succeeds", async () => {
+        let finish: (() => void) | undefined;
+        const apply = vi.fn(
+            () =>
+                new Promise<void>((resolve) => {
+                    finish = resolve;
+                }),
+        );
+        const close = vi.fn();
+        const { user } = renderUI(
+            <GoalTargetDialog category={food} onApply={apply} onClose={close} />,
+        );
+        await user.type(screen.getByLabelText("Target, ₽"), "100");
+        const move = screen.getByRole("button", { name: "Move" });
+
+        act(() => {
+            move.click();
+            move.click();
+        });
+
+        expect(apply).toHaveBeenCalledExactlyOnceWith({ goalTarget: 10_000, goalTargetDate: null });
+        expect(move).toBeDisabled();
+        expect(close).not.toHaveBeenCalled();
+        finish?.();
+        await waitFor(() => expect(close).toHaveBeenCalledOnce());
+        await waitFor(() => expect(move).toBeEnabled());
+        await user.click(move);
+        expect(apply).toHaveBeenCalledTimes(2);
+    });
+
+    it("keeps the goal dialog open and re-enables submit after persistence fails", async () => {
+        const close = vi.fn();
+        const { user } = renderUI(
+            <GoalTargetDialog
+                category={food}
+                onApply={vi.fn().mockRejectedValue(new Error("offline"))}
+                onClose={close}
+            />,
+        );
+        await user.type(screen.getByLabelText("Target, ₽"), "100");
+        await user.click(screen.getByRole("button", { name: "Move" }));
+
+        await waitFor(() => expect(screen.getByRole("button", { name: "Move" })).toBeEnabled());
+        expect(close).not.toHaveBeenCalled();
     });
 
     it("edits a category in the selected group and preserves its keyword text", async () => {
