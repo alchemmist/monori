@@ -404,16 +404,7 @@ jobs:
 
     audit:
         name: Dependency and security audit
-        needs:
-            [
-                coverage,
-                mutation,
-                bundle-size,
-                frontend-performance,
-                flaky-tests,
-                docs-links,
-                docs-examples,
-            ]
+        needs: [coverage, mutation, bundle-size, frontend-performance, flaky-tests, docs-examples]
         if: >-
             always()
             && needs.coverage.result == 'success'
@@ -421,7 +412,6 @@ jobs:
             && needs.bundle-size.result == 'success'
             && needs.frontend-performance.result == 'success'
             && needs.flaky-tests.result == 'success'
-            && needs.docs-links.result == 'success'
             && needs.docs-examples.result == 'success'
         runs-on: ubuntu-latest
         steps:
@@ -439,7 +429,7 @@ jobs:
 
     quality-report:
         name: Finalize PR quality dashboard
-        needs: audit
+        needs: [audit, docs-links]
         if: >-
             always()
             && github.event_name == 'pull_request'

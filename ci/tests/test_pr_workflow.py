@@ -231,7 +231,6 @@ class TestPullRequestWorkflowGraph:
                 "bundle-size",
                 "frontend-performance",
                 "flaky-tests",
-                "docs-links",
                 "docs-examples",
             },
         }
@@ -412,7 +411,10 @@ class TestPullRequestWorkflowGraph:
         )
         assert block is not None
         body = block.group("body")
-        assert self.workflow["jobs"]["quality-report"]["needs"] == "audit"
+        assert set(self.workflow["jobs"]["quality-report"]["needs"]) == {
+            "audit",
+            "docs-links",
+        }
         assert "always()" in body
         assert "actions/download-artifact@v8" in body
         assert "pattern: quality-result-*" in body
