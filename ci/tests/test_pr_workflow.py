@@ -158,11 +158,11 @@ class TestPullRequestWorkflowGraph:
         jobs = self.workflow["jobs"]
         expected = {
             "fmt-check": "workflow-graph",
-            "suppressions": "fmt-check",
+            "suppressions": {"fmt-check", "triple-quotes"},
             "triple-quotes": "workflow-graph",
             "lint": {"suppressions", "triple-quotes"},
             "docs": {"suppressions", "triple-quotes"},
-            "object-annotations": "triple-quotes",
+            "object-annotations": {"fmt-check", "triple-quotes"},
             "type": "object-annotations",
             "analyze": {"docs", "lint", "type"},
             "time-bombs": {"lint", "type"},
