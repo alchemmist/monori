@@ -22,7 +22,7 @@ class TestTypeCastGate:
         configuration = tomllib.loads(Path("pyproject.toml").read_text())
 
         assert configuration["tool"]["mutmut"]["do_not_mutate"] == [
-            "ci/quality_graph/checks/type_casts.py"
+            "*ci/quality_graph/checks/type_casts.py"
         ]
 
     def test_check_collects_python_and_typescript_findings(self) -> None:
