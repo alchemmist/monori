@@ -524,11 +524,8 @@ jobs:
 
     bundle-size:
         name: Frontend bundle size
-        needs: [build, backend-performance]
-        if: >-
-            github.event_name == 'pull_request'
-            && needs.build.result == 'success'
-            && needs.backend-performance.result == 'success'
+        needs: build
+        if: github.event_name == 'pull_request' && needs.build.result == 'success'
         env:
             QUALITY_GRAPH_READ_ONLY: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.event.pull_request.user.login == 'dependabot[bot]' }}
         permissions:

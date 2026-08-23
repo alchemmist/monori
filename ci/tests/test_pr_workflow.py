@@ -183,7 +183,7 @@ class TestPullRequestWorkflowGraph:
             "build": "test-slow",
             "backend-performance": "coverage",
             "frontend-performance-sla": {"backend-performance", "build"},
-            "bundle-size": {"build", "backend-performance"},
+            "bundle-size": "build",
             "frontend-performance": "frontend-performance-sla",
         }
         for job, dependency in expected.items():
