@@ -27,6 +27,7 @@ FRONTEND_PERFORMANCE_SCOPE = (
     REPOSITORY_ROOT / ".github/actions/frontend-performance-scope/action.yml"
 )
 ADMIN_COMMAND_ACTION = REPOSITORY_ROOT / ".github/actions/admin-command/action.yml"
+FLAKY_TEST_ACTION = REPOSITORY_ROOT / ".github/actions/flaky-test-gate/action.yml"
 MUTATION_ACTION = REPOSITORY_ROOT / ".github/actions/mutation-diff-gate/action.yml"
 TEST_RUNNERS = (
     REPOSITORY_ROOT / "Makefile",
@@ -80,6 +81,7 @@ class TestPullRequestWorkflowGraph:
             "test-fast",
             "test-medium",
             "test-slow",
+            "flaky-tests",
             "build",
             "coverage",
             "audit",
@@ -112,6 +114,11 @@ class TestPullRequestWorkflowGraph:
                 "pull-requests": "write",
             },
             "frontend-performance": {
+                "contents": "read",
+                "issues": "write",
+                "pull-requests": "write",
+            },
+            "flaky-tests": {
                 "contents": "read",
                 "issues": "write",
                 "pull-requests": "write",
@@ -160,6 +167,7 @@ class TestPullRequestWorkflowGraph:
             "test-fast": {"analyze", "time-bombs"},
             "test-medium": {"analyze", "time-bombs"},
             "test-slow": {"test-fast", "test-medium"},
+            "flaky-tests": "test-slow",
             "coverage": "test-slow",
             "mutation": "test-slow",
             "build": "test-slow",
@@ -205,7 +213,13 @@ class TestPullRequestWorkflowGraph:
     def test_final_audits_converge_after_all_expensive_checks(self) -> None:
         jobs = self.workflow["jobs"]
         expected_dependencies = {
-            "audit": {"coverage", "mutation", "bundle-size", "frontend-performance"},
+            "audit": {
+                "coverage",
+                "mutation",
+                "bundle-size",
+                "frontend-performance",
+                "flaky-tests",
+            },
         }
         for job, expected in expected_dependencies.items():
             needs = jobs[job].get("needs", [])
@@ -231,6 +245,7 @@ class TestPullRequestWorkflowGraph:
             "object-annotations": "object-annotation-gate",
             "suppressions": "suppression-gate",
             "admin-command": "admin-command",
+            "flaky-tests": "flaky-test-gate",
         }
         for job, action in expected_actions.items():
             block = re.search(
@@ -248,6 +263,15 @@ class TestPullRequestWorkflowGraph:
         assert "Process Quality Graph command" in source
         assert "unittest" not in source
         assert "pytest" not in source
+
+    def test_flaky_test_gate_is_a_standalone_quality_graph_action(self) -> None:
+        source = FLAKY_TEST_ACTION.read_text()
+
+        assert "monori.ci.lib.flaky_tests" in source
+        assert "monori.ci.quality_graph.checks.flaky_tests" in source
+        assert "make " not in source
+        assert "--retries=0" not in source
+        assert "quality-result-flaky-tests" in source
 
     def test_jobs_request_only_their_python_dependency_profile(self) -> None:
         """Install job-specific Python tooling instead of the aggregate dev environment."""

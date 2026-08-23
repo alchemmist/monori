@@ -90,19 +90,24 @@ class TestQualityGraphCommand:
     def test_help_is_generated_from_registered_check_metadata(self) -> None:
         body = help_body()
 
-        for gate in ("object", "suppression", "bundle", "frontend"):
+        for gate in ("object", "suppression", "bundle", "frontend", "flaky"):
             assert f"{gate}-<id>" in body
-        assert "selected files (object-annotations, suppressions)" in body
-        assert "/qg ignore object-annotations,suppressions,bundle-size,frontend-performance" in body
+        assert "selected files (object-annotations, suppressions, flaky-tests)" in body
+        assert (
+            "/qg ignore object-annotations,suppressions,bundle-size,"
+            "frontend-performance,flaky-tests" in body
+        )
         assert (
             body == "Only repository administrators may execute state-changing commands.\n\n"
-            "- `/qg ignore object-<id>,suppression-<id>,bundle-<id>,frontend-<id>` — "
+            "- `/qg ignore object-<id>,suppression-<id>,bundle-<id>,frontend-<id>,flaky-<id>` — "
             "ignore selected findings\n"
-            "- `/qg ignore object-annotations,suppressions,bundle-size,frontend-performance` — "
+            "- `/qg ignore object-annotations,suppressions,bundle-size,"
+            "frontend-performance,flaky-tests` — "
             "ignore all current findings of selected types\n"
             "- `/qg ignore-file path/to/file` — ignore findings in selected files "
-            "(object-annotations, suppressions)\n"
-            "- `/qg remove-ignore object-<id>,suppression-<id>,bundle-<id>,frontend-<id>` — "
+            "(object-annotations, suppressions, flaky-tests)\n"
+            "- `/qg remove-ignore object-<id>,suppression-<id>,bundle-<id>,"
+            "frontend-<id>,flaky-<id>` — "
             "remove selected ignores\n"
             "- `/qg status` — show the current command status\n"
             "- `/qg help` — show this help"

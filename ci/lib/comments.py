@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
@@ -14,6 +15,7 @@ from monori.common import JsonValue, array_value, object_value
 DEFAULT_BOT_LOGIN = "github-actions[bot]"
 LEGACY_BOT_LOGIN = "monori-bot"
 GITHUB_COMMENT_BODY_LIMIT = 65_536
+STICKY_STATE_RE = re.compile(r"<!-- monori-qg-sticky: [^>]+ -->")
 
 
 class Reaction(StrEnum):
@@ -77,18 +79,35 @@ def bounded_comment_body(body: str) -> str:
         omitted = updated_omitted
 
 
+def preserve_comment_state(existing: str, rendered: str) -> str:
+    """
+    Preserve bot-owned sticky state across managed comment replacement.
+    """
+    markers = tuple(dict.fromkeys(STICKY_STATE_RE.findall(existing)))
+    missing = tuple(marker for marker in markers if marker not in rendered)
+    if not missing:
+        return rendered
+    first_line, _, remainder = rendered.partition("\n")
+    state = "\n".join(missing)
+    return f"{first_line}\n{state}\n{remainder}"
+
+
 def upsert_comment(github: GitHubAPI, number: int, marker: str, body: str) -> None:
     """Create or update one bot-owned marked pull-request comment."""
-    rendered = bounded_comment_body(comment_body(marker, body))
     existing = managed_comment(github, number, marker)
+    rendered = comment_body(marker, body)
     if existing is not None:
+        existing_body = existing.get("body")
+        if isinstance(existing_body, str):
+            rendered = preserve_comment_state(existing_body, rendered)
+        rendered = bounded_comment_body(rendered)
         comment_id = existing.get("id")
         if not isinstance(comment_id, int):
             message = "Pull request report comment has no numeric id"
             raise TypeError(message)
         github.request("PATCH", f"/issues/comments/{comment_id}", {"body": rendered})
         return
-    github.request("POST", f"/issues/{number}/comments", {"body": rendered})
+    github.request("POST", f"/issues/{number}/comments", {"body": bounded_comment_body(rendered)})
 
 
 def update_comment_body(github: GitHubAPI, comment_id: int, body: str) -> None:

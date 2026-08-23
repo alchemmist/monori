@@ -130,6 +130,14 @@ while the single Quality Graph comment carries its compact status and links. Mai
 saves the baseline in the Actions cache; when a baseline is not available, patch coverage
 still blocks uncovered changes while the total-coverage delta remains neutral.
 
+After the fast, medium, and slow lanes pass, the `Flaky test detection` Quality Graph check finds
+test definitions added under `server/tests`, `web/src`, and `web/e2e`. Every collected runner case,
+including each expanded parameterized case, runs ten times in a fresh process with retries disabled.
+Any failed, timed-out, or crashed attempt is a sticky blocking finding for the current head SHA.
+Repository administrators can approve individual findings, all current findings, or one file through
+the standard `/qg ignore` controls. This check is intentionally available only as a standalone
+Quality Graph action; it has no Make target and does not repeat pre-existing tests.
+
 ### The pre-commit hook
 
 Install the repository hook once per checkout:
