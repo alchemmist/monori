@@ -23,6 +23,7 @@ class TestMainWorkflowGraph:
         assert set(self.workflow["jobs"]) == {
             "fmt-check",
             "lint",
+            "docs-links",
             "type",
             "analyze",
             "test-fast",
@@ -40,6 +41,7 @@ class TestMainWorkflowGraph:
         jobs = self.workflow["jobs"]
         expected = {
             "lint": "fmt-check",
+            "docs-links": "fmt-check",
             "type": "lint",
             "analyze": "type",
             "test-fast": "analyze",
@@ -55,6 +57,11 @@ class TestMainWorkflowGraph:
             needs = jobs[job].get("needs", [])
             needs = [needs] if isinstance(needs, str) else needs
             assert dependency in needs
+
+        assert jobs["lint"]["needs"] == "fmt-check"
+        assert jobs["docs-links"]["needs"] == "fmt-check"
+        assert jobs["type"]["needs"] == "lint"
+        assert set(jobs["audit"]["needs"]) == {"coverage", "docs-links"}
 
     def test_main_jobs_request_specific_python_profiles(self) -> None:
         """Keep main jobs on the same minimal dependency profiles as PR jobs."""

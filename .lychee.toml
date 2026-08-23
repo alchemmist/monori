@@ -1,0 +1,12 @@
+include_fragments = "anchor-only"
+max_retries = 2
+retry_wait_time = 1
+timeout = 10
+max_concurrency = 32
+host_concurrency = 4
+no_progress = true
+user_agent = "monori-docs-link-check/1.0"
+
+exclude = [
+    "^http://localhost(?::[0-9]+)?(?:/.*)?$",
+]

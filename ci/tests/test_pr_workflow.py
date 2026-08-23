@@ -22,7 +22,9 @@ def find_repository_root(path: Path) -> Path:
 
 REPOSITORY_ROOT = find_repository_root(Path(__file__).resolve())
 WORKFLOW = REPOSITORY_ROOT / ".github/workflows/pr-checks.yaml"
+MAIN_WORKFLOW = REPOSITORY_ROOT / ".github/workflows/main-checks.yaml"
 ROOT_PYPROJECT = REPOSITORY_ROOT / "pyproject.toml"
+TOOL_INSTALLER = REPOSITORY_ROOT / "scripts/install-tools.sh"
 FRONTEND_PERFORMANCE_SCOPE = (
     REPOSITORY_ROOT / ".github/actions/frontend-performance-scope/action.yml"
 )
@@ -74,6 +76,7 @@ class TestPullRequestWorkflowGraph:
             "workflow-graph",
             "fmt-check",
             "triple-quotes",
+            "docs-links",
             "lint",
             "type",
             "analyze",
@@ -157,23 +160,24 @@ class TestPullRequestWorkflowGraph:
         jobs = self.workflow["jobs"]
         expected = {
             "fmt-check": "workflow-graph",
-            "suppressions": "fmt-check",
+            "suppressions": "workflow-graph",
             "triple-quotes": "workflow-graph",
-            "lint": {"suppressions", "triple-quotes"},
-            "object-annotations": "fmt-check",
+            "docs-links": "workflow-graph",
+            "lint": "suppressions",
+            "object-annotations": "suppressions",
             "type": "object-annotations",
-            "analyze": {"lint", "type"},
-            "time-bombs": {"lint", "type"},
-            "test-fast": {"analyze", "time-bombs"},
-            "test-medium": {"analyze", "time-bombs"},
+            "analyze": "lint",
+            "time-bombs": {"analyze", "type"},
+            "test-fast": "analyze",
+            "test-medium": "analyze",
             "test-slow": {"test-fast", "test-medium"},
             "flaky-tests": "test-slow",
             "coverage": "test-slow",
             "mutation": "test-slow",
             "build": "test-slow",
-            "backend-performance": "coverage",
-            "frontend-performance-sla": {"backend-performance", "build"},
-            "bundle-size": {"build", "backend-performance"},
+            "backend-performance": "test-slow",
+            "frontend-performance-sla": {"backend-performance", "bundle-size"},
+            "bundle-size": "build",
             "frontend-performance": "frontend-performance-sla",
         }
         for job, dependency in expected.items():
@@ -210,16 +214,10 @@ class TestPullRequestWorkflowGraph:
         for job in jobs:
             visit(job)
 
-    def test_final_audits_converge_after_all_expensive_checks(self) -> None:
+    def test_dependency_audit_follows_bundle_measurement(self) -> None:
         jobs = self.workflow["jobs"]
         expected_dependencies = {
-            "audit": {
-                "coverage",
-                "mutation",
-                "bundle-size",
-                "frontend-performance",
-                "flaky-tests",
-            },
+            "audit": {"bundle-size"},
         }
         for job, expected in expected_dependencies.items():
             needs = jobs[job].get("needs", [])
@@ -232,8 +230,8 @@ class TestPullRequestWorkflowGraph:
                 re.MULTILINE | re.DOTALL,
             )
             assert block is not None, job
-            assert "always()" in block.group("body"), job
-            assert "needs.frontend-performance.result == 'success'" in block.group("body"), job
+            assert "always()" not in block.group("body"), job
+            assert "needs.bundle-size.result == 'success'" in block.group("body"), job
 
     def test_complex_gates_use_local_actions(self) -> None:
         expected_actions = {
@@ -279,6 +277,7 @@ class TestPullRequestWorkflowGraph:
             "workflow-graph": "ci",
             "fmt-check": "format",
             "triple-quotes": "ci",
+            "docs-links": "ci",
             "lint": "lint",
             "type": "type",
             "analyze": "analyze",
@@ -299,6 +298,22 @@ class TestPullRequestWorkflowGraph:
             )
             assert block is not None, job
             assert f"python-profile: {profile}" in block.group("body"), job
+
+    def test_lychee_downloads_are_bounded(self) -> None:
+        required = (
+            "--connect-timeout 10",
+            "--max-time 120",
+            "--retry 3",
+            "--retry-max-time 120",
+        )
+        for path in (TOOL_INSTALLER, MAIN_WORKFLOW, WORKFLOW):
+            downloads = [
+                line
+                for line in path.read_text().splitlines()
+                if "lycheeverse/lychee/releases/download" in line
+            ]
+            assert len(downloads) == 1, path
+            assert all(option in downloads[0] for option in required), path
 
     def test_analysis_profile_can_publish_quality_results(self) -> None:
         """Install the shared CI package used after the analysis command finishes."""
@@ -387,8 +402,10 @@ class TestPullRequestWorkflowGraph:
         assert "uses: ./.github/actions/quality-job" in block.group("body")
         assert "check-id: audit" in block.group("body")
 
-    def test_final_dashboard_runs_after_the_complete_graph(self) -> None:
-        """Collect all result artifacts even when an earlier check failed."""
+    def test_final_dashboard_runs_after_the_successful_graph(self) -> None:
+        """
+        Collect result artifacts only after every graph branch passes.
+        """
         block = re.search(
             r"^    quality-report:\n(?P<body>.*?)(?=^    \S|\Z)",
             self.source,
@@ -396,8 +413,28 @@ class TestPullRequestWorkflowGraph:
         )
         assert block is not None
         body = block.group("body")
-        assert self.workflow["jobs"]["quality-report"]["needs"] == "audit"
-        assert "always()" in body
+        assert set(self.workflow["jobs"]["quality-report"]["needs"]) == {
+            "audit",
+            "coverage",
+            "docs-links",
+            "flaky-tests",
+            "fmt-check",
+            "frontend-performance",
+            "mutation",
+            "triple-quotes",
+            "time-bombs",
+        }
+        condition = self.workflow["jobs"]["quality-report"]["if"]
+        assert "always()" not in condition
+        assert "needs.audit.result == 'success'" in condition
+        assert "needs.coverage.result == 'success'" in condition
+        assert "needs.docs-links.result == 'success'" in condition
+        assert "needs.flaky-tests.result == 'success'" in condition
+        assert "needs.fmt-check.result == 'success'" in condition
+        assert "needs.frontend-performance.result == 'success'" in condition
+        assert "needs.mutation.result == 'success'" in condition
+        assert "needs.triple-quotes.result == 'success'" in condition
+        assert "needs.time-bombs.result == 'success'" in condition
         assert "actions/download-artifact@v8" in body
         assert "pattern: quality-result-*" in body
         assert "github.run_attempt" not in body.split("path:", maxsplit=1)[0]

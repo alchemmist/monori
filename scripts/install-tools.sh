@@ -5,6 +5,7 @@ SHFMT_VERSION=3.10.0
 HADOLINT_VERSION=2.12.0
 ACTIONLINT_VERSION=1.7.7
 GITLEAKS_VERSION=8.21.2
+LYCHEE_VERSION=0.24.2
 
 bindir="${MONORI_TOOLS_BIN:-$HOME/.local/bin}"
 mkdir -p "$bindir"
@@ -78,6 +79,41 @@ if ! have hadolint; then
   fi
   curl -sSfL "https://github.com/hadolint/hadolint/releases/download/v${HADOLINT_VERSION}/hadolint-${kernel}-${hmachine}" -o "$tmp/hadolint"
   install -m 0755 "$tmp/hadolint" "$bindir/hadolint"
+fi
+
+if ! have lychee; then
+  echo "installing lychee ${LYCHEE_VERSION}"
+  case "$goos-$goarch" in
+  darwin-amd64)
+    lychee_target=x86_64-apple-darwin
+    lychee_sha256=887503a9cff667d322b8d0892b40bf49976eb9507af8483220a3706cdad55978
+    ;;
+  darwin-arm64)
+    lychee_target=aarch64-apple-darwin
+    lychee_sha256=c9d3740ea2d891854d37116c9fba840f37b6e7c89d330e7db84ac333631c4977
+    ;;
+  linux-amd64)
+    lychee_target=x86_64-unknown-linux-gnu
+    lychee_sha256=1f4e0ef7f6554a6ed33dd7ac144fb2e1bbed98598e7af973042fc5cd43951c9a
+    ;;
+  linux-arm64)
+    lychee_target=aarch64-unknown-linux-gnu
+    lychee_sha256=91a7bd65685da41b90ccb9bc867a3d649a7818042dae04ff405e55a25bddee4c
+    ;;
+  *)
+    echo "unsupported lychee target: $goos-$goarch" >&2
+    exit 1
+    ;;
+  esac
+  archive="lychee-${lychee_target}.tar.gz"
+  curl --connect-timeout 10 --max-time 120 --retry 3 --retry-max-time 120 -sSfL "https://github.com/lycheeverse/lychee/releases/download/lychee-v${LYCHEE_VERSION}/${archive}" -o "$tmp/lychee.tgz"
+  actual_sha256=$(python3 -c 'import hashlib, pathlib, sys; print(hashlib.file_digest(pathlib.Path(sys.argv[1]).open("rb"), "sha256").hexdigest())' "$tmp/lychee.tgz")
+  if [ "$actual_sha256" != "$lychee_sha256" ]; then
+    echo "lychee archive checksum mismatch" >&2
+    exit 1
+  fi
+  tar -xzf "$tmp/lychee.tgz" -C "$tmp" --strip-components=1 "lychee-${lychee_target}/lychee"
+  install -m 0755 "$tmp/lychee" "$bindir/lychee"
 fi
 
 case ":$PATH:" in

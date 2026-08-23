@@ -42,6 +42,7 @@ WORKFLOW_JOBS = (
     WorkflowJobDefinition(
         "suppressions", "Lint suppression gate", "suppressions", "suppression", "suppression"
     ),
+    WorkflowJobDefinition("docs-links", "Documentation links", "docs_links"),
     WorkflowJobDefinition("lint", "Lint", "lint"),
     WorkflowJobDefinition(
         "object-annotations",

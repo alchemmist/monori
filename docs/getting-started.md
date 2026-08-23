@@ -78,7 +78,7 @@ make install   # web (npm) + server (uv) deps + external lint/analyze CLIs
 This installs the web packages (`npm install`), all Python workspace/tooling profiles
 (`uv sync --all-groups`), and the standalone CLIs the
 lint/analyze/audit targets shell out to —
-`shellcheck`, `shfmt`, `hadolint`, `actionlint`, `semgrep`, `gitleaks`. That last
+`shellcheck`, `shfmt`, `hadolint`, `actionlint`, `semgrep`, `gitleaks`, `lychee`. That last
 part (`make tools`) works the same on Linux and macOS: `semgrep` and
 `shellcheck` come from `uv tool`, the rest are downloaded as pinned release
 binaries into `~/.local/bin` (override with `MONORI_TOOLS_BIN`). Any tool already
