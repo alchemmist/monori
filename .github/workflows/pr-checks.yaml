@@ -119,13 +119,12 @@ jobs:
 
     lint:
         name: Lint
-        needs: [fmt-check, triple-quotes, suppressions, object-annotations, docs-links]
+        needs: [fmt-check, triple-quotes, suppressions, docs-links]
         if: >-
             github.event_name == 'pull_request'
             && needs.fmt-check.result == 'success'
             && needs.triple-quotes.result == 'success'
             && needs.suppressions.result == 'success'
-            && needs.object-annotations.result == 'success'
             && needs.docs-links.result == 'success'
         runs-on: ubuntu-latest
         steps:
@@ -196,14 +195,8 @@ jobs:
 
     type:
         name: Type check
-        needs: [fmt-check, triple-quotes, suppressions, object-annotations, docs-links]
-        if: >-
-            github.event_name == 'pull_request'
-            && needs.fmt-check.result == 'success'
-            && needs.triple-quotes.result == 'success'
-            && needs.suppressions.result == 'success'
-            && needs.object-annotations.result == 'success'
-            && needs.docs-links.result == 'success'
+        needs: object-annotations
+        if: github.event_name == 'pull_request' && needs.object-annotations.result == 'success'
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@v7
@@ -219,11 +212,8 @@ jobs:
 
     analyze:
         name: Static analysis
-        needs: [lint, type]
-        if: >-
-            github.event_name == 'pull_request'
-            && needs.lint.result == 'success'
-            && needs.type.result == 'success'
+        needs: lint
+        if: github.event_name == 'pull_request' && needs.lint.result == 'success'
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@v7
@@ -609,8 +599,13 @@ jobs:
 
     object-annotations:
         name: Python object annotation gate
-        needs: workflow-graph
-        if: github.event_name == 'pull_request' && needs.workflow-graph.result == 'success'
+        needs: [fmt-check, triple-quotes, suppressions, docs-links]
+        if: >-
+            github.event_name == 'pull_request'
+            && needs.fmt-check.result == 'success'
+            && needs.triple-quotes.result == 'success'
+            && needs.suppressions.result == 'success'
+            && needs.docs-links.result == 'success'
         runs-on: ubuntu-latest
         timeout-minutes: 10
         env:
