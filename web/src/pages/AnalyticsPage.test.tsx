@@ -5,13 +5,29 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // plan-vs-fact colors and the yearly series are assertable.
 vi.mock("@mantine/charts", () => {
     const serialize = (testid: string) =>
-        function Chart({ data, series }: { data: unknown; series: unknown }) {
+        function Chart({
+            data,
+            series,
+            withLegend,
+        }: {
+            data: unknown;
+            series: Array<{ name: string; label?: string }>;
+            withLegend?: boolean;
+        }) {
             return (
                 <div
                     data-testid={testid}
                     data-series={JSON.stringify(data)}
                     data-cols={JSON.stringify(series)}
-                />
+                >
+                    {withLegend === true && (
+                        <div data-testid={`${testid}-legend`}>
+                            {series.map((item) => (
+                                <span key={item.name}>{item.label ?? item.name}</span>
+                            ))}
+                        </div>
+                    )}
+                </div>
             );
         };
     return { BarChart: serialize("bar-chart"), LineChart: serialize("line-chart") };
@@ -254,7 +270,7 @@ describe("AnalyticsPage", () => {
 
         const januaryCell = (categoryName: string) =>
             screen
-                .getByText(categoryName)
+                .getByText(categoryName, { selector: ".disc-grid__name" })
                 .closest<HTMLElement>("tr")!
                 .querySelectorAll<HTMLElement>("td")[1]!
                 .querySelector<HTMLElement>(".disc-cell")!;
@@ -727,7 +743,7 @@ describe("AnalyticsPage", () => {
     describe("budget discipline cell classes", () => {
         const cellFor = (categoryName: string, monthIndex: number) =>
             screen
-                .getByText(categoryName)
+                .getByText(categoryName, { selector: ".disc-grid__name" })
                 .closest<HTMLElement>("tr")!
                 .querySelectorAll<HTMLElement>("td")
                 [monthIndex + 1]!.querySelector<HTMLElement>(".disc-cell")!;
@@ -825,6 +841,20 @@ describe("AnalyticsPage", () => {
     });
 
     describe("mutation-hardening", () => {
+        it("renders category names instead of internal keys in the chart legend", () => {
+            render(seedKnownYear());
+
+            const card = screen
+                .getByText(/Categories through the year/)
+                .closest<HTMLElement>(".chart-card")!;
+            const legend = within(card).getByTestId("bar-chart-legend");
+
+            expect(within(legend).getByText("Groceries")).toBeInTheDocument();
+            expect(within(legend).getByText("Rent")).toBeInTheDocument();
+            expect(within(legend).queryByText("cat-2")).not.toBeInTheDocument();
+            expect(within(legend).queryByText("cat-3")).not.toBeInTheDocument();
+        });
+
         it("suffixes the group name only when two categories share a name", () => {
             // Two distinct "Fuel" categories in different groups collide on name,
             // so both series labels carry the group name; the unique "Groceries"
