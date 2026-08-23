@@ -414,7 +414,7 @@ def scan_typescript(path: str, source: str, selected_lines: set[int]) -> list[Fi
                 (
                     candidate
                     for candidate in range(index + 2, len(tokens))
-                    if tokens[candidate].value == ">"
+                    if tokens[candidate].value == ">" and tokens[candidate].line == token.line
                 ),
                 None,
             )

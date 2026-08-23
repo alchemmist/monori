@@ -1,4 +1,5 @@
 import json
+import tomllib
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -9,12 +10,21 @@ from monori.ci.quality_graph.checks.type_casts import (
     TypeCastCheck,
     repository_main,
     scan_file,
+    scan_pull_request,
     summary_body,
 )
 from monori.ci.quality_graph.models import CheckContext, Verdict
+from monori.common import JsonValue
 
 
 class TestTypeCastGate:
+    def test_scanner_is_excluded_from_expression_mutation(self) -> None:
+        configuration = tomllib.loads(Path("pyproject.toml").read_text())
+
+        assert configuration["tool"]["mutmut"]["do_not_mutate"] == [
+            "ci/quality_graph/checks/type_casts.py"
+        ]
+
     def test_check_collects_python_and_typescript_findings(self) -> None:
         result = TypeCastCheck().collect(
             CheckContext(
@@ -66,6 +76,10 @@ class TestTypeCastGate:
 
         assert scan_file("example.py", source, set(range(1, 20))) == []
 
+    def test_ignores_invalid_python_and_unsupported_files(self) -> None:
+        assert scan_file("broken.py", "value = (", {1}) == []
+        assert scan_file("example.txt", "raw as Model", {1}) == []
+
     @pytest.mark.parametrize(
         "source",
         [
@@ -110,12 +124,30 @@ class TestTypeCastGate:
 
         assert scan_file("example.tsx", source, set(range(1, 20))) == []
 
+    def test_finds_assertions_inside_tsx_expressions(self) -> None:
+        source = "const view = <Component value={raw as Model} />;\n"
+
+        findings = scan_file("example.tsx", source, {1})
+
+        assert [(finding.line, finding.cast_form) for finding in findings] == [(1, "as Model")]
+
     def test_finds_assertions_inside_template_interpolations(self) -> None:
         source = "const value = `prefix ${raw as string} suffix`;\n"
 
         findings = scan_file("example.ts", source, {1})
 
         assert [(finding.line, finding.cast_form) for finding in findings] == [(1, "as string")]
+
+    def test_template_scanner_handles_escapes_quotes_and_nested_braces(self) -> None:
+        source = (
+            "const escaped = `\\` ${raw as Model}`;\n"
+            "const quoted = `${call('}', {value: raw as Model})}`;\n"
+            "const unfinished = `${raw as Model`;\n"
+        )
+
+        findings = scan_file("example.ts", source, {1, 2, 3})
+
+        assert [finding.line for finding in findings] == [1, 2, 3]
 
     @pytest.mark.parametrize(
         "source",
@@ -128,6 +160,27 @@ class TestTypeCastGate:
     )
     def test_ignores_non_assertion_typescript_as_syntax(self, source: str) -> None:
         assert scan_file("example.ts", source, set(range(1, 20))) == []
+
+    def test_handles_nested_and_multiline_assertion_types(self) -> None:
+        source = (
+            "const nested = raw as Map<string, Array<Model>>;\n"
+            "const parenthesized = raw as (Model | Other);\n"
+            "const multiline = raw as\nModel;\n"
+        )
+
+        findings = scan_file("example.ts", source, {1, 2, 3})
+
+        assert [finding.line for finding in findings] == [1, 2, 3]
+
+    def test_ignores_angle_syntax_that_is_not_an_assertion(self) -> None:
+        source = (
+            "const generic = <Schema extends Base>(value: Schema) => value;\n"
+            "const incomplete = <Model;\n"
+            "const empty = <>value;\n"
+            "const comparison = left < Model > value;\n"
+        )
+
+        assert scan_file("example.ts", source, set(range(1, 10))) == []
 
     def test_ignores_generated_files_and_headers(self) -> None:
         source = "const value = raw as Model;\n"
@@ -176,6 +229,18 @@ class TestTypeCastGate:
         assert "/qg ignore cast-abc123" in report.summary
         assert "/qg ignore-file web/src/example.ts" in report.summary
 
+    def test_check_builds_precise_source_annotation(self) -> None:
+        finding = scan_file("example.ts", "const value = raw as Model;\n", {1})[0]
+
+        annotation = TypeCastCheck().source_annotation(finding)
+
+        assert (annotation.path, annotation.start_line, annotation.start_column) == (
+            "example.ts",
+            1,
+            19,
+        )
+        assert "cast-" in annotation.message
+
     def test_repository_mode_writes_machine_readable_findings(
         self,
         tmp_path: Path,
@@ -209,3 +274,94 @@ class TestTypeCastGate:
             "path": "example.py",
             "suggestion": "Narrow the type or validate at a boundary",
         }
+
+    def test_repository_mode_can_print_a_non_blocking_inventory(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        (tmp_path / "example.ts").write_text("const value = raw as Model;\n")
+        monkeypatch.chdir(tmp_path)
+
+        class Index:
+            def __iter__(self) -> Iterator[bytes]:
+                return iter((b"README.md", b"example.ts"))
+
+        class Repository:
+            def open_index(self) -> Index:
+                return Index()
+
+        monkeypatch.setattr(
+            "monori.ci.quality_graph.checks.type_casts.Repo.discover",
+            lambda _root: Repository(),
+        )
+
+        assert repository_main([]) == 0
+        assert json.loads(capsys.readouterr().out)[0]["cast_form"] == "as Model"
+
+    def test_pull_request_scan_uses_patches_and_merge_base_fallback(self) -> None:
+        class GitHub:
+            def paged(self, path: str) -> list[dict[str, JsonValue]]:
+                assert path == "/pulls/7/files"
+                return [
+                    {
+                        "filename": "added.ts",
+                        "status": "added",
+                        "patch": "@@ -0,0 +1 @@\n+const value = raw as Model;",
+                    },
+                    {
+                        "filename": "renamed.py",
+                        "previous_filename": "before.py",
+                        "status": "renamed",
+                    },
+                    {"filename": "removed.py", "status": "removed"},
+                    {"filename": "README.md", "status": "modified"},
+                ]
+
+            def request(self, method: str, path: str, _payload: JsonValue = None) -> JsonValue:
+                assert (method, path) == ("GET", "/compare/base...head")
+                return {"merge_base_commit": {"sha": "merge-base"}}
+
+            def file_text(self, path: str, revision: str) -> str | None:
+                files = {
+                    ("added.ts", "head"): "const value = raw as Model;\n",
+                    ("renamed.py", "head"): "from typing import cast\nvalue = cast(str, raw)\n",
+                    ("before.py", "merge-base"): "from typing import cast\n",
+                }
+                return files.get((path, revision))
+
+        pull: dict[str, JsonValue] = {
+            "number": 7,
+            "head": {"sha": "head"},
+            "base": {"sha": "base"},
+        }
+
+        findings = scan_pull_request(GitHub(), pull)
+
+        assert [(finding.path, finding.line) for finding in findings] == [
+            ("added.ts", 1),
+            ("renamed.py", 2),
+        ]
+
+    def test_pull_request_scan_rejects_an_unreadable_changed_file(self) -> None:
+        class GitHub:
+            def paged(self, _path: str) -> list[dict[str, JsonValue]]:
+                return [{"filename": "missing.py", "status": "modified"}]
+
+            def request(
+                self, _method: str, _path: str, _payload: JsonValue = None
+            ) -> JsonValue:
+                return {"merge_base_commit": {"sha": "merge-base"}}
+
+            def file_text(self, _path: str, _revision: str) -> None:
+                return None
+
+        pull: dict[str, JsonValue] = {
+            "number": 7,
+            "head": {"sha": "head"},
+            "base": {"sha": "base"},
+        }
+
+        with pytest.raises(RuntimeError, match=r"Cannot read changed source file missing\.py"):
+            scan_pull_request(GitHub(), pull)
