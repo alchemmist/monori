@@ -377,6 +377,39 @@ def test_already_logged_in_skips_login() -> None:
     assert not any(event.kind == "fill" for event in page.log)
 
 
+def test_login_waits_for_existing_auth_redirect() -> None:
+    class RedirectingPage(FakePage):
+        @override
+        def goto(self, url: str, wait_until: str | None = None) -> None:
+            self.log.append(PageEvent("goto", url, wait_until))
+            if url == TBankConnector.URL_HOME and self.stage == "start":
+                self.stage = "redirecting"
+                self.url = "https://www.tbank.ru/auth/login/?redirectTo=%2Fmybank%2F"
+                return
+            if url == TBankConnector.URL_LOGIN:
+                message = "competing login navigation"
+                raise RuntimeError(message)
+            super().goto(url, wait_until)
+
+        @override
+        def wait_for_timeout(self, ms: int) -> None:
+            super().wait_for_timeout(ms)
+            if self.stage == "redirecting" and ms == TBankConnector.STEP_PAUSE_MS:
+                self.stage = "phone"
+                self.url = "https://id.tbank.ru/auth/step?cid=test"
+
+    connector = _connector()
+    connector.to_worker.put(("sms", "9999"))
+    page = RedirectingPage()
+
+    connector.ensure_logged_in(page)
+
+    assert connector.is_logged_in(page) is True
+    assert not any(
+        event.kind == "goto" and event.argument == TBankConnector.URL_LOGIN for event in page.log
+    )
+
+
 def test_quick_login_uses_stored_code() -> None:
     c = _connector()
     page = FakePage(scenario="quick")

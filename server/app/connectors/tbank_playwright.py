@@ -686,7 +686,9 @@ class TBankPlaywrightConnector(Connector):
             return
 
         on_sso = (
-            page.query_selector(self.SEL_PHONE)
+            "/auth/" in page.url
+            or page.query_selector(self.SEL_PHONE)
+            or page.query_selector(self.SEL_PASSWORD)
             or page.query_selector(self.SEL_OTP)
             or page.query_selector(self.SEL_PIN)
         )
@@ -727,7 +729,7 @@ class TBankPlaywrightConnector(Connector):
             self._submit_otp(page, state)
         elif page.query_selector(self.SEL_PIN):
             self._submit_pin(page, state)
-        else:
+        elif "/auth/" not in page.url:
             self._return_to_home(page)
 
     def _raise_if_access_denied(self, page: _Page) -> None:
