@@ -22,7 +22,9 @@ def find_repository_root(path: Path) -> Path:
 
 REPOSITORY_ROOT = find_repository_root(Path(__file__).resolve())
 WORKFLOW = REPOSITORY_ROOT / ".github/workflows/pr-checks.yaml"
+MAIN_WORKFLOW = REPOSITORY_ROOT / ".github/workflows/main-checks.yaml"
 ROOT_PYPROJECT = REPOSITORY_ROOT / "pyproject.toml"
+TOOL_INSTALLER = REPOSITORY_ROOT / "scripts/install-tools.sh"
 FRONTEND_PERFORMANCE_SCOPE = (
     REPOSITORY_ROOT / ".github/actions/frontend-performance-scope/action.yml"
 )
@@ -296,6 +298,22 @@ class TestPullRequestWorkflowGraph:
             )
             assert block is not None, job
             assert f"python-profile: {profile}" in block.group("body"), job
+
+    def test_lychee_downloads_are_bounded(self) -> None:
+        required = (
+            "--connect-timeout 10",
+            "--max-time 120",
+            "--retry 3",
+            "--retry-max-time 120",
+        )
+        for path in (TOOL_INSTALLER, MAIN_WORKFLOW, WORKFLOW):
+            downloads = [
+                line
+                for line in path.read_text().splitlines()
+                if "lycheeverse/lychee/releases/download" in line
+            ]
+            assert len(downloads) == 1, path
+            assert all(option in downloads[0] for option in required), path
 
     def test_analysis_profile_can_publish_quality_results(self) -> None:
         """Install the shared CI package used after the analysis command finishes."""

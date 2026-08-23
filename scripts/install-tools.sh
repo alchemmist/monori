@@ -106,7 +106,7 @@ if ! have lychee; then
     ;;
   esac
   archive="lychee-${lychee_target}.tar.gz"
-  curl -sSfL "https://github.com/lycheeverse/lychee/releases/download/lychee-v${LYCHEE_VERSION}/${archive}" -o "$tmp/lychee.tgz"
+  curl --connect-timeout 10 --max-time 120 --retry 3 --retry-max-time 120 -sSfL "https://github.com/lycheeverse/lychee/releases/download/lychee-v${LYCHEE_VERSION}/${archive}" -o "$tmp/lychee.tgz"
   actual_sha256=$(python3 -c 'import hashlib, pathlib, sys; print(hashlib.file_digest(pathlib.Path(sys.argv[1]).open("rb"), "sha256").hexdigest())' "$tmp/lychee.tgz")
   if [ "$actual_sha256" != "$lychee_sha256" ]; then
     echo "lychee archive checksum mismatch" >&2
