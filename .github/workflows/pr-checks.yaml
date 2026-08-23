@@ -584,8 +584,8 @@ jobs:
 
     object-annotations:
         name: Python object annotation gate
-        needs: fmt-check
-        if: github.event_name == 'pull_request' && needs.fmt-check.result == 'success'
+        needs: triple-quotes
+        if: github.event_name == 'pull_request' && needs.triple-quotes.result == 'success'
         runs-on: ubuntu-latest
         timeout-minutes: 10
         env:

@@ -162,7 +162,7 @@ class TestPullRequestWorkflowGraph:
             "triple-quotes": "workflow-graph",
             "lint": {"suppressions", "triple-quotes"},
             "docs": {"suppressions", "triple-quotes"},
-            "object-annotations": "fmt-check",
+            "object-annotations": "triple-quotes",
             "type": "object-annotations",
             "analyze": {"docs", "lint", "type"},
             "time-bombs": {"lint", "type"},
