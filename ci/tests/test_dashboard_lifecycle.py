@@ -36,6 +36,11 @@ if TYPE_CHECKING:
     from monori.common import JsonValue
 
 
+def test_live_dashboard_status_delay_is_bounded() -> None:
+    """Keep short jobs observable without introducing per-job dashboard writers."""
+    assert 0 < DEFAULT_WATCH_INTERVAL <= 15
+
+
 @pytest.mark.parametrize(
     ("job", "expected"),
     [

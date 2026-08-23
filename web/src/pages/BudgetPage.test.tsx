@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import {
     fireEvent,
     renderUI,
@@ -15,6 +15,14 @@ import type { UserEvent } from "@testing-library/user-event";
 import type { BudgetMonth, BudgetYearResult } from "../engine/budget.js";
 
 const YEAR = 2026;
+
+const pinSystemDate = (year = YEAR) => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    onTestFinished(() => {
+        vi.useRealTimers();
+    });
+    vi.setSystemTime(new Date(`${year}-07-01T12:00:00`));
+};
 
 /** A month of one category: what the engine would hand the page. */
 const month = (budgeted: number, outflows: number): BudgetMonth => ({
@@ -113,12 +121,32 @@ describe("BudgetPage", () => {
 
         it("falls back to zeroes for a category the year result does not cover", async () => {
             const { user } = render();
-            await user.click(screen.getByRole("button", { name: "Show 1 unused" }));
+            const unused = screen.getByRole("button", { name: "Show 1 unused" });
+            expect(unused).toBeEnabled();
+            expect(unused).toHaveAttribute("aria-hidden", "false");
+            expect(unused).toHaveAttribute("tabindex", "0");
+            expect(unused).not.toHaveClass("budget-toolbar__action_hidden");
+            await user.click(unused);
 
             const row = screen.getByText("Rent").closest<HTMLElement>("tr")!;
             expect(
                 [...row.querySelectorAll<HTMLElement>(".yg-total")].map((td) => td.textContent),
             ).toEqual(["0", "0"]);
+        });
+
+        it("keeps the reserved unused slot inaccessible when every category is used", () => {
+            const complete = result();
+            complete.byCategory.set(
+                3,
+                Array.from({ length: 12 }, () => month(100, 0)),
+            );
+            render(complete);
+
+            const unused = screen.getByText("Show 0 unused").closest("button")!;
+            expect(unused).toBeDisabled();
+            expect(unused).toHaveAttribute("aria-hidden", "true");
+            expect(unused).toHaveAttribute("tabindex", "-1");
+            expect(unused).toHaveClass("budget-toolbar__action_hidden");
         });
 
         it("heads each month with its available-to-budget breakdown", () => {
@@ -246,6 +274,152 @@ describe("BudgetPage", () => {
                 ...document.querySelectorAll<HTMLElement>(".gsel__drop [role='option']"),
             ].map((o) => o.textContent);
             expect(options).toEqual([String(YEAR - 2), String(YEAR - 1), String(YEAR)]);
+        });
+
+        it("creates the selected preview year from the latest planning year", async () => {
+            pinSystemDate();
+            const copyBudgetYear = vi
+                .spyOn(useStore.getState(), "copyBudgetYear")
+                .mockResolvedValue(24);
+            const notify = vi.spyOn(useStore.getState(), "notify");
+            const { user } = renderUI(
+                <BudgetPage
+                    results={
+                        new Map([
+                            [YEAR, result()],
+                            [YEAR + 1, result()],
+                        ])
+                    }
+                    firstYear={YEAR}
+                    lastYear={YEAR + 1}
+                />,
+            );
+
+            await user.click(screen.getByRole("button", { name: String(YEAR) }));
+            await user.click(screen.getByRole("option", { name: String(YEAR + 1) }));
+            await user.click(screen.getByRole("button", { name: `Create ${YEAR + 1}` }));
+
+            await waitFor(() => expect(copyBudgetYear).toHaveBeenCalledWith(YEAR, YEAR + 1));
+            expect(notify).toHaveBeenCalledWith({
+                title: `${YEAR + 1} budget created`,
+                content: `24 budget cells copied from ${YEAR}`,
+                theme: "success",
+            });
+        });
+
+        it("reports a failed year copy and re-enables the action", async () => {
+            pinSystemDate();
+            const copyBudgetYear = vi
+                .spyOn(useStore.getState(), "copyBudgetYear")
+                .mockRejectedValue(new Error("offline"));
+            const notify = vi.spyOn(useStore.getState(), "notify");
+            const { user } = render();
+
+            await user.click(screen.getByRole("button", { name: `Create ${YEAR}` }));
+
+            await waitFor(() => expect(copyBudgetYear).toHaveBeenCalledWith(YEAR - 1, YEAR));
+            expect(notify).toHaveBeenCalledWith({
+                title: "Failed to create budget year",
+                content: "Error: offline",
+                theme: "danger",
+            });
+            await waitFor(() =>
+                expect(screen.getByRole("button", { name: `Create ${YEAR}` })).toBeEnabled(),
+            );
+        });
+
+        it("uses a singular success message for one copied budget cell", async () => {
+            pinSystemDate();
+            vi.spyOn(useStore.getState(), "copyBudgetYear").mockResolvedValue(1);
+            const notify = vi.spyOn(useStore.getState(), "notify");
+            const { user } = render();
+
+            await user.click(screen.getByRole("button", { name: `Create ${YEAR}` }));
+
+            await waitFor(() =>
+                expect(notify).toHaveBeenCalledWith({
+                    title: `${YEAR} budget created`,
+                    content: `1 budget cell copied from ${YEAR - 1}`,
+                    theme: "success",
+                }),
+            );
+        });
+
+        it("disables the create action while the year copy is pending", async () => {
+            pinSystemDate();
+            let finish: ((count: number) => void) | undefined;
+            vi.spyOn(useStore.getState(), "copyBudgetYear").mockReturnValue(
+                new Promise((resolve) => {
+                    finish = resolve;
+                }),
+            );
+            const { user } = render();
+            const create = screen.getByRole("button", { name: `Create ${YEAR}` });
+
+            await user.click(create);
+
+            expect(create).toBeDisabled();
+            finish?.(2);
+            await waitFor(() => expect(create).toBeEnabled());
+        });
+
+        it.each([
+            [2000, false],
+            [2001, true],
+            [2100, true],
+            [2101, false],
+        ])("marks preview year %s create availability as %s", (previewYear, available) => {
+            pinSystemDate(previewYear);
+            const preview = { ...result(), year: previewYear };
+            renderUI(
+                <BudgetPage
+                    results={new Map([[previewYear, preview]])}
+                    firstYear={previewYear}
+                    lastYear={previewYear}
+                />,
+            );
+
+            const create = screen.getByText(`Create ${previewYear}`).closest("button")!;
+            expect(create).toHaveAttribute("aria-hidden", String(!available));
+            expect(create).toHaveAttribute("tabindex", available ? "0" : "-1");
+            expect(create).toHaveClass(
+                available ? "budget-toolbar__create" : "budget-toolbar__action_hidden",
+            );
+            expect(create).toHaveProperty("disabled", !available);
+        });
+
+        it("offers the action only on the final preview year", async () => {
+            pinSystemDate();
+            const { user } = renderUI(
+                <BudgetPage
+                    results={
+                        new Map([
+                            [YEAR, result()],
+                            [YEAR + 1, result()],
+                            [YEAR + 2, result()],
+                        ])
+                    }
+                    firstYear={YEAR}
+                    lastYear={YEAR + 2}
+                />,
+            );
+
+            const hiddenCreate = screen.getByText(`Create ${YEAR}`).closest("button")!;
+            expect(hiddenCreate).toBeDisabled();
+            expect(hiddenCreate).toHaveAttribute("aria-hidden", "true");
+            expect(hiddenCreate).toHaveAttribute("tabindex", "-1");
+
+            await user.click(screen.getByRole("button", { name: String(YEAR) }));
+            await user.click(screen.getByRole("option", { name: String(YEAR + 2) }));
+
+            expect(screen.getByRole("button", { name: `Create ${YEAR + 2}` })).toBeInTheDocument();
+        });
+
+        it("offers to create the selected preview year", () => {
+            pinSystemDate();
+            render();
+
+            expect(screen.getByRole("button", { name: `Create ${YEAR}` })).toBeInTheDocument();
         });
 
         it("hides the month picker and month-only hero cards in year mode", () => {

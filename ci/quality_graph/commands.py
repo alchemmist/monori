@@ -105,6 +105,14 @@ def is_gate_name(value: str) -> bool:
     return GATE_NAME_RE.fullmatch(value) is not None
 
 
+def command_target_gate(value: str) -> str | None:
+    """Resolve a canonical check ID or legacy alias to its internal gate."""
+    for gate, check in registered_checks().items():
+        if value in {check.job_id, gate}:
+            return gate
+    return None
+
+
 def command_targets_prefix(command: QualityGraphCommand, prefix: str) -> bool:
     """Check whether command arguments include an entry with given prefix."""
     return any(argument.startswith(prefix) for argument in command.arguments)
@@ -117,7 +125,7 @@ def command_targets_gate(command: QualityGraphCommand, gate: str) -> bool:
         return False
     if command.name == "ignore-file":
         return check.supports_ignore_file
-    return gate in command.arguments or any(
+    return any(command_target_gate(argument) == gate for argument in command.arguments) or any(
         argument.startswith(f"{gate}-") for argument in command.arguments
     )
 
@@ -134,7 +142,7 @@ def validate_command(command: QualityGraphCommand) -> str | None:
             else "At least one file path is required"
         )
     for argument in command.arguments:
-        if argument in checks or finding_gate(argument) in checks:
+        if command_target_gate(argument) in checks or finding_gate(argument) in checks:
             continue
         return f"Unknown Quality Graph target: `{argument}`"
     return None if command.arguments else "At least one target is required"
@@ -182,9 +190,9 @@ def pull_request_number(event: dict[str, JsonValue]) -> int | None:
 def help_body() -> str:
     """Render concise command help for the dashboard notice."""
     checks = registered_checks()
-    gates = ",".join(checks)
+    gates = ",".join(check.job_id for check in checks.values())
     finding_ids = ",".join(f"{gate}-<id>" for gate in checks)
-    file_gates = ", ".join(gate for gate, check in checks.items() if check.supports_ignore_file)
+    file_gates = ", ".join(check.job_id for check in checks.values() if check.supports_ignore_file)
     file_help = (
         f"- `/qg ignore-file path/to/file` — ignore findings in selected files ({file_gates})\n"
         if file_gates

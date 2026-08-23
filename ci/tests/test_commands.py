@@ -1,5 +1,7 @@
 from typing import TYPE_CHECKING, cast
 
+import pytest
+
 from monori.ci.quality_graph.commands import (
     QualityGraphCommand,
     command_request,
@@ -13,6 +15,7 @@ from monori.ci.quality_graph.commands import (
     pull_request_number,
     validate_command,
 )
+from monori.ci.quality_graph.registry import workflow_job_for_gate
 from monori.ci.quality_graph.reporting import (
     ReportModel,
     ReportStatus,
@@ -32,12 +35,18 @@ class TestQualityGraphCommand:
         assert parse_command("/qg ignore object-abc123,suppression-def456") == expected
 
     def test_gate_name_targets_all_findings_of_that_type(self) -> None:
-        command = parse_command("/qg ignore object,suppression")
+        command = parse_command("/qg ignore object-annotations,suppressions")
 
         assert command is not None
         assert command_targets_gate(command, "object")
         assert command_targets_gate(command, "suppression")
         assert not command_targets_gate(command, "bundle")
+
+        legacy = parse_command("/qg ignore object,suppression")
+        assert legacy is not None
+        assert validate_command(legacy) is None
+        assert command_targets_gate(legacy, "object")
+        assert command_targets_gate(legacy, "suppression")
 
     def test_ignore_file_targets_only_checks_with_file_approvals(self) -> None:
         command = parse_command("/qg ignore-file server/app.py")
@@ -59,6 +68,21 @@ class TestQualityGraphCommand:
         assert command is not None
         assert validate_command(command) == "Unknown Quality Graph target: `unknown-target`"
 
+    def test_validation_covers_status_help_files_and_every_target(self) -> None:
+        assert validate_command(QualityGraphCommand("help")) is None
+        assert validate_command(QualityGraphCommand("status")) is None
+        assert (
+            validate_command(QualityGraphCommand("ignore-file"))
+            == "At least one file path is required"
+        )
+        assert validate_command(QualityGraphCommand("ignore-file", ("server/app.py",))) is None
+        assert (
+            validate_command(
+                QualityGraphCommand("ignore", ("object-annotations", "unknown-target"))
+            )
+            == "Unknown Quality Graph target: `unknown-target`"
+        )
+
     def test_finding_ids_require_a_registered_gate_prefix(self) -> None:
         assert is_finding_id("object-abc123")
         assert not is_finding_id("unknown-abc123")
@@ -68,7 +92,25 @@ class TestQualityGraphCommand:
 
         for gate in ("object", "suppression", "bundle", "frontend"):
             assert f"{gate}-<id>" in body
-        assert "selected files (object, suppression)" in body
+        assert "selected files (object-annotations, suppressions)" in body
+        assert "/qg ignore object-annotations,suppressions,bundle-size,frontend-performance" in body
+        assert (
+            body == "Only repository administrators may execute state-changing commands.\n\n"
+            "- `/qg ignore object-<id>,suppression-<id>,bundle-<id>,frontend-<id>` — "
+            "ignore selected findings\n"
+            "- `/qg ignore object-annotations,suppressions,bundle-size,frontend-performance` — "
+            "ignore all current findings of selected types\n"
+            "- `/qg ignore-file path/to/file` — ignore findings in selected files "
+            "(object-annotations, suppressions)\n"
+            "- `/qg remove-ignore object-<id>,suppression-<id>,bundle-<id>,frontend-<id>` — "
+            "remove selected ignores\n"
+            "- `/qg status` — show the current command status\n"
+            "- `/qg help` — show this help"
+        )
+
+    def test_unknown_internal_gate_has_an_actionable_error(self) -> None:
+        with pytest.raises(ValueError, match="Unknown Quality Graph gate: missing"):
+            workflow_job_for_gate("missing")
 
     def test_command_text_is_canonical(self) -> None:
         command = QualityGraphCommand("remove-ignore", ("object-abc123", "suppression-def456"))

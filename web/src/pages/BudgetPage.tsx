@@ -47,6 +47,7 @@ export default function BudgetPage({
         snapshot,
         setBudget,
         setBudgets,
+        copyBudgetYear,
         fillBudgetForward,
         archiveGoal,
         patchCategory,
@@ -69,6 +70,7 @@ export default function BudgetPage({
     // celebration is transient: it plays and then clears itself after the sweep.
     const [completeMonth, setCompleteMonth] = useState(-1);
     const celebrateTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const [creatingYear, setCreatingYear] = useState(false);
 
     const res = results.get(year);
     if (!res) throw new Error(`budget result for ${year} is missing`);
@@ -118,6 +120,8 @@ export default function BudgetPage({
         }
         return { catsByGroup: filtered, unusedCount: unused };
     }, [allCatsByGroup, groups, res, showUnused, snapshot.budgets, todayMonth, todayYear]);
+    const canCreateYear = year === lastYear && year > 2000 && year <= 2100;
+    const hasUnused = unusedCount > 0;
 
     const txCountByCat = useMemo(() => {
         const m = new Map<Id, number>();
@@ -164,7 +168,7 @@ export default function BudgetPage({
         const before = normalizeKop(target?.available[targetMonth - 1] ?? 0);
         const after = normalizeKop(before - delta);
         const hitsZero = before !== 0 && after === 0;
-        setBudget(categoryId, targetYear, targetMonth, amount);
+        void setBudget(categoryId, targetYear, targetMonth, amount);
         if (targetYear === year && hitsZero) {
             setCompleteMonth(targetMonth - 1);
             if (celebrateTimer.current) clearTimeout(celebrateTimer.current);
@@ -242,6 +246,23 @@ export default function BudgetPage({
         }
     };
 
+    const createNextYear = async () => {
+        const sourceYear = year - 1;
+        setCreatingYear(true);
+        try {
+            const count = await copyBudgetYear(sourceYear, year);
+            notify({
+                title: `${year} budget created`,
+                content: `${count} budget cell${count === 1 ? "" : "s"} copied from ${sourceYear}`,
+                theme: "success",
+            });
+        } catch (e) {
+            notify({ title: "Failed to create budget year", content: String(e), theme: "danger" });
+        } finally {
+            setCreatingYear(false);
+        }
+    };
+
     return (
         <div className="fade-in">
             <div className="budget-toolbar">
@@ -253,6 +274,18 @@ export default function BudgetPage({
                     onChange={(v) => setYear(+v)}
                     data={years.map((y) => String(y))}
                 />
+                <Button
+                    className={`budget-toolbar__create ${canCreateYear ? "" : "budget-toolbar__action_hidden"}`}
+                    size="xs"
+                    variant="light"
+                    loading={creatingYear}
+                    onClick={() => void createNextYear()}
+                    disabled={!canCreateYear}
+                    aria-hidden={!canCreateYear}
+                    tabIndex={canCreateYear ? 0 : -1}
+                >
+                    Create {year}
+                </Button>
                 {mode === "month" && (
                     <div className="toolbar-scroll">
                         <SegmentedControl
@@ -274,16 +307,18 @@ export default function BudgetPage({
                         Fill {selectedCategory.name} to Dec
                     </Button>
                 )}
-                {unusedCount > 0 && (
-                    <Button
-                        size="xs"
-                        variant="subtle"
-                        onClick={() => setShowUnused((v) => !v)}
-                        title="Categories with nothing budgeted, spent or held this year"
-                    >
-                        {showUnused ? "Hide unused" : `Show ${unusedCount} unused`}
-                    </Button>
-                )}
+                <Button
+                    className={`budget-toolbar__unused ${hasUnused ? "" : "budget-toolbar__action_hidden"}`}
+                    size="xs"
+                    variant="subtle"
+                    onClick={() => setShowUnused((v) => !v)}
+                    title="Categories with nothing budgeted, spent or held this year"
+                    disabled={!hasUnused}
+                    aria-hidden={!hasUnused}
+                    tabIndex={hasUnused ? 0 : -1}
+                >
+                    {showUnused ? "Hide unused" : `Show ${unusedCount} unused`}
+                </Button>
                 {mode === "year" && (
                     <SegmentedControl
                         value={density}

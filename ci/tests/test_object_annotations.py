@@ -129,7 +129,7 @@ other: "list[object]"
                 "/qg remove-ignore object-finding-1",
             ),
             JobControl(
-                "/qg ignore object",
+                "/qg ignore object-annotations",
                 "/qg remove-ignore object-finding-1",
             ),
             JobControl(

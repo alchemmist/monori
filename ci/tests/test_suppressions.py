@@ -213,7 +213,7 @@ value = 2
                 "/qg remove-ignore suppression-600043a9733a",
             ),
             JobControl(
-                "/qg ignore suppression",
+                "/qg ignore suppressions",
                 "/qg remove-ignore suppression-600043a9733a",
             ),
             JobControl(

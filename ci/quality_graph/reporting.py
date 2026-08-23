@@ -12,7 +12,7 @@ from jinja2 import Environment, FileSystemLoader, StrictUndefined, select_autoes
 
 from monori.ci.lib.status import QualityStatus
 from monori.ci.quality_graph.job_results import JobControl
-from monori.ci.quality_graph.registry import workflow_job_for_report
+from monori.ci.quality_graph.registry import workflow_job_for_gate, workflow_job_for_report
 
 if TYPE_CHECKING:
     from collections.abc import Collection, Mapping
@@ -110,13 +110,14 @@ def admin_commands(
     """Build canonical administrator commands from one gate's current data."""
     active = sorted(set(active_ids))
     approved = sorted(set(approved_ids))
+    command_target = workflow_job_for_gate(gate).job_id
     controls: list[JobControl] = []
     if active:
         remove_active = f"/qg remove-ignore {','.join(active)}"
         controls.extend(
             (
                 JobControl(f"/qg ignore {','.join(active)}", remove_active),
-                JobControl(f"/qg ignore {gate}", remove_active),
+                JobControl(f"/qg ignore {command_target}", remove_active),
             )
         )
         for path, finding_ids in sorted((file_findings or {}).items()):

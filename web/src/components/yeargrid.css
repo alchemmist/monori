@@ -11,7 +11,7 @@
     --yg-bottom-inset: 0px;
 
     overflow: auto;
-    max-height: calc(100dvh - var(--yg-top, 200px) - var(--yg-bottom-inset));
+    height: calc(100dvh - var(--yg-top, 200px) - var(--yg-bottom-inset));
     border-top: 1px solid var(--m-border);
     border-radius: 12px 12px 0 0;
     margin: 0 calc(-1 * var(--pad-x, 28px)) calc(-1 * var(--pad-b, 48px));

@@ -55,7 +55,7 @@ NOTICE_RE = re.compile(
     r"<!-- monori-qg-notice:start -->.*?<!-- monori-qg-notice:end -->",
     re.DOTALL,
 )
-DEFAULT_WATCH_INTERVAL = 60.0
+DEFAULT_WATCH_INTERVAL = 15.0
 SUPPORTED_WORKFLOW_DURATION_SECONDS = 3 * 60 * 60
 DEFAULT_WATCH_TIMEOUT = float(SUPPORTED_WORKFLOW_DURATION_SECONDS)
 ARTIFACT_ATTEMPT_RE = re.compile(r"-(?P<attempt>\d+)$")

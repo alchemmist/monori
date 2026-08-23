@@ -58,7 +58,7 @@ afterEach(() => {
 
 describe("setBudget", () => {
     it("replaces only the cell for that exact category, year and month", () => {
-        useStore.getState().setBudget(4, 2026, 1, 99);
+        void useStore.getState().setBudget(4, 2026, 1, 99);
         expect(snap().budgets).toEqual([
             { categoryId: 4, year: 2026, month: 2, amount: 30 },
             { categoryId: 4, year: 2025, month: 1, amount: 40 },
@@ -68,7 +68,7 @@ describe("setBudget", () => {
     });
 
     it("drops the cell instead of storing a zero", () => {
-        useStore.getState().setBudget(4, 2026, 1, 0);
+        void useStore.getState().setBudget(4, 2026, 1, 0);
         expect(snap().budgets).toEqual([
             { categoryId: 4, year: 2026, month: 2, amount: 30 },
             { categoryId: 4, year: 2025, month: 1, amount: 40 },
@@ -77,16 +77,16 @@ describe("setBudget", () => {
     });
 
     it("appends a cell that did not exist yet and leaves the rest untouched", () => {
-        useStore.getState().setBudget(1, 2026, 3, 7);
+        void useStore.getState().setBudget(1, 2026, 3, 7);
         expect(snap().budgets).toEqual([
             ...base().budgets,
             { categoryId: 1, year: 2026, month: 3, amount: 7 },
         ]);
     });
 
-    it("never calls the API in the demo", () => {
+    it("never calls the API in the demo", async () => {
         const put = vi.spyOn(api, "putBudget");
-        useStore.getState().setBudget(4, 2026, 1, 99);
+        await useStore.getState().setBudget(4, 2026, 1, 99);
         expect(put).not.toHaveBeenCalled();
     });
 });

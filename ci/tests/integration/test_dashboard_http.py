@@ -294,7 +294,7 @@ def test_dashboard_watcher_stays_within_request_budget_without_noop_patches() ->
         and request.get("path") == f"/repos/{REPOSITORY}/issues/comments/{comment_id}"
         for request in requests
     )
-    assert projected_requests_per_hour <= 500
+    assert projected_requests_per_hour <= 2000
     assert comment_patch_count == 0
 
 

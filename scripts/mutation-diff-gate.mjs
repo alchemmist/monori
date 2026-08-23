@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import process from "node:process";
+import { groupBy, mutationDiagnostics } from "./mutation-diff-report.mjs";
 
 const [base, reportPath, thresholdText] = process.argv.slice(2);
 const threshold = Number(thresholdText);
@@ -74,13 +75,15 @@ const report = JSON.parse(fs.readFileSync(reportPath, "utf8"));
 const mutants = Object.entries(report.files ?? {})
     .filter(([path]) => changedFiles.has(normalizePath(path)))
     .flatMap(([path, file]) =>
-        (file.mutants ?? []).filter((mutant) => {
-            const lines = changedLines.get(normalizePath(path));
-            const line = mutant.location?.start?.line;
-            return line === undefined || lines.has(line);
-        }),
+        (file.mutants ?? [])
+            .filter((mutant) => {
+                const lines = changedLines.get(normalizePath(path));
+                const line = mutant.location?.start?.line;
+                return line === undefined || lines.has(line);
+            })
+            .map((mutant) => ({ ...mutant, sourcePath: `web/${normalizePath(path)}` })),
     );
-const counts = Object.groupBy(mutants, (mutant) => mutant.status);
+const counts = groupBy(mutants, (mutant) => mutant.status);
 const killed = counts.Killed?.length ?? 0;
 const timedOut = counts.Timeout?.length ?? 0;
 const survived = counts.Survived?.length ?? 0;
@@ -99,6 +102,8 @@ if (considered === 0) {
 const score = (detected * 100) / considered;
 const passed = score >= threshold && survived === 0;
 const status = passed ? "✅ PASS" : "❌ FAIL";
+const findings = mutants.filter((mutant) => ["Survived", "NoCoverage"].includes(mutant.status));
+const diagnostics = mutationDiagnostics(findings);
 console.log("── changed frontend mutation summary ────────────────");
 console.log(`killed             ${killed}`);
 console.log(`survived           ${survived}`);
@@ -120,6 +125,7 @@ appendStepSummary(
         `| Considered | ${considered} |`,
         `| Score | ${score.toFixed(2)}% |`,
         `| Threshold | ${threshold}% |`,
+        ...diagnostics,
     ].join("\n"),
 );
 process.exit(passed ? 0 : 1);

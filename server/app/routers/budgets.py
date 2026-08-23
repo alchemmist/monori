@@ -1,7 +1,7 @@
 """Provide backend functionality."""
 
 import sqlite3
-from typing import Annotated
+from typing import Annotated, cast
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import ConfigDict, Field
@@ -63,6 +63,7 @@ class CopyResponse:
     """Represent CopyResponse."""
 
     copied: int
+    budgets: list[BudgetCell]
 
 
 def _set_cell(c: sqlite3.Connection, cell: BudgetCell, uid: int) -> None:
@@ -140,11 +141,15 @@ def copy_budgets(
         raise HTTPException(400, "give both fromMonth and toMonth, or neither")
     c = conn()
     try:
+        copied: list[BudgetCell] = []
         if month_mode:
+            from_month = cast("int", from_month)
+            to_month = cast("int", to_month)
             src = c.execute(
                 "SELECT category_id, amount FROM budgets WHERE year=? AND month=?"
                 " AND category_id IN (SELECT c.id FROM categories c"
-                " JOIN category_groups g ON g.id = c.group_id WHERE g.user_id=?)",
+                " JOIN category_groups g ON g.id = c.group_id WHERE g.user_id=?)"
+                " ORDER BY category_id",
                 (body.from_year, from_month, uid),
             ).fetchall()
             c.execute(
@@ -158,11 +163,20 @@ def copy_budgets(
                     "INSERT INTO budgets (category_id, year, month, amount) VALUES (?, ?, ?, ?)",
                     (r["category_id"], body.to_year, to_month, r["amount"]),
                 )
+                copied.append(
+                    BudgetCell(
+                        categoryId=r["category_id"],
+                        year=body.to_year,
+                        month=to_month,
+                        amount=r["amount"],
+                    )
+                )
         else:
             src = c.execute(
                 "SELECT category_id, month, amount FROM budgets WHERE year=?"
                 " AND category_id IN (SELECT c.id FROM categories c"
-                " JOIN category_groups g ON g.id = c.group_id WHERE g.user_id=?)",
+                " JOIN category_groups g ON g.id = c.group_id WHERE g.user_id=?)"
+                " ORDER BY month, category_id",
                 (body.from_year, uid),
             ).fetchall()
             c.execute(
@@ -175,7 +189,15 @@ def copy_budgets(
                     "INSERT INTO budgets (category_id, year, month, amount) VALUES (?, ?, ?, ?)",
                     (r["category_id"], body.to_year, r["month"], r["amount"]),
                 )
+                copied.append(
+                    BudgetCell(
+                        categoryId=r["category_id"],
+                        year=body.to_year,
+                        month=r["month"],
+                        amount=r["amount"],
+                    )
+                )
         c.commit()
-        return CopyResponse(copied=len(src))
+        return CopyResponse(copied=len(copied), budgets=copied)
     finally:
         c.close()
