@@ -11,6 +11,7 @@ import io
 import pathlib
 import sys
 import tarfile
+import threading
 import types
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -707,6 +708,46 @@ def test_run_missing_playwright_reports_error(monkeypatch: pytest.MonkeyPatch) -
     with pytest.raises(ConnectorError) as e:
         c.sync()
     assert "playwright" in str(e.value).lower()
+
+
+def test_run_playwright_error_reports_connector_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    class FakePlaywrightError(Exception):
+        pass
+
+    class AbortedPage(FakePage):
+        @override
+        def goto(self, url: str, wait_until: str | None = None) -> None:
+            message = "Page.goto: net::ERR_ABORTED"
+            raise FakePlaywrightError(message)
+
+    monkeypatch.setattr(tbank_mod, "PlaywrightError", FakePlaywrightError, raising=False)
+    _install_fake_playwright(monkeypatch, AbortedPage())
+    connector = _connector()
+    errors: list[ConnectorError] = []
+    finished = threading.Event()
+
+    def run() -> None:
+        try:
+            connector.sync()
+        except ConnectorError as error:
+            errors.append(error)
+        finally:
+            finished.set()
+
+    threading.Thread(target=run, daemon=True).start()
+
+    assert finished.wait(1), "connector remained blocked after its worker failed"
+    assert len(errors) == 1
+    assert "net::ERR_ABORTED" in str(errors[0])
+
+
+def test_run_worker_without_message_reports_connector_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(TBankConnector, "_run", lambda _self, _since: None)
+
+    with pytest.raises(ConnectorError, match="worker stopped without a result"):
+        _connector().sync()
 
 
 def test_shot_writes_when_debug_on(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

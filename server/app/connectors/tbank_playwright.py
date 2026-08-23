@@ -58,7 +58,10 @@ from monori.server.app.connectors.base import (
 from monori.server.app.importer import parse_statement
 
 
-class _MissingPlaywrightTimeoutError(Exception): ...
+class _MissingPlaywrightError(Exception): ...
+
+
+class _MissingPlaywrightTimeoutError(_MissingPlaywrightError): ...
 
 
 class _BrowserContext(Protocol):
@@ -110,11 +113,14 @@ class _SyncPlaywright(Protocol):
     def __call__(self) -> _PlaywrightContextManager: ...
 
 
+PlaywrightError: type[Exception]
 PlaywrightTimeoutError: type[Exception]
 
 try:
+    from playwright.sync_api import Error as PlaywrightError
     from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 except ImportError:
+    PlaywrightError = _MissingPlaywrightError
     PlaywrightTimeoutError = _MissingPlaywrightTimeoutError
 
 
@@ -445,7 +451,15 @@ class TBankPlaywrightConnector(Connector):
 
     def await_worker(self) -> SyncResult:
         """Wait for the next worker event and return or raise its result."""
-        kind, payload = self.from_worker.get()
+        while True:
+            try:
+                kind, payload = self.from_worker.get(timeout=0.1)
+                break
+            except queue.Empty:
+                if self._worker is not None and self._worker.is_alive():
+                    continue
+                msg = "connector worker stopped without a result"
+                raise ConnectorError(msg) from None
         if kind == "sms_required":
             raise SmsRequiredError(payload)
         if kind == "error":
@@ -516,7 +530,7 @@ class TBankPlaywrightConnector(Connector):
                 self.from_worker.put(("result", SyncResult(rows, session=session)))
         except (
             ConnectorError,
-            PlaywrightTimeoutError,
+            PlaywrightError,
             OSError,
             RuntimeError,
             ValueError,
