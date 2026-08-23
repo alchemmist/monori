@@ -349,9 +349,7 @@ class TestTypeCastGate:
             def paged(self, _path: str) -> list[dict[str, JsonValue]]:
                 return [{"filename": "missing.py", "status": "modified"}]
 
-            def request(
-                self, _method: str, _path: str, _payload: JsonValue = None
-            ) -> JsonValue:
+            def request(self, _method: str, _path: str, _payload: JsonValue = None) -> JsonValue:
                 return {"merge_base_commit": {"sha": "merge-base"}}
 
             def file_text(self, _path: str, _revision: str) -> None:
