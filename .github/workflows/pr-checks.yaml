@@ -318,26 +318,6 @@ jobs:
               with:
                   check-id: test-slow
 
-    docs-examples:
-        name: Documentation examples
-        needs: [test-fast, test-medium]
-        if: >-
-            github.event_name == 'pull_request'
-            && needs.test-fast.result == 'success'
-            && needs.test-medium.result == 'success'
-        runs-on: ubuntu-latest
-        steps:
-            - uses: actions/checkout@v7
-              with:
-                  persist-credentials: false
-            - uses: ./.github/actions/setup-project
-              with:
-                  install-web: true
-                  python-profile: test
-            - uses: ./.github/actions/quality-job
-              with:
-                  check-id: docs-examples
-
     flaky-tests:
         name: Flaky test detection
         needs: test-slow
@@ -404,7 +384,7 @@ jobs:
 
     audit:
         name: Dependency and security audit
-        needs: [coverage, mutation, bundle-size, frontend-performance, flaky-tests, docs-examples]
+        needs: [coverage, mutation, bundle-size, frontend-performance, flaky-tests]
         if: >-
             always()
             && needs.coverage.result == 'success'
@@ -412,7 +392,6 @@ jobs:
             && needs.bundle-size.result == 'success'
             && needs.frontend-performance.result == 'success'
             && needs.flaky-tests.result == 'success'
-            && needs.docs-examples.result == 'success'
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@v7

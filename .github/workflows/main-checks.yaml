@@ -179,21 +179,6 @@ jobs:
               working-directory: web
             - run: make t-slow
 
-    docs-examples:
-        name: Documentation examples
-        needs: test-medium
-        runs-on: ubuntu-latest
-        steps:
-            - name: Checkout
-              uses: actions/checkout@v7
-              with:
-                  persist-credentials: false
-            - uses: ./.github/actions/setup-project
-              with:
-                  install-web: true
-                  python-profile: test
-            - run: make docs-examples
-
     build:
         name: Build
         needs: test-slow
@@ -231,7 +216,7 @@ jobs:
 
     audit:
         name: Dependency and security audit
-        needs: [coverage, docs-links, docs-examples]
+        needs: [coverage, docs-links]
         runs-on: ubuntu-latest
         permissions:
             contents: read

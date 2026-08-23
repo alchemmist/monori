@@ -82,7 +82,6 @@ class TestPullRequestWorkflowGraph:
             "test-fast",
             "test-medium",
             "test-slow",
-            "docs-examples",
             "flaky-tests",
             "build",
             "coverage",
@@ -178,7 +177,6 @@ class TestPullRequestWorkflowGraph:
             "test-fast": {"analyze", "time-bombs"},
             "test-medium": {"analyze", "time-bombs"},
             "test-slow": {"test-fast", "test-medium"},
-            "docs-examples": {"test-fast", "test-medium"},
             "flaky-tests": "test-slow",
             "coverage": "test-slow",
             "mutation": "test-slow",
@@ -231,7 +229,6 @@ class TestPullRequestWorkflowGraph:
                 "bundle-size",
                 "frontend-performance",
                 "flaky-tests",
-                "docs-examples",
             },
         }
         for job, expected in expected_dependencies.items():
@@ -300,7 +297,6 @@ class TestPullRequestWorkflowGraph:
             "test-fast": "test",
             "test-medium": "test",
             "test-slow": "test",
-            "docs-examples": "test",
             "build": "ci",
             "coverage": "coverage",
             "audit": "audit",

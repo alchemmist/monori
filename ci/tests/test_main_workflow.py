@@ -29,7 +29,6 @@ class TestMainWorkflowGraph:
             "test-fast",
             "test-medium",
             "test-slow",
-            "docs-examples",
             "build",
             "coverage",
             "audit",
@@ -48,7 +47,6 @@ class TestMainWorkflowGraph:
             "test-fast": "analyze",
             "test-medium": "test-fast",
             "test-slow": "test-medium",
-            "docs-examples": "test-medium",
             "build": "test-slow",
             "coverage": "build",
             "audit": "coverage",
@@ -63,7 +61,7 @@ class TestMainWorkflowGraph:
         assert jobs["lint"]["needs"] == "fmt-check"
         assert jobs["docs-links"]["needs"] == "fmt-check"
         assert jobs["type"]["needs"] == "lint"
-        assert set(jobs["audit"]["needs"]) == {"coverage", "docs-links", "docs-examples"}
+        assert set(jobs["audit"]["needs"]) == {"coverage", "docs-links"}
 
     def test_main_jobs_request_specific_python_profiles(self) -> None:
         """Keep main jobs on the same minimal dependency profiles as PR jobs."""
@@ -75,7 +73,6 @@ class TestMainWorkflowGraph:
             "test-fast": "test",
             "test-medium": "test",
             "test-slow": "test",
-            "docs-examples": "test",
             "coverage": "coverage",
             "audit": "audit",
             "mutation-full-backend": "mutation",
