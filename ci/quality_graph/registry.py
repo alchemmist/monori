@@ -129,10 +129,9 @@ def registered_checks() -> dict[str, type[QualityCheckDefinition]]:
         "type[QualityCheckDefinition]",
         importlib.import_module("monori.ci.quality_graph.checks.flaky_tests").FlakyTestCheck,
     )
-    type_cast_check = cast(
-        "type[QualityCheckDefinition]",
-        importlib.import_module("monori.ci.quality_graph.checks.type_casts").TypeCastCheck,
-    )
+    type_cast_check: type[QualityCheckDefinition] = importlib.import_module(
+        "monori.ci.quality_graph.checks.type_casts"
+    ).TypeCastCheck
     checks = (
         ObjectAnnotationCheck,
         type_cast_check,

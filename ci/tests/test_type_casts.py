@@ -35,12 +35,12 @@ class TestTypeCastGate:
     def test_resolves_python_cast_imports_and_aliases(self) -> None:
         source = (
             "import typing\n"
-            "import typing_extensions as te\n"
+            "import typing_extensions as typing_extensions_module\n"
             "from typing import cast\n"
             "from typing_extensions import cast as force_type\n"
             "\n"
             "one = typing.cast(str, raw)\n"
-            "two = te.cast(int, raw)\n"
+            "two = typing_extensions_module.cast(int, raw)\n"
             "three = cast(float, raw)\n"
             "four = force_type(bytes, raw)\n"
         )
@@ -49,7 +49,7 @@ class TestTypeCastGate:
 
         assert [(finding.line, finding.cast_form) for finding in findings] == [
             (6, "typing.cast"),
-            (7, "te.cast"),
+            (7, "typing_extensions_module.cast"),
             (8, "cast"),
             (9, "force_type"),
         ]
@@ -64,6 +64,21 @@ class TestTypeCastGate:
             "value = cast(raw)\n"
         )
 
+        assert scan_file("example.py", source, set(range(1, 20))) == []
+
+    @pytest.mark.parametrize(
+        "source",
+        [
+            "from typing import cast\ndef f(cast):\n    return cast(str, raw)\n",
+            "from typing import cast\n"
+            "def f():\n"
+            "    cast = replacement\n"
+            "    return cast(str, raw)\n",
+            "import typing\ndef f(typing):\n    return typing.cast(str, raw)\n",
+            "import typing\ntyping = replacement\nvalue = typing.cast(str, raw)\n",
+        ],
+    )
+    def test_ignores_shadowed_python_cast_names(self, source: str) -> None:
         assert scan_file("example.py", source, set(range(1, 20))) == []
 
     def test_finds_typescript_assertion_forms_and_allows_as_const(self) -> None:
@@ -95,6 +110,25 @@ class TestTypeCastGate:
 
         assert scan_file("example.tsx", source, set(range(1, 20))) == []
 
+    def test_finds_assertions_inside_template_interpolations(self) -> None:
+        source = "const value = `prefix ${raw as string} suffix`;\n"
+
+        findings = scan_file("example.ts", source, {1})
+
+        assert [(finding.line, finding.cast_form) for finding in findings] == [(1, "as string")]
+
+    @pytest.mark.parametrize(
+        "source",
+        [
+            "const value = { as: raw };\n",
+            "type Mapped<T> = { [K in keyof T as Name]: T[K] };\n",
+            "import {\n  Foo\n  as\n  Bar\n} from './module';\n",
+            "export {\n  Foo as\n  Bar\n};\n",
+        ],
+    )
+    def test_ignores_non_assertion_typescript_as_syntax(self, source: str) -> None:
+        assert scan_file("example.ts", source, set(range(1, 20))) == []
+
     def test_ignores_generated_files_and_headers(self) -> None:
         source = "const value = raw as Model;\n"
 
@@ -115,6 +149,13 @@ class TestTypeCastGate:
 
         assert before.finding_id == shifted.finding_id
         assert before.finding_id != changed.finding_id
+
+    def test_duplicate_ids_do_not_depend_on_selected_line_subset(self) -> None:
+        source = "const first = raw as Model;\nconst second = raw as Model;\n"
+        both = scan_file("example.ts", source, {1, 2})
+        second = scan_file("example.ts", source, {2})
+
+        assert second[0].finding_id == both[1].finding_id
 
     def test_summary_exposes_location_language_form_id_and_suggestion(self) -> None:
         finding = Finding(

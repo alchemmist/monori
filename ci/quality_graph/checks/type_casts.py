@@ -150,6 +150,51 @@ def python_cast_form(call: ast.Call, direct: set[str], modules: set[str]) -> str
     return None
 
 
+def parent_nodes(tree: ast.AST) -> dict[ast.AST, ast.AST]:
+    """
+    Index AST parents for lexical binding checks.
+    """
+    return {child: node for node in ast.walk(tree) for child in ast.iter_child_nodes(node)}
+
+
+def function_scope(node: ast.AST, parents: dict[ast.AST, ast.AST]) -> ast.AST | None:
+    """
+    Return the nearest function-like scope containing a node.
+    """
+    current = parents.get(node)
+    while current is not None:
+        if isinstance(current, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+            return current
+        current = parents.get(current)
+    return None
+
+
+def name_is_shadowed(
+    tree: ast.Module,
+    call: ast.Call,
+    name: str,
+    parents: dict[ast.AST, ast.AST],
+) -> bool:
+    """
+    Check whether a local or later module binding replaces an imported cast name.
+    """
+    scope = function_scope(call, parents)
+    for node in ast.walk(scope or tree):
+        if not isinstance(node, ast.Name) or not isinstance(node.ctx, ast.Store):
+            continue
+        if node.id != name or function_scope(node, parents) is not scope:
+            continue
+        if scope is not None or (node.lineno, node.col_offset) < (call.lineno, call.col_offset):
+            return True
+    if isinstance(scope, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+        arguments = [*scope.args.posonlyargs, *scope.args.args, *scope.args.kwonlyargs]
+        arguments.extend(
+            argument for argument in (scope.args.vararg, scope.args.kwarg) if argument is not None
+        )
+        return any(argument.arg == name for argument in arguments)
+    return False
+
+
 def scan_python(path: str, source: str, selected_lines: set[int]) -> list[Finding]:
     """
     Find resolved typing.cast calls on selected Python lines.
@@ -159,27 +204,93 @@ def scan_python(path: str, source: str, selected_lines: set[int]) -> list[Findin
     except SyntaxError:
         return []
     direct, modules = python_cast_names(tree)
+    parents = parent_nodes(tree)
     candidates: list[tuple[int, int, str, str]] = []
     for node in ast.walk(tree):
-        if not isinstance(node, ast.Call) or node.lineno not in selected_lines:
+        if not isinstance(node, ast.Call):
             continue
         form = python_cast_form(node, direct, modules)
         if form is None:
             continue
+        root_name = form.split(".", maxsplit=1)[0]
+        if name_is_shadowed(tree, node, root_name, parents):
+            continue
         rendered = ast.get_source_segment(source, node) or form
         identity = f"{path}:python:{' '.join(rendered.split())}"
         candidates.append((node.lineno, node.col_offset, form, identity))
-    return build_findings(path, "python", candidates, "Narrow the type or validate at a boundary")
+    findings = build_findings(
+        path,
+        "python",
+        candidates,
+        "Narrow the type or validate at a boundary",
+    )
+    return [finding for finding in findings if finding.line in selected_lines]
 
 
 def mask_typescript_non_code(source: str) -> str:
     """
     Mask comments and string literals while preserving offsets and newlines.
     """
-    return NON_CODE_RE.sub(
+    masked = NON_CODE_RE.sub(
         lambda match: "".join("\n" if character == "\n" else " " for character in match.group()),
         source,
     )
+    output = list(masked)
+    for start, end in template_expression_ranges(source):
+        output[start:end] = mask_typescript_non_code(source[start:end])
+    return "".join(output)
+
+
+def template_expression_ranges(source: str) -> list[tuple[int, int]]:
+    """
+    Locate code regions embedded in template literals.
+    """
+    ranges: list[tuple[int, int]] = []
+    index = 0
+    while index < len(source):
+        if source[index] != "`":
+            index += 1
+            continue
+        index += 1
+        while index < len(source) and source[index] != "`":
+            if source[index] == "\\":
+                index += 2
+                continue
+            if source.startswith("${", index):
+                end = matching_template_brace(source, index + 2)
+                ranges.append((index + 2, end))
+                index = end + 1
+                continue
+            index += 1
+        index += 1
+    return ranges
+
+
+def matching_template_brace(source: str, start: int) -> int:
+    """
+    Find the closing brace of one template interpolation.
+    """
+    depth = 1
+    index = start
+    quote: str | None = None
+    while index < len(source):
+        character = source[index]
+        if quote is not None:
+            if character == "\\":
+                index += 2
+                continue
+            if character == quote:
+                quote = None
+        elif character in {"'", '"'}:
+            quote = character
+        elif character == "{":
+            depth += 1
+        elif character == "}":
+            depth -= 1
+            if depth == 0:
+                return index
+        index += 1
+    return len(source)
 
 
 def typescript_tokens(source: str, *, jsx: bool) -> list[Token]:
@@ -213,14 +324,31 @@ def typescript_tokens(source: str, *, jsx: bool) -> list[Token]:
     return tokens
 
 
-def is_import_alias(source: str, token: Token) -> bool:
+def is_non_assertion_as(tokens: list[Token], index: int) -> bool:
     """
-    Exclude import and export alias syntax that also uses the `as` keyword.
+    Exclude aliases, properties, and mapped-type remapping syntax.
     """
-    line_start = source.rfind("\n", 0, token.start) + 1
-    prefix = source[line_start : token.start].lstrip()
-    return prefix.startswith(("import ", "export ")) or bool(
-        re.search(r"\b(?:import|export)\b[^;]*$", prefix)
+    if index + 1 < len(tokens) and tokens[index + 1].value == ":":
+        return True
+    statement_start = max(
+        (candidate + 1 for candidate in range(index) if tokens[candidate].value == ";"),
+        default=0,
+    )
+    statement = [token.value for token in tokens[statement_start:index]]
+    if "import" in statement:
+        return True
+    if statement[:1] == ["export"] and "{" in statement and "=" not in statement:
+        return True
+    bracket_start = max(
+        (candidate for candidate in range(index) if tokens[candidate].value == "["),
+        default=-1,
+    )
+    bracket_end = max(
+        (candidate for candidate in range(index) if tokens[candidate].value == "]"),
+        default=-1,
+    )
+    return bracket_start > bracket_end and any(
+        token.value == "in" for token in tokens[bracket_start:index]
     )
 
 
@@ -266,12 +394,10 @@ def scan_typescript(path: str, source: str, selected_lines: set[int]) -> list[Fi
     tokens = typescript_tokens(source, jsx=Path(path).suffix == ".tsx")
     candidates: list[tuple[int, int, str, str]] = []
     for index, token in enumerate(tokens):
-        if token.line not in selected_lines:
-            continue
         if (
             token.value == "as"
             and index + 1 < len(tokens)
-            and not is_import_alias(source, token)
+            and not is_non_assertion_as(tokens, index)
             and not (Path(path).suffix == ".tsx" and is_jsx_text(source, token))
         ):
             if tokens[index + 1].value == "const":
@@ -307,12 +433,13 @@ def scan_typescript(path: str, source: str, selected_lines: set[int]) -> list[Fi
             form = source[token.start : tokens[closing].end].strip()
             identity = f"{path}:typescript:{' '.join(form.split())}"
             candidates.append((token.line, token.column - 1, form, identity))
-    return build_findings(
+    findings = build_findings(
         path,
         "typescript",
         candidates,
         "Narrow the value or validate it before use",
     )
+    return [finding for finding in findings if finding.line in selected_lines]
 
 
 def build_findings(
