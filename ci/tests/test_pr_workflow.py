@@ -72,6 +72,7 @@ class TestPullRequestWorkflowGraph:
         for job in (
             "workflow-graph",
             "fmt-check",
+            "triple-quotes",
             "lint",
             "type",
             "analyze",
@@ -150,7 +151,8 @@ class TestPullRequestWorkflowGraph:
         expected = {
             "fmt-check": "workflow-graph",
             "suppressions": "fmt-check",
-            "lint": "suppressions",
+            "triple-quotes": "workflow-graph",
+            "lint": {"suppressions", "triple-quotes"},
             "object-annotations": "fmt-check",
             "type": "object-annotations",
             "analyze": {"lint", "type"},
@@ -252,6 +254,7 @@ class TestPullRequestWorkflowGraph:
         expected = {
             "workflow-graph": "ci",
             "fmt-check": "format",
+            "triple-quotes": "ci",
             "lint": "lint",
             "type": "type",
             "analyze": "analyze",

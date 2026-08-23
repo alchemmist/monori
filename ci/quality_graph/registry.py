@@ -38,6 +38,7 @@ class WorkflowJobDefinition:
 WORKFLOW_JOBS = (
     WorkflowJobDefinition("workflow-graph", "Workflow graph validation", "workflow_graph"),
     WorkflowJobDefinition("fmt-check", "Format check", "fmt_check"),
+    WorkflowJobDefinition("triple-quotes", "Triple-quoted string style", "triple_quotes"),
     WorkflowJobDefinition(
         "suppressions", "Lint suppression gate", "suppressions", "suppression", "suppression"
     ),
