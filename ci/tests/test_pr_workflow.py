@@ -420,6 +420,17 @@ class TestPullRequestWorkflowGraph:
         assert "id: quality-results" in body
         assert "if: steps.quality-results.outcome == 'success'" in body
         assert "monori.ci.quality_graph.dashboard finish" in body
+        enforce = next(
+            step
+            for step in self.workflow["jobs"]["quality-report"]["steps"]
+            if step.get("name") == "Enforce complete Quality Graph verdict"
+        )
+        assert enforce["if"] == "always()"
+        assert enforce["env"] == {
+            "AUDIT_RESULT": "${{ needs.audit.result }}",
+            "DOCS_LINKS_RESULT": "${{ needs.docs-links.result }}",
+        }
+        assert "exit 1" in enforce["run"]
 
     def test_live_dashboard_has_one_serial_writer(self) -> None:
         """Keep parallel check jobs from replacing the shared comment body."""
