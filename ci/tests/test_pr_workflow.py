@@ -218,7 +218,6 @@ class TestPullRequestWorkflowGraph:
             "audit": {
                 "coverage",
                 "mutation",
-                "bundle-size",
                 "frontend-performance",
                 "flaky-tests",
             },

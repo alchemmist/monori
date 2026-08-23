@@ -380,12 +380,11 @@ jobs:
 
     audit:
         name: Dependency and security audit
-        needs: [coverage, mutation, bundle-size, frontend-performance, flaky-tests]
+        needs: [coverage, mutation, frontend-performance, flaky-tests]
         if: >-
             always()
             && needs.coverage.result == 'success'
             && needs.mutation.result == 'success'
-            && needs.bundle-size.result == 'success'
             && needs.frontend-performance.result == 'success'
             && needs.flaky-tests.result == 'success'
         runs-on: ubuntu-latest
