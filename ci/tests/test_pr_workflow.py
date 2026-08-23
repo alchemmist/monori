@@ -161,16 +161,8 @@ class TestPullRequestWorkflowGraph:
             "suppressions": "workflow-graph",
             "triple-quotes": "workflow-graph",
             "docs-links": "workflow-graph",
-            "lint": {
-                "fmt-check",
-                "triple-quotes",
-                "suppressions",
-            },
-            "object-annotations": {
-                "fmt-check",
-                "triple-quotes",
-                "suppressions",
-            },
+            "lint": "suppressions",
+            "object-annotations": "suppressions",
             "type": "object-annotations",
             "analyze": "lint",
             "time-bombs": {"lint", "type"},
@@ -399,7 +391,9 @@ class TestPullRequestWorkflowGraph:
         assert "check-id: audit" in block.group("body")
 
     def test_final_dashboard_runs_after_the_successful_graph(self) -> None:
-        """Collect result artifacts only after both graph branches pass."""
+        """
+        Collect result artifacts only after every graph branch passes.
+        """
         block = re.search(
             r"^    quality-report:\n(?P<body>.*?)(?=^    \S|\Z)",
             self.source,
@@ -410,11 +404,15 @@ class TestPullRequestWorkflowGraph:
         assert set(self.workflow["jobs"]["quality-report"]["needs"]) == {
             "audit",
             "docs-links",
+            "fmt-check",
+            "triple-quotes",
         }
         condition = self.workflow["jobs"]["quality-report"]["if"]
         assert "always()" not in condition
         assert "needs.audit.result == 'success'" in condition
         assert "needs.docs-links.result == 'success'" in condition
+        assert "needs.fmt-check.result == 'success'" in condition
+        assert "needs.triple-quotes.result == 'success'" in condition
         assert "actions/download-artifact@v8" in body
         assert "pattern: quality-result-*" in body
         assert "github.run_attempt" not in body.split("path:", maxsplit=1)[0]

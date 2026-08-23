@@ -119,12 +119,8 @@ jobs:
 
     lint:
         name: Lint
-        needs: [fmt-check, triple-quotes, suppressions]
-        if: >-
-            github.event_name == 'pull_request'
-            && needs.fmt-check.result == 'success'
-            && needs.triple-quotes.result == 'success'
-            && needs.suppressions.result == 'success'
+        needs: suppressions
+        if: github.event_name == 'pull_request' && needs.suppressions.result == 'success'
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@v7
@@ -408,11 +404,13 @@ jobs:
 
     quality-report:
         name: Finalize PR quality dashboard
-        needs: [audit, docs-links]
+        needs: [audit, docs-links, fmt-check, triple-quotes]
         if: >-
             github.event_name == 'pull_request'
             && needs.audit.result == 'success'
             && needs.docs-links.result == 'success'
+            && needs.fmt-check.result == 'success'
+            && needs.triple-quotes.result == 'success'
             && github.event.pull_request.head.repo.full_name == github.repository
             && github.event.pull_request.user.login != 'dependabot[bot]'
         permissions:
@@ -575,12 +573,8 @@ jobs:
 
     object-annotations:
         name: Python object annotation gate
-        needs: [fmt-check, triple-quotes, suppressions]
-        if: >-
-            github.event_name == 'pull_request'
-            && needs.fmt-check.result == 'success'
-            && needs.triple-quotes.result == 'success'
-            && needs.suppressions.result == 'success'
+        needs: suppressions
+        if: github.event_name == 'pull_request' && needs.suppressions.result == 'success'
         runs-on: ubuntu-latest
         timeout-minutes: 10
         env:
