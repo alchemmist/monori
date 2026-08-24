@@ -1,0 +1,65 @@
+name: Unsafe type cast gate
+description: Check changed Python and TypeScript casts and publish the gate report
+inputs:
+    github-token:
+        description: GitHub token used to publish the gate report
+        required: true
+runs:
+    using: composite
+    steps:
+        - name: Setup Python dependencies
+          uses: ./.github/actions/setup-project
+          with:
+              python-profile: ci
+        - name: Test type cast checker
+          id: type-cast-test
+          shell: bash
+          run: |
+              set +e
+              log_path="$RUNNER_TEMP/quality-results/type-casts-test.log"
+              mkdir -p "$(dirname "$log_path")"
+              env -u GITHUB_STEP_SUMMARY -u MUTATION_SUMMARY_PATH uv run --locked pytest -q ci/tests/test_type_casts.py 2>&1 | tee "$log_path"
+              echo "exit_code=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
+              exit 0
+        - name: Check unsafe type casts
+          id: type-casts
+          if: steps.type-cast-test.outputs.exit_code == '0'
+          shell: bash
+          env:
+              GITHUB_TOKEN: ${{ inputs.github-token }}
+              QUALITY_RESULT_PATH: ${{ runner.temp }}/quality-results/type-casts.json
+          run: |
+              set +e
+              uv run --locked python -m monori.ci.quality_graph.checks.type_casts
+              echo "exit_code=$?" >> "$GITHUB_OUTPUT"
+              exit 0
+        - name: Publish failed checker test summary
+          if: steps.type-cast-test.outputs.exit_code != '0'
+          shell: bash
+          run: >-
+              uv run --locked python -m monori.ci.quality_graph.job_report
+              --check-id type-casts
+              --title 'Unsafe type cast gate'
+              --exit-code "${{ steps.type-cast-test.outputs.exit_code }}"
+              --log "$RUNNER_TEMP/quality-results/type-casts-test.log"
+              --output "$RUNNER_TEMP/quality-results/type-casts.json"
+              --summary "$GITHUB_STEP_SUMMARY"
+        - name: Upload type-cast result
+          if: always()
+          uses: actions/upload-artifact@v7
+          with:
+              name: quality-result-type-casts-${{ github.run_attempt }}
+              path: ${{ runner.temp }}/quality-results/type-casts.json
+              if-no-files-found: error
+              retention-days: 7
+        - name: Enforce type-cast verdict
+          if: always()
+          shell: bash
+          env:
+              TEST_EXIT: ${{ steps.type-cast-test.outputs.exit_code }}
+              CHECK_EXIT: ${{ steps.type-casts.outputs.exit_code }}
+          run: |
+              if [ "${TEST_EXIT:-2}" -ne 0 ]; then
+                  exit "${TEST_EXIT:-2}"
+              fi
+              exit "${CHECK_EXIT:-2}"
