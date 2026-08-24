@@ -335,7 +335,7 @@ def is_non_assertion_as(tokens: list[Token], index: int) -> bool:
         default=0,
     )
     statement = [token.value for token in tokens[statement_start:index]]
-    if "import" in statement:
+    if statement[:1] == ["import"]:
         return True
     if statement[:1] == ["export"] and "{" in statement and "=" not in statement:
         return True

@@ -138,6 +138,13 @@ class TestTypeCastGate:
 
         assert [(finding.line, finding.cast_form) for finding in findings] == [(1, "as string")]
 
+    def test_finds_assertions_after_dynamic_imports(self) -> None:
+        source = 'const module = (await import("./module")) as Module;\n'
+
+        findings = scan_file("example.ts", source, {1})
+
+        assert [(finding.line, finding.cast_form) for finding in findings] == [(1, "as Module")]
+
     def test_template_scanner_handles_escapes_quotes_and_nested_braces(self) -> None:
         source = (
             "const escaped = `\\` ${raw as Model}`;\n"
