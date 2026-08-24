@@ -51,6 +51,9 @@ WORKFLOW_JOBS = (
         "object",
         "object-annotations",
     ),
+    WorkflowJobDefinition(
+        "type-casts", "Unsafe type cast gate", "type_casts", "cast", "type-casts"
+    ),
     WorkflowJobDefinition("type", "Type check", "type_check"),
     WorkflowJobDefinition("analyze", "Static analysis", "analyze"),
     WorkflowJobDefinition("time-bombs", "Time bomb guardrail", "time_bombs"),
@@ -126,8 +129,12 @@ def registered_checks() -> dict[str, type[QualityCheckDefinition]]:
         "type[QualityCheckDefinition]",
         importlib.import_module("monori.ci.quality_graph.checks.flaky_tests").FlakyTestCheck,
     )
+    type_cast_check: type[QualityCheckDefinition] = importlib.import_module(
+        "monori.ci.quality_graph.checks.type_casts"
+    ).TypeCastCheck
     checks = (
         ObjectAnnotationCheck,
+        type_cast_check,
         SuppressionCheck,
         BundleSizeCheck,
         FrontendPerformanceCheck,

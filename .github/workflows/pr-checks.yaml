@@ -190,8 +190,11 @@ jobs:
 
     type:
         name: Type check
-        needs: object-annotations
-        if: github.event_name == 'pull_request' && needs.object-annotations.result == 'success'
+        needs: [object-annotations, type-casts]
+        if: >-
+            github.event_name == 'pull_request'
+            && needs.object-annotations.result == 'success'
+            && needs.type-casts.result == 'success'
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@v7
@@ -593,6 +596,27 @@ jobs:
               with:
                   persist-credentials: false
             - uses: ./.github/actions/object-annotation-gate
+              with:
+                  github-token: ${{ secrets.GITHUB_TOKEN }}
+
+    type-casts:
+        name: Unsafe type cast gate
+        needs: suppressions
+        if: github.event_name == 'pull_request' && needs.suppressions.result == 'success'
+        runs-on: ubuntu-latest
+        timeout-minutes: 10
+        env:
+            QUALITY_GRAPH_READ_ONLY: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.event.pull_request.user.login == 'dependabot[bot]' }}
+        permissions:
+            contents: read
+            issues: write
+            pull-requests: write
+        steps:
+            - name: Checkout workflow code
+              uses: actions/checkout@v7
+              with:
+                  persist-credentials: false
+            - uses: ./.github/actions/type-cast-gate
               with:
                   github-token: ${{ secrets.GITHUB_TOKEN }}
 

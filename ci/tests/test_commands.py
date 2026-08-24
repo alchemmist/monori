@@ -90,23 +90,24 @@ class TestQualityGraphCommand:
     def test_help_is_generated_from_registered_check_metadata(self) -> None:
         body = help_body()
 
-        for gate in ("object", "suppression", "bundle", "frontend", "flaky"):
+        for gate in ("object", "cast", "suppression", "bundle", "frontend", "flaky"):
             assert f"{gate}-<id>" in body
-        assert "selected files (object-annotations, suppressions, flaky-tests)" in body
+        assert "selected files (object-annotations, type-casts, suppressions, flaky-tests)" in body
         assert (
-            "/qg ignore object-annotations,suppressions,bundle-size,"
+            "/qg ignore object-annotations,type-casts,suppressions,bundle-size,"
             "frontend-performance,flaky-tests" in body
         )
         assert (
             body == "Only repository administrators may execute state-changing commands.\n\n"
-            "- `/qg ignore object-<id>,suppression-<id>,bundle-<id>,frontend-<id>,flaky-<id>` — "
+            "- `/qg ignore object-<id>,cast-<id>,suppression-<id>,bundle-<id>,"
+            "frontend-<id>,flaky-<id>` — "
             "ignore selected findings\n"
-            "- `/qg ignore object-annotations,suppressions,bundle-size,"
+            "- `/qg ignore object-annotations,type-casts,suppressions,bundle-size,"
             "frontend-performance,flaky-tests` — "
             "ignore all current findings of selected types\n"
             "- `/qg ignore-file path/to/file` — ignore findings in selected files "
-            "(object-annotations, suppressions, flaky-tests)\n"
-            "- `/qg remove-ignore object-<id>,suppression-<id>,bundle-<id>,"
+            "(object-annotations, type-casts, suppressions, flaky-tests)\n"
+            "- `/qg remove-ignore object-<id>,cast-<id>,suppression-<id>,bundle-<id>,"
             "frontend-<id>,flaky-<id>` — "
             "remove selected ignores\n"
             "- `/qg status` — show the current command status\n"
