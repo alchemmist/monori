@@ -145,6 +145,13 @@ class TestTypeCastGate:
 
         assert [(finding.line, finding.cast_form) for finding in findings] == [(1, "as Module")]
 
+    def test_finds_assertions_after_semicolon_free_imports(self) -> None:
+        source = 'import { Foo as Bar } from "./module"\nconst value = raw as Model\n'
+
+        findings = scan_file("example.ts", source, {2})
+
+        assert [(finding.line, finding.cast_form) for finding in findings] == [(2, "as Model")]
+
     def test_template_scanner_handles_escapes_quotes_and_nested_braces(self) -> None:
         source = (
             "const escaped = `\\` ${raw as Model}`;\n"
@@ -163,6 +170,8 @@ class TestTypeCastGate:
             "type Mapped<T> = { [K in keyof T as Name]: T[K] };\n",
             "import {\n  Foo\n  as\n  Bar\n} from './module';\n",
             "export {\n  Foo as\n  Bar\n};\n",
+            'const previous = 1\nimport { Foo as Bar } from "./module"\n',
+            "const previous = 1\nexport { Foo as Bar }\n",
         ],
     )
     def test_ignores_non_assertion_typescript_as_syntax(self, source: str) -> None:

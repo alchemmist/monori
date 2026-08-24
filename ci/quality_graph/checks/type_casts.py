@@ -69,6 +69,18 @@ NON_CODE_RE = re.compile(
 JSX_TEXT_RE = re.compile(r"(?<=>)[^<{]+(?=<)")
 ASSERTION_BOUNDARIES = {";", ",", ")", "}", "=", "=>", "&&", "||", "??"}
 ANGLE_PREFIXES = {"=", "(", "[", "{", ",", ":", ";", "!", "&&", "||", "??", "=>"}
+DECLARATION_STARTERS = {
+    "class",
+    "const",
+    "enum",
+    "export",
+    "function",
+    "import",
+    "interface",
+    "let",
+    "namespace",
+    "var",
+}
 
 
 @dataclass(frozen=True)
@@ -330,14 +342,7 @@ def is_non_assertion_as(tokens: list[Token], index: int) -> bool:
     """
     if index + 1 < len(tokens) and tokens[index + 1].value == ":":
         return True
-    statement_start = max(
-        (candidate + 1 for candidate in range(index) if tokens[candidate].value == ";"),
-        default=0,
-    )
-    statement = [token.value for token in tokens[statement_start:index]]
-    if statement[:1] == ["import"]:
-        return True
-    if statement[:1] == ["export"] and "{" in statement and "=" not in statement:
+    if is_declaration_alias(tokens, index):
         return True
     bracket_start = max(
         (candidate for candidate in range(index) if tokens[candidate].value == "["),
@@ -350,6 +355,29 @@ def is_non_assertion_as(tokens: list[Token], index: int) -> bool:
     return bracket_start > bracket_end and any(
         token.value == "in" for token in tokens[bracket_start:index]
     )
+
+
+def is_declaration_alias(tokens: list[Token], index: int) -> bool:
+    """
+    Recognize import and export aliases across semicolon-free declaration boundaries.
+    """
+    declaration = max(
+        (
+            candidate
+            for candidate in range(index)
+            if tokens[candidate].value in {"import", "export"}
+        ),
+        default=-1,
+    )
+    if declaration < 0 or declaration + 1 >= len(tokens):
+        return False
+    keyword = tokens[declaration].value
+    following = tokens[declaration + 1].value
+    if keyword == "import" and following == "(":
+        return False
+    if keyword == "export" and following != "{":
+        return False
+    return not any(token.value in DECLARATION_STARTERS for token in tokens[declaration + 1 : index])
 
 
 def assertion_end(tokens: list[Token], start: int) -> int:
