@@ -420,7 +420,7 @@ m-back-diff:
 	if git diff --quiet "$(BASE)...HEAD" -- server/app ci/lib ci/quality_graph common; then \
 		echo "mutation-diff: no changed Python files — pass"; exit 0; \
 	fi; \
-	paths=$$(git diff --diff-filter=ACMR --name-only "$(BASE)...HEAD" -- server/app ci/lib ci/quality_graph common '*.py' | sed -e 's#^server/#monori.server.#' -e 's#^ci/#monori.ci.#' -e 's#^common/#monori.common.#' -e 's#\.py$$##' -e 's#/#.#g' -e 's#$$#.*#' | paste -sd' ' -); \
+	paths=$$(git diff --diff-filter=ACMR --name-only "$(BASE)...HEAD" -- server/app ci/lib ci/quality_graph common | sed -e 's#^server/#monori.server.#' -e 's#^ci/#monori.ci.#' -e 's#^common/#monori.common.#' -e 's#\.py$$##' -e 's#/#.#g' -e 's#$$#.*#' | paste -sd' ' -); \
 	if [ -z "$$paths" ]; then \
 		echo "mutation-diff: no changed Python source files — pass"; exit 0; \
 	fi; \

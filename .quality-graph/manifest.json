@@ -1,0 +1,864 @@
+{
+  "administration": {
+    "roles": [
+      "admin",
+      "maintain",
+      "write"
+    ]
+  },
+  "graphDigest": "be5a5540546d27d30276f3050578d2e9adcf21dd5dc1ec69b66e564144d16841",
+  "graphVersion": 0,
+  "labels": {
+    "enabled": true,
+    "failing": {
+      "color": "d73a4a",
+      "create": true,
+      "description": "Quality Graph has a blocking failure",
+      "name": "quality: failing"
+    }
+  },
+  "manifestVersion": 0,
+  "nodes": [
+    {
+      "env": {},
+      "id": "workflow-graph",
+      "needs": [],
+      "policy": {
+        "approvals": {
+          "files": false,
+          "findings": true,
+          "node": false
+        },
+        "blocking": true,
+        "blockingSeverities": [
+          "error"
+        ]
+      },
+      "profile": "default",
+      "result": {
+        "adapter": "exit-code"
+      },
+      "step": {
+        "run": "uv run --locked --group quality-graph qg validate"
+      },
+      "title": "Workflow graph validation"
+    },
+    {
+      "env": {},
+      "id": "fmt-check",
+      "needs": [
+        "workflow-graph"
+      ],
+      "policy": {
+        "approvals": {
+          "files": false,
+          "findings": true,
+          "node": false
+        },
+        "blocking": true,
+        "blockingSeverities": [
+          "error"
+        ]
+      },
+      "profile": "default",
+      "result": {
+        "adapter": "exit-code"
+      },
+      "step": {
+        "run": "make fmt-check"
+      },
+      "title": "Format check"
+    },
+    {
+      "env": {
+        "BASE": "${{ github.event.pull_request.base.sha || 'origin/main' }}"
+      },
+      "id": "triple-quotes",
+      "needs": [
+        "workflow-graph"
+      ],
+      "policy": {
+        "approvals": {
+          "files": false,
+          "findings": true,
+          "node": false
+        },
+        "blocking": true,
+        "blockingSeverities": [
+          "error"
+        ]
+      },
+      "profile": "default",
+      "result": {
+        "adapter": "exit-code"
+      },
+      "step": {
+        "env": {
+          "BASE": "${{ github.event.pull_request.base.sha || 'origin/main' }}"
+        },
+        "run": "uv run --locked --group quality-graph qg-python-triple-quotes --base \"$BASE\""
+      },
+      "title": "Triple-quoted string style"
+    },
+    {
+      "env": {
+        "BASE": "${{ github.event.pull_request.base.sha || 'origin/main' }}"
+      },
+      "id": "suppressions",
+      "needs": [
+        "workflow-graph"
+      ],
+      "policy": {
+        "approvals": {
+          "files": true,
+          "findings": true,
+          "node": false
+        },
+        "blocking": true,
+        "blockingSeverities": [
+          "error"
+        ]
+      },
+      "profile": "default",
+      "result": {
+        "adapter": "exit-code"
+      },
+      "step": {
+        "env": {
+          "BASE": "${{ github.event.pull_request.base.sha || 'origin/main' }}"
+        },
+        "run": "uv run --locked --group quality-graph qg-python-suppressions --base \"$BASE\""
+      },
+      "title": "Lint suppression gate"
+    },
+    {
+      "env": {},
+      "id": "docs-links",
+      "needs": [
+        "workflow-graph"
+      ],
+      "policy": {
+        "approvals": {
+          "files": false,
+          "findings": true,
+          "node": false
+        },
+        "blocking": true,
+        "blockingSeverities": [
+          "error"
+        ]
+      },
+      "profile": "docs",
+      "result": {
+        "adapter": "exit-code"
+      },
+      "step": {
+        "run": "make docs-links"
+      },
+      "title": "Documentation links"
+    },
+    {
+      "env": {},
+      "id": "lint",
+      "needs": [
+        "suppressions"
+      ],
+      "policy": {
+        "approvals": {
+          "files": false,
+          "findings": true,
+          "node": false
+        },
+        "blocking": true,
+        "blockingSeverities": [
+          "error"
+        ]
+      },
+      "profile": "lint",
+      "result": {
+        "adapter": "exit-code"
+      },
+      "step": {
+        "run": "make lint"
+      },
+      "title": "Lint"
+    },
+    {
+      "env": {
+        "BASE": "${{ github.event.pull_request.base.sha || 'origin/main' }}"
+      },
+      "id": "object-annotations",
+      "needs": [
+        "workflow-graph"
+      ],
+      "policy": {
+        "approvals": {
+          "files": true,
+          "findings": true,
+          "node": false
+        },
+        "blocking": true,
+        "blockingSeverities": [
+          "error"
+        ]
+      },
+      "profile": "default",
+      "result": {
+        "adapter": "exit-code"
+      },
+      "step": {
+        "env": {
+          "BASE": "${{ github.event.pull_request.base.sha || 'origin/main' }}"
+        },
+        "run": "uv run --locked --group quality-graph qg-python-object-annotations --base \"$BASE\""
+      },
+      "title": "Python object annotation gate"
+    },
+    {
+      "env": {},
+      "id": "type-casts",
+      "needs": [
+        "workflow-graph"
+      ],
+      "policy": {
+        "approvals": {
+          "files": true,
+          "findings": true,
+          "node": false
+        },
+        "blocking": true,
+        "blockingSeverities": [
+          "error"
+        ]
+      },
+      "profile": "default",
+      "result": {
+        "adapter": "exit-code"
+      },
+      "step": {
+        "run": "make type-casts"
+      },
+      "title": "Unsafe type cast gate"
+    },
+    {
+      "env": {},
+      "id": "type",
+      "needs": [
+        "object-annotations",
+        "type-casts"
+      ],
+      "policy": {
+        "approvals": {
+          "files": false,
+          "findings": true,
+          "node": false
+        },
+        "blocking": true,
+        "blockingSeverities": [
+          "error"
+        ]
+      },
+      "profile": "default",
+      "result": {
+        "adapter": "exit-code"
+      },
+      "step": {
+        "run": "make type"
+      },
+      "title": "Type check"
+    },
+    {
+      "env": {},
+      "id": "analyze",
+      "needs": [
+        "lint"
+      ],
+      "policy": {
+        "approvals": {
+          "files": false,
+          "findings": true,
+          "node": false
+        },
+        "blocking": true,
+        "blockingSeverities": [
+          "error"
+        ]
+      },
+      "profile": "analyze",
+      "result": {
+        "adapter": "exit-code"
+      },
+      "step": {
+        "run": "make analyze"
+      },
+      "title": "Static analysis"
+    },
+    {
+      "env": {
+        "BASE": "${{ github.event.pull_request.base.sha || 'origin/main' }}"
+      },
+      "id": "time-bombs",
+      "needs": [
+        "analyze",
+        "type"
+      ],
+      "policy": {
+        "approvals": {
+          "files": false,
+          "findings": true,
+          "node": false
+        },
+        "blocking": true,
+        "blockingSeverities": [
+          "error"
+        ]
+      },
+      "profile": "default",
+      "result": {
+        "adapter": "exit-code"
+      },
+      "step": {
+        "env": {
+          "BASE": "${{ github.event.pull_request.base.sha || 'origin/main' }}"
+        },
+        "run": "uv run --locked --group quality-graph qg-python-time-bombs --base \"$BASE\""
+      },
+      "title": "Time bomb guardrail"
+    },
+    {
+      "env": {},
+      "id": "test-fast",
+      "needs": [
+        "analyze"
+      ],
+      "policy": {
+        "approvals": {
+          "files": false,
+          "findings": true,
+          "node": false
+        },
+        "blocking": true,
+        "blockingSeverities": [
+          "error"
+        ]
+      },
+      "profile": "default",
+      "result": {
+        "adapter": "exit-code"
+      },
+      "step": {
+        "run": "make t-fast"
+      },
+      "title": "Fast tests"
+    },
+    {
+      "env": {},
+      "id": "test-medium",
+      "needs": [
+        "analyze"
+      ],
+      "policy": {
+        "approvals": {
+          "files": false,
+          "findings": true,
+          "node": false
+        },
+        "blocking": true,
+        "blockingSeverities": [
+          "error"
+        ]
+      },
+      "profile": "default",
+      "result": {
+        "adapter": "exit-code"
+      },
+      "step": {
+        "run": "make t-medium"
+      },
+      "title": "Medium tests"
+    },
+    {
+      "env": {},
+      "id": "test-slow",
+      "needs": [
+        "test-fast",
+        "test-medium"
+      ],
+      "policy": {
+        "approvals": {
+          "files": false,
+          "findings": true,
+          "node": false
+        },
+        "blocking": true,
+        "blockingSeverities": [
+          "error"
+        ]
+      },
+      "profile": "slow",
+      "result": {
+        "adapter": "exit-code"
+      },
+      "step": {
+        "run": "make t-slow"
+      },
+      "title": "Slow tests"
+    },
+    {
+      "env": {
+        "BASE": "${{ github.event.pull_request.base.sha || 'origin/main' }}"
+      },
+      "id": "flaky-tests",
+      "needs": [
+        "test-slow"
+      ],
+      "policy": {
+        "approvals": {
+          "files": false,
+          "findings": true,
+          "node": false
+        },
+        "blocking": true,
+        "blockingSeverities": [
+          "error"
+        ]
+      },
+      "profile": "default",
+      "result": {
+        "adapter": "exit-code"
+      },
+      "step": {
+        "env": {
+          "BASE": "${{ github.event.pull_request.base.sha || 'origin/main' }}"
+        },
+        "run": "scripts/flaky-quality-graph.sh"
+      },
+      "timeoutMinutes": 180,
+      "title": "Flaky test detection"
+    },
+    {
+      "env": {},
+      "id": "build",
+      "needs": [
+        "test-slow"
+      ],
+      "policy": {
+        "approvals": {
+          "files": false,
+          "findings": true,
+          "node": false
+        },
+        "blocking": true,
+        "blockingSeverities": [
+          "error"
+        ]
+      },
+      "profile": "default",
+      "result": {
+        "adapter": "exit-code"
+      },
+      "step": {
+        "run": "make build"
+      },
+      "title": "Build frontend"
+    },
+    {
+      "env": {
+        "BASE": "${{ github.event.pull_request.base.sha || 'origin/main' }}"
+      },
+      "id": "coverage",
+      "needs": [
+        "test-slow"
+      ],
+      "policy": {
+        "approvals": {
+          "files": false,
+          "findings": true,
+          "node": false
+        },
+        "blocking": true,
+        "blockingSeverities": [
+          "error"
+        ]
+      },
+      "profile": "default",
+      "result": {
+        "adapter": "exit-code"
+      },
+      "step": {
+        "env": {
+          "BASE": "${{ github.event.pull_request.base.sha || 'origin/main' }}"
+        },
+        "run": "make BASE=\"$BASE\" coverage-diff"
+      },
+      "title": "Coverage"
+    },
+    {
+      "env": {
+        "BASE": "${{ github.event.pull_request.base.sha || 'origin/main' }}"
+      },
+      "id": "mutation",
+      "needs": [
+        "coverage"
+      ],
+      "policy": {
+        "approvals": {
+          "files": false,
+          "findings": true,
+          "node": false
+        },
+        "blocking": true,
+        "blockingSeverities": [
+          "error"
+        ]
+      },
+      "profile": "default",
+      "result": {
+        "adapter": "exit-code"
+      },
+      "step": {
+        "env": {
+          "BASE": "${{ github.event.pull_request.base.sha || 'origin/main' }}"
+        },
+        "run": "make BASE=\"$BASE\" mutation-diff"
+      },
+      "timeoutMinutes": 360,
+      "title": "Mutation testing"
+    },
+    {
+      "env": {
+        "BASE": "${{ github.event.pull_request.base.sha || 'origin/main' }}",
+        "HEAD_SHA": "${{ github.event.pull_request.head.sha || github.sha }}",
+        "PR_NUMBER": "${{ github.event.pull_request.number || '0' }}"
+      },
+      "id": "bundle-size",
+      "needs": [
+        "build"
+      ],
+      "policy": {
+        "approvals": {
+          "files": false,
+          "findings": true,
+          "node": true
+        },
+        "blocking": true,
+        "blockingSeverities": [
+          "error"
+        ]
+      },
+      "profile": "default",
+      "result": {
+        "adapter": "exit-code"
+      },
+      "step": {
+        "env": {
+          "BASE": "${{ github.event.pull_request.base.sha || 'origin/main' }}",
+          "HEAD_SHA": "${{ github.event.pull_request.head.sha || github.sha }}",
+          "PR_NUMBER": "${{ github.event.pull_request.number || '0' }}"
+        },
+        "run": "scripts/bundle-size-quality-graph.sh"
+      },
+      "title": "Frontend bundle size"
+    },
+    {
+      "env": {
+        "BASE": "${{ github.event.pull_request.base.sha || 'origin/main' }}"
+      },
+      "id": "frontend-performance",
+      "needs": [
+        "build"
+      ],
+      "policy": {
+        "approvals": {
+          "files": false,
+          "findings": true,
+          "node": true
+        },
+        "blocking": true,
+        "blockingSeverities": [
+          "error"
+        ]
+      },
+      "profile": "performance",
+      "result": {
+        "adapter": "exit-code"
+      },
+      "step": {
+        "env": {
+          "BASE": "${{ github.event.pull_request.base.sha || 'origin/main' }}"
+        },
+        "run": "make BASE=\"$BASE\" perf-front-diff"
+      },
+      "timeoutMinutes": 90,
+      "title": "Frontend performance regression"
+    },
+    {
+      "env": {},
+      "id": "audit",
+      "needs": [
+        "build"
+      ],
+      "policy": {
+        "approvals": {
+          "files": false,
+          "findings": true,
+          "node": false
+        },
+        "blocking": true,
+        "blockingSeverities": [
+          "error"
+        ]
+      },
+      "profile": "default",
+      "result": {
+        "adapter": "exit-code"
+      },
+      "step": {
+        "run": "make audit"
+      },
+      "title": "Dependency and security audit"
+    }
+  ],
+  "profiles": {
+    "analyze": {
+      "env": {},
+      "permissions": {
+        "contents": "read"
+      },
+      "runner": "ubuntu-latest",
+      "services": {},
+      "setup": [
+        {
+          "uses": "actions/checkout@v7",
+          "with": {
+            "fetch-depth": "0",
+            "persist-credentials": "false"
+          }
+        },
+        {
+          "uses": "actions/setup-node@v7",
+          "with": {
+            "cache": "npm",
+            "cache-dependency-path": "web/package-lock.json\ntools/frontend-perf/package-lock.json\n",
+            "node-version": "22"
+          }
+        },
+        {
+          "uses": "astral-sh/setup-uv@v7",
+          "with": {
+            "cache-dependency-glob": "uv.lock",
+            "enable-cache": "true"
+          }
+        },
+        {
+          "name": "Install project dependencies",
+          "run": "scripts/setup-quality-graph.sh"
+        },
+        {
+          "run": "python -m pip install semgrep"
+        }
+      ]
+    },
+    "default": {
+      "env": {},
+      "permissions": {
+        "contents": "read"
+      },
+      "runner": "ubuntu-latest",
+      "services": {},
+      "setup": [
+        {
+          "uses": "actions/checkout@v7",
+          "with": {
+            "fetch-depth": "0",
+            "persist-credentials": "false"
+          }
+        },
+        {
+          "uses": "actions/setup-node@v7",
+          "with": {
+            "cache": "npm",
+            "cache-dependency-path": "web/package-lock.json\ntools/frontend-perf/package-lock.json\n",
+            "node-version": "22"
+          }
+        },
+        {
+          "uses": "astral-sh/setup-uv@v7",
+          "with": {
+            "cache-dependency-glob": "uv.lock",
+            "enable-cache": "true"
+          }
+        },
+        {
+          "name": "Install project dependencies",
+          "run": "scripts/setup-quality-graph.sh"
+        }
+      ]
+    },
+    "docs": {
+      "env": {},
+      "permissions": {
+        "contents": "read"
+      },
+      "runner": "ubuntu-latest",
+      "services": {},
+      "setup": [
+        {
+          "uses": "actions/checkout@v7",
+          "with": {
+            "fetch-depth": "0",
+            "persist-credentials": "false"
+          }
+        },
+        {
+          "uses": "actions/setup-node@v7",
+          "with": {
+            "cache": "npm",
+            "cache-dependency-path": "web/package-lock.json\ntools/frontend-perf/package-lock.json\n",
+            "node-version": "22"
+          }
+        },
+        {
+          "uses": "astral-sh/setup-uv@v7",
+          "with": {
+            "cache-dependency-glob": "uv.lock",
+            "enable-cache": "true"
+          }
+        },
+        {
+          "name": "Install project dependencies",
+          "run": "scripts/setup-quality-graph.sh"
+        },
+        {
+          "name": "Install Lychee",
+          "run": "scripts/install-lychee.sh"
+        }
+      ]
+    },
+    "lint": {
+      "env": {},
+      "permissions": {
+        "contents": "read"
+      },
+      "runner": "ubuntu-latest",
+      "services": {},
+      "setup": [
+        {
+          "uses": "actions/checkout@v7",
+          "with": {
+            "fetch-depth": "0",
+            "persist-credentials": "false"
+          }
+        },
+        {
+          "uses": "actions/setup-node@v7",
+          "with": {
+            "cache": "npm",
+            "cache-dependency-path": "web/package-lock.json\ntools/frontend-perf/package-lock.json\n",
+            "node-version": "22"
+          }
+        },
+        {
+          "uses": "astral-sh/setup-uv@v7",
+          "with": {
+            "cache-dependency-glob": "uv.lock",
+            "enable-cache": "true"
+          }
+        },
+        {
+          "name": "Install project dependencies",
+          "run": "scripts/setup-quality-graph.sh"
+        },
+        {
+          "name": "Install external linters",
+          "run": "scripts/install-ci-linters.sh"
+        }
+      ]
+    },
+    "performance": {
+      "env": {},
+      "permissions": {
+        "contents": "read"
+      },
+      "runner": "ubuntu-latest",
+      "services": {},
+      "setup": [
+        {
+          "uses": "actions/checkout@v7",
+          "with": {
+            "fetch-depth": "0",
+            "persist-credentials": "false"
+          }
+        },
+        {
+          "uses": "actions/setup-node@v7",
+          "with": {
+            "cache": "npm",
+            "cache-dependency-path": "web/package-lock.json\ntools/frontend-perf/package-lock.json\n",
+            "node-version": "22"
+          }
+        },
+        {
+          "uses": "astral-sh/setup-uv@v7",
+          "with": {
+            "cache-dependency-glob": "uv.lock",
+            "enable-cache": "true"
+          }
+        },
+        {
+          "name": "Install project dependencies",
+          "run": "scripts/setup-quality-graph.sh"
+        },
+        {
+          "run": "npx playwright install --with-deps chromium",
+          "working-directory": "tools/frontend-perf"
+        }
+      ]
+    },
+    "slow": {
+      "env": {},
+      "permissions": {
+        "contents": "read"
+      },
+      "runner": "ubuntu-latest",
+      "services": {},
+      "setup": [
+        {
+          "uses": "actions/checkout@v7",
+          "with": {
+            "fetch-depth": "0",
+            "persist-credentials": "false"
+          }
+        },
+        {
+          "uses": "actions/setup-node@v7",
+          "with": {
+            "cache": "npm",
+            "cache-dependency-path": "web/package-lock.json\ntools/frontend-perf/package-lock.json\n",
+            "node-version": "22"
+          }
+        },
+        {
+          "uses": "astral-sh/setup-uv@v7",
+          "with": {
+            "cache-dependency-glob": "uv.lock",
+            "enable-cache": "true"
+          }
+        },
+        {
+          "name": "Install project dependencies",
+          "run": "scripts/setup-quality-graph.sh"
+        },
+        {
+          "run": "npx playwright install --with-deps chromium",
+          "working-directory": "web"
+        }
+      ]
+    }
+  },
+  "provider": "github",
+  "resultSchemaVersion": 0,
+  "runtime": {
+    "action": "alchemmist/quality-graph@a4a65abfc9364da6801be56b992358d302c7ad77"
+  }
+}

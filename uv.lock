@@ -1283,6 +1283,11 @@ mutation = [
     { name = "pytest" },
     { name = "pytest-cov" },
 ]
+quality-graph = [
+    { name = "quality-graph-cli" },
+    { name = "quality-graph-github" },
+    { name = "quality-graph-python" },
+]
 runtime = [
     { name = "monori-server" },
 ]
@@ -1344,6 +1349,11 @@ mutation = [
     { name = "mutmut", specifier = ">=3.6.0" },
     { name = "pytest", specifier = ">=8" },
     { name = "pytest-cov", specifier = ">=5" },
+]
+quality-graph = [
+    { name = "quality-graph-cli", specifier = "==0.1.2" },
+    { name = "quality-graph-github", specifier = "==0.1.2" },
+    { name = "quality-graph-python", specifier = "==0.1.2" },
 ]
 runtime = [{ name = "monori-server", editable = "server" }]
 sync-runtime = [{ name = "monori-server", extras = ["connectors"], editable = "server" }]
@@ -2004,6 +2014,58 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/05/10/f42c48fa5153204f42eaa945e8d1fd7c10d6296841dcb2447bf7da1be5c4/pyyaml_ft-8.0.0-cp313-cp313t-musllinux_1_2_aarch64.whl", hash = "sha256:052561b89d5b2a8e1289f326d060e794c21fa068aa11255fe71d65baf18a632e", size = 810403, upload-time = "2025-06-10T15:32:11.051Z" },
     { url = "https://files.pythonhosted.org/packages/d5/d2/e369064aa51009eb9245399fd8ad2c562bd0bcd392a00be44b2a824ded7c/pyyaml_ft-8.0.0-cp313-cp313t-musllinux_1_2_x86_64.whl", hash = "sha256:3bb4b927929b0cb162fb1605392a321e3333e48ce616cdcfa04a839271373255", size = 835581, upload-time = "2025-06-10T15:32:12.897Z" },
     { url = "https://files.pythonhosted.org/packages/c0/28/26534bed77109632a956977f60d8519049f545abc39215d086e33a61f1f2/pyyaml_ft-8.0.0-cp313-cp313t-win_amd64.whl", hash = "sha256:de04cfe9439565e32f178106c51dd6ca61afaa2907d143835d501d84703d3793", size = 171579, upload-time = "2025-06-10T15:32:14.34Z" },
+]
+
+[[package]]
+name = "quality-graph-cli"
+version = "0.1.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "quality-graph-core" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/72/6b/7ac9cce77bbbed05e6852e515d914002f29fb9db5d737d7a2a0b26fbca08/quality_graph_cli-0.1.2.tar.gz", hash = "sha256:17fb1d332cffde099cba10be860624cb5426df6f650f9208d2b6f28276c526a9", size = 4095, upload-time = "2026-08-23T23:29:01.19Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/96/5c/2c6f500f02c2934a750e94be24a6f75b72e45ccfd08f42b09f82983aa990/quality_graph_cli-0.1.2-py3-none-any.whl", hash = "sha256:f519156422fc0ddd3dc3ed8ffae16bc09758d56fba7ead428a7783a6651993e4", size = 5722, upload-time = "2026-08-23T23:29:00.067Z" },
+]
+
+[[package]]
+name = "quality-graph-core"
+version = "0.1.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "defusedxml" },
+    { name = "pyyaml" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/f2/b4/4b333bf1cb0035d55545873be6dc8435c48e796a12f4b69b056ed86a0d9d/quality_graph_core-0.1.2.tar.gz", hash = "sha256:fb27e98d1a2f20e77851c962fce3a1f737b9cf6945a0dddbe72c33c01868bcd2", size = 16878, upload-time = "2026-08-23T23:28:34.499Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/99/30/4a91ed6c2666d66cd05148652cd8e0ec1e164f2446219d479c2b82b6a21c/quality_graph_core-0.1.2-py3-none-any.whl", hash = "sha256:09733a512c2e0ee2765003459d171513366a85a0c68e0fcea198a3b55f0001d9", size = 20875, upload-time = "2026-08-23T23:28:33.26Z" },
+]
+
+[[package]]
+name = "quality-graph-github"
+version = "0.1.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "httpx" },
+    { name = "jinja2" },
+    { name = "pyyaml" },
+    { name = "quality-graph-core" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/2f/53/1d9091ca8827d4db0199b721148aef257002c39bdb7bdf8b13a45a840c73/quality_graph_github-0.1.2.tar.gz", hash = "sha256:c711ce3e1a18f7f8a38afab039a23a8c7338ae3fd27ab036f8cfc0878c31f041", size = 23097, upload-time = "2026-08-23T23:28:59.492Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/2a/f9/dd02fb6215ae42b03055032a511eb9c4c8d4d94df23d5f108b5f037d3f82/quality_graph_github-0.1.2-py3-none-any.whl", hash = "sha256:1878872874b5a9be8a34d94994dbc24e7a7d2e56497e7ab8545879339f8b1e4b", size = 32347, upload-time = "2026-08-23T23:28:58.387Z" },
+]
+
+[[package]]
+name = "quality-graph-python"
+version = "0.1.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "anyio" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/1f/0d/6aa219819093f1d61a8e8eedad5193587a3477f1d55d26750cc7376604b5/quality_graph_python-0.1.2.tar.gz", hash = "sha256:ae45cbd40ea428250e2a87a0f69532da2e5597a8d17856b81a281c567a1aa663", size = 6353, upload-time = "2026-08-23T23:28:33.636Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/70/c0/ae4e7a633b25cdd23e83879d679ddec5c3b2cf56a11b261ad8c232d8ff4d/quality_graph_python-0.1.2-py3-none-any.whl", hash = "sha256:f02e2fb201601a38c7e37a35470a1507f5706558874f30d9649ae921f410dba2", size = 10879, upload-time = "2026-08-23T23:28:32.514Z" },
 ]
 
 [[package]]

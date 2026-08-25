@@ -1,0 +1,190 @@
+version: 0
+provider:
+    name: github
+    configuration:
+        runtime:
+            action: alchemmist/quality-graph@a4a65abfc9364da6801be56b992358d302c7ad77
+administration:
+    roles: [admin, maintain, write]
+labels:
+    enabled: true
+    failing:
+        name: "quality: failing"
+        color: d73a4a
+        description: Quality Graph has a blocking failure
+        create: true
+profiles:
+    default:
+        runner: ubuntu-latest
+        setup:
+            - uses: actions/checkout@v7
+              with:
+                  fetch-depth: "0"
+                  persist-credentials: "false"
+            - uses: actions/setup-node@v7
+              with:
+                  node-version: "22"
+                  cache: npm
+                  cache-dependency-path: |
+                      web/package-lock.json
+                      tools/frontend-perf/package-lock.json
+            - uses: astral-sh/setup-uv@v7
+              with:
+                  enable-cache: "true"
+                  cache-dependency-glob: uv.lock
+            - name: Install project dependencies
+              run: scripts/setup-quality-graph.sh
+    lint:
+        extends: default
+        setup:
+            - name: Install external linters
+              run: scripts/install-ci-linters.sh
+    docs:
+        extends: default
+        setup:
+            - name: Install Lychee
+              run: scripts/install-lychee.sh
+    analyze:
+        extends: default
+        setup:
+            - run: python -m pip install semgrep
+    slow:
+        extends: default
+        setup:
+            - run: npx playwright install --with-deps chromium
+              working-directory: web
+    performance:
+        extends: default
+        setup:
+            - run: npx playwright install --with-deps chromium
+              working-directory: tools/frontend-perf
+nodes:
+    workflow-graph:
+        title: Workflow graph validation
+        run: uv run --locked --group quality-graph qg validate
+    fmt-check:
+        title: Format check
+        needs: [workflow-graph]
+        run: make fmt-check
+    triple-quotes:
+        title: Triple-quoted string style
+        needs: [workflow-graph]
+        run: uv run --locked --group quality-graph qg-python-triple-quotes --base "$BASE"
+        env:
+            BASE: ${{ github.event.pull_request.base.sha || 'origin/main' }}
+    suppressions:
+        title: Lint suppression gate
+        needs: [workflow-graph]
+        run: uv run --locked --group quality-graph qg-python-suppressions --base "$BASE"
+        env:
+            BASE: ${{ github.event.pull_request.base.sha || 'origin/main' }}
+        policy:
+            approvals:
+                files: true
+                findings: true
+    docs-links:
+        title: Documentation links
+        profile: docs
+        needs: [workflow-graph]
+        run: make docs-links
+    lint:
+        title: Lint
+        profile: lint
+        needs: [suppressions]
+        run: make lint
+    object-annotations:
+        title: Python object annotation gate
+        needs: [workflow-graph]
+        run: uv run --locked --group quality-graph qg-python-object-annotations --base "$BASE"
+        env:
+            BASE: ${{ github.event.pull_request.base.sha || 'origin/main' }}
+        policy:
+            approvals:
+                files: true
+                findings: true
+    type-casts:
+        title: Unsafe type cast gate
+        needs: [workflow-graph]
+        run: make type-casts
+        policy:
+            approvals:
+                files: true
+                findings: true
+    type:
+        title: Type check
+        needs: [object-annotations, type-casts]
+        run: make type
+    analyze:
+        title: Static analysis
+        profile: analyze
+        needs: [lint]
+        run: make analyze
+    time-bombs:
+        title: Time bomb guardrail
+        needs: [analyze, type]
+        run: uv run --locked --group quality-graph qg-python-time-bombs --base "$BASE"
+        env:
+            BASE: ${{ github.event.pull_request.base.sha || 'origin/main' }}
+    test-fast:
+        title: Fast tests
+        needs: [analyze]
+        run: make t-fast
+    test-medium:
+        title: Medium tests
+        needs: [analyze]
+        run: make t-medium
+    test-slow:
+        title: Slow tests
+        profile: slow
+        needs: [test-fast, test-medium]
+        run: make t-slow
+    flaky-tests:
+        title: Flaky test detection
+        needs: [test-slow]
+        run: scripts/flaky-quality-graph.sh
+        env:
+            BASE: ${{ github.event.pull_request.base.sha || 'origin/main' }}
+        timeout-minutes: 180
+    build:
+        title: Build frontend
+        needs: [test-slow]
+        run: make build
+    coverage:
+        title: Coverage
+        needs: [test-slow]
+        run: make BASE="$BASE" coverage-diff
+        env:
+            BASE: ${{ github.event.pull_request.base.sha || 'origin/main' }}
+    mutation:
+        title: Mutation testing
+        needs: [coverage]
+        run: make BASE="$BASE" mutation-diff
+        env:
+            BASE: ${{ github.event.pull_request.base.sha || 'origin/main' }}
+        timeout-minutes: 360
+    bundle-size:
+        title: Frontend bundle size
+        needs: [build]
+        run: scripts/bundle-size-quality-graph.sh
+        env:
+            BASE: ${{ github.event.pull_request.base.sha || 'origin/main' }}
+            PR_NUMBER: ${{ github.event.pull_request.number || '0' }}
+            HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        policy:
+            approvals:
+                node: true
+    frontend-performance:
+        title: Frontend performance regression
+        profile: performance
+        needs: [build]
+        run: make BASE="$BASE" perf-front-diff
+        env:
+            BASE: ${{ github.event.pull_request.base.sha || 'origin/main' }}
+        timeout-minutes: 90
+        policy:
+            approvals:
+                node: true
+    audit:
+        title: Dependency and security audit
+        needs: [build]
+        run: make audit
