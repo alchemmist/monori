@@ -135,10 +135,7 @@ source_paths = [
   "monori/ci/quality_graph",
   "monori/common",
 ]
-do_not_mutate = [
-  "*ci/quality_graph/checks/flaky_runner.py",
-  "*ci/quality_graph/checks/type_casts.py",
-]
+do_not_mutate = ["*ci/quality_graph/checks/type_casts.py"]
 also_copy = [
   ".github",
   "scripts",

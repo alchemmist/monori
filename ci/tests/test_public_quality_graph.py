@@ -23,3 +23,5 @@ def test_mutation_and_performance_inputs_are_available() -> None:
         "run": "npx playwright install --with-deps chromium",
         "working-directory": "tools/frontend-perf",
     } in setup
+    makefile = Path("Makefile").read_text()
+    assert "grep -v '^ci/quality_graph/checks/flaky_runner.py$$'" in makefile
