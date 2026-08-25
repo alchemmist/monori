@@ -37,6 +37,7 @@ import shutil
 import tarfile
 import tempfile
 import threading
+from collections import Counter
 from collections.abc import Callable
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
@@ -828,7 +829,10 @@ class TBankPlaywrightConnector(Connector):
             text = decode_statement(pathlib.Path(tmp.name).read_bytes())
         rows, errors = parse_statement(text)
         if errors:
-            message = f"{STATEMENT_INVALID} Invalid rows: {len(errors)}."
+            reasons = ", ".join(
+                f"{reason}: {count}" for reason, count in Counter(e.error for e in errors).items()
+            )
+            message = f"{STATEMENT_INVALID} Invalid rows: {len(errors)} ({reasons})."
             raise PublicConnectorError(message)
         if not rows:
             raise PublicConnectorError(STATEMENT_EMPTY)

@@ -769,7 +769,10 @@ def test_download_and_parse_accepts_utf16_statement() -> None:
 def test_download_and_parse_rejects_invalid_statement() -> None:
     page = FakePage(scenario="logged_in", csv="garbage line\n")
 
-    with pytest.raises(ConnectorError, match="could not be parsed"):
+    with pytest.raises(
+        ConnectorError,
+        match=r"could not be parsed.*expected >=12 columns, got 1: 1",
+    ):
         _connector().download_and_parse(page, None)
 
 
