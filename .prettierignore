@@ -5,6 +5,9 @@ server/static/
 server/data/
 .venv/
 docs/
+.github/workflows/quality-graph.yml
+.github/workflows/quality-graph-publish.yml
+.quality-graph/manifest.json
 **/*.woff2
 **/*.png
 **/*.svg

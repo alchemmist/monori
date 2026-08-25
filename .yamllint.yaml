@@ -13,3 +13,5 @@ ignore: |
     **/node_modules/
     **/dist/
     server/.venv/
+    .github/workflows/quality-graph.yml
+    .github/workflows/quality-graph-publish.yml
