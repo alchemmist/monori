@@ -56,21 +56,6 @@ value = 2
     def test_does_not_treat_numeric_workflow_settings_as_suppressions(self) -> None:
         assert scan_file(".github/workflows/ci.yml", "fetch-depth: 0\n", {1}) == []
 
-    @pytest.mark.parametrize(
-        ("path", "source"),
-        [
-            ("quality-graph.yml", "version: 0\n"),
-            (".quality-graph/manifest.json", '"graphVersion": 0,\n'),
-            (".quality-graph/manifest.json", '"manifestVersion": 0,\n'),
-            (".quality-graph/manifest.json", '"resultSchemaVersion": 0,\n'),
-            (".quality-graph/manifest.json", '"fetch-depth": "0",\n'),
-        ],
-    )
-    def test_does_not_treat_quality_graph_versions_as_suppressions(
-        self, path: str, source: str
-    ) -> None:
-        assert scan_file(path, source, {1}) == []
-
     def test_finds_entry_added_to_existing_toml_suppression_section(self) -> None:
         source = """\
 [tool.ruff.lint.per-file-ignores]

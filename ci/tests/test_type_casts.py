@@ -18,11 +18,12 @@ from monori.common import JsonValue
 
 
 class TestTypeCastGate:
-    def test_scanner_is_excluded_from_expression_mutation(self) -> None:
+    def test_thin_adapters_are_excluded_from_expression_mutation(self) -> None:
         configuration = tomllib.loads(Path("pyproject.toml").read_text())
 
         assert configuration["tool"]["mutmut"]["do_not_mutate"] == [
-            "*ci/quality_graph/checks/type_casts.py"
+            "*ci/quality_graph/checks/flaky_runner.py",
+            "*ci/quality_graph/checks/type_casts.py",
         ]
 
     def test_check_collects_python_and_typescript_findings(self) -> None:
