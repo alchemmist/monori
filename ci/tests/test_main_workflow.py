@@ -193,6 +193,15 @@ class TestMainWorkflowGraph:
         for service in ("monori", "back", "sync"):
             assert compose["services"][service]["logging"] == expected_logging
 
+        assert compose["services"]["monori"]["depends_on"] == {
+            "back": {"condition": "service_healthy"}
+        }
+        assert compose["services"]["back"]["depends_on"] == {
+            "sync": {"condition": "service_healthy"}
+        }
+        assert "openapi.json" in compose["services"]["back"]["healthcheck"]["test"][-1]
+        assert "/health" in compose["services"]["sync"]["healthcheck"]["test"][-1]
+
         assert json.loads(DOCKER_DAEMON_CONFIG.read_text()) == {
             "log-driver": "local",
             "log-opts": {"max-size": "20m", "max-file": "3"},

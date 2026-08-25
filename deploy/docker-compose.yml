@@ -16,7 +16,8 @@ services:
         # requests instead of cutting them; it just needs to be allowed the time
         stop_grace_period: 10m
         depends_on:
-            - back
+            back:
+                condition: service_healthy
         networks:
             - personal-site_default
             - internal
@@ -42,8 +43,19 @@ services:
             MONORI_ADMIN_EMAILS: ${MONORI_ADMIN_EMAILS:-}
         volumes:
             - ./data:/app/data
+        healthcheck:
+            test:
+                - CMD
+                - /app/.venv/bin/python
+                - -c
+                - import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/openapi.json', timeout=2)
+            interval: 5s
+            timeout: 3s
+            retries: 12
+            start_period: 5s
         depends_on:
-            - sync
+            sync:
+                condition: service_healthy
         networks:
             - internal
 
@@ -63,6 +75,16 @@ services:
             MONORI_CONNECTOR_DEBUG: "1"
         volumes:
             - ./sync-debug:/app/data
+        healthcheck:
+            test:
+                - CMD
+                - /app/.venv/bin/python
+                - -c
+                - import urllib.request; urllib.request.urlopen('http://127.0.0.1:8010/health', timeout=2)
+            interval: 5s
+            timeout: 3s
+            retries: 12
+            start_period: 5s
         networks:
             - internal
 
