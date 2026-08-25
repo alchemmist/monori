@@ -1,0 +1,10 @@
+[Unit]
+Description=Bound Docker disk usage
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/docker buildx prune -af --max-used-space 4gb --min-free-space 8gb
+ExecStart=/usr/bin/docker image prune -af --filter until=48h
+ExecStart=/usr/bin/docker container prune -f --filter until=48h

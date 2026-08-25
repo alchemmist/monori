@@ -42,6 +42,17 @@ jobs:
                   key: ${{ secrets.SSH_KEY }}
                   script: |
                       set -e
+                      docker_gc() {
+                        docker buildx prune -af --max-used-space 4gb --min-free-space 8gb
+                        docker image prune -af --filter "until=48h"
+                        docker container prune -f --filter "until=48h"
+                      }
+                      docker_gc
+                      free_bytes=$(df --output=avail -B1 / | tail -n 1)
+                      if [ "$free_bytes" -lt 5368709120 ]; then
+                        echo "deploy requires at least 5 GB of free disk space"
+                        exit 1
+                      fi
                       cd ${{ secrets.SSH_PROJECT_PATH }}
                       git fetch origin main
                       # reset, not checkout: a hand-edit to a tracked file on
@@ -51,3 +62,4 @@ jobs:
                       git reset --hard ${{ github.event.inputs.sha || github.event.workflow_run.head_sha }}
                       cd deploy
                       docker compose up --build -d
+                      docker_gc

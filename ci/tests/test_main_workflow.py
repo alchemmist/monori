@@ -1,3 +1,4 @@
+import json
 import re
 from typing import ClassVar, cast
 
@@ -6,6 +7,11 @@ import yaml
 from monori.ci.tests.test_pr_workflow import REPOSITORY_ROOT, WorkflowDocument
 
 WORKFLOW = REPOSITORY_ROOT / ".github/workflows/main-checks.yaml"
+DEPLOY_WORKFLOW = REPOSITORY_ROOT / ".github/workflows/deploy.yaml"
+PRODUCTION_COMPOSE = REPOSITORY_ROOT / "deploy/docker-compose.yml"
+DOCKER_DAEMON_CONFIG = REPOSITORY_ROOT / "deploy/docker-daemon.json"
+DOCKER_GC_SERVICE = REPOSITORY_ROOT / "deploy/systemd/docker-disk-gc.service"
+DOCKER_GC_TIMER = REPOSITORY_ROOT / "deploy/systemd/docker-disk-gc.timer"
 
 
 class TestMainWorkflowGraph:
@@ -164,3 +170,35 @@ class TestMainWorkflowGraph:
         assert "run: make coverage-baseline" in block.group("body")
         assert "uses: actions/cache/save@v5" in block.group("body")
         assert "key: coverage-baseline-v1-${{ github.sha }}" in block.group("body")
+
+    def test_deploy_bounds_docker_storage_before_fetch(self) -> None:
+        source = DEPLOY_WORKFLOW.read_text()
+        build_cache_gc = "docker buildx prune -af --max-used-space 4gb --min-free-space 8gb"
+        image_gc = 'docker image prune -af --filter "until=48h"'
+        container_gc = 'docker container prune -f --filter "until=48h"'
+
+        assert source.count(build_cache_gc) == 1
+        assert source.count(image_gc) == 1
+        assert source.count(container_gc) == 1
+        assert source.index(build_cache_gc) < source.index("git fetch origin main")
+        assert "free_bytes" in source
+        assert "5368709120" in source
+
+    def test_production_host_bounds_docker_storage(self) -> None:
+        compose = yaml.safe_load(PRODUCTION_COMPOSE.read_text())
+        expected_logging = {
+            "driver": "local",
+            "options": {"max-size": "20m", "max-file": "3"},
+        }
+        for service in ("monori", "back", "sync"):
+            assert compose["services"][service]["logging"] == expected_logging
+
+        assert json.loads(DOCKER_DAEMON_CONFIG.read_text()) == {
+            "log-driver": "local",
+            "log-opts": {"max-size": "20m", "max-file": "3"},
+        }
+        gc_service = DOCKER_GC_SERVICE.read_text()
+        assert "--max-used-space 4gb --min-free-space 8gb" in gc_service
+        assert "image prune -af --filter until=48h" in gc_service
+        assert "container prune -f --filter until=48h" in gc_service
+        assert "OnCalendar=*-*-* 03:30:00" in DOCKER_GC_TIMER.read_text()

@@ -1,9 +1,16 @@
+x-logging: &default-logging
+    driver: local
+    options:
+        max-size: "20m"
+        max-file: "3"
+
 services:
     monori:
         build:
             context: ..
             dockerfile: deploy/Dockerfile.front
         container_name: monori
+        logging: *default-logging
         restart: unless-stopped
         # the nginx image already stops on SIGQUIT, which finishes in-flight
         # requests instead of cutting them; it just needs to be allowed the time
@@ -19,6 +26,7 @@ services:
             context: ..
             dockerfile: deploy/Dockerfile.back
         container_name: monori-back
+        logging: *default-logging
         restart: unless-stopped
         # a workbook migration writes for tens of seconds; the default 10s kill
         # would cut it off mid-request, which is what turned a redeploy into a
@@ -44,6 +52,7 @@ services:
             context: ..
             dockerfile: deploy/Dockerfile.sync
         container_name: monori-sync
+        logging: *default-logging
         restart: unless-stopped
         # a bank login drives a real browser and can outlast any short timeout
         stop_grace_period: 10m
