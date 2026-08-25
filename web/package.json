@@ -50,7 +50,7 @@
         "jsdom": "^30.0.1",
         "knip": "^6.32.2",
         "markdownlint-cli2": "^0.23.0",
-        "oxlint": "^1.78.0",
+        "oxlint": "^1.79.0",
         "oxlint-tsgolint": "^7.0.2001",
         "prettier": "^3.9.5",
         "stylelint": "^17.14.0",
