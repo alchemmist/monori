@@ -24,5 +24,6 @@ def test_mutation_and_performance_inputs_are_available() -> None:
         "working-directory": "tools/frontend-perf",
     } in setup
     makefile = Path("Makefile").read_text()
-    assert "grep -v '^ci/quality_graph/checks/flaky_runner.py$$'" in makefile
+    exclusion = "':(exclude)ci/quality_graph/checks/flaky_runner.py'"
+    assert makefile.count(exclusion) == 2
     assert "common '*.py'" not in makefile
