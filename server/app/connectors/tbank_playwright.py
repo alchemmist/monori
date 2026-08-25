@@ -478,6 +478,8 @@ class TBankPlaywrightConnector(Connector):
             raise SmsRequiredError(payload)
         if kind == "error":
             raise ConnectorError(payload)
+        if kind == "public_error":
+            raise PublicConnectorError(payload)
         if kind == "result":
             if isinstance(payload, SyncResult):
                 return payload
@@ -542,6 +544,8 @@ class TBankPlaywrightConnector(Connector):
                     context.close()
                 session: JsonObject = {"profile": self.archive_profile(work_dir)}
                 self.from_worker.put(("result", SyncResult(rows, session=session)))
+        except PublicConnectorError as error:
+            self.from_worker.put(("public_error", str(error)))
         except (
             ConnectorError,
             PlaywrightError,
