@@ -223,7 +223,7 @@ jobs:
             - run: make coverage
             - run: make coverage-baseline
             - name: Save coverage baseline
-              uses: actions/cache/save@v5
+              uses: actions/cache/save@v6
               with:
                   path: coverage-baseline
                   key: coverage-baseline-v1-${{ github.sha }}
@@ -264,7 +264,7 @@ jobs:
                   install-web: true
             - name: Restore Stryker incremental state
               id: restore-stryker
-              uses: actions/cache/restore@v5
+              uses: actions/cache/restore@v6
               with:
                   path: web/reports/stryker-incremental.json
                   key: mutation-stryker-${{ runner.os }}-${{ hashFiles('web/package-lock.json') }}-main-${{ hashFiles('web/stryker.conf.ts') }}-${{ github.sha }}
@@ -275,7 +275,7 @@ jobs:
               run: make m-front
             - name: Save Stryker incremental state
               if: always() && steps.restore-stryker.outputs.cache-hit != 'true'
-              uses: actions/cache/save@v5
+              uses: actions/cache/save@v6
               with:
                   path: web/reports/stryker-incremental.json
                   key: mutation-stryker-${{ runner.os }}-${{ hashFiles('web/package-lock.json') }}-main-${{ hashFiles('web/stryker.conf.ts') }}-${{ github.sha }}
@@ -297,7 +297,7 @@ jobs:
                   python-profile: mutation
             - name: Restore mutmut state
               id: restore-mutmut
-              uses: actions/cache/restore@v5
+              uses: actions/cache/restore@v6
               with:
                   path: mutants
                   key: mutation-mutmut-${{ runner.os }}-${{ hashFiles('uv.lock') }}-main-${{ hashFiles('pyproject.toml') }}-${{ github.sha }}
@@ -308,7 +308,7 @@ jobs:
               run: make m-back
             - name: Save mutmut state
               if: always() && steps.restore-mutmut.outputs.cache-hit != 'true'
-              uses: actions/cache/save@v5
+              uses: actions/cache/save@v6
               with:
                   path: mutants
                   key: mutation-mutmut-${{ runner.os }}-${{ hashFiles('uv.lock') }}-main-${{ hashFiles('pyproject.toml') }}-${{ github.sha }}

@@ -333,9 +333,9 @@ class TestPullRequestWorkflowGraph:
     def test_frontend_performance_reuses_sla_measurements(self) -> None:
         sla = self.workflow["jobs"]["frontend-performance-sla"]
         regression = self.workflow["jobs"]["frontend-performance"]
-        save = next(step for step in sla["steps"] if step.get("uses") == "actions/cache/save@v5")
+        save = next(step for step in sla["steps"] if step.get("uses") == "actions/cache/save@v6")
         restore = next(
-            step for step in regression["steps"] if step.get("uses") == "actions/cache/restore@v5"
+            step for step in regression["steps"] if step.get("uses") == "actions/cache/restore@v6"
         )
         gate = next(
             step
@@ -581,7 +581,7 @@ class TestPullRequestWorkflowGraph:
         )
         assert block is not None
         body = block.group("body")
-        assert "uses: actions/cache/restore@v5" in body
+        assert "uses: actions/cache/restore@v6" in body
         assert "restore-keys:" not in body
         assert "Build missing main coverage baseline" not in body
         assert "git switch" not in body
