@@ -64,13 +64,13 @@ nodes:
     triple-quotes:
         title: Triple-quoted string style
         needs: [workflow-graph]
-        run: qg-python-triple-quotes --base "$BASE"
+        run: uv run --locked --group quality-graph qg-python-triple-quotes --base "$BASE"
         env:
             BASE: ${{ github.event.pull_request.base.sha || 'origin/main' }}
     suppressions:
         title: Lint suppression gate
         needs: [workflow-graph]
-        run: qg-python-suppressions --base "$BASE"
+        run: uv run --locked --group quality-graph qg-python-suppressions --base "$BASE"
         env:
             BASE: ${{ github.event.pull_request.base.sha || 'origin/main' }}
         policy:
@@ -90,7 +90,7 @@ nodes:
     object-annotations:
         title: Python object annotation gate
         needs: [workflow-graph]
-        run: qg-python-object-annotations --base "$BASE"
+        run: uv run --locked --group quality-graph qg-python-object-annotations --base "$BASE"
         env:
             BASE: ${{ github.event.pull_request.base.sha || 'origin/main' }}
         policy:
@@ -117,7 +117,7 @@ nodes:
     time-bombs:
         title: Time bomb guardrail
         needs: [analyze, type]
-        run: qg-python-time-bombs --base "$BASE"
+        run: uv run --locked --group quality-graph qg-python-time-bombs --base "$BASE"
         env:
             BASE: ${{ github.event.pull_request.base.sha || 'origin/main' }}
     test-fast:

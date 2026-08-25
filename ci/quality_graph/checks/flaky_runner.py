@@ -1,4 +1,6 @@
-"""Run flaky-test repetitions without repository-host publication."""
+"""
+Run flaky-test repetitions without repository-host publication.
+"""
 
 from __future__ import annotations
 
@@ -9,7 +11,9 @@ from monori.ci.quality_graph.checks.flaky_tests import execute_manifest
 
 
 def main() -> int:
-    """Return failure when any discovered test is unstable."""
+    """
+    Return failure when any discovered test is unstable.
+    """
     parser = argparse.ArgumentParser()
     parser.add_argument("--manifest", type=Path, required=True)
     executions = execute_manifest(parser.parse_args().manifest)

@@ -53,6 +53,10 @@ CONFIG_SUPPRESSION_RE = re.compile(
     r"|(?<!fetch-depth):\s*[\"']?(?:off|0)[\"']?(?:\s*[,}]|\s*$)"
     r"|\bzizmor\s*:\s*ignore\b|\bactionlint\s*:\s*ignore\b)"
 )
+NON_SUPPRESSION_ZERO_RE = re.compile(
+    r'^\s*["\']?(?:fetch-depth|version|graphVersion|manifestVersion|resultSchemaVersion)'
+    r'["\']?\s*:\s*["\']?0["\']?(?:\s*[,}]|\s*$)'
+)
 TOML_SECTION_RE = re.compile(r"^\s*\[([^\]]+)\]\s*$")
 TOML_KEY_RE = re.compile(
     r'^\s*((?:"[^"]+"|\'[^\']+\'|[A-Za-z0-9_-]+)'
@@ -124,6 +128,8 @@ def _directive_candidates(
             if section_match:
                 toml_section = section_match.group(1)
         if line_number not in added_lines or _is_toml_suppression_section(toml_section):
+            continue
+        if pattern is CONFIG_SUPPRESSION_RE and NON_SUPPRESSION_ZERO_RE.match(line):
             continue
         match = pattern.search(line)
         if match is None:

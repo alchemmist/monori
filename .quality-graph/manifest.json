@@ -6,7 +6,7 @@
       "write"
     ]
   },
-  "graphDigest": "1670986e4964f28092e1faa09c4a07b44d27f0a58b8b3903ef80113a31156067",
+  "graphDigest": "6bb2589501477565053364941441db701ed54b14084e5ce6c9d51b143afd5934",
   "graphVersion": 0,
   "labels": {
     "enabled": true,
@@ -96,7 +96,7 @@
         "env": {
           "BASE": "${{ github.event.pull_request.base.sha || 'origin/main' }}"
         },
-        "run": "qg-python-triple-quotes --base \"$BASE\""
+        "run": "uv run --locked --group quality-graph qg-python-triple-quotes --base \"$BASE\""
       },
       "title": "Triple-quoted string style"
     },
@@ -127,7 +127,7 @@
         "env": {
           "BASE": "${{ github.event.pull_request.base.sha || 'origin/main' }}"
         },
-        "run": "qg-python-suppressions --base \"$BASE\""
+        "run": "uv run --locked --group quality-graph qg-python-suppressions --base \"$BASE\""
       },
       "title": "Lint suppression gate"
     },
@@ -210,7 +210,7 @@
         "env": {
           "BASE": "${{ github.event.pull_request.base.sha || 'origin/main' }}"
         },
-        "run": "qg-python-object-annotations --base \"$BASE\""
+        "run": "uv run --locked --group quality-graph qg-python-object-annotations --base \"$BASE\""
       },
       "title": "Python object annotation gate"
     },
@@ -321,7 +321,7 @@
         "env": {
           "BASE": "${{ github.event.pull_request.base.sha || 'origin/main' }}"
         },
-        "run": "qg-python-time-bombs --base \"$BASE\""
+        "run": "uv run --locked --group quality-graph qg-python-time-bombs --base \"$BASE\""
       },
       "title": "Time bomb guardrail"
     },
