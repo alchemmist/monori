@@ -365,7 +365,7 @@ jobs:
                   install-web: true
                   python-profile: coverage
             - name: Restore main coverage baseline
-              uses: actions/cache/restore@v5
+              uses: actions/cache/restore@v6
               with:
                   path: coverage-baseline
                   key: coverage-baseline-v1-${{ github.event.pull_request.base.sha }}
@@ -523,7 +523,7 @@ jobs:
                   persist-credentials: false
             - uses: ./.github/actions/frontend-lab-performance
             - name: Cache pull-request performance measurements
-              uses: actions/cache/save@v5
+              uses: actions/cache/save@v6
               with:
                   path: reports/perf
                   key: frontend-performance-${{ github.run_id }}-${{ github.event.pull_request.head.sha }}
@@ -569,7 +569,7 @@ jobs:
                   fetch-depth: 0
                   persist-credentials: false
             - name: Restore pull-request performance measurements
-              uses: actions/cache/restore@v5
+              uses: actions/cache/restore@v6
               with:
                   path: reports/perf
                   key: frontend-performance-${{ github.run_id }}-${{ github.event.pull_request.head.sha }}

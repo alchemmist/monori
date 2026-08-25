@@ -9,6 +9,7 @@ set, and the first category (in definition order) whose keyword is a
 case-insensitive substring of the description wins.
 """
 
+import csv
 import hashlib
 import re
 from collections.abc import Iterable, Mapping
@@ -297,8 +298,8 @@ def parse_statement(text: str) -> tuple[list[ImportRow], list[ParseError]]:
     for ln, line in enumerate(text.splitlines(), 1):
         if not line.strip():
             continue
-        delim = "\t" if "\t" in line else ";"
-        parts = [p.strip().strip('"') for p in line.split(delim)]
+        delim = "\t" if "\t" in line else ";" if ";" in line else ","
+        parts = [p.strip() for p in next(csv.reader([line], delimiter=delim))]
         if parts and parts[0].lower() in HEADER_FIRST_CELLS:
             continue
         if len(parts) < MIN_STATEMENT_COLUMNS:

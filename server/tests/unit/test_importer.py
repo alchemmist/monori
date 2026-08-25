@@ -116,6 +116,18 @@ def test_parse_statement_semicolon_delimiter_and_quotes() -> None:
     assert rows[0]["amount"] == -2000
 
 
+def test_parse_statement_comma_delimiter_and_quotes() -> None:
+    line = (
+        '"05.07.2026","05.07.2026","*1","OK","-20,00","RUB","-20,00","RUB",'
+        '"","Transport","4111","Metro",0,0,"-20,00"\n'
+    )
+    rows, errors = parse_statement(line)
+    assert not errors
+    assert len(rows) == 1
+    assert rows[0]["description"] == "Metro"
+    assert rows[0]["amount"] == -2000
+
+
 def test_parse_statement_accepts_exactly_twelve_columns() -> None:
     line = (
         "05.07.2026 10:00:00\t05.07.2026\t*1\tOK\t-10,00\tRUB\t-10,00\tRUB\t\t"
