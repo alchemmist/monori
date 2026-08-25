@@ -138,6 +138,7 @@ source_paths = [
 do_not_mutate = ["*ci/quality_graph/checks/type_casts.py"]
 also_copy = [
   ".github",
+  "quality-graph.yml",
   "scripts",
   "Makefile",
   "server/tests",

@@ -53,6 +53,11 @@ profiles:
         setup:
             - run: npx playwright install --with-deps chromium
               working-directory: web
+    performance:
+        extends: default
+        setup:
+            - run: npx playwright install --with-deps chromium
+              working-directory: tools/frontend-perf
 nodes:
     workflow-graph:
         title: Workflow graph validation
@@ -170,6 +175,7 @@ nodes:
                 node: true
     frontend-performance:
         title: Frontend performance regression
+        profile: performance
         needs: [build]
         run: make BASE="$BASE" perf-front-diff
         env:

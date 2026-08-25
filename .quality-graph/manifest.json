@@ -6,7 +6,7 @@
       "write"
     ]
   },
-  "graphDigest": "6bb2589501477565053364941441db701ed54b14084e5ce6c9d51b143afd5934",
+  "graphDigest": "be5a5540546d27d30276f3050578d2e9adcf21dd5dc1ec69b66e564144d16841",
   "graphVersion": 0,
   "labels": {
     "enabled": true,
@@ -579,7 +579,7 @@
           "error"
         ]
       },
-      "profile": "default",
+      "profile": "performance",
       "result": {
         "adapter": "exit-code"
       },
@@ -772,6 +772,46 @@
         {
           "name": "Install external linters",
           "run": "scripts/install-ci-linters.sh"
+        }
+      ]
+    },
+    "performance": {
+      "env": {},
+      "permissions": {
+        "contents": "read"
+      },
+      "runner": "ubuntu-latest",
+      "services": {},
+      "setup": [
+        {
+          "uses": "actions/checkout@v7",
+          "with": {
+            "fetch-depth": "0",
+            "persist-credentials": "false"
+          }
+        },
+        {
+          "uses": "actions/setup-node@v7",
+          "with": {
+            "cache": "npm",
+            "cache-dependency-path": "web/package-lock.json\ntools/frontend-perf/package-lock.json\n",
+            "node-version": "22"
+          }
+        },
+        {
+          "uses": "astral-sh/setup-uv@v7",
+          "with": {
+            "cache-dependency-glob": "uv.lock",
+            "enable-cache": "true"
+          }
+        },
+        {
+          "name": "Install project dependencies",
+          "run": "scripts/setup-quality-graph.sh"
+        },
+        {
+          "run": "npx playwright install --with-deps chromium",
+          "working-directory": "tools/frontend-perf"
         }
       ]
     },
