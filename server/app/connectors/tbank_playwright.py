@@ -28,6 +28,7 @@ followed by ``playwright install chromium``.
 
 import base64
 import contextlib
+import csv
 import importlib
 import io
 import os
@@ -372,6 +373,15 @@ def decode_statement(raw: bytes) -> str:
         return raw.decode("utf-8-sig")
     except UnicodeDecodeError:
         return raw.decode("cp1251")
+
+
+def statement_header(text: str) -> tuple[str, ...]:
+    first = next((line for line in text.splitlines() if line.strip()), "")
+    delim = "\t" if "\t" in first else ";" if ";" in first else ","
+    fields = tuple(" ".join(field.split()) for field in next(csv.reader([first], delimiter=delim)))
+    lowered = " ".join(fields).lower()
+    markers = ("date", "дата", "operation", "операц")
+    return fields if any(marker in lowered for marker in markers) else ()
 
 
 @register
@@ -832,7 +842,9 @@ class TBankPlaywrightConnector(Connector):
             reasons = ", ".join(
                 f"{reason}: {count}" for reason, count in Counter(e.error for e in errors).items()
             )
-            message = f"{STATEMENT_INVALID} Invalid rows: {len(errors)} ({reasons})."
+            header = statement_header(text)
+            columns = f" Columns: {' | '.join(header)}." if header else ""
+            message = f"{STATEMENT_INVALID} Invalid rows: {len(errors)} ({reasons}).{columns}"
             raise PublicConnectorError(message)
         if not rows:
             raise PublicConnectorError(STATEMENT_EMPTY)

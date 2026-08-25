@@ -776,6 +776,21 @@ def test_download_and_parse_rejects_invalid_statement() -> None:
         _connector().download_and_parse(page, None)
 
 
+def test_download_and_parse_reports_header_without_transaction_data() -> None:
+    text = (
+        "Account;Operation date;Payment amount;Description;Extra;A;B;C;D;E;F;G\n"
+        "ref;05.07.2026;-20,00;Secret merchant;0;0;0;0;0;0;0;0\n"
+    )
+    page = FakePage(scenario="logged_in", csv=text)
+
+    with pytest.raises(ConnectorError) as caught:
+        _connector().download_and_parse(page, None)
+
+    message = str(caught.value)
+    assert "Columns: Account | Operation date | Payment amount | Description" in message
+    assert "Secret merchant" not in message
+
+
 def test_download_and_parse_rejects_empty_statement() -> None:
     header = (
         "Operation date;Payment date;Card number;Status;Operation amount;"
