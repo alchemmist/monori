@@ -101,11 +101,14 @@ class FakeElement:
 
 
 class FakeDownload:
-    def __init__(self, text: str) -> None:
+    def __init__(self, text: str | bytes) -> None:
         self._text = text
 
     def save_as(self, path: str) -> None:
-        pathlib.Path(path).write_text(self._text, encoding="utf-8")
+        if isinstance(self._text, bytes):
+            pathlib.Path(path).write_bytes(self._text)
+        else:
+            pathlib.Path(path).write_text(self._text, encoding="utf-8")
 
 
 class FakeDownloadExpectation:
@@ -157,7 +160,7 @@ class FakePage:
         scenario: str = "fresh",
         export_label: str = "CSV",
         csv_hook: bool = True,
-        csv: str = STATEMENT,
+        csv: str | bytes = STATEMENT,
         wrong_codes: set[str] | None = None,
     ) -> None:
         self.scenario = scenario
@@ -753,6 +756,33 @@ def test_run_two_phase_produces_rows_and_session(monkeypatch: pytest.MonkeyPatch
     assert user_agent == tbank_mod.USER_AGENT
     assert accept_downloads is True
     assert "--disk-cache-size=1" in args
+
+
+def test_download_and_parse_accepts_utf16_statement() -> None:
+    page = FakePage(scenario="logged_in", csv=STATEMENT.encode("utf-16"))
+
+    rows = _connector().download_and_parse(page, None)
+
+    assert [row.description for row in rows] == ["Lenta", "Okey"]
+
+
+def test_download_and_parse_rejects_invalid_statement() -> None:
+    page = FakePage(scenario="logged_in", csv="garbage line\n")
+
+    with pytest.raises(ConnectorError, match="could not be parsed"):
+        _connector().download_and_parse(page, None)
+
+
+def test_download_and_parse_rejects_empty_statement() -> None:
+    header = (
+        "Operation date;Payment date;Card number;Status;Operation amount;"
+        "Transaction currency;Payment amount;Payment currency;Cashback;"
+        "Category;MCC;Description\n"
+    )
+    page = FakePage(scenario="logged_in", csv=header)
+
+    with pytest.raises(ConnectorError, match="returned an empty statement"):
+        _connector().download_and_parse(page, None)
 
 
 def test_run_missing_playwright_reports_error(monkeypatch: pytest.MonkeyPatch) -> None:

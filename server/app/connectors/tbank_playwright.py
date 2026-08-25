@@ -359,6 +359,18 @@ USER_AGENT = (
     "(KHTML, like Gecko) Chrome/122.0 Safari/537.36"
 )
 LOGIN_EXPIRED = "The TBank login session expired or rejected the code. Start bank sync again."
+STATEMENT_INVALID = "The TBank statement could not be parsed. The export format may have changed."
+STATEMENT_EMPTY = "TBank returned an empty statement. Check the selected account and export period."
+
+
+def decode_statement(raw: bytes) -> str:
+    """Decode a bank statement without masking an encoding mismatch."""
+    if raw.startswith((b"\xff\xfe", b"\xfe\xff")) or b"\x00" in raw[:256]:
+        return raw.decode("utf-16")
+    try:
+        return raw.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        return raw.decode("cp1251")
 
 
 @register
@@ -809,8 +821,13 @@ class TBankPlaywrightConnector(Connector):
 
         with tempfile.NamedTemporaryFile(suffix=".csv") as tmp:
             download.save_as(tmp.name)
-            text = pathlib.Path(tmp.name).read_text(encoding="utf-8", errors="replace")
-        rows, _ = parse_statement(text)
+            text = decode_statement(pathlib.Path(tmp.name).read_bytes())
+        rows, errors = parse_statement(text)
+        if errors:
+            message = f"{STATEMENT_INVALID} Invalid rows: {len(errors)}."
+            raise PublicConnectorError(message)
+        if not rows:
+            raise PublicConnectorError(STATEMENT_EMPTY)
         return [row.to_sync_dict() for row in rows]
 
     def click_export_format(self, page: _Page) -> bool:
