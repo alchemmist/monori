@@ -348,7 +348,7 @@ function UserRow({
                     <Button
                         size="xs"
                         variant="subtle"
-                        color="red"
+                        color="var(--m-expense)"
                         loading={busy}
                         onClick={(event) => void remove(event)}
                     >

@@ -116,7 +116,7 @@ export default function AdminSqlTab({ onClose }: { onClose: () => void }) {
             <Button
                 size="l"
                 variant="filled"
-                {...(pendingWrite != null && pendingWrite !== "" ? { color: "red" } : {})}
+                {...(pendingWrite != null && pendingWrite !== "" ? { color: "var(--m-expense)" } : {})}
                 loading={busy}
                 disabled={sql.trim() === ""}
                 onClick={() => void run(Boolean(pendingWrite))}

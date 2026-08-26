@@ -3,14 +3,16 @@ import { PALETTE, fmtNum } from "./chartTheme.js";
 
 describe("chartTheme", () => {
     describe("PALETTE", () => {
-        it("is a set of distinct hex colors", () => {
+        it("is a set of theme-backed color variables", () => {
             expect(PALETTE).toHaveLength(12);
-            for (const color of PALETTE) expect(color).toMatch(/^#[0-9a-f]{6}$/i);
+            for (const [index, color] of PALETTE.entries()) {
+                expect(color).toBe(`var(--m-chart-${index + 1})`);
+            }
             expect(new Set(PALETTE).size).toBe(PALETTE.length);
         });
 
-        it("leads with the brand orange so the first series carries the accent", () => {
-            expect(PALETTE[0]).toBe("#ef5a17");
+        it("leads with the themed accent so the first series carries the brand color", () => {
+            expect(PALETTE[0]).toBe("var(--m-chart-1)");
         });
     });
 
