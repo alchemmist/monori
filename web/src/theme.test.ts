@@ -18,7 +18,7 @@ const palette = [
     "#efb118",
     "#9c6b4e",
     "#97bbf5",
-    "#ff725c",
+    "#e5325d",
     "#6b4fbb",
     "#9498a0",
 ];
@@ -28,10 +28,13 @@ describe("theme colors", () => {
         expect(palette.map((_, index) => values(`--m-chart-${index + 1}`))).toEqual(
             palette.map((color) => [color]),
         );
-        expect(values("--m-chart-accent")).toEqual(["var(--m-chart-1)"]);
-        expect(values("--m-chart-income")).toEqual(["var(--m-chart-3)"]);
-        expect(values("--m-chart-expense")).toEqual(["var(--m-chart-10)"]);
-        expect(values("--m-chart-warning")).toEqual(["var(--m-chart-7)"]);
-        expect(values("--m-accent")).toEqual(["var(--m-chart-accent)", "var(--m-chart-accent)"]);
+        expect(values("--m-accent")).toEqual(["var(--m-chart-1)"]);
+        expect(values("--m-income")).toEqual(["var(--m-chart-3)"]);
+        expect(values("--m-expense")).toEqual(["var(--m-chart-10)"]);
+        expect(values("--m-warning")).toEqual(["var(--m-chart-7)"]);
+        expect(themeCss).not.toMatch(/--m-chart-(accent|income|expense|warning):/);
+        expect(values("--g-color-text-positive")).toEqual(["var(--m-income)"]);
+        expect(values("--g-color-text-danger")).toEqual(["var(--m-expense)"]);
+        expect(values("--g-color-text-warning")).toEqual(["var(--m-warning)"]);
     });
 });

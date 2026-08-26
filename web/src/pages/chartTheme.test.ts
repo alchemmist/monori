@@ -17,10 +17,10 @@ describe("chartTheme", () => {
 
         it("keeps chart semantics inside the chart color system", () => {
             expect(SERIES).toMatchObject({
-                accent: "var(--m-chart-accent)",
-                income: "var(--m-chart-income)",
-                expense: "var(--m-chart-expense)",
-                warning: "var(--m-chart-warning)",
+                accent: "var(--m-accent)",
+                income: "var(--m-income)",
+                expense: "var(--m-expense)",
+                warning: "var(--m-warning)",
             });
         });
     });
