@@ -109,8 +109,8 @@ class Page:
     def wait_for_timeout(self, _timeout: int) -> None:
         return
 
-    def query_selector(self, selector: str) -> object | None:
-        return object() if selector == "main" and self.mode == "logged" else None
+    def query_selector(self, selector: str) -> str | None:
+        return "main" if selector == "main" and self.mode == "logged" else None
 
     def locator(self, selector: str) -> Locator:
         if selector == "iframe":
@@ -148,6 +148,11 @@ def test_parse_amount() -> None:
         parse_amount("not an amount")
 
 
+class ConnectorWithCode(YandexPayConnector):
+    def ask_sms(self, _message: str = "") -> str:
+        return "123456"
+
+
 def test_parse_date() -> None:
     assert parse_date("25 августа 2026", year=2020) == "2026-08-25T00:00:00"
     assert parse_date("авг. •• 2026", year=2020) == "2026-08-01T00:00:00"
@@ -164,12 +169,11 @@ def test_history_years_handles_new_year_without_explicit_year() -> None:
 
 
 def test_connector_auth_steps_and_history() -> None:
-    connector = YandexPayConnector({"phone": "+70000000000", "password": "pw"})
+    connector = ConnectorWithCode({"phone": "+70000000000", "password": "pw"})
     connector.ensure_logged_in(Page())
     assert connector.choose_code_method(Page("chooser"))
     assert connector.drive_auth_step(Page("phone"))
     assert connector.drive_auth_step(Page("password"))
-    connector.ask_sms = lambda _message: "123456"  # type: ignore[method-assign]
     assert connector.drive_auth_step(Page("code"))
     rows = connector.download_and_parse(Page(), None)
     assert len(rows) == 1
