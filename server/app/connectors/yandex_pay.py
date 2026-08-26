@@ -1,4 +1,6 @@
-"""Yandex Pay history connector and DOM parser."""
+"""
+Yandex Pay history connector and DOM parser.
+"""
 
 from __future__ import annotations
 
@@ -68,14 +70,17 @@ AMOUNT_MISSING = "Yandex Pay transaction amount is missing"
 DATE_MISSING = "Yandex Pay transaction date is missing"
 ITEM_INVALID = "Yandex Pay transaction item has an unexpected structure"
 PHONE_MISSING = "Yandex Pay phone is missing"
-LOGIN_SECRET_MISSING = "Yandex Pay password is missing"  # noqa: S105
+LOGIN_CREDENTIAL_MISSING = "Yandex Pay login credential is missing"
 LOGIN_FAILED = "Yandex ID login did not reach payment history"
 NO_TRANSACTIONS = "Yandex Pay returned no transactions"
+FILTER_MISSING = "Yandex Pay Pay card history filter is unavailable"
 MIN_TITLES = 2
 
 
 def parse_amount(value: str) -> int:
-    """Parse a localized Yandex Pay amount into minor currency units."""
+    """
+    Parse a localized Yandex Pay amount into minor currency units.
+    """
     match = AMOUNT_RE.search(value)
     if match is None:
         raise ConnectorError(AMOUNT_MISSING)
@@ -87,7 +92,9 @@ def parse_amount(value: str) -> int:
 
 
 def parse_date(value: str, *, year: int) -> str:
-    """Parse a localized Yandex Pay date into an ISO timestamp."""
+    """
+    Parse a localized Yandex Pay date into an ISO timestamp.
+    """
     normalized = value.strip().lower()
     today = datetime.now(UTC)
     if normalized in {"сегодня", "today"}:
@@ -123,7 +130,9 @@ def parse_date(value: str, *, year: int) -> str:
 
 
 def parse_payment_item(titles: list[str], descriptions: list[str], *, year: int) -> SyncRow:
-    """Convert one Yandex Pay history item into a sync row."""
+    """
+    Convert one Yandex Pay history item into a sync row.
+    """
     if len(titles) < MIN_TITLES or not descriptions:
         raise ConnectorError(ITEM_INVALID)
     return SyncRow(
@@ -136,9 +145,49 @@ def parse_payment_item(titles: list[str], descriptions: list[str], *, year: int)
     )
 
 
+def history_years(headings: list[str], *, year: int) -> list[int]:
+    """
+    Return the calendar year for each descending history date heading.
+    """
+    result: list[int] = []
+    current_year = year
+    previous: tuple[int, int] | None = None
+    for heading in headings:
+        normalized = heading.strip().lower()
+        date_match = DATE_RE.search(normalized)
+        english_match = EN_DATE_RE.search(normalized)
+        month_day: tuple[int, int] | None
+        if date_match is not None and date_match.group(2) in MONTHS:
+            month_day = (MONTHS[date_match.group(2)], int(date_match.group(1)))
+            explicit_year = date_match.group(3)
+        elif english_match is not None and english_match.group(1) in MONTHS:
+            month_day = (MONTHS[english_match.group(1)], int(english_match.group(2)))
+            explicit_year = english_match.group(3)
+        else:
+            relative = datetime.now(UTC) - timedelta(
+                days=1 if normalized in {"вчера", "yesterday"} else 0
+            )
+            month_day = (
+                (relative.month, relative.day)
+                if normalized in {"сегодня", "today", "вчера", "yesterday"}
+                else None
+            )
+            explicit_year = None
+        if explicit_year is not None:
+            current_year = int(explicit_year)
+        elif month_day is not None and previous is not None and month_day > previous:
+            current_year -= 1
+        result.append(current_year)
+        if month_day is not None:
+            previous = month_day
+    return result
+
+
 @register
 class YandexPayConnector(TBankPlaywrightConnector):
-    """Synchronize transactions from the authenticated Yandex Pay history."""
+    """
+    Synchronize transactions from the authenticated Yandex Pay history.
+    """
 
     bank = "yandex_pay"
     kind = "playwright"
@@ -153,7 +202,9 @@ class YandexPayConnector(TBankPlaywrightConnector):
 
     @override
     def ensure_logged_in(self, page: _Page) -> None:
-        """Authenticate with Yandex ID when the saved browser session expired."""
+        """
+        Authenticate with Yandex ID when the saved browser session expired.
+        """
         page.goto(self.HISTORY_URL, wait_until="domcontentloaded")
         page.wait_for_timeout(1500)
         for _ in range(30):
@@ -171,7 +222,9 @@ class YandexPayConnector(TBankPlaywrightConnector):
 
     @staticmethod
     def choose_code_method(page: _Page) -> bool:
-        """Start the push-code challenge shown by the bank login wrapper."""
+        """
+        Start the push-code challenge shown by the bank login wrapper.
+        """
         for label in ("Get code via push", "Let's do SMS instead"):
             chooser = page.get_by_text(label, exact=True)
             if chooser.count():
@@ -181,7 +234,9 @@ class YandexPayConnector(TBankPlaywrightConnector):
         return False
 
     def drive_auth_step(self, page: _Page) -> bool:
-        """Fill one visible field in the embedded Yandex ID login form."""
+        """
+        Fill one visible field in the embedded Yandex ID login form.
+        """
         scope = (
             page.locator("iframe").first.content_frame if page.locator("iframe").count() else page
         )
@@ -197,7 +252,7 @@ class YandexPayConnector(TBankPlaywrightConnector):
         if password.count():
             value = self.credentials.get("password")
             if not isinstance(value, str):
-                raise ConnectorError(LOGIN_SECRET_MISSING)
+                raise ConnectorError(LOGIN_CREDENTIAL_MISSING)
             password.first.fill(value, timeout=5000)
             page.keyboard.press("Enter")
             return True
@@ -214,7 +269,9 @@ class YandexPayConnector(TBankPlaywrightConnector):
 
     @override
     def download_and_parse(self, page: _Page, _since: str | None) -> list[SyncRow]:
-        """Load all lazily rendered history items and parse their visible fields."""
+        """
+        Load all lazily rendered history items and parse their visible fields.
+        """
         page.goto(self.HISTORY_URL, wait_until="domcontentloaded")
         page.wait_for_timeout(1500)
         self.select_pay_card_filter(page)
@@ -230,7 +287,8 @@ class YandexPayConnector(TBankPlaywrightConnector):
         payload = cast(
             "list[dict[str, JsonValue]]",
             page.evaluate(
-                """() => {
+                """
+                () => {
                     const headings = [...document.querySelectorAll('main h3')];
                     return [...document.querySelectorAll(
                         'main a[aria-haspopup="true"]'
@@ -245,12 +303,15 @@ class YandexPayConnector(TBankPlaywrightConnector):
                             date: heading?.innerText || '',
                         };
                     });
-                }""",
+                }
+                """,
             ),
         )
         year = datetime.now(UTC).year
+        date_texts = [str(item.get("date", "")) for item in payload]
+        years = history_years(date_texts, year=year)
         rows: list[SyncRow] = []
-        for item in payload:
+        for item, item_year in zip(payload, years, strict=True):
             titles = [str(value) for value in cast("list[JsonValue]", item.get("titles", []))]
             amount = str(item.get("amount", ""))
             date_text = str(item.get("date", ""))
@@ -258,16 +319,39 @@ class YandexPayConnector(TBankPlaywrightConnector):
                 raise ConnectorError(DATE_MISSING)
             titles.append(amount)
             descriptions = [date_text]
-            rows.append(parse_payment_item(titles, descriptions, year=year))
+            rows.append(parse_payment_item(titles, descriptions, year=item_year))
         if not rows:
             raise PublicConnectorError(NO_TRANSACTIONS)
         return rows
 
     @staticmethod
     def select_pay_card_filter(page: _Page) -> None:
-        """Limit the history view to Pay card operations."""
+        """
+        Limit the history view to Pay card operations.
+        """
+        if YandexPayConnector.pay_card_filter_active(page):
+            return
         for label in YandexPayConnector.PAY_CARD_FILTER_LABELS:
             with contextlib.suppress(Exception):
                 page.get_by_text(label, exact=True).first.click(timeout=2_500)
                 page.wait_for_timeout(750)
-                return
+                if YandexPayConnector.pay_card_filter_active(page):
+                    return
+        raise PublicConnectorError(FILTER_MISSING)
+
+    @staticmethod
+    def pay_card_filter_active(page: _Page) -> bool:
+        """
+        Return whether the Pay card history filter is active.
+        """
+        return bool(
+            page.evaluate(
+                """
+                () => [...document.querySelectorAll('main button')].some(button => {
+                    const label = button.innerText.trim();
+                    return (label === 'Pay card' || label === 'Карта Пэй')
+                        && (button.disabled || button.className.includes('isActive'));
+                })
+                """
+            )
+        )

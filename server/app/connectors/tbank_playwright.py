@@ -876,7 +876,9 @@ class TBankPlaywrightConnector(Connector):
         return [row.to_sync_dict() for row in rows]
 
     def select_period(self, page: _Page) -> None:
-        """Select a two-month operation window when the cabinet exposes it."""
+        """
+        Select a two-month operation window when the cabinet exposes it.
+        """
         with contextlib.suppress(Exception):
             page.locator(self.SEL_PERIOD_TWO_MONTHS).first.click(timeout=5_000)
             page.wait_for_timeout(1_000)
