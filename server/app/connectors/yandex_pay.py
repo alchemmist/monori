@@ -159,7 +159,14 @@ class YandexPayConnector(TBankPlaywrightConnector):
         for _ in range(30):
             if "/my/history" in page.url and page.query_selector("main") is not None:
                 return
-            frame = page.locator("iframe[src*='yandex.ru/user-id']").first.content_frame
+            if page.locator("iframe").count() == 0:
+                if "/_pay/login" in page.url:
+                    page.goto(self.HISTORY_URL, wait_until="domcontentloaded")
+                    page.wait_for_timeout(1500)
+                    continue
+                page.wait_for_timeout(1000)
+                continue
+            frame = page.locator("iframe").first.content_frame
             if frame.locator("input[type='tel'], input[name='login']").count():
                 phone = self.credentials.get("phone")
                 if not isinstance(phone, str):
