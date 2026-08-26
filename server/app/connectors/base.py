@@ -148,6 +148,7 @@ REGISTRY: dict[tuple[str, str], type[Connector]] = {}
 @cache
 def _load_builtin_connectors() -> None:
     importlib.import_module("monori.server.app.connectors.tbank_playwright")
+    importlib.import_module("monori.server.app.connectors.yandex_pay")
 
 
 def register(cls: type[Connector]) -> type[Connector]:

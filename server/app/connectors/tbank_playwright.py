@@ -150,11 +150,17 @@ class _Locator(Protocol):
     @property
     def first(self) -> Self: ...
 
+    def nth(self, index: int) -> Self: ...
+
     def click(self, *, timeout: int | None = None) -> None: ...
+
+    def count(self) -> int: ...
 
 
 class _Keyboard(Protocol):
     def type(self, text: str) -> None: ...
+
+    def press(self, key: str) -> None: ...
 
 
 class _Element(Protocol):
@@ -223,6 +229,8 @@ class _Page(_LocatorPage, Protocol):
 
     def content(self) -> str: ...
 
+    def evaluate(self, expression: str) -> JsonValue: ...
+
 
 class _NavigationResponse(Protocol):
     pass
@@ -273,6 +281,8 @@ class _RawPage(_LocatorPage, Protocol):
     def screenshot(self, *, path: str, full_page: bool = False) -> bytes: ...
 
     def content(self) -> str: ...
+
+    def evaluate(self, expression: str) -> JsonValue: ...
 
 
 class _DownloadExpectationAdapter(AbstractContextManager["_DownloadExpectationAdapter"]):
@@ -351,6 +361,9 @@ class _PageAdapter:
 
     def content(self) -> str:
         return self._page.content()
+
+    def evaluate(self, expression: str) -> JsonValue:
+        return self._page.evaluate(expression)
 
 
 type _ToWorkerMessage = tuple[Literal["sms"], str] | tuple[Literal["cancel"], None]
