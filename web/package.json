@@ -31,7 +31,7 @@
         "zustand": "^5.0.15"
     },
     "devDependencies": {
-        "@axe-core/playwright": "^4.12.1",
+        "@axe-core/playwright": "^4.13.0",
         "@playwright/test": "^1.62.0",
         "@stryker-mutator/api": "^10.0.0",
         "@stryker-mutator/core": "^10.0.0",
