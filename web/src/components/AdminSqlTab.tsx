@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import type { KeyboardEvent } from "react";
 import { Button, Textarea } from "@mantine/core";
 import { api } from "../api.js";
@@ -116,7 +116,16 @@ export default function AdminSqlTab({ onClose }: { onClose: () => void }) {
             <Button
                 size="l"
                 variant="filled"
-                {...(pendingWrite != null && pendingWrite !== "" ? { color: "var(--m-expense)" } : {})}
+                {...(pendingWrite != null && pendingWrite !== ""
+                    ? {
+                          color: "var(--m-expense)",
+                          styles: {
+                              root: {
+                                  "--button-color": "var(--m-accent-contrast)",
+                              } as CSSProperties,
+                          },
+                      }
+                    : {})}
                 loading={busy}
                 disabled={sql.trim() === ""}
                 onClick={() => void run(Boolean(pendingWrite))}

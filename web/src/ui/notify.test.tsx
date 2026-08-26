@@ -15,10 +15,10 @@ describe("showToast", () => {
     it("maps each gravity theme onto its Mantine colour", () => {
         const spy = vi.spyOn(notifications, "show").mockImplementation(() => "id");
         for (const [theme, color] of [
-            ["danger", "red"],
-            ["success", "teal"],
-            ["warning", "yellow"],
-            ["info", "blue"],
+            ["danger", "var(--m-expense)"],
+            ["success", "var(--m-income)"],
+            ["warning", "var(--m-warning)"],
+            ["info", "var(--m-chart-2)"],
         ] as const) {
             showToast({ title: "t", theme });
             expect(spy).toHaveBeenLastCalledWith(

@@ -228,6 +228,10 @@ html:has(> body.theme-dark) {
     background: var(--m-canvas);
 }
 
+:root:has(> body.theme-dark) {
+    --m-canvas: #221d22;
+}
+
 /* frosted-glass cards over the canvas: the translucent --m-card-bg is blurred
    and lifted with a soft drop shadow so panels feel like glass, not black tiles */
 .theme-dark .card {
