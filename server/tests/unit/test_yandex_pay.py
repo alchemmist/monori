@@ -172,8 +172,15 @@ def test_parse_date() -> None:
 
 
 def test_history_years_handles_new_year_without_explicit_year() -> None:
-    assert history_years(["January 2", "December 31"], year=2026) == [2026, 2025]
-    assert history_years(["25 августа 2026", "Yesterday"], year=2020) == [2026, 2026]
+    reference_year = datetime.now(UTC).year
+    assert history_years(["January 2", "December 31"], year=reference_year) == [
+        reference_year,
+        reference_year - 1,
+    ]
+    assert history_years(["today", "yesterday"], year=reference_year) == [
+        reference_year,
+        reference_year,
+    ]
     assert history_years(["August 23, 2026", "December 31, 2025"], year=2020) == [2026, 2025]
     assert history_years(["today", "yesterday", "August 23"], year=2026) == [2026, 2026, 2026]
 

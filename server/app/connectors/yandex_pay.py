@@ -46,22 +46,20 @@ MONTHS = {
     "нояб.": 11,
     "дек.": 12,
 }
-MONTHS.update(
-    {
-        "january": 1,
-        "february": 2,
-        "march": 3,
-        "april": 4,
-        "may": 5,
-        "june": 6,
-        "july": 7,
-        "august": 8,
-        "september": 9,
-        "october": 10,
-        "november": 11,
-        "december": 12,
-    }
-)
+EN_MONTHS = {
+    "january": 1,
+    "february": 2,
+    "march": 3,
+    "april": 4,
+    "may": 5,
+    "june": 6,
+    "july": 7,
+    "august": 8,
+    "september": 9,
+    "october": 10,
+    "november": 11,
+    "december": 12,
+}
 AMOUNT_RE = re.compile(r"([+\-\N{MINUS SIGN}]?\s*[0-9][0-9\u00a0 ]*(?:[,.][0-9]{1,2})?)")
 DATE_RE = re.compile(r"(\d{1,2})\s+([\u0410-\u042f\u0430-\u044fЁё]+)(?:\s+(\d{4}))?")
 EN_DATE_RE = re.compile(r"([A-Za-z]+)\s+(\d{1,2})(?:,\s*(\d{4}))?")
@@ -111,10 +109,10 @@ def parse_date(value: str, *, year: int) -> str:
             )
         else:
             english = EN_DATE_RE.search(normalized)
-            if english is not None and english.group(1) in MONTHS:
+            if english is not None and english.group(1) in EN_MONTHS:
                 result = date(
                     int(english.group(3) or year),
-                    MONTHS[english.group(1)],
+                    EN_MONTHS[english.group(1)],
                     int(english.group(2)),
                 )
             else:
@@ -156,8 +154,8 @@ def history_years(headings: list[str], *, year: int) -> list[int]:
         if date_match is not None and date_match.group(2) in MONTHS:
             month_day = (MONTHS[date_match.group(2)], int(date_match.group(1)))
             explicit_year = date_match.group(3)
-        elif english_match is not None and english_match.group(1) in MONTHS:
-            month_day = (MONTHS[english_match.group(1)], int(english_match.group(2)))
+        elif english_match is not None and english_match.group(1) in EN_MONTHS:
+            month_day = (EN_MONTHS[english_match.group(1)], int(english_match.group(2)))
             explicit_year = english_match.group(3)
         else:
             relative = datetime.now(UTC).date() - timedelta(
