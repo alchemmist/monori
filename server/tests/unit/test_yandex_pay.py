@@ -177,6 +177,7 @@ def test_history_years_handles_new_year_without_explicit_year() -> None:
         reference_year,
         reference_year - 1,
     ]
+    assert history_years(["25 августа 2026"], year=reference_year) == [2026]
     assert history_years(["today", "yesterday"], year=reference_year) == [
         reference_year,
         reference_year,
