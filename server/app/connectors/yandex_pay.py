@@ -139,13 +139,16 @@ def parse_payment_item(titles: list[str], descriptions: list[str], *, year: int)
     )
 
 
-def history_years(headings: list[str], *, year: int) -> list[int]:
+def history_years(
+    headings: list[str], *, year: int, reference_date: date | None = None
+) -> list[int]:
     """
     Return the calendar year for each descending history date heading.
     """
     result: list[int] = []
     current_year = year
     previous: tuple[int, int] | None = None
+    today = reference_date or datetime.now(UTC).date()
     for heading in headings:
         normalized = heading.strip().lower()
         date_match = DATE_RE.search(normalized)
@@ -158,14 +161,12 @@ def history_years(headings: list[str], *, year: int) -> list[int]:
             month_day = (EN_MONTHS[english_match.group(1)], int(english_match.group(2)))
             explicit_year = english_match.group(3)
         else:
-            relative = datetime.now(UTC).date() - timedelta(
-                days=1 if normalized in {"вчера", "yesterday"} else 0
-            )
-            month_day = (
-                (relative.month, relative.day)
-                if normalized in {"сегодня", "today", "вчера", "yesterday"}
-                else None
-            )
+            relative = today - timedelta(days=1 if normalized in {"вчера", "yesterday"} else 0)
+            if normalized in {"сегодня", "today", "вчера", "yesterday"}:
+                current_year = relative.year
+                month_day = (relative.month, relative.day)
+            else:
+                month_day = None
             explicit_year = None
         if explicit_year is not None:
             current_year = int(explicit_year)

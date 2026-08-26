@@ -1,4 +1,4 @@
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import TYPE_CHECKING
 
 import pytest
@@ -177,13 +177,25 @@ def test_history_years_handles_new_year_without_explicit_year() -> None:
         reference_year,
         reference_year - 1,
     ]
-    assert history_years(["25 августа 2026"], year=reference_year) == [2026]
+    assert history_years(["25 августа 2025"], year=reference_year) == [2025]
+    assert history_years(["2 января", "31 декабря"], year=reference_year) == [
+        reference_year,
+        reference_year - 1,
+    ]
     assert history_years(["today", "yesterday"], year=reference_year) == [
         reference_year,
         reference_year,
     ]
     assert history_years(["August 23, 2026", "December 31, 2025"], year=2020) == [2026, 2025]
     assert history_years(["today", "yesterday", "August 23"], year=2026) == [2026, 2026, 2026]
+
+
+def test_history_years_uses_relative_year_across_new_year() -> None:
+    assert history_years(
+        ["Yesterday", "December 30"],
+        year=2026,
+        reference_date=date(2026, 1, 1),
+    ) == [2025, 2025]
 
 
 def test_connector_auth_steps_and_history() -> None:
@@ -225,17 +237,27 @@ def test_tbank_playwright_adapter_and_period_selection() -> None:
         def __init__(self, *, qa_present: bool) -> None:
             super().__init__()
             self.qa_present = qa_present
+            self.clicked: str | None = None
 
         def locator(self, selector: str) -> Locator:
             if selector == TBankPlaywrightConnector.SEL_PERIOD_TWO_MONTHS:
-                return Locator(present=self.qa_present)
+                locator = Locator(present=self.qa_present)
+                locator.on_click = lambda: setattr(self, "clicked", selector)
+                return locator
             return super().locator(selector)
 
         def get_by_text(self, text: str, *, exact: bool = False) -> Locator:
-            return Locator(present=exact and text == "2 месяца")
+            locator = Locator(present=exact and text == "2 месяца")
+            locator.on_click = lambda: setattr(self, "clicked", text)
+            return locator
 
-    TBankPlaywrightConnector({}).select_period(PeriodPage(qa_present=True))
-    TBankPlaywrightConnector({}).select_period(PeriodPage(qa_present=False))
+    qa_page = PeriodPage(qa_present=True)
+    TBankPlaywrightConnector({}).select_period(qa_page)
+    assert qa_page.clicked == TBankPlaywrightConnector.SEL_PERIOD_TWO_MONTHS
+
+    fallback_page = PeriodPage(qa_present=False)
+    TBankPlaywrightConnector({}).select_period(fallback_page)
+    assert fallback_page.clicked == "2 месяца"
 
 
 def test_connector_rejects_empty_or_incomplete_history() -> None:
