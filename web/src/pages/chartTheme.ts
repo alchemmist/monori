@@ -20,10 +20,10 @@ export const PALETTE = [
 // green/red/brand meaning across light & dark; the neutral tokens back the
 // "budgeted target" and receding year-over-year lines.
 export const SERIES = {
-    income: "var(--m-income)",
-    expense: "var(--m-expense)",
-    accent: "var(--m-accent)",
-    warning: "var(--m-warning)",
+    income: "var(--m-chart-income)",
+    expense: "var(--m-chart-expense)",
+    accent: "var(--m-chart-accent)",
+    warning: "var(--m-chart-warning)",
     hint: "var(--g-color-text-hint)",
     secondary: "var(--g-color-text-secondary)",
 };

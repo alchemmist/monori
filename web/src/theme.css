@@ -36,25 +36,29 @@
     --m-text: #0a0a0a;
     --m-text-dim: #5c5c58;
     --m-text-faint: #6b6a66;
-    --m-accent: #c2410c;
+    --m-accent: var(--m-chart-accent);
     --m-accent-soft: #ffe6d9;
     --m-income: #166534;
     --m-expense: #b91c1c;
     --m-warning: #b45309;
     --m-income-soft: #e4f3e9;
     --m-expense-soft: #fbe3e3;
-    --m-chart-1: var(--m-accent);
+    --m-chart-1: #ef5a17;
     --m-chart-2: #4269d0;
     --m-chart-3: #3ca951;
     --m-chart-4: #a463f2;
-    --m-chart-5: #d94f87;
-    --m-chart-6: #329f8a;
-    --m-chart-7: #b77900;
-    --m-chart-8: #87583b;
-    --m-chart-9: #5d8fd8;
-    --m-chart-10: #d94f4f;
-    --m-chart-11: #5b43a0;
-    --m-chart-12: #6b6a66;
+    --m-chart-5: #ff8ab7;
+    --m-chart-6: #6cc5b0;
+    --m-chart-7: #efb118;
+    --m-chart-8: #9c6b4e;
+    --m-chart-9: #97bbf5;
+    --m-chart-10: #ff725c;
+    --m-chart-11: #6b4fbb;
+    --m-chart-12: #9498a0;
+    --m-chart-accent: var(--m-chart-1);
+    --m-chart-income: var(--m-chart-3);
+    --m-chart-expense: var(--m-chart-10);
+    --m-chart-warning: var(--m-chart-7);
     --m-card-bg: var(--m-surface);
     --m-card-border: var(--m-border);
     --m-sidebar-edge: var(--m-border-soft);
@@ -71,13 +75,13 @@
     --glass-shadow: 0 2px 16px rgb(0 0 0 / 6%);
 
     /* accent-tuned brand tokens (drive the Mantine skin's filled/selection look) */
-    --g-color-base-brand: #c2410c;
-    --g-color-base-brand-hover: #a9360b;
-    --g-color-line-brand: #c2410c;
-    --g-color-text-brand: #a9360b;
-    --g-color-text-brand-heavy: #8f2f09;
-    --g-color-text-link: #a9360b;
-    --g-color-text-link-hover: #8f2f09;
+    --g-color-base-brand: var(--m-accent);
+    --g-color-base-brand-hover: color-mix(in srgb, var(--m-accent) 88%, var(--m-text));
+    --g-color-line-brand: var(--m-accent);
+    --g-color-text-brand: var(--m-accent);
+    --g-color-text-brand-heavy: color-mix(in srgb, var(--m-accent) 78%, var(--m-text));
+    --g-color-text-link: var(--m-accent);
+    --g-color-text-link-hover: color-mix(in srgb, var(--m-accent) 78%, var(--m-text));
     --g-color-text-brand-contrast: #fff;
     --g-color-base-selection: #ffe6d9;
     --g-color-base-selection-hover: #ffd9c5;
@@ -128,7 +132,7 @@
     --m-text: #f2f1f6;
     --m-text-dim: #a3a0b0;
     --m-text-faint: #aaa7b8;
-    --m-accent: #ff8a52;
+    --m-accent: var(--m-chart-accent);
     --m-accent-contrast: #0a0a0a;
     --m-accent-soft: #3a1e10;
     --m-income: #4ade80;
@@ -136,18 +140,6 @@
     --m-warning: #fbbf24;
     --m-income-soft: #16281c;
     --m-expense-soft: #331919;
-    --m-chart-1: var(--m-accent);
-    --m-chart-2: #82a7ff;
-    --m-chart-3: #65d98b;
-    --m-chart-4: #c49aff;
-    --m-chart-5: #ff9bc3;
-    --m-chart-6: #76d8c1;
-    --m-chart-7: #ffd166;
-    --m-chart-8: #c49a7a;
-    --m-chart-9: #a9c7ff;
-    --m-chart-10: #ff8f8f;
-    --m-chart-11: #a997ed;
-    --m-chart-12: #aaa7b8;
 
     /* glass over the dark canvas: the approved warm, see-through panel from the
        category dropdown, now the shared standard. Cards read the same tokens so
@@ -160,13 +152,13 @@
     --m-card-border: var(--glass-border);
     --m-sidebar-edge: rgb(255 255 255 / 8%);
 
-    --g-color-base-brand: #ff8a52;
-    --g-color-base-brand-hover: #ff9d70;
-    --g-color-line-brand: #ff8a52;
-    --g-color-text-brand: #ff9d70;
-    --g-color-text-brand-heavy: #ffb28f;
-    --g-color-text-link: #ff9d70;
-    --g-color-text-link-hover: #ffb28f;
+    --g-color-base-brand: var(--m-accent);
+    --g-color-base-brand-hover: color-mix(in srgb, var(--m-accent) 88%, var(--m-text));
+    --g-color-line-brand: var(--m-accent);
+    --g-color-text-brand: var(--m-accent);
+    --g-color-text-brand-heavy: color-mix(in srgb, var(--m-accent) 78%, var(--m-text));
+    --g-color-text-link: var(--m-accent);
+    --g-color-text-link-hover: color-mix(in srgb, var(--m-accent) 78%, var(--m-text));
     --g-color-text-brand-contrast: #0a0a0a;
     --g-color-base-selection: #3a1e10;
     --g-color-base-selection-hover: #4a2614;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { PALETTE, fmtNum } from "./chartTheme.js";
+import { PALETTE, SERIES, fmtNum } from "./chartTheme.js";
 
 describe("chartTheme", () => {
     describe("PALETTE", () => {
@@ -13,6 +13,15 @@ describe("chartTheme", () => {
 
         it("leads with the themed accent so the first series carries the brand color", () => {
             expect(PALETTE[0]).toBe("var(--m-chart-1)");
+        });
+
+        it("keeps chart semantics inside the chart color system", () => {
+            expect(SERIES).toMatchObject({
+                accent: "var(--m-chart-accent)",
+                income: "var(--m-chart-income)",
+                expense: "var(--m-chart-expense)",
+                warning: "var(--m-chart-warning)",
+            });
         });
     });
 
