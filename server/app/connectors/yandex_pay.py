@@ -191,7 +191,6 @@ class YandexPayConnector(TBankPlaywrightConnector):
             if not isinstance(value, str):
                 raise ConnectorError(PHONE_MISSING)
             phone.first.fill(value, timeout=5000)
-            phone.first.click(timeout=5000)
             page.keyboard.press("Enter")
             return True
         password = scope.locator("input[type='password']")
@@ -200,7 +199,6 @@ class YandexPayConnector(TBankPlaywrightConnector):
             if not isinstance(value, str):
                 raise ConnectorError(LOGIN_SECRET_MISSING)
             password.first.fill(value, timeout=5000)
-            password.first.click(timeout=5000)
             page.keyboard.press("Enter")
             return True
         code = scope.locator(
