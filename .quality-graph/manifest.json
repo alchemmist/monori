@@ -6,7 +6,7 @@
       "write"
     ]
   },
-  "graphDigest": "e71403d2c569ce8dbaabdeb41de81bb52fc154f0769ec9b4fb215fec0ca6fe85",
+  "graphDigest": "3377fcb397b400185976952cb475e66382faea1ea79a4c893459edf5bdb2cd5f",
   "graphVersion": 0,
   "labels": {
     "enabled": true,
@@ -133,8 +133,9 @@
     },
     {
       "env": {
-        "GITHUB_TOKEN": "${{ secrets.GITHUB_TOKEN }}",
-        "QUALITY_GRAPH_READ_ONLY": "true"
+        "BASE": "${{ github.event.pull_request.base.sha || 'origin/main' }}",
+        "QG_HEAD_SHA": "${{ github.event.pull_request.head.sha || github.sha }}",
+        "QG_PULL_REQUEST": "${{ github.event.pull_request.number || '0' }}"
       },
       "id": "hardcoded-colors",
       "needs": [
@@ -144,7 +145,7 @@
         "approvals": {
           "files": true,
           "findings": true,
-          "node": false
+          "node": true
         },
         "blocking": true,
         "blockingSeverities": [
@@ -153,14 +154,16 @@
       },
       "profile": "default",
       "result": {
-        "adapter": "exit-code"
+        "adapter": "native",
+        "path": "reports/hardcoded-colors.json"
       },
       "step": {
         "env": {
-          "GITHUB_TOKEN": "${{ secrets.GITHUB_TOKEN }}",
-          "QUALITY_GRAPH_READ_ONLY": "true"
+          "BASE": "${{ github.event.pull_request.base.sha || 'origin/main' }}",
+          "QG_HEAD_SHA": "${{ github.event.pull_request.head.sha || github.sha }}",
+          "QG_PULL_REQUEST": "${{ github.event.pull_request.number || '0' }}"
         },
-        "run": "uv run --locked python -m monori.ci.quality_graph.checks --check-id hardcoded-colors"
+        "run": "uv run --locked --group quality-graph python -m monori.ci.quality_graph.checks.hardcoded_colors --base \"$BASE\""
       },
       "title": "Hardcoded color gate"
     },

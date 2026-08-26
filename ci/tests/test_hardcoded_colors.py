@@ -1,10 +1,11 @@
+from typing import cast
+
 from monori.ci.quality_graph.checks.hardcoded_colors import (
-    HardcodedColorCheck,
+    result_value,
     scan_file,
     should_scan,
     summary_body,
 )
-from monori.ci.quality_graph.models import CheckContext, Verdict
 
 
 def test_detects_supported_color_syntax() -> None:
@@ -93,24 +94,56 @@ def test_excludes_generated_vendor_minified_lockfiles_and_fixtures() -> None:
     assert all(not should_scan(path) for path in paths)
 
 
-def test_check_annotation_and_summary_support_approvals() -> None:
-    result = HardcodedColorCheck().collect(
-        CheckContext(
-            files={"example.css": "color: #ef5a17;\n"},
-            changed_lines={"example.css": frozenset({1})},
-        )
+def test_native_result_contains_findings_annotations_and_controls() -> None:
+    finding = scan_file("example.css", "color: #ef5a17;\n", {1})[0]
+    result = result_value(
+        [finding],
+        {
+            "GITHUB_REPOSITORY": "org/repo",
+            "QG_HEAD_SHA": "a" * 40,
+            "GITHUB_RUN_ID": "123",
+            "GITHUB_RUN_ATTEMPT": "2",
+            "QG_PULL_REQUEST": "7",
+        },
+        "b" * 64,
     )
-    finding = result.findings[0]
-    annotation = HardcodedColorCheck().source_annotation(finding)
-    failed = summary_body([finding], set()).summary
-    passed = summary_body([finding], {finding.finding_id}).summary
 
-    assert result.verdict is Verdict.FAIL
-    assert annotation.path == "example.css"
-    assert annotation.start_line == annotation.end_line == 1
-    assert annotation.start_column == 8
-    assert annotation.end_column == 14
-    assert "| File | Line | Literal | Format | Context | Status |" in failed
-    assert "`/qg ignore hardcoded-colors`" in failed
-    assert "`/qg ignore-file example.css`" in failed
-    assert "## ✅ Hardcoded color gate" in passed
+    assert result["status"] == "failed"
+    assert result["failureKind"] == "quality"
+    findings = cast("list[dict[str, object]]", result["findings"])
+    annotations = cast("list[dict[str, object]]", result["annotations"])
+    controls = cast("list[dict[str, object]]", result["controls"])
+    provenance = cast("dict[str, object]", result["provenance"])
+    assert cast("str", findings[0]["id"]).startswith("color-")
+    assert findings[0]["location"] == {
+        "path": "example.css",
+        "startLine": 1,
+        "endLine": 1,
+        "startColumn": 8,
+        "endColumn": 14,
+    }
+    assert annotations[0]["location"] == findings[0]["location"]
+    assert {control["kind"] for control in controls} == {"finding", "file", "node"}
+    assert provenance["pullRequest"] == 7
+    summary = summary_body([finding])
+    assert "| File | Line | Literal | Format | Context | Status |" in summary
+    assert "`/qg ignore hardcoded-colors`" in summary
+    assert "`/qg ignore-file example.css`" in summary
+
+
+def test_passing_native_result_has_no_failure_kind() -> None:
+    result = result_value(
+        [],
+        {
+            "GITHUB_REPOSITORY": "org/repo",
+            "QG_HEAD_SHA": "a" * 40,
+            "GITHUB_RUN_ID": "123",
+            "GITHUB_RUN_ATTEMPT": "1",
+            "QG_PULL_REQUEST": "0",
+        },
+        "b" * 64,
+    )
+
+    assert result["status"] == "passed"
+    assert "failureKind" not in result
+    assert "pullRequest" not in cast("dict[str, object]", result["provenance"])

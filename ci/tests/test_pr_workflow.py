@@ -40,7 +40,6 @@ TEST_RUNNERS = (
     REPOSITORY_ROOT / ".github/actions/mutation-diff-gate/action.yml",
     REPOSITORY_ROOT / ".github/actions/object-annotation-gate/action.yml",
     REPOSITORY_ROOT / ".github/actions/suppression-gate/action.yml",
-    REPOSITORY_ROOT / ".github/actions/hardcoded-color-gate/action.yml",
     REPOSITORY_ROOT / ".github/actions/type-cast-gate/action.yml",
 )
 WorkflowStep = TypedDict("WorkflowStep", {"uses": str, "with": dict[str, str]}, total=False)
@@ -98,7 +97,6 @@ class TestPullRequestWorkflowGraph:
             "object-annotations",
             "type-casts",
             "suppressions",
-            "hardcoded-colors",
             "admin-command",
             "quality-dashboard-live",
             "quality-report",
@@ -157,11 +155,6 @@ class TestPullRequestWorkflowGraph:
                 "issues": "write",
                 "pull-requests": "write",
             },
-            "hardcoded-colors": {
-                "contents": "read",
-                "issues": "write",
-                "pull-requests": "write",
-            },
         }
         for job, definition in self.workflow["jobs"].items():
             permissions = definition.get("permissions", {})
@@ -175,7 +168,6 @@ class TestPullRequestWorkflowGraph:
         expected = {
             "fmt-check": "workflow-graph",
             "suppressions": "workflow-graph",
-            "hardcoded-colors": "workflow-graph",
             "triple-quotes": "workflow-graph",
             "docs-links": "workflow-graph",
             "lint": "suppressions",
@@ -259,7 +251,6 @@ class TestPullRequestWorkflowGraph:
             "object-annotations": "object-annotation-gate",
             "type-casts": "type-cast-gate",
             "suppressions": "suppression-gate",
-            "hardcoded-colors": "hardcoded-color-gate",
             "admin-command": "admin-command",
             "flaky-tests": "flaky-test-gate",
         }
@@ -387,7 +378,6 @@ class TestPullRequestWorkflowGraph:
             "mutation-diff-gate",
             "object-annotation-gate",
             "suppression-gate",
-            "hardcoded-color-gate",
             "type-cast-gate",
         )
         for action in actions:
@@ -503,7 +493,6 @@ class TestPullRequestWorkflowGraph:
             "frontend-performance",
             "object-annotations",
             "suppressions",
-            "hardcoded-colors",
             "type-casts",
         ):
             job_source = re.search(

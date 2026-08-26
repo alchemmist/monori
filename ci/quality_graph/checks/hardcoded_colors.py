@@ -2,37 +2,32 @@
 
 from __future__ import annotations
 
+import argparse
+import importlib
+import json
+import os
 import re
 from dataclasses import dataclass
-from pathlib import PurePosixPath
-from typing import TYPE_CHECKING, ClassVar, override
+from pathlib import Path, PurePosixPath
+from typing import TYPE_CHECKING, cast
 
-from monori.ci.lib.annotations import AnnotationLevel, SourceAnnotation
 from monori.ci.lib.findings import stable_finding_id
-from monori.ci.quality_graph.base import (
-    ApprovalLifecycle,
-    PullRequestSourceCheck,
-    QualityRuntime,
-    read_github_event,
-)
-from monori.ci.quality_graph.checks.suppressions import added_lines_from_patch
-from monori.ci.quality_graph.models import CheckContext, CheckResult, Metric, Verdict
-from monori.ci.quality_graph.registry import WORKFLOW_JOB_BY_ID
-from monori.ci.quality_graph.reporting import (
-    RenderedCheckReport,
-    ReportModel,
-    ReportStatus,
-    admin_commands,
-    render_report,
-)
-from monori.common import JsonValue, integer_value, object_value, optional_string, string_value
 
 if TYPE_CHECKING:
-    from monori.ci.lib.github import RepositoryGitHubAPI
+    from collections.abc import Callable, Mapping
+    from typing import Protocol
+
+    class ChangedFile(Protocol):
+        """Describe the diff data consumed by the scanner."""
+
+        path: str
+        source: str
+        added_lines: frozenset[int]
+
 
 FINDING_ID_PREFIX = "color-"
-STATUS_LABEL = "monori-hardcoded-color-failed"
-APPROVAL_STATE_RE = re.compile(r"<!-- monori-color-approvals: ([0-9a-f,]*) -->")
+RESULT_PATH = Path("reports/hardcoded-colors.json")
+MANIFEST_PATH = Path(".quality-graph/manifest.json")
 SOURCE_SUFFIXES = (
     ".css",
     ".scss",
@@ -104,13 +99,6 @@ NAMED_COLORS = frozenset(
 NAMED_RE = re.compile(
     r"(?i)(?<![-\w])(" + "|".join(sorted(NAMED_COLORS, key=len, reverse=True)) + r")(?![-\w])"
 )
-APPROVALS = ApprovalLifecycle(
-    "color",
-    FINDING_ID_PREFIX,
-    APPROVAL_STATE_RE,
-    "<!-- monori-color-approvals: {ids} -->",
-    allow_file_commands=True,
-)
 
 
 @dataclass(frozen=True)
@@ -124,11 +112,6 @@ class Finding:
     format: str
     context: str
     finding_id: str
-
-
-def display_finding_id(finding_id: str) -> str:
-    """Format a finding ID for administrator commands."""
-    return f"{FINDING_ID_PREFIX}{finding_id}"
 
 
 def should_scan(path: str) -> bool:
@@ -199,80 +182,18 @@ def scan_file(path: str, source: str, added_lines: set[int]) -> list[Finding]:
                     literal,
                     color_format,
                     line.strip(),
-                    stable_finding_id(raw_id),
+                    f"{FINDING_ID_PREFIX}{stable_finding_id(raw_id)}",
                 )
             )
     return findings
-
-
-class HardcodedColorCheck(PullRequestSourceCheck[Finding]):
-    """Find hardcoded web colors on added pull-request lines."""
-
-    definition = WORKFLOW_JOB_BY_ID["hardcoded-colors"]
-    approval_lifecycle = APPROVALS
-    supports_ignore_file = True
-    failure_label: ClassVar[str | None] = STATUS_LABEL
-
-    @override
-    def collect(self, context: CheckContext) -> CheckResult[Finding]:
-        findings = tuple(
-            finding
-            for path, source in context.files.items()
-            for finding in scan_file(path, source, set(context.changed_lines.get(path, ())))
-        )
-        return CheckResult(findings, Verdict.FAIL if findings else Verdict.PASS)
-
-    @override
-    def collect_pull_request(
-        self, github: RepositoryGitHubAPI, pull: dict[str, JsonValue]
-    ) -> list[Finding]:
-        """Collect newly introduced colors from the pull request."""
-        return changed_files(github, pull)
-
-    @override
-    def render_summary(
-        self, findings: list[Finding], approved: set[str], pull_request_url: str
-    ) -> RenderedCheckReport:
-        """Render the hardcoded-color report."""
-        return summary_body(findings, approved)
-
-    @override
-    def source_annotation(self, finding: Finding) -> SourceAnnotation:
-        """Build an exact error annotation for a color literal."""
-        return SourceAnnotation(
-            finding.path,
-            finding.line,
-            finding.line,
-            f"Hardcoded {finding.format} color: {finding.literal}",
-            AnnotationLevel.FAILURE,
-            start_column=finding.column + 1,
-            end_column=finding.column + len(finding.literal),
-        )
-
-
-def changed_files(github: RepositoryGitHubAPI, pull: dict[str, JsonValue]) -> list[Finding]:
-    """Collect color findings from supported changed files in a pull request."""
-    number = integer_value(pull["number"], "pull request number")
-    head_sha = string_value(object_value(pull["head"], "head")["sha"], "head sha")
-    findings: list[Finding] = []
-    for file in github.paged(f"/pulls/{number}/files"):
-        path = string_value(file["filename"], "changed filename")
-        patch = optional_string(file.get("patch"))
-        if file.get("status") == "removed" or not patch or not should_scan(path):
-            continue
-        source = github.file_text(path, head_sha)
-        if source is not None:
-            findings.extend(scan_file(path, source, added_lines_from_patch(patch)))
-    return sorted(findings, key=lambda finding: (finding.path, finding.line, finding.column))
 
 
 def _cell(value: str) -> str:
     return value.replace("|", "\\|").replace("`", "\\`").replace("\n", " ")
 
 
-def summary_body(findings: list[Finding], approved: set[str]) -> RenderedCheckReport:
+def summary_body(findings: list[Finding]) -> str:
     """Build the hardcoded-color Job Summary."""
-    active = [finding for finding in findings if finding.finding_id not in approved]
     rows = [
         "| File | Line | Literal | Format | Context | Status |",
         "| --- | ---: | --- | --- | --- | --- |",
@@ -280,50 +201,117 @@ def summary_body(findings: list[Finding], approved: set[str]) -> RenderedCheckRe
     rows.extend(
         f"| `{_cell(finding.path)}` | {finding.line} | `{_cell(finding.literal)}` | "
         f"{finding.format} | `{_cell(finding.context[:200])}` | "
-        f"{'approved' if finding.finding_id in approved else 'active'} |"
+        "active |"
         for finding in findings
     )
-    return render_report(
-        ReportModel(
-            "hardcoded-colors",
-            ReportStatus.PASSED if not active else ReportStatus.FAILED,
-            metrics=(
-                Metric("Status", "PASS" if not active else "FAIL"),
-                Metric("Findings", str(len(findings))),
-                Metric("Active", str(len(active))),
-                Metric("Approved", str(len(findings) - len(active))),
-            ),
-            content="\n".join(rows) if findings else "No hardcoded colors found.",
-            admin=admin_commands(
-                "color",
-                [display_finding_id(finding.finding_id) for finding in active],
-                [
-                    display_finding_id(finding.finding_id)
-                    for finding in findings
-                    if finding.finding_id in approved
-                ],
-                {
-                    path: [
-                        display_finding_id(finding.finding_id)
-                        for finding in active
-                        if finding.path == path
-                    ]
-                    for path in {finding.path for finding in active}
-                },
-            ),
-        )
+    if not findings:
+        return "No hardcoded colors found."
+    ids = ",".join(finding.finding_id for finding in findings)
+    files = "\n".join(
+        f"- `/qg ignore-file {path}`" for path in sorted({finding.path for finding in findings})
     )
+    controls = (
+        f"\n\nApprove findings with `/qg ignore {ids}` or `/qg ignore hardcoded-colors`.\n{files}"
+    )
+    return "\n".join(rows) + controls
+
+
+def result_value(
+    findings: list[Finding], environment: Mapping[str, str], graph_digest: str
+) -> dict[str, object]:
+    """Serialize findings through the Quality Graph native Result Protocol."""
+    locations = [
+        {
+            "path": finding.path,
+            "startLine": finding.line,
+            "endLine": finding.line,
+            "startColumn": finding.column + 1,
+            "endColumn": finding.column + len(finding.literal),
+        }
+        for finding in findings
+    ]
+    controls: list[dict[str, object]] = [
+        {"kind": "finding", "target": finding.finding_id, "checked": False} for finding in findings
+    ]
+    controls.extend(
+        {"kind": "file", "target": path, "checked": False}
+        for path in sorted({finding.path for finding in findings})
+    )
+    controls.append({"kind": "node", "target": "hardcoded-colors", "checked": False})
+    pull_request = int(environment["QG_PULL_REQUEST"])
+    provenance: dict[str, object] = {
+        "repository": environment["GITHUB_REPOSITORY"],
+        "headSha": environment["QG_HEAD_SHA"],
+        "workflowRunId": int(environment["GITHUB_RUN_ID"]),
+        "runAttempt": int(environment["GITHUB_RUN_ATTEMPT"]),
+        "graphDigest": graph_digest,
+    }
+    if pull_request:
+        provenance["pullRequest"] = pull_request
+    return {
+        "schemaVersion": 0,
+        "nodeId": "hardcoded-colors",
+        "title": "Hardcoded color gate",
+        "status": "failed" if findings else "passed",
+        **({"failureKind": "quality"} if findings else {}),
+        "summary": summary_body(findings),
+        "metrics": [
+            {"label": "Status", "value": "FAIL" if findings else "PASS"},
+            {"label": "Findings", "value": str(len(findings))},
+        ],
+        "findings": [
+            {
+                "id": finding.finding_id,
+                "severity": "error",
+                "message": f"Hardcoded {finding.format} color: {finding.literal}",
+                "ruleId": "hardcoded-color",
+                "fingerprint": finding.finding_id,
+                "location": location,
+                "group": finding.format,
+            }
+            for finding, location in zip(findings, locations, strict=True)
+        ],
+        "annotations": [
+            {
+                "level": "error",
+                "message": f"Hardcoded {finding.format} color: {finding.literal}",
+                "title": "Hardcoded color gate",
+                "location": location,
+            }
+            for finding, location in zip(findings, locations, strict=True)
+        ],
+        "diagnostics": [],
+        "controls": controls,
+        "notes": ["Color finding IDs are stable and location-sensitive."],
+        "provenance": provenance,
+    }
 
 
 def main() -> int:
-    """Run the hardcoded-color gate."""
-    runtime = QualityRuntime.from_environment()
-    return HardcodedColorCheck().run_pull_request_gate(
-        runtime.github,
-        read_github_event(),
-        runtime.publisher,
-        read_only=runtime.read_only,
+    """Scan the local diff and emit a native Quality Graph result."""
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--base", default="origin/main")
+    arguments = parser.parse_args()
+    changed_files = cast(
+        "Callable[[str, tuple[str, ...]], tuple[ChangedFile, ...]]",
+        importlib.import_module("qg_python.diff").changed_files,
     )
+    findings = sorted(
+        (
+            finding
+            for changed in changed_files(arguments.base, SOURCE_SUFFIXES)
+            for finding in scan_file(changed.path, changed.source, set(changed.added_lines))
+        ),
+        key=lambda finding: (finding.path, finding.line, finding.column),
+    )
+    manifest = cast("dict[str, object]", json.loads(MANIFEST_PATH.read_text()))
+    graph_digest = cast("str", manifest["graphDigest"])
+    RESULT_PATH.parent.mkdir(parents=True, exist_ok=True)
+    RESULT_PATH.write_text(
+        json.dumps(result_value(findings, os.environ, graph_digest), indent=2, sort_keys=True)
+        + "\n"
+    )
+    return 0
 
 
 if __name__ == "__main__":
