@@ -37,7 +37,7 @@ runs:
                     "ci/quality_graph/checks/frontend_measurement.py",
                     "ci/tests/test_frontend_performance.py",
                     "ci/tests/test_frontend_measurement.py",
-                    ".github/workflows/pr-checks.yaml",
+                    ".github/workflows/quality-graph.yml",
                   ]);
                   const relevant = files.some((file) => {
                     const path = file.filename;

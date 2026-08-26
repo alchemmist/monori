@@ -143,7 +143,7 @@ class GitHub:
 def rerun_latest_pull_request_workflow(
     github: GitHubAPI,
     number: int,
-    workflow: str = "pr-checks.yaml",
+    workflow: str = "quality-graph.yml",
 ) -> None:
     """Rerun failed jobs in the newest workflow run associated with a pull request."""
     pull = object_value(github.request("GET", f"/pulls/{number}"), "pull request")
