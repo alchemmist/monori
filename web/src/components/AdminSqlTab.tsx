@@ -18,6 +18,8 @@ const renderCell = (v: SqlCell) => {
 
 const rowsLabel = (n: number) => `${n} ${n === 1 ? "row" : "rows"}`;
 
+export const isPendingWrite = (value: string | null) => value != null && value !== "";
+
 const writeToastTitle = (statement: string, count: number) => {
     // Only the first token is needed for the toast. Avoid a regex that tries
     // to consume an arbitrary number of SQL comments before the statement.
@@ -116,19 +118,17 @@ export default function AdminSqlTab({ onClose }: { onClose: () => void }) {
             <Button
                 size="l"
                 variant="filled"
-                {...(pendingWrite != null && pendingWrite !== ""
+                {...(isPendingWrite(pendingWrite)
                     ? {
                           color: "var(--m-expense)",
-                          styles: {
-                              root: { "--button-color": "var(--m-accent-contrast)" },
-                          },
+                          style: { "--button-color": "var(--m-accent-contrast)" },
                       }
                     : {})}
                 loading={busy}
                 disabled={sql.trim() === ""}
                 onClick={() => void run(Boolean(pendingWrite))}
             >
-                {pendingWrite != null && pendingWrite !== "" ? "Apply write" : "Run"}
+                {isPendingWrite(pendingWrite) ? "Apply write" : "Run"}
             </Button>
         </>
     );
