@@ -188,7 +188,7 @@ def test_connector_filter_requires_active_selection() -> None:
     page = Page()
     assert YandexPayConnector.pay_card_filter_active(page)
     YandexPayConnector.select_pay_card_filter(Page("filter", filter_active=False))
-    with pytest.raises(ConnectorError, match="filter is unavailable"):
+    with pytest.raises(PublicConnectorError, match="filter is unavailable"):
         YandexPayConnector.select_pay_card_filter(Page("empty", filter_active=False))
 
 
@@ -222,7 +222,7 @@ def test_connector_rejects_empty_or_incomplete_history() -> None:
         connector.download_and_parse(
             Page(payload=[{"titles": ["Merchant"], "amount": "", "date": ""}]), None
         )
-    with pytest.raises(ConnectorError, match="no transactions"):
+    with pytest.raises(PublicConnectorError, match="no transactions"):
         connector.download_and_parse(Page(payload=[]), None)
 
 
