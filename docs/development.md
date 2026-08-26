@@ -86,6 +86,18 @@ The gate adds a failure label to PRs with active findings and removes it when
 all findings are fixed or approved. Finding IDs and file paths in the commands
 may be comma-separated.
 
+The Hardcoded color gate scans added lines in CSS-family, HTML, SVG, JavaScript,
+TypeScript, JSX, TSX, JSON, Vue, Svelte, and Astro files. It reports three-, four-,
+six-, and eight-digit hexadecimal colors; numeric and percentage forms of
+`rgb()`, `rgba()`, `hsl()`, `hsla()`, `hwb()`, `lab()`, `lch()`, `oklab()`,
+`oklch()`, and `color()`; and the standard CSS named colors. This includes
+literals in custom properties, gradients, shadows, attributes, and strings.
+Semantic keywords such as `transparent`, `currentColor`, `inherit`, `initial`,
+`unset`, and `revert` are allowed, as are color functions made only from CSS
+variables. Generated, dependency, fixture, minified, and lock files are excluded.
+Color approvals use `/qg ignore color-<finding-id>`, `/qg ignore hardcoded-colors`,
+or `/qg ignore-file path/to/file`; color finding IDs are location-sensitive.
+
 ### Dead-code analysis
 
 `make analyze` runs Vulture against `server/app` and Knip against the frontend

@@ -641,6 +641,28 @@ jobs:
               with:
                   github-token: ${{ secrets.GITHUB_TOKEN }}
 
+    hardcoded-colors:
+        name: Hardcoded color gate
+        needs: workflow-graph
+        if: github.event_name == 'pull_request' && needs.workflow-graph.result == 'success'
+        runs-on: ubuntu-latest
+        timeout-minutes: 10
+        env:
+            QUALITY_GRAPH_READ_ONLY: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.event.pull_request.user.login == 'dependabot[bot]' }}
+        permissions:
+            contents: read
+            issues: write
+            pull-requests: write
+        steps:
+            - name: Checkout workflow code
+              uses: actions/checkout@v7
+              with:
+                  fetch-depth: 0
+                  persist-credentials: false
+            - uses: ./.github/actions/hardcoded-color-gate
+              with:
+                  github-token: ${{ secrets.GITHUB_TOKEN }}
+
     admin-command:
         name: Command handler
         if: >-

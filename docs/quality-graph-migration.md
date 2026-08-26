@@ -12,6 +12,7 @@ must not be edited by hand.
 | formatting | `fmt-check` | existing `make fmt-check` |
 | triple quotes | `triple-quotes` | `quality-graph-python` |
 | lint suppressions | `suppressions` | `quality-graph-python` |
+| hardcoded web colors | `hardcoded-colors` | Monori-specific checker |
 | documentation links | `docs-links` | existing `make docs-links` |
 | lint and generated files | `lint` | existing `make lint` |
 | object annotations | `object-annotations` | `quality-graph-python` |

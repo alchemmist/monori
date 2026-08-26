@@ -82,6 +82,17 @@ nodes:
             approvals:
                 files: true
                 findings: true
+    hardcoded-colors:
+        title: Hardcoded color gate
+        needs: [workflow-graph]
+        run: uv run --locked python -m monori.ci.quality_graph.checks --check-id hardcoded-colors
+        env:
+            GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+            QUALITY_GRAPH_READ_ONLY: "true"
+        policy:
+            approvals:
+                files: true
+                findings: true
     docs-links:
         title: Documentation links
         profile: docs

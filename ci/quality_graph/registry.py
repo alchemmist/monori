@@ -42,6 +42,13 @@ WORKFLOW_JOBS = (
     WorkflowJobDefinition(
         "suppressions", "Lint suppression gate", "suppressions", "suppression", "suppression"
     ),
+    WorkflowJobDefinition(
+        "hardcoded-colors",
+        "Hardcoded color gate",
+        "hardcoded_colors",
+        "color",
+        "hardcoded-colors",
+    ),
     WorkflowJobDefinition("docs-links", "Documentation links", "docs_links"),
     WorkflowJobDefinition("lint", "Lint", "lint"),
     WorkflowJobDefinition(
@@ -120,6 +127,9 @@ def registered_checks() -> dict[str, type[QualityCheckDefinition]]:
     from monori.ci.quality_graph.checks.frontend_performance import (  # noqa: PLC0415
         FrontendPerformanceCheck,
     )
+    from monori.ci.quality_graph.checks.hardcoded_colors import (  # noqa: PLC0415
+        HardcodedColorCheck,
+    )
     from monori.ci.quality_graph.checks.object_annotations import (  # noqa: PLC0415
         ObjectAnnotationCheck,
     )
@@ -136,6 +146,7 @@ def registered_checks() -> dict[str, type[QualityCheckDefinition]]:
         ObjectAnnotationCheck,
         type_cast_check,
         SuppressionCheck,
+        HardcodedColorCheck,
         BundleSizeCheck,
         FrontendPerformanceCheck,
         flaky_check,

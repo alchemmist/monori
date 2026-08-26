@@ -55,7 +55,7 @@ jobs:
         adapter: exit-code
         report-path: ''
         command-outcome: ${{ steps.quality-command.outcome }}
-        graph-digest: be5a5540546d27d30276f3050578d2e9adcf21dd5dc1ec69b66e564144d16841
+        graph-digest: e71403d2c569ce8dbaabdeb41de81bb52fc154f0769ec9b4fb215fec0ca6fe85
     - name: Upload Workflow graph validation result
       if: always()
       uses: actions/upload-artifact@v7
@@ -110,7 +110,7 @@ jobs:
         adapter: exit-code
         report-path: ''
         command-outcome: ${{ steps.quality-command.outcome }}
-        graph-digest: be5a5540546d27d30276f3050578d2e9adcf21dd5dc1ec69b66e564144d16841
+        graph-digest: e71403d2c569ce8dbaabdeb41de81bb52fc154f0769ec9b4fb215fec0ca6fe85
     - name: Upload Format check result
       if: always()
       uses: actions/upload-artifact@v7
@@ -169,7 +169,7 @@ jobs:
         adapter: exit-code
         report-path: ''
         command-outcome: ${{ steps.quality-command.outcome }}
-        graph-digest: be5a5540546d27d30276f3050578d2e9adcf21dd5dc1ec69b66e564144d16841
+        graph-digest: e71403d2c569ce8dbaabdeb41de81bb52fc154f0769ec9b4fb215fec0ca6fe85
     - name: Upload Triple-quoted string style result
       if: always()
       uses: actions/upload-artifact@v7
@@ -230,7 +230,7 @@ jobs:
         adapter: exit-code
         report-path: ''
         command-outcome: ${{ steps.quality-command.outcome }}
-        graph-digest: be5a5540546d27d30276f3050578d2e9adcf21dd5dc1ec69b66e564144d16841
+        graph-digest: e71403d2c569ce8dbaabdeb41de81bb52fc154f0769ec9b4fb215fec0ca6fe85
     - name: Upload Lint suppression gate result
       if: always()
       uses: actions/upload-artifact@v7
@@ -249,6 +249,69 @@ jobs:
     - workflow-graph
     env:
       BASE: ${{ github.event.pull_request.base.sha || 'origin/main' }}
+  hardcoded-colors:
+    name: Hardcoded color gate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+    - uses: actions/checkout@v7
+      with:
+        fetch-depth: '0'
+        persist-credentials: 'false'
+    - uses: actions/setup-node@v7
+      with:
+        node-version: '22'
+        cache: npm
+        cache-dependency-path: 'web/package-lock.json
+
+          tools/frontend-perf/package-lock.json
+
+          '
+    - uses: astral-sh/setup-uv@v7
+      with:
+        enable-cache: 'true'
+        cache-dependency-glob: uv.lock
+    - name: Install project dependencies
+      run: scripts/setup-quality-graph.sh
+    - run: uv run --locked python -m monori.ci.quality_graph.checks --check-id hardcoded-colors
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        QUALITY_GRAPH_READ_ONLY: 'true'
+      name: Run Hardcoded color gate
+      id: quality-command
+      continue-on-error: true
+    - name: Collect Hardcoded color gate result
+      id: quality-result
+      if: always()
+      uses: alchemmist/quality-graph@a4a65abfc9364da6801be56b992358d302c7ad77
+      with:
+        operation: collect
+        node-id: hardcoded-colors
+        title: Hardcoded color gate
+        adapter: exit-code
+        report-path: ''
+        command-outcome: ${{ steps.quality-command.outcome }}
+        graph-digest: e71403d2c569ce8dbaabdeb41de81bb52fc154f0769ec9b4fb215fec0ca6fe85
+    - name: Upload Hardcoded color gate result
+      if: always()
+      uses: actions/upload-artifact@v7
+      with:
+        name: quality-result-hardcoded-colors-${{ github.run_attempt }}
+        path: ${{ runner.temp }}/quality-graph/hardcoded-colors.json
+        if-no-files-found: error
+        retention-days: 7
+    - name: Enforce Hardcoded color gate result
+      if: always()
+      shell: bash
+      env:
+        EXIT_CODE: ${{ steps.quality-result.outputs.exit-code }}
+      run: exit "${EXIT_CODE:-2}"
+    needs:
+    - workflow-graph
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      QUALITY_GRAPH_READ_ONLY: 'true'
   docs-links:
     name: Documentation links
     runs-on: ubuntu-latest
@@ -291,7 +354,7 @@ jobs:
         adapter: exit-code
         report-path: ''
         command-outcome: ${{ steps.quality-command.outcome }}
-        graph-digest: be5a5540546d27d30276f3050578d2e9adcf21dd5dc1ec69b66e564144d16841
+        graph-digest: e71403d2c569ce8dbaabdeb41de81bb52fc154f0769ec9b4fb215fec0ca6fe85
     - name: Upload Documentation links result
       if: always()
       uses: actions/upload-artifact@v7
@@ -350,7 +413,7 @@ jobs:
         adapter: exit-code
         report-path: ''
         command-outcome: ${{ steps.quality-command.outcome }}
-        graph-digest: be5a5540546d27d30276f3050578d2e9adcf21dd5dc1ec69b66e564144d16841
+        graph-digest: e71403d2c569ce8dbaabdeb41de81bb52fc154f0769ec9b4fb215fec0ca6fe85
     - name: Upload Lint result
       if: always()
       uses: actions/upload-artifact@v7
@@ -409,7 +472,7 @@ jobs:
         adapter: exit-code
         report-path: ''
         command-outcome: ${{ steps.quality-command.outcome }}
-        graph-digest: be5a5540546d27d30276f3050578d2e9adcf21dd5dc1ec69b66e564144d16841
+        graph-digest: e71403d2c569ce8dbaabdeb41de81bb52fc154f0769ec9b4fb215fec0ca6fe85
     - name: Upload Python object annotation gate result
       if: always()
       uses: actions/upload-artifact@v7
@@ -468,7 +531,7 @@ jobs:
         adapter: exit-code
         report-path: ''
         command-outcome: ${{ steps.quality-command.outcome }}
-        graph-digest: be5a5540546d27d30276f3050578d2e9adcf21dd5dc1ec69b66e564144d16841
+        graph-digest: e71403d2c569ce8dbaabdeb41de81bb52fc154f0769ec9b4fb215fec0ca6fe85
     - name: Upload Unsafe type cast gate result
       if: always()
       uses: actions/upload-artifact@v7
@@ -525,7 +588,7 @@ jobs:
         adapter: exit-code
         report-path: ''
         command-outcome: ${{ steps.quality-command.outcome }}
-        graph-digest: be5a5540546d27d30276f3050578d2e9adcf21dd5dc1ec69b66e564144d16841
+        graph-digest: e71403d2c569ce8dbaabdeb41de81bb52fc154f0769ec9b4fb215fec0ca6fe85
     - name: Upload Type check result
       if: always()
       uses: actions/upload-artifact@v7
@@ -584,7 +647,7 @@ jobs:
         adapter: exit-code
         report-path: ''
         command-outcome: ${{ steps.quality-command.outcome }}
-        graph-digest: be5a5540546d27d30276f3050578d2e9adcf21dd5dc1ec69b66e564144d16841
+        graph-digest: e71403d2c569ce8dbaabdeb41de81bb52fc154f0769ec9b4fb215fec0ca6fe85
     - name: Upload Static analysis result
       if: always()
       uses: actions/upload-artifact@v7
@@ -643,7 +706,7 @@ jobs:
         adapter: exit-code
         report-path: ''
         command-outcome: ${{ steps.quality-command.outcome }}
-        graph-digest: be5a5540546d27d30276f3050578d2e9adcf21dd5dc1ec69b66e564144d16841
+        graph-digest: e71403d2c569ce8dbaabdeb41de81bb52fc154f0769ec9b4fb215fec0ca6fe85
     - name: Upload Time bomb guardrail result
       if: always()
       uses: actions/upload-artifact@v7
@@ -703,7 +766,7 @@ jobs:
         adapter: exit-code
         report-path: ''
         command-outcome: ${{ steps.quality-command.outcome }}
-        graph-digest: be5a5540546d27d30276f3050578d2e9adcf21dd5dc1ec69b66e564144d16841
+        graph-digest: e71403d2c569ce8dbaabdeb41de81bb52fc154f0769ec9b4fb215fec0ca6fe85
     - name: Upload Fast tests result
       if: always()
       uses: actions/upload-artifact@v7
@@ -760,7 +823,7 @@ jobs:
         adapter: exit-code
         report-path: ''
         command-outcome: ${{ steps.quality-command.outcome }}
-        graph-digest: be5a5540546d27d30276f3050578d2e9adcf21dd5dc1ec69b66e564144d16841
+        graph-digest: e71403d2c569ce8dbaabdeb41de81bb52fc154f0769ec9b4fb215fec0ca6fe85
     - name: Upload Medium tests result
       if: always()
       uses: actions/upload-artifact@v7
@@ -819,7 +882,7 @@ jobs:
         adapter: exit-code
         report-path: ''
         command-outcome: ${{ steps.quality-command.outcome }}
-        graph-digest: be5a5540546d27d30276f3050578d2e9adcf21dd5dc1ec69b66e564144d16841
+        graph-digest: e71403d2c569ce8dbaabdeb41de81bb52fc154f0769ec9b4fb215fec0ca6fe85
     - name: Upload Slow tests result
       if: always()
       uses: actions/upload-artifact@v7
@@ -879,7 +942,7 @@ jobs:
         adapter: exit-code
         report-path: ''
         command-outcome: ${{ steps.quality-command.outcome }}
-        graph-digest: be5a5540546d27d30276f3050578d2e9adcf21dd5dc1ec69b66e564144d16841
+        graph-digest: e71403d2c569ce8dbaabdeb41de81bb52fc154f0769ec9b4fb215fec0ca6fe85
     - name: Upload Flaky test detection result
       if: always()
       uses: actions/upload-artifact@v7
@@ -939,7 +1002,7 @@ jobs:
         adapter: exit-code
         report-path: ''
         command-outcome: ${{ steps.quality-command.outcome }}
-        graph-digest: be5a5540546d27d30276f3050578d2e9adcf21dd5dc1ec69b66e564144d16841
+        graph-digest: e71403d2c569ce8dbaabdeb41de81bb52fc154f0769ec9b4fb215fec0ca6fe85
     - name: Upload Build frontend result
       if: always()
       uses: actions/upload-artifact@v7
@@ -998,7 +1061,7 @@ jobs:
         adapter: exit-code
         report-path: ''
         command-outcome: ${{ steps.quality-command.outcome }}
-        graph-digest: be5a5540546d27d30276f3050578d2e9adcf21dd5dc1ec69b66e564144d16841
+        graph-digest: e71403d2c569ce8dbaabdeb41de81bb52fc154f0769ec9b4fb215fec0ca6fe85
     - name: Upload Coverage result
       if: always()
       uses: actions/upload-artifact@v7
@@ -1059,7 +1122,7 @@ jobs:
         adapter: exit-code
         report-path: ''
         command-outcome: ${{ steps.quality-command.outcome }}
-        graph-digest: be5a5540546d27d30276f3050578d2e9adcf21dd5dc1ec69b66e564144d16841
+        graph-digest: e71403d2c569ce8dbaabdeb41de81bb52fc154f0769ec9b4fb215fec0ca6fe85
     - name: Upload Mutation testing result
       if: always()
       uses: actions/upload-artifact@v7
@@ -1123,7 +1186,7 @@ jobs:
         adapter: exit-code
         report-path: ''
         command-outcome: ${{ steps.quality-command.outcome }}
-        graph-digest: be5a5540546d27d30276f3050578d2e9adcf21dd5dc1ec69b66e564144d16841
+        graph-digest: e71403d2c569ce8dbaabdeb41de81bb52fc154f0769ec9b4fb215fec0ca6fe85
     - name: Upload Frontend bundle size result
       if: always()
       uses: actions/upload-artifact@v7
@@ -1188,7 +1251,7 @@ jobs:
         adapter: exit-code
         report-path: ''
         command-outcome: ${{ steps.quality-command.outcome }}
-        graph-digest: be5a5540546d27d30276f3050578d2e9adcf21dd5dc1ec69b66e564144d16841
+        graph-digest: e71403d2c569ce8dbaabdeb41de81bb52fc154f0769ec9b4fb215fec0ca6fe85
     - name: Upload Frontend performance regression result
       if: always()
       uses: actions/upload-artifact@v7
@@ -1248,7 +1311,7 @@ jobs:
         adapter: exit-code
         report-path: ''
         command-outcome: ${{ steps.quality-command.outcome }}
-        graph-digest: be5a5540546d27d30276f3050578d2e9adcf21dd5dc1ec69b66e564144d16841
+        graph-digest: e71403d2c569ce8dbaabdeb41de81bb52fc154f0769ec9b4fb215fec0ca6fe85
     - name: Upload Dependency and security audit result
       if: always()
       uses: actions/upload-artifact@v7
