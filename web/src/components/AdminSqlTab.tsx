@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 import { Button, Textarea } from "@mantine/core";
 import { api } from "../api.js";
@@ -120,9 +120,7 @@ export default function AdminSqlTab({ onClose }: { onClose: () => void }) {
                     ? {
                           color: "var(--m-expense)",
                           styles: {
-                              root: {
-                                  "--button-color": "var(--m-accent-contrast)",
-                              } as CSSProperties,
+                              root: { "--button-color": "var(--m-accent-contrast)" },
                           },
                       }
                     : {})}
