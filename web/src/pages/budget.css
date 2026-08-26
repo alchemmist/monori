@@ -146,7 +146,7 @@
         100deg,
         transparent 38%,
         color-mix(in srgb, var(--m-accent) 36%, transparent) 47%,
-        color-mix(in srgb, #fff 62%, var(--m-accent)) 50%,
+        color-mix(in srgb, var(--m-accent-contrast) 62%, var(--m-accent)) 50%,
         color-mix(in srgb, var(--m-accent) 36%, transparent) 53%,
         transparent 62%
     );

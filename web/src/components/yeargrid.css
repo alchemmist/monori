@@ -70,7 +70,7 @@
         100deg,
         transparent 36%,
         color-mix(in srgb, var(--m-accent) 40%, transparent) 47%,
-        color-mix(in srgb, #fff 60%, var(--m-accent)) 50%,
+        color-mix(in srgb, var(--m-accent-contrast) 60%, var(--m-accent)) 50%,
         color-mix(in srgb, var(--m-accent) 40%, transparent) 53%,
         transparent 64%
     );
@@ -415,20 +415,20 @@
    #221d22 canvas — no backdrop-filter glass (blur on the sticky header + frozen
    column breaks Chrome's compositing and paints gray blocks over the body) */
 .theme-dark .year-grid thead th {
-    background: #2c262c;
+    background: var(--m-surface-raised);
 }
 
 .theme-dark .yg-band th {
-    background: #2c262c;
+    background: var(--m-surface-raised);
 }
 
 .theme-dark .yg-corner,
 .theme-dark .yg-name {
-    background: #2c262c;
+    background: var(--m-surface-raised);
 }
 
 .theme-dark .yg-corner_year {
-    background: #2c262c;
+    background: var(--m-surface-raised);
 }
 
 .theme-dark .yg-group td {
@@ -436,15 +436,15 @@
 }
 
 .theme-dark .yg-group .yg-name {
-    background: #362f36;
+    background: var(--m-surface-hover);
 }
 
 .theme-dark .yg-msum_now {
-    background: color-mix(in srgb, var(--m-accent) 14%, #2c262c);
+    background: color-mix(in srgb, var(--m-accent) 14%, var(--m-surface-raised));
 }
 
 .theme-dark .yg-row:hover .yg-name {
-    background: #362f36;
+    background: var(--m-surface-hover);
 }
 
 /* narrower frozen column on phones so more data stays visible; the pane also

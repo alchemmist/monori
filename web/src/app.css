@@ -351,10 +351,9 @@
         right 0.25s ease;
 }
 
-/* the dark canvas is painted on <body> as a literal (see theme.css) — the dark
-   --m-bg token is a stale near-black nothing else uses; match the body color */
+/* tabs use the same dark canvas token as the document body */
 .theme-dark .ui-tab {
-    background: #221d22;
+    background: var(--m-canvas);
     box-shadow:
         -4px 0 14px rgb(0 0 0 / 12%),
         -16px 0 40px rgb(0 0 0 / 16%);

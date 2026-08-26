@@ -31,7 +31,7 @@ vi.mock("@mantine/core", async (importOriginal) => {
         ),
     };
 });
-import AdminSqlTab from "./AdminSqlTab.jsx";
+import AdminSqlTab, { isPendingWrite } from "./AdminSqlTab.jsx";
 import AdminTxTab from "./AdminTxTab.jsx";
 import { api } from "../api.js";
 import { fireEvent, renderUI, resetStore, screen, waitFor } from "../test/render.jsx";
@@ -105,6 +105,12 @@ describe("AdminSqlTab", () => {
     });
     afterEach(() => vi.restoreAllMocks());
 
+    it("recognizes only non-empty pending writes", () => {
+        expect(isPendingWrite(null)).toBe(false);
+        expect(isPendingWrite("")).toBe(false);
+        expect(isPendingWrite("delete from tx")).toBe(true);
+    });
+
     it("runs a read query, renders values safely and restores it from history", async () => {
         vi.spyOn(api, "adminSql").mockResolvedValue({
             kind: "read",
@@ -137,10 +143,15 @@ describe("AdminSqlTab", () => {
                 rows: [],
             });
         const { user } = renderUI(<AdminSqlTab onClose={vi.fn()} />);
+        expect(screen.getByRole("button", { name: "Run" })).toBeDisabled();
         await user.type(screen.getByLabelText("SQL statement"), "delete from tx");
-        await user.click(screen.getByRole("button", { name: "Run" }));
+        const runButton = screen.getByRole("button", { name: "Run" });
+        expect(runButton).toBeEnabled();
+        await user.click(runButton);
         expect(await screen.findByText(/needs confirmation/)).toBeInTheDocument();
-        await user.click(screen.getByRole("button", { name: "Apply write" }));
+        const apply = screen.getByRole("button", { name: "Apply write" });
+        expect(apply).toHaveStyle("--button-color: var(--m-accent-contrast)");
+        await user.click(apply);
         await waitFor(() => expect(run).toHaveBeenLastCalledWith("delete from tx", true, false));
         expect(useStore.getState().adminTick).toBe(1);
     });

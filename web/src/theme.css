@@ -27,6 +27,7 @@
         "Courier New", "Courier", monospace;
 
     --m-bg: #fff;
+    --m-canvas: #fff;
     --m-surface: #fff;
     --m-surface-hover: #f7f7f6;
     --m-surface-raised: #f5f5f4;
@@ -42,6 +43,18 @@
     --m-warning: #b45309;
     --m-income-soft: #e4f3e9;
     --m-expense-soft: #fbe3e3;
+    --m-chart-1: var(--m-accent);
+    --m-chart-2: #4269d0;
+    --m-chart-3: #3ca951;
+    --m-chart-4: #a463f2;
+    --m-chart-5: #d94f87;
+    --m-chart-6: #329f8a;
+    --m-chart-7: #b77900;
+    --m-chart-8: #87583b;
+    --m-chart-9: #5d8fd8;
+    --m-chart-10: #d94f4f;
+    --m-chart-11: #5b43a0;
+    --m-chart-12: #6b6a66;
     --m-card-bg: var(--m-surface);
     --m-card-border: var(--m-border);
     --m-sidebar-edge: var(--m-border-soft);
@@ -106,6 +119,7 @@
  */
 .theme-dark {
     --m-bg: #08070d;
+    --m-canvas: #221d22;
     --m-surface: #0d0b15;
     --m-surface-hover: #2a242a;
     --m-surface-raised: #141020;
@@ -122,6 +136,18 @@
     --m-warning: #fbbf24;
     --m-income-soft: #16281c;
     --m-expense-soft: #331919;
+    --m-chart-1: var(--m-accent);
+    --m-chart-2: #82a7ff;
+    --m-chart-3: #65d98b;
+    --m-chart-4: #c49aff;
+    --m-chart-5: #ff9bc3;
+    --m-chart-6: #76d8c1;
+    --m-chart-7: #ffd166;
+    --m-chart-8: #c49a7a;
+    --m-chart-9: #a9c7ff;
+    --m-chart-10: #ff8f8f;
+    --m-chart-11: #a997ed;
+    --m-chart-12: #aaa7b8;
 
     /* glass over the dark canvas: the approved warm, see-through panel from the
        category dropdown, now the shared standard. Cards read the same tokens so
@@ -194,13 +220,16 @@ body {
     min-height: 100vh;
 }
 
-/* flat dark canvas — the approved look. (Previously this was gravity's default
-   base background; now that uikit is gone we set it explicitly.) The theme-dark
-   class only lands on <body>, but html also paints --m-bg (the light #fff),
-   which shows through on overscroll; keep it in sync with the dark body. */
+/* flat dark canvas — the approved look. The theme-dark class only lands on
+   <body>, but html also paints the canvas token, which shows through on
+   overscroll; keep it in sync with the dark body. */
 body.theme-dark,
 html:has(> body.theme-dark) {
-    background: #221d22;
+    background: var(--m-canvas);
+}
+
+:root:has(> body.theme-dark) {
+    --m-canvas: #221d22;
 }
 
 /* frosted-glass cards over the canvas: the translucent --m-card-bg is blurred

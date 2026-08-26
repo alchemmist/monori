@@ -303,7 +303,7 @@ export default function SplitTransactionTab({
                     <Button
                         className="split-editor__remove"
                         variant="subtle"
-                        color="red"
+                        color="var(--m-expense)"
                         loading={saving}
                         onClick={() => void removeSplit()}
                     >

@@ -2,10 +2,10 @@ import { notifications } from "@mantine/notifications";
 import type { ToastMessage } from "../types.js";
 
 const COLORS = {
-    danger: "red",
-    success: "teal",
-    warning: "yellow",
-    info: "blue",
+    danger: "var(--m-expense)",
+    success: "var(--m-income)",
+    warning: "var(--m-warning)",
+    info: "var(--m-chart-2)",
 };
 type ToastTheme = keyof typeof COLORS;
 

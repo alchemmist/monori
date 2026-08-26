@@ -194,7 +194,7 @@ describe("DashboardPage", () => {
         expect(screen.getByRole("button", { name: "Card" })).toBeInTheDocument();
         expect(trendRow(`${prevYear}-04`)!.Expenses).toBe(700);
         expect(series("donut-chart")).toEqual([
-            { name: "Groceries", value: 700, color: "#ef5a17" },
+            { name: "Groceries", value: 700, color: "var(--m-chart-1)" },
         ]);
     });
 
