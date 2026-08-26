@@ -159,45 +159,60 @@ class YandexPayConnector(TBankPlaywrightConnector):
         for _ in range(30):
             if "/my/history" in page.url and page.query_selector("main") is not None:
                 return
-            if page.locator("iframe").count() == 0:
-                if "/_pay/login" in page.url:
-                    page.goto(self.HISTORY_URL, wait_until="domcontentloaded")
-                    page.wait_for_timeout(1500)
-                    continue
-                page.wait_for_timeout(1000)
+            if self.choose_code_method(page) or self.drive_auth_step(page):
                 continue
-            frame = page.locator("iframe").first.content_frame
-            if frame.locator("input[type='tel'], input[name='login']").count():
-                phone = self.credentials.get("phone")
-                if not isinstance(phone, str):
-                    raise ConnectorError(PHONE_MISSING)
-                selector = "input[type='tel'], input[name='login']"
-                frame.locator(selector).first.fill(phone, timeout=5000)
-                frame.locator(selector).first.click(timeout=5000)
-                page.keyboard.press("Enter")
-            elif frame.locator("input[type='password']").count():
-                password = self.credentials.get("password")
-                if not isinstance(password, str):
-                    raise ConnectorError(LOGIN_SECRET_MISSING)
-                frame.locator("input[type='password']").first.fill(password, timeout=5000)
-                frame.locator("input[type='password']").first.click(timeout=5000)
-                page.keyboard.press("Enter")
-            elif frame.locator(
-                "input[inputmode='numeric'], input[type='number'], "
-                "input[autocomplete='one-time-code']"
-            ).count():
-                code = self.ask_sms("enter the code from the Yandex ID push notification")
-                code_input = frame.locator(
-                    "input[inputmode='numeric'], input[type='number'], "
-                    "input[autocomplete='one-time-code']"
-                ).first
-                code_input.click(timeout=5000)
-                page.keyboard.type(code)
-                page.keyboard.press("Enter")
-            else:
-                page.wait_for_timeout(1000)
+            if page.locator("iframe").count() == 0 and "/_pay/login" in page.url:
+                page.goto(self.HISTORY_URL, wait_until="domcontentloaded")
+                page.wait_for_timeout(1500)
+                continue
+            page.wait_for_timeout(1000)
             page.wait_for_timeout(1500)
         raise PublicConnectorError(LOGIN_FAILED)
+
+    @staticmethod
+    def choose_code_method(page: _Page) -> bool:
+        """Start the push-code challenge shown by the bank login wrapper."""
+        for label in ("Get code via push", "Let's do SMS instead"):
+            chooser = page.get_by_text(label, exact=True)
+            if chooser.count():
+                chooser.first.click(timeout=5000)
+                page.wait_for_timeout(1000)
+                return True
+        return False
+
+    def drive_auth_step(self, page: _Page) -> bool:
+        """Fill one visible field in the embedded Yandex ID login form."""
+        scope = (
+            page.locator("iframe").first.content_frame if page.locator("iframe").count() else page
+        )
+        phone = scope.locator("input[type='tel'], input[name='login']")
+        if phone.count():
+            value = self.credentials.get("phone")
+            if not isinstance(value, str):
+                raise ConnectorError(PHONE_MISSING)
+            phone.first.fill(value, timeout=5000)
+            phone.first.click(timeout=5000)
+            page.keyboard.press("Enter")
+            return True
+        password = scope.locator("input[type='password']")
+        if password.count():
+            value = self.credentials.get("password")
+            if not isinstance(value, str):
+                raise ConnectorError(LOGIN_SECRET_MISSING)
+            password.first.fill(value, timeout=5000)
+            password.first.click(timeout=5000)
+            page.keyboard.press("Enter")
+            return True
+        code = scope.locator(
+            "input[inputmode='numeric'], input[type='number'], input[autocomplete='one-time-code']"
+        )
+        if code.count():
+            value = self.ask_sms("enter the code from the Yandex ID push notification")
+            code.first.click(timeout=5000)
+            page.keyboard.type(value)
+            page.keyboard.press("Enter")
+            return True
+        return False
 
     @override
     def download_and_parse(self, page: _Page, _since: str | None) -> list[SyncRow]:
