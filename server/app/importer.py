@@ -59,6 +59,22 @@ DATE_RE = re.compile(r"^(\d{2})\.(\d{2})\.(\d{4})(?:\s+(\d{2}):(\d{2})(?::(\d{2}
 
 
 HEADER_FIRST_CELLS = {"дата операции", "op_date", "date", "operation date"}
+HEADER_ALIASES = {
+    "дата операции": "op_date",
+    "operation date": "op_date",
+    "op_date": "op_date",
+    "сумма операции": "amount",
+    "operation amount": "amount",
+    "номер карты": "card",
+    "card number": "card",
+    "статус": "status",
+    "status": "status",
+    "категория по-умолчанию": "bank_category",
+    "category": "bank_category",
+    "mcc": "mcc",
+    "описание": "description",
+    "description": "description",
+}
 
 
 def _attr_name(key: str) -> str:
@@ -295,17 +311,33 @@ def parse_statement(text: str) -> tuple[list[ImportRow], list[ParseError]]:
     """
     rows: list[ImportRow] = []
     errors: list[ParseError] = []
+    header_map: dict[str, int] | None = None
     for ln, line in enumerate(text.splitlines(), 1):
         if not line.strip():
             continue
         delim = "\t" if "\t" in line else ";" if ";" in line else ","
         parts = [p.strip() for p in next(csv.reader([line], delimiter=delim))]
-        if parts and parts[0].lower() in HEADER_FIRST_CELLS:
+        normalized = [part.lower() for part in parts]
+        if parts and (
+            parts[0].lower() in HEADER_FIRST_CELLS
+            or (
+                any(part in HEADER_ALIASES for part in normalized) and "дата операции" in normalized
+            )
+        ):
+            header_map = {
+                field: index
+                for index, part in enumerate(normalized)
+                if (field := HEADER_ALIASES.get(part)) is not None
+            }
             continue
         if len(parts) < MIN_STATEMENT_COLUMNS:
             errors.append(ParseError(ln, f"expected >=12 columns, got {len(parts)}", line[:200]))
             continue
-        rec = dict(zip(COLUMNS, parts + [""] * (len(COLUMNS) - len(parts)), strict=False))
+        if header_map is None:
+            rec = dict(zip(COLUMNS, parts + [""] * (len(COLUMNS) - len(parts)), strict=False))
+        else:
+            rec = {field: parts[index] for field, index in header_map.items() if index < len(parts)}
+            rec = {column: rec.get(column, "") for column in COLUMNS}
         date = parse_date(rec["op_date"])
         amount = parse_amount_kop(rec["amount"])
         if date is None or amount is None:

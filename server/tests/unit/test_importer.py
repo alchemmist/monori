@@ -79,6 +79,27 @@ def test_parse_statement_skips_csv_header_row() -> None:
     assert rows[0]["description"] == "Metro"
 
 
+def test_parse_statement_maps_current_tbank_header() -> None:
+    header = (
+        "Имя счёта;Номер карты;Дата операции;Сумма операции;Валюта операции;"
+        "Сумма в валюте счёта;Валюта счёта;Статус;Категория по-умолчанию;"
+        "Ваша категория;MCC;Описание;Сообщение;Округление;"
+        "Сумма операции \u0441 округлением;Бонусы (включая кэшбэк);Учёт в аналитике\n"
+    )
+    line = (
+        "Black;*2947;03.07.2026 19:48:24;-450,00;RUB;-450,00;RUB;OK;"
+        "Переводы;;;Sberbank;;;-450,00;0;Да\n"
+    )
+
+    rows, errors = parse_statement(header + line)
+
+    assert not errors
+    assert len(rows) == 1
+    assert rows[0]["date"] == "2026-07-03T19:48:24"
+    assert rows[0]["amount"] == -45000
+    assert rows[0]["description"] == "Sberbank"
+
+
 def test_parse_statement_bad_line() -> None:
     rows, errors = parse_statement("garbage line\n")
     assert not rows
