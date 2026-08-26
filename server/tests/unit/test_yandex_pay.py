@@ -1,3 +1,4 @@
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
 import pytest
@@ -144,6 +145,10 @@ class Page:
 def test_parse_amount() -> None:
     assert parse_amount("\N{MINUS SIGN}1 234,50 ₽") == -123450
     assert parse_amount("+99,9 ₽") == 9990
+    assert parse_amount("1 ₽") == 100
+    assert parse_amount("1,2 ₽") == 120
+    assert parse_amount("-0,5 ₽") == -50
+    assert parse_amount("\N{MINUS SIGN}1\u00a0234,50 ₽") == -123450
     with pytest.raises(ConnectorError, match="amount is missing"):
         parse_amount("not an amount")
 
@@ -157,8 +162,11 @@ def test_parse_date() -> None:
     assert parse_date("25 августа 2026", year=2020) == "2026-08-25T00:00:00"
     assert parse_date("авг. •• 2026", year=2020) == "2026-08-01T00:00:00"
     assert parse_date("August 23", year=2026) == "2026-08-23T00:00:00"
-    assert parse_date("today", year=2026).startswith("2026-")
-    assert parse_date("yesterday", year=2026).startswith("2026-")
+    now = datetime.now(UTC).date()
+    assert parse_date("today", year=2026) == f"{now.isoformat()}T00:00:00"
+    assert parse_date("yesterday", year=2026) == f"{(now - timedelta(days=1)).isoformat()}T00:00:00"
+    assert parse_date("сегодня", year=2026).startswith(f"{now.year}-")
+    assert parse_date("вчера", year=2026).startswith(f"{now.year}-")
     with pytest.raises(ConnectorError, match="date is missing"):
         parse_date("not a date", year=2026)
 
@@ -166,6 +174,8 @@ def test_parse_date() -> None:
 def test_history_years_handles_new_year_without_explicit_year() -> None:
     assert history_years(["January 2", "December 31"], year=2026) == [2026, 2025]
     assert history_years(["25 августа 2026", "Yesterday"], year=2020) == [2026, 2026]
+    assert history_years(["August 23, 2026", "December 31, 2025"], year=2020) == [2026, 2025]
+    assert history_years(["today", "yesterday", "August 23"], year=2026) == [2026, 2026, 2026]
 
 
 def test_connector_auth_steps_and_history() -> None:
@@ -237,6 +247,9 @@ def test_parse_payment_item() -> None:
     assert row.date == "2026-08-25T00:00:00"
     assert row.amount == -123450
     assert row.description == "Merchant"
+    assert row.bank_category == ""
+    assert row.mcc == ""
+    assert row.card == ""
 
 
 def test_parse_payment_item_rejects_missing_fields() -> None:

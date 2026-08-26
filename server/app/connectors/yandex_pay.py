@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import contextlib
 import re
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import TYPE_CHECKING, ClassVar, cast, override
 
 from monori.server.app.connectors.base import (
@@ -86,7 +86,7 @@ def parse_amount(value: str) -> int:
         raise ConnectorError(AMOUNT_MISSING)
     raw = match.group(1).replace("\N{MINUS SIGN}", "-").replace("\u00a0", "").replace(" ", "")
     sign = -1 if raw.startswith("-") else 1
-    raw = raw.lstrip("+-")
+    raw = raw.removeprefix("+").removeprefix("-")
     whole, _, fraction = raw.replace(",", ".").partition(".")
     return sign * (int(whole) * 100 + int((fraction + "00")[:2]))
 
@@ -96,7 +96,7 @@ def parse_date(value: str, *, year: int) -> str:
     Parse a localized Yandex Pay date into an ISO timestamp.
     """
     normalized = value.strip().lower()
-    today = datetime.now(UTC)
+    today = datetime.now(UTC).date()
     if normalized in {"сегодня", "today"}:
         result = today
     elif normalized in {"вчера", "yesterday"}:
@@ -104,29 +104,25 @@ def parse_date(value: str, *, year: int) -> str:
     else:
         match = DATE_RE.search(normalized)
         if match is not None and match.group(2) in MONTHS:
-            result = datetime(
+            result = date(
                 int(match.group(3) or year),
                 MONTHS[match.group(2)],
                 int(match.group(1)),
-                tzinfo=UTC,
             )
         else:
             english = EN_DATE_RE.search(normalized)
             if english is not None and english.group(1) in MONTHS:
-                result = datetime(
+                result = date(
                     int(english.group(3) or year),
                     MONTHS[english.group(1)],
                     int(english.group(2)),
-                    tzinfo=UTC,
                 )
             else:
                 month_year = MONTH_YEAR_RE.search(normalized)
                 if month_year is None or month_year.group(1) not in MONTHS:
                     raise ConnectorError(DATE_MISSING)
-                result = datetime(
-                    int(month_year.group(2)), MONTHS[month_year.group(1)], 1, tzinfo=UTC
-                )
-    return result.strftime("%Y-%m-%dT%H:%M:%S")
+                result = date(int(month_year.group(2)), MONTHS[month_year.group(1)], 1)
+    return f"{result.isoformat()}T00:00:00"
 
 
 def parse_payment_item(titles: list[str], descriptions: list[str], *, year: int) -> SyncRow:
@@ -164,7 +160,7 @@ def history_years(headings: list[str], *, year: int) -> list[int]:
             month_day = (MONTHS[english_match.group(1)], int(english_match.group(2)))
             explicit_year = english_match.group(3)
         else:
-            relative = datetime.now(UTC) - timedelta(
+            relative = datetime.now(UTC).date() - timedelta(
                 days=1 if normalized in {"вчера", "yesterday"} else 0
             )
             month_day = (
