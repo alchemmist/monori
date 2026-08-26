@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import re
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, ClassVar, cast, override
@@ -43,8 +44,25 @@ MONTHS = {
     "нояб.": 11,
     "дек.": 12,
 }
+MONTHS.update(
+    {
+        "january": 1,
+        "february": 2,
+        "march": 3,
+        "april": 4,
+        "may": 5,
+        "june": 6,
+        "july": 7,
+        "august": 8,
+        "september": 9,
+        "october": 10,
+        "november": 11,
+        "december": 12,
+    }
+)
 AMOUNT_RE = re.compile(r"([+\-\N{MINUS SIGN}]?\s*[0-9][0-9\u00a0 ]*(?:[,.][0-9]{1,2})?)")
 DATE_RE = re.compile(r"(\d{1,2})\s+([\u0410-\u042f\u0430-\u044fЁё]+)(?:\s+(\d{4}))?")
+EN_DATE_RE = re.compile(r"([A-Za-z]+)\s+(\d{1,2})(?:,\s*(\d{4}))?")
 MONTH_YEAR_RE = re.compile(r"([\u0410-\u042f\u0430-\u044fЁё.]+)\s*[•.\s]+(\d{4})")
 AMOUNT_MISSING = "Yandex Pay transaction amount is missing"
 DATE_MISSING = "Yandex Pay transaction date is missing"
@@ -72,9 +90,9 @@ def parse_date(value: str, *, year: int) -> str:
     """Parse a localized Yandex Pay date into an ISO timestamp."""
     normalized = value.strip().lower()
     today = datetime.now(UTC)
-    if normalized == "сегодня":
+    if normalized in {"сегодня", "today"}:
         result = today
-    elif normalized == "вчера":
+    elif normalized in {"вчера", "yesterday"}:
         result = today - timedelta(days=1)
     else:
         match = DATE_RE.search(normalized)
@@ -86,10 +104,21 @@ def parse_date(value: str, *, year: int) -> str:
                 tzinfo=UTC,
             )
         else:
-            month_year = MONTH_YEAR_RE.search(normalized)
-            if month_year is None or month_year.group(1) not in MONTHS:
-                raise ConnectorError(DATE_MISSING)
-            result = datetime(int(month_year.group(2)), MONTHS[month_year.group(1)], 1, tzinfo=UTC)
+            english = EN_DATE_RE.search(normalized)
+            if english is not None and english.group(1) in MONTHS:
+                result = datetime(
+                    int(english.group(3) or year),
+                    MONTHS[english.group(1)],
+                    int(english.group(2)),
+                    tzinfo=UTC,
+                )
+            else:
+                month_year = MONTH_YEAR_RE.search(normalized)
+                if month_year is None or month_year.group(1) not in MONTHS:
+                    raise ConnectorError(DATE_MISSING)
+                result = datetime(
+                    int(month_year.group(2)), MONTHS[month_year.group(1)], 1, tzinfo=UTC
+                )
     return result.strftime("%Y-%m-%dT%H:%M:%S")
 
 
@@ -119,7 +148,8 @@ class YandexPayConnector(TBankPlaywrightConnector):
         ConnectorParam(name="password", label="Password", secret=True, required=True),
     ]
     account_params: ClassVar[list[ConnectorParam]] = []
-    HISTORY_URL = "https://id.yandex.ru/pay/history"
+    HISTORY_URL = "https://bank.yandex.ru/my/history"
+    PAY_CARD_FILTER_LABELS = ("Pay card", "Карта Пэй")
 
     @override
     def ensure_logged_in(self, page: _Page) -> None:
@@ -127,32 +157,36 @@ class YandexPayConnector(TBankPlaywrightConnector):
         page.goto(self.HISTORY_URL, wait_until="domcontentloaded")
         page.wait_for_timeout(1500)
         for _ in range(30):
-            if "/pay/history" in page.url or page.query_selector(
-                "[data-testid='payments-history']"
-            ):
+            if "/my/history" in page.url and page.query_selector("main") is not None:
                 return
-            if page.query_selector("input[type='tel'], input[name='login']"):
+            frame = page.locator("iframe[src*='yandex.ru/user-id']").first.content_frame
+            if frame.locator("input[type='tel'], input[name='login']").count():
                 phone = self.credentials.get("phone")
                 if not isinstance(phone, str):
                     raise ConnectorError(PHONE_MISSING)
                 selector = "input[type='tel'], input[name='login']"
-                page.fill(selector, phone)
+                frame.locator(selector).first.fill(phone, timeout=5000)
+                frame.locator(selector).first.click(timeout=5000)
                 page.keyboard.press("Enter")
-            elif page.query_selector("input[type='password']"):
+            elif frame.locator("input[type='password']").count():
                 password = self.credentials.get("password")
                 if not isinstance(password, str):
                     raise ConnectorError(LOGIN_SECRET_MISSING)
-                page.fill("input[type='password']", password)
+                frame.locator("input[type='password']").first.fill(password, timeout=5000)
+                frame.locator("input[type='password']").first.click(timeout=5000)
                 page.keyboard.press("Enter")
-            elif page.query_selector("input[inputmode='numeric'], input[type='number']"):
+            elif frame.locator(
+                "input[inputmode='numeric'], input[type='number'], "
+                "input[autocomplete='one-time-code']"
+            ).count():
                 code = self.ask_sms("enter the code from the Yandex ID push notification")
-                page.locator("input[inputmode='numeric'], input[type='number']").first.click(
-                    timeout=5000
-                )
+                code_input = frame.locator(
+                    "input[inputmode='numeric'], input[type='number'], "
+                    "input[autocomplete='one-time-code']"
+                ).first
+                code_input.click(timeout=5000)
                 page.keyboard.type(code)
                 page.keyboard.press("Enter")
-            elif page.query_selector("[data-testid='cell']"):
-                page.locator("[data-testid='cell']").first.click(timeout=5000)
             else:
                 page.wait_for_timeout(1000)
             page.wait_for_timeout(1500)
@@ -163,61 +197,57 @@ class YandexPayConnector(TBankPlaywrightConnector):
         """Load all lazily rendered history items and parse their visible fields."""
         page.goto(self.HISTORY_URL, wait_until="domcontentloaded")
         page.wait_for_timeout(1500)
+        self.select_pay_card_filter(page)
         previous = 0
         for _ in range(60):
-            count = page.locator("[data-testid='payment-item']").count()
+            count = page.locator("main a[aria-haspopup='true']").count()
             page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
             page.wait_for_timeout(750)
-            current = page.locator("[data-testid='payment-item']").count()
+            current = page.locator("main a[aria-haspopup='true']").count()
             if current == previous and current == count:
                 break
             previous = current
         payload = cast(
             "list[dict[str, JsonValue]]",
             page.evaluate(
-                """() => [...document.querySelectorAll('[data-testid=payment-item]')].map(item => ({
-                    titles: [...item.querySelectorAll('[data-testid=heading-title]')]
-                        .map(e => e.innerText),
-                }))""",
+                """() => {
+                    const headings = [...document.querySelectorAll('main h3')];
+                    return [...document.querySelectorAll(
+                        'main a[aria-haspopup="true"]'
+                    )].map(item => {
+                        const heading = headings.filter(e =>
+                            e.compareDocumentPosition(item) & Node.DOCUMENT_POSITION_FOLLOWING
+                        ).at(-1);
+                        const paragraphs = [...item.querySelectorAll('p')].map(e => e.innerText);
+                        return {
+                            titles: paragraphs.slice(0, 1),
+                            amount: paragraphs.find(e => /[-+\u2212]?\\s*\\d/.test(e)) || '',
+                            date: heading?.innerText || '',
+                        };
+                    });
+                }""",
             ),
         )
         year = datetime.now(UTC).year
         rows: list[SyncRow] = []
-        for index, item in enumerate(payload):
+        for item in payload:
             titles = [str(value) for value in cast("list[JsonValue]", item.get("titles", []))]
-            page.locator("[data-testid='payment-item']").nth(index).click(timeout=5000)
-            for _ in range(10):
-                if (
-                    page.query_selector(
-                        "[data-testid='payment-details-viewer-dialog'] [data-testid='heading']"
-                    )
-                    is not None
-                ):
-                    break
-                page.wait_for_timeout(150)
-            detail_descriptions = cast(
-                "list[JsonValue]",
-                page.evaluate(
-                    """() => [...document.querySelectorAll(
-                        '[data-testid=payment-details-viewer-dialog] '
-                        + '[data-testid=heading-description]'
-                    )].map(e => e.innerText)"""
-                ),
-            )
-            page.evaluate(
-                """() => document.querySelector(
-                    '[data-testid=payment-details-viewer-dialog] [data-testid=close]'
-                )?.click()"""
-            )
-            page.wait_for_timeout(150)
-            date_text = next(
-                (str(value) for value in detail_descriptions if re.search(r"\d{4}", str(value))),
-                None,
-            )
-            if date_text is None:
+            amount = str(item.get("amount", ""))
+            date_text = str(item.get("date", ""))
+            if not amount or not date_text:
                 raise ConnectorError(DATE_MISSING)
+            titles.append(amount)
             descriptions = [date_text]
             rows.append(parse_payment_item(titles, descriptions, year=year))
         if not rows:
             raise PublicConnectorError(NO_TRANSACTIONS)
         return rows
+
+    @staticmethod
+    def select_pay_card_filter(page: _Page) -> None:
+        """Limit the history view to Pay card operations."""
+        for label in YandexPayConnector.PAY_CARD_FILTER_LABELS:
+            with contextlib.suppress(Exception):
+                page.get_by_text(label, exact=True).first.click(timeout=2_500)
+                page.wait_for_timeout(750)
+                return

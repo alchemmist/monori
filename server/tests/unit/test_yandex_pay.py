@@ -12,6 +12,7 @@ def test_parse_amount() -> None:
 def test_parse_date() -> None:
     assert parse_date("25 августа 2026", year=2020) == "2026-08-25T00:00:00"
     assert parse_date("авг. •• 2026", year=2020) == "2026-08-01T00:00:00"
+    assert parse_date("August 23", year=2026) == "2026-08-23T00:00:00"
 
 
 def test_parse_payment_item() -> None:
