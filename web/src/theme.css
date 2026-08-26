@@ -17,7 +17,7 @@
 :root {
     --m-radius: 6px;
     --m-radius-sm: 5px;
-    --m-accent-contrast: #fff;
+    --m-accent-contrast: #0a0a0a;
     --m-title-weight: 800;
     --m-num-weight: 800;
 
@@ -26,98 +26,6 @@
         "Menlo", "Monaco", "Consolas", "Liberation Mono", "Ubuntu Mono", "DejaVu Sans Mono",
         "Courier New", "Courier", monospace;
 
-    --m-bg: #fff;
-    --m-canvas: #fff;
-    --m-surface: #fff;
-    --m-surface-hover: #f7f7f6;
-    --m-surface-raised: #f5f5f4;
-    --m-border: #e7e6e3;
-    --m-border-soft: #efefed;
-    --m-text: #0a0a0a;
-    --m-text-dim: #5c5c58;
-    --m-text-faint: #6b6a66;
-    --m-accent: #c2410c;
-    --m-accent-soft: #ffe6d9;
-    --m-income: #166534;
-    --m-expense: #b91c1c;
-    --m-warning: #b45309;
-    --m-income-soft: #e4f3e9;
-    --m-expense-soft: #fbe3e3;
-    --m-chart-1: var(--m-accent);
-    --m-chart-2: #4269d0;
-    --m-chart-3: #3ca951;
-    --m-chart-4: #a463f2;
-    --m-chart-5: #d94f87;
-    --m-chart-6: #329f8a;
-    --m-chart-7: #b77900;
-    --m-chart-8: #87583b;
-    --m-chart-9: #5d8fd8;
-    --m-chart-10: #d94f4f;
-    --m-chart-11: #5b43a0;
-    --m-chart-12: #6b6a66;
-    --m-card-bg: var(--m-surface);
-    --m-card-border: var(--m-border);
-    --m-sidebar-edge: var(--m-border-soft);
-
-    /* ---- frosted glass: single source of truth for every glass surface ----
-       Transparency (--glass-fill), blur (--glass-blur), border and lift are set
-       once here and reused by cards, the category dropdown, the chart tooltip,
-       kanban cards and the docs surfaces. Tune a token and every glass surface
-       updates together. Light theme keeps solid cards; these values only show on
-       translucent overlays (the tooltip, dropdown, sticky docs bar). */
-    --glass-blur: 8px;
-    --glass-fill: rgb(255 255 255 / 72%);
-    --glass-border: rgb(0 0 0 / 8%);
-    --glass-shadow: 0 2px 16px rgb(0 0 0 / 6%);
-
-    /* accent-tuned brand tokens (drive the Mantine skin's filled/selection look) */
-    --g-color-base-brand: #c2410c;
-    --g-color-base-brand-hover: #a9360b;
-    --g-color-line-brand: #c2410c;
-    --g-color-text-brand: #a9360b;
-    --g-color-text-brand-heavy: #8f2f09;
-    --g-color-text-link: #a9360b;
-    --g-color-text-link-hover: #8f2f09;
-    --g-color-text-brand-contrast: #fff;
-    --g-color-base-selection: #ffe6d9;
-    --g-color-base-selection-hover: #ffd9c5;
-
-    /* neutral / semantic tokens the skin and charts read (former uikit values) */
-    --g-color-base-danger-light: rgb(255, 0, 61, 0.15);
-    --g-color-base-float: rgb(255, 255, 255);
-    --g-color-base-generic: rgb(0, 0, 0, 0.05);
-    --g-color-base-generic-accent-disabled: rgb(0, 0, 0, 0.07);
-    --g-color-base-generic-hover: rgb(0, 0, 0, 0.15);
-    --g-color-base-info-light: rgb(54, 151, 241, 0.15);
-    --g-color-base-neutral-light: rgb(0, 0, 0, 0.05);
-    --g-color-base-positive-light: rgb(50, 186, 118, 0.15);
-    --g-color-base-simple-hover: rgb(0, 0, 0, 0.05);
-    --g-color-base-warning-light: rgb(255, 190, 92, 0.3);
-    --g-color-line-danger: rgb(255, 0, 61, 0.8);
-    --g-color-line-generic: rgb(0, 0, 0, 0.1);
-    --g-color-line-generic-active: rgb(0, 0, 0, 0.3);
-    --g-color-line-generic-hover: rgb(0, 0, 0, 0.15);
-    --g-color-sfx-fade: rgb(255, 255, 255, 0.3);
-    --g-color-text-complementary: rgb(0, 0, 0, 0.7);
-    --g-color-text-danger: rgb(233, 3, 58);
-    --g-color-text-danger-heavy: rgb(189, 9, 53);
-    --g-color-text-hint: rgb(0, 0, 0, 0.55);
-    --g-color-text-info-heavy: rgb(48, 114, 179);
-    --g-color-text-positive: #167a48;
-    --g-color-text-positive-heavy: #12633b;
-    --g-color-text-secondary: rgb(0, 0, 0, 0.65);
-    --g-color-text-warning: rgb(189, 142, 75);
-    --g-color-text-warning-heavy: rgb(189, 92, 10);
-}
-
-/* ---------- DARK ---------- */
-
-/*
- * Dark theme: a flat, deep near-black canvas (the approved look) with
- * frosted-glass cards that sit a step lighter than the canvas. Neutrals carry a
- * faint violet cast; the orange accent and green/red money colors are unchanged.
- */
-.theme-dark {
     --m-bg: #08070d;
     --m-canvas: #08070d;
     --m-surface: #0d0b15;
@@ -129,7 +37,6 @@
     --m-text-dim: #a3a0b0;
     --m-text-faint: #aaa7b8;
     --m-accent: #ff8a52;
-    --m-accent-contrast: #0a0a0a;
     --m-accent-soft: #3a1e10;
     --m-income: #4ade80;
     --m-expense: #f87171;
@@ -148,18 +55,22 @@
     --m-chart-10: #ff8f8f;
     --m-chart-11: #a997ed;
     --m-chart-12: #aaa7b8;
-
-    /* glass over the dark canvas: the approved warm, see-through panel from the
-       category dropdown, now the shared standard. Cards read the same tokens so
-       every glass surface matches. */
-    --glass-fill: rgb(44 38 46 / 38%);
-    --glass-border: transparent;
-    --glass-shadow: 0 2px 14px rgb(0 0 0 / 16%);
-
     --m-card-bg: var(--glass-fill);
     --m-card-border: var(--glass-border);
     --m-sidebar-edge: rgb(255 255 255 / 8%);
 
+    /* ---- frosted glass: single source of truth for every glass surface ----
+       Transparency (--glass-fill), blur (--glass-blur), border and lift are set
+       once here and reused by cards, the category dropdown, the chart tooltip,
+       kanban cards and the docs surfaces. Tune a token and every glass surface
+       updates together. Light theme keeps solid cards; these values only show on
+       translucent overlays (the tooltip, dropdown, sticky docs bar). */
+    --glass-blur: 8px;
+    --glass-fill: rgb(44 38 46 / 38%);
+    --glass-border: transparent;
+    --glass-shadow: 0 2px 14px rgb(0 0 0 / 16%);
+
+    /* accent-tuned brand tokens (drive the Mantine skin's filled/selection look) */
     --g-color-base-brand: #ff8a52;
     --g-color-base-brand-hover: #ff9d70;
     --g-color-line-brand: #ff8a52;
@@ -171,6 +82,7 @@
     --g-color-base-selection: #3a1e10;
     --g-color-base-selection-hover: #4a2614;
 
+    /* neutral / semantic tokens the skin and charts read (former uikit values) */
     --g-color-base-danger-light: rgb(229, 50, 93, 0.2);
     --g-color-base-float: rgb(56, 52, 56);
     --g-color-base-generic: rgb(255, 255, 255, 0.1);
@@ -196,6 +108,94 @@
     --g-color-text-secondary: rgb(255, 255, 255, 0.7);
     --g-color-text-warning: rgb(255, 190, 92);
     --g-color-text-warning-heavy: rgb(255, 197, 108);
+}
+
+/* ---------- DARK ---------- */
+
+/*
+ * Dark theme: a flat, deep near-black canvas (the approved look) with
+ * frosted-glass cards that sit a step lighter than the canvas. Neutrals carry a
+ * faint violet cast; the orange accent and green/red money colors are unchanged.
+ */
+.theme-dark {
+    --m-bg: #fff;
+    --m-canvas: #fff;
+    --m-surface: #fff;
+    --m-surface-hover: #f7f7f6;
+    --m-surface-raised: #f5f5f4;
+    --m-border: #e7e6e3;
+    --m-border-soft: #efefed;
+    --m-text: #0a0a0a;
+    --m-text-dim: #5c5c58;
+    --m-text-faint: #6b6a66;
+    --m-accent: #c2410c;
+    --m-accent-contrast: #fff;
+    --m-accent-soft: #ffe6d9;
+    --m-income: #166534;
+    --m-expense: #b91c1c;
+    --m-warning: #b45309;
+    --m-income-soft: #e4f3e9;
+    --m-expense-soft: #fbe3e3;
+    --m-chart-1: var(--m-accent);
+    --m-chart-2: #4269d0;
+    --m-chart-3: #3ca951;
+    --m-chart-4: #a463f2;
+    --m-chart-5: #d94f87;
+    --m-chart-6: #329f8a;
+    --m-chart-7: #b77900;
+    --m-chart-8: #87583b;
+    --m-chart-9: #5d8fd8;
+    --m-chart-10: #d94f4f;
+    --m-chart-11: #5b43a0;
+    --m-chart-12: #6b6a66;
+
+    /* glass over the dark canvas: the approved warm, see-through panel from the
+       category dropdown, now the shared standard. Cards read the same tokens so
+       every glass surface matches. */
+    --glass-fill: rgb(255 255 255 / 72%);
+    --glass-border: rgb(0 0 0 / 8%);
+    --glass-shadow: 0 2px 16px rgb(0 0 0 / 6%);
+
+    --m-card-bg: var(--m-surface);
+    --m-card-border: var(--m-border);
+    --m-sidebar-edge: var(--m-border-soft);
+
+    --g-color-base-brand: #c2410c;
+    --g-color-base-brand-hover: #a9360b;
+    --g-color-line-brand: #c2410c;
+    --g-color-text-brand: #a9360b;
+    --g-color-text-brand-heavy: #8f2f09;
+    --g-color-text-link: #a9360b;
+    --g-color-text-link-hover: #8f2f09;
+    --g-color-text-brand-contrast: #fff;
+    --g-color-base-selection: #ffe6d9;
+    --g-color-base-selection-hover: #ffd9c5;
+
+    --g-color-base-danger-light: rgb(255, 0, 61, 0.15);
+    --g-color-base-float: rgb(255, 255, 255);
+    --g-color-base-generic: rgb(0, 0, 0, 0.05);
+    --g-color-base-generic-accent-disabled: rgb(0, 0, 0, 0.07);
+    --g-color-base-generic-hover: rgb(0, 0, 0, 0.15);
+    --g-color-base-info-light: rgb(54, 151, 241, 0.15);
+    --g-color-base-neutral-light: rgb(0, 0, 0, 0.05);
+    --g-color-base-positive-light: rgb(50, 186, 118, 0.15);
+    --g-color-base-simple-hover: rgb(0, 0, 0, 0.05);
+    --g-color-base-warning-light: rgb(255, 190, 92, 0.3);
+    --g-color-line-danger: rgb(255, 0, 61, 0.8);
+    --g-color-line-generic: rgb(0, 0, 0, 0.1);
+    --g-color-line-generic-active: rgb(0, 0, 0, 0.3);
+    --g-color-line-generic-hover: rgb(0, 0, 0, 0.15);
+    --g-color-sfx-fade: rgb(255, 255, 255, 0.3);
+    --g-color-text-complementary: rgb(0, 0, 0, 0.7);
+    --g-color-text-danger: rgb(233, 3, 58);
+    --g-color-text-danger-heavy: rgb(189, 9, 53);
+    --g-color-text-hint: rgb(0, 0, 0, 0.55);
+    --g-color-text-info-heavy: rgb(48, 114, 179);
+    --g-color-text-positive: #167a48;
+    --g-color-text-positive-heavy: #12633b;
+    --g-color-text-secondary: rgb(0, 0, 0, 0.65);
+    --g-color-text-warning: rgb(189, 142, 75);
+    --g-color-text-warning-heavy: rgb(189, 92, 10);
 }
 
 html,
@@ -229,7 +229,7 @@ html:has(> body.theme-dark) {
 }
 
 :root:has(> body.theme-dark) {
-    --m-canvas: #08070d;
+    --m-canvas: #fff;
 }
 
 /* frosted-glass cards over the canvas: the translucent --m-card-bg is blurred
