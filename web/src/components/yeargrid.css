@@ -412,7 +412,7 @@
 }
 
 /* dark: the frozen chrome is one flat opaque surface a step lighter than the
-   #08070d canvas — no backdrop-filter glass (blur on the sticky header + frozen
+   #221d22 canvas — no backdrop-filter glass (blur on the sticky header + frozen
    column breaks Chrome's compositing and paints gray blocks over the body) */
 .theme-dark .year-grid thead th {
     background: var(--m-surface-raised);

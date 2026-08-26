@@ -119,7 +119,7 @@
  */
 .theme-dark {
     --m-bg: #08070d;
-    --m-canvas: #08070d;
+    --m-canvas: #221d22;
     --m-surface: #0d0b15;
     --m-surface-hover: #2a242a;
     --m-surface-raised: #141020;
@@ -229,7 +229,7 @@ html:has(> body.theme-dark) {
 }
 
 :root:has(> body.theme-dark) {
-    --m-canvas: #08070d;
+    --m-canvas: #221d22;
 }
 
 /* frosted-glass cards over the canvas: the translucent --m-card-bg is blurred
