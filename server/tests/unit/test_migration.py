@@ -199,6 +199,51 @@ def test_bootstrap_rejects_current_schema_missing_an_index(tmp_path: pathlib.Pat
         connect(db_path)
 
 
+def test_category_name_migration_resolves_existing_group_duplicates(
+    tmp_path: pathlib.Path,
+) -> None:
+    db_path = tmp_path / "duplicate-categories.db"
+    connect(db_path).close()
+    cfg = _alembic_config(db_path)
+    command.downgrade(cfg, "0019")
+    raw = sqlite3.connect(db_path)
+    group_id = raw.execute(
+        "INSERT INTO category_groups (name, sort, type_id)"
+        " VALUES ('Home', 1, (SELECT id FROM category_group_types WHERE type='expense'))"
+    ).lastrowid
+    assert group_id is not None
+    raw.execute(
+        "INSERT INTO categories (group_id, name, sort) VALUES (?, 'Other', 1)",
+        (group_id,),
+    )
+    raw.execute(
+        "INSERT INTO categories (group_id, name, sort) VALUES (?, 'Other', 2)",
+        (group_id,),
+    )
+    raw.commit()
+    raw.close()
+
+    command.upgrade(cfg, "head")
+
+    raw = sqlite3.connect(db_path)
+    try:
+        names = [
+            row[0]
+            for row in raw.execute(
+                "SELECT name FROM categories WHERE group_id=? ORDER BY id",
+                (group_id,),
+            )
+        ]
+        assert names == ["Other", "Other (2)"]
+        with pytest.raises(sqlite3.IntegrityError):
+            raw.execute(
+                "INSERT INTO categories (group_id, name, sort) VALUES (?, 'Other', 3)",
+                (group_id,),
+            )
+    finally:
+        raw.close()
+
+
 @pytest.mark.parametrize("user_version", [-1, len(LEGACY_REVISIONS), 999])
 def test_unknown_legacy_user_version_is_rejected_without_changes(
     tmp_path: pathlib.Path,
