@@ -4,9 +4,11 @@ import { describe, expect, it } from "vitest";
 const themeCss = readFileSync("src/theme.css", "utf8");
 
 const values = (name: string) =>
-    Array.from(themeCss.matchAll(new RegExp(`${name}:\\s*([^;]+);`, "g")), ([, value]) =>
-        value.trim(),
-    );
+    Array.from(themeCss.matchAll(new RegExp(`${name}:\\s*([^;]+);`, "g")), (match) => {
+        const value = match[1];
+        if (value === undefined) throw new Error(`Missing value for ${name}`);
+        return value.trim();
+    });
 
 const palette = [
     "#ef5a17",
