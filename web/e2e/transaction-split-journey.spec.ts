@@ -78,7 +78,7 @@ test("split journey keeps allocation, budgets and dashboard visualizations consi
     await expect(parts.locator(".split-editor__swatch")).toHaveCount(2);
     await expect(allocation).toHaveCSS(
         "background-image",
-        /rgb\(194, 65, 12\).*rgb\(66, 105, 208\)/,
+        /rgb\(239, 90, 23\).*rgb\(66, 105, 208\)/,
     );
 
     // Dragging the bar updates numeric fields; manual entry updates its neighbour and keeps it visible.
