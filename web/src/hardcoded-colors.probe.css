@@ -1,0 +1,8 @@
+.qg-hardcoded-color-probe {
+    color: #ef5a17;
+    background: rgb(239 90 23 / 80%);
+    border-color: hsl(18 87% 51%);
+    outline-color: rebeccapurple;
+    box-shadow: 0 0 8px oklch(68% 0.19 42);
+    text-shadow: 0 0 2px color(display-p3 0.9 0.3 0.1);
+}
