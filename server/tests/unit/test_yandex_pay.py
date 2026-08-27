@@ -11,6 +11,8 @@ from monori.server.app.connectors.tbank_playwright import (
     _PageAdapter,
 )
 from monori.server.app.connectors.yandex_pay import (
+    CAPTCHA_REFRESH,
+    CODE_RESEND,
     YandexPayConnector,
     history_years,
     parse_amount,
@@ -137,6 +139,7 @@ class Page:
                     and text == "Получить код по \u0421\u041c\u0421"
                 )
                 or (self.mode == "captcha" and exact and text == "Submit")
+                or (self.mode == "captcha" and exact and text == "Another code")
                 or (self.mode == "filter" and exact and text == "Pay card")
             )
         )
@@ -168,6 +171,17 @@ def test_parse_amount() -> None:
 class ConnectorWithCode(YandexPayConnector):
     def ask_sms(self, _message: str = "") -> str:
         return "123456"
+
+
+class ConnectorWithAnswer(YandexPayConnector):
+    def __init__(self, answer: str) -> None:
+        super().__init__({"phone": "+70000000000", "password": "pw"})
+        self.answer = answer
+        self.messages: list[str] = []
+
+    def ask_sms(self, message: str = "") -> str:
+        self.messages.append(message)
+        return self.answer
 
 
 def test_parse_date() -> None:
@@ -221,6 +235,7 @@ def test_connector_auth_steps_and_history() -> None:
     suggest = Page("suggest")
     suggest.url = "https://passport.yandex.ru/pwl-yandex/auth/suggest"
     assert connector.choose_suggested_account(suggest)
+    assert not connector.choose_suggested_account(Page())
     assert connector.drive_auth_step(Page("phone"))
     assert connector.drive_auth_step(Page("password"))
     assert connector.drive_auth_step(Page("code"))
@@ -236,6 +251,47 @@ def test_connector_auth_steps_and_history() -> None:
         connector.ensure_logged_in(Page("retry"))
     with pytest.raises(PublicConnectorError, match="login did not reach"):
         connector.ensure_logged_in(Page("chooser"))
+
+
+def test_connector_handles_suggest_resend_and_captcha_refresh() -> None:
+    class SuggestPage(Page):
+        def __init__(self) -> None:
+            super().__init__("suggest")
+            self.url = "https://passport.yandex.ru/pwl-yandex/auth/suggest"
+
+        def goto(self, url: str, *, wait_until: str | None = None) -> None:
+            del wait_until
+            self.url = (
+                url
+                if self.mode == "logged"
+                else "https://passport.yandex.ru/pwl-yandex/auth/suggest"
+            )
+
+        def locator(self, selector: str) -> Locator:
+            locator = super().locator(selector)
+            if selector == "button":
+                def select() -> None:
+                    self.mode = "logged"
+                    self.url = "https://bank.yandex.ru/my/history"
+
+                locator.on_click = select
+            return locator
+
+    ConnectorWithCode({"phone": "+70000000000", "password": "pw"}).ensure_logged_in(
+        SuggestPage()
+    )
+    assert ConnectorWithAnswer(CODE_RESEND).drive_auth_step(Page("code"))
+    assert ConnectorWithAnswer(CAPTCHA_REFRESH).drive_auth_step(Page("captcha"))
+
+    class InvalidCaptchaPage(Page):
+        def evaluate(self, expression: str) -> JsonValue:
+            if "Captcha-img" in expression:
+                return "https://example.com/not-yandex"
+            return super().evaluate(expression)
+
+    captcha = ConnectorWithAnswer("answer")
+    assert captcha.drive_auth_step(InvalidCaptchaPage("captcha"))
+    assert captcha.messages == ["captcha:"]
 
 
 def test_connector_waits_for_auth_dom_transition() -> None:

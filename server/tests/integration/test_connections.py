@@ -443,6 +443,50 @@ def test_pending_account_is_persisted_and_resume_skips_synced(
     c.close()
 
 
+class SecondAccountOtpConnector(RetryOtpConnector):
+    bank = "secondotp"
+    kind = "secondotp"
+
+    @override
+    def sync(self, since: str | None = None) -> SyncResult:
+        if self.account_ref == "second":
+            raise SmsRequiredError("captcha:https://ext.captcha.yandex.net/image?key=next")
+        raise SmsRequiredError("code sent")
+
+    @override
+    def resume_sync(self, code: str) -> SyncResult:
+        return SyncResult([], session={"token": code})
+
+
+def test_resume_propagates_challenge_from_next_account(
+    api: Api,
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setitem(
+        base.REGISTRY,
+        ("secondotp", "secondotp"),
+        SecondAccountOtpConnector,
+    )
+    first = api.default_account()
+    second = api.account("Second")
+    response = client.post(
+        "/api/connections",
+        json={"bank": "secondotp", "kind": "secondotp", "credentials": {"phone": "+7"}},
+    )
+    cid = response.json()["id"]
+    client.patch(f"/api/accounts/{first}", json={"connectionId": cid, "bankRef": "first"})
+    client.patch(f"/api/accounts/{second}", json={"connectionId": cid, "bankRef": "second"})
+
+    assert client.post(f"/api/connections/{cid}/sync").json()["status"] == "awaiting_sms"
+    body = client.post(f"/api/connections/{cid}/sms", json={"code": "123456"}).json()
+
+    assert body == {
+        "status": "awaiting_sms",
+        "message": "captcha:https://ext.captcha.yandex.net/image?key=next",
+    }
+
+
 class MultiCardConnector(base.Connector):
     bank = "multicard"
     kind = "multicard"
