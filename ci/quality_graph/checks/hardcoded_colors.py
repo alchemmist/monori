@@ -266,14 +266,7 @@ def summary_body(findings: list[Finding]) -> str:
     )
     if not findings:
         return "No hardcoded colors found."
-    ids = ",".join(finding.finding_id for finding in findings)
-    files = "\n".join(
-        f"- `/qg ignore-file {path}`" for path in sorted({finding.path for finding in findings})
-    )
-    controls = (
-        f"\n\nApprove findings with `/qg ignore {ids}` or `/qg ignore hardcoded-colors`.\n{files}"
-    )
-    return "\n".join(rows) + controls
+    return "\n".join(rows)
 
 
 def result_value(
@@ -291,14 +284,6 @@ def result_value(
             "endColumn": finding.column + len(finding.literal),
         }
 
-    controls: list[ResultValue] = [
-        {"kind": "finding", "target": finding.finding_id, "checked": False} for finding in findings
-    ]
-    controls.extend(
-        {"kind": "file", "target": path, "checked": False}
-        for path in sorted({finding.path for finding in findings})
-    )
-    controls.append({"kind": "node", "target": "hardcoded-colors", "checked": False})
     pull_request = int(environment["QG_PULL_REQUEST"])
     provenance: dict[str, ResultValue] = {
         "repository": environment["GITHUB_REPOSITORY"],
@@ -342,7 +327,7 @@ def result_value(
             for finding in findings
         ],
         "diagnostics": [],
-        "controls": controls,
+        "controls": [],
         "notes": ["Color finding IDs are stable and location-sensitive."],
         "provenance": provenance,
     }

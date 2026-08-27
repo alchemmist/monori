@@ -19,22 +19,6 @@ jobs:
         name: Format check
         runs-on: ubuntu-latest
         steps:
-            - name: Quality Graph command reference
-              run: |
-                  cat >> "$GITHUB_STEP_SUMMARY" <<'EOF'
-                  ## Quality Graph commands
-
-                  Repository administrators can use these commands in a pull-request comment:
-
-                  - `/qg ignore <type>-<finding-id>[,<type>-<finding-id>...]` — ignore selected findings
-                  - `/qg ignore <type>[,<type>...]` — ignore all current findings of selected types
-                  - `/qg ignore-file path/to/file[,path/to/file...]` — ignore findings in selected files
-                  - `/qg remove-ignore <type>-<finding-id>[,<type>-<finding-id>...]` — remove selected ignores
-                  - `/qg status` — show command status
-                  - `/qg help` — show this reference
-
-                  `/quality-graph` is an alias for `/qg`.
-                  EOF
             - name: Checkout
               uses: actions/checkout@v7
               with:

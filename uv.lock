@@ -1351,9 +1351,9 @@ mutation = [
     { name = "pytest-cov", specifier = ">=5" },
 ]
 quality-graph = [
-    { name = "quality-graph-cli", specifier = "==0.1.2" },
-    { name = "quality-graph-github", specifier = "==0.1.2" },
-    { name = "quality-graph-python", specifier = "==0.1.2" },
+    { name = "quality-graph-cli", specifier = "==0.1.6" },
+    { name = "quality-graph-github", specifier = "==0.1.6" },
+    { name = "quality-graph-python", specifier = "==0.1.6" },
 ]
 runtime = [{ name = "monori-server", editable = "server" }]
 sync-runtime = [{ name = "monori-server", extras = ["connectors"], editable = "server" }]
@@ -2014,32 +2014,32 @@ wheels = [
 
 [[package]]
 name = "quality-graph-cli"
-version = "0.1.2"
+version = "0.1.6"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "quality-graph-core" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/72/6b/7ac9cce77bbbed05e6852e515d914002f29fb9db5d737d7a2a0b26fbca08/quality_graph_cli-0.1.2.tar.gz", hash = "sha256:17fb1d332cffde099cba10be860624cb5426df6f650f9208d2b6f28276c526a9", size = 4095, upload-time = "2026-08-23T23:29:01.19Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/bd/e8/8e00c119a5990eacd8268e70fddd1c30f0336fc293d2dbc3135ee22d9d98/quality_graph_cli-0.1.6.tar.gz", hash = "sha256:c92bdab79429a5359259d770e0b35b2575e84cccc334674805d31b2d0c94bd49", size = 4718, upload-time = "2026-08-27T19:30:16.885Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/96/5c/2c6f500f02c2934a750e94be24a6f75b72e45ccfd08f42b09f82983aa990/quality_graph_cli-0.1.2-py3-none-any.whl", hash = "sha256:f519156422fc0ddd3dc3ed8ffae16bc09758d56fba7ead428a7783a6651993e4", size = 5722, upload-time = "2026-08-23T23:29:00.067Z" },
+    { url = "https://files.pythonhosted.org/packages/18/96/a2d96fba358a4896a9c6fd854552d08019b3ae0ce3b139d77ccd4de3c7b3/quality_graph_cli-0.1.6-py3-none-any.whl", hash = "sha256:d969f78062cc96e053cb873ff48cef3028dc73506acddf8a7a582aeec5321063", size = 6360, upload-time = "2026-08-27T19:30:15.868Z" },
 ]
 
 [[package]]
 name = "quality-graph-core"
-version = "0.1.2"
+version = "0.1.6"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "defusedxml" },
     { name = "pyyaml" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/f2/b4/4b333bf1cb0035d55545873be6dc8435c48e796a12f4b69b056ed86a0d9d/quality_graph_core-0.1.2.tar.gz", hash = "sha256:fb27e98d1a2f20e77851c962fce3a1f737b9cf6945a0dddbe72c33c01868bcd2", size = 16878, upload-time = "2026-08-23T23:28:34.499Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/19/a9/e1454535f5a8ee74dbc0824190d21147c439891630232442bfbbceddd34c/quality_graph_core-0.1.6.tar.gz", hash = "sha256:7a289b1db32adbcf13c25dd47faff1558e5b3f80213f0a4541699d0c28d8b1ba", size = 17094, upload-time = "2026-08-27T19:29:58.386Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/99/30/4a91ed6c2666d66cd05148652cd8e0ec1e164f2446219d479c2b82b6a21c/quality_graph_core-0.1.2-py3-none-any.whl", hash = "sha256:09733a512c2e0ee2765003459d171513366a85a0c68e0fcea198a3b55f0001d9", size = 20875, upload-time = "2026-08-23T23:28:33.26Z" },
+    { url = "https://files.pythonhosted.org/packages/b5/a0/9b662bcc2903a2dd150096f19deea2a45aec895a57d121271f5f896f0295/quality_graph_core-0.1.6-py3-none-any.whl", hash = "sha256:25a6c84a0929ff6ab3e57a1fde8fb5b55219ba045b806c7ad0c7dc3afb93f707", size = 21052, upload-time = "2026-08-27T19:29:57.134Z" },
 ]
 
 [[package]]
 name = "quality-graph-github"
-version = "0.1.2"
+version = "0.1.6"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "httpx" },
@@ -2047,21 +2047,21 @@ dependencies = [
     { name = "pyyaml" },
     { name = "quality-graph-core" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/2f/53/1d9091ca8827d4db0199b721148aef257002c39bdb7bdf8b13a45a840c73/quality_graph_github-0.1.2.tar.gz", hash = "sha256:c711ce3e1a18f7f8a38afab039a23a8c7338ae3fd27ab036f8cfc0878c31f041", size = 23097, upload-time = "2026-08-23T23:28:59.492Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/d3/13/8a3501fe15da8804c8d72d0cb10ae50a6b5e10e5c24e6179038b7fff7606/quality_graph_github-0.1.6.tar.gz", hash = "sha256:fc5274a1eeb6efda0c4cd8104827235185c075eee7c44e4996d102034278570f", size = 25206, upload-time = "2026-08-27T19:30:17.995Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/2a/f9/dd02fb6215ae42b03055032a511eb9c4c8d4d94df23d5f108b5f037d3f82/quality_graph_github-0.1.2-py3-none-any.whl", hash = "sha256:1878872874b5a9be8a34d94994dbc24e7a7d2e56497e7ab8545879339f8b1e4b", size = 32347, upload-time = "2026-08-23T23:28:58.387Z" },
+    { url = "https://files.pythonhosted.org/packages/24/31/52fb138b3c02f00089c1d09974c28b5749deebb0fca38511da2832bd37f8/quality_graph_github-0.1.6-py3-none-any.whl", hash = "sha256:e758d9c5a65e60f8c674a5ddb3e43f6b04715208361cefdd83ff90e5e2b526cf", size = 34390, upload-time = "2026-08-27T19:30:16.887Z" },
 ]
 
 [[package]]
 name = "quality-graph-python"
-version = "0.1.2"
+version = "0.1.6"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "anyio" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/1f/0d/6aa219819093f1d61a8e8eedad5193587a3477f1d55d26750cc7376604b5/quality_graph_python-0.1.2.tar.gz", hash = "sha256:ae45cbd40ea428250e2a87a0f69532da2e5597a8d17856b81a281c567a1aa663", size = 6353, upload-time = "2026-08-23T23:28:33.636Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/9c/16/6d2458c3fa4b96f6f2a8042ee9deb0f51ff8df0a41b4cc89d0d0553c2373/quality_graph_python-0.1.6.tar.gz", hash = "sha256:957ade200757ba07aeaea57e6c696efe48a2752966037f0c435078274c3fcd11", size = 7446, upload-time = "2026-08-27T19:30:00.277Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/70/c0/ae4e7a633b25cdd23e83879d679ddec5c3b2cf56a11b261ad8c232d8ff4d/quality_graph_python-0.1.2-py3-none-any.whl", hash = "sha256:f02e2fb201601a38c7e37a35470a1507f5706558874f30d9649ae921f410dba2", size = 10879, upload-time = "2026-08-23T23:28:32.514Z" },
+    { url = "https://files.pythonhosted.org/packages/c3/47/c4aec82b98db73afd353f2a9829dec651f697b346c883a58270d82fe3a74/quality_graph_python-0.1.6-py3-none-any.whl", hash = "sha256:7bc21510fd38cb03ae3df425852081e41684e92e0cb6358913d3c37c9c5b4bab", size = 12115, upload-time = "2026-08-27T19:29:59.122Z" },
 ]
 
 [[package]]

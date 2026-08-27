@@ -19,9 +19,9 @@ members = ["common", "ci", "server"]
 format = ["monori-ci", "ruff==0.15.22"]
 ci = ["monori-ci", "pytest>=8"]
 quality-graph = [
-  "quality-graph-cli==0.1.2",
-  "quality-graph-github==0.1.2",
-  "quality-graph-python==0.1.2",
+  "quality-graph-cli==0.1.6",
+  "quality-graph-github==0.1.6",
+  "quality-graph-python==0.1.6",
 ]
 lint = ["monori-ci", "ruff==0.15.22"]
 test = [
