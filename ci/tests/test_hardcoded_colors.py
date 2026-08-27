@@ -1,6 +1,7 @@
 from typing import cast
 
 from monori.ci.quality_graph.checks.hardcoded_colors import (
+    ResultValue,
     result_value,
     scan_file,
     should_scan,
@@ -9,14 +10,14 @@ from monori.ci.quality_graph.checks.hardcoded_colors import (
 
 
 def test_detects_supported_color_syntax() -> None:
-    source = """\
-#abc #abcd #aabbcc #aabbccdd
-rgb(1, 2, 3) rgba(10% 20% 30% / 40%)
-hsl(120 50% 25%) hsla(120, 50%, 25%, .5) hwb(90 10% 20% / 30%)
-lab(50% 20 30) lch(50% 40 120) oklab(.5 .1 .2) oklch(.5 .1 120)
-color(display-p3 1 0 0) color(srgb 100% 0% 0% / 50%)
-color: aliceblue; border-color: rebeccapurple;
-"""
+    source = (
+        "#abc #abcd #aabbcc #aabbccdd\n"
+        "rgb(1, 2, 3) rgba(10% 20% 30% / 40%) rgb(calc(128) 0 0)\n"
+        "hsl(120 50% 25%) hsla(120, 50%, 25%, .5) hwb(90 10% 20% / 30%)\n"
+        "lab(50% 20 30) lch(50% 40 120) oklab(.5 .1 .2) oklch(.5 .1 120)\n"
+        "color(display-p3 1 0 0) color(srgb 100% 0% 0% / 50%)\n"
+        "color: aliceblue; border-color: rebeccapurple;\n"
+    )
 
     findings = scan_file("web/src/colors.css", source, set(range(1, 7)))
 
@@ -27,6 +28,7 @@ color: aliceblue; border-color: rebeccapurple;
         "HEX",
         "RGB",
         "RGBA",
+        "RGB",
         "HSL",
         "HSLA",
         "HWB",
@@ -54,6 +56,14 @@ def test_detects_literals_in_supported_source_contexts() -> None:
     assert all(scan_file(path, source, {1}) for path, source in cases.items())
 
 
+def test_detects_nested_calculations_in_color_functions() -> None:
+    findings = scan_file("example.css", "color: rgb(calc(128) 0 0);\n", {1})
+
+    assert [(finding.literal, finding.format) for finding in findings] == [
+        ("rgb(calc(128) 0 0)", "RGB")
+    ]
+
+
 def test_scans_added_lines_only_and_finds_multiple_literals() -> None:
     findings = scan_file("example.css", "color: red;\nbox-shadow: 0 0 #fff, 0 0 rgb(1 2 3);\n", {2})
 
@@ -71,12 +81,14 @@ def test_location_sensitive_ids_distinguish_duplicates() -> None:
 
 
 def test_excludes_semantic_keywords_variable_only_functions_and_false_positives() -> None:
-    source = """\
-color: transparent; color: currentColor; color: inherit; color: initial;
-color: unset; color: revert; color: color-mix(in srgb, var(--accent), var(--surface));
-background: url(#abc); content: "issue #123"; href="#abc"; hash: abcdef1234567890;
-const red = token; function blue() {}
-"""
+    source = (
+        "color: transparent; color: currentColor; color: inherit; color: initial;\n"
+        "color: unset; color: revert; "
+        "color: color-mix(in srgb, var(--accent), var(--surface));\n"
+        'background: url(#abc); content: "issue #123"; '
+        'href="#abc"; hash: abcdef1234567890;\n'
+        "const red = token; function blue() {}\n"
+    )
 
     assert scan_file("example.ts", source, {1, 2, 3, 4}) == []
 
@@ -110,10 +122,10 @@ def test_native_result_contains_findings_annotations_and_controls() -> None:
 
     assert result["status"] == "failed"
     assert result["failureKind"] == "quality"
-    findings = cast("list[dict[str, object]]", result["findings"])
-    annotations = cast("list[dict[str, object]]", result["annotations"])
-    controls = cast("list[dict[str, object]]", result["controls"])
-    provenance = cast("dict[str, object]", result["provenance"])
+    findings = cast("list[dict[str, ResultValue]]", result["findings"])
+    annotations = cast("list[dict[str, ResultValue]]", result["annotations"])
+    controls = cast("list[dict[str, ResultValue]]", result["controls"])
+    provenance = cast("dict[str, ResultValue]", result["provenance"])
     assert cast("str", findings[0]["id"]).startswith("color-")
     assert findings[0]["location"] == {
         "path": "example.css",
@@ -146,4 +158,4 @@ def test_passing_native_result_has_no_failure_kind() -> None:
 
     assert result["status"] == "passed"
     assert "failureKind" not in result
-    assert "pullRequest" not in cast("dict[str, object]", result["provenance"])
+    assert "pullRequest" not in cast("dict[str, ResultValue]", result["provenance"])

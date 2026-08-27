@@ -13,6 +13,9 @@ from typing import TYPE_CHECKING, cast
 
 from monori.ci.lib.findings import stable_finding_id
 
+type ResultScalar = bool | int | str | None
+type ResultValue = ResultScalar | list[ResultValue] | dict[str, ResultValue]
+
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
     from typing import Protocol
@@ -69,14 +72,14 @@ HEX_RE = re.compile(
     r"(?<![\w#])#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{4}|"
     r"[0-9a-fA-F]{3})(?![0-9a-fA-F])"
 )
-FUNCTION_RE = re.compile(
+FUNCTION_START_RE = re.compile(
     r"(?i)(?<![-\w])(?P<name>rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)\("
-    r"(?P<body>[^()]*?(?:var\([^)]*\)[^()]*)*)\)"
 )
 NAMED_COLORS = frozenset(
     re.findall(
         r"[a-z]+",
-        """aliceblue antiquewhite aqua aquamarine azure beige bisque black blanchedalmond blue
+        """
+aliceblue antiquewhite aqua aquamarine azure beige bisque black blanchedalmond blue
     blueviolet brown burlywood cadetblue chartreuse chocolate coral cornflowerblue cornsilk
     crimson cyan darkblue darkcyan darkgoldenrod darkgray darkgreen darkgrey darkkhaki
     darkmagenta darkolivegreen darkorange darkorchid darkred darksalmon darkseagreen
@@ -93,7 +96,8 @@ NAMED_COLORS = frozenset(
     powderblue purple rebeccapurple red rosybrown royalblue saddlebrown salmon sandybrown
     seagreen seashell sienna silver skyblue slateblue slategray slategrey snow springgreen
     steelblue tan teal thistle tomato turquoise violet wheat white whitesmoke yellow
-    yellowgreen""",
+    yellowgreen
+""",
     )
 )
 NAMED_RE = re.compile(
@@ -127,6 +131,7 @@ def should_scan(path: str) -> bool:
 
 
 def _named_color_is_literal(line: str, start: int, end: int) -> bool:
+    """Distinguish named color values from source identifiers."""
     before = line[:start].rstrip()
     after = line[end:].lstrip()
     quoted = bool(before[-1:] in {'"', "'", "`"} and after[:1] == before[-1:])
@@ -136,15 +141,39 @@ def _named_color_is_literal(line: str, start: int, end: int) -> bool:
     return quoted or css_value
 
 
-def _line_matches(line: str) -> list[tuple[int, int, str, str]]:
+def _functional_matches(line: str) -> list[tuple[int, int, str, str]]:
+    """Extract supported color functions with balanced nested notation."""
     matches: list[tuple[int, int, str, str]] = []
-    occupied: list[tuple[int, int]] = []
-    for match in FUNCTION_RE.finditer(line):
-        body = match.group("body")
-        if not re.search(r"(?:\d|#)", body):
+    for start_match in FUNCTION_START_RE.finditer(line):
+        depth = 1
+        position = start_match.end()
+        quote = ""
+        while position < len(line) and depth:
+            character = line[position]
+            if quote:
+                if character == quote and line[position - 1] != "\\":
+                    quote = ""
+            elif character in {'"', "'"}:
+                quote = character
+            elif character == "(":
+                depth += 1
+            elif character == ")":
+                depth -= 1
+            position += 1
+        if depth:
             continue
-        matches.append((match.start(), match.end(), match.group(), match.group("name").upper()))
-        occupied.append(match.span())
+        literal = line[start_match.start() : position]
+        if re.search(r"(?:\d|#)", literal):
+            matches.append(
+                (start_match.start(), position, literal, start_match.group("name").upper())
+            )
+    return matches
+
+
+def _line_matches(line: str) -> list[tuple[int, int, str, str]]:
+    """Find every non-overlapping color literal on one source line."""
+    matches = _functional_matches(line)
+    occupied = [(start, end) for start, end, _, _ in matches]
     for match in HEX_RE.finditer(line):
         if any(start <= match.start() < end for start, end in occupied):
             continue
@@ -189,6 +218,7 @@ def scan_file(path: str, source: str, added_lines: set[int]) -> list[Finding]:
 
 
 def _cell(value: str) -> str:
+    """Escape a value for one Markdown table cell."""
     return value.replace("|", "\\|").replace("`", "\\`").replace("\n", " ")
 
 
@@ -218,9 +248,9 @@ def summary_body(findings: list[Finding]) -> str:
 
 def result_value(
     findings: list[Finding], environment: Mapping[str, str], graph_digest: str
-) -> dict[str, object]:
+) -> dict[str, ResultValue]:
     """Serialize findings through the Quality Graph native Result Protocol."""
-    locations = [
+    locations: list[dict[str, ResultValue]] = [
         {
             "path": finding.path,
             "startLine": finding.line,
@@ -230,7 +260,7 @@ def result_value(
         }
         for finding in findings
     ]
-    controls: list[dict[str, object]] = [
+    controls: list[ResultValue] = [
         {"kind": "finding", "target": finding.finding_id, "checked": False} for finding in findings
     ]
     controls.extend(
@@ -239,7 +269,7 @@ def result_value(
     )
     controls.append({"kind": "node", "target": "hardcoded-colors", "checked": False})
     pull_request = int(environment["QG_PULL_REQUEST"])
-    provenance: dict[str, object] = {
+    provenance: dict[str, ResultValue] = {
         "repository": environment["GITHUB_REPOSITORY"],
         "headSha": environment["QG_HEAD_SHA"],
         "workflowRunId": int(environment["GITHUB_RUN_ID"]),
@@ -304,7 +334,7 @@ def main() -> int:
         ),
         key=lambda finding: (finding.path, finding.line, finding.column),
     )
-    manifest = cast("dict[str, object]", json.loads(MANIFEST_PATH.read_text()))
+    manifest = cast("dict[str, ResultValue]", json.loads(MANIFEST_PATH.read_text()))
     graph_digest = cast("str", manifest["graphDigest"])
     RESULT_PATH.parent.mkdir(parents=True, exist_ok=True)
     RESULT_PATH.write_text(
