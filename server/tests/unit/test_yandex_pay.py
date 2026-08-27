@@ -127,6 +127,11 @@ class Page:
         locator = Locator(
             present=(
                 (self.mode == "chooser" and exact and text == "Get code via push")
+                or (
+                    self.mode == "chooser_ru"
+                    and exact
+                    and text == "Получить код по \u0421\u041c\u0421"
+                )
                 or (self.mode == "filter" and exact and text == "Pay card")
             )
         )
@@ -202,6 +207,7 @@ def test_connector_auth_steps_and_history() -> None:
     connector = ConnectorWithCode({"phone": "+70000000000", "password": "pw"})
     connector.ensure_logged_in(Page())
     assert connector.choose_code_method(Page("chooser"))
+    assert connector.choose_code_method(Page("chooser_ru"))
     assert connector.drive_auth_step(Page("phone"))
     assert connector.drive_auth_step(Page("password"))
     assert connector.drive_auth_step(Page("code"))

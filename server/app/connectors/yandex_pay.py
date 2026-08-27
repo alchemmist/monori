@@ -194,6 +194,14 @@ class YandexPayConnector(TBankPlaywrightConnector):
     account_params: ClassVar[list[ConnectorParam]] = []
     HISTORY_URL = "https://bank.yandex.ru/my/history"
     PAY_CARD_FILTER_LABELS = ("Pay card", "Карта Пэй")
+    CODE_METHOD_LABELS = (
+        "Get code via push",
+        "Let's do SMS instead",
+        "Получить код в приложении",
+        "Получить код по \u0421\u041c\u0421",
+        "Получить код через \u0421\u041c\u0421",
+        "Отправить код по \u0421\u041c\u0421",
+    )
 
     @override
     def ensure_logged_in(self, page: _Page) -> None:
@@ -220,7 +228,7 @@ class YandexPayConnector(TBankPlaywrightConnector):
         """
         Start the push-code challenge shown by the bank login wrapper.
         """
-        for label in ("Get code via push", "Let's do SMS instead"):
+        for label in YandexPayConnector.CODE_METHOD_LABELS:
             chooser = page.get_by_text(label, exact=True)
             if chooser.count():
                 chooser.first.click(timeout=5000)
