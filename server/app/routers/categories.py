@@ -9,6 +9,7 @@ from pydantic.dataclasses import dataclass as pydantic_dataclass
 
 from monori.common import JsonValue
 from monori.server.app.auth import AuthenticatedUser, current_user
+from monori.server.app.db import begin_write
 from monori.server.app.db_records import CategoryOwnershipRecord, GoalGroupRecord
 from monori.server.app.deps import IdResponse, conn
 from monori.server.app.domain_types import GoalStatus
@@ -130,6 +131,7 @@ def create_category(
         raise HTTPException(422, "name cannot be empty")
     c = conn()
     try:
+        begin_write(c)
         group = c.execute(
             "SELECT g.id, t.is_goal FROM category_groups g"
             " JOIN category_group_types t ON t.id=g.type_id"
@@ -165,6 +167,8 @@ def create_category(
         )
         c.commit()
         return IdResponse(id=cur.lastrowid)
+    except sqlite3.IntegrityError:
+        raise HTTPException(409, "category with this name already exists") from None
     finally:
         c.close()
 
@@ -179,6 +183,7 @@ def patch_category(
     uid = user.id
     c = conn()
     try:
+        begin_write(c)
         category = _owned_category(c, cat_id, uid)
         if not category:
             raise HTTPException(404, "category not found")
@@ -188,6 +193,8 @@ def patch_category(
         _update_goal_fields(c, cat_id, patch, allowed=goal_fields_allowed)
         c.commit()
         return OkResponse(ok=True)
+    except sqlite3.IntegrityError:
+        raise HTTPException(409, "category with this name already exists") from None
     finally:
         c.close()
 

@@ -16,7 +16,7 @@ from monori.server.app.importer import tx_hash
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-HEAD = "0019"
+HEAD = "0020"
 assert LEGACY_REVISIONS[-1] == "0006"
 
 OLD_SCHEMA = """
@@ -185,6 +185,18 @@ def test_bootstrap_recovers_after_schema_creation_before_stamp(
         assert _revision(conn) == HEAD
     finally:
         conn.close()
+
+
+def test_bootstrap_rejects_current_schema_missing_an_index(tmp_path: pathlib.Path) -> None:
+    db_path = tmp_path / "missing-index.db"
+    raw = sqlite3.connect(db_path)
+    raw.executescript(SCHEMA_PATH.read_text())
+    raw.execute("DROP INDEX idx_users_email_canonical")
+    raw.commit()
+    raw.close()
+
+    with pytest.raises(RuntimeError, match="incompatible schema metadata"):
+        connect(db_path)
 
 
 @pytest.mark.parametrize("user_version", [-1, len(LEGACY_REVISIONS), 999])

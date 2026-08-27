@@ -43,12 +43,28 @@ def _schema_signature(
     conn: sqlite3.Connection,
     tables: set[str],
 ) -> SchemaSignature:
-    return {
-        table: tuple(
-            tuple(row[1:6]) for row in conn.execute("SELECT * FROM pragma_table_info(?)", (table,))
+    signature = {}
+    for table in tables:
+        columns = (
+            ("column", *tuple(row[1:6]))
+            for row in conn.execute("SELECT * FROM pragma_table_info(?)", (table,))
         )
-        for table in tables
-    }
+        foreign_keys = (
+            ("foreign_key", *tuple(row))
+            for row in conn.execute("SELECT * FROM pragma_foreign_key_list(?)", (table,))
+        )
+        signature[table] = tuple(columns) + tuple(foreign_keys)
+    signature["__objects__"] = tuple(
+        sorted(
+            (str(row[0]), str(row[1]), str(row[2]), row[3])
+            for row in conn.execute(
+                "SELECT type, name, tbl_name, sql FROM sqlite_master"
+                " WHERE type IN ('table', 'index', 'trigger')"
+            )
+            if str(row[2]) in tables and not str(row[1]).startswith("sqlite_")
+        )
+    )
+    return signature
 
 
 def _current_schema_signature() -> SchemaSignature:
@@ -72,7 +88,7 @@ def _adopt_unversioned(
     user_version: int,
 ) -> None:
     current_schema = _current_schema_signature()
-    current_tables = set(current_schema)
+    current_tables = set(current_schema) - {"__objects__"}
     if current_tables <= tables:
         conn = sqlite3.connect(path)
         try:

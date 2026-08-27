@@ -159,6 +159,7 @@ function resetBudgetSession() {
     nextBudgetRevision = 0;
     budgetRevisions.clear();
     failedBudgetWrites.clear();
+    hiddenRevisions.clear();
 }
 
 function sessionStamp() {
@@ -754,6 +755,7 @@ export const useStore = create<StoreState>((set, get) => ({
     },
 
     hideTx(txId) {
+        const stamp = sessionStamp();
         const { hiddenTx } = get();
         const snapshot = requireSnapshot(get().snapshot);
         const t = snapshot.transactions.find((x) => x.id === txId);
@@ -775,7 +777,7 @@ export const useStore = create<StoreState>((set, get) => ({
                 await chainedPatchTx(txId, { hidden: true });
                 if (get().txProgress) void get().fillTransactions((fillGeneration += 1));
             } catch (e) {
-                if (hiddenRevisions.get(txId) === revision) {
+                if (hiddenRevisions.get(txId) === revision && stamp.epoch === sessionEpoch) {
                     const current = requireSnapshot(get().snapshot);
                     set({
                         snapshot: {
@@ -798,6 +800,7 @@ export const useStore = create<StoreState>((set, get) => ({
     },
 
     unhideTx(txId) {
+        const stamp = sessionStamp();
         const { hiddenTx } = get();
         const snapshot = requireSnapshot(get().snapshot);
         const t = (hiddenTx ?? []).find((x) => x.id === txId);
@@ -818,7 +821,7 @@ export const useStore = create<StoreState>((set, get) => ({
             try {
                 await chainedPatchTx(txId, { hidden: false });
             } catch (e) {
-                if (hiddenRevisions.get(txId) === revision) {
+                if (hiddenRevisions.get(txId) === revision && stamp.epoch === sessionEpoch) {
                     const current = requireSnapshot(get().snapshot);
                     set({
                         snapshot: {
@@ -1032,11 +1035,16 @@ export const useStore = create<StoreState>((set, get) => ({
             await api.deleteTransferWithLegs(transferId);
         }
         const snapshot = requireSnapshot(get().snapshot);
+        const removed = snapshot.transactions.filter((t) => ids.includes(t.id)).length;
         set({
             snapshot: {
                 ...snapshot,
                 transactions: snapshot.transactions.filter((t) => !ids.includes(t.id)),
                 transfers: snapshot.transfers.filter((x) => x.id !== transferId),
+                transactionsTotal: Math.max(
+                    0,
+                    (snapshot.transactionsTotal ?? snapshot.transactions.length) - removed,
+                ),
             },
         });
     },

@@ -85,13 +85,11 @@ class YearSection:
     rows: list[tuple[int, str]]
 
 
-def _year_entry(source: YearSheetRow, name: str) -> YearCategoryRow | None:
-    matches = [entry for (_, category), entry in source.cats.items() if category == name]
-    return matches[0] if len(matches) == 1 else None
+type CategoryKey = tuple[str, str]
 
 
-def _year_has_name(source: YearSheetRow, name: str) -> bool:
-    return any(category == name for _, category in source.cats)
+def _year_entry(source: YearSheetRow, key: CategoryKey) -> YearCategoryRow | None:
+    return source.cats.get(key)
 
 
 @dataclass(slots=True)
@@ -812,7 +810,7 @@ def _synthetic(
     amount: int,
     category: str,
     description: str,
-    marker: str = "",
+    group: str = "",
 ) -> WorkbookTransactionRow:
     date_iso = _stamp(*period)
     return WorkbookTransactionRow(
@@ -821,7 +819,7 @@ def _synthetic(
         description=description,
         currency=DEFAULT_CURRENCY,
         monori_category=category,
-        marker=marker,
+        monori_category_group=group,
     )
 
 
@@ -1249,10 +1247,10 @@ class _Reconciliation:
     transactions: list[WorkbookTransactionRow]
     budgets: list[WorkbookBudgetRow]
     income_category: str
-    kinds: dict[str, str] = field(init=False)
-    tx_sums: dict[tuple[str, int, int], int] = field(init=False)
+    kinds: dict[CategoryKey, str] = field(init=False)
+    tx_sums: dict[tuple[str, str, int, int], int] = field(init=False)
     income_sums: dict[tuple[int, int], int] = field(init=False)
-    budget_map: dict[tuple[str, int, int], int] = field(init=False)
+    budget_map: dict[tuple[str, str, int, int], int] = field(init=False)
     months_with_rows: set[tuple[int, int]] = field(init=False)
     synthetic: list[WorkbookTransactionRow] = field(default_factory=list)
     n_hist: int = 0
@@ -1291,7 +1289,7 @@ class _Reconciliation:
     def _reconcile_balances(self) -> None:
         start, end, first_active = self._range()
         opening = self._opening_balance(first_active)
-        balances: dict[str, int] = {}
+        balances: dict[CategoryKey, int] = {}
         available = 0
         overspent = 0
         for year, month in _month_range(start, end):
@@ -1353,9 +1351,9 @@ class _Reconciliation:
 
     def _budgeted_total(self, year: int, month: int) -> int:
         return sum(
-            self.budget_map.get((category.name, year, month), 0)
+            self.budget_map.get((category.group, category.name, year, month), 0)
             for category in self.catalog.categories
-            if self.kinds[category.name] != "income"
+            if self.kinds[(category.group, category.name)] != "income"
         )
 
     def _year_sheet(self, year: int) -> YearSheetRow:
@@ -1370,13 +1368,14 @@ class _Reconciliation:
         year: int,
         month: int,
         source: YearSheetRow,
-        balances: dict[str, int],
+        balances: dict[CategoryKey, int],
     ) -> int:
         overspent = 0
         for category in self.catalog.categories:
-            if self.kinds[category.name] == "income":
+            key = (category.group, category.name)
+            if self.kinds[key] == "income":
                 continue
-            projected = self._reconcile_category(year, month, source, category.name, balances)
+            projected = self._reconcile_category(year, month, source, key, balances)
             overspent += min(projected, 0)
         return overspent
 
@@ -1385,20 +1384,21 @@ class _Reconciliation:
         year: int,
         month: int,
         source: YearSheetRow,
-        name: str,
-        balances: dict[str, int],
+        key: CategoryKey,
+        balances: dict[CategoryKey, int],
     ) -> int:
-        have = self.tx_sums.get((name, year, month), 0)
+        group, name = key
+        have = self.tx_sums.get((group, name, year, month), 0)
         projected = (
-            max(balances.get(name, 0), 0) + self.budget_map.get((name, year, month), 0) + have
+            max(balances.get(key, 0), 0) + self.budget_map.get((group, name, year, month), 0) + have
         )
-        attempt = _CategoryBalance(name, projected, have, balances)
+        attempt = _CategoryBalance(key, projected, have, balances)
         desired = self._desired_balance(year, month, source, attempt)
         delta = 0 if desired is None else desired - projected
         if abs(delta) > ADJUST_TOLERANCE_KOP:
-            self._record_category_adjustment(year, month, name, delta, have)
+            self._record_category_adjustment(year, month, key, delta, have)
             projected += delta
-        balances[name] = projected
+        balances[key] = projected
         return projected
 
     def _desired_balance(
@@ -1409,8 +1409,8 @@ class _Reconciliation:
         attempt: "_CategoryBalance",
     ) -> int | None:
         if self._at_seam(year, month):
-            return self._seam_balance(attempt.name)
-        entry = _year_entry(source, attempt.name)
+            return self._seam_balance(attempt.key)
+        entry = _year_entry(source, attempt.key)
         if entry is not None:
             balance = entry.balances.get(month)
             return (
@@ -1422,16 +1422,16 @@ class _Reconciliation:
             return 0
         return None
 
-    def _seam_balance(self, name: str) -> int | None:
+    def _seam_balance(self, key: CategoryKey) -> int | None:
         seam_sheet = self.sheets.seam_sheet
         if seam_sheet is None:
             return None
         last_month = max(seam_sheet.months)
-        entry = _year_entry(seam_sheet, name)
+        entry = _year_entry(seam_sheet, key)
         if entry is not None and (balance := entry.balances.get(last_month)) is not None:
             return balance
         first_live = min(self.sheets.live_years) if self.sheets.live_years else None
-        if first_live is not None and not _year_has_name(self.sheets.live_years[first_live], name):
+        if first_live is not None and key not in self.sheets.live_years[first_live].cats:
             return 0
         return None
 
@@ -1444,7 +1444,7 @@ class _Reconciliation:
     ) -> bool:
         return (
             year not in self.sheets.live_years
-            and attempt.balances.get(attempt.name, 0) != 0
+            and attempt.balances.get(attempt.key, 0) != 0
             and month == max(source.months)
         )
 
@@ -1452,7 +1452,7 @@ class _Reconciliation:
         self,
         year: int,
         month: int,
-        name: str,
+        key: CategoryKey,
         delta: int,
         have: int,
     ) -> None:
@@ -1460,8 +1460,9 @@ class _Reconciliation:
             self.n_seam += 1
         else:
             self._count_adjustment(year, month)
-        self.synthetic.append(_synthetic((year, month), delta, name, name))
-        self.tx_sums[(name, year, month)] = have + delta
+        group, name = key
+        self.synthetic.append(_synthetic((year, month), delta, name, name, group=group))
+        self.tx_sums[(group, name, year, month)] = have + delta
 
     def _apply_seam_seed(self, year: int, month: int, available: int) -> int:
         if not self._at_seam(year, month):
@@ -1552,42 +1553,51 @@ class _Reconciliation:
 
 @dataclass(slots=True)
 class _CategoryBalance:
-    name: str
+    key: CategoryKey
     projected: int
     have: int
-    balances: dict[str, int]
+    balances: dict[CategoryKey, int]
 
 
 def _category_kinds(
     groups: Iterable[WorkbookGroupRow],
     categories: Iterable[WorkbookCategoryRow],
-) -> dict[str, str]:
+) -> dict[CategoryKey, str]:
     group_kinds = {group.name: group.kind for group in groups}
-    return {category.name: group_kinds.get(category.group, "expense") for category in categories}
+    return {
+        (category.group, category.name): group_kinds.get(category.group, "expense")
+        for category in categories
+    }
 
 
 def _transaction_totals(
     transactions: Iterable[WorkbookTransactionRow],
-    kinds: Mapping[str, str],
-) -> tuple[dict[tuple[str, int, int], int], dict[tuple[int, int], int]]:
-    tx_sums: dict[tuple[str, int, int], int] = {}
+    kinds: Mapping[CategoryKey, str],
+) -> tuple[dict[tuple[str, str, int, int], int], dict[tuple[int, int], int]]:
+    tx_sums: dict[tuple[str, str, int, int], int] = {}
     income_sums: dict[tuple[int, int], int] = {}
     for transaction in transactions:
         name = transaction.monori_category
         if name:
+            candidates = [key for key in kinds if key[1] == name]
+            key = (transaction.monori_category_group, name)
+            if not transaction.monori_category_group and len(candidates) == 1:
+                key = candidates[0]
             year, month = int(transaction.date[:4]), int(transaction.date[5:7])
-            if kinds.get(name) == "income":
+            if kinds.get(key) == "income":
                 income_sums[(year, month)] = income_sums.get((year, month), 0) + transaction.amount
             else:
-                key = name, year, month
-                tx_sums[key] = tx_sums.get(key, 0) + transaction.amount
+                total_key = key[0], key[1], year, month
+                tx_sums[total_key] = tx_sums.get(total_key, 0) + transaction.amount
     return tx_sums, income_sums
 
 
-def _budget_totals(budgets: Iterable[WorkbookBudgetRow]) -> dict[tuple[str, int, int], int]:
-    totals: dict[tuple[str, int, int], int] = {}
+def _budget_totals(
+    budgets: Iterable[WorkbookBudgetRow],
+) -> dict[tuple[str, str, int, int], int]:
+    totals: dict[tuple[str, str, int, int], int] = {}
     for budget in budgets:
-        key = budget.category, budget.year, budget.month
+        key = budget.group, budget.category, budget.year, budget.month
         totals[key] = totals.get(key, 0) + budget.amount
     return totals
 

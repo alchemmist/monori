@@ -55,7 +55,8 @@ PENDING_CAPACITY = 8
 class PendingSession:
     """Own a connector until its SMS deadline."""
 
-    connector: connectors.Connector
+    token: object
+    connector: connectors.Connector | None
     expires_at: float
 
 
@@ -111,28 +112,45 @@ def _close_connector(connector: connectors.Connector) -> None:
         connector.close()
 
 
-def _close_pending(cid: int) -> None:
-    old = PENDING.pop(cid, None)
-    if old is not None:
-        _close_connector(old.connector)
-
-
-def _expire_pending() -> None:
+def _expire_pending() -> list[connectors.Connector]:
     now = monotonic()
+    expired = []
     for cid, pending in list(PENDING.items()):
         if pending.expires_at <= now:
-            _close_pending(cid)
+            PENDING.pop(cid, None)
+            if pending.connector is not None:
+                expired.append(pending.connector)
+    return expired
 
 
-def _park(cid: int, connector: connectors.Connector) -> None:
-    PENDING[cid] = PendingSession(connector, monotonic() + PENDING_TTL_SECONDS)
+def _reserve(cid: int) -> tuple[object, list[connectors.Connector]]:
+    expired = _expire_pending()
+    replaced = PENDING.pop(cid, None)
+    if replaced is not None and replaced.connector is not None:
+        expired.append(replaced.connector)
+    if len(PENDING) >= PENDING_CAPACITY:
+        raise HTTPException(429, "too many logins awaiting a code")
+    token = object()
+    PENDING[cid] = PendingSession(token, None, monotonic() + PENDING_TTL_SECONDS)
+    return token, expired
+
+
+def _park_if_owned(cid: int, token: object, connector: connectors.Connector) -> bool:
+    current = PENDING.get(cid)
+    if current is None or current.token is not token:
+        return False
+    PENDING[cid] = PendingSession(token, connector, monotonic() + PENDING_TTL_SECONDS)
+    return True
 
 
 def close_all_pending() -> None:
     """Close and forget every connector waiting for SMS."""
     with PENDING_LOCK:
-        for cid in list(PENDING):
-            _close_pending(cid)
+        pending = list(PENDING.values())
+        PENDING.clear()
+    for session in pending:
+        if session.connector is not None:
+            _close_connector(session.connector)
 
 
 def shutdown() -> None:
@@ -153,55 +171,84 @@ def health() -> dict[str, bool]:
 @app.post("/runs/{cid}")
 def start_run(cid: int, body: RunBody) -> RunDoneResponse | RunStatusResponse:
     """Handle start run."""
+    try:
+        cls = connectors.get_connector_class(body.bank, body.kind)
+    except ConnectorError as e:
+        return _error(cid, e)
     with PENDING_LOCK:
-        _expire_pending()
-        _close_pending(cid)
-        if len(PENDING) >= PENDING_CAPACITY:
-            raise HTTPException(429, "too many logins awaiting a code")
-        try:
-            cls = connectors.get_connector_class(body.bank, body.kind)
-        except ConnectorError as e:
-            return _error(cid, e)
-        connector = cls(body.credentials, body.session, account_ref=body.account_ref)
-        try:
-            result = _done(connector.sync(body.since))
-            _close_connector(connector)
-        except SmsRequiredError:
-            _park(cid, connector)
+        token, stale = _reserve(cid)
+    for old in stale:
+        _close_connector(old)
+    connector = cls(body.credentials, body.session, account_ref=body.account_ref)
+    try:
+        result = _done(connector.sync(body.since))
+    except SmsRequiredError:
+        with PENDING_LOCK:
+            parked = _park_if_owned(cid, token, connector)
+        if parked:
             return RunStatusResponse(status="awaiting_sms", message=SMS_SENT)
-        except ConnectorError as e:
-            _close_connector(connector)
-            return _error(cid, e)
-        else:
-            return result
+        _close_connector(connector)
+        raise HTTPException(409, "login was cancelled or superseded") from None
+    except ConnectorError as e:
+        with PENDING_LOCK:
+            current = PENDING.get(cid)
+            if current is not None and current.token is token:
+                PENDING.pop(cid)
+        _close_connector(connector)
+        return _error(cid, e)
+    with PENDING_LOCK:
+        current = PENDING.get(cid)
+        if current is not None and current.token is token:
+            PENDING.pop(cid)
+    _close_connector(connector)
+    return result
 
 
 @app.post("/runs/{cid}/sms")
 def submit_sms(cid: int, body: SmsBody) -> RunDoneResponse | RunStatusResponse:
     """Handle submit sms."""
     with PENDING_LOCK:
-        _expire_pending()
+        expired = _expire_pending()
         pending = PENDING.pop(cid, None)
-        if pending is None:
+        if pending is None or pending.connector is None:
             raise HTTPException(409, "no login awaiting a code")
+        token = pending.token
         connector = pending.connector
-        try:
-            result = _done(connector.resume_sync(body.code))
-            _close_connector(connector)
-        except SmsRequiredError:
-            _park(cid, connector)
+        PENDING[cid] = PendingSession(token, None, pending.expires_at)
+    for old in expired:
+        _close_connector(old)
+    try:
+        result = _done(connector.resume_sync(body.code))
+    except SmsRequiredError:
+        with PENDING_LOCK:
+            parked = _park_if_owned(cid, token, connector)
+        if parked:
             return RunStatusResponse(status="awaiting_sms", message=CODE_REJECTED)
-        except ConnectorError as e:
-            _close_connector(connector)
-            return _error(cid, e)
-        else:
-            return result
+        _close_connector(connector)
+        raise HTTPException(409, "login was cancelled or superseded") from None
+    except ConnectorError as e:
+        with PENDING_LOCK:
+            current = PENDING.get(cid)
+            if current is not None and current.token is token:
+                PENDING.pop(cid)
+        _close_connector(connector)
+        return _error(cid, e)
+    with PENDING_LOCK:
+        current = PENDING.get(cid)
+        if current is not None and current.token is token:
+            PENDING.pop(cid)
+    _close_connector(connector)
+    return result
 
 
 @app.post("/runs/{cid}/cancel")
 def cancel_run(cid: int) -> dict[str, int]:
     """Handle cancel run."""
     with PENDING_LOCK:
-        _expire_pending()
-        _close_pending(cid)
+        expired = _expire_pending()
+        pending = PENDING.pop(cid, None)
+    for connector in expired:
+        _close_connector(connector)
+    if pending is not None and pending.connector is not None:
+        _close_connector(pending.connector)
     return {"cancelled": cid}
