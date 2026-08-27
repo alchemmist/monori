@@ -25,6 +25,8 @@ MIGRATIONS_PATH = PACKAGE_DIR / "migrations"
 
 LEGACY_REVISIONS = ["0001", "0002", "0003", "0004", "0005", "0006"]
 JOURNAL_MODES = {"DELETE", "WAL"}
+type SchemaCell = str | int | None
+type SchemaSignature = dict[str, tuple[tuple[SchemaCell, ...], ...]]
 
 _bootstrapped: set[str] = set()
 _bootstrap_lock = threading.Lock()
@@ -40,7 +42,7 @@ def _alembic_config(path: pathlib.Path) -> Config:
 def _schema_signature(
     conn: sqlite3.Connection,
     tables: set[str],
-) -> dict[str, tuple[tuple[object, ...], ...]]:
+) -> SchemaSignature:
     return {
         table: tuple(
             tuple(row[1:6]) for row in conn.execute("SELECT * FROM pragma_table_info(?)", (table,))
@@ -49,7 +51,7 @@ def _schema_signature(
     }
 
 
-def _current_schema_signature() -> dict[str, tuple[tuple[object, ...], ...]]:
+def _current_schema_signature() -> SchemaSignature:
     memory = sqlite3.connect(":memory:")
     try:
         memory.executescript(SCHEMA_PATH.read_text())
