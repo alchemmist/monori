@@ -52,10 +52,15 @@ PENDING_CAPACITY = 8
 
 
 @dataclass(frozen=True)
+class RunToken:
+    """Identify one run generation for a connection."""
+
+
+@dataclass(frozen=True)
 class PendingSession:
     """Own a connector until its SMS deadline."""
 
-    token: object
+    token: RunToken
     connector: connectors.Connector | None
     expires_at: float
 
@@ -123,19 +128,19 @@ def _expire_pending() -> list[connectors.Connector]:
     return expired
 
 
-def _reserve(cid: int) -> tuple[object, list[connectors.Connector]]:
+def _reserve(cid: int) -> tuple[RunToken, list[connectors.Connector]]:
     expired = _expire_pending()
     replaced = PENDING.pop(cid, None)
     if replaced is not None and replaced.connector is not None:
         expired.append(replaced.connector)
     if len(PENDING) >= PENDING_CAPACITY:
         raise HTTPException(429, "too many logins awaiting a code")
-    token = object()
+    token = RunToken()
     PENDING[cid] = PendingSession(token, None, monotonic() + PENDING_TTL_SECONDS)
     return token, expired
 
 
-def _park_if_owned(cid: int, token: object, connector: connectors.Connector) -> bool:
+def _park_if_owned(cid: int, token: RunToken, connector: connectors.Connector) -> bool:
     current = PENDING.get(cid)
     if current is None or current.token is not token:
         return False
