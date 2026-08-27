@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import bisect
 import importlib
 import json
 import os
@@ -135,9 +136,8 @@ def _named_color_is_literal(line: str, start: int, end: int) -> bool:
     before = line[:start].rstrip()
     after = line[end:].lstrip()
     quoted = bool(before[-1:] in {'"', "'", "`"} and after[:1] == before[-1:])
-    css_value = bool(re.search(r"(?:[:(,]|\s)\s*$", before)) and not bool(
-        re.search(r"(?:const|let|var|function|class|interface|type)\s+$", before)
-    )
+    declaration = before.rsplit(";", 1)[-1]
+    css_value = ":" in declaration
     return quoted or css_value
 
 
@@ -171,12 +171,9 @@ def _functional_matches(line: str) -> list[tuple[int, int, str, str]]:
 
 
 def _line_matches(line: str) -> list[tuple[int, int, str, str]]:
-    """Find every non-overlapping color literal on one source line."""
-    matches = _functional_matches(line)
-    occupied = [(start, end) for start, end, _, _ in matches]
+    """Find hexadecimal and named color literals on one source line."""
+    matches: list[tuple[int, int, str, str]] = []
     for match in HEX_RE.finditer(line):
-        if any(start <= match.start() < end for start, end in occupied):
-            continue
         prefix = line[max(0, match.start() - 12) : match.start()].lower()
         if (
             prefix.endswith("url(")
@@ -185,11 +182,11 @@ def _line_matches(line: str) -> list[tuple[int, int, str, str]]:
         ):
             continue
         matches.append((match.start(), match.end(), match.group(), "HEX"))
-    for match in NAMED_RE.finditer(line):
-        if any(start <= match.start() < end for start, end in occupied):
-            continue
-        if _named_color_is_literal(line, match.start(), match.end()):
-            matches.append((match.start(), match.end(), match.group(), "NAMED"))
+    matches.extend(
+        (match.start(), match.end(), match.group(), "NAMED")
+        for match in NAMED_RE.finditer(line)
+        if _named_color_is_literal(line, match.start(), match.end())
+    )
     return sorted(matches)
 
 
@@ -197,11 +194,44 @@ def scan_file(path: str, source: str, added_lines: set[int]) -> list[Finding]:
     """Scan added lines in one supported source file."""
     if not should_scan(path):
         return []
+    lines = source.splitlines()
+    line_offsets = [0]
+    for line in source.splitlines(keepends=True):
+        line_offsets.append(line_offsets[-1] + len(line))
+    functional_spans: list[tuple[int, int]] = []
     findings: list[Finding] = []
-    for line_number, line in enumerate(source.splitlines(), 1):
+    for start, end, literal, color_format in _functional_matches(source):
+        start_line = bisect.bisect_right(line_offsets, start)
+        end_line = bisect.bisect_right(line_offsets, max(start, end - 1))
+        overlapping = sorted(added_lines & set(range(start_line, end_line + 1)))
+        if not overlapping:
+            continue
+        line_number = overlapping[0]
+        column = start - line_offsets[start_line - 1] if line_number == start_line else 0
+        context = " ".join(literal.split())
+        raw_id = f"{path}:{line_number}:{column}:{literal.lower()}"
+        findings.append(
+            Finding(
+                path,
+                line_number,
+                column,
+                literal,
+                color_format,
+                context,
+                f"{FINDING_ID_PREFIX}{stable_finding_id(raw_id)}",
+            )
+        )
+        functional_spans.append((start, end))
+    for line_number, line in enumerate(lines, 1):
         if line_number not in added_lines:
             continue
+        line_offset = line_offsets[line_number - 1]
         for start, _, literal, color_format in _line_matches(line):
+            absolute_start = line_offset + start
+            if any(
+                span_start <= absolute_start < span_end for span_start, span_end in functional_spans
+            ):
+                continue
             raw_id = f"{path}:{line_number}:{start}:{literal.lower()}"
             findings.append(
                 Finding(
@@ -214,7 +244,7 @@ def scan_file(path: str, source: str, added_lines: set[int]) -> list[Finding]:
                     f"{FINDING_ID_PREFIX}{stable_finding_id(raw_id)}",
                 )
             )
-    return findings
+    return sorted(findings, key=lambda finding: (finding.line, finding.column))
 
 
 def _cell(value: str) -> str:

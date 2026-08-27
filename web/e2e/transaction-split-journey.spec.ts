@@ -76,10 +76,18 @@ test("split journey keeps allocation, budgets and dashboard visualizations consi
     const allocation = page.locator(".split-allocation");
     await expect(allocation).toBeVisible();
     await expect(parts.locator(".split-editor__swatch")).toHaveCount(2);
-    await expect(allocation).toHaveCSS(
-        "background-image",
-        /rgb\(194, 65, 12\).*rgb\(66, 105, 208\)/,
+    const swatches = parts.locator(".split-editor__swatch");
+    const firstColor = await swatches
+        .nth(0)
+        .evaluate((element) => getComputedStyle(element).backgroundColor);
+    const secondColor = await swatches
+        .nth(1)
+        .evaluate((element) => getComputedStyle(element).backgroundColor);
+    const allocationGradient = await allocation.evaluate(
+        (element) => getComputedStyle(element).backgroundImage,
     );
+    expect(allocationGradient).toContain(firstColor);
+    expect(allocationGradient).toContain(secondColor);
 
     // Dragging the bar updates numeric fields; manual entry updates its neighbour and keeps it visible.
     await page.getByRole("slider", { name: "Boundary between parts 1 and 2" }).fill("60000");

@@ -64,6 +64,22 @@ def test_detects_nested_calculations_in_color_functions() -> None:
     ]
 
 
+def test_detects_multiline_functions_when_added_lines_overlap() -> None:
+    source = "color: rgb(\n  1 2 3\n);\n"
+
+    findings = scan_file("example.css", source, {2})
+
+    assert [(finding.line, finding.literal, finding.format) for finding in findings] == [
+        (2, "rgb(\n  1 2 3\n)", "RGB")
+    ]
+
+
+def test_detects_named_colors_in_shorthand_declarations() -> None:
+    findings = scan_file("example.css", "border: 1px solid red;\n", {1})
+
+    assert [(finding.literal, finding.format) for finding in findings] == [("red", "NAMED")]
+
+
 def test_scans_added_lines_only_and_finds_multiple_literals() -> None:
     findings = scan_file("example.css", "color: red;\nbox-shadow: 0 0 #fff, 0 0 rgb(1 2 3);\n", {2})
 
