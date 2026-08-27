@@ -213,7 +213,10 @@ class YandexPayConnector(TBankPlaywrightConnector):
         for _ in range(30):
             if "/my/history" in page.url and page.query_selector("main") is not None:
                 return
-            if self.choose_code_method(page) or self.drive_auth_step(page):
+            if self.choose_code_method(page):
+                continue
+            if self.drive_auth_step(page):
+                page.wait_for_timeout(1500)
                 continue
             if page.locator("iframe").count() == 0 and "/_pay/login" in page.url:
                 page.goto(self.HISTORY_URL, wait_until="domcontentloaded")

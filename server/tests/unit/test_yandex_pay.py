@@ -224,6 +224,28 @@ def test_connector_auth_steps_and_history() -> None:
         connector.ensure_logged_in(Page("chooser"))
 
 
+def test_connector_waits_for_auth_dom_transition() -> None:
+    class TransitionPage(Page):
+        def __init__(self) -> None:
+            super().__init__("phone")
+            self.pending = False
+            self.keyboard = type(
+                "Keyboard",
+                (),
+                {
+                    "press": lambda _keyboard, _key: setattr(self, "pending", True),
+                    "type": lambda *_args: None,
+                },
+            )()
+
+        def wait_for_timeout(self, _timeout: int) -> None:
+            if self.pending:
+                self.mode = "logged"
+                self.url = YandexPayConnector.HISTORY_URL
+
+    ConnectorWithCode({"phone": "+70000000000"}).ensure_logged_in(TransitionPage())
+
+
 def test_connector_filter_requires_active_selection() -> None:
     page = Page()
     assert YandexPayConnector.pay_card_filter_active(page)
