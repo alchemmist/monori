@@ -2,18 +2,18 @@
 // orange-led so the brand accent leads the series, then distinct hues that stay
 // legible against the near-monochrome UI in both light and dark themes.
 export const PALETTE = [
-    "#ef5a17",
-    "#4269d0",
-    "#3ca951",
-    "#a463f2",
-    "#ff8ab7",
-    "#6cc5b0",
-    "#efb118",
-    "#9c6b4e",
-    "#97bbf5",
-    "#ff725c",
-    "#6b4fbb",
-    "#9498a0",
+    "var(--m-chart-1)",
+    "var(--m-chart-2)",
+    "var(--m-chart-3)",
+    "var(--m-chart-4)",
+    "var(--m-chart-5)",
+    "var(--m-chart-6)",
+    "var(--m-chart-7)",
+    "var(--m-chart-8)",
+    "var(--m-chart-9)",
+    "var(--m-chart-10)",
+    "var(--m-chart-11)",
+    "var(--m-chart-12)",
 ];
 
 // income/expense/accent map to the theme's semantic tokens so the data keeps its

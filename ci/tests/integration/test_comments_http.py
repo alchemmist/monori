@@ -117,7 +117,7 @@ def test_repository_client_helpers_converge_real_http_state() -> None:
     assert not github.is_admin("blocked")
 
     reset_fake_github({"workflow_runs": []})
-    with pytest.raises(RuntimeError, match=re.escape("No pr-checks.yaml run found")):
+    with pytest.raises(RuntimeError, match=re.escape("No quality-graph.yml run found")):
         rerun_latest_pull_request_workflow(github, PULL_REQUEST_NUMBER)
 
 

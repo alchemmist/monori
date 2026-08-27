@@ -27,6 +27,7 @@
         "Courier New", "Courier", monospace;
 
     --m-bg: #fff;
+    --m-canvas: #fff;
     --m-surface: #fff;
     --m-surface-hover: #f7f7f6;
     --m-surface-raised: #f5f5f4;
@@ -35,13 +36,25 @@
     --m-text: #0a0a0a;
     --m-text-dim: #5c5c58;
     --m-text-faint: #6b6a66;
-    --m-accent: #c2410c;
-    --m-accent-soft: #ffe6d9;
-    --m-income: #166534;
-    --m-expense: #b91c1c;
-    --m-warning: #b45309;
-    --m-income-soft: #e4f3e9;
-    --m-expense-soft: #fbe3e3;
+    --m-accent: var(--m-chart-1);
+    --m-income: var(--m-chart-3);
+    --m-expense: var(--m-chart-10);
+    --m-warning: var(--m-chart-7);
+    --m-accent-soft: color-mix(in srgb, var(--m-accent) 14%, var(--m-surface));
+    --m-income-soft: color-mix(in srgb, var(--m-income) 14%, var(--m-surface));
+    --m-expense-soft: color-mix(in srgb, var(--m-expense) 14%, var(--m-surface));
+    --m-chart-1: #ef5a17;
+    --m-chart-2: #4269d0;
+    --m-chart-3: #3ca951;
+    --m-chart-4: #a463f2;
+    --m-chart-5: #ff8ab7;
+    --m-chart-6: #6cc5b0;
+    --m-chart-7: #efb118;
+    --m-chart-8: #9c6b4e;
+    --m-chart-9: #97bbf5;
+    --m-chart-10: #d94f4f;
+    --m-chart-11: #6b4fbb;
+    --m-chart-12: #9498a0;
     --m-card-bg: var(--m-surface);
     --m-card-border: var(--m-border);
     --m-sidebar-edge: var(--m-border-soft);
@@ -58,16 +71,16 @@
     --glass-shadow: 0 2px 16px rgb(0 0 0 / 6%);
 
     /* accent-tuned brand tokens (drive the Mantine skin's filled/selection look) */
-    --g-color-base-brand: #c2410c;
-    --g-color-base-brand-hover: #a9360b;
-    --g-color-line-brand: #c2410c;
-    --g-color-text-brand: #a9360b;
-    --g-color-text-brand-heavy: #8f2f09;
-    --g-color-text-link: #a9360b;
-    --g-color-text-link-hover: #8f2f09;
+    --g-color-base-brand: var(--m-accent);
+    --g-color-base-brand-hover: var(--m-accent);
+    --g-color-line-brand: var(--m-accent);
+    --g-color-text-brand: var(--m-accent);
+    --g-color-text-brand-heavy: var(--m-accent);
+    --g-color-text-link: var(--m-accent);
+    --g-color-text-link-hover: var(--m-accent);
     --g-color-text-brand-contrast: #fff;
-    --g-color-base-selection: #ffe6d9;
-    --g-color-base-selection-hover: #ffd9c5;
+    --g-color-base-selection: var(--m-accent-soft);
+    --g-color-base-selection-hover: var(--m-accent-soft);
 
     /* neutral / semantic tokens the skin and charts read (former uikit values) */
     --g-color-base-danger-light: rgb(255, 0, 61, 0.15);
@@ -80,21 +93,21 @@
     --g-color-base-positive-light: rgb(50, 186, 118, 0.15);
     --g-color-base-simple-hover: rgb(0, 0, 0, 0.05);
     --g-color-base-warning-light: rgb(255, 190, 92, 0.3);
-    --g-color-line-danger: rgb(255, 0, 61, 0.8);
+    --g-color-line-danger: var(--m-expense);
     --g-color-line-generic: rgb(0, 0, 0, 0.1);
     --g-color-line-generic-active: rgb(0, 0, 0, 0.3);
     --g-color-line-generic-hover: rgb(0, 0, 0, 0.15);
     --g-color-sfx-fade: rgb(255, 255, 255, 0.3);
     --g-color-text-complementary: rgb(0, 0, 0, 0.7);
-    --g-color-text-danger: rgb(233, 3, 58);
-    --g-color-text-danger-heavy: rgb(189, 9, 53);
+    --g-color-text-danger: var(--m-expense);
+    --g-color-text-danger-heavy: var(--m-expense);
     --g-color-text-hint: rgb(0, 0, 0, 0.55);
-    --g-color-text-info-heavy: rgb(48, 114, 179);
-    --g-color-text-positive: #167a48;
-    --g-color-text-positive-heavy: #12633b;
+    --g-color-text-info-heavy: var(--m-chart-2);
+    --g-color-text-positive: var(--m-income);
+    --g-color-text-positive-heavy: var(--m-income);
     --g-color-text-secondary: rgb(0, 0, 0, 0.65);
-    --g-color-text-warning: rgb(189, 142, 75);
-    --g-color-text-warning-heavy: rgb(189, 92, 10);
+    --g-color-text-warning: var(--m-warning);
+    --g-color-text-warning-heavy: var(--m-warning);
 }
 
 /* ---------- DARK ---------- */
@@ -106,6 +119,7 @@
  */
 .theme-dark {
     --m-bg: #08070d;
+    --m-canvas: #221d22;
     --m-surface: #0d0b15;
     --m-surface-hover: #2a242a;
     --m-surface-raised: #141020;
@@ -114,14 +128,10 @@
     --m-text: #f2f1f6;
     --m-text-dim: #a3a0b0;
     --m-text-faint: #aaa7b8;
-    --m-accent: #ff8a52;
     --m-accent-contrast: #0a0a0a;
-    --m-accent-soft: #3a1e10;
-    --m-income: #4ade80;
-    --m-expense: #f87171;
-    --m-warning: #fbbf24;
-    --m-income-soft: #16281c;
-    --m-expense-soft: #331919;
+    --m-accent-soft: color-mix(in srgb, var(--m-accent) 20%, var(--m-bg));
+    --m-income-soft: color-mix(in srgb, var(--m-income) 20%, var(--m-bg));
+    --m-expense-soft: color-mix(in srgb, var(--m-expense) 20%, var(--m-bg));
 
     /* glass over the dark canvas: the approved warm, see-through panel from the
        category dropdown, now the shared standard. Cards read the same tokens so
@@ -134,16 +144,9 @@
     --m-card-border: var(--glass-border);
     --m-sidebar-edge: rgb(255 255 255 / 8%);
 
-    --g-color-base-brand: #ff8a52;
-    --g-color-base-brand-hover: #ff9d70;
-    --g-color-line-brand: #ff8a52;
-    --g-color-text-brand: #ff9d70;
-    --g-color-text-brand-heavy: #ffb28f;
-    --g-color-text-link: #ff9d70;
-    --g-color-text-link-hover: #ffb28f;
     --g-color-text-brand-contrast: #0a0a0a;
-    --g-color-base-selection: #3a1e10;
-    --g-color-base-selection-hover: #4a2614;
+    --g-color-base-selection: var(--m-accent-soft);
+    --g-color-base-selection-hover: var(--m-accent-soft);
 
     --g-color-base-danger-light: rgb(229, 50, 93, 0.2);
     --g-color-base-float: rgb(56, 52, 56);
@@ -155,21 +158,13 @@
     --g-color-base-positive-light: rgb(77, 176, 155, 0.2);
     --g-color-base-simple-hover: rgb(255, 255, 255, 0.1);
     --g-color-base-warning-light: rgb(255, 190, 92, 0.2);
-    --g-color-line-danger: rgb(229, 50, 93, 0.8);
     --g-color-line-generic: rgb(255, 255, 255, 0.15);
     --g-color-line-generic-active: rgb(255, 255, 255, 0.3);
     --g-color-line-generic-hover: rgb(255, 255, 255, 0.25);
     --g-color-sfx-fade: rgb(255, 255, 255, 0.25);
     --g-color-text-complementary: rgb(255, 255, 255, 0.7);
-    --g-color-text-danger: rgb(229, 50, 93);
-    --g-color-text-danger-heavy: rgb(232, 71, 109);
     --g-color-text-hint: rgb(255, 255, 255, 0.65);
-    --g-color-text-info-heavy: rgb(74, 161, 242);
-    --g-color-text-positive: rgb(77, 176, 155);
-    --g-color-text-positive-heavy: rgb(95, 184, 165);
     --g-color-text-secondary: rgb(255, 255, 255, 0.7);
-    --g-color-text-warning: rgb(255, 190, 92);
-    --g-color-text-warning-heavy: rgb(255, 197, 108);
 }
 
 html,
@@ -194,13 +189,16 @@ body {
     min-height: 100vh;
 }
 
-/* flat dark canvas — the approved look. (Previously this was gravity's default
-   base background; now that uikit is gone we set it explicitly.) The theme-dark
-   class only lands on <body>, but html also paints --m-bg (the light #fff),
-   which shows through on overscroll; keep it in sync with the dark body. */
+/* flat dark canvas — the approved look. The theme-dark class only lands on
+   <body>, but html also paints the canvas token, which shows through on
+   overscroll; keep it in sync with the dark body. */
 body.theme-dark,
 html:has(> body.theme-dark) {
-    background: #221d22;
+    background: var(--m-canvas);
+}
+
+:root:has(> body.theme-dark) {
+    --m-canvas: #221d22;
 }
 
 /* frosted-glass cards over the canvas: the translucent --m-card-bg is blurred

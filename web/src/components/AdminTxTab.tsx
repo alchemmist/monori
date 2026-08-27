@@ -108,7 +108,7 @@ export default function AdminTxTab({ user, onClose }: { user: User; onClose: () 
             <Button
                 size="l"
                 variant="filled"
-                color="red"
+                color="var(--m-expense)"
                 disabled={selected.size === 0}
                 loading={busy}
                 onClick={() => void removeSelected()}

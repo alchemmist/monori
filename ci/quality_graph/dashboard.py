@@ -567,7 +567,7 @@ class DashboardLifecycle:
         response = object_value(
             self.github.request(
                 "GET",
-                "/actions/workflows/pr-checks.yaml/runs"
+                "/actions/workflows/quality-graph.yml/runs"
                 f"?event=pull_request&per_page={GITHUB_PAGE_SIZE}&page=1",
             ),
             "workflow runs response",

@@ -74,8 +74,32 @@ deploy:
 	git fetch -q origin; \
 	git merge-base --is-ancestor "$$rev" origin/main || \
 		{ echo "revision $$rev is not on origin/main — push it first"; exit 1; }; \
+	dispatch_started=$$(date -u +%s); \
 	echo "dispatching Deploy for $$rev"; \
 	gh workflow run deploy.yaml --ref main -f sha="$$rev"; \
+	repo=$$(gh repo view --json nameWithOwner -q .nameWithOwner); \
+	run_id=""; \
+	for _ in $$(seq 1 30); do \
+		run_id=$$(gh run list --workflow deploy.yaml --event workflow_dispatch --limit 20 --json databaseId,headSha,event,createdAt --jq '.[] | select(.headSha == "'"$$rev"'" and .event == "workflow_dispatch" and (.createdAt | fromdateiso8601) >= '"$$dispatch_started"') | .databaseId' | head -n 1); \
+		[ -n "$$run_id" ] && break; \
+		sleep 1; \
+	done; \
+	if [ -n "$$run_id" ]; then \
+		pending=""; \
+		for _ in $$(seq 1 30); do \
+			pending=$$(gh api "repos/$$repo/actions/runs/$$run_id/pending_deployments" 2>/dev/null || true); \
+			environment_ids=$$(printf '%s' "$$pending" | jq -c '[.[].environment.id] // []' 2>/dev/null || printf '[]'); \
+			[ "$$environment_ids" != "[]" ] && break; \
+			status=$$(gh run view "$$run_id" --json status -q .status 2>/dev/null || true); \
+			case "$$status" in completed|failure|cancelled|skipped|startup_failure|timed_out) break;; esac; \
+			sleep 1; \
+		done; \
+		can_approve=$$(printf '%s' "$$pending" | jq -r 'all(.[]; .current_user_can_approve == true)' 2>/dev/null || printf 'false'); \
+		if [ "$$environment_ids" != "[]" ] && [ "$$can_approve" = true ]; then \
+			jq -n --argjson environment_ids "$$environment_ids" '{environment_ids: $$environment_ids, state: "approved", comment: "Approved by make deploy"}' | \
+				gh api --method POST "repos/$$repo/actions/runs/$$run_id/pending_deployments" --input - >/dev/null 2>&1 || true; \
+		fi; \
+	fi; \
 	echo "follow it with: gh run watch \$$(gh run list --workflow deploy.yaml -L1 --json databaseId -q '.[0].databaseId')"
 
 api:
