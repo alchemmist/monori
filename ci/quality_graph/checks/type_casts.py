@@ -12,52 +12,16 @@ import sys
 from collections import Counter
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar, Literal, override
+from typing import Literal
 
 from dulwich.repo import Repo
 
-from monori.ci.lib.annotations import AnnotationLevel, SourceAnnotation
 from monori.ci.lib.findings import stable_finding_id
-from monori.ci.quality_graph.base import (
-    ApprovalLifecycle,
-    PullRequestSourceCheck,
-    QualityRuntime,
-    read_github_event,
-)
-from monori.ci.quality_graph.checks.object_annotations import (
-    added_lines_from_patch,
-    changed_lines,
-)
-from monori.ci.quality_graph.models import CheckContext, CheckResult, Metric, Verdict
-from monori.ci.quality_graph.registry import WORKFLOW_JOB_BY_ID
-from monori.ci.quality_graph.reporting import (
-    RenderedCheckReport,
-    ReportFinding,
-    ReportModel,
-    ReportStatus,
-    admin_commands,
-    finding_location,
-    render_report,
-)
-from monori.common import JsonValue, integer_value, object_value, optional_string, string_value
-
-if TYPE_CHECKING:
-    from monori.ci.lib.github import RepositoryGitHubAPI
 
 Language = Literal["python", "typescript"]
 SOURCE_SUFFIXES = {".py", ".ts", ".tsx", ".mts", ".cts"}
 TYPESCRIPT_SUFFIXES = {".ts", ".tsx", ".mts", ".cts"}
 GENERATED_PARTS = {"build", "dist", "generated", "node_modules", "static", "mutants"}
-FINDING_ID_PREFIX = "cast-"
-FAILURE_LABEL = "monori-type-cast-failed"
-APPROVAL_STATE_RE = re.compile(r"<!-- monori-type-cast-approvals: ([0-9a-f,]*) -->")
-APPROVALS = ApprovalLifecycle(
-    "cast",
-    FINDING_ID_PREFIX,
-    APPROVAL_STATE_RE,
-    "<!-- monori-type-cast-approvals: {ids} -->",
-    allow_file_commands=True,
-)
 TOKEN_RE = re.compile(
     r"(?P<identifier>[A-Za-z_$][\w$]*)|(?P<number>\d+(?:\.\d+)?)|"
     r"(?P<operator>=>|===|!==|==|!=|<=|>=|\?\?|&&|\|\||\+\+|--|\.\.\.|.)",
@@ -109,13 +73,6 @@ class Token:
     end: int
     line: int
     column: int
-
-
-def display_finding_id(finding_id: str) -> str:
-    """
-    Return a command-addressable finding identifier.
-    """
-    return f"{FINDING_ID_PREFIX}{finding_id}"
 
 
 def is_generated(path: str, source: str) -> bool:
@@ -511,137 +468,6 @@ def scan_file(path: str, source: str, selected_lines: set[int]) -> list[Finding]
     return []
 
 
-class TypeCastCheck(PullRequestSourceCheck[Finding]):
-    """
-    Find newly introduced Python and TypeScript casts.
-    """
-
-    definition = WORKFLOW_JOB_BY_ID["type-casts"]
-    approval_lifecycle = APPROVALS
-    supports_ignore_file = True
-    failure_label: ClassVar[str | None] = FAILURE_LABEL
-
-    @override
-    def collect(self, context: CheckContext) -> CheckResult[Finding]:
-        findings = tuple(
-            finding
-            for path, source in context.files.items()
-            for finding in scan_file(
-                path,
-                source,
-                set(context.changed_lines.get(path, frozenset())),
-            )
-        )
-        return CheckResult(findings, Verdict.FAIL if findings else Verdict.PASS)
-
-    @override
-    def collect_pull_request(
-        self, github: RepositoryGitHubAPI, pull: dict[str, JsonValue]
-    ) -> list[Finding]:
-        return scan_pull_request(github, pull)
-
-    @override
-    def render_summary(
-        self, findings: list[Finding], approved: set[str], pull_request_url: str
-    ) -> RenderedCheckReport:
-        return summary_body(findings, approved, pull_request_url)
-
-    @override
-    def source_annotation(self, finding: Finding) -> SourceAnnotation:
-        return SourceAnnotation(
-            finding.path,
-            finding.line,
-            finding.line,
-            f"{finding.cast_form}: {finding.suggestion} ({display_finding_id(finding.finding_id)})",
-            AnnotationLevel.FAILURE,
-            start_column=finding.column + 1,
-            end_column=finding.column + max(1, len(finding.cast_form)),
-        )
-
-
-def summary_body(findings: list[Finding], approved: set[str], pr_url: str) -> RenderedCheckReport:
-    """
-    Render all casts, including approved exceptions, in the job report.
-    """
-    active = [finding for finding in findings if finding.finding_id not in approved]
-    return render_report(
-        ReportModel(
-            "type-casts",
-            ReportStatus.PASSED if not active else ReportStatus.FAILED,
-            metrics=(
-                Metric("Status", "PASS" if not active else "FAIL"),
-                Metric("Findings", str(len(findings))),
-                Metric("Active", str(len(active))),
-                Metric("Approved", str(len(findings) - len(active))),
-            ),
-            findings_title="Unsafe type casts",
-            findings=tuple(
-                ReportFinding(
-                    f"`{finding.language}` · `{finding.cast_form}` · "
-                    f"{finding.suggestion} · `{display_finding_id(finding.finding_id)}`",
-                    approved=finding.finding_id in approved,
-                    location=finding_location(pr_url, finding.path, finding.line),
-                )
-                for finding in findings
-            ),
-            admin=admin_commands(
-                "cast",
-                [display_finding_id(finding.finding_id) for finding in active],
-                [
-                    display_finding_id(finding.finding_id)
-                    for finding in findings
-                    if finding.finding_id in approved
-                ],
-                {
-                    path: [
-                        display_finding_id(finding.finding_id)
-                        for finding in active
-                        if finding.path == path
-                    ]
-                    for path in {finding.path for finding in active}
-                },
-            ),
-        )
-    )
-
-
-def scan_pull_request(github: RepositoryGitHubAPI, pull: dict[str, JsonValue]) -> list[Finding]:
-    """
-    Scan only added or replaced lines in supported pull-request files.
-    """
-    head = object_value(pull["head"], "pull request head")
-    base = object_value(pull["base"], "pull request base")
-    number = integer_value(pull["number"], "pull request number")
-    head_sha = string_value(head["sha"], "head sha")
-    base_sha = string_value(base["sha"], "base sha")
-    files = github.paged(f"/pulls/{number}/files")
-    comparison = object_value(
-        github.request("GET", f"/compare/{base_sha}...{head_sha}"),
-        "pull request comparison",
-    )
-    merge_base = string_value(
-        object_value(comparison["merge_base_commit"], "merge base commit")["sha"],
-        "merge base sha",
-    )
-    findings: list[Finding] = []
-    for file in files:
-        path = string_value(file["filename"], "changed filename")
-        if Path(path).suffix not in SOURCE_SUFFIXES or file["status"] == "removed":
-            continue
-        source = github.file_text(path, head_sha)
-        if source is None:
-            message = f"Cannot read changed source file {path} at {head_sha}"
-            raise RuntimeError(message)
-        patch = optional_string(file.get("patch"))
-        if patch:
-            selected = added_lines_from_patch(patch)
-        else:
-            previous_path = optional_string(file.get("previous_filename")) or path
-            selected = changed_lines(github.file_text(previous_path, merge_base), source)
-        findings.extend(scan_file(path, source, selected))
-    return sorted(findings, key=lambda finding: (finding.path, finding.line, finding.column))
-
-
 def scan_repository(root: Path) -> list[Finding]:
     """
     Scan every tracked source file for scheduled and manual checks.
@@ -679,16 +505,8 @@ def main() -> int:
     """
     Run the pull-request gate or an explicit full repository scan.
     """
-    if "--all" in sys.argv[1:]:
-        arguments = [argument for argument in sys.argv[1:] if argument != "--all"]
-        return repository_main(arguments)
-    runtime = QualityRuntime.from_environment()
-    return TypeCastCheck().run_pull_request_gate(
-        runtime.github,
-        read_github_event(),
-        runtime.publisher,
-        read_only=runtime.read_only,
-    )
+    arguments = [argument for argument in sys.argv[1:] if argument != "--all"]
+    return repository_main(arguments)
 
 
 if __name__ == "__main__":

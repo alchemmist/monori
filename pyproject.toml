@@ -65,7 +65,7 @@ markers = ["integration: integration test that stands up real dependencies"]
 
 [tool.coverage.run]
 source = ["common", "ci", "server"]
-omit = ["*/tests/*", "ci/testkit/*", "**/mutants/**"]
+omit = ["*/tests/*", "**/mutants/**"]
 
 [tool.coverage.report]
 fail_under = 80
@@ -146,7 +146,6 @@ also_copy = [
   "tools/frontend-perf",
   "monori/server/schema.sql",
   "monori/server/migrations",
-  "monori/ci/quality_graph/templates",
 ]
 pytest_add_cli_args_test_selection = [
   "--import-mode=importlib",

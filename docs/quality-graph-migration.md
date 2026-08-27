@@ -42,8 +42,9 @@ not pull-request graph nodes.
    trusted publication reads topology from the base branch.
 5. Confirm the complete dashboard, commands, approvals, labels, reruns, and fork-safe run.
 6. Change branch protection to require only the aggregate `Quality Graph` check.
-7. Remove the superseded PR orchestration and its tests in a follow-up change. Retain the
-   Make targets and Monori-specific producers referenced by `quality-graph.yml`.
+7. Remove the superseded PR orchestration and its tests. Retain the Make targets and
+   Monori-specific producers referenced by `quality-graph.yml`. Completed after the probe
+   pull request confirmed the generated graph and publisher lifecycle.
 
 ## Rollback
 

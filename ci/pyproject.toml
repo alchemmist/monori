@@ -5,8 +5,6 @@ description = "Monori CI libraries and checks"
 requires-python = ">=3.12"
 dependencies = [
   "dulwich>=0.25.0",
-  "httpx>=0.27",
-  "jinja2>=3.1",
   "monori-common",
   "pydantic>=2",
   "PyYAML>=6.0",
@@ -26,16 +24,11 @@ packages = [
   "monori.ci.lib",
   "monori.ci.quality_graph",
   "monori.ci.quality_graph.checks",
-  "monori.ci.quality_graph.templates",
-  "monori.ci.testkit",
-  "monori.ci.testkit.fake_github",
   "monori.ci.tests",
-  "monori.ci.tests.integration",
 ]
 
 [tool.setuptools.package-data]
 "monori.ci" = ["py.typed"]
-"monori.ci.quality_graph" = ["templates/*.j2"]
 
 [tool.pytest.ini_options]
 markers = ["integration: integration test that stands up real dependencies"]

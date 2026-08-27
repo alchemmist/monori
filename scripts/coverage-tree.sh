@@ -19,9 +19,7 @@ echo "collecting Python coverage..." >&2
   --cov-fail-under=0 >/dev/null) || status=$?
 (cd "$root" && uv run --locked --group test coverage erase) || status=$?
 (cd "$root" && env -u GITHUB_STEP_SUMMARY -u MUTATION_SUMMARY_PATH uv run --locked --group test pytest -q ci/tests \
-  --ignore=ci/tests/integration --cov=ci --cov-report= --cov-fail-under=0 >/dev/null) || status=$?
-(cd "$root" && COMPOSE="${COMPOSE:-docker compose}" bash scripts/ci-tests.sh \
-  --cov=ci --cov-report="json:$ci" --cov-report= --cov-append >/dev/null) || status=$?
+  --cov=ci --cov-report="json:$ci" --cov-report= --cov-fail-under=0 >/dev/null) || status=$?
 (cd "$root" && uv run --locked --group test coverage report \
   --include="ci/*" --fail-under=90) || status=$?
 

@@ -3,7 +3,6 @@ from pathlib import Path
 
 import pytest
 
-from monori.ci.lib.annotations import SourceAnnotation
 from monori.ci.lib.coverage_diff import (
     COVERAGE_REPORT_ADAPTER,
     CoverageReport,
@@ -20,10 +19,6 @@ from monori.ci.lib.coverage_diff import (
     typescript_function,
     write_baseline,
 )
-from monori.ci.quality_graph.checks.coverage import CoverageResultAdapter
-from monori.ci.quality_graph.job_results import JobStatus
-from monori.ci.quality_graph.registry import WORKFLOW_JOB_BY_ID
-from monori.ci.quality_graph.run_job import CommandResult
 from monori.common import JsonValue
 
 READ_ERROR = "unreadable"
@@ -388,58 +383,3 @@ def test_clean_summary_discloses_an_inactive_total_regression_gate() -> None:
         "⚠️ Total-coverage regression gate inactive: "
         "the base coverage baseline was unavailable.\n"
     )
-
-
-def test_coverage_uses_the_portable_quality_graph_result(tmp_path: Path) -> None:
-    artifact = tmp_path / "report.json"
-    artifact.write_bytes(COVERAGE_REPORT_ADAPTER.dump_json(report(passed=False)))
-
-    result = CoverageResultAdapter(artifact).build(
-        WORKFLOW_JOB_BY_ID["coverage"], CommandResult(0, "coverage completed"), ""
-    )
-
-    assert result.check_id == "coverage"
-    assert result.status is JobStatus.FAILED
-    assert result.metrics[0].label == "backend total"
-    assert result.annotations == (
-        SourceAnnotation(
-            "server/app/example.py",
-            4,
-            4,
-            "calculate: changed lines are not covered",
-            title="Coverage",
-        ),
-    )
-
-    artifact.write_bytes(COVERAGE_REPORT_ADAPTER.dump_json(report()))
-    clean = CoverageResultAdapter(artifact).build(
-        WORKFLOW_JOB_BY_ID["coverage"], CommandResult(0, "coverage completed"), ""
-    )
-    assert clean.status is JobStatus.PASSED
-
-
-def test_coverage_adapter_fails_closed_through_the_same_protocol(tmp_path: Path) -> None:
-    result = CoverageResultAdapter(tmp_path / "missing.json").build(
-        WORKFLOW_JOB_BY_ID["coverage"], CommandResult(0, "coverage passed"), ""
-    )
-
-    assert result.status is JobStatus.FAILED
-    assert "Coverage report was not produced" in result.summary
-
-
-def test_coverage_adapter_converts_read_errors_to_a_job_result(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    artifact = tmp_path / "report.json"
-    artifact.write_text("{}")
-
-    def fail_read(_path: Path) -> bytes:
-        raise OSError(READ_ERROR)
-
-    monkeypatch.setattr(Path, "read_bytes", fail_read)
-    result = CoverageResultAdapter(artifact).build(
-        WORKFLOW_JOB_BY_ID["coverage"], CommandResult(0, "coverage passed"), ""
-    )
-
-    assert result.status is JobStatus.FAILED
-    assert "Coverage report could not be read" in result.summary
