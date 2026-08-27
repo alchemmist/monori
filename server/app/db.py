@@ -37,6 +37,59 @@ def _alembic_config(path: pathlib.Path) -> Config:
     return cfg
 
 
+def _schema_signature(
+    conn: sqlite3.Connection,
+    tables: set[str],
+) -> dict[str, tuple[tuple[object, ...], ...]]:
+    return {
+        table: tuple(
+            tuple(row[1:6]) for row in conn.execute("SELECT * FROM pragma_table_info(?)", (table,))
+        )
+        for table in tables
+    }
+
+
+def _current_schema_signature() -> dict[str, tuple[tuple[object, ...], ...]]:
+    memory = sqlite3.connect(":memory:")
+    try:
+        memory.executescript(SCHEMA_PATH.read_text())
+        tables = {
+            str(row[0])
+            for row in memory.execute("SELECT name FROM sqlite_master WHERE type='table'")
+            if row[0] != "sqlite_sequence"
+        }
+        return _schema_signature(memory, tables)
+    finally:
+        memory.close()
+
+
+def _adopt_unversioned(
+    path: pathlib.Path,
+    cfg: Config,
+    tables: set[str],
+    user_version: int,
+) -> None:
+    current_schema = _current_schema_signature()
+    current_tables = set(current_schema)
+    if current_tables <= tables:
+        conn = sqlite3.connect(path)
+        try:
+            actual_schema = _schema_signature(conn, current_tables)
+        finally:
+            conn.close()
+        if actual_schema != current_schema:
+            msg = "database has current table names but incompatible schema metadata"
+            raise RuntimeError(msg)
+        command.stamp(cfg, "head")
+        return
+    if 0 <= user_version < len(LEGACY_REVISIONS):
+        command.stamp(cfg, LEGACY_REVISIONS[user_version])
+        command.upgrade(cfg, "head")
+        return
+    msg = f"unsupported legacy database user_version: {user_version}"
+    raise RuntimeError(msg)
+
+
 def _bootstrap(path: pathlib.Path) -> None:
     conn = sqlite3.connect(path)
     try:
@@ -49,8 +102,7 @@ def _bootstrap(path: pathlib.Path) -> None:
     if "alembic_version" in tables:
         command.upgrade(cfg, "head")
     elif "transactions" in tables:
-        command.stamp(cfg, LEGACY_REVISIONS[user_version])
-        command.upgrade(cfg, "head")
+        _adopt_unversioned(path, cfg, tables, user_version)
     else:
         conn = sqlite3.connect(path)
         try:

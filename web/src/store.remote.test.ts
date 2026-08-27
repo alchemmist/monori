@@ -50,16 +50,16 @@ describe("optimistic edits outside the demo", () => {
         expect(snap().budgets).toEqual([{ categoryId: 4, year: 2026, month: 1, amount: 35 }]);
     });
 
-    it("warns but keeps the optimistic budget when the save fails", async () => {
+    it("rolls back an optimistic budget when the save fails", async () => {
         vi.spyOn(api, "putBudget").mockRejectedValue(new Error("offline"));
-        void useStore.getState().setBudget(4, 2026, 1, 35);
+        await expect(useStore.getState().setBudget(4, 2026, 1, 35)).rejects.toThrow("offline");
         await vi.waitFor(() => expect(useStore.getState().toast).not.toBeNull());
         expect(useStore.getState().toast).toEqual({
             title: "Failed to save budget",
             theme: "danger",
             content: "Error: offline",
         });
-        expect(snap().budgets).toEqual([{ categoryId: 4, year: 2026, month: 1, amount: 35 }]);
+        expect(snap().budgets).toEqual([{ categoryId: 4, year: 2026, month: 1, amount: 20 }]);
     });
 
     it("sends a category retag and maps an unfiled row to category zero", async () => {
@@ -81,6 +81,7 @@ describe("optimistic edits outside the demo", () => {
             theme: "danger",
             content: "Error: offline",
         });
+        expect(snap().transactions[0]!.categoryId).toBe(4);
     });
 
     it("sends an account move for the transaction", async () => {
@@ -95,10 +96,11 @@ describe("optimistic edits outside the demo", () => {
         useStore.getState().setTxAccount(2, 5);
         await vi.waitFor(() => expect(useStore.getState().toast).not.toBeNull());
         expect(useStore.getState().toast).toEqual({
-            title: "Failed to move transaction",
+            title: "Failed to update transaction",
             theme: "danger",
             content: "Error: offline",
         });
+        expect(snap().transactions[0]!.accountId).toBe(1);
     });
 });
 
@@ -155,7 +157,7 @@ describe("deletes reach the server before the snapshot is trimmed", () => {
     });
 
     it("leaves the transfer legs in place when the server refuses the delete", async () => {
-        vi.spyOn(api, "splitTransfer").mockRejectedValue(new Error("gone"));
+        vi.spyOn(api, "deleteTransferWithLegs").mockRejectedValue(new Error("gone"));
         await expect(useStore.getState().deleteTransferWithLegs("t-1")).rejects.toThrow("gone");
         expect(snap().transactions).toEqual(base().transactions);
     });

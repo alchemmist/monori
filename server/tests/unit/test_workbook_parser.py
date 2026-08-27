@@ -407,7 +407,7 @@ def test_parse_year_sheet_reads_grid_income_available_seed() -> None:
     assert layout is not None
     assert layout is not None
     parsed = _parse_year_sheet(ws, 2025, layout)
-    groceries = parsed.cats["Groceries"]
+    groceries = parsed.cats[("Daily", "Groceries")]
     assert groceries.group == "Daily"
     assert groceries.budgets == {1: 100000, 2: 100000}
     assert groceries.outflows == {1: 30000, 2: 50000}
@@ -903,7 +903,7 @@ def test_a_sheet_running_to_december_keeps_its_last_month() -> None:
     assert layout is not None
     parsed = _parse_year_sheet(ws, 2025, layout)
     assert parsed.months[-1] == 12
-    assert parsed.cats["Groceries"].balances[12] == 70000
+    assert parsed.cats[("Daily", "Groceries")].balances[12] == 70000
 
 
 def test_history_and_adjustment_split_follows_the_rows_not_the_sheet_name() -> None:

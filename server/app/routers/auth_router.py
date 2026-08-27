@@ -19,6 +19,7 @@ from pydantic.dataclasses import dataclass as pydantic_dataclass
 
 from monori.server.app.admin import admin_emails
 from monori.server.app.auth import AuthenticatedUser, current_user
+from monori.server.app.db import begin_write
 from monori.server.app.db_records import UserRecord
 from monori.server.app.deps import UserResponse, conn, serialize_user
 from monori.server.app.emails import canonical_email, normalize_email
@@ -84,14 +85,16 @@ def create_user(c: sqlite3.Connection, raw_email: str, password: str) -> UserRes
     if len(password) < MIN_PASSWORD_LEN:
         raise HTTPException(400, f"password must be at least {MIN_PASSWORD_LEN} characters")
     now = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S")
+    password_hash = hash_password(password)
     try:
+        begin_write(c)
         cur = c.execute(
             "INSERT INTO users (email, email_canonical, password_hash, created_at)"
             " VALUES (?, ?, ?, ?)",
-            (email, canonical_email(email), hash_password(password), now),
+            (email, canonical_email(email), password_hash, now),
         )
-        c.commit()
     except sqlite3.IntegrityError:
+        c.rollback()
         raise HTTPException(409, "email already registered") from None
     uid = cur.lastrowid
     if uid is None:
@@ -107,7 +110,6 @@ def create_user(c: sqlite3.Connection, raw_email: str, password: str) -> UserRes
             " VALUES (?, 'Cash', 'cash', 'RUB', 1)",
             (uid,),
         )
-    c.commit()
     row = c.execute(
         "SELECT id, email, created_at, is_admin, last_login, default_account_id"
         " FROM users WHERE id=?",
@@ -116,6 +118,7 @@ def create_user(c: sqlite3.Connection, raw_email: str, password: str) -> UserRes
     if row is None:
         msg = "created user was not found"
         raise RuntimeError(msg)
+    c.commit()
     return serialize_user(UserRecord.from_row(row))
 
 

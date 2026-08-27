@@ -130,6 +130,8 @@ let fillGeneration = 0;
 /** Bumped by every hide/unhide, so an in-flight hidden-list fetch can tell it
  * is stale and must not overwrite the newer optimistic state. */
 let hiddenEpoch = 0;
+let nextHiddenRevision = 0;
+const hiddenRevisions = new Map<Id, number>();
 
 /** Rapid hide→unhide on one row must reach the server in order, or the earlier
  * PATCH could land last and win — so per-transaction PATCHes are chained. */
@@ -411,8 +413,12 @@ export const useStore = create<StoreState>((set, get) => ({
     setBudget(categoryId, year, month, amount) {
         const stamp = sessionStamp();
         const key = budgetKey(categoryId, year, month);
-        budgetRevisions.set(key, ++nextBudgetRevision);
+        const revision = ++nextBudgetRevision;
+        budgetRevisions.set(key, revision);
         const snapshot = requireSnapshot(get().snapshot);
+        const before = snapshot.budgets.find(
+            (b) => b.categoryId === categoryId && b.year === year && b.month === month,
+        );
         const budgets = snapshot.budgets.filter(
             (b) => !(b.categoryId === categoryId && b.year === year && b.month === month),
         );
@@ -424,7 +430,22 @@ export const useStore = create<StoreState>((set, get) => ({
                 await api.putBudget({ categoryId, year, month, amount });
                 failedBudgetWrites.delete(key);
             } catch (error) {
-                if (stamp.epoch === sessionEpoch) failedBudgetWrites.set(key, error);
+                if (stamp.epoch === sessionEpoch) {
+                    failedBudgetWrites.set(key, error);
+                    if (budgetRevisions.get(key) === revision) {
+                        const current = requireSnapshot(get().snapshot);
+                        const restored = current.budgets.filter(
+                            (b) =>
+                                !(
+                                    b.categoryId === categoryId &&
+                                    b.year === year &&
+                                    b.month === month
+                                ),
+                        );
+                        if (before) restored.push(before);
+                        set({ snapshot: { ...current, budgets: restored } });
+                    }
+                }
                 throw error;
             }
         });
@@ -511,21 +532,7 @@ export const useStore = create<StoreState>((set, get) => ({
     },
 
     setTxCategory(txId, categoryId) {
-        const snapshot = requireSnapshot(get().snapshot);
-        const transactions = snapshot.transactions.map((t) =>
-            t.id === txId ? { ...t, categoryId } : t,
-        );
-        set({ snapshot: { ...snapshot, transactions } });
-        if (isDemo()) return;
-        api.patchTx(txId, { categoryId: categoryId ?? 0 }).catch((e) =>
-            set({
-                toast: {
-                    title: "Failed to update transaction",
-                    theme: "danger",
-                    content: String(e),
-                },
-            }),
-        );
+        void get().updateTransaction(txId, { categoryId: categoryId ?? null });
     },
 
     /** Record a transaction by hand. The row is merged straight into the loaded
@@ -587,7 +594,10 @@ export const useStore = create<StoreState>((set, get) => ({
         set({ snapshot: { ...snapshot, transactions: rows } });
         if (isDemo()) return;
         try {
-            await api.patchTx(txId, patch);
+            await api.patchTx(
+                txId,
+                patch.categoryId === null ? { ...patch, categoryId: 0 } : patch,
+            );
         } catch (e) {
             const cur = requireSnapshot(get().snapshot);
             const undo = Object.fromEntries(
@@ -748,6 +758,8 @@ export const useStore = create<StoreState>((set, get) => ({
         const snapshot = requireSnapshot(get().snapshot);
         const t = snapshot.transactions.find((x) => x.id === txId);
         if (!t) return;
+        const revision = ++nextHiddenRevision;
+        hiddenRevisions.set(txId, revision);
         set({
             snapshot: {
                 ...snapshot,
@@ -758,22 +770,31 @@ export const useStore = create<StoreState>((set, get) => ({
         });
         if (isDemo()) return;
         hiddenEpoch += 1;
-        chainedPatchTx(txId, { hidden: true }).then(
-            () => {
-                // once the server excludes this row, every list offset past it
-                // shifts down by one — a running background fill would skip
-                // the row that slid into its boundary, so restart it
+        void (async () => {
+            try {
+                await chainedPatchTx(txId, { hidden: true });
                 if (get().txProgress) void get().fillTransactions((fillGeneration += 1));
-            },
-            (e) =>
-                set({
-                    toast: {
-                        title: "Failed to hide transaction",
-                        theme: "danger",
-                        content: String(e),
-                    },
-                }),
-        );
+            } catch (e) {
+                if (hiddenRevisions.get(txId) === revision) {
+                    const current = requireSnapshot(get().snapshot);
+                    set({
+                        snapshot: {
+                            ...current,
+                            transactions: mergeTransactions(current.transactions, [t]),
+                            transactionsTotal: (current.transactionsTotal ?? 0) + 1,
+                        },
+                        hiddenTx: (get().hiddenTx ?? []).filter((row) => row.id !== txId),
+                        toast: {
+                            title: "Failed to hide transaction",
+                            theme: "danger",
+                            content: String(e),
+                        },
+                    });
+                }
+            } finally {
+                if (hiddenRevisions.get(txId) === revision) hiddenRevisions.delete(txId);
+            }
+        })();
     },
 
     unhideTx(txId) {
@@ -781,6 +802,8 @@ export const useStore = create<StoreState>((set, get) => ({
         const snapshot = requireSnapshot(get().snapshot);
         const t = (hiddenTx ?? []).find((x) => x.id === txId);
         if (!t || !hiddenTx) return;
+        const revision = ++nextHiddenRevision;
+        hiddenRevisions.set(txId, revision);
         set({
             snapshot: {
                 ...snapshot,
@@ -791,29 +814,34 @@ export const useStore = create<StoreState>((set, get) => ({
         });
         if (isDemo()) return;
         hiddenEpoch += 1;
-        chainedPatchTx(txId, { hidden: false }).catch((e) =>
-            set({
-                toast: {
-                    title: "Failed to unhide transaction",
-                    theme: "danger",
-                    content: String(e),
-                },
-            }),
-        );
+        void (async () => {
+            try {
+                await chainedPatchTx(txId, { hidden: false });
+            } catch (e) {
+                if (hiddenRevisions.get(txId) === revision) {
+                    const current = requireSnapshot(get().snapshot);
+                    set({
+                        snapshot: {
+                            ...current,
+                            transactions: current.transactions.filter((row) => row.id !== txId),
+                            transactionsTotal: Math.max(0, (current.transactionsTotal ?? 1) - 1),
+                        },
+                        hiddenTx: [...(get().hiddenTx ?? []), t].sort(compareTx),
+                        toast: {
+                            title: "Failed to unhide transaction",
+                            theme: "danger",
+                            content: String(e),
+                        },
+                    });
+                }
+            } finally {
+                if (hiddenRevisions.get(txId) === revision) hiddenRevisions.delete(txId);
+            }
+        })();
     },
 
     setTxAccount(txId, accountId) {
-        const snapshot = requireSnapshot(get().snapshot);
-        const transactions = snapshot.transactions.map((t) =>
-            t.id === txId ? { ...t, accountId } : t,
-        );
-        set({ snapshot: { ...snapshot, transactions } });
-        if (isDemo()) return;
-        api.patchTx(txId, { accountId }).catch((e) =>
-            set({
-                toast: { title: "Failed to move transaction", theme: "danger", content: String(e) },
-            }),
-        );
+        void get().updateTransaction(txId, { accountId });
     },
 
     async createAccount(body) {
@@ -1001,8 +1029,7 @@ export const useStore = create<StoreState>((set, get) => ({
             .transactions.filter((t) => t.transferId === transferId)
             .map((t) => t.id);
         if (!isDemo()) {
-            await api.splitTransfer(transferId);
-            await Promise.all(ids.map((id) => api.deleteTx(id)));
+            await api.deleteTransferWithLegs(transferId);
         }
         const snapshot = requireSnapshot(get().snapshot);
         set({

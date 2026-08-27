@@ -3,6 +3,7 @@ import re
 import pytest
 from fastapi.testclient import TestClient
 
+from monori.server.app.db import connect
 from monori.server.app.deps import TransactionResponse
 from monori.server.tests.conftest import Api, TransactionOptions, login_as
 
@@ -154,6 +155,48 @@ def test_split_keeps_both_transactions(api: Api, client: TestClient) -> None:
     assert api.tx_by(in_id).transfer_id is None
 
     assert client.delete(f"/api/transfers/{transfer_id}").status_code == 404
+
+
+def test_delete_transfer_with_legs_is_atomic(api: Api, client: TestClient) -> None:
+    first = api.default_account()
+    second = api.account("Vault")
+    transfer_id = api.transfer(first, second, 5000)
+    leg_ids = [transaction.id for transaction in legs(api, transfer_id)]
+    c = connect()
+    try:
+        c.execute(
+            f"CREATE TRIGGER fail_second_leg BEFORE DELETE ON transactions"
+            f" WHEN OLD.id={leg_ids[1]} BEGIN SELECT RAISE(ABORT, 'injected'); END"
+        )
+        c.commit()
+    finally:
+        c.close()
+
+    with pytest.raises(Exception, match="injected"):
+        client.delete(f"/api/transfers/{transfer_id}/with-legs")
+
+    assert {transaction.id for transaction in legs(api, transfer_id)} == set(leg_ids)
+    assert any(transfer.id == transfer_id for transfer in api.snapshot().transfers)
+
+
+def test_delete_transfer_with_legs_removes_both_rows(api: Api, client: TestClient) -> None:
+    first = api.default_account()
+    second = api.account("Vault")
+    transfer_id = api.transfer(first, second, 5000)
+    leg_ids = {transaction.id for transaction in legs(api, transfer_id)}
+
+    assert client.delete(f"/api/transfers/{transfer_id}/with-legs").status_code == 200
+    assert leg_ids.isdisjoint({transaction.id for transaction in api.snapshot().transactions})
+    assert client.delete(f"/api/transfers/{transfer_id}/with-legs").status_code == 404
+
+
+def test_delete_transfer_with_legs_is_user_scoped(api: Api, client: TestClient) -> None:
+    transfer_id = api.transfer(api.default_account(), api.account("Vault"), 5000)
+    client.headers.update(login_as(client, "other@example.com"))
+
+    assert client.delete(f"/api/transfers/{transfer_id}/with-legs").status_code == 404
+    client.headers.update(login_as(client, "tester@example.com"))
+    assert len(legs(api, transfer_id)) == 2
 
 
 def test_split_frees_the_legs_to_be_linked_again(api: Api, client: TestClient) -> None:

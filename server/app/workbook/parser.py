@@ -68,7 +68,7 @@ class YearSheetRow:
 
     year: int
     months: list[int]
-    cats: dict[str, YearCategoryRow]
+    cats: dict[tuple[str, str], YearCategoryRow]
     income: dict[int, int]
     available: dict[int, int]
     seeds: dict[int, int]
@@ -83,6 +83,15 @@ class YearSection:
     name: str
     kind: str
     rows: list[tuple[int, str]]
+
+
+def _year_entry(source: YearSheetRow, name: str) -> YearCategoryRow | None:
+    matches = [entry for (_, category), entry in source.cats.items() if category == name]
+    return matches[0] if len(matches) == 1 else None
+
+
+def _year_has_name(source: YearSheetRow, name: str) -> bool:
+    return any(category == name for _, category in source.cats)
 
 
 @dataclass(slots=True)
@@ -113,6 +122,7 @@ TX_ALIASES = {
     "mcc": ("MCC",),
     "description": ("Описание", "Description", "Transaction description"),
     "category": ("Monori Category",),
+    "category_group": ("Monori Category Group",),
     "comment": ("Comment",),
 }
 
@@ -436,12 +446,12 @@ def _year_categories(
     layout: LayoutRow,
     months: list[tuple[int, int]],
     sections: list[YearSection],
-) -> dict[str, YearCategoryRow]:
-    cats: dict[str, YearCategoryRow] = {}
+) -> dict[tuple[str, str], YearCategoryRow]:
+    cats: dict[tuple[str, str], YearCategoryRow] = {}
     for section in sections:
         for r, name in section.rows:
             entry = cats.setdefault(
-                name,
+                (section.name, name),
                 YearCategoryRow(group=section.name),
             )
             for m, base in months:
@@ -670,6 +680,7 @@ class _TransactionParseState:
             bank_category=reader.text(row, "bank_category"),
             mcc=reader.text(row, "mcc"),
             comment=reader.text(row, "comment"),
+            monori_category_group=reader.text(row, "category_group"),
             monori_category=reader.category(row),
             marker=reader.text(row, "card") or reader.text(row, "account"),
         )
@@ -884,6 +895,19 @@ def _parse(wb: Workbook) -> ParsedWorkbook:
     errors: list[WorkbookParseErrorRow] = []
     sheets = _parse_sheets(wb, warnings, errors)
     catalog = _build_catalog(wb, sheets, warnings)
+    for transaction in sheets.transactions:
+        name = transaction.monori_category
+        if (
+            name
+            and not transaction.monori_category_group
+            and len(catalog.category_groups.get(name, set())) > 1
+        ):
+            errors.append(
+                WorkbookParseErrorRow(
+                    row=0,
+                    error=f"ambiguous legacy category {name!r}; add Monori Category Group",
+                )
+            )
     if not sheets.has_years:
         return _result(
             _ParsedRows(catalog.groups, catalog.categories, sheets.transactions, []),
@@ -996,7 +1020,7 @@ class _CategoryCatalog:
     groups: list[WorkbookGroupRow] = field(default_factory=list)
     categories: list[WorkbookCategoryRow] = field(default_factory=list)
     group_names: set[str] = field(default_factory=set)
-    category_groups: dict[str, str] = field(default_factory=dict)
+    category_groups: dict[str, set[str]] = field(default_factory=dict)
 
     def add_group(
         self,
@@ -1020,8 +1044,9 @@ class _CategoryCatalog:
         group_kind: Literal["income", "expense"] | None = None,
         group_sort: int = 0,
     ) -> None:
-        if name not in self.category_groups:
-            self.category_groups[name] = group
+        groups = self.category_groups.setdefault(name, set())
+        if group not in groups:
+            groups.add(group)
             self.categories.append(
                 WorkbookCategoryRow(
                     group=group,
@@ -1200,14 +1225,18 @@ def _add_transaction_category(
 def _collect_budgets(sheets: _SheetData, catalog: _CategoryCatalog) -> list[WorkbookBudgetRow]:
     budgets: list[WorkbookBudgetRow] = []
     for source in sheets.sources:
-        for name, entry in source.cats.items():
+        for (group, name), entry in source.cats.items():
             if name not in catalog.category_groups:
                 continue
             for month, amount in entry.budgets.items():
                 if amount:
                     budgets.append(
                         WorkbookBudgetRow(
-                            category=name, year=source.year, month=month, amount=amount
+                            category=name,
+                            year=source.year,
+                            month=month,
+                            amount=amount,
+                            group=group,
                         ),
                     )
     return budgets
@@ -1381,7 +1410,7 @@ class _Reconciliation:
     ) -> int | None:
         if self._at_seam(year, month):
             return self._seam_balance(attempt.name)
-        entry = source.cats.get(attempt.name)
+        entry = _year_entry(source, attempt.name)
         if entry is not None:
             balance = entry.balances.get(month)
             return (
@@ -1398,11 +1427,11 @@ class _Reconciliation:
         if seam_sheet is None:
             return None
         last_month = max(seam_sheet.months)
-        entry = seam_sheet.cats.get(name)
+        entry = _year_entry(seam_sheet, name)
         if entry is not None and (balance := entry.balances.get(last_month)) is not None:
             return balance
         first_live = min(self.sheets.live_years) if self.sheets.live_years else None
-        if first_live is not None and name not in self.sheets.live_years[first_live].cats:
+        if first_live is not None and not _year_has_name(self.sheets.live_years[first_live], name):
             return 0
         return None
 

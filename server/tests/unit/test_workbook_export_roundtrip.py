@@ -300,6 +300,21 @@ def test_transactions_parse_and_markers() -> None:
     assert parsed.errors == []
 
 
+def test_legacy_ambiguous_category_requires_group_identity() -> None:
+    wb, categories, tx = _workbook()
+    categories.append([1, "▼Home", "Other", ""])
+    categories.append([2, "▼Travel", "Other", ""])
+    TransactionFixture(monori="Other").append_to(tx)
+
+    parsed = parse_workbook(_bytes(wb))
+
+    assert [(category.group, category.name) for category in parsed.categories] == [
+        ("Home", "Other"),
+        ("Travel", "Other"),
+    ]
+    assert any("ambiguous legacy category 'Other'" in error.error for error in parsed.errors)
+
+
 def test_transactions_unparseable_rows_reported_with_row_number() -> None:
     wb, _, tx = _workbook()
     TransactionFixture(op="garbage").append_to(tx)

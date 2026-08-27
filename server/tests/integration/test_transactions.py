@@ -6,6 +6,54 @@ from monori.server.tests.conftest import Api, TransactionOptions
 pytestmark = pytest.mark.integration
 
 
+@pytest.mark.parametrize(
+    "date",
+    ["2026-02-29", "2026-13-01", "2026-00-01", "2026-01-32", "not-a-date"],
+)
+def test_create_rejects_invalid_calendar_dates(api: Api, client: TestClient, date: str) -> None:
+    response = client.post(
+        "/api/transactions",
+        json={"date": date, "amount": 1, "accountId": api.default_account()},
+    )
+
+    assert response.status_code == 422
+
+
+@pytest.mark.parametrize("amount", [-(2**53), 2**53, 2**63 - 1, -(2**63)])
+def test_create_rejects_money_outside_the_browser_safe_range(
+    api: Api,
+    client: TestClient,
+    amount: int,
+) -> None:
+    response = client.post(
+        "/api/transactions",
+        json={"date": "2026-01-01", "amount": amount, "accountId": api.default_account()},
+    )
+
+    assert response.status_code == 422
+
+
+@pytest.mark.parametrize("amount", [-(2**53) + 1, 2**53 - 1])
+def test_safe_money_boundaries_round_trip_exactly(
+    api: Api,
+    client: TestClient,
+    amount: int,
+) -> None:
+    response = client.post(
+        "/api/transactions",
+        json={
+            "date": "2024-02-29T23:59:59+03:00",
+            "amount": amount,
+            "accountId": api.default_account(),
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    transaction = api.tx_by(response.json()["id"])
+    assert transaction.amount == amount
+    assert transaction.date == "2024-02-29T23:59:59+03:00"
+
+
 def test_transaction_create_variants(api: Api, client: TestClient) -> None:
     g = api.group("Expenses")
     cat = api.category("Food", g)
@@ -23,12 +71,15 @@ def test_transaction_create_variants(api: Api, client: TestClient) -> None:
     acct = api.default_account()
     bad = client.post(
         "/api/transactions",
-        json={"date": "x", "amount": 1, "accountId": acct, "categoryId": 999},
+        json={"date": "2026-02-04", "amount": 1, "accountId": acct, "categoryId": 999},
     )
     assert bad.status_code == 400
     assert "category" in bad.json()["detail"].lower()
 
-    bad_acct = client.post("/api/transactions", json={"date": "x", "amount": 1, "accountId": 999})
+    bad_acct = client.post(
+        "/api/transactions",
+        json={"date": "2026-02-04", "amount": 1, "accountId": 999},
+    )
     assert bad_acct.status_code == 400
     assert "account" in bad_acct.json()["detail"].lower()
 

@@ -1,4 +1,6 @@
 from dataclasses import replace
+from datetime import date, timedelta
+from time import perf_counter
 
 from monori.server.app.transfer_match import (
     TransferCandidate,
@@ -80,6 +82,24 @@ def test_each_transaction_is_used_at_most_once() -> None:
     rows = [row(1, 10, -5000, 1), row(2, 10, 5000, 2), row(3, 13, 5000, 3)]
     pairs = find_pairs(rows)
     assert [(p.out_tx_id, p.in_tx_id) for p in pairs] == [(1, 2)]
+
+
+def test_repeated_amount_matching_is_bounded_by_the_date_window() -> None:
+    start = date(2020, 1, 1)
+    rows = []
+    for index in range(2000):
+        current = (start + timedelta(days=index)).isoformat()
+        rows.append(TransferMatchRow(index * 2 + 1, current, -5000, 1))
+        rows.append(TransferMatchRow(index * 2 + 2, current, 5000, 2))
+
+    started = perf_counter()
+    pairs = find_pairs(rows, max_days=5)
+    elapsed = perf_counter() - started
+
+    assert len(pairs) == 2000
+    assert elapsed < 1
+    assert len({pair.out_tx_id for pair in pairs}) == len(pairs)
+    assert len({pair.in_tx_id for pair in pairs}) == len(pairs)
 
 
 def test_a_transfer_sounding_description_breaks_the_tie() -> None:

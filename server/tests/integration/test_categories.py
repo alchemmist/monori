@@ -25,7 +25,9 @@ def test_category_patch_move_group_and_name(api: Api, client: TestClient) -> Non
     assert client.patch(f"/api/categories/{a}", json={"groupId": g2}).status_code == 200
     assert api.cat(a).group_id == g2
     assert client.patch(f"/api/categories/{a}", json={"groupId": 999}).status_code == 400
-    assert client.patch(f"/api/categories/{a}", json={"name": "B"}).status_code == 409
+    assert client.patch(f"/api/categories/{a}", json={"name": "B"}).status_code == 200
+    api.category("Taken", g2)
+    assert client.patch(f"/api/categories/{a}", json={"name": "Taken"}).status_code == 409
     assert client.patch("/api/categories/999", json={"name": "z"}).status_code == 404
     assert client.patch(f"/api/categories/{a}", json={"keywords": "x|y"}).status_code == 200
     assert api.cat(a).keywords == "x|y"

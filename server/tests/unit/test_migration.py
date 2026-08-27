@@ -9,7 +9,8 @@ import pytest
 from alembic import command
 from alembic.config import Config
 
-from monori.server.app.db import LEGACY_REVISIONS, _alembic_config, connect
+import monori.server.app.db as dbmod
+from monori.server.app.db import LEGACY_REVISIONS, SCHEMA_PATH, _alembic_config, connect
 from monori.server.app.importer import tx_hash
 
 if TYPE_CHECKING:
@@ -153,6 +154,63 @@ def test_fresh_db_is_created_from_schema_sql(tmp_path: pathlib.Path) -> None:
         assert _revision(conn) == HEAD
     finally:
         conn.close()
+
+
+def test_bootstrap_recovers_after_schema_creation_before_stamp(
+    tmp_path: pathlib.Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    db_path = tmp_path / "interrupted.db"
+    raw = sqlite3.connect(db_path)
+    raw.executescript(SCHEMA_PATH.read_text())
+    raw.commit()
+    raw.close()
+    real_stamp = command.stamp
+    attempts = 0
+
+    def interrupted_stamp(cfg: Config, revision: str) -> None:
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            message = "injected interruption"
+            raise RuntimeError(message)
+        real_stamp(cfg, revision)
+
+    monkeypatch.setattr(command, "stamp", interrupted_stamp)
+    with pytest.raises(RuntimeError, match="injected interruption"):
+        connect(db_path)
+
+    conn = connect(db_path)
+    try:
+        assert _revision(conn) == HEAD
+    finally:
+        conn.close()
+
+
+@pytest.mark.parametrize("user_version", [-1, len(LEGACY_REVISIONS), 999])
+def test_unknown_legacy_user_version_is_rejected_without_changes(
+    tmp_path: pathlib.Path,
+    user_version: int,
+) -> None:
+    db_path = tmp_path / "unknown.db"
+    _make_old_db(db_path)
+    raw = sqlite3.connect(db_path)
+    raw.execute(f"PRAGMA user_version={user_version}")
+    raw.commit()
+    before = raw.execute("SELECT sql FROM sqlite_master ORDER BY name").fetchall()
+    raw.close()
+
+    with pytest.raises(RuntimeError, match="unsupported legacy database user_version"):
+        connect(db_path)
+
+    raw = sqlite3.connect(db_path)
+    try:
+        assert raw.execute("SELECT sql FROM sqlite_master ORDER BY name").fetchall() == before
+        assert "alembic_version" not in {
+            row[0] for row in raw.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        }
+    finally:
+        raw.close()
 
 
 @dataclass(frozen=True, order=True)

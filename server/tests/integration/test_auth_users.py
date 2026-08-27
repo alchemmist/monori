@@ -42,6 +42,27 @@ def test_register_rejects_duplicate_email(client: TestClient) -> None:
     assert r.status_code == 409
 
 
+def test_register_rolls_back_when_default_account_creation_fails(client: TestClient) -> None:
+    c = dbmod.connect()
+    try:
+        c.execute(
+            "CREATE TRIGGER fail_default_account BEFORE INSERT ON accounts"
+            " BEGIN SELECT RAISE(ABORT, 'injected'); END"
+        )
+        c.commit()
+    finally:
+        c.close()
+
+    with pytest.raises(Exception, match="injected"):
+        _register(client, email="atomic@example.com")
+
+    c = dbmod.connect()
+    try:
+        assert c.execute("SELECT 1 FROM users WHERE email='atomic@example.com'").fetchone() is None
+    finally:
+        c.close()
+
+
 def test_register_normalizes_email(client: TestClient) -> None:
     assert _register(client, email="  Mixed@Example.COM ").status_code == 200
 

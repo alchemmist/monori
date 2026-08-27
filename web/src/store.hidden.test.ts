@@ -169,5 +169,7 @@ describe("hiding transactions", () => {
         await vi.waitFor(() => expect(useStore.getState().toast).toBeTruthy());
 
         expect(useStore.getState().toast!.title).toMatch(/hide/i);
+        expect(useStore.getState().snapshot!.transactions.map((row) => row.id)).toEqual([1, 2, 3]);
+        expect(useStore.getState().hiddenTx).toEqual([]);
     });
 });
