@@ -270,6 +270,7 @@ def test_connector_handles_suggest_resend_and_captcha_refresh() -> None:
         def locator(self, selector: str) -> Locator:
             locator = super().locator(selector)
             if selector == "button":
+
                 def select() -> None:
                     self.mode = "logged"
                     self.url = "https://bank.yandex.ru/my/history"
@@ -277,9 +278,7 @@ def test_connector_handles_suggest_resend_and_captcha_refresh() -> None:
                 locator.on_click = select
             return locator
 
-    ConnectorWithCode({"phone": "+70000000000", "password": "pw"}).ensure_logged_in(
-        SuggestPage()
-    )
+    ConnectorWithCode({"phone": "+70000000000", "password": "pw"}).ensure_logged_in(SuggestPage())
     assert ConnectorWithAnswer(CODE_RESEND).drive_auth_step(Page("code"))
     assert ConnectorWithAnswer(CAPTCHA_REFRESH).drive_auth_step(Page("captcha"))
 

@@ -450,8 +450,10 @@ class SecondAccountOtpConnector(RetryOtpConnector):
     @override
     def sync(self, since: str | None = None) -> SyncResult:
         if self.account_ref == "second":
-            raise SmsRequiredError("captcha:https://ext.captcha.yandex.net/image?key=next")
-        raise SmsRequiredError("code sent")
+            message = "captcha:https://ext.captcha.yandex.net/image?key=next"
+            raise SmsRequiredError(message)
+        message = "code sent"
+        raise SmsRequiredError(message)
 
     @override
     def resume_sync(self, code: str) -> SyncResult:
