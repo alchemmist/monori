@@ -1,6 +1,9 @@
 from typing import cast
 
+import pytest
+
 from monori.ci.quality_graph.checks.hardcoded_colors import (
+    Finding,
     ResultValue,
     result_value,
     scan_file,
@@ -115,11 +118,73 @@ def test_excludes_generated_vendor_minified_lockfiles_and_fixtures() -> None:
         "web/dist/app.css",
         "web/build/app.js",
         "web/app.min.css",
+        "web/app.min.js",
         "web/package-lock.json",
         "ci/tests/fixtures/colors.ts",
     )
 
     assert all(not should_scan(path) for path in paths)
+    assert should_scan("web/src/app.css")
+    assert should_scan("web/src/app.tsx")
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        ('const color = "red";', ["red"]),
+        ('const color =   "red"   ;', ["red"]),
+        ("const color = 'blue';", ["blue"]),
+        ("const color = `green`;", ["green"]),
+        ("border: 1px solid red;", ["red"]),
+        ("const red = token;", []),
+        ("color: var(--red);", []),
+        ("content: red; const blue = token;", ["red"]),
+        ("color: red; border: blue; const green = token;", ["red", "blue"]),
+    ],
+)
+def test_named_color_literal_boundaries(source: str, expected: list[str]) -> None:
+    assert [finding.literal for finding in scan_file("example.ts", source, {1})] == expected
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "color: rgb(1 2 3;",
+        "color: rgb(var(--red) var(--green) var(--blue));",
+    ],
+)
+def test_ignores_incomplete_or_variable_only_color_functions(source: str) -> None:
+    assert scan_file("example.css", source, {1}) == []
+
+
+def test_balanced_function_parser_ignores_parentheses_inside_quotes() -> None:
+    findings = scan_file("example.css", 'color: rgb(")" 1 2 3);\n', {1})
+
+    assert findings == [
+        Finding(
+            "example.css",
+            1,
+            7,
+            'rgb(")" 1 2 3)',
+            "RGB",
+            'rgb(")" 1 2 3)',
+            "color-7eb545bda61f",
+        )
+    ]
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "color: rgb(')' 1 2 3);\n",
+        'color: rgb("escaped \\" )" 1 2 3);\n',
+    ],
+)
+def test_balanced_function_parser_tracks_quote_boundaries(source: str) -> None:
+    findings = scan_file("example.css", source, {1})
+
+    assert len(findings) == 1
+    assert findings[0].literal.endswith("1 2 3)")
 
 
 def test_native_result_contains_findings_annotations_and_controls() -> None:
@@ -136,27 +201,67 @@ def test_native_result_contains_findings_annotations_and_controls() -> None:
         "b" * 64,
     )
 
-    assert result["status"] == "failed"
-    assert result["failureKind"] == "quality"
-    findings = cast("list[dict[str, ResultValue]]", result["findings"])
-    annotations = cast("list[dict[str, ResultValue]]", result["annotations"])
-    controls = cast("list[dict[str, ResultValue]]", result["controls"])
-    provenance = cast("dict[str, ResultValue]", result["provenance"])
-    assert cast("str", findings[0]["id"]).startswith("color-")
-    assert findings[0]["location"] == {
+    location: dict[str, ResultValue] = {
         "path": "example.css",
         "startLine": 1,
         "endLine": 1,
         "startColumn": 8,
         "endColumn": 14,
     }
-    assert annotations[0]["location"] == findings[0]["location"]
-    assert {control["kind"] for control in controls} == {"finding", "file", "node"}
-    assert provenance["pullRequest"] == 7
-    summary = summary_body([finding])
-    assert "| File | Line | Literal | Format | Context | Status |" in summary
-    assert "`/qg ignore hardcoded-colors`" in summary
-    assert "`/qg ignore-file example.css`" in summary
+    summary = (
+        "| File | Line | Literal | Format | Context | Status |\n"
+        "| --- | ---: | --- | --- | --- | --- |\n"
+        "| `example.css` | 1 | `#ef5a17` | HEX | `color: #ef5a17;` | active |\n\n"
+        "Approve findings with `/qg ignore color-09ab56808930` or "
+        "`/qg ignore hardcoded-colors`.\n"
+        "- `/qg ignore-file example.css`"
+    )
+    assert result == {
+        "schemaVersion": 0,
+        "nodeId": "hardcoded-colors",
+        "title": "Hardcoded color gate",
+        "status": "failed",
+        "failureKind": "quality",
+        "summary": summary,
+        "metrics": [
+            {"label": "Status", "value": "FAIL"},
+            {"label": "Findings", "value": "1"},
+        ],
+        "findings": [
+            {
+                "id": "color-09ab56808930",
+                "severity": "error",
+                "message": "Hardcoded HEX color: #ef5a17",
+                "ruleId": "hardcoded-color",
+                "fingerprint": "color-09ab56808930",
+                "location": location,
+                "group": "HEX",
+            }
+        ],
+        "annotations": [
+            {
+                "level": "error",
+                "message": "Hardcoded HEX color: #ef5a17",
+                "title": "Hardcoded color gate",
+                "location": location,
+            }
+        ],
+        "diagnostics": [],
+        "controls": [
+            {"kind": "finding", "target": "color-09ab56808930", "checked": False},
+            {"kind": "file", "target": "example.css", "checked": False},
+            {"kind": "node", "target": "hardcoded-colors", "checked": False},
+        ],
+        "notes": ["Color finding IDs are stable and location-sensitive."],
+        "provenance": {
+            "repository": "org/repo",
+            "headSha": "a" * 40,
+            "workflowRunId": 123,
+            "runAttempt": 2,
+            "graphDigest": "b" * 64,
+            "pullRequest": 7,
+        },
+    }
 
 
 def test_passing_native_result_has_no_failure_kind() -> None:
@@ -172,6 +277,80 @@ def test_passing_native_result_has_no_failure_kind() -> None:
         "b" * 64,
     )
 
-    assert result["status"] == "passed"
-    assert "failureKind" not in result
-    assert "pullRequest" not in cast("dict[str, ResultValue]", result["provenance"])
+    assert result == {
+        "schemaVersion": 0,
+        "nodeId": "hardcoded-colors",
+        "title": "Hardcoded color gate",
+        "status": "passed",
+        "summary": "No hardcoded colors found.",
+        "metrics": [
+            {"label": "Status", "value": "PASS"},
+            {"label": "Findings", "value": "0"},
+        ],
+        "findings": [],
+        "annotations": [],
+        "diagnostics": [],
+        "controls": [{"kind": "node", "target": "hardcoded-colors", "checked": False}],
+        "notes": ["Color finding IDs are stable and location-sensitive."],
+        "provenance": {
+            "repository": "org/repo",
+            "headSha": "a" * 40,
+            "workflowRunId": 123,
+            "runAttempt": 1,
+            "graphDigest": "b" * 64,
+        },
+    }
+
+
+def test_multiline_finding_has_exact_location_context_and_id() -> None:
+    findings = scan_file("example.css", "color: rgb(\n  1 2 3\n);\n", {2})
+
+    assert findings == [
+        Finding(
+            "example.css",
+            2,
+            0,
+            "rgb(\n  1 2 3\n)",
+            "RGB",
+            "rgb( 1 2 3 )",
+            "color-16ec146e7967",
+        )
+    ]
+
+
+def test_summary_escapes_table_cells_and_groups_file_controls() -> None:
+    findings = scan_file("web/a|b.css", "color: red; /* `context` */\n", {1})
+
+    summary = summary_body(findings)
+
+    assert "`web/a\\|b.css`" in summary
+    assert "`color: red; /* \\`context\\` */`" in summary
+    assert summary.count("/qg ignore-file web/a|b.css") == 1
+
+
+def test_summary_sorts_distinct_file_controls() -> None:
+    first = scan_file("z.css", "color: red;\n", {1})[0]
+    second = scan_file("a.css", "color: blue;\n", {1})[0]
+
+    summary = summary_body([first, second])
+
+    assert summary.endswith("- `/qg ignore-file a.css`\n- `/qg ignore-file z.css`")
+    assert f"/qg ignore {first.finding_id},{second.finding_id}" in summary
+
+
+def test_summary_flattens_multiline_literals_and_truncates_context() -> None:
+    finding = Finding(
+        "example.css",
+        2,
+        0,
+        "rgb(\n1 2 3\n)",
+        "RGB",
+        "x" * 201,
+        "color-example",
+    )
+
+    summary = summary_body([finding])
+
+    assert "`rgb( 1 2 3 )`" in summary
+    assert f"`{'x' * 200}`" in summary
+    assert "x" * 201 not in summary

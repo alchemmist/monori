@@ -280,16 +280,17 @@ def result_value(
     findings: list[Finding], environment: Mapping[str, str], graph_digest: str
 ) -> dict[str, ResultValue]:
     """Serialize findings through the Quality Graph native Result Protocol."""
-    locations: list[dict[str, ResultValue]] = [
-        {
+
+    def location(finding: Finding) -> dict[str, ResultValue]:
+        """Build the protocol location for one finding."""
+        return {
             "path": finding.path,
             "startLine": finding.line,
             "endLine": finding.line,
             "startColumn": finding.column + 1,
             "endColumn": finding.column + len(finding.literal),
         }
-        for finding in findings
-    ]
+
     controls: list[ResultValue] = [
         {"kind": "finding", "target": finding.finding_id, "checked": False} for finding in findings
     ]
@@ -326,19 +327,19 @@ def result_value(
                 "message": f"Hardcoded {finding.format} color: {finding.literal}",
                 "ruleId": "hardcoded-color",
                 "fingerprint": finding.finding_id,
-                "location": location,
+                "location": location(finding),
                 "group": finding.format,
             }
-            for finding, location in zip(findings, locations, strict=True)
+            for finding in findings
         ],
         "annotations": [
             {
                 "level": "error",
                 "message": f"Hardcoded {finding.format} color: {finding.literal}",
                 "title": "Hardcoded color gate",
-                "location": location,
+                "location": location(finding),
             }
-            for finding, location in zip(findings, locations, strict=True)
+            for finding in findings
         ],
         "diagnostics": [],
         "controls": controls,
