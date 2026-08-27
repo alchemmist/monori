@@ -86,8 +86,9 @@ test("split journey keeps allocation, budgets and dashboard visualizations consi
     const allocationGradient = await allocation.evaluate(
         (element) => getComputedStyle(element).backgroundImage,
     );
-    expect(allocationGradient).toContain(firstColor);
-    expect(allocationGradient).toContain(secondColor);
+    expect(allocationGradient).toBe(
+        `linear-gradient(90deg, ${firstColor} 0%, ${firstColor} 50%, ${secondColor} 50%, ${secondColor} 100%)`,
+    );
 
     // Dragging the bar updates numeric fields; manual entry updates its neighbour and keeps it visible.
     await page.getByRole("slider", { name: "Boundary between parts 1 and 2" }).fill("60000");

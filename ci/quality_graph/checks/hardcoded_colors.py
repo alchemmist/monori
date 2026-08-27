@@ -137,7 +137,7 @@ def _named_color_is_literal(line: str, start: int, end: int) -> bool:
     after = line[end:].lstrip()
     quoted = bool(before[-1:] in {'"', "'", "`"} and after[:1] == before[-1:])
     declaration = before.rsplit(";", 1)[-1]
-    css_value = ":" in declaration
+    css_value = declaration.rfind(":") > declaration.rfind("=")
     return quoted or css_value
 
 
@@ -163,7 +163,7 @@ def _functional_matches(line: str) -> list[tuple[int, int, str, str]]:
         if depth:
             continue
         literal = line[start_match.start() : position]
-        if re.search(r"(?:\d|#)", literal):
+        if re.search(r"#|(?<![-\w])\d", literal):
             matches.append(
                 (start_match.start(), position, literal, start_match.group("name").upper())
             )

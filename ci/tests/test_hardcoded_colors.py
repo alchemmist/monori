@@ -129,21 +129,25 @@ def test_excludes_generated_vendor_minified_lockfiles_and_fixtures() -> None:
 
 
 @pytest.mark.parametrize(
-    ("source", "expected"),
+    ("path", "source", "expected"),
     [
-        ('const color = "red";', ["red"]),
-        ('const color =   "red"   ;', ["red"]),
-        ("const color = 'blue';", ["blue"]),
-        ("const color = `green`;", ["green"]),
-        ("border: 1px solid red;", ["red"]),
-        ("const red = token;", []),
-        ("color: var(--red);", []),
-        ("content: red; const blue = token;", ["red"]),
-        ("color: red; border: blue; const green = token;", ["red", "blue"]),
+        ("example.ts", 'const color = "red";', ["red"]),
+        ("example.ts", 'const color =   "red"   ;', ["red"]),
+        ("example.ts", "const color = 'blue';", ["blue"]),
+        ("example.ts", "const color = `green`;", ["green"]),
+        ("example.css", "border: 1px solid red;", ["red"]),
+        ("example.ts", "const red = token;", []),
+        ("example.ts", "const color: Token = red;", []),
+        ("example.html", '<div style="color: red">', ["red"]),
+        ("example.css", "color: var(--red);", []),
+        ("example.css", "content: red; const blue = token;", ["red"]),
+        ("example.css", "color: red; border: blue; const green = token;", ["red", "blue"]),
+        ("example.css", "a: b = color: red", ["red"]),
+        ("example.css", "a=x: y=red", []),
     ],
 )
-def test_named_color_literal_boundaries(source: str, expected: list[str]) -> None:
-    assert [finding.literal for finding in scan_file("example.ts", source, {1})] == expected
+def test_named_color_literal_boundaries(path: str, source: str, expected: list[str]) -> None:
+    assert [finding.literal for finding in scan_file(path, source, {1})] == expected
 
 
 @pytest.mark.parametrize(
@@ -154,6 +158,12 @@ def test_named_color_literal_boundaries(source: str, expected: list[str]) -> Non
     ],
 )
 def test_ignores_incomplete_or_variable_only_color_functions(source: str) -> None:
+    assert scan_file("example.css", source, {1}) == []
+
+
+def test_ignores_numbered_variable_only_color_functions() -> None:
+    source = "rgb(var(--red-500) var(--green-500) var(--blue-500))"
+
     assert scan_file("example.css", source, {1}) == []
 
 
