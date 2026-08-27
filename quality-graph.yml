@@ -82,6 +82,21 @@ nodes:
             approvals:
                 files: true
                 findings: true
+    hardcoded-colors:
+        title: Hardcoded color gate
+        needs: [workflow-graph]
+        run: uv run --locked --group quality-graph python -m monori.ci.quality_graph.checks.hardcoded_colors --base "$BASE"
+        env:
+            BASE: ${{ github.event.pull_request.base.sha || 'origin/main' }}
+            QG_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+            QG_PULL_REQUEST: ${{ github.event.pull_request.number || '0' }}
+        results:
+            native: reports/hardcoded-colors.json
+        policy:
+            approvals:
+                files: true
+                findings: true
+                node: true
     docs-links:
         title: Documentation links
         profile: docs

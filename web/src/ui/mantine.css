@@ -107,6 +107,12 @@ meter {
     color: var(--m-text-dim);
 }
 
+.mantine-Button-root[data-variant="outline"]:not([data-tone="danger"]) {
+    background: transparent;
+    border: 1px solid var(--g-color-line-generic);
+    color: var(--m-text);
+}
+
 .mantine-Button-root[data-variant="subtle"][data-tone="danger"],
 .mantine-Button-root[data-variant="outline"][data-tone="danger"] {
     color: var(--g-color-text-danger);
@@ -453,7 +459,7 @@ textarea.mi-input__field {
 }
 
 .mantine-SegmentedControl-label[data-active] {
-    color: var(--g-color-text-brand);
+    color: var(--m-text-dim);
 }
 
 /* the large variant used on Settings (gravity size l) */

@@ -6,9 +6,7 @@ const themeCss = readFileSync("src/theme.css", "utf8");
 const values = (name: string) =>
     Array.from(themeCss.matchAll(new RegExp(`${name}:\\s*([^;]+);`, "g")), (match) => {
         const value = match[1];
-        if (value === undefined) {
-            throw new Error(`Missing value for ${name}`);
-        }
+        if (value === undefined) throw new Error(`Missing value for ${name}`);
         return value.trim();
     });
 
@@ -32,13 +30,13 @@ describe("theme colors", () => {
         expect(palette.map((_, index) => values(`--m-chart-${index + 1}`))).toEqual(
             palette.map((color) => [color]),
         );
-        expect(values("--m-accent")).toEqual(["#c2410c", "#ff8a52"]);
+        expect(values("--m-accent")).toEqual(["var(--m-chart-1)"]);
         expect(values("--m-income")).toEqual(["var(--m-chart-3)"]);
         expect(values("--m-expense")).toEqual(["var(--m-chart-10)"]);
         expect(values("--m-warning")).toEqual(["var(--m-chart-7)"]);
         expect(themeCss).not.toMatch(/--m-chart-(accent|income|expense|warning):/);
         expect(values("--g-color-text-positive")).toEqual(["var(--m-income)"]);
-        expect(values("--g-color-text-danger")).toEqual(["#b91c1c"]);
+        expect(values("--g-color-text-danger")).toEqual(["var(--m-expense-text)"]);
         expect(values("--g-color-text-warning")).toEqual(["var(--m-warning)"]);
     });
 });

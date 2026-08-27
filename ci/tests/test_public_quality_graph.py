@@ -14,6 +14,23 @@ def test_python_gates_run_inside_the_locked_uv_environment() -> None:
         )
         assert command.startswith("uv run --locked --group quality-graph qg-python-")
 
+    color_command = next(
+        step["run"]
+        for step in workflow["jobs"]["hardcoded-colors"]["steps"]
+        if step.get("id") == "quality-command"
+    )
+    assert color_command.startswith(
+        "uv run --locked --group quality-graph python -m "
+        "monori.ci.quality_graph.checks.hardcoded_colors"
+    )
+    collect = next(
+        step
+        for step in workflow["jobs"]["hardcoded-colors"]["steps"]
+        if step.get("id") == "quality-result"
+    )
+    assert collect["with"]["adapter"] == "native"
+    assert collect["with"]["report-path"] == "reports/hardcoded-colors.json"
+
 
 def test_mutation_and_performance_inputs_are_available() -> None:
     workflow = yaml.safe_load(Path(".github/workflows/quality-graph.yml").read_text())

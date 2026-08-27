@@ -76,9 +76,18 @@ test("split journey keeps allocation, budgets and dashboard visualizations consi
     const allocation = page.locator(".split-allocation");
     await expect(allocation).toBeVisible();
     await expect(parts.locator(".split-editor__swatch")).toHaveCount(2);
-    await expect(allocation).toHaveCSS(
-        "background-image",
-        /rgb\(239, 90, 23\).*rgb\(66, 105, 208\)/,
+    const swatches = parts.locator(".split-editor__swatch");
+    const firstColor = await swatches
+        .nth(0)
+        .evaluate((element) => getComputedStyle(element).backgroundColor);
+    const secondColor = await swatches
+        .nth(1)
+        .evaluate((element) => getComputedStyle(element).backgroundColor);
+    const allocationGradient = await allocation.evaluate(
+        (element) => getComputedStyle(element).backgroundImage,
+    );
+    expect(allocationGradient).toBe(
+        `linear-gradient(90deg, ${firstColor} 0%, ${firstColor} 50%, ${secondColor} 50%, ${secondColor} 100%)`,
     );
 
     // Dragging the bar updates numeric fields; manual entry updates its neighbour and keeps it visible.
