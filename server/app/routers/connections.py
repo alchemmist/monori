@@ -673,8 +673,12 @@ def sync_connection(
             )
             _mark_connected(c, cid)
             return _aggregate(results, unmapped)
-        except SmsRequiredError:
-            return SyncStatusResponse(status=ConnectionStatus.AWAITING_SMS, message=SMS_SENT)
+        except SmsRequiredError as error:
+            message = str(error)
+            return SyncStatusResponse(
+                status=ConnectionStatus.AWAITING_SMS,
+                message=message if message.startswith(("captcha:", "code:")) else SMS_SENT,
+            )
         except ConnectorError as e:
             _fail(c, cid, e)
     finally:
@@ -705,8 +709,12 @@ def submit_sms(
             result = get_runner().resume(cid, body.code)
         except NoPendingLoginError as e:
             raise HTTPException(409, "no login awaiting a code") from e
-        except SmsRequiredError:
-            return SyncStatusResponse(status=ConnectionStatus.AWAITING_SMS, message=CODE_REJECTED)
+        except SmsRequiredError as error:
+            message = str(error)
+            return SyncStatusResponse(
+                status=ConnectionStatus.AWAITING_SMS,
+                message=message if message.startswith(("captcha:", "code:")) else CODE_REJECTED,
+            )
         except ConnectorError as e:
             _fail(c, cid, e)
         results, unmapped = _finish_account(c, row, pending_id, result, uid)
@@ -719,8 +727,12 @@ def submit_sms(
                 SyncContext(c, row, _creds(row), session, uid),
                 remaining,
             )
-        except SmsRequiredError:
-            return SyncStatusResponse(status=ConnectionStatus.AWAITING_SMS, message=SMS_SENT)
+        except SmsRequiredError as error:
+            message = str(error)
+            return SyncStatusResponse(
+                status=ConnectionStatus.AWAITING_SMS,
+                message=message if message.startswith(("captcha:", "code:")) else SMS_SENT,
+            )
         except ConnectorError as e:
             _fail(c, cid, e)
         results.extend(more)

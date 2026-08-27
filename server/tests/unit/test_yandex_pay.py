@@ -121,6 +121,10 @@ class Page:
             )
         if selector == "main a[aria-haspopup='true']":
             return Locator(present=True)
+        if selector == "button":
+            return Locator(present=self.mode in {"suggest", "code"})
+        if selector == "input[placeholder='Enter the characters']":
+            return Locator(present=self.mode == "captcha")
         return Locator()
 
     def get_by_text(self, text: str, *, exact: bool = False) -> Locator:
@@ -132,6 +136,7 @@ class Page:
                     and exact
                     and text == "Получить код по \u0421\u041c\u0421"
                 )
+                or (self.mode == "captcha" and exact and text == "Submit")
                 or (self.mode == "filter" and exact and text == "Pay card")
             )
         )
@@ -144,6 +149,8 @@ class Page:
             return self.filter_active
         if "window.scrollTo" in expression:
             return None
+        if "Captcha-img" in expression:
+            return "https://ext.captcha.yandex.net/image?key=test"
         return self.payload
 
 
@@ -208,9 +215,16 @@ def test_connector_auth_steps_and_history() -> None:
     connector.ensure_logged_in(Page())
     assert connector.choose_code_method(Page("chooser"))
     assert connector.choose_code_method(Page("chooser_ru"))
+    assert YandexPayConnector.CODE_METHOD_LABELS.index("Let's do SMS instead") < (
+        YandexPayConnector.CODE_METHOD_LABELS.index("Get code via push")
+    )
+    suggest = Page("suggest")
+    suggest.url = "https://passport.yandex.ru/pwl-yandex/auth/suggest"
+    assert connector.choose_suggested_account(suggest)
     assert connector.drive_auth_step(Page("phone"))
     assert connector.drive_auth_step(Page("password"))
     assert connector.drive_auth_step(Page("code"))
+    assert connector.drive_auth_step(Page("captcha"))
     rows = connector.download_and_parse(Page(), None)
     assert len(rows) == 1
     assert not connector.choose_code_method(Page())

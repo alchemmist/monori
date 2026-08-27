@@ -72,6 +72,10 @@ LOGIN_CREDENTIAL_MISSING = "Yandex Pay login credential is missing"
 LOGIN_FAILED = "Yandex ID login did not reach payment history"
 NO_TRANSACTIONS = "Yandex Pay returned no transactions"
 FILTER_MISSING = "Yandex Pay Pay card history filter is unavailable"
+CAPTCHA_PREFIX = "captcha:"
+CAPTCHA_REFRESH = "__refresh_captcha__"
+CODE_PREFIX = "code:"
+CODE_RESEND = "__resend_yandex_code__"
 MIN_TITLES = 2
 
 
@@ -195,12 +199,12 @@ class YandexPayConnector(TBankPlaywrightConnector):
     HISTORY_URL = "https://bank.yandex.ru/my/history"
     PAY_CARD_FILTER_LABELS = ("Pay card", "Карта Пэй")
     CODE_METHOD_LABELS = (
-        "Get code via push",
         "Let's do SMS instead",
-        "Получить код в приложении",
         "Получить код по \u0421\u041c\u0421",
         "Получить код через \u0421\u041c\u0421",
         "Отправить код по \u0421\u041c\u0421",
+        "Get code via push",
+        "Получить код в приложении",
     )
 
     @override
@@ -213,6 +217,8 @@ class YandexPayConnector(TBankPlaywrightConnector):
         for _ in range(30):
             if "/my/history" in page.url and page.query_selector("main") is not None:
                 return
+            if "/auth/suggest" in page.url and self.choose_suggested_account(page):
+                continue
             if self.choose_code_method(page):
                 continue
             if self.drive_auth_step(page):
@@ -225,6 +231,18 @@ class YandexPayConnector(TBankPlaywrightConnector):
             page.wait_for_timeout(1000)
             page.wait_for_timeout(1500)
         raise PublicConnectorError(LOGIN_FAILED)
+
+    @staticmethod
+    def choose_suggested_account(page: _Page) -> bool:
+        """
+        Select the first account Yandex ID associates with the submitted phone.
+        """
+        accounts = page.locator("button")
+        if accounts.count() == 0:
+            return False
+        accounts.first.click(timeout=5000)
+        page.wait_for_timeout(1500)
+        return True
 
     @staticmethod
     def choose_code_method(page: _Page) -> bool:
@@ -266,10 +284,31 @@ class YandexPayConnector(TBankPlaywrightConnector):
             "input[inputmode='numeric'], input[type='number'], input[autocomplete='one-time-code']"
         )
         if code.count():
-            value = self.ask_sms("enter the code from the Yandex ID push notification")
-            code.first.click(timeout=5000)
-            page.keyboard.type(value)
-            page.keyboard.press("Enter")
+            self.shot(page, "code")
+            value = self.ask_sms(f"{CODE_PREFIX}Enter the code sent by Yandex via SMS.")
+            if value == CODE_RESEND:
+                page.locator("button").first.click(timeout=70000)
+                page.wait_for_timeout(1000)
+            else:
+                code.first.click(timeout=5000)
+                page.keyboard.type(value)
+                page.keyboard.press("Enter")
+            return True
+        captcha = scope.locator("input[placeholder='Enter the characters']")
+        if captcha.count():
+            source = str(page.evaluate("document.querySelector('img.Captcha-img')?.src || ''"))
+            if not source.startswith("https://ext.captcha.yandex.net/image"):
+                source = ""
+            value = self.ask_sms(f"{CAPTCHA_PREFIX}{source}")
+            if value == CAPTCHA_REFRESH:
+                page.get_by_text("Another code", exact=True).first.click(timeout=5000)
+                page.wait_for_timeout(1000)
+                return True
+            self.shot(page, "captcha-before")
+            captcha.first.fill(value, timeout=5000)
+            page.get_by_text("Submit", exact=True).first.click(timeout=5000)
+            page.wait_for_timeout(1500)
+            self.shot(page, "captcha-after")
             return True
         return False
 

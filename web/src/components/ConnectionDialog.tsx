@@ -17,6 +17,19 @@ const STATUS_THEME: Record<string, string> = {
 };
 
 const NEW_LOGIN = "new";
+const CAPTCHA_PREFIX = "captcha:";
+const CAPTCHA_REFRESH = "__refresh_captcha__";
+const CODE_PREFIX = "code:";
+const CODE_RESEND = "__resend_yandex_code__";
+const RESEND_DELAY_SECONDS = 60;
+
+const formatYandexSmsCode = (value: string) => {
+    const digits = value.replace(/\D/g, "").slice(0, 6);
+    return digits.length > 3 ? `${digits.slice(0, 3)}-${digits.slice(3)}` : digits;
+};
+
+const formatCountdown = (seconds: number) =>
+    `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
 
 type DialogStep = "credentials" | "ready" | "syncing" | "sms" | "done" | "error";
 interface DialogFooter {
@@ -61,6 +74,8 @@ export default function ConnectionDialog({
     });
     const [step, setStep] = useState<DialogStep>(connection == null ? "credentials" : "ready");
     const [code, setCode] = useState("");
+    const [challengeMessage, setChallengeMessage] = useState("");
+    const [resendSeconds, setResendSeconds] = useState(0);
     const [busy, setBusy] = useState(false);
     const [result, setResult] = useState<SyncResult | null>(null);
     const [error, setError] = useState("");
@@ -77,7 +92,20 @@ export default function ConnectionDialog({
             );
     }, [notify]);
 
+    useEffect(() => {
+        if (resendSeconds === 0) return;
+        const timer = window.setTimeout(() => setResendSeconds(resendSeconds - 1), 1000);
+        return () => window.clearTimeout(timer);
+    }, [resendSeconds]);
+
     const connector = connectors.find((c) => `${c.bank}/${c.kind}` === bankKey) ?? null;
+    const isYandexPay = (connection?.bank ?? connector?.bank) === "yandex_pay";
+    const isCaptcha = challengeMessage.startsWith(CAPTCHA_PREFIX);
+    const isCodeChallenge = challengeMessage.startsWith(CODE_PREFIX);
+    const captchaUrl = isCaptcha ? challengeMessage.slice(CAPTCHA_PREFIX.length) : "";
+    const submittedCode = isYandexPay && !isCaptcha ? code.replace(/\D/g, "") : code.trim();
+    const codeComplete =
+        isYandexPay && !isCaptcha ? submittedCode.length === 6 : submittedCode !== "";
     const existingLogins =
         connector != null
             ? connections.filter((c) => c.bank === connector.bank && c.kind === connector.kind)
@@ -100,8 +128,12 @@ export default function ConnectionDialog({
         setStep("syncing");
         try {
             const res = await syncConnection(id);
-            if (res.status === "awaiting_sms") setStep("sms");
-            else {
+            if (res.status === "awaiting_sms") {
+                const nextChallenge = res.message ?? "";
+                setChallengeMessage(nextChallenge);
+                setResendSeconds(nextChallenge.startsWith(CODE_PREFIX) ? RESEND_DELAY_SECONDS : 0);
+                setStep("sms");
+            } else {
                 setResult(res);
                 setStep("done");
             }
@@ -145,19 +177,27 @@ export default function ConnectionDialog({
         }
     };
 
-    const confirmSms = async () => {
-        if (code.trim() === "" || connId.current == null) return;
-        setBusy(true);
+    const confirmSms = async (overrideCode?: string) => {
+        const value = overrideCode ?? submittedCode;
         setError("");
         setStep("syncing");
         try {
-            const res = await submitConnectionSms(connId.current, code.trim());
+            const res = await submitConnectionSms(connId.current!, value);
             if (res.status === "awaiting_sms") {
                 setCode("");
+                const nextChallenge = res.message ?? "";
+                setChallengeMessage(nextChallenge);
+                setResendSeconds(nextChallenge.startsWith(CODE_PREFIX) ? RESEND_DELAY_SECONDS : 0);
                 setError(
-                    res.message == null || res.message === ""
-                        ? "The bank rejected the code — try again."
-                        : res.message,
+                    nextChallenge.startsWith(CAPTCHA_PREFIX)
+                        ? overrideCode === CAPTCHA_REFRESH
+                            ? "A new CAPTCHA is shown."
+                            : "Yandex issued a new CAPTCHA. This can also happen when automated login is challenged."
+                        : nextChallenge.startsWith(CODE_PREFIX)
+                          ? ""
+                          : nextChallenge === ""
+                            ? "The bank rejected the code — try again."
+                            : nextChallenge,
                 );
                 setStep("sms");
             } else {
@@ -410,25 +450,70 @@ export default function ConnectionDialog({
         body = (
             <>
                 <Txt tone="secondary" caption>
-                    Enter the code the bank sent to your phone.
+                    {isCaptcha
+                        ? "Enter the characters exactly as shown, including hyphens and punctuation."
+                        : isCodeChallenge
+                          ? challengeMessage.slice(CODE_PREFIX.length)
+                          : "Enter the code the bank sent to your phone."}
                 </Txt>
+                {isCaptcha && captchaUrl !== "" && (
+                    <img
+                        key={captchaUrl}
+                        src={captchaUrl}
+                        alt="Yandex CAPTCHA"
+                        style={{ maxWidth: "100%" }}
+                    />
+                )}
                 {error !== "" && (
                     <Txt tone="danger" caption>
                         {error}
                     </Txt>
                 )}
                 <FTextInput
-                    label="SMS code"
+                    label={isCaptcha ? "CAPTCHA" : "SMS code"}
                     value={code}
-                    onChange={(e) => setCode(e.target.value)}
+                    onChange={(e) => {
+                        if (isCaptcha) setError("");
+                        setCode(
+                            isYandexPay && !isCaptcha
+                                ? formatYandexSmsCode(e.target.value)
+                                : e.target.value,
+                        );
+                    }}
+                    inputMode={isYandexPay && !isCaptcha ? "numeric" : undefined}
+                    placeholder={isYandexPay && !isCaptcha ? "000-000" : undefined}
+                    maxLength={isYandexPay && !isCaptcha ? 7 : undefined}
                     autoFocus
                 />
+                {isCaptcha && (
+                    <Button
+                        variant="subtle"
+                        size="s"
+                        loading={busy}
+                        onClick={() => void confirmSms(CAPTCHA_REFRESH)}
+                    >
+                        Show another CAPTCHA
+                    </Button>
+                )}
+                {isCodeChallenge && (
+                    <Button
+                        variant="subtle"
+                        size="s"
+                        loading={busy}
+                        disabled={resendSeconds > 0}
+                        onClick={() => void confirmSms(CODE_RESEND)}
+                    >
+                        {resendSeconds > 0
+                            ? `Resend SMS (${formatCountdown(resendSeconds)})`
+                            : "Resend SMS"}
+                    </Button>
+                )}
             </>
         );
         footer = {
             apply: "Confirm",
-            onApply: confirmSms,
-            applyProps: { loading: busy, disabled: code.trim() === "" },
+            onApply: () => confirmSms(),
+            applyProps: { loading: busy, disabled: !codeComplete },
         };
     } else if (step === "syncing") {
         body = <Txt tone="secondary">Syncing…</Txt>;

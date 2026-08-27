@@ -33,6 +33,9 @@ log = logging.getLogger(__name__)
 SMS_SENT = "A confirmation code was sent to your phone."
 CODE_REJECTED = "The bank rejected the code — check it and try again."
 SYNC_FAILED = "The bank sync could not be completed."
+CAPTCHA_PREFIX = "captcha:"
+CODE_PREFIX = "code:"
+CHALLENGE_PREFIXES = (CAPTCHA_PREFIX, CODE_PREFIX)
 
 PENDING: dict[int, connectors.Connector] = {}
 
@@ -108,9 +111,13 @@ def start_run(cid: int, body: RunBody) -> RunDoneResponse | RunStatusResponse:
     connector = cls(body.credentials, body.session, account_ref=body.account_ref)
     try:
         return _done(connector.sync(body.since))
-    except SmsRequiredError:
+    except SmsRequiredError as error:
         PENDING[cid] = connector
-        return RunStatusResponse(status="awaiting_sms", message=SMS_SENT)
+        message = str(error)
+        return RunStatusResponse(
+            status="awaiting_sms",
+            message=message if message.startswith(CHALLENGE_PREFIXES) else SMS_SENT,
+        )
     except ConnectorError as e:
         return _error(cid, e)
 
@@ -123,9 +130,13 @@ def submit_sms(cid: int, body: SmsBody) -> RunDoneResponse | RunStatusResponse:
         raise HTTPException(409, "no login awaiting a code")
     try:
         return _done(connector.resume_sync(body.code))
-    except SmsRequiredError:
+    except SmsRequiredError as error:
         PENDING[cid] = connector
-        return RunStatusResponse(status="awaiting_sms", message=CODE_REJECTED)
+        message = str(error)
+        return RunStatusResponse(
+            status="awaiting_sms",
+            message=message if message.startswith(CHALLENGE_PREFIXES) else CODE_REJECTED,
+        )
     except ConnectorError as e:
         with contextlib.suppress(Exception):
             connector.close()
