@@ -107,7 +107,7 @@
 }
 
 .yg-msum_now .yg-msum__mon {
-    color: var(--m-accent);
+    color: var(--m-text-dim);
 }
 
 /* the four components that add up to Available, under the hero number */

@@ -17,7 +17,7 @@
 :root {
     --m-radius: 6px;
     --m-radius-sm: 5px;
-    --m-accent-contrast: #fff;
+    --m-accent-contrast: var(--m-text);
     --m-title-weight: 800;
     --m-num-weight: 800;
 
@@ -39,6 +39,7 @@
     --m-accent: var(--m-chart-1);
     --m-income: var(--m-chart-3);
     --m-expense: var(--m-chart-10);
+    --m-expense-text: color-mix(in srgb, var(--m-expense) 82%, var(--m-text));
     --m-warning: var(--m-chart-7);
     --m-accent-soft: color-mix(in srgb, var(--m-accent) 14%, var(--m-surface));
     --m-income-soft: color-mix(in srgb, var(--m-income) 14%, var(--m-surface));
@@ -78,7 +79,7 @@
     --g-color-text-brand-heavy: var(--m-accent);
     --g-color-text-link: var(--m-accent);
     --g-color-text-link-hover: var(--m-accent);
-    --g-color-text-brand-contrast: #fff;
+    --g-color-text-brand-contrast: var(--m-accent-contrast);
     --g-color-base-selection: var(--m-accent-soft);
     --g-color-base-selection-hover: var(--m-accent-soft);
 
@@ -99,8 +100,8 @@
     --g-color-line-generic-hover: rgb(0, 0, 0, 0.15);
     --g-color-sfx-fade: rgb(255, 255, 255, 0.3);
     --g-color-text-complementary: rgb(0, 0, 0, 0.7);
-    --g-color-text-danger: var(--m-expense);
-    --g-color-text-danger-heavy: var(--m-expense);
+    --g-color-text-danger: var(--m-expense-text);
+    --g-color-text-danger-heavy: var(--m-expense-text);
     --g-color-text-hint: rgb(0, 0, 0, 0.55);
     --g-color-text-info-heavy: var(--m-chart-2);
     --g-color-text-positive: var(--m-income);
@@ -132,6 +133,7 @@
     --m-accent-soft: color-mix(in srgb, var(--m-accent) 20%, var(--m-bg));
     --m-income-soft: color-mix(in srgb, var(--m-income) 20%, var(--m-bg));
     --m-expense-soft: color-mix(in srgb, var(--m-expense) 20%, var(--m-bg));
+    --m-expense-text: var(--m-expense);
 
     /* glass over the dark canvas: the approved warm, see-through panel from the
        category dropdown, now the shared standard. Cards read the same tokens so

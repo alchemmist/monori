@@ -6,7 +6,7 @@
       "write"
     ]
   },
-  "graphDigest": "be5a5540546d27d30276f3050578d2e9adcf21dd5dc1ec69b66e564144d16841",
+  "graphDigest": "3377fcb397b400185976952cb475e66382faea1ea79a4c893459edf5bdb2cd5f",
   "graphVersion": 0,
   "labels": {
     "enabled": true,
@@ -130,6 +130,42 @@
         "run": "uv run --locked --group quality-graph qg-python-suppressions --base \"$BASE\""
       },
       "title": "Lint suppression gate"
+    },
+    {
+      "env": {
+        "BASE": "${{ github.event.pull_request.base.sha || 'origin/main' }}",
+        "QG_HEAD_SHA": "${{ github.event.pull_request.head.sha || github.sha }}",
+        "QG_PULL_REQUEST": "${{ github.event.pull_request.number || '0' }}"
+      },
+      "id": "hardcoded-colors",
+      "needs": [
+        "workflow-graph"
+      ],
+      "policy": {
+        "approvals": {
+          "files": true,
+          "findings": true,
+          "node": true
+        },
+        "blocking": true,
+        "blockingSeverities": [
+          "error"
+        ]
+      },
+      "profile": "default",
+      "result": {
+        "adapter": "native",
+        "path": "reports/hardcoded-colors.json"
+      },
+      "step": {
+        "env": {
+          "BASE": "${{ github.event.pull_request.base.sha || 'origin/main' }}",
+          "QG_HEAD_SHA": "${{ github.event.pull_request.head.sha || github.sha }}",
+          "QG_PULL_REQUEST": "${{ github.event.pull_request.number || '0' }}"
+        },
+        "run": "uv run --locked --group quality-graph python -m monori.ci.quality_graph.checks.hardcoded_colors --base \"$BASE\""
+      },
+      "title": "Hardcoded color gate"
     },
     {
       "env": {},
