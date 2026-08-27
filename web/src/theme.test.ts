@@ -36,7 +36,7 @@ describe("theme colors", () => {
         expect(values("--m-warning")).toEqual(["var(--m-chart-7)"]);
         expect(themeCss).not.toMatch(/--m-chart-(accent|income|expense|warning):/);
         expect(values("--g-color-text-positive")).toEqual(["var(--m-income)"]);
-        expect(values("--g-color-text-danger")).toEqual(["var(--m-expense)"]);
+        expect(values("--g-color-text-danger")).toEqual(["var(--m-expense-text)"]);
         expect(values("--g-color-text-warning")).toEqual(["var(--m-warning)"]);
     });
 });
