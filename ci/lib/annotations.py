@@ -155,7 +155,19 @@ def publish_workflow_annotations(
     source = tuple(annotations)
     grouped = grouped_annotations(source)
     output.writelines(f"{workflow_annotation_command(annotation)}\n" for annotation in grouped)
-    if len(source) > len(grouped):
+    unique_locations = {
+        (
+            annotation.path,
+            annotation.start_line,
+            annotation.end_line,
+            annotation.level,
+            annotation.title,
+            annotation.start_column,
+            annotation.end_column,
+        )
+        for annotation in source
+    }
+    if len(unique_locations) > len(grouped):
         output.write(f"::notice::{escape_data(omitted_message)}\n")
 
 

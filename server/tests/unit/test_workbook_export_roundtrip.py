@@ -300,6 +300,27 @@ def test_transactions_parse_and_markers() -> None:
     assert parsed.errors == []
 
 
+def test_transaction_only_category_uses_supplied_group() -> None:
+    wb, _, transactions = _workbook()
+    transactions.insert_cols(14)
+    transactions.cell(1, 14, "Monori Category Group")
+    transactions.cell(1, 15, "Monori Category")
+    transactions.cell(2, 1, "05.01.2026 10:00:00")
+    transactions.cell(2, 5, "OK")
+    transactions.cell(2, 6, -125.5)
+    transactions.cell(2, 7, "RUB")
+    transactions.cell(2, 13, "Rent payment")
+    transactions.cell(2, 14, "Housing")
+    transactions.cell(2, 15, "Rent")
+
+    parsed = parse_workbook(_bytes(wb))
+
+    assert [(category.group, category.name) for category in parsed.categories] == [
+        ("Housing", "Rent")
+    ]
+    assert parsed.transactions[0].monori_category_group == "Housing"
+
+
 def test_legacy_ambiguous_category_requires_group_identity() -> None:
     wb, categories, tx = _workbook()
     categories.append([1, "▼Home", "Other", ""])

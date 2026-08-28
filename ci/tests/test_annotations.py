@@ -56,4 +56,15 @@ def test_workflow_commands_escape_and_publish_omission_notice() -> None:
     publish_workflow_annotations(
         [annotation, annotation], omitted_message="More findings", stream=stream
     )
-    assert "::notice::More findings" in stream.getvalue()
+    assert "::notice::More findings" not in stream.getvalue()
+
+    overflow = StringIO()
+    publish_workflow_annotations(
+        [
+            SourceAnnotation(f"file-{index}.py", 1, 1, "failure")
+            for index in range(MAX_STEP_ANNOTATIONS + 1)
+        ],
+        omitted_message="More findings",
+        stream=overflow,
+    )
+    assert "::notice::More findings" in overflow.getvalue()

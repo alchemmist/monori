@@ -106,6 +106,13 @@ class OkResponse:
     ok: bool
 
 
+@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+class DeletedResponse:
+    """Represent the number of transaction legs removed."""
+
+    deleted: int
+
+
 def account_exists(c: sqlite3.Connection, account_id: int, uid: int) -> bool:
     """Handle account exists."""
     return (
@@ -306,7 +313,7 @@ def delete_transfer(
 def delete_transfer_with_legs(
     transfer_id: str,
     user: Annotated[AuthenticatedUser, Depends(current_user)],
-) -> OkResponse:
+) -> DeletedResponse:
     """Remove a transfer entity and both owned transaction legs atomically."""
     c = conn()
     try:
@@ -328,6 +335,6 @@ def delete_transfer_with_legs(
         c.execute("DELETE FROM transactions WHERE id=?", (leg_ids[0],))
         c.execute("DELETE FROM transactions WHERE id=?", (leg_ids[1],))
         c.commit()
-        return OkResponse(ok=True)
+        return DeletedResponse(deleted=TRANSFER_LEGS)
     finally:
         c.close()

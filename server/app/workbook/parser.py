@@ -1057,10 +1057,10 @@ class _CategoryCatalog:
                 ),
             )
 
-    def income_category(self) -> str:
+    def income_category(self) -> CategoryKey:
         income_category = next(
             (
-                category.name
+                (category.group, category.name)
                 for category in self.categories
                 if category.name == INCOME_CATEGORY
                 or _kind_of(category.group, self.groups) == "income"
@@ -1070,7 +1070,7 @@ class _CategoryCatalog:
         if income_category is None:
             self.add_group(INCOME_GROUP, "income")
             self.add_category(INCOME_CATEGORY, INCOME_GROUP)
-            return INCOME_CATEGORY
+            return INCOME_GROUP, INCOME_CATEGORY
         return income_category
 
 
@@ -1184,10 +1184,20 @@ def _add_transaction_categories(
     catalog: _CategoryCatalog,
 ) -> None:
     named_only: dict[str, list[int]] = {}
+    supplied: dict[CategoryKey, list[int]] = {}
     for transaction in transactions:
         name = transaction.monori_category
-        if name and name not in catalog.category_groups:
+        group = transaction.monori_category_group
+        if name and group and group not in catalog.category_groups.get(name, set()):
+            supplied.setdefault((group, name), []).append(transaction.amount)
+        elif name and name not in catalog.category_groups:
             named_only.setdefault(name, []).append(transaction.amount)
+    for (group, name), amounts in supplied.items():
+        kind: Literal["income", "expense"] = (
+            "income" if all(amount >= 0 for amount in amounts) else "expense"
+        )
+        catalog.add_group(group, kind)
+        catalog.add_category(name, group, group_kind=kind)
     income_group = next((group.name for group in catalog.groups if group.kind == "income"), None)
     expense_group = next((group.name for group in catalog.groups if group.kind != "income"), None)
     for name, amounts in named_only.items():
@@ -1246,7 +1256,7 @@ class _Reconciliation:
     catalog: _CategoryCatalog
     transactions: list[WorkbookTransactionRow]
     budgets: list[WorkbookBudgetRow]
-    income_category: str
+    income_category: CategoryKey
     kinds: dict[CategoryKey, str] = field(init=False)
     tx_sums: dict[tuple[str, str, int, int], int] = field(init=False)
     income_sums: dict[tuple[int, int], int] = field(init=False)
@@ -1279,9 +1289,7 @@ class _Reconciliation:
                 delta = target - have
                 if abs(delta) > ADJUST_TOLERANCE_KOP:
                     self.synthetic.append(
-                        _synthetic(
-                            (source.year, month), delta, self.income_category, self.income_category
-                        ),
+                        self._income_synthetic((source.year, month), delta, self.income_category[1])
                     )
                     self.income_sums[(source.year, month)] = have + delta
                     self._count_adjustment(source.year, month)
@@ -1339,9 +1347,7 @@ class _Reconciliation:
             return available
         previous_year, previous_month = (year - 1, 12) if month == 1 else (year, month - 1)
         self.synthetic.append(
-            _synthetic(
-                (previous_year, previous_month), delta, self.income_category, OPENING_DESCRIPTION
-            ),
+            self._income_synthetic((previous_year, previous_month), delta, OPENING_DESCRIPTION)
         )
         self.income_sums[(previous_year, previous_month)] = (
             self.income_sums.get((previous_year, previous_month), 0) + delta
@@ -1472,12 +1478,19 @@ class _Reconciliation:
         if seed is None or abs(seed - available) <= ADJUST_TOLERANCE_KOP:
             return available
         delta = seed - available
-        self.synthetic.append(
-            _synthetic((year, month), delta, self.income_category, self.income_category)
-        )
+        self.synthetic.append(self._income_synthetic((year, month), delta, self.income_category[1]))
         self.income_sums[(year, month)] = self.income_sums.get((year, month), 0) + delta
         self.n_seam += 1
         return available + delta
+
+    def _income_synthetic(
+        self,
+        period: tuple[int, int],
+        amount: int,
+        description: str,
+    ) -> WorkbookTransactionRow:
+        group, category = self.income_category
+        return _synthetic(period, amount, category, description, group=group)
 
     def _record_available_residual(
         self,

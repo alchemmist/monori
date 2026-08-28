@@ -62,6 +62,17 @@ describe("optimistic edits outside the demo", () => {
         expect(snap().budgets).toEqual([{ categoryId: 4, year: 2026, month: 1, amount: 20 }]);
     });
 
+    it("restores the confirmed budget after consecutive failures", async () => {
+        vi.spyOn(api, "putBudget").mockRejectedValue(new Error("offline"));
+
+        const first = useStore.getState().setBudget(4, 2026, 1, 35);
+        const second = useStore.getState().setBudget(4, 2026, 1, 45);
+
+        await expect(first).rejects.toThrow("offline");
+        await expect(second).rejects.toThrow("offline");
+        expect(snap().budgets).toEqual([{ categoryId: 4, year: 2026, month: 1, amount: 20 }]);
+    });
+
     it("sends a category retag and maps an unfiled row to category zero", async () => {
         const patch = vi.spyOn(api, "patchTx").mockResolvedValue({});
         useStore.getState().setTxCategory(2, 9);

@@ -149,7 +149,7 @@ describe("store remote mutations", () => {
 
     it("reloads after creating a transfer but deletes one locally", async () => {
         const create = vi.spyOn(api, "createTransfer").mockResolvedValue({ transferId: "t-9" });
-        const remove = vi.spyOn(api, "deleteTransferWithLegs").mockResolvedValue({});
+        const remove = vi.spyOn(api, "deleteTransferWithLegs").mockResolvedValue({ deleted: 2 });
         const body = { fromAccountId: 1, toAccountId: 2, amount: 25, date: "2026-01-02" };
 
         const transferId = await useStore.getState().createTransfer(body);

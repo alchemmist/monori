@@ -61,7 +61,7 @@ class PendingSession:
     """Own a connector until its SMS deadline."""
 
     token: RunToken
-    connector: connectors.Connector | None
+    connector: connectors.Connector
     expires_at: float
 
 
@@ -123,20 +123,22 @@ def _expire_pending() -> list[connectors.Connector]:
     for cid, pending in list(PENDING.items()):
         if pending.expires_at <= now:
             PENDING.pop(cid, None)
-            if pending.connector is not None:
-                expired.append(pending.connector)
+            expired.append(pending.connector)
     return expired
 
 
-def _reserve(cid: int) -> tuple[RunToken, list[connectors.Connector]]:
+def _reserve(
+    cid: int,
+    connector: connectors.Connector,
+) -> tuple[RunToken, list[connectors.Connector]]:
     expired = _expire_pending()
     replaced = PENDING.pop(cid, None)
-    if replaced is not None and replaced.connector is not None:
+    if replaced is not None:
         expired.append(replaced.connector)
     if len(PENDING) >= PENDING_CAPACITY:
         raise HTTPException(429, "too many logins awaiting a code")
     token = RunToken()
-    PENDING[cid] = PendingSession(token, None, monotonic() + PENDING_TTL_SECONDS)
+    PENDING[cid] = PendingSession(token, connector, monotonic() + PENDING_TTL_SECONDS)
     return token, expired
 
 
@@ -148,14 +150,22 @@ def _park_if_owned(cid: int, token: RunToken, connector: connectors.Connector) -
     return True
 
 
+def _release_if_owned(cid: int, token: RunToken) -> bool:
+    with PENDING_LOCK:
+        current = PENDING.get(cid)
+        if current is None or current.token is not token:
+            return False
+        PENDING.pop(cid)
+        return True
+
+
 def close_all_pending() -> None:
     """Close and forget every connector waiting for SMS."""
     with PENDING_LOCK:
         pending = list(PENDING.values())
         PENDING.clear()
     for session in pending:
-        if session.connector is not None:
-            _close_connector(session.connector)
+        _close_connector(session.connector)
 
 
 def shutdown() -> None:
@@ -180,11 +190,15 @@ def start_run(cid: int, body: RunBody) -> RunDoneResponse | RunStatusResponse:
         cls = connectors.get_connector_class(body.bank, body.kind)
     except ConnectorError as e:
         return _error(cid, e)
-    with PENDING_LOCK:
-        token, stale = _reserve(cid)
+    connector = cls(body.credentials, body.session, account_ref=body.account_ref)
+    try:
+        with PENDING_LOCK:
+            token, stale = _reserve(cid, connector)
+    except HTTPException:
+        _close_connector(connector)
+        raise
     for old in stale:
         _close_connector(old)
-    connector = cls(body.credentials, body.session, account_ref=body.account_ref)
     try:
         result = _done(connector.sync(body.since))
     except SmsRequiredError:
@@ -192,19 +206,14 @@ def start_run(cid: int, body: RunBody) -> RunDoneResponse | RunStatusResponse:
             parked = _park_if_owned(cid, token, connector)
         if parked:
             return RunStatusResponse(status="awaiting_sms", message=SMS_SENT)
-        _close_connector(connector)
         raise HTTPException(409, "login was cancelled or superseded") from None
     except ConnectorError as e:
-        with PENDING_LOCK:
-            current = PENDING.get(cid)
-            if current is not None and current.token is token:
-                PENDING.pop(cid)
+        if not _release_if_owned(cid, token):
+            raise HTTPException(409, "login was cancelled or superseded") from None
         _close_connector(connector)
         return _error(cid, e)
-    with PENDING_LOCK:
-        current = PENDING.get(cid)
-        if current is not None and current.token is token:
-            PENDING.pop(cid)
+    if not _release_if_owned(cid, token):
+        raise HTTPException(409, "login was cancelled or superseded")
     _close_connector(connector)
     return result
 
@@ -215,11 +224,11 @@ def submit_sms(cid: int, body: SmsBody) -> RunDoneResponse | RunStatusResponse:
     with PENDING_LOCK:
         expired = _expire_pending()
         pending = PENDING.pop(cid, None)
-        if pending is None or pending.connector is None:
+        if pending is None:
             raise HTTPException(409, "no login awaiting a code")
         token = pending.token
         connector = pending.connector
-        PENDING[cid] = PendingSession(token, None, pending.expires_at)
+        PENDING[cid] = pending
     for old in expired:
         _close_connector(old)
     try:
@@ -229,19 +238,14 @@ def submit_sms(cid: int, body: SmsBody) -> RunDoneResponse | RunStatusResponse:
             parked = _park_if_owned(cid, token, connector)
         if parked:
             return RunStatusResponse(status="awaiting_sms", message=CODE_REJECTED)
-        _close_connector(connector)
         raise HTTPException(409, "login was cancelled or superseded") from None
     except ConnectorError as e:
-        with PENDING_LOCK:
-            current = PENDING.get(cid)
-            if current is not None and current.token is token:
-                PENDING.pop(cid)
+        if not _release_if_owned(cid, token):
+            raise HTTPException(409, "login was cancelled or superseded") from None
         _close_connector(connector)
         return _error(cid, e)
-    with PENDING_LOCK:
-        current = PENDING.get(cid)
-        if current is not None and current.token is token:
-            PENDING.pop(cid)
+    if not _release_if_owned(cid, token):
+        raise HTTPException(409, "login was cancelled or superseded")
     _close_connector(connector)
     return result
 
@@ -254,6 +258,6 @@ def cancel_run(cid: int) -> dict[str, int]:
         pending = PENDING.pop(cid, None)
     for connector in expired:
         _close_connector(connector)
-    if pending is not None and pending.connector is not None:
+    if pending is not None:
         _close_connector(pending.connector)
     return {"cancelled": cid}

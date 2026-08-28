@@ -150,6 +150,7 @@ let budgetOperationTail: Promise<void> = Promise.resolve();
 let nextBudgetRevision = 0;
 const budgetRevisions = new Map<string, number>();
 const failedBudgetWrites = new Map<string, unknown>();
+const budgetBaselines = new Map<string, BudgetCell | undefined>();
 let sessionEpoch = {};
 
 class SessionChangedError extends Error {}
@@ -159,6 +160,7 @@ function resetBudgetSession() {
     nextBudgetRevision = 0;
     budgetRevisions.clear();
     failedBudgetWrites.clear();
+    budgetBaselines.clear();
     hiddenRevisions.clear();
 }
 
@@ -420,6 +422,7 @@ export const useStore = create<StoreState>((set, get) => ({
         const before = snapshot.budgets.find(
             (b) => b.categoryId === categoryId && b.year === year && b.month === month,
         );
+        if (!budgetBaselines.has(key)) budgetBaselines.set(key, before);
         const budgets = snapshot.budgets.filter(
             (b) => !(b.categoryId === categoryId && b.year === year && b.month === month),
         );
@@ -430,6 +433,10 @@ export const useStore = create<StoreState>((set, get) => ({
             try {
                 await api.putBudget({ categoryId, year, month, amount });
                 failedBudgetWrites.delete(key);
+                budgetBaselines.set(
+                    key,
+                    amount === 0 ? undefined : { categoryId, year, month, amount },
+                );
             } catch (error) {
                 if (stamp.epoch === sessionEpoch) {
                     failedBudgetWrites.set(key, error);
@@ -443,7 +450,8 @@ export const useStore = create<StoreState>((set, get) => ({
                                     b.month === month
                                 ),
                         );
-                        if (before) restored.push(before);
+                        const baseline = budgetBaselines.get(key);
+                        if (baseline) restored.push(baseline);
                         set({ snapshot: { ...current, budgets: restored } });
                     }
                 }
@@ -457,6 +465,11 @@ export const useStore = create<StoreState>((set, get) => ({
                 });
             }
         });
+        void write
+            .finally(() => {
+                if (budgetRevisions.get(key) === revision) budgetBaselines.delete(key);
+            })
+            .catch(() => undefined);
         return write;
     },
 
@@ -582,6 +595,8 @@ export const useStore = create<StoreState>((set, get) => ({
      * budget on the page lying until the next reload. A changed date moves the
      * row, so the ledger is re-sorted into canonical order. */
     async updateTransaction(txId, patch) {
+        const stamp = sessionStamp();
+        const generation = fillGeneration;
         const snapshot = requireSnapshot(get().snapshot);
         const before = snapshot.transactions.find((t) => t.id === txId);
         if (!before) return;
@@ -600,6 +615,7 @@ export const useStore = create<StoreState>((set, get) => ({
                 patch.categoryId === null ? { ...patch, categoryId: 0 } : patch,
             );
         } catch (e) {
+            if (stamp.epoch !== sessionEpoch || generation !== fillGeneration) return;
             const cur = requireSnapshot(get().snapshot);
             const undo = Object.fromEntries(
                 patchKeys
@@ -771,13 +787,17 @@ export const useStore = create<StoreState>((set, get) => ({
             hiddenTx: [...(hiddenTx ?? []), { ...t, hidden: true }].sort(compareTx),
         });
         if (isDemo()) return;
-        hiddenEpoch += 1;
+        const operationEpoch = (hiddenEpoch += 1);
         void (async () => {
             try {
                 await chainedPatchTx(txId, { hidden: true });
                 if (get().txProgress) void get().fillTransactions((fillGeneration += 1));
             } catch (e) {
-                if (hiddenRevisions.get(txId) === revision && stamp.epoch === sessionEpoch) {
+                if (
+                    hiddenRevisions.get(txId) === revision &&
+                    stamp.epoch === sessionEpoch &&
+                    operationEpoch === hiddenEpoch
+                ) {
                     const current = requireSnapshot(get().snapshot);
                     set({
                         snapshot: {
@@ -816,12 +836,17 @@ export const useStore = create<StoreState>((set, get) => ({
             hiddenTx: hiddenTx.filter((x) => x.id !== txId),
         });
         if (isDemo()) return;
-        hiddenEpoch += 1;
+        const operationEpoch = (hiddenEpoch += 1);
         void (async () => {
             try {
                 await chainedPatchTx(txId, { hidden: false });
+                if (get().txProgress) void get().fillTransactions((fillGeneration += 1));
             } catch (e) {
-                if (hiddenRevisions.get(txId) === revision && stamp.epoch === sessionEpoch) {
+                if (
+                    hiddenRevisions.get(txId) === revision &&
+                    stamp.epoch === sessionEpoch &&
+                    operationEpoch === hiddenEpoch
+                ) {
                     const current = requireSnapshot(get().snapshot);
                     set({
                         snapshot: {
@@ -1031,11 +1056,10 @@ export const useStore = create<StoreState>((set, get) => ({
         const ids = requireSnapshot(get().snapshot)
             .transactions.filter((t) => t.transferId === transferId)
             .map((t) => t.id);
-        if (!isDemo()) {
-            await api.deleteTransferWithLegs(transferId);
-        }
+        const deleted = isDemo()
+            ? ids.length
+            : (await api.deleteTransferWithLegs(transferId)).deleted;
         const snapshot = requireSnapshot(get().snapshot);
-        const removed = snapshot.transactions.filter((t) => ids.includes(t.id)).length;
         set({
             snapshot: {
                 ...snapshot,
@@ -1043,10 +1067,11 @@ export const useStore = create<StoreState>((set, get) => ({
                 transfers: snapshot.transfers.filter((x) => x.id !== transferId),
                 transactionsTotal: Math.max(
                     0,
-                    (snapshot.transactionsTotal ?? snapshot.transactions.length) - removed,
+                    (snapshot.transactionsTotal ?? snapshot.transactions.length) - deleted,
                 ),
             },
         });
+        if (get().txProgress) void get().fillTransactions((fillGeneration += 1));
     },
 
     /** Pairs the server thinks are transfers but is not sure enough to merge

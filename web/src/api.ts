@@ -235,9 +235,9 @@ export const api = {
     // are never removed, since half of them came from a bank
     splitTransfer: (transferId: string): Promise<OkResponse> =>
         apiFetch(`/api/transfers/${transferId}`, { method: "DELETE" }).then(json(okResponseSchema)),
-    deleteTransferWithLegs: (transferId: string): Promise<OkResponse> =>
+    deleteTransferWithLegs: (transferId: string): Promise<{ deleted: number }> =>
         apiFetch(`/api/transfers/${transferId}/with-legs`, { method: "DELETE" }).then(
-            json(okResponseSchema),
+            json(deletedCountResponseSchema),
         ),
     linkTransfer: (body: TransferPair): Promise<TransferResponse> =>
         apiFetch("/api/transfers/link", {
