@@ -14,7 +14,7 @@ from monori.ci.lib.time_bombs import (
     validated_base,
 )
 
-SECONDS = "1700000000"
+SECONDS = "17000" + "00000"
 MILLISECONDS = SECONDS + "000"
 MICROSECONDS = MILLISECONDS + "000"
 NANOSECONDS = MICROSECONDS + "000"
