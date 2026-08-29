@@ -169,15 +169,20 @@ describe("copyBudgetYear", () => {
         );
     });
 
-    it("does not restore a budget baseline retained across a test reset", async () => {
+    it("does not let a stale write clear a new session's budget baseline", async () => {
         let finishOldWrite: ((result: { ok: boolean }) => void) | undefined;
+        let failNewWrite: ((error: Error) => void) | undefined;
         vi.spyOn(api, "putBudget")
             .mockReturnValueOnce(
                 new Promise((resolve) => {
                     finishOldWrite = resolve;
                 }),
             )
-            .mockRejectedValueOnce(new Error("new write failed"));
+            .mockReturnValueOnce(
+                new Promise((_resolve, reject) => {
+                    failNewWrite = reject;
+                }),
+            );
 
         const oldWrite = useStore.getState().setBudget(7, 2027, 3, 30_000);
         await vi.waitFor(() => expect(api.putBudget).toHaveBeenCalledOnce());
@@ -189,17 +194,18 @@ describe("copyBudgetYear", () => {
             }),
         });
 
-        await expect(useStore.getState().setBudget(7, 2027, 3, 20_000)).rejects.toThrow(
-            "new write failed",
-        );
+        const newWrite = useStore.getState().setBudget(7, 2027, 3, 20_000);
+        await vi.waitFor(() => expect(api.putBudget).toHaveBeenCalledTimes(2));
+        finishOldWrite?.({ ok: true });
+        await expect(oldWrite).rejects.toThrow("session changed");
+        failNewWrite?.(new Error("new write failed"));
+        await expect(newWrite).rejects.toThrow("new write failed");
         expect(useStore.getState().snapshot!.budgets).toContainEqual({
             categoryId: 7,
             year: 2027,
             month: 3,
             amount: 10_000,
         });
-        finishOldWrite?.({ ok: true });
-        await expect(oldWrite).rejects.toThrow("session changed");
     });
 
     it("discards queued budget operations when the authenticated session changes", async () => {

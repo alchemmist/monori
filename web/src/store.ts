@@ -436,6 +436,7 @@ export const useStore = create<StoreState>((set, get) => ({
         const write = chainedBudgetOperation(stamp, async () => {
             try {
                 await api.putBudget({ categoryId, year, month, amount });
+                assertCurrentSession(stamp);
                 failedBudgetWrites.delete(key);
                 budgetBaselines.set(
                     key,
@@ -471,7 +472,13 @@ export const useStore = create<StoreState>((set, get) => ({
         });
         void write
             .finally(() => {
-                if (budgetRevisions.get(key) === revision) budgetBaselines.delete(key);
+                if (
+                    stamp.epoch === sessionEpoch &&
+                    stamp.token === localStorage.getItem("monori_token") &&
+                    budgetRevisions.get(key) === revision
+                ) {
+                    budgetBaselines.delete(key);
+                }
             })
             .catch(() => undefined);
         return write;
