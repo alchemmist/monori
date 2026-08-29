@@ -443,7 +443,10 @@ export const useStore = create<StoreState>((set, get) => ({
                     amount === 0 ? undefined : { categoryId, year, month, amount },
                 );
             } catch (error) {
-                if (stamp.epoch === sessionEpoch) {
+                if (
+                    stamp.epoch === sessionEpoch &&
+                    stamp.token === localStorage.getItem("monori_token")
+                ) {
                     failedBudgetWrites.set(key, error);
                     if (budgetRevisions.get(key) === revision) {
                         const current = requireSnapshot(get().snapshot);

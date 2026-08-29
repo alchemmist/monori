@@ -208,6 +208,35 @@ describe("copyBudgetYear", () => {
         });
     });
 
+    it("does not let a rejected stale write restore the previous session's baseline", async () => {
+        let rejectOldWrite: ((error: Error) => void) | undefined;
+        vi.spyOn(api, "putBudget").mockReturnValue(
+            new Promise((_resolve, reject) => {
+                rejectOldWrite = reject;
+            }),
+        );
+        localStorage.setItem("monori_token", "user-a");
+
+        const oldWrite = useStore.getState().setBudget(7, 2027, 3, 30_000);
+        await vi.waitFor(() => expect(api.putBudget).toHaveBeenCalledOnce());
+        localStorage.setItem("monori_token", "user-b");
+        useStore.setState({
+            snapshot: buildSnapshot({
+                categories: [{ id: 7, name: "Groceries" }],
+                budgets: [{ categoryId: 7, year: 2027, month: 3, amount: 10_000 }],
+            }),
+        });
+
+        rejectOldWrite?.(new Error("old write failed"));
+        await expect(oldWrite).rejects.toThrow("old write failed");
+        expect(useStore.getState().snapshot!.budgets).toContainEqual({
+            categoryId: 7,
+            year: 2027,
+            month: 3,
+            amount: 10_000,
+        });
+    });
+
     it("discards queued budget operations when the authenticated session changes", async () => {
         let finishWrite: ((result: { ok: boolean }) => void) | undefined;
         const pendingWrite = new Promise<{ ok: boolean }>((resolve) => {
