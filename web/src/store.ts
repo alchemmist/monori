@@ -127,6 +127,8 @@ export const TX_FLUSH_MS = 250;
 /** Bumped by every load(); a fill whose generation is stale drops its results. */
 let fillGeneration = 0;
 
+let snapshotReplacementEpoch = 0;
+
 /** Bumped by every hide/unhide, so an in-flight hidden-list fetch can tell it
  * is stale and must not overwrite the newer optimistic state. */
 let hiddenEpoch = 0;
@@ -328,6 +330,7 @@ export const useStore = create<StoreState>((set, get) => ({
         set({ hiddenTx: null });
         if (isDemo()) {
             const snapshot = structuredClone(demoSnapshot);
+            snapshotReplacementEpoch += 1;
             set({
                 snapshot: { ...snapshot, transactionsTotal: snapshot.transactions.length },
                 loading: false,
@@ -339,6 +342,7 @@ export const useStore = create<StoreState>((set, get) => ({
         try {
             const snapshot = await api.snapshot({ light: true });
             if (generation !== fillGeneration) return;
+            snapshotReplacementEpoch += 1;
             set({ snapshot, loading: false, error: null });
         } catch (e) {
             set({ error: String(e), loading: false, txProgress: null });
@@ -596,7 +600,7 @@ export const useStore = create<StoreState>((set, get) => ({
      * row, so the ledger is re-sorted into canonical order. */
     async updateTransaction(txId, patch) {
         const stamp = sessionStamp();
-        const generation = fillGeneration;
+        const replacementEpoch = snapshotReplacementEpoch;
         const snapshot = requireSnapshot(get().snapshot);
         const before = snapshot.transactions.find((t) => t.id === txId);
         if (!before) return;
@@ -615,7 +619,8 @@ export const useStore = create<StoreState>((set, get) => ({
                 patch.categoryId === null ? { ...patch, categoryId: 0 } : patch,
             );
         } catch (e) {
-            if (stamp.epoch !== sessionEpoch || generation !== fillGeneration) return;
+            if (stamp.epoch !== sessionEpoch || replacementEpoch !== snapshotReplacementEpoch)
+                return;
             const cur = requireSnapshot(get().snapshot);
             const undo = Object.fromEntries(
                 patchKeys
@@ -772,6 +777,7 @@ export const useStore = create<StoreState>((set, get) => ({
 
     hideTx(txId) {
         const stamp = sessionStamp();
+        const replacementEpoch = snapshotReplacementEpoch;
         const { hiddenTx } = get();
         const snapshot = requireSnapshot(get().snapshot);
         const t = snapshot.transactions.find((x) => x.id === txId);
@@ -787,7 +793,7 @@ export const useStore = create<StoreState>((set, get) => ({
             hiddenTx: [...(hiddenTx ?? []), { ...t, hidden: true }].sort(compareTx),
         });
         if (isDemo()) return;
-        const operationEpoch = (hiddenEpoch += 1);
+        hiddenEpoch += 1;
         void (async () => {
             try {
                 await chainedPatchTx(txId, { hidden: true });
@@ -796,7 +802,7 @@ export const useStore = create<StoreState>((set, get) => ({
                 if (
                     hiddenRevisions.get(txId) === revision &&
                     stamp.epoch === sessionEpoch &&
-                    operationEpoch === hiddenEpoch
+                    replacementEpoch === snapshotReplacementEpoch
                 ) {
                     const current = requireSnapshot(get().snapshot);
                     set({
@@ -821,6 +827,7 @@ export const useStore = create<StoreState>((set, get) => ({
 
     unhideTx(txId) {
         const stamp = sessionStamp();
+        const replacementEpoch = snapshotReplacementEpoch;
         const { hiddenTx } = get();
         const snapshot = requireSnapshot(get().snapshot);
         const t = (hiddenTx ?? []).find((x) => x.id === txId);
@@ -836,7 +843,7 @@ export const useStore = create<StoreState>((set, get) => ({
             hiddenTx: hiddenTx.filter((x) => x.id !== txId),
         });
         if (isDemo()) return;
-        const operationEpoch = (hiddenEpoch += 1);
+        hiddenEpoch += 1;
         void (async () => {
             try {
                 await chainedPatchTx(txId, { hidden: false });
@@ -845,7 +852,7 @@ export const useStore = create<StoreState>((set, get) => ({
                 if (
                     hiddenRevisions.get(txId) === revision &&
                     stamp.epoch === sessionEpoch &&
-                    operationEpoch === hiddenEpoch
+                    replacementEpoch === snapshotReplacementEpoch
                 ) {
                     const current = requireSnapshot(get().snapshot);
                     set({
@@ -1063,7 +1070,9 @@ export const useStore = create<StoreState>((set, get) => ({
         set({
             snapshot: {
                 ...snapshot,
-                transactions: snapshot.transactions.filter((t) => !ids.includes(t.id)),
+                transactions: snapshot.transactions.filter(
+                    (t) => !ids.includes(t.id) && t.transferId !== transferId,
+                ),
                 transfers: snapshot.transfers.filter((x) => x.id !== transferId),
                 transactionsTotal: Math.max(
                     0,
@@ -1297,6 +1306,7 @@ const initialNextTabId = nextTabId;
 
 export function resetStoreForTests() {
     fillGeneration += 1;
+    snapshotReplacementEpoch += 1;
     hiddenEpoch += 1;
     txPatchChain.clear();
     nextTxFieldRevision = 0;
@@ -1306,6 +1316,7 @@ export function resetStoreForTests() {
     nextBudgetRevision = 0;
     budgetRevisions.clear();
     failedBudgetWrites.clear();
+    budgetBaselines.clear();
     nextTabId = initialNextTabId;
     useStore.setState(
         {

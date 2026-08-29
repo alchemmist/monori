@@ -172,4 +172,56 @@ describe("hiding transactions", () => {
         expect(useStore.getState().snapshot!.transactions.map((row) => row.id)).toEqual([1, 2, 3]);
         expect(useStore.getState().hiddenTx).toEqual([]);
     });
+
+    it("rolls back a failed hide after hiding another transaction", async () => {
+        let rejectFirst: (reason?: unknown) => void;
+        vi.spyOn(api, "patchTx")
+            .mockReturnValueOnce(
+                new Promise((_, reject) => {
+                    rejectFirst = reject;
+                }),
+            )
+            .mockResolvedValueOnce({});
+
+        useStore.getState().hideTx(1);
+        useStore.getState().hideTx(2);
+        await vi.waitFor(() => expect(api.patchTx).toHaveBeenCalledTimes(2));
+        rejectFirst!(new Error("network down"));
+
+        await vi.waitFor(() =>
+            expect(useStore.getState().snapshot!.transactions.map((row) => row.id)).toEqual([1, 3]),
+        );
+        expect(useStore.getState().hiddenTx!.map((row) => row.id)).toEqual([2]);
+    });
+
+    it("rolls back a failed unhide after unhiding another transaction", async () => {
+        let rejectFirst: (reason?: unknown) => void;
+        vi.spyOn(api, "patchTx")
+            .mockReturnValueOnce(
+                new Promise((_, reject) => {
+                    rejectFirst = reject;
+                }),
+            )
+            .mockResolvedValueOnce({});
+        useStore.setState({
+            snapshot: buildSnapshot({
+                transactions: [tx(3, "2026-02-01T00:00:00")],
+                transactionsTotal: 1,
+            }),
+            hiddenTx: [
+                { ...tx(1, "2026-01-01T00:00:00"), hidden: true },
+                { ...tx(2), hidden: true },
+            ],
+        });
+
+        useStore.getState().unhideTx(1);
+        useStore.getState().unhideTx(2);
+        await vi.waitFor(() => expect(api.patchTx).toHaveBeenCalledTimes(2));
+        rejectFirst!(new Error("network down"));
+
+        await vi.waitFor(() =>
+            expect(useStore.getState().snapshot!.transactions.map((row) => row.id)).toEqual([2, 3]),
+        );
+        expect(useStore.getState().hiddenTx!.map((row) => row.id)).toEqual([1]);
+    });
 });

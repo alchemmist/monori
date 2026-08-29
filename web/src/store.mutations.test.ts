@@ -162,6 +162,42 @@ describe("store remote mutations", () => {
         expect(refreshCount()).toBe(1);
     });
 
+    it("removes a transfer leg loaded while deletion is pending", async () => {
+        let finishDelete: ((result: { deleted: number }) => void) | undefined;
+        vi.spyOn(api, "deleteTransferWithLegs").mockReturnValue(
+            new Promise((resolve) => {
+                finishDelete = resolve;
+            }),
+        );
+        useStore.setState((state) => ({
+            snapshot: {
+                ...state.snapshot!,
+                transactions: state.snapshot!.transactions.map((row) => ({
+                    ...row,
+                    transferId: "t-9",
+                })),
+                transfers: [{ id: "t-9", outTxId: 1, inTxId: 1, origin: "manual", note: "" }],
+            },
+        }));
+
+        const deleting = useStore.getState().deleteTransferWithLegs("t-9");
+        useStore.setState((state) => ({
+            snapshot: {
+                ...state.snapshot!,
+                transactions: [
+                    ...state.snapshot!.transactions,
+                    { ...state.snapshot!.transactions[0]!, id: 99, transferId: "t-9" },
+                ],
+            },
+        }));
+        finishDelete?.({ deleted: 2 });
+        await deleting;
+
+        expect(
+            useStore.getState().snapshot!.transactions.some((row) => row.transferId === "t-9"),
+        ).toBe(false);
+    });
+
     it("sends category edits to their own endpoints without refreshing", async () => {
         const create = vi.spyOn(api, "createCategory").mockResolvedValue({ id: 5 });
         const patch = vi.spyOn(api, "patchCategory").mockResolvedValue({});
