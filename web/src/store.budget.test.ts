@@ -159,6 +159,16 @@ describe("setBudgets", () => {
 });
 
 describe("copyBudgetYear", () => {
+    it("records a successful zero budget as an empty baseline", async () => {
+        vi.spyOn(api, "putBudget").mockResolvedValue({ ok: true });
+
+        await useStore.getState().setBudget(7, 2027, 3, 0);
+
+        expect(useStore.getState().snapshot!.budgets).not.toContainEqual(
+            expect.objectContaining({ categoryId: 7, year: 2027, month: 3 }),
+        );
+    });
+
     it("does not restore a budget baseline retained across a test reset", async () => {
         let finishOldWrite: ((result: { ok: boolean }) => void) | undefined;
         vi.spyOn(api, "putBudget")

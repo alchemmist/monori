@@ -1,5 +1,6 @@
 from threading import Barrier, Thread
 from typing import override
+from unittest.mock import Mock
 
 import pytest
 from fastapi.testclient import TestClient
@@ -46,6 +47,27 @@ class BlockingConnector(base.Connector):
     def resume_sync(self, code: str) -> SyncResult:
         type(self).entered.wait()
         type(self).release.wait()
+        message = "retry"
+        raise SmsRequiredError(message)
+
+    @override
+    def close(self) -> None:
+        type(self).closed += 1
+
+
+class RetryConnector(base.Connector):
+    bank = "retry"
+    kind = "retry"
+    hidden = True
+    closed = 0
+
+    @override
+    def sync(self, since: str | None = None) -> SyncResult:
+        message = "code sent"
+        raise SmsRequiredError(message)
+
+    @override
+    def resume_sync(self, code: str) -> SyncResult:
         message = "retry"
         raise SmsRequiredError(message)
 
@@ -181,3 +203,95 @@ def test_shutdown_closes_all_pending(
 
     assert sync_service.PENDING == {}
     assert BlockingConnector.closed == 2
+
+
+def test_lifespan_runs_shutdown(monkeypatch: pytest.MonkeyPatch) -> None:
+    shutdown = Mock()
+    monkeypatch.setattr(sync_service, "shutdown", shutdown)
+
+    with TestClient(sync_service.app) as managed:
+        assert managed.get("/health").status_code == 200
+
+    shutdown.assert_called_once_with()
+
+
+def test_ownership_helpers_reject_stale_tokens() -> None:
+    connector = RetryConnector(CREDS)
+    park_if_owned = vars(sync_service)["_park_if_owned"]
+    release_if_owned = vars(sync_service)["_release_if_owned"]
+
+    assert park_if_owned(1, sync_service.RunToken(), connector) is False
+    assert release_if_owned(1, sync_service.RunToken()) is False
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        {"bank": "fake", "kind": "fake", "credentials": {}},
+        {
+            "bank": "fake",
+            "kind": "fake",
+            "credentials": CREDS,
+            "session": {"token": "ok"},
+        },
+    ],
+)
+def test_cancelled_start_completion_is_409(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    body: JsonObject,
+) -> None:
+    monkeypatch.setattr(sync_service, "_release_if_owned", lambda *_: False)
+
+    response = client.post("/runs/1", json=body)
+
+    assert response.status_code == 409
+    assert response.json() == {"detail": "login was cancelled or superseded"}
+
+
+def test_cancelled_start_cannot_repark_after_sms(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(sync_service, "_park_if_owned", lambda *_: False)
+
+    response = client.post("/runs/1", json={"bank": "fake", "kind": "fake", "credentials": CREDS})
+    assert response.status_code == 409
+
+
+@pytest.mark.parametrize("code", ["bad", "0000"])
+def test_cancelled_sms_completion_is_409(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, code: str
+) -> None:
+    client.post("/runs/1", json={"bank": "fake", "kind": "fake", "credentials": CREDS})
+    monkeypatch.setattr(sync_service, "_release_if_owned", lambda *_: False)
+
+    assert client.post("/runs/1/sms", json={"code": code}).status_code == 409
+
+
+def test_cancelled_sms_cannot_repark(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setitem(base.REGISTRY, ("retry", "retry"), RetryConnector)
+    client.post("/runs/1", json={"bank": "retry", "kind": "retry", "credentials": CREDS})
+    monkeypatch.setattr(sync_service, "_park_if_owned", lambda *_: False)
+
+    assert client.post("/runs/1/sms", json={"code": "again"}).status_code == 409
+
+
+@pytest.mark.parametrize("path", ["/runs/1/sms", "/runs/9/cancel"])
+def test_expired_connectors_are_closed_by_terminal_requests(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    path: str,
+) -> None:
+    monkeypatch.setitem(base.REGISTRY, ("retry", "retry"), RetryConnector)
+    RetryConnector.closed = 0
+    connector = RetryConnector(CREDS)
+    if path.endswith("/sms"):
+        client.post("/runs/1", json={"bank": "fake", "kind": "fake", "credentials": CREDS})
+    sync_service.PENDING[2] = sync_service.PendingSession(
+        sync_service.RunToken(), connector, expires_at=0
+    )
+
+    response = client.post(path, json={"code": "0000"})
+
+    assert response.status_code == 200
+    assert RetryConnector.closed == 1

@@ -224,4 +224,57 @@ describe("hiding transactions", () => {
         );
         expect(useStore.getState().hiddenTx!.map((row) => row.id)).toEqual([1]);
     });
+
+    it("rolls back a failed hide when optional snapshot state is absent", async () => {
+        let rejectHide: (reason?: unknown) => void;
+        vi.spyOn(api, "patchTx").mockReturnValue(
+            new Promise((_, reject) => {
+                rejectHide = reject;
+            }),
+        );
+        useStore.setState((state) => ({
+            snapshot: { ...state.snapshot!, transactionsTotal: undefined },
+        }));
+
+        useStore.getState().hideTx(1);
+        useStore.setState((state) => ({
+            snapshot: { ...state.snapshot!, transactionsTotal: undefined },
+            hiddenTx: null,
+        }));
+        rejectHide!(new Error("hide failed"));
+        await vi.waitFor(() => expect(useStore.getState().toast?.title).toMatch(/hide/i));
+
+        expect(useStore.getState().snapshot!.transactionsTotal).toBe(1);
+        expect(useStore.getState().snapshot!.transactions.map((row) => row.id)).toContain(1);
+        expect(useStore.getState().hiddenTx).toEqual([]);
+    });
+
+    it("rolls back a failed unhide when optional snapshot state is absent", async () => {
+        let rejectUnhide: (reason?: unknown) => void;
+        vi.spyOn(api, "patchTx").mockReturnValue(
+            new Promise((_, reject) => {
+                rejectUnhide = reject;
+            }),
+        );
+        const hidden = { ...tx(1, "2026-01-01T00:00:00"), hidden: true };
+        useStore.setState((state) => ({
+            snapshot: {
+                ...state.snapshot!,
+                transactions: state.snapshot!.transactions.filter((row) => row.id !== 1),
+                transactionsTotal: undefined,
+            },
+            hiddenTx: [hidden],
+        }));
+
+        useStore.getState().unhideTx(1);
+        useStore.setState((state) => ({
+            snapshot: { ...state.snapshot!, transactionsTotal: undefined },
+            hiddenTx: null,
+        }));
+        rejectUnhide!(new Error("unhide failed"));
+        await vi.waitFor(() => expect(useStore.getState().toast?.title).toMatch(/unhide/i));
+
+        expect(useStore.getState().snapshot!.transactionsTotal).toBe(0);
+        expect(useStore.getState().hiddenTx!.map((row) => row.id)).toEqual([1]);
+    });
 });

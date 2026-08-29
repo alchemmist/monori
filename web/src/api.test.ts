@@ -63,6 +63,7 @@ const responseFor = (url: string, method?: string): unknown => {
     if (url === "/api/accounts/1/reconcile") return { delta: 0 };
     if (url === "/api/transfers/suggestions") return { rows: [], transactions: [] };
     if (url === "/api/transfers/detect") return { merged: [], suggested: 0 };
+    if (url.endsWith("/with-legs")) return { deleted: 2 };
     if (url === "/api/transfers" || url === "/api/transfers/link") return { transfer_id: "t" };
     if (url === "/api/import/preview") return { rows: [], errors: [] };
     if (url === "/api/import/duplicates") return { duplicates: [] };
@@ -269,6 +270,13 @@ const ENDPOINTS: Endpoint[] = [
         { fromAccountId: 1, toAccountId: 2, amount: 10, date: "2026-01-01" },
     ],
     ["splitTransfer", () => api.splitTransfer("t"), "/api/transfers/t", "DELETE", undefined],
+    [
+        "deleteTransferWithLegs",
+        () => api.deleteTransferWithLegs("t"),
+        "/api/transfers/t/with-legs",
+        "DELETE",
+        undefined,
+    ],
     [
         "linkTransfer",
         () => api.linkTransfer({ outTxId: 1, inTxId: 2 }),
