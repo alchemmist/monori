@@ -1,6 +1,9 @@
+import sqlite3
+
 import pytest
 from fastapi.testclient import TestClient
 
+from monori.server.app.db_records import CategoryOwnershipRecord
 from monori.server.app.routers import categories as categories_router
 from monori.server.tests.conftest import Api, TransactionOptions
 
@@ -68,7 +71,9 @@ def test_category_patch_rejects_a_row_removed_after_ownership_check(
     category = api.category("Category", source)
     original = vars(categories_router)["_owned_category"]
 
-    def remove_after_lookup(c: object, cat_id: int, uid: int) -> object:
+    def remove_after_lookup(
+        c: sqlite3.Connection, cat_id: int, uid: int
+    ) -> CategoryOwnershipRecord | None:
         record = original(c, cat_id, uid)
         c.execute("DELETE FROM categories WHERE id=?", (cat_id,))
         return record

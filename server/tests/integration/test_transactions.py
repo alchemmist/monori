@@ -1,6 +1,8 @@
 import pytest
 from fastapi.testclient import TestClient
+from pydantic import TypeAdapter, ValidationError
 
+from monori.server.app.value_types import Money
 from monori.server.tests.conftest import Api, TransactionOptions
 
 pytestmark = pytest.mark.integration
@@ -19,7 +21,10 @@ def test_create_rejects_invalid_calendar_dates(api: Api, client: TestClient, dat
     assert response.status_code == 422
 
 
-@pytest.mark.parametrize("amount", [-(2**53), 2**53, 2**63 - 1, -(2**63)])
+@pytest.mark.parametrize(
+    "amount",
+    [-(2**53), 2**53, 2**63 - 1, -(2**63), 2**63, -(2**63) - 1],
+)
 def test_create_rejects_money_outside_the_browser_safe_range(
     api: Api,
     client: TestClient,
@@ -33,7 +38,7 @@ def test_create_rejects_money_outside_the_browser_safe_range(
     assert response.status_code == 422
 
 
-@pytest.mark.parametrize("amount", [-(2**53) + 1, 2**53 - 1])
+@pytest.mark.parametrize("amount", [-(2**53) + 1, -1, 0, 1, 2**53 - 1])
 def test_safe_money_boundaries_round_trip_exactly(
     api: Api,
     client: TestClient,
@@ -52,6 +57,30 @@ def test_safe_money_boundaries_round_trip_exactly(
     transaction = api.tx_by(response.json()["id"])
     assert transaction.amount == amount
     assert transaction.date == "2024-02-29T23:59:59+03:00"
+
+
+@pytest.mark.parametrize(
+    "date",
+    ["2025-12-31T23:59:59-12:00", "2026-01-01T00:00:00+14:00"],
+)
+def test_timezone_offset_boundaries_round_trip_exactly(
+    api: Api,
+    client: TestClient,
+    date: str,
+) -> None:
+    response = client.post(
+        "/api/transactions",
+        json={"date": date, "amount": 1, "accountId": api.default_account()},
+    )
+
+    assert response.status_code == 200, response.text
+    assert api.tx_by(response.json()["id"]).date == date
+
+
+@pytest.mark.parametrize("amount", [float("nan"), float("inf"), float("-inf")])
+def test_money_boundary_rejects_non_finite_values(amount: float) -> None:
+    with pytest.raises(ValidationError, match="finite number"):
+        TypeAdapter(Money).validate_python(amount)
 
 
 def test_transaction_create_variants(api: Api, client: TestClient) -> None:

@@ -1,6 +1,9 @@
 from dataclasses import replace
 from datetime import date, timedelta
 
+import pytest
+
+from monori.server.app import transfer_match
 from monori.server.app.transfer_match import (
     TransferCandidate,
     TransferMatchRow,
@@ -9,6 +12,8 @@ from monori.server.app.transfer_match import (
     has_hint,
     split_confident,
 )
+
+MAX_SCALE_DAY_NUMBER_CALLS = 50_000
 
 
 def row(
@@ -83,7 +88,9 @@ def test_each_transaction_is_used_at_most_once() -> None:
     assert [(p.out_tx_id, p.in_tx_id) for p in pairs] == [(1, 2)]
 
 
-def test_repeated_amount_matching_is_bounded_by_the_date_window() -> None:
+def test_repeated_amount_matching_is_bounded_by_the_date_window(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     start = date(2020, 1, 1)
     rows = []
     for index in range(2000):
@@ -91,11 +98,84 @@ def test_repeated_amount_matching_is_bounded_by_the_date_window() -> None:
         rows.append(TransferMatchRow(index * 2 + 1, current, -5000, 1))
         rows.append(TransferMatchRow(index * 2 + 2, current, 5000, 2))
 
+    calls = 0
+    original_day_number = transfer_match.day_number
+
+    def counted_day_number(date_iso: str) -> int:
+        nonlocal calls
+        calls += 1
+        return original_day_number(date_iso)
+
+    monkeypatch.setattr(transfer_match, "day_number", counted_day_number)
     pairs = find_pairs(rows, max_days=5)
 
     assert len(pairs) == 2000
     assert len({pair.out_tx_id for pair in pairs}) == len(pairs)
     assert len({pair.in_tx_id for pair in pairs}) == len(pairs)
+    assert calls <= MAX_SCALE_DAY_NUMBER_CALLS
+
+
+def _reference_find_pairs(
+    rows: list[TransferMatchRow],
+    max_days: int,
+) -> list[TransferCandidate]:
+    candidates = []
+    for out_row in rows:
+        if out_row.amount >= 0 or out_row.transfer_id:
+            continue
+        for in_row in rows:
+            if in_row.amount != -out_row.amount or in_row.transfer_id:
+                continue
+            if out_row.account_id == in_row.account_id:
+                continue
+            days = abs(day_number(in_row.date) - day_number(out_row.date))
+            if days > max_days:
+                continue
+            out_hint = has_hint(out_row.description)
+            in_hint = has_hint(in_row.description)
+            silent = in_row if out_hint else out_row
+            candidates.append(
+                TransferCandidate(
+                    out_row.id,
+                    in_row.id,
+                    -out_row.amount,
+                    days,
+                    out_hint or in_hint,
+                    out_hint != in_hint and bool(silent.description.strip()),
+                )
+            )
+    candidates.sort(
+        key=lambda candidate: (
+            candidate.days,
+            candidate.mismatch,
+            not candidate.hint,
+            candidate.out_tx_id,
+            candidate.in_tx_id,
+        )
+    )
+    used = set()
+    result = []
+    for candidate in candidates:
+        if candidate.out_tx_id in used or candidate.in_tx_id in used:
+            continue
+        used.update((candidate.out_tx_id, candidate.in_tx_id))
+        result.append(candidate)
+    return result
+
+
+def test_optimized_matching_matches_the_quadratic_reference() -> None:
+    rows = [
+        TransferMatchRow(
+            id=index + 1,
+            date=(date(2026, 1, 1) + timedelta(days=(index * 7) % 13)).isoformat(),
+            amount=(-1 if index % 2 == 0 else 1) * (1000 + (index % 3) * 500),
+            account_id=index % 4,
+            description="Transfer" if index % 5 == 0 else "",
+        )
+        for index in range(36)
+    ]
+
+    assert find_pairs(rows, max_days=3) == _reference_find_pairs(rows, max_days=3)
 
 
 def test_a_transfer_sounding_description_breaks_the_tie() -> None:

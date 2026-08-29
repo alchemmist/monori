@@ -14,6 +14,12 @@ const tx = (id: number, date = "2026-01-05T00:00:00"): Transaction =>
 
 const flush = () => new Promise((r) => setTimeout(r, 0));
 
+const withoutTransactionsTotal = (snapshot: Snapshot): Snapshot => {
+    const copy = { ...snapshot };
+    delete copy.transactionsTotal;
+    return copy;
+};
+
 beforeEach(() => {
     useStore.setState({
         snapshot: buildSnapshot({
@@ -233,12 +239,12 @@ describe("hiding transactions", () => {
             }),
         );
         useStore.setState((state) => ({
-            snapshot: { ...state.snapshot!, transactionsTotal: undefined },
+            snapshot: withoutTransactionsTotal(state.snapshot!),
         }));
 
         useStore.getState().hideTx(1);
         useStore.setState((state) => ({
-            snapshot: { ...state.snapshot!, transactionsTotal: undefined },
+            snapshot: withoutTransactionsTotal(state.snapshot!),
             hiddenTx: null,
         }));
         rejectHide!(new Error("hide failed"));
@@ -258,17 +264,16 @@ describe("hiding transactions", () => {
         );
         const hidden = { ...tx(1, "2026-01-01T00:00:00"), hidden: true };
         useStore.setState((state) => ({
-            snapshot: {
+            snapshot: withoutTransactionsTotal({
                 ...state.snapshot!,
                 transactions: state.snapshot!.transactions.filter((row) => row.id !== 1),
-                transactionsTotal: undefined,
-            },
+            }),
             hiddenTx: [hidden],
         }));
 
         useStore.getState().unhideTx(1);
         useStore.setState((state) => ({
-            snapshot: { ...state.snapshot!, transactionsTotal: undefined },
+            snapshot: withoutTransactionsTotal(state.snapshot!),
             hiddenTx: null,
         }));
         rejectUnhide!(new Error("unhide failed"));
