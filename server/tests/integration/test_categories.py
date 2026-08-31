@@ -32,6 +32,7 @@ def test_category_patch_move_group_and_name(api: Api, client: TestClient) -> Non
     assert client.patch(f"/api/categories/{a}", json={"name": "B"}).status_code == 200
     api.category("Taken", g2)
     assert client.patch(f"/api/categories/{a}", json={"name": "Taken"}).status_code == 409
+    assert api.cat(a).name == "B"
     assert client.patch("/api/categories/999", json={"name": "z"}).status_code == 404
     assert client.patch(f"/api/categories/{a}", json={"keywords": "x|y"}).status_code == 200
     assert api.cat(a).keywords == "x|y"
@@ -48,6 +49,8 @@ def test_category_constraints_win_preflight_races(
     response = client.post("/api/categories", json={"name": "Taken", "groupId": group})
     assert response.status_code == 409
     assert client.patch(f"/api/categories/{first}", json={"name": "Taken"}).status_code == 409
+    categories = [category for category in api.snapshot().categories if category.group_id == group]
+    assert [category.name for category in categories] == ["First", "Taken"]
 
 
 def test_category_move_rejects_a_duplicate_name(api: Api, client: TestClient) -> None:
@@ -57,6 +60,7 @@ def test_category_move_rejects_a_duplicate_name(api: Api, client: TestClient) ->
     api.category("Taken", target)
 
     assert client.patch(f"/api/categories/{category}", json={"groupId": target}).status_code == 409
+    assert api.cat(category).group_id == source
 
 
 @pytest.mark.parametrize("patch_kind", ["name", "group"])
