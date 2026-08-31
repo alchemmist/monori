@@ -814,7 +814,6 @@ export const useStore = create<StoreState>((set, get) => ({
             } catch (e) {
                 if (
                     hiddenRevisions.get(txId) === revision &&
-                    stamp.epoch === sessionEpoch &&
                     stamp.token === localStorage.getItem("monori_token") &&
                     replacementEpoch === snapshotReplacementEpoch
                 ) {
@@ -863,7 +862,6 @@ export const useStore = create<StoreState>((set, get) => ({
             } catch (e) {
                 if (
                     hiddenRevisions.get(txId) === revision &&
-                    stamp.epoch === sessionEpoch &&
                     stamp.token === localStorage.getItem("monori_token") &&
                     replacementEpoch === snapshotReplacementEpoch
                 ) {

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { api } from "./api.js";
-import { useStore } from "./store.js";
+import { resetStoreForTests, useStore } from "./store.js";
 import { buildSnapshot, tx as makeTx } from "./test/render.js";
 import type { Snapshot, Transaction } from "./types.js";
 
@@ -42,6 +42,29 @@ afterEach(() => {
 });
 
 describe("hiding transactions", () => {
+    it("reset clears pending visibility patch chains", async () => {
+        let resolveFirst: (value: object) => void;
+        const patch = vi
+            .spyOn(api, "patchTx")
+            .mockReturnValueOnce(
+                new Promise((resolve) => {
+                    resolveFirst = resolve;
+                }),
+            )
+            .mockResolvedValueOnce({});
+        const snapshot = useStore.getState().snapshot;
+
+        useStore.getState().hideTx(2);
+        await vi.waitFor(() => expect(patch).toHaveBeenCalledOnce());
+        resetStoreForTests();
+        useStore.setState({ snapshot, hiddenTx: null });
+
+        useStore.getState().hideTx(2);
+
+        await vi.waitFor(() => expect(patch).toHaveBeenCalledTimes(2));
+        resolveFirst!({});
+    });
+
     it("hideTx moves the row out of the snapshot and patches the server", async () => {
         vi.spyOn(api, "patchTx").mockResolvedValue({});
 

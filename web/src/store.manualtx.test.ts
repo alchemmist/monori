@@ -194,6 +194,23 @@ describe("updateTransaction", () => {
         );
     });
 
+    it("restarts only an active fill after adding a transaction", async () => {
+        vi.spyOn(api, "createTx")
+            .mockResolvedValueOnce({ id: 42 })
+            .mockResolvedValueOnce({ id: 43 });
+        const fill = vi.fn().mockResolvedValue(undefined);
+        useStore.setState({ fillTransactions: fill, txProgress: { loaded: 2, total: 3 } });
+
+        await useStore.getState().addTransaction(body);
+
+        expect(fill).toHaveBeenCalledOnce();
+
+        useStore.setState({ txProgress: null });
+        await useStore.getState().addTransaction(body);
+
+        expect(fill).toHaveBeenCalledOnce();
+    });
+
     it("does not roll back over a replacement snapshot", async () => {
         let rejectPatch: (reason?: unknown) => void;
         vi.spyOn(api, "patchTx").mockReturnValue(
