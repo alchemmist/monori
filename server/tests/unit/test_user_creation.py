@@ -1,5 +1,5 @@
 import sqlite3
-from datetime import UTC, datetime
+from datetime import UTC, datetime, tzinfo
 from pathlib import Path
 
 import pytest
@@ -45,7 +45,7 @@ def test_create_user_uses_utc_timestamp(
 ) -> None:
     class FrozenDateTime:
         @classmethod
-        def now(cls, timezone: object) -> datetime:
+        def now(cls, timezone: tzinfo) -> datetime:
             assert timezone is UTC
             return datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC)
 

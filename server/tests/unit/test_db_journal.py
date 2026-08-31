@@ -1,4 +1,5 @@
 import sqlite3
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -47,12 +48,16 @@ def test_bootstrap_reports_refused_journal_mode(
         def __init__(self, target: Path) -> None:
             self.inner = real_connect(target)
 
-        def execute(self, sql: str, parameters: tuple[object, ...] = ()) -> object:
+        def execute(
+            self,
+            sql: str,
+            parameters: tuple[str | int | float | bytes | None, ...] = (),
+        ) -> sqlite3.Cursor | Cursor:
             if sql.startswith("PRAGMA journal_mode="):
                 return Cursor()
             return self.inner.execute(sql, parameters)
 
-        def __getattr__(self, name: str) -> object:
+        def __getattr__(self, name: str) -> Callable[..., sqlite3.Cursor | None] | str | None:
             return getattr(self.inner, name)
 
     monkeypatch.setattr(db.sqlite3, "connect", Connection)
