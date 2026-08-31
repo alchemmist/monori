@@ -219,9 +219,13 @@ def test_ownership_helpers_reject_stale_tokens() -> None:
     connector = RetryConnector(CREDS)
     park_if_owned = vars(sync_service)["_park_if_owned"]
     release_if_owned = vars(sync_service)["_release_if_owned"]
+    current = sync_service.RunToken()
+    sync_service.PENDING[1] = sync_service.PendingSession(current, connector, float("inf"))
+    stale = sync_service.RunToken()
 
-    assert park_if_owned(1, sync_service.RunToken(), connector) is False
-    assert release_if_owned(1, sync_service.RunToken()) is False
+    assert park_if_owned(1, stale, connector) is False
+    assert release_if_owned(1, stale) is False
+    assert sync_service.PENDING[1].token is current
 
 
 @pytest.mark.parametrize(

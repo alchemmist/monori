@@ -59,15 +59,16 @@ def test_category_move_rejects_a_duplicate_name(api: Api, client: TestClient) ->
     assert client.patch(f"/api/categories/{category}", json={"groupId": target}).status_code == 409
 
 
-@pytest.mark.parametrize("patch", [{"name": "Renamed"}, {"groupId": 2}])
+@pytest.mark.parametrize("patch_kind", ["name", "group"])
 def test_category_patch_rejects_a_row_removed_after_ownership_check(
     api: Api,
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
-    patch: dict[str, str | int],
+    patch_kind: str,
 ) -> None:
     source = api.group("Source")
-    api.group("Target")
+    target = api.group("Target")
+    patch = {"name": "Renamed"} if patch_kind == "name" else {"groupId": target}
     category = api.category("Category", source)
     original = vars(categories_router)["_owned_category"]
 

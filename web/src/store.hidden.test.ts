@@ -37,6 +37,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+    localStorage.removeItem("monori_token");
     vi.restoreAllMocks();
 });
 
@@ -53,6 +54,30 @@ describe("hiding transactions", () => {
         expect(s.hiddenTx![0]!.hidden).toBe(true);
         await flush();
         expect(api.patchTx).toHaveBeenCalledWith(2, { hidden: true });
+    });
+
+    it("keeps hidden rows in canonical date order", async () => {
+        vi.spyOn(api, "patchTx").mockResolvedValue({});
+        useStore.setState({
+            hiddenTx: [{ ...tx(9, "2026-02-01T00:00:00"), hidden: true }],
+        });
+
+        useStore.getState().hideTx(1);
+
+        expect(useStore.getState().hiddenTx!.map((row) => row.id)).toEqual([1, 9]);
+    });
+
+    it("changes visibility locally in the demo without patching the server", async () => {
+        window.history.replaceState({}, "", "/demo");
+        const patch = vi.spyOn(api, "patchTx");
+
+        useStore.getState().hideTx(2);
+        useStore.getState().unhideTx(2);
+        await flush();
+
+        expect(patch).not.toHaveBeenCalled();
+        expect(useStore.getState().snapshot!.transactions.map((row) => row.id)).toEqual([1, 2, 3]);
+        window.history.replaceState({}, "", "/");
     });
 
     it("unhideTx puts the row back in canonical date order", async () => {
@@ -281,5 +306,225 @@ describe("hiding transactions", () => {
 
         expect(useStore.getState().snapshot!.transactionsTotal).toBe(0);
         expect(useStore.getState().hiddenTx!.map((row) => row.id)).toEqual([1]);
+    });
+
+    it("does not roll back a failed hide after logout changes the session", async () => {
+        let rejectHide: (reason?: unknown) => void;
+        vi.spyOn(api, "patchTx").mockReturnValue(
+            new Promise((_, reject) => {
+                rejectHide = reject;
+            }),
+        );
+
+        useStore.getState().hideTx(2);
+        useStore.getState().logout();
+        rejectHide!(new Error("old session"));
+        await flush();
+
+        expect(useStore.getState().snapshot!.transactions.map((row) => row.id)).toEqual([1, 3]);
+        expect(useStore.getState().hiddenTx).toBeNull();
+        expect(useStore.getState().toast).toBeNull();
+    });
+
+    it("does not roll back a failed hide after the token changes externally", async () => {
+        let rejectHide: (reason?: unknown) => void;
+        vi.spyOn(api, "patchTx").mockReturnValue(
+            new Promise((_, reject) => {
+                rejectHide = reject;
+            }),
+        );
+        localStorage.setItem("monori_token", "user-a");
+
+        useStore.getState().hideTx(2);
+        localStorage.setItem("monori_token", "user-b");
+        rejectHide!(new Error("old session"));
+        await flush();
+
+        expect(useStore.getState().snapshot!.transactions.map((row) => row.id)).toEqual([1, 3]);
+        expect(useStore.getState().toast).toBeNull();
+    });
+
+    it("does not roll back a failed hide over a replacement snapshot", async () => {
+        let rejectHide: (reason?: unknown) => void;
+        vi.spyOn(api, "patchTx").mockReturnValue(
+            new Promise((_, reject) => {
+                rejectHide = reject;
+            }),
+        );
+        vi.spyOn(api, "snapshot").mockResolvedValue(
+            buildSnapshot({ transactions: [tx(1), tx(3)], transactionsTotal: 2 }),
+        );
+        vi.spyOn(api, "hiddenTx").mockResolvedValue({ total: 0, rows: [] });
+
+        useStore.getState().hideTx(2);
+        await useStore.getState().load();
+        rejectHide!(new Error("stale hide"));
+        await flush();
+
+        expect(useStore.getState().snapshot!.transactions.map((row) => row.id)).toEqual([1, 3]);
+        expect(useStore.getState().toast).toBeNull();
+    });
+
+    it("does not roll back an old hide after a newer unhide of the same row", async () => {
+        let rejectHide: (reason?: unknown) => void;
+        vi.spyOn(api, "patchTx")
+            .mockReturnValueOnce(
+                new Promise((_, reject) => {
+                    rejectHide = reject;
+                }),
+            )
+            .mockResolvedValueOnce({});
+
+        useStore.getState().hideTx(2);
+        useStore.getState().unhideTx(2);
+        rejectHide!(new Error("old hide"));
+        await vi.waitFor(() => expect(api.patchTx).toHaveBeenCalledTimes(2));
+
+        expect(useStore.getState().snapshot!.transactions.map((row) => row.id)).toEqual([1, 2, 3]);
+        expect(useStore.getState().hiddenTx).toEqual([]);
+        expect(useStore.getState().toast).toBeNull();
+    });
+
+    it("does not roll back an old unhide after a newer hide of the same row", async () => {
+        let rejectUnhide: (reason?: unknown) => void;
+        vi.spyOn(api, "patchTx")
+            .mockReturnValueOnce(
+                new Promise((_, reject) => {
+                    rejectUnhide = reject;
+                }),
+            )
+            .mockResolvedValueOnce({});
+        useStore.setState({
+            snapshot: buildSnapshot({ transactions: [tx(1), tx(3)], transactionsTotal: 2 }),
+            hiddenTx: [{ ...tx(2), hidden: true }],
+        });
+
+        useStore.getState().unhideTx(2);
+        useStore.getState().hideTx(2);
+        rejectUnhide!(new Error("old unhide"));
+        await vi.waitFor(() => expect(api.patchTx).toHaveBeenCalledTimes(2));
+
+        expect(useStore.getState().snapshot!.transactions.map((row) => row.id)).toEqual([1, 3]);
+        expect(useStore.getState().hiddenTx!.map((row) => row.id)).toEqual([2]);
+        expect(useStore.getState().toast).toBeNull();
+    });
+
+    it("does not roll back a failed unhide after logout changes the session", async () => {
+        let rejectUnhide: (reason?: unknown) => void;
+        vi.spyOn(api, "patchTx").mockReturnValue(
+            new Promise((_, reject) => {
+                rejectUnhide = reject;
+            }),
+        );
+        useStore.setState({
+            snapshot: buildSnapshot({ transactions: [tx(1), tx(3)], transactionsTotal: 2 }),
+            hiddenTx: [{ ...tx(2), hidden: true }],
+        });
+
+        useStore.getState().unhideTx(2);
+        useStore.getState().logout();
+        rejectUnhide!(new Error("old session"));
+        await flush();
+
+        expect(useStore.getState().snapshot!.transactions.map((row) => row.id)).toEqual([1, 2, 3]);
+        expect(useStore.getState().hiddenTx).toBeNull();
+        expect(useStore.getState().toast).toBeNull();
+    });
+
+    it("does not roll back a failed unhide after the token changes externally", async () => {
+        let rejectUnhide: (reason?: unknown) => void;
+        vi.spyOn(api, "patchTx").mockReturnValue(
+            new Promise((_, reject) => {
+                rejectUnhide = reject;
+            }),
+        );
+        localStorage.setItem("monori_token", "user-a");
+        useStore.setState({
+            snapshot: buildSnapshot({ transactions: [tx(1), tx(3)], transactionsTotal: 2 }),
+            hiddenTx: [{ ...tx(2), hidden: true }],
+        });
+
+        useStore.getState().unhideTx(2);
+        localStorage.setItem("monori_token", "user-b");
+        rejectUnhide!(new Error("old session"));
+        await flush();
+
+        expect(useStore.getState().snapshot!.transactions.map((row) => row.id)).toEqual([1, 2, 3]);
+        expect(useStore.getState().toast).toBeNull();
+    });
+
+    it("does not roll back a failed unhide over a replacement snapshot", async () => {
+        let rejectUnhide: (reason?: unknown) => void;
+        vi.spyOn(api, "patchTx").mockReturnValue(
+            new Promise((_, reject) => {
+                rejectUnhide = reject;
+            }),
+        );
+        vi.spyOn(api, "snapshot").mockResolvedValue(
+            buildSnapshot({ transactions: [tx(1), tx(2), tx(3)], transactionsTotal: 3 }),
+        );
+        vi.spyOn(api, "hiddenTx").mockResolvedValue({ total: 0, rows: [] });
+        useStore.setState({
+            snapshot: buildSnapshot({ transactions: [tx(1), tx(3)], transactionsTotal: 2 }),
+            hiddenTx: [{ ...tx(2), hidden: true }],
+        });
+
+        useStore.getState().unhideTx(2);
+        await useStore.getState().load();
+        rejectUnhide!(new Error("stale unhide"));
+        await flush();
+
+        expect(useStore.getState().snapshot!.transactions.map((row) => row.id)).toEqual([1, 2, 3]);
+        expect(useStore.getState().toast).toBeNull();
+    });
+
+    it("restarts an active fill only after a successful visibility change", async () => {
+        vi.spyOn(api, "patchTx").mockResolvedValue({});
+        const fill = vi.fn().mockResolvedValue(undefined);
+        useStore.setState({
+            fillTransactions: fill,
+            txProgress: { loaded: 1, total: 3 },
+        });
+
+        useStore.getState().hideTx(2);
+        await vi.waitFor(() => expect(fill).toHaveBeenCalledOnce());
+        useStore.setState({ txProgress: null });
+        useStore.getState().unhideTx(2);
+        await flush();
+
+        expect(fill).toHaveBeenCalledOnce();
+    });
+
+    it("does not restart an inactive fill for hide and restarts an active fill for unhide", async () => {
+        vi.spyOn(api, "patchTx").mockResolvedValue({});
+        const fill = vi.fn().mockResolvedValue(undefined);
+        useStore.setState({ fillTransactions: fill, txProgress: null });
+
+        useStore.getState().hideTx(2);
+        await vi.waitFor(() => expect(api.patchTx).toHaveBeenCalledOnce());
+        await flush();
+        expect(fill).not.toHaveBeenCalled();
+
+        useStore.setState({ txProgress: { loaded: 2, total: 3 } });
+        useStore.getState().unhideTx(2);
+        await vi.waitFor(() => expect(api.patchTx).toHaveBeenCalledTimes(2));
+        await vi.waitFor(() => expect(fill).toHaveBeenCalledOnce());
+    });
+
+    it("restores failed unhide count and canonical hidden order", async () => {
+        vi.spyOn(api, "patchTx").mockRejectedValue(new Error("network down"));
+        useStore.setState({
+            snapshot: buildSnapshot({ transactions: [tx(3)], transactionsTotal: 1 }),
+            hiddenTx: [
+                { ...tx(2, "2026-02-01T00:00:00"), hidden: true },
+                { ...tx(1, "2026-01-01T00:00:00"), hidden: true },
+            ],
+        });
+
+        useStore.getState().unhideTx(1);
+        await vi.waitFor(() => expect(useStore.getState().toast?.title).toMatch(/unhide/i));
+
+        expect(useStore.getState().snapshot!.transactionsTotal).toBe(1);
+        expect(useStore.getState().hiddenTx!.map((row) => row.id)).toEqual([1, 2]);
     });
 });

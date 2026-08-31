@@ -140,6 +140,12 @@ async function copyBudgetYear(
     }).then(json(z.object({ copied: z.number(), budgets: z.array(budgetCellSchema) })));
 }
 
+function deleteTransferWithLegs(transferId: string): Promise<{ deleted: number }> {
+    return apiFetch(`/api/transfers/${transferId}/with-legs`, { method: "DELETE" }).then(
+        json(deletedCountResponseSchema),
+    );
+}
+
 export const api = {
     snapshot: ({
         light = false,
@@ -235,10 +241,7 @@ export const api = {
     // are never removed, since half of them came from a bank
     splitTransfer: (transferId: string): Promise<OkResponse> =>
         apiFetch(`/api/transfers/${transferId}`, { method: "DELETE" }).then(json(okResponseSchema)),
-    deleteTransferWithLegs: (transferId: string): Promise<{ deleted: number }> =>
-        apiFetch(`/api/transfers/${transferId}/with-legs`, { method: "DELETE" }).then(
-            json(deletedCountResponseSchema),
-        ),
+    deleteTransferWithLegs,
     linkTransfer: (body: TransferPair): Promise<TransferResponse> =>
         apiFetch("/api/transfers/link", {
             method: "POST",

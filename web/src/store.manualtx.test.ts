@@ -223,6 +223,25 @@ describe("updateTransaction", () => {
         expect(useStore.getState().toast).toBeNull();
     });
 
+    it("does not roll back an edit rejected after logout", async () => {
+        let rejectPatch: (reason?: unknown) => void;
+        vi.spyOn(api, "patchTx").mockReturnValue(
+            new Promise((_, reject) => {
+                rejectPatch = reject;
+            }),
+        );
+
+        const updating = useStore.getState().updateTransaction(1, { amount: -5000 });
+        useStore.getState().logout();
+        rejectPatch!(new Error("old session"));
+        await updating;
+
+        expect(useStore.getState().snapshot!.transactions.find((t) => t.id === 1)!.amount).toBe(
+            -5000,
+        );
+        expect(useStore.getState().toast).toBeNull();
+    });
+
     it("ignores an id that is not in the ledger", async () => {
         vi.spyOn(api, "patchTx").mockResolvedValue({ ok: true });
 

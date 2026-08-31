@@ -198,6 +198,42 @@ describe("store remote mutations", () => {
         ).toBe(false);
     });
 
+    it("updates the server total and restarts only an active fill after transfer deletion", async () => {
+        vi.spyOn(api, "deleteTransferWithLegs").mockResolvedValue({ deleted: 2 });
+        const fill = vi.fn().mockResolvedValue(undefined);
+        const transferRows = [
+            { ...snapshot().transactions[0]!, id: 10, transferId: "t-9" },
+            { ...snapshot().transactions[0]!, id: 11, transferId: "t-9" },
+        ];
+        useStore.setState({
+            snapshot: {
+                ...snapshot(),
+                transactions: [...snapshot().transactions, ...transferRows],
+                transactionsTotal: 7,
+                transfers: [{ id: "t-9", outTxId: 10, inTxId: 11, origin: "manual", note: "" }],
+            },
+            fillTransactions: fill,
+            txProgress: { loaded: 3, total: 7 },
+        });
+
+        await useStore.getState().deleteTransferWithLegs("t-9");
+
+        expect(useStore.getState().snapshot!.transactionsTotal).toBe(5);
+        expect(fill).toHaveBeenCalledOnce();
+
+        useStore.setState((state) => ({
+            snapshot: {
+                ...state.snapshot!,
+                transactions: [...state.snapshot!.transactions, ...transferRows],
+                transfers: [{ id: "t-10", outTxId: 10, inTxId: 11, origin: "manual", note: "" }],
+            },
+            txProgress: null,
+        }));
+        await useStore.getState().deleteTransferWithLegs("t-10");
+
+        expect(fill).toHaveBeenCalledOnce();
+    });
+
     it("sends category edits to their own endpoints without refreshing", async () => {
         const create = vi.spyOn(api, "createCategory").mockResolvedValue({ id: 5 });
         const patch = vi.spyOn(api, "patchCategory").mockResolvedValue({});
