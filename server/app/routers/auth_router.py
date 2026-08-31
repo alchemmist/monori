@@ -10,7 +10,7 @@ a ``current_user`` dependency other routes can adopt.
 import sqlite3
 from datetime import UTC, datetime
 from enum import StrEnum
-from typing import Annotated
+from typing import Annotated, cast
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import OAuth2PasswordRequestForm
@@ -29,6 +29,25 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 MIN_PASSWORD_LEN = 8
 MAX_EMAIL_LEN = 254
+INVALID_EMAIL_DETAIL = "invalid email"
+DUPLICATE_EMAIL_DETAIL = "email already registered"
+CREATED_AT_FORMAT = "%Y-%m-%dT%H:%M:%S"
+MIN_LENGTH_DETAIL = "password must be at least {minimum} characters"
+INSERT_USER_SQL = (
+    "INSERT INTO users (email, email_canonical, password_hash, created_at) VALUES (?, ?, ?, ?)"
+)
+USER_COUNT_SQL = "SELECT COUNT(*) FROM users"
+ASSIGN_ACCOUNTS_SQL = "UPDATE accounts SET user_id=? WHERE user_id IS NULL"
+ASSIGN_GROUPS_SQL = "UPDATE category_groups SET user_id=? WHERE user_id IS NULL"
+ASSIGN_CONNECTIONS_SQL = "UPDATE bank_connections SET user_id=? WHERE user_id IS NULL"
+USER_ACCOUNT_SQL = "SELECT id FROM accounts WHERE user_id=?"
+INSERT_CASH_ACCOUNT_SQL = (
+    "INSERT INTO accounts (user_id, name, type, currency, sort)"
+    " VALUES (?, 'Cash', 'cash', 'RUB', 1)"
+)
+SELECT_USER_SQL = (
+    "SELECT id, email, created_at, is_admin, last_login, default_account_id FROM users WHERE id=?"
+)
 
 
 def _valid_email(email: str) -> bool:
@@ -81,43 +100,25 @@ def create_user(c: sqlite3.Connection, raw_email: str, password: str) -> UserRes
     """
     email = normalize_email(raw_email)
     if not _valid_email(email):
-        raise HTTPException(400, "invalid email")
+        raise HTTPException(400, INVALID_EMAIL_DETAIL)
     if len(password) < MIN_PASSWORD_LEN:
-        raise HTTPException(400, f"password must be at least {MIN_PASSWORD_LEN} characters")
-    now = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S")
+        raise HTTPException(400, MIN_LENGTH_DETAIL.format(minimum=MIN_PASSWORD_LEN))
+    now = datetime.now(UTC).strftime(CREATED_AT_FORMAT)
     password_hash = hash_password(password)
     try:
         begin_write(c)
-        cur = c.execute(
-            "INSERT INTO users (email, email_canonical, password_hash, created_at)"
-            " VALUES (?, ?, ?, ?)",
-            (email, canonical_email(email), password_hash, now),
-        )
+        cur = c.execute(INSERT_USER_SQL, (email, canonical_email(email), password_hash, now))
     except sqlite3.IntegrityError:
         c.rollback()
-        raise HTTPException(409, "email already registered") from None
-    uid = cur.lastrowid
-    if uid is None:
-        msg = "user insert did not return an id"
-        raise RuntimeError(msg)
-    if c.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 1:
-        c.execute("UPDATE accounts SET user_id=? WHERE user_id IS NULL", (uid,))
-        c.execute("UPDATE category_groups SET user_id=? WHERE user_id IS NULL", (uid,))
-        c.execute("UPDATE bank_connections SET user_id=? WHERE user_id IS NULL", (uid,))
-    if not c.execute("SELECT id FROM accounts WHERE user_id=?", (uid,)).fetchone():
-        c.execute(
-            "INSERT INTO accounts (user_id, name, type, currency, sort)"
-            " VALUES (?, 'Cash', 'cash', 'RUB', 1)",
-            (uid,),
-        )
-    row = c.execute(
-        "SELECT id, email, created_at, is_admin, last_login, default_account_id"
-        " FROM users WHERE id=?",
-        (uid,),
-    ).fetchone()
-    if row is None:
-        msg = "created user was not found"
-        raise RuntimeError(msg)
+        raise HTTPException(409, DUPLICATE_EMAIL_DETAIL) from None
+    uid = cast("int", cur.lastrowid)
+    if c.execute(USER_COUNT_SQL).fetchone()[0] == 1:
+        c.execute(ASSIGN_ACCOUNTS_SQL, (uid,))
+        c.execute(ASSIGN_GROUPS_SQL, (uid,))
+        c.execute(ASSIGN_CONNECTIONS_SQL, (uid,))
+    if not c.execute(USER_ACCOUNT_SQL, (uid,)).fetchone():
+        c.execute(INSERT_CASH_ACCOUNT_SQL, (uid,))
+    row = cast("sqlite3.Row", c.execute(SELECT_USER_SQL, (uid,)).fetchone())
     c.commit()
     return serialize_user(UserRecord.from_row(row))
 

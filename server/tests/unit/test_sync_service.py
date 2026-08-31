@@ -137,7 +137,7 @@ def test_pending_login_expires_without_a_timing_sleep(
     monkeypatch.setattr(sync_service, "PENDING_TTL_SECONDS", 5)
     client.post("/runs/1", json={"bank": "fake", "kind": "fake", "credentials": CREDS})
 
-    now[0] = 16.0
+    now[0] = 15.0
 
     assert client.post("/runs/1/sms", json={"code": "0000"}).status_code == 409
     assert sync_service.PENDING == {}
@@ -155,13 +155,27 @@ def test_pending_capacity_rejects_one_above_the_limit(
         == 200
     )
 
-    assert (
-        client.post(
-            "/runs/2", json={"bank": "fake", "kind": "fake", "credentials": CREDS}
-        ).status_code
-        == 429
-    )
+    response = client.post("/runs/2", json={"bank": "fake", "kind": "fake", "credentials": CREDS})
+    assert response.status_code == 429
+    assert response.json() == {"detail": "too many logins awaiting a code"}
     assert set(sync_service.PENDING) == {1}
+
+
+def test_reserve_keeps_token_connector_and_deadline(monkeypatch: pytest.MonkeyPatch) -> None:
+    connector = RetryConnector(CREDS)
+    sync_service.PENDING.clear()
+    monkeypatch.setattr(sync_service, "monotonic", lambda: 10.0)
+    monkeypatch.setattr(sync_service, "PENDING_TTL_SECONDS", 5)
+    reserve = vars(sync_service)["_reserve"]
+
+    token, expired = reserve(1, connector)
+
+    assert expired == []
+    assert isinstance(token, sync_service.RunToken)
+    pending = sync_service.PENDING[1]
+    assert pending.token is token
+    assert pending.connector is connector
+    assert pending.expires_at == 15.0
 
 
 def test_sms_and_cancel_have_one_terminal_owner(
@@ -225,6 +239,9 @@ def test_ownership_helpers_reject_stale_tokens() -> None:
 
     assert park_if_owned(1, stale, connector) is False
     assert release_if_owned(1, stale) is False
+    assert sync_service.PENDING[1].token is current
+
+    assert park_if_owned(1, current, connector) is True
     assert sync_service.PENDING[1].token is current
 
 

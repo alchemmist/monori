@@ -334,6 +334,7 @@ def test_legacy_ambiguous_category_requires_group_identity() -> None:
         ("Travel", "Other"),
     ]
     assert any("ambiguous legacy category 'Other'" in error.error for error in parsed.errors)
+    assert [error.row for error in parsed.errors] == [0]
 
 
 def test_transactions_unparseable_rows_reported_with_row_number() -> None:

@@ -25,6 +25,19 @@ MIGRATIONS_PATH = PACKAGE_DIR / "migrations"
 
 LEGACY_REVISIONS = ["0001", "0002", "0003", "0004", "0005", "0006"]
 JOURNAL_MODES = {"DELETE", "WAL"}
+TABLE_INFO_SQL = "SELECT * FROM pragma_table_info(?)"
+FOREIGN_KEY_SQL = "SELECT * FROM pragma_foreign_key_list(?)"
+SCHEMA_OBJECTS_SQL = (
+    "SELECT type, name, tbl_name, sql FROM sqlite_master"
+    " WHERE type IN ('table', 'index', 'trigger') AND name NOT LIKE 'sqlite_%'"
+)
+TABLE_NAMES_SQL = "SELECT name FROM sqlite_master WHERE type='table'"
+USER_VERSION_SQL = "PRAGMA user_version"
+MEMORY_DATABASE = ":memory:"
+SQLITE_SEQUENCE = "sqlite_sequence"
+OBJECTS_KEY = "__objects__"
+INCOMPATIBLE_SCHEMA_MESSAGE = "database has current table names but incompatible schema metadata"
+DEFAULT_JOURNAL_MODE = "DELETE"
 type SchemaCell = str | int | None
 type SchemaSignature = dict[str, tuple[tuple[SchemaCell, ...], ...]]
 
@@ -46,35 +59,23 @@ def _schema_signature(
     signature = {}
     for table in tables:
         columns = (
-            ("column", *tuple(row[1:6]))
-            for row in conn.execute("SELECT * FROM pragma_table_info(?)", (table,))
+            (row[1], row[2], row[3], row[4], row[5])
+            for row in conn.execute(TABLE_INFO_SQL, (table,))
         )
-        foreign_keys = (
-            ("foreign_key", *tuple(row))
-            for row in conn.execute("SELECT * FROM pragma_foreign_key_list(?)", (table,))
-        )
+        foreign_keys = (tuple(row) for row in conn.execute(FOREIGN_KEY_SQL, (table,)))
         signature[table] = tuple(columns) + tuple(foreign_keys)
-    signature["__objects__"] = tuple(
-        sorted(
-            (str(row[0]), str(row[1]), str(row[2]), row[3])
-            for row in conn.execute(
-                "SELECT type, name, tbl_name, sql FROM sqlite_master"
-                " WHERE type IN ('table', 'index', 'trigger')"
-            )
-            if str(row[2]) in tables and not str(row[1]).startswith("sqlite_")
-        )
+    signature[OBJECTS_KEY] = tuple(
+        sorted(tuple(row) for row in conn.execute(SCHEMA_OBJECTS_SQL) if str(row[2]) in tables)
     )
     return signature
 
 
 def _current_schema_signature() -> SchemaSignature:
-    memory = sqlite3.connect(":memory:")
+    memory = sqlite3.connect(MEMORY_DATABASE)
     try:
         memory.executescript(SCHEMA_PATH.read_text())
         tables = {
-            str(row[0])
-            for row in memory.execute("SELECT name FROM sqlite_master WHERE type='table'")
-            if row[0] != "sqlite_sequence"
+            str(row[0]) for row in memory.execute(TABLE_NAMES_SQL) if row[0] != SQLITE_SEQUENCE
         }
         return _schema_signature(memory, tables)
     finally:
@@ -88,7 +89,7 @@ def _adopt_unversioned(
     user_version: int,
 ) -> None:
     current_schema = _current_schema_signature()
-    current_tables = set(current_schema) - {"__objects__"}
+    current_tables = set(current_schema) - {OBJECTS_KEY}
     if current_tables <= tables:
         conn = sqlite3.connect(path)
         try:
@@ -96,8 +97,7 @@ def _adopt_unversioned(
         finally:
             conn.close()
         if actual_schema != current_schema:
-            msg = "database has current table names but incompatible schema metadata"
-            raise RuntimeError(msg)
+            raise RuntimeError(INCOMPATIBLE_SCHEMA_MESSAGE)
         command.stamp(cfg, "head")
         return
     if 0 <= user_version < len(LEGACY_REVISIONS):
@@ -111,8 +111,8 @@ def _adopt_unversioned(
 def _bootstrap(path: pathlib.Path) -> None:
     conn = sqlite3.connect(path)
     try:
-        tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-        user_version = conn.execute("PRAGMA user_version").fetchone()[0]
+        tables = {r[0] for r in conn.execute(TABLE_NAMES_SQL)}
+        user_version = conn.execute(USER_VERSION_SQL).fetchone()[0]
     finally:
         conn.close()
 
@@ -130,7 +130,7 @@ def _bootstrap(path: pathlib.Path) -> None:
             conn.close()
         command.stamp(cfg, "head")
 
-    journal_mode = os.environ.get("MONORI_SQLITE_JOURNAL_MODE", "DELETE").upper()
+    journal_mode = os.environ.get("MONORI_SQLITE_JOURNAL_MODE", DEFAULT_JOURNAL_MODE).upper()
     if journal_mode not in JOURNAL_MODES:
         msg = f"unsupported SQLite journal mode: {journal_mode}"
         raise ValueError(msg)

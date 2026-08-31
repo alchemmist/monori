@@ -15,6 +15,10 @@ from monori.server.app.deps import IdResponse, conn
 from monori.server.app.domain_types import GoalStatus
 
 router = APIRouter(prefix="/api/categories", tags=["categories"])
+NAME_TAKEN_SQL = (
+    "SELECT c.id FROM categories c JOIN category_groups g ON g.id = c.group_id"
+    " WHERE g.user_id=? AND c.group_id=? AND c.name=? AND c.id<>?"
+)
 
 
 _CONFIG = ConfigDict(extra="forbid", populate_by_name=True)
@@ -112,9 +116,8 @@ def _name_taken(
     except_id: int | None = None,
 ) -> bool:
     dup = c.execute(
-        "SELECT c.id FROM categories c JOIN category_groups g ON g.id = c.group_id"
-        " WHERE g.user_id=? AND c.group_id=? AND c.name=? AND c.id<>?",
-        (uid, group_id, name, except_id or 0),
+        NAME_TAKEN_SQL,
+        (uid, group_id, name, except_id if except_id is not None else 0),
     ).fetchone()
     return dup is not None
 

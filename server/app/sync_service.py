@@ -122,7 +122,7 @@ def _expire_pending() -> list[connectors.Connector]:
     expired = []
     for cid, pending in list(PENDING.items()):
         if pending.expires_at <= now:
-            PENDING.pop(cid, None)
+            del PENDING[cid]
             expired.append(pending.connector)
     return expired
 

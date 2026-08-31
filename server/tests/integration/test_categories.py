@@ -26,6 +26,7 @@ def test_category_patch_move_group_and_name(api: Api, client: TestClient) -> Non
     g2 = api.group("Income", "income")
     a = api.category("A", g1)
     api.category("B", g1)
+    assert client.patch(f"/api/categories/{a}", json={"name": "A"}).status_code == 200
     assert client.patch(f"/api/categories/{a}", json={"groupId": g2}).status_code == 200
     assert api.cat(a).group_id == g2
     assert client.patch(f"/api/categories/{a}", json={"groupId": 999}).status_code == 400

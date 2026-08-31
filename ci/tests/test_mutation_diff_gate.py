@@ -264,7 +264,11 @@ diff --git a/server/app/example.py b/server/app/example.py
         )
         commit = module.commit_for_revision(repository, "HEAD")
         repository.refs[Ref(b"refs/heads/main")] = commit.id
+        repository.refs[Ref(b"refs/remotes/team/topic")] = commit.id
+        repository.refs[Ref(b"refs/remotes/origin/feature")] = commit.id
         assert module.commit_for_revision(repository, "main").id == commit.id
+        assert module.commit_for_revision(repository, "team/topic").id == commit.id
+        assert module.commit_for_revision(repository, "feature").id == commit.id
         with pytest.raises(RuntimeError, match="Cannot resolve git revision"):
             module.commit_for_revision(repository, "missing-revision")
 

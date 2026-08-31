@@ -199,6 +199,66 @@ def test_bootstrap_rejects_current_schema_missing_an_index(tmp_path: pathlib.Pat
         connect(db_path)
 
 
+def test_schema_signature_preserves_columns_foreign_keys_and_objects() -> None:
+    conn = sqlite3.connect(":memory:")
+    conn.executescript(
+        "CREATE TABLE parent(id INTEGER PRIMARY KEY AUTOINCREMENT);"
+        "CREATE TABLE child(id INTEGER, parent_id INTEGER REFERENCES parent(id));"
+        "CREATE INDEX idx_child_parent ON child(parent_id);"
+        "CREATE TABLE unrelated(id INTEGER PRIMARY KEY);"
+    )
+    try:
+        signature = vars(dbmod)["_schema_signature"](conn, {"parent", "child", "sqlite_sequence"})
+    finally:
+        conn.close()
+
+    assert signature == {
+        "parent": (("id", "INTEGER", 0, None, 1),),
+        "sqlite_sequence": (("name", "", 0, None, 0), ("seq", "", 0, None, 0)),
+        "child": (
+            ("id", "INTEGER", 0, None, 0),
+            ("parent_id", "INTEGER", 0, None, 0),
+            (0, 0, "parent", "parent_id", "id", "NO ACTION", "NO ACTION", "NONE"),
+        ),
+        "__objects__": (
+            (
+                "index",
+                "idx_child_parent",
+                "child",
+                "CREATE INDEX idx_child_parent ON child(parent_id)",
+            ),
+            (
+                "table",
+                "child",
+                "child",
+                "CREATE TABLE child(id INTEGER, parent_id INTEGER REFERENCES parent(id))",
+            ),
+            (
+                "table",
+                "parent",
+                "parent",
+                "CREATE TABLE parent(id INTEGER PRIMARY KEY AUTOINCREMENT)",
+            ),
+        ),
+    }
+
+
+def test_legacy_adoption_stamps_the_matching_revision(
+    tmp_path: pathlib.Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    stamped: list[str] = []
+    upgraded: list[str] = []
+    monkeypatch.setattr(command, "stamp", lambda _cfg, revision: stamped.append(revision))
+    monkeypatch.setattr(command, "upgrade", lambda _cfg, revision: upgraded.append(revision))
+    monkeypatch.setattr(dbmod, "_current_schema_signature", lambda: {"current": ()})
+
+    vars(dbmod)["_adopt_unversioned"](tmp_path / "legacy.db", Config(), {"transactions"}, 2)
+
+    assert stamped == [LEGACY_REVISIONS[2]]
+    assert upgraded == ["head"]
+
+
 def test_category_name_migration_resolves_existing_group_duplicates(
     tmp_path: pathlib.Path,
 ) -> None:

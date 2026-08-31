@@ -281,6 +281,7 @@ def test_month_range_wraps_across_years() -> None:
 
 def test_synthetic_shape() -> None:
     a = _synthetic((2025, 1), 20000, "Groceries", "Groceries")
+    grouped = _synthetic((2025, 1), 20000, "Groceries", "Groceries", "Food")
     assert a.date == "2025-01-31T12:00:00"
     assert a.amount == 20000
     assert a.monori_category == "Groceries"
@@ -289,6 +290,8 @@ def test_synthetic_shape() -> None:
     assert a.bank_category == ""
     assert a.mcc == ""
     assert a.comment == ""
+    assert a.monori_category_group == ""
+    assert grouped.monori_category_group == "Food"
     assert not hasattr(a, "hash")
 
 
