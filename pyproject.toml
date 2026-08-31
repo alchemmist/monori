@@ -16,14 +16,14 @@ monori-server = { workspace = true }
 members = ["common", "ci", "server"]
 
 [dependency-groups]
-format = ["monori-ci", "ruff==0.15.22"]
+format = ["monori-ci", "ruff==0.16.5"]
 ci = ["monori-ci", "pytest>=8"]
 quality-graph = [
   "quality-graph-cli==0.1.6",
   "quality-graph-github==0.1.6",
   "quality-graph-python==0.1.6",
 ]
-lint = ["monori-ci", "ruff==0.15.22"]
+lint = ["monori-ci", "ruff==0.16.5"]
 test = [
   "monori-ci",
   "monori-server[connectors]",
