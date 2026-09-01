@@ -55,6 +55,7 @@ import {
     splitsResponseSchema,
     syncResultSchema,
     transactionPageSchema,
+    transactionCreateSchema,
     transferDetectionResponseSchema,
     transferIdResponseSchema,
     transferSuggestionsResponseSchema,
@@ -181,12 +182,14 @@ export const api = {
         apiFetch(`/api/transactions?hidden=true&limit=1000&offset=${offset}`).then(
             json(transactionPageSchema),
         ),
-    createTx: (body: TransactionCreate): Promise<IdResponse> =>
-        apiFetch("/api/transactions", {
+    createTx: async (body: TransactionCreate): Promise<IdResponse> => {
+        const checked = transactionCreateSchema.parse(body);
+        return apiFetch("/api/transactions", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(body),
-        }).then(json(entitySchema)),
+            body: JSON.stringify(checked),
+        }).then(json(entitySchema));
+    },
     patchTx: (id: Id, patch: TransactionPatch): Promise<OkResponse> =>
         apiFetch(`/api/transactions/${id}`, {
             method: "PATCH",

@@ -491,6 +491,14 @@ describe("api", () => {
         await expect(call()).rejects.toThrow();
     });
 
+    it.each([
+        { date: "2026-02-29", amount: 1, accountId: 1 },
+        { date: "2026-01-01", amount: 2 ** 53, accountId: 1 },
+    ])("rejects an unsafe transaction before sending it", async (body) => {
+        await expect(api.createTx(body)).rejects.toThrow();
+        expect(fetch).not.toHaveBeenCalled();
+    });
+
     it("returns the persisted cells from a budget year copy", async () => {
         const response = {
             copied: 1,

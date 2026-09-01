@@ -21,6 +21,20 @@ export const transactionSourceSchema = z.enum([
     "workbook",
     "sheets",
 ]);
+const transactionDateSchema = z.union([
+    z.iso.date(),
+    z.iso.datetime({ offset: true, local: true }),
+]);
+export const transactionCreateSchema = z.strictObject({
+    date: transactionDateSchema,
+    amount: z.number().int().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
+    accountId: id,
+    description: z.string().optional(),
+    bankCategory: z.string().optional(),
+    mcc: z.string().optional(),
+    categoryId: nullableId.optional(),
+    comment: z.string().optional(),
+});
 export const goalStatusSchema = z.enum(["active", "achieved", "archived"]);
 
 export const accountSchema = z.strictObject({

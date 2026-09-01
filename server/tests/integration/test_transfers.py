@@ -178,6 +178,21 @@ def test_delete_transfer_with_legs_is_atomic(api: Api, client: TestClient) -> No
     assert {transaction.id for transaction in legs(api, transfer_id)} == set(leg_ids)
     assert any(transfer.id == transfer_id for transfer in api.snapshot().transfers)
 
+    c = connect()
+    try:
+        c.execute("DROP TRIGGER fail_second_leg")
+        c.commit()
+    finally:
+        c.close()
+
+    response = client.delete(f"/api/transfers/{transfer_id}/with-legs")
+
+    assert response.status_code == 200
+    assert response.json() == {"deleted": 2}
+    snapshot = api.snapshot()
+    assert set(leg_ids).isdisjoint({transaction.id for transaction in snapshot.transactions})
+    assert all(transfer.id != transfer_id for transfer in snapshot.transfers)
+
 
 def test_delete_transfer_with_legs_removes_both_rows(api: Api, client: TestClient) -> None:
     first = api.default_account()

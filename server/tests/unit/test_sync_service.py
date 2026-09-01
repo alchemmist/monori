@@ -1,17 +1,34 @@
+from __future__ import annotations
+
+from functools import partial
 from threading import Barrier, Thread
-from typing import override
+from typing import TYPE_CHECKING, override
 from unittest.mock import Mock
 
 import pytest
 from fastapi.testclient import TestClient
 
 import monori.server.app.connectors.fake
-from monori.common import JsonObject
 from monori.server.app import sync_service
 from monori.server.app.connectors import base
 from monori.server.app.connectors.base import SmsRequiredError, SyncResult
 
+if TYPE_CHECKING:
+    from httpx2 import Response as HTTPXResponse
+
+    from monori.common import JsonObject
+
 CREDS = {"phone": "+70000000000", "password": "pw"}
+
+
+def post_response(
+    responses: dict[str, HTTPXResponse],
+    key: str,
+    client: TestClient,
+    path: str,
+    body: JsonObject | None = None,
+) -> None:
+    responses[key] = client.post(path, json=body)
 
 
 @pytest.fixture
@@ -183,22 +200,39 @@ def test_sms_and_cancel_have_one_terminal_owner(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setitem(base.REGISTRY, ("blocking", "blocking"), BlockingConnector)
-    BlockingConnector.entered = Barrier(2)
-    BlockingConnector.release = Barrier(2)
     BlockingConnector.closed = 0
-    client.post("/runs/1", json={"bank": "blocking", "kind": "blocking", "credentials": CREDS})
-    sms = Thread(target=lambda: client.post("/runs/1/sms", json={"code": "0000"}))
-    cancel = Thread(target=lambda: client.post("/runs/1/cancel"))
+    attempts = 20
+    for cid in range(1, attempts + 1):
+        BlockingConnector.entered = Barrier(2)
+        BlockingConnector.release = Barrier(2)
+        client.post(
+            f"/runs/{cid}", json={"bank": "blocking", "kind": "blocking", "credentials": CREDS}
+        )
+        responses: dict[str, HTTPXResponse] = {}
+        sms = Thread(
+            target=partial(
+                post_response, responses, "sms", client, f"/runs/{cid}/sms", {"code": "0000"}
+            )
+        )
+        cancel = Thread(
+            target=partial(post_response, responses, "cancel", client, f"/runs/{cid}/cancel")
+        )
 
-    sms.start()
-    BlockingConnector.entered.wait()
-    cancel.start()
-    BlockingConnector.release.wait()
-    sms.join()
-    cancel.join()
+        sms.start()
+        BlockingConnector.entered.wait()
+        cancel.start()
+        cancel.join()
+        BlockingConnector.release.wait()
+        sms.join()
+
+        assert responses["cancel"].status_code == 200
+        assert responses["cancel"].json() == {"cancelled": cid}
+        assert responses["sms"].status_code == 409
+        assert responses["sms"].json() == {"detail": "login was cancelled or superseded"}
+        assert cid not in sync_service.PENDING
 
     assert sync_service.PENDING == {}
-    assert BlockingConnector.closed == 1
+    assert BlockingConnector.closed == attempts
 
 
 def test_shutdown_closes_all_pending(
