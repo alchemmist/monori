@@ -62,8 +62,8 @@ class BlockingConnector(base.Connector):
 
     @override
     def resume_sync(self, code: str) -> SyncResult:
-        type(self).entered.wait()
-        type(self).release.wait()
+        type(self).entered.wait(timeout=1)
+        type(self).release.wait(timeout=1)
         message = "retry"
         raise SmsRequiredError(message)
 
@@ -219,11 +219,13 @@ def test_sms_and_cancel_have_one_terminal_owner(
         )
 
         sms.start()
-        BlockingConnector.entered.wait()
+        BlockingConnector.entered.wait(timeout=1)
         cancel.start()
-        cancel.join()
-        BlockingConnector.release.wait()
-        sms.join()
+        cancel.join(timeout=1)
+        assert not cancel.is_alive()
+        BlockingConnector.release.wait(timeout=1)
+        sms.join(timeout=1)
+        assert not sms.is_alive()
 
         assert responses["cancel"].status_code == 200
         assert responses["cancel"].json() == {"cancelled": cid}
