@@ -21,13 +21,17 @@ export const transactionSourceSchema = z.enum([
     "workbook",
     "sheets",
 ]);
-const transactionDateSchema = z.union([
-    z.iso.date(),
-    z.iso.datetime({ offset: true, local: true }),
-]);
+function isTransactionDate(value: string): boolean {
+    return (
+        z.iso.date().safeParse(value).success ||
+        z.iso.datetime({ offset: true, local: true }).safeParse(value).success
+    );
+}
+
+const transactionDateSchema = z.string().refine(isTransactionDate);
 export const transactionCreateSchema = z.strictObject({
     date: transactionDateSchema,
-    amount: z.number().int().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
+    amount: z.number().refine(Number.isSafeInteger),
     accountId: id,
     description: z.string().optional(),
     bankCategory: z.string().optional(),
