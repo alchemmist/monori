@@ -39,6 +39,7 @@ CREATE TABLE IF NOT EXISTS categories (
   goal_target_date TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_categories_group ON categories (group_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_categories_group_name ON categories (group_id, name);
 
 CREATE TABLE IF NOT EXISTS accounts (
   id INTEGER PRIMARY KEY,

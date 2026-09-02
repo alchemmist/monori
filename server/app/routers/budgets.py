@@ -9,6 +9,7 @@ from pydantic.dataclasses import dataclass as pydantic_dataclass
 
 from monori.server.app.auth import AuthenticatedUser, current_user
 from monori.server.app.deps import conn
+from monori.server.app.value_types import Money
 
 router = APIRouter(prefix="/api/budgets", tags=["budgets"])
 MONTHS_IN_YEAR = 12
@@ -23,7 +24,7 @@ class BudgetCell:
 
     year: int
     month: int
-    amount: int
+    amount: Money
     category_id: int = Field(alias="categoryId")
 
 
