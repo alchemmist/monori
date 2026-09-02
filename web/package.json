@@ -48,7 +48,7 @@
         "eslint-plugin-react-hooks": "^7.1.1",
         "htmlhint": "^1.9.2",
         "jsdom": "^30.0.1",
-        "knip": "^6.32.2",
+        "knip": "^6.33.0",
         "markdownlint-cli2": "^0.23.0",
         "oxlint": "^1.80.0",
         "oxlint-tsgolint": "^7.0.2001",
