@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 from dulwich import porcelain
+from dulwich.refs import Ref
 from dulwich.repo import Repo
 
 from monori.ci.lib import mutation_diff_gate as module
@@ -261,7 +262,13 @@ diff --git a/server/app/example.py b/server/app/example.py
             author=b"Test <test@example.com>",
             committer=b"Test <test@example.com>",
         )
-        assert module.commit_for_revision(repository, "HEAD").id
+        commit = module.commit_for_revision(repository, "HEAD")
+        repository.refs[Ref(b"refs/heads/main")] = commit.id
+        repository.refs[Ref(b"refs/remotes/team/topic")] = commit.id
+        repository.refs[Ref(b"refs/remotes/origin/feature")] = commit.id
+        assert module.commit_for_revision(repository, "main").id == commit.id
+        assert module.commit_for_revision(repository, "team/topic").id == commit.id
+        assert module.commit_for_revision(repository, "feature").id == commit.id
         with pytest.raises(RuntimeError, match="Cannot resolve git revision"):
             module.commit_for_revision(repository, "missing-revision")
 

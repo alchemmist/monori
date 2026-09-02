@@ -39,6 +39,7 @@ class WorkbookTransaction:
     bank_category: str = ""
     mcc: str = ""
     comment: str = ""
+    monori_category_group: str = ""
     monori_category: str = ""
     marker: str = ""
 
@@ -51,6 +52,7 @@ class WorkbookBudget:
     year: int
     month: int
     amount: int
+    group: str = ""
 
 
 @pydantic_dataclass(config=_CONFIG)

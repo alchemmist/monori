@@ -1,8 +1,11 @@
+from datetime import UTC, datetime, tzinfo
+
 import pytest
 from fastapi.testclient import TestClient
 from httpx2 import Response as HTTPXResponse
 
 import monori.server.app.db as dbmod
+from monori.server.app.routers import auth_router
 from monori.server.app.routers.auth_router import _valid_email
 from monori.server.tests.conftest import Api, login_as
 
@@ -40,6 +43,28 @@ def test_register_rejects_duplicate_email(client: TestClient) -> None:
     assert _register(client).status_code == 200
     r = _register(client)
     assert r.status_code == 409
+    assert r.json() == {"detail": "email already registered"}
+
+
+def test_register_rolls_back_when_default_account_creation_fails(client: TestClient) -> None:
+    c = dbmod.connect()
+    try:
+        c.execute(
+            "CREATE TRIGGER fail_default_account BEFORE INSERT ON accounts"
+            " BEGIN SELECT RAISE(ABORT, 'injected'); END"
+        )
+        c.commit()
+    finally:
+        c.close()
+
+    with pytest.raises(Exception, match="injected"):
+        _register(client, email="atomic@example.com")
+
+    c = dbmod.connect()
+    try:
+        assert c.execute("SELECT 1 FROM users WHERE email='atomic@example.com'").fetchone() is None
+    finally:
+        c.close()
 
 
 def test_register_normalizes_email(client: TestClient) -> None:
@@ -80,8 +105,31 @@ def test_login_works_through_a_gmail_alias(client: TestClient) -> None:
 
 
 def test_register_validates_email_and_password(client: TestClient) -> None:
-    assert _register(client, email="not-an-email").status_code == 400
-    assert _register(client, email="a@b.co", password="short").status_code == 400
+    invalid_email = _register(client, email="not-an-email")
+    assert invalid_email.status_code == 400
+    assert invalid_email.json() == {"detail": "invalid email"}
+    short_password = _register(client, email="a@b.co", password="short")
+    assert short_password.status_code == 400
+    assert short_password.json() == {"detail": "password must be at least 8 characters"}
+    assert _register(client, email="a@b.co", password="12345678").status_code == 200
+
+
+def test_register_uses_utc_timestamp(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FrozenDateTime:
+        @classmethod
+        def now(cls, timezone: tzinfo) -> datetime:
+            assert timezone is UTC
+            return datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC)
+
+    monkeypatch.setattr(auth_router, "datetime", FrozenDateTime)
+
+    response = _register(client)
+
+    assert response.status_code == 200
+    assert response.json()["createdAt"] == "2026-01-02T03:04:05"
 
 
 @pytest.mark.parametrize("email", ["user@example.com", "a.b+c@sub.example.co"])

@@ -102,7 +102,13 @@ def changed_lines(base: str) -> dict[str, set[int]]:
 
 def commit_for_revision(repository: Repo, revision: str) -> Commit:
     """Resolve a git revision or remote branch name to a commit object."""
-    candidates = (revision.encode(), f"refs/remotes/{revision}".encode())
+    encoded = revision.encode()
+    candidates = (
+        encoded,
+        b"refs/heads/" + encoded,
+        b"refs/remotes/" + encoded,
+        b"refs/remotes/origin/" + encoded,
+    )
     for candidate in candidates:
         try:
             resolved = repository[candidate]

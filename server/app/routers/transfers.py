@@ -9,6 +9,7 @@ from pydantic import ConfigDict, Field
 from pydantic.dataclasses import dataclass as pydantic_dataclass
 
 from monori.server.app.auth import AuthenticatedUser, current_user
+from monori.server.app.db import begin_write
 from monori.server.app.db_records import TransactionRecord
 from monori.server.app.deps import TransactionResponse, conn, serialize_tx
 from monori.server.app.importer import tx_hash
@@ -25,8 +26,10 @@ from monori.server.app.transfer_service import (
 )
 from monori.server.app.transfer_service import link as link_pair
 from monori.server.app.transfer_service import split as split_transfer
+from monori.server.app.value_types import Money, TransactionDate
 
 router = APIRouter(prefix="/api/transfers", tags=["transfers"])
+TRANSFER_LEGS = 2
 
 LEGS_BY_ID = (
     "SELECT t.* FROM transactions t JOIN accounts a ON a.id = t.account_id"
@@ -38,8 +41,8 @@ LEGS_BY_ID = (
 class TransferBody:
     """Represent TransferBody."""
 
-    amount: int
-    date: str
+    amount: Money
+    date: TransactionDate
     from_account_id: int = Field(alias="fromAccountId")
     to_account_id: int = Field(alias="toAccountId")
     comment: str = ""
@@ -101,6 +104,13 @@ class OkResponse:
     """Represent OkResponse."""
 
     ok: bool
+
+
+@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+class DeletedResponse:
+    """Represent the number of transaction legs removed."""
+
+    deleted: int
 
 
 def account_exists(c: sqlite3.Connection, account_id: int, uid: int) -> bool:
@@ -295,5 +305,36 @@ def delete_transfer(
             raise HTTPException(404, "transfer not found")
         c.commit()
         return OkResponse(ok=True)
+    finally:
+        c.close()
+
+
+@router.delete("/{transfer_id}/with-legs")
+def delete_transfer_with_legs(
+    transfer_id: str,
+    user: Annotated[AuthenticatedUser, Depends(current_user)],
+) -> DeletedResponse:
+    """Remove a transfer entity and both owned transaction legs atomically."""
+    c = conn()
+    try:
+        begin_write(c)
+        row = c.execute(
+            "SELECT out_tx_id, in_tx_id FROM transfers WHERE id=? AND user_id=?",
+            (transfer_id, user.id),
+        ).fetchone()
+        if row is None:
+            raise HTTPException(404, "transfer not found")
+        leg_ids = (int(row[0]), int(row[1]))
+        owned_legs = c.execute(
+            "SELECT COUNT(*) FROM transactions t JOIN accounts a ON a.id=t.account_id"
+            " WHERE a.user_id=? AND t.transfer_id=? AND t.id IN (?, ?)",
+            (user.id, transfer_id, *leg_ids),
+        ).fetchone()[0]
+        if owned_legs != TRANSFER_LEGS:
+            raise HTTPException(409, "transfer does not have two owned legs")
+        c.execute("DELETE FROM transactions WHERE id=?", (leg_ids[0],))
+        c.execute("DELETE FROM transactions WHERE id=?", (leg_ids[1],))
+        c.commit()
+        return DeletedResponse(deleted=TRANSFER_LEGS)
     finally:
         c.close()
