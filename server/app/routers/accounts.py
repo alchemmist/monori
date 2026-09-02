@@ -15,6 +15,7 @@ from monori.server.app.db_records import AccountRecord
 from monori.server.app.deps import AccountResponse, conn, serialize_account
 from monori.server.app.domain_types import AccountType
 from monori.server.app.importer import tx_hash
+from monori.server.app.value_types import Money, TransactionDate
 
 router = APIRouter(prefix="/api/accounts", tags=["accounts"])
 
@@ -34,8 +35,8 @@ class AccountBody:
     color: str | None = None
     icon_image: str | None = Field(default=None, alias="iconImage")
     currency: str | None = None
-    opening_balance: int | None = Field(default=None, alias="openingBalance")
-    opening_date: str | None = Field(default=None, alias="openingDate")
+    opening_balance: Money | None = Field(default=None, alias="openingBalance")
+    opening_date: TransactionDate | None = Field(default=None, alias="openingDate")
     connection_id: int | None = Field(default=None, alias="connectionId")
     bank_ref: str | None = Field(default=None, alias="bankRef")
     card_tails: list[str] | None = Field(default=None, alias="cardTails")
@@ -65,8 +66,8 @@ class AccountPatch:
 
     icon_image: str | None = Field(default=None, alias="iconImage")
     currency: str | None = None
-    opening_balance: int | None = Field(default=None, alias="openingBalance")
-    opening_date: str | None = Field(default=None, alias="openingDate")
+    opening_balance: Money | None = Field(default=None, alias="openingBalance")
+    opening_date: TransactionDate | None = Field(default=None, alias="openingDate")
     archived: bool | None = None
 
     connection_id: int | None = Field(default=None, alias="connectionId")

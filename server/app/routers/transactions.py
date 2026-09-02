@@ -19,6 +19,7 @@ from monori.server.app.deps import (
 )
 from monori.server.app.importer import tx_hash
 from monori.server.app.transfer_service import detach_leg
+from monori.server.app.value_types import Money, TransactionDate
 
 router = APIRouter(prefix="/api/transactions", tags=["transactions"])
 MIN_SPLIT_PARTS = 2
@@ -31,8 +32,8 @@ _CONFIG = ConfigDict(extra="forbid", populate_by_name=True)
 class TxCreate:
     """Represent TxCreate."""
 
-    date: str
-    amount: int
+    date: TransactionDate
+    amount: Money
     account_id: int = Field(alias="accountId")
     description: str = ""
     bank_category: str = Field(default="", alias="bankCategory")
@@ -45,8 +46,8 @@ class TxCreate:
 class TxPatch:
     """Represent TxPatch."""
 
-    date: str | None = None
-    amount: int | None = None
+    date: TransactionDate | None = None
+    amount: Money | None = None
     account_id: int | None = Field(default=None, alias="accountId")
     description: str | None = None
     bank_category: str | None = Field(default=None, alias="bankCategory")
@@ -69,7 +70,7 @@ class BulkBody:
 class SplitPart:
     """Represent SplitPart."""
 
-    amount: int
+    amount: Money
     category_id: int = Field(alias="categoryId")
     comment: str = ""
 

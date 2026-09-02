@@ -24,6 +24,7 @@ TRANSACTION_HEADERS = [
     "Категория",
     "MCC",
     "Description",
+    "Monori Category Group",
     "Monori Category",
     "Account",
     "Comment",

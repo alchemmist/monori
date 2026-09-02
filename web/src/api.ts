@@ -55,6 +55,7 @@ import {
     splitsResponseSchema,
     syncResultSchema,
     transactionPageSchema,
+    transactionCreateSchema,
     transferDetectionResponseSchema,
     transferIdResponseSchema,
     transferSuggestionsResponseSchema,
@@ -140,6 +141,12 @@ async function copyBudgetYear(
     }).then(json(z.object({ copied: z.number(), budgets: z.array(budgetCellSchema) })));
 }
 
+function deleteTransferWithLegs(transferId: string): Promise<{ deleted: number }> {
+    return apiFetch(`/api/transfers/${transferId}/with-legs`, { method: "DELETE" }).then(
+        json(deletedCountResponseSchema),
+    );
+}
+
 export const api = {
     snapshot: ({
         light = false,
@@ -175,12 +182,14 @@ export const api = {
         apiFetch(`/api/transactions?hidden=true&limit=1000&offset=${offset}`).then(
             json(transactionPageSchema),
         ),
-    createTx: (body: TransactionCreate): Promise<IdResponse> =>
-        apiFetch("/api/transactions", {
+    createTx: async (body: TransactionCreate): Promise<IdResponse> => {
+        const checked = transactionCreateSchema.parse(body);
+        return apiFetch("/api/transactions", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(body),
-        }).then(json(entitySchema)),
+            body: JSON.stringify(checked),
+        }).then(json(entitySchema));
+    },
     patchTx: (id: Id, patch: TransactionPatch): Promise<OkResponse> =>
         apiFetch(`/api/transactions/${id}`, {
             method: "PATCH",
@@ -235,6 +244,7 @@ export const api = {
     // are never removed, since half of them came from a bank
     splitTransfer: (transferId: string): Promise<OkResponse> =>
         apiFetch(`/api/transfers/${transferId}`, { method: "DELETE" }).then(json(okResponseSchema)),
+    deleteTransferWithLegs,
     linkTransfer: (body: TransferPair): Promise<TransferResponse> =>
         apiFetch("/api/transfers/link", {
             method: "POST",

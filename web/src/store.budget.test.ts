@@ -159,6 +159,314 @@ describe("setBudgets", () => {
 });
 
 describe("copyBudgetYear", () => {
+    it("optimistically replaces only the exact budget cell while persistence is pending", async () => {
+        let finishWrite: ((result: { ok: boolean }) => void) | undefined;
+        vi.spyOn(api, "putBudget").mockReturnValue(
+            new Promise((resolve) => {
+                finishWrite = resolve;
+            }),
+        );
+        useStore.setState((state) => ({
+            snapshot: {
+                ...state.snapshot!,
+                budgets: [
+                    ...state.snapshot!.budgets,
+                    { categoryId: 8, year: 2027, month: 3, amount: 6_000 },
+                    { categoryId: 7, year: 2028, month: 3, amount: 7_000 },
+                ],
+            },
+        }));
+
+        const write = useStore.getState().setBudget(7, 2027, 3, 40_000);
+        await vi.waitFor(() => expect(api.putBudget).toHaveBeenCalledOnce());
+
+        expect(useStore.getState().snapshot!.budgets).toEqual([
+            { categoryId: 7, year: 2027, month: 4, amount: 10_000 },
+            { categoryId: 8, year: 2027, month: 4, amount: 5_000 },
+            { categoryId: 8, year: 2027, month: 3, amount: 6_000 },
+            { categoryId: 7, year: 2028, month: 3, amount: 7_000 },
+            { categoryId: 7, year: 2027, month: 3, amount: 40_000 },
+        ]);
+        finishWrite?.({ ok: true });
+        await expect(write).resolves.toBeUndefined();
+    });
+
+    it("restores the exact cell when similar coordinates precede it", async () => {
+        vi.spyOn(api, "putBudget").mockRejectedValue(new Error("save failed"));
+        useStore.setState((state) => ({
+            snapshot: {
+                ...state.snapshot!,
+                budgets: [
+                    { categoryId: 8, year: 2027, month: 3, amount: 6_000 },
+                    { categoryId: 7, year: 2028, month: 3, amount: 7_000 },
+                    ...state.snapshot!.budgets,
+                ],
+            },
+        }));
+
+        await expect(useStore.getState().setBudget(7, 2027, 3, 40_000)).rejects.toThrow(
+            "save failed",
+        );
+
+        expect(useStore.getState().snapshot!.budgets).toEqual([
+            { categoryId: 8, year: 2027, month: 3, amount: 6_000 },
+            { categoryId: 7, year: 2028, month: 3, amount: 7_000 },
+            { categoryId: 7, year: 2027, month: 4, amount: 10_000 },
+            { categoryId: 8, year: 2027, month: 4, amount: 5_000 },
+            { categoryId: 7, year: 2027, month: 3, amount: 25_000 },
+        ]);
+    });
+
+    it("records a successful zero budget as an empty baseline", async () => {
+        vi.spyOn(api, "putBudget").mockResolvedValue({ ok: true });
+
+        await useStore.getState().setBudget(7, 2027, 3, 0);
+
+        expect(useStore.getState().snapshot!.budgets).not.toContainEqual(
+            expect.objectContaining({ categoryId: 7, year: 2027, month: 3 }),
+        );
+    });
+
+    it("restores the last confirmed nonzero budget without changing adjacent cells", async () => {
+        let confirmOldWrite: ((result: { ok: boolean }) => void) | undefined;
+        vi.spyOn(api, "putBudget")
+            .mockReturnValueOnce(
+                new Promise((resolve) => {
+                    confirmOldWrite = resolve;
+                }),
+            )
+            .mockRejectedValueOnce(new Error("save failed"));
+        useStore.setState((state) => ({
+            snapshot: {
+                ...state.snapshot!,
+                budgets: [
+                    ...state.snapshot!.budgets,
+                    { categoryId: 8, year: 2027, month: 3, amount: 6_000 },
+                    { categoryId: 7, year: 2028, month: 3, amount: 7_000 },
+                ],
+            },
+        }));
+
+        const confirmedWrite = useStore.getState().setBudget(7, 2027, 3, 30_000);
+        await vi.waitFor(() => expect(api.putBudget).toHaveBeenCalledOnce());
+        const failedWrite = useStore.getState().setBudget(7, 2027, 3, 40_000);
+        confirmOldWrite?.({ ok: true });
+
+        await expect(confirmedWrite).resolves.toBeUndefined();
+        await expect(failedWrite).rejects.toThrow("save failed");
+
+        expect(useStore.getState().snapshot!.budgets).toEqual([
+            { categoryId: 7, year: 2027, month: 4, amount: 10_000 },
+            { categoryId: 8, year: 2027, month: 4, amount: 5_000 },
+            { categoryId: 8, year: 2027, month: 3, amount: 6_000 },
+            { categoryId: 7, year: 2028, month: 3, amount: 7_000 },
+            { categoryId: 7, year: 2027, month: 3, amount: 30_000 },
+        ]);
+    });
+
+    it("restores an empty cell after a confirmed zero is followed by a failed write", async () => {
+        let confirmZero: ((result: { ok: boolean }) => void) | undefined;
+        vi.spyOn(api, "putBudget")
+            .mockReturnValueOnce(
+                new Promise((resolve) => {
+                    confirmZero = resolve;
+                }),
+            )
+            .mockRejectedValueOnce(new Error("save failed"));
+
+        const zeroWrite = useStore.getState().setBudget(7, 2027, 3, 0);
+        await vi.waitFor(() => expect(api.putBudget).toHaveBeenCalledOnce());
+        const failedWrite = useStore.getState().setBudget(7, 2027, 3, 40_000);
+        confirmZero?.({ ok: true });
+
+        await expect(zeroWrite).resolves.toBeUndefined();
+        await expect(failedWrite).rejects.toThrow("save failed");
+        expect(useStore.getState().snapshot!.budgets).not.toContainEqual(
+            expect.objectContaining({ categoryId: 7, year: 2027, month: 3 }),
+        );
+    });
+
+    it("does not roll back a newer optimistic edit when an older write fails", async () => {
+        let rejectOldWrite: ((error: Error) => void) | undefined;
+        vi.spyOn(api, "putBudget")
+            .mockReturnValueOnce(
+                new Promise((_resolve, reject) => {
+                    rejectOldWrite = reject;
+                }),
+            )
+            .mockResolvedValueOnce({ ok: true });
+
+        const oldWrite = useStore.getState().setBudget(7, 2027, 3, 30_000);
+        await vi.waitFor(() => expect(api.putBudget).toHaveBeenCalledOnce());
+        const newerWrite = useStore.getState().setBudget(7, 2027, 3, 40_000);
+        rejectOldWrite?.(new Error("old write failed"));
+
+        await expect(oldWrite).rejects.toThrow("old write failed");
+        await expect(newerWrite).resolves.toBeUndefined();
+        expect(useStore.getState().snapshot!.budgets).toContainEqual({
+            categoryId: 7,
+            year: 2027,
+            month: 3,
+            amount: 40_000,
+        });
+    });
+
+    it("uses a refreshed snapshot as the baseline for a later failed write", async () => {
+        vi.spyOn(api, "putBudget")
+            .mockResolvedValueOnce({ ok: true })
+            .mockRejectedValueOnce(new Error("save failed"));
+
+        await useStore.getState().setBudget(7, 2027, 3, 30_000);
+        useStore.setState((state) => ({
+            snapshot: {
+                ...state.snapshot!,
+                budgets: state.snapshot!.budgets.map((budget) =>
+                    budget.categoryId === 7 && budget.year === 2027 && budget.month === 3
+                        ? { ...budget, amount: 35_000 }
+                        : budget,
+                ),
+            },
+        }));
+
+        await expect(useStore.getState().setBudget(7, 2027, 3, 40_000)).rejects.toThrow(
+            "save failed",
+        );
+        expect(useStore.getState().snapshot!.budgets).toContainEqual({
+            categoryId: 7,
+            year: 2027,
+            month: 3,
+            amount: 35_000,
+        });
+    });
+
+    it("keeps the next session baseline when an old token finishes successfully", async () => {
+        let finishOldWrite: ((result: { ok: boolean }) => void) | undefined;
+        vi.spyOn(api, "putBudget")
+            .mockReturnValueOnce(
+                new Promise((resolve) => {
+                    finishOldWrite = resolve;
+                }),
+            )
+            .mockRejectedValueOnce(new Error("new write failed"));
+        localStorage.setItem("monori_token", "user-a");
+
+        const oldWrite = useStore.getState().setBudget(7, 2027, 3, 30_000);
+        await vi.waitFor(() => expect(api.putBudget).toHaveBeenCalledOnce());
+        localStorage.setItem("monori_token", "user-b");
+        useStore.setState({
+            snapshot: buildSnapshot({
+                categories: [{ id: 7, name: "Groceries" }],
+                budgets: [{ categoryId: 7, year: 2027, month: 3, amount: 10_000 }],
+            }),
+        });
+        finishOldWrite?.({ ok: true });
+        await expect(oldWrite).rejects.toThrow("session changed");
+
+        await expect(useStore.getState().setBudget(7, 2027, 3, 20_000)).rejects.toThrow(
+            "new write failed",
+        );
+        expect(useStore.getState().snapshot!.budgets).toContainEqual({
+            categoryId: 7,
+            year: 2027,
+            month: 3,
+            amount: 10_000,
+        });
+    });
+
+    it("does not roll back a rejected write after logout with the same token restored", async () => {
+        let rejectWrite: ((error: Error) => void) | undefined;
+        vi.spyOn(api, "putBudget").mockReturnValue(
+            new Promise((_resolve, reject) => {
+                rejectWrite = reject;
+            }),
+        );
+        localStorage.setItem("monori_token", "same-token");
+
+        const write = useStore.getState().setBudget(7, 2027, 3, 30_000);
+        await vi.waitFor(() => expect(api.putBudget).toHaveBeenCalledOnce());
+        useStore.getState().logout();
+        localStorage.setItem("monori_token", "same-token");
+        rejectWrite?.(new Error("old write failed"));
+
+        await expect(write).rejects.toThrow("old write failed");
+        expect(useStore.getState().snapshot!.budgets).toContainEqual({
+            categoryId: 7,
+            year: 2027,
+            month: 3,
+            amount: 30_000,
+        });
+        expect(useStore.getState().toast).toBeNull();
+    });
+
+    it("does not let a stale write clear a new session's budget baseline", async () => {
+        let finishOldWrite: ((result: { ok: boolean }) => void) | undefined;
+        let failNewWrite: ((error: Error) => void) | undefined;
+        vi.spyOn(api, "putBudget")
+            .mockReturnValueOnce(
+                new Promise((resolve) => {
+                    finishOldWrite = resolve;
+                }),
+            )
+            .mockReturnValueOnce(
+                new Promise((_resolve, reject) => {
+                    failNewWrite = reject;
+                }),
+            );
+
+        const oldWrite = useStore.getState().setBudget(7, 2027, 3, 30_000);
+        await vi.waitFor(() => expect(api.putBudget).toHaveBeenCalledOnce());
+        resetStoreForTests();
+        useStore.setState({
+            snapshot: buildSnapshot({
+                categories: [{ id: 7, name: "Groceries" }],
+                budgets: [{ categoryId: 7, year: 2027, month: 3, amount: 10_000 }],
+            }),
+        });
+
+        const newWrite = useStore.getState().setBudget(7, 2027, 3, 20_000);
+        await vi.waitFor(() => expect(api.putBudget).toHaveBeenCalledTimes(2));
+        finishOldWrite?.({ ok: true });
+        await expect(oldWrite).rejects.toThrow("session changed");
+        failNewWrite?.(new Error("new write failed"));
+        await expect(newWrite).rejects.toThrow("new write failed");
+        expect(useStore.getState().snapshot!.budgets).toContainEqual({
+            categoryId: 7,
+            year: 2027,
+            month: 3,
+            amount: 10_000,
+        });
+    });
+
+    it("does not let a rejected stale write restore the previous session's baseline", async () => {
+        let rejectOldWrite: ((error: Error) => void) | undefined;
+        vi.spyOn(api, "putBudget").mockReturnValue(
+            new Promise((_resolve, reject) => {
+                rejectOldWrite = reject;
+            }),
+        );
+        localStorage.setItem("monori_token", "user-a");
+
+        const oldWrite = useStore.getState().setBudget(7, 2027, 3, 30_000);
+        await vi.waitFor(() => expect(api.putBudget).toHaveBeenCalledOnce());
+        localStorage.setItem("monori_token", "user-b");
+        useStore.setState({
+            snapshot: buildSnapshot({
+                categories: [{ id: 7, name: "Groceries" }],
+                budgets: [{ categoryId: 7, year: 2027, month: 3, amount: 10_000 }],
+            }),
+        });
+
+        rejectOldWrite?.(new Error("old write failed"));
+        await expect(oldWrite).rejects.toThrow("old write failed");
+        expect(useStore.getState().toast).toBeNull();
+        expect(useStore.getState().snapshot!.budgets).toContainEqual({
+            categoryId: 7,
+            year: 2027,
+            month: 3,
+            amount: 10_000,
+        });
+    });
+
     it("discards queued budget operations when the authenticated session changes", async () => {
         let finishWrite: ((result: { ok: boolean }) => void) | undefined;
         const pendingWrite = new Promise<{ ok: boolean }>((resolve) => {
