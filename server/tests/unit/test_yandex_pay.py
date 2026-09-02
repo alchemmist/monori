@@ -11,6 +11,7 @@ from monori.server.app.connectors.tbank_playwright import (
     _PageAdapter,
 )
 from monori.server.app.connectors.yandex_pay import (
+    AUTH_REJECTED,
     CAPTCHA_REFRESH,
     CODE_RESEND,
     YandexPayConnector,
@@ -68,7 +69,16 @@ class Frame:
         return Locator(
             present=(
                 (self.mode == "phone" and "tel" in selector)
-                or (self.mode == "password" and "password" in selector)
+                or (
+                    self.mode == "password"
+                    and "password" in selector
+                    and "aria-invalid" not in selector
+                )
+                or (
+                    self.mode == "password_error"
+                    and "current-password" in selector
+                    and "aria-invalid" in selector
+                )
                 or (self.mode == "code" and "inputmode" in selector)
             )
         )
@@ -93,7 +103,11 @@ class Page:
         self.url = (
             "https://bank.yandex.ru/my/history"
             if mode == "logged"
-            else "https://bank.yandex.ru/_pay/login"
+            else (
+                "https://passport.yandex.ru/pwl-yandex/auth/code"
+                if mode == "code"
+                else "https://bank.yandex.ru/_pay/login"
+            )
         )
         self.keyboard = type(
             "Keyboard", (), {"press": lambda *_args: None, "type": lambda *_args: None}
@@ -118,16 +132,19 @@ class Page:
     def locator(self, selector: str) -> Locator:
         if selector == "iframe":
             return Locator(
-                present=self.mode in {"phone", "password", "code", "chooser"},
+                present=self.mode in {"phone", "password", "password_error", "code", "chooser"},
                 frame=Frame(self.mode),
             )
         if selector == "main a[aria-haspopup='true']":
             return Locator(present=True)
         if selector == "button":
             return Locator(present=self.mode in {"suggest", "code"})
-        if selector == "input[placeholder='Enter the characters']":
-            return Locator(present=self.mode == "captcha")
-        return Locator()
+        present = (
+            (selector == "input[placeholder='Enter the characters']" and self.mode == "captcha")
+            or ("type='tel'" in selector and self.mode == "ypay_code" and ":not" not in selector)
+            or ("one-time-code" in selector and self.mode == "ypay_code")
+        )
+        return Locator(present=present)
 
     def get_by_text(self, text: str, *, exact: bool = False) -> Locator:
         locator = Locator(
@@ -140,11 +157,19 @@ class Page:
                 )
                 or (self.mode == "captcha" and exact and text == "Submit")
                 or (self.mode == "captcha" and exact and text == "Another code")
+                or (self.mode == "suggest" and exact and text == "person@example.com")
                 or (self.mode == "filter" and exact and text == "Pay card")
             )
         )
         if self.mode == "filter":
             locator.on_click = lambda: setattr(self, "filter_active", True)
+        if self.mode == "suggest":
+
+            def select_account() -> None:
+                self.mode = "logged"
+                self.url = "https://bank.yandex.ru/my/history"
+
+            locator.on_click = select_account
         return locator
 
     def evaluate(self, expression: str) -> JsonValue:
@@ -225,7 +250,9 @@ def test_history_years_uses_relative_year_across_new_year() -> None:
 
 
 def test_connector_auth_steps_and_history() -> None:
-    connector = ConnectorWithCode({"phone": "+70000000000", "password": "pw"})
+    connector = ConnectorWithCode(
+        {"phone": "+70000000000", "password": "pw", "yandex_account": "person@example.com"}
+    )
     connector.ensure_logged_in(Page())
     assert connector.choose_code_method(Page("chooser"))
     assert connector.choose_code_method(Page("chooser_ru"))
@@ -235,10 +262,24 @@ def test_connector_auth_steps_and_history() -> None:
     suggest = Page("suggest")
     suggest.url = "https://passport.yandex.ru/pwl-yandex/auth/suggest"
     assert connector.choose_suggested_account(suggest)
-    assert not connector.choose_suggested_account(Page())
+    assert suggest.mode == "logged"
+    assert {param.name for param in connector.connection_params} == {
+        "phone",
+        "yandex_account",
+        "password",
+    }
+    with pytest.raises(ConnectorError, match="account email or login"):
+        ConnectorWithCode({"phone": "+70000000000", "password": "pw"}).choose_suggested_account(
+            Page("suggest")
+        )
+    with pytest.raises(PublicConnectorError, match="requested account"):
+        connector.choose_suggested_account(Page())
     assert connector.drive_auth_step(Page("phone"))
     assert connector.drive_auth_step(Page("password"))
     assert connector.drive_auth_step(Page("code"))
+    pay_code = ConnectorWithAnswer("1234")
+    assert pay_code.drive_auth_step(Page("ypay_code"))
+    assert pay_code.messages == ["code:4:Enter the 4-digit code sent by Yandex Pay."]
     assert connector.drive_auth_step(Page("captcha"))
     rows = connector.download_and_parse(Page(), None)
     assert len(rows) == 1
@@ -247,6 +288,8 @@ def test_connector_auth_steps_and_history() -> None:
         YandexPayConnector({}).drive_auth_step(Page("phone"))
     with pytest.raises(ConnectorError, match="credential is missing"):
         YandexPayConnector({}).drive_auth_step(Page("password"))
+    with pytest.raises(PublicConnectorError, match=AUTH_REJECTED):
+        connector.drive_auth_step(Page("password_error"))
     with pytest.raises(ConnectorError, match="login did not reach"):
         connector.ensure_logged_in(Page("retry"))
     with pytest.raises(PublicConnectorError, match="login did not reach"):
@@ -278,7 +321,9 @@ def test_connector_handles_suggest_resend_and_captcha_refresh() -> None:
                 locator.on_click = select
             return locator
 
-    ConnectorWithCode({"phone": "+70000000000", "password": "pw"}).ensure_logged_in(SuggestPage())
+    ConnectorWithCode(
+        {"phone": "+70000000000", "password": "pw", "yandex_account": "person@example.com"}
+    ).ensure_logged_in(SuggestPage())
     assert ConnectorWithAnswer(CODE_RESEND).drive_auth_step(Page("code"))
     assert ConnectorWithAnswer(CAPTCHA_REFRESH).drive_auth_step(Page("captcha"))
 

@@ -37,7 +37,7 @@ describe("ConnectionDialog", () => {
         expect(connect).toBeDisabled();
         await user.type(screen.getByLabelText("Login"), "alice");
         await user.clear(screen.getByLabelText("Bank account"));
-        await user.type(screen.getByLabelText("Bank account"), "40817");
+        await user.type(screen.getByLabelText("Bank account"), " 40817 ");
         await user.click(connect);
         await waitFor(() =>
             expect(create).toHaveBeenCalledWith({
@@ -129,6 +129,37 @@ describe("ConnectionDialog", () => {
         expect(input).toHaveValue("123-456");
         await user.click(screen.getByRole("button", { name: "Confirm" }));
         await waitFor(() => expect(sms).toHaveBeenCalledWith(7, "123456"));
+    });
+
+    it("accepts the separate four-digit Yandex Pay confirmation code", async () => {
+        const yandexPay = { ...connector, bank: "yandex_pay" };
+        vi.spyOn(api, "connectionsAvailable").mockResolvedValue([yandexPay]);
+        vi.spyOn(useStore.getState(), "createConnection").mockResolvedValue({ id: 7 });
+        vi.spyOn(useStore.getState(), "patchAccount").mockResolvedValue();
+        vi.spyOn(useStore.getState(), "syncConnection").mockResolvedValue({
+            status: "awaiting_sms",
+            message: "code:4:Enter the 4-digit code sent by Yandex Pay.",
+        });
+        const sms = vi.spyOn(useStore.getState(), "submitConnectionSms").mockResolvedValue({
+            status: "connected",
+            inserted: 0,
+            skipped: 0,
+        });
+        const { user } = renderUI(<ConnectionDialog account={account} onClose={vi.fn()} />);
+        await user.type(await screen.findByLabelText("Login"), "alice");
+        await user.clear(screen.getByLabelText("Bank account"));
+        await user.type(screen.getByLabelText("Bank account"), "40817");
+        await user.click(screen.getByRole("button", { name: "Connect & sync" }));
+
+        expect(await screen.findByText("Enter the 4-digit code sent by Yandex Pay.")).toBeVisible();
+        const input = screen.getByLabelText("Yandex Pay code");
+        expect(input).toHaveAttribute("maxlength", "4");
+        expect(input).toHaveAttribute("placeholder", "0000");
+        await user.type(input, "123");
+        expect(screen.getByRole("button", { name: "Confirm" })).toBeDisabled();
+        await user.type(input, "4");
+        await user.click(screen.getByRole("button", { name: "Confirm" }));
+        await waitFor(() => expect(sms).toHaveBeenCalledWith(7, "1234"));
     });
 
     it("renders a Yandex CAPTCHA challenge", async () => {
@@ -258,6 +289,36 @@ describe("ConnectionDialog", () => {
         expect(close).toHaveBeenCalled();
     });
 
+    it("saves a dirty bank reference before syncing an existing connection", async () => {
+        vi.spyOn(api, "connectionsAvailable").mockResolvedValue([connector]);
+        const patch = vi.spyOn(useStore.getState(), "patchAccount").mockResolvedValue();
+        const sync = vi.spyOn(useStore.getState(), "syncConnection").mockResolvedValue({
+            status: "connected",
+            inserted: 0,
+            skipped: 0,
+        });
+        const { user } = renderUI(
+            <ConnectionDialog
+                account={account}
+                connection={{
+                    id: 9,
+                    bank: "demo",
+                    kind: "web",
+                    status: "connected",
+                    lastSync: null,
+                }}
+                onClose={vi.fn()}
+            />,
+        );
+        await screen.findByLabelText("Bank account");
+        await user.clear(screen.getByLabelText("Bank account"));
+        await user.type(screen.getByLabelText("Bank account"), "new-ref");
+        await user.click(screen.getByRole("button", { name: "Sync now" }));
+
+        await waitFor(() => expect(patch).toHaveBeenCalledWith(1, { bankRef: "new-ref" }));
+        expect(sync).toHaveBeenCalledWith(9);
+    });
+
     it("reuses an existing login and shows the full sync outcome", async () => {
         seed({
             accounts: [account],
@@ -333,7 +394,14 @@ describe("ConnectionDialog", () => {
     });
 
     it("does not treat whitespace-only credentials or bank references as complete", async () => {
-        vi.spyOn(api, "connectionsAvailable").mockResolvedValue([connector]);
+        const twoAccountFields = {
+            ...connector,
+            accountParams: [
+                ...connector.accountParams,
+                { name: "routing", label: "Routing", required: true },
+            ],
+        };
+        vi.spyOn(api, "connectionsAvailable").mockResolvedValue([twoAccountFields]);
         const { user } = renderUI(<ConnectionDialog account={account} onClose={vi.fn()} />);
         await screen.findByLabelText("Login");
         const connect = screen.getByRole("button", { name: "Connect & sync" });
@@ -341,6 +409,8 @@ describe("ConnectionDialog", () => {
         expect(connect).toBeDisabled();
         await user.clear(screen.getByLabelText("Login"));
         await user.type(screen.getByLabelText("Login"), "alice");
+        expect(connect).toBeDisabled();
+        await user.type(screen.getByLabelText("Routing"), "route");
         expect(connect).not.toBeDisabled();
         await user.clear(screen.getByLabelText("Bank account"));
         await user.type(screen.getByLabelText("Bank account"), "   ");
@@ -462,5 +532,20 @@ describe("ConnectionDialog", () => {
                 expect.objectContaining({ title: "Failed to load banks" }),
             ),
         );
+    });
+
+    it("shows connection creation failures and stops the busy state", async () => {
+        vi.spyOn(api, "connectionsAvailable").mockResolvedValue([connector]);
+        vi.spyOn(useStore.getState(), "createConnection").mockRejectedValue(
+            new Error("credentials rejected"),
+        );
+        const { user } = renderUI(<ConnectionDialog account={account} onClose={vi.fn()} />);
+        await user.type(await screen.findByLabelText("Login"), "alice");
+        await user.clear(screen.getByLabelText("Bank account"));
+        await user.type(screen.getByLabelText("Bank account"), "40817");
+        await user.click(screen.getByRole("button", { name: "Connect & sync" }));
+
+        expect(await screen.findByText("Error: credentials rejected")).toBeVisible();
+        expect(screen.getByRole("button", { name: "Retry" })).toBeEnabled();
     });
 });

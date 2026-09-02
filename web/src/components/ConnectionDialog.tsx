@@ -23,9 +23,15 @@ const CODE_PREFIX = "code:";
 const CODE_RESEND = "__resend_yandex_code__";
 const RESEND_DELAY_SECONDS = 60;
 
-const formatYandexSmsCode = (value: string) => {
-    const digits = value.replace(/\D/g, "").slice(0, 6);
-    return digits.length > 3 ? `${digits.slice(0, 3)}-${digits.slice(3)}` : digits;
+const yandexCodeChallenge = (message: string) => {
+    const match = new RegExp(`^${CODE_PREFIX}(?:(\\d+):)?(.*)$`, "s").exec(message);
+    if (match == null) return null;
+    return { length: Number(match[1] ?? 6), message: match[2] ?? "" };
+};
+
+const formatYandexCode = (value: string, length: number) => {
+    const digits = value.replace(/\D/g, "").slice(0, length);
+    return length === 6 && digits.length > 3 ? `${digits.slice(0, 3)}-${digits.slice(3)}` : digits;
 };
 
 const formatCountdown = (seconds: number) =>
@@ -101,11 +107,15 @@ export default function ConnectionDialog({
     const connector = connectors.find((c) => `${c.bank}/${c.kind}` === bankKey) ?? null;
     const isYandexPay = (connection?.bank ?? connector?.bank) === "yandex_pay";
     const isCaptcha = challengeMessage.startsWith(CAPTCHA_PREFIX);
-    const isCodeChallenge = challengeMessage.startsWith(CODE_PREFIX);
+    const codeChallenge = yandexCodeChallenge(challengeMessage);
+    const isCodeChallenge = codeChallenge != null;
+    const yandexCodeLength = codeChallenge?.length ?? 6;
     const captchaUrl = isCaptcha ? challengeMessage.slice(CAPTCHA_PREFIX.length) : "";
     const submittedCode = isYandexPay && !isCaptcha ? code.replace(/\D/g, "") : code.trim();
     const codeComplete =
-        isYandexPay && !isCaptcha ? submittedCode.length === 6 : submittedCode !== "";
+        isYandexPay && !isCaptcha
+            ? submittedCode.length === yandexCodeLength
+            : submittedCode !== "";
     const existingLogins =
         connector != null
             ? connections.filter((c) => c.bank === connector.bank && c.kind === connector.kind)
@@ -123,7 +133,6 @@ export default function ConnectionDialog({
         );
 
     const runSync = async (id: Id) => {
-        setBusy(true);
         setError("");
         setStep("syncing");
         try {
@@ -131,7 +140,9 @@ export default function ConnectionDialog({
             if (res.status === "awaiting_sms") {
                 const nextChallenge = res.message ?? "";
                 setChallengeMessage(nextChallenge);
-                setResendSeconds(nextChallenge.startsWith(CODE_PREFIX) ? RESEND_DELAY_SECONDS : 0);
+                setResendSeconds(
+                    yandexCodeChallenge(nextChallenge)?.length === 6 ? RESEND_DELAY_SECONDS : 0,
+                );
                 setStep("sms");
             } else {
                 setResult(res);
@@ -167,7 +178,7 @@ export default function ConnectionDialog({
                 id = Number(loginChoice);
             }
             connId.current = id;
-            const ref = String(accountFields["account"] ?? "").trim();
+            const ref = (accountFields["account"] ?? "").trim();
             await patchAccount(account.id, { connectionId: id, bankRef: ref });
             await runSync(id);
         } catch (e) {
@@ -187,13 +198,15 @@ export default function ConnectionDialog({
                 setCode("");
                 const nextChallenge = res.message ?? "";
                 setChallengeMessage(nextChallenge);
-                setResendSeconds(nextChallenge.startsWith(CODE_PREFIX) ? RESEND_DELAY_SECONDS : 0);
+                setResendSeconds(
+                    yandexCodeChallenge(nextChallenge)?.length === 6 ? RESEND_DELAY_SECONDS : 0,
+                );
                 setError(
                     nextChallenge.startsWith(CAPTCHA_PREFIX)
                         ? overrideCode === CAPTCHA_REFRESH
                             ? "A new CAPTCHA is shown."
                             : "Yandex issued a new CAPTCHA. This can also happen when automated login is challenged."
-                        : nextChallenge.startsWith(CODE_PREFIX)
+                        : yandexCodeChallenge(nextChallenge) != null
                           ? ""
                           : nextChallenge === ""
                             ? "The bank rejected the code — try again."
@@ -453,7 +466,7 @@ export default function ConnectionDialog({
                     {isCaptcha
                         ? "Enter the characters exactly as shown, including hyphens and punctuation."
                         : isCodeChallenge
-                          ? challengeMessage.slice(CODE_PREFIX.length)
+                          ? codeChallenge.message
                           : "Enter the code the bank sent to your phone."}
                 </Txt>
                 {isCaptcha && captchaUrl !== "" && (
@@ -470,19 +483,37 @@ export default function ConnectionDialog({
                     </Txt>
                 )}
                 <FTextInput
-                    label={isCaptcha ? "CAPTCHA" : "SMS code"}
+                    label={
+                        isCaptcha
+                            ? "CAPTCHA"
+                            : yandexCodeLength === 4
+                              ? "Yandex Pay code"
+                              : "SMS code"
+                    }
                     value={code}
                     onChange={(e) => {
                         if (isCaptcha) setError("");
                         setCode(
                             isYandexPay && !isCaptcha
-                                ? formatYandexSmsCode(e.target.value)
+                                ? formatYandexCode(e.target.value, yandexCodeLength)
                                 : e.target.value,
                         );
                     }}
                     inputMode={isYandexPay && !isCaptcha ? "numeric" : undefined}
-                    placeholder={isYandexPay && !isCaptcha ? "000-000" : undefined}
-                    maxLength={isYandexPay && !isCaptcha ? 7 : undefined}
+                    placeholder={
+                        isYandexPay && !isCaptcha
+                            ? yandexCodeLength === 6
+                                ? "000-000"
+                                : "0".repeat(yandexCodeLength)
+                            : undefined
+                    }
+                    maxLength={
+                        isYandexPay && !isCaptcha
+                            ? yandexCodeLength === 6
+                                ? 7
+                                : yandexCodeLength
+                            : undefined
+                    }
                     autoFocus
                 />
                 {isCaptcha && (
@@ -495,7 +526,7 @@ export default function ConnectionDialog({
                         Show another CAPTCHA
                     </Button>
                 )}
-                {isCodeChallenge && (
+                {isCodeChallenge && yandexCodeLength === 6 && (
                     <Button
                         variant="subtle"
                         size="s"

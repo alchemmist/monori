@@ -48,5 +48,9 @@ def test_available_connectors_declare_params_and_hide_fake() -> None:
     assert [p.name for p in tbank.accountParams] == ["account"]
     yandex_pay = next(c for c in conns if c.bank == "yandex_pay")
     assert yandex_pay.label == "Yandex Pay (browser sync)"
-    assert {p.name for p in yandex_pay.connectionParams} == {"phone", "password"}
+    assert {p.name for p in yandex_pay.connectionParams} == {
+        "phone",
+        "yandex_account",
+        "password",
+    }
     assert yandex_pay.accountParams == []

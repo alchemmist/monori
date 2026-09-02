@@ -16,7 +16,11 @@ from monori.server.app.connectors.base import (
     SyncRow,
     register,
 )
-from monori.server.app.connectors.tbank_playwright import TBankPlaywrightConnector, _Page
+from monori.server.app.connectors.tbank_playwright import (
+    TBankPlaywrightConnector,
+    _FrameLocator,
+    _Page,
+)
 
 if TYPE_CHECKING:
     from monori.common import JsonValue
@@ -69,6 +73,9 @@ DATE_MISSING = "Yandex Pay transaction date is missing"
 ITEM_INVALID = "Yandex Pay transaction item has an unexpected structure"
 PHONE_MISSING = "Yandex Pay phone is missing"
 LOGIN_CREDENTIAL_MISSING = "Yandex Pay login credential is missing"
+ACCOUNT_CREDENTIAL_MISSING = "Yandex Pay account email or login credential is missing"
+ACCOUNT_NOT_FOUND = "Yandex could not find the requested account"
+AUTH_REJECTED = "Yandex rejected the password — check it and try again"
 LOGIN_FAILED = "Yandex ID login did not reach payment history"
 NO_TRANSACTIONS = "Yandex Pay returned no transactions"
 FILTER_MISSING = "Yandex Pay Pay card history filter is unavailable"
@@ -193,6 +200,11 @@ class YandexPayConnector(TBankPlaywrightConnector):
     label = "Yandex Pay (browser sync)"
     connection_params: ClassVar[list[ConnectorParam]] = [
         ConnectorParam(name="phone", label="Phone", required=True),
+        ConnectorParam(
+            name="yandex_account",
+            label="Yandex account email or login",
+            required=True,
+        ),
         ConnectorParam(name="password", label="Password", secret=True, required=True),
     ]
     account_params: ClassVar[list[ConnectorParam]] = []
@@ -232,15 +244,17 @@ class YandexPayConnector(TBankPlaywrightConnector):
             page.wait_for_timeout(1500)
         raise PublicConnectorError(LOGIN_FAILED)
 
-    @staticmethod
-    def choose_suggested_account(page: _Page) -> bool:
+    def choose_suggested_account(self, page: _Page) -> bool:
         """
-        Select the first account Yandex ID associates with the submitted phone.
+        Select the requested account Yandex ID associates with the submitted phone.
         """
-        accounts = page.locator("button")
-        if accounts.count() == 0:
-            return False
-        accounts.first.click(timeout=5000)
+        account = self.credentials.get("yandex_account")
+        if not isinstance(account, str) or account.strip() == "":
+            raise ConnectorError(ACCOUNT_CREDENTIAL_MISSING)
+        candidate = page.get_by_text(account.strip(), exact=True)
+        if candidate.count() == 0:
+            raise PublicConnectorError(ACCOUNT_NOT_FOUND)
+        candidate.first.click(timeout=5000)
         page.wait_for_timeout(1500)
         return True
 
@@ -264,7 +278,16 @@ class YandexPayConnector(TBankPlaywrightConnector):
         scope = (
             page.locator("iframe").first.content_frame if page.locator("iframe").count() else page
         )
-        phone = scope.locator("input[type='tel'], input[name='login']")
+        rejected_password = scope.locator(
+            "input[autocomplete='current-password'][aria-invalid='true']"
+        )
+        if rejected_password.count():
+            raise PublicConnectorError(AUTH_REJECTED)
+        if self.drive_code_step(page, scope):
+            return True
+        phone = scope.locator(
+            "input[type='tel']:not([autocomplete='one-time-code']), input[name='login']"
+        )
         if phone.count():
             value = self.credentials.get("phone")
             if not isinstance(value, str):
@@ -272,27 +295,13 @@ class YandexPayConnector(TBankPlaywrightConnector):
             phone.first.fill(value, timeout=5000)
             page.keyboard.press("Enter")
             return True
-        password = scope.locator("input[type='password']")
+        password = scope.locator("input[type='password'], input[autocomplete='current-password']")
         if password.count():
             value = self.credentials.get("password")
             if not isinstance(value, str):
                 raise ConnectorError(LOGIN_CREDENTIAL_MISSING)
             password.first.fill(value, timeout=5000)
             page.keyboard.press("Enter")
-            return True
-        code = scope.locator(
-            "input[inputmode='numeric'], input[type='number'], input[autocomplete='one-time-code']"
-        )
-        if code.count():
-            self.shot(page, "code")
-            value = self.ask_sms(f"{CODE_PREFIX}Enter the code sent by Yandex via SMS.")
-            if value == CODE_RESEND:
-                page.locator("button").first.click(timeout=70000)
-                page.wait_for_timeout(1000)
-            else:
-                code.first.click(timeout=5000)
-                page.keyboard.type(value)
-                page.keyboard.press("Enter")
             return True
         captcha = scope.locator("input[placeholder='Enter the characters']")
         if captcha.count():
@@ -309,6 +318,31 @@ class YandexPayConnector(TBankPlaywrightConnector):
             page.get_by_text("Submit", exact=True).first.click(timeout=5000)
             page.wait_for_timeout(1500)
             self.shot(page, "captcha-after")
+            return True
+        return False
+
+    def drive_code_step(self, page: _Page, scope: _Page | _FrameLocator) -> bool:
+        """Submit the OTP format belonging to the current Yandex authentication surface."""
+        code = scope.locator(
+            "input[inputmode='numeric'], input[type='number'], input[autocomplete='one-time-code']"
+        )
+        if code.count():
+            self.shot(page, "code")
+            yandex_pay_code = "/_pay/login" in page.url
+            prompt = (
+                "4:Enter the 4-digit code sent by Yandex Pay."
+                if yandex_pay_code
+                else "6:Enter the code sent by Yandex via SMS."
+            )
+            value = self.ask_sms(f"{CODE_PREFIX}{prompt}")
+            if value == CODE_RESEND:
+                page.locator("button").first.click(timeout=70000)
+                page.wait_for_timeout(1000)
+            else:
+                code.first.click(timeout=5000)
+                page.keyboard.type(value)
+                if not yandex_pay_code:
+                    page.keyboard.press("Enter")
             return True
         return False
 
