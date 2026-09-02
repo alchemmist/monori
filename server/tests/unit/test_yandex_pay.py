@@ -1,4 +1,4 @@
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta, tzinfo
 from typing import TYPE_CHECKING
 
 import pytest
@@ -276,7 +276,7 @@ def test_history_years_tracks_relative_and_unknown_boundaries() -> None:
 def test_relative_dates_use_utc(monkeypatch: pytest.MonkeyPatch) -> None:
     class Clock:
         @staticmethod
-        def now(timezone: object) -> datetime:
+        def now(timezone: tzinfo | None) -> datetime:
             assert timezone is UTC
             return datetime(2026, 1, 2, tzinfo=UTC)
 
