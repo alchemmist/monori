@@ -173,6 +173,92 @@ describe("updateTransaction", () => {
         );
     });
 
+    it("rolls back after an unrelated background fill restart", async () => {
+        let rejectPatch: (reason?: unknown) => void;
+        vi.spyOn(api, "patchTx").mockReturnValue(
+            new Promise((_, reject) => {
+                rejectPatch = reject;
+            }),
+        );
+        vi.spyOn(api, "createTx").mockResolvedValue({ id: 42 });
+        vi.spyOn(api, "transactions").mockResolvedValue({ total: 3, rows: [] });
+        useStore.setState({ txProgress: { loaded: 2, total: 3 } });
+
+        const updating = useStore.getState().updateTransaction(1, { amount: -5000 });
+        await useStore.getState().addTransaction(body);
+        rejectPatch!(new Error("nope"));
+        await updating;
+
+        expect(useStore.getState().snapshot!.transactions.find((t) => t.id === 1)!.amount).toBe(
+            -100,
+        );
+    });
+
+    it("restarts only an active fill after adding a transaction", async () => {
+        vi.spyOn(api, "createTx")
+            .mockResolvedValueOnce({ id: 42 })
+            .mockResolvedValueOnce({ id: 43 });
+        const fill = vi.fn().mockResolvedValue(undefined);
+        useStore.setState({ fillTransactions: fill, txProgress: { loaded: 2, total: 3 } });
+
+        await useStore.getState().addTransaction(body);
+
+        expect(fill).toHaveBeenCalledOnce();
+
+        useStore.setState({ txProgress: null });
+        await useStore.getState().addTransaction(body);
+
+        expect(fill).toHaveBeenCalledOnce();
+    });
+
+    it("does not roll back over a replacement snapshot", async () => {
+        let rejectPatch: (reason?: unknown) => void;
+        vi.spyOn(api, "patchTx").mockReturnValue(
+            new Promise((_, reject) => {
+                rejectPatch = reject;
+            }),
+        );
+        vi.spyOn(api, "snapshot").mockResolvedValue(
+            buildSnapshot({
+                accounts: [{ id: 1, name: "Card" }],
+                transactions: [
+                    { ...tx(1, "2026-01-01T00:00:00"), amount: -250 },
+                    tx(3, "2026-03-01T00:00:00"),
+                ],
+                transactionsTotal: 2,
+            }),
+        );
+
+        const updating = useStore.getState().updateTransaction(1, { amount: -5000 });
+        await useStore.getState().load();
+        rejectPatch!(new Error("nope"));
+        await updating;
+
+        expect(useStore.getState().snapshot!.transactions.find((t) => t.id === 1)!.amount).toBe(
+            -250,
+        );
+        expect(useStore.getState().toast).toBeNull();
+    });
+
+    it("does not roll back an edit rejected after logout", async () => {
+        let rejectPatch: (reason?: unknown) => void;
+        vi.spyOn(api, "patchTx").mockReturnValue(
+            new Promise((_, reject) => {
+                rejectPatch = reject;
+            }),
+        );
+
+        const updating = useStore.getState().updateTransaction(1, { amount: -5000 });
+        useStore.getState().logout();
+        rejectPatch!(new Error("old session"));
+        await updating;
+
+        expect(useStore.getState().snapshot!.transactions.find((t) => t.id === 1)!.amount).toBe(
+            -5000,
+        );
+        expect(useStore.getState().toast).toBeNull();
+    });
+
     it("ignores an id that is not in the ledger", async () => {
         vi.spyOn(api, "patchTx").mockResolvedValue({ ok: true });
 

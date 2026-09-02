@@ -1,4 +1,5 @@
 import json
+import sys
 from pathlib import Path
 
 import pytest
@@ -7,8 +8,11 @@ from monori.ci.lib.coverage_diff import (
     COVERAGE_REPORT_ADAPTER,
     CoverageReport,
     Finding,
+    ReportInputs,
     StackReport,
+    build_report,
     coverage_totals,
+    diff_stats,
     function_name,
     group_findings,
     load_baseline,
@@ -18,7 +22,9 @@ from monori.ci.lib.coverage_diff import (
     render_summary,
     typescript_function,
     write_baseline,
+    write_report,
 )
+from monori.ci.lib.coverage_diff import main as coverage_main
 from monori.common import JsonValue
 
 READ_ERROR = "unreadable"
@@ -383,3 +389,127 @@ def test_clean_summary_discloses_an_inactive_total_regression_gate() -> None:
         "⚠️ Total-coverage regression gate inactive: "
         "the base coverage baseline was unavailable.\n"
     )
+
+
+def test_cli_baseline_and_normalize_commands(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    frontend = tmp_path / "frontend.json"
+    backend = tmp_path / "backend.json"
+    baseline = tmp_path / "baseline.json"
+    frontend.write_text(json.dumps({"total": {"lines": {"pct": 91}}}))
+    backend.write_text(json.dumps({"totals": {"percent_covered": 82}}))
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "coverage-diff",
+            "baseline",
+            "--frontend",
+            str(frontend),
+            "--backend",
+            str(backend),
+            "--output",
+            str(baseline),
+        ],
+    )
+    assert coverage_main() == 0
+    assert load_baseline(baseline) == {"backend": 82.0, "frontend": 91.0}
+
+    source = tmp_path / "lcov.info"
+    normalized = tmp_path / "normalized.info"
+    source.write_text("SF:src/example.ts\n")
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "coverage-diff",
+            "normalize-lcov",
+            "--input",
+            str(source),
+            "--output",
+            str(normalized),
+        ],
+    )
+    assert coverage_main() == 0
+    assert normalized.read_text() == "SF:web/src/example.ts\n"
+
+
+def test_cli_report_returns_report_status(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    output = tmp_path / "report.json"
+    monkeypatch.setattr("monori.ci.lib.coverage_diff.build_report", lambda _inputs: report())
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "coverage-diff",
+            "report",
+            "--frontend",
+            "frontend.json",
+            "--backend",
+            "backend.json",
+            "--frontend-diff",
+            "frontend-diff.json",
+            "--backend-diff",
+            "backend-diff.json",
+            "--baseline",
+            "baseline.json",
+            "--base",
+            "origin/main",
+            "--coverage-exit",
+            "0",
+            "--output",
+            str(output),
+        ],
+    )
+    assert coverage_main() == 0
+    assert COVERAGE_REPORT_ADAPTER.validate_json(output.read_bytes()).passed
+
+
+def test_diff_stats_fails_closed_for_missing_and_invalid_reports(tmp_path: Path) -> None:
+    assert diff_stats(tmp_path / "missing.json") == (
+        0,
+        0,
+        0,
+        [],
+        "Diff coverage report was not produced",
+    )
+    invalid = tmp_path / "invalid.json"
+    invalid.write_text("{")
+    assert diff_stats(invalid)[4] is not None
+
+
+def test_build_and_write_report_use_touched_stack_evidence(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    frontend = tmp_path / "frontend.json"
+    backend = tmp_path / "backend.json"
+    baseline = tmp_path / "baseline.json"
+    frontend_diff = tmp_path / "frontend-diff.json"
+    backend_diff = tmp_path / "backend-diff.json"
+    output = tmp_path / "nested/report.json"
+    frontend.write_text(json.dumps({"total": {"lines": {"pct": 91}}}))
+    backend.write_text(json.dumps({"totals": {"percent_covered": 82}}))
+    baseline.write_text(
+        json.dumps({"schema_version": 1, "stacks": {"backend": 82, "frontend": 91}})
+    )
+    monkeypatch.setattr(
+        "monori.ci.lib.coverage_diff.changed_paths", lambda _base: {"server/app/example.py"}
+    )
+    monkeypatch.setattr(
+        "monori.ci.lib.coverage_diff.diff_stats", lambda _path: (100, 1, 1, [], None)
+    )
+    built = build_report(
+        ReportInputs(
+            frontend,
+            backend,
+            frontend_diff,
+            backend_diff,
+            baseline,
+            "origin/main",
+            0,
+        )
+    )
+    assert [stack.touched for stack in built.stacks] == [True, False]
+    write_report(built, output)
+    assert COVERAGE_REPORT_ADAPTER.validate_json(output.read_bytes()) == built
