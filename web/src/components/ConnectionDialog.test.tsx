@@ -104,9 +104,8 @@ describe("ConnectionDialog", () => {
             message: "code:Enter the code sent by Yandex via SMS.",
         });
         const sms = vi.spyOn(useStore.getState(), "submitConnectionSms").mockResolvedValue({
-            status: "connected",
-            inserted: 0,
-            skipped: 0,
+            status: "awaiting_sms",
+            message: "code:4:Enter the 4-digit code sent by Yandex Pay.",
         });
         const { user } = renderUI(<ConnectionDialog account={account} onClose={vi.fn()} />);
         await user.type(await screen.findByLabelText("Login"), "alice");
@@ -141,9 +140,8 @@ describe("ConnectionDialog", () => {
             message: "code:4:Enter the 4-digit code sent by Yandex Pay.",
         });
         const sms = vi.spyOn(useStore.getState(), "submitConnectionSms").mockResolvedValue({
-            status: "connected",
-            inserted: 0,
-            skipped: 0,
+            status: "awaiting_sms",
+            message: "code:4:Enter the 4-digit code sent by Yandex Pay.",
         });
         const { user } = renderUI(<ConnectionDialog account={account} onClose={vi.fn()} />);
         await user.type(await screen.findByLabelText("Login"), "alice");
@@ -158,8 +156,19 @@ describe("ConnectionDialog", () => {
         await user.type(input, "123");
         expect(screen.getByRole("button", { name: "Confirm" })).toBeDisabled();
         await user.type(input, "4");
-        await user.click(screen.getByRole("button", { name: "Confirm" }));
-        await waitFor(() => expect(sms).toHaveBeenCalledWith(7, "1234"));
+        expect(input).toHaveValue("1234");
+        expect(screen.queryByRole("button", { name: /Resend SMS/ })).not.toBeInTheDocument();
+        const timer = vi.spyOn(window, "setTimeout");
+        try {
+            await user.click(screen.getByRole("button", { name: "Confirm" }));
+            await waitFor(() => expect(sms).toHaveBeenCalledWith(7, "1234"));
+            expect(screen.getByLabelText("Yandex Pay code")).toHaveValue("");
+            expect(
+                timer.mock.calls.filter((call) => String(call[0]).includes("setResendSeconds")),
+            ).toHaveLength(0);
+        } finally {
+            timer.mockRestore();
+        }
     });
 
     it("renders a Yandex CAPTCHA challenge", async () => {
