@@ -172,7 +172,7 @@ def _effective_transactions(snap: SnapshotResponse) -> list[EffectiveTransaction
 def _transactions_sheet(
     ws: Worksheet,
     snap: SnapshotResponse,
-    cat_names: dict[int, str],
+    cat_identity: dict[int, tuple[str, str]],
     acct_names: dict[int, str],
     acct_currency: dict[int, str],
 ) -> None:
@@ -197,10 +197,13 @@ def _transactions_sheet(
         ws.cell(row=row, column=12, value=_text(tx.mcc))
         ws.cell(row=row, column=13, value=_text(tx.description))
         category_id = tx.category_id
-        category_name = cat_names.get(category_id, "") if category_id is not None else ""
-        ws.cell(row=row, column=14, value=_text(category_name))
-        ws.cell(row=row, column=15, value=_text(acct_names.get(tx.account_id, "")))
-        ws.cell(row=row, column=16, value=_text(tx.comment))
+        category_group, category_name = (
+            cat_identity.get(category_id, ("", "")) if category_id is not None else ("", "")
+        )
+        ws.cell(row=row, column=14, value=_text(category_group))
+        ws.cell(row=row, column=15, value=_text(category_name))
+        ws.cell(row=row, column=16, value=_text(acct_names.get(tx.account_id, "")))
+        ws.cell(row=row, column=17, value=_text(tx.comment))
         row += 1
     ws.freeze_panes = "A2"
 
@@ -426,7 +429,10 @@ def _write_category_year_totals(
 
 def build_workbook(snap: SnapshotResponse) -> Workbook:
     """Handle build workbook."""
-    cat_names = {c.id: c.name for c in snap.categories}
+    group_names = {group.id: group.name for group in snap.groups}
+    cat_identity = {
+        category.id: (group_names[category.group_id], category.name) for category in snap.categories
+    }
     acct_names = {a.id: a.name for a in snap.accounts}
     acct_currency = {a.id: a.currency for a in snap.accounts}
     activity = _month_activity(snap)
@@ -441,7 +447,7 @@ def build_workbook(snap: SnapshotResponse) -> Workbook:
     _transactions_sheet(
         wb.create_sheet(spec.SHEET_TRANSACTIONS),
         snap,
-        cat_names,
+        cat_identity,
         acct_names,
         acct_currency,
     )

@@ -9,11 +9,16 @@ from pydantic.dataclasses import dataclass as pydantic_dataclass
 
 from monori.common import JsonValue
 from monori.server.app.auth import AuthenticatedUser, current_user
+from monori.server.app.db import begin_write
 from monori.server.app.db_records import CategoryOwnershipRecord, GoalGroupRecord
 from monori.server.app.deps import IdResponse, conn
 from monori.server.app.domain_types import GoalStatus
 
 router = APIRouter(prefix="/api/categories", tags=["categories"])
+NAME_TAKEN_SQL = (
+    "SELECT c.id FROM categories c JOIN category_groups g ON g.id = c.group_id"
+    " WHERE g.user_id=? AND c.group_id=? AND c.name=? AND c.id<>?"
+)
 
 
 _CONFIG = ConfigDict(extra="forbid", populate_by_name=True)
@@ -103,11 +108,16 @@ def _owned_category(c: sqlite3.Connection, cat_id: int, uid: int) -> CategoryOwn
     return CategoryOwnershipRecord.from_row(row) if row is not None else None
 
 
-def _name_taken(c: sqlite3.Connection, uid: int, name: str, except_id: int | None = None) -> bool:
+def _name_taken(
+    c: sqlite3.Connection,
+    uid: int,
+    group_id: int,
+    name: str,
+    except_id: int | None = None,
+) -> bool:
     dup = c.execute(
-        "SELECT c.id FROM categories c JOIN category_groups g ON g.id = c.group_id"
-        " WHERE g.user_id=? AND c.name=? AND c.id<>?",
-        (uid, name, except_id or 0),
+        NAME_TAKEN_SQL,
+        (uid, group_id, name, except_id if except_id is not None else 0),
     ).fetchone()
     return dup is not None
 
@@ -124,6 +134,7 @@ def create_category(
         raise HTTPException(422, "name cannot be empty")
     c = conn()
     try:
+        begin_write(c)
         group = c.execute(
             "SELECT g.id, t.is_goal FROM category_groups g"
             " JOIN category_group_types t ON t.id=g.type_id"
@@ -137,7 +148,7 @@ def create_category(
         goal_target = body.goal_target
         if group_record.is_goal and goal_target is None:
             raise HTTPException(400, "goalTarget is required for goal categories")
-        if _name_taken(c, uid, name):
+        if _name_taken(c, uid, body.group_id, name):
             raise HTTPException(409, "category with this name already exists")
         max_sort = c.execute(
             "SELECT COALESCE(MAX(c.sort),0) FROM categories c"
@@ -159,6 +170,8 @@ def create_category(
         )
         c.commit()
         return IdResponse(id=cur.lastrowid)
+    except sqlite3.IntegrityError:
+        raise HTTPException(409, "category with this name already exists") from None
     finally:
         c.close()
 
@@ -173,6 +186,7 @@ def patch_category(
     uid = user.id
     c = conn()
     try:
+        begin_write(c)
         category = _owned_category(c, cat_id, uid)
         if not category:
             raise HTTPException(404, "category not found")
@@ -182,6 +196,8 @@ def patch_category(
         _update_goal_fields(c, cat_id, patch, allowed=goal_fields_allowed)
         c.commit()
         return OkResponse(ok=True)
+    except sqlite3.IntegrityError:
+        raise HTTPException(409, "category with this name already exists") from None
     finally:
         c.close()
 
@@ -193,7 +209,13 @@ def _update_category_name(
     patch: CategoryPatch,
 ) -> None:
     if patch.name is not None:
-        if _name_taken(c, uid, patch.name, except_id=cat_id):
+        group_id = patch.group_id
+        if group_id is None:
+            row = c.execute("SELECT group_id FROM categories WHERE id=?", (cat_id,)).fetchone()
+            if row is None:
+                raise HTTPException(404, "category not found")
+            group_id = int(row[0])
+        if _name_taken(c, uid, group_id, patch.name, except_id=cat_id):
             raise HTTPException(409, "category with this name already exists")
         c.execute("UPDATE categories SET name=? WHERE id=?", (patch.name, cat_id))
 
@@ -215,6 +237,11 @@ def _move_category(
     ).fetchone()
     if not target_group:
         raise HTTPException(400, "unknown group")
+    name_row = c.execute("SELECT name FROM categories WHERE id=?", (cat_id,)).fetchone()
+    if name_row is None:
+        raise HTTPException(404, "category not found")
+    if _name_taken(c, uid, patch.group_id, str(name_row[0]), except_id=cat_id):
+        raise HTTPException(409, "category with this name already exists")
     target = GoalGroupRecord.from_row(target_group)
     if target.is_goal and not patch.goal_target_provided and category.goal_target is None:
         raise HTTPException(400, "goalTarget is required for goal categories")
