@@ -197,7 +197,7 @@ def test_balanced_function_parser_tracks_quote_boundaries(source: str) -> None:
     assert findings[0].literal.endswith("1 2 3)")
 
 
-def test_native_result_contains_findings_annotations_and_controls() -> None:
+def test_native_result_contains_semantic_findings_and_annotations() -> None:
     finding = scan_file("example.css", "color: #ef5a17;\n", {1})[0]
     result = result_value(
         [finding],
@@ -221,10 +221,7 @@ def test_native_result_contains_findings_annotations_and_controls() -> None:
     summary = (
         "| File | Line | Literal | Format | Context | Status |\n"
         "| --- | ---: | --- | --- | --- | --- |\n"
-        "| `example.css` | 1 | `#ef5a17` | HEX | `color: #ef5a17;` | active |\n\n"
-        "Approve findings with `/qg ignore color-09ab56808930` or "
-        "`/qg ignore hardcoded-colors`.\n"
-        "- `/qg ignore-file example.css`"
+        "| `example.css` | 1 | `#ef5a17` | HEX | `color: #ef5a17;` | active |"
     )
     assert result == {
         "schemaVersion": 0,
@@ -257,11 +254,7 @@ def test_native_result_contains_findings_annotations_and_controls() -> None:
             }
         ],
         "diagnostics": [],
-        "controls": [
-            {"kind": "finding", "target": "color-09ab56808930", "checked": False},
-            {"kind": "file", "target": "example.css", "checked": False},
-            {"kind": "node", "target": "hardcoded-colors", "checked": False},
-        ],
+        "controls": [],
         "notes": ["Color finding IDs are stable and location-sensitive."],
         "provenance": {
             "repository": "org/repo",
@@ -300,7 +293,7 @@ def test_passing_native_result_has_no_failure_kind() -> None:
         "findings": [],
         "annotations": [],
         "diagnostics": [],
-        "controls": [{"kind": "node", "target": "hardcoded-colors", "checked": False}],
+        "controls": [],
         "notes": ["Color finding IDs are stable and location-sensitive."],
         "provenance": {
             "repository": "org/repo",
@@ -328,24 +321,25 @@ def test_multiline_finding_has_exact_location_context_and_id() -> None:
     ]
 
 
-def test_summary_escapes_table_cells_and_groups_file_controls() -> None:
+def test_summary_escapes_table_cells_without_framework_controls() -> None:
     findings = scan_file("web/a|b.css", "color: red; /* `context` */\n", {1})
 
     summary = summary_body(findings)
 
     assert "`web/a\\|b.css`" in summary
     assert "`color: red; /* \\`context\\` */`" in summary
-    assert summary.count("/qg ignore-file web/a|b.css") == 1
+    assert "/qg" not in summary
 
 
-def test_summary_sorts_distinct_file_controls() -> None:
+def test_summary_keeps_domain_rows_only() -> None:
     first = scan_file("z.css", "color: red;\n", {1})[0]
     second = scan_file("a.css", "color: blue;\n", {1})[0]
 
     summary = summary_body([first, second])
 
-    assert summary.endswith("- `/qg ignore-file a.css`\n- `/qg ignore-file z.css`")
-    assert f"/qg ignore {first.finding_id},{second.finding_id}" in summary
+    assert "`z.css`" in summary
+    assert "`a.css`" in summary
+    assert "/qg" not in summary
 
 
 def test_summary_flattens_multiline_literals_and_truncates_context() -> None:

@@ -281,6 +281,7 @@ def test_month_range_wraps_across_years() -> None:
 
 def test_synthetic_shape() -> None:
     a = _synthetic((2025, 1), 20000, "Groceries", "Groceries")
+    grouped = _synthetic((2025, 1), 20000, "Groceries", "Groceries", "Food")
     assert a.date == "2025-01-31T12:00:00"
     assert a.amount == 20000
     assert a.monori_category == "Groceries"
@@ -289,6 +290,8 @@ def test_synthetic_shape() -> None:
     assert a.bank_category == ""
     assert a.mcc == ""
     assert a.comment == ""
+    assert a.monori_category_group == ""
+    assert grouped.monori_category_group == "Food"
     assert not hasattr(a, "hash")
 
 
@@ -407,7 +410,7 @@ def test_parse_year_sheet_reads_grid_income_available_seed() -> None:
     assert layout is not None
     assert layout is not None
     parsed = _parse_year_sheet(ws, 2025, layout)
-    groceries = parsed.cats["Groceries"]
+    groceries = parsed.cats[("Daily", "Groceries")]
     assert groceries.group == "Daily"
     assert groceries.budgets == {1: 100000, 2: 100000}
     assert groceries.outflows == {1: 30000, 2: 50000}
@@ -903,7 +906,7 @@ def test_a_sheet_running_to_december_keeps_its_last_month() -> None:
     assert layout is not None
     parsed = _parse_year_sheet(ws, 2025, layout)
     assert parsed.months[-1] == 12
-    assert parsed.cats["Groceries"].balances[12] == 70000
+    assert parsed.cats[("Daily", "Groceries")].balances[12] == 70000
 
 
 def test_history_and_adjustment_split_follows_the_rows_not_the_sheet_name() -> None:

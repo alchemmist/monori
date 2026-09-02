@@ -1,10 +1,33 @@
 import json
+import os
 import re
-from typing import ClassVar, cast
+from pathlib import Path
+from typing import ClassVar, TypedDict, cast
 
 import yaml
 
-from monori.ci.tests.test_pr_workflow import REPOSITORY_ROOT, WorkflowDocument
+WorkflowStep = TypedDict("WorkflowStep", {"uses": str, "with": dict[str, str]}, total=False)
+
+
+WorkflowJob = TypedDict(
+    "WorkflowJob",
+    {
+        "if": str,
+        "needs": str | list[str],
+        "permissions": dict[str, str],
+        "steps": list[WorkflowStep],
+    },
+    total=False,
+)
+
+
+class WorkflowDocument(TypedDict):
+    jobs: dict[str, WorkflowJob]
+
+
+REPOSITORY_ROOT = Path(
+    os.environ.get("MONORI_REPOSITORY_ROOT", Path(__file__).resolve().parents[2])
+)
 
 WORKFLOW = REPOSITORY_ROOT / ".github/workflows/main-checks.yaml"
 DEPLOY_WORKFLOW = REPOSITORY_ROOT / ".github/workflows/deploy.yaml"

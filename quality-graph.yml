@@ -3,7 +3,8 @@ provider:
     name: github
     configuration:
         runtime:
-            action: alchemmist/quality-graph@a4a65abfc9364da6801be56b992358d302c7ad77
+            action: alchemmist/quality-graph@c73c58fb1c5064546b40f481decdb7bc12c5e9fe
+            publisher-action: alchemmist/quality-graph@c73c58fb1c5064546b40f481decdb7bc12c5e9fe
 administration:
     roles: [admin, maintain, write]
 labels:

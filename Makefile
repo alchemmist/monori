@@ -21,7 +21,7 @@ CLOC_EXCLUDE_DIRS := .git,.worktrees,.claude,node_modules,.venv,__pycache__,.pyt
         lint lint-web lint-css lint-html lint-server lint-no-comments lint-sql lint-yaml lint-md lint-docs lint-actions lint-docker lint-shell spell \
         docs-links \
         type type-casts type-front type-back analyze analyze-python-dead-code analyze-javascript-dead-code time-bombs audit audit-deps audit-deps-py audit-secrets \
-        test t-workflow t-fast t-medium t-ci t-ci-unit t-ci-integration t-slow t-slow-ui t-front t-back t-e2e t-e2e-ui coverage coverage-baseline coverage-diff perf-front-diff mutation mutation-diff mutation-python m-front m-front-diff m-front-file m-back m-back-diff \
+        test t-workflow t-fast t-medium t-ci t-ci-unit t-slow t-slow-ui t-front t-back t-e2e t-e2e-ui coverage coverage-baseline coverage-diff perf-front-diff mutation mutation-diff mutation-python m-front m-front-diff m-front-file m-back m-back-diff \
         load load-api load-api-auth load-api-read load-api-write load-api-import load-e2e load-fe load-sqlite load-report \
         schema-diagram check
 
@@ -214,14 +214,14 @@ lint-actions:
 	actionlint -shellcheck=
 
 lint-docker:
-	hadolint deploy/Dockerfile.front deploy/Dockerfile.back deploy/Dockerfile.sync deploy/Dockerfile.dev ci/testkit/Dockerfile
+	hadolint deploy/Dockerfile.front deploy/Dockerfile.back deploy/Dockerfile.sync deploy/Dockerfile.dev
 
 lint-shell:
 	@files=$$(git ls-files '*.sh'); [ -z "$$files" ] || shellcheck $$files
 	@files=$$(git ls-files '*.sh'); [ -z "$$files" ] || shfmt -d $$files
 
 spell:
-	uvx codespell --skip='*/mutants/*' web/src $(PYTHON_SOURCES) \
+	uvx codespell --skip='*/mutants/*,server/data/*' web/src $(PYTHON_SOURCES) \
 		README.md web/README.md docs Makefile .github
 
 type: type-back type-front
@@ -280,7 +280,7 @@ time-bombs:
 test: t-front t-back t-e2e
 
 t-workflow:
-	env -u GITHUB_STEP_SUMMARY -u MUTATION_SUMMARY_PATH uv run --locked pytest -q ci/tests/test_pr_workflow.py ci/tests/test_main_workflow.py ci/tests/test_performance_workflow.py
+	env -u GITHUB_STEP_SUMMARY -u MUTATION_SUMMARY_PATH uv run --locked pytest -q ci/tests/test_main_workflow.py ci/tests/test_performance_workflow.py ci/tests/test_public_quality_graph.py
 
 t-fast:
 	cd web && npx vitest run --exclude "src/**/*.test.tsx"
@@ -290,17 +290,11 @@ t-fast:
 t-medium:
 	cd web && npx vitest run --exclude "src/**/*.test.ts"
 	env -u GITHUB_STEP_SUMMARY -u MUTATION_SUMMARY_PATH uv run --locked --group test pytest -q server/tests -m integration
-	$(MAKE) t-ci-integration
 
-t-ci:
-	$(MAKE) t-ci-unit
-	$(MAKE) t-ci-integration
+t-ci: t-ci-unit
 
 t-ci-unit:
-	env -u GITHUB_STEP_SUMMARY -u MUTATION_SUMMARY_PATH uv run --locked --group test pytest -q ci/tests --ignore=ci/tests/integration
-
-t-ci-integration:
-	COMPOSE="$(COMPOSE)" bash scripts/ci-tests.sh
+	env -u GITHUB_STEP_SUMMARY -u MUTATION_SUMMARY_PATH uv run --locked --group test pytest -q ci/tests
 
 t-slow: t-e2e
 

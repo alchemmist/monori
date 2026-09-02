@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 from openpyxl import Workbook, load_workbook
 
 from monori.server.app.importer import tx_hash
+from monori.server.app.workbook.parser import parse_workbook
 from monori.server.tests.conftest import AccountOptions, Api, TransactionOptions
 
 pytestmark = pytest.mark.integration
@@ -63,7 +64,7 @@ def test_export_transactions_sheet(api: Api, client: TestClient) -> None:
     ws = _export(client)["Transactions"]
     headers = [c.value for c in ws[1]]
     assert headers[0] == "Дата операции"
-    assert headers[-3:] == ["Monori Category", "Account", "Comment"]
+    assert headers[-4:] == ["Monori Category Group", "Monori Category", "Account", "Comment"]
     row = [c.value for c in ws[2]]
     assert row[0] == "05.01.2026 10:00:00"
     assert row[1] == "05.01.2026"
@@ -71,8 +72,53 @@ def test_export_transactions_sheet(api: Api, client: TestClient) -> None:
     assert row[5] == -125.50
     assert row[7] == "-125.50 ₽"
     assert row[12] == "Lenta"
-    assert row[13] == "Groceries"
-    assert row[14] == "Card"
+    assert row[13] == "Daily Expenses"
+    assert row[14] == "Groceries"
+    assert row[15] == "Card"
+
+
+def test_export_round_trip_preserves_duplicate_category_groups(
+    api: Api,
+    client: TestClient,
+) -> None:
+    account = api.default_account()
+    home = api.group("Home")
+    travel = api.group("Travel")
+    home_other = api.category("Other", home)
+    travel_other = api.category("Other", travel)
+    api.tx(
+        "2026-01-01T10:00:00",
+        -100,
+        TransactionOptions(account_id=account, category_id=home_other, description="home"),
+    )
+    api.tx(
+        "2026-01-02T10:00:00",
+        -200,
+        TransactionOptions(account_id=account, category_id=travel_other, description="travel"),
+    )
+    client.put(
+        "/api/budgets",
+        json={"categoryId": home_other, "year": 2026, "month": 1, "amount": 1000},
+    )
+    client.put(
+        "/api/budgets",
+        json={"categoryId": travel_other, "year": 2026, "month": 1, "amount": 2000},
+    )
+    workbook = _export(client)
+    buffer = BytesIO()
+    workbook.save(buffer)
+
+    parsed = parse_workbook(buffer.getvalue())
+
+    assert {
+        (transaction.description, transaction.monori_category_group, transaction.monori_category)
+        for transaction in parsed.transactions
+        if transaction.description in {"home", "travel"}
+    } == {("home", "Home", "Other"), ("travel", "Travel", "Other")}
+    assert {(budget.group, budget.category, budget.amount) for budget in parsed.budgets} == {
+        ("Home", "Other", 1000),
+        ("Travel", "Other", 2000),
+    }
 
 
 def test_export_uses_split_parts_for_rows_and_totals(api: Api, client: TestClient) -> None:
@@ -101,7 +147,7 @@ def test_export_uses_split_parts_for_rows_and_totals(api: Api, client: TestClien
 
     wb = _export(client)
     rows = [[cell.value for cell in row] for row in wb["Transactions"].iter_rows(min_row=2)]
-    assert [(row[5], row[13], row[15]) for row in rows] == [
+    assert [(row[5], row[14], row[16]) for row in rows] == [
         (-60, "Groceries", "food"),
         (-40, "Household", "soap"),
     ]
@@ -334,7 +380,7 @@ def test_export_escapes_formula_prefixes(api: Api, client: TestClient) -> None:
     )
     ws = _export(client)["Transactions"]
     descriptions = {ws.cell(row=r, column=13).value for r in range(2, ws.max_row + 1)}
-    comments = {ws.cell(row=r, column=16).value for r in range(2, ws.max_row + 1)}
+    comments = {ws.cell(row=r, column=17).value for r in range(2, ws.max_row + 1)}
     assert "'=HYPERLINK(evil)" in descriptions
     assert "'+SUM(A1)" in comments
 

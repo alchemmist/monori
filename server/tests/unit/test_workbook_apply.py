@@ -149,6 +149,61 @@ def test_apply_preserves_blank_categories_despite_keywords(tmp_path: Path) -> No
     ]
 
 
+def test_duplicate_category_names_use_group_identity(tmp_path: Path) -> None:
+    c, uid, acct = _db(tmp_path)
+    parsed = _parsed(
+        groups=[
+            WorkbookGroup("Home", 1, "expense"),
+            WorkbookGroup("Travel", 2, "expense"),
+        ],
+        categories=[
+            WorkbookCategory("Home", "Other", "expense"),
+            WorkbookCategory("Travel", "Other", "expense"),
+        ],
+        transactions=[
+            WorkbookTransaction(
+                "2026-01-01T00:00:00",
+                -100,
+                "home",
+                "RUB",
+                monori_category="Other",
+                monori_category_group="Home",
+            ),
+            WorkbookTransaction(
+                "2026-01-02T00:00:00",
+                -200,
+                "travel",
+                "RUB",
+                monori_category="Other",
+                monori_category_group="Travel",
+            ),
+        ],
+        budgets=[
+            WorkbookBudget("Other", 2026, 1, 1000, group="Home"),
+            WorkbookBudget("Other", 2026, 1, 2000, group="Travel"),
+        ],
+    )
+
+    result = apply_workbook(c, uid, parsed, {"RUB:": acct})
+    c.commit()
+
+    assert result.inserted == 2
+    rows = c.execute(
+        "SELECT t.description, g.name, c.name FROM transactions t"
+        " JOIN categories c ON c.id=t.category_id"
+        " JOIN category_groups g ON g.id=c.group_id ORDER BY t.date"
+    ).fetchall()
+    assert [(row[0], row[1], row[2]) for row in rows] == [
+        ("home", "Home", "Other"),
+        ("travel", "Travel", "Other"),
+    ]
+    budgets = c.execute(
+        "SELECT g.name, b.amount FROM budgets b JOIN categories c ON c.id=b.category_id"
+        " JOIN category_groups g ON g.id=c.group_id ORDER BY g.name"
+    ).fetchall()
+    assert [(row[0], row[1]) for row in budgets] == [("Home", 1000), ("Travel", 2000)]
+
+
 def test_named_category_outside_the_sheet_beats_keywords(tmp_path: Path) -> None:
     c, uid, acct = _db(tmp_path)
     c.execute(

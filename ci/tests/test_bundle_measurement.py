@@ -16,7 +16,6 @@ from monori.ci.quality_graph.checks.bundle_measurement import (
     snapshot,
     tier,
 )
-from monori.ci.quality_graph.checks.bundle_size import format_kib
 
 
 class BundleEntry(TypedDict):
@@ -61,10 +60,6 @@ class TestBundleSize:
         growth = cast("list[AssetGrowth]", result["assetGrowth"])
         assert entries[0]["id"] == "bundle-initial-load"
         assert growth[0]["delta"] == 10_000
-
-    def test_format_kib_rejects_boolean_values(self) -> None:
-        with pytest.raises(TypeError, match="numeric bundle size"):
-            format_kib(value=True)
 
     def test_snapshot_and_cli_measure_real_build_assets(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

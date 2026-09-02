@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { authTokenSchema, snapshotSchema } from "./apiSchemas.js";
+import { authTokenSchema, snapshotSchema, transactionCreateSchema } from "./apiSchemas.js";
 
 const snapshot = {
     accounts: [
@@ -102,6 +102,13 @@ describe("API runtime contracts", () => {
         malformed.transactions[0]!.source = "unknown_source";
 
         expect(() => snapshotSchema.parse(malformed)).toThrow();
+    });
+
+    it.each([
+        { date: "2026-01-01T00:00:00", amount: Number.MIN_SAFE_INTEGER, accountId: 1 },
+        { date: "2026-01-01T00:00:00+14:00", amount: Number.MAX_SAFE_INTEGER, accountId: 1 },
+    ])("accepts browser-safe transaction boundaries", (body) => {
+        expect(transactionCreateSchema.parse(body)).toEqual(body);
     });
 
     it("requires the complete OAuth token response", () => {

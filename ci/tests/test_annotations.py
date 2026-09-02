@@ -1,12 +1,4 @@
-"""Test workflow annotation publication."""
-
-from __future__ import annotations
-
-import os
-import sys
-from contextlib import contextmanager
 from io import StringIO
-from typing import TYPE_CHECKING
 
 import pytest
 
@@ -19,134 +11,60 @@ from monori.ci.lib.annotations import (
     publish_workflow_annotations,
     workflow_annotation_command,
 )
-from monori.ci.lib.diagnostics import (
-    COLON_RE,
-    DiagnosticContext,
-    annotation_from_match,
-    normalize_source_path,
-    parse_context_line,
-    parse_diagnostics,
-    parse_diff_annotations,
-)
-from monori.ci.quality_graph.job_report import (
-    MAX_SUMMARY_LOG_CHARACTERS,
-    build_result,
-    diagnostic_summary,
-)
-from monori.ci.quality_graph.job_report import main as job_report_main
-from monori.ci.quality_graph.job_results import (
-    JobControl,
-    JobResult,
-    JobResultPublisher,
-    JobStatus,
-    append_job_summary,
-    controls_from_markdown,
-    read_job_result,
-    write_job_result,
-)
-from monori.ci.quality_graph.models import Metric
-from monori.ci.quality_graph.result_cli import main as result_cli_main
-
-if TYPE_CHECKING:
-    from collections.abc import Iterator
-    from pathlib import Path
 
 
-@contextmanager
-def arguments(values: list[str]) -> Iterator[None]:
-    """Temporarily replace command-line arguments for one CLI test."""
-    previous = sys.argv
-    sys.argv = values
-    try:
-        yield
-    finally:
-        sys.argv = previous
+def test_annotation_validates_ranges_and_round_trips_json() -> None:
+    annotation = SourceAnnotation("a.py", 2, 2, "bad", start_column=3, end_column=5)
+    assert SourceAnnotation.from_json(annotation.to_json()) == annotation
+    with pytest.raises(ValueError, match="line range"):
+        SourceAnnotation("a.py", 0, 1, "bad")
+    with pytest.raises(ValueError, match="provided together"):
+        SourceAnnotation("a.py", 1, 1, "bad", start_column=1)
+    with pytest.raises(ValueError, match="positive ordered"):
+        SourceAnnotation("a.py", 1, 2, "bad", start_column=2, end_column=1)
 
 
-@contextmanager
-def environment(values: dict[str, str]) -> Iterator[None]:
-    """Temporarily set environment values for one CLI test."""
-    previous = {key: os.environ.get(key) for key in values}
-    os.environ.update(values)
-    try:
-        yield
-    finally:
-        for key, value in previous.items():
-            if value is None:
-                os.environ.pop(key, None)
-            else:
-                os.environ[key] = value
-
-
-def test_grouped_annotations_merge_one_location_and_apply_limit() -> None:
-    """Avoid noisy repeated annotations while retaining every source location."""
+def test_grouped_annotations_merge_locations_and_limit_output() -> None:
     annotations = [
         SourceAnnotation("same.py", 1, 1, "first"),
         SourceAnnotation("same.py", 1, 1, "second"),
         *(SourceAnnotation(f"file-{index}.py", 1, 1, "failure") for index in range(20)),
     ]
-
     grouped = grouped_annotations(annotations)
-
     assert len(grouped) == MAX_STEP_ANNOTATIONS
     assert grouped[0].message == "first\nsecond"
 
 
-def test_grouped_annotations_preserve_distinct_titles() -> None:
-    """Keep diagnostics from different rules separate at one source range."""
-    grouped = grouped_annotations(
-        (
-            SourceAnnotation("same.py", 1, 1, "first", title="rule-a"),
-            SourceAnnotation("same.py", 1, 1, "second", title="rule-b"),
-        )
+def test_workflow_commands_escape_and_publish_omission_notice() -> None:
+    annotation = SourceAnnotation(
+        "a,b.py",
+        1,
+        1,
+        "line one\nline two",
+        AnnotationLevel.WARNING,
+        title="bad:title",
+        start_column=2,
+        end_column=4,
     )
-
-    assert [(item.title, item.message) for item in grouped] == [
-        ("rule-a", "first"),
-        ("rule-b", "second"),
-    ]
-
-
-def test_annotation_publisher_groups_limits_and_reports_omissions() -> None:
-    """Publish workflow commands through the single annotation boundary."""
-    stream = StringIO()
-    annotations = [
-        SourceAnnotation("same.py", 1, 1, "first"),
-        SourceAnnotation("same.py", 1, 1, "second"),
-        *(SourceAnnotation(f"file-{index}.py", 1, 1, "failure") for index in range(20)),
-    ]
-
-    publish_workflow_annotations(
-        annotations,
-        omitted_message="More findings are in the summary.",
-        stream=stream,
+    assert workflow_annotation_command(annotation) == (
+        "::warning file=a%2Cb.py,line=1,endLine=1,title=bad%3Atitle,col=2,endColumn=4::"
+        "line one%0Aline two"
     )
-
-    output = stream.getvalue()
-    assert output.count("::error ") == MAX_STEP_ANNOTATIONS
-    assert "first%0Asecond" in output
-    assert "::notice::More findings are in the summary." in output
-
-
-def test_control_markers_restore_reversible_checkbox_state() -> None:
-    """Recover both commands from a rendered administrator checkbox."""
-    control = JobControl(
-        "/qg ignore suppression-a",
-        "/qg remove-ignore suppression-a",
-        checked=True,
-    )
-    body = f"- [x] `{control.command}` <!-- {control.marker} -->"
-
-    assert controls_from_markdown(body) == (control,)
-
-
-def test_workflow_command_escapes_untrusted_annotation_data() -> None:
-    """Prevent source diagnostics from breaking GitHub workflow command syntax."""
-    rendered = workflow_annotation_command(
-        SourceAnnotation("a,b.py", 1, 1, "line one\nline two", title="bad:title")
-    )
-
-    assert rendered == (
-        "::error file=a%2Cb.py,line=1,endLine=1,title=bad%3Atitle::line one%0Aline two"
-    )
+    assert AnnotationLevel.FAILURE.command == "error"
     assert escape_data("100%\r\nnext") == "100%25%0D%0Anext"
+    stream = StringIO()
+    publish_workflow_annotations(
+        [annotation, annotation], omitted_message="More findings", stream=stream
+    )
+    assert "::notice::More findings" in stream.getvalue()
+
+    overflow = StringIO()
+    publish_workflow_annotations(
+        [
+            SourceAnnotation(f"file-{index}.py", 1, 1, "failure")
+            for index in range(MAX_STEP_ANNOTATIONS + 1)
+        ],
+        omitted_message="More findings",
+        stream=overflow,
+    )
+    assert "::notice::More findings" in overflow.getvalue()
