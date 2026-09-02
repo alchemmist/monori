@@ -16,6 +16,7 @@ cp server/__init__.py server/schema.sql "$workspace/monori/server/"
 cp -R server/tests "$workspace/server/tests"
 cp -R ci/tests "$workspace/ci/tests"
 cp -R performance "$workspace/performance"
+cp -R deploy "$workspace/deploy"
 cp -R tools/frontend-perf "$workspace/tools/frontend-perf"
 cp -R .github "$workspace/.github"
 cp -R scripts "$workspace/scripts"
@@ -27,7 +28,7 @@ if [ -d mutants ]; then
 fi
 
 set +e
-(cd "$workspace" && env -u GITHUB_STEP_SUMMARY -u MUTATION_SUMMARY_PATH "$repository/.venv/bin/mutmut" "$@")
+(cd "$workspace" && env -u GITHUB_STEP_SUMMARY -u MUTATION_SUMMARY_PATH MONORI_REPOSITORY_ROOT="$repository" "$repository/.venv/bin/mutmut" "$@")
 status=$?
 set -e
 

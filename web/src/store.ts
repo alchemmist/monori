@@ -60,7 +60,7 @@ interface StoreState {
     patchMe: (patch: Partial<Pick<User, "defaultAccountId">>) => Promise<User>;
     logout: () => void;
     load: () => Promise<void>;
-    fillTransactions: (generation?: number) => Promise<void>;
+    fillTransactions: (generation?: object) => Promise<void>;
     notify: (toast: ToastMessage) => void;
     setBudget: (categoryId: Id, year: number, month: number, amount: number) => Promise<void>;
     fillBudgetForward: (categoryId: Id, year: number, month: number) => Promise<number>;
@@ -124,12 +124,15 @@ export const TX_CHUNK = 1000;
  * so on a fast link the chunks are coalesced instead of recomputing per chunk. */
 export const TX_FLUSH_MS = 250;
 
-/** Bumped by every load(); a fill whose generation is stale drops its results. */
-let fillGeneration = 0;
+/** Replaced by every load(); a fill whose generation is stale drops its results. */
+let fillGeneration = {};
 
-/** Bumped by every hide/unhide, so an in-flight hidden-list fetch can tell it
+let snapshotReplacementEpoch = {};
+
+/** Replaced by every hide/unhide, so an in-flight hidden-list fetch can tell it
  * is stale and must not overwrite the newer optimistic state. */
-let hiddenEpoch = 0;
+let hiddenEpoch = {};
+let hiddenRevisions = new Map<Id, object>();
 
 /** Rapid hide→unhide on one row must reach the server in order, or the earlier
  * PATCH could land last and win — so per-transaction PATCHes are chained. */
@@ -148,19 +151,29 @@ let budgetOperationTail: Promise<void> = Promise.resolve();
 let nextBudgetRevision = 0;
 const budgetRevisions = new Map<string, number>();
 const failedBudgetWrites = new Map<string, unknown>();
+let budgetBaselines = new Map<string, BudgetCell | undefined>();
 let sessionEpoch = {};
+let budgetSessionToken: string | null = null;
 
 class SessionChangedError extends Error {}
 
 function resetBudgetSession() {
     sessionEpoch = {};
+    budgetSessionToken = null;
     nextBudgetRevision = 0;
     budgetRevisions.clear();
     failedBudgetWrites.clear();
+    budgetBaselines = new Map();
+    hiddenRevisions = new Map();
 }
 
 function sessionStamp() {
-    return { epoch: sessionEpoch, token: localStorage.getItem("monori_token") };
+    const token = localStorage.getItem("monori_token");
+    if (token !== budgetSessionToken) {
+        resetBudgetSession();
+        budgetSessionToken = token;
+    }
+    return { epoch: sessionEpoch, token };
 }
 
 function assertCurrentSession(stamp: ReturnType<typeof sessionStamp>) {
@@ -193,7 +206,7 @@ function budgetKey(categoryId: Id, year: number, month: number) {
 // Each optimistic transaction edit owns revisions for the fields it changes.
 // A failed older request must never undo a newer edit to the same field.
 let nextTxFieldRevision = 0;
-const txFieldRevisions = new Map<Id, Map<keyof TransactionPatch, number>>();
+let txFieldRevisions = new Map<Id, Map<keyof TransactionPatch, number>>();
 
 let nextSplitRevision = 0;
 const splitRevisions = new Map<Id, number>();
@@ -315,14 +328,15 @@ export const useStore = create<StoreState>((set, get) => ({
     async load() {
         // claimed before the await, so two overlapping loads (React StrictMode
         // remounts, a reload during a fill) leave only the last one filling
-        const generation = (fillGeneration += 1);
+        const generation = (fillGeneration = {});
         // Do not briefly render a prior account's hidden ledger while the new
         // snapshot is loading. The epoch also discards any old hidden request.
         const reloadHidden = get().hiddenTx !== null;
-        hiddenEpoch += 1;
+        hiddenEpoch = {};
         set({ hiddenTx: null });
         if (isDemo()) {
             const snapshot = structuredClone(demoSnapshot);
+            snapshotReplacementEpoch = {};
             set({
                 snapshot: { ...snapshot, transactionsTotal: snapshot.transactions.length },
                 loading: false,
@@ -334,6 +348,7 @@ export const useStore = create<StoreState>((set, get) => ({
         try {
             const snapshot = await api.snapshot({ light: true });
             if (generation !== fillGeneration) return;
+            snapshotReplacementEpoch = {};
             set({ snapshot, loading: false, error: null });
         } catch (e) {
             set({ error: String(e), loading: false, txProgress: null });
@@ -411,8 +426,13 @@ export const useStore = create<StoreState>((set, get) => ({
     setBudget(categoryId, year, month, amount) {
         const stamp = sessionStamp();
         const key = budgetKey(categoryId, year, month);
-        budgetRevisions.set(key, ++nextBudgetRevision);
+        const revision = ++nextBudgetRevision;
+        budgetRevisions.set(key, revision);
         const snapshot = requireSnapshot(get().snapshot);
+        const before = snapshot.budgets.find(
+            (b) => b.categoryId === categoryId && b.year === year && b.month === month,
+        );
+        if (!budgetBaselines.has(key)) budgetBaselines.set(key, before);
         const budgets = snapshot.budgets.filter(
             (b) => !(b.categoryId === categoryId && b.year === year && b.month === month),
         );
@@ -422,19 +442,51 @@ export const useStore = create<StoreState>((set, get) => ({
         const write = chainedBudgetOperation(stamp, async () => {
             try {
                 await api.putBudget({ categoryId, year, month, amount });
+                assertCurrentSession(stamp);
                 failedBudgetWrites.delete(key);
+                budgetBaselines.set(
+                    key,
+                    amount === 0 ? undefined : { categoryId, year, month, amount },
+                );
             } catch (error) {
-                if (stamp.epoch === sessionEpoch) failedBudgetWrites.set(key, error);
+                if (stamp.token === localStorage.getItem("monori_token")) {
+                    failedBudgetWrites.set(key, error);
+                    if (budgetRevisions.get(key) === revision) {
+                        const current = requireSnapshot(get().snapshot);
+                        const restored = current.budgets.filter(
+                            (b) =>
+                                !(
+                                    b.categoryId === categoryId &&
+                                    b.year === year &&
+                                    b.month === month
+                                ),
+                        );
+                        const baseline = budgetBaselines.get(key);
+                        if (baseline) restored.push(baseline);
+                        set({ snapshot: { ...current, budgets: restored } });
+                    }
+                }
                 throw error;
             }
         });
         write.catch((e) => {
-            if (!(e instanceof SessionChangedError)) {
+            if (
+                !(e instanceof SessionChangedError) &&
+                stamp.epoch === sessionEpoch &&
+                stamp.token === localStorage.getItem("monori_token")
+            ) {
                 set({
                     toast: { title: "Failed to save budget", theme: "danger", content: String(e) },
                 });
             }
         });
+        void write
+            .finally(() => {
+                if (stamp.epoch === sessionEpoch && budgetRevisions.get(key) === revision) {
+                    budgetBaselines.delete(key);
+                }
+            })
+            .catch(() => undefined);
         return write;
     },
 
@@ -511,21 +563,7 @@ export const useStore = create<StoreState>((set, get) => ({
     },
 
     setTxCategory(txId, categoryId) {
-        const snapshot = requireSnapshot(get().snapshot);
-        const transactions = snapshot.transactions.map((t) =>
-            t.id === txId ? { ...t, categoryId } : t,
-        );
-        set({ snapshot: { ...snapshot, transactions } });
-        if (isDemo()) return;
-        api.patchTx(txId, { categoryId: categoryId ?? 0 }).catch((e) =>
-            set({
-                toast: {
-                    title: "Failed to update transaction",
-                    theme: "danger",
-                    content: String(e),
-                },
-            }),
-        );
+        void get().updateTransaction(txId, { categoryId: categoryId ?? null });
     },
 
     /** Record a transaction by hand. The row is merged straight into the loaded
@@ -564,7 +602,7 @@ export const useStore = create<StoreState>((set, get) => ({
         });
         // Creating a row shifts every older-page offset. Restart the fill so
         // its captured total and offsets cannot overwrite or skip this insert.
-        if (get().txProgress) void get().fillTransactions((fillGeneration += 1));
+        if (get().txProgress) void get().fillTransactions((fillGeneration = {}));
         return tx;
     },
 
@@ -574,6 +612,8 @@ export const useStore = create<StoreState>((set, get) => ({
      * budget on the page lying until the next reload. A changed date moves the
      * row, so the ledger is re-sorted into canonical order. */
     async updateTransaction(txId, patch) {
+        const stamp = sessionStamp();
+        const replacementEpoch = snapshotReplacementEpoch;
         const snapshot = requireSnapshot(get().snapshot);
         const before = snapshot.transactions.find((t) => t.id === txId);
         if (!before) return;
@@ -583,12 +623,17 @@ export const useStore = create<StoreState>((set, get) => ({
         patchKeys.forEach((key) => revisions.set(key, revision));
         txFieldRevisions.set(txId, revisions);
         const rows = snapshot.transactions.map((t) => (t.id === txId ? { ...t, ...patch } : t));
-        if (patch.date !== undefined && patch.date !== before.date) rows.sort(compareTx);
+        rows.sort(compareTx);
         set({ snapshot: { ...snapshot, transactions: rows } });
         if (isDemo()) return;
         try {
-            await api.patchTx(txId, patch);
+            await api.patchTx(
+                txId,
+                patch.categoryId === null ? { ...patch, categoryId: 0 } : patch,
+            );
         } catch (e) {
+            if (stamp.epoch !== sessionEpoch || replacementEpoch !== snapshotReplacementEpoch)
+                return;
             const cur = requireSnapshot(get().snapshot);
             const undo = Object.fromEntries(
                 patchKeys
@@ -744,10 +789,14 @@ export const useStore = create<StoreState>((set, get) => ({
     },
 
     hideTx(txId) {
+        const stamp = sessionStamp();
+        const replacementEpoch = snapshotReplacementEpoch;
         const { hiddenTx } = get();
         const snapshot = requireSnapshot(get().snapshot);
         const t = snapshot.transactions.find((x) => x.id === txId);
         if (!t) return;
+        const revision = {};
+        hiddenRevisions.set(txId, revision);
         set({
             snapshot: {
                 ...snapshot,
@@ -757,30 +806,45 @@ export const useStore = create<StoreState>((set, get) => ({
             hiddenTx: [...(hiddenTx ?? []), { ...t, hidden: true }].sort(compareTx),
         });
         if (isDemo()) return;
-        hiddenEpoch += 1;
-        chainedPatchTx(txId, { hidden: true }).then(
-            () => {
-                // once the server excludes this row, every list offset past it
-                // shifts down by one — a running background fill would skip
-                // the row that slid into its boundary, so restart it
-                if (get().txProgress) void get().fillTransactions((fillGeneration += 1));
-            },
-            (e) =>
-                set({
-                    toast: {
-                        title: "Failed to hide transaction",
-                        theme: "danger",
-                        content: String(e),
-                    },
-                }),
-        );
+        hiddenEpoch = {};
+        void (async () => {
+            try {
+                await chainedPatchTx(txId, { hidden: true });
+                if (get().txProgress) void get().fillTransactions((fillGeneration = {}));
+            } catch (e) {
+                if (
+                    hiddenRevisions.get(txId) === revision &&
+                    stamp.token === localStorage.getItem("monori_token") &&
+                    replacementEpoch === snapshotReplacementEpoch
+                ) {
+                    const current = requireSnapshot(get().snapshot);
+                    set({
+                        snapshot: {
+                            ...current,
+                            transactions: mergeTransactions(current.transactions, [t]),
+                            transactionsTotal: (current.transactionsTotal ?? 0) + 1,
+                        },
+                        hiddenTx: (get().hiddenTx ?? []).filter((row) => row.id !== txId),
+                        toast: {
+                            title: "Failed to hide transaction",
+                            theme: "danger",
+                            content: String(e),
+                        },
+                    });
+                }
+            }
+        })();
     },
 
     unhideTx(txId) {
+        const stamp = sessionStamp();
+        const replacementEpoch = snapshotReplacementEpoch;
         const { hiddenTx } = get();
         const snapshot = requireSnapshot(get().snapshot);
         const t = (hiddenTx ?? []).find((x) => x.id === txId);
         if (!t || !hiddenTx) return;
+        const revision = {};
+        hiddenRevisions.set(txId, revision);
         set({
             snapshot: {
                 ...snapshot,
@@ -790,30 +854,38 @@ export const useStore = create<StoreState>((set, get) => ({
             hiddenTx: hiddenTx.filter((x) => x.id !== txId),
         });
         if (isDemo()) return;
-        hiddenEpoch += 1;
-        chainedPatchTx(txId, { hidden: false }).catch((e) =>
-            set({
-                toast: {
-                    title: "Failed to unhide transaction",
-                    theme: "danger",
-                    content: String(e),
-                },
-            }),
-        );
+        hiddenEpoch = {};
+        void (async () => {
+            try {
+                await chainedPatchTx(txId, { hidden: false });
+                if (get().txProgress) void get().fillTransactions((fillGeneration = {}));
+            } catch (e) {
+                if (
+                    hiddenRevisions.get(txId) === revision &&
+                    stamp.token === localStorage.getItem("monori_token") &&
+                    replacementEpoch === snapshotReplacementEpoch
+                ) {
+                    const current = requireSnapshot(get().snapshot);
+                    set({
+                        snapshot: {
+                            ...current,
+                            transactions: current.transactions.filter((row) => row.id !== txId),
+                            transactionsTotal: Math.max(0, (current.transactionsTotal ?? 1) - 1),
+                        },
+                        hiddenTx: [...(get().hiddenTx ?? []), t].sort(compareTx),
+                        toast: {
+                            title: "Failed to unhide transaction",
+                            theme: "danger",
+                            content: String(e),
+                        },
+                    });
+                }
+            }
+        })();
     },
 
     setTxAccount(txId, accountId) {
-        const snapshot = requireSnapshot(get().snapshot);
-        const transactions = snapshot.transactions.map((t) =>
-            t.id === txId ? { ...t, accountId } : t,
-        );
-        set({ snapshot: { ...snapshot, transactions } });
-        if (isDemo()) return;
-        api.patchTx(txId, { accountId }).catch((e) =>
-            set({
-                toast: { title: "Failed to move transaction", theme: "danger", content: String(e) },
-            }),
-        );
+        void get().updateTransaction(txId, { accountId });
     },
 
     async createAccount(body) {
@@ -997,21 +1069,23 @@ export const useStore = create<StoreState>((set, get) => ({
      * money. Kept separate from splitTransfer so nothing can destroy a bank's
      * own transactions by accident. */
     async deleteTransferWithLegs(transferId) {
-        const ids = requireSnapshot(get().snapshot)
-            .transactions.filter((t) => t.transferId === transferId)
-            .map((t) => t.id);
-        if (!isDemo()) {
-            await api.splitTransfer(transferId);
-            await Promise.all(ids.map((id) => api.deleteTx(id)));
-        }
+        const transactions = requireSnapshot(get().snapshot).transactions;
+        const deleted = isDemo()
+            ? transactions.filter((transaction) => transaction.transferId === transferId).length
+            : (await api.deleteTransferWithLegs(transferId)).deleted;
         const snapshot = requireSnapshot(get().snapshot);
         set({
             snapshot: {
                 ...snapshot,
-                transactions: snapshot.transactions.filter((t) => !ids.includes(t.id)),
+                transactions: snapshot.transactions.filter((t) => t.transferId !== transferId),
                 transfers: snapshot.transfers.filter((x) => x.id !== transferId),
+                transactionsTotal: Math.max(
+                    0,
+                    (snapshot.transactionsTotal ?? snapshot.transactions.length) - deleted,
+                ),
             },
         });
+        if (get().txProgress) void get().fillTransactions((fillGeneration = {}));
     },
 
     /** Pairs the server thinks are transfers but is not sure enough to merge
@@ -1236,16 +1310,19 @@ const initialTabs = structuredClone(initialStoreState.tabs);
 const initialNextTabId = nextTabId;
 
 export function resetStoreForTests() {
-    fillGeneration += 1;
-    hiddenEpoch += 1;
+    fillGeneration = {};
+    snapshotReplacementEpoch = {};
+    hiddenEpoch = {};
     txPatchChain.clear();
     nextTxFieldRevision = 0;
-    txFieldRevisions.clear();
+    txFieldRevisions = new Map();
     budgetOperationTail = Promise.resolve();
     sessionEpoch = {};
     nextBudgetRevision = 0;
     budgetRevisions.clear();
     failedBudgetWrites.clear();
+    budgetBaselines = new Map();
+    hiddenRevisions = new Map();
     nextTabId = initialNextTabId;
     useStore.setState(
         {

@@ -1,4 +1,5 @@
 import json
+import os
 import re
 from pathlib import Path
 from typing import ClassVar, TypedDict, cast
@@ -24,7 +25,9 @@ class WorkflowDocument(TypedDict):
     jobs: dict[str, WorkflowJob]
 
 
-REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
+REPOSITORY_ROOT = Path(
+    os.environ.get("MONORI_REPOSITORY_ROOT", Path(__file__).resolve().parents[2])
+)
 
 WORKFLOW = REPOSITORY_ROOT / ".github/workflows/main-checks.yaml"
 DEPLOY_WORKFLOW = REPOSITORY_ROOT / ".github/workflows/deploy.yaml"
