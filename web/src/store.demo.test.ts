@@ -299,7 +299,7 @@ describe("createTransfer and deleteTransfer in the demo", () => {
         const transferId = await useStore
             .getState()
             .createTransfer({ fromAccountId: 1, toAccountId: 5, amount: 25, date: "2026-03-01" });
-        await useStore.getState().createTransfer({
+        const retainedTransferId = await useStore.getState().createTransfer({
             fromAccountId: 5,
             toAccountId: 1,
             amount: 5,
@@ -307,6 +307,8 @@ describe("createTransfer and deleteTransfer in the demo", () => {
         });
         await useStore.getState().deleteTransferWithLegs(transferId);
         expect(snap().transactions.map((t) => t.id)).toEqual([2, 7, 10, 11]);
+        expect(snap().transactionsTotal).toBe(4);
+        expect(snap().transfers.map((transfer) => transfer.id)).toEqual([retainedTransferId]);
     });
 });
 

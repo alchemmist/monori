@@ -61,7 +61,7 @@ def _upsert_categories(
     uid: int,
     categories: Iterable[WorkbookCategory],
     group_ids: Mapping[str, int],
-) -> tuple[dict[str, int], int]:
+) -> tuple[dict[tuple[str, str], int], int]:
     existing = {
         (int(r["group_id"]), str(r["name"])): int(r["id"])
         for r in c.execute(
@@ -80,14 +80,14 @@ def _upsert_categories(
         )
     }
     created = 0
-    ids: dict[str, int] = {}
+    ids: dict[tuple[str, str], int] = {}
     for cat in categories:
         gid = group_ids.get(cat.group)
         if gid is None:
             continue
         key = (gid, cat.name)
         if key in existing:
-            ids[cat.name] = existing[key]
+            ids[(_norm(cat.group), _norm(cat.name))] = existing[key]
             continue
         sort = max_sort.get(gid, -1) + 1
         max_sort[gid] = sort
@@ -99,12 +99,12 @@ def _upsert_categories(
         if category_id is None:
             msg = "inserted category did not return a row id"
             raise RuntimeError(msg)
-        ids[cat.name] = category_id
+        ids[(_norm(cat.group), _norm(cat.name))] = category_id
         created += 1
     return ids, created
 
 
-def _category_index(c: sqlite3.Connection, uid: int) -> dict[str, int]:
+def _category_index(c: sqlite3.Connection, uid: int) -> dict[str, list[int]]:
     """
     Every category the user owns, keyed by a normalized name, so a workbook cell.
 
@@ -112,14 +112,14 @@ def _category_index(c: sqlite3.Connection, uid: int) -> dict[str, int]:
     table. Names that collide across groups map to the first one by sort order —
     the workbook has no group column on the transaction row to tell them apart.
     """
-    index: dict[str, int] = {}
+    index: dict[str, list[int]] = {}
     for r in c.execute(
         "SELECT c.id, c.name FROM categories c"
         " JOIN category_groups g ON g.id = c.group_id WHERE g.user_id=?"
         " ORDER BY c.sort, c.id",
         (uid,),
     ):
-        index.setdefault(_norm(str(r["name"])), int(r["id"]))
+        index.setdefault(_norm(str(r["name"])), []).append(int(r["id"]))
     return index
 
 
@@ -150,7 +150,7 @@ def _import_transactions(
     uid: int,
     transactions: Iterable[WorkbookTransaction],
     mapping: Mapping[str, int],
-    category_ids: Mapping[str, int],
+    category_ids: Mapping[tuple[str, str], int],
 ) -> tuple[int, int, list[WorkbookBatchResult], list[str], int, int]:
     """
     Handle A workbook is historical evidence, not a fresh bank feed: every category is.
@@ -169,7 +169,14 @@ def _import_transactions(
         account_id = mapping[account_slot(tx)]
         named = tx.monori_category
         if named:
-            category_id = category_ids.get(named) or index.get(_norm(named))
+            category_id = (
+                category_ids.get((_norm(tx.monori_category_group), _norm(named)))
+                if tx.monori_category_group
+                else None
+            )
+            legacy = index.get(_norm(named), [])
+            if category_id is None and not tx.monori_category_group and len(legacy) == 1:
+                category_id = legacy[0]
             if category_id is None:
                 unmatched.add(named)
         else:
@@ -216,13 +223,20 @@ def _import_transactions(
 def _import_budgets(
     c: sqlite3.Connection,
     budgets: Iterable[WorkbookBudget],
-    category_ids: Mapping[str, int],
+    category_ids: Mapping[tuple[str, str], int],
     *,
     overwrite: bool,
 ) -> tuple[int, int]:
     written = skipped = 0
+    by_name: dict[str, list[int]] = {}
+    for (_, name), category_id in category_ids.items():
+        by_name.setdefault(name, []).append(category_id)
     for cell in budgets:
-        cid = category_ids.get(cell.category)
+        normalized_name = _norm(cell.category)
+        cid = category_ids.get((_norm(cell.group), normalized_name)) if cell.group else None
+        legacy = by_name.get(normalized_name, [])
+        if cid is None and not cell.group and len(legacy) == 1:
+            cid = legacy[0]
         if cid is None:
             skipped += 1
             continue

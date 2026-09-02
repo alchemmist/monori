@@ -24,6 +24,7 @@ description — a merchant purchase that merely matches the amount — is a
 mismatch: still offered as a suggestion, never merged on its own.
 """
 
+from bisect import bisect_left, bisect_right
 from collections.abc import Iterable
 from dataclasses import dataclass
 
@@ -134,10 +135,19 @@ def _transfer_candidates(
 ) -> list[TransferCandidate]:
     candidates: list[TransferCandidate] = []
     for amount, out_rows in outs.items():
+        in_rows = ins.get(amount, [])
+        dated_ins = sorted(
+            ((day_number(row.date), row) for row in in_rows),
+            key=lambda item: (item[0], item[1].id),
+        )
+        in_days = [day for day, _ in dated_ins]
         for out_row in out_rows:
+            out_day = day_number(out_row.date)
+            start = bisect_left(in_days, out_day - max_days)
+            end = bisect_right(in_days, out_day + max_days)
             candidates.extend(
                 candidate
-                for in_row in ins.get(amount, [])
+                for _, in_row in dated_ins[start:end]
                 if (candidate := _transfer_candidate(out_row, in_row, amount, max_days, rejected))
                 is not None
             )

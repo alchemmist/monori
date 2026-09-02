@@ -149,7 +149,7 @@ describe("store remote mutations", () => {
 
     it("reloads after creating a transfer but deletes one locally", async () => {
         const create = vi.spyOn(api, "createTransfer").mockResolvedValue({ transferId: "t-9" });
-        const remove = vi.spyOn(api, "splitTransfer").mockResolvedValue({});
+        const remove = vi.spyOn(api, "deleteTransferWithLegs").mockResolvedValue({ deleted: 2 });
         const body = { fromAccountId: 1, toAccountId: 2, amount: 25, date: "2026-01-02" };
 
         const transferId = await useStore.getState().createTransfer(body);
@@ -160,6 +160,78 @@ describe("store remote mutations", () => {
         await useStore.getState().deleteTransferWithLegs("t-9");
         expect(remove).toHaveBeenCalledExactlyOnceWith("t-9");
         expect(refreshCount()).toBe(1);
+    });
+
+    it("removes a transfer leg loaded while deletion is pending", async () => {
+        let finishDelete: ((result: { deleted: number }) => void) | undefined;
+        vi.spyOn(api, "deleteTransferWithLegs").mockReturnValue(
+            new Promise((resolve) => {
+                finishDelete = resolve;
+            }),
+        );
+        useStore.setState((state) => ({
+            snapshot: {
+                ...state.snapshot!,
+                transactions: state.snapshot!.transactions.map((row) => ({
+                    ...row,
+                    transferId: "t-9",
+                })),
+                transfers: [{ id: "t-9", outTxId: 1, inTxId: 1, origin: "manual", note: "" }],
+            },
+        }));
+
+        const deleting = useStore.getState().deleteTransferWithLegs("t-9");
+        useStore.setState((state) => ({
+            snapshot: {
+                ...state.snapshot!,
+                transactions: [
+                    ...state.snapshot!.transactions,
+                    { ...state.snapshot!.transactions[0]!, id: 99, transferId: "t-9" },
+                ],
+            },
+        }));
+        finishDelete?.({ deleted: 2 });
+        await deleting;
+
+        expect(
+            useStore.getState().snapshot!.transactions.some((row) => row.transferId === "t-9"),
+        ).toBe(false);
+    });
+
+    it("updates the server total and restarts only an active fill after transfer deletion", async () => {
+        vi.spyOn(api, "deleteTransferWithLegs").mockResolvedValue({ deleted: 2 });
+        const fill = vi.fn().mockResolvedValue(undefined);
+        const transferRows = [
+            { ...snapshot().transactions[0]!, id: 10, transferId: "t-9" },
+            { ...snapshot().transactions[0]!, id: 11, transferId: "t-9" },
+        ];
+        useStore.setState({
+            snapshot: {
+                ...snapshot(),
+                transactions: [...snapshot().transactions, ...transferRows],
+                transactionsTotal: 7,
+                transfers: [{ id: "t-9", outTxId: 10, inTxId: 11, origin: "manual", note: "" }],
+            },
+            fillTransactions: fill,
+            txProgress: { loaded: 3, total: 7 },
+        });
+
+        await useStore.getState().deleteTransferWithLegs("t-9");
+
+        expect(useStore.getState().snapshot!.transactionsTotal).toBe(5);
+        expect(fill).toHaveBeenCalledOnce();
+
+        useStore.setState((state) => ({
+            snapshot: {
+                ...state.snapshot!,
+                transactions: [...state.snapshot!.transactions, ...transferRows],
+                transfers: [{ id: "t-10", outTxId: 10, inTxId: 11, origin: "manual", note: "" }],
+            },
+            txProgress: null,
+        }));
+        await useStore.getState().deleteTransferWithLegs("t-10");
+
+        expect(fill).toHaveBeenCalledOnce();
     });
 
     it("sends category edits to their own endpoints without refreshing", async () => {

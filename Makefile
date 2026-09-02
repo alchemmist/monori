@@ -290,7 +290,6 @@ t-fast:
 t-medium:
 	cd web && npx vitest run --exclude "src/**/*.test.ts"
 	env -u GITHUB_STEP_SUMMARY -u MUTATION_SUMMARY_PATH uv run --locked --group test pytest -q server/tests -m integration
-	$(MAKE) t-ci-integration
 
 t-ci: t-ci-unit
 
