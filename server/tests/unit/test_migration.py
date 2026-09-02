@@ -9,13 +9,14 @@ import pytest
 from alembic import command
 from alembic.config import Config
 
-from monori.server.app.db import LEGACY_REVISIONS, _alembic_config, connect
+import monori.server.app.db as dbmod
+from monori.server.app.db import LEGACY_REVISIONS, SCHEMA_PATH, _alembic_config, connect
 from monori.server.app.importer import tx_hash
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-HEAD = "0019"
+HEAD = "0020"
 assert LEGACY_REVISIONS[-1] == "0006"
 
 OLD_SCHEMA = """
@@ -153,6 +154,180 @@ def test_fresh_db_is_created_from_schema_sql(tmp_path: pathlib.Path) -> None:
         assert _revision(conn) == HEAD
     finally:
         conn.close()
+
+
+def test_bootstrap_recovers_after_schema_creation_before_stamp(
+    tmp_path: pathlib.Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    db_path = tmp_path / "interrupted.db"
+    raw = sqlite3.connect(db_path)
+    raw.executescript(SCHEMA_PATH.read_text())
+    raw.commit()
+    raw.close()
+    real_stamp = command.stamp
+    attempts = 0
+
+    def interrupted_stamp(cfg: Config, revision: str) -> None:
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            message = "injected interruption"
+            raise RuntimeError(message)
+        real_stamp(cfg, revision)
+
+    monkeypatch.setattr(command, "stamp", interrupted_stamp)
+    with pytest.raises(RuntimeError, match="injected interruption"):
+        connect(db_path)
+
+    conn = connect(db_path)
+    try:
+        assert _revision(conn) == HEAD
+    finally:
+        conn.close()
+
+
+def test_bootstrap_rejects_current_schema_missing_an_index(tmp_path: pathlib.Path) -> None:
+    db_path = tmp_path / "missing-index.db"
+    raw = sqlite3.connect(db_path)
+    raw.executescript(SCHEMA_PATH.read_text())
+    raw.execute("DROP INDEX idx_users_email_canonical")
+    raw.commit()
+    raw.close()
+
+    with pytest.raises(RuntimeError, match="incompatible schema metadata"):
+        connect(db_path)
+
+
+def test_schema_signature_preserves_columns_foreign_keys_and_objects() -> None:
+    conn = sqlite3.connect(":memory:")
+    conn.executescript(
+        "CREATE TABLE parent(id INTEGER PRIMARY KEY AUTOINCREMENT);"
+        "CREATE TABLE child(id INTEGER, parent_id INTEGER REFERENCES parent(id));"
+        "CREATE INDEX idx_child_parent ON child(parent_id);"
+        "CREATE TABLE unrelated(id INTEGER PRIMARY KEY);"
+    )
+    try:
+        signature = vars(dbmod)["_schema_signature"](conn, {"parent", "child", "sqlite_sequence"})
+    finally:
+        conn.close()
+
+    assert signature == {
+        "parent": (("id", "INTEGER", 0, None, 1),),
+        "sqlite_sequence": (("name", "", 0, None, 0), ("seq", "", 0, None, 0)),
+        "child": (
+            ("id", "INTEGER", 0, None, 0),
+            ("parent_id", "INTEGER", 0, None, 0),
+            (0, 0, "parent", "parent_id", "id", "NO ACTION", "NO ACTION", "NONE"),
+        ),
+        "__objects__": (
+            (
+                "index",
+                "idx_child_parent",
+                "child",
+                "CREATE INDEX idx_child_parent ON child(parent_id)",
+            ),
+            (
+                "table",
+                "child",
+                "child",
+                "CREATE TABLE child(id INTEGER, parent_id INTEGER REFERENCES parent(id))",
+            ),
+            (
+                "table",
+                "parent",
+                "parent",
+                "CREATE TABLE parent(id INTEGER PRIMARY KEY AUTOINCREMENT)",
+            ),
+        ),
+    }
+
+
+def test_legacy_adoption_stamps_the_matching_revision(
+    tmp_path: pathlib.Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    stamped: list[str] = []
+    upgraded: list[str] = []
+    monkeypatch.setattr(command, "stamp", lambda _cfg, revision: stamped.append(revision))
+    monkeypatch.setattr(command, "upgrade", lambda _cfg, revision: upgraded.append(revision))
+    monkeypatch.setattr(dbmod, "_current_schema_signature", lambda: {"current": ()})
+
+    vars(dbmod)["_adopt_unversioned"](tmp_path / "legacy.db", Config(), {"transactions"}, 2)
+
+    assert stamped == [LEGACY_REVISIONS[2]]
+    assert upgraded == ["head"]
+
+
+def test_category_name_migration_resolves_existing_group_duplicates(
+    tmp_path: pathlib.Path,
+) -> None:
+    db_path = tmp_path / "duplicate-categories.db"
+    connect(db_path).close()
+    cfg = _alembic_config(db_path)
+    command.downgrade(cfg, "0019")
+    raw = sqlite3.connect(db_path)
+    group_id = raw.execute(
+        "INSERT INTO category_groups (name, sort, type_id)"
+        " VALUES ('Home', 1, (SELECT id FROM category_group_types WHERE type='expense'))"
+    ).lastrowid
+    assert group_id is not None
+    raw.execute(
+        "INSERT INTO categories (group_id, name, sort) VALUES (?, 'Other', 1)",
+        (group_id,),
+    )
+    raw.execute(
+        "INSERT INTO categories (group_id, name, sort) VALUES (?, 'Other', 2)",
+        (group_id,),
+    )
+    raw.commit()
+    raw.close()
+
+    command.upgrade(cfg, "head")
+
+    raw = sqlite3.connect(db_path)
+    try:
+        names = [
+            row[0]
+            for row in raw.execute(
+                "SELECT name FROM categories WHERE group_id=? ORDER BY id",
+                (group_id,),
+            )
+        ]
+        assert names == ["Other", "Other (2)"]
+        with pytest.raises(sqlite3.IntegrityError):
+            raw.execute(
+                "INSERT INTO categories (group_id, name, sort) VALUES (?, 'Other', 3)",
+                (group_id,),
+            )
+    finally:
+        raw.close()
+
+
+@pytest.mark.parametrize("user_version", [-1, len(LEGACY_REVISIONS), 999])
+def test_unknown_legacy_user_version_is_rejected_without_changes(
+    tmp_path: pathlib.Path,
+    user_version: int,
+) -> None:
+    db_path = tmp_path / "unknown.db"
+    _make_old_db(db_path)
+    raw = sqlite3.connect(db_path)
+    raw.execute(f"PRAGMA user_version={user_version}")
+    raw.commit()
+    before = raw.execute("SELECT sql FROM sqlite_master ORDER BY name").fetchall()
+    raw.close()
+
+    with pytest.raises(RuntimeError, match="unsupported legacy database user_version"):
+        connect(db_path)
+
+    raw = sqlite3.connect(db_path)
+    try:
+        assert raw.execute("SELECT sql FROM sqlite_master ORDER BY name").fetchall() == before
+        assert "alembic_version" not in {
+            row[0] for row in raw.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        }
+    finally:
+        raw.close()
 
 
 @dataclass(frozen=True, order=True)
