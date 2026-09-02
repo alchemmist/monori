@@ -3,6 +3,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+import monori.server.app.connectors.yandex_pay as yandex_pay_module
 from monori.common import JsonValue
 from monori.server.app.connectors.base import ConnectorError, PublicConnectorError
 from monori.server.app.connectors.tbank_playwright import (
@@ -247,6 +248,41 @@ def test_history_years_uses_relative_year_across_new_year() -> None:
         year=2026,
         reference_date=date(2026, 1, 1),
     ) == [2025, 2025]
+
+
+@pytest.mark.parametrize(
+    ("heading", "expected"),
+    [("сегодня", 2026), ("today", 2026), ("вчера", 2025), ("yesterday", 2025)],
+)
+def test_history_years_anchors_each_relative_heading(heading: str, expected: int) -> None:
+    assert history_years([heading], year=1999, reference_date=date(2026, 1, 1)) == [expected]
+
+
+def test_history_years_tracks_relative_and_unknown_boundaries() -> None:
+    assert history_years(
+        ["вчера", "yesterday"],
+        year=1999,
+        reference_date=date(2026, 1, 2),
+    ) == [2026, 2026]
+    assert history_years(
+        ["today", "December 31"],
+        year=1999,
+        reference_date=date(2026, 1, 2),
+    ) == [2026, 2025]
+    assert history_years(["unknown", "January 1"], year=2026) == [2026, 2026]
+    assert history_years(["January 1", "January 1"], year=2026) == [2026, 2026]
+
+
+def test_relative_dates_use_utc(monkeypatch: pytest.MonkeyPatch) -> None:
+    class Clock:
+        @staticmethod
+        def now(timezone: object) -> datetime:
+            assert timezone is UTC
+            return datetime(2026, 1, 2, tzinfo=UTC)
+
+    monkeypatch.setattr(yandex_pay_module, "datetime", Clock)
+    assert parse_date("today", year=1999) == "2026-01-02T00:00:00"
+    assert history_years(["today"], year=1999) == [2026]
 
 
 def test_connector_auth_steps_and_history() -> None:

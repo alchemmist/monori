@@ -84,6 +84,8 @@ CAPTCHA_REFRESH = "__refresh_captcha__"
 CODE_PREFIX = "code:"
 CODE_RESEND = "__resend_yandex_code__"
 MIN_TITLES = 2
+MINUS_SIGN = chr(0x2212)
+NO_BREAK_SPACE = chr(0xA0)
 
 
 def parse_amount(value: str) -> int:
@@ -93,9 +95,9 @@ def parse_amount(value: str) -> int:
     match = AMOUNT_RE.search(value)
     if match is None:
         raise ConnectorError(AMOUNT_MISSING)
-    raw = match.group(1).replace("\N{MINUS SIGN}", "-").replace("\u00a0", "").replace(" ", "")
+    raw = match.group(1).replace(MINUS_SIGN, "-").replace(NO_BREAK_SPACE, "").replace(" ", "")
     sign = -1 if raw.startswith("-") else 1
-    raw = raw.removeprefix("+").removeprefix("-")
+    raw = raw.removeprefix("-")
     whole, _, fraction = raw.replace(",", ".").partition(".")
     return sign * (int(whole) * 100 + int((fraction + "00")[:2]))
 
