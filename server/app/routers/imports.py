@@ -26,6 +26,7 @@ from monori.server.app.importer import (
 )
 from monori.server.app.ingest import commit_rows, existing_hash_counts
 from monori.server.app.transfer_service import detect
+from monori.server.app.value_types import Money, TransactionDate
 from monori.server.app.workbook.apply import apply_workbook, budget_conflicts
 from monori.server.app.workbook.models import (
     ACCOUNT_MAPPING_ADAPTER,
@@ -60,8 +61,8 @@ class ImportBody:
 class CommitRow:
     """Represent CommitRow."""
 
-    date: str
-    amount: int
+    date: TransactionDate
+    amount: Money
     description: str = ""
     bank_category: str = ""
     mcc: str = ""

@@ -1,6 +1,10 @@
+import sqlite3
+
 import pytest
 from fastapi.testclient import TestClient
 
+from monori.server.app.db_records import CategoryOwnershipRecord
+from monori.server.app.routers import categories as categories_router
 from monori.server.tests.conftest import Api, TransactionOptions
 
 pytestmark = pytest.mark.integration
@@ -22,13 +26,67 @@ def test_category_patch_move_group_and_name(api: Api, client: TestClient) -> Non
     g2 = api.group("Income", "income")
     a = api.category("A", g1)
     api.category("B", g1)
+    assert client.patch(f"/api/categories/{a}", json={"name": "A"}).status_code == 200
     assert client.patch(f"/api/categories/{a}", json={"groupId": g2}).status_code == 200
     assert api.cat(a).group_id == g2
     assert client.patch(f"/api/categories/{a}", json={"groupId": 999}).status_code == 400
-    assert client.patch(f"/api/categories/{a}", json={"name": "B"}).status_code == 409
+    assert client.patch(f"/api/categories/{a}", json={"name": "B"}).status_code == 200
+    api.category("Taken", g2)
+    assert client.patch(f"/api/categories/{a}", json={"name": "Taken"}).status_code == 409
+    assert api.cat(a).name == "B"
     assert client.patch("/api/categories/999", json={"name": "z"}).status_code == 404
     assert client.patch(f"/api/categories/{a}", json={"keywords": "x|y"}).status_code == 200
     assert api.cat(a).keywords == "x|y"
+
+
+def test_category_constraints_win_preflight_races(
+    api: Api, client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    group = api.group("Expenses")
+    first = api.category("First", group)
+    api.category("Taken", group)
+    monkeypatch.setattr(categories_router, "_name_taken", lambda *_args, **_kwargs: False)
+
+    response = client.post("/api/categories", json={"name": "Taken", "groupId": group})
+    assert response.status_code == 409
+    assert client.patch(f"/api/categories/{first}", json={"name": "Taken"}).status_code == 409
+    categories = [category for category in api.snapshot().categories if category.group_id == group]
+    assert [category.name for category in categories] == ["First", "Taken"]
+
+
+def test_category_move_rejects_a_duplicate_name(api: Api, client: TestClient) -> None:
+    source = api.group("Source")
+    target = api.group("Target")
+    category = api.category("Taken", source)
+    api.category("Taken", target)
+
+    assert client.patch(f"/api/categories/{category}", json={"groupId": target}).status_code == 409
+    assert api.cat(category).group_id == source
+
+
+@pytest.mark.parametrize("patch_kind", ["name", "group"])
+def test_category_patch_rejects_a_row_removed_after_ownership_check(
+    api: Api,
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    patch_kind: str,
+) -> None:
+    source = api.group("Source")
+    target = api.group("Target")
+    patch = {"name": "Renamed"} if patch_kind == "name" else {"groupId": target}
+    category = api.category("Category", source)
+    original = vars(categories_router)["_owned_category"]
+
+    def remove_after_lookup(
+        c: sqlite3.Connection, cat_id: int, uid: int
+    ) -> CategoryOwnershipRecord | None:
+        record = original(c, cat_id, uid)
+        c.execute("DELETE FROM categories WHERE id=?", (cat_id,))
+        return record
+
+    monkeypatch.setattr(categories_router, "_owned_category", remove_after_lookup)
+
+    assert client.patch(f"/api/categories/{category}", json=patch).status_code == 404
 
 
 def test_category_reorder_and_archive_roundtrip(api: Api, client: TestClient) -> None:
