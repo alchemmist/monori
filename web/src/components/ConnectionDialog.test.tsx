@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { act, fireEvent } from "@testing-library/react";
 import { api } from "../api.js";
 import { renderUI, resetStore, screen, seed, waitFor } from "../test/render.jsx";
 import { useStore } from "../store.js";
+import type { SyncResult } from "../types.js";
 import ConnectionDialog from "./ConnectionDialog.jsx";
 
 const account = { id: 1, name: "Card", bankRef: "old-ref" };
@@ -35,7 +37,7 @@ describe("ConnectionDialog", () => {
         expect(connect).toBeDisabled();
         await user.type(screen.getByLabelText("Login"), "alice");
         await user.clear(screen.getByLabelText("Bank account"));
-        await user.type(screen.getByLabelText("Bank account"), "40817");
+        await user.type(screen.getByLabelText("Bank account"), " 40817 ");
         await user.click(connect);
         await waitFor(() =>
             expect(create).toHaveBeenCalledWith({
@@ -55,23 +57,218 @@ describe("ConnectionDialog", () => {
         vi.spyOn(useStore.getState(), "syncConnection").mockResolvedValue({
             status: "awaiting_sms",
         });
-        const sms = vi.spyOn(useStore.getState(), "submitConnectionSms").mockResolvedValue({
-            status: "connected",
-            inserted: 3,
-            skipped: 1,
-            dateFrom: "2026-07-01",
-            dateTo: "2026-07-02",
+        let finishSync: (result: SyncResult) => void = () => undefined;
+        const pendingSync = new Promise<SyncResult>((resolve) => {
+            finishSync = resolve;
         });
+        const sms = vi
+            .spyOn(useStore.getState(), "submitConnectionSms")
+            .mockReturnValue(pendingSync);
         const { user } = renderUI(<ConnectionDialog account={account} onClose={vi.fn()} />);
         await waitFor(() => expect(api.connectionsAvailable).toHaveBeenCalled());
         await user.type(screen.getByLabelText("Login"), "alice");
         await user.clear(screen.getByLabelText("Bank account"));
         await user.type(screen.getByLabelText("Bank account"), "40817");
         await user.click(screen.getByRole("button", { name: "Connect & sync" }));
-        await user.type(await screen.findByLabelText("SMS code"), "1234");
-        await user.click(screen.getByRole("button", { name: "Confirm" }));
+        const input = await screen.findByLabelText("SMS code");
+        expect(input).not.toHaveAttribute("inputmode");
+        expect(input).not.toHaveAttribute("maxlength");
+        expect(input).not.toHaveAttribute("placeholder");
+        expect(screen.queryByRole("button", { name: /Resend SMS/ })).not.toBeInTheDocument();
+        const confirm = screen.getByRole("button", { name: "Confirm" });
+        expect(confirm).toBeDisabled();
+        expect(sms).not.toHaveBeenCalled();
+        fireEvent.change(input, { target: { value: "  1234  " } });
+        expect(confirm).toBeEnabled();
+        const confirmation = user.click(confirm);
+        expect(await screen.findByText("Syncing…")).toBeInTheDocument();
+        finishSync({
+            status: "connected",
+            inserted: 3,
+            skipped: 1,
+            dateFrom: "2026-07-01",
+            dateTo: "2026-07-02",
+        });
+        await confirmation;
         await waitFor(() => expect(sms).toHaveBeenCalledWith(7, "1234"));
         expect(await screen.findByText(/3 new, 1 duplicates skipped/)).toBeInTheDocument();
+    });
+
+    it("formats Yandex Pay SMS codes and submits digits only", async () => {
+        const yandexPay = { ...connector, bank: "yandex_pay" };
+        vi.spyOn(api, "connectionsAvailable").mockResolvedValue([yandexPay]);
+        vi.spyOn(useStore.getState(), "createConnection").mockResolvedValue({ id: 7 });
+        vi.spyOn(useStore.getState(), "patchAccount").mockResolvedValue();
+        vi.spyOn(useStore.getState(), "syncConnection").mockResolvedValue({
+            status: "awaiting_sms",
+            message: "code:Enter the code sent by Yandex via SMS.",
+        });
+        const sms = vi.spyOn(useStore.getState(), "submitConnectionSms").mockResolvedValue({
+            status: "awaiting_sms",
+            message: "code:4:Enter the 4-digit code sent by Yandex Pay.",
+        });
+        const { user } = renderUI(<ConnectionDialog account={account} onClose={vi.fn()} />);
+        await user.type(await screen.findByLabelText("Login"), "alice");
+        await user.clear(screen.getByLabelText("Bank account"));
+        await user.type(screen.getByLabelText("Bank account"), "40817");
+        await user.click(screen.getByRole("button", { name: "Connect & sync" }));
+        const input = await screen.findByLabelText("SMS code");
+        expect(input).toHaveAttribute("inputmode", "numeric");
+        expect(input).toHaveAttribute("maxlength", "7");
+        expect(input).toHaveAttribute("placeholder", "000-000");
+        expect(screen.getByRole("button", { name: "Resend SMS (01:00)" })).toBeDisabled();
+        await user.type(input, "90a1");
+        expect(input).toHaveValue("901");
+        await user.type(input, "05");
+        expect(screen.getByRole("button", { name: "Confirm" })).toBeDisabled();
+        await user.type(input, "37");
+        expect(input).toHaveValue("901-053");
+        expect(screen.getByRole("button", { name: "Confirm" })).toBeEnabled();
+        fireEvent.change(input, { target: { value: "1234567" } });
+        expect(input).toHaveValue("123-456");
+        await user.click(screen.getByRole("button", { name: "Confirm" }));
+        await waitFor(() => expect(sms).toHaveBeenCalledWith(7, "123456"));
+    });
+
+    it("accepts the separate four-digit Yandex Pay confirmation code", async () => {
+        const yandexPay = { ...connector, bank: "yandex_pay" };
+        vi.spyOn(api, "connectionsAvailable").mockResolvedValue([yandexPay]);
+        vi.spyOn(useStore.getState(), "createConnection").mockResolvedValue({ id: 7 });
+        vi.spyOn(useStore.getState(), "patchAccount").mockResolvedValue();
+        vi.spyOn(useStore.getState(), "syncConnection").mockResolvedValue({
+            status: "awaiting_sms",
+            message: "code:4:Enter the 4-digit code sent by Yandex Pay.",
+        });
+        const sms = vi.spyOn(useStore.getState(), "submitConnectionSms").mockResolvedValue({
+            status: "awaiting_sms",
+            message: "code:4:Enter the 4-digit code sent by Yandex Pay.",
+        });
+        const { user } = renderUI(<ConnectionDialog account={account} onClose={vi.fn()} />);
+        await user.type(await screen.findByLabelText("Login"), "alice");
+        await user.clear(screen.getByLabelText("Bank account"));
+        await user.type(screen.getByLabelText("Bank account"), "40817");
+        await user.click(screen.getByRole("button", { name: "Connect & sync" }));
+
+        expect(await screen.findByText("Enter the 4-digit code sent by Yandex Pay.")).toBeVisible();
+        const input = screen.getByLabelText("Yandex Pay code");
+        expect(input).toHaveAttribute("maxlength", "4");
+        expect(input).toHaveAttribute("placeholder", "0000");
+        await user.type(input, "123");
+        expect(screen.getByRole("button", { name: "Confirm" })).toBeDisabled();
+        await user.type(input, "4");
+        expect(input).toHaveValue("1234");
+        expect(screen.queryByRole("button", { name: /Resend SMS/ })).not.toBeInTheDocument();
+        const timer = vi.spyOn(window, "setTimeout");
+        try {
+            await user.click(screen.getByRole("button", { name: "Confirm" }));
+            await waitFor(() => expect(sms).toHaveBeenCalledWith(7, "1234"));
+            expect(screen.getByLabelText("Yandex Pay code")).toHaveValue("");
+            expect(
+                timer.mock.calls.filter((call) => String(call[0]).includes("setResendSeconds")),
+            ).toHaveLength(0);
+        } finally {
+            timer.mockRestore();
+        }
+    });
+
+    it("renders a Yandex CAPTCHA challenge", async () => {
+        const yandexPay = { ...connector, bank: "yandex_pay" };
+        vi.spyOn(api, "connectionsAvailable").mockResolvedValue([yandexPay]);
+        vi.spyOn(useStore.getState(), "createConnection").mockResolvedValue({ id: 7 });
+        vi.spyOn(useStore.getState(), "patchAccount").mockResolvedValue();
+        vi.spyOn(useStore.getState(), "syncConnection").mockResolvedValue({
+            status: "awaiting_sms",
+            message: "captcha:https://ext.captcha.yandex.net/image?key=test",
+        });
+        vi.spyOn(useStore.getState(), "submitConnectionSms")
+            .mockResolvedValueOnce({
+                status: "awaiting_sms",
+                message: "captcha:https://ext.captcha.yandex.net/image?key=next",
+            })
+            .mockResolvedValueOnce({ status: "awaiting_sms", message: "captcha:" });
+        const { user } = renderUI(<ConnectionDialog account={account} onClose={vi.fn()} />);
+        await user.type(await screen.findByLabelText("Login"), "alice");
+        await user.clear(screen.getByLabelText("Bank account"));
+        await user.type(screen.getByLabelText("Bank account"), "40817");
+        await user.click(screen.getByRole("button", { name: "Connect & sync" }));
+        expect(await screen.findByRole("img", { name: "Yandex CAPTCHA" })).toHaveAttribute(
+            "src",
+            "https://ext.captcha.yandex.net/image?key=test",
+        );
+        expect(screen.getByRole("button", { name: "Confirm" })).toBeDisabled();
+        await user.click(screen.getByRole("button", { name: "Show another CAPTCHA" }));
+        await waitFor(() =>
+            expect(useStore.getState().submitConnectionSms).toHaveBeenLastCalledWith(
+                7,
+                "__refresh_captcha__",
+            ),
+        );
+        expect(await screen.findByText("A new CAPTCHA is shown.")).toBeInTheDocument();
+        await user.type(screen.getByLabelText("CAPTCHA"), "wrong");
+        expect(screen.getByRole("button", { name: "Confirm" })).toBeEnabled();
+        await user.click(screen.getByRole("button", { name: "Confirm" }));
+        expect(await screen.findByText(/Yandex issued a new CAPTCHA/)).toBeInTheDocument();
+        expect(screen.queryByText(/captcha:https:/)).not.toBeInTheDocument();
+        expect(screen.queryByRole("img", { name: "Yandex CAPTCHA" })).not.toBeInTheDocument();
+        expect(screen.getByLabelText("CAPTCHA")).toHaveValue("");
+        await user.type(screen.getByLabelText("CAPTCHA"), "next answer");
+        expect(screen.queryByText(/Yandex issued a new CAPTCHA/)).not.toBeInTheDocument();
+    });
+
+    it("moves from CAPTCHA to a Yandex code challenge without a rejection error", async () => {
+        const yandexPay = { ...connector, bank: "yandex_pay" };
+        vi.spyOn(api, "connectionsAvailable").mockResolvedValue([yandexPay]);
+        vi.spyOn(useStore.getState(), "createConnection").mockResolvedValue({ id: 7 });
+        vi.spyOn(useStore.getState(), "patchAccount").mockResolvedValue();
+        vi.spyOn(useStore.getState(), "syncConnection").mockResolvedValue({
+            status: "awaiting_sms",
+            message: "captcha:https://ext.captcha.yandex.net/image?key=test",
+        });
+        vi.spyOn(useStore.getState(), "submitConnectionSms").mockResolvedValue({
+            status: "awaiting_sms",
+            message: "code:Enter the code sent by Yandex via SMS.",
+        });
+        const { container, unmount, user } = renderUI(
+            <ConnectionDialog account={account} onClose={vi.fn()} />,
+        );
+        await user.type(await screen.findByLabelText("Login"), "alice");
+        await user.clear(screen.getByLabelText("Bank account"));
+        await user.type(screen.getByLabelText("Bank account"), "40817");
+        await user.click(screen.getByRole("button", { name: "Connect & sync" }));
+        await user.type(await screen.findByLabelText("CAPTCHA"), "answer");
+        vi.useFakeTimers();
+        try {
+            const clearTimer = vi.spyOn(window, "clearTimeout");
+            await act(async () => fireEvent.click(screen.getByRole("button", { name: "Confirm" })));
+            expect(screen.getByText("Enter the code sent by Yandex via SMS.")).toBeInTheDocument();
+            expect(screen.getByLabelText("SMS code")).toBeInTheDocument();
+            expect(screen.queryByText(/rejected/)).not.toBeInTheDocument();
+            expect(container.querySelector(".t-danger")).toBeNull();
+            expect(screen.getByRole("button", { name: "Resend SMS (01:00)" })).toBeDisabled();
+            await act(() => vi.advanceTimersByTimeAsync(1000));
+            expect(clearTimer).toHaveBeenCalled();
+            expect(screen.getByRole("button", { name: "Resend SMS (00:59)" })).toBeDisabled();
+            for (let second = 0; second < 59; second += 1) {
+                await act(() => vi.advanceTimersByTimeAsync(1000));
+            }
+            expect(vi.getTimerCount()).toBe(0);
+            const enabledResend = screen.getByRole("button", { name: "Resend SMS" });
+            expect(enabledResend).toBeEnabled();
+            await act(async () => fireEvent.click(enabledResend));
+            expect(useStore.getState().submitConnectionSms).toHaveBeenLastCalledWith(
+                7,
+                "__resend_yandex_code__",
+            );
+            expect(screen.queryByText(/rejected/)).not.toBeInTheDocument();
+            expect(screen.queryByText(/code:Enter/)).not.toBeInTheDocument();
+            expect(screen.getByRole("button", { name: "Resend SMS (01:00)" })).toBeDisabled();
+            const timersBeforeUnmount = vi.getTimerCount();
+            expect(timersBeforeUnmount).toBeGreaterThan(0);
+            unmount();
+            expect(vi.getTimerCount()).toBe(timersBeforeUnmount - 1);
+        } finally {
+            vi.useRealTimers();
+        }
     });
 
     it("saves a changed bank reference and unlinks an existing connection", async () => {
@@ -99,6 +296,36 @@ describe("ConnectionDialog", () => {
         await user.click(screen.getByRole("button", { name: "Unlink account" }));
         await waitFor(() => expect(patch).toHaveBeenCalledWith(1, { connectionId: 0 }));
         expect(close).toHaveBeenCalled();
+    });
+
+    it("saves a dirty bank reference before syncing an existing connection", async () => {
+        vi.spyOn(api, "connectionsAvailable").mockResolvedValue([connector]);
+        const patch = vi.spyOn(useStore.getState(), "patchAccount").mockResolvedValue();
+        const sync = vi.spyOn(useStore.getState(), "syncConnection").mockResolvedValue({
+            status: "connected",
+            inserted: 0,
+            skipped: 0,
+        });
+        const { user } = renderUI(
+            <ConnectionDialog
+                account={account}
+                connection={{
+                    id: 9,
+                    bank: "demo",
+                    kind: "web",
+                    status: "connected",
+                    lastSync: null,
+                }}
+                onClose={vi.fn()}
+            />,
+        );
+        await screen.findByLabelText("Bank account");
+        await user.clear(screen.getByLabelText("Bank account"));
+        await user.type(screen.getByLabelText("Bank account"), "new-ref");
+        await user.click(screen.getByRole("button", { name: "Sync now" }));
+
+        await waitFor(() => expect(patch).toHaveBeenCalledWith(1, { bankRef: "new-ref" }));
+        expect(sync).toHaveBeenCalledWith(9);
     });
 
     it("reuses an existing login and shows the full sync outcome", async () => {
@@ -176,7 +403,14 @@ describe("ConnectionDialog", () => {
     });
 
     it("does not treat whitespace-only credentials or bank references as complete", async () => {
-        vi.spyOn(api, "connectionsAvailable").mockResolvedValue([connector]);
+        const twoAccountFields = {
+            ...connector,
+            accountParams: [
+                ...connector.accountParams,
+                { name: "routing", label: "Routing", required: true },
+            ],
+        };
+        vi.spyOn(api, "connectionsAvailable").mockResolvedValue([twoAccountFields]);
         const { user } = renderUI(<ConnectionDialog account={account} onClose={vi.fn()} />);
         await screen.findByLabelText("Login");
         const connect = screen.getByRole("button", { name: "Connect & sync" });
@@ -184,6 +418,8 @@ describe("ConnectionDialog", () => {
         expect(connect).toBeDisabled();
         await user.clear(screen.getByLabelText("Login"));
         await user.type(screen.getByLabelText("Login"), "alice");
+        expect(connect).toBeDisabled();
+        await user.type(screen.getByLabelText("Routing"), "route");
         expect(connect).not.toBeDisabled();
         await user.clear(screen.getByLabelText("Bank account"));
         await user.type(screen.getByLabelText("Bank account"), "   ");
@@ -220,10 +456,9 @@ describe("ConnectionDialog", () => {
             .spyOn(useStore.getState(), "syncConnection")
             .mockResolvedValueOnce({ status: "awaiting_sms" })
             .mockRejectedValueOnce(new Error("network"));
-        vi.spyOn(useStore.getState(), "submitConnectionSms").mockResolvedValueOnce({
-            status: "awaiting_sms",
-            message: "Wrong code",
-        });
+        vi.spyOn(useStore.getState(), "submitConnectionSms")
+            .mockResolvedValueOnce({ status: "awaiting_sms" })
+            .mockResolvedValueOnce({ status: "awaiting_sms", message: "Wrong code" });
         const cancel = vi.spyOn(useStore.getState(), "cancelConnectionSync").mockResolvedValue();
         const { user } = renderUI(<ConnectionDialog account={account} onClose={vi.fn()} />);
         await screen.findByLabelText("Login");
@@ -232,6 +467,12 @@ describe("ConnectionDialog", () => {
         await user.type(screen.getByLabelText("Bank account"), "ref");
         await user.click(screen.getByRole("button", { name: "Connect & sync" }));
         await user.type(await screen.findByLabelText("SMS code"), "bad");
+        await user.click(screen.getByRole("button", { name: "Confirm" }));
+        expect(
+            await screen.findByText("The bank rejected the code — try again."),
+        ).toBeInTheDocument();
+        await user.type(screen.getByLabelText("SMS code"), "next");
+        expect(screen.getByText("The bank rejected the code — try again.")).toBeInTheDocument();
         await user.click(screen.getByRole("button", { name: "Confirm" }));
         expect(await screen.findByText("Wrong code")).toBeInTheDocument();
         await user.click(screen.getByRole("button", { name: "Cancel" }));
@@ -300,5 +541,20 @@ describe("ConnectionDialog", () => {
                 expect.objectContaining({ title: "Failed to load banks" }),
             ),
         );
+    });
+
+    it("shows connection creation failures and stops the busy state", async () => {
+        vi.spyOn(api, "connectionsAvailable").mockResolvedValue([connector]);
+        vi.spyOn(useStore.getState(), "createConnection").mockRejectedValue(
+            new Error("credentials rejected"),
+        );
+        const { user } = renderUI(<ConnectionDialog account={account} onClose={vi.fn()} />);
+        await user.type(await screen.findByLabelText("Login"), "alice");
+        await user.clear(screen.getByLabelText("Bank account"));
+        await user.type(screen.getByLabelText("Bank account"), "40817");
+        await user.click(screen.getByRole("button", { name: "Connect & sync" }));
+
+        expect(await screen.findByText("Error: credentials rejected")).toBeVisible();
+        expect(screen.getByRole("button", { name: "Retry" })).toBeEnabled();
     });
 });

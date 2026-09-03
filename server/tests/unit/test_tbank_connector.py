@@ -31,6 +31,7 @@ from monori.server.app.connectors.base import (
 )
 from monori.server.app.connectors.fake import FIXTURE_ROWS, _rows
 from monori.server.app.connectors.tbank_playwright import TBankPlaywrightConnector as TBankConnector
+from monori.server.app.connectors.tbank_playwright import _PageAdapter
 
 STATEMENT = (
     "05.01.2026 10:00:00\t05.01.2026\t*1\tOK\t-100,00\tRUB\t-100,00\tRUB\t\tSuper\t5411\t"
@@ -875,3 +876,11 @@ def test_get_connector_class_lookup_and_unknown() -> None:
     assert get_connector_class("fake", "fake").__name__ == "FakeConnector"
     with pytest.raises(ConnectorError):
         get_connector_class("nope", "nope")
+
+
+def test_page_adapter_evaluates_javascript() -> None:
+    class RawPage:
+        def evaluate(self, expression: str) -> str:
+            return expression
+
+    assert _PageAdapter(RawPage()).evaluate("probe") == "probe"

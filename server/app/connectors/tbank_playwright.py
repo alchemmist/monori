@@ -150,11 +150,26 @@ class _Locator(Protocol):
     @property
     def first(self) -> Self: ...
 
+    def nth(self, index: int) -> Self: ...
+
     def click(self, *, timeout: int | None = None) -> None: ...
+
+    def count(self) -> int: ...
+
+    def fill(self, value: str, *, timeout: int | None = None) -> None: ...
+
+    @property
+    def content_frame(self) -> "_FrameLocator": ...
+
+
+class _FrameLocator(Protocol):
+    def locator(self, selector: str) -> _Locator: ...
 
 
 class _Keyboard(Protocol):
     def type(self, text: str) -> None: ...
+
+    def press(self, key: str) -> None: ...
 
 
 class _Element(Protocol):
@@ -223,6 +238,8 @@ class _Page(_LocatorPage, Protocol):
 
     def content(self) -> str: ...
 
+    def evaluate(self, expression: str) -> JsonValue: ...
+
 
 class _NavigationResponse(Protocol):
     pass
@@ -273,6 +290,8 @@ class _RawPage(_LocatorPage, Protocol):
     def screenshot(self, *, path: str, full_page: bool = False) -> bytes: ...
 
     def content(self) -> str: ...
+
+    def evaluate(self, expression: str) -> JsonValue: ...
 
 
 class _DownloadExpectationAdapter(AbstractContextManager["_DownloadExpectationAdapter"]):
@@ -352,6 +371,9 @@ class _PageAdapter:
     def content(self) -> str:
         return self._page.content()
 
+    def evaluate(self, expression: str) -> JsonValue:
+        return self._page.evaluate(expression)
+
 
 type _ToWorkerMessage = tuple[Literal["sms"], str] | tuple[Literal["cancel"], None]
 type _FromWorkerMessage = tuple[str, SyncResult | str]
@@ -424,6 +446,7 @@ class TBankPlaywrightConnector(Connector):
 
     SEL_EXPORT_TRIGGER = "[data-qa-type='molecule-export-dropdown-operations-button']"
     SEL_EXPORT_CSV = "[data-qa-type~='molecule-export-dropdown-operations-menuItem-csv']"
+    SEL_PERIOD_TWO_MONTHS = "[data-qa-type='period-tab-2 месяца']"
 
     EXPORT_FORMAT_LABELS = (
         "Download CSV",
@@ -432,6 +455,7 @@ class TBankPlaywrightConnector(Connector):
         "CSV-файл",
         "CSV",
     )
+    PERIOD_LABELS = ("За 2 месяца", "2 месяца", "Последние 2 месяца", "60 дней")
 
     TITLE_SET_CODE = "Придумайте код"
 
@@ -823,6 +847,7 @@ class TBankPlaywrightConnector(Connector):
         with contextlib.suppress(Exception):
             page.wait_for_load_state("networkidle", timeout=self.LOGIN_TIMEOUT_MS)
         page.wait_for_timeout(2_500)
+        self.select_period(page)
         self.shot(page, "08-operations")
 
         page.locator(self.SEL_EXPORT_TRIGGER).first.click(timeout=self.LOGIN_TIMEOUT_MS)
@@ -849,6 +874,20 @@ class TBankPlaywrightConnector(Connector):
         if not rows:
             raise PublicConnectorError(STATEMENT_EMPTY)
         return [row.to_sync_dict() for row in rows]
+
+    def select_period(self, page: _Page) -> None:
+        """
+        Select a two-month operation window when the cabinet exposes it.
+        """
+        with contextlib.suppress(Exception):
+            page.locator(self.SEL_PERIOD_TWO_MONTHS).first.click(timeout=5_000)
+            page.wait_for_timeout(1_000)
+            return
+        for label in self.PERIOD_LABELS:
+            with contextlib.suppress(Exception):
+                page.get_by_text(label, exact=True).first.click(timeout=2_500)
+                page.wait_for_timeout(1_000)
+                return
 
     def click_export_format(self, page: _Page) -> bool:
         """Try to choose CSV export in dropdown and report whether it was found."""

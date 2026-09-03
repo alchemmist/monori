@@ -46,6 +46,9 @@ log = logging.getLogger(__name__)
 SMS_SENT = "A confirmation code was sent to your phone."
 CODE_REJECTED = "The bank rejected the code — check it and try again."
 SYNC_FAILED = "The bank sync could not be completed."
+CAPTCHA_PREFIX = "captcha:"
+CODE_PREFIX = "code:"
+CHALLENGE_PREFIXES = (CAPTCHA_PREFIX, CODE_PREFIX)
 
 PENDING_TTL_SECONDS = 600
 PENDING_CAPACITY = 8
@@ -201,11 +204,15 @@ def start_run(cid: int, body: RunBody) -> RunDoneResponse | RunStatusResponse:
         _close_connector(old)
     try:
         result = _done(connector.sync(body.since))
-    except SmsRequiredError:
+    except SmsRequiredError as error:
         with PENDING_LOCK:
             parked = _park_if_owned(cid, token, connector)
         if parked:
-            return RunStatusResponse(status="awaiting_sms", message=SMS_SENT)
+            message = str(error)
+            return RunStatusResponse(
+                status="awaiting_sms",
+                message=message if message.startswith(CHALLENGE_PREFIXES) else SMS_SENT,
+            )
         raise HTTPException(409, "login was cancelled or superseded") from None
     except ConnectorError as e:
         if not _release_if_owned(cid, token):
@@ -233,11 +240,15 @@ def submit_sms(cid: int, body: SmsBody) -> RunDoneResponse | RunStatusResponse:
         _close_connector(old)
     try:
         result = _done(connector.resume_sync(body.code))
-    except SmsRequiredError:
+    except SmsRequiredError as error:
         with PENDING_LOCK:
             parked = _park_if_owned(cid, token, connector)
         if parked:
-            return RunStatusResponse(status="awaiting_sms", message=CODE_REJECTED)
+            message = str(error)
+            return RunStatusResponse(
+                status="awaiting_sms",
+                message=message if message.startswith(CHALLENGE_PREFIXES) else CODE_REJECTED,
+            )
         raise HTTPException(409, "login was cancelled or superseded") from None
     except ConnectorError as e:
         if not _release_if_owned(cid, token):
