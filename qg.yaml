@@ -2,9 +2,10 @@ version: 0
 provider:
     name: github
     configuration:
+        default-branch: main
         runtime:
-            action: alchemmist/quality-graph@c73c58fb1c5064546b40f481decdb7bc12c5e9fe
-            publisher-action: alchemmist/quality-graph@c73c58fb1c5064546b40f481decdb7bc12c5e9fe
+            action: alchemmist/quality-graph@585b63cf6fd2c022160a10a1330be4799e9d5acc
+            publisher-action: alchemmist/quality-graph@585b63cf6fd2c022160a10a1330be4799e9d5acc
 administration:
     roles: [admin, maintain, write]
 labels:

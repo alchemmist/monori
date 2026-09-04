@@ -1,6 +1,6 @@
 # Quality Graph migration
 
-Issue 424 migrates CI orchestration to `quality-graph.yml`. The generated
+Issue 424 migrates CI orchestration to `qg.yaml`. The generated
 workflows and `.quality-graph/manifest.json` are committed build artifacts and
 must not be edited by hand.
 
@@ -43,7 +43,7 @@ not pull-request graph nodes.
 5. Confirm the complete dashboard, commands, approvals, labels, reruns, and fork-safe run.
 6. Change branch protection to require only the aggregate `Quality Graph` check.
 7. Remove the superseded PR orchestration and its tests. Retain the Make targets and
-   Monori-specific producers referenced by `quality-graph.yml`. Completed after the probe
+   Monori-specific producers referenced by `qg.yaml`. Completed after the probe
    pull request confirmed the generated graph and publisher lifecycle.
 
 ## Rollback

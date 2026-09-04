@@ -14,4 +14,5 @@ ignore: |
     **/dist/
     server/.venv/
     .github/workflows/quality-graph.yml
+    .github/workflows/quality-graph-push.yml
     .github/workflows/quality-graph-publish.yml
