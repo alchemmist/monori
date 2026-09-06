@@ -134,7 +134,15 @@ class Page:
     def locator(self, selector: str) -> Locator:
         if selector == "iframe":
             return Locator(
-                present=self.mode in {"phone", "password", "password_error", "code", "chooser"},
+                present=self.mode
+                in {
+                    "phone",
+                    "password",
+                    "password_error",
+                    "code",
+                    "chooser",
+                    "ypay_code_with_iframe",
+                },
                 frame=Frame(self.mode),
             )
         if selector == "main a[aria-haspopup='true']":
@@ -143,8 +151,12 @@ class Page:
             return Locator(present=self.mode in {"suggest", "code"})
         present = (
             (selector == "input[placeholder='Enter the characters']" and self.mode == "captcha")
-            or ("type='tel'" in selector and self.mode == "ypay_code" and ":not" not in selector)
-            or ("one-time-code" in selector and self.mode == "ypay_code")
+            or (
+                "type='tel'" in selector
+                and self.mode in {"ypay_code", "ypay_code_with_iframe"}
+                and ":not" not in selector
+            )
+            or ("one-time-code" in selector and self.mode in {"ypay_code", "ypay_code_with_iframe"})
         )
         return Locator(present=present)
 
@@ -317,6 +329,9 @@ def test_connector_auth_steps_and_history() -> None:
     pay_code = ConnectorWithAnswer("1234")
     assert pay_code.drive_auth_step(Page("ypay_code"))
     assert pay_code.messages == ["code:4:Enter the 4-digit code sent by Yandex Pay."]
+    pay_code_with_iframe = ConnectorWithAnswer("1234")
+    assert pay_code_with_iframe.drive_auth_step(Page("ypay_code_with_iframe"))
+    assert pay_code_with_iframe.messages == ["code:4:Enter the 4-digit code sent by Yandex Pay."]
     assert connector.drive_auth_step(Page("captcha"))
     rows = connector.download_and_parse(Page(), None)
     assert len(rows) == 1

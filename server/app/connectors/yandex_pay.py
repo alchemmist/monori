@@ -273,15 +273,14 @@ class YandexPayConnector(TBankPlaywrightConnector):
         """
         Fill one visible field in the embedded Yandex ID login form.
         """
-        scope = (
-            page.locator("iframe").first.content_frame if page.locator("iframe").count() else page
-        )
+        iframe = page.locator("iframe")
+        scope = iframe.first.content_frame if iframe.count() else page
         rejected_password = scope.locator(
             "input[autocomplete='current-password'][aria-invalid='true']"
         )
         if rejected_password.count():
             raise PublicConnectorError(AUTH_REJECTED)
-        if self.drive_code_step(page, scope):
+        if self._drive_visible_code_step(page):
             return True
         phone = scope.locator(
             "input[type='tel']:not([autocomplete='one-time-code']), input[name='login']"
@@ -318,6 +317,12 @@ class YandexPayConnector(TBankPlaywrightConnector):
             self.shot(page, "captcha-after")
             return True
         return False
+
+    def _drive_visible_code_step(self, page: _Page) -> bool:
+        if self.drive_code_step(page, page):
+            return True
+        iframe = page.locator("iframe")
+        return bool(iframe.count() and self.drive_code_step(page, iframe.first.content_frame))
 
     def drive_code_step(self, page: _Page, scope: _Page | _FrameLocator) -> bool:
         """Submit the OTP format belonging to the current Yandex authentication surface."""
