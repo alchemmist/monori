@@ -6,11 +6,15 @@ import pytest
 
 import monori.server.app.connectors.yandex_pay as yandex_pay_module
 from monori.common import JsonValue
-from monori.server.app.connectors.base import ConnectorError, PublicConnectorError
+from monori.server.app.connectors.base import (
+    ConnectorChallenge,
+    ConnectorError,
+    PublicConnectorError,
+)
+from monori.server.app.connectors.playwright import PlaywrightConnector
 from monori.server.app.connectors.tbank_playwright import (
     PlaywrightTimeoutError,
     TBankPlaywrightConnector,
-    _PageAdapter,
 )
 from monori.server.app.connectors.yandex_pay import (
     AUTH_REJECTED,
@@ -20,6 +24,7 @@ from monori.server.app.connectors.yandex_pay import (
     history_years,
     parse_amount,
     parse_date,
+    parse_history_html,
     parse_payment_item,
 )
 
@@ -195,6 +200,15 @@ class Page:
             return "https://ext.captcha.yandex.net/image?key=test"
         return self.payload
 
+    def content(self) -> str:
+        parts = ["<main>"]
+        for item in self.payload:
+            parts.append(f"<h3>{item.get('date', '')}</h3><a aria-haspopup='true'>")
+            parts.extend(f"<p>{title}</p>" for title in item.get("titles", []))
+            parts.append(f"<p>{item.get('amount', '')}</p></a>")
+        parts.append("</main>")
+        return "".join(parts)
+
 
 def test_parse_amount() -> None:
     assert parse_amount("\N{MINUS SIGN}1 234,50 ₽") == -123450
@@ -207,8 +221,14 @@ def test_parse_amount() -> None:
         parse_amount("not an amount")
 
 
+def test_browser_connectors_share_only_the_neutral_lifecycle() -> None:
+    assert issubclass(YandexPayConnector, PlaywrightConnector)
+    assert issubclass(TBankPlaywrightConnector, PlaywrightConnector)
+    assert not issubclass(YandexPayConnector, TBankPlaywrightConnector)
+
+
 class ConnectorWithCode(YandexPayConnector):
-    def ask_sms(self, _message: str = "") -> str:
+    def ask_sms(self, _challenge: ConnectorChallenge | None = None) -> str:
         return "123456"
 
 
@@ -216,10 +236,11 @@ class ConnectorWithAnswer(YandexPayConnector):
     def __init__(self, answer: str) -> None:
         super().__init__({"phone": "+70000000000", "password": "pw"})
         self.answer = answer
-        self.messages: list[str] = []
+        self.messages: list[ConnectorChallenge] = []
 
-    def ask_sms(self, message: str = "") -> str:
-        self.messages.append(message)
+    def ask_sms(self, challenge: ConnectorChallenge | None = None) -> str:
+        assert challenge is not None
+        self.messages.append(challenge)
         return self.answer
 
 
@@ -328,10 +349,16 @@ def test_connector_auth_steps_and_history() -> None:
     assert connector.drive_auth_step(Page("code"))
     pay_code = ConnectorWithAnswer("1234")
     assert pay_code.drive_auth_step(Page("ypay_code"))
-    assert pay_code.messages == ["code:4:Enter the 4-digit code sent by Yandex Pay."]
+    assert pay_code.messages == [
+        ConnectorChallenge(
+            kind="code",
+            prompt="Enter the 4-digit code sent by Yandex Pay.",
+            code_length=4,
+        )
+    ]
     pay_code_with_iframe = ConnectorWithAnswer("1234")
     assert pay_code_with_iframe.drive_auth_step(Page("ypay_code_with_iframe"))
-    assert pay_code_with_iframe.messages == ["code:4:Enter the 4-digit code sent by Yandex Pay."]
+    assert pay_code_with_iframe.messages == pay_code.messages
     assert connector.drive_auth_step(Page("captcha"))
     rows = connector.download_and_parse(Page(), None)
     assert len(rows) == 1
@@ -387,7 +414,9 @@ def test_connector_handles_suggest_resend_and_captcha_refresh() -> None:
 
     captcha = ConnectorWithAnswer("answer")
     assert captcha.drive_auth_step(InvalidCaptchaPage("captcha"))
-    assert captcha.messages == ["captcha:"]
+    assert captcha.messages == [
+        ConnectorChallenge(kind="captcha", prompt="Enter the characters exactly as shown.")
+    ]
 
 
 def test_connector_waits_for_auth_dom_transition() -> None:
@@ -446,7 +475,13 @@ def test_connector_waits_for_delayed_yandex_pay_code() -> None:
 
     connector = ConnectorWithAnswer("1234")
     connector.ensure_logged_in(DelayedPayCodePage())
-    assert connector.messages == ["code:4:Enter the 4-digit code sent by Yandex Pay."]
+    assert connector.messages == [
+        ConnectorChallenge(
+            kind="code",
+            prompt="Enter the 4-digit code sent by Yandex Pay.",
+            code_length=4,
+        )
+    ]
 
 
 def test_yandex_pay_connector_preserves_browser_profile(tmp_path: Path) -> None:
@@ -471,13 +506,7 @@ def test_connector_filter_requires_active_selection() -> None:
         YandexPayConnector.select_pay_card_filter(Page("empty", filter_active=False))
 
 
-def test_tbank_playwright_adapter_and_period_selection() -> None:
-    class Raw:
-        def evaluate(self, expression: str) -> JsonValue:
-            return expression
-
-    assert _PageAdapter(Raw()).evaluate("probe") == "probe"
-
+def test_tbank_period_selection() -> None:
     class PeriodPage(Page):
         def __init__(self, *, qa_present: bool) -> None:
             super().__init__()
@@ -507,7 +536,7 @@ def test_tbank_playwright_adapter_and_period_selection() -> None:
 
 def test_connector_rejects_empty_or_incomplete_history() -> None:
     connector = YandexPayConnector({})
-    with pytest.raises(ConnectorError, match="date is missing"):
+    with pytest.raises(PublicConnectorError, match="history format changed"):
         connector.download_and_parse(
             Page(payload=[{"titles": ["Merchant"], "amount": "", "date": ""}]), None
         )
@@ -525,6 +554,17 @@ def test_parse_payment_item() -> None:
     assert row.bank_category == ""
     assert row.mcc == ""
     assert row.card == ""
+
+
+def test_parse_redacted_history_fixture() -> None:
+    fixture = Path(__file__).parents[1] / "fixtures" / "yandex_pay_history.html"
+    assert parse_history_html(fixture.read_text()) == [
+        {
+            "titles": ["Redacted merchant"],
+            "amount": "\N{MINUS SIGN}1 234,50 ₽",
+            "date": "August 25, 2026",
+        }
+    ]
 
 
 def test_parse_payment_item_rejects_missing_fields() -> None:

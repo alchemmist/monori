@@ -11,6 +11,7 @@ import monori.server.app.db as dbmod
 from monori.common import JsonObject
 from monori.server.app.connectors import base
 from monori.server.app.connectors.base import (
+    ConnectorChallenge,
     PublicConnectorError,
     SmsRequiredError,
     SyncResult,
@@ -196,13 +197,13 @@ class RetryOtpConnector(base.Connector):
     @override
     def sync(self, since: str | None = None) -> SyncResult:
         msg = "code sent"
-        raise SmsRequiredError(msg)
+        raise SmsRequiredError(ConnectorChallenge(kind="code", prompt=msg))
 
     @override
     def resume_sync(self, code: str) -> SyncResult:
         if code != "4242":
             msg = "the bank rejected the code — check it and try again"
-            raise SmsRequiredError(msg)
+            raise SmsRequiredError(ConnectorChallenge(kind="code", prompt=msg))
         return SyncResult([], session=None)
 
     @override
@@ -450,10 +451,15 @@ class SecondAccountOtpConnector(RetryOtpConnector):
     @override
     def sync(self, since: str | None = None) -> SyncResult:
         if self.account_ref == "second":
-            message = "captcha:https://ext.captcha.yandex.net/image?key=next"
-            raise SmsRequiredError(message)
+            raise SmsRequiredError(
+                ConnectorChallenge(
+                    kind="captcha",
+                    prompt="Enter the characters exactly as shown.",
+                    image_url="https://ext.captcha.yandex.net/image?key=next",
+                )
+            )
         message = "code sent"
-        raise SmsRequiredError(message)
+        raise SmsRequiredError(ConnectorChallenge(kind="code", prompt=message))
 
     @override
     def resume_sync(self, code: str) -> SyncResult:
@@ -485,7 +491,14 @@ def test_resume_propagates_challenge_from_next_account(
 
     assert body == {
         "status": "awaiting_sms",
-        "message": "captcha:https://ext.captcha.yandex.net/image?key=next",
+        "message": "A confirmation code was sent to your phone.",
+        "challenge": {
+            "kind": "captcha",
+            "prompt": "Enter the characters exactly as shown.",
+            "codeLength": None,
+            "imageUrl": "https://ext.captcha.yandex.net/image?key=next",
+            "canResend": False,
+        },
     }
 
 

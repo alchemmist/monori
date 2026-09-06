@@ -25,6 +25,10 @@ cp pyproject.toml "$workspace/pyproject.toml"
 
 if [ -d mutants ]; then
   cp -R mutants "$workspace/mutants"
+  rm -rf "$workspace/mutants/server/tests" "$workspace/mutants/ci/tests"
+  mkdir -p "$workspace/mutants/server" "$workspace/mutants/ci"
+  cp -R server/tests "$workspace/mutants/server/tests"
+  cp -R ci/tests "$workspace/mutants/ci/tests"
 fi
 
 set +e

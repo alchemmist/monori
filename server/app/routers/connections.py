@@ -30,6 +30,7 @@ from monori.server.app import crypto
 from monori.server.app.auth import AuthenticatedUser, current_user
 from monori.server.app.connectors import base as connectors
 from monori.server.app.connectors.base import (
+    ConnectorChallenge,
     ConnectorError,
     ConnectorInfo,
     PublicConnectorError,
@@ -154,6 +155,7 @@ class SyncStatusResponse:
 
     status: ConnectionStatus
     message: str | None = None
+    challenge: ConnectorChallenge | None = None
 
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid", populate_by_name=True))
@@ -674,10 +676,10 @@ def sync_connection(
             _mark_connected(c, cid)
             return _aggregate(results, unmapped)
         except SmsRequiredError as error:
-            message = str(error)
             return SyncStatusResponse(
                 status=ConnectionStatus.AWAITING_SMS,
-                message=message if message.startswith(("captcha:", "code:")) else SMS_SENT,
+                message=SMS_SENT,
+                challenge=error.challenge,
             )
         except ConnectorError as e:
             _fail(c, cid, e)
@@ -710,10 +712,10 @@ def submit_sms(
         except NoPendingLoginError as e:
             raise HTTPException(409, "no login awaiting a code") from e
         except SmsRequiredError as error:
-            message = str(error)
             return SyncStatusResponse(
                 status=ConnectionStatus.AWAITING_SMS,
-                message=message if message.startswith(("captcha:", "code:")) else CODE_REJECTED,
+                message=CODE_REJECTED,
+                challenge=error.challenge,
             )
         except ConnectorError as e:
             _fail(c, cid, e)
@@ -728,10 +730,10 @@ def submit_sms(
                 remaining,
             )
         except SmsRequiredError as error:
-            message = str(error)
             return SyncStatusResponse(
                 status=ConnectionStatus.AWAITING_SMS,
-                message=message if message.startswith(("captcha:", "code:")) else SMS_SENT,
+                message=SMS_SENT,
+                challenge=error.challenge,
             )
         except ConnectorError as e:
             _fail(c, cid, e)
