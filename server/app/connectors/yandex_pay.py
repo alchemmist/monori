@@ -238,10 +238,6 @@ class YandexPayConnector(TBankPlaywrightConnector):
             if self.drive_auth_step(page):
                 page.wait_for_timeout(1500)
                 continue
-            if page.locator("iframe").count() == 0 and "/_pay/login" in page.url:
-                page.goto(self.HISTORY_URL, wait_until="domcontentloaded")
-                page.wait_for_timeout(1500)
-                continue
             page.wait_for_timeout(1000)
             page.wait_for_timeout(1500)
         raise PublicConnectorError(LOGIN_FAILED)

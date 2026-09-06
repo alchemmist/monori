@@ -1,4 +1,5 @@
 from datetime import UTC, date, datetime, timedelta, tzinfo
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
@@ -394,6 +395,57 @@ def test_connector_waits_for_auth_dom_transition() -> None:
                 self.url = YandexPayConnector.HISTORY_URL
 
     ConnectorWithCode({"phone": "+70000000000"}).ensure_logged_in(TransitionPage())
+
+
+def test_connector_waits_for_delayed_yandex_pay_code() -> None:
+    class DelayedPayCodePage(Page):
+        def __init__(self) -> None:
+            super().__init__("empty")
+            self.url = "https://bank.yandex.ru/_pay/login"
+            self.waits = 0
+            self.code_typed = False
+            self.keyboard = type(
+                "Keyboard",
+                (),
+                {
+                    "press": lambda *_args: None,
+                    "type": lambda _keyboard, _value: setattr(self, "code_typed", True),
+                },
+            )()
+
+        def goto(self, _url: str, *, wait_until: str | None = None) -> None:
+            del wait_until
+            if self.code_typed:
+                self.mode = "logged"
+                self.url = YandexPayConnector.HISTORY_URL
+            else:
+                self.url = "https://bank.yandex.ru/_pay/login"
+
+        def wait_for_timeout(self, _timeout: int) -> None:
+            self.waits += 1
+            if self.code_typed:
+                self.mode = "logged"
+                self.url = YandexPayConnector.HISTORY_URL
+            elif self.waits >= 2:
+                self.mode = "ypay_code"
+
+    connector = ConnectorWithAnswer("1234")
+    connector.ensure_logged_in(DelayedPayCodePage())
+    assert connector.messages == ["code:4:Enter the 4-digit code sent by Yandex Pay."]
+
+
+def test_yandex_pay_connector_preserves_browser_profile(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    cookies = source / "Default" / "Cookies"
+    cookies.parent.mkdir(parents=True)
+    cookies.write_text("authenticated")
+    archived = YandexPayConnector({}).archive_profile(str(source))
+
+    restored = tmp_path / "restored"
+    restored.mkdir()
+    YandexPayConnector({}, session={"profile": archived}).restore_profile(str(restored))
+
+    assert (restored / "Default" / "Cookies").read_text() == "authenticated"
 
 
 def test_connector_filter_requires_active_selection() -> None:
