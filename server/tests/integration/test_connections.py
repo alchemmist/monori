@@ -11,6 +11,7 @@ import monori.server.app.db as dbmod
 from monori.common import JsonObject
 from monori.server.app.connectors import base
 from monori.server.app.connectors.base import (
+    ConnectorChallenge,
     PublicConnectorError,
     SmsRequiredError,
     SyncResult,
@@ -196,13 +197,13 @@ class RetryOtpConnector(base.Connector):
     @override
     def sync(self, since: str | None = None) -> SyncResult:
         msg = "code sent"
-        raise SmsRequiredError(msg)
+        raise SmsRequiredError(ConnectorChallenge(kind="code", prompt=msg))
 
     @override
     def resume_sync(self, code: str) -> SyncResult:
         if code != "4242":
             msg = "the bank rejected the code — check it and try again"
-            raise SmsRequiredError(msg)
+            raise SmsRequiredError(ConnectorChallenge(kind="code", prompt=msg))
         return SyncResult([], session=None)
 
     @override
@@ -441,6 +442,64 @@ def test_pending_account_is_persisted_and_resume_skips_synced(
     batches = c.execute("SELECT COUNT(*) FROM import_batches WHERE connection_id=?", (cid,))
     assert batches.fetchone()[0] == 2
     c.close()
+
+
+class SecondAccountOtpConnector(RetryOtpConnector):
+    bank = "secondotp"
+    kind = "secondotp"
+
+    @override
+    def sync(self, since: str | None = None) -> SyncResult:
+        if self.account_ref == "second":
+            raise SmsRequiredError(
+                ConnectorChallenge(
+                    kind="captcha",
+                    prompt="Enter the characters exactly as shown.",
+                    image_url="https://ext.captcha.yandex.net/image?key=next",
+                )
+            )
+        message = "code sent"
+        raise SmsRequiredError(ConnectorChallenge(kind="code", prompt=message))
+
+    @override
+    def resume_sync(self, code: str) -> SyncResult:
+        return SyncResult([], session={"token": code})
+
+
+def test_resume_propagates_challenge_from_next_account(
+    api: Api,
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setitem(
+        base.REGISTRY,
+        ("secondotp", "secondotp"),
+        SecondAccountOtpConnector,
+    )
+    first = api.default_account()
+    second = api.account("Second")
+    response = client.post(
+        "/api/connections",
+        json={"bank": "secondotp", "kind": "secondotp", "credentials": {"phone": "+7"}},
+    )
+    cid = response.json()["id"]
+    client.patch(f"/api/accounts/{first}", json={"connectionId": cid, "bankRef": "first"})
+    client.patch(f"/api/accounts/{second}", json={"connectionId": cid, "bankRef": "second"})
+
+    assert client.post(f"/api/connections/{cid}/sync").json()["status"] == "awaiting_sms"
+    body = client.post(f"/api/connections/{cid}/sms", json={"code": "123456"}).json()
+
+    assert body == {
+        "status": "awaiting_sms",
+        "message": "A confirmation code was sent to your phone.",
+        "challenge": {
+            "kind": "captcha",
+            "prompt": "Enter the characters exactly as shown.",
+            "codeLength": None,
+            "imageUrl": "https://ext.captcha.yandex.net/image?key=next",
+            "canResend": False,
+        },
+    }
 
 
 class MultiCardConnector(base.Connector):

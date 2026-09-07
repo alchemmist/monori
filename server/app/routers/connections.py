@@ -30,6 +30,7 @@ from monori.server.app import crypto
 from monori.server.app.auth import AuthenticatedUser, current_user
 from monori.server.app.connectors import base as connectors
 from monori.server.app.connectors.base import (
+    ConnectorChallenge,
     ConnectorError,
     ConnectorInfo,
     PublicConnectorError,
@@ -154,6 +155,7 @@ class SyncStatusResponse:
 
     status: ConnectionStatus
     message: str | None = None
+    challenge: ConnectorChallenge | None = None
 
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid", populate_by_name=True))
@@ -673,8 +675,12 @@ def sync_connection(
             )
             _mark_connected(c, cid)
             return _aggregate(results, unmapped)
-        except SmsRequiredError:
-            return SyncStatusResponse(status=ConnectionStatus.AWAITING_SMS, message=SMS_SENT)
+        except SmsRequiredError as error:
+            return SyncStatusResponse(
+                status=ConnectionStatus.AWAITING_SMS,
+                message=SMS_SENT,
+                challenge=error.challenge,
+            )
         except ConnectorError as e:
             _fail(c, cid, e)
     finally:
@@ -705,8 +711,12 @@ def submit_sms(
             result = get_runner().resume(cid, body.code)
         except NoPendingLoginError as e:
             raise HTTPException(409, "no login awaiting a code") from e
-        except SmsRequiredError:
-            return SyncStatusResponse(status=ConnectionStatus.AWAITING_SMS, message=CODE_REJECTED)
+        except SmsRequiredError as error:
+            return SyncStatusResponse(
+                status=ConnectionStatus.AWAITING_SMS,
+                message=CODE_REJECTED,
+                challenge=error.challenge,
+            )
         except ConnectorError as e:
             _fail(c, cid, e)
         results, unmapped = _finish_account(c, row, pending_id, result, uid)
@@ -719,8 +729,12 @@ def submit_sms(
                 SyncContext(c, row, _creds(row), session, uid),
                 remaining,
             )
-        except SmsRequiredError:
-            return SyncStatusResponse(status=ConnectionStatus.AWAITING_SMS, message=SMS_SENT)
+        except SmsRequiredError as error:
+            return SyncStatusResponse(
+                status=ConnectionStatus.AWAITING_SMS,
+                message=SMS_SENT,
+                challenge=error.challenge,
+            )
         except ConnectorError as e:
             _fail(c, cid, e)
         results.extend(more)
