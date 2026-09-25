@@ -9,7 +9,7 @@
         "puppeteer-core": "^25.4.0"
     },
     "overrides": {
-        "lighthouse": "13.4.1",
+        "lighthouse": "13.5.0",
         "tmp": "^0.2.6",
         "uuid": "^11.1.1"
     }
