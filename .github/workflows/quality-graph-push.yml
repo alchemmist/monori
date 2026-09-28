@@ -43,7 +43,7 @@ jobs:
       - name: Collect Workflow graph validation result
         id: quality-result
         if: always()
-        uses: alchemmist/quality-graph@585b63cf6fd2c022160a10a1330be4799e9d5acc
+        uses: alchemmist/quality-graph@0d049bebd08adf35b73659d82ce6b71bf542afc9
         with:
           operation: collect
           node-id: workflow-graph
@@ -101,7 +101,7 @@ jobs:
       - name: Collect Format check result
         id: quality-result
         if: always()
-        uses: alchemmist/quality-graph@585b63cf6fd2c022160a10a1330be4799e9d5acc
+        uses: alchemmist/quality-graph@0d049bebd08adf35b73659d82ce6b71bf542afc9
         with:
           operation: collect
           node-id: fmt-check
@@ -163,7 +163,7 @@ jobs:
       - name: Collect Triple-quoted string style result
         id: quality-result
         if: always()
-        uses: alchemmist/quality-graph@585b63cf6fd2c022160a10a1330be4799e9d5acc
+        uses: alchemmist/quality-graph@0d049bebd08adf35b73659d82ce6b71bf542afc9
         with:
           operation: collect
           node-id: triple-quotes
@@ -227,7 +227,7 @@ jobs:
       - name: Collect Lint suppression gate result
         id: quality-result
         if: always()
-        uses: alchemmist/quality-graph@585b63cf6fd2c022160a10a1330be4799e9d5acc
+        uses: alchemmist/quality-graph@0d049bebd08adf35b73659d82ce6b71bf542afc9
         with:
           operation: collect
           node-id: suppressions
@@ -293,7 +293,7 @@ jobs:
       - name: Collect Hardcoded color gate result
         id: quality-result
         if: always()
-        uses: alchemmist/quality-graph@585b63cf6fd2c022160a10a1330be4799e9d5acc
+        uses: alchemmist/quality-graph@0d049bebd08adf35b73659d82ce6b71bf542afc9
         with:
           operation: collect
           node-id: hardcoded-colors
@@ -359,7 +359,7 @@ jobs:
       - name: Collect Documentation links result
         id: quality-result
         if: always()
-        uses: alchemmist/quality-graph@585b63cf6fd2c022160a10a1330be4799e9d5acc
+        uses: alchemmist/quality-graph@0d049bebd08adf35b73659d82ce6b71bf542afc9
         with:
           operation: collect
           node-id: docs-links
@@ -421,7 +421,7 @@ jobs:
       - name: Collect Lint result
         id: quality-result
         if: always()
-        uses: alchemmist/quality-graph@585b63cf6fd2c022160a10a1330be4799e9d5acc
+        uses: alchemmist/quality-graph@0d049bebd08adf35b73659d82ce6b71bf542afc9
         with:
           operation: collect
           node-id: lint
@@ -483,7 +483,7 @@ jobs:
       - name: Collect Python object annotation gate result
         id: quality-result
         if: always()
-        uses: alchemmist/quality-graph@585b63cf6fd2c022160a10a1330be4799e9d5acc
+        uses: alchemmist/quality-graph@0d049bebd08adf35b73659d82ce6b71bf542afc9
         with:
           operation: collect
           node-id: object-annotations
@@ -545,7 +545,7 @@ jobs:
       - name: Collect Unsafe type cast gate result
         id: quality-result
         if: always()
-        uses: alchemmist/quality-graph@585b63cf6fd2c022160a10a1330be4799e9d5acc
+        uses: alchemmist/quality-graph@0d049bebd08adf35b73659d82ce6b71bf542afc9
         with:
           operation: collect
           node-id: type-casts
@@ -605,7 +605,7 @@ jobs:
       - name: Collect Type check result
         id: quality-result
         if: always()
-        uses: alchemmist/quality-graph@585b63cf6fd2c022160a10a1330be4799e9d5acc
+        uses: alchemmist/quality-graph@0d049bebd08adf35b73659d82ce6b71bf542afc9
         with:
           operation: collect
           node-id: type
@@ -667,7 +667,7 @@ jobs:
       - name: Collect Static analysis result
         id: quality-result
         if: always()
-        uses: alchemmist/quality-graph@585b63cf6fd2c022160a10a1330be4799e9d5acc
+        uses: alchemmist/quality-graph@0d049bebd08adf35b73659d82ce6b71bf542afc9
         with:
           operation: collect
           node-id: analyze
@@ -729,7 +729,7 @@ jobs:
       - name: Collect Time bomb guardrail result
         id: quality-result
         if: always()
-        uses: alchemmist/quality-graph@585b63cf6fd2c022160a10a1330be4799e9d5acc
+        uses: alchemmist/quality-graph@0d049bebd08adf35b73659d82ce6b71bf542afc9
         with:
           operation: collect
           node-id: time-bombs
@@ -792,7 +792,7 @@ jobs:
       - name: Collect Fast tests result
         id: quality-result
         if: always()
-        uses: alchemmist/quality-graph@585b63cf6fd2c022160a10a1330be4799e9d5acc
+        uses: alchemmist/quality-graph@0d049bebd08adf35b73659d82ce6b71bf542afc9
         with:
           operation: collect
           node-id: test-fast
@@ -852,7 +852,7 @@ jobs:
       - name: Collect Medium tests result
         id: quality-result
         if: always()
-        uses: alchemmist/quality-graph@585b63cf6fd2c022160a10a1330be4799e9d5acc
+        uses: alchemmist/quality-graph@0d049bebd08adf35b73659d82ce6b71bf542afc9
         with:
           operation: collect
           node-id: test-medium
@@ -914,7 +914,7 @@ jobs:
       - name: Collect Slow tests result
         id: quality-result
         if: always()
-        uses: alchemmist/quality-graph@585b63cf6fd2c022160a10a1330be4799e9d5acc
+        uses: alchemmist/quality-graph@0d049bebd08adf35b73659d82ce6b71bf542afc9
         with:
           operation: collect
           node-id: test-slow
@@ -977,7 +977,7 @@ jobs:
       - name: Collect Flaky test detection result
         id: quality-result
         if: always()
-        uses: alchemmist/quality-graph@585b63cf6fd2c022160a10a1330be4799e9d5acc
+        uses: alchemmist/quality-graph@0d049bebd08adf35b73659d82ce6b71bf542afc9
         with:
           operation: collect
           node-id: flaky-tests
@@ -1040,7 +1040,7 @@ jobs:
       - name: Collect Build frontend result
         id: quality-result
         if: always()
-        uses: alchemmist/quality-graph@585b63cf6fd2c022160a10a1330be4799e9d5acc
+        uses: alchemmist/quality-graph@0d049bebd08adf35b73659d82ce6b71bf542afc9
         with:
           operation: collect
           node-id: build
@@ -1102,7 +1102,7 @@ jobs:
       - name: Collect Coverage result
         id: quality-result
         if: always()
-        uses: alchemmist/quality-graph@585b63cf6fd2c022160a10a1330be4799e9d5acc
+        uses: alchemmist/quality-graph@0d049bebd08adf35b73659d82ce6b71bf542afc9
         with:
           operation: collect
           node-id: coverage
@@ -1166,7 +1166,7 @@ jobs:
       - name: Collect Mutation testing result
         id: quality-result
         if: always()
-        uses: alchemmist/quality-graph@585b63cf6fd2c022160a10a1330be4799e9d5acc
+        uses: alchemmist/quality-graph@0d049bebd08adf35b73659d82ce6b71bf542afc9
         with:
           operation: collect
           node-id: mutation
@@ -1233,7 +1233,7 @@ jobs:
       - name: Collect Frontend bundle size result
         id: quality-result
         if: always()
-        uses: alchemmist/quality-graph@585b63cf6fd2c022160a10a1330be4799e9d5acc
+        uses: alchemmist/quality-graph@0d049bebd08adf35b73659d82ce6b71bf542afc9
         with:
           operation: collect
           node-id: bundle-size
@@ -1301,7 +1301,7 @@ jobs:
       - name: Collect Frontend performance regression result
         id: quality-result
         if: always()
-        uses: alchemmist/quality-graph@585b63cf6fd2c022160a10a1330be4799e9d5acc
+        uses: alchemmist/quality-graph@0d049bebd08adf35b73659d82ce6b71bf542afc9
         with:
           operation: collect
           node-id: frontend-performance
@@ -1364,7 +1364,7 @@ jobs:
       - name: Collect Dependency and security audit result
         id: quality-result
         if: always()
-        uses: alchemmist/quality-graph@585b63cf6fd2c022160a10a1330be4799e9d5acc
+        uses: alchemmist/quality-graph@0d049bebd08adf35b73659d82ce6b71bf542afc9
         with:
           operation: collect
           node-id: audit
