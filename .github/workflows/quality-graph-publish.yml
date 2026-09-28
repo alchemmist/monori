@@ -29,7 +29,7 @@ jobs:
       pull-requests: write
     steps:
       - name: Publish trusted Quality Graph state
-        uses: alchemmist/quality-graph@585b63cf6fd2c022160a10a1330be4799e9d5acc
+        uses: alchemmist/quality-graph@0d049bebd08adf35b73659d82ce6b71bf542afc9
         with:
           operation: ${{ github.event.action == 'completed' && 'publish' || 'watch' }}
   command:
@@ -43,6 +43,6 @@ jobs:
       pull-requests: write
     steps:
       - name: Handle trusted Quality Graph command
-        uses: alchemmist/quality-graph@585b63cf6fd2c022160a10a1330be4799e9d5acc
+        uses: alchemmist/quality-graph@0d049bebd08adf35b73659d82ce6b71bf542afc9
         with:
           operation: command
