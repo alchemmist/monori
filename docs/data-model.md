@@ -374,6 +374,31 @@ avoid inserting a row that already exists; see [Importing](importing.md).
 
 ## Backups
 
-The database is a single file. To back up, copy `monori.db` (and its `-wal`
-sidecar if present) while the app is stopped, or use SQLite's own online backup.
+Back up `monori.db` with SQLite's online backup API, or stop the application
+before copying the database and any existing WAL sidecar. Keep the matching
+`.encryption_key` and `.auth_secret` files beside the database. If these secrets
+are supplied through `MONORI_ENCRYPTION_KEY` or `MONORI_AUTH_SECRET`, preserve
+the configured values separately. Losing the encryption key makes saved bank
+credentials and sessions unreadable; losing the auth secret invalidates login
+tokens.
+
+Store private migration snapshots in `.local-data/`, which is ignored by Git.
+Keep independent databases in separate subdirectories instead of overwriting
+`server/data/monori.db`. Include historical backups and matching secrets.
+The development data in `server/data/`, root `.env`, and `deploy/.env` are also
+local files: a fresh clone does not restore them. Transfer them separately
+through secure storage, and never commit databases, bank browser profiles,
+debug captures, or secrets.
+
+Before removing a snapshot's old location, verify the copied files and database
+integrity. If Syncthing manages that location, pause the folder, copy and verify
+its contents, update the folder path while paused, then resume synchronization
+and verify its status. Delete the old copy only after Syncthing uses the new
+path, so cleanup does not propagate as deletion to another device.
+
+To restore a snapshot, stop the destination application and preserve its current
+data separately. Restore the selected database and its matching secrets together,
+then verify that the application can open the data. Do not combine unrelated
+databases by replacing individual files.
+
 A backup/restore UI is planned in issue #28.
