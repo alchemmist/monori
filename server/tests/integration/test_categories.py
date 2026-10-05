@@ -1,6 +1,7 @@
 import pytest
 from fastapi.testclient import TestClient
 
+from monori.server.app.routers import categories as categories_router
 from monori.server.tests.conftest import Api, TransactionOptions
 
 pytestmark = pytest.mark.integration
@@ -17,6 +18,33 @@ def test_category_create_sort_and_conflicts(api: Api, client: TestClient) -> Non
     assert a != b
 
 
+def test_category_create_maps_constraint_race_to_conflict(
+    api: Api,
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    group = api.group("Expenses")
+    api.category("Other", group)
+    monkeypatch.setattr(categories_router, "_name_taken", lambda *_args, **_kwargs: False)
+
+    assert (
+        client.post("/api/categories", json={"name": "Other", "groupId": group}).status_code == 409
+    )
+
+
+def test_category_patch_maps_constraint_race_to_conflict(
+    api: Api,
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    group = api.group("Expenses")
+    first = api.category("First", group)
+    api.category("Taken", group)
+    monkeypatch.setattr(categories_router, "_name_taken", lambda *_args, **_kwargs: False)
+
+    assert client.patch(f"/api/categories/{first}", json={"name": "Taken"}).status_code == 409
+
+
 def test_category_patch_move_group_and_name(api: Api, client: TestClient) -> None:
     g1 = api.group("Expenses", "expense")
     g2 = api.group("Income", "income")
@@ -31,6 +59,23 @@ def test_category_patch_move_group_and_name(api: Api, client: TestClient) -> Non
     assert client.patch("/api/categories/999", json={"name": "z"}).status_code == 404
     assert client.patch(f"/api/categories/{a}", json={"keywords": "x|y"}).status_code == 200
     assert api.cat(a).keywords == "x|y"
+
+
+def test_category_move_rejects_name_taken_in_target_group(api: Api, client: TestClient) -> None:
+    source = api.group("Source")
+    target = api.group("Target")
+    category = api.category("Other", source)
+    api.category("Other", target)
+
+    assert client.patch(f"/api/categories/{category}", json={"groupId": target}).status_code == 409
+
+
+def test_category_move_to_goal_requires_a_target(api: Api, client: TestClient) -> None:
+    source = api.group("Source")
+    goals = api.group("Goals", "goal")
+    category = api.category("House", source)
+
+    assert client.patch(f"/api/categories/{category}", json={"groupId": goals}).status_code == 400
 
 
 def test_category_reorder_and_archive_roundtrip(api: Api, client: TestClient) -> None:

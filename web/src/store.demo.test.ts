@@ -295,6 +295,21 @@ describe("createTransfer and deleteTransfer in the demo", () => {
         ).toEqual(["rent", "rent"]);
     });
 
+    it("splits a transfer without deleting its legs", async () => {
+        const transferId = await useStore
+            .getState()
+            .createTransfer({ fromAccountId: 1, toAccountId: 5, amount: 25, date: "2026-03-01" });
+
+        await useStore.getState().splitTransfer(transferId);
+
+        expect(
+            snap()
+                .transactions.slice(2)
+                .map((t) => t.transferId),
+        ).toEqual([null, null]);
+        expect(snap().transfers).toEqual([]);
+    });
+
     it("deletes only the legs of that transfer", async () => {
         const transferId = await useStore
             .getState()

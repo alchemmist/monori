@@ -142,9 +142,10 @@ describe("updateTransaction", () => {
             .mockResolvedValueOnce({ ok: true });
 
         const first = useStore.getState().updateTransaction(1, { amount: -5000 });
-        await useStore.getState().updateTransaction(1, { comment: "kept" });
+        const second = useStore.getState().updateTransaction(1, { comment: "kept" });
+        await vi.waitFor(() => expect(api.patchTx).toHaveBeenCalledTimes(1));
         rejectFirst!(new Error("nope"));
-        await first;
+        await Promise.all([first, second]);
 
         expect(useStore.getState().snapshot!.transactions.find((t) => t.id === 1)).toMatchObject({
             amount: -100,
@@ -164,9 +165,10 @@ describe("updateTransaction", () => {
             .mockResolvedValueOnce({ ok: true });
 
         const first = useStore.getState().updateTransaction(1, { amount: -5000 });
-        await useStore.getState().updateTransaction(1, { amount: -7500 });
+        const second = useStore.getState().updateTransaction(1, { amount: -7500 });
+        await vi.waitFor(() => expect(api.patchTx).toHaveBeenCalledTimes(1));
         rejectFirst!(new Error("nope"));
-        await first;
+        await Promise.all([first, second]);
 
         expect(useStore.getState().snapshot!.transactions.find((t) => t.id === 1)!.amount).toBe(
             -7500,

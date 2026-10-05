@@ -2,6 +2,7 @@ from threading import Barrier, Thread
 from typing import override
 
 import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 import monori.server.app.connectors.fake
@@ -54,8 +55,91 @@ class BlockingConnector(base.Connector):
         type(self).closed += 1
 
 
+class StaleConnector(BlockingConnector):
+    bank = "stale"
+    kind = "stale"
+
+    @override
+    def sync(self, since: str | None = None) -> SyncResult:
+        sync_service.PENDING.pop(1, None)
+        mode = str(self.credentials.get("mode"))
+        if mode == "sms":
+            message = "code sent"
+            raise SmsRequiredError(message)
+        if mode == "error":
+            message = "failed"
+            raise base.ConnectorError(message)
+        return SyncResult([], None)
+
+    @override
+    def resume_sync(self, code: str) -> SyncResult:
+        sync_service.PENDING.pop(1, None)
+        if code == "sms":
+            message = "retry"
+            raise SmsRequiredError(message)
+        if code == "error":
+            message = "failed"
+            raise base.ConnectorError(message)
+        return SyncResult([], None)
+
+
 def test_health(client: TestClient) -> None:
     assert client.get("/health").json() == {"ok": True}
+
+
+def test_lifespan_closes_pending_connector(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setitem(base.REGISTRY, ("blocking", "blocking"), BlockingConnector)
+    BlockingConnector.closed = 0
+    with TestClient(sync_service.app) as service:
+        service.post(
+            "/runs/1",
+            json={"bank": "blocking", "kind": "blocking", "credentials": CREDS},
+        )
+    assert BlockingConnector.closed == 1
+
+
+def test_ownership_helpers_reject_a_stale_token(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setitem(base.REGISTRY, ("blocking", "blocking"), BlockingConnector)
+    connector = BlockingConnector(CREDS)
+    current = sync_service.RunToken()
+    sync_service.PENDING[1] = sync_service.PendingSession(current, connector, 100)
+
+    park_if_owned = vars(sync_service)["_park_if_owned"]
+    release_if_owned = vars(sync_service)["_release_if_owned"]
+    assert not park_if_owned(1, sync_service.RunToken(), connector)
+    assert not release_if_owned(1, sync_service.RunToken())
+
+
+@pytest.mark.parametrize("mode", ["sms", "error", "done"])
+def test_stale_start_result_is_rejected(
+    monkeypatch: pytest.MonkeyPatch,
+    mode: str,
+) -> None:
+    monkeypatch.setitem(base.REGISTRY, ("stale", "stale"), StaleConnector)
+    body = sync_service.RunBody("stale", "stale", {"mode": mode})
+
+    with pytest.raises(HTTPException, match="cancelled or superseded"):
+        sync_service.start_run(1, body)
+
+
+@pytest.mark.parametrize("code", ["sms", "error", "done"])
+def test_stale_sms_result_is_rejected(code: str) -> None:
+    connector = StaleConnector(CREDS)
+    token = sync_service.RunToken()
+    sync_service.PENDING[1] = sync_service.PendingSession(token, connector, float("inf"))
+
+    with pytest.raises(HTTPException, match="cancelled or superseded"):
+        sync_service.submit_sms(1, sync_service.SmsBody(code))
+
+
+def test_cancel_closes_expired_connectors(monkeypatch: pytest.MonkeyPatch) -> None:
+    BlockingConnector.closed = 0
+    connector = BlockingConnector(CREDS)
+    sync_service.PENDING[2] = sync_service.PendingSession(sync_service.RunToken(), connector, 1)
+    monkeypatch.setattr(sync_service, "monotonic", lambda: 2)
+
+    assert sync_service.cancel_run(1) == {"cancelled": 1}
+    assert BlockingConnector.closed == 1
 
 
 def test_otp_flow(client: TestClient) -> None:

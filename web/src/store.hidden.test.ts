@@ -49,6 +49,21 @@ describe("hiding transactions", () => {
         expect(api.patchTx).toHaveBeenCalledWith(2, { hidden: true });
     });
 
+    it("derives visibility counts when the snapshot total is absent", async () => {
+        vi.spyOn(api, "patchTx").mockResolvedValue({});
+        const snapshot = structuredClone(useStore.getState().snapshot!);
+        delete snapshot.transactionsTotal;
+        useStore.setState({ snapshot });
+
+        useStore.getState().hideTx(2);
+        expect(useStore.getState().snapshot!.transactionsTotal).toBe(0);
+        const hiddenSnapshot = structuredClone(useStore.getState().snapshot!);
+        delete hiddenSnapshot.transactionsTotal;
+        useStore.setState({ snapshot: hiddenSnapshot });
+        useStore.getState().unhideTx(2);
+        expect(useStore.getState().snapshot!.transactionsTotal).toBe(1);
+    });
+
     it("unhideTx puts the row back in canonical date order", async () => {
         vi.spyOn(api, "patchTx").mockResolvedValue({});
 
@@ -171,5 +186,26 @@ describe("hiding transactions", () => {
         expect(useStore.getState().toast!.title).toMatch(/hide/i);
         expect(useStore.getState().snapshot!.transactions.map((row) => row.id)).toEqual([1, 2, 3]);
         expect(useStore.getState().hiddenTx).toEqual([]);
+    });
+
+    it("a failed unhide patch restores the hidden row", async () => {
+        let rejectUnhide: ((error: Error) => void) | undefined;
+        vi.spyOn(api, "patchTx")
+            .mockResolvedValueOnce({})
+            .mockReturnValueOnce(
+                new Promise((_, reject) => {
+                    rejectUnhide = reject;
+                }),
+            );
+        useStore.getState().hideTx(2);
+        await vi.waitFor(() => expect(api.patchTx).toHaveBeenCalledTimes(1));
+        useStore.getState().unhideTx(2);
+        await vi.waitFor(() => expect(api.patchTx).toHaveBeenCalledTimes(2));
+        useStore.setState({ hiddenTx: null });
+        rejectUnhide!(new Error("network down"));
+        await vi.waitFor(() => expect(useStore.getState().toast).toBeTruthy());
+
+        expect(useStore.getState().snapshot!.transactions.map((row) => row.id)).toEqual([1, 3]);
+        expect(useStore.getState().hiddenTx!.map((row) => row.id)).toEqual([2]);
     });
 });

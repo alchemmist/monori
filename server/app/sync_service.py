@@ -224,13 +224,14 @@ def submit_sms(cid: int, body: SmsBody) -> RunDoneResponse | RunStatusResponse:
     with PENDING_LOCK:
         expired = _expire_pending()
         pending = PENDING.pop(cid, None)
-        if pending is None:
-            raise HTTPException(409, "no login awaiting a code")
-        token = pending.token
-        connector = pending.connector
-        PENDING[cid] = pending
     for old in expired:
         _close_connector(old)
+    if pending is None:
+        raise HTTPException(409, "no login awaiting a code")
+    token = pending.token
+    connector = pending.connector
+    with PENDING_LOCK:
+        PENDING[cid] = pending
     try:
         result = _done(connector.resume_sync(body.code))
     except SmsRequiredError:

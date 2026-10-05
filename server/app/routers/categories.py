@@ -208,10 +208,9 @@ def _update_category_name(
     if patch.name is not None:
         group_id = patch.group_id
         if group_id is None:
-            row = c.execute("SELECT group_id FROM categories WHERE id=?", (cat_id,)).fetchone()
-            if row is None:
-                raise HTTPException(404, "category not found")
-            group_id = int(row[0])
+            group_id = int(
+                c.execute("SELECT group_id FROM categories WHERE id=?", (cat_id,)).fetchone()[0]
+            )
         if _name_taken(c, uid, group_id, patch.name, except_id=cat_id):
             raise HTTPException(409, "category with this name already exists")
         c.execute("UPDATE categories SET name=? WHERE id=?", (patch.name, cat_id))
@@ -235,8 +234,6 @@ def _move_category(
     if not target_group:
         raise HTTPException(400, "unknown group")
     name_row = c.execute("SELECT name FROM categories WHERE id=?", (cat_id,)).fetchone()
-    if name_row is None:
-        raise HTTPException(404, "category not found")
     if _name_taken(c, uid, patch.group_id, str(name_row[0]), except_id=cat_id):
         raise HTTPException(409, "category with this name already exists")
     target = GoalGroupRecord.from_row(target_group)

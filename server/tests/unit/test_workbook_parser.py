@@ -2,12 +2,14 @@ import datetime
 import re
 from dataclasses import dataclass
 from io import BytesIO
+from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
 import pytest
 from openpyxl import Workbook, load_workbook
 from openpyxl.worksheet.worksheet import Worksheet
 
+from monori.server.app.workbook import parser as workbook_parser
 from monori.server.app.workbook import spec
 from monori.server.app.workbook.parser import (
     MONTH_ABBREVS,
@@ -1364,3 +1366,19 @@ def test_label_col_only_counts_the_rows_just_under_the_header() -> None:
     for r in range(80, 140):
         ws.cell(row=r, column=2, value=f"note {r}")
     assert _label_col(ws, 5, 4) == 1
+
+
+def test_reconciliation_reports_missing_year_and_handles_absent_seam() -> None:
+    reconciliation_type = vars(workbook_parser)["_Reconciliation"]
+    reconciliation = object.__new__(reconciliation_type)
+    reconciliation.sheets = SimpleNamespace(
+        live_years={},
+        archive_years={},
+        seam_sheet=None,
+    )
+    year_sheet = vars(reconciliation_type)["_year_sheet"]
+    seam_balance = vars(reconciliation_type)["_seam_balance"]
+
+    with pytest.raises(WorkbookError, match="missing year sheet: 2025"):
+        year_sheet(reconciliation, 2025)
+    assert seam_balance(reconciliation, ("Daily", "Groceries")) is None

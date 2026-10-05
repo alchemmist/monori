@@ -1062,11 +1062,19 @@ class _CategoryCatalog:
             (
                 (category.group, category.name)
                 for category in self.categories
-                if category.name == INCOME_CATEGORY
-                or _kind_of(category.group, self.groups) == "income"
+                if _kind_of(category.group, self.groups) == "income"
             ),
             None,
         )
+        if income_category is None:
+            income_category = next(
+                (
+                    (category.group, category.name)
+                    for category in self.categories
+                    if category.name == INCOME_CATEGORY
+                ),
+                None,
+            )
         if income_category is None:
             self.add_group(INCOME_GROUP, "income")
             self.add_category(INCOME_CATEGORY, INCOME_GROUP)
@@ -1365,8 +1373,8 @@ class _Reconciliation:
     def _year_sheet(self, year: int) -> YearSheetRow:
         source = self.sheets.live_years.get(year) or self.sheets.archive_years.get(year)
         if source is None:
-            msg = f"missing year sheet: {year}"
-            raise WorkbookError(msg)
+            message = f"missing year sheet: {year}"
+            raise WorkbookError(message)
         return source
 
     def _reconcile_month(
@@ -1424,9 +1432,7 @@ class _Reconciliation:
                 if balance is None and month in entry.outflows
                 else balance
             )
-        if self._is_archived_final_balance(year, month, source, attempt):
-            return 0
-        return None
+        return 0 if self._is_archived_final_balance(year, month, source, attempt) else None
 
     def _seam_balance(self, key: CategoryKey) -> int | None:
         seam_sheet = self.sheets.seam_sheet

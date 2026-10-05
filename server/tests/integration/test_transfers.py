@@ -190,6 +190,22 @@ def test_delete_transfer_with_legs_removes_both_rows(api: Api, client: TestClien
     assert client.delete(f"/api/transfers/{transfer_id}/with-legs").status_code == 404
 
 
+def test_delete_transfer_with_legs_rejects_an_incomplete_pair(
+    api: Api,
+    client: TestClient,
+) -> None:
+    transfer_id = api.transfer(api.default_account(), api.account("Vault"), 5000)
+    leg_id = legs(api, transfer_id)[0].id
+    c = connect()
+    try:
+        c.execute("UPDATE transactions SET transfer_id=NULL WHERE id=?", (leg_id,))
+        c.commit()
+    finally:
+        c.close()
+
+    assert client.delete(f"/api/transfers/{transfer_id}/with-legs").status_code == 409
+
+
 def test_delete_transfer_with_legs_is_user_scoped(api: Api, client: TestClient) -> None:
     transfer_id = api.transfer(api.default_account(), api.account("Vault"), 5000)
     client.headers.update(login_as(client, "other@example.com"))

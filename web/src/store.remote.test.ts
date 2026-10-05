@@ -50,6 +50,12 @@ describe("optimistic edits outside the demo", () => {
         expect(snap().budgets).toEqual([{ categoryId: 4, year: 2026, month: 1, amount: 35 }]);
     });
 
+    it("persists clearing a budget cell", async () => {
+        vi.spyOn(api, "putBudget").mockResolvedValue({});
+        await useStore.getState().setBudget(4, 2026, 1, 0);
+        expect(snap().budgets).toEqual([]);
+    });
+
     it("rolls back an optimistic budget when the save fails", async () => {
         vi.spyOn(api, "putBudget").mockRejectedValue(new Error("offline"));
         await expect(useStore.getState().setBudget(4, 2026, 1, 35)).rejects.toThrow("offline");
@@ -76,9 +82,11 @@ describe("optimistic edits outside the demo", () => {
     it("sends a category retag and maps an unfiled row to category zero", async () => {
         const patch = vi.spyOn(api, "patchTx").mockResolvedValue({});
         useStore.getState().setTxCategory(2, 9);
+        await vi.waitFor(() => expect(patch).toHaveBeenCalledTimes(1));
         expect(patch).toHaveBeenCalledExactlyOnceWith(2, { categoryId: 9 });
 
         useStore.getState().setTxCategory(2, null);
+        await vi.waitFor(() => expect(patch).toHaveBeenCalledTimes(2));
         expect(patch).toHaveBeenLastCalledWith(2, { categoryId: 0 });
         expect(snap().transactions[0]!.categoryId).toBeNull();
     });
@@ -95,9 +103,20 @@ describe("optimistic edits outside the demo", () => {
         expect(snap().transactions[0]!.categoryId).toBe(4);
     });
 
+    it("restores the confirmed transaction field after consecutive failures", async () => {
+        vi.spyOn(api, "patchTx").mockRejectedValue(new Error("offline"));
+
+        useStore.getState().setTxCategory(2, 9);
+        useStore.getState().setTxCategory(2, 8);
+
+        await vi.waitFor(() => expect(api.patchTx).toHaveBeenCalledTimes(2));
+        await vi.waitFor(() => expect(snap().transactions[0]!.categoryId).toBe(4));
+    });
+
     it("sends an account move for the transaction", async () => {
         const patch = vi.spyOn(api, "patchTx").mockResolvedValue({});
         useStore.getState().setTxAccount(2, 5);
+        await vi.waitFor(() => expect(patch).toHaveBeenCalledTimes(1));
         expect(patch).toHaveBeenCalledExactlyOnceWith(2, { accountId: 5 });
         expect(snap().transactions[0]!.accountId).toBe(5);
     });
