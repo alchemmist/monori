@@ -377,4 +377,24 @@ describe("api", () => {
             expect(replace).not.toHaveBeenCalled();
         });
     });
+
+    it("keeps the bare status when the error body carries no detail", async () => {
+        fetch.mockResolvedValueOnce({
+            ok: false,
+            status: 422,
+            statusText: "Unprocessable Entity",
+            url: "/api/x",
+            json: vi.fn().mockResolvedValue({ errors: ["nope"] }),
+        });
+        await expect(api.snapshot()).rejects.toThrow("422 Unprocessable Entity");
+    });
+
+    it("defaults an admin SQL run to a read-only, non-dry request", async () => {
+        await api.adminSql("select 1");
+        expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({
+            sql: "select 1",
+            confirmWrite: false,
+            dryRun: false,
+        });
+    });
 });
