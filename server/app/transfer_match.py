@@ -23,8 +23,10 @@ description — a merchant purchase that merely matches the amount — is a
 mismatch: still offered as a suggestion, never merged on its own.
 """
 
-AUTO_DAYS = 1
-SUGGEST_DAYS = 5
+from typing import Any, Iterable, Literal, TypeVar, cast
+
+AUTO_DAYS: Literal[1] = 1
+SUGGEST_DAYS: Literal[5] = 5
 
 TRANSFER_HINTS = (
     "перевод",
@@ -41,14 +43,17 @@ TRANSFER_HINTS = (
     "снятие",
 )
 
+_T = TypeVar("_T")
 
-def day_number(date_iso):
+RowKey = Literal["id", "date", "amount", "account_id", "description", "transfer_id"]
+
+
+def day_number(date_iso: str, /) -> int:
     """
     Days since the epoch for an ISO date(time), by calendar day only — the
     times of the two legs are irrelevant and banks disagree about them anyway.
     """
     y, m, d = (int(p) for p in date_iso[:10].split("-"))
-    # Howard Hinnant's days_from_civil, so no datetime import for a hot loop
     y -= m <= 2
     era = (y if y >= 0 else y - 399) // 400
     yoe = y - era * 400
@@ -57,7 +62,7 @@ def day_number(date_iso):
     return era * 146097 + doe - 719468
 
 
-def field(row, name, default=None):
+def field(row: Any, name: RowKey, default: _T) -> _T:
     """
     Read ``name`` off a dict or a ``sqlite3.Row``, neither of which shares the
     other's accessor for a missing key.
@@ -66,15 +71,28 @@ def field(row, name, default=None):
         value = row[name]
     except (KeyError, IndexError):
         return default
-    return default if value is None else value
+    return default if value is None else cast(_T, value)
 
 
-def has_hint(description):
+def has_hint(description: str | None) -> bool:
     lowered = (description or "").lower()
     return any(h in lowered for h in TRANSFER_HINTS)
 
 
-def find_pairs(rows, max_days=SUGGEST_DAYS, rejected=()):
+class TransferPair(dict[str, object]):
+    outTxId: int
+    inTxId: int
+    amount: int
+    days: int
+    hint: bool
+    mismatch: bool
+
+
+def find_pairs(
+    rows: list[Any],
+    max_days: int = SUGGEST_DAYS,
+    rejected: Iterable[tuple[int, int]] = (),
+) -> list[TransferPair]:
     """
     Greedily pair ``rows`` into transfer candidates.
 
@@ -87,54 +105,54 @@ def find_pairs(rows, max_days=SUGGEST_DAYS, rejected=()):
     sorted best-first: closest in time, transfer-sounding descriptions ahead of
     silent ones, then by id so the order never depends on the input order.
     """
-    rejected = {tuple(p) for p in rejected}
-    outs: dict[int, list] = {}
-    ins: dict[int, list] = {}
+    rejected_set: set[tuple[int, int]] = set(rejected)
+    outs: dict[int, list[Any]] = {}
+    ins: dict[int, list[Any]] = {}
     for r in rows:
-        if field(r, "transfer_id"):
+        if field(r, "transfer_id", None):
             continue
-        amount = r["amount"]
+        amount = cast(int, r["amount"])
         if amount == 0:
             continue
         bucket = outs if amount < 0 else ins
         bucket.setdefault(abs(amount), []).append(r)
 
-    candidates = []
+    candidates: list[TransferPair] = []
     for amount, out_rows in outs.items():
         in_rows = ins.get(amount)
         if not in_rows:
             continue
         for out_row in out_rows:
-            out_day = day_number(out_row["date"])
+            out_day = day_number(cast(str, out_row["date"]))
             for in_row in in_rows:
                 if out_row["account_id"] == in_row["account_id"]:
                     continue
-                if (out_row["id"], in_row["id"]) in rejected:
+                if (cast(int, out_row["id"]), cast(int, in_row["id"])) in rejected_set:
                     continue
-                days = abs(day_number(in_row["date"]) - out_day)
+                days = abs(day_number(cast(str, in_row["date"])) - out_day)
                 if days > max_days:
                     continue
-                out_hint = has_hint(field(out_row, "description", ""))
-                in_hint = has_hint(field(in_row, "description", ""))
-                silent = field(in_row if out_hint else out_row, "description", "")
+                out_hint = has_hint(cast(str | None, field(out_row, "description", "")))
+                in_hint = has_hint(cast(str | None, field(in_row, "description", "")))
+                silent = cast(str | None, field(in_row if out_hint else out_row, "description", ""))
                 candidates.append(
-                    {
-                        "outTxId": out_row["id"],
-                        "inTxId": in_row["id"],
-                        "amount": amount,
-                        "days": days,
-                        "hint": out_hint or in_hint,
-                        # one leg says "transfer", the other names something else
-                        # entirely — the amount agreeing is not enough to be sure
-                        "mismatch": out_hint != in_hint and bool(str(silent).strip()),
-                    }
+                    TransferPair(
+                        {
+                            "outTxId": cast(int, out_row["id"]),
+                            "inTxId": cast(int, in_row["id"]),
+                            "amount": amount,
+                            "days": days,
+                            "hint": out_hint or in_hint,
+                            "mismatch": out_hint != in_hint and bool(str(silent).strip()),
+                        }
+                    )
                 )
 
     candidates.sort(
         key=lambda c: (c["days"], c["mismatch"], not c["hint"], c["outTxId"], c["inTxId"])
     )
-    used = set()
-    pairs = []
+    used: set[int] = set()
+    pairs: list[TransferPair] = []
     for c in candidates:
         if c["outTxId"] in used or c["inTxId"] in used:
             continue
@@ -144,15 +162,17 @@ def find_pairs(rows, max_days=SUGGEST_DAYS, rejected=()):
     return pairs
 
 
-def split_confident(pairs, auto_days=AUTO_DAYS):
+def split_confident(
+    pairs: list[Any], auto_days: int = AUTO_DAYS
+) -> tuple[list[TransferPair], list[TransferPair]]:
     """
     Partition matched pairs into the ones safe to merge without asking
     (``days <= auto_days`` and no description mismatch) and the ones worth
     showing as suggestions.
     """
-    auto: list = []
-    suggested: list = []
+    auto: list[TransferPair] = []
+    suggested: list[TransferPair] = []
     for p in pairs:
-        confident = p["days"] <= auto_days and not p.get("mismatch")
+        confident = cast(int, p["days"]) <= auto_days and not cast(bool, p.get("mismatch"))
         (auto if confident else suggested).append(p)
     return auto, suggested
