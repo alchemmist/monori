@@ -1,4 +1,4 @@
-name: PR checks
+name: Quality
 
 on:
     push:
