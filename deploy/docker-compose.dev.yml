@@ -24,7 +24,7 @@ services:
             # set to 1 to dump a screenshot + HTML of each login/export step to
             # server/data/ when tuning selectors (off by default — it writes
             # cabinet pages with personal data on every sync)
-            MONORI_CONNECTOR_DEBUG: ${MONORI_CONNECTOR_DEBUG:-}
+            MONORI_CONNECTOR_DEBUG: ${MONORI_CONNECTOR_DEBUG:-1}
             # comma-separated emails that get the admin panel (synced on login)
             MONORI_ADMIN_EMAILS: ${MONORI_ADMIN_EMAILS:-}
         volumes:
