@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { authTokenSchema, snapshotSchema, transactionCreateSchema } from "./apiSchemas.js";
+import {
+    authTokenSchema,
+    snapshotSchema,
+    syncResultSchema,
+    transactionCreateSchema,
+} from "./apiSchemas.js";
 
 const snapshot = {
     accounts: [
@@ -117,5 +122,23 @@ describe("API runtime contracts", () => {
             access_token: "token",
             token_type: "bearer",
         });
+    });
+
+    it("validates structured connector challenges", () => {
+        const challenge = {
+            status: "awaiting_sms",
+            message: "A confirmation code was sent to your phone.",
+            challenge: {
+                kind: "code",
+                prompt: "Enter the 4-digit code sent by Yandex Pay.",
+                codeLength: 4,
+                imageUrl: null,
+                canResend: false,
+            },
+        };
+        expect(syncResultSchema.parse(challenge)).toEqual(challenge);
+        expect(() =>
+            syncResultSchema.parse({ status: "awaiting_sms", message: "code:4:legacy" }),
+        ).toThrow();
     });
 });

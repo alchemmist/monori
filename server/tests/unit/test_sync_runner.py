@@ -11,6 +11,7 @@ from monori.common import JsonObject
 from monori.server.app import sync_service
 from monori.server.app.connectors import base
 from monori.server.app.connectors.base import (
+    ConnectorChallenge,
     ConnectorError,
     PublicConnectorError,
     SmsRequiredError,
@@ -164,7 +165,7 @@ class ClosableConnector(base.Connector):
     @override
     def sync(self, since: str | None = None) -> SyncResult:
         msg = "code sent"
-        raise SmsRequiredError(msg)
+        raise SmsRequiredError(ConnectorChallenge(kind="code", prompt=msg))
 
     @override
     def resume_sync(self, code: str) -> SyncResult:
@@ -251,13 +252,13 @@ class RetryOtpConnector(base.Connector):
     @override
     def sync(self, since: str | None = None) -> SyncResult:
         msg = "code sent"
-        raise SmsRequiredError(msg)
+        raise SmsRequiredError(ConnectorChallenge(kind="code", prompt=msg))
 
     @override
     def resume_sync(self, code: str) -> SyncResult:
         if code != "4242":
             msg = "the bank rejected the code — check it and try again"
-            raise SmsRequiredError(msg)
+            raise SmsRequiredError(ConnectorChallenge(kind="code", prompt=msg))
         return SyncResult([], session=None)
 
     @override
@@ -328,12 +329,7 @@ def test_rejected_code_keeps_login_alive(runner: Runner, monkeypatch: pytest.Mon
         runner.start(SyncRequest(1, "retryotp", "retryotp", CREDS, None, None))
     with pytest.raises(SmsRequiredError) as ei:
         runner.resume(1, "0000")
-    expected = (
-        sync_service.CODE_REJECTED
-        if isinstance(runner, RemoteRunner)
-        else "the bank rejected the code — check it and try again"
-    )
-    assert str(ei.value) == expected
+    assert str(ei.value) == "the bank rejected the code — check it and try again"
     assert RetryOtpConnector.closed == 0
     result = runner.resume(1, "4242")
     assert result.rows == []
@@ -363,13 +359,27 @@ def test_remote_awaiting_sms_message() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         assert request.method == "POST"
         assert request.url.path == "/runs/1"
-        return httpx.Response(200, json={"status": "awaiting_sms"})
+        return httpx.Response(
+            200,
+            json={
+                "status": "awaiting_sms",
+                "challenge": {
+                    "kind": "code",
+                    "prompt": "Enter the code sent by the bank.",
+                    "codeLength": None,
+                    "imageUrl": None,
+                    "canResend": True,
+                },
+            },
+        )
 
     client = httpx.Client(transport=httpx.MockTransport(handler), base_url="http://sync")
     r = RemoteRunner("http://sync", client=client)
     with pytest.raises(SmsRequiredError) as ei:
         r.start(SyncRequest(1, "fake", "fake", CREDS, None, None))
-    assert str(ei.value) == "code sent"
+    assert ei.value.challenge == ConnectorChallenge(
+        kind="code", prompt="Enter the code sent by the bank.", can_resend=True
+    )
 
 
 def test_remote_resume_transport_failure() -> None:

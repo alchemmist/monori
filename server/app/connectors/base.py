@@ -10,7 +10,7 @@ raises :class:`SmsRequiredError`; the caller parks the live connector and later 
 
 import importlib
 from functools import cache
-from typing import ClassVar
+from typing import ClassVar, Literal
 
 from pydantic import ConfigDict, Field, TypeAdapter
 from pydantic.dataclasses import dataclass as pydantic_dataclass
@@ -74,12 +74,34 @@ class PublicConnectorError(ConnectorError):
     """A sync failed with a sanitized message safe to return through the API."""
 
 
+@pydantic_dataclass(config=ConfigDict(extra="forbid", populate_by_name=True))
+class ConnectorChallenge:
+    """Describe user input required to continue a connector run."""
+
+    kind: Literal["code", "captcha"]
+    prompt: str
+    code_length: int | None = Field(
+        default=None, serialization_alias="codeLength", validation_alias="codeLength"
+    )
+    image_url: str | None = Field(
+        default=None, serialization_alias="imageUrl", validation_alias="imageUrl"
+    )
+    can_resend: bool = Field(
+        default=False, serialization_alias="canResend", validation_alias="canResend"
+    )
+
+
 class SmsRequiredError(Exception):
     """
     Login reached the OTP step. The caller must collect a code from the user.
 
     and continue the same connector instance via :meth:`Connector.resume_sync`.
     """
+
+    def __init__(self, challenge: ConnectorChallenge) -> None:
+        """Attach a typed challenge to the control-flow exception."""
+        super().__init__(challenge.prompt)
+        self.challenge = challenge
 
 
 @pydantic_dataclass
@@ -92,6 +114,7 @@ class SyncResult:
 
 JSON_OBJECT_ADAPTER: TypeAdapter[JsonObject] = TypeAdapter(JsonObject)
 SYNC_RESULT_ADAPTER: TypeAdapter[SyncResult] = TypeAdapter(SyncResult)
+CONNECTOR_CHALLENGE_ADAPTER: TypeAdapter[ConnectorChallenge] = TypeAdapter(ConnectorChallenge)
 
 
 class Connector:
@@ -148,6 +171,7 @@ REGISTRY: dict[tuple[str, str], type[Connector]] = {}
 @cache
 def _load_builtin_connectors() -> None:
     importlib.import_module("monori.server.app.connectors.tbank_playwright")
+    importlib.import_module("monori.server.app.connectors.yandex_pay")
 
 
 def register(cls: type[Connector]) -> type[Connector]:

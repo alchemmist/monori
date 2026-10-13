@@ -75,6 +75,7 @@ class RunStatusResponse:
 
     status: str
     message: str | None = None
+    challenge: connectors.ConnectorChallenge | None = None
 
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid"))
@@ -201,11 +202,15 @@ def start_run(cid: int, body: RunBody) -> RunDoneResponse | RunStatusResponse:
         _close_connector(old)
     try:
         result = _done(connector.sync(body.since))
-    except SmsRequiredError:
+    except SmsRequiredError as error:
         with PENDING_LOCK:
             parked = _park_if_owned(cid, token, connector)
         if parked:
-            return RunStatusResponse(status="awaiting_sms", message=SMS_SENT)
+            return RunStatusResponse(
+                status="awaiting_sms",
+                message=SMS_SENT,
+                challenge=error.challenge,
+            )
         raise HTTPException(409, "login was cancelled or superseded") from None
     except ConnectorError as e:
         if not _release_if_owned(cid, token):
@@ -233,11 +238,15 @@ def submit_sms(cid: int, body: SmsBody) -> RunDoneResponse | RunStatusResponse:
         _close_connector(old)
     try:
         result = _done(connector.resume_sync(body.code))
-    except SmsRequiredError:
+    except SmsRequiredError as error:
         with PENDING_LOCK:
             parked = _park_if_owned(cid, token, connector)
         if parked:
-            return RunStatusResponse(status="awaiting_sms", message=CODE_REJECTED)
+            return RunStatusResponse(
+                status="awaiting_sms",
+                message=CODE_REJECTED,
+                challenge=error.challenge,
+            )
         raise HTTPException(409, "login was cancelled or superseded") from None
     except ConnectorError as e:
         if not _release_if_owned(cid, token):
