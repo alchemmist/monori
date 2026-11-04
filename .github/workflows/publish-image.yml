@@ -20,6 +20,12 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Log in to Harbor
+        uses: docker/login-action@v3
+        with:
+          registry: harbor.socrat.alchemmist.xyz
+          username: ${{ secrets.HARBOR_USERNAME }}
+          password: ${{ secrets.HARBOR_PASSWORD }}
       - id: front
         uses: docker/build-push-action@v6
         with:
@@ -28,7 +34,9 @@ jobs:
           push: true
           tags: |
             ghcr.io/alchemmist/monori:front
+            harbor.socrat.alchemmist.xyz/homelab/monori:front
             ghcr.io/alchemmist/monori:front-${{ github.sha }}
+            harbor.socrat.alchemmist.xyz/homelab/monori:front-${{ github.sha }}
       - name: Deploy front to Socrat
         uses: alchemmist/deploy-to-socrat@v1
         with:
@@ -43,7 +51,9 @@ jobs:
           push: true
           tags: |
             ghcr.io/alchemmist/monori:back
+            harbor.socrat.alchemmist.xyz/homelab/monori:back
             ghcr.io/alchemmist/monori:back-${{ github.sha }}
+            harbor.socrat.alchemmist.xyz/homelab/monori:back-${{ github.sha }}
       - name: Deploy back to Socrat
         uses: alchemmist/deploy-to-socrat@v1
         with:
@@ -58,7 +68,9 @@ jobs:
           push: true
           tags: |
             ghcr.io/alchemmist/monori:sync
+            harbor.socrat.alchemmist.xyz/homelab/monori:sync
             ghcr.io/alchemmist/monori:sync-${{ github.sha }}
+            harbor.socrat.alchemmist.xyz/homelab/monori:sync-${{ github.sha }}
       - name: Deploy sync to Socrat
         uses: alchemmist/deploy-to-socrat@v1
         with:
