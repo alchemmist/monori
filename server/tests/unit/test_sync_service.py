@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 import monori.server.app.connectors.fake
 from monori.server.app import sync_service
 from monori.server.app.connectors import base
-from monori.server.app.connectors.base import SmsRequiredError, SyncResult
+from monori.server.app.connectors.base import ConnectorChallenge, SmsRequiredError, SyncResult
 
 if TYPE_CHECKING:
     from httpx2 import Response as HTTPXResponse
@@ -58,14 +58,14 @@ class BlockingConnector(base.Connector):
     @override
     def sync(self, since: str | None = None) -> SyncResult:
         message = "code sent"
-        raise SmsRequiredError(message)
+        raise SmsRequiredError(ConnectorChallenge(kind="code", prompt=message))
 
     @override
     def resume_sync(self, code: str) -> SyncResult:
         type(self).entered.wait(timeout=1)
         type(self).release.wait(timeout=1)
         message = "retry"
-        raise SmsRequiredError(message)
+        raise SmsRequiredError(ConnectorChallenge(kind="code", prompt=message))
 
     @override
     def close(self) -> None:
@@ -81,12 +81,12 @@ class RetryConnector(base.Connector):
     @override
     def sync(self, since: str | None = None) -> SyncResult:
         message = "code sent"
-        raise SmsRequiredError(message)
+        raise SmsRequiredError(ConnectorChallenge(kind="code", prompt=message))
 
     @override
     def resume_sync(self, code: str) -> SyncResult:
         message = "retry"
-        raise SmsRequiredError(message)
+        raise SmsRequiredError(ConnectorChallenge(kind="code", prompt=message))
 
     @override
     def close(self) -> None:
@@ -99,7 +99,17 @@ def test_health(client: TestClient) -> None:
 
 def test_otp_flow(client: TestClient) -> None:
     r = client.post("/runs/1", json={"bank": "fake", "kind": "fake", "credentials": CREDS})
-    assert r.json() == {"status": "awaiting_sms", "message": sync_service.SMS_SENT}
+    assert r.json() == {
+        "status": "awaiting_sms",
+        "message": sync_service.SMS_SENT,
+        "challenge": {
+            "kind": "code",
+            "prompt": "Enter the code sent by the bank.",
+            "codeLength": None,
+            "imageUrl": None,
+            "canResend": False,
+        },
+    }
     assert 1 in sync_service.PENDING
 
     r = client.post("/runs/1/sms", json={"code": "0000"})
@@ -120,7 +130,11 @@ def test_cached_session_skips_otp(client: TestClient) -> None:
 
 def test_connector_error_is_reported(client: TestClient) -> None:
     r = client.post("/runs/1", json={"bank": "fake", "kind": "fake", "credentials": {}})
-    assert r.json() == {"status": "error", "message": sync_service.SYNC_FAILED}
+    assert r.json() == {
+        "status": "error",
+        "message": sync_service.SYNC_FAILED,
+        "challenge": None,
+    }
 
 
 def test_unknown_connector(client: TestClient) -> None:

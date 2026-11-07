@@ -73,6 +73,14 @@ syncs restore the session, falling back to the code when it expires. During a
 sync the profile is unpacked into an owner-only temporary directory and removed
 right after, so the reusable banking state never sits in plaintext on disk.
 
+The Yandex Pay connector reads the Pay card history visible in the Yandex Pay
+web interface. It has no per-account `bankRef`: every fetched operation is
+written to the local account from which the connection was opened. Link one
+local account to the connection. The available history range and operation
+details are limited to what the web interface currently exposes. Its encrypted
+browser profile is reused between syncs, although Yandex Pay may still request
+a separate four-digit confirmation code.
+
 This is automated access to your own account and is a grey area under the bank's
 terms of service — use it on your own account at your own risk. Because it holds
 real access to financial data, keep the instance off the open internet and set

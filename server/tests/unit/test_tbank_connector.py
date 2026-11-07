@@ -22,14 +22,17 @@ from typing import ClassVar, Literal, Self, override
 import pytest
 
 from monori.common import JsonObject
+from monori.server.app.connectors import playwright as playwright_mod
 from monori.server.app.connectors import tbank_playwright as tbank_mod
 from monori.server.app.connectors.base import (
+    ConnectorChallenge,
     ConnectorError,
     SmsRequiredError,
     SyncResult,
     get_connector_class,
 )
 from monori.server.app.connectors.fake import FIXTURE_ROWS, _rows
+from monori.server.app.connectors.playwright import Locator
 from monori.server.app.connectors.tbank_playwright import TBankPlaywrightConnector as TBankConnector
 
 STATEMENT = (
@@ -120,9 +123,9 @@ class FakeDownloadExpectation:
 
     def __exit__(
         self,
-        exc_type: type[BaseException] | None,
-        exc_value: BaseException | None,
-        traceback: TracebackType | None,
+        _exc_type: type[BaseException] | None,
+        _exc_value: BaseException | None,
+        _traceback: TracebackType | None,
     ) -> Literal[False]:
         return False
 
@@ -474,8 +477,8 @@ def test_wrong_otp_reprompts_with_rejection_message() -> None:
     while not c.from_worker.empty():
         kind, payload = c.from_worker.get()
         if kind == "sms_required":
-            assert isinstance(payload, str)
-            messages.append(payload)
+            assert isinstance(payload, ConnectorChallenge)
+            messages.append(payload.prompt)
     assert messages == [
         "enter the code sent by the bank",
         "the bank rejected the code — check it and try again",
@@ -519,7 +522,7 @@ class _SubmitClickPage:
     def __init__(self, error: Exception) -> None:
         self._error = error
 
-    def locator(self, selector: str) -> tbank_mod._Locator:
+    def locator(self, selector: str) -> Locator:
         assert selector == TBankConnector.SEL_SUBMIT
         error = self._error
 
@@ -626,7 +629,7 @@ def test_await_worker_dispatch() -> None:
     from_worker.put(("error", "boom"))
     with pytest.raises(ConnectorError):
         await_worker()
-    from_worker.put(("sms_required", "x"))
+    from_worker.put(("sms_required", ConnectorChallenge(kind="code", prompt="x")))
     with pytest.raises(SmsRequiredError):
         await_worker()
 
@@ -724,9 +727,9 @@ def _install_fake_playwright(monkeypatch: pytest.MonkeyPatch, page: FakePage) ->
 
         def __exit__(
             self,
-            exc_type: type[BaseException] | None,
-            exc_value: BaseException | None,
-            traceback: TracebackType | None,
+            _exc_type: type[BaseException] | None,
+            _exc_value: BaseException | None,
+            _traceback: TracebackType | None,
         ) -> Literal[False]:
             return False
 
@@ -753,7 +756,7 @@ def test_run_two_phase_produces_rows_and_session(monkeypatch: pytest.MonkeyPatch
     work_dir, headless, user_agent, accept_downloads, args = page.launch_options
     assert pathlib.Path(work_dir).name.startswith("tbank-profile-")
     assert headless is True
-    assert user_agent == tbank_mod.USER_AGENT
+    assert user_agent == playwright_mod.USER_AGENT
     assert accept_downloads is True
     assert "--disk-cache-size=1" in args
 
@@ -822,7 +825,7 @@ def test_run_playwright_error_reports_connector_error(monkeypatch: pytest.Monkey
             message = "Page.goto: net::ERR_ABORTED"
             raise FakePlaywrightError(message)
 
-    monkeypatch.setattr(tbank_mod, "PlaywrightError", FakePlaywrightError, raising=False)
+    monkeypatch.setattr(playwright_mod, "PlaywrightError", FakePlaywrightError)
     _install_fake_playwright(monkeypatch, AbortedPage())
     connector = _connector()
     errors: list[ConnectorError] = []

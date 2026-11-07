@@ -13,6 +13,7 @@ from typing import override
 
 from monori.server.app.connectors.base import (
     Connector,
+    ConnectorChallenge,
     ConnectorError,
     SmsRequiredError,
     SyncResult,
@@ -60,8 +61,9 @@ class FakeConnector(Connector):
         if session and session.get("token"):
             return SyncResult(_rows(self.account_ref), session=session)
         self._pending = True
-        msg = "code sent"
-        raise SmsRequiredError(msg)
+        raise SmsRequiredError(
+            ConnectorChallenge(kind="code", prompt="Enter the code sent by the bank.")
+        )
 
     @override
     def resume_sync(self, code: str) -> SyncResult:
