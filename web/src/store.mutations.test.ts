@@ -29,6 +29,57 @@ afterEach(() => {
 });
 
 describe("store demo mutations", () => {
+    it("suggests, links and unlinks partial refunds locally", async () => {
+        useStore.setState({
+            snapshot: buildSnapshot({
+                transactions: [
+                    {
+                        id: 1,
+                        date: "2026-01-01",
+                        amount: -10000,
+                        description: "Shop",
+                        refundIds: [],
+                    },
+                    {
+                        id: 2,
+                        date: "2026-01-02",
+                        amount: 2400,
+                        description: "Shop refund",
+                        categoryId: null,
+                    },
+                    {
+                        id: 3,
+                        date: "2026-01-03",
+                        amount: 7600,
+                        description: "Shop refund",
+                        refundOfId: 1,
+                    },
+                    { id: 4, date: "2026-01-01", amount: -2400, description: "Other" },
+                ],
+            }),
+        });
+        const store = useStore.getState();
+        await expect(store.refundSuggestions(2)).resolves.toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({ id: 1 }),
+                expect.objectContaining({ id: 4 }),
+            ]),
+        );
+        await store.linkRefund(2, 1);
+        expect(
+            useStore.getState().snapshot!.transactions.find((row) => row.id === 2),
+        ).toMatchObject({
+            refundOfId: 1,
+        });
+        await store.unlinkRefund(2);
+        expect(
+            useStore.getState().snapshot!.transactions.find((row) => row.id === 2),
+        ).toMatchObject({
+            refundOfId: null,
+        });
+        await expect(store.refundSuggestions(1)).resolves.toEqual([]);
+    });
+
     it("edits budgets and transaction category/account optimistically", () => {
         const store = useStore.getState();
         void store.setBudget(2, 2026, 1, 30);
@@ -114,6 +165,57 @@ describe("store remote mutations", () => {
 
     /** Actions that only edit the snapshot must not spend a round trip on `load`. */
     const refreshCount = () => vi.mocked(useStore.getState().load).mock.calls.length;
+
+    it("loads, links and unlinks refunds through the API", async () => {
+        const purchase = {
+            id: 10,
+            date: "2026-01-01",
+            amount: -100,
+            description: "Shop",
+            refundIds: [],
+        };
+        const refund = { id: 11, date: "2026-01-02", amount: 50, description: "Shop refund" };
+        useStore.setState({ snapshot: buildSnapshot({ transactions: [purchase, refund] }) });
+        vi.spyOn(api, "refundSuggestions").mockResolvedValue({
+            rows: [buildSnapshot({ transactions: [purchase] }).transactions[0]!],
+        });
+        vi.spyOn(api, "linkRefund").mockResolvedValue({ refundOfId: 10, categoryId: 2 });
+        vi.spyOn(api, "unlinkRefund").mockResolvedValue({ categoryId: 2 });
+
+        await expect(useStore.getState().refundSuggestions(11)).resolves.toHaveLength(1);
+        await useStore.getState().linkRefund(11, 10);
+        expect(
+            useStore.getState().snapshot!.transactions.find((row) => row.id === 11),
+        ).toMatchObject({
+            refundOfId: 10,
+            categoryId: 2,
+        });
+        await useStore.getState().unlinkRefund(11);
+        expect(
+            useStore.getState().snapshot!.transactions.find((row) => row.id === 11),
+        ).toMatchObject({
+            refundOfId: null,
+            categoryId: 2,
+        });
+    });
+
+    it("repairs refund links when deletion rolls back", async () => {
+        const purchase = { id: 10, date: "2026-01-01", amount: -100, refundIds: [11] };
+        const refund = { id: 11, date: "2026-01-02", amount: 50, refundOfId: 10 };
+        useStore.setState({ snapshot: buildSnapshot({ transactions: [purchase, refund] }) });
+        vi.spyOn(api, "deleteTx").mockRejectedValue(new Error("offline"));
+
+        await expect(useStore.getState().deleteTransaction(10)).resolves.toBe(false);
+        expect(
+            useStore.getState().snapshot!.transactions.find((row) => row.id === 11),
+        ).toMatchObject({
+            refundOfId: 10,
+        });
+        await expect(useStore.getState().deleteTransaction(11)).resolves.toBe(false);
+        expect(
+            useStore.getState().snapshot!.transactions.find((row) => row.id === 10)?.refundIds,
+        ).toContain(11);
+    });
 
     it("sends account edits to their own endpoints and adopts the server id", async () => {
         const createAccount = vi.spyOn(api, "createAccount").mockResolvedValue({ id: 4 });

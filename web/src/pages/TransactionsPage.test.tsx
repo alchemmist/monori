@@ -232,6 +232,31 @@ describe("TransactionsPage", () => {
         await waitFor(() => expect(food).not.toBeInTheDocument());
     });
 
+    it("opens and removes refund links from the row menu", async () => {
+        seed({ transactions: [tx(1, { amount: -10000 }), tx(2, { amount: 2400 })] });
+        const { user, unmount } = renderUI(<TransactionsPage />);
+        let row = screen.getByText("tx 2").closest<HTMLElement>("tr")!;
+        await user.click(within(row).getByRole("button", { name: "Transaction actions" }));
+        fireEvent.click(screen.getByText("Mark as refund"));
+        expect(
+            await screen.findByText("Mark as refund", { selector: ".mantine-Modal-title" }),
+        ).toBeInTheDocument();
+        unmount();
+
+        seed({
+            transactions: [
+                tx(1, { amount: -10000, refundIds: [2] }),
+                tx(2, { amount: 2400, refundOfId: 1 }),
+            ],
+        });
+        const unlink = vi.spyOn(useStore.getState(), "unlinkRefund").mockResolvedValue();
+        const rendered = renderUI(<TransactionsPage />);
+        row = screen.getByText("tx 2").closest<HTMLElement>("tr")!;
+        await rendered.user.click(within(row).getByRole("button", { name: "Transaction actions" }));
+        fireEvent.click(screen.getByText("Unlink refund"));
+        expect(unlink).toHaveBeenCalledWith(2);
+    });
+
     it("offers import and transfer controls and disables transfer with one active account", () => {
         seed({ accounts, transactions: [] });
         const { unmount } = renderUI(<TransactionsPage />);

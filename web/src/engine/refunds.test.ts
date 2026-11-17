@@ -10,4 +10,8 @@ describe("refundMerchantKey", () => {
     ])("normalizes %s", (value, expected) => {
         expect(refundMerchantKey(value)).toBe(expected);
     });
+
+    it("returns an empty key when no merchant letters remain", () => {
+        expect(refundMerchantKey("123 REFUND 456")).toBe("");
+    });
 });
