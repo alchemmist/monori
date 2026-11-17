@@ -232,8 +232,25 @@ def test_refund_suggestions_validation_and_unlink(api: Api, client: TestClient) 
     )
     refund = api.tx("2026-01-03T10:00:00", 24_00, TransactionOptions(description="Shop RETURN100"))
 
+    assert client.get("/api/transactions/999/refund-suggestions").status_code == 404
+    assert client.get(f"/api/transactions/{purchase}/refund-suggestions").status_code == 400
+    assert client.delete("/api/transactions/999/refund").status_code == 404
+    assert client.delete(f"/api/transactions/{refund}/refund").status_code == 404
+    assert (
+        client.put(
+            f"/api/transactions/{purchase}/refund",
+            json={"originalId": refund},
+        ).status_code
+        == 400
+    )
+
+    small = api.tx("2026-01-02T12:00:00", -10_00, TransactionOptions(description="Tiny"))
+    unrelated = api.tx("2026-01-02T13:00:00", -50_00, TransactionOptions(description="Elsewhere"))
+
     suggestions = client.get(f"/api/transactions/{refund}/refund-suggestions").json()["rows"]
     assert [row["id"] for row in suggestions] == [purchase, other]
+    assert small not in [row["id"] for row in suggestions]
+    assert unrelated not in [row["id"] for row in suggestions]
     assert (
         client.put(
             f"/api/transactions/{refund}/refund",
@@ -242,10 +259,32 @@ def test_refund_suggestions_validation_and_unlink(api: Api, client: TestClient) 
         == 200
     )
     assert client.patch(f"/api/transactions/{refund}", json={"amount": -1}).status_code == 400
+    assert client.patch(f"/api/transactions/{purchase}", json={"amount": -1_000}).status_code == 400
     assert (
         client.patch(
             f"/api/transactions/{refund}",
             json={"categoryId": salary},
+        ).status_code
+        == 400
+    )
+    assert (
+        client.put(
+            f"/api/transactions/{refund}/splits",
+            json={
+                "parts": [
+                    {"categoryId": food, "amount": 12_00},
+                    {"categoryId": food, "amount": 12_00},
+                ]
+            },
+        ).status_code
+        == 400
+    )
+
+    chained = api.tx("2026-01-04T10:00:00", 1_00)
+    assert (
+        client.put(
+            f"/api/transactions/{chained}/refund",
+            json={"originalId": refund},
         ).status_code
         == 400
     )
@@ -254,6 +293,12 @@ def test_refund_suggestions_validation_and_unlink(api: Api, client: TestClient) 
     assert api.tx_by(refund).refund_of_id is None
     assert api.tx_by(refund).category_id == food
     assert api.tx_by(purchase).refund_ids == []
+
+    assert client.delete(f"/api/transactions/{refund}/refund").status_code == 404
+    assert (
+        client.put(f"/api/transactions/{refund}/refund", json={"originalId": 999}).status_code
+        == 404
+    )
 
 
 def test_transaction_patch_recomputes_hash_for_dedup(api: Api, client: TestClient) -> None:
