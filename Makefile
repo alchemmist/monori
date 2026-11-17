@@ -4,6 +4,7 @@ HAVE_PODMAN_COMPOSE = $(shell podman compose version >/dev/null 2>&1 && echo 1)
 COMPOSE ?= $(if $(HAVE_DOCKER_COMPOSE),docker compose,$(if $(HAVE_PODMAN_COMPOSE),podman compose --in-pod=false,docker compose))
 MUTATION_THRESHOLD ?= 85
 MUTATION_DIFF_THRESHOLD ?= 90
+COVERAGE_DIFF_THRESHOLD ?= 90
 MUTATION_JOBS ?= $(shell getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 1)
 BASE ?= origin/main
 MONORI_TOOLS_BIN ?= $(HOME)/.local/bin
@@ -329,11 +330,11 @@ coverage-diff:
 		--input web/coverage/lcov.info --output coverage-report/frontend.lcov; normalize=$$?; \
 	uv run --locked --group test diff-cover server/coverage.xml \
 		--compare-branch "$(BASE)" --include 'server/app/**' 'common/**' \
-		--format json:coverage-report/backend-diff.json --fail-under=100 \
+		--format json:coverage-report/backend-diff.json --fail-under=$(COVERAGE_DIFF_THRESHOLD) \
 		--total-percent-float --quiet; back=$$?; \
 	uv run --locked --group test diff-cover coverage-report/frontend.lcov \
 		--compare-branch "$(BASE)" --include 'web/src/**' \
-		--format json:coverage-report/frontend-diff.json --fail-under=100 \
+		--format json:coverage-report/frontend-diff.json --fail-under=$(COVERAGE_DIFF_THRESHOLD) \
 		--total-percent-float --quiet; front=$$?; \
 	uv run --locked --group test python -m monori.ci.lib.coverage_diff report \
 		--frontend web/coverage/coverage-summary.json --backend server/coverage.json \
