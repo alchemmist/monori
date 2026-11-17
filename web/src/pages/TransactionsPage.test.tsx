@@ -477,7 +477,7 @@ describe("TransactionsPage", () => {
         expect(screen.getByText("0 ₽")).toBeInTheDocument();
     });
 
-    it("offers only income categories for a positive row", async () => {
+    it("offers income and expense categories for a positive row", async () => {
         seed({
             accounts,
             groups: [
@@ -502,8 +502,8 @@ describe("TransactionsPage", () => {
         const dropdown = salary.closest<HTMLElement>(".gsel__drop")!;
         expect(salary).toBeInTheDocument();
         expect(
-            within(dropdown).queryByRole("option", { name: "Food", hidden: true }),
-        ).not.toBeInTheDocument();
+            within(dropdown).getByRole("option", { name: "Food", hidden: true }),
+        ).toBeInTheDocument();
     });
 
     it("hides the back-to-top button until the page is scrolled", () => {

@@ -160,20 +160,21 @@ export default function TransactionsPage() {
     ): Array<SelectOption | SelectSection> => {
         const cur = t.categoryId != null ? catById.get(t.categoryId) : null;
         const uncategorized = { value: "", label: "Leave uncategorized" };
-        const kind =
-            t.amount < 0 || ("refundOfId" in t && t.refundOfId != null)
-                ? "expense"
+        const linkedRefund = "refundOfId" in t && t.refundOfId != null;
+        const kinds =
+            t.amount < 0 || linkedRefund
+                ? ["expense"]
                 : t.amount > 0
-                  ? "income"
+                  ? ["income", "expense"]
                   : null;
-        const matchingSections = kind
-            ? catSections.filter((section) => section.kind === kind)
+        const matchingSections = kinds
+            ? catSections.filter((section) => kinds.includes(section.kind ?? ""))
             : catSections;
         if (!cur || !cur.archived) return [uncategorized, ...matchingSections];
         const g = groupById.get(cur.groupId);
         const opt = { value: String(cur.id), label: cur.name };
         const clone = matchingSections.map((s) => ({ ...s, options: [...s.options] }));
-        if (kind && g?.kind !== kind) return [uncategorized, ...clone];
+        if (kinds && !kinds.includes(g?.kind ?? "")) return [uncategorized, ...clone];
         const sec = clone.find((s) => s.id === cur.groupId);
         if (sec) sec.options.push(opt);
         else
@@ -433,9 +434,9 @@ export default function TransactionsPage() {
                             refund
                         </Tag>
                     )}
-                    {!leg && "refundIds" in t && t.refundIds.length > 0 && (
+                    {!leg && "refundIds" in t && (t.refundIds ?? []).length > 0 && (
                         <Tag theme="info" style={{ marginLeft: 8 }}>
-                            refunded · {t.refundIds.length}
+                            refunded · {(t.refundIds ?? []).length}
                         </Tag>
                     )}
                     {splits.length > 0 && !leg && (
@@ -604,8 +605,17 @@ export default function TransactionsPage() {
                                                   ? [
                                                         {
                                                             text: "Unlink refund",
-                                                            action: () =>
-                                                                void unlinkRefund(transactionId),
+                                                            action: () => {
+                                                                void unlinkRefund(
+                                                                    transactionId,
+                                                                ).catch((error: unknown) =>
+                                                                    notify({
+                                                                        title: "Failed to unlink refund",
+                                                                        theme: "danger",
+                                                                        content: String(error),
+                                                                    }),
+                                                                );
+                                                            },
                                                         },
                                                     ]
                                                   : []),
