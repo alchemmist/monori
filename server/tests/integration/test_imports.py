@@ -197,7 +197,7 @@ def test_import_commit_accepts_goal_category(api: Api, client: TestClient) -> No
     assert imported.total == 1
 
 
-def test_import_commit_rejects_category_with_the_wrong_direction(
+def test_import_commit_allows_expense_category_for_positive_refund(
     api: Api,
     client: TestClient,
 ) -> None:
@@ -219,11 +219,11 @@ def test_import_commit_rejects_category_with_the_wrong_direction(
     rows[1].amount = 100
     rows[1].category_id = food
     payload = TypeAdapter(list[ImportRowResponse]).dump_python(rows, mode="json")
-    bad_income = client.post(
+    refund = client.post(
         "/api/import/commit",
         json={"accountId": api.default_account(), "rows": payload},
     )
-    assert bad_income.status_code == 400
+    assert refund.status_code == 200
 
 
 def test_commit_rejects_unknown_account(client: TestClient) -> None:
@@ -239,7 +239,7 @@ def test_preview_rejects_oversized_statement(api: Api, client: TestClient) -> No
     assert r.json()["detail"] == "statement is too large"
 
 
-def test_import_preview_never_proposes_a_wrong_direction_category(
+def test_import_preview_preserves_expense_category_for_refund(
     api: Api,
 ) -> None:
     """
@@ -249,8 +249,8 @@ def test_import_preview_never_proposes_a_wrong_direction_category(
     proposing one would make the whole statement unimportable.
     """
     expenses = api.group("Expenses")
-    api.category("Groceries", expenses, keywords="lenta")
+    groceries = api.category("Groceries", expenses, keywords="lenta")
     refund = api.statement.splitlines()[0].replace("-100,00", "100,00") + "\n"
     rows = api.preview(refund)
     assert rows[0].amount > 0
-    assert rows[0].category_id is None
+    assert rows[0].category_id == groceries

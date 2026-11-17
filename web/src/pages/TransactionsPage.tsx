@@ -26,6 +26,7 @@ import DeleteTxDialog from "../components/DeleteTxDialog.jsx";
 import TransferDialog from "../components/TransferDialog.jsx";
 import TransferRow from "../components/TransferRow.jsx";
 import TransferSuggestions from "../components/TransferSuggestions.jsx";
+import RefundDialog from "../components/RefundDialog.jsx";
 import { mergeTransferRows, type TransferTableItem } from "../engine/transfers.js";
 import { splitPartTransaction, type EffectiveTransaction } from "../engine/splits.js";
 import "./budget.css";
@@ -58,6 +59,7 @@ export default function TransactionsPage() {
         unhideTx,
         splitTransfer,
         deleteTransferWithLegs,
+        unlinkRefund,
         openTab,
         notify,
     } = useStore();
@@ -77,6 +79,7 @@ export default function TransactionsPage() {
     const [suggesting, setSuggesting] = useState(false);
     const [expanded, setExpanded] = useState(() => new Set<string>());
     const [deleting, setDeleting] = useState<Transaction | null>(null);
+    const [refunding, setRefunding] = useState<Transaction | null>(null);
     const bodyRef = useRef<HTMLTableSectionElement>(null);
     const [rowH, setRowH] = useState(ROW_H_FALLBACK);
     const [showTop, setShowTop] = useState(false);
@@ -157,7 +160,12 @@ export default function TransactionsPage() {
     ): Array<SelectOption | SelectSection> => {
         const cur = t.categoryId != null ? catById.get(t.categoryId) : null;
         const uncategorized = { value: "", label: "Leave uncategorized" };
-        const kind = t.amount < 0 ? "expense" : t.amount > 0 ? "income" : null;
+        const kind =
+            t.amount < 0 || ("refundOfId" in t && t.refundOfId != null)
+                ? "expense"
+                : t.amount > 0
+                  ? "income"
+                  : null;
         const matchingSections = kind
             ? catSections.filter((section) => section.kind === kind)
             : catSections;
@@ -420,6 +428,16 @@ export default function TransactionsPage() {
                             transfer
                         </Tag>
                     )}
+                    {!leg && "refundOfId" in t && t.refundOfId != null && (
+                        <Tag theme="info" style={{ marginLeft: 8 }}>
+                            refund
+                        </Tag>
+                    )}
+                    {!leg && "refundIds" in t && t.refundIds.length > 0 && (
+                        <Tag theme="info" style={{ marginLeft: 8 }}>
+                            refunded · {t.refundIds.length}
+                        </Tag>
+                    )}
                     {splits.length > 0 && !leg && (
                         <Button
                             variant="subtle"
@@ -569,6 +587,28 @@ export default function TransactionsPage() {
                                                           `tx-split-${transactionId}`,
                                                       ),
                                               },
+                                          ]
+                                        : []),
+                                    ...(!splits.length && t.transferId == null && t.amount > 0
+                                        ? [
+                                              {
+                                                  text:
+                                                      "refundOfId" in t && t.refundOfId != null
+                                                          ? "Change refund link"
+                                                          : "Mark as refund",
+                                                  action: () =>
+                                                      sourceTransaction &&
+                                                      setRefunding(sourceTransaction),
+                                              },
+                                              ...("refundOfId" in t && t.refundOfId != null
+                                                  ? [
+                                                        {
+                                                            text: "Unlink refund",
+                                                            action: () =>
+                                                                void unlinkRefund(transactionId),
+                                                        },
+                                                    ]
+                                                  : []),
                                           ]
                                         : []),
                                     {
@@ -898,6 +938,9 @@ export default function TransactionsPage() {
                 <TransferDialog accounts={accounts} onClose={() => setTransferring(false)} />
             )}
             {suggesting && <TransferSuggestions onClose={() => setSuggesting(false)} />}
+            {refunding && (
+                <RefundDialog transaction={refunding} onClose={() => setRefunding(null)} />
+            )}
             {deleting && <DeleteTxDialog tx={deleting} onClose={() => setDeleting(null)} />}
         </div>
     );

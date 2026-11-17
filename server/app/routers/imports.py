@@ -297,8 +297,6 @@ def _validate_import_categories(c: sqlite3.Connection, uid: int, rows: list[Comm
             raise HTTPException(400, "unknown category")
         if row.amount < 0 and category["transaction_sign"] != -1:
             raise HTTPException(400, "expense transaction requires an expense category")
-        if row.amount > 0 and category["transaction_sign"] != 1:
-            raise HTTPException(400, "income transaction requires an income category")
 
 
 def _card_digits(card: str) -> str:
@@ -387,10 +385,8 @@ def import_preview(
         }
         for row in rows:
             category_id = categorize(row.description, row.amount, rules)
-            if category_id is not None:
-                expected = "expense" if row.amount < 0 else "income"
-                if kinds.get(category_id) != expected:
-                    category_id = None
+            if category_id is not None and row.amount < 0 and kinds.get(category_id) != "expense":
+                category_id = None
             row.category_id = category_id
         _mark_duplicates(c, rows)
         return ImportPreviewResponse(

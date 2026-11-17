@@ -94,6 +94,8 @@ export interface Transaction {
     source?: string;
     hidden?: boolean;
     splits?: TransactionSplit[];
+    refundOfId?: Id | null;
+    refundIds?: Id[];
 }
 
 export interface BudgetCell {

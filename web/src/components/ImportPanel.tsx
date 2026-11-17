@@ -33,7 +33,9 @@ export default function ImportPanel({ onClose }: { onClose: () => void }) {
         ...categories
             .filter((c) => {
                 const group = snapshot.groups.find((g) => g.id === c.groupId);
-                return amount === 0 || group?.kind === (amount < 0 ? "expense" : "income");
+                return amount >= 0
+                    ? group?.kind === "income" || group?.kind === "expense"
+                    : group?.kind === "expense";
             })
             .map((c) => ({ value: String(c.id), label: c.name })),
     ];

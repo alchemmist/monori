@@ -74,6 +74,8 @@ def test_snapshot_serialization_contract(api: Api, client: TestClient) -> None:
             "source": "manual",
             "hidden": False,
             "splits": [],
+            "refund_of_id": None,
+            "refund_ids": [],
         },
     ]
     assert serialized["budgets"] == [{"category_id": cat, "year": 2026, "month": 3, "amount": 5000}]

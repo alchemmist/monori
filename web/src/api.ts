@@ -50,6 +50,9 @@ import {
     importPreviewSchema,
     importResultSchema,
     okResponseSchema,
+    refundLinkResponseSchema,
+    refundSuggestionsResponseSchema,
+    refundUnlinkResponseSchema,
     setResponseSchema,
     snapshotSchema,
     splitsResponseSchema,
@@ -202,6 +205,20 @@ export const api = {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ parts }),
         }).then(json(splitsResponseSchema)),
+    refundSuggestions: (id: Id): Promise<{ rows: Transaction[] }> =>
+        apiFetch(`/api/transactions/${id}/refund-suggestions`).then(
+            json(refundSuggestionsResponseSchema),
+        ),
+    linkRefund: (id: Id, originalId: Id): Promise<{ refundOfId: Id; categoryId: Id | null }> =>
+        apiFetch(`/api/transactions/${id}/refund`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ originalId }),
+        }).then(json(refundLinkResponseSchema)),
+    unlinkRefund: (id: Id): Promise<{ categoryId: Id | null }> =>
+        apiFetch(`/api/transactions/${id}/refund`, { method: "DELETE" }).then(
+            json(refundUnlinkResponseSchema),
+        ),
     deleteTx: (id: Id): Promise<OkResponse> =>
         apiFetch(`/api/transactions/${id}`, { method: "DELETE" }).then(json(okResponseSchema)),
     createAccount: (body: AccountCreate): Promise<IdResponse> =>

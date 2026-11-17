@@ -178,6 +178,83 @@ def test_transaction_category_must_match_amount_direction(api: Api, client: Test
     assert api.tx_by(income_tx).category_id == salary
 
 
+def test_partial_refunds_link_to_purchase_and_inherit_category(
+    api: Api,
+    client: TestClient,
+) -> None:
+    expenses = api.group("Expenses")
+    food = api.category("Food", expenses)
+    purchase = api.tx(
+        "2026-02-03T10:00:00",
+        -100_00,
+        TransactionOptions(description="Lenta", category_id=food),
+    )
+    first = api.tx("2026-02-04T10:00:00", 24_00, TransactionOptions(description="Lenta refund"))
+    second = api.tx("2026-02-05T10:00:00", 76_00, TransactionOptions(description="Lenta refund"))
+
+    linked = client.put(f"/api/transactions/{first}/refund", json={"originalId": purchase})
+    assert linked.status_code == 200
+    assert linked.json()["categoryId"] == food
+    assert api.tx_by(first).refund_of_id == purchase
+    assert api.tx_by(first).category_id == food
+    assert api.tx_by(purchase).refund_ids == [first]
+
+    assert (
+        client.put(
+            f"/api/transactions/{second}/refund",
+            json={"originalId": purchase},
+        ).status_code
+        == 200
+    )
+    assert api.tx_by(purchase).refund_ids == [first, second]
+
+    too_much = api.tx("2026-02-06T10:00:00", 1, TransactionOptions(description="Lenta refund"))
+    response = client.put(f"/api/transactions/{too_much}/refund", json={"originalId": purchase})
+    assert response.status_code == 400
+    assert "exceed" in response.json()["detail"]
+
+
+def test_refund_suggestions_validation_and_unlink(api: Api, client: TestClient) -> None:
+    expenses = api.group("Expenses")
+    income = api.group("Income", "income")
+    food = api.category("Food", expenses)
+    salary = api.category("Salary", income)
+    purchase = api.tx(
+        "2026-01-01T10:00:00",
+        -100_00,
+        TransactionOptions(description="Shop 456", category_id=food),
+    )
+    other = api.tx(
+        "2026-01-02T10:00:00",
+        -24_00,
+        TransactionOptions(description="Another merchant"),
+    )
+    refund = api.tx("2026-01-03T10:00:00", 24_00, TransactionOptions(description="Shop RETURN100"))
+
+    suggestions = client.get(f"/api/transactions/{refund}/refund-suggestions").json()["rows"]
+    assert [row["id"] for row in suggestions] == [purchase, other]
+    assert (
+        client.put(
+            f"/api/transactions/{refund}/refund",
+            json={"originalId": purchase},
+        ).status_code
+        == 200
+    )
+    assert client.patch(f"/api/transactions/{refund}", json={"amount": -1}).status_code == 400
+    assert (
+        client.patch(
+            f"/api/transactions/{refund}",
+            json={"categoryId": salary},
+        ).status_code
+        == 400
+    )
+
+    assert client.delete(f"/api/transactions/{refund}/refund").status_code == 200
+    assert api.tx_by(refund).refund_of_id is None
+    assert api.tx_by(refund).category_id == food
+    assert api.tx_by(purchase).refund_ids == []
+
+
 def test_transaction_patch_recomputes_hash_for_dedup(api: Api, client: TestClient) -> None:
     """
     Editing date/amount/description must recompute the dedup hash: a statement.

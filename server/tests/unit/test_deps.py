@@ -17,6 +17,9 @@ def test_serialize_transactions_chunks_split_lookup() -> None:
             id INTEGER PRIMARY KEY, transaction_id INTEGER, category_id INTEGER,
             amount INTEGER, comment TEXT, sort INTEGER DEFAULT 0
         );
+        CREATE TABLE refund_links (
+            refund_tx_id INTEGER PRIMARY KEY, original_tx_id INTEGER NOT NULL
+        );
         """,
     )
     connection.executemany(

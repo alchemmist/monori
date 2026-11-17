@@ -128,6 +128,12 @@ class TransactionResponse:
     transfer_id: str | None = Field(
         ..., serialization_alias="transferId", validation_alias="transferId"
     )
+    refund_of_id: int | None = Field(
+        ..., serialization_alias="refundOfId", validation_alias="refundOfId"
+    )
+    refund_ids: list[int] = Field(
+        ..., serialization_alias="refundIds", validation_alias="refundIds"
+    )
 
 
 @pydantic_dataclass(config=_DTO_CONFIG)
@@ -246,6 +252,8 @@ def serialize_account(account: AccountRecord) -> AccountResponse:
 def serialize_tx(
     transaction: TransactionRecord,
     splits: Iterable[SplitRecord] = (),
+    refund_of_id: int | None = None,
+    refund_ids: Iterable[int] = (),
 ) -> TransactionResponse:
     """Handle serialize tx."""
     return TransactionResponse(
@@ -261,6 +269,8 @@ def serialize_tx(
         comment=transaction.comment,
         source=transaction.source,
         hidden=transaction.hidden,
+        refund_of_id=refund_of_id,
+        refund_ids=list(refund_ids),
         splits=[
             SplitResponse(
                 id=split.id,
@@ -283,6 +293,8 @@ def serialize_transactions(
         return []
     ids = [transaction.id for transaction in transactions]
     by_tx: dict[int, list[SplitRecord]] = {}
+    refund_of: dict[int, int] = {}
+    refunds: dict[int, list[int]] = {}
     for chunk in batched(ids, SPLIT_FETCH_BATCH_SIZE):
         for split in cur.execute(
             "SELECT id, transaction_id, category_id, amount, comment"
@@ -292,7 +304,20 @@ def serialize_transactions(
         ):
             record = SplitRecord.from_row(split)
             by_tx.setdefault(record.transaction_id, []).append(record)
-    return [serialize_tx(tx, by_tx.get(tx.id, ())) for tx in transactions]
+        for link in cur.execute(
+            "SELECT refund_tx_id, original_tx_id FROM refund_links"
+            " WHERE refund_tx_id IN (SELECT value FROM json_each(?))"
+            " OR original_tx_id IN (SELECT value FROM json_each(?))",
+            (json.dumps(chunk), json.dumps(chunk)),
+        ):
+            refund_id = int(link["refund_tx_id"])
+            original_id = int(link["original_tx_id"])
+            refund_of[refund_id] = original_id
+            refunds.setdefault(original_id, []).append(refund_id)
+    return [
+        serialize_tx(tx, by_tx.get(tx.id, ()), refund_of.get(tx.id), refunds.get(tx.id, ()))
+        for tx in transactions
+    ]
 
 
 def serialize_user(user: UserRecord) -> UserResponse:
