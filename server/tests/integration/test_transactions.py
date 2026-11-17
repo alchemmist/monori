@@ -288,6 +288,50 @@ def test_refund_suggestions_validation_and_unlink(api: Api, client: TestClient) 
         == 400
     )
 
+    second_account = api.account("Second card")
+    transfer = client.post(
+        "/api/transfers",
+        json={
+            "fromAccountId": api.default_account(),
+            "toAccountId": second_account,
+            "amount": 5_00,
+            "date": "2026-01-05",
+        },
+    )
+    assert transfer.status_code == 200
+    transfer_rows = [row for row in api.snapshot().transactions if row.transfer_id is not None]
+    transfer_in = next(row for row in transfer_rows if row.amount > 0)
+    assert client.get(f"/api/transactions/{transfer_in.id}/refund-suggestions").status_code == 400
+    assert (
+        client.put(
+            f"/api/transactions/{transfer_in.id}/refund",
+            json={"originalId": purchase},
+        ).status_code
+        == 400
+    )
+
+    split_refund = api.tx("2026-01-06", 10_00)
+    assert (
+        client.put(
+            f"/api/transactions/{split_refund}/splits",
+            json={
+                "parts": [
+                    {"categoryId": salary, "amount": 4_00},
+                    {"categoryId": salary, "amount": 6_00},
+                ]
+            },
+        ).status_code
+        == 200
+    )
+    assert client.get(f"/api/transactions/{split_refund}/refund-suggestions").status_code == 400
+    assert (
+        client.put(
+            f"/api/transactions/{split_refund}/refund",
+            json={"originalId": purchase},
+        ).status_code
+        == 400
+    )
+
     assert client.delete(f"/api/transactions/{refund}/refund").status_code == 200
     assert api.tx_by(refund).refund_of_id is None
     assert api.tx_by(refund).category_id == food
