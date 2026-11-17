@@ -98,6 +98,8 @@ export const transactionSchema = z.strictObject({
     source: transactionSourceSchema,
     hidden: z.boolean(),
     splits: z.array(transactionSplitSchema),
+    refundOfId: nullableId,
+    refundIds: z.array(id),
 });
 
 export const budgetCellSchema = z.strictObject({
@@ -172,6 +174,18 @@ export const transferIdResponseSchema = z
     .strictObject({ transfer_id: z.string().min(1) })
     .transform(({ transfer_id: transferId }) => ({ transferId }));
 export const splitsResponseSchema = z.strictObject({ splits: z.array(transactionSplitSchema) });
+export const refundLinkResponseSchema = z.strictObject({
+    ok: z.boolean(),
+    refundOfId: id,
+    categoryId: nullableId,
+});
+export const refundUnlinkResponseSchema = z.strictObject({
+    ok: z.boolean(),
+    categoryId: nullableId,
+});
+export const refundSuggestionsResponseSchema = z.strictObject({
+    rows: z.array(transactionSchema),
+});
 export const deletedResponseSchema = z.strictObject({ deleted: id });
 export const cancelledResponseSchema = z.strictObject({ cancelled: id });
 

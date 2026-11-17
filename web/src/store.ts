@@ -3,6 +3,7 @@ import { api } from "./api.js";
 import { demoSnapshot } from "./demo/demoData.js";
 import { mergeCategories } from "./mergeCategories.js";
 import { compareTx, mergeTransactions } from "./mergeTransactions.js";
+import { refundMerchantKey } from "./engine/refunds.js";
 import { loadTabs, saveTabs } from "./ui/tabPersist.js";
 import type {
     AccountCreate,
@@ -73,6 +74,9 @@ interface StoreState {
         txId: Id,
         parts: Array<Omit<TransactionSplit, "id">>,
     ) => Promise<TransactionSplit[] | undefined>;
+    refundSuggestions: (txId: Id) => Promise<Transaction[]>;
+    linkRefund: (txId: Id, originalId: Id) => Promise<void>;
+    unlinkRefund: (txId: Id) => Promise<void>;
     deleteTransaction: (txId: Id) => Promise<boolean>;
     loadHiddenTx: () => Promise<void>;
     hideTx: (txId: Id) => void;
@@ -721,6 +725,94 @@ export const useStore = create<StoreState>((set, get) => ({
         }
     },
 
+    async refundSuggestions(txId) {
+        const snapshot = requireSnapshot(get().snapshot);
+        if (!isDemo()) return (await api.refundSuggestions(txId)).rows;
+        const refund = snapshot.transactions.find((transaction) => transaction.id === txId);
+        if (
+            !refund ||
+            refund.amount <= 0 ||
+            refund.transferId != null ||
+            (refund.splits?.length ?? 0) > 0
+        )
+            return [];
+        const refunded = new Map<Id, number>();
+        for (const transaction of snapshot.transactions) {
+            if (transaction.refundOfId != null && transaction.id !== txId)
+                refunded.set(
+                    transaction.refundOfId,
+                    (refunded.get(transaction.refundOfId) ?? 0) + transaction.amount,
+                );
+        }
+        const merchant = refundMerchantKey(refund.description);
+        return snapshot.transactions
+            .filter(
+                (transaction) =>
+                    transaction.amount < 0 &&
+                    transaction.transferId == null &&
+                    (transaction.splits?.length ?? 0) === 0 &&
+                    transaction.date <= refund.date &&
+                    -transaction.amount - (refunded.get(transaction.id) ?? 0) >= refund.amount &&
+                    ((merchant !== "" && refundMerchantKey(transaction.description) === merchant) ||
+                        -transaction.amount === refund.amount),
+            )
+            .reverse()
+            .slice(0, 20);
+    },
+
+    async linkRefund(txId, originalId) {
+        const before = requireSnapshot(get().snapshot);
+        const refund = before.transactions.find((transaction) => transaction.id === txId);
+        const original = before.transactions.find((transaction) => transaction.id === originalId);
+        if (!refund || !original) return;
+        const result = isDemo()
+            ? { refundOfId: originalId, categoryId: original.categoryId }
+            : await api.linkRefund(txId, originalId);
+        const current = requireSnapshot(get().snapshot);
+        set({
+            snapshot: {
+                ...current,
+                transactions: current.transactions.map((transaction) => {
+                    if (transaction.id === txId)
+                        return {
+                            ...transaction,
+                            refundOfId: originalId,
+                            categoryId: result.categoryId,
+                        };
+                    const withoutRefund = (transaction.refundIds ?? []).filter(
+                        (refundId) => refundId !== txId,
+                    );
+                    if (transaction.id === originalId) withoutRefund.push(txId);
+                    return { ...transaction, refundIds: withoutRefund };
+                }),
+            },
+        });
+    },
+
+    async unlinkRefund(txId) {
+        const before = requireSnapshot(get().snapshot);
+        const refund = before.transactions.find((transaction) => transaction.id === txId);
+        const result = isDemo()
+            ? { categoryId: refund?.categoryId ?? null }
+            : await api.unlinkRefund(txId);
+        const current = requireSnapshot(get().snapshot);
+        set({
+            snapshot: {
+                ...current,
+                transactions: current.transactions.map((transaction) =>
+                    transaction.id === txId
+                        ? { ...transaction, refundOfId: null, categoryId: result.categoryId }
+                        : {
+                              ...transaction,
+                              refundIds: (transaction.refundIds ?? []).filter(
+                                  (refundId) => refundId !== txId,
+                              ),
+                          },
+                ),
+            },
+        });
+    },
+
     /** Delete a transaction for good. Also rolls back on failure, for the same
      * reason: a row that vanished from the ledger but not from the server would
      * quietly skew every total until a reload brought it back. */
@@ -731,7 +823,22 @@ export const useStore = create<StoreState>((set, get) => ({
         set({
             snapshot: {
                 ...snapshot,
-                transactions: snapshot.transactions.filter((t) => t.id !== txId),
+                transactions: snapshot.transactions
+                    .filter((t) => t.id !== txId)
+                    .map((transaction) => ({
+                        ...transaction,
+                        ...(transaction.refundOfId === undefined
+                            ? {}
+                            : {
+                                  refundOfId:
+                                      transaction.refundOfId === txId
+                                          ? null
+                                          : transaction.refundOfId,
+                              }),
+                        refundIds: (transaction.refundIds ?? []).filter(
+                            (refundId) => refundId !== txId,
+                        ),
+                    })),
                 transactionsTotal: Math.max(0, (snapshot.transactionsTotal ?? 1) - 1),
             },
         });
@@ -744,7 +851,19 @@ export const useStore = create<StoreState>((set, get) => ({
             set({
                 snapshot: {
                     ...cur,
-                    transactions: mergeTransactions(cur.transactions, [gone]),
+                    transactions: mergeTransactions(
+                        cur.transactions.map((transaction) => {
+                            if (transaction.id === gone.refundOfId)
+                                return {
+                                    ...transaction,
+                                    refundIds: [...(transaction.refundIds ?? []), gone.id],
+                                };
+                            if ((gone.refundIds ?? []).includes(transaction.id))
+                                return { ...transaction, refundOfId: gone.id };
+                            return transaction;
+                        }),
+                        [gone],
+                    ),
                     transactionsTotal: (cur.transactionsTotal ?? 0) + 1,
                 },
                 toast: {
