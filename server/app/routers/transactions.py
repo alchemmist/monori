@@ -266,6 +266,35 @@ def _validate_refund_amount(
     return link is not None
 
 
+def _edited_category(
+    c: sqlite3.Connection,
+    patch: TxPatch,
+    transaction: TransactionRecord,
+    amount: int,
+    uid: int,
+) -> int | None:
+    is_refund = (
+        c.execute("SELECT 1 FROM refund_links WHERE refund_tx_id=?", (transaction.id,)).fetchone()
+        is not None
+    )
+    category = transaction.category_id
+    if patch.category_id is not None:
+        if c.execute("SELECT 1 FROM splits WHERE transaction_id=?", (transaction.id,)).fetchone():
+            raise HTTPException(400, "remove the split before categorizing the parent")
+        category = _resolve_category(c, patch.category_id, uid, amount, is_refund=is_refund)
+        if is_refund:
+            original_category = c.execute(
+                "SELECT t.category_id FROM refund_links r"
+                " JOIN transactions t ON t.id=r.original_tx_id WHERE r.refund_tx_id=?",
+                (transaction.id,),
+            ).fetchone()[0]
+            if category != original_category:
+                raise HTTPException(400, "refund category must match the original purchase")
+    elif patch.amount is not None and category is not None:
+        _resolve_category(c, category, uid, amount, is_refund=is_refund)
+    return category
+
+
 def _resolve_account(c: dbmod.DatabaseConnection, account_id: int, uid: int) -> int:
     if not c.execute(
         "SELECT id FROM accounts WHERE id=? AND user_id=?",
@@ -402,27 +431,13 @@ def patch_transaction(
         )
         mcc = patch.mcc if patch.mcc is not None else transaction.mcc
         comment = patch.comment if patch.comment is not None else transaction.comment
-        category = transaction.category_id
-        if patch.category_id is not None:
-            if split_total is not None:
-                raise HTTPException(400, "remove the split before categorizing the parent")
-            category = _resolve_category(
-                c,
-                patch.category_id,
-                uid,
-                amount,
-                is_refund=is_refund,
-            )
-            if is_refund:
-                original_category = c.execute(
-                    "SELECT t.category_id FROM refund_links r"
-                    " JOIN transactions t ON t.id=r.original_tx_id WHERE r.refund_tx_id=?",
-                    (tx_id,),
-                ).fetchone()[0]
-                if category != original_category:
-                    raise HTTPException(400, "refund category must match the original purchase")
-        elif patch.amount is not None and category is not None:
-            _resolve_category(c, category, uid, amount, is_refund=is_refund)
+        category = _edited_category(
+            c,
+            patch,
+            transaction,
+            amount,
+            uid,
+        )
         account = transaction.account_id
         if patch.account_id is not None:
             account = _resolve_account(c, patch.account_id, uid)
