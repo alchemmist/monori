@@ -764,28 +764,30 @@ export const useStore = create<StoreState>((set, get) => ({
         const before = requireSnapshot(get().snapshot);
         const refund = before.transactions.find((transaction) => transaction.id === txId);
         const original = before.transactions.find((transaction) => transaction.id === originalId);
-        if (!refund || !original) return;
+        if (!refund || (isDemo() && !original)) return;
         const result = isDemo()
-            ? { refundOfId: originalId, categoryId: original.categoryId }
+            ? { refundOfId: originalId, categoryId: original?.categoryId ?? null }
             : await api.linkRefund(txId, originalId);
-        const current = requireSnapshot(get().snapshot);
-        set({
-            snapshot: {
-                ...current,
-                transactions: current.transactions.map((transaction) => {
-                    if (transaction.id === txId)
-                        return {
-                            ...transaction,
-                            refundOfId: originalId,
-                            categoryId: result.categoryId,
-                        };
-                    const withoutRefund = (transaction.refundIds ?? []).filter(
-                        (refundId) => refundId !== txId,
-                    );
-                    if (transaction.id === originalId) withoutRefund.push(txId);
-                    return { ...transaction, refundIds: withoutRefund };
-                }),
-            },
+        set((state) => {
+            const current = requireSnapshot(state.snapshot);
+            return {
+                snapshot: {
+                    ...current,
+                    transactions: current.transactions.map((transaction) => {
+                        if (transaction.id === txId)
+                            return {
+                                ...transaction,
+                                refundOfId: originalId,
+                                categoryId: result.categoryId,
+                            };
+                        const withoutRefund = (transaction.refundIds ?? []).filter(
+                            (refundId) => refundId !== txId,
+                        );
+                        if (transaction.id === originalId) withoutRefund.push(txId);
+                        return { ...transaction, refundIds: withoutRefund };
+                    }),
+                },
+            };
         });
     },
 
@@ -795,21 +797,23 @@ export const useStore = create<StoreState>((set, get) => ({
         const result = isDemo()
             ? { categoryId: refund?.categoryId ?? null }
             : await api.unlinkRefund(txId);
-        const current = requireSnapshot(get().snapshot);
-        set({
-            snapshot: {
-                ...current,
-                transactions: current.transactions.map((transaction) =>
-                    transaction.id === txId
-                        ? { ...transaction, refundOfId: null, categoryId: result.categoryId }
-                        : {
-                              ...transaction,
-                              refundIds: (transaction.refundIds ?? []).filter(
-                                  (refundId) => refundId !== txId,
-                              ),
-                          },
-                ),
-            },
+        set((state) => {
+            const current = requireSnapshot(state.snapshot);
+            return {
+                snapshot: {
+                    ...current,
+                    transactions: current.transactions.map((transaction) =>
+                        transaction.id === txId
+                            ? { ...transaction, refundOfId: null, categoryId: result.categoryId }
+                            : {
+                                  ...transaction,
+                                  refundIds: (transaction.refundIds ?? []).filter(
+                                      (refundId) => refundId !== txId,
+                                  ),
+                              },
+                    ),
+                },
+            };
         });
     },
 

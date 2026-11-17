@@ -294,7 +294,7 @@ def serialize_transactions(
     ids = [transaction.id for transaction in transactions]
     by_tx: dict[int, list[SplitRecord]] = {}
     refund_of: dict[int, int] = {}
-    refunds: dict[int, list[int]] = {}
+    refunds: dict[int, set[int]] = {}
     for chunk in batched(ids, SPLIT_FETCH_BATCH_SIZE):
         for split in cur.execute(
             "SELECT id, transaction_id, category_id, amount, comment"
@@ -313,9 +313,9 @@ def serialize_transactions(
             refund_id = int(link["refund_tx_id"])
             original_id = int(link["original_tx_id"])
             refund_of[refund_id] = original_id
-            refunds.setdefault(original_id, []).append(refund_id)
+            refunds.setdefault(original_id, set()).add(refund_id)
     return [
-        serialize_tx(tx, by_tx.get(tx.id, ()), refund_of.get(tx.id), refunds.get(tx.id, ()))
+        serialize_tx(tx, by_tx.get(tx.id, ()), refund_of.get(tx.id), sorted(refunds.get(tx.id, ())))
         for tx in transactions
     ]
 

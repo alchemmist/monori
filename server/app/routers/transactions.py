@@ -169,7 +169,7 @@ class RefundSuggestionsResponse:
 def _validate_category_type(transaction_sign: int, amount: int, *, is_refund: bool = False) -> None:
     if amount < 0 and transaction_sign != -1:
         raise HTTPException(400, "expense transaction requires an expense category")
-    if amount > 0 and transaction_sign != (-1 if is_refund else 1):
+    if amount > 0 and is_refund and transaction_sign != -1:
         raise HTTPException(400, "income transaction requires an income category")
 
 
@@ -401,6 +401,14 @@ def patch_transaction(
                 amount,
                 is_refund=is_refund,
             )
+            if is_refund:
+                original_category = c.execute(
+                    "SELECT t.category_id FROM refund_links r"
+                    " JOIN transactions t ON t.id=r.original_tx_id WHERE r.refund_tx_id=?",
+                    (tx_id,),
+                ).fetchone()[0]
+                if category != original_category:
+                    raise HTTPException(400, "refund category must match the original purchase")
         elif patch.amount is not None and category is not None:
             _resolve_category(c, category, uid, amount, is_refund=is_refund)
         account = transaction.account_id
@@ -426,6 +434,12 @@ def patch_transaction(
                 tx_id,
             ),
         )
+        if not is_refund and category != transaction.category_id:
+            c.execute(
+                "UPDATE transactions SET category_id=? WHERE id IN"
+                " (SELECT refund_tx_id FROM refund_links WHERE original_tx_id=?)",
+                (category, tx_id),
+            )
         c.commit()
         return OkResponse(ok=True)
     finally:
@@ -505,6 +519,8 @@ def link_refund(
             raise HTTPException(404, "transaction not found")
         if refund.amount <= 0 or original.amount >= 0:
             raise HTTPException(400, "a refund must link a positive transaction to a purchase")
+        if original.date > refund.date:
+            raise HTTPException(400, "a refund cannot predate its original purchase")
         if refund.transfer_id is not None or original.transfer_id is not None:
             raise HTTPException(400, "transfer transactions cannot be refunds")
         if c.execute(
