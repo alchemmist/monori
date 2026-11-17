@@ -183,6 +183,7 @@ def test_partial_refunds_link_to_purchase_and_inherit_category(
 ) -> None:
     expenses = api.group("Expenses")
     food = api.category("Food", expenses)
+    shopping = api.category("Shopping", expenses)
     purchase = api.tx(
         "2026-02-03T10:00:00",
         -100_00,
@@ -207,10 +208,36 @@ def test_partial_refunds_link_to_purchase_and_inherit_category(
     )
     assert api.tx_by(purchase).refund_ids == [first, second]
 
+    assert (
+        client.patch(
+            f"/api/transactions/{first}",
+            json={"categoryId": shopping},
+        ).status_code
+        == 400
+    )
+    assert (
+        client.patch(
+            f"/api/transactions/{purchase}",
+            json={"categoryId": shopping},
+        ).status_code
+        == 200
+    )
+    assert api.tx_by(first).category_id == shopping
+    assert api.tx_by(second).category_id == shopping
+
     too_much = api.tx("2026-02-06T10:00:00", 1, TransactionOptions(description="Lenta refund"))
     response = client.put(f"/api/transactions/{too_much}/refund", json={"originalId": purchase})
     assert response.status_code == 400
     assert "exceed" in response.json()["detail"]
+
+    earlier_refund = api.tx("2026-01-01", 1_00)
+    assert (
+        client.put(
+            f"/api/transactions/{earlier_refund}/refund",
+            json={"originalId": purchase},
+        ).status_code
+        == 400
+    )
 
 
 def test_refund_suggestions_validation_and_unlink(api: Api, client: TestClient) -> None:
