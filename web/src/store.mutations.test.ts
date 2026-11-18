@@ -282,6 +282,46 @@ describe("store remote mutations", () => {
         ).toMatchObject({ refundOfId: null, categoryId: 2 });
     });
 
+    it.each(["link", "unlink"])(
+        "discards an in-flight %s and queued refund changes after logout",
+        async (action) => {
+            useStore.setState({
+                snapshot: buildSnapshot({
+                    transactions: [
+                        {
+                            id: 10,
+                            date: "2026-01-01",
+                            amount: -100,
+                            categoryId: 2,
+                            refundIds: [11],
+                        },
+                        { id: 11, date: "2026-01-02", amount: 50, categoryId: 2, refundOfId: 10 },
+                    ],
+                }),
+            });
+            let finish!: (result: { refundOfId: number; categoryId: number }) => void;
+            const response = new Promise<{ refundOfId: number; categoryId: number }>((resolve) => {
+                finish = resolve;
+            });
+            const link = vi.spyOn(api, "linkRefund").mockReturnValue(response);
+            const unlink = vi.spyOn(api, "unlinkRefund").mockReturnValue(response);
+            const store = useStore.getState();
+            const pending = action === "link" ? store.linkRefund(11, 10) : store.unlinkRefund(11);
+            await vi.waitFor(() =>
+                expect(action === "link" ? link : unlink).toHaveBeenCalledOnce(),
+            );
+            const queuedLink = store.linkRefund(11, 10);
+            const queuedUnlink = store.unlinkRefund(11);
+            store.logout();
+            const snapshotAfterLogout = useStore.getState().snapshot;
+            finish({ refundOfId: 10, categoryId: 3 });
+            await Promise.all([pending, queuedLink, queuedUnlink]);
+            expect(link).toHaveBeenCalledTimes(action === "link" ? 1 : 0);
+            expect(unlink).toHaveBeenCalledTimes(action === "unlink" ? 1 : 0);
+            expect(useStore.getState().snapshot).toBe(snapshotAfterLogout);
+        },
+    );
+
     it("propagates and rolls back a purchase category on linked refunds", async () => {
         useStore.setState({
             snapshot: buildSnapshot({
