@@ -161,12 +161,8 @@ export default function TransactionsPage() {
         const cur = t.categoryId != null ? catById.get(t.categoryId) : null;
         const uncategorized = { value: "", label: "Leave uncategorized" };
         const linkedRefund = "refundOfId" in t && t.refundOfId != null;
-        const kinds =
-            t.amount < 0 || linkedRefund
-                ? ["expense"]
-                : t.amount > 0
-                  ? ["income", "expense"]
-                  : null;
+        if (linkedRefund) return cur ? [{ value: String(cur.id), label: cur.name }] : [];
+        const kinds = t.amount < 0 ? ["expense"] : t.amount > 0 ? ["income", "expense"] : null;
         const matchingSections = kinds
             ? catSections.filter((section) => kinds.includes(section.kind ?? ""))
             : catSections;

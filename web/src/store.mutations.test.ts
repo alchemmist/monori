@@ -80,6 +80,44 @@ describe("store demo mutations", () => {
         await expect(store.refundSuggestions(1)).resolves.toEqual([]);
     });
 
+    it("moves a demo refund between purchases and tolerates a missing row", async () => {
+        useStore.setState({
+            snapshot: buildSnapshot({
+                transactions: [
+                    { id: 1, date: "2026-01-01", amount: -100, refundIds: [3] },
+                    { id: 2, date: "2026-01-02", amount: -100, categoryId: 2, refundIds: [] },
+                    { id: 3, date: "2026-01-03", amount: 50, refundOfId: 1 },
+                ],
+            }),
+        });
+
+        await useStore.getState().linkRefund(3, 2);
+        expect(useStore.getState().snapshot!.transactions).toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({ id: 1, refundIds: [] }),
+                expect.objectContaining({ id: 2, refundIds: [3] }),
+                expect.objectContaining({ id: 3, refundOfId: 2, categoryId: 2 }),
+            ]),
+        );
+
+        await useStore.getState().unlinkRefund(999);
+    });
+
+    it("rejects invalid demo refund links", async () => {
+        useStore.setState({
+            snapshot: buildSnapshot({
+                transactions: [
+                    { id: 1, date: "2026-01-02", amount: 100 },
+                    { id: 2, date: "2026-01-01", amount: 50 },
+                ],
+            }),
+        });
+
+        await useStore.getState().linkRefund(2, 1);
+
+        expect(useStore.getState().snapshot!.transactions[1]).not.toHaveProperty("refundOfId");
+    });
+
     it("edits budgets and transaction category/account optimistically", () => {
         const store = useStore.getState();
         void store.setBudget(2, 2026, 1, 30);
@@ -199,6 +237,28 @@ describe("store remote mutations", () => {
         });
     });
 
+    it("propagates and rolls back a purchase category on linked refunds", async () => {
+        useStore.setState({
+            snapshot: buildSnapshot({
+                transactions: [
+                    { id: 10, date: "2026-01-01", amount: -100, categoryId: 2, refundIds: [11] },
+                    { id: 11, date: "2026-01-02", amount: 50, categoryId: 2, refundOfId: 10 },
+                ],
+            }),
+        });
+        vi.spyOn(api, "patchTx").mockResolvedValueOnce({}).mockRejectedValueOnce(new Error("save"));
+
+        await useStore.getState().updateTransaction(10, { categoryId: 3 });
+        expect(
+            useStore.getState().snapshot!.transactions.map((transaction) => transaction.categoryId),
+        ).toEqual([3, 3]);
+
+        await useStore.getState().updateTransaction(10, { categoryId: 2 });
+        expect(
+            useStore.getState().snapshot!.transactions.map((transaction) => transaction.categoryId),
+        ).toEqual([3, 3]);
+    });
+
     it("repairs refund links when deletion rolls back", async () => {
         const purchase = { id: 10, date: "2026-01-01", amount: -100, refundIds: [11] };
         const refund = { id: 11, date: "2026-01-02", amount: 50, refundOfId: 10 };
@@ -215,6 +275,18 @@ describe("store remote mutations", () => {
         expect(
             useStore.getState().snapshot!.transactions.find((row) => row.id === 10)?.refundIds,
         ).toContain(11);
+    });
+
+    it("clears both sides of refund links while deletion is pending", async () => {
+        const purchase = { id: 10, date: "2026-01-01", amount: -100, refundIds: [11] };
+        const refund = { id: 11, date: "2026-01-02", amount: 50, refundOfId: 10 };
+        useStore.setState({ snapshot: buildSnapshot({ transactions: [purchase, refund] }) });
+        vi.spyOn(api, "deleteTx").mockResolvedValue({});
+
+        await expect(useStore.getState().deleteTransaction(10)).resolves.toBe(true);
+        expect(useStore.getState().snapshot!.transactions).toEqual([
+            expect.objectContaining({ id: 11, refundOfId: null }),
+        ]);
     });
 
     it("sends account edits to their own endpoints and adopts the server id", async () => {

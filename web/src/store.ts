@@ -626,7 +626,20 @@ export const useStore = create<StoreState>((set, get) => ({
         const patchKeys = TRANSACTION_PATCH_KEYS.filter((key) => patch[key] !== undefined);
         patchKeys.forEach((key) => revisions.set(key, revision));
         txFieldRevisions.set(txId, revisions);
-        const rows = snapshot.transactions.map((t) => (t.id === txId ? { ...t, ...patch } : t));
+        const refundCategories =
+            patch.categoryId === undefined
+                ? new Map<number, Id | null>()
+                : new Map(
+                      snapshot.transactions
+                          .filter((transaction) => transaction.refundOfId === txId)
+                          .map((transaction) => [transaction.id, transaction.categoryId]),
+                  );
+        const rows = snapshot.transactions.map((transaction) => {
+            if (transaction.id === txId) return { ...transaction, ...patch };
+            if (refundCategories.has(transaction.id))
+                return { ...transaction, categoryId: patch.categoryId ?? null };
+            return transaction;
+        });
         rows.sort(compareTx);
         set({ snapshot: { ...snapshot, transactions: rows } });
         if (isDemo()) return;
@@ -645,7 +658,11 @@ export const useStore = create<StoreState>((set, get) => ({
                     .map((key) => [key, before[key]]),
             );
             const back = cur.transactions
-                .map((t) => (t.id === txId ? { ...t, ...undo } : t))
+                .map((transaction) => {
+                    if (transaction.id === txId) return { ...transaction, ...undo };
+                    const categoryId = refundCategories.get(transaction.id);
+                    return categoryId === undefined ? transaction : { ...transaction, categoryId };
+                })
                 .sort(compareTx);
             set({
                 snapshot: { ...cur, transactions: back },
@@ -765,6 +782,17 @@ export const useStore = create<StoreState>((set, get) => ({
         const refund = before.transactions.find((transaction) => transaction.id === txId);
         const original = before.transactions.find((transaction) => transaction.id === originalId);
         if (!refund || (isDemo() && !original)) return;
+        if (
+            isDemo() &&
+            (refund.amount <= 0 ||
+                original!.amount >= 0 ||
+                original!.date > refund.date ||
+                refund.transferId != null ||
+                original!.transferId != null ||
+                (refund.splits?.length ?? 0) > 0 ||
+                (original!.splits?.length ?? 0) > 0)
+        )
+            return;
         const result = isDemo()
             ? { refundOfId: originalId, categoryId: original?.categoryId ?? null }
             : await api.linkRefund(txId, originalId);
@@ -784,7 +812,10 @@ export const useStore = create<StoreState>((set, get) => ({
                             (refundId) => refundId !== txId,
                         );
                         if (transaction.id === originalId) withoutRefund.push(txId);
-                        return { ...transaction, refundIds: withoutRefund };
+                        return transaction.id === originalId ||
+                            withoutRefund.length !== (transaction.refundIds ?? []).length
+                            ? { ...transaction, refundIds: withoutRefund }
+                            : transaction;
                     }),
                 },
             };
@@ -805,12 +836,14 @@ export const useStore = create<StoreState>((set, get) => ({
                     transactions: current.transactions.map((transaction) =>
                         transaction.id === txId
                             ? { ...transaction, refundOfId: null, categoryId: result.categoryId }
-                            : {
-                                  ...transaction,
-                                  refundIds: (transaction.refundIds ?? []).filter(
-                                      (refundId) => refundId !== txId,
-                                  ),
-                              },
+                            : (transaction.refundIds ?? []).includes(txId)
+                              ? {
+                                    ...transaction,
+                                    refundIds: transaction.refundIds!.filter(
+                                        (refundId) => refundId !== txId,
+                                    ),
+                                }
+                              : transaction,
                     ),
                 },
             };
