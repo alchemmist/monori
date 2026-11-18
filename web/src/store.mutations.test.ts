@@ -107,15 +107,16 @@ describe("store demo mutations", () => {
         useStore.setState({
             snapshot: buildSnapshot({
                 transactions: [
-                    { id: 1, date: "2026-01-02", amount: 100 },
-                    { id: 2, date: "2026-01-01", amount: 50 },
+                    { id: 1, date: "2026-01-01", amount: -100 },
+                    { id: 2, date: "2026-01-02", amount: 80, refundOfId: 1 },
+                    { id: 3, date: "2026-01-03", amount: 50 },
                 ],
             }),
         });
 
-        await useStore.getState().linkRefund(2, 1);
+        await useStore.getState().linkRefund(3, 1);
 
-        expect(useStore.getState().snapshot!.transactions[1]).not.toHaveProperty("refundOfId");
+        expect(useStore.getState().snapshot!.transactions[2]).not.toHaveProperty("refundOfId");
     });
 
     it("edits budgets and transaction category/account optimistically", () => {

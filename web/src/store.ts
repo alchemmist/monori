@@ -782,10 +782,16 @@ export const useStore = create<StoreState>((set, get) => ({
         const refund = before.transactions.find((transaction) => transaction.id === txId);
         const original = before.transactions.find((transaction) => transaction.id === originalId);
         if (!refund || (isDemo() && !original)) return;
+        const refunded = before.transactions
+            .filter(
+                (transaction) => transaction.refundOfId === originalId && transaction.id !== txId,
+            )
+            .reduce((total, transaction) => total + transaction.amount, 0);
         if (
             isDemo() &&
             (refund.amount <= 0 ||
                 original!.amount >= 0 ||
+                refunded + refund.amount > -original!.amount ||
                 original!.date > refund.date ||
                 refund.transferId != null ||
                 original!.transferId != null ||
