@@ -7,6 +7,7 @@ describe("refundMerchantKey", () => {
         ["возврат Shop 123", "shop"],
         ["RETURN100 Shop", "shop"],
         ["Shop return456", "shop"],
+        ["Refundshop", "refundshop"],
     ])("normalizes %s", (value, expected) => {
         expect(refundMerchantKey(value)).toBe(expected);
     });
