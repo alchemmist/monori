@@ -178,9 +178,8 @@ path = Path(os.environ["DOCKERFILE"])
 text = path.read_text()
 old = "RUN npm ci --silent --no-audit --no-fund"
 new = "RUN npm install --global npm@11.6.2 && npm ci --no-audit --no-fund"
-if old not in text:
-    raise SystemExit("base Dockerfile has no silent npm ci line")
-path.write_text(text.replace(old, new, 1))
+if old in text:
+    path.write_text(text.replace(old, new, 1))
 '
 fi
 

@@ -638,20 +638,20 @@ def discover_repository(base: str, executor: ProcessExecutor) -> tuple[Collected
             suffix=".json",
         )
         os.close(descriptor)
-        result = executor.run(
-            (
-                "./node_modules/.bin/vitest",
-                "list",
-                *(path.removeprefix("web/") for path in vitest_paths),
-                "--json",
-                collection_path,
-                "--includeTaskLocation",
-            ),
-            "web",
-            120,
-        )
-        _require_collection("Vitest", result)
         try:
+            result = executor.run(
+                (
+                    "./node_modules/.bin/vitest",
+                    "list",
+                    *(path.removeprefix("web/") for path in vitest_paths),
+                    "--json",
+                    collection_path,
+                    "--includeTaskLocation",
+                ),
+                "web",
+                120,
+            )
+            _require_collection("Vitest", result)
             payload = Path(collection_path).read_text()
         finally:
             Path(collection_path).unlink(missing_ok=True)

@@ -508,3 +508,40 @@ diff --git a/web/src/Added.test.tsx b/web/src/Added.test.tsx
     assert [test.line for test in tests] == [11]
     assert "--json" in executor.commands[1]
     assert executor.commands[1][executor.commands[1].index("--json") + 1].endswith(".json")
+    written = Path(executor.commands[1][executor.commands[1].index("--json") + 1])
+    assert not written.exists()
+
+
+def test_vitest_collection_file_is_removed_when_collection_fails() -> None:
+    patch = """
+diff --git a/web/src/Added.test.tsx b/web/src/Added.test.tsx
++++ b/web/src/Added.test.tsx
+@@ -0,0 +11 @@
++    it("added", () => {})
+"""
+
+    class FailingExecutor:
+        def __init__(self) -> None:
+            self.path: Path | None = None
+
+        def run(
+            self,
+            command: tuple[str, ...],
+            _cwd: str,
+            _timeout_seconds: float,
+        ) -> ProcessResult:
+            if command[0] == "git":
+                return ProcessResult(0, patch, 0.1)
+            self.path = Path(command[command.index("--json") + 1])
+            self.path.write_text("{}")
+            return ProcessResult(1, "vitest failed", 0.1)
+
+    executor = FailingExecutor()
+    failed = False
+    try:
+        discover_repository("main", executor)
+    except RuntimeError:
+        failed = True
+    assert failed
+    assert executor.path is not None
+    assert not executor.path.exists()
