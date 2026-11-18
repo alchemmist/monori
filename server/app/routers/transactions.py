@@ -520,7 +520,11 @@ def refund_suggestions(
         current_id = int(current["original_tx_id"]) if current is not None else None
         c.create_function("refund_merchant_key", 1, _merchant_key, deterministic=True)
         rows = c.execute(
-            "SELECT * FROM (SELECT t.*, COALESCE((SELECT SUM(rt.amount)"
+            "SELECT id, date, amount, description, bank_category, mcc, category_id,"
+            " account_id, transfer_id, comment, source, hidden FROM ("
+            " SELECT t.id, t.date, t.amount, t.description, t.bank_category, t.mcc,"
+            " t.category_id, t.account_id, t.transfer_id, t.comment, t.source, t.hidden,"
+            " COALESCE((SELECT SUM(rt.amount)"
             " FROM refund_links rl JOIN transactions rt ON rt.id=rl.refund_tx_id"
             " WHERE rl.original_tx_id=t.id AND rl.refund_tx_id<>?), 0) AS used_refund"
             " FROM transactions t JOIN accounts a ON a.id=t.account_id"
