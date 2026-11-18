@@ -185,16 +185,30 @@ describe("ImportPanel", () => {
         await user.click(categorySelect);
         await user.click(await screen.findByRole("option", { name: "Groceries" }));
         expect(screen.getByRole("button", { name: "Groceries" })).toBeInTheDocument();
+        await user.click(screen.getByRole("button", { name: "Groceries" }));
+        await user.click(await screen.findByRole("option", { name: "Uncategorized" }));
+        expect(screen.getByRole("button", { name: "Uncategorized" })).toBeInTheDocument();
     });
 
     it("offers income and expense categories for positive amounts", async () => {
+        seed({
+            accounts,
+            transactions: [
+                {
+                    id: 7,
+                    date: "2026-07-01",
+                    description: "Shop",
+                    amount: -100_00,
+                },
+            ],
+        });
         vi.spyOn(api, "importPreview").mockResolvedValue({
             rows: [
                 {
                     date: "2026-07-03",
                     card: "",
-                    description: "Paycheck",
-                    amount: 90000,
+                    description: "Shop refund",
+                    amount: 24_00,
                     accountId: 1,
                     categoryId: null,
                     duplicate: false,
@@ -204,7 +218,8 @@ describe("ImportPanel", () => {
         });
         const { container, user } = renderUI(<ImportPanel onClose={vi.fn()} />);
         upload(container);
-        await screen.findByText("Paycheck");
+        await screen.findByText("Shop refund");
+        expect(screen.getByText("looks like a refund of Shop")).toBeInTheDocument();
 
         await user.click(screen.getByRole("button", { name: "Uncategorized" }));
         expect(await screen.findByRole("option", { name: "Salary" })).toBeInTheDocument();
