@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 """Strict JSON value helpers shared by all Monori Python packages."""
 
 from __future__ import annotations

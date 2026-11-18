@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 import pathlib
 import sqlite3
 import threading

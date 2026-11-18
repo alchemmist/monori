@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 """Measure and compare gzip sizes of the frontend build."""
 
 from __future__ import annotations

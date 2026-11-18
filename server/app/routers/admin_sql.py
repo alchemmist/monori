@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 """
 Admin SQL console (issue #168): run one statement against the live database.
 

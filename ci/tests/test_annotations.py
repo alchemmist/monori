@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 from io import StringIO
 
 import pytest

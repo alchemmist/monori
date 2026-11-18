@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 """
 Accounts: every transaction gains a NOT NULL account_id and a nullable.
 

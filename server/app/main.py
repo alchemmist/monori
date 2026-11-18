@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 """Monori API. Money in/out of this API is integer kopecks everywhere."""
 
 import contextlib

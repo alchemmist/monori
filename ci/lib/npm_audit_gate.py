@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 """
 Fail on high/critical npm advisory with limited exceptions.
 
@@ -56,6 +57,7 @@ logger = logging.getLogger(__name__)
 
 ALLOWED = {
     "GHSA-qwww-vcr4-c8h2": "react-router RSC-only; N/A to our SPA, no fix released",
+    "GHSA-fc5q-39xc-vjpf": "picomatch ReDoS, dev-only extglob, no fixed release",
 }
 
 

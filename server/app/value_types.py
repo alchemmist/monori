@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 """Validated date and money types shared by persistence boundaries."""
 
 import re

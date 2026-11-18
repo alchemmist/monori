@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 """
 Transfers as a first-class entity, plus the rejections that mute auto-detection.
 

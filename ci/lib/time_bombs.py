@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 """Detect plausible Unix timestamps introduced on changed source lines."""
 
 from __future__ import annotations

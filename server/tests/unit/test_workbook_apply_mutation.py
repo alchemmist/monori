@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 """
 Targets the parts of apply that the existing suite pins only loosely: the.
 
@@ -129,7 +130,9 @@ def test_already_imported_warning_reads_in_full(tmp_path: pathlib.Path) -> None:
     result = apply_workbook(c, uid, _parsed([]), {"RUB:": acct})
     c.commit()
     assert result.warnings == [
-        "1 rows are already in monori — delivered by a bank sync or an"
-        " earlier import, possibly onto a different account — and were not"
-        " imported again",
+        (
+            "1 rows are already in monori — delivered by a bank sync or an"
+            " earlier import, possibly onto a different account — and were not"
+            " imported again"
+        ),
     ]

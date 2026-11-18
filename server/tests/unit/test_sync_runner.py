@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 from dataclasses import dataclass
 from typing import override
 

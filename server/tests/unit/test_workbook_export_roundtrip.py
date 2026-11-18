@@ -1,4 +1,5 @@
-import datetime
+# Copyright (c) 2026
+import datetime as dt
 from dataclasses import dataclass
 from io import BytesIO
 
@@ -6,6 +7,7 @@ import pytest
 from openpyxl import Workbook
 from openpyxl.worksheet.worksheet import Worksheet
 
+from monori.server.app.workbook.export import _parse_dt as export_parse_dt
 from monori.server.app.workbook.parser import (
     WorkbookError,
     _amount,
@@ -15,16 +17,16 @@ from monori.server.app.workbook.parser import (
 )
 
 
-def _workbook_datetime(*parts: int) -> datetime.datetime:
+def _workbook_datetime(*parts: int) -> dt.datetime:
     values = list(parts) + [0] * (6 - len(parts))
-    return datetime.datetime(
+    return dt.datetime(
         values[0],
         values[1],
         values[2],
         values[3],
         values[4],
         values[5],
-        tzinfo=datetime.UTC,
+        tzinfo=dt.UTC,
     ).replace(tzinfo=None)
 
 
@@ -132,6 +134,10 @@ def test_unquote_reverses_only_the_formula_escape() -> None:
     assert _unquote("'legit apostrophe") == "'legit apostrophe"
 
 
+def test_export_parse_dt_keeps_a_leading_date_when_the_rest_is_not_iso() -> None:
+    assert export_parse_dt("2026-01-05 trailing") == _workbook_datetime(2026, 1, 5)
+
+
 def test_parse_dt_variants() -> None:
     ws = Workbook().active
     assert ws is not None
@@ -141,7 +147,7 @@ def test_parse_dt_variants() -> None:
         5,
         10,
     )
-    assert _parse_dt(ws.cell(1, 2, datetime.date(2026, 1, 5))) == _workbook_datetime(2026, 1, 5)
+    assert _parse_dt(ws.cell(1, 2, dt.date(2026, 1, 5))) == _workbook_datetime(2026, 1, 5)
     assert _parse_dt(ws.cell(1, 3, "05.01.2026 10:00:00")) == _workbook_datetime(2026, 1, 5, 10)
     assert _parse_dt(ws.cell(1, 4, "2026-01-05T10:00:00")) == _workbook_datetime(2026, 1, 5, 10)
     assert _parse_dt(ws.cell(1, 5, "")) is None
@@ -257,8 +263,10 @@ def test_category_sheet_saying_nothing_defers_to_the_grids() -> None:
     assert parsed.categories == []
     assert parsed.groups == []
     assert parsed.warnings == [
-        "Categories: no category rows recognized (2 rows skipped),"
-        " structure taken from the year grids",
+        (
+            "Categories: no category rows recognized (2 rows skipped),"
+            " structure taken from the year grids"
+        ),
     ]
 
 

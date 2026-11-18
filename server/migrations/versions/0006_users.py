@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 """
 First-class users that sign in to monori itself (issue #34). Passwords are.
 

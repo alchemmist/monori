@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 """Base schema: category groups, categories, transactions, budgets."""
 
 from alembic import op

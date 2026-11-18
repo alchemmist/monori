@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 """
 SQLite access layer. All money amounts are stored as integer kopecks.
 

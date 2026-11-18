@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 """
 Recompute every transaction's dedup fingerprint with SHA-256.
 

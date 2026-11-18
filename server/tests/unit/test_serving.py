@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 """
 The SPA catch-all must not swallow unknown /api paths — those still 404 as.
 
