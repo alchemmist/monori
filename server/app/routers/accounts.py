@@ -14,10 +14,15 @@ from monori.common import JsonValue
 from monori.server.app.auth import AuthenticatedUser, current_user
 from monori.server.app.currencies import validate as validate_currency
 from monori.server.app.db_records import AccountRecord
-from monori.server.app.deps import AccountResponse, conn, serialize_account
+from monori.server.app.deps import AccountResponse, conn, serialize_accounts
 from monori.server.app.domain_types import AccountType
 from monori.server.app.importer import tx_hash
-from monori.server.app.money import account_currency, base_currency, to_base
+from monori.server.app.money import (
+    account_currency,
+    base_currency,
+    to_base,
+    validate_account_valuations,
+)
 from monori.server.app.value_types import Money, TransactionDate
 
 router = APIRouter(prefix="/api/accounts", tags=["accounts"])
@@ -161,15 +166,19 @@ def list_accounts(
     uid = user.id
     c = conn()
     try:
-        return [
-            serialize_account(AccountRecord.from_row(r), c, user.id)
-            for r in c.execute(
-                "SELECT id, name, type, icon, color, icon_image, currency, sort, archived,"
-                " opening_balance, opening_date, connection_id, bank_ref, card_tails"
-                " FROM accounts WHERE user_id=? ORDER BY sort, id",
-                (uid,),
-            )
-        ]
+        return serialize_accounts(
+            c,
+            user.id,
+            (
+                AccountRecord.from_row(r)
+                for r in c.execute(
+                    "SELECT id, name, type, icon, color, icon_image, currency, sort, archived,"
+                    " opening_balance, opening_date, connection_id, bank_ref, card_tails"
+                    " FROM accounts WHERE user_id=? ORDER BY sort, id",
+                    (uid,),
+                )
+            ),
+        )
     finally:
         c.close()
 
@@ -204,10 +213,12 @@ def create_account(
             (uid,),
         ).fetchone()[0]
         cur = c.execute(
-            """INSERT INTO accounts
+            """
+            INSERT INTO accounts
                (user_id, name, type, icon, color, icon_image, currency, opening_balance,
                 opening_date, sort, connection_id, bank_ref, card_tails)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id
+            """,
             (
                 uid,
                 body.name,
@@ -224,8 +235,10 @@ def create_account(
                 _clean_tails(body.card_tails or []),
             ),
         )
+        created_id = int(cur.fetchone()["id"])
+        validate_account_valuations(c, [created_id])
         c.commit()
-        return AccountIdResponse(id=cur.lastrowid)
+        return AccountIdResponse(id=created_id)
     finally:
         c.close()
 
@@ -245,6 +258,7 @@ def patch_account(
         _update_account_fields(c, account_id, uid, patch)
         _update_account_connection(c, account_id, uid, patch.connection_id)
         _update_account_tails(c, account_id, patch.card_tails)
+        validate_account_valuations(c, [account_id])
         c.commit()
         return {"ok": True}
     finally:
@@ -407,6 +421,7 @@ def delete_account(
                     for r in moved
                 ],
             )
+            validate_account_valuations(c, [reassign_to])
         c.execute(
             "UPDATE users SET default_account_id=NULL WHERE default_account_id=?",
             (account_id,),
@@ -470,6 +485,7 @@ def reconcile_account(
                     tx_hash(account_id, date, delta, desc, currency),
                 ),
             )
+            validate_account_valuations(c, [account_id])
             c.commit()
         return {"delta": delta}
     finally:

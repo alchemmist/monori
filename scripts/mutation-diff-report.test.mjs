@@ -4,6 +4,7 @@ import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 import { groupBy, mutationDiagnostics } from "./mutation-diff-report.mjs";
 
 test("identifies affected files and actionable mutants", () => {
@@ -88,7 +89,7 @@ function mutationGateResult(killed, survived, threshold) {
     return spawnSync(
         process.execPath,
         [
-            new URL("./mutation-diff-gate.mjs", import.meta.url).pathname,
+            fileURLToPath(new URL("./mutation-diff-gate.mjs", import.meta.url)),
             base,
             report,
             `${threshold}`,

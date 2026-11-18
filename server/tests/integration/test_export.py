@@ -164,38 +164,45 @@ def test_export_uses_split_parts_for_rows_and_totals(api: Api, client: TestClien
     assert activity["Household"] == 40
 
 
-def test_export_conserves_converted_split_total(api: Api, client: TestClient) -> None:
+@pytest.mark.parametrize(
+    ("rate", "count", "expected"),
+    [(10 / 3, 3, [0.03, 0.04, 0.03]), (2 / 3, 6, [0.01, 0, 0.01, 0.01, 0, 0.01])],
+)
+def test_export_conserves_converted_split_total(
+    api: Api, client: TestClient, rate: float, count: int, expected: list[float]
+) -> None:
     expenses = api.group("Expenses")
-    categories = [api.category(name, expenses) for name in ("First", "Second", "Third")]
+    names = [f"Part {index}" for index in range(count)]
+    categories = [api.category(name, expenses) for name in names]
     account = api.account("Dollar card", AccountOptions(currency="USD"))
     with sqlite3.connect(os.environ["MONORI_DB"]) as connection:
         connection.execute(
             "INSERT INTO exchange_rates (day, code, rub_per_unit, source)"
             " VALUES ('2026-01-01', 'USD', ?, 'manual')",
-            (10 / 3,),
+            (rate,),
         )
     transaction = api.tx(
         "2026-01-05T10:00:00",
-        -3,
-        TransactionOptions(account_id=account, description="Three parts"),
+        -count,
+        TransactionOptions(account_id=account, description="Split parts"),
     )
     response = client.put(
         f"/api/transactions/{transaction}/splits",
         json={"parts": [{"categoryId": category, "amount": -1} for category in categories]},
     )
     assert response.status_code == 200, response.text
-    assert api.tx_by(transaction).base_amount == -10
+    assert api.tx_by(transaction).base_amount == -round(count * rate)
 
     workbook = _export(client)
-    assert workbook["DashData"].cell(row=2, column=3).value == 0.1
+    assert workbook["DashData"].cell(row=2, column=3).value == pytest.approx(sum(expected))
     rows = [[cell.value for cell in row] for row in workbook["Transactions"].iter_rows(min_row=2)]
-    assert [(row[5], row[6]) for row in rows] == [(-0.01, "USD")] * 3
+    assert [(row[5], row[6]) for row in rows] == [(-0.01, "USD")] * count
     yearly = workbook["2026"]
     activity = {
         yearly.cell(row=row, column=1).value: yearly.cell(row=row, column=3).value
         for row in range(1, yearly.max_row + 1)
     }
-    assert [activity[name] for name in ("First", "Second", "Third")] == [0.03, 0.03, 0.04]
+    assert [activity[name] for name in names] == expected
 
 
 def test_export_year_sheet_grid(api: Api, client: TestClient) -> None:

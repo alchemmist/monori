@@ -13,12 +13,13 @@ per-user case (my bank converted at its own rate) is already served where it
 belongs: a transfer records the amount that actually arrived.
 """
 
+import math
 from datetime import date as date_cls
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import ConfigDict, Field
+from pydantic import BeforeValidator, ConfigDict, Field
 from pydantic.dataclasses import dataclass as pydantic_dataclass
 
 from monori.server.app.admin import admin_user
@@ -36,17 +37,46 @@ from monori.server.app.rates import (
     today_iso,
 )
 
+if TYPE_CHECKING:
+    from monori.common.json_values import JsonValue
+
 router = APIRouter(prefix="/api/rates", tags=["rates"])
 
 MAX_BACKFILL_DAYS = 90
+
+
+def _finite_input(value: "JsonValue") -> "JsonValue":
+    """Reject nonfinite JSON numbers before validation errors try to encode them."""
+    if isinstance(value, float) and not math.isfinite(value):
+        raise HTTPException(422, "rubPerUnit must be finite")
+    return value
+
+
+FiniteRate = Annotated[float, BeforeValidator(_finite_input)]
 
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid", populate_by_name=True))
 class RateOverride:
     """Represent a manually supplied exchange rate."""
 
-    rub_per_unit: float = Field(gt=0, alias="rubPerUnit")
+    rub_per_unit: FiniteRate = Field(gt=0, allow_inf_nan=False, alias="rubPerUnit")
     day: str | None = None
+
+
+@pydantic_dataclass(config=ConfigDict(extra="forbid", populate_by_name=True))
+class BatchRate:
+    """Represent one quote in an atomic historical-rate repair."""
+
+    code: str
+    rub_per_unit: FiniteRate = Field(gt=0, allow_inf_nan=False, alias="rubPerUnit")
+    day: str | None = None
+
+
+@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+class RateBatch:
+    """Represent quotes that must be stored and repriced together."""
+
+    rates: list[BatchRate] = Field(min_length=1)
 
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid", populate_by_name=True))
@@ -156,6 +186,29 @@ def refresh_rates(
         repriced = reprice_all(c)
         c.commit()
         return {"stored": stored, "days": days_fetched, "repriced": repriced}
+    finally:
+        c.close()
+
+
+@router.put("")
+def override_rates(
+    body: RateBatch,
+    _admin: Annotated[AuthenticatedUser, Depends(admin_user)],
+) -> dict[str, int]:
+    """Repair several missing quotes atomically before repricing every ledger."""
+    entries = [
+        (validate_currency(rate.code), _iso_day(rate.day), rate.rub_per_unit) for rate in body.rates
+    ]
+    if any(code == "RUB" for code, _, _ in entries):
+        raise HTTPException(400, "RUB is quoted against itself and cannot be set")
+    c = conn()
+    try:
+        stored = sum(
+            store_rates(c, day, {code: value}, source=SOURCE_MANUAL) for code, day, value in entries
+        )
+        repriced = reprice_all(c)
+        c.commit()
+        return {"stored": stored, "repriced": repriced}
     finally:
         c.close()
 

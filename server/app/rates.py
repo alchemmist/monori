@@ -12,11 +12,13 @@ A conversion is always resolved against the transaction's own date and frozen
 onto the row as ``base_amount``. Rates published later never rewrite history.
 """
 
+import math
 import re
 import sqlite3
 from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
 from datetime import date as date_cls
+from fractions import Fraction
 from typing import TypedDict, cast
 
 import httpx
@@ -47,6 +49,7 @@ BUNDLED_RATES = {
     "RSD": 0.7885,
 }
 
+PUBLICATION_DATE_RE = re.compile(r"<ValCurs\b[^>]*\bDate=[\"'](\d{2}\.\d{2}\.\d{4})[\"']")
 VALUTE_SPLIT = re.compile(r"<Valute\b")
 CHAR_CODE_RE = re.compile(r"<CharCode>\s*([A-Za-z]{3})\s*</CharCode>")
 NOMINAL_RE = re.compile(r"<Nominal>\s*([\d ]{1,12})\s*</Nominal>")
@@ -89,17 +92,19 @@ def parse_cbr(payload: str) -> dict[str, float]:
         units = int(nominal.group(1).replace(" ", "") or 1)
         if units <= 0:
             continue
-        rates[code.group(1).upper()] = float(value.group(1).replace(",", ".")) / units
+        rates[code.group(1).upper()] = float(Fraction(value.group(1).replace(",", ".")) / units)
     return rates
 
 
-def fetch_cbr(day: str | None = None, client: httpx.Client | None = None) -> dict[str, float]:
+def fetch_cbr(
+    day: str | None = None, client: httpx.Client | None = None
+) -> tuple[str, dict[str, float]]:
     """
     Fetch the CBR rates for ``day`` (ISO date, today when omitted).
 
     The feed only moves on business days and answers a weekend request with the
-    previous publication, which is exactly the rate that was in force — so the
-    response is stored under the day that was asked for.
+    previous publication. Preserve that publication date rather than relabelling
+    the quote with the requested day.
     """
     day = day or today_iso()
     y, m, d = day[:10].split("-")
@@ -110,7 +115,21 @@ def fetch_cbr(day: str | None = None, client: httpx.Client | None = None) -> dic
     else:
         response = client.get(CBR_URL, params=params)
     response.raise_for_status()
-    return parse_cbr(response.text)
+    published = PUBLICATION_DATE_RE.search(response.text)
+    if published is None:
+        message = "CBR feed has no publication date"
+        raise httpx.DecodingError(message, request=response.request)
+    try:
+        publication_day = (
+            datetime.strptime(published.group(1), "%d.%m.%Y").replace(tzinfo=UTC).date()
+        )
+    except ValueError as error:
+        message = "CBR feed has an invalid publication date"
+        raise httpx.DecodingError(message, request=response.request) from error
+    if publication_day.isoformat() > day[:10]:
+        message = "CBR feed publication is later than the requested day"
+        raise httpx.DecodingError(message, request=response.request)
+    return publication_day.isoformat(), parse_cbr(response.text)
 
 
 def store_rates(
@@ -128,7 +147,12 @@ def store_rates(
     kept = 0
     for raw_code, per_unit in rates.items():
         code = normalize(raw_code, "")
-        if code not in CURRENCIES or code == PIVOT_CURRENCY or per_unit <= 0:
+        if (
+            code not in CURRENCIES
+            or code == PIVOT_CURRENCY
+            or not math.isfinite(per_unit)
+            or per_unit <= 0
+        ):
             continue
         values = (day[:10], code, float(per_unit), source)
         if source == SOURCE_MANUAL:
@@ -159,7 +183,8 @@ def refresh(
     Fetch and store one day of rates, returning how many were kept.
     """
     day = (day or today_iso())[:10]
-    return store_rates(c, day, fetch_cbr(day, client=client))
+    publication_day, rates = fetch_cbr(day, client=client)
+    return store_rates(c, publication_day, rates)
 
 
 def stored_rate(c: sqlite3.Connection, code: str, day: str) -> sqlite3.Row | None:
@@ -205,7 +230,7 @@ def convert(c: sqlite3.Connection, amount: int, src: str, dst: str, day: str) ->
         return amount
     src_rate, _, _ = rate_on(c, src, day)
     dst_rate, _, _ = rate_on(c, dst, day)
-    return round(amount * src_rate / dst_rate)
+    return round(amount * Fraction(str(src_rate)) / Fraction(str(dst_rate)))
 
 
 def rate_table(

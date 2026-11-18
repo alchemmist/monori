@@ -127,3 +127,30 @@ def test_serialized_account_amounts_use_historical_rates(api: Api, client: TestC
     assert response.status_code == 200, response.text
     assert response.json()["rows"][0]["accountAmount"] == -8000
     assert response.json()["rows"][0]["baseAmount"] == -8000
+
+
+def test_opening_amount_without_a_date_uses_the_earliest_transaction(
+    api: Api,
+) -> None:
+    with sqlite3.connect(os.environ["MONORI_DB"]) as connection:
+        connection.executemany(
+            "INSERT INTO exchange_rates (day, code, rub_per_unit, source)"
+            " VALUES (?, 'USD', ?, 'manual')",
+            [("2026-01-01", 80), ("2026-07-01", 90)],
+        )
+    foreign = api.account("USD savings", AccountOptions(currency="USD", opening_balance=100))
+    api.tx(
+        "2026-01-05T12:00:00",
+        -10,
+        TransactionOptions(account_id=foreign),
+    )
+    api.tx(
+        "2026-07-05T12:00:00",
+        -10,
+        TransactionOptions(account_id=foreign),
+    )
+
+    account = next(row for row in api.snapshot().accounts if row.id == foreign)
+
+    assert account.opening_date is None
+    assert account.opening_base_amount == 8000

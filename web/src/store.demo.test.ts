@@ -325,6 +325,26 @@ describe("reconcileAccount in the demo", () => {
 });
 
 describe("createTransfer and deleteTransfer in the demo", () => {
+    it("rejects a received amount rounded to zero without changing the ledger", async () => {
+        const before = buildSnapshot({
+            accounts: [
+                { id: 1, name: "Ruble", currency: "RUB" },
+                { id: 5, name: "Dollar", currency: "USD" },
+            ],
+            rates: [{ code: "USD", rate: 80, day: "2026-07-01", source: "manual" }],
+        });
+        useStore.setState({ snapshot: before });
+        await expect(
+            useStore.getState().createTransfer({
+                fromAccountId: 1,
+                toAccountId: 5,
+                amount: 1,
+                date: "2026-07-01",
+            }),
+        ).rejects.toThrow("received amount must be positive");
+        expect(useStore.getState().snapshot).toBe(before);
+    });
+
     it("books two consecutive legs with mirrored amounts", async () => {
         const transferId = await useStore
             .getState()

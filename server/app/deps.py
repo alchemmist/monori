@@ -245,6 +245,8 @@ def serialize_account(
     account: AccountRecord,
     c: sqlite3.Connection | None = None,
     user_id: int | None = None,
+    first_transaction_date: str | None = None,
+    reporting_currency: str | None = None,
 ) -> AccountResponse:
     """Handle serialize account."""
     opening_base_amount = account.opening_balance
@@ -253,8 +255,8 @@ def serialize_account(
             c,
             account.opening_balance,
             account.currency,
-            base_currency(c, user_id),
-            account.opening_date or today_iso(),
+            reporting_currency or base_currency(c, user_id),
+            account.opening_date or first_transaction_date or today_iso(),
         )
     return AccountResponse(
         id=account.id,
@@ -275,25 +277,51 @@ def serialize_account(
     )
 
 
+def serialize_accounts(
+    c: sqlite3.Connection,
+    user_id: int,
+    accounts: Iterable[AccountRecord],
+) -> list[AccountResponse]:
+    """Serialize accounts with one lookup for their earliest transaction dates."""
+    records = list(accounts)
+    if not records:
+        return []
+    account_ids = [account.id for account in records]
+    reporting_currency = base_currency(c, user_id)
+    first_dates = {
+        int(row["account_id"]): str(row["first_date"])
+        for row in c.execute(
+            "SELECT account_id, MIN(date) AS first_date FROM transactions"
+            " WHERE account_id IN (SELECT value FROM json_each(?)) GROUP BY account_id",
+            (json.dumps(account_ids),),
+        )
+    }
+    return [
+        serialize_account(
+            account,
+            c,
+            user_id,
+            first_dates.get(account.id),
+            reporting_currency,
+        )
+        for account in records
+    ]
+
+
 def serialize_tx(
+    c: sqlite3.Connection,
     transaction: TransactionRecord,
+    account_currency: str,
     splits: Iterable[SplitRecord] = (),
-    c: sqlite3.Connection | None = None,
 ) -> TransactionResponse:
     """Handle serialize tx."""
-    account_amount = transaction.amount
-    if c is not None:
-        row = c.execute(
-            "SELECT currency FROM accounts WHERE id=?", (transaction.account_id,)
-        ).fetchone()
-        if row is not None:
-            account_amount = to_base(
-                c,
-                transaction.amount,
-                transaction.currency,
-                row["currency"],
-                transaction.date,
-            )
+    account_amount = to_base(
+        c,
+        transaction.amount,
+        transaction.currency,
+        account_currency,
+        transaction.date,
+    )
     return TransactionResponse(
         id=transaction.id,
         date=transaction.date,
@@ -331,6 +359,17 @@ def serialize_transactions(
     if not transactions:
         return []
     ids = [transaction.id for transaction in transactions]
+    account_ids = sorted({transaction.account_id for transaction in transactions})
+    account_currencies = {
+        int(row["id"]): str(row["currency"])
+        for row in cur.execute(
+            "SELECT id, currency FROM accounts WHERE id IN (SELECT value FROM json_each(?))",
+            (json.dumps(account_ids),),
+        )
+    }
+    if len(account_currencies) != len(account_ids):
+        message = "transaction account currency is unavailable"
+        raise RuntimeError(message)
     by_tx: dict[int, list[SplitRecord]] = {}
     for chunk in batched(ids, SPLIT_FETCH_BATCH_SIZE):
         for split in cur.execute(
@@ -341,7 +380,15 @@ def serialize_transactions(
         ):
             record = SplitRecord.from_row(split)
             by_tx.setdefault(record.transaction_id, []).append(record)
-    return [serialize_tx(tx, by_tx.get(tx.id, ()), cur.connection) for tx in transactions]
+    return [
+        serialize_tx(
+            cur.connection,
+            tx,
+            account_currencies[tx.account_id],
+            by_tx.get(tx.id, ()),
+        )
+        for tx in transactions
+    ]
 
 
 def serialize_user(user: UserRecord) -> UserResponse:
@@ -427,15 +474,19 @@ def snapshot(c: sqlite3.Connection, user_id: int, tx_limit: int | None = None) -
     return SnapshotResponse(
         base_currency=base_currency(c, user_id),
         rates=rate_table(c),
-        accounts=[
-            serialize_account(AccountRecord.from_row(r), c, user_id)
-            for r in cur.execute(
-                "SELECT id, name, type, icon, color, icon_image, currency, sort, archived,"
-                " opening_balance, opening_date, connection_id, bank_ref, card_tails"
-                " FROM accounts WHERE user_id=? ORDER BY sort, id",
-                uid,
-            )
-        ],
+        accounts=serialize_accounts(
+            c,
+            user_id,
+            (
+                AccountRecord.from_row(r)
+                for r in cur.execute(
+                    "SELECT id, name, type, icon, color, icon_image, currency, sort, archived,"
+                    " opening_balance, opening_date, connection_id, bank_ref, card_tails"
+                    " FROM accounts WHERE user_id=? ORDER BY sort, id",
+                    uid,
+                )
+            ),
+        ),
         groups=[
             serialize_group(GroupRecord.from_row(r))
             for r in cur.execute(

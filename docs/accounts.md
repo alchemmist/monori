@@ -30,7 +30,9 @@ Accounts live on the **Accounts** page in the sidebar. Each one has:
   [Budget](budgeting.md) page,
 - an **opening date** — when that balance was on the account, which decides the
   month it lands in on the Budget page. New accounts default to today; left
-  empty, the balance follows the account's earliest transaction.
+  empty, the balance follows the account's earliest transaction. Reporting
+  conversion uses that same date; if neither a date nor a transaction exists,
+  it uses today's rate until a historical date is available.
 
 From the list you can create, rename, reorder, **archive** (hide without
 deleting), and delete accounts. Deleting an account asks where its transactions

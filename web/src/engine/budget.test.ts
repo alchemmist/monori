@@ -51,8 +51,8 @@ describe("buildTxIndex", () => {
         ]);
         expect([...index.values()].reduce((sum, amount) => sum + amount, 0)).toBe(-10);
         expect(index.get(txKey(2024, 3, 5))).toBe(-3);
-        expect(index.get(txKey(2024, 3, 6))).toBe(-3);
-        expect(index.get(txKey(2024, 3, 7))).toBe(-4);
+        expect(index.get(txKey(2024, 3, 6))).toBe(-4);
+        expect(index.get(txKey(2024, 3, 7))).toBe(-3);
     });
 });
 

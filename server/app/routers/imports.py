@@ -15,6 +15,7 @@ from monori.server.app.auth import AuthenticatedUser, current_user
 from monori.server.app.connectors.base import SyncRow
 from monori.server.app.currencies import normalize
 from monori.server.app.currencies import validate as validate_currency
+from monori.server.app.db import begin_write
 from monori.server.app.deps import conn
 from monori.server.app.domain_types import TransactionSource
 from monori.server.app.importer import (
@@ -459,6 +460,7 @@ def import_commit(
     uid = user.id
     c = conn()
     try:
+        begin_write(c)
         if body.account_id is not None and not _owned_account(c, body.account_id, uid):
             raise HTTPException(400, "unknown account")
         _validate_import_categories(c, uid, body.rows)
@@ -657,6 +659,7 @@ def _commit_workbook(
         raise HTTPException(400, f"unmapped account slots: {missing}")
     c = conn()
     try:
+        begin_write(c)
         for account_id in set(marker_map.values()):
             if not _owned_account(c, account_id, uid):
                 raise HTTPException(400, f"unknown account: {account_id}")

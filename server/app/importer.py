@@ -65,8 +65,19 @@ HEADER_ALIASES = {
     "дата операции": "op_date",
     "operation date": "op_date",
     "op_date": "op_date",
-    "сумма операции": "amount",
-    "operation amount": "amount",
+    "сумма операции": "op_amount",
+    "operation amount": "op_amount",
+    "payment amount": "amount",
+    "сумма платежа": "amount",
+    "сумма в валюте счёта": "amount",
+    "сумма в валюте счета": "amount",
+    "transaction currency": "op_currency",
+    "валюта операции": "op_currency",
+    "payment currency": "currency",
+    "валюта платежа": "currency",
+    "валюта счёта": "currency",
+    "валюта счета": "currency",
+    "currency": "currency",
     "номер карты": "card",
     "card number": "card",
     "статус": "status",
@@ -236,6 +247,7 @@ class ImportRow:
             bank_category=self.bank_category,
             mcc=self.mcc,
             card=self.card,
+            currency=self.currency,
             account_id=self.account_id,
             category_id=self.category_id,
             duplicate=self.duplicate,
@@ -348,7 +360,7 @@ def parse_statement(text: str) -> tuple[list[ImportRow], list[ParseError]]:
             rec = {field: parts[index] for field, index in header_map.items() if index < len(parts)}
             rec = {column: rec.get(column, "") for column in COLUMNS}
         date = parse_date(rec["op_date"])
-        amount = parse_amount_kop(rec["amount"])
+        amount = parse_amount_kop(rec["amount"] or rec["op_amount"])
         if date is None or amount is None:
             errors.append(ParseError(ln, "unparseable date or amount", line[:200]))
             continue
@@ -363,7 +375,7 @@ def parse_statement(text: str) -> tuple[list[ImportRow], list[ParseError]]:
                 bank_category=rec["bank_category"],
                 mcc=rec["mcc"],
                 card=rec["card"],
-                currency=normalize(rec["currency"], ""),
+                currency=normalize(rec["currency"] or rec["op_currency"], ""),
             ),
         )
     return rows, errors

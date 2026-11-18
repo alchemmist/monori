@@ -124,7 +124,7 @@ gives `400`.
 | PATCH | `/api/accounts/{id}` | `{name?, type?, icon?, color?, iconImage?, currency?, openingBalance?, openingDate?, archived?}` | Partial update. `iconImage: ""` clears the custom image back to the glyph. |
 | DELETE | `/api/accounts/{id}` | — | Query `?reassignTo=<id>` moves its transactions first. A non-empty account without a target, or the last account, gives `400`. |
 | POST | `/api/accounts/reorder` | `{ids: [...]}` | Must list every account exactly once. |
-| POST | `/api/accounts/{id}/reconcile` | `{actualBalance}` | Posts an `adjustment` transaction for `actualBalance − computed balance`. Returns `{delta}` (`0` when already matching). |
+| POST | `/api/accounts/{id}/reconcile` | `{actualBalance}` | `actualBalance` is in minor units of the account currency. Posts an `adjustment` transaction for `actualBalance − computed balance`. Returns `{delta}` (`0` when already matching). |
 
 ## Transfers
 
@@ -221,6 +221,7 @@ how many rows moved. See [Currencies](currencies.md).
 | -------- | ------ | ------ | ------- |
 | GET | `/api/rates` | `?day=YYYY-MM-DD` (`400` if not an ISO date) | `{day, baseCurrency, currencies: [{code, name, symbol, minorUnits}], rates: [{code, rate, day, source, stale}]}`. `day` on a rate is when it was actually published; `stale` says it is older than the day asked for. `source` is `pivot`, `cbr`, `manual` or `bundled`. |
 | POST | `/api/rates/refresh` | `?days=0` | **Admin.** Fetches today from the Bank of Russia, plus the last `days` (0–90) of any days with nothing stored. Returns `{stored, days, repriced}`. `502` if the feed is unreachable. |
+| PUT | `/api/rates` | `{rates: [{code, rubPerUnit, day?}]}` | **Admin.** Atomically stores all quotes, then reprices every ledger. Use this to repair legacy data missing multiple historical currency rates; a single-quote update cannot succeed while another required quote is missing. All quotes and repricing roll back on failure. Returns `{stored, repriced}`. |
 | PUT | `/api/rates/{code}` | `{rubPerUnit, day?}` | **Admin.** Sets a rate by hand for `day` (today by default). `400` for an unknown code, a non-ISO `day`, or for `RUB`, which is the pivot and is always 1. Returns `{code, day, repriced}`. |
 | PATCH | `/api/auth/me` | `{baseCurrency?}` | Changes the reporting currency and reprices every transaction at the rate for its own date. Returns the updated user object. Existing budget allocations and savings targets are converted at the switch-day rate. `400` for an unknown code or an unavailable conversion rate. |
 

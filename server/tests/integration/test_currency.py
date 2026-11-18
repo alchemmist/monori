@@ -504,3 +504,21 @@ def test_transfer_without_historical_rate_returns_actionable_error(
     assert response.status_code == 400
     assert "state the amount that arrived" in response.json()["detail"]
     assert api.snapshot().transactions == []
+
+
+def test_cross_currency_transfer_rejects_a_received_amount_rounded_to_zero(
+    api: Api, client: TestClient
+) -> None:
+    account = api.account("Foreign", AccountOptions(currency="USD"))
+    response = client.post(
+        "/api/transfers",
+        json={
+            "fromAccountId": api.default_account(),
+            "toAccountId": account,
+            "amount": 1,
+            "date": "2026-07-01T12:00:00",
+        },
+    )
+    assert response.status_code == 422
+    assert "state the amount that arrived" in response.json()["detail"]
+    assert api.snapshot().transactions == []

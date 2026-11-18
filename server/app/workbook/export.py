@@ -13,6 +13,7 @@ rather than a raw dump.
 import datetime as dt
 from collections import defaultdict
 from dataclasses import dataclass
+from fractions import Fraction
 from io import BytesIO
 
 from openpyxl import Workbook
@@ -155,11 +156,13 @@ def _effective_transactions(snap: SnapshotResponse) -> list[EffectiveTransaction
             effective.append(_effective_transaction(tx))
             continue
         allocated = 0
+        cumulative = 0
         for index, part in enumerate(tx.splits):
+            cumulative += part.amount
             base_amount = (
                 tx.base_amount - allocated
                 if index == len(tx.splits) - 1
-                else round(tx.base_amount * part.amount / tx.amount)
+                else round(Fraction(tx.base_amount * cumulative, tx.amount)) - allocated
             )
             allocated += base_amount
             effective.append(

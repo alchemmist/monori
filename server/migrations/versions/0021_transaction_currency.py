@@ -72,6 +72,7 @@ def _hash(
     currency: str,
     description: str,
 ) -> str:
+    currency = currency.strip().upper() or "RUB"
     return hashlib.sha256(
         f"{account_id}|{date_iso}|{amount_kop}|{currency}|{description}".encode()
     ).hexdigest()
@@ -100,6 +101,7 @@ def upgrade() -> None:
     op.execute("ALTER TABLE users ADD COLUMN base_currency TEXT NOT NULL DEFAULT 'RUB'")
     op.execute("ALTER TABLE transactions ADD COLUMN currency TEXT NOT NULL DEFAULT ''")
     op.execute("ALTER TABLE transactions ADD COLUMN base_amount INTEGER NOT NULL DEFAULT 0")
+    op.execute("UPDATE accounts SET currency = COALESCE(NULLIF(UPPER(TRIM(currency)), ''), 'RUB')")
     op.execute(
         "UPDATE transactions SET currency = COALESCE("
         "  NULLIF((SELECT a.currency FROM accounts a WHERE a.id = transactions.account_id), ''),"

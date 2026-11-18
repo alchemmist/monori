@@ -1,11 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-    convertAmount,
-    isMixedCurrency,
-    ratesByCode,
-    roundHalfEven,
-    totalInBase,
-} from "./money.js";
+import { convertAmount, isMixedCurrency, ratesByCode, roundRatio, totalInBase } from "./money.js";
 
 const RATES = [
     { code: "RUB", rate: 1 },
@@ -20,6 +14,24 @@ describe("ratesByCode", () => {
 });
 
 describe("convertAmount", () => {
+    it.each([
+        [300, 1.005, 302],
+        [-300, 1.005, -302],
+        [300, 1.004999, 301],
+        [300, 1.005001, 302],
+        [100, 1.005, 100],
+        [1, 1e-7, 0],
+        [1, 1e21, 1e21],
+        [-1, 1e-7, 0],
+    ])("rounds decimal quotes exactly (%s, %s)", (amount, rate, expected) => {
+        expect(convertAmount(amount, "USD", "RUB", [{ code: "USD", rate }])).toBe(expected);
+    });
+
+    it.each([Infinity, -Infinity, NaN, 0, -1])("rejects invalid quotes (%s)", (rate) => {
+        expect(() => convertAmount(100, "USD", "RUB", [{ code: "USD", rate }])).toThrow();
+        expect(() => convertAmount(100, "RUB", "USD", [{ code: "USD", rate }])).toThrow();
+    });
+
     it("is an exact identity within one currency", () => {
         expect(convertAmount(7, "USD", "usd", RATES)).toBe(7);
         expect(convertAmount(-12345, "GEL", "GEL", RATES)).toBe(-12345);
@@ -47,10 +59,18 @@ describe("convertAmount", () => {
     });
 });
 
-describe("roundHalfEven", () => {
-    it("matches Python rounding for positive and negative ties", () => {
-        expect([2.5, 3.5, -2.5, -3.5].map(roundHalfEven)).toEqual([2, 4, -2, -4]);
-        expect(Object.is(roundHalfEven(-0.5), -0)).toBe(false);
+describe("roundRatio", () => {
+    it.each([
+        [5n, 2n, 2],
+        [7n, 2n, 4],
+        [-5n, 2n, -2],
+        [-7n, 2n, -4],
+        [5n, -2n, -2],
+        [-5n, -2n, 2],
+        [-1n, 2n, 0],
+        [0n, -2n, 0],
+    ])("rounds exact signed halves (%s/%s)", (numerator, denominator, expected) => {
+        expect(roundRatio(numerator, denominator)).toBe(expected);
     });
 });
 

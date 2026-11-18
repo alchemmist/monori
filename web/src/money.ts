@@ -7,16 +7,29 @@ export function ratesByCode(rates: ExchangeRate[] = []): Map<string, number> {
     return map;
 }
 
-/** Round like Python's `round`: exact half values go to the nearest even integer. */
-export function roundHalfEven(value: number): number {
-    const sign = value < 0 ? -1 : 1;
-    const absolute = Math.abs(value);
-    const lower = Math.floor(absolute);
-    const fraction = absolute - lower;
-    const rounded =
-        fraction < 0.5 ? lower : fraction > 0.5 ? lower + 1 : lower % 2 === 0 ? lower : lower + 1;
-    const result = sign * rounded;
-    return result === 0 ? 0 : result;
+/** Round an exact ratio to the nearest even minor unit. */
+export function roundRatio(numerator: bigint, denominator: bigint): number {
+    const negative = numerator < 0n !== denominator < 0n;
+    const dividend = numerator < 0n ? -numerator : numerator;
+    const divisor = denominator < 0n ? -denominator : denominator;
+    let rounded = dividend / divisor;
+    const twiceRemainder = (dividend % divisor) * 2n;
+    if (twiceRemainder > divisor || (twiceRemainder === divisor && rounded % 2n === 1n)) {
+        rounded += 1n;
+    }
+    return negative && rounded !== 0n ? -Number(rounded) : Number(rounded);
+}
+
+function decimalRatio(value: number): [bigint, bigint] {
+    const text = value.toString();
+    const exponentAt = text.indexOf("e");
+    const exponent = exponentAt < 0 ? 0 : Number(text.slice(exponentAt + 1));
+    const coefficient = exponentAt < 0 ? text : text.slice(0, exponentAt);
+    const dot = coefficient.indexOf(".");
+    const fractionDigits = dot < 0 ? 0 : coefficient.length - dot - 1;
+    const digits = BigInt(coefficient.replace(".", ""));
+    const power = exponent - fractionDigits;
+    return power >= 0 ? [digits * 10n ** BigInt(power), 1n] : [digits, 10n ** BigInt(-power)];
 }
 
 export function convertAmount(
@@ -31,10 +44,21 @@ export function convertAmount(
     const table = rates instanceof Map ? rates : ratesByCode(rates);
     const sourceRate = table.get(source);
     const targetRate = table.get(target);
-    if (sourceRate == null || targetRate == null || sourceRate <= 0 || targetRate <= 0) {
+    if (
+        sourceRate == null ||
+        targetRate == null ||
+        sourceRate <= 0 ||
+        targetRate <= 0 ||
+        !Number.isFinite(sourceRate) ||
+        !Number.isFinite(targetRate)
+    ) {
         throw new Error(`Missing exchange rate for ${sourceRate == null ? source : target}`);
     }
-    return roundHalfEven((amount * sourceRate) / targetRate);
+    const [sourceNumerator, sourceDenominator] = decimalRatio(sourceRate);
+    const [targetNumerator, targetDenominator] = decimalRatio(targetRate);
+    const numerator = BigInt(amount) * sourceNumerator * targetDenominator;
+    const denominator = sourceDenominator * targetNumerator;
+    return roundRatio(numerator, denominator);
 }
 
 export function totalInBase(

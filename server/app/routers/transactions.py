@@ -20,7 +20,12 @@ from monori.server.app.deps import (
     serialize_transactions,
 )
 from monori.server.app.importer import tx_hash
-from monori.server.app.money import base_currency, resolve_currency, to_base
+from monori.server.app.money import (
+    base_currency,
+    resolve_currency,
+    to_base,
+    validate_account_valuations,
+)
 from monori.server.app.transfer_service import detach_leg
 from monori.server.app.value_types import Money, TransactionDate
 
@@ -229,6 +234,7 @@ def create_transaction(
     uid = user.id
     c = conn()
     try:
+        begin_write(c)
         category = _resolve_category(c, body.category_id, uid, body.amount)
         account = _resolve_account(c, body.account_id, uid)
         currency = validate_currency(resolve_currency(c, account, body.currency))
@@ -253,6 +259,7 @@ def create_transaction(
                 tx_hash(account, body.date, body.amount, body.description, currency),
             ),
         )
+        validate_account_valuations(c, [account])
         c.commit()
         return IdResponse(id=cur.lastrowid)
     finally:
@@ -338,6 +345,7 @@ def patch_transaction(
                 tx_id,
             ),
         )
+        validate_account_valuations(c, [transaction.account_id, account])
         c.commit()
         return OkResponse(ok=True)
     finally:
@@ -436,12 +444,20 @@ def delete_transaction(
     uid = user.id
     c = conn()
     try:
+        begin_write(c)
+        row = c.execute(
+            "SELECT t.account_id FROM transactions t JOIN accounts a ON a.id=t.account_id"
+            " WHERE t.id=? AND a.user_id=?",
+            (tx_id, uid),
+        ).fetchone()
         detach_leg(c, uid, tx_id)
         cur = c.execute(
             "DELETE FROM transactions WHERE id=?"
             " AND account_id IN (SELECT id FROM accounts WHERE user_id=?)",
             (tx_id, uid),
         )
+        if row is not None:
+            validate_account_valuations(c, [row["account_id"]])
         c.commit()
         if cur.rowcount == 0:
             raise HTTPException(404, "transaction not found")
@@ -464,13 +480,22 @@ def bulk_transactions(
         begin_write(c)
         affected = 0
         if body.action == "delete":
+            affected_accounts: set[int] = set()
             for tx_id in body.ids:
+                row = c.execute(
+                    "SELECT t.account_id FROM transactions t JOIN accounts a ON a.id=t.account_id"
+                    " WHERE t.id=? AND a.user_id=?",
+                    (tx_id, uid),
+                ).fetchone()
+                if row is not None:
+                    affected_accounts.add(row["account_id"])
                 detach_leg(c, uid, tx_id)
                 affected += c.execute(
                     "DELETE FROM transactions WHERE id=?"
                     " AND account_id IN (SELECT id FROM accounts WHERE user_id=?)",
                     (tx_id, uid),
                 ).rowcount
+            validate_account_valuations(c, affected_accounts)
         else:
             category = _resolve_category(c, body.category_id, uid)
 

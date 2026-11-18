@@ -658,7 +658,12 @@ def test_connection_conversion_to_user_level(tmp_path: pathlib.Path) -> None:
     c.close()
 
 
-def test_currency_migration_backfills_history_and_dedup_hash(tmp_path: pathlib.Path) -> None:
+@pytest.mark.parametrize(
+    ("legacy_currency", "expected_currency"), [("RUB", "RUB"), (" usd ", "USD"), ("   ", "RUB")]
+)
+def test_currency_migration_backfills_history_and_dedup_hash(
+    tmp_path: pathlib.Path, legacy_currency: str, expected_currency: str
+) -> None:
     db_path = tmp_path / "currency-upgrade.db"
     cfg = _alembic_config(db_path)
     command.upgrade(cfg, "0020")
@@ -669,7 +674,8 @@ def test_currency_migration_backfills_history_and_dedup_hash(tmp_path: pathlib.P
         )
         connection.execute(
             "INSERT INTO accounts (id, user_id, name, type, currency, sort)"
-            " VALUES (991, 1, 'Existing card', 'card', 'RUB', 1)"
+            " VALUES (991, 1, 'Existing card', 'card', ?, 1)",
+            (legacy_currency,),
         )
         connection.execute(
             "INSERT INTO transactions (id, date, amount, description, account_id, hash)"
@@ -678,9 +684,15 @@ def test_currency_migration_backfills_history_and_dedup_hash(tmp_path: pathlib.P
     connection = connect(db_path)
     try:
         transaction = _row(connection, "SELECT currency, base_amount, hash FROM transactions")
-        assert transaction["currency"] == "RUB"
+        assert transaction["currency"] == expected_currency
+        assert (
+            _row(connection, "SELECT currency FROM accounts WHERE id=991")["currency"]
+            == expected_currency
+        )
         assert transaction["base_amount"] == -250
-        assert transaction["hash"] == tx_hash(991, "2026-01-05T12:00:00", -250, "Purchase", "RUB")
+        assert transaction["hash"] == tx_hash(
+            991, "2026-01-05T12:00:00", -250, "Purchase", expected_currency
+        )
         assert _row(connection, "SELECT base_currency FROM users")["base_currency"] == "RUB"
         assert _revision(connection) == HEAD
         for invalid in ("", "   "):

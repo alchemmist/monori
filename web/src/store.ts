@@ -1181,18 +1181,22 @@ export const useStore = create<StoreState>((set, get) => ({
             const currencyOf = (id: Id) =>
                 snapshot.accounts.find((a) => a.id === id)?.currency ?? DEFAULT_CURRENCY;
             const base = get().baseCurrency();
+            const received =
+                body.toAmount ??
+                convertAmount(
+                    body.amount,
+                    currencyOf(body.fromAccountId),
+                    currencyOf(body.toAccountId),
+                    get().rates(),
+                );
+            if (received <= 0) {
+                throw new Error("received amount must be positive; state the amount that arrived");
+            }
             const rows = [
                 { accountId: body.fromAccountId, amount: -body.amount },
                 {
                     accountId: body.toAccountId,
-                    amount:
-                        body.toAmount ??
-                        convertAmount(
-                            body.amount,
-                            currencyOf(body.fromAccountId),
-                            currencyOf(body.toAccountId),
-                            get().rates(),
-                        ),
+                    amount: received,
                 },
             ].map((r, i) => ({
                 id: nextId + i,

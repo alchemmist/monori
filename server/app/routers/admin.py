@@ -19,6 +19,7 @@ from monori.server.app import auth
 from monori.server.app.admin import admin_user
 from monori.server.app.db_records import UserRecord
 from monori.server.app.deps import UserResponse, conn, serialize_user
+from monori.server.app.money import to_base
 from monori.server.app.routers.auth_router import create_user
 
 router = APIRouter(
@@ -294,6 +295,28 @@ def user_detail(
         ).fetchone()
         if row is None:
             raise HTTPException(404, "unknown user")
+        account_rows = c.execute(
+            "SELECT a.id, a.name, a.type, a.currency, a.archived, a.opening_balance,"
+            " COUNT(t.id) AS tx_count FROM accounts a"
+            " LEFT JOIN transactions t ON t.account_id=a.id"
+            " WHERE a.user_id=? GROUP BY a.id ORDER BY a.sort, a.id",
+            (uid,),
+        ).fetchall()
+        balances = {r["id"]: r["opening_balance"] for r in account_rows}
+        for transaction in c.execute(
+            "SELECT t.account_id, t.date, t.amount, t.currency, a.currency AS account_currency"
+            " FROM transactions t JOIN accounts a ON a.id=t.account_id"
+            " WHERE a.user_id=? AND (t.category_id IS NOT NULL OR t.transfer_id IS NOT NULL"
+            " OR t.source IN ('transfer', 'adjustment'))",
+            (uid,),
+        ):
+            balances[transaction["account_id"]] += to_base(
+                c,
+                transaction["amount"],
+                transaction["currency"],
+                transaction["account_currency"],
+                transaction["date"],
+            )
         return UserDetailResponse(
             user=serialize_user(UserRecord.from_row(row)),
             accounts=[
@@ -303,19 +326,10 @@ def user_detail(
                     type=r["type"],
                     currency=r["currency"],
                     archived=bool(r["archived"]),
-                    balance=r["balance"],
+                    balance=balances[r["id"]],
                     transactions=r["tx_count"],
                 )
-                for r in c.execute(
-                    "SELECT a.id, a.name, a.type, a.currency, a.archived,"
-                    " a.opening_balance + COALESCE(SUM(CASE WHEN t.category_id IS NOT NULL"
-                    "   OR t.transfer_id IS NOT NULL OR t.source IN ('transfer', 'adjustment')"
-                    "   THEN t.amount END), 0) AS balance,"
-                    " COUNT(t.id) AS tx_count"
-                    " FROM accounts a LEFT JOIN transactions t ON t.account_id = a.id"
-                    " WHERE a.user_id=? GROUP BY a.id ORDER BY a.sort, a.id",
-                    (uid,),
-                )
+                for r in account_rows
             ],
             recent_transactions=[
                 AdminTransactionSummary(

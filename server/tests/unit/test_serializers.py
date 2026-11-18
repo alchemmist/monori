@@ -1,5 +1,6 @@
 # Copyright (c) 2026
 import pathlib
+import sqlite3
 import sys
 from dataclasses import asdict
 
@@ -139,7 +140,9 @@ def test_serialize_tx() -> None:
         source=TransactionSource.IMPORT,
         hidden=False,
     )
-    assert asdict(serialize_tx(row)) == {
+    with sqlite3.connect(":memory:") as connection:
+        serialized = asdict(serialize_tx(connection, row, "RUB"))
+    assert serialized == {
         "id": 11,
         "date": "2026-01-05T00:00:00",
         "amount": -150000,

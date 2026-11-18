@@ -9,9 +9,10 @@ here so every path answers them the same way.
 """
 
 import sqlite3
+from collections.abc import Iterable
 
 from .currencies import DEFAULT_CURRENCY, normalize
-from .rates import convert
+from .rates import convert, today_iso
 
 
 def account_currency(c: sqlite3.Connection, account_id: int) -> str:
@@ -67,6 +68,38 @@ def resolve_currency(c: sqlite3.Connection, account_id: int, requested: str | No
     """
     code = normalize(requested, "")
     return code or account_currency(c, account_id) or DEFAULT_CURRENCY
+
+
+def validate_account_valuations(
+    c: sqlite3.Connection,
+    account_ids: Iterable[int],
+) -> None:
+    """Ensure affected accounts can be valued before their write is committed."""
+    for account_id in set(account_ids):
+        account = c.execute(
+            "SELECT a.currency, a.opening_balance, a.opening_date, u.base_currency"
+            " FROM accounts a JOIN users u ON u.id=a.user_id WHERE a.id=?",
+            (account_id,),
+        ).fetchone()
+        if account is None:
+            continue
+        first_date = c.execute(
+            "SELECT MIN(date) FROM transactions WHERE account_id=?",
+            (account_id,),
+        ).fetchone()[0]
+        effective_date = account["opening_date"] or first_date or today_iso()
+        to_base(
+            c,
+            account["opening_balance"],
+            account["currency"],
+            account["base_currency"],
+            effective_date,
+        )
+        for row in c.execute(
+            "SELECT DISTINCT date, currency FROM transactions WHERE account_id=? AND amount != 0",
+            (account_id,),
+        ):
+            to_base(c, 1, row["currency"], account["currency"], row["date"])
 
 
 def reprice_user(c: sqlite3.Connection, user_id: int) -> int:

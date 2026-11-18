@@ -4,7 +4,7 @@ from fastapi.testclient import TestClient
 from pydantic import TypeAdapter
 
 from monori.server.app.deps import IdResponse, SnapshotResponse
-from monori.server.tests.conftest import login_as
+from monori.server.tests.conftest import Api, TransactionOptions, login_as
 
 pytestmark = pytest.mark.integration
 
@@ -340,3 +340,26 @@ def test_usage_middleware_ignores_anonymous_and_garbage_tokens(
     body = anon.get("/api/admin/activity").json()
     features = {r["feature"]: r["count"] for r in body["features"]}
     assert features.get("snapshot", 0) == 0
+
+
+def test_admin_account_balance_converts_transaction_currency(
+    client: TestClient, api: Api, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    email = client.get("/api/auth/me").json()["email"]
+    client.headers.update(_make_admin(client, monkeypatch, email))
+    account = api.default_account()
+    category = api.category("Income", api.group("Income", kind="income"))
+    response = client.put("/api/rates/USD", json={"rubPerUnit": 90, "day": "2026-07-01"})
+    assert response.status_code == 200, response.text
+    for currency in ("RUB", "USD"):
+        api.tx(
+            "2026-07-01",
+            10000,
+            TransactionOptions(account_id=account, category_id=category, currency=currency),
+        )
+    uid = client.get("/api/auth/me").json()["id"]
+    response = client.get(f"/api/admin/users/{uid}")
+    assert response.status_code == 200, response.text
+    summary = next(row for row in response.json()["accounts"] if row["id"] == account)
+    assert summary["balance"] == 910000
+    assert summary["transactions"] == 2

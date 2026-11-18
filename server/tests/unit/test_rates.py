@@ -251,7 +251,7 @@ def test_rate_table_flags_a_stale_quote(tmp_path: Path) -> None:
         c.close()
 
 
-def test_refresh_stores_the_day_that_was_asked_for(
+def test_refresh_preserves_the_feed_publication_date(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     c = _db(tmp_path)
@@ -261,7 +261,7 @@ def test_refresh_stores_the_day_that_was_asked_for(
         assert refresh(c, "2025-07-06", client=feed) == 3
 
         assert feed.asked == ["06/07/2025"]
-        assert rate_on(c, "USD", "2025-07-06")[:2] == (78.5, "2025-07-06")
+        assert rate_on(c, "USD", "2025-07-06")[:2] == (78.5, "2025-07-01")
     finally:
         c.close()
 
@@ -338,7 +338,7 @@ def test_fetch_cbr_opens_its_own_client_when_not_given_one(monkeypatch: pytest.M
             return False
 
     monkeypatch.setattr(httpx, "Client", _Client)
-    assert fetch_cbr("2025-07-01T09:00:00")["USD"] == 78.5
+    assert fetch_cbr("2025-07-01T09:00:00")[1]["USD"] == 78.5
     assert closed == [True]
     assert opened[0].timeout == CBR_TIMEOUT
 
@@ -358,3 +358,71 @@ def test_rate_table_skips_a_currency_nothing_quotes(
         assert {"AMD", "TRY", "RSD"} <= set(codes)
     finally:
         c.close()
+
+
+@pytest.mark.parametrize("value", [float("inf"), float("-inf"), float("nan")])
+def test_store_rates_rejects_nonfinite_values(tmp_path: Path, value: float) -> None:
+    c = _db(tmp_path)
+    try:
+        store_rates(c, "2026-01-01", {"USD": 90.0}, SOURCE_MANUAL)
+        assert store_rates(c, "2026-01-01", {"USD": value}, SOURCE_MANUAL) == 0
+        assert rate_on(c, "USD", "2026-01-01")[0] == 90.0
+    finally:
+        c.close()
+
+
+@pytest.mark.parametrize(
+    ("date_attribute", "requested"),
+    [
+        ("", "2025-07-06"),
+        ('Date="32.07.2025"', "2025-07-06"),
+        ('Date="07.07.2025"', "2025-07-06"),
+    ],
+)
+def test_refresh_rejects_unusable_publication_dates(
+    tmp_path: Path, date_attribute: str, requested: str
+) -> None:
+    c = _db(tmp_path)
+    feed = _Feed(FEED.replace('Date="01.07.2025"', date_attribute))
+    try:
+        with pytest.raises(httpx.DecodingError):
+            refresh(c, requested, client=feed)
+        assert c.execute("SELECT COUNT(*) FROM exchange_rates").fetchone()[0] == 0
+    finally:
+        c.close()
+
+
+def test_weekend_refresh_preserves_manual_publication_override(tmp_path: Path) -> None:
+    c = _db(tmp_path)
+    try:
+        store_rates(c, "2025-07-01", {"USD": 80.0}, SOURCE_MANUAL)
+        refresh(c, "2025-07-06", client=_Feed())
+        assert rate_on(c, "USD", "2025-07-06") == (80.0, "2025-07-01", SOURCE_MANUAL)
+        assert (
+            c.execute("SELECT COUNT(*) FROM exchange_rates WHERE day='2025-07-06'").fetchone()[0]
+            == 0
+        )
+        with pytest.raises(RateUnavailableError):
+            rate_on(c, "USD", "2025-06-30")
+    finally:
+        c.close()
+
+
+@pytest.mark.parametrize(
+    ("rate", "amount", "expected"),
+    [(1.005, 300, 302), (1.005, -300, -302), (1.0049, 300, 301), (1.0051, 300, 302)],
+)
+def test_convert_rounds_decimal_quotes_without_binary_float_drift(
+    tmp_path: Path, rate: float, amount: int, expected: int
+) -> None:
+    c = _db(tmp_path)
+    try:
+        store_rates(c, "2026-01-01", {"USD": rate})
+        assert convert(c, amount, "USD", "RUB", "2026-01-01") == expected
+    finally:
+        c.close()
+
+
+def test_parse_cbr_divides_decimal_quote_before_float_storage() -> None:
+    payload = "<Valute><CharCode>USD</CharCode><Nominal>10</Nominal><Value>1,005</Value></Valute>"
+    assert parse_cbr(payload)["USD"] == 0.1005

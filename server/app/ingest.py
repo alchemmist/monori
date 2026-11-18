@@ -24,7 +24,12 @@ from monori.server.app.importer import (
     categorize,
     tx_hash,
 )
-from monori.server.app.money import account_currency, base_currency_of_account, to_base
+from monori.server.app.money import (
+    account_currency,
+    base_currency_of_account,
+    to_base,
+    validate_account_valuations,
+)
 
 INSERT_SQL = """INSERT INTO transactions
    (date, amount, currency, base_amount, description, bank_category, mcc, category_id,
@@ -199,6 +204,7 @@ def commit_rows(
             ),
         )
         inserted += 1
+    validate_account_valuations(c, [account_id])
     return inserted, skipped
 
 
