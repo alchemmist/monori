@@ -42,10 +42,41 @@ MAX_BACKFILL_DAYS = 90
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid", populate_by_name=True))
 class RateOverride:
-    """Represent a manually supplied exchange rate."""
+    "Represent a manually supplied exchange rate."
 
     rub_per_unit: float = Field(gt=0, alias="rubPerUnit")
     day: str | None = None
+
+
+@pydantic_dataclass(config=ConfigDict(extra="forbid", populate_by_name=True))
+class CurrencyResponse:
+    "Represent one supported currency."
+
+    code: str
+    name: str
+    symbol: str
+    minor_units: int = Field(alias="minorUnits")
+
+
+@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+class RateResponse:
+    "Represent one dated exchange rate."
+
+    code: str
+    rate: float
+    day: str
+    source: str
+    stale: bool
+
+
+@pydantic_dataclass(config=ConfigDict(extra="forbid", populate_by_name=True))
+class RatesResponse:
+    "Represent the currency catalog and rates for a requested day."
+
+    day: str
+    currencies: list[CurrencyResponse]
+    rates: list[RateResponse]
+    base_currency: str = Field(alias="baseCurrency")
 
 
 def _iso_day(day: str | None) -> str:
@@ -67,7 +98,7 @@ def _iso_day(day: str | None) -> str:
 def get_rates(
     user: Annotated[AuthenticatedUser, Depends(current_user)],
     day: Annotated[str | None, Query()] = None,
-) -> dict[str, object]:
+) -> RatesResponse:
     """
     Return what each currency is worth on ``day``.
 
@@ -77,12 +108,29 @@ def get_rates(
     c = conn()
     try:
         on = _iso_day(day)
-        return {
-            "day": on,
-            "baseCurrency": base_currency(c, user.id),
-            "currencies": catalog(),
-            "rates": rate_table(c, on),
-        }
+        return RatesResponse(
+            day=on,
+            baseCurrency=base_currency(c, user.id),
+            currencies=[
+                CurrencyResponse(
+                    code=str(row["code"]),
+                    name=str(row["name"]),
+                    symbol=str(row["symbol"]),
+                    minorUnits=int(row["minorUnits"]),
+                )
+                for row in catalog()
+            ],
+            rates=[
+                RateResponse(
+                    code=str(row["code"]),
+                    rate=float(row["rate"]),
+                    day=str(row["day"]),
+                    source=str(row["source"]),
+                    stale=bool(row["stale"]),
+                )
+                for row in rate_table(c, on)
+            ],
+        )
     finally:
         c.close()
 

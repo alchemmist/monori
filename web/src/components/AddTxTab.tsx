@@ -213,7 +213,7 @@ export default function AddTxTab({ onClose }: { onClose: () => void }) {
                             <div key={t.id} className="addtx-recent__row">
                                 <span className="addtx-recent__desc">{t.description || "—"}</span>
                                 <span className={`money num ${t.amount > 0 ? "money_pos" : ""}`}>
-                                    {money(t.amount)}
+                                    {money(t.amount, t.currency)}
                                 </span>
                             </div>
                         ))}

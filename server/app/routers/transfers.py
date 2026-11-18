@@ -224,7 +224,8 @@ def create_transfer(
                 """INSERT INTO transactions
                    (date, amount, currency, base_amount, description, account_id,
                     comment, hash, source)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'transfer')""",
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'transfer')
+                """,
                 (
                     body.date,
                     amount,

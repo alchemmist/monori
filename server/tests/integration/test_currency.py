@@ -6,6 +6,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from monori.server.app.rates import store_rates
+from monori.server.app.routers import auth_router
 from monori.server.app.routers import rates as rates_router
 from monori.server.tests.conftest import AccountOptions, Api, TransactionOptions, login_as
 
@@ -98,15 +99,76 @@ def test_switching_the_reporting_currency_reprices_the_ledger(admin: TestClient,
     r = admin.patch("/api/auth/me", json={"baseCurrency": "USD"})
     assert r.status_code == 200, r.text
     assert r.json()["baseCurrency"] == "USD"
-    # 300.00 GEL = 9000 RUB = 100.00 USD
     assert api.tx_by(tx).base_amount == -10000
-    # the row itself is untouched — only what it is expressed in changed
     assert api.tx_by(tx).amount == -30000
     assert api.snapshot().base_currency == "USD"
 
 
 def test_switching_to_an_unknown_reporting_currency_is_rejected(client: TestClient) -> None:
     assert client.patch("/api/auth/me", json={"baseCurrency": "XYZ"}).status_code == 400
+
+
+def test_switching_reporting_currency_converts_budgets_and_goals(
+    admin: TestClient, api: Api, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(auth_router, "today_iso", lambda: RATE_DAY)
+    _set_rate(admin, "USD", 90.0)
+    goal = admin.post(
+        "/api/categories",
+        json={
+            "name": "House",
+            "groupId": api.group("Plans", kind="goal"),
+            "goalTarget": 9000,
+            "goalTargetDate": "2027-01-01",
+        },
+    )
+    assert goal.status_code == 200, goal.text
+    category_id = goal.json()["id"]
+    budget = admin.put(
+        "/api/budgets",
+        json={"categoryId": category_id, "year": 2026, "month": 7, "amount": 9000},
+    )
+    assert budget.status_code == 200, budget.text
+
+    changed = admin.patch("/api/auth/me", json={"baseCurrency": "USD"})
+
+    assert changed.status_code == 200, changed.text
+    snapshot = admin.get("/api/snapshot").json()
+    assert snapshot["baseCurrency"] == "USD"
+    assert snapshot["budgets"][0]["amount"] == 100
+    category = next(row for row in snapshot["categories"] if row["id"] == category_id)
+    assert category["goalTarget"] == 100
+
+
+def test_reporting_currency_failure_rolls_back_plans(
+    admin: TestClient, api: Api, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(auth_router, "today_iso", lambda: "2020-01-01")
+    goal = admin.post(
+        "/api/categories",
+        json={
+            "name": "House",
+            "groupId": api.group("Plans", kind="goal"),
+            "goalTarget": 9000,
+            "goalTargetDate": "2027-01-01",
+        },
+    )
+    assert goal.status_code == 200, goal.text
+    category_id = goal.json()["id"]
+    budget = admin.put(
+        "/api/budgets",
+        json={"categoryId": category_id, "year": 2026, "month": 7, "amount": 9000},
+    )
+    assert budget.status_code == 200, budget.text
+
+    failed = admin.patch("/api/auth/me", json={"baseCurrency": "USD"})
+
+    assert failed.status_code == 400, failed.text
+    snapshot = admin.get("/api/snapshot").json()
+    assert snapshot["baseCurrency"] == "RUB"
+    assert snapshot["budgets"][0]["amount"] == 9000
+    category = next(row for row in snapshot["categories"] if row["id"] == category_id)
+    assert category["goalTarget"] == 9000
 
 
 def test_correcting_a_rate_reprices_what_it_priced(admin: TestClient, api: Api) -> None:
@@ -192,7 +254,6 @@ def test_setting_a_rate_is_not_an_ordinary_user_business(client: TestClient) -> 
     """
     assert client.put("/api/rates/USD", json={"rubPerUnit": 80}).status_code == 403
     assert client.post("/api/rates/refresh").status_code == 403
-    # reading is everyone's
     assert client.get("/api/rates").status_code == 200
 
 
@@ -238,7 +299,6 @@ def test_two_currencies_with_the_same_amount_are_not_each_other_duplicate(
             ],
         },
     ).json()
-    # the ruble row is already there and is skipped; the lari one never matched it
     assert rows == {
         "inserted": 0,
         "skipped": 1,
@@ -257,10 +317,8 @@ def test_a_transfer_between_two_currencies_carries_each_leg_in_its_own(
     legs = {t.account_id: t for t in api.snapshot().transactions}
     assert legs[rubles].amount == -300000
     assert legs[rubles].currency == "RUB"
-    # 3000.00 RUB at 30 RUB per lari is 100.00 lari
     assert legs[lari].amount == 10000
     assert legs[lari].currency == "GEL"
-    # both legs are worth the same in the reporting currency
     assert legs[lari].base_amount == -legs[rubles].base_amount
 
 

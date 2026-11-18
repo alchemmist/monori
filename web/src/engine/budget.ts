@@ -16,7 +16,7 @@
 
 import type { Account, BudgetCell, Category, Id, Snapshot, Transaction } from "../types.js";
 import { reported } from "./reported.js";
-import { convertAmount } from "../money.js";
+import { convertAmount, roundHalfEven } from "../money.js";
 
 type BudgetTransaction = Pick<Transaction, "date" | "amount" | "baseAmount" | "categoryId"> &
     Partial<Pick<Transaction, "transferId" | "splits">>;
@@ -68,7 +68,7 @@ export function buildTxIndex(transactions: BudgetTransaction[]): Map<string, num
                     ? parentBase - allocated
                     : transaction.amount === 0
                       ? 0
-                      : Math.round((parentBase * part.amount) / transaction.amount);
+                      : roundHalfEven((parentBase * part.amount) / transaction.amount);
             allocated += baseAmount;
             return { ...transaction, categoryId: part.categoryId, amount: part.amount, baseAmount };
         });

@@ -154,8 +154,9 @@ export const snapshotSchema = z.strictObject({
         z.strictObject({
             code: z.string(),
             rate: z.number(),
-            day: z.string().optional(),
-            source: z.string().optional(),
+            day: z.string(),
+            source: z.string(),
+            stale: z.boolean(),
         }),
     ),
 });

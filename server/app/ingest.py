@@ -28,7 +28,8 @@ from monori.server.app.money import account_currency, base_currency_of_account, 
 INSERT_SQL = """INSERT INTO transactions
    (date, amount, currency, base_amount, description, bank_category, mcc, category_id,
     account_id, batch_id, hash, source)
-   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
+   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+"""
 
 
 def load_rules(c: sqlite3.Connection) -> dict[str, list[CategoryRule]]:

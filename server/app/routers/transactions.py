@@ -236,7 +236,8 @@ def create_transaction(
             """INSERT INTO transactions
                (date, amount, currency, base_amount, description, bank_category, mcc,
                 category_id, account_id, comment, hash, source)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'manual')""",
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'manual')
+            """,
             (
                 body.date,
                 body.amount,
@@ -313,11 +314,13 @@ def patch_transaction(
         )
         converted = to_base(c, amount, currency, base_currency(c, uid), date)
         c.execute(
-            """UPDATE transactions
+            """
+            UPDATE transactions
                SET date=?, amount=?, currency=?, base_amount=?, description=?,
                    bank_category=?, mcc=?, category_id=?,
                    account_id=?, comment=?, hidden=?, hash=?
-               WHERE id=?""",
+               WHERE id=?
+            """,
             (
                 date,
                 amount,

@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { api } from "./api.js";
 import { DEFAULT_CURRENCY } from "./currencies.js";
 import { convertAmount } from "./money.js";
+import { accountBalances } from "./engine/analytics.js";
 import { demoSnapshot } from "./demo/demoData.js";
 import { mergeCategories } from "./mergeCategories.js";
 import { compareTx, mergeTransactions } from "./mergeTransactions.js";
@@ -977,6 +978,15 @@ export const useStore = create<StoreState>((set, get) => ({
                         ...t,
                         baseAmount: convertAmount(t.amount, t.currency, code, snapshot.rates ?? []),
                     })),
+                    accounts: snapshot.accounts.map((account) => ({
+                        ...account,
+                        openingBaseAmount: convertAmount(
+                            account.openingBaseAmount ?? account.openingBalance ?? 0,
+                            snapshot.baseCurrency ?? DEFAULT_CURRENCY,
+                            code,
+                            snapshot.rates ?? [],
+                        ),
+                    })),
                     budgets: snapshot.budgets.map((budget) => ({
                         ...budget,
                         amount: convertAmount(
@@ -1129,14 +1139,7 @@ export const useStore = create<StoreState>((set, get) => ({
         if (isDemo()) {
             const snapshot = requireSnapshot(get().snapshot);
             const account = snapshot.accounts.find((candidate) => candidate.id === id);
-            const balance = account
-                ? snapshot.transactions
-                      .filter((t) => t.accountId === id)
-                      .reduce(
-                          (sum, transaction) => sum + transaction.amount,
-                          account.openingBalance ?? 0,
-                      )
-                : 0;
+            const balance = account ? (accountBalances(snapshot).get(id) ?? 0) : 0;
             const delta = actualBalance - balance;
             if (delta !== 0) {
                 const nextId = Math.max(0, ...snapshot.transactions.map((t) => t.id)) + 1;

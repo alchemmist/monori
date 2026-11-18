@@ -1,4 +1,5 @@
 import type { Transaction, TransactionSplit } from "../types.js";
+import { roundHalfEven } from "../money.js";
 
 export type EffectiveTransaction = Omit<Transaction, "id"> & {
     id: number | string;
@@ -15,12 +16,12 @@ export function splitPartTransaction(
     const baseAmount =
         transaction.amount === 0
             ? 0
-            : Math.round((parentBaseAmount * part.amount) / transaction.amount);
+            : roundHalfEven((parentBaseAmount * part.amount) / transaction.amount);
     const parentAccountAmount = transaction.accountAmount ?? transaction.amount;
     const accountAmount =
         transaction.amount === 0
             ? 0
-            : Math.round((parentAccountAmount * part.amount) / transaction.amount);
+            : roundHalfEven((parentAccountAmount * part.amount) / transaction.amount);
     return {
         ...transaction,
         id: `${transaction.id}:${part.id}`,

@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { convertAmount, isMixedCurrency, ratesByCode, totalInBase } from "./money.js";
+import {
+    convertAmount,
+    isMixedCurrency,
+    ratesByCode,
+    roundHalfEven,
+    totalInBase,
+} from "./money.js";
 
 const RATES = [
     { code: "RUB", rate: 1 },
@@ -38,6 +44,13 @@ describe("convertAmount", () => {
 
     it("accepts a prepared lookup as well as the raw list", () => {
         expect(convertAmount(10000, "GEL", "RUB", ratesByCode(RATES))).toBe(300000);
+    });
+});
+
+describe("roundHalfEven", () => {
+    it("matches Python rounding for positive and negative ties", () => {
+        expect([2.5, 3.5, -2.5, -3.5].map(roundHalfEven)).toEqual([2, 4, -2, -4]);
+        expect(Object.is(roundHalfEven(-0.5), -0)).toBe(false);
     });
 });
 

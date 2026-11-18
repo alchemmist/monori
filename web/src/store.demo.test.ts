@@ -99,6 +99,7 @@ describe("reporting currency in the demo", () => {
     it("reprices transactions and budget values without a backend", async () => {
         await useStore.getState().setBaseCurrency("USD");
         expect(snap().baseCurrency).toBe("USD");
+        expect(snap().accounts.map((account) => account.openingBaseAmount)).toEqual([1, 0]);
         expect(snap().transactions.map((transaction) => transaction.baseAmount)).toEqual([1, 0]);
         expect(snap().budgets.map((budget) => budget.amount)).toEqual([0, 0, 0, 1]);
     });
@@ -259,6 +260,33 @@ describe("reconcileAccount in the demo", () => {
         });
         const result = await useStore.getState().reconcileAccount(1, 25);
         expect(result).toEqual({ delta: 25 });
+    });
+
+    it("reconciles against account-currency amounts for foreign transaction overrides", async () => {
+        useStore.setState({
+            snapshot: buildSnapshot({
+                accounts: [{ id: 1, currency: "RUB", openingBalance: 10000 }],
+                rates: [
+                    { code: "RUB", rate: 1 },
+                    { code: "USD", rate: 90 },
+                ],
+                transactions: [
+                    {
+                        id: 1,
+                        date: "2026-01-01",
+                        amount: -100,
+                        currency: "USD",
+                        baseAmount: -9000,
+                        accountAmount: -9000,
+                        accountId: 1,
+                        categoryId: 4,
+                    },
+                ],
+            }),
+        });
+        await expect(useStore.getState().reconcileAccount(1, 2000)).resolves.toEqual({
+            delta: 1000,
+        });
     });
 });
 

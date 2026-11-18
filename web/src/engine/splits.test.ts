@@ -77,4 +77,18 @@ describe("effectiveTransactions", () => {
         expect(accountBalances(snapshot).get(2)).toBe(-1000);
         expect(monthlySeries(snapshot)).toEqual([["2026-01", { income: 0, expense: 1000 }]]);
     });
+
+    it("uses ties-to-even allocation before assigning the final remainder", () => {
+        const rows = effectiveTransactions([
+            tx(9, {
+                amount: -2,
+                baseAmount: -3,
+                splits: [
+                    { id: 1, categoryId: 10, amount: -1, comment: "" },
+                    { id: 2, categoryId: 11, amount: -1, comment: "" },
+                ],
+            }),
+        ]);
+        expect(rows.map((row) => row.baseAmount)).toEqual([-2, -1]);
+    });
 });

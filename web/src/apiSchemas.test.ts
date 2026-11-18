@@ -3,7 +3,15 @@ import { authTokenSchema, snapshotSchema, transactionCreateSchema } from "./apiS
 
 const snapshot = {
     baseCurrency: "RUB",
-    rates: [],
+    rates: [
+        {
+            code: "USD",
+            rate: 90,
+            day: "2026-11-18",
+            source: "cbr",
+            stale: false,
+        },
+    ],
     accounts: [
         {
             id: 1,

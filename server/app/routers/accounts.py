@@ -457,7 +457,8 @@ def reconcile_account(
             c.execute(
                 """INSERT INTO transactions
                    (date, amount, currency, base_amount, description, account_id, hash, source)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, 'adjustment')""",
+                   VALUES (?, ?, ?, ?, ?, ?, ?, 'adjustment')
+                """,
                 (
                     date,
                     delta,

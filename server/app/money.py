@@ -14,13 +14,13 @@ from .rates import convert
 
 
 def account_currency(c: sqlite3.Connection, account_id: int) -> str:
-    """Return the currency in which an account is held."""
+    "Return the currency in which an account is held."
     row = c.execute("SELECT currency FROM accounts WHERE id=?", (account_id,)).fetchone()
     return normalize(row["currency"] if row else None)
 
 
 def base_currency(c: sqlite3.Connection, user_id: int) -> str:
-    """Return a user's reporting currency."""
+    "Return a user's reporting currency."
     row = c.execute("SELECT base_currency FROM users WHERE id=?", (user_id,)).fetchone()
     return normalize(row["base_currency"] if row else None)
 
@@ -109,26 +109,26 @@ def reprice_plans(
     target_currency: str,
     day: str,
 ) -> int:
-    """Convert budget allocations and savings targets when reporting currency changes."""
+    "Convert budget allocations and savings targets when reporting currency changes."
     changed = 0
     budgets = c.execute(
-        "SELECT b.rowid, b.amount AS value FROM budgets b"
+        "SELECT b.rowid AS row_id, b.amount AS value FROM budgets b"
         " JOIN categories c ON c.id=b.category_id"
         " JOIN category_groups g ON g.id=c.group_id WHERE g.user_id=?",
         (user_id,),
     ).fetchall()
     for row in budgets:
         value = convert(c, row["value"], source_currency, target_currency, day)
-        c.execute("UPDATE budgets SET amount=? WHERE rowid=?", (value, row["rowid"]))
+        c.execute("UPDATE budgets SET amount=? WHERE rowid=?", (value, row["row_id"]))
         changed += 1
     goals = c.execute(
-        "SELECT c.rowid, c.goal_target AS value FROM categories c"
+        "SELECT c.rowid AS row_id, c.goal_target AS value FROM categories c"
         " JOIN category_groups g ON g.id=c.group_id"
         " WHERE g.user_id=? AND c.goal_target IS NOT NULL",
         (user_id,),
     ).fetchall()
     for row in goals:
         value = convert(c, row["value"], source_currency, target_currency, day)
-        c.execute("UPDATE categories SET goal_target=? WHERE rowid=?", (value, row["rowid"]))
+        c.execute("UPDATE categories SET goal_target=? WHERE rowid=?", (value, row["row_id"]))
         changed += 1
     return changed

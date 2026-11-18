@@ -7,6 +7,18 @@ export function ratesByCode(rates: ExchangeRate[] = []): Map<string, number> {
     return map;
 }
 
+/** Round like Python's `round`: exact half values go to the nearest even integer. */
+export function roundHalfEven(value: number): number {
+    const sign = value < 0 ? -1 : 1;
+    const absolute = Math.abs(value);
+    const lower = Math.floor(absolute);
+    const fraction = absolute - lower;
+    const rounded =
+        fraction < 0.5 ? lower : fraction > 0.5 ? lower + 1 : lower % 2 === 0 ? lower : lower + 1;
+    const result = sign * rounded;
+    return result === 0 ? 0 : result;
+}
+
 export function convertAmount(
     amount: number,
     from: string | undefined,
@@ -22,8 +34,7 @@ export function convertAmount(
     if (sourceRate == null || targetRate == null || sourceRate <= 0 || targetRate <= 0) {
         throw new Error(`Missing exchange rate for ${sourceRate == null ? source : target}`);
     }
-    const converted = Math.round((amount * sourceRate) / targetRate);
-    return converted === 0 ? 0 : converted;
+    return roundHalfEven((amount * sourceRate) / targetRate);
 }
 
 export function totalInBase(

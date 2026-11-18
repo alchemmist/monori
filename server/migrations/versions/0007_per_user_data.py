@@ -87,15 +87,14 @@ def upgrade() -> None:
         conn.exec_driver_sql(
             "CREATE INDEX IF NOT EXISTS idx_categories_group ON categories(group_id)",
         )
-    for statement in (
+    conn.exec_driver_sql(
         "UPDATE accounts SET user_id=(SELECT MIN(id) FROM users)"
-        + " WHERE user_id IS NULL AND EXISTS (SELECT 1 FROM users)",
+        " WHERE user_id IS NULL AND EXISTS (SELECT 1 FROM users)",
+    )
+    conn.exec_driver_sql(
         "UPDATE category_groups SET user_id=(SELECT MIN(id) FROM users)"
-        + " WHERE user_id IS NULL AND EXISTS (SELECT 1 FROM users)",
-    ):
-        conn.exec_driver_sql(
-            statement,
-        )
+        " WHERE user_id IS NULL AND EXISTS (SELECT 1 FROM users)",
+    )
 
 
 def downgrade() -> None:
