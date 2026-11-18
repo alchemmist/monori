@@ -6,6 +6,7 @@ import io
 import json
 import sys
 from contextlib import contextmanager
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
@@ -14,7 +15,6 @@ from monori.ci.lib import mutation_gate, npm_audit_gate
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
-    from pathlib import Path
 
     from monori.common import JsonValue
 
@@ -118,3 +118,43 @@ def test_cli_modules_expose_callable_entrypoints() -> None:
     """Keep direct entrypoints available to Make and composite actions."""
     assert callable(mutation_gate.main)
     assert callable(npm_audit_gate.main)
+
+
+@pytest.mark.parametrize("include_other_advisory", [False, True])
+def test_picomatch_exception_does_not_hide_other_advisories(
+    *, include_other_advisory: bool
+) -> None:
+    advisories = [
+        {
+            "severity": "high",
+            "url": "https://github.com/advisories/GHSA-fc5q-39xc-vjpf",
+            "title": "Tooling-only repeated extglob denial of service",
+        }
+    ]
+    if include_other_advisory:
+        advisories.append(
+            {
+                "severity": "critical",
+                "url": "https://github.com/advisories/GHSA-other-picomatch",
+                "title": "Different picomatch vulnerability",
+            }
+        )
+    payload = {"vulnerabilities": {"picomatch": {"via": advisories}}}
+    with process_io(["npm-audit-gate"], json.dumps(payload)):
+        assert npm_audit_gate.main() == int(include_other_advisory)
+
+
+def test_picomatch_exception_requires_tooling_only_installations() -> None:
+    lock_path = next(
+        parent / "web/package-lock.json"
+        for parent in Path(__file__).resolve().parents
+        if (parent / "web/package-lock.json").is_file()
+    )
+    lock = json.loads(lock_path.read_text())
+    installations = [
+        package
+        for name, package in lock["packages"].items()
+        if name.endswith("node_modules/picomatch")
+    ]
+    assert installations
+    assert all(package.get("dev") is True for package in installations)
