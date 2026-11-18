@@ -151,6 +151,17 @@ function chainedPatchTx(id: Id, patch: TransactionPatch) {
     return next;
 }
 
+const refundMutationChain = new Map<Id, Promise<void>>();
+function chainedRefundMutation(id: Id, mutation: () => Promise<void>) {
+    const previous = refundMutationChain.get(id) ?? Promise.resolve();
+    const next = previous.catch(() => {}).then(mutation);
+    refundMutationChain.set(id, next);
+    next.catch(() => {}).finally(() => {
+        if (refundMutationChain.get(id) === next) refundMutationChain.delete(id);
+    });
+    return next;
+}
+
 let budgetOperationTail: Promise<void> = Promise.resolve();
 let nextBudgetRevision = 0;
 const budgetRevisions = new Map<string, number>();
@@ -778,81 +789,100 @@ export const useStore = create<StoreState>((set, get) => ({
     },
 
     async linkRefund(txId, originalId) {
-        const before = requireSnapshot(get().snapshot);
-        const refund = before.transactions.find((transaction) => transaction.id === txId);
-        const original = before.transactions.find((transaction) => transaction.id === originalId);
-        if (!refund || (isDemo() && !original)) return;
-        const refunded = before.transactions
-            .filter(
-                (transaction) => transaction.refundOfId === originalId && transaction.id !== txId,
+        const stamp = sessionStamp();
+        const replacementEpoch = snapshotReplacementEpoch;
+        return chainedRefundMutation(txId, async () => {
+            if (stamp.epoch !== sessionEpoch || replacementEpoch !== snapshotReplacementEpoch)
+                return;
+            const before = requireSnapshot(get().snapshot);
+            const refund = before.transactions.find((transaction) => transaction.id === txId);
+            const original = before.transactions.find(
+                (transaction) => transaction.id === originalId,
+            );
+            if (!refund || (isDemo() && !original)) return;
+            const refunded = before.transactions
+                .filter(
+                    (transaction) =>
+                        transaction.refundOfId === originalId && transaction.id !== txId,
+                )
+                .reduce((total, transaction) => total + transaction.amount, 0);
+            if (
+                isDemo() &&
+                (refund.amount <= 0 ||
+                    original!.amount >= 0 ||
+                    refunded + refund.amount > -original!.amount ||
+                    original!.date > refund.date ||
+                    refund.transferId != null ||
+                    original!.transferId != null ||
+                    (refund.splits?.length ?? 0) > 0 ||
+                    (original!.splits?.length ?? 0) > 0)
             )
-            .reduce((total, transaction) => total + transaction.amount, 0);
-        if (
-            isDemo() &&
-            (refund.amount <= 0 ||
-                original!.amount >= 0 ||
-                refunded + refund.amount > -original!.amount ||
-                original!.date > refund.date ||
-                refund.transferId != null ||
-                original!.transferId != null ||
-                (refund.splits?.length ?? 0) > 0 ||
-                (original!.splits?.length ?? 0) > 0)
-        )
-            return;
-        const result = isDemo()
-            ? { refundOfId: originalId, categoryId: original!.categoryId ?? null }
-            : await api.linkRefund(txId, originalId);
-        set((state) => {
-            const current = requireSnapshot(state.snapshot);
-            return {
-                snapshot: {
-                    ...current,
-                    transactions: current.transactions.map((transaction) => {
-                        if (transaction.id === txId)
-                            return {
-                                ...transaction,
-                                refundOfId: originalId,
-                                categoryId: result.categoryId,
-                            };
-                        const withoutRefund = (transaction.refundIds ?? []).filter(
-                            (refundId) => refundId !== txId,
-                        );
-                        if (transaction.id === originalId) withoutRefund.push(txId);
-                        return transaction.id === originalId ||
-                            withoutRefund.length !== (transaction.refundIds ?? []).length
-                            ? { ...transaction, refundIds: withoutRefund }
-                            : transaction;
-                    }),
-                },
-            };
+                return;
+            const result = isDemo()
+                ? { refundOfId: originalId, categoryId: original!.categoryId ?? null }
+                : await api.linkRefund(txId, originalId);
+            if (stamp.epoch !== sessionEpoch || replacementEpoch !== snapshotReplacementEpoch)
+                return;
+            set((state) => {
+                const current = requireSnapshot(state.snapshot);
+                return {
+                    snapshot: {
+                        ...current,
+                        transactions: current.transactions.map((transaction) => {
+                            if (transaction.id === txId)
+                                return {
+                                    ...transaction,
+                                    refundOfId: originalId,
+                                    categoryId: result.categoryId,
+                                };
+                            const withoutRefund = (transaction.refundIds ?? []).filter(
+                                (refundId) => refundId !== txId,
+                            );
+                            if (transaction.id === originalId) withoutRefund.push(txId);
+                            return transaction.id === originalId ||
+                                withoutRefund.length !== (transaction.refundIds ?? []).length
+                                ? { ...transaction, refundIds: withoutRefund }
+                                : transaction;
+                        }),
+                    },
+                };
+            });
         });
     },
 
     async unlinkRefund(txId) {
-        const before = requireSnapshot(get().snapshot);
-        const refund = before.transactions.find((transaction) => transaction.id === txId);
-        const result = isDemo()
-            ? { categoryId: refund?.categoryId ?? null }
-            : await api.unlinkRefund(txId);
-        set((state) => {
-            const current = requireSnapshot(state.snapshot);
-            return {
-                snapshot: {
-                    ...current,
-                    transactions: current.transactions.map((transaction) =>
-                        transaction.id === txId
-                            ? { ...transaction, refundOfId: null, categoryId: result.categoryId }
-                            : (transaction.refundIds ?? []).includes(txId)
-                              ? {
-                                    ...transaction,
-                                    refundIds: transaction.refundIds!.filter(
-                                        (refundId) => refundId !== txId,
-                                    ),
-                                }
-                              : transaction,
-                    ),
-                },
-            };
+        const stamp = sessionStamp();
+        const replacementEpoch = snapshotReplacementEpoch;
+        return chainedRefundMutation(txId, async () => {
+            if (stamp.epoch !== sessionEpoch || replacementEpoch !== snapshotReplacementEpoch)
+                return;
+            const before = requireSnapshot(get().snapshot);
+            const refund = before.transactions.find((transaction) => transaction.id === txId);
+            const result = isDemo()
+                ? { categoryId: refund?.categoryId ?? null }
+                : await api.unlinkRefund(txId);
+            if (stamp.epoch !== sessionEpoch || replacementEpoch !== snapshotReplacementEpoch)
+                return;
+            set((state) => {
+                const current = requireSnapshot(state.snapshot);
+                return {
+                    snapshot: {
+                        ...current,
+                        transactions: current.transactions.map((transaction) =>
+                            transaction.id === txId
+                                ? { ...transaction, refundOfId: null, categoryId: result.categoryId }
+                                : (transaction.refundIds ?? []).includes(txId)
+                                  ? {
+                                        ...transaction,
+                                        refundIds: transaction.refundIds!.filter(
+                                            (refundId) => refundId !== txId,
+                                        ),
+                                    }
+                                  : transaction,
+                        ),
+                    },
+                };
+            });
         });
     },
 

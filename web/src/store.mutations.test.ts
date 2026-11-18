@@ -256,6 +256,32 @@ describe("store remote mutations", () => {
         });
     });
 
+    it("serializes link and unlink requests for the same refund", async () => {
+        const purchase = { id: 10, date: "2026-01-01", amount: -100, refundIds: [] };
+        const refund = { id: 11, date: "2026-01-02", amount: 50 };
+        useStore.setState({ snapshot: buildSnapshot({ transactions: [purchase, refund] }) });
+        let finishLink!: (value: { refundOfId: number; categoryId: number }) => void;
+        const link = vi.spyOn(api, "linkRefund").mockReturnValue(
+            new Promise((resolve) => {
+                finishLink = resolve;
+            }),
+        );
+        const unlink = vi.spyOn(api, "unlinkRefund").mockResolvedValue({ categoryId: 2 });
+
+        const linking = useStore.getState().linkRefund(11, 10);
+        await vi.waitFor(() => expect(link).toHaveBeenCalledOnce());
+        const unlinking = useStore.getState().unlinkRefund(11);
+        expect(unlink).not.toHaveBeenCalled();
+
+        finishLink({ refundOfId: 10, categoryId: 2 });
+        await Promise.all([linking, unlinking]);
+
+        expect(unlink).toHaveBeenCalledOnce();
+        expect(
+            useStore.getState().snapshot!.transactions.find((row) => row.id === 11),
+        ).toMatchObject({ refundOfId: null, categoryId: 2 });
+    });
+
     it("propagates and rolls back a purchase category on linked refunds", async () => {
         useStore.setState({
             snapshot: buildSnapshot({
