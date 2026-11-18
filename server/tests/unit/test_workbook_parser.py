@@ -270,6 +270,14 @@ def test_parse_dt_variants() -> None:
     assert _parse_dt(ws.cell(1, 6)) is None
 
 
+def test_parse_dt_returns_a_datetime_object_unchanged_and_rejects_a_missing_cell() -> None:
+    value = _workbook_datetime(2025, 1, 5, 10)
+    ws = Workbook().active
+    assert ws is not None
+    assert _parse_dt(ws.cell(1, 1, value)) is value
+    assert _parse_dt(None) is None
+
+
 def test_month_range_wraps_across_years() -> None:
     assert list(_month_range((2024, 11), (2025, 2))) == [
         (2024, 11),

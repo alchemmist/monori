@@ -654,7 +654,7 @@ def discover_repository(base: str, executor: ProcessExecutor) -> tuple[Collected
             _require_collection("Vitest", result)
             payload = Path(collection_path).read_text()
         finally:
-            Path(collection_path).unlink(missing_ok=True)
+            Path(collection_path).unlink()
         collected.extend(parse_vitest_collection(payload))
     playwright_paths = sorted(path for path in changed if path.startswith("web/e2e/"))
     if playwright_paths:

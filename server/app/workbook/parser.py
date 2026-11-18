@@ -526,7 +526,7 @@ def _parse_dt(cell: Cell | MergedCell | None) -> dt.datetime | None:
     if isinstance(value, dt.datetime):
         return value
     if isinstance(value, dt.date):
-        return dt.datetime(value.year, value.month, value.day, tzinfo=dt.UTC).replace(tzinfo=None)
+        return dt.datetime.combine(value, dt.time.min)
     text = _s(cell)
     if not text:
         return None

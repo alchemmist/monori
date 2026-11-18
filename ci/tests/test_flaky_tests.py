@@ -545,3 +545,188 @@ diff --git a/web/src/Added.test.tsx b/web/src/Added.test.tsx
     assert failed
     assert executor.path is not None
     assert not executor.path.exists()
+
+
+def test_discover_repository_collects_each_runner() -> None:
+    patch = """
+diff --git a/server/tests/unit/test_emails.py b/server/tests/unit/test_emails.py
++++ b/server/tests/unit/test_emails.py
+@@ -37,0 +38 @@
++def test_canonical_email_is_idempotent() -> None:
+diff --git a/server/tests/unit/test_deps.py b/server/tests/unit/test_deps.py
++++ b/server/tests/unit/test_deps.py
+@@ -6,0 +7 @@
++def test_serialize_transactions_chunks_split_lookup() -> None:
+diff --git a/web/src/b.test.tsx b/web/src/b.test.tsx
++++ b/web/src/b.test.tsx
+@@ -10,0 +11 @@
++    it("b", () => {})
+diff --git a/web/src/a.test.tsx b/web/src/a.test.tsx
++++ b/web/src/a.test.tsx
+@@ -10,0 +11 @@
++    it("a", () => {})
+diff --git a/web/e2e/theme.spec.ts b/web/e2e/theme.spec.ts
++++ b/web/e2e/theme.spec.ts
+@@ -2,0 +3 @@
++test("theme", async () => {})
+"""
+
+    class CollectingExecutor:
+        def __init__(self) -> None:
+            self.calls: list[tuple[tuple[str, ...], str, float]] = []
+            self.collection: Path | None = None
+
+        def run(
+            self,
+            command: tuple[str, ...],
+            cwd: str,
+            timeout_seconds: float,
+        ) -> ProcessResult:
+            self.calls.append((command, cwd, timeout_seconds))
+            if command[0] == "git":
+                return ProcessResult(0, patch, 0.1)
+            if command[0] == "uv":
+                deps = "server/tests/unit/test_deps.py"
+                emails = "server/tests/unit/test_emails.py"
+                deps_test = "test_serialize_transactions_chunks_split_lookup"
+                emails_test = "test_canonical_email_is_idempotent"
+                output = f"{deps}::{deps_test}\n{emails}::{emails_test}"
+                return ProcessResult(0, output, 0.1)
+            if "vitest" in command[0]:
+                self.collection = Path(command[command.index("--json") + 1])
+                self.collection.write_text(
+                    json.dumps(
+                        [
+                            {
+                                "name": "a",
+                                "file": "/repo/web/src/a.test.tsx",
+                                "location": {"line": 11, "column": 1},
+                            },
+                            {
+                                "name": "b",
+                                "file": "/repo/web/src/b.test.tsx",
+                                "location": {"line": 11, "column": 1},
+                            },
+                        ]
+                    )
+                )
+                return ProcessResult(0, "", 0.1)
+            return ProcessResult(
+                0,
+                json.dumps(
+                    {
+                        "suites": [
+                            {
+                                "title": "theme.spec.ts",
+                                "specs": [
+                                    {
+                                        "title": "theme",
+                                        "id": "theme-id",
+                                        "file": "theme.spec.ts",
+                                        "line": 3,
+                                    }
+                                ],
+                            }
+                        ]
+                    }
+                ),
+                0.1,
+            )
+
+    executor = CollectingExecutor()
+    tests = discover_repository("main", executor)
+    assert [test.path for test in tests] == [
+        "server/tests/unit/test_deps.py",
+        "server/tests/unit/test_emails.py",
+        "web/src/a.test.tsx",
+        "web/src/b.test.tsx",
+        "web/e2e/theme.spec.ts",
+    ]
+    pytest_command, pytest_cwd, pytest_timeout = executor.calls[1]
+    vitest_command, vitest_cwd, vitest_timeout = executor.calls[2]
+    playwright_command, playwright_cwd, playwright_timeout = executor.calls[3]
+    assert pytest_command == (
+        "uv",
+        "run",
+        "--locked",
+        "--group",
+        "test",
+        "pytest",
+        "--collect-only",
+        "-q",
+        "server/tests/unit/test_deps.py",
+        "server/tests/unit/test_emails.py",
+    )
+    assert pytest_cwd == "."
+    assert pytest_timeout == 120
+    assert vitest_command[0] == "./node_modules/.bin/vitest"
+    assert vitest_command[1:4] == ("list", "src/a.test.tsx", "src/b.test.tsx")
+    assert vitest_command[4] == "--json"
+    assert vitest_command[6] == "--includeTaskLocation"
+    assert vitest_cwd == "web"
+    assert vitest_timeout == 120
+    assert playwright_command == (
+        "./node_modules/.bin/playwright",
+        "test",
+        "e2e/theme.spec.ts",
+        "--list",
+        "--reporter=json",
+        "--retries=0",
+    )
+    assert playwright_cwd == "web"
+    assert playwright_timeout == 120
+    assert executor.collection is not None
+    assert executor.collection.name.startswith("vitest-collection-")
+    assert not executor.collection.exists()
+
+
+def test_failed_collection_names_its_runner() -> None:
+    requests = {
+        "pytest": (
+            """
+diff --git a/server/tests/unit/test_emails.py b/server/tests/unit/test_emails.py
++++ b/server/tests/unit/test_emails.py
+@@ -37,0 +38 @@
++def test_canonical_email_is_idempotent() -> None:
+""",
+            "pytest",
+        ),
+        "Vitest": (
+            """
+diff --git a/web/src/a.test.tsx b/web/src/a.test.tsx
++++ b/web/src/a.test.tsx
+@@ -10,0 +11 @@
++    it("a", () => {})
+""",
+            "Vitest",
+        ),
+        "Playwright": (
+            """
+diff --git a/web/e2e/theme.spec.ts b/web/e2e/theme.spec.ts
++++ b/web/e2e/theme.spec.ts
+@@ -2,0 +3 @@
++test("theme", async () => {})
+""",
+            "Playwright",
+        ),
+    }
+
+    class Failing:
+        def __init__(self, patch: str) -> None:
+            self.patch = patch
+
+        def run(
+            self,
+            command: tuple[str, ...],
+            _cwd: str,
+            _timeout_seconds: float,
+        ) -> ProcessResult:
+            if command[0] == "git":
+                return ProcessResult(0, self.patch, 0.1)
+            if "vitest" in command[0]:
+                Path(command[command.index("--json") + 1]).write_text("[]")
+            return ProcessResult(1, "failed", 0.1)
+
+    for patch, name in requests.values():
+        with pytest.raises(RuntimeError, match=f"{name} collection failed"):
+            discover_repository("main", Failing(patch))

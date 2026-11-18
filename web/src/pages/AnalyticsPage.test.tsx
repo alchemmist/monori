@@ -1074,12 +1074,15 @@ describe("AnalyticsPage", () => {
     });
 });
 
-function elementFill(node: unknown): string | undefined {
-    if (typeof node !== "object" || node == null || !("props" in node)) return undefined;
+function fillState(node: unknown): { present: boolean; value: unknown } {
+    if (typeof node !== "object" || node == null || !("props" in node)) {
+        return { present: false, value: undefined };
+    }
     const props: unknown = Reflect.get(node, "props");
-    if (typeof props !== "object" || props == null || !("fill" in props)) return undefined;
-    const fill: unknown = Reflect.get(props, "fill");
-    return typeof fill === "string" ? fill : undefined;
+    if (typeof props !== "object" || props == null || !("fill" in props)) {
+        return { present: false, value: undefined };
+    }
+    return { present: true, value: Reflect.get(props, "fill") };
 }
 
 describe("perRowColor", () => {
@@ -1096,8 +1099,8 @@ describe("perRowColor", () => {
             payload: { color: 1 },
             fill: 1,
         } as never);
-        expect(elementFill(colored)).toBe("var(--row)");
-        expect(elementFill(fallback)).toBe("var(--bar)");
-        expect(elementFill(omitted)).toBeUndefined();
+        expect(fillState(colored)).toEqual({ present: true, value: "var(--row)" });
+        expect(fillState(fallback)).toEqual({ present: true, value: "var(--bar)" });
+        expect(fillState(omitted)).toEqual({ present: false, value: undefined });
     });
 });

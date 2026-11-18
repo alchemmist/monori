@@ -1,11 +1,14 @@
 # Copyright (c) 2026
+import datetime as dt
 import pathlib
 import sqlite3
 import sys
 from dataclasses import replace
 from pathlib import Path
+from unittest.mock import patch
 
 import monori.server.app.db as dbmod
+from monori.server.app.workbook.apply import _now
 from monori.server.app.workbook.apply import apply_workbook as _apply_workbook
 from monori.server.app.workbook.apply import budget_conflicts as _budget_conflicts
 from monori.server.app.workbook.models import (
@@ -533,3 +536,11 @@ def test_apply_keeps_a_manual_twin_out_of_the_dedup(tmp_path: Path) -> None:
     c.commit()
     assert result.inserted == 2
     assert result.skipped == 0
+
+
+def test_now_formats_utc_seconds() -> None:
+    with patch("monori.server.app.workbook.apply.dt.datetime") as clock:
+        clock.now.return_value.strftime.return_value = "2026-01-05T10:11:12"
+        assert _now() == "2026-01-05T10:11:12"
+    clock.now.assert_called_once_with(dt.UTC)
+    clock.now.return_value.strftime.assert_called_once_with("%Y-%m-%dT%H:%M:%S")
