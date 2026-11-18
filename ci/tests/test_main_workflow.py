@@ -204,7 +204,6 @@ class TestMainWorkflowGraph:
         assert "uses: actions/cache/save@v6" in block.group("body")
         assert "key: coverage-baseline-v1-${{ github.sha }}" in block.group("body")
 
-
     def test_production_host_bounds_docker_storage(self) -> None:
         compose = yaml.safe_load(PRODUCTION_COMPOSE.read_text())
         expected_logging = {
