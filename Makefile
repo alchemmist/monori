@@ -253,7 +253,7 @@ analyze-javascript-dead-code:
 audit: audit-deps audit-deps-py audit-secrets
 
 audit-deps:
-	rm -f web/package-lock.json tools/frontend-perf/package-lock.json
+	rm -f web/package-lock.json tools/frontend-perf/package-lock.json uv.lock
 	uv sync --group audit
 	cd web && npm install --no-audit --no-fund --silent
 	(cd web && npm audit --audit-level=high --json) | \
@@ -263,6 +263,7 @@ audit-deps:
 		uv run --locked --group audit python -m monori.ci.lib.npm_audit_gate
 
 audit-deps-py:
+	@rm -f uv.lock
 	@uv sync --group audit
 	@req=$$(mktemp); \
 	( uv export --group runtime --no-dev --no-hashes --format requirements-txt -o "$$req" \
