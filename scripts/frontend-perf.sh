@@ -171,15 +171,19 @@ worktree_added=1
 # node:22-alpine now ships npm 10.9, which rejects the committed lock as out of
 # sync. npm 11.6.2 installs that same lock with npm ci.
 base_dockerfile="$base_worktree/deploy/Dockerfile.front"
-if [ -f "$base_dockerfile" ] && grep -q 'npm ci --silent' "$base_dockerfile"; then
+npm_ci_line='RUN npm ci --silent --no-audit --no-fund'
+if [ -f "$base_dockerfile" ] && grep -q 'npm ci' "$base_dockerfile"; then
+  if ! grep -qxF "$npm_ci_line" "$base_dockerfile"; then
+    echo "frontend performance: base Dockerfile runs npm ci in a form this job does not rewrite" >&2
+    exit 1
+  fi
   DOCKERFILE="$base_dockerfile" python3 -c 'from pathlib import Path
 import os
 path = Path(os.environ["DOCKERFILE"])
 text = path.read_text()
 old = "RUN npm ci --silent --no-audit --no-fund"
 new = "RUN npm install --global npm@11.6.2 && npm ci --no-audit --no-fund"
-if old in text:
-    path.write_text(text.replace(old, new, 1))
+path.write_text(text.replace(old, new, 1))
 '
 fi
 
