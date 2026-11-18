@@ -34,3 +34,6 @@ web/playwright-report/
 node_modules
 mutation.log
 /.local-data/
+
+package-lock.json
+uv.lock

@@ -138,7 +138,7 @@ class TestMainWorkflowGraph:
         assert frontend is not None
         assert backend is not None
         assert "path: web/reports/stryker-incremental.json" in frontend.group("body")
-        assert "hashFiles('web/package-lock.json')" in frontend.group("body")
+        assert "hashFiles('web/package.json')" in frontend.group("body")
         assert "hashFiles('web/stryker.conf.ts')" in frontend.group("body")
         assert "${{ github.sha }}" in frontend.group("body")
         assert "restore-keys:" in frontend.group("body")
@@ -148,7 +148,7 @@ class TestMainWorkflowGraph:
         assert "steps.restore-stryker.outputs.cache-hit != 'true'" in frontend.group("body")
         assert "run: make m-front" in frontend.group("body")
         assert "path: mutants" in backend.group("body")
-        assert "hashFiles('uv.lock')" in backend.group("body")
+        assert "hashFiles('pyproject.toml', 'common/pyproject.toml', 'ci/pyproject.toml', 'server/pyproject.toml')" in backend.group("body")
         assert "hashFiles('pyproject.toml')" in backend.group("body")
         assert "${{ github.sha }}" in backend.group("body")
         assert "restore-keys:" in backend.group("body")

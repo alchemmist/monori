@@ -85,8 +85,9 @@ binaries into `~/.local/bin` (override with `MONORI_TOOLS_BIN`). Any tool alread
 on your `PATH` is left alone, so it is safe to rerun.
 
 Rerun `make install` whenever `web/package.json` or the server dependencies
-change — `web/package-lock.json` is not committed, so `npm ci` will not work
-here.
+change. Lockfiles are not committed (`web/package-lock.json`,
+`tools/frontend-perf/package-lock.json`, `uv.lock`), so `npm ci` and
+`uv sync --locked` will not work here. `make install` resolves from the manifests.
 
 The whole dev loop is driven by `make`. To bring up both services with
 hot-reload in containers:

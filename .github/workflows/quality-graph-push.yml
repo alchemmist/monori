@@ -25,15 +25,19 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: 'web/package-lock.json
+          cache-dependency-path: 'web/package.json
 
-            tools/frontend-perf/package-lock.json
+            tools/frontend-perf/package.json
 
             '
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: 'true'
-          cache-dependency-glob: uv.lock
+          cache-dependency-glob: |
+            pyproject.toml
+            common/pyproject.toml
+            ci/pyproject.toml
+            server/pyproject.toml
       - name: Install project dependencies
         run: scripts/setup-quality-graph.sh
       - run: uv run --locked --group quality-graph qg validate
@@ -83,15 +87,19 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: 'web/package-lock.json
+          cache-dependency-path: 'web/package.json
 
-            tools/frontend-perf/package-lock.json
+            tools/frontend-perf/package.json
 
             '
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: 'true'
-          cache-dependency-glob: uv.lock
+          cache-dependency-glob: |
+            pyproject.toml
+            common/pyproject.toml
+            ci/pyproject.toml
+            server/pyproject.toml
       - name: Install project dependencies
         run: scripts/setup-quality-graph.sh
       - run: make fmt-check
@@ -143,15 +151,19 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: 'web/package-lock.json
+          cache-dependency-path: 'web/package.json
 
-            tools/frontend-perf/package-lock.json
+            tools/frontend-perf/package.json
 
             '
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: 'true'
-          cache-dependency-glob: uv.lock
+          cache-dependency-glob: |
+            pyproject.toml
+            common/pyproject.toml
+            ci/pyproject.toml
+            server/pyproject.toml
       - name: Install project dependencies
         run: scripts/setup-quality-graph.sh
       - run: uv run --locked --group quality-graph qg-python-triple-quotes --base "$BASE"
@@ -207,15 +219,19 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: 'web/package-lock.json
+          cache-dependency-path: 'web/package.json
 
-            tools/frontend-perf/package-lock.json
+            tools/frontend-perf/package.json
 
             '
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: 'true'
-          cache-dependency-glob: uv.lock
+          cache-dependency-glob: |
+            pyproject.toml
+            common/pyproject.toml
+            ci/pyproject.toml
+            server/pyproject.toml
       - name: Install project dependencies
         run: scripts/setup-quality-graph.sh
       - run: uv run --locked --group quality-graph qg-python-suppressions --base "$BASE"
@@ -271,15 +287,19 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: 'web/package-lock.json
+          cache-dependency-path: 'web/package.json
 
-            tools/frontend-perf/package-lock.json
+            tools/frontend-perf/package.json
 
             '
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: 'true'
-          cache-dependency-glob: uv.lock
+          cache-dependency-glob: |
+            pyproject.toml
+            common/pyproject.toml
+            ci/pyproject.toml
+            server/pyproject.toml
       - name: Install project dependencies
         run: scripts/setup-quality-graph.sh
       - run: uv run --locked --group quality-graph python -m monori.ci.quality_graph.checks.hardcoded_colors --base "$BASE"
@@ -339,15 +359,19 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: 'web/package-lock.json
+          cache-dependency-path: 'web/package.json
 
-            tools/frontend-perf/package-lock.json
+            tools/frontend-perf/package.json
 
             '
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: 'true'
-          cache-dependency-glob: uv.lock
+          cache-dependency-glob: |
+            pyproject.toml
+            common/pyproject.toml
+            ci/pyproject.toml
+            server/pyproject.toml
       - name: Install project dependencies
         run: scripts/setup-quality-graph.sh
       - name: Install Lychee
@@ -401,15 +425,19 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: 'web/package-lock.json
+          cache-dependency-path: 'web/package.json
 
-            tools/frontend-perf/package-lock.json
+            tools/frontend-perf/package.json
 
             '
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: 'true'
-          cache-dependency-glob: uv.lock
+          cache-dependency-glob: |
+            pyproject.toml
+            common/pyproject.toml
+            ci/pyproject.toml
+            server/pyproject.toml
       - name: Install project dependencies
         run: scripts/setup-quality-graph.sh
       - name: Install external linters
@@ -463,15 +491,19 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: 'web/package-lock.json
+          cache-dependency-path: 'web/package.json
 
-            tools/frontend-perf/package-lock.json
+            tools/frontend-perf/package.json
 
             '
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: 'true'
-          cache-dependency-glob: uv.lock
+          cache-dependency-glob: |
+            pyproject.toml
+            common/pyproject.toml
+            ci/pyproject.toml
+            server/pyproject.toml
       - name: Install project dependencies
         run: scripts/setup-quality-graph.sh
       - run: uv run --locked --group quality-graph qg-python-object-annotations --base "$BASE"
@@ -527,15 +559,19 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: 'web/package-lock.json
+          cache-dependency-path: 'web/package.json
 
-            tools/frontend-perf/package-lock.json
+            tools/frontend-perf/package.json
 
             '
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: 'true'
-          cache-dependency-glob: uv.lock
+          cache-dependency-glob: |
+            pyproject.toml
+            common/pyproject.toml
+            ci/pyproject.toml
+            server/pyproject.toml
       - name: Install project dependencies
         run: scripts/setup-quality-graph.sh
       - run: make type-casts
@@ -587,15 +623,19 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: 'web/package-lock.json
+          cache-dependency-path: 'web/package.json
 
-            tools/frontend-perf/package-lock.json
+            tools/frontend-perf/package.json
 
             '
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: 'true'
-          cache-dependency-glob: uv.lock
+          cache-dependency-glob: |
+            pyproject.toml
+            common/pyproject.toml
+            ci/pyproject.toml
+            server/pyproject.toml
       - name: Install project dependencies
         run: scripts/setup-quality-graph.sh
       - run: make type
@@ -648,15 +688,19 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: 'web/package-lock.json
+          cache-dependency-path: 'web/package.json
 
-            tools/frontend-perf/package-lock.json
+            tools/frontend-perf/package.json
 
             '
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: 'true'
-          cache-dependency-glob: uv.lock
+          cache-dependency-glob: |
+            pyproject.toml
+            common/pyproject.toml
+            ci/pyproject.toml
+            server/pyproject.toml
       - name: Install project dependencies
         run: scripts/setup-quality-graph.sh
       - run: python -m pip install semgrep
@@ -709,15 +753,19 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: 'web/package-lock.json
+          cache-dependency-path: 'web/package.json
 
-            tools/frontend-perf/package-lock.json
+            tools/frontend-perf/package.json
 
             '
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: 'true'
-          cache-dependency-glob: uv.lock
+          cache-dependency-glob: |
+            pyproject.toml
+            common/pyproject.toml
+            ci/pyproject.toml
+            server/pyproject.toml
       - name: Install project dependencies
         run: scripts/setup-quality-graph.sh
       - run: uv run --locked --group quality-graph qg-python-time-bombs --base "$BASE"
@@ -774,15 +822,19 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: 'web/package-lock.json
+          cache-dependency-path: 'web/package.json
 
-            tools/frontend-perf/package-lock.json
+            tools/frontend-perf/package.json
 
             '
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: 'true'
-          cache-dependency-glob: uv.lock
+          cache-dependency-glob: |
+            pyproject.toml
+            common/pyproject.toml
+            ci/pyproject.toml
+            server/pyproject.toml
       - name: Install project dependencies
         run: scripts/setup-quality-graph.sh
       - run: make t-fast
@@ -834,15 +886,19 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: 'web/package-lock.json
+          cache-dependency-path: 'web/package.json
 
-            tools/frontend-perf/package-lock.json
+            tools/frontend-perf/package.json
 
             '
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: 'true'
-          cache-dependency-glob: uv.lock
+          cache-dependency-glob: |
+            pyproject.toml
+            common/pyproject.toml
+            ci/pyproject.toml
+            server/pyproject.toml
       - name: Install project dependencies
         run: scripts/setup-quality-graph.sh
       - run: make t-medium
@@ -894,15 +950,19 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: 'web/package-lock.json
+          cache-dependency-path: 'web/package.json
 
-            tools/frontend-perf/package-lock.json
+            tools/frontend-perf/package.json
 
             '
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: 'true'
-          cache-dependency-glob: uv.lock
+          cache-dependency-glob: |
+            pyproject.toml
+            common/pyproject.toml
+            ci/pyproject.toml
+            server/pyproject.toml
       - name: Install project dependencies
         run: scripts/setup-quality-graph.sh
       - run: npx playwright install --with-deps chromium
@@ -957,15 +1017,19 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: 'web/package-lock.json
+          cache-dependency-path: 'web/package.json
 
-            tools/frontend-perf/package-lock.json
+            tools/frontend-perf/package.json
 
             '
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: 'true'
-          cache-dependency-glob: uv.lock
+          cache-dependency-glob: |
+            pyproject.toml
+            common/pyproject.toml
+            ci/pyproject.toml
+            server/pyproject.toml
       - name: Install project dependencies
         run: scripts/setup-quality-graph.sh
       - run: scripts/flaky-quality-graph.sh
@@ -1022,15 +1086,19 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: 'web/package-lock.json
+          cache-dependency-path: 'web/package.json
 
-            tools/frontend-perf/package-lock.json
+            tools/frontend-perf/package.json
 
             '
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: 'true'
-          cache-dependency-glob: uv.lock
+          cache-dependency-glob: |
+            pyproject.toml
+            common/pyproject.toml
+            ci/pyproject.toml
+            server/pyproject.toml
       - name: Install project dependencies
         run: scripts/setup-quality-graph.sh
       - run: make build
@@ -1082,15 +1150,19 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: 'web/package-lock.json
+          cache-dependency-path: 'web/package.json
 
-            tools/frontend-perf/package-lock.json
+            tools/frontend-perf/package.json
 
             '
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: 'true'
-          cache-dependency-glob: uv.lock
+          cache-dependency-glob: |
+            pyproject.toml
+            common/pyproject.toml
+            ci/pyproject.toml
+            server/pyproject.toml
       - name: Install project dependencies
         run: scripts/setup-quality-graph.sh
       - run: make BASE="$BASE" coverage-diff
@@ -1146,15 +1218,19 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: 'web/package-lock.json
+          cache-dependency-path: 'web/package.json
 
-            tools/frontend-perf/package-lock.json
+            tools/frontend-perf/package.json
 
             '
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: 'true'
-          cache-dependency-glob: uv.lock
+          cache-dependency-glob: |
+            pyproject.toml
+            common/pyproject.toml
+            ci/pyproject.toml
+            server/pyproject.toml
       - name: Install project dependencies
         run: scripts/setup-quality-graph.sh
       - run: make BASE="$BASE" mutation-diff
@@ -1211,15 +1287,19 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: 'web/package-lock.json
+          cache-dependency-path: 'web/package.json
 
-            tools/frontend-perf/package-lock.json
+            tools/frontend-perf/package.json
 
             '
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: 'true'
-          cache-dependency-glob: uv.lock
+          cache-dependency-glob: |
+            pyproject.toml
+            common/pyproject.toml
+            ci/pyproject.toml
+            server/pyproject.toml
       - name: Install project dependencies
         run: scripts/setup-quality-graph.sh
       - run: scripts/bundle-size-quality-graph.sh
@@ -1279,15 +1359,19 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: 'web/package-lock.json
+          cache-dependency-path: 'web/package.json
 
-            tools/frontend-perf/package-lock.json
+            tools/frontend-perf/package.json
 
             '
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: 'true'
-          cache-dependency-glob: uv.lock
+          cache-dependency-glob: |
+            pyproject.toml
+            common/pyproject.toml
+            ci/pyproject.toml
+            server/pyproject.toml
       - name: Install project dependencies
         run: scripts/setup-quality-graph.sh
       - run: npx playwright install --with-deps chromium
@@ -1346,15 +1430,19 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: 'web/package-lock.json
+          cache-dependency-path: 'web/package.json
 
-            tools/frontend-perf/package-lock.json
+            tools/frontend-perf/package.json
 
             '
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: 'true'
-          cache-dependency-glob: uv.lock
+          cache-dependency-glob: |
+            pyproject.toml
+            common/pyproject.toml
+            ci/pyproject.toml
+            server/pyproject.toml
       - name: Install project dependencies
         run: scripts/setup-quality-graph.sh
       - run: make audit

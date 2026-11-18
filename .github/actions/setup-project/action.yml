@@ -18,7 +18,7 @@ runs:
           with:
               node-version: 22
               cache: npm
-              cache-dependency-path: web/package-lock.json
+              cache-dependency-path: web/package.json
 
         - name: Pin npm
           if: inputs.install-web == 'true'
@@ -30,19 +30,23 @@ runs:
           uses: astral-sh/setup-uv@v7
           with:
               enable-cache: true
-              cache-dependency-glob: uv.lock
+              cache-dependency-glob: |
+                  pyproject.toml
+                  common/pyproject.toml
+                  ci/pyproject.toml
+                  server/pyproject.toml
 
         - name: Restore Python environment
           if: inputs.python-profile != 'none'
           uses: actions/cache@v5
           with:
               path: .venv
-              key: uv-venv-${{ runner.os }}-python-3.12-${{ inputs.python-profile }}-${{ hashFiles('uv.lock') }}
+              key: uv-venv-${{ runner.os }}-python-3.12-${{ inputs.python-profile }}-${{ hashFiles('pyproject.toml', 'common/pyproject.toml', 'ci/pyproject.toml', 'server/pyproject.toml') }}
 
         - name: Install web dependencies
           if: inputs.install-web == 'true'
           shell: bash
-          run: npm ci --no-audit --no-fund
+          run: npm install --no-audit --no-fund
           working-directory: web
 
         - name: Install Python dependencies
@@ -51,11 +55,11 @@ runs:
           run: |
               case "${{ inputs.python-profile }}" in
                   type)
-                      uv sync --locked --no-editable --reinstall-package monori-common --reinstall-package monori-ci --reinstall-package monori-server --no-dev --group type ;;
+                      uv sync --no-editable --reinstall-package monori-common --reinstall-package monori-ci --reinstall-package monori-server --no-dev --group type ;;
                   ci|format|lint|analyze|test|audit|mutation|runtime)
-                      uv sync --locked --no-dev --group "${{ inputs.python-profile }}" ;;
+                      uv sync --no-dev --group "${{ inputs.python-profile }}" ;;
                   coverage)
-                      uv sync --locked --no-dev --group test ;;
+                      uv sync --no-dev --group test ;;
                   *) echo "Unknown Python profile: ${{ inputs.python-profile }}" >&2; exit 2 ;;
               esac
               echo "UV_NO_SYNC=1" >> "$GITHUB_ENV"

@@ -28,12 +28,16 @@ profiles:
                   node-version: "22"
                   cache: npm
                   cache-dependency-path: |
-                      web/package-lock.json
-                      tools/frontend-perf/package-lock.json
+                      web/package.json
+                      tools/frontend-perf/package.json
             - uses: astral-sh/setup-uv@v7
               with:
                   enable-cache: "true"
-                  cache-dependency-glob: uv.lock
+                  cache-dependency-glob: |
+                      pyproject.toml
+                      common/pyproject.toml
+                      ci/pyproject.toml
+                      server/pyproject.toml
             - name: Install project dependencies
               run: scripts/setup-quality-graph.sh
     lint:
