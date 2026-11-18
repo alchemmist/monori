@@ -230,18 +230,20 @@ def _refund_total(c: sqlite3.Connection, original_id: int, excluding: int | None
     )
 
 
-_REFUND_WORD = re.compile(
-    r"(?<![a-z\u0430-\u044f\u0451])(?:refund|return|\u0432\u043e\u0437\u0432\u0440\u0430\u0442)(?![a-z\u0430-\u044f\u0451])"
-)
-_MERCHANT_WORD = re.compile(r"[a-z\u0430-\u044f\u0451]+")
-
-
 def _merchant_key(value: str) -> str:
     """
-    Normalize merchant text like the frontend refund matcher.
+    Return the merchant words shared by a purchase and its refund description.
+
+    Bank descriptions often add REFUND, RETURN, or возврат plus digits. Split the
+    description into words, remove only those exact labels, and keep the merchant
+    words in order. This intentionally mirrors web/src/engine/refunds.ts.
     """
-    without_refund_label = _REFUND_WORD.sub(" ", value.lower())
-    return " ".join(_MERCHANT_WORD.findall(without_refund_label))
+    words = re.findall(r"[a-z\u0430-\u044f\u0451]+", value.lower())
+    return " ".join(
+        word
+        for word in words
+        if word not in {"refund", "return", "\u0432\u043e\u0437\u0432\u0440\u0430\u0442"}
+    )
 
 
 def _validate_refund_amount(

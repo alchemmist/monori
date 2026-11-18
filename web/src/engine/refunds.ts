@@ -1,9 +1,5 @@
 export function refundMerchantKey(value: string): string {
-    return (
-        value
-            .toLowerCase()
-            .replace(/(?<![a-zа-яё])(refund|return|возврат)(?![a-zа-яё])/g, " ")
-            .match(/[a-zа-яё]+/g)
-            ?.join(" ") ?? ""
-    );
+    const words = value.toLowerCase().match(/[a-zа-яё]+/g) ?? [];
+    const refundLabels = new Set(["refund", "return", "возврат"]);
+    return words.filter((word) => !refundLabels.has(word)).join(" ");
 }

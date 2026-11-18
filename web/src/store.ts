@@ -926,11 +926,11 @@ export const useStore = create<StoreState>((set, get) => ({
             await api.deleteTx(txId);
             return true;
         } catch (e) {
-            const cur = requireSnapshot(get().snapshot);
             set((state) => {
+                const current = requireSnapshot(state.snapshot);
                 const hidden = state.hiddenTx ?? [];
                 const currentById = new Map(
-                    [...cur.transactions, ...hidden].map((transaction) => [
+                    [...current.transactions, ...hidden].map((transaction) => [
                         transaction.id,
                         transaction,
                     ]),
@@ -957,11 +957,11 @@ export const useStore = create<StoreState>((set, get) => ({
                     });
                 return {
                     snapshot: {
-                        ...cur,
-                        transactions: mergeTransactions(repairRows(cur.transactions), [
+                        ...current,
+                        transactions: mergeTransactions(repairRows(current.transactions), [
                             restoredGone,
                         ]),
-                        transactionsTotal: cur.transactionsTotal! + 1,
+                        transactionsTotal: current.transactionsTotal! + 1,
                     },
                     hiddenTx: state.hiddenTx == null ? null : repairRows(state.hiddenTx),
                     toast: {
