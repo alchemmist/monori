@@ -469,7 +469,8 @@ def test_adapter_classifies_timeout_runner_error_and_test_failure() -> None:
 
 
 def test_vitest_collection_is_read_from_the_json_file() -> None:
-    patch = """diff --git a/web/src/Added.test.tsx b/web/src/Added.test.tsx
+    patch = """
+diff --git a/web/src/Added.test.tsx b/web/src/Added.test.tsx
 +++ b/web/src/Added.test.tsx
 @@ -0,0 +11 @@
 +    it("added", () => {})
@@ -507,4 +508,3 @@ def test_vitest_collection_is_read_from_the_json_file() -> None:
     assert [test.line for test in tests] == [11]
     assert "--json" in executor.commands[1]
     assert executor.commands[1][executor.commands[1].index("--json") + 1].endswith(".json")
-
