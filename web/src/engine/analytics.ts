@@ -242,7 +242,9 @@ export function merchantKey(description: string): string {
 export function topMerchants(snapshot: Snapshot, year: string, limit = 10) {
     const incomeIds = incomeGroupIdSet(snapshot.groups);
     const catById = new Map(snapshot.categories.map((c) => [c.id, c]));
-    const txById = new Map(snapshot.transactions.map((transaction) => [transaction.id, transaction]));
+    const txById = new Map(
+        snapshot.transactions.map((transaction) => [transaction.id, transaction]),
+    );
     const sums = new Map<string, { fullName: string; total: number; count: number }>();
     for (const t of effectiveTransactions(snapshot.transactions)) {
         if (!t.date.startsWith(year) || t.categoryId == null) continue;
