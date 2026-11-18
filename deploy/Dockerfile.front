@@ -3,6 +3,8 @@
 # "monori" so the outer reverse proxy config does not change.
 FROM node:22-alpine AS web
 WORKDIR /build/web
+# npm 10 cannot build an ideal tree for this manifest without a lockfile.
+RUN npm install --global npm@11.6.2
 COPY web/package.json ./
 # Resolve from the manifest inside the image. The lockfile is not in git.
 RUN npm install --no-audit --no-fund
