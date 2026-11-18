@@ -242,17 +242,24 @@ export function merchantKey(description: string): string {
 export function topMerchants(snapshot: Snapshot, year: string, limit = 10) {
     const incomeIds = incomeGroupIdSet(snapshot.groups);
     const catById = new Map(snapshot.categories.map((c) => [c.id, c]));
+    const txById = new Map(snapshot.transactions.map((transaction) => [transaction.id, transaction]));
     const sums = new Map<string, { fullName: string; total: number; count: number }>();
     for (const t of effectiveTransactions(snapshot.transactions)) {
-        if (!t.date.startsWith(year) || t.categoryId == null || t.amount >= 0) continue;
+        if (!t.date.startsWith(year) || t.categoryId == null) continue;
         if (isTransfer(t)) continue;
         const cat = catById.get(t.categoryId);
         if (!cat || incomeIds.has(cat.groupId)) continue;
-        const key = merchantKey(t.description) || "(no description)";
+        const original =
+            t.amount > 0 && "refundOfId" in t && t.refundOfId != null
+                ? txById.get(t.refundOfId)
+                : undefined;
+        if (t.amount >= 0 && !original) continue;
+        const description = original?.description ?? t.description;
+        const key = merchantKey(description) || "(no description)";
         let e = sums.get(key);
-        if (!e) sums.set(key, (e = { fullName: t.description || key, total: 0, count: 0 }));
+        if (!e) sums.set(key, (e = { fullName: description || key, total: 0, count: 0 }));
         e.total += -t.amount;
-        e.count += 1;
+        if (t.amount < 0) e.count += 1;
     }
     return [...sums.entries()]
         .map(([name, v]) => ({ name, ...v }))
