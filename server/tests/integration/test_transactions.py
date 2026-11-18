@@ -204,46 +204,36 @@ def test_partial_refunds_link_to_purchase_and_inherit_category(
     assert api.tx_by(first).category_id == food
     assert api.tx_by(purchase).refund_ids == [first]
 
-    assert (
-        client.put(
-            f"/api/transactions/{second}/refund",
-            json={"originalId": purchase},
-        ).status_code
-        == 200
+    response = client.put(
+        f"/api/transactions/{second}/refund",
+        json={"originalId": purchase},
     )
+    assert response.status_code == 200
     assert api.tx_by(purchase).refund_ids == [first, second]
 
-    assert (
-        client.patch(
-            f"/api/transactions/{first}",
-            json={"date": "2026-02-02T10:00:00"},
-        ).status_code
-        == 400
+    response = client.patch(
+        f"/api/transactions/{first}",
+        json={"date": "2026-02-02T10:00:00"},
     )
-    assert (
-        client.patch(
-            f"/api/transactions/{purchase}",
-            json={"date": "2026-02-05T10:00:00"},
-        ).status_code
-        == 400
+    assert response.status_code == 400
+    response = client.patch(
+        f"/api/transactions/{purchase}",
+        json={"date": "2026-02-05T10:00:00"},
     )
+    assert response.status_code == 400
     assert api.tx_by(first).date == "2026-02-04T10:00:00"
     assert api.tx_by(purchase).date == "2026-02-03T10:00:00"
 
-    assert (
-        client.patch(
-            f"/api/transactions/{first}",
-            json={"categoryId": shopping},
-        ).status_code
-        == 400
+    response = client.patch(
+        f"/api/transactions/{first}",
+        json={"categoryId": shopping},
     )
-    assert (
-        client.patch(
-            f"/api/transactions/{purchase}",
-            json={"categoryId": shopping},
-        ).status_code
-        == 200
+    assert response.status_code == 400
+    response = client.patch(
+        f"/api/transactions/{purchase}",
+        json={"categoryId": shopping},
     )
+    assert response.status_code == 200
     assert api.tx_by(first).category_id == shopping
     assert api.tx_by(second).category_id == shopping
 
