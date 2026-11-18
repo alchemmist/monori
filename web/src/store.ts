@@ -672,7 +672,13 @@ export const useStore = create<StoreState>((set, get) => ({
                 .map((transaction) => {
                     if (transaction.id === txId) return { ...transaction, ...undo };
                     const categoryId = refundCategories.get(transaction.id);
-                    return categoryId === undefined ? transaction : { ...transaction, categoryId };
+                    if (
+                        categoryId === undefined ||
+                        revisions.get("categoryId") !== revision ||
+                        transaction.refundOfId !== txId
+                    )
+                        return transaction;
+                    return { ...transaction, categoryId };
                 })
                 .sort(compareTx);
             set({
