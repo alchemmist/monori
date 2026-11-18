@@ -304,6 +304,51 @@ describe("store remote mutations", () => {
         ).toEqual([3, 3]);
     });
 
+    it.each(["new category", "relink", "unlink"])(
+        "preserves a refund's %s when an older purchase edit rolls back",
+        async (action) => {
+            useStore.setState({
+                snapshot: buildSnapshot({
+                    transactions: [
+                        {
+                            id: 10,
+                            date: "2026-01-01",
+                            amount: -100,
+                            categoryId: 2,
+                            refundIds: [11],
+                        },
+                        { id: 11, date: "2026-01-02", amount: 50, categoryId: 2, refundOfId: 10 },
+                        { id: 12, date: "2026-01-01", amount: -100, categoryId: 3 },
+                    ],
+                }),
+            });
+            let rejectEdit!: (error: Error) => void;
+            vi.spyOn(api, "patchTx")
+                .mockImplementationOnce(() => new Promise((_, reject) => (rejectEdit = reject)))
+                .mockResolvedValue({});
+            const pending = useStore.getState().updateTransaction(10, { categoryId: 3 });
+            if (action === "new category") {
+                await useStore.getState().updateTransaction(10, { categoryId: 4 });
+            } else if (action === "relink") {
+                vi.spyOn(api, "linkRefund").mockResolvedValue({ refundOfId: 12, categoryId: 3 });
+                await useStore.getState().linkRefund(11, 12);
+            } else {
+                vi.spyOn(api, "unlinkRefund").mockResolvedValue({ categoryId: 3 });
+                await useStore.getState().unlinkRefund(11);
+            }
+            rejectEdit(new Error("older save failed"));
+            await pending;
+            const rows = useStore.getState().snapshot!.transactions;
+            expect(rows.find((row) => row.id === 10)?.categoryId).toBe(
+                action === "new category" ? 4 : 2,
+            );
+            expect(rows.find((row) => row.id === 11)).toMatchObject({
+                categoryId: action === "new category" ? 4 : 3,
+                refundOfId: action === "new category" ? 10 : action === "relink" ? 12 : null,
+            });
+        },
+    );
+
     it("repairs refund links when deletion rolls back", async () => {
         const purchase = { id: 10, date: "2026-01-01", amount: -100, refundIds: [11] };
         const refund = { id: 11, date: "2026-01-02", amount: 50, refundOfId: 10 };
