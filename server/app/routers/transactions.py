@@ -230,14 +230,18 @@ def _refund_total(c: sqlite3.Connection, original_id: int, excluding: int | None
     )
 
 
+_REFUND_WORD = re.compile(
+    r"(?<![a-z\u0430-\u044f\u0451])(?:refund|return|\u0432\u043e\u0437\u0432\u0440\u0430\u0442)(?![a-z\u0430-\u044f\u0451])"
+)
+_MERCHANT_WORD = re.compile(r"[a-z\u0430-\u044f\u0451]+")
+
+
 def _merchant_key(value: str) -> str:
     """
     Normalize merchant text like the frontend refund matcher.
     """
-    letters = "a-z\u0430-\u044f\u0451"
-    refund_words = "refund|return|\u0432\u043e\u0437\u0432\u0440\u0430\u0442"
-    value = re.sub(rf"(?<![{letters}])({refund_words})(?![{letters}])", " ", value.lower())
-    return " ".join(re.findall(rf"[{letters}]+", value))
+    without_refund_label = _REFUND_WORD.sub(" ", value.lower())
+    return " ".join(_MERCHANT_WORD.findall(without_refund_label))
 
 
 def _validate_refund_amount(
