@@ -252,9 +252,13 @@ analyze-javascript-dead-code:
 
 audit: audit-deps audit-deps-py audit-secrets
 
-audit-deps:
-	rm -f web/package-lock.json tools/frontend-perf/package-lock.json uv.lock
+# One sync for both audit targets so make -j cannot interleave two uv.lock writes.
+audit-python-env:
+	rm -f uv.lock
 	uv sync --group audit
+
+audit-deps: audit-python-env
+	rm -f web/package-lock.json tools/frontend-perf/package-lock.json
 	cd web && npm install --no-audit --no-fund --silent
 	(cd web && npm audit --audit-level=high --json) | \
 		uv run --locked --group audit python -m monori.ci.lib.npm_audit_gate
@@ -262,9 +266,7 @@ audit-deps:
 	(cd tools/frontend-perf && npm audit --audit-level=high --json) | \
 		uv run --locked --group audit python -m monori.ci.lib.npm_audit_gate
 
-audit-deps-py:
-	@rm -f uv.lock
-	@uv sync --group audit
+audit-deps-py: audit-python-env
 	@req=$$(mktemp); \
 	( uv export --group runtime --no-dev --no-hashes --format requirements-txt -o "$$req" \
 		&& uv run --locked --group audit pip-audit -r "$$req" ); code=$$?; \

@@ -16,7 +16,7 @@ import tokenize
 from pathlib import Path
 
 ALLOWED_COMMENT = re.compile(
-    r"^#\s*(?:noqa|nosec|type:\s*(?:ignore|noqa)|Copyright\b)",
+    r"^#\s*(?:noqa|nosec|type:\s*(?:ignore|noqa)|Copyright)\b",
     re.IGNORECASE,
 )
 logger = logging.getLogger(__name__)
