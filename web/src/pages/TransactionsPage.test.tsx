@@ -244,6 +244,7 @@ describe("TransactionsPage", () => {
         expect(
             await screen.findByText("Mark as refund", { selector: ".mantine-Modal-title" }),
         ).toBeInTheDocument();
+        await user.click(screen.getByRole("button", { name: "Cancel" }));
         unmount();
 
         seed({
@@ -259,6 +260,24 @@ describe("TransactionsPage", () => {
         await rendered.user.click(within(row).getByRole("button", { name: "Transaction actions" }));
         fireEvent.click(screen.getByText("Unlink refund"));
         expect(unlink).toHaveBeenCalledWith(2);
+    });
+
+    it("reports a failed unlink and runs the hide action", async () => {
+        seed({ transactions: [tx(1, { amount: 2400, refundOfId: 2 })] });
+        vi.spyOn(useStore.getState(), "unlinkRefund").mockRejectedValue("offline");
+        const hide = vi.spyOn(useStore.getState(), "hideTx").mockResolvedValue();
+        const { user } = renderUI(<TransactionsPage />);
+        const row = screen.getByText("tx 1").closest<HTMLElement>("tr")!;
+
+        await user.click(within(row).getByRole("button", { name: "Transaction actions" }));
+        fireEvent.click(screen.getByText("Unlink refund"));
+        await waitFor(() =>
+            expect(useStore.getState().toast?.title).toBe("Failed to unlink refund"),
+        );
+
+        await user.click(within(row).getByRole("button", { name: "Transaction actions" }));
+        fireEvent.click(screen.getByText("Hide transaction"));
+        expect(hide).toHaveBeenCalledWith(1);
     });
 
     it("offers import and transfer controls and disables transfer with one active account", () => {

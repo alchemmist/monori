@@ -280,13 +280,32 @@ describe("store remote mutations", () => {
     it("clears both sides of refund links while deletion is pending", async () => {
         const purchase = { id: 10, date: "2026-01-01", amount: -100, refundIds: [11] };
         const refund = { id: 11, date: "2026-01-02", amount: 50, refundOfId: 10 };
-        useStore.setState({ snapshot: buildSnapshot({ transactions: [purchase, refund] }) });
+        const otherRefund = { id: 12, date: "2026-01-03", amount: 20, refundOfId: 99 };
+        useStore.setState({
+            snapshot: buildSnapshot({ transactions: [purchase, refund, otherRefund] }),
+        });
         vi.spyOn(api, "deleteTx").mockResolvedValue({});
 
         await expect(useStore.getState().deleteTransaction(10)).resolves.toBe(true);
-        expect(useStore.getState().snapshot!.transactions).toEqual([
-            expect.objectContaining({ id: 11, refundOfId: null }),
-        ]);
+        expect(useStore.getState().snapshot!.transactions).toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({ id: 11, refundOfId: null }),
+                expect.objectContaining({ id: 12, refundOfId: 99 }),
+            ]),
+        );
+    });
+
+    it("restores a deleted refund when its purchase omitted refundIds", async () => {
+        const purchase = { id: 10, date: "2026-01-01", amount: -100 };
+        const refund = { id: 11, date: "2026-01-02", amount: 50, refundOfId: 10 };
+        useStore.setState({ snapshot: buildSnapshot({ transactions: [purchase, refund] }) });
+        vi.spyOn(api, "deleteTx").mockRejectedValue(new Error("offline"));
+
+        await expect(useStore.getState().deleteTransaction(11)).resolves.toBe(false);
+
+        expect(
+            useStore.getState().snapshot!.transactions.find((row) => row.id === 10)?.refundIds,
+        ).toEqual([11]);
     });
 
     it("sends account edits to their own endpoints and adopts the server id", async () => {
