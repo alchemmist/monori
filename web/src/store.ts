@@ -800,7 +800,7 @@ export const useStore = create<StoreState>((set, get) => ({
         )
             return;
         const result = isDemo()
-            ? { refundOfId: originalId, categoryId: original!.categoryId }
+            ? { refundOfId: originalId, categoryId: original!.categoryId ?? null }
             : await api.linkRefund(txId, originalId);
         set((state) => {
             const current = requireSnapshot(state.snapshot);

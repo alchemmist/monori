@@ -410,6 +410,29 @@ def test_refund_suggestions_validation_and_unlink(api: Api, client: TestClient) 
     )
 
 
+def test_refund_suggestions_filter_before_the_result_cap(api: Api, client: TestClient) -> None:
+    old_purchase = api.tx(
+        "2025-01-01",
+        -50_00,
+        TransactionOptions(description="Archived Shop"),
+    )
+    for index in range(251):
+        api.tx(
+            f"2025-12-{index % 28 + 1:02d}",
+            -50_00,
+            TransactionOptions(description=f"Noise {index}"),
+        )
+    refund = api.tx(
+        "2026-01-01",
+        10_00,
+        TransactionOptions(description="Archived Shop refund"),
+    )
+
+    rows = client.get(f"/api/transactions/{refund}/refund-suggestions").json()["rows"]
+
+    assert [row["id"] for row in rows] == [old_purchase]
+
+
 def test_transaction_patch_recomputes_hash_for_dedup(api: Api, client: TestClient) -> None:
     """
     Editing date/amount/description must recompute the dedup hash: a statement.

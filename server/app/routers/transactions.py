@@ -496,7 +496,7 @@ def refund_suggestions(
             " FROM transactions t JOIN accounts a ON a.id=t.account_id"
             " WHERE a.user_id=? AND t.amount<0 AND t.date<=? AND t.transfer_id IS NULL"
             " AND t.id<>? AND NOT EXISTS (SELECT 1 FROM splits s WHERE s.transaction_id=t.id)"
-            " ORDER BY t.date DESC, t.id DESC LIMIT 250",
+            " ORDER BY t.date DESC, t.id DESC",
             (refund_tx_id, uid, refund.date, refund_tx_id),
         ).fetchall()
         candidates: list[tuple[bool, sqlite3.Row]] = []
