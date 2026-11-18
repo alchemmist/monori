@@ -254,9 +254,20 @@ describe("TransactionsPage", () => {
             ],
         });
         const unlink = vi.spyOn(useStore.getState(), "unlinkRefund").mockResolvedValue();
+        const scrollIntoView = vi.fn();
         const rendered = renderUI(<TransactionsPage />);
+        const querySelector = document.querySelector.bind(document);
+        vi.spyOn(document, "querySelector").mockImplementation((selector) =>
+            selector.startsWith("[data-transaction-id=")
+                ? ({ scrollIntoView } as unknown as Element)
+                : querySelector(selector),
+        );
         expect(screen.getByText("refunded · 1")).toBeInTheDocument();
+        await rendered.user.click(screen.getByRole("button", { name: "refunded · 1" }));
+        expect(scrollIntoView).toHaveBeenCalled();
         row = screen.getByText("tx 2").closest<HTMLElement>("tr")!;
+        await rendered.user.click(within(row).getByRole("button", { name: "refund" }));
+        expect(scrollIntoView).toHaveBeenCalledTimes(2);
         await rendered.user.click(within(row).getByRole("button", { name: "Transaction actions" }));
         fireEvent.click(screen.getByText("Unlink refund"));
         expect(unlink).toHaveBeenCalledWith(2);
@@ -278,6 +289,18 @@ describe("TransactionsPage", () => {
         await user.click(within(row).getByRole("button", { name: "Transaction actions" }));
         fireEvent.click(screen.getByText("Hide transaction"));
         expect(hide).toHaveBeenCalledWith(1);
+    });
+
+    it("opens the split editor from the row menu", async () => {
+        seed({ transactions: [tx(1)] });
+        const openTab = vi.spyOn(useStore.getState(), "openTab");
+        const { user } = renderUI(<TransactionsPage />);
+        const row = screen.getByText("tx 1").closest<HTMLElement>("tr")!;
+
+        await user.click(within(row).getByRole("button", { name: "Transaction actions" }));
+        fireEvent.click(screen.getByText("Split transaction"));
+
+        expect(openTab).toHaveBeenCalledWith("tx-split", { transactionId: 1 }, "tx-split-1");
     });
 
     it("offers import and transfer controls and disables transfer with one active account", () => {
@@ -529,10 +552,16 @@ describe("TransactionsPage", () => {
         ).toBeInTheDocument();
     });
 
-    it("hides the back-to-top button until the page is scrolled", () => {
+    it("shows the back-to-top button after scrolling", async () => {
         seed({ transactions: [tx(1, { description: "Item", date: "2026-03-01" })] });
-        renderUI(<TransactionsPage />);
+        const scrollTo = vi.spyOn(window, "scrollTo").mockImplementation(() => undefined);
+        const { user } = renderUI(<TransactionsPage />);
         expect(screen.queryByRole("button", { name: "Back to top" })).not.toBeInTheDocument();
+        Object.defineProperty(window, "scrollY", { configurable: true, value: 2_000 });
+        fireEvent.scroll(window);
+        const button = await screen.findByRole("button", { name: "Back to top" });
+        await user.click(button);
+        expect(scrollTo).toHaveBeenCalledWith({ top: 0, behavior: "smooth" });
     });
 
     it("renders a transfer as a single merged row with no per-row action menu", () => {

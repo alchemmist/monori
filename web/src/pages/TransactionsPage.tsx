@@ -308,6 +308,13 @@ export default function TransactionsPage() {
             return next;
         });
 
+    const jumpToTransaction = (txId: Id) => {
+        document.querySelector(`[data-transaction-id="${txId}"]`)?.scrollIntoView({
+            behavior: "smooth",
+            block: "center",
+        });
+    };
+
     const runTransferAction =
         (action: (transferId: string) => Promise<void>, title: string) =>
         async (transferId: string) => {
@@ -370,6 +377,7 @@ export default function TransactionsPage() {
         return (
             <tr
                 key={leg ? `l${t.id}` : t.id}
+                data-transaction-id={transactionId}
                 className={`cat-row${leg ? " tx-row_leg" : ""}${splitPart ? " tx-row_leg" : ""}${t.hidden === true ? " tx-hidden-row" : ""}`}
             >
                 <td style={{ textAlign: "left" }} className="num">
@@ -426,14 +434,24 @@ export default function TransactionsPage() {
                         </Tag>
                     )}
                     {!leg && "refundOfId" in t && t.refundOfId != null && (
-                        <Tag theme="info" style={{ marginLeft: 8 }}>
+                        <Button
+                            variant="subtle"
+                            size="compact-xs"
+                            style={{ marginLeft: 8 }}
+                            onClick={() => jumpToTransaction(t.refundOfId!)}
+                        >
                             refund
-                        </Tag>
+                        </Button>
                     )}
                     {!leg && Array.isArray(t.refundIds) && t.refundIds.length > 0 && (
-                        <Tag theme="info" style={{ marginLeft: 8 }}>
+                        <Button
+                            variant="subtle"
+                            size="compact-xs"
+                            style={{ marginLeft: 8 }}
+                            onClick={() => jumpToTransaction(t.refundIds![0]!)}
+                        >
                             refunded · {t.refundIds.length}
-                        </Tag>
+                        </Button>
                     )}
                     {splits.length > 0 && !leg && (
                         <Button
