@@ -272,6 +272,45 @@ describe("TransactionsPage", () => {
         expect(unlink).toHaveBeenCalledWith(2);
     });
 
+    it("reveals an off-screen purchase when its refund badge is clicked", async () => {
+        vi.stubGlobal("scrollY", 0);
+        vi.stubGlobal("innerHeight", 800);
+        vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
+            this: HTMLElement,
+        ) {
+            if (this.tagName === "TBODY")
+                return DOMRect.fromRect({ y: 100 - window.scrollY, height: 4040 });
+            if (this.matches("tr.cat-row")) return DOMRect.fromRect({ height: 40 });
+            return DOMRect.fromRect({ width: 1200, height: 900 });
+        });
+        seed({
+            transactions: [
+                tx(1, { amount: -10000, refundIds: [101] }),
+                ...Array.from({ length: 99 }, (_, index) => tx(index + 2)),
+                tx(101, { amount: 2400, refundOfId: 1 }),
+            ],
+        });
+        const scrollTo = vi.spyOn(window, "scrollTo").mockImplementation(() => undefined);
+        const { user } = renderUI(<TransactionsPage />);
+        expect(screen.queryByText("tx 1")).not.toBeInTheDocument();
+        await user.click(screen.getByRole("button", { name: "refund" }));
+        expect(scrollTo).toHaveBeenCalledWith({ top: 3700, behavior: "smooth" });
+        vi.stubGlobal("scrollY", 3700);
+        fireEvent.scroll(window);
+        expect(await screen.findByText("tx 1")).toBeInTheDocument();
+    });
+
+    it("explains when a linked purchase is outside the visible ledger", async () => {
+        seed({ transactions: [tx(2, { amount: 2400, refundOfId: 1 })] });
+        const scrollTo = vi.spyOn(window, "scrollTo").mockImplementation(() => undefined);
+        const { user } = renderUI(<TransactionsPage />);
+        await user.click(screen.getByRole("button", { name: "refund" }));
+        expect(useStore.getState().toast?.title).toBe(
+            "Linked transaction is hidden by the current filters",
+        );
+        expect(scrollTo).not.toHaveBeenCalled();
+    });
+
     it("reports a failed unlink and runs the hide action", async () => {
         seed({ transactions: [tx(1, { amount: 2400, refundOfId: 2 })] });
         vi.spyOn(useStore.getState(), "unlinkRefund").mockRejectedValue("offline");
