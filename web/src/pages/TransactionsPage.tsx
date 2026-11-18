@@ -161,7 +161,10 @@ export default function TransactionsPage() {
         const cur = t.categoryId != null ? catById.get(t.categoryId) : null;
         const uncategorized = { value: "", label: "Leave uncategorized" };
         const linkedRefund = "refundOfId" in t && t.refundOfId != null;
-        if (linkedRefund) return cur ? [{ value: String(cur.id), label: cur.name }] : [];
+        if (linkedRefund)
+            return cur
+                ? [{ value: String(cur.id), label: cur.name }]
+                : [{ value: "", label: "Uncategorized" }];
         const kinds = t.amount < 0 ? ["expense"] : t.amount > 0 ? ["income", "expense"] : null;
         const matchingSections = kinds
             ? catSections.filter((section) => kinds.includes(section.kind ?? ""))
@@ -309,9 +312,21 @@ export default function TransactionsPage() {
         });
 
     const jumpToTransaction = (txId: Id) => {
-        document.querySelector(`[data-transaction-id="${txId}"]`)?.scrollIntoView({
+        const target = document.querySelector(`[data-transaction-id="${txId}"]`);
+        if (target) {
+            target.scrollIntoView({ behavior: "smooth", block: "center" });
+            return;
+        }
+        const index = items.findIndex((item) => item.kind === "tx" && item.tx.id === txId);
+        const body = bodyRef.current;
+        if (index < 0 || !body) {
+            notify({ title: "Linked transaction is hidden by the current filters" });
+            return;
+        }
+        const rowsTop = body.getBoundingClientRect().top + window.scrollY;
+        window.scrollTo({
+            top: rowsTop + index * rowH - window.innerHeight / 2,
             behavior: "smooth",
-            block: "center",
         });
     };
 

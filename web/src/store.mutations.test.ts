@@ -322,6 +322,54 @@ describe("store remote mutations", () => {
         ).toContain(11);
     });
 
+    it("keeps hidden refund relationships in sync", async () => {
+        const refund = { id: 11, date: "2026-01-02", amount: 50, refundOfId: 10 };
+        const hiddenPurchase = buildSnapshot({
+            transactions: [
+                {
+                    id: 10,
+                    date: "2026-01-01",
+                    amount: -100,
+                    refundIds: [11],
+                    hidden: true,
+                },
+            ],
+        }).transactions[0]!;
+        useStore.setState({
+            snapshot: buildSnapshot({ transactions: [refund] }),
+            hiddenTx: [hiddenPurchase],
+        });
+        vi.spyOn(api, "unlinkRefund").mockResolvedValue({ categoryId: null });
+
+        await useStore.getState().unlinkRefund(11);
+
+        expect(useStore.getState().hiddenTx![0]).toMatchObject({ id: 10, refundIds: [] });
+    });
+
+    it("preserves a newer refund link when deletion rolls back", async () => {
+        const purchase = { id: 10, date: "2026-01-01", amount: -100, refundIds: [11] };
+        const other = { id: 12, date: "2026-01-01", amount: -100, refundIds: [] };
+        const refund = { id: 11, date: "2026-01-02", amount: 50, refundOfId: 10 };
+        useStore.setState({ snapshot: buildSnapshot({ transactions: [purchase, other, refund] }) });
+        let failDelete!: (error: Error) => void;
+        vi.spyOn(api, "deleteTx").mockReturnValue(
+            new Promise((_, reject) => {
+                failDelete = reject;
+            }),
+        );
+        vi.spyOn(api, "linkRefund").mockResolvedValue({ refundOfId: 12, categoryId: null });
+
+        const deleting = useStore.getState().deleteTransaction(10);
+        await useStore.getState().linkRefund(11, 12);
+        failDelete(new Error("offline"));
+        await expect(deleting).resolves.toBe(false);
+
+        const rows = useStore.getState().snapshot!.transactions;
+        expect(rows.find((row) => row.id === 11)).toMatchObject({ refundOfId: 12 });
+        expect(rows.find((row) => row.id === 12)).toMatchObject({ refundIds: [11] });
+        expect(rows.find((row) => row.id === 10)).toMatchObject({ refundIds: [] });
+    });
+
     it("clears both sides of refund links while deletion is pending", async () => {
         const purchase = { id: 10, date: "2026-01-01", amount: -100, refundIds: [11] };
         const refund = { id: 11, date: "2026-01-02", amount: 50, refundOfId: 10 };
