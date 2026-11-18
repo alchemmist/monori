@@ -169,7 +169,7 @@ git worktree add --detach "$base_worktree" "$base_revision" >/dev/null
 worktree_added=1
 sed -i.bak 's/npm ci --silent/npm install --legacy-peer-deps --silent/' \
   "$base_worktree/deploy/Dockerfile.front"
-sed -i.bak 's/COPY web\/ .\//RUN npm install --legacy-peer-deps --no-save react-is@19.2.8\nCOPY web\/ .\//' \
+sed -i.bak 's/COPY web\/ .\//RUN npm install --legacy-peer-deps --no-save react-is@17.0.2\nCOPY web\/ .\//' \
   "$base_worktree/deploy/Dockerfile.front"
 rm -f "$base_worktree/deploy/Dockerfile.front.bak"
 
