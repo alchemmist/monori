@@ -9,11 +9,33 @@ set, and the first category (in definition order) whose keyword is a
 case-insensitive substring of the description wins.
 """
 
+import csv
 import hashlib
 import re
-from datetime import datetime
+from collections.abc import Iterable, Mapping
+from dataclasses import asdict
+from datetime import UTC, datetime
+from typing import Literal, overload
 
-from .currencies import DEFAULT_CURRENCY, normalize
+from pydantic import ConfigDict
+from pydantic.dataclasses import dataclass as pydantic_dataclass
+
+from monori.server.app.connectors.base import SyncRow
+from monori.server.app.currencies import DEFAULT_CURRENCY, normalize
+
+type ImportValue = str | int | bool | None
+type RuleValue = str | list[str] | int
+
+
+@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+class CategoryDefinition:
+    """Represent CategoryDefinition."""
+
+    id: int
+    name: str
+    keywords: str | None
+    group_id: int
+
 
 COLUMNS = [
     "op_date",
@@ -32,131 +54,369 @@ COLUMNS = [
     "rounding",
     "rounded_total",
 ]
+MIN_STATEMENT_COLUMNS = 12
 
 DATE_RE = re.compile(r"^(\d{2})\.(\d{2})\.(\d{4})(?:\s+(\d{2}):(\d{2})(?::(\d{2}))?)?$")
 
-# first cell of a bank CSV export's header row — such a line is metadata, not data
-HEADER_FIRST_CELLS = {"дата операции", "op_date", "date"}
+
+HEADER_FIRST_CELLS = {"дата операции", "op_date", "date", "operation date"}
+HEADER_ALIASES = {
+    "дата операции": "op_date",
+    "operation date": "op_date",
+    "op_date": "op_date",
+    "сумма операции": "amount",
+    "operation amount": "amount",
+    "номер карты": "card",
+    "card number": "card",
+    "статус": "status",
+    "status": "status",
+    "категория по-умолчанию": "bank_category",
+    "category": "bank_category",
+    "mcc": "mcc",
+    "описание": "description",
+    "description": "description",
+}
 
 
-def parse_date(raw):
+def _attr_name(key: str) -> str:
+    return {
+        "accountId": "account_id",
+        "categoryId": "category_id",
+    }.get(key, key)
+
+
+@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+class ParseError:
+    """Represent ParseError."""
+
+    line: int
+    error: str
+    raw: str
+
+    @overload
+    def __getitem__(self, key: Literal["line"]) -> int: ...
+
+    @overload
+    def __getitem__(self, key: Literal["error"]) -> str: ...
+
+    @overload
+    def __getitem__(self, key: Literal["raw"]) -> str: ...
+
+    def __getitem__(self, key: str) -> int | str:
+        """Return a parse-error field by its API key."""
+        if key == "line":
+            return self.line
+        if key == "error":
+            return self.error
+        if key == "raw":
+            return self.raw
+        raise KeyError(key)
+
+    def to_api_dict(self) -> dict[str, int | str]:
+        """Handle to api dict."""
+        return asdict(self)
+
+
+@pydantic_dataclass(config=ConfigDict(extra="forbid", validate_assignment=True))
+class ImportRow:
+    """Represent ImportRow."""
+
+    date: str
+    amount: int
+    description: str
+    bank_category: str
+    mcc: str
+    card: str
+    currency: str | None = None
+    account_id: int | None = None
+    category_id: int | None = None
+    duplicate: bool = False
+    hash: str = ""
+
+    @overload
+    def __getitem__(self, key: Literal["date"]) -> str: ...
+
+    @overload
+    def __getitem__(self, key: Literal["amount"]) -> int: ...
+
+    @overload
+    def __getitem__(self, key: Literal["description"]) -> str: ...
+
+    @overload
+    def __getitem__(self, key: Literal["bank_category"]) -> str: ...
+
+    @overload
+    def __getitem__(self, key: Literal["mcc"]) -> str: ...
+
+    @overload
+    def __getitem__(self, key: Literal["card"]) -> str: ...
+
+    @overload
+    def __getitem__(self, key: Literal["accountId"]) -> int | None: ...
+
+    @overload
+    def __getitem__(self, key: Literal["categoryId"]) -> int | None: ...
+
+    @overload
+    def __getitem__(self, key: Literal["duplicate"]) -> bool: ...
+
+    @overload
+    def __getitem__(self, key: Literal["hash"]) -> str: ...
+
+    def __getitem__(self, key: str) -> ImportValue:
+        """Return an import-row field by its API or internal key."""
+        values: dict[str, ImportValue] = self.to_api_dict()
+        try:
+            return values[key]
+        except KeyError:
+            snake_key = _attr_name(key)
+            if snake_key == "account_id":
+                return self.account_id
+            if snake_key == "category_id":
+                return self.category_id
+            raise
+
+    @overload
+    def __setitem__(self, key: Literal["accountId"], value: int | None) -> None: ...
+
+    @overload
+    def __setitem__(self, key: Literal["categoryId"], value: int | None) -> None: ...
+
+    @overload
+    def __setitem__(self, key: Literal["duplicate"], value: bool) -> None: ...
+
+    @overload
+    def __setitem__(self, key: Literal["hash"], value: str) -> None: ...
+
+    def __setitem__(self, key: str, value: ImportValue) -> None:
+        """Assign an import-row field by its API or internal key."""
+        setattr(self, _attr_name(key), value)
+
+    def get(self, key: str, default: ImportValue = None) -> ImportValue:
+        """Handle get."""
+        try:
+            values: dict[str, ImportValue] = self.to_api_dict()
+            return values[key]
+        except KeyError:
+            return default
+
+    def to_api_dict(self) -> dict[str, ImportValue]:
+        """Handle to api dict."""
+        return {
+            "date": self.date,
+            "amount": self.amount,
+            "description": self.description,
+            "bank_category": self.bank_category,
+            "mcc": self.mcc,
+            "card": self.card,
+            "accountId": self.account_id,
+            "categoryId": self.category_id,
+            "duplicate": self.duplicate,
+            "hash": self.hash,
+        }
+
+    def to_ingest_dict(self) -> dict[str, ImportValue]:
+        """Serialize at the SQLite ingest boundary, which uses snake_case keys."""
+        return {
+            "date": self.date,
+            "amount": self.amount,
+            "description": self.description,
+            "bank_category": self.bank_category,
+            "mcc": self.mcc,
+            "category_id": self.category_id,
+        }
+
+    def to_sync_dict(self) -> SyncRow:
+        """Handle to sync dict."""
+        return SyncRow(
+            date=self.date,
+            amount=self.amount,
+            description=self.description,
+            bank_category=self.bank_category,
+            mcc=self.mcc,
+            card=self.card,
+            account_id=self.account_id,
+            category_id=self.category_id,
+            duplicate=self.duplicate,
+            hash=self.hash,
+        )
+
+
+@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+class CategoryRule:
+    """Represent CategoryRule."""
+
+    category_id: int
+    name: str
+    keywords: list[str]
+
+    @overload
+    def __getitem__(self, key: Literal["category_id"]) -> int: ...
+
+    @overload
+    def __getitem__(self, key: Literal["name"]) -> str: ...
+
+    @overload
+    def __getitem__(self, key: Literal["keywords"]) -> list[str]: ...
+
+    def __getitem__(self, key: str) -> RuleValue:
+        """Return a category-rule field by its name."""
+        if key == "category_id":
+            return self.category_id
+        if key == "name":
+            return self.name
+        if key == "keywords":
+            return self.keywords
+        raise KeyError(key)
+
+
+def parse_date(raw: str) -> datetime | None:
+    """Handle parse date."""
     m = DATE_RE.match(raw.strip())
     if not m:
         return None
     d, mo, y, hh, mm, ss = m.groups()
-    return datetime(int(y), int(mo), int(d), int(hh or 0), int(mm or 0), int(ss or 0))
+    return datetime(int(y), int(mo), int(d), int(hh or 0), int(mm or 0), int(ss or 0), tzinfo=UTC)
 
 
-def parse_amount_kop(raw):
-    """
-    '-1 500,00' -> -150000 kopecks.
-    """
-    s = str(raw).strip().replace(" ", "").replace(" ", "").replace(",", ".")
+def parse_amount_kop(raw: str) -> int | None:
+    """'-1 500,00' -> -150000 kopecks."""
+    s = str(raw).strip().replace("\u00a0", "").replace(" ", "").replace(",", ".")
     if not s or s in ("-", "."):
         return None
     try:
-        # round through cents to dodge float artifacts
         return round(round(float(s), 2) * 100)
     except ValueError:
         return None
 
 
-def tx_hash(account_id, date_iso, amount_kop, description, currency=DEFAULT_CURRENCY):
+def tx_hash(
+    account_id: int,
+    date_iso: str,
+    amount_kop: int,
+    description: str,
+    currency: str = DEFAULT_CURRENCY,
+) -> str:
     """
-    Dedup key of a transaction. Always scoped to the account: the same
-    date/amount/description legitimately occurs on two different accounts
-    (transfer legs, mirrored cards) and must not collide. The currency is part
-    of the key for the same reason — 100 lari and 100 rubles are different money,
-    and on a card billed in both neither may swallow the other.
+    Dedup key of a transaction. Always scoped to the account: the same.
+
+    date/amount/description legitimately occurs on two different accounts.
+    (transfer legs, mirrored cards) and must not collide.
     """
-    code = normalize(currency)
     return hashlib.sha256(
-        f"{account_id}|{date_iso}|{amount_kop}|{code}|{description}".encode()
+        f"{account_id}|{date_iso}|{amount_kop}|{normalize(currency)}|{description}".encode(),
     ).hexdigest()
 
 
-def parse_statement(text):
+def parse_statement(text: str) -> tuple[list[ImportRow], list[ParseError]]:
     """
-    Returns (rows, errors). Each row: dict with date (ISO), amount (minor
-    units), currency, description, bank_category, mcc. The amount and the
-    currency are read as the pair the bank prints them as — the settlement
-    column, not the one the merchant charged in.
+    Handle Returns (rows, errors). Each row: dict with date (ISO), amount (kopecks),.
 
-    Accepts both pasted statement rows and a
+    description, bank_category, mcc. Accepts both pasted statement rows and a.
     full bank CSV export — a header row is skipped, not reported. Hashes are
     not computed here — the account is not known yet; ingestion derives the
     account-scoped hash on insert.
     """
-    rows, errors = [], []
+    rows: list[ImportRow] = []
+    errors: list[ParseError] = []
+    header_map: dict[str, int] | None = None
     for ln, line in enumerate(text.splitlines(), 1):
         if not line.strip():
             continue
-        delim = "\t" if "\t" in line else ";"
-        parts = [p.strip().strip('"') for p in line.split(delim)]
-        if parts and parts[0].lower() in HEADER_FIRST_CELLS:
-            continue
-        if len(parts) < 12:
-            errors.append(
-                {"line": ln, "error": f"expected >=12 columns, got {len(parts)}", "raw": line[:200]}
+        delim = "\t" if "\t" in line else ";" if ";" in line else ","
+        parts = [p.strip() for p in next(csv.reader([line], delimiter=delim))]
+        normalized = [part.lower() for part in parts]
+        if parts and (
+            parts[0].lower() in HEADER_FIRST_CELLS
+            or (
+                any(part in HEADER_ALIASES for part in normalized) and "дата операции" in normalized
             )
+        ):
+            header_map = {
+                field: index
+                for index, part in enumerate(normalized)
+                if (field := HEADER_ALIASES.get(part)) is not None
+            }
             continue
-        rec = dict(zip(COLUMNS, parts + [""] * (len(COLUMNS) - len(parts)), strict=False))
+        if len(parts) < MIN_STATEMENT_COLUMNS:
+            errors.append(ParseError(ln, f"expected >=12 columns, got {len(parts)}", line[:200]))
+            continue
+        if header_map is None:
+            rec = dict(zip(COLUMNS, parts + [""] * (len(COLUMNS) - len(parts)), strict=False))
+        else:
+            rec = {field: parts[index] for field, index in header_map.items() if index < len(parts)}
+            rec = {column: rec.get(column, "") for column in COLUMNS}
         date = parse_date(rec["op_date"])
         amount = parse_amount_kop(rec["amount"])
         if date is None or amount is None:
-            errors.append({"line": ln, "error": "unparseable date or amount", "raw": line[:200]})
+            errors.append(ParseError(ln, "unparseable date or amount", line[:200]))
             continue
         if rec["status"] and rec["status"].upper() == "FAILED":
             continue
         date_iso = date.strftime("%Y-%m-%dT%H:%M:%S")
         rows.append(
-            {
-                "date": date_iso,
-                "amount": amount,
-                "description": rec["description"],
-                "bank_category": rec["bank_category"],
-                "mcc": rec["mcc"],
-                "card": rec["card"],
-                "currency": normalize(rec["currency"], ""),
-            }
+            ImportRow(
+                date=date_iso,
+                amount=amount,
+                description=rec["description"],
+                bank_category=rec["bank_category"],
+                mcc=rec["mcc"],
+                card=rec["card"],
+                currency=normalize(rec["currency"], ""),
+            ),
         )
     return rows, errors
 
 
-def build_rules(categories, groups):
+def build_rules(
+    categories: Iterable[CategoryDefinition],
+    groups: Mapping[int, str],
+) -> dict[str, list[CategoryRule]]:
     """
-    categories: iterable of dicts with name/keywords/group_id;
+    categories: iterable of dicts with name/keywords/group_id;.
+
     groups: id -> kind ('income'|'expense'). Returns {'IN': [...], 'OUT': [...]}.
     """
-    rules: dict[str, list] = {"IN": [], "OUT": []}
+    rules: dict[str, list[CategoryRule]] = {"IN": [], "OUT": []}
     for c in categories:
-        keywords = [k.strip().lower() for k in str(c["keywords"] or "").split("|") if k.strip()]
+        keywords = list(
+            dict.fromkeys(k.strip().lower() for k in (c.keywords or "").split("|") if k.strip())
+        )
         if not keywords:
             continue
-        kind = groups.get(c["group_id"])
+        group_id = c.group_id
+        kind = groups.get(group_id)
         if kind not in ("income", "expense"):
             continue
         rules["IN" if kind == "income" else "OUT"].append(
-            {"category_id": c["id"], "name": c["name"], "keywords": keywords}
+            CategoryRule(
+                category_id=c.id,
+                name=c.name,
+                keywords=keywords,
+            ),
         )
     return rules
 
 
-def categorize(description, amount_kop, rules):
+def categorize(
+    description: str,
+    amount_kop: int,
+    rules: Mapping[str, list[CategoryRule]],
+) -> int | None:
     """
-    Returns category_id or None.
+    Handle Returns category_id or None.
 
     An inflow is income first — but a merchant's money coming back is a refund,
     and a refund belongs in the envelope it left, or the category quietly reads
     as more spent than it was. So a positive amount that matches no income
     keyword still gets to match the expense keywords.
     """
-    desc = str(description or "").lower()
+    desc = description.lower()
     if not desc or amount_kop == 0:
         return None
     for side in ("IN", "OUT") if amount_kop > 0 else ("OUT",):
         for rule in rules[side]:
-            for kw in rule["keywords"]:
+            for kw in rule.keywords:
                 if kw in desc:
-                    return rule["category_id"]
+                    return rule.category_id
     return None

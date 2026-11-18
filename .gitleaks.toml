@@ -1,0 +1,6 @@
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Built frontend bundle: server/static/ is a minified, now-gitignored build that was committed once (193f3e5). Its i18n placeholder strings (e.g. MISSING_KEY_FOR_0) trip the generic-api-key rule on the historical blob."
+paths = ['''server/static/.*''']

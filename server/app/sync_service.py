@@ -12,14 +12,34 @@ on ``/runs/{cid}/sms``, the run is cancelled, or it is replaced by a new run.
 
 import contextlib
 import logging
+import threading
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+from dataclasses import dataclass
+from time import monotonic
 
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
+from pydantic import ConfigDict, Field
+from pydantic.dataclasses import dataclass as pydantic_dataclass
 
-from .connectors import base as connectors
-from .connectors.base import ConnectorError, SmsRequired
+from monori.common import JsonObject
+from monori.server.app.connectors import base as connectors
+from monori.server.app.connectors.base import (
+    ConnectorError,
+    PublicConnectorError,
+    SmsRequiredError,
+    SyncResult,
+)
 
-app = FastAPI(title="monori-sync")
+
+@asynccontextmanager
+async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    """Release every pending connector when FastAPI stops."""
+    yield
+    shutdown()
+
+
+app = FastAPI(title="monori-sync", lifespan=lifespan)
 
 log = logging.getLogger(__name__)
 
@@ -27,80 +47,217 @@ SMS_SENT = "A confirmation code was sent to your phone."
 CODE_REJECTED = "The bank rejected the code — check it and try again."
 SYNC_FAILED = "The bank sync could not be completed."
 
-PENDING: dict[int, connectors.Connector] = {}
+PENDING_TTL_SECONDS = 600
+PENDING_CAPACITY = 8
 
 
-def _error(cid, error):
+@dataclass(frozen=True)
+class RunToken:
+    """Identify one run generation for a connection."""
+
+
+@dataclass(frozen=True)
+class PendingSession:
+    """Own a connector until its SMS deadline."""
+
+    token: RunToken
+    connector: connectors.Connector
+    expires_at: float
+
+
+PENDING: dict[int, PendingSession] = {}
+PENDING_LOCK = threading.RLock()
+
+
+@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+class RunStatusResponse:
+    """Represent RunStatusResponse."""
+
+    status: str
+    message: str | None = None
+
+
+@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+class RunDoneResponse:
+    """Represent RunDoneResponse."""
+
+    status: str
+    rows: list[connectors.SyncRow]
+    session: JsonObject | None
+
+
+def _error(cid: int, error: Exception) -> RunStatusResponse:
     log.warning("sync run %s failed: %s", cid, error)
-    return {"status": "error", "message": SYNC_FAILED}
+    if isinstance(error, PublicConnectorError):
+        return RunStatusResponse(status=connectors.PUBLIC_ERROR_STATUS, message=str(error))
+    return RunStatusResponse(status="error", message=SYNC_FAILED)
 
 
-class RunBody(BaseModel):
+@pydantic_dataclass(config=ConfigDict(populate_by_name=True))
+class RunBody:
+    """Represent RunBody."""
+
     bank: str
     kind: str
-    credentials: dict
-    session: dict | None = None
+    credentials: JsonObject
+    session: JsonObject | None = None
     since: str | None = None
-    accountRef: str | None = None
+    account_ref: str | None = Field(default=None, alias="accountRef")
 
 
-class SmsBody(BaseModel):
+@pydantic_dataclass(config=ConfigDict(populate_by_name=True))
+class SmsBody:
+    """Represent SmsBody."""
+
     code: str
 
 
-def _close_pending(cid):
-    old = PENDING.pop(cid, None)
-    if old is not None:
-        with contextlib.suppress(Exception):
-            old.close()
+def _close_connector(connector: connectors.Connector) -> None:
+    with contextlib.suppress(Exception):
+        connector.close()
 
 
-def _done(result):
-    return {"status": "done", "rows": result.rows, "session": result.session}
+def _expire_pending() -> list[connectors.Connector]:
+    now = monotonic()
+    expired = []
+    for cid, pending in list(PENDING.items()):
+        if pending.expires_at <= now:
+            del PENDING[cid]
+            expired.append(pending.connector)
+    return expired
+
+
+def _reserve(
+    cid: int,
+    connector: connectors.Connector,
+) -> tuple[RunToken, list[connectors.Connector]]:
+    expired = _expire_pending()
+    replaced = PENDING.pop(cid, None)
+    if replaced is not None:
+        expired.append(replaced.connector)
+    if len(PENDING) >= PENDING_CAPACITY:
+        raise HTTPException(429, "too many logins awaiting a code")
+    token = RunToken()
+    PENDING[cid] = PendingSession(token, connector, monotonic() + PENDING_TTL_SECONDS)
+    return token, expired
+
+
+def _park_if_owned(cid: int, token: RunToken, connector: connectors.Connector) -> bool:
+    current = PENDING.get(cid)
+    if current is None or current.token is not token:
+        return False
+    PENDING[cid] = PendingSession(token, connector, monotonic() + PENDING_TTL_SECONDS)
+    return True
+
+
+def _release_if_owned(cid: int, token: RunToken) -> bool:
+    with PENDING_LOCK:
+        current = PENDING.get(cid)
+        if current is None or current.token is not token:
+            return False
+        PENDING.pop(cid)
+        return True
+
+
+def close_all_pending() -> None:
+    """Close and forget every connector waiting for SMS."""
+    with PENDING_LOCK:
+        pending = list(PENDING.values())
+        PENDING.clear()
+    for session in pending:
+        _close_connector(session.connector)
+
+
+def shutdown() -> None:
+    """Release pending browser sessions during application shutdown."""
+    close_all_pending()
+
+
+def _done(result: SyncResult) -> RunDoneResponse:
+    return RunDoneResponse(status="done", rows=result.rows, session=result.session)
 
 
 @app.get("/health")
-def health():
+def health() -> dict[str, bool]:
+    """Handle health."""
     return {"ok": True}
 
 
 @app.post("/runs/{cid}")
-def start_run(cid: int, body: RunBody):
-    _close_pending(cid)
+def start_run(cid: int, body: RunBody) -> RunDoneResponse | RunStatusResponse:
+    """Handle start run."""
     try:
         cls = connectors.get_connector_class(body.bank, body.kind)
     except ConnectorError as e:
         return _error(cid, e)
-    connector = cls(body.credentials, body.session, account_ref=body.accountRef)
+    connector = cls(body.credentials, body.session, account_ref=body.account_ref)
     try:
-        return _done(connector.sync(body.since))
-    except SmsRequired:
-        PENDING[cid] = connector
-        return {"status": "awaiting_sms", "message": SMS_SENT}
+        with PENDING_LOCK:
+            token, stale = _reserve(cid, connector)
+    except HTTPException:
+        _close_connector(connector)
+        raise
+    for old in stale:
+        _close_connector(old)
+    try:
+        result = _done(connector.sync(body.since))
+    except SmsRequiredError:
+        with PENDING_LOCK:
+            parked = _park_if_owned(cid, token, connector)
+        if parked:
+            return RunStatusResponse(status="awaiting_sms", message=SMS_SENT)
+        raise HTTPException(409, "login was cancelled or superseded") from None
     except ConnectorError as e:
+        if not _release_if_owned(cid, token):
+            raise HTTPException(409, "login was cancelled or superseded") from None
+        _close_connector(connector)
         return _error(cid, e)
+    if not _release_if_owned(cid, token):
+        raise HTTPException(409, "login was cancelled or superseded")
+    _close_connector(connector)
+    return result
 
 
 @app.post("/runs/{cid}/sms")
-def submit_sms(cid: int, body: SmsBody):
-    connector = PENDING.pop(cid, None)
-    if connector is None:
-        raise HTTPException(409, "no login awaiting a code")
+def submit_sms(cid: int, body: SmsBody) -> RunDoneResponse | RunStatusResponse:
+    """Handle submit sms."""
+    with PENDING_LOCK:
+        expired = _expire_pending()
+        pending = PENDING.pop(cid, None)
+        if pending is None:
+            raise HTTPException(409, "no login awaiting a code")
+        token = pending.token
+        connector = pending.connector
+        PENDING[cid] = pending
+    for old in expired:
+        _close_connector(old)
     try:
-        return _done(connector.resume_sync(body.code))
-    except SmsRequired:
-        # a rejected code keeps the login alive — re-park it and ask again
-        PENDING[cid] = connector
-        return {"status": "awaiting_sms", "message": CODE_REJECTED}
+        result = _done(connector.resume_sync(body.code))
+    except SmsRequiredError:
+        with PENDING_LOCK:
+            parked = _park_if_owned(cid, token, connector)
+        if parked:
+            return RunStatusResponse(status="awaiting_sms", message=CODE_REJECTED)
+        raise HTTPException(409, "login was cancelled or superseded") from None
     except ConnectorError as e:
-        # the failed login is no longer tracked, so close it here or its live
-        # browser leaks
-        with contextlib.suppress(Exception):
-            connector.close()
+        if not _release_if_owned(cid, token):
+            raise HTTPException(409, "login was cancelled or superseded") from None
+        _close_connector(connector)
         return _error(cid, e)
+    if not _release_if_owned(cid, token):
+        raise HTTPException(409, "login was cancelled or superseded")
+    _close_connector(connector)
+    return result
 
 
 @app.post("/runs/{cid}/cancel")
-def cancel_run(cid: int):
-    _close_pending(cid)
+def cancel_run(cid: int) -> dict[str, int]:
+    """Handle cancel run."""
+    with PENDING_LOCK:
+        expired = _expire_pending()
+        pending = PENDING.pop(cid, None)
+    for connector in expired:
+        _close_connector(connector)
+    if pending is not None:
+        _close_connector(pending.connector)
     return {"cancelled": cid}

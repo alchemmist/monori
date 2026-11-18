@@ -13,9 +13,12 @@ branch_labels = None
 depends_on = None
 
 
-def upgrade():
+def upgrade() -> None:
+    """Handle upgrade."""
     op.execute("ALTER TABLE activity_events ADD COLUMN detail TEXT")
 
 
-def downgrade():
-    raise NotImplementedError("forward-only migrations")
+def downgrade() -> None:
+    """Handle downgrade."""
+    msg = "forward-only migrations"
+    raise NotImplementedError(msg)

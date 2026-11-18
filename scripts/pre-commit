@@ -1,0 +1,10 @@
+#!/bin/sh
+
+# monori-pre-commit-hook
+set -eu
+
+repo_root=$(git rev-parse --show-toplevel)
+cd "$repo_root"
+
+make fmt
+git add -u -- .

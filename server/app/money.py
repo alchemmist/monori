@@ -7,23 +7,29 @@ amount worth in that reporting currency on that day — and they are answered
 here so every path answers them the same way.
 """
 
+import sqlite3
+
 from .currencies import DEFAULT_CURRENCY, normalize
-from .rates import RateUnavailable, convert
+from .rates import convert
 
 
-def account_currency(c, account_id):
+def account_currency(c: sqlite3.Connection, account_id: int) -> str:
+    """Return the currency in which an account is held."""
     row = c.execute("SELECT currency FROM accounts WHERE id=?", (account_id,)).fetchone()
     return normalize(row["currency"] if row else None)
 
 
-def base_currency(c, user_id):
+def base_currency(c: sqlite3.Connection, user_id: int) -> str:
+    """Return a user's reporting currency."""
     row = c.execute("SELECT base_currency FROM users WHERE id=?", (user_id,)).fetchone()
     return normalize(row["base_currency"] if row else None)
 
 
-def base_currency_of_account(c, account_id):
+def base_currency_of_account(c: sqlite3.Connection, account_id: int) -> str:
     """
-    The reporting currency of whoever owns this account. Ingestion knows the
+    Return the reporting currency of whoever owns this account.
+
+    Ingestion knows the
     account it is writing to long before it knows the user.
     """
     row = c.execute(
@@ -33,31 +39,36 @@ def base_currency_of_account(c, account_id):
     return normalize(row["base_currency"] if row else None)
 
 
-def to_base(c, amount, currency, base, date):
+def to_base(
+    c: sqlite3.Connection,
+    amount: int,
+    currency: str,
+    base: str,
+    date: str,
+) -> int:
     """
     ``amount`` in ``base``, at the rate for ``date``.
 
-    A currency with no rate anywhere is carried across at face value rather
-    than blocking the write: refusing to record a transaction because a rate
-    feed was unreachable would be the worse failure, and the number is corrected
-    the moment rates arrive (see :func:`reprice_user`).
+    Missing historical rates fail explicitly so incomparable units can never be
+    stored as though they were equal.
     """
-    try:
-        return convert(c, amount, currency, base, date)
-    except RateUnavailable:
-        return amount
+    if amount == 0:
+        return 0
+    return convert(c, amount, currency, base, date)
 
 
-def resolve_currency(c, account_id, requested):
+def resolve_currency(c: sqlite3.Connection, account_id: int, requested: str | None) -> str:
     """
-    What a new transaction on this account is denominated in: what the caller
+    Resolve what a new transaction on this account is denominated in.
+
+    Prefer what the caller
     asked for, else the account's own currency, else rubles.
     """
     code = normalize(requested, "")
     return code or account_currency(c, account_id) or DEFAULT_CURRENCY
 
 
-def reprice_user(c, user_id):
+def reprice_user(c: sqlite3.Connection, user_id: int) -> int:
     """
     Recompute ``base_amount`` for every one of a user's transactions.
 
@@ -80,7 +91,7 @@ def reprice_user(c, user_id):
     return changed
 
 
-def reprice_all(c):
+def reprice_all(c: sqlite3.Connection) -> int:
     """
     Reprice every user's ledger.
 
@@ -89,3 +100,35 @@ def reprice_all(c):
     of whoever pressed the button.
     """
     return sum(reprice_user(c, r["id"]) for r in c.execute("SELECT id FROM users"))
+
+
+def reprice_plans(
+    c: sqlite3.Connection,
+    user_id: int,
+    source_currency: str,
+    target_currency: str,
+    day: str,
+) -> int:
+    """Convert budget allocations and savings targets when reporting currency changes."""
+    changed = 0
+    budgets = c.execute(
+        "SELECT b.rowid, b.amount AS value FROM budgets b"
+        " JOIN categories c ON c.id=b.category_id"
+        " JOIN category_groups g ON g.id=c.group_id WHERE g.user_id=?",
+        (user_id,),
+    ).fetchall()
+    for row in budgets:
+        value = convert(c, row["value"], source_currency, target_currency, day)
+        c.execute("UPDATE budgets SET amount=? WHERE rowid=?", (value, row["rowid"]))
+        changed += 1
+    goals = c.execute(
+        "SELECT c.rowid, c.goal_target AS value FROM categories c"
+        " JOIN category_groups g ON g.id=c.group_id"
+        " WHERE g.user_id=? AND c.goal_target IS NOT NULL",
+        (user_id,),
+    ).fetchall()
+    for row in goals:
+        value = convert(c, row["value"], source_currency, target_currency, day)
+        c.execute("UPDATE categories SET goal_target=? WHERE rowid=?", (value, row["rowid"]))
+        changed += 1
+    return changed

@@ -1,0 +1,62 @@
+name: Setup project
+description: Install only the project dependencies required by the current job
+inputs:
+    install-web:
+        description: Install web dependencies and configure Node
+        required: false
+        default: "false"
+    python-profile:
+        description: Python environment profile
+        required: false
+        default: none
+runs:
+    using: composite
+    steps:
+        - name: Setup Node
+          if: inputs.install-web == 'true'
+          uses: actions/setup-node@v7
+          with:
+              node-version: 22
+              cache: npm
+              cache-dependency-path: web/package-lock.json
+
+        - name: Pin npm
+          if: inputs.install-web == 'true'
+          shell: bash
+          run: npm install --global npm@10.9.2
+
+        - name: Setup uv
+          if: inputs.python-profile != 'none'
+          uses: astral-sh/setup-uv@v7
+          with:
+              enable-cache: true
+              cache-dependency-glob: uv.lock
+
+        - name: Restore Python environment
+          if: inputs.python-profile != 'none'
+          uses: actions/cache@v5
+          with:
+              path: .venv
+              key: uv-venv-${{ runner.os }}-python-3.12-${{ inputs.python-profile }}-${{ hashFiles('uv.lock') }}
+
+        - name: Install web dependencies
+          if: inputs.install-web == 'true'
+          shell: bash
+          run: npm ci --no-audit --no-fund
+          working-directory: web
+
+        - name: Install Python dependencies
+          if: inputs.python-profile != 'none'
+          shell: bash
+          run: |
+              case "${{ inputs.python-profile }}" in
+                  type)
+                      uv sync --locked --no-editable --reinstall-package monori-common --reinstall-package monori-ci --reinstall-package monori-server --no-dev --group type ;;
+                  ci|format|lint|analyze|test|audit|mutation|runtime)
+                      uv sync --locked --no-dev --group "${{ inputs.python-profile }}" ;;
+                  coverage)
+                      uv sync --locked --no-dev --group test ;;
+                  *) echo "Unknown Python profile: ${{ inputs.python-profile }}" >&2; exit 2 ;;
+              esac
+              echo "UV_NO_SYNC=1" >> "$GITHUB_ENV"
+          working-directory: .

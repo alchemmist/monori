@@ -1,10 +1,10 @@
-import pathlib
-import sys
+import sqlite3
+from pathlib import Path
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
+import pytest
 
-import app.db as dbmod
-from app.money import (
+import monori.server.app.db as dbmod
+from monori.server.app.money import (
     account_currency,
     base_currency,
     base_currency_of_account,
@@ -12,10 +12,10 @@ from app.money import (
     resolve_currency,
     to_base,
 )
-from app.rates import store_rates
+from monori.server.app.rates import RateUnavailableError, store_rates
 
 
-def _db(tmp_path, base="RUB"):
+def _db(tmp_path: Path, base: str = "RUB") -> tuple[sqlite3.Connection, int]:
     c = dbmod.connect(str(tmp_path / "money.db"))
     c.execute(
         "INSERT INTO users (email, email_canonical, password_hash, created_at, base_currency)"
@@ -33,20 +33,26 @@ def _db(tmp_path, base="RUB"):
     return c, uid
 
 
-def _account(c, name):
+def _account(c: sqlite3.Connection, name: str) -> int:
     return c.execute("SELECT id FROM accounts WHERE name=?", (name,)).fetchone()[0]
 
 
-def _add_tx(c, account_id, amount, currency, date="2026-07-01T10:00:00", base=None):
+def _add_tx(
+    c: sqlite3.Connection,
+    account_id: int,
+    amount: int,
+    currency: str,
+    date: str = "2026-07-01T10:00:00",
+) -> int:
     c.execute(
         "INSERT INTO transactions (date, amount, currency, base_amount, description,"
         " account_id, hash, source) VALUES (?, ?, ?, ?, 'x', ?, ?, 'manual')",
-        (date, amount, currency, amount if base is None else base, account_id, f"h{amount}"),
+        (date, amount, currency, amount, account_id, f"h{amount}"),
     )
     return c.execute("SELECT MAX(id) FROM transactions").fetchone()[0]
 
 
-def test_reads_the_currency_off_an_account_and_its_owner(tmp_path):
+def test_reads_the_currency_off_an_account_and_its_owner(tmp_path: Path) -> None:
     c, uid = _db(tmp_path, base="EUR")
     try:
         lari = _account(c, "Lari")
@@ -57,7 +63,7 @@ def test_reads_the_currency_off_an_account_and_its_owner(tmp_path):
         c.close()
 
 
-def test_missing_rows_fall_back_to_rubles(tmp_path):
+def test_missing_rows_fall_back_to_rubles(tmp_path: Path) -> None:
     c, _ = _db(tmp_path)
     try:
         assert account_currency(c, 9999) == "RUB"
@@ -67,7 +73,7 @@ def test_missing_rows_fall_back_to_rubles(tmp_path):
         c.close()
 
 
-def test_resolve_currency_prefers_what_was_asked_for(tmp_path):
+def test_resolve_currency_prefers_what_was_asked_for(tmp_path: Path) -> None:
     c, _ = _db(tmp_path)
     try:
         rubles = _account(c, "Rubles")
@@ -78,7 +84,7 @@ def test_resolve_currency_prefers_what_was_asked_for(tmp_path):
         c.close()
 
 
-def test_to_base_converts_at_the_rate_for_the_date(tmp_path):
+def test_to_base_converts_at_the_rate_for_the_date(tmp_path: Path) -> None:
     c, _ = _db(tmp_path)
     try:
         store_rates(c, "2026-07-01", {"GEL": 30.0})
@@ -87,19 +93,16 @@ def test_to_base_converts_at_the_rate_for_the_date(tmp_path):
         c.close()
 
 
-def test_to_base_carries_an_unquotable_currency_across_at_face_value(tmp_path):
-    """
-    A rate feed being unreachable must not be able to block a write. The number
-    is wrong until rates arrive, and repricing then corrects it.
-    """
+def test_to_base_rejects_an_unquotable_currency(tmp_path: Path) -> None:
     c, _ = _db(tmp_path)
     try:
-        assert to_base(c, 5000, "XYZ", "RUB", "2026-07-01") == 5000
+        with pytest.raises(RateUnavailableError):
+            to_base(c, 5000, "XYZ", "RUB", "2026-07-01")
     finally:
         c.close()
 
 
-def test_reprice_only_touches_what_moved(tmp_path):
+def test_reprice_only_touches_what_moved(tmp_path: Path) -> None:
     c, uid = _db(tmp_path)
     try:
         store_rates(c, "2026-07-01", {"GEL": 30.0})
@@ -111,13 +114,13 @@ def test_reprice_only_touches_what_moved(tmp_path):
             c.execute("SELECT base_amount FROM transactions WHERE id=?", (gel_tx,)).fetchone()[0]
             == -300000
         )
-        # a second pass has nothing left to correct
+
         assert reprice_user(c, uid) == 0
     finally:
         c.close()
 
 
-def test_reprice_follows_a_new_reporting_currency(tmp_path):
+def test_reprice_follows_a_new_reporting_currency(tmp_path: Path) -> None:
     c, uid = _db(tmp_path)
     try:
         store_rates(c, "2026-07-01", {"GEL": 30.0, "USD": 90.0})
@@ -125,7 +128,7 @@ def test_reprice_follows_a_new_reporting_currency(tmp_path):
         gel_tx = _add_tx(c, lari, -30000, "GEL")
         c.execute("UPDATE users SET base_currency='USD' WHERE id=?", (uid,))
         reprice_user(c, uid)
-        # 300.00 GEL = 9000 RUB = 100.00 USD
+
         assert (
             c.execute("SELECT base_amount FROM transactions WHERE id=?", (gel_tx,)).fetchone()[0]
             == -10000
@@ -134,7 +137,7 @@ def test_reprice_follows_a_new_reporting_currency(tmp_path):
         c.close()
 
 
-def test_reprice_uses_each_row_own_date(tmp_path):
+def test_reprice_uses_each_row_own_date(tmp_path: Path) -> None:
     c, uid = _db(tmp_path)
     try:
         store_rates(c, "2026-01-01", {"GEL": 30.0})

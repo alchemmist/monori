@@ -3,10 +3,15 @@ web/dist/
 web/package-lock.json
 server/static/
 server/data/
-server/.venv/
-server/uv.lock
-migration/
+.venv/
 docs/
 **/*.woff2
 **/*.png
 **/*.svg
+
+# Quality Graph generated files (managed by qg)
+.github/workflows/quality-graph.yml
+.github/workflows/quality-graph-push.yml
+.github/workflows/quality-graph-publish.yml
+.quality-graph/manifest.json
+# End Quality Graph generated files

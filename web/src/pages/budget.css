@@ -2,13 +2,107 @@
     display: flex;
     align-items: center;
     gap: 12px;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     margin-bottom: 16px;
+}
+
+.budget-toolbar__create {
+    width: 92px;
+}
+
+.budget-toolbar__unused {
+    width: 116px;
+}
+
+.budget-toolbar__action_hidden {
+    visibility: hidden;
+    pointer-events: none;
+}
+
+.goal-group-badge {
+    margin-left: 8px;
+    color: var(--m-accent);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
+.goal-urgency {
+    color: var(--m-warning);
+}
+
+.goal-urgency_overdue {
+    color: var(--m-expense);
+    font-weight: 700;
+}
+
+.goal-distribute-prompt {
+    margin-bottom: 8px;
+    color: var(--m-text);
+    font-size: 13px;
+    font-weight: 600;
+}
+
+/* the range lives in a dropdown so the toolbar keeps one row of equal-height
+   controls; the button above it carries the current selection */
+.tx-amount-filter {
+    padding: 12px 14px 10px;
+}
+
+.tx-amount-filter__head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+    color: var(--m-text-dim);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.tx-amount-filter__selection {
+    color: var(--m-text);
+    font-size: 12.5px;
+    font-variant-numeric: tabular-nums;
+    text-transform: none;
+    letter-spacing: 0;
+    white-space: nowrap;
+}
+
+/* an active range keeps changing width; tabular figures and a floor on the
+   width keep the toolbar from twitching under the drag */
+.tx-amount-filter__button {
+    min-width: 104px;
+    font-variant-numeric: tabular-nums;
+}
+
+.tx-amount-filter__scale,
+.tx-amount-filter__foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    color: var(--m-text-dim);
+    font-size: 11.5px;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.tx-amount-filter__foot {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid var(--m-border-soft);
+}
+
+/* room for the zero mark that hangs below the track */
+.tx-amount-filter .mantine-RangeSlider-root {
+    margin: 4px 0 18px;
 }
 
 @media (width <= 760px) {
     .budget-toolbar {
         gap: 8px;
+        flex-wrap: wrap;
     }
 
     .hero-card {
@@ -34,13 +128,79 @@
     min-width: 150px;
 }
 
+.hero-card_available {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+}
+
+/* a single warm light sweeps across the card when the month reaches zero */
+.hero-card_complete::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    border-radius: inherit;
+    pointer-events: none;
+    background: linear-gradient(
+        100deg,
+        transparent 38%,
+        color-mix(in srgb, var(--m-accent) 36%, transparent) 47%,
+        color-mix(in srgb, var(--m-accent-contrast) 62%, var(--m-accent)) 50%,
+        color-mix(in srgb, var(--m-accent) 36%, transparent) 53%,
+        transparent 62%
+    );
+    background-size: 220% 100%;
+    background-repeat: no-repeat;
+    animation: budget-shimmer 900ms ease-in-out both;
+}
+
+.hero-card_complete .hero-card__value {
+    animation: budget-shimmer-text 900ms ease-out both;
+}
+
 .hero-card__label {
+    display: flex;
+    align-items: center;
+    gap: 4px;
     font-size: 11px;
     font-weight: 600;
     letter-spacing: 0.7px;
     text-transform: uppercase;
     color: var(--m-text-faint);
     margin-bottom: 4px;
+}
+
+@keyframes budget-shimmer {
+    from {
+        background-position: 150% 0;
+    }
+
+    to {
+        background-position: -70% 0;
+    }
+}
+
+@keyframes budget-shimmer-text {
+    0% {
+        text-shadow: none;
+    }
+
+    45% {
+        color: var(--m-accent);
+        text-shadow: 0 0 10px color-mix(in srgb, var(--m-accent) 45%, transparent);
+    }
+
+    100% {
+        text-shadow: none;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .hero-card_complete::before,
+    .hero-card_complete .hero-card__value {
+        animation: none;
+    }
 }
 
 .hero-card__value {
@@ -225,6 +385,53 @@
     background: var(--m-surface-hover);
 }
 
+.goal-category-cell {
+    background: linear-gradient(
+        90deg,
+        color-mix(in srgb, var(--m-accent) 18%, var(--m-surface)) 0 var(--goal-progress),
+        var(--m-surface) var(--goal-progress) 100%
+    );
+}
+
+.cat-row:hover .goal-category-cell {
+    background: linear-gradient(
+        90deg,
+        color-mix(in srgb, var(--m-accent) 26%, var(--m-surface-hover)) 0 var(--goal-progress),
+        var(--m-surface-hover) var(--goal-progress) 100%
+    );
+}
+
+.goal-label {
+    display: flex;
+    align-items: center;
+    width: calc(100% + 28px);
+    height: 38px;
+    margin-inline: -14px;
+    padding-inline: 14px;
+    cursor: help;
+}
+
+.cat-row__name .goal-label {
+    flex: 1;
+}
+
+.goal-label__popup {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.goal-tooltip {
+    padding: 6px 9px !important;
+    font-size: 11px !important;
+    font-weight: 400 !important;
+    color: var(--m-text) !important;
+    border: 1px solid var(--glass-border) !important;
+    background: color-mix(in srgb, var(--m-surface-raised) 78%, transparent) !important;
+    backdrop-filter: blur(16px) saturate(135%);
+    box-shadow: var(--glass-shadow) !important;
+}
+
 .cat-row__name {
     display: flex;
     align-items: center;
@@ -358,13 +565,19 @@
     box-shadow: 0 0 0 3px var(--m-accent-soft);
 }
 
-.budget-cell {
-    cursor: pointer;
-    border-radius: var(--m-radius-sm);
+.budget-cell,
+.budget-cell__input {
+    box-sizing: border-box;
+    display: inline-block;
+    width: 88px;
     padding: 4px 8px;
     margin: -4px -8px;
-    display: inline-block;
-    min-width: 72px;
+    border: 0;
+    border-radius: var(--m-radius-sm);
+}
+
+.budget-cell {
+    cursor: pointer;
     transition:
         background 0.12s ease,
         box-shadow 0.12s ease;
@@ -376,17 +589,15 @@
 }
 
 .budget-cell__input {
-    width: 96px;
     background: var(--m-bg);
-    border: 1px solid var(--m-accent);
-    border-radius: var(--m-radius-sm);
     color: var(--m-text);
     font: inherit;
     font-variant-numeric: tabular-nums;
     text-align: right;
-    padding: 3px 7px;
     outline: none;
-    box-shadow: 0 0 0 3px var(--m-accent-soft);
+    box-shadow:
+        inset 0 0 0 1px var(--m-accent),
+        0 0 0 3px var(--m-accent-soft);
 }
 
 /* placed last so it wins over the base .budget-hero / .hero-card rules above */

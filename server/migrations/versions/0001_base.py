@@ -1,6 +1,4 @@
-"""
-Base schema: category groups, categories, transactions, budgets.
-"""
+"""Base schema: category groups, categories, transactions, budgets."""
 
 from alembic import op
 
@@ -49,11 +47,14 @@ STATEMENTS = [
 ]
 
 
-def upgrade():
+def upgrade() -> None:
+    """Handle upgrade."""
     conn = op.get_bind()
     for statement in STATEMENTS:
         conn.exec_driver_sql(statement)
 
 
-def downgrade():
-    raise NotImplementedError("monori migrations are forward-only")
+def downgrade() -> None:
+    """Handle downgrade."""
+    msg = "monori migrations are forward-only"
+    raise NotImplementedError(msg)

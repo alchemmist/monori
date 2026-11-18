@@ -1,0 +1,13 @@
+.git
+.worktrees
+ci/coverage.json
+reports
+server/.venv
+server/data
+server/static
+web/dist
+web/node_modules
+web/playwright-report
+web/reports
+web/test-results
+tools/frontend-perf

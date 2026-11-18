@@ -60,7 +60,7 @@ Enabling connectors takes two things:
    and a browser:
 
    ```bash
-   pip install 'monori-server[connectors]'
+   uv sync --group test
    playwright install chromium
    ```
 

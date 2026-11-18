@@ -8,10 +8,14 @@ pnpm-debug.log*
 lerna-debug.log*
 
 node_modules
-package-lock.json
 dist
 dist-ssr
 *.local
+
+# Stryker leaves these sandbox setup files in the working dir after a run
+.stryker-tmp
+stryker-setup-*.js
+reports
 
 # Editor directories and files
 .vscode/*

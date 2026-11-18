@@ -36,24 +36,83 @@ one-to-one — there is no separate CI script to drift out of sync.
 
 ### Run
 
-| Target | Does |
-| -------- | ------ |
+| Target                  | Does                                                        |
+| ----------------------- | ----------------------------------------------------------- |
 | `make up` / `make down` | Dev stack in Docker (web on 5173, api on 8077), hot-reload. |
-| `make api` | API only: `uvicorn --reload` on `API_PORT` (default 8077). |
-| `make web` | Web dev server only, proxying the API. |
-| `make build` | `vite build`, then copy `web/dist` into `server/static`. |
+| `make api`              | API only: `uvicorn --reload` on `API_PORT` (default 8077).  |
+| `make web`              | Web dev server only, proxying the API.                      |
+| `make build`            | `vite build`, then copy `web/dist` into `server/static`.    |
 
 ### Format & lint
 
-| Target | Does |
-| -------- | ------ |
-| `make fmt` | Prettier + Ruff format/fix, and regenerates the schema diagram. |
-| `make fmt-check` | The same, check-only. |
-| `make lint` | Everything: web (Oxlint), CSS, HTML, server (Ruff), YAML, Markdown, generated docs, GitHub Actions, Dockerfile, shell, and spelling. |
-| `make schema-diagram` | Regenerates the ER diagram in [data-model.md](data-model.md) from `server/schema.sql`. `make lint` fails if it is stale. |
-| `make typecheck` | mypy on the server. |
-| `make analyze` | bandit + semgrep security scan. |
-| `make audit` | Dependency + secret scanning (`audit-deps`, `audit-deps-py`, `audit-secrets`). |
+| Target                | Does                                                                                                                                             |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `make fmt`            | Prettier + Ruff format/fix, and regenerates the schema diagram.                                                                                  |
+| `make fmt-check`      | The same, check-only.                                                                                                                            |
+| `make triple-quotes`  | Reject changed multiline Python strings whose opening or closing delimiter shares a line with content.                                           |
+| `make lint`           | Everything: web (Oxlint), CSS, HTML, server (Ruff), YAML, Markdown, generated docs, GitHub Actions, Dockerfile, shell, and spelling.             |
+| `make schema-diagram` | Regenerates the ER diagram in [data-model.md](data-model.md) from `server/schema.sql`. `make lint` fails if it is stale.                         |
+| `make type`           | Strict mypy for all tracked Python plus TypeScript compiler and type-aware Oxlint checks.                                                        |
+| `make analyze`        | bandit + semgrep security scans, plus Vulture for Python and Knip for JavaScript/TypeScript dead code.                                           |
+| `make audit`          | Dependency + secret scanning (`audit-deps`, `audit-deps-py`, `audit-secrets`).                                                                   |
+
+Multiline Python strings keep both triple-quote delimiters on content-free lines:
+
+```python
+message = """
+Readable multiline content.
+"""
+```
+
+One-line non-docstring strings use ordinary single or double quotes instead of triple quotes.
+Docstrings remain triple-double-quoted under Ruff `D300`, with their delimiters formatted as the
+block above. Pull requests run this rule only against added Python lines, using the same
+`make triple-quotes BASE=origin/main` target available locally. The custom checker replaces only
+Ruff's conflicting `D200` layout rule; all other pydocstyle checks remain enabled.
+
+Pull requests also run a CI-only Python annotation gate. It rejects new uses of
+`object` as an annotation, including nested types such as `list[object]`. Use a
+specific type, a protocol, or a suitable generic instead. If a boundary truly
+requires `object`, a repository administrator can approve that finding by
+posting a new pull request comment containing only
+one of `/qg ignore object-<finding-id>`, `/qg ignore-file path/to/file.py`, or
+`/qg ignore object`. An administrator can remove one approval with
+`/qg remove-ignore object-<finding-id>`. The `/quality-graph` spelling is also
+accepted.
+Approvals are tied to a stable finding fingerprint,
+so moving the same suppression to another line preserves the approval; changing
+the suppressed code or directive creates a new finding that requires review.
+The gate adds a failure label to PRs with active findings and removes it when
+all findings are fixed or approved. Finding IDs and file paths in the commands
+may be comma-separated.
+
+The Hardcoded color gate scans added lines in CSS-family, HTML, SVG, JavaScript,
+TypeScript, JSX, TSX, JSON, Vue, Svelte, and Astro files. It reports three-, four-,
+six-, and eight-digit hexadecimal colors; numeric and percentage forms of
+`rgb()`, `rgba()`, `hsl()`, `hsla()`, `hwb()`, `lab()`, `lch()`, `oklab()`,
+`oklch()`, and `color()`; and the standard CSS named colors. This includes
+literals in custom properties, gradients, shadows, attributes, and strings.
+Semantic keywords such as `transparent`, `currentColor`, `inherit`, `initial`,
+`unset`, and `revert` are allowed, as are color functions made only from CSS
+variables. Generated, dependency, fixture, minified, and lock files are excluded.
+Color approvals use `/qg ignore color-<finding-id>`, `/qg ignore hardcoded-colors`,
+or `/qg ignore-file path/to/file`; color finding IDs are location-sensitive.
+
+### Dead-code analysis
+
+`make analyze` runs Vulture against `server/app` and Knip against the frontend
+source, end-to-end tests, and tool configuration files. Vulture uses the
+`[tool.vulture]` section in `server/pyproject.toml`. Its `min_confidence = 80`
+setting means that `make analyze` reports only findings with at least 80%
+confidence; Vulture's 60% heuristic findings are intentionally excluded until
+they can be reviewed with an allowlist. Its two ignored names are arguments
+required by Playwright-compatible protocol signatures. Knip uses
+`web/knip.config.js`: prototype experiments are outside its project globs, and
+packages invoked by Makefile/CI or imported from CSS are explicitly excluded
+because they are outside the JavaScript module graph.
+
+For a new finding, remove the dead code or add a narrowly scoped, documented
+exception only when the symbol is an intentional external entry point.
 
 ### Test
 
@@ -61,19 +120,70 @@ The suite is a testing "trophy" — heavy on integration tests that use real
 dependencies (a real temp SQLite database, the real FastAPI app), not mocks.
 
 | Target | Does |
-| -------- | ------ |
-| `make test` | The whole suite (`t-fast` + `t-medium` + `t-slow`). |
-| `make t-fast` | Unit tests: Vitest + pytest `-m "not integration"`. |
-| `make t-medium` | Integration tests: pytest `-m integration` against a real DB. |
-| `make t-slow` | Placeholder for end-to-end (Playwright), not yet wired up. |
-| `make coverage` | Coverage as a tree (root → back/front → module → file), via `scripts/coverage-tree.sh`. |
-| `make mutation` | Mutation testing: Stryker on `web/src/engine`, mutmut on `server/app`. |
+| --- | --- |
+| `make test` | The whole suite (`t-front` + `t-back` + `t-e2e`). |
+| `make t-fast` | CI fast lane: frontend logic/store tests (`.test.ts`), backend unit tests, and CI unit tests without Docker. |
+| `make t-medium` | CI medium lane: frontend component tests and backend integration tests. |
+| `make t-ci` | CI package tests for the public Quality Graph integration. |
+| `make t-ci-unit` | CI package tests without Docker or external services; this replaces the removed legacy fake-GitHub testkit. |
+| `make t-slow` | CI slow lane: end-to-end Playwright tests against the real backend and production frontend stack. |
+| `make t-front` | Local frontend slice via Vitest. |
+| `make t-back` | Local backend slice with unit and integration tests. |
+| `make t-e2e` | Local end-to-end slice against the real backend and production frontend stack. |
+| `make docs-links` | Check repository Markdown links, including local anchors, with Lychee. Localhost URLs are the only allowlisted targets because the documented services are intentionally offline during this check. |
+| `make coverage` | Coverage as a tree (root → back/front → module → file), via `scripts/coverage-tree.sh`. Fails below **90% statements and lines** in `web/src`. |
+| `make coverage-diff BASE=origin/main` | Runs coverage plus a 100% changed-line gate for backend and frontend, comparing total coverage with `coverage-baseline/baseline.json` when available. |
+| `make mutation` | Full local mutation sweep: Stryker on `web/src`, then mutmut on `server/app`. CI runs the two cached halves in parallel nightly at 05:00 Moscow time and on manual dispatch. |
+| `make mutation-diff` | Diff-scoped gate for changed frontend lines and backend functions. Needs full git history. Example: `BASE=origin/main`, threshold 90%. |
 
-### The pre-commit gate
+Pull-request coverage uses the same portable `JobResult` protocol as every other Quality Graph
+check. Detailed metrics and uncovered source ranges are published in the Coverage job summary,
+while the single Quality Graph comment carries its compact status and links. Main-branch coverage
+saves the baseline in the Actions cache; when a baseline is not available, patch coverage
+still blocks uncovered changes while the total-coverage delta remains neutral.
+
+Link exclusions belong in `.lychee.toml` and must name one intentionally unavailable target class
+rather than hide a whole domain or status code.
+
+After the fast, medium, and slow lanes pass, the `Flaky test detection` Quality Graph check finds
+test definitions added under `server/tests`, `web/src`, and `web/e2e`. Every collected runner case,
+including each expanded parameterized case, runs ten times in a fresh process with retries disabled.
+Any failed, timed-out, or crashed attempt is a sticky blocking finding for the current head SHA.
+Repository administrators can approve individual findings, all current findings, or one file through
+the standard `/qg ignore` controls. This check is intentionally available only as a standalone
+Quality Graph action; it has no Make target and does not repeat pre-existing tests.
+
+### The pre-commit hook
+
+Install the repository hook once per checkout:
 
 ```bash
-make check   # fmt-check + lint + typecheck + analyze + test
+make precommit-install
 ```
+
+The hook runs `make fmt` before each commit and stages formatter changes so
+they are included in that commit. Formatting failures stop the commit.
+
+Remove the hook with:
+
+```bash
+make precommit-uninstall
+```
+
+The hook only manages formatting. Run `make check` separately for the full
+local quality gate (`fmt-check` + `lint` + `type` + `analyze` + `t-fast`).
+
+## Typing policy
+
+All tracked Python is checked with `mypy --strict` and Ruff annotation rules.
+Do not introduce `Any`, bare collections, untyped public functions, or broad
+per-file ignores. When a third-party API is dynamic, accept it at a small
+adapter boundary as `object` and narrow it before it reaches application code.
+
+The frontend uses strict TypeScript and type-aware Oxlint. Use `unknown` for
+untrusted JSON and narrow it; do not use `any`, `@ts-ignore`, or `@ts-nocheck`.
+An `@ts-expect-error` is only acceptable for a documented, specific third-party
+typing defect and must be removed when the upstream types are fixed.
 
 CI runs each of these leaf targets as its own separate check, so a red pipeline
 points straight at the failing tool.
@@ -83,9 +193,10 @@ points straight at the failing tool.
 - Backend integration tests use a fixture that spins up a temp SQLite file and a
   FastAPI `TestClient`, split by resource under `server/tests/integration/`; unit
   tests (e.g. the importer) live under `server/tests/unit/`.
-- Coverage is gated: pytest fails under 80% on the backend, and Vitest holds the
-  engine at 80%. The overall frontend number is honest (the UI is largely
-  untested for now), so the gate is scoped to what is meant to be covered.
+- Frontend logic and store unit tests use the `.test.ts` suffix; component
+  integration tests rendered in jsdom use `.test.tsx`.
+- Coverage is gated: pytest fails under 80% on the backend, and Vitest holds
+  `web/src` at 90% statements and lines, with the engine held to the same bar.
 - Mutation scores are the real quality check on the test suite; some surviving
   mutants are equivalent (e.g. SQLite's case-insensitive comparisons) and are not
   worth chasing.

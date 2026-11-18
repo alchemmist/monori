@@ -18,6 +18,7 @@ Each transaction carries two amounts:
 | ------- | ------------ |
 | `amount` | the money as it was spent, in `currency` |
 | `baseAmount` | the same money in the reporting currency, at the rate for the transaction's date |
+| `accountAmount` | the same money in the account's currency, at the rate for the transaction's date |
 
 `amount` is what the transactions page prints. `baseAmount` is what the budget,
 the dashboard, analytics and the workbook export add up — nothing else may be
@@ -43,7 +44,8 @@ already do.
 
 Set it in **Settings → Currency**. Changing it reprices the whole ledger: every
 `baseAmount` is recomputed at the rate for its own transaction's date. The
-transactions themselves do not move.
+transactions themselves do not move. Existing budget allocations and savings
+targets are converted at the rate in force on the day of the switch.
 
 Rubles by default.
 
@@ -58,10 +60,9 @@ amount in B = amount in A × rate(A) ÷ rate(B)
 
 Looking up a rate for a date takes the latest publication no later than it —
 which is exactly what was in force, since the feed only moves on business days.
-For a transaction older than anything stored, it reaches forward to the earliest
-rate held instead. If nothing is stored at all, a snapshot bundled with the app
-is used, and the settings screen labels it as such, so an offline monori still
-adds up and says so.
+It never uses a future publication for an older transaction. A bundled snapshot
+is available only on or after that snapshot's date; earlier writes require an
+applicable historical rate.
 
 **Settings → Currency** lists every rate with the day it was published and where
 it came from. *Fetch today* pulls the current publication and catches up on any
@@ -92,10 +93,9 @@ look, so a cross-currency transfer is always linked deliberately.
 ## Importing
 
 A pasted statement's currency column is read as the pair it is printed as: the
-settlement amount and the currency it settled in. A row with no currency — or
-with a code monori does not know — is taken as the account's, since nothing
-could price an unknown one and its converted value would silently be the raw
-number.
+settlement amount and the currency it settled in. A row with no currency uses
+the account's currency. An explicit unsupported code is rejected so the amount
+is never silently relabelled as different money.
 
 Workbook migration already splits accounts by currency — a `*2947 · USD` slot
 can only be pointed at a USD account — and now records that currency on every
@@ -108,4 +108,4 @@ BYN, GEL, AMD, TRY, AED, CNY, RSD. Every one has two minor units, which is what
 lets monori keep storing money as an integer count of them.
 
 Adding one means adding it in two places — `server/app/currencies.py` and
-`web/src/currencies.js` — and a test holds the two lists to each other.
+`web/src/currencies.ts` — and a test holds the two lists to each other.

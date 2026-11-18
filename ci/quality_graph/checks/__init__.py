@@ -1,0 +1,1 @@
+"""Concrete Quality Graph checks."""

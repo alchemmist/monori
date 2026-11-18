@@ -63,7 +63,8 @@ Returns the entire state in one call — the frontend loads this on startup.
   "accounts": [
     { "id": 1, "name": "T-Bank", "type": "card", "icon": "wallet",
       "color": "#5b6472", "iconImage": null, "currency": "RUB", "sort": 1,
-      "archived": false, "openingBalance": 0, "openingDate": null }
+      "archived": false, "openingBalance": 0, "openingBaseAmount": 0,
+      "openingDate": null }
   ],
   "groups": [{ "id": 1, "name": "Bills", "sort": 1, "kind": "expense" }],
   "categories": [
@@ -72,7 +73,7 @@ Returns the entire state in one call — the frontend loads this on startup.
   ],
   "transactions": [
     { "id": 1, "date": "2026-01-05T00:00:00", "amount": -150000,
-      "currency": "RUB", "baseAmount": -150000,
+      "currency": "RUB", "baseAmount": -150000, "accountAmount": -150000,
       "description": "LANDLORD", "bankCategory": "Housing", "mcc": "6513",
       "categoryId": 1, "accountId": 1, "transferId": null, "comment": "",
       "source": "import" }
@@ -88,10 +89,10 @@ Returns the entire state in one call — the frontend loads this on startup.
 }
 ```
 
-`amount` is in `currency`; `baseAmount` is the same money in `baseCurrency`, at
-the rate for the transaction's date. Only `baseAmount` may be summed across
-accounts. `rates` are rubles per unit, enough for a client to convert the money
-that has no transaction behind it (opening balances). See
+`amount` is in `currency`; `baseAmount` is the same money in `baseCurrency`, and
+`accountAmount` is its value in the owning account's currency, both at the rate
+for the transaction's date. `openingBaseAmount` converts an account's opening
+balance at its opening date. Only base amounts may be summed across accounts. See
 [Currencies](currencies.md).
 
 Query parameters:

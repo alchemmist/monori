@@ -5,11 +5,15 @@
 # run never touches the developer's database or dev servers.
 services:
     back:
+        platform: "${CONTAINER_PLATFORM}"
+        environment:
+            MONORI_SQLITE_JOURNAL_MODE: "${MONORI_SQLITE_JOURNAL_MODE:-DELETE}"
         build:
             context: ..
             dockerfile: deploy/Dockerfile.back
 
     front:
+        platform: "${CONTAINER_PLATFORM}"
         build:
             context: ..
             dockerfile: deploy/Dockerfile.front

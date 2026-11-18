@@ -20,13 +20,14 @@ depends_on = None
 BATCH = 1000
 
 
-def _hash(account_id, date_iso, amount_kop, description):
+def _hash(account_id: int, date_iso: str, amount_kop: int, description: str) -> str:
     return hashlib.sha256(
-        f"{account_id}|{date_iso}|{amount_kop}|{description}".encode()
+        f"{account_id}|{date_iso}|{amount_kop}|{description}".encode(),
     ).hexdigest()
 
 
-def upgrade():
+def upgrade() -> None:
+    """Handle upgrade."""
     conn = op.get_bind()
     last_id = 0
     while True:
@@ -45,5 +46,7 @@ def upgrade():
         last_id = rows[-1][0]
 
 
-def downgrade():
-    raise NotImplementedError("account-less fingerprints are not restorable")
+def downgrade() -> None:
+    """Handle downgrade."""
+    msg = "account-less fingerprints are not restorable"
+    raise NotImplementedError(msg)

@@ -1,20 +1,19 @@
-import pathlib
-import sys
+import sqlite3
+from pathlib import Path
+from types import TracebackType
 
 import httpx
 import pytest
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
-
-import app.db as dbmod
-from app.rates import (
+import monori.server.app.db as dbmod
+from monori.server.app.rates import (
     BUNDLED_DAY,
     BUNDLED_RATES,
     CBR_TIMEOUT,
     SOURCE_BUNDLED,
     SOURCE_CBR,
     SOURCE_MANUAL,
-    RateUnavailable,
+    RateUnavailableError,
     backfill,
     convert,
     fetch_cbr,
@@ -26,7 +25,8 @@ from app.rates import (
     store_rates,
 )
 
-FEED = """<?xml version="1.0" encoding="windows-1251"?>
+FEED = """
+<?xml version="1.0" encoding="windows-1251"?>
 <ValCurs Date="01.07.2025" name="Foreign Currency Market">
 <Valute ID="R01235"><NumCode>840</NumCode><CharCode>USD</CharCode><Nominal>1</Nominal>
 <Name>Доллар США</Name><Value>78,5000</Value><VunitRate>78,5</VunitRate></Valute>
@@ -40,48 +40,43 @@ FEED = """<?xml version="1.0" encoding="windows-1251"?>
 """
 
 
-def _db(tmp_path):
+def _db(tmp_path: Path) -> sqlite3.Connection:
     return dbmod.connect(str(tmp_path / "rates.db"))
 
 
 class _Feed:
-    """
-    A stand-in for the CBR: answers with a fixed payload and records the dates
-    it was asked for.
-    """
+    """Serve a fixed CBR payload and record the requested dates."""
 
-    def __init__(self, payload=FEED, fail=False):
+    def __init__(self, payload: str = FEED, *, fail: bool = False) -> None:
         self.payload = payload
         self.fail = fail
-        self.asked = []
-        self.params = []
+        self.asked: list[str | None] = []
+        self.params: list[dict[str, str] | None] = []
 
-    def get(self, url, params=None):
+    def get(self, url: str, params: dict[str, str] | None = None) -> httpx.Response:
         self.params.append(params)
         self.asked.append((params or {}).get("date_req"))
         if self.fail:
-            raise httpx.ConnectError("offline")
+            msg = "offline"
+            raise httpx.ConnectError(msg)
         return httpx.Response(200, text=self.payload, request=httpx.Request("GET", url))
 
 
-def test_parse_cbr_divides_by_the_nominal():
+def test_parse_cbr_divides_by_the_nominal() -> None:
     rates = parse_cbr(FEED)
     assert rates["USD"] == 78.5
     assert rates["EUR"] == 92.4
-    # quoted per 100 units, so the per-unit rate is two orders smaller
+
     assert rates["AMD"] == pytest.approx(0.2043)
 
 
-def test_parse_cbr_ignores_junk():
+def test_parse_cbr_ignores_junk() -> None:
     assert parse_cbr("") == {}
     assert parse_cbr("<ValCurs><Valute><CharCode>USD</CharCode></Valute></ValCurs>") == {}
 
 
-def test_parse_cbr_needs_all_three_fields():
-    """
-    A block missing any one of code, nominal or value is not half-usable — it
-    is skipped, and the blocks after it are still read.
-    """
+def test_parse_cbr_needs_all_three_fields() -> None:
+    """Skip incomplete currency blocks without discarding later valid ones."""
     feed = (
         "<ValCurs>"
         "<Valute><CharCode>USD</CharCode><Nominal>1</Nominal></Valute>"
@@ -93,7 +88,7 @@ def test_parse_cbr_needs_all_three_fields():
     assert parse_cbr(feed) == {"EUR": 92.4}
 
 
-def test_parse_cbr_refuses_to_divide_by_a_zero_nominal():
+def test_parse_cbr_refuses_to_divide_by_a_zero_nominal() -> None:
     feed = (
         "<ValCurs><Valute><CharCode>USD</CharCode><Nominal>0</Nominal>"
         "<Value>78,5000</Value></Valute></ValCurs>"
@@ -101,7 +96,7 @@ def test_parse_cbr_refuses_to_divide_by_a_zero_nominal():
     assert parse_cbr(feed) == {}
 
 
-def test_parse_cbr_keeps_reading_past_an_unusable_nominal():
+def test_parse_cbr_keeps_reading_past_an_unusable_nominal() -> None:
     feed = (
         "<ValCurs>"
         "<Valute><CharCode>USD</CharCode><Nominal>0</Nominal>"
@@ -113,7 +108,7 @@ def test_parse_cbr_keeps_reading_past_an_unusable_nominal():
     assert parse_cbr(feed) == {"EUR": 92.4}
 
 
-def test_parse_cbr_reads_a_blank_nominal_as_one():
+def test_parse_cbr_reads_a_blank_nominal_as_one() -> None:
     feed = (
         "<ValCurs><Valute><CharCode>USD</CharCode><Nominal> </Nominal>"
         "<Value>78,5000</Value></Valute></ValCurs>"
@@ -121,11 +116,11 @@ def test_parse_cbr_reads_a_blank_nominal_as_one():
     assert parse_cbr(feed) == {"USD": 78.5}
 
 
-def test_store_rates_keeps_only_currencies_monori_offers(tmp_path):
+def test_store_rates_keeps_only_currencies_monori_offers(tmp_path: Path) -> None:
     c = _db(tmp_path)
     try:
         kept = store_rates(c, "2025-07-01", parse_cbr(FEED))
-        # JPY is in the feed but not on the list, and RUB is the pivot itself
+
         assert kept == 3
         codes = {r["code"] for r in c.execute("SELECT code FROM exchange_rates")}
         assert codes == {"USD", "EUR", "AMD"}
@@ -133,7 +128,7 @@ def test_store_rates_keeps_only_currencies_monori_offers(tmp_path):
         c.close()
 
 
-def test_store_rates_rejects_nonsense(tmp_path):
+def test_store_rates_rejects_nonsense(tmp_path: Path) -> None:
     c = _db(tmp_path)
     try:
         assert store_rates(c, "2025-07-01", {"USD": 0, "EUR": -1, "RUB": 1.0}) == 0
@@ -141,7 +136,7 @@ def test_store_rates_rejects_nonsense(tmp_path):
         c.close()
 
 
-def test_store_rates_overwrites_the_same_day(tmp_path):
+def test_store_rates_overwrites_the_same_day(tmp_path: Path) -> None:
     c = _db(tmp_path)
     try:
         store_rates(c, "2025-07-01", {"USD": 78.5})
@@ -152,7 +147,7 @@ def test_store_rates_overwrites_the_same_day(tmp_path):
         c.close()
 
 
-def test_rate_on_pivot_is_exactly_one(tmp_path):
+def test_rate_on_pivot_is_exactly_one(tmp_path: Path) -> None:
     c = _db(tmp_path)
     try:
         assert rate_on(c, "RUB", "2025-07-01") == (1.0, "2025-07-01", "pivot")
@@ -160,7 +155,7 @@ def test_rate_on_pivot_is_exactly_one(tmp_path):
         c.close()
 
 
-def test_rate_on_uses_the_latest_publication_not_later_than_the_day(tmp_path):
+def test_rate_on_uses_the_latest_publication_not_later_than_the_day(tmp_path: Path) -> None:
     c = _db(tmp_path)
     try:
         store_rates(c, "2025-07-01", {"USD": 78.5})
@@ -172,16 +167,17 @@ def test_rate_on_uses_the_latest_publication_not_later_than_the_day(tmp_path):
         c.close()
 
 
-def test_rate_on_reaches_forward_for_a_transaction_older_than_any_rate(tmp_path):
+def test_rate_on_does_not_reach_forward_for_an_older_transaction(tmp_path: Path) -> None:
     c = _db(tmp_path)
     try:
         store_rates(c, "2025-07-01", {"USD": 78.5})
-        assert rate_on(c, "USD", "2020-01-01")[:2] == (78.5, "2025-07-01")
+        with pytest.raises(RateUnavailableError):
+            rate_on(c, "USD", "2020-01-01")
     finally:
         c.close()
 
 
-def test_rate_on_falls_back_to_the_bundled_snapshot(tmp_path):
+def test_rate_on_falls_back_to_the_bundled_snapshot(tmp_path: Path) -> None:
     c = _db(tmp_path)
     try:
         rate, day, source = rate_on(c, "GEL", "2026-07-01")
@@ -191,30 +187,29 @@ def test_rate_on_falls_back_to_the_bundled_snapshot(tmp_path):
         c.close()
 
 
-def test_rate_on_raises_for_a_currency_nobody_quotes(tmp_path):
+def test_rate_on_raises_for_a_currency_nobody_quotes(tmp_path: Path) -> None:
     c = _db(tmp_path)
     try:
-        with pytest.raises(RateUnavailable):
+        with pytest.raises(RateUnavailableError):
             rate_on(c, "XYZ", "2026-07-01")
     finally:
         c.close()
 
 
-def test_convert_is_an_exact_identity_within_one_currency(tmp_path):
+def test_convert_is_an_exact_identity_within_one_currency(tmp_path: Path) -> None:
     c = _db(tmp_path)
     try:
-        # no rounding, no float — 7 kopecks stay 7 kopecks
         assert convert(c, 7, "USD", "USD", "2026-07-01") == 7
         assert convert(c, -12345, "gel", "GEL", "2026-07-01") == -12345
     finally:
         c.close()
 
 
-def test_convert_goes_through_the_pivot(tmp_path):
+def test_convert_goes_through_the_pivot(tmp_path: Path) -> None:
     c = _db(tmp_path)
     try:
         store_rates(c, "2026-07-01", {"USD": 80.0, "EUR": 100.0})
-        # 100.00 USD = 8000 RUB = 80.00 EUR
+
         assert convert(c, 10000, "USD", "EUR", "2026-07-01") == 8000
         assert convert(c, 10000, "USD", "RUB", "2026-07-01") == 800000
         assert convert(c, 800000, "RUB", "USD", "2026-07-01") == 10000
@@ -222,7 +217,7 @@ def test_convert_goes_through_the_pivot(tmp_path):
         c.close()
 
 
-def test_convert_keeps_the_sign_and_rounds_to_the_minor_unit(tmp_path):
+def test_convert_keeps_the_sign_and_rounds_to_the_minor_unit(tmp_path: Path) -> None:
     c = _db(tmp_path)
     try:
         store_rates(c, "2026-07-01", {"USD": 78.53})
@@ -232,7 +227,7 @@ def test_convert_keeps_the_sign_and_rounds_to_the_minor_unit(tmp_path):
         c.close()
 
 
-def test_rate_table_flags_a_stale_quote(tmp_path):
+def test_rate_table_flags_a_stale_quote(tmp_path: Path) -> None:
     c = _db(tmp_path)
     try:
         store_rates(c, "2026-06-01", {"USD": 80.0})
@@ -241,36 +236,34 @@ def test_rate_table_flags_a_stale_quote(tmp_path):
         assert table["USD"]["day"] == "2026-06-01"
         assert table["USD"]["source"] == SOURCE_CBR
         assert table["RUB"]["stale"] is False
-        # a datetime is trimmed to its day, or every quote would read as stale
+
         same = {r["code"]: r for r in rate_table(c, "2026-06-01T10:00:00")}
         assert same["USD"]["stale"] is False
     finally:
         c.close()
 
 
-def test_refresh_stores_the_day_that_was_asked_for(tmp_path):
+def test_refresh_stores_the_day_that_was_asked_for(tmp_path: Path) -> None:
     c = _db(tmp_path)
     feed = _Feed()
     try:
         assert refresh(c, "2025-07-06", client=feed) == 3
-        # a Sunday: the feed answers with Friday's numbers, and those are the
-        # rates that were in force on Sunday
+
         assert feed.asked == ["06/07/2025"]
         assert rate_on(c, "USD", "2025-07-06")[:2] == (78.5, "2025-07-06")
     finally:
         c.close()
 
 
-def test_missing_days_looks_a_month_back_by_default(tmp_path):
+def test_missing_days_looks_a_month_back_by_default(tmp_path: Path) -> None:
     c = _db(tmp_path)
     try:
-        # 30 days back plus today
         assert len(missing_days(c, today="2026-07-25")) == 31
     finally:
         c.close()
 
 
-def test_missing_days_lists_only_the_gaps(tmp_path):
+def test_missing_days_lists_only_the_gaps(tmp_path: Path) -> None:
     c = _db(tmp_path)
     try:
         store_rates(c, "2026-07-24", {"USD": 80.0})
@@ -280,7 +273,7 @@ def test_missing_days_lists_only_the_gaps(tmp_path):
         c.close()
 
 
-def test_backfill_fetches_every_gap(tmp_path):
+def test_backfill_fetches_every_gap(tmp_path: Path) -> None:
     c = _db(tmp_path)
     feed = _Feed()
     try:
@@ -290,7 +283,7 @@ def test_backfill_fetches_every_gap(tmp_path):
         c.close()
 
 
-def test_backfill_covers_a_month_by_default(tmp_path):
+def test_backfill_covers_a_month_by_default(tmp_path: Path) -> None:
     c = _db(tmp_path)
     feed = _Feed()
     try:
@@ -299,7 +292,7 @@ def test_backfill_covers_a_month_by_default(tmp_path):
         c.close()
 
 
-def test_backfill_stops_at_the_first_network_failure(tmp_path):
+def test_backfill_stops_at_the_first_network_failure(tmp_path: Path) -> None:
     c = _db(tmp_path)
     feed = _Feed(fail=True)
     try:
@@ -309,24 +302,26 @@ def test_backfill_stops_at_the_first_network_failure(tmp_path):
         c.close()
 
 
-def test_fetch_cbr_opens_its_own_client_when_not_given_one(monkeypatch):
-    """
-    The refresh endpoint hands its own client in; a script calling fetch_cbr()
-    bare must still get a connection, and must still close it.
-    """
+def test_fetch_cbr_opens_its_own_client_when_not_given_one(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Open and close an HTTP client when the caller supplies none."""
     closed = []
     opened = []
 
     class _Client:
-        def __init__(self, timeout=None):
+        def __init__(self, timeout: float | None = None) -> None:
             self.timeout = timeout
             self.feed = _Feed()
             opened.append(self)
 
-        def __enter__(self):
+        def __enter__(self) -> _Feed:
             return self.feed
 
-        def __exit__(self, *exc):
+        def __exit__(
+            self,
+            _kind: type[BaseException] | None,
+            _error: BaseException | None,
+            _traceback: TracebackType | None,
+        ) -> bool:
             closed.append(True)
             return False
 
@@ -334,21 +329,20 @@ def test_fetch_cbr_opens_its_own_client_when_not_given_one(monkeypatch):
     assert fetch_cbr("2025-07-01T09:00:00")["USD"] == 78.5
     assert closed == [True]
     assert opened[0].timeout == CBR_TIMEOUT
-    # the day asked for still reaches the feed, trimmed out of a datetime
+
     assert opened[0].feed.asked == ["01/07/2025"]
 
 
-def test_rate_table_skips_a_currency_nothing_quotes(tmp_path, monkeypatch):
-    """
-    A currency added to the registry before any rate exists for it is left out
-    of the table rather than shown as a number nobody can stand behind.
-    """
+def test_rate_table_skips_a_currency_nothing_quotes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Omit unquoted currencies while retaining the remaining table entries."""
     c = _db(tmp_path)
     monkeypatch.delitem(BUNDLED_RATES, "GEL")
     try:
         codes = [r["code"] for r in rate_table(c, "2026-07-01")]
         assert "GEL" not in codes
-        # and the currencies after it are still there
+
         assert {"AMD", "TRY", "RSD"} <= set(codes)
     finally:
         c.close()

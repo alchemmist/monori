@@ -108,3 +108,122 @@
     display: flex;
     gap: 8px;
 }
+
+.split-editor__summary,
+.split-editor__actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.split-editor__summary {
+    justify-content: space-between;
+    margin-bottom: 14px;
+}
+
+.split-editor__parts {
+    display: grid;
+    gap: 8px;
+}
+
+.split-allocation {
+    position: relative;
+    height: 8px;
+    margin: 4px 0 18px;
+    border-radius: 999px;
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--m-text) 12%, transparent);
+}
+
+.split-allocation__range {
+    position: absolute;
+    top: -6px;
+    left: 0;
+    width: 100%;
+    height: 20px;
+    margin: 0;
+    appearance: none;
+    background: transparent;
+    pointer-events: none;
+}
+
+.split-allocation__range::-webkit-slider-thumb {
+    width: 20px;
+    height: 20px;
+    appearance: none;
+    border: 1px solid var(--glass-border);
+    border-radius: 50%;
+    background: var(--glass-fill);
+    backdrop-filter: blur(var(--glass-blur));
+    box-shadow: var(--glass-shadow);
+    cursor: ew-resize;
+    pointer-events: auto;
+}
+
+.split-allocation__range::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    border: 1px solid var(--glass-border);
+    border-radius: 50%;
+    background: var(--glass-fill);
+    backdrop-filter: blur(var(--glass-blur));
+    box-shadow: var(--glass-shadow);
+    cursor: ew-resize;
+    pointer-events: auto;
+}
+
+.split-allocation__range::-moz-range-track {
+    background: transparent;
+}
+
+.split-editor__part {
+    display: grid;
+    grid-template-columns: 10px minmax(160px, 1.3fr) minmax(100px, 0.7fr) minmax(140px, 1fr) 38px;
+    gap: 8px;
+    align-items: center;
+}
+
+.split-editor__swatch {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--split-color);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--split-color) 18%, transparent);
+}
+
+.split-editor__remainder {
+    margin: 12px 0;
+    color: var(--m-expense);
+    font-weight: 600;
+}
+
+.split-editor__remainder_done {
+    color: var(--m-income);
+}
+
+.split-editor__actions {
+    flex-wrap: wrap;
+}
+
+.split-editor__actions .mantine-Button-root {
+    flex: 0 0 auto;
+    white-space: nowrap;
+}
+
+.split-editor__remove {
+    margin-left: auto;
+}
+
+@media (width <= 700px) {
+    .split-editor__part {
+        grid-template-columns: 10px 1fr 110px 38px;
+    }
+
+    .split-editor__part > :nth-child(4) {
+        grid-column: 2 / -1;
+        grid-row: 2;
+    }
+
+    .split-editor__actions {
+        flex-wrap: wrap;
+    }
+}

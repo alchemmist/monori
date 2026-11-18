@@ -1,20 +1,37 @@
+"""Provide backend functionality."""
+
 import json
+import sqlite3
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, Field
+from pydantic import ConfigDict, Field
+from pydantic.dataclasses import dataclass as pydantic_dataclass
 
-from ..auth import current_user
-from ..deps import conn, serialize_tx
-from ..importer import tx_hash
-from ..money import account_currency, base_currency, to_base
-from ..rates import RateUnavailable, convert
-from ..transfer_match import AUTO_DAYS, SUGGEST_DAYS, split_confident
-from ..transfer_service import LinkError, candidates, detect, list_transfers, reject
-from ..transfer_service import link as link_pair
-from ..transfer_service import split as split_transfer
+from monori.server.app.auth import AuthenticatedUser, current_user
+from monori.server.app.db import begin_write
+from monori.server.app.db_records import TransactionRecord
+from monori.server.app.deps import TransactionResponse, conn, serialize_tx
+from monori.server.app.importer import tx_hash
+from monori.server.app.money import account_currency, base_currency, to_base
+from monori.server.app.rates import RateUnavailableError, convert
+from monori.server.app.transfer_match import AUTO_DAYS, SUGGEST_DAYS, split_confident
+from monori.server.app.transfer_service import (
+    LinkError,
+    LinkRequest,
+    MergedTransfer,
+    TransferResponse,
+    candidates,
+    detect,
+    list_transfers,
+    reject,
+)
+from monori.server.app.transfer_service import link as link_pair
+from monori.server.app.transfer_service import split as split_transfer
+from monori.server.app.value_types import Money, TransactionDate
 
 router = APIRouter(prefix="/api/transfers", tags=["transfers"])
+TRANSFER_LEGS = 2
 
 LEGS_BY_ID = (
     "SELECT t.* FROM transactions t JOIN accounts a ON a.id = t.account_id"
@@ -22,24 +39,86 @@ LEGS_BY_ID = (
 )
 
 
-class TransferBody(BaseModel):
-    fromAccountId: int
-    toAccountId: int
-    amount: int = Field(gt=0)
-    # what actually landed, in the destination account's currency. Only means
-    # anything when the two accounts differ; left out, the day's rate decides.
-    toAmount: int | None = Field(default=None, gt=0)
-    date: str
+@pydantic_dataclass(config=ConfigDict(extra="forbid", populate_by_name=True))
+class TransferBody:
+    """Represent TransferBody."""
+
+    amount: Money
+    date: TransactionDate
+    from_account_id: int = Field(alias="fromAccountId")
+    to_account_id: int = Field(alias="toAccountId")
+    to_amount: Money | None = Field(default=None, alias="toAmount")
     comment: str = ""
 
 
-class PairBody(BaseModel):
-    outTxId: int
-    inTxId: int
+@pydantic_dataclass(config=ConfigDict(extra="forbid", populate_by_name=True))
+class PairBody:
+    """Represent PairBody."""
+
+    out_tx_id: int = Field(alias="outTxId")
+    in_tx_id: int = Field(alias="inTxId")
     note: str = ""
 
 
-def account_exists(c, account_id, uid):
+@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+class TransfersResponse:
+    """Represent TransfersResponse."""
+
+    rows: list[TransferResponse]
+
+
+@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+class SuggestionsResponse:
+    """Represent SuggestionsResponse."""
+
+    rows: list["SuggestionResponse"]
+    transactions: list[TransactionResponse]
+
+
+@pydantic_dataclass(config=ConfigDict(extra="forbid", populate_by_name=True))
+class SuggestionResponse:
+    """Represent SuggestionResponse."""
+
+    amount: int
+    currency: str
+    days: int
+    hint: bool
+    mismatch: bool
+    out_tx_id: int
+    in_tx_id: int
+
+
+@pydantic_dataclass(config=ConfigDict(extra="forbid", populate_by_name=True))
+class TransferIdResponse:
+    """Represent TransferIdResponse."""
+
+    transfer_id: str
+
+
+@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+class DetectionResponse:
+    """Represent DetectionResponse."""
+
+    merged: list[MergedTransfer]
+    suggested: int
+
+
+@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+class OkResponse:
+    """Represent OkResponse."""
+
+    ok: bool
+
+
+@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+class DeletedResponse:
+    """Represent the number of transaction legs removed."""
+
+    deleted: int
+
+
+def account_exists(c: sqlite3.Connection, account_id: int, uid: int) -> bool:
+    """Handle account exists."""
     return (
         c.execute("SELECT id FROM accounts WHERE id=? AND user_id=?", (account_id, uid)).fetchone()
         is not None
@@ -47,75 +126,99 @@ def account_exists(c, account_id, uid):
 
 
 @router.get("")
-def get_transfers(user: Annotated[dict, Depends(current_user)]):
+def get_transfers(user: Annotated[AuthenticatedUser, Depends(current_user)]) -> TransfersResponse:
+    """Handle get transfers."""
     c = conn()
     try:
-        return {"rows": list_transfers(c, user["id"])}
+        return TransfersResponse(rows=list_transfers(c, user.id))
     finally:
         c.close()
 
 
 @router.get("/suggestions")
 def get_suggestions(
-    user: Annotated[dict, Depends(current_user)],
-    maxDays: int = Query(default=SUGGEST_DAYS, ge=0, le=31),
-):
+    user: Annotated[AuthenticatedUser, Depends(current_user)],
+    max_days: Annotated[int, Query(ge=0, le=31, alias="maxDays")] = SUGGEST_DAYS,
+) -> SuggestionsResponse:
     """
-    Pairs that look like a transfer but that detection would not merge unasked
-    — too far apart in time, or the two descriptions disagree. The transactions
+    Pairs that look like a transfer but that detection would not merge unasked.
+
+    — too far apart in time, or the two descriptions disagree. The transactions.
     themselves ride along so the UI can show both sides without a second round
     trip.
     """
-    uid = user["id"]
+    uid = user.id
     c = conn()
     try:
-        _, pairs = split_confident(candidates(c, uid, maxDays))
-        ids = sorted({p["outTxId"] for p in pairs} | {p["inTxId"] for p in pairs})
+        _, pairs = split_confident(candidates(c, uid, max_days))
+        ids = sorted({p.out_tx_id for p in pairs} | {p.in_tx_id for p in pairs})
         legs = (
-            [serialize_tx(r) for r in c.execute(LEGS_BY_ID, (uid, json.dumps(ids)))] if ids else []
+            [
+                serialize_tx(TransactionRecord.from_row(row), c=c)
+                for row in c.execute(LEGS_BY_ID, (uid, json.dumps(ids)))
+            ]
+            if ids
+            else []
         )
-        return {"rows": pairs, "transactions": legs}
+        return SuggestionsResponse(
+            rows=[
+                SuggestionResponse(
+                    out_tx_id=pair.out_tx_id,
+                    in_tx_id=pair.in_tx_id,
+                    amount=pair.amount,
+                    currency=pair.currency,
+                    days=pair.days,
+                    hint=pair.hint,
+                    mismatch=pair.mismatch,
+                )
+                for pair in pairs
+            ],
+            transactions=legs,
+        )
     finally:
         c.close()
 
 
 @router.post("")
-def create_transfer(body: TransferBody, user: Annotated[dict, Depends(current_user)]):
+def create_transfer(
+    body: TransferBody,
+    user: Annotated[AuthenticatedUser, Depends(current_user)],
+) -> TransferIdResponse:
     """
-    A transfer is two linked transactions: a negative row on the source account
+    Handle A transfer is two linked transactions: a negative row on the source account.
+
     and a positive row on the destination, merged into one ``transfers`` entity.
     Both legs stay uncategorized, so they never count as income or expense.
-
-    Each leg is denominated in its own account's currency. Across currencies the
-    two magnitudes differ, and what arrived is the caller's to state — a bank
-    converts at its own rate, not the central bank's — so ``toAmount`` wins over
-    the rate whenever it is given.
     """
-    uid = user["id"]
-    if body.fromAccountId == body.toAccountId:
+    uid = user.id
+    if body.amount <= 0:
+        raise HTTPException(422, "amount must be positive")
+    if body.from_account_id == body.to_account_id:
         raise HTTPException(400, "cannot transfer to the same account")
     c = conn()
     try:
-        if not account_exists(c, body.fromAccountId, uid) or not account_exists(
-            c, body.toAccountId, uid
+        if not account_exists(c, body.from_account_id, uid) or not account_exists(
+            c,
+            body.to_account_id,
+            uid,
         ):
             raise HTTPException(400, "unknown account")
-        out_currency = account_currency(c, body.fromAccountId)
-        in_currency = account_currency(c, body.toAccountId)
-        if body.toAmount is not None and out_currency == in_currency:
-            # within one currency the money that left is the money that arrived;
-            # a second figure could only ever make the two legs disagree
+        out_currency = account_currency(c, body.from_account_id)
+        in_currency = account_currency(c, body.to_account_id)
+        if body.to_amount is not None and body.to_amount <= 0:
+            raise HTTPException(422, "toAmount must be positive")
+        if body.to_amount is not None and out_currency == in_currency:
             raise HTTPException(400, "toAmount only applies between two currencies")
         try:
-            landed = body.toAmount or convert(c, body.amount, out_currency, in_currency, body.date)
-        except RateUnavailable as e:
-            raise HTTPException(400, f"{e}; state the amount that arrived") from e
-        base = base_currency(c, uid)
+            landed = body.to_amount or convert(c, body.amount, out_currency, in_currency, body.date)
+        except RateUnavailableError as error:
+            raise HTTPException(400, f"{error}; state the amount that arrived") from error
+        reporting_currency = base_currency(c, uid)
         description = "Transfer"
-        legs = []
+        legs: list[int] = []
         for account_id, amount, currency in (
-            (body.fromAccountId, -body.amount, out_currency),
-            (body.toAccountId, landed, in_currency),
+            (body.from_account_id, -body.amount, out_currency),
+            (body.to_account_id, landed, in_currency),
         ):
             cur = c.execute(
                 """INSERT INTO transactions
@@ -126,17 +229,20 @@ def create_transfer(body: TransferBody, user: Annotated[dict, Depends(current_us
                     body.date,
                     amount,
                     currency,
-                    to_base(c, amount, currency, base, body.date),
+                    to_base(c, amount, currency, reporting_currency, body.date),
                     description,
                     account_id,
                     body.comment,
                     tx_hash(account_id, body.date, amount, description, currency),
                 ),
             )
+            if cur.lastrowid is None:
+                msg = "transaction insert did not return an id"
+                raise RuntimeError(msg)
             legs.append(cur.lastrowid)
-        transfer_id = link_pair(c, uid, legs[0], legs[1], note=body.comment)
+        transfer_id = link_pair(c, uid, LinkRequest(legs[0], legs[1], note=body.comment))
         c.commit()
-        return {"transferId": transfer_id}
+        return TransferIdResponse(transfer_id=transfer_id)
     except LinkError as e:
         raise HTTPException(400, str(e)) from e
     finally:
@@ -144,17 +250,25 @@ def create_transfer(body: TransferBody, user: Annotated[dict, Depends(current_us
 
 
 @router.post("/link")
-def link_transactions(body: PairBody, user: Annotated[dict, Depends(current_user)]):
+def link_transactions(
+    body: PairBody,
+    user: Annotated[AuthenticatedUser, Depends(current_user)],
+) -> TransferIdResponse:
     """
-    Merge a pair that is already in the ledger — the usual case for rows the
-    bank sent us itself. Nothing is inserted or deleted: both transactions keep
+    Merge a pair that is already in the ledger — the usual case for rows the.
+
+    bank sent us itself. Nothing is inserted or deleted: both transactions keep.
     their id and hash, so the next sync still recognizes them.
     """
     c = conn()
     try:
-        transfer_id = link_pair(c, user["id"], body.outTxId, body.inTxId, note=body.note)
+        transfer_id = link_pair(
+            c,
+            user.id,
+            LinkRequest(body.out_tx_id, body.in_tx_id, note=body.note),
+        )
         c.commit()
-        return {"transferId": transfer_id}
+        return TransferIdResponse(transfer_id=transfer_id)
     except LinkError as e:
         raise HTTPException(400, str(e)) from e
     finally:
@@ -162,12 +276,16 @@ def link_transactions(body: PairBody, user: Annotated[dict, Depends(current_user
 
 
 @router.post("/suggestions/dismiss")
-def dismiss_suggestion(body: PairBody, user: Annotated[dict, Depends(current_user)]):
+def dismiss_suggestion(
+    body: PairBody,
+    user: Annotated[AuthenticatedUser, Depends(current_user)],
+) -> OkResponse:
+    """Handle dismiss suggestion."""
     c = conn()
     try:
-        reject(c, user["id"], body.outTxId, body.inTxId)
+        reject(c, user.id, body.out_tx_id, body.in_tx_id)
         c.commit()
-        return {"ok": True}
+        return OkResponse(ok=True)
     except LinkError as e:
         raise HTTPException(400, str(e)) from e
     finally:
@@ -176,33 +294,66 @@ def dismiss_suggestion(body: PairBody, user: Annotated[dict, Depends(current_use
 
 @router.post("/detect")
 def run_detection(
-    user: Annotated[dict, Depends(current_user)],
-    maxDays: int = Query(default=SUGGEST_DAYS, ge=0, le=31),
-):
-    """
-    Merge the pairs that are beyond doubt and report the rest as suggestions.
-    """
+    user: Annotated[AuthenticatedUser, Depends(current_user)],
+    max_days: Annotated[int, Query(ge=0, le=31, alias="maxDays")] = SUGGEST_DAYS,
+) -> DetectionResponse:
+    """Merge the pairs that are beyond doubt and report the rest as suggestions."""
     c = conn()
     try:
-        merged, suggested = detect(c, user["id"], AUTO_DAYS, maxDays)
+        merged, suggested = detect(c, user.id, AUTO_DAYS, max_days)
         c.commit()
-        return {"merged": merged, "suggested": len(suggested)}
+        return DetectionResponse(merged=merged, suggested=len(suggested))
     finally:
         c.close()
 
 
 @router.delete("/{transfer_id}")
-def delete_transfer(transfer_id: str, user: Annotated[dict, Depends(current_user)]):
+def delete_transfer(
+    transfer_id: str,
+    user: Annotated[AuthenticatedUser, Depends(current_user)],
+) -> OkResponse:
     """
     Split a transfer back into two ordinary transactions, categories and all.
+
     The rows are never deleted here: half of them came from a bank, and deleting
     them would only invite the next sync to bring them back unlinked.
     """
     c = conn()
     try:
-        if not split_transfer(c, user["id"], transfer_id):
+        if not split_transfer(c, user.id, str(transfer_id)):
             raise HTTPException(404, "transfer not found")
         c.commit()
-        return {"ok": True}
+        return OkResponse(ok=True)
+    finally:
+        c.close()
+
+
+@router.delete("/{transfer_id}/with-legs")
+def delete_transfer_with_legs(
+    transfer_id: str,
+    user: Annotated[AuthenticatedUser, Depends(current_user)],
+) -> DeletedResponse:
+    """Remove a transfer entity and both owned transaction legs atomically."""
+    c = conn()
+    try:
+        begin_write(c)
+        row = c.execute(
+            "SELECT out_tx_id, in_tx_id FROM transfers WHERE id=? AND user_id=?",
+            (transfer_id, user.id),
+        ).fetchone()
+        if row is None:
+            raise HTTPException(404, "transfer not found")
+        leg_ids = (int(row[0]), int(row[1]))
+        owned_legs = c.execute(
+            "SELECT COUNT(*) FROM transactions t JOIN accounts a ON a.id=t.account_id"
+            " WHERE a.user_id=? AND t.transfer_id=? AND t.id IN (?, ?)",
+            (user.id, transfer_id, *leg_ids),
+        ).fetchone()[0]
+        if owned_legs != TRANSFER_LEGS:
+            raise HTTPException(409, "transfer does not have two owned legs")
+        c.execute("DELETE FROM transactions WHERE id=?", (leg_ids[0],))
+        c.execute("DELETE FROM transactions WHERE id=?", (leg_ids[1],))
+        c.commit()
+        return DeletedResponse(deleted=TRANSFER_LEGS)
     finally:
         c.close()

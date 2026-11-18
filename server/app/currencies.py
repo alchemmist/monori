@@ -7,7 +7,7 @@ minor units. That second property is what lets the whole codebase keep storing
 money as an integer count of minor units ("kopecks") and treat the currency as a
 label on top — no per-currency scaling anywhere.
 
-``web/src/currencies.js`` is the same list on the frontend; the two are kept in
+``web/src/currencies.ts`` is the same list on the frontend; the two are kept in
 step by ``tests/unit/test_currencies.py``.
 """
 
@@ -15,7 +15,6 @@ from fastapi import HTTPException
 
 MINOR_UNITS = 2
 
-# code -> (english name, symbol)
 CURRENCIES = {
     "RUB": ("Russian ruble", "₽"),
     "USD": ("US dollar", "$"),
@@ -34,14 +33,13 @@ CURRENCIES = {
 
 DEFAULT_CURRENCY = "RUB"
 
-# every rate is quoted against this one, so a conversion is always two hops at
-# most and the rate table stays one row per currency per day
 PIVOT_CURRENCY = "RUB"
 
 
-def normalize(code, fallback=DEFAULT_CURRENCY):
+def normalize(code: str | None, fallback: str = DEFAULT_CURRENCY) -> str:
     """
     Trim and upper-case a currency code, falling back when it is missing.
+
     Unknown codes are returned as given — validation is a separate decision, so
     data that predates the registry can still be read back.
     """
@@ -49,11 +47,12 @@ def normalize(code, fallback=DEFAULT_CURRENCY):
     return code or fallback
 
 
-def is_known(code):
+def is_known(code: str | None) -> bool:
+    """Return whether the normalized code belongs to the supported catalog."""
     return normalize(code, "") in CURRENCIES
 
 
-def validate(code, fallback=DEFAULT_CURRENCY):
+def validate(code: str | None, fallback: str = DEFAULT_CURRENCY) -> str:
     """
     Normalize a code coming from a request, rejecting anything not on the list.
     """
@@ -63,14 +62,15 @@ def validate(code, fallback=DEFAULT_CURRENCY):
     return normalized
 
 
-def symbol(code):
+def symbol(code: str | None) -> str:
+    """Return the display symbol for a supported code, or the normalized code."""
     entry = CURRENCIES.get(normalize(code, ""))
     return entry[1] if entry else normalize(code, "")
 
 
-def catalog():
+def catalog() -> list[dict[str, str | int]]:
     """
-    The registry as the API serves it.
+    Return the registry as the API serves it.
     """
     return [
         {"code": code, "name": name, "symbol": sym, "minorUnits": MINOR_UNITS}

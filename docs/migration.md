@@ -44,13 +44,13 @@ workbook that is a bit of both still works.
   category, MCC, description, `Monori Category`, `Account`, `Comment`. A row is
   read as long as it can say **when** it happened and **for how much**;
   everything else is a bonus.
-  - The **amount** is what actually moved: *Сумма платежа* when the sheet has
+    - The **amount** is what actually moved: *Сумма платежа* when the sheet has
     that column, the operation amount otherwise. One card operation split across
     categories repeats its full total on every part and carries each part's real
     share in the payment amount — sometimes as a formula (`=-48480+16990`),
     which is added up on import. Every part becomes its own transaction with its
     own category; only rows identical down to that share count as duplicates.
-  - The **category** is copied literally. A workbook that names a category
+    - The **category** is copied literally. A workbook that names a category
     column in its header is taken at its word. The live spreadsheet doesn't name
     it and keeps two: what the keyword rules guessed and what actually counts —
     that guess accepted, or a label typed over it. Only the second is what its
@@ -74,14 +74,14 @@ workbook that is a bit of both still works.
   budget, and only where it is non-zero; outflows and balances are derived
   values monori recomputes — but they are still read, because they are what a
   month without rows gets rebuilt from.
-  - Every month block also states what was left unbudgeted the month before.
+    - Every month block also states what was left unbudgeted the month before.
     At the first month that has any activity that number is the **opening
     balance** — money the spreadsheet was started with, which no row in it
     accounts for. It is imported as one transaction, dated the month before,
     so the running Available starts where the sheet starts and not at zero.
-  - A year with an `_archive` sheet is read from that sheet alone: a plain
+    - A year with an `_archive` sheet is read from that sheet alone: a plain
     sheet for the same year is a working copy of history and is ignored.
-  - The year before the earliest live one is the **seam** — where the archived
+    - The year before the earliest live one is the **seam** — where the archived
     past hands over to the months that still have rows. Its December is where
     every carried-over balance is squared up (see the reconciliation rule
     below), and its successor's *Not budgeted* / *Не заложено* header cell

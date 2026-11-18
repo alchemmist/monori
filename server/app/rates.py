@@ -13,8 +13,10 @@ onto the row as ``base_amount``. Rates published later never rewrite history.
 
 import re
 import sqlite3
+from collections.abc import Mapping
+from datetime import UTC, datetime, timedelta
 from datetime import date as date_cls
-from datetime import timedelta
+from typing import TypedDict, cast
 
 import httpx
 
@@ -27,10 +29,6 @@ SOURCE_CBR = "cbr"
 SOURCE_MANUAL = "manual"
 SOURCE_BUNDLED = "bundled"
 
-# Rubles per unit, as published by the CBR on BUNDLED_DAY. Only ever used when
-# the table has nothing at all for a currency: an offline monori still converts,
-# and every response says which day the number is from so a stale one is
-# recognizable rather than silently believed.
 BUNDLED_DAY = "2025-07-01"
 BUNDLED_RATES = {
     "RUB": 1.0,
@@ -48,25 +46,32 @@ BUNDLED_RATES = {
     "RSD": 0.7885,
 }
 
-# one <Valute> block of the CBR feed; matched tag by tag over an already-split
-# chunk, so the scan stays linear and no XML parser is pointed at the network
 VALUTE_SPLIT = re.compile(r"<Valute\b")
 CHAR_CODE_RE = re.compile(r"<CharCode>\s*([A-Za-z]{3})\s*</CharCode>")
 NOMINAL_RE = re.compile(r"<Nominal>\s*([\d ]{1,12})\s*</Nominal>")
 VALUE_RE = re.compile(r"<Value>\s*([\d]{1,15}[.,][\d]{1,6})\s*</Value>")
 
 
-class RateUnavailable(Exception):
-    """
-    No rate is known for this currency on this day, from any source.
-    """
+class RateUnavailableError(Exception):
+    """Raised when no rate is known for a currency on the requested day."""
 
 
-def today_iso():
-    return date_cls.today().isoformat()
+class RateTableEntry(TypedDict):
+    """Represent one dated exchange-rate response row."""
+
+    code: str
+    rate: float
+    day: str
+    source: str
+    stale: bool
 
 
-def parse_cbr(payload):
+def today_iso() -> str:
+    """Return today's UTC calendar date."""
+    return datetime.now(UTC).date().isoformat()
+
+
+def parse_cbr(payload: str) -> dict[str, float]:
     """
     Pull ``code -> rubles per unit`` out of a CBR daily feed.
 
@@ -87,9 +92,9 @@ def parse_cbr(payload):
     return rates
 
 
-def fetch_cbr(day=None, client=None):
+def fetch_cbr(day: str | None = None, client: httpx.Client | None = None) -> dict[str, float]:
     """
-    The CBR rates for ``day`` (ISO date, today when omitted).
+    Fetch the CBR rates for ``day`` (ISO date, today when omitted).
 
     The feed only moves on business days and answers a weekend request with the
     previous publication, which is exactly the rate that was in force — so the
@@ -107,28 +112,48 @@ def fetch_cbr(day=None, client=None):
     return parse_cbr(response.text)
 
 
-def store_rates(c, day, rates, source=SOURCE_CBR):
+def store_rates(
+    c: sqlite3.Connection,
+    day: str,
+    rates: Mapping[str, float],
+    source: str = SOURCE_CBR,
+) -> int:
     """
-    Upsert ``code -> rubles per unit`` for ``day``. Codes monori does not offer
+    Upsert ``code -> rubles per unit`` for ``day``. Codes monori does not offer.
+
     are dropped: the feed carries forty of them and none of the rest can ever
     be attached to an account.
     """
     kept = 0
-    for code, per_unit in rates.items():
-        code = normalize(code, "")
+    for raw_code, per_unit in rates.items():
+        code = normalize(raw_code, "")
         if code not in CURRENCIES or code == PIVOT_CURRENCY or per_unit <= 0:
             continue
-        c.execute(
-            "INSERT INTO exchange_rates (day, code, rub_per_unit, source) VALUES (?, ?, ?, ?)"
-            " ON CONFLICT(day, code) DO UPDATE SET"
-            " rub_per_unit=excluded.rub_per_unit, source=excluded.source",
-            (day[:10], code, float(per_unit), source),
-        )
+        values = (day[:10], code, float(per_unit), source)
+        if source == SOURCE_MANUAL:
+            c.execute(
+                "INSERT INTO exchange_rates (day, code, rub_per_unit, source) VALUES (?, ?, ?, ?)"
+                " ON CONFLICT(day, code) DO UPDATE SET"
+                " rub_per_unit=excluded.rub_per_unit, source=excluded.source",
+                values,
+            )
+        else:
+            c.execute(
+                "INSERT INTO exchange_rates (day, code, rub_per_unit, source) VALUES (?, ?, ?, ?)"
+                " ON CONFLICT(day, code) DO UPDATE SET"
+                " rub_per_unit=excluded.rub_per_unit, source=excluded.source"
+                " WHERE exchange_rates.source != 'manual'",
+                values,
+            )
         kept += 1
     return kept
 
 
-def refresh(c, day=None, client=None):
+def refresh(
+    c: sqlite3.Connection,
+    day: str | None = None,
+    client: httpx.Client | None = None,
+) -> int:
     """
     Fetch and store one day of rates, returning how many were kept.
     """
@@ -136,27 +161,21 @@ def refresh(c, day=None, client=None):
     return store_rates(c, day, fetch_cbr(day, client=client))
 
 
-def stored_rate(c, code, day):
+def stored_rate(c: sqlite3.Connection, code: str, day: str) -> sqlite3.Row | None:
     """
-    The stored rate in force on ``day``: the latest publication no later than
-    it, or — for a transaction older than anything we hold — the earliest one
-    we have, since an approximate rate beats refusing to show a total.
+    Return the stored rate in force on ``day``.
     """
-    row = c.execute(
-        "SELECT day, rub_per_unit, source FROM exchange_rates"
-        " WHERE code=? AND day<=? ORDER BY day DESC LIMIT 1",
-        (code, day[:10]),
-    ).fetchone()
-    if row is None:
-        row = c.execute(
+    return cast(
+        "sqlite3.Row | None",
+        c.execute(
             "SELECT day, rub_per_unit, source FROM exchange_rates"
-            " WHERE code=? ORDER BY day ASC LIMIT 1",
-            (code,),
-        ).fetchone()
-    return row
+            " WHERE code=? AND day<=? ORDER BY day DESC LIMIT 1",
+            (code, day[:10]),
+        ).fetchone(),
+    )
 
 
-def rate_on(c, code, day):
+def rate_on(c: sqlite3.Connection, code: str, day: str) -> tuple[float, str, str]:
     """
     Rubles per unit of ``code`` on ``day``, as ``(rate, day, source)``.
     """
@@ -166,14 +185,16 @@ def rate_on(c, code, day):
     row = stored_rate(c, code, day)
     if row is not None:
         return float(row["rub_per_unit"]), row["day"], row["source"]
-    if code in BUNDLED_RATES:
+    if code in BUNDLED_RATES and day[:10] >= BUNDLED_DAY:
         return BUNDLED_RATES[code], BUNDLED_DAY, SOURCE_BUNDLED
-    raise RateUnavailable(f"no exchange rate for {code}")
+    message = f"no exchange rate for {code}"
+    raise RateUnavailableError(message)
 
 
-def convert(c, amount, src, dst, day):
+def convert(c: sqlite3.Connection, amount: int, src: str, dst: str, day: str) -> int:
     """
-    ``amount`` minor units of ``src`` expressed in minor units of ``dst``, at
+    ``amount`` minor units of ``src`` expressed in minor units of ``dst``, at.
+
     the rates in force on ``day``. Same currency is an exact identity — no
     float ever touches money that does not need converting.
     """
@@ -186,45 +207,56 @@ def convert(c, amount, src, dst, day):
     return round(amount * src_rate / dst_rate)
 
 
-def rate_table(c, day=None):
+def rate_table(
+    c: sqlite3.Connection, day: str | None = None
+) -> list[dict[str, str | float | bool]]:
     """
-    One entry per known currency for ``day``, for the settings screen: the rate
+    One entry per known currency for ``day``, for the settings screen: the rate.
+
     itself, the day it was actually published, and where it came from.
     """
     day = (day or today_iso())[:10]
-    table = []
+    table: list[RateTableEntry] = []
     for code in CURRENCIES:
         try:
             rate, on, source = rate_on(c, code, day)
-        except RateUnavailable:
+        except RateUnavailableError:
             continue
         table.append({"code": code, "rate": rate, "day": on, "source": source, "stale": on != day})
-    return table
+    return cast("list[dict[str, str | float | bool]]", table)
 
 
-def missing_days(c, days_back=30, today=None):
+def missing_days(c: sqlite3.Connection, days_back: int = 30, today: str | None = None) -> list[str]:
     """
-    The recent days with no stored rates at all — what a catch-up refresh has
+    Return recent days with no stored rates at all.
+
+    These are what a catch-up refresh has
     to fetch, newest first.
     """
-    today = date_cls.fromisoformat((today or today_iso())[:10])
+    current_day = date_cls.fromisoformat((today or today_iso())[:10])
     have = {
         r["day"]
         for r in c.execute(
             "SELECT DISTINCT day FROM exchange_rates WHERE day>=?",
-            ((today - timedelta(days=days_back)).isoformat(),),
+            ((current_day - timedelta(days=days_back)).isoformat(),),
         )
     }
     return [
         d.isoformat()
-        for d in (today - timedelta(days=n) for n in range(days_back + 1))
+        for d in (current_day - timedelta(days=n) for n in range(days_back + 1))
         if d.isoformat() not in have
     ]
 
 
-def backfill(c, days_back=30, today=None, client=None):
+def backfill(
+    c: sqlite3.Connection,
+    days_back: int = 30,
+    today: str | None = None,
+    client: httpx.Client | None = None,
+) -> int:
     """
-    Fetch every recent day we are missing. Network failures stop the sweep
+    Fetch every recent day we are missing. Network failures stop the sweep.
+
     rather than abort it — whatever was already stored stays stored.
     """
     fetched = 0

@@ -1,0 +1,106 @@
+import { describe, expect, it, vi } from "vitest";
+import { renderUI, screen } from "../test/render.jsx";
+import InlineSelect from "./InlineSelect.jsx";
+
+describe("InlineSelect", () => {
+    it("filters grouped options by group name or option label and submits the chosen value", async () => {
+        const onChange = vi.fn();
+        const { user } = renderUI(
+            <InlineSelect
+                searchable
+                value="rent"
+                onChange={onChange}
+                data={[
+                    { value: "none", label: "Uncategorized" },
+                    {
+                        group: "Home",
+                        kind: "expense",
+                        options: [
+                            { value: "rent", label: "Rent" },
+                            { value: "power", label: "Electricity" },
+                        ],
+                    },
+                    {
+                        group: "Income",
+                        kind: "income",
+                        options: [{ value: "pay", label: "Salary" }],
+                    },
+                ]}
+            />,
+        );
+
+        await user.click(screen.getByRole("button", { name: "Rent" }));
+        expect(screen.getByRole("option", { name: "Rent" })).toHaveAttribute(
+            "data-selected",
+            "true",
+        );
+        expect(screen.getByRole("option", { name: "Electricity" })).not.toHaveAttribute(
+            "data-selected",
+        );
+        const search = screen.getByRole("textbox");
+        await user.type(search, "home");
+        expect(screen.getByRole("option", { name: "Rent" })).toBeInTheDocument();
+        expect(screen.getByRole("option", { name: "Electricity" })).toBeInTheDocument();
+        expect(screen.queryByRole("option", { name: "Salary" })).not.toBeInTheDocument();
+
+        await user.clear(search);
+        await user.type(search, "elec");
+        await user.click(screen.getByRole("option", { name: "Electricity" }));
+        expect(onChange).toHaveBeenCalledWith("power");
+    });
+
+    it("shows an empty result for a search that matches neither group nor option", async () => {
+        const { user } = renderUI(
+            <InlineSelect
+                searchable
+                value={null}
+                onChange={() => {}}
+                data={["January", "February"]}
+            />,
+        );
+        await user.click(screen.getByRole("button", { name: "—" }));
+        await user.type(screen.getByRole("textbox"), "zzz");
+        expect(screen.getByText("Nothing found")).toBeInTheDocument();
+    });
+
+    it("keeps loose options searchable and resets a search when the menu closes", async () => {
+        const { user } = renderUI(
+            <InlineSelect
+                searchable
+                value="rent"
+                onChange={() => {}}
+                data={[
+                    { value: "none", label: "Uncategorized" },
+                    { group: "Home", options: [{ value: "rent", label: "Rent" }] },
+                ]}
+            />,
+        );
+
+        await user.click(screen.getByRole("button", { name: "Rent" }));
+        const search = screen.getByRole("textbox");
+        await user.type(search, "uncat");
+        expect(screen.getByRole("option", { name: "Uncategorized" })).toBeInTheDocument();
+        expect(screen.queryByRole("option", { name: "Rent" })).not.toBeInTheDocument();
+
+        await user.click(screen.getByRole("button", { name: "Rent" }));
+        await user.click(screen.getByRole("button", { name: "Rent" }));
+        expect(screen.getByRole("textbox")).toHaveValue("");
+        expect(screen.getByRole("option", { name: "Rent" })).toBeInTheDocument();
+    });
+
+    it("uses a supplied label and placeholder when the current value is absent", async () => {
+        const { user } = renderUI(
+            <InlineSelect
+                field
+                label="Account"
+                placeholder="Choose account"
+                value="removed"
+                onChange={() => {}}
+                data={[{ value: "cash", label: "Cash" }]}
+            />,
+        );
+
+        await user.click(screen.getByRole("button", { name: /accountchoose account/i }));
+        expect(screen.getByRole("option", { name: "Cash" })).toBeInTheDocument();
+    });
+});

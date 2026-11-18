@@ -27,12 +27,18 @@ if the schema changed and the diagram did not.
 
 ```mermaid
 erDiagram
+    category_group_types {
+        INTEGER id PK
+        TEXT type "required"
+        INTEGER transaction_sign "required"
+        INTEGER is_goal "required"
+    }
     category_groups {
         INTEGER id PK
         INTEGER user_id FK "-> users.id"
         TEXT name "required"
         INTEGER sort "required"
-        TEXT kind "required"
+        INTEGER type_id FK "-> category_group_types.id, required"
     }
     categories {
         INTEGER id PK
@@ -41,6 +47,9 @@ erDiagram
         TEXT keywords "required"
         INTEGER sort "required"
         INTEGER archived "required"
+        INTEGER goal_target
+        TEXT goal_status
+        TEXT goal_target_date
     }
     accounts {
         INTEGER id PK
@@ -106,6 +115,14 @@ erDiagram
         REAL rub_per_unit "required"
         TEXT source "required"
     }
+    splits {
+        INTEGER id PK
+        INTEGER transaction_id FK "-> transactions.id, required"
+        INTEGER category_id FK "-> categories.id, required"
+        INTEGER amount "required"
+        TEXT comment "required"
+        INTEGER sort "required"
+    }
     transfers {
         TEXT id PK
         INTEGER user_id FK "-> users.id"
@@ -151,6 +168,7 @@ erDiagram
         TEXT day PK
         INTEGER count "required"
     }
+    category_group_types ||--o{ category_groups : "type_id"
     users |o--o{ category_groups : "user_id"
     category_groups ||--o{ categories : "group_id"
     bank_connections |o--o{ accounts : "connection_id"
@@ -162,6 +180,8 @@ erDiagram
     import_batches |o--o{ transactions : "batch_id"
     accounts ||--o{ transactions : "account_id"
     categories |o--o{ transactions : "category_id"
+    categories ||--o{ splits : "category_id"
+    transactions ||--o{ splits : "transaction_id"
     transactions ||--o{ transfers : "in_tx_id"
     transactions ||--o{ transfers : "out_tx_id"
     users |o--o{ transfers : "user_id"
@@ -211,7 +231,7 @@ belongs to exactly one account.
 | `icon` | TEXT | display glyph name (e.g. `wallet`, `card`, `ruble`); default `wallet` |
 | `color` | TEXT | `#rrggbb` tint for the glyph and its tile; default `#5b6472` |
 | `icon_image` | TEXT | optional custom icon as an image data URL; when set it overrides `icon`/`color` |
-| `currency` | TEXT | ISO code, default `RUB`. What new transactions on this account are denominated in; the ones already filed keep theirs |
+| `currency` | TEXT | ISO code, default `RUB`. A label only — monori is single-currency for now (see issue #29) |
 | `sort` | INTEGER | display order; default `0` |
 | `archived` | INTEGER | `0`/`1`; default `0` |
 | `opening_balance` | INTEGER | kopecks; default `0` |
@@ -244,9 +264,7 @@ The ledger.
 | -------- | ------ | ------- |
 | `id` | INTEGER PK | |
 | `date` | TEXT | ISO-8601 datetime |
-| `amount` | INTEGER | signed minor units of `currency`; negative = expense |
-| `currency` | TEXT | ISO code the amount is denominated in; NOT NULL, blank rejected by trigger |
-| `base_amount` | INTEGER | `amount` in the owner's reporting currency, at the rate for `date`. **The only column that may be summed across accounts** |
+| `amount` | INTEGER | signed kopecks; negative = expense |
 | `description` | TEXT | default `''` |
 | `bank_category` | TEXT | the bank's own label; default `''` |
 | `mcc` | TEXT | merchant category code; default `''` |
@@ -254,7 +272,7 @@ The ledger.
 | `account_id` | INTEGER | → `accounts(id)`, NOT NULL |
 | `transfer_id` | TEXT | links the two legs of a transfer; `NULL` for normal rows |
 | `comment` | TEXT | default `''` |
-| `hash` | TEXT | `sha256(account_id \| date \| amount \| currency \| description)`, for dedup |
+| `hash` | TEXT | `sha1(date \| amount \| description)`, for dedup |
 | `source` | TEXT | `import` / `manual` / `transfer` / `adjustment` / `sync` / `sheets`; default `import` |
 | `batch_id` | INTEGER | → `import_batches(id)`, `ON DELETE SET NULL`; the batch that inserted the row (paste or sync), nullable |
 
@@ -263,33 +281,7 @@ Indexes: `date`, `hash`, `category_id`, `account_id`.
 A **transfer** between your own accounts is two linked rows sharing a
 `transfer_id`: a negative leg on the source account and a positive leg on the
 destination. Both are uncategorized, so a transfer never counts as income or
-expense in analytics — this is enforced by construction, not by convention, and
-it is the link, not the arithmetic, that keeps a transfer out of every total.
-Across currencies the two legs are different numbers: each is denominated in its
-own account's currency. Their `base_amount`s are close but need not cancel
-exactly — the arriving leg records what the bank actually paid out, and a bank's
-spread is not the central bank's rate.
-
-`base_amount` is frozen when the row is written and only ever recomputed
-deliberately — by a new reporting currency, a corrected rate, or a rate
-backfill. Rates published later never rewrite what a past transaction was worth.
-
-### `exchange_rates`
-
-What a unit of a currency was worth, in rubles, on a given day. One pivot, so
-any A→B conversion is `amount * rate(A) / rate(B)`.
-
-| Column | Type | Notes |
-| -------- | ------ | ------- |
-| `day` | TEXT | ISO date |
-| `code` | TEXT | ISO currency code |
-| `rub_per_unit` | REAL | rubles per one unit of `code` |
-| `source` | TEXT | `cbr` (the Bank of Russia feed) or `manual`; default `cbr` |
-
-Primary key is `(day, code)`. A lookup takes the latest publication no later
-than the day asked for; for a transaction older than anything stored it reaches
-forward to the earliest one instead, and failing that falls back to a snapshot
-bundled with the app, so an offline monori still adds up.
+expense in analytics — this is enforced by construction, not by convention.
 
 ### `budgets`
 
@@ -357,14 +349,15 @@ user starts with a default **Cash** account.
 | `email` | TEXT | unique, stored lowercased |
 | `password_hash` | TEXT | Argon2 hash; the plaintext is never stored |
 | `created_at` | TEXT | ISO datetime |
-| `base_currency` | TEXT | the reporting currency every total is expressed in; default `RUB` |
 
 ## Referential behavior
 
 - Deleting a **category** sets `category_id` to `NULL` on its transactions (they
   become uncategorized) and cascade-deletes its budgets. Moving the transactions
   to another category instead is `POST /api/categories/{id}/merge` — the only
-  path that does so, and the one that enforces the income/expense invariant.
+  path that does so, and the one that enforces the income/expense invariant. If
+  the category is referenced by a split part, deletion is refused until those
+  parts are moved with that merge operation.
 - Deleting a **group** is refused while it still has categories.
 - Deleting an **account** reassigns its transactions to another account
   (`?reassignTo=`). Since every transaction must belong to an account, deleting a
@@ -384,15 +377,37 @@ the default T-Bank account.
 
 ## Dedup hashing
 
-The `hash` is `sha256(f"{account_id}|{date}|{amount}|{currency}|{description}")`.
-Two transactions are "the same" only when all five match — the account, because
-mirrored cards and transfer legs legitimately repeat an amount, and the currency,
-because 100 lari and 100 rubles are different money. Import and bank sync use
-this to avoid inserting a row that already exists; see
-[Importing](importing.md).
+The `hash` is `sha1(f"{date}|{amount}|{description}")`. Two transactions are
+"the same" only when date, amount, and description all match. Import uses this to
+avoid inserting a row that already exists; see [Importing](importing.md).
 
 ## Backups
 
-The database is a single file. To back up, copy `monori.db` (and its `-wal`
-sidecar if present) while the app is stopped, or use SQLite's own online backup.
+Back up `monori.db` with SQLite's online backup API, or stop the application
+before copying the database and any existing WAL sidecar. Keep the matching
+`.encryption_key` and `.auth_secret` files beside the database. If these secrets
+are supplied through `MONORI_ENCRYPTION_KEY` or `MONORI_AUTH_SECRET`, preserve
+the configured values separately. Losing the encryption key makes saved bank
+credentials and sessions unreadable; losing the auth secret invalidates login
+tokens.
+
+Store private migration snapshots in `.local-data/`, which is ignored by Git.
+Keep independent databases in separate subdirectories instead of overwriting
+`server/data/monori.db`. Include historical backups and matching secrets.
+The development data in `server/data/`, root `.env`, and `deploy/.env` are also
+local files: a fresh clone does not restore them. Transfer them separately
+through secure storage, and never commit databases, bank browser profiles,
+debug captures, or secrets.
+
+Before removing a snapshot's old location, verify the copied files and database
+integrity. If Syncthing manages that location, pause the folder, copy and verify
+its contents, update the folder path while paused, then resume synchronization
+and verify its status. Delete the old copy only after Syncthing uses the new
+path, so cleanup does not propagate as deletion to another device.
+
+To restore a snapshot, stop the destination application and preserve its current
+data separately. Restore the selected database and its matching secrets together,
+then verify that the application can open the data. Do not combine unrelated
+databases by replacing individual files.
+
 A backup/restore UI is planned in issue #28.

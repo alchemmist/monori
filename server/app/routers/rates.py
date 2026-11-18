@@ -17,29 +17,40 @@ from typing import Annotated
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, Field
+from pydantic import ConfigDict, Field
+from pydantic.dataclasses import dataclass as pydantic_dataclass
 
-from ..admin import admin_user
-from ..auth import current_user
-from ..currencies import catalog
-from ..currencies import validate as validate_currency
-from ..deps import conn
-from ..money import base_currency, reprice_all
-from ..rates import SOURCE_MANUAL, backfill, rate_table, refresh, store_rates, today_iso
+from monori.server.app.admin import admin_user
+from monori.server.app.auth import AuthenticatedUser, current_user
+from monori.server.app.currencies import catalog
+from monori.server.app.currencies import validate as validate_currency
+from monori.server.app.deps import conn
+from monori.server.app.money import base_currency, reprice_all
+from monori.server.app.rates import (
+    SOURCE_MANUAL,
+    backfill,
+    rate_table,
+    refresh,
+    store_rates,
+    today_iso,
+)
 
 router = APIRouter(prefix="/api/rates", tags=["rates"])
 
 MAX_BACKFILL_DAYS = 90
 
 
-class RateOverride(BaseModel):
+@pydantic_dataclass(config=ConfigDict(extra="forbid", populate_by_name=True))
+class RateOverride:
+    """Represent a manually supplied exchange rate."""
+
+    rub_per_unit: float = Field(gt=0, alias="rubPerUnit")
     day: str | None = None
-    rubPerUnit: float = Field(gt=0)
 
 
-def _iso_day(day):
+def _iso_day(day: str | None) -> str:
     """
-    An ISO date, or a 400.
+    Return an ISO date, or raise a 400 response.
 
     Rates are looked up by comparing ``day`` as text, which only orders
     correctly for ``YYYY-MM-DD`` — a malformed one would sort into the wrong
@@ -54,11 +65,13 @@ def _iso_day(day):
 
 @router.get("")
 def get_rates(
-    user: Annotated[dict, Depends(current_user)],
-    day: str | None = Query(default=None),
-):
+    user: Annotated[AuthenticatedUser, Depends(current_user)],
+    day: Annotated[str | None, Query()] = None,
+) -> dict[str, object]:
     """
-    What each currency is worth on ``day``, alongside the registry itself so a
+    Return what each currency is worth on ``day``.
+
+    Include the registry so a
     settings screen needs one request rather than two.
     """
     c = conn()
@@ -66,7 +79,7 @@ def get_rates(
         on = _iso_day(day)
         return {
             "day": on,
-            "baseCurrency": base_currency(c, user["id"]),
+            "baseCurrency": base_currency(c, user.id),
             "currencies": catalog(),
             "rates": rate_table(c, on),
         }
@@ -76,11 +89,12 @@ def get_rates(
 
 @router.post("/refresh")
 def refresh_rates(
-    admin: Annotated[dict, Depends(admin_user)],
-    days: int = Query(default=0, ge=0, le=MAX_BACKFILL_DAYS),
-):
+    _admin: Annotated[AuthenticatedUser, Depends(admin_user)],
+    days: Annotated[int, Query(ge=0, le=MAX_BACKFILL_DAYS)] = 0,
+) -> dict[str, int]:
     """
-    Pull today's rates from the CBR, and optionally the last ``days`` of them
+    Pull today's rates from the CBR, and optionally the last ``days`` of them.
+
     for a ledger that has been running without any.
     """
     c = conn()
@@ -98,16 +112,21 @@ def refresh_rates(
 
 
 @router.put("/{code}")
-def override_rate(code: str, body: RateOverride, admin: Annotated[dict, Depends(admin_user)]):
+def override_rate(
+    code: str,
+    body: RateOverride,
+    _admin: Annotated[AuthenticatedUser, Depends(admin_user)],
+) -> dict[str, str | int]:
     """
-    Set a rate by hand — for a day the feed never published, or a currency it
+    Set a rate by hand — for a day the feed never published, or a currency it.
+
     does not carry.
     """
     currency = validate_currency(code)
     day = _iso_day(body.day)
     c = conn()
     try:
-        if not store_rates(c, day, {currency: body.rubPerUnit}, source=SOURCE_MANUAL):
+        if not store_rates(c, day, {currency: body.rub_per_unit}, source=SOURCE_MANUAL):
             raise HTTPException(400, f"{currency} is quoted against itself and cannot be set")
         repriced = reprice_all(c)
         c.commit()

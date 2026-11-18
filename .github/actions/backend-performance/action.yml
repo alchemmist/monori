@@ -1,0 +1,66 @@
+name: Backend performance suite
+description: Run API and full-stack performance scenarios and publish their reports
+inputs:
+    levels:
+        description: Space-separated virtual-user levels
+        required: true
+    duration:
+        description: Duration per workload and level
+        required: true
+runs:
+    using: composite
+    steps:
+        - name: Setup Python dependencies
+          uses: ./.github/actions/setup-project
+          with:
+              python-profile: ci
+        - name: Run default-journal API scenarios
+          id: api
+          continue-on-error: true
+          shell: bash
+          env:
+              LOAD_LEVELS: ${{ inputs.levels }}
+              LOAD_DURATION: ${{ inputs.duration }}
+              LOAD_OUTPUT_DIR: ${{ github.workspace }}/reports/perf
+          run: make load-api
+        - name: Run full-stack journeys
+          id: e2e
+          continue-on-error: true
+          shell: bash
+          env:
+              LOAD_LEVELS: ${{ inputs.levels }}
+              LOAD_DURATION: ${{ inputs.duration }}
+              LOAD_OUTPUT_DIR: ${{ github.workspace }}/reports/perf
+          run: make load-e2e
+        - name: Run WAL write scenarios
+          id: wal
+          continue-on-error: true
+          shell: bash
+          env:
+              LOAD_LEVELS: ${{ inputs.levels }}
+              LOAD_DURATION: ${{ inputs.duration }}
+              LOAD_OUTPUT_DIR: ${{ github.workspace }}/reports/perf
+              MONORI_SQLITE_JOURNAL_MODE: WAL
+          run: make load-api-write
+        - name: Add summary
+          if: always()
+          shell: bash
+          env:
+              LOAD_OUTPUT_DIR: ${{ github.workspace }}/reports/perf
+          run: test ! -f "$LOAD_OUTPUT_DIR/summary.md" || cat "$LOAD_OUTPUT_DIR/summary.md" >> "$GITHUB_STEP_SUMMARY"
+        - name: Upload load reports
+          if: always()
+          uses: actions/upload-artifact@v7
+          with:
+              name: backend-and-e2e-performance-${{ github.run_attempt }}
+              path: ${{ github.workspace }}/reports/perf
+              if-no-files-found: error
+              retention-days: 30
+        - name: Enforce performance verdicts
+          if: always()
+          shell: bash
+          env:
+              API_OUTCOME: ${{ steps.api.outcome }}
+              E2E_OUTCOME: ${{ steps.e2e.outcome }}
+              WAL_OUTCOME: ${{ steps.wal.outcome }}
+          run: test "$API_OUTCOME" = success && test "$E2E_OUTCOME" = success && test "$WAL_OUTCOME" = success

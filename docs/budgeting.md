@@ -73,14 +73,14 @@ months. A year selector at the top picks which year you are looking at.
 **View mode** — a Year / Month toggle:
 
 - **Year** shows all twelve months at once. A density control switches between:
-  - **Full** — assigned, activity, and running balance for every cell;
-  - **Plan** — just what you assigned;
-  - **Actual** — activity and balance, for reviewing what happened.
+    - **Full** — assigned, activity, and running balance for every cell;
+    - **Plan** — just what you assigned;
+    - **Actual** — activity and balance, for reviewing what happened.
 - **Month** zooms into a single month (picked with a month selector) for
   focused editing, with summary cards on top:
-  - **To be budgeted** — the `available` pool at the end of the month;
-  - **Income** — total income for the month;
-  - **Overspent** — the uncovered total this month.
+    - **To be budgeted** — the `available` pool at the end of the month;
+    - **Income** — total income for the month;
+    - **Overspent** — the uncovered total this month.
 
 Editing is inline: click a budget cell and type an amount. Changes are applied
 optimistically in the UI and saved to the backend immediately, so the balances
@@ -98,14 +98,14 @@ From the budget grid you can:
 - **reorder** groups and categories,
 - **delete** a category. The dialog always asks where its transactions should go,
   and the answer decides what kind of delete it is:
-  - **into another category** — for when the same thing ended up split over two
+    - **into another category** — for when the same thing ended up split over two
     names ("Cafe" and "Coffee"). The transactions move across, the two keyword
     sets are unioned so auto-categorization keeps working, and the monthly
     budgets follow the spending: a month both categories planned is summed, a
     month only the deleted one planned is carried over as it is. Only categories
     of the same kind are offered — income with income, expense with expense —
     because moving history across the line would flip its sign.
-  - **leave uncategorized** — for a category that should never have existed. The
+    - **leave uncategorized** — for a category that should never have existed. The
     transactions stay, without a category, and the budget history goes with it.
 
   Either way the dialog spells out what will happen before you confirm, and

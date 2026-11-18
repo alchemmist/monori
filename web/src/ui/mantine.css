@@ -107,6 +107,12 @@ meter {
     color: var(--m-text-dim);
 }
 
+.mantine-Button-root[data-variant="outline"]:not([data-tone="danger"]) {
+    background: transparent;
+    border: 1px solid var(--g-color-line-generic);
+    color: var(--m-text);
+}
+
 .mantine-Button-root[data-variant="subtle"][data-tone="danger"],
 .mantine-Button-root[data-variant="outline"][data-tone="danger"] {
     color: var(--g-color-text-danger);
@@ -453,7 +459,7 @@ textarea.mi-input__field {
 }
 
 .mantine-SegmentedControl-label[data-active] {
-    color: var(--g-color-text-brand);
+    color: var(--m-text-dim);
 }
 
 /* the large variant used on Settings (gravity size l) */
@@ -549,4 +555,42 @@ textarea.mi-input__field {
 /* ---- Loader ---- */
 .mantine-Loader-root {
     --loader-color: var(--m-accent);
+}
+
+/* ---- Slider / RangeSlider ---- */
+
+/* the track colours are set per color-scheme upstream, so match that
+   specificity here or the blue default wins */
+[data-mantine-color-scheme] .mantine-Slider-root,
+[data-mantine-color-scheme] .mantine-RangeSlider-root {
+    --slider-color: var(--m-accent);
+    --slider-track-bg: var(--m-border);
+    --slider-size: 4px;
+    --slider-thumb-size: 14px;
+}
+
+.mantine-Slider-thumb,
+.mantine-RangeSlider-thumb {
+    border-width: 2px;
+    background: var(--m-surface);
+    box-shadow: 0 1px 3px rgb(0 0 0 / 18%);
+}
+
+.mantine-Slider-label,
+.mantine-RangeSlider-label {
+    background: var(--m-text);
+    color: var(--m-surface);
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+}
+
+.mantine-Slider-mark,
+.mantine-RangeSlider-mark {
+    border-color: var(--m-border);
+}
+
+.mantine-Slider-markLabel,
+.mantine-RangeSlider-markLabel {
+    color: var(--m-text-dim);
+    font-size: 11px;
 }

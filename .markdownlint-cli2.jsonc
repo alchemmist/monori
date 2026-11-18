@@ -1,6 +1,7 @@
 {
     "config": {
         "default": true,
+        "MD007": { "indent": 4 },
         "MD013": false,
         "MD033": false,
         "MD041": false,
@@ -10,8 +11,12 @@
         "**/node_modules",
         "**/.venv",
         "web/dist",
+        "web/test-results",
+        "web/playwright-report",
         "server/static",
         "migration",
         "**/CHANGELOG.md",
+        ".claude/worktrees",
+        ".worktrees",
     ],
 }

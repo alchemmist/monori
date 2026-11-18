@@ -1,0 +1,109 @@
+{
+    "runs": 3,
+    "lighthouseRoutes": [
+        { "id": "login", "label": "Login", "path": "/login" },
+        { "id": "welcome", "label": "Welcome", "path": "/welcome" },
+        { "id": "budget-year", "label": "Budget · Year", "path": "/budget" },
+        {
+            "id": "dashboard",
+            "label": "Dashboard",
+            "path": "/dashboard",
+            "sla": { "total-blocking-time": 2000 }
+        },
+        {
+            "id": "transactions",
+            "label": "Transactions",
+            "path": "/transactions",
+            "sla": { "total-blocking-time": 800 }
+        },
+        { "id": "accounts", "label": "Accounts", "path": "/accounts" },
+        { "id": "categories", "label": "Categories", "path": "/categories" },
+        { "id": "settings", "label": "Settings", "path": "/settings" }
+    ],
+    "navigationScenarios": [
+        {
+            "id": "budget-year-to-month",
+            "label": "Budget · Year → Month",
+            "startPath": "/budget",
+            "action": "month",
+            "readySelector": ".budget-month-card"
+        },
+        {
+            "id": "budget-to-transactions",
+            "label": "Budget · Year → Transactions",
+            "startPath": "/budget",
+            "action": "Transactions",
+            "readySelector": ".tx-table"
+        },
+        {
+            "id": "budget-to-dashboard",
+            "label": "Budget · Year → Dashboard",
+            "startPath": "/budget",
+            "action": "Dashboard",
+            "readySelector": ".dash-head"
+        }
+    ],
+    "metrics": {
+        "largest-contentful-paint": {
+            "label": "LCP",
+            "unit": "ms",
+            "good": 2500,
+            "poor": 4000,
+            "noisePercent": 5,
+            "noiseAbsolute": 200,
+            "significantPercent": 10,
+            "criticalPercent": 25
+        },
+        "total-blocking-time": {
+            "label": "TBT",
+            "unit": "ms",
+            "good": 200,
+            "poor": 600,
+            "noisePercent": 5,
+            "noiseAbsolute": 100,
+            "significantPercent": 10,
+            "criticalPercent": 25
+        },
+        "cumulative-layout-shift": {
+            "label": "CLS",
+            "unit": "score",
+            "good": 0.1,
+            "poor": 0.25,
+            "noisePercent": 5,
+            "noiseAbsolute": 0.01,
+            "significantPercent": 10,
+            "criticalPercent": 25
+        },
+        "speed-index": {
+            "label": "Speed Index",
+            "unit": "ms",
+            "good": 3400,
+            "poor": 5800,
+            "noisePercent": 5,
+            "noiseAbsolute": 200,
+            "significantPercent": 10,
+            "criticalPercent": 25
+        },
+        "server-response-time": {
+            "label": "TTFB",
+            "unit": "ms",
+            "policy": "ttfb",
+            "good": 800,
+            "poor": 1800,
+            "noisePercent": 20,
+            "noiseAbsolute": 100,
+            "significantPercent": 50,
+            "significantAbsolute": 200,
+            "criticalPercent": 100,
+            "criticalAbsolute": 300
+        },
+        "navigation": {
+            "label": "Navigation",
+            "unit": "ms",
+            "noisePercent": 5,
+            "noiseAbsolute": 100,
+            "significantPercent": 10,
+            "criticalPercent": 25
+        }
+    }
+}

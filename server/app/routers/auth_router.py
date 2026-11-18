@@ -9,30 +9,56 @@ a ``current_user`` dependency other routes can adopt.
 
 import sqlite3
 from datetime import UTC, datetime
-from typing import Annotated
+from enum import StrEnum
+from typing import Annotated, cast
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import OAuth2PasswordRequestForm
-from pydantic import BaseModel
+from pydantic import ConfigDict, Field
+from pydantic.dataclasses import dataclass as pydantic_dataclass
 
-from ..admin import admin_emails
-from ..auth import current_user
-from ..currencies import validate as validate_currency
-from ..deps import conn, serialize_user
-from ..emails import canonical_email, normalize_email
-from ..money import reprice_user
-from ..security import create_access_token, hash_password, verify_password
+from monori.server.app.admin import admin_emails
+from monori.server.app.auth import AuthenticatedUser, current_user
+from monori.server.app.currencies import validate as validate_currency
+from monori.server.app.db import begin_write
+from monori.server.app.db_records import UserRecord
+from monori.server.app.deps import UserResponse, conn, serialize_user
+from monori.server.app.emails import canonical_email, normalize_email
+from monori.server.app.money import reprice_plans, reprice_user
+from monori.server.app.rates import today_iso
+from monori.server.app.security import create_access_token, hash_password, verify_password
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 MIN_PASSWORD_LEN = 8
 MAX_EMAIL_LEN = 254
+INVALID_EMAIL_DETAIL = "invalid email"
+DUPLICATE_EMAIL_DETAIL = "email already registered"
+CREATED_AT_FORMAT = "%Y-%m-%dT%H:%M:%S"
+MIN_LENGTH_DETAIL = "password must be at least {minimum} characters"
+INSERT_USER_SQL = (
+    "INSERT INTO users (email, email_canonical, password_hash, created_at) VALUES (?, ?, ?, ?)"
+)
+USER_COUNT_SQL = "SELECT COUNT(*) FROM users"
+ASSIGN_ACCOUNTS_SQL = "UPDATE accounts SET user_id=? WHERE user_id IS NULL"
+ASSIGN_GROUPS_SQL = "UPDATE category_groups SET user_id=? WHERE user_id IS NULL"
+ASSIGN_CONNECTIONS_SQL = "UPDATE bank_connections SET user_id=? WHERE user_id IS NULL"
+USER_ACCOUNT_SQL = "SELECT id FROM accounts WHERE user_id=?"
+INSERT_CASH_ACCOUNT_SQL = (
+    "INSERT INTO accounts (user_id, name, type, currency, sort)"
+    " VALUES (?, 'Cash', 'cash', 'RUB', 1)"
+)
+SELECT_USER_SQL = (
+    "SELECT id, email, created_at, is_admin, last_login, base_currency, default_account_id"
+    " FROM users WHERE id=?"
+)
 
 
-def _valid_email(email):
+def _valid_email(email: str) -> bool:
     """
-    Shape check for an email: one ``@``, non-empty local part, and a dotted
-    domain with no empty labels. Linear and non-backtracking (bounded by
+    Shape check for an email: one ``@``, non-empty local part, and a dotted.
+
+    domain with no empty labels. Linear and non-backtracking (bounded by.
     ``MAX_EMAIL_LEN``) so it cannot be driven into a ReDoS.
     """
     if not email or len(email) > MAX_EMAIL_LEN or any(ch.isspace() for ch in email):
@@ -43,19 +69,32 @@ def _valid_email(email):
     return all(domain.split("."))
 
 
-class RegisterBody(BaseModel):
+@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+class RegisterBody:
+    """Represent RegisterBody."""
+
     email: str
     password: str
 
 
-class MePatch(BaseModel):
-    baseCurrency: str | None = None
-    defaultAccountId: int | None = None
+@pydantic_dataclass(config=ConfigDict(extra="forbid"))
+class TokenResponse:
+    """Represent TokenResponse."""
+
+    access_token: str
+    token_type: "OAuthTokenType"
 
 
-def create_user(c, raw_email, password):
+class OAuthTokenType(StrEnum):
+    """Represent OAuthTokenType."""
+
+    BEARER = "bearer"
+
+
+def create_user(c: sqlite3.Connection, raw_email: str, password: str) -> UserResponse:
     """
-    Validate and insert a user (with a default Cash account), returning the
+    Validate and insert a user (with a default Cash account), returning the.
+
     serialized user. Shared by public registration and admin user creation.
     Raises HTTPException on invalid input or duplicate email.
 
@@ -65,41 +104,32 @@ def create_user(c, raw_email, password):
     """
     email = normalize_email(raw_email)
     if not _valid_email(email):
-        raise HTTPException(400, "invalid email")
+        raise HTTPException(400, INVALID_EMAIL_DETAIL)
     if len(password) < MIN_PASSWORD_LEN:
-        raise HTTPException(400, f"password must be at least {MIN_PASSWORD_LEN} characters")
-    now = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S")
+        raise HTTPException(400, MIN_LENGTH_DETAIL.format(minimum=MIN_PASSWORD_LEN))
+    now = datetime.now(UTC).strftime(CREATED_AT_FORMAT)
+    password_hash = hash_password(password)
     try:
-        cur = c.execute(
-            "INSERT INTO users (email, email_canonical, password_hash, created_at)"
-            " VALUES (?, ?, ?, ?)",
-            (email, canonical_email(email), hash_password(password), now),
-        )
-        c.commit()
+        begin_write(c)
+        cur = c.execute(INSERT_USER_SQL, (email, canonical_email(email), password_hash, now))
     except sqlite3.IntegrityError:
-        raise HTTPException(409, "email already registered") from None
-    uid = cur.lastrowid
-    if c.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 1:
-        c.execute("UPDATE accounts SET user_id=? WHERE user_id IS NULL", (uid,))
-        c.execute("UPDATE category_groups SET user_id=? WHERE user_id IS NULL", (uid,))
-        c.execute("UPDATE bank_connections SET user_id=? WHERE user_id IS NULL", (uid,))
-    if not c.execute("SELECT id FROM accounts WHERE user_id=?", (uid,)).fetchone():
-        c.execute(
-            "INSERT INTO accounts (user_id, name, type, currency, sort)"
-            " VALUES (?, 'Cash', 'cash', 'RUB', 1)",
-            (uid,),
-        )
+        c.rollback()
+        raise HTTPException(409, DUPLICATE_EMAIL_DETAIL) from None
+    uid = cast("int", cur.lastrowid)
+    if c.execute(USER_COUNT_SQL).fetchone()[0] == 1:
+        c.execute(ASSIGN_ACCOUNTS_SQL, (uid,))
+        c.execute(ASSIGN_GROUPS_SQL, (uid,))
+        c.execute(ASSIGN_CONNECTIONS_SQL, (uid,))
+    if not c.execute(USER_ACCOUNT_SQL, (uid,)).fetchone():
+        c.execute(INSERT_CASH_ACCOUNT_SQL, (uid,))
+    row = cast("sqlite3.Row", c.execute(SELECT_USER_SQL, (uid,)).fetchone())
     c.commit()
-    row = c.execute(
-        "SELECT id, email, created_at, is_admin, last_login, base_currency, default_account_id"
-        " FROM users WHERE id=?",
-        (uid,),
-    ).fetchone()
-    return serialize_user(row)
+    return serialize_user(UserRecord.from_row(row))
 
 
 @router.post("/register")
-def register(body: RegisterBody):
+def register(body: RegisterBody) -> UserResponse:
+    """Handle register."""
     c = conn()
     try:
         return create_user(c, body.email, body.password)
@@ -108,10 +138,8 @@ def register(body: RegisterBody):
 
 
 @router.post("/token")
-def token(form: Annotated[OAuth2PasswordRequestForm, Depends()]):
-    """
-    OAuth2 password grant: ``username`` is the email. Returns a bearer token.
-    """
+def token(form: Annotated[OAuth2PasswordRequestForm, Depends()]) -> TokenResponse:
+    """OAuth2 password grant: ``username`` is the email. Returns a bearer token."""
     email = normalize_email(form.username)
     c = conn()
     try:
@@ -119,73 +147,93 @@ def token(form: Annotated[OAuth2PasswordRequestForm, Depends()]):
             "SELECT id, password_hash FROM users WHERE email_canonical=?",
             (canonical_email(email),),
         ).fetchone()
-        # deliberately distinguishable: the sign-in form tells the user which of
-        # the two fields is wrong, at the cost of confirming which addresses are
-        # registered (account enumeration)
+
         if row is None:
             raise HTTPException(401, "no account is registered for this email")
-        if not verify_password(row["password_hash"], form.password):
+        password_hash = row["password_hash"]
+        user_id = row["id"]
+        if not isinstance(password_hash, str) or not isinstance(user_id, int):
+            msg = "stored user credentials have invalid types"
+            raise TypeError(msg)
+        if not verify_password(password_hash, form.password):
             raise HTTPException(401, "incorrect password")
-        # MONORI_ADMIN_EMAILS is the source of truth for admin rights, so the
-        # flag is (re)synced on every successful login; matched on the canonical
-        # form so an admin's mailbox is recognised through any of its aliases
+
         now = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S")
         admin_canon = {canonical_email(e) for e in admin_emails()}
         c.execute(
             "UPDATE users SET is_admin=?, last_login=? WHERE id=?",
-            (1 if canonical_email(email) in admin_canon else 0, now, row["id"]),
+            (1 if canonical_email(email) in admin_canon else 0, now, user_id),
         )
         c.execute(
             "INSERT INTO activity_events (user_id, kind, created_at) VALUES (?, 'login', ?)",
-            (row["id"], now),
+            (user_id, now),
         )
         c.commit()
     finally:
         c.close()
-    return {"access_token": create_access_token(row["id"]), "token_type": "bearer"}
+    return TokenResponse(
+        access_token=create_access_token(user_id),
+        token_type=OAuthTokenType.BEARER,
+    )
 
 
 @router.get("/me")
-def me(user: Annotated[dict, Depends(current_user)]):
-    return user
+def me(user: Annotated[AuthenticatedUser, Depends(current_user)]) -> UserResponse:
+    """Handle me."""
+    return user.to_api_dict()
+
+
+@pydantic_dataclass(config=ConfigDict(extra="forbid", populate_by_name=True))
+class MePatch:
+    """Represent MePatch."""
+
+    default_account_id: int | None = Field(default=None, alias="defaultAccountId")
+    base_currency: str | None = Field(default=None, alias="baseCurrency")
 
 
 @router.patch("/me")
-def patch_me(body: MePatch, user: Annotated[dict, Depends(current_user)]):
+def patch_me(
+    body: MePatch,
+    user: Annotated[AuthenticatedUser, Depends(current_user)],
+) -> UserResponse:
     """
-    Change reporting and import preferences. ``defaultAccountId`` is where
-    imports land rows no card number can route; null clears it.
+    User-level preferences. ``defaultAccountId`` is where imports land rows no.
+
+    card number can route; null clears it and those rows go back to being.
+    assigned by hand.
     """
-    uid = user["id"]
+    uid = user.id
     c = conn()
     try:
-        if body.baseCurrency is not None:
+        if body.base_currency is not None:
+            old_currency = user.base_currency
+            new_currency = validate_currency(body.base_currency)
             c.execute(
                 "UPDATE users SET base_currency=? WHERE id=?",
-                (validate_currency(body.baseCurrency), uid),
+                (new_currency, uid),
             )
-            repriced = reprice_user(c, uid)
-        else:
-            repriced = 0
+            reprice_user(c, uid)
+            reprice_plans(c, uid, old_currency, new_currency, today_iso())
+        default_account_id = body.default_account_id
         if (
-            "defaultAccountId" in body.model_fields_set
-            and body.defaultAccountId is not None
+            default_account_id is not None
             and not c.execute(
-                "SELECT id FROM accounts WHERE id=? AND user_id=?", (body.defaultAccountId, uid)
+                "SELECT id FROM accounts WHERE id=? AND user_id=?",
+                (default_account_id, uid),
             ).fetchone()
         ):
             raise HTTPException(400, "unknown account")
-        if "defaultAccountId" in body.model_fields_set:
-            c.execute(
-                "UPDATE users SET default_account_id=? WHERE id=?", (body.defaultAccountId, uid)
-            )
+        if body.base_currency is None or default_account_id is not None:
+            c.execute("UPDATE users SET default_account_id=? WHERE id=?", (default_account_id, uid))
         c.commit()
         row = c.execute(
             "SELECT id, email, created_at, is_admin, last_login, base_currency, default_account_id"
             " FROM users WHERE id=?",
             (uid,),
         ).fetchone()
-        serialized = serialize_user(row)
-        return {**serialized, "user": serialized, "repriced": repriced}
+        if row is None:
+            msg = "updated user was not found"
+            raise RuntimeError(msg)
+        return serialize_user(UserRecord.from_row(row))
     finally:
         c.close()
