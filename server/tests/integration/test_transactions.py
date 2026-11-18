@@ -264,6 +264,9 @@ def test_link_refund_rejects_legacy_income_category(api: Api, client: TestClient
     finally:
         c.close()
 
+    suggestions = client.get(f"/api/transactions/{refund}/refund-suggestions").json()["rows"]
+    assert all(row["id"] != purchase for row in suggestions)
+
     response = client.put(f"/api/transactions/{refund}/refund", json={"originalId": purchase})
 
     assert response.status_code == 400
