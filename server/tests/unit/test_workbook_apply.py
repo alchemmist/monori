@@ -133,9 +133,11 @@ def test_apply_preserves_blank_categories_despite_keywords(tmp_path: Path) -> No
     c.commit()
 
     assert result.warnings == [
-        "1 rows carry no category in the sheet and were imported uncategorized"
-        " — typically transfers between your own accounts, which the spreadsheet"
-        " leaves out of the budget as well",
+        (
+            "1 rows carry no category in the sheet and were imported uncategorized"
+            " — typically transfers between your own accounts, which the spreadsheet"
+            " leaves out of the budget as well"
+        ),
     ]
     rows = list(
         c.execute(
@@ -423,9 +425,11 @@ def test_unmatched_category_names_are_listed_ten_at_a_time(tmp_path: Path) -> No
     result = apply_workbook(c, uid, parsed, {"RUB:": acct})
     c.commit()
     assert result.warnings == [
-        "11 category names in the sheet match nothing in monori"
-        " — those rows were left uncategorized rather than guessed:"
-        f" {', '.join(names[:10])}",
+        (
+            "11 category names in the sheet match nothing in monori"
+            " — those rows were left uncategorized rather than guessed:"
+            f" {', '.join(names[:10])}"
+        ),
     ]
 
 

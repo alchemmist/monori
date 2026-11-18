@@ -1,4 +1,4 @@
-import datetime
+import datetime as dt
 import re
 from dataclasses import dataclass
 from io import BytesIO
@@ -42,16 +42,16 @@ TX_HEADER: list[str] = [
 ]
 
 
-def _workbook_datetime(*parts: int) -> datetime.datetime:
+def _workbook_datetime(*parts: int) -> dt.datetime:
     values = list(parts) + [0] * (6 - len(parts))
-    return datetime.datetime(
+    return dt.datetime(
         values[0],
         values[1],
         values[2],
         values[3],
         values[4],
         values[5],
-        tzinfo=datetime.UTC,
+        tzinfo=dt.UTC,
     ).replace(tzinfo=None)
 
 
@@ -158,7 +158,7 @@ def _write_year(
 
 @dataclass(frozen=True)
 class TransactionFixture:
-    date: datetime.datetime | str
+    date: dt.datetime | str
     amount: float
     category: str
     card: str = "*1111"
@@ -231,10 +231,10 @@ def test_kop_parses_formatted_strings() -> None:
 
 
 def test_last_day_handles_december_and_others() -> None:
-    assert _last_day(2024, 1) == datetime.date(2024, 1, 31)
-    assert _last_day(2024, 2) == datetime.date(2024, 2, 29)
-    assert _last_day(2025, 2) == datetime.date(2025, 2, 28)
-    assert _last_day(2024, 12) == datetime.date(2024, 12, 31)
+    assert _last_day(2024, 1) == dt.date(2024, 1, 31)
+    assert _last_day(2024, 2) == dt.date(2024, 2, 29)
+    assert _last_day(2025, 2) == dt.date(2025, 2, 28)
+    assert _last_day(2024, 12) == dt.date(2024, 12, 31)
 
 
 def test_stamp_is_noon_on_last_day() -> None:
@@ -262,7 +262,7 @@ def test_parse_dt_variants() -> None:
         5,
         10,
     )
-    assert _parse_dt(ws.cell(1, 2, datetime.date(2025, 1, 5))) == _workbook_datetime(2025, 1, 5)
+    assert _parse_dt(ws.cell(1, 2, dt.date(2025, 1, 5))) == _workbook_datetime(2025, 1, 5)
     assert _parse_dt(ws.cell(1, 3, "2025-01-05")) == _workbook_datetime(2025, 1, 5)
     assert _parse_dt(ws.cell(1, 4, "05.01.2025 10:00:00")) == _workbook_datetime(2025, 1, 5, 10)
     assert _parse_dt(ws.cell(1, 5, "garbage")) is None

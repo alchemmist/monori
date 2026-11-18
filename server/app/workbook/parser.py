@@ -18,7 +18,7 @@ adjustments while making budgeted / outflows / balance / available figures
 survive the move.
 """
 
-import datetime
+import datetime as dt
 import re
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
@@ -227,13 +227,9 @@ def _kop(cell: Cell | MergedCell | None) -> int | None:
     return spec.kop_from_rub(value)
 
 
-def _last_day(year: int, month: int) -> datetime.date:
-    end = (
-        datetime.date(year + 1, 1, 1)
-        if month == MONTHS_IN_YEAR
-        else datetime.date(year, month + 1, 1)
-    )
-    return end - datetime.timedelta(days=1)
+def _last_day(year: int, month: int) -> dt.date:
+    end = dt.date(year + 1, 1, 1) if month == MONTHS_IN_YEAR else dt.date(year, month + 1, 1)
+    return end - dt.timedelta(days=1)
 
 
 def _stamp(year: int, month: int) -> str:
@@ -524,14 +520,12 @@ def _tx_header_index(ws: Worksheet) -> dict[str, int] | None:
     return index
 
 
-def _parse_dt(cell: Cell | MergedCell | None) -> datetime.datetime | None:
+def _parse_dt(cell: Cell | MergedCell | None) -> dt.datetime | None:
     value = None if cell is None else cell.value
-    if isinstance(value, datetime.datetime):
+    if isinstance(value, dt.datetime):
         return value
-    if isinstance(value, datetime.date):
-        return datetime.datetime(value.year, value.month, value.day, tzinfo=datetime.UTC).replace(
-            tzinfo=None
-        )
+    if isinstance(value, dt.date):
+        return dt.datetime(value.year, value.month, value.day, tzinfo=dt.UTC).replace(tzinfo=None)
     text = _s(cell)
     if not text:
         return None
@@ -539,7 +533,7 @@ def _parse_dt(cell: Cell | MergedCell | None) -> datetime.datetime | None:
     if parsed:
         return parsed.replace(tzinfo=None)
     try:
-        return datetime.datetime.fromisoformat(text)
+        return dt.datetime.fromisoformat(text)
     except ValueError:
         return None
 

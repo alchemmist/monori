@@ -4,7 +4,7 @@ Writes a parsed workbook (see ``importer.parse_workbook``) into the.
 database for one user. The caller owns the connection and the commit.
 """
 
-import datetime
+import datetime as dt
 import sqlite3
 from collections.abc import Iterable, Mapping
 
@@ -24,7 +24,7 @@ from monori.server.app.workbook.parser import account_slot
 
 
 def _now() -> str:
-    return datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%dT%H:%M:%S")
+    return dt.datetime.now(dt.UTC).strftime("%Y-%m-%dT%H:%M:%S")
 
 
 def _upsert_groups(

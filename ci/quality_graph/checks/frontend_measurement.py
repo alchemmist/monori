@@ -461,8 +461,10 @@ def render_standards(config: dict[str, JsonValue]) -> list[str]:
         "<details>",
         "<summary>Blocking standards</summary>",
         "",
-        "The CI fails only for a Critical verdict or a measurement failure. "
-        "None, Info, and Significant verdicts remain green.",
+        (
+            "The CI fails only for a Critical verdict or a measurement failure. "
+            "None, Info, and Significant verdicts remain green."
+        ),
         "",
     ]
     for metric_id, metric in metrics.items():
@@ -500,8 +502,10 @@ def render_standards(config: dict[str, JsonValue]) -> list[str]:
 
     lines.extend(
         [
-            "- **Measurement failure:** the collector or comparator exits with status 2 and the CI "
-            "fails; this is reported separately from a product regression.",
+            (
+                "- **Measurement failure:** the collector or comparator exits with status 2 "
+                "and the CI fails; this is reported separately from a product regression."
+            ),
             "",
             "</details>",
         ]
@@ -527,8 +531,10 @@ def render_report(
         lines.extend(
             [
                 "> [!CAUTION]",
-                "> A critical runtime performance regression was detected. Fix the highlighted "
-                "route or metric before merging.",
+                (
+                    "> A critical runtime performance regression was detected. Fix the highlighted "
+                    "route or metric before merging."
+                ),
                 "",
             ]
         )
@@ -536,8 +542,10 @@ def render_report(
         lines.extend(
             [
                 "> [!WARNING]",
-                "> Runtime performance regressed noticeably. The check still passes, but the "
-                "change should be reviewed.",
+                (
+                    "> Runtime performance regressed noticeably. The check still passes, but the "
+                    "change should be reviewed."
+                ),
                 "",
             ]
         )

@@ -9,7 +9,7 @@ lifted from the reference template so the export reads as a designed document
 rather than a raw dump.
 """
 
-import datetime
+import datetime as dt
 from collections import defaultdict
 from dataclasses import dataclass
 from io import BytesIO
@@ -60,11 +60,11 @@ _GRID_SIDE = Side(style="thin", color="FFD9D9D9")
 GRID_BORDER = Border(left=_GRID_SIDE, right=_GRID_SIDE, top=_GRID_SIDE, bottom=_GRID_SIDE)
 
 
-def _parse_dt(value: str) -> datetime.datetime:
+def _parse_dt(value: str) -> dt.datetime:
     try:
-        return datetime.datetime.fromisoformat(value)
+        return dt.datetime.fromisoformat(value)
     except ValueError:
-        return datetime.datetime.fromisoformat(value[:10])
+        return dt.datetime.fromisoformat(value[:10])
 
 
 def _text(value: str) -> str:
