@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Button } from "@mantine/core";
 import { api } from "../api.js";
 import { readStatementFile } from "../importFile.js";
@@ -20,6 +20,18 @@ export default function ImportPanel({ onClose }: { onClose: () => void }) {
     if (!snapshot) throw new Error("Import requires a loaded snapshot");
     const accounts = snapshot.accounts.filter((a) => !a.archived);
     const categories = snapshot.categories.filter((c) => !c.archived);
+    const purchasesByMerchant = useMemo(() => {
+        const purchases = new Map<string, typeof snapshot.transactions>();
+        for (const transaction of snapshot.transactions) {
+            if (transaction.amount >= 0 || transaction.transferId != null) continue;
+            const merchant = refundMerchantKey(transaction.description);
+            if (merchant === "") continue;
+            const rows = purchases.get(merchant) ?? [];
+            rows.push(transaction);
+            purchases.set(merchant, rows);
+        }
+        return purchases;
+    }, [snapshot]);
     const fileRef = useRef<HTMLInputElement>(null);
     const [fileName, setFileName] = useState("");
     const [rows, setRows] = useState<ImportRow[] | null>(null);
@@ -44,14 +56,11 @@ export default function ImportPanel({ onClose }: { onClose: () => void }) {
         if (row.amount <= 0) return null;
         const merchant = refundMerchantKey(row.description);
         if (merchant === "") return null;
-        return snapshot.transactions.find(
-            (transaction) =>
-                transaction.amount < 0 &&
-                transaction.transferId == null &&
-                transaction.date <= row.date &&
-                -transaction.amount >= row.amount &&
-                refundMerchantKey(transaction.description) === merchant,
-        );
+        return purchasesByMerchant
+            .get(merchant)
+            ?.find(
+                (transaction) => transaction.date <= row.date && -transaction.amount >= row.amount,
+            );
     };
     const unassigned = rows?.filter((r) => r.accountId == null).length ?? 0;
     const fresh = rows?.filter((r) => r.duplicate !== true).length ?? 0;
