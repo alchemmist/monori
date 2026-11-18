@@ -1083,16 +1083,21 @@ function elementFill(node: unknown): string | undefined {
 }
 
 describe("perRowColor", () => {
-    it("uses a string color from the row and drops a non-string one", () => {
+    it("prefers a string row color and otherwise keeps a string bar fill", () => {
         const colored = perRowColor("color")({
             payload: { color: "var(--row)" },
             fill: "var(--bar)",
         } as never);
-        const plain = perRowColor("color")({
+        const fallback = perRowColor("color")({
             payload: { color: 1 },
             fill: "var(--bar)",
         } as never);
+        const omitted = perRowColor("color")({
+            payload: { color: 1 },
+            fill: 1,
+        } as never);
         expect(elementFill(colored)).toBe("var(--row)");
-        expect(elementFill(plain)).toBeUndefined();
+        expect(elementFill(fallback)).toBe("var(--bar)");
+        expect(elementFill(omitted)).toBeUndefined();
     });
 });
