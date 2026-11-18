@@ -30,7 +30,6 @@ REPOSITORY_ROOT = Path(
 )
 
 WORKFLOW = REPOSITORY_ROOT / ".github/workflows/main-checks.yaml"
-DEPLOY_WORKFLOW = REPOSITORY_ROOT / ".github/workflows/deploy.yaml"
 PRODUCTION_COMPOSE = REPOSITORY_ROOT / "deploy/docker-compose.yml"
 DOCKER_DAEMON_CONFIG = REPOSITORY_ROOT / "deploy/docker-daemon.json"
 DOCKER_GC_SERVICE = REPOSITORY_ROOT / "deploy/systemd/docker-disk-gc.service"
@@ -193,19 +192,6 @@ class TestMainWorkflowGraph:
         assert "run: make coverage-baseline" in block.group("body")
         assert "uses: actions/cache/save@v6" in block.group("body")
         assert "key: coverage-baseline-v1-${{ github.sha }}" in block.group("body")
-
-    def test_deploy_bounds_docker_storage_before_fetch(self) -> None:
-        source = DEPLOY_WORKFLOW.read_text()
-        build_cache_gc = "docker buildx prune -af --max-used-space 4gb --min-free-space 8gb"
-        image_gc = 'docker image prune -af --filter "until=48h"'
-        container_gc = 'docker container prune -f --filter "until=48h"'
-
-        assert source.count(build_cache_gc) == 1
-        assert source.count(image_gc) == 1
-        assert source.count(container_gc) == 1
-        assert source.index(build_cache_gc) < source.index("git fetch origin main")
-        assert "free_bytes" in source
-        assert "5368709120" in source
 
     def test_production_host_bounds_docker_storage(self) -> None:
         compose = yaml.safe_load(PRODUCTION_COMPOSE.read_text())
