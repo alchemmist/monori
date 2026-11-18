@@ -201,7 +201,7 @@ diff --git a/server/app/example.py b/server/app/example.py
             (
                 module.MutationStats(killed=9, survived=1, new_survivors=1),
                 False,
-                0,
+                1,
             ),
             (
                 module.MutationStats(killed=9, survived=1, new_survivors=1),
@@ -211,7 +211,7 @@ diff --git a/server/app/example.py b/server/app/example.py
             (module.MutationStats(killed=7, survived=3), False, 1),
         ],
     )
-    def test_verdict_enforces_score_threshold(
+    def test_verdict_enforces_score_and_new_survivors_independently(
         self,
         tmp_path: Path,
         stats: module.MutationStats,
@@ -219,7 +219,7 @@ diff --git a/server/app/example.py b/server/app/example.py
         skip_new_survivors: bool,
         expected: int,
     ) -> None:
-        """Use the configured mutation score as the gate."""
+        """Keep the score threshold and survivor regression policy independent."""
         summary = tmp_path / "summary.md"
         result = module.report_verdict(
             module.GateRequest(

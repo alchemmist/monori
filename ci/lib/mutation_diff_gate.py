@@ -345,7 +345,7 @@ def report_verdict(
 ) -> int:
     """Publish the mutation verdict and return its process exit code."""
     score = 100 * stats.killed / stats.considered
-    passed = score >= request.threshold
+    passed = score >= request.threshold and (request.skip_new_survivors or stats.new_survivors == 0)
     gate_status = "✅ PASS" if passed else "❌ FAIL"
     summary = [
         "## Python mutation diff",
