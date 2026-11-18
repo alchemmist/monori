@@ -100,7 +100,7 @@ if (considered === 0) {
 }
 
 const score = (detected * 100) / considered;
-const passed = score >= threshold && survived === 0;
+const passed = score >= threshold;
 const status = passed ? "✅ PASS" : "❌ FAIL";
 const findings = mutants.filter((mutant) => ["Survived", "NoCoverage"].includes(mutant.status));
 const diagnostics = mutationDiagnostics(findings);

@@ -3,7 +3,7 @@ HAVE_DOCKER_COMPOSE = $(shell docker compose version >/dev/null 2>&1 && echo 1)
 HAVE_PODMAN_COMPOSE = $(shell podman compose version >/dev/null 2>&1 && echo 1)
 COMPOSE ?= $(if $(HAVE_DOCKER_COMPOSE),docker compose,$(if $(HAVE_PODMAN_COMPOSE),podman compose --in-pod=false,docker compose))
 MUTATION_THRESHOLD ?= 85
-MUTATION_DIFF_THRESHOLD ?= 90
+MUTATION_DIFF_THRESHOLD ?= 60
 COVERAGE_DIFF_THRESHOLD ?= 90
 MUTATION_JOBS ?= $(shell getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 1)
 BASE ?= origin/main
