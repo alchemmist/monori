@@ -256,11 +256,10 @@ describe("TransactionsPage", () => {
         const unlink = vi.spyOn(useStore.getState(), "unlinkRefund").mockResolvedValue();
         const scrollIntoView = vi.fn();
         const rendered = renderUI(<TransactionsPage />);
-        const querySelector = document.querySelector.bind(document);
         vi.spyOn(document, "querySelector").mockImplementation((selector) =>
             selector.startsWith("[data-transaction-id=")
                 ? ({ scrollIntoView } as unknown as Element)
-                : querySelector(selector),
+                : null,
         );
         expect(screen.getByText("refunded · 1")).toBeInTheDocument();
         await rendered.user.click(screen.getByRole("button", { name: "refunded · 1" }));
