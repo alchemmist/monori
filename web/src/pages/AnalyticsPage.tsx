@@ -47,7 +47,8 @@ const perRowColor = (field: string) => (props: BarShapeProps) => {
         typeof payload === "object" && payload != null && field in payload
             ? (Reflect.get(payload, field) as unknown)
             : undefined;
-    const { fill: _fill, ...rest } = props;
+    const { fill: originalFill, ...rest } = props;
+    void originalFill;
     if (typeof fill !== "string") {
         return <Rectangle {...rest} />;
     }
