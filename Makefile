@@ -253,17 +253,16 @@ analyze-javascript-dead-code:
 audit: audit-deps audit-deps-py audit-secrets
 
 audit-deps:
-	cd web && npm ci --legacy-peer-deps --no-audit --no-fund --silent
+	cd web && npm ci --no-audit --no-fund --silent
 	(cd web && npm audit --audit-level=high --json) | \
 		uv run --locked --group audit python -m monori.ci.lib.npm_audit_gate
-	cd tools/frontend-perf && npm ci --legacy-peer-deps --no-audit --no-fund --silent
+	cd tools/frontend-perf && npm ci --no-audit --no-fund --silent
 	(cd tools/frontend-perf && npm audit --audit-level=high --json) | \
 		uv run --locked --group audit python -m monori.ci.lib.npm_audit_gate
 
 audit-deps-py:
 	@req=$$(mktemp); \
-	( uv export --group runtime --no-dev --no-hashes --no-emit-workspace \
-		--format requirements-txt -o "$$req" \
+	( uv export --group runtime --no-dev --no-hashes --format requirements-txt -o "$$req" \
 		&& uv run --locked --group audit pip-audit -r "$$req" ); code=$$?; \
 	rm -f "$$req"; exit $$code
 
