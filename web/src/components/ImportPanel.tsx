@@ -23,7 +23,12 @@ export default function ImportPanel({ onClose }: { onClose: () => void }) {
     const purchasesByMerchant = useMemo(() => {
         const purchases = new Map<string, typeof snapshot.transactions>();
         for (const transaction of snapshot.transactions) {
-            if (transaction.amount >= 0 || transaction.transferId != null) continue;
+            if (
+                transaction.amount >= 0 ||
+                transaction.transferId != null ||
+                (transaction.splits?.length ?? 0) > 0
+            )
+                continue;
             const merchant = refundMerchantKey(transaction.description);
             if (merchant === "") continue;
             const rows = purchases.get(merchant) ?? [];
