@@ -463,3 +463,43 @@ def test_reconcile_converts_transaction_overrides_to_account_currency(
 def test_an_unknown_account_currency_is_rejected(client: TestClient) -> None:
     r = client.post("/api/accounts", json={"name": "Dogecoin", "currency": "DOGE"})
     assert r.status_code == 400
+
+
+@pytest.mark.parametrize("received", [0, -1])
+def test_cross_currency_transfer_rejects_nonpositive_received_amount(
+    api: Api,
+    client: TestClient,
+    received: int,
+) -> None:
+    account = api.account("Foreign", AccountOptions(currency="USD"))
+    response = client.post(
+        "/api/transfers",
+        json={
+            "fromAccountId": api.default_account(),
+            "toAccountId": account,
+            "amount": 100,
+            "toAmount": received,
+            "date": "2026-07-01T12:00:00",
+        },
+    )
+    assert response.status_code == 422
+    assert api.snapshot().transactions == []
+
+
+def test_transfer_without_historical_rate_returns_actionable_error(
+    api: Api,
+    client: TestClient,
+) -> None:
+    account = api.account("Foreign", AccountOptions(currency="USD"))
+    response = client.post(
+        "/api/transfers",
+        json={
+            "fromAccountId": api.default_account(),
+            "toAccountId": account,
+            "amount": 100,
+            "date": "2020-01-01T12:00:00",
+        },
+    )
+    assert response.status_code == 400
+    assert "state the amount that arrived" in response.json()["detail"]
+    assert api.snapshot().transactions == []

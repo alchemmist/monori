@@ -115,6 +115,29 @@ describe("store remote mutations", () => {
     /** Actions that only edit the snapshot must not spend a round trip on `load`. */
     const refreshCount = () => vi.mocked(useStore.getState().load).mock.calls.length;
 
+    it("changes reporting currency and refreshes or overrides rates through the API", async () => {
+        const patch = vi.spyOn(api, "authPatchMe").mockResolvedValue({
+            id: 1,
+            email: "a@example.com",
+            baseCurrency: "USD",
+        });
+        const refresh = vi.spyOn(api, "refreshRates").mockResolvedValue({ repriced: 2 });
+        const setRate = vi.spyOn(api, "setRate").mockResolvedValue({ repriced: 1 });
+        const store = useStore.getState();
+
+        await expect(store.setBaseCurrency("USD")).resolves.toBeUndefined();
+        expect(patch).toHaveBeenCalledExactlyOnceWith({ baseCurrency: "USD" });
+        expect(useStore.getState().user?.baseCurrency).toBe("USD");
+        await expect(store.refreshRates(30)).resolves.toEqual({ repriced: 2 });
+        await expect(store.setRate("USD", 91, "2026-01-02")).resolves.toEqual({ repriced: 1 });
+        expect(refresh).toHaveBeenCalledExactlyOnceWith(30);
+        expect(setRate).toHaveBeenCalledExactlyOnceWith("USD", {
+            rubPerUnit: 91,
+            day: "2026-01-02",
+        });
+        expect(refreshCount()).toBe(3);
+    });
+
     it("sends account edits to their own endpoints and adopts the server id", async () => {
         const createAccount = vi.spyOn(api, "createAccount").mockResolvedValue({ id: 4 });
         const patchAccount = vi.spyOn(api, "patchAccount").mockResolvedValue({});

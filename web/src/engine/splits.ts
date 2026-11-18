@@ -13,15 +13,9 @@ export function splitPartTransaction(
     part: TransactionSplit,
 ): EffectiveTransaction {
     const parentBaseAmount = transaction.baseAmount ?? transaction.amount;
-    const baseAmount =
-        transaction.amount === 0
-            ? 0
-            : roundHalfEven((parentBaseAmount * part.amount) / transaction.amount);
+    const baseAmount = roundHalfEven((parentBaseAmount * part.amount) / transaction.amount);
     const parentAccountAmount = transaction.accountAmount ?? transaction.amount;
-    const accountAmount =
-        transaction.amount === 0
-            ? 0
-            : roundHalfEven((parentAccountAmount * part.amount) / transaction.amount);
+    const accountAmount = roundHalfEven((parentAccountAmount * part.amount) / transaction.amount);
     return {
         ...transaction,
         id: `${transaction.id}:${part.id}`,

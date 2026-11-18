@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import TransferDialog from "./TransferDialog.jsx";
 import { renderUI, resetStore, screen, seed, waitFor } from "../test/render.jsx";
 import { useStore } from "../store.js";
+import { api } from "../api.js";
 import { buildSnapshot } from "../test/render.js";
 import type { ComponentProps } from "react";
 import type { UserEvent } from "@testing-library/user-event";
@@ -97,5 +98,46 @@ describe("TransferDialog", () => {
         unmount();
         renderUI(<TransferDialog accounts={[accounts[0]!]} onClose={vi.fn()} />);
         expect(screen.getByRole("button", { name: "Transfer" })).toBeDisabled();
+    });
+
+    it("uses the selected day's rate for a cross-currency transfer", async () => {
+        const mixed = buildSnapshot({
+            accounts: [
+                { id: 1, name: "Rubles", currency: "RUB", archived: false },
+                { id: 2, name: "Dollars", currency: "USD", archived: false },
+            ],
+        }).accounts;
+        vi.spyOn(api, "rates").mockResolvedValue({ rates: [{ code: "USD", rate: 90 }] });
+        const create = vi.spyOn(useStore.getState(), "createTransfer").mockResolvedValue("t1");
+        const { user } = renderUI(<TransferDialog accounts={mixed} onClose={vi.fn()} />);
+        await user.type(screen.getByLabelText("Sent (RUB)"), "900");
+        expect(screen.getByLabelText("Received (USD)")).toHaveAttribute("placeholder", "10");
+        await user.click(screen.getByRole("button", { name: "Transfer" }));
+        await waitFor(() =>
+            expect(create).toHaveBeenCalledWith(
+                expect.objectContaining({ amount: 90_000, toAmount: 1_000 }),
+            ),
+        );
+    });
+
+    it("accepts an explicit received amount when a dated rate is unavailable", async () => {
+        const mixed = buildSnapshot({
+            accounts: [
+                { id: 1, name: "Rubles", currency: "RUB", archived: false },
+                { id: 2, name: "Dollars", currency: "USD", archived: false },
+            ],
+        }).accounts;
+        vi.spyOn(api, "rates").mockResolvedValue({ rates: [] });
+        const create = vi.spyOn(useStore.getState(), "createTransfer").mockResolvedValue("t1");
+        const { user } = renderUI(<TransferDialog accounts={mixed} onClose={vi.fn()} />);
+        await user.type(screen.getByLabelText("Sent (RUB)"), "90");
+        expect(
+            await screen.findByText(/No exchange rate is available for this date/),
+        ).toBeInTheDocument();
+        await user.type(screen.getByLabelText("Received (USD)"), "1.25");
+        await user.click(screen.getByRole("button", { name: "Transfer" }));
+        await waitFor(() =>
+            expect(create).toHaveBeenCalledWith(expect.objectContaining({ toAmount: 125 })),
+        );
     });
 });

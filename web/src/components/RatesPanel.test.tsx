@@ -116,4 +116,26 @@ describe("RatesPanel", () => {
         );
         expect(screen.getByRole("button", { name: "90.0000 ₽" })).toBeEnabled();
     });
+    it("renders available metadata and saves an undated quote without claiming repricing", async () => {
+        setRate.mockResolvedValue({ repriced: 0 });
+        useStore.setState({
+            snapshot: buildSnapshot({
+                rates: [
+                    { code: "USD", rate: 90 },
+                    { code: "EUR", rate: 95, source: "imported" },
+                ],
+            }),
+        });
+        const { user } = renderUI(<RatesPanel />);
+        expect(screen.getByText("imported")).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "90.0000 ₽" })).toHaveAttribute(
+            "title",
+            "Set the rate for today by hand",
+        );
+        await user.click(screen.getByRole("button", { name: "90.0000 ₽" }));
+        await user.clear(screen.getByRole("textbox"));
+        await user.type(screen.getByRole("textbox"), "91{Enter}");
+        await waitFor(() => expect(setRate).toHaveBeenCalledExactlyOnceWith("USD", 91, undefined));
+        expect(notify).toHaveBeenCalledWith({ title: "USD set to 91 ₽", theme: "success" });
+    });
 });

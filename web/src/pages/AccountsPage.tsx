@@ -189,7 +189,7 @@ export default function AccountsPage() {
                                 )}
                             </div>
                             <span className="account-row__balance num">
-                                {money(balances.get(a.id) ?? 0, a.currency)}
+                                {money(balances.get(a.id)!, a.currency)}
                             </span>
                             <div className="account-row__actions">
                                 <RowMenu

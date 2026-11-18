@@ -345,7 +345,7 @@ export default function DashboardPage({
                                                 : undefined,
                                     }}
                                 >
-                                    {money(balances.get(a.id) ?? 0, a.currency)}
+                                    {money(balances.get(a.id)!, a.currency)}
                                 </div>
                             </div>
                         );

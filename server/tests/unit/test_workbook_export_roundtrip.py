@@ -6,6 +6,7 @@ import pytest
 from openpyxl import Workbook
 from openpyxl.worksheet.worksheet import Worksheet
 
+from monori.server.app.workbook.export import _parse_dt as parse_export_date
 from monori.server.app.workbook.parser import (
     WorkbookError,
     _amount,
@@ -390,3 +391,7 @@ def test_dashdata_sheet_is_known_and_silent() -> None:
     dash.append(["Month", "Income"])
     parsed = parse_workbook(_bytes(wb))
     assert parsed.warnings == []
+
+
+def test_export_preserves_legacy_dates_with_invalid_time_suffixes() -> None:
+    assert parse_export_date("2026-01-05 legacy-time") == _workbook_datetime(2026, 1, 5)

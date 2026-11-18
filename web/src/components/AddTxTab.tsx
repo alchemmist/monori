@@ -100,7 +100,7 @@ export default function AddTxTab({ onClose }: { onClose: () => void }) {
                 description: description.trim(),
                 categoryId: category == null || category === "" ? null : +category,
                 comment: comment.trim(),
-                ...(currency === (accountCurrency ?? DEFAULT_CURRENCY) ? {} : { currency }),
+                ...(currency === accountCurrency ? {} : { currency }),
             });
             setRecent((prev) => [tx, ...prev].slice(0, RECENT_SHOWN));
             setAmount("");

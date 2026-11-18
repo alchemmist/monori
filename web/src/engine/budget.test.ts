@@ -69,6 +69,17 @@ describe("buildBudgetIndex", () => {
 });
 
 describe("buildOpeningIndex", () => {
+    it("converts a foreign opening balance when no server-derived amount is present", () => {
+        const index = buildOpeningIndex(
+            [{ id: 1, openingBalance: 100, currency: "USD", openingDate: "2024-01-01" }],
+            2024,
+            [],
+            "RUB",
+            [{ code: "USD", rate: 90 }],
+        );
+        expect(index.get(monthKey(2024, 1))).toBe(9000);
+    });
+
     it("sums opening balances into the month an account opened", () => {
         const index = buildOpeningIndex(
             [

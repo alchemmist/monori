@@ -66,9 +66,7 @@ export function buildTxIndex(transactions: BudgetTransaction[]): Map<string, num
             const baseAmount =
                 index === splits.length - 1
                     ? parentBase - allocated
-                    : transaction.amount === 0
-                      ? 0
-                      : roundHalfEven((parentBase * part.amount) / transaction.amount);
+                    : roundHalfEven((parentBase * part.amount) / transaction.amount);
             allocated += baseAmount;
             return { ...transaction, categoryId: part.categoryId, amount: part.amount, baseAmount };
         });

@@ -68,6 +68,43 @@ describe("SettingsPage", () => {
         expect(screen.queryByText(/^Joined/)).not.toBeInTheDocument();
     });
 
+    it("changes reporting currency and reports success", async () => {
+        useStore.setState({
+            user: { id: 1, email: "plain@example.com", baseCurrency: "RUB" },
+            setBaseCurrency: vi.fn().mockResolvedValue(undefined),
+        });
+        const notify = vi.spyOn(useStore.getState(), "notify");
+        const { user } = renderSettings(
+            <SettingsPage theme="light" onToggleTheme={vi.fn()} onMigrate={vi.fn()} />,
+        );
+        await user.click(screen.getByRole("button", { name: /RUB/ }));
+        await user.click(await screen.findByRole("option", { name: /USD/, hidden: true }));
+        await waitFor(() =>
+            expect(useStore.getState().setBaseCurrency).toHaveBeenCalledWith("USD"),
+        );
+        expect(notify).toHaveBeenCalledWith({ title: "Now reporting in USD", theme: "success" });
+    });
+
+    it("reports a reporting-currency change failure", async () => {
+        useStore.setState({
+            user: { id: 1, email: "plain@example.com", baseCurrency: "RUB" },
+            setBaseCurrency: vi.fn().mockRejectedValue(new Error("reprice failed")),
+        });
+        const notify = vi.spyOn(useStore.getState(), "notify");
+        const { user } = renderSettings(
+            <SettingsPage theme="light" onToggleTheme={vi.fn()} onMigrate={vi.fn()} />,
+        );
+        await user.click(screen.getByRole("button", { name: /RUB/ }));
+        await user.click(await screen.findByRole("option", { name: /USD/, hidden: true }));
+        await waitFor(() =>
+            expect(notify).toHaveBeenCalledWith({
+                title: "Could not change the reporting currency",
+                theme: "danger",
+                content: "Error: reprice failed",
+            }),
+        );
+    });
+
     it("downloads the exported workbook and reports an API error", async () => {
         useStore.setState({ user: { id: 1, email: "me@example.com" } });
         const create = vi.fn(() => "blob:test"),
