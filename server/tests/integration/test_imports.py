@@ -48,6 +48,16 @@ def test_import_preview_categorizes_and_flags_errors(api: Api, client: TestClien
     assert len(prev.errors) == 1
 
 
+def test_import_preview_drops_income_category_from_expense(api: Api) -> None:
+    income = api.group("Income", "income")
+    api.category("Wrong direction", income, "Lenta")
+
+    rows = api.preview(api.statement)
+
+    assert rows[0].amount < 0
+    assert rows[0].category_id is None
+
+
 def test_preview_routes_each_card_and_commit_accepts_mixed_accounts(
     api: Api,
     client: TestClient,

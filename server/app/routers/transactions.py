@@ -178,7 +178,7 @@ def _validate_category_type(transaction_sign: int, amount: int, *, is_refund: bo
     if amount < 0 and transaction_sign != -1:
         raise HTTPException(400, "expense transaction requires an expense category")
     if amount > 0 and is_refund and transaction_sign != -1:
-        raise HTTPException(400, "income transaction requires an income category")
+        raise HTTPException(400, "linked refund requires an expense category")
 
 
 def _resolve_category(
@@ -560,6 +560,8 @@ def link_refund(
             (body.original_id, refund_tx_id),
         ).fetchone():
             raise HTTPException(400, "refund links cannot be chained")
+        if original.category_id is not None:
+            _resolve_category(c, original.category_id, uid, original.amount)
         if _refund_total(c, body.original_id, refund_tx_id) + refund.amount > -original.amount:
             raise HTTPException(400, "refunds cannot exceed the original purchase")
         c.execute(

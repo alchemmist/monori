@@ -228,6 +228,9 @@ describe("TransactionsPage", () => {
         expect(
             within(dropdown).queryByRole("option", { name: "Salary", hidden: true }),
         ).not.toBeInTheDocument();
+        expect(
+            within(dropdown).queryByRole("option", { name: "Leave uncategorized", hidden: true }),
+        ).not.toBeInTheDocument();
         await user.click(categorySelect);
         await waitFor(() => expect(food).not.toBeInTheDocument());
     });
@@ -251,6 +254,7 @@ describe("TransactionsPage", () => {
         });
         const unlink = vi.spyOn(useStore.getState(), "unlinkRefund").mockResolvedValue();
         const rendered = renderUI(<TransactionsPage />);
+        expect(screen.getByText("refunded · 1")).toBeInTheDocument();
         row = screen.getByText("tx 2").closest<HTMLElement>("tr")!;
         await rendered.user.click(within(row).getByRole("button", { name: "Transaction actions" }));
         fireEvent.click(screen.getByText("Unlink refund"));

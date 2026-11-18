@@ -3,6 +3,7 @@ import pytest
 from fastapi.testclient import TestClient
 from pydantic import TypeAdapter, ValidationError
 
+from monori.server.app.deps import conn
 from monori.server.app.value_types import Money
 from monori.server.tests.conftest import Api, TransactionOptions
 
@@ -241,6 +242,24 @@ def test_partial_refunds_link_to_purchase_and_inherit_category(
     )
 
 
+def test_link_refund_rejects_legacy_income_category(api: Api, client: TestClient) -> None:
+    income = api.group("Income", "income")
+    salary = api.category("Salary", income)
+    purchase = api.tx("2026-01-01", -30_00)
+    refund = api.tx("2026-01-02", 10_00)
+    c = conn()
+    try:
+        c.execute("UPDATE transactions SET category_id=? WHERE id=?", (salary, purchase))
+        c.commit()
+    finally:
+        c.close()
+
+    response = client.put(f"/api/transactions/{refund}/refund", json={"originalId": purchase})
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "expense transaction requires an expense category"
+
+
 def test_refund_suggestions_validation_and_unlink(api: Api, client: TestClient) -> None:
     expenses = api.group("Expenses")
     income = api.group("Income", "income")
@@ -285,6 +304,7 @@ def test_refund_suggestions_validation_and_unlink(api: Api, client: TestClient) 
         == 200
     )
     assert client.patch(f"/api/transactions/{refund}", json={"amount": -1}).status_code == 400
+    assert client.patch(f"/api/transactions/{refund}", json={"amount": 10_001}).status_code == 400
     assert client.patch(f"/api/transactions/{purchase}", json={"amount": -1_000}).status_code == 400
     assert (
         client.patch(
@@ -349,6 +369,10 @@ def test_refund_suggestions_validation_and_unlink(api: Api, client: TestClient) 
             },
         ).status_code
         == 200
+    )
+    assert (
+        client.patch(f"/api/transactions/{split_refund}", json={"categoryId": salary}).status_code
+        == 400
     )
     assert client.get(f"/api/transactions/{split_refund}/refund-suggestions").status_code == 400
     assert (
