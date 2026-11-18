@@ -47,12 +47,12 @@ const perRowColor = (field: string) => (props: BarShapeProps) => {
         typeof payload === "object" && payload != null && field in payload
             ? (Reflect.get(payload, field) as unknown)
             : undefined;
-    const { fill: originalFill, ...rest } = props;
-    void originalFill;
-    if (typeof fill !== "string") {
+    const { fill: barFill, ...rest } = props;
+    const chosen = typeof fill === "string" ? fill : barFill;
+    if (typeof chosen !== "string") {
         return <Rectangle {...rest} />;
     }
-    return <Rectangle {...rest} fill={fill} />;
+    return <Rectangle {...rest} fill={chosen} />;
 };
 
 function categoryChartData(
