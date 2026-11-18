@@ -172,6 +172,8 @@ sed -i.bak 's/npm ci --silent/npm install --legacy-peer-deps --silent/' \
 sed -i.bak 's/COPY web\/ .\//RUN npm install --legacy-peer-deps --no-save react-is@17.0.2\nCOPY web\/ .\//' \
   "$base_worktree/deploy/Dockerfile.front"
 rm -f "$base_worktree/deploy/Dockerfile.front.bak"
+grep -q 'npm install --legacy-peer-deps --silent' "$base_worktree/deploy/Dockerfile.front"
+grep -q 'react-is@17.0.2' "$base_worktree/deploy/Dockerfile.front"
 
 collect_revision base "$base_worktree" 8178
 if [ -n "$PERF_PR_RESULTS_DIR" ]; then
