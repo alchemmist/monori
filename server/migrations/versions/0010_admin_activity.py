@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 """
 Admin flag and activity tracking.
 

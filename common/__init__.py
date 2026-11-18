@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 """Shared Python primitives used throughout Monori."""
 
 from monori.common.json_values import (

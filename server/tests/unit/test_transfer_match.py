@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 from dataclasses import replace
 from datetime import date, timedelta
 

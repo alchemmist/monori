@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 """Compare frontend performance measurements and render the CI report."""
 
 import argparse
@@ -461,27 +462,26 @@ def render_standards(config: dict[str, JsonValue]) -> list[str]:
         "<details>",
         "<summary>Blocking standards</summary>",
         "",
-        "The CI fails only for a Critical verdict or a measurement failure. "
-        "None, Info, and Significant verdicts remain green.",
+        (
+            "The CI fails only for a Critical verdict or a measurement failure. "
+            "None, Info, and Significant verdicts remain green."
+        ),
         "",
     ]
     for metric_id, metric in metrics.items():
         label = string_value(metric.get("label"), f"{metric_id} label")
+        unit = string_value(metric.get("unit"), "unit")
         noise = format_value(
             number_value(metric.get("noiseAbsolute"), "noiseAbsolute"),
-            string_value(metric.get("unit"), "unit"),
+            unit,
         )
-        policy = metric.get("policy")
-        if policy == "ttfb":
+        if metric.get("policy") == "ttfb":
             critical_percent = number_value(metric.get("criticalPercent"), "criticalPercent")
             critical_absolute = format_value(
                 number_value(metric.get("criticalAbsolute"), "criticalAbsolute"),
-                string_value(metric.get("unit"), "unit"),
+                unit,
             )
-            poor = format_value(
-                number_value(metric.get("poor"), "poor"),
-                string_value(metric.get("unit"), "unit"),
-            )
+            poor = format_value(number_value(metric.get("poor"), "poor"), unit)
             lines.append(
                 f"- **{label}:** more than {critical_percent:.0f}% slower and at least "
                 f"+{critical_absolute}, or enters the poor band (≥ {poor}) with at least +{noise}."
@@ -491,17 +491,16 @@ def render_standards(config: dict[str, JsonValue]) -> list[str]:
         critical_percent = number_value(metric.get("criticalPercent"), "criticalPercent")
         line = f"- **{label}:** more than {critical_percent:.0f}% slower and at least +{noise}"
         if metric.get("poor") is not None:
-            poor = format_value(
-                number_value(metric.get("poor"), "poor"),
-                string_value(metric.get("unit"), "unit"),
-            )
+            poor = format_value(number_value(metric.get("poor"), "poor"), unit)
             line += f", or crosses into the poor band (≥ {poor}) after clearing +{noise}"
         lines.append(line + ".")
 
     lines.extend(
         [
-            "- **Measurement failure:** the collector or comparator exits with status 2 and the CI "
-            "fails; this is reported separately from a product regression.",
+            (
+                "- **Measurement failure:** the collector or comparator exits with status 2 "
+                "and the CI fails; this is reported separately from a product regression."
+            ),
             "",
             "</details>",
         ]
@@ -527,8 +526,10 @@ def render_report(
         lines.extend(
             [
                 "> [!CAUTION]",
-                "> A critical runtime performance regression was detected. Fix the highlighted "
-                "route or metric before merging.",
+                (
+                    "> A critical runtime performance regression was detected. Fix the highlighted "
+                    "route or metric before merging."
+                ),
                 "",
             ]
         )
@@ -536,8 +537,10 @@ def render_report(
         lines.extend(
             [
                 "> [!WARNING]",
-                "> Runtime performance regressed noticeably. The check still passes, but the "
-                "change should be reviewed.",
+                (
+                    "> Runtime performance regressed noticeably. The check still passes, but the "
+                    "change should be reviewed."
+                ),
                 "",
             ]
         )

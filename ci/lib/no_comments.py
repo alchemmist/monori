@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 """
 Command-line check that rejects inline comments outside allowed markers.
 
@@ -14,7 +15,10 @@ import sys
 import tokenize
 from pathlib import Path
 
-ALLOWED_COMMENT = re.compile(r"^#\s*(?:noqa|nosec|type:\s*(?:ignore|noqa))\b", re.IGNORECASE)
+ALLOWED_COMMENT = re.compile(
+    r"^#\s*(?:noqa|nosec|type:\s*(?:ignore|noqa)|Copyright)\b",
+    re.IGNORECASE,
+)
 logger = logging.getLogger(__name__)
 
 

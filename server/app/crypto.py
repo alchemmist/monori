@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 """
 Encryption for bank-connection secrets (credentials and cached sessions).
 

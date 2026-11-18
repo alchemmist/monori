@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 """
 Bank connections become user-level: a connection is one bank login owned by.
 

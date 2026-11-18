@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 """Gate mutmut results against functions changed by the current diff."""
 
 import argparse

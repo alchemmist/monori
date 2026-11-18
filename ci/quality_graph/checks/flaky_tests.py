@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 """Execute the flaky-test manifest produced by Monori discovery."""
 
 from pathlib import Path

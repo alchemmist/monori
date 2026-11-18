@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 """
 Admin rights and activity accounting.
 

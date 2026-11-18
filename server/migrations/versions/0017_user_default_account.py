@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 """
 A per-user default account for rows no card number can route: statement.
 

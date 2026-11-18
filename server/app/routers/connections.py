@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 """
 Bank connections: one bank login per connection, owned by the user, with any.
 

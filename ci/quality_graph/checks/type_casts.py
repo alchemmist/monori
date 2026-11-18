@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 """
 Reject newly introduced Python casts and TypeScript type assertions.
 """

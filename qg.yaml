@@ -4,8 +4,8 @@ provider:
     configuration:
         default-branch: main
         runtime:
-            action: alchemmist/quality-graph@585b63cf6fd2c022160a10a1330be4799e9d5acc
-            publisher-action: alchemmist/quality-graph@585b63cf6fd2c022160a10a1330be4799e9d5acc
+            action: alchemmist/quality-graph@64ed072ce1bd019d5fa7dec22cb3df991b9ac691
+            publisher-action: alchemmist/quality-graph@64ed072ce1bd019d5fa7dec22cb3df991b9ac691
 administration:
     roles: [admin, maintain, write]
 labels:
@@ -28,12 +28,16 @@ profiles:
                   node-version: "22"
                   cache: npm
                   cache-dependency-path: |
-                      web/package-lock.json
-                      tools/frontend-perf/package-lock.json
+                      web/package.json
+                      tools/frontend-perf/package.json
             - uses: astral-sh/setup-uv@v7
               with:
                   enable-cache: "true"
-                  cache-dependency-glob: uv.lock
+                  cache-dependency-glob: |
+                      pyproject.toml
+                      common/pyproject.toml
+                      ci/pyproject.toml
+                      server/pyproject.toml
             - name: Install project dependencies
               run: scripts/setup-quality-graph.sh
     lint:

@@ -2,12 +2,12 @@
 # delegated to the sync service via MONORI_SYNC_URL.
 FROM python:3.12-slim
 WORKDIR /app
-COPY pyproject.toml uv.lock ./
+COPY pyproject.toml ./
 COPY common ./common
 COPY ci/pyproject.toml ./ci/pyproject.toml
 COPY server ./server
 RUN pip install --no-cache-dir "uv==0.11.26" && \
-    uv sync --frozen --group runtime --no-dev
+    uv sync --group runtime --no-dev
 ENV MONORI_DB=/app/data/monori.db
 EXPOSE 8000
 # on SIGTERM uvicorn stops accepting connections and finishes what is already

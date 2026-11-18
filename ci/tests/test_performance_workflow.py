@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 from pathlib import Path
 from typing import TypedDict, cast
 

@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 """Fail pull requests that add hardcoded web colors."""
 
 from __future__ import annotations

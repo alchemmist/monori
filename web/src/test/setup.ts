@@ -41,8 +41,11 @@ window.matchMedia = (query) => ({
     matches: false,
     media: query,
     onchange: null,
-    ["addListener"]: () => {},
-    ["removeListener"]: () => {},
+    // jsdom still types the legacy pair; Mantine calls them on mount
+    // eslint-disable-next-line @typescript-eslint/no-deprecated
+    addListener: () => {},
+    // eslint-disable-next-line @typescript-eslint/no-deprecated
+    removeListener: () => {},
     addEventListener: () => {},
     removeEventListener: () => {},
     dispatchEvent: () => false,

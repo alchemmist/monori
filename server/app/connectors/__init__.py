@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 """
 Pluggable bank connectors.
 
