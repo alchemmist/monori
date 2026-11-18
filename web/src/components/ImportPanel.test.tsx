@@ -226,6 +226,51 @@ describe("ImportPanel", () => {
         expect(screen.getByRole("option", { name: "Groceries" })).toBeInTheDocument();
     });
 
+    it("does not overbook a purchase across import refund hints", async () => {
+        seed({
+            accounts,
+            transactions: [
+                { id: 7, date: "2026-07-01", description: "Shop", amount: -100_00 },
+                {
+                    id: 8,
+                    date: "2026-07-02",
+                    description: "Shop refund",
+                    amount: 80_00,
+                    refundOfId: 7,
+                },
+            ],
+        });
+        vi.spyOn(api, "importPreview").mockResolvedValue({
+            rows: [
+                {
+                    date: "2026-07-03",
+                    card: "",
+                    description: "Shop refund",
+                    amount: 15_00,
+                    accountId: 1,
+                    categoryId: null,
+                    duplicate: false,
+                },
+                {
+                    date: "2026-07-04",
+                    card: "",
+                    description: "Shop refund",
+                    amount: 15_00,
+                    accountId: 1,
+                    categoryId: null,
+                    duplicate: false,
+                },
+            ],
+            errors: [],
+        });
+        const { container } = renderUI(<ImportPanel onClose={vi.fn()} />);
+
+        upload(container);
+        await screen.findAllByText("Shop refund");
+
+        expect(screen.getAllByText("looks like a refund of Shop")).toHaveLength(1);
+    });
+
     it("renders unparsed lines and their per-line detail", async () => {
         vi.spyOn(api, "importPreview").mockResolvedValue({
             rows: [

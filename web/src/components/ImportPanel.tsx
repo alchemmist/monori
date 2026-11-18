@@ -39,6 +39,35 @@ export default function ImportPanel({ onClose }: { onClose: () => void }) {
     const [busy, setBusy] = useState(false);
     const [checkingDuplicates, setCheckingDuplicates] = useState(false);
     const duplicateEpoch = useRef(0);
+    const refundHints = useMemo(() => {
+        if (!rows) return [];
+        const used = new Map<number, number>();
+        for (const transaction of snapshot.transactions) {
+            if (transaction.refundOfId == null) continue;
+            used.set(
+                transaction.refundOfId,
+                (used.get(transaction.refundOfId) ?? 0) + transaction.amount,
+            );
+        }
+        const remaining = new Map<number, number>();
+        for (const purchases of purchasesByMerchant.values()) {
+            for (const purchase of purchases)
+                remaining.set(purchase.id, -purchase.amount - (used.get(purchase.id) ?? 0));
+        }
+        return rows.map((row) => {
+            if (row.amount <= 0 || row.duplicate === true) return null;
+            const merchant = refundMerchantKey(row.description);
+            const purchase = purchasesByMerchant
+                .get(merchant)
+                ?.find(
+                    (candidate) =>
+                        candidate.date <= row.date && remaining.get(candidate.id)! >= row.amount,
+                );
+            if (purchase)
+                remaining.set(purchase.id, (remaining.get(purchase.id) ?? 0) - row.amount);
+            return purchase ?? null;
+        });
+    }, [purchasesByMerchant, rows, snapshot.transactions]);
 
     const accountOptions = accounts.map((a) => ({ value: String(a.id), label: a.name }));
     const categoryOptionsFor = (amount: number) => [
@@ -52,16 +81,6 @@ export default function ImportPanel({ onClose }: { onClose: () => void }) {
             })
             .map((c) => ({ value: String(c.id), label: c.name })),
     ];
-    const refundHintFor = (row: ImportRow) => {
-        if (row.amount <= 0) return null;
-        const merchant = refundMerchantKey(row.description);
-        if (merchant === "") return null;
-        return purchasesByMerchant
-            .get(merchant)
-            ?.find(
-                (transaction) => transaction.date <= row.date && -transaction.amount >= row.amount,
-            );
-    };
     const unassigned = rows?.filter((r) => r.accountId == null).length ?? 0;
     const fresh = rows?.filter((r) => r.duplicate !== true).length ?? 0;
     const allAssigned = Boolean(rows?.length) && unassigned === 0;
@@ -258,7 +277,7 @@ export default function ImportPanel({ onClose }: { onClose: () => void }) {
                             </thead>
                             <tbody>
                                 {rows.map((row, index) => {
-                                    const refundHint = refundHintFor(row);
+                                    const refundHint = refundHints[index];
                                     return (
                                         <tr
                                             key={index}

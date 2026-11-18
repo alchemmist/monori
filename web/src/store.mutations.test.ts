@@ -119,6 +119,24 @@ describe("store demo mutations", () => {
         expect(useStore.getState().snapshot!.transactions[2]).not.toHaveProperty("refundOfId");
     });
 
+    it("normalizes an uncategorized demo purchase to a null refund category", async () => {
+        const current = buildSnapshot({
+            transactions: [
+                { id: 1, date: "2026-01-01", amount: -100 },
+                { id: 2, date: "2026-01-02", amount: 50 },
+            ],
+        });
+        Reflect.deleteProperty(current.transactions[0]!, "categoryId");
+        useStore.setState({ snapshot: current });
+
+        await useStore.getState().linkRefund(2, 1);
+
+        expect(useStore.getState().snapshot!.transactions[1]).toMatchObject({
+            refundOfId: 1,
+            categoryId: null,
+        });
+    });
+
     it("edits budgets and transaction category/account optimistically", () => {
         const store = useStore.getState();
         void store.setBudget(2, 2026, 1, 30);
