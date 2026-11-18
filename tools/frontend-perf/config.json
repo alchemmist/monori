@@ -50,7 +50,7 @@
             "good": 2500,
             "poor": 4000,
             "noisePercent": 5,
-            "noiseAbsolute": 500,
+            "noiseAbsolute": 200,
             "significantPercent": 10,
             "criticalPercent": 25
         },
