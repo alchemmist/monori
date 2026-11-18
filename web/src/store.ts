@@ -824,26 +824,29 @@ export const useStore = create<StoreState>((set, get) => ({
                 return;
             set((state) => {
                 const current = requireSnapshot(state.snapshot);
+                const updateRows = (rows: Transaction[]) =>
+                    rows.map((transaction) => {
+                        if (transaction.id === txId)
+                            return {
+                                ...transaction,
+                                refundOfId: originalId,
+                                categoryId: result.categoryId,
+                            };
+                        const withoutRefund = (transaction.refundIds ?? []).filter(
+                            (refundId) => refundId !== txId,
+                        );
+                        if (transaction.id === originalId) withoutRefund.push(txId);
+                        return transaction.id === originalId ||
+                            withoutRefund.length !== (transaction.refundIds ?? []).length
+                            ? { ...transaction, refundIds: withoutRefund }
+                            : transaction;
+                    });
                 return {
                     snapshot: {
                         ...current,
-                        transactions: current.transactions.map((transaction) => {
-                            if (transaction.id === txId)
-                                return {
-                                    ...transaction,
-                                    refundOfId: originalId,
-                                    categoryId: result.categoryId,
-                                };
-                            const withoutRefund = (transaction.refundIds ?? []).filter(
-                                (refundId) => refundId !== txId,
-                            );
-                            if (transaction.id === originalId) withoutRefund.push(txId);
-                            return transaction.id === originalId ||
-                                withoutRefund.length !== (transaction.refundIds ?? []).length
-                                ? { ...transaction, refundIds: withoutRefund }
-                                : transaction;
-                        }),
+                        transactions: updateRows(current.transactions),
                     },
+                    hiddenTx: state.hiddenTx == null ? null : updateRows(state.hiddenTx),
                 };
             });
         });
@@ -864,22 +867,25 @@ export const useStore = create<StoreState>((set, get) => ({
                 return;
             set((state) => {
                 const current = requireSnapshot(state.snapshot);
+                const updateRows = (rows: Transaction[]) =>
+                    rows.map((transaction) =>
+                        transaction.id === txId
+                            ? { ...transaction, refundOfId: null, categoryId: result.categoryId }
+                            : (transaction.refundIds ?? []).includes(txId)
+                              ? {
+                                    ...transaction,
+                                    refundIds: transaction.refundIds!.filter(
+                                        (refundId) => refundId !== txId,
+                                    ),
+                                }
+                              : transaction,
+                    );
                 return {
                     snapshot: {
                         ...current,
-                        transactions: current.transactions.map((transaction) =>
-                            transaction.id === txId
-                                ? { ...transaction, refundOfId: null, categoryId: result.categoryId }
-                                : (transaction.refundIds ?? []).includes(txId)
-                                  ? {
-                                        ...transaction,
-                                        refundIds: transaction.refundIds!.filter(
-                                            (refundId) => refundId !== txId,
-                                        ),
-                                    }
-                                  : transaction,
-                        ),
+                        transactions: updateRows(current.transactions),
                     },
+                    hiddenTx: state.hiddenTx == null ? null : updateRows(state.hiddenTx),
                 };
             });
         });
@@ -892,56 +898,78 @@ export const useStore = create<StoreState>((set, get) => ({
         const snapshot = requireSnapshot(get().snapshot);
         const gone = snapshot.transactions.find((t) => t.id === txId);
         if (!gone) return false;
-        set({
+        const removeRelationships = (rows: Transaction[]) =>
+            rows
+                .filter((t) => t.id !== txId)
+                .map((transaction) => {
+                    let updated = transaction;
+                    if (transaction.refundOfId === txId) updated = { ...updated, refundOfId: null };
+                    if ((transaction.refundIds ?? []).includes(txId))
+                        updated = {
+                            ...updated,
+                            refundIds: transaction.refundIds!.filter(
+                                (refundId) => refundId !== txId,
+                            ),
+                        };
+                    return updated;
+                });
+        set((state) => ({
             snapshot: {
                 ...snapshot,
-                transactions: snapshot.transactions
-                    .filter((t) => t.id !== txId)
-                    .map((transaction) => {
-                        let updated = transaction;
-                        if (transaction.refundOfId === txId)
-                            updated = { ...updated, refundOfId: null };
-                        if ((transaction.refundIds ?? []).includes(txId))
-                            updated = {
-                                ...updated,
-                                refundIds: transaction.refundIds!.filter(
-                                    (refundId) => refundId !== txId,
-                                ),
-                            };
-                        return updated;
-                    }),
+                transactions: removeRelationships(snapshot.transactions),
                 transactionsTotal: Math.max(0, (snapshot.transactionsTotal ?? 1) - 1),
             },
-        });
+            hiddenTx: state.hiddenTx == null ? null : removeRelationships(state.hiddenTx),
+        }));
         if (isDemo()) return true;
         try {
             await api.deleteTx(txId);
             return true;
         } catch (e) {
             const cur = requireSnapshot(get().snapshot);
-            set({
-                snapshot: {
-                    ...cur,
-                    transactions: mergeTransactions(
-                        cur.transactions.map((transaction) => {
-                            if (transaction.id === gone.refundOfId)
-                                return {
-                                    ...transaction,
-                                    refundIds: [...(transaction.refundIds ?? []), gone.id],
-                                };
-                            if ((gone.refundIds ?? []).includes(transaction.id))
-                                return { ...transaction, refundOfId: gone.id };
-                            return transaction;
-                        }),
-                        [gone],
-                    ),
-                    transactionsTotal: cur.transactionsTotal! + 1,
-                },
-                toast: {
-                    title: "Failed to delete transaction",
-                    theme: "danger",
-                    content: String(e),
-                },
+            set((state) => {
+                const hidden = state.hiddenTx ?? [];
+                const currentById = new Map(
+                    [...cur.transactions, ...hidden].map((transaction) => [
+                        transaction.id,
+                        transaction,
+                    ]),
+                );
+                const restoredRefundIds = (gone.refundIds ?? []).filter(
+                    (refundId) => currentById.get(refundId)?.refundOfId == null,
+                );
+                const restoredGone = { ...gone, refundIds: restoredRefundIds };
+                const repairRows = (rows: Transaction[]) =>
+                    rows.map((transaction) => {
+                        if (transaction.id === gone.refundOfId)
+                            return {
+                                ...transaction,
+                                refundIds: [
+                                    ...new Set([...(transaction.refundIds ?? []), gone.id]),
+                                ],
+                            };
+                        if (
+                            restoredRefundIds.includes(transaction.id) &&
+                            transaction.refundOfId == null
+                        )
+                            return { ...transaction, refundOfId: gone.id };
+                        return transaction;
+                    });
+                return {
+                    snapshot: {
+                        ...cur,
+                        transactions: mergeTransactions(repairRows(cur.transactions), [
+                            restoredGone,
+                        ]),
+                        transactionsTotal: cur.transactionsTotal! + 1,
+                    },
+                    hiddenTx: state.hiddenTx == null ? null : repairRows(state.hiddenTx),
+                    toast: {
+                        title: "Failed to delete transaction",
+                        theme: "danger",
+                        content: String(e),
+                    },
+                };
             });
             return false;
         }
