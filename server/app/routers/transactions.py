@@ -530,7 +530,7 @@ def refund_suggestions(
             " WHERE -amount-used_refund>=?"
             " AND (id=? OR -amount=? OR (?<>'' AND refund_merchant_key(description)=?))"
             " ORDER BY CASE WHEN ?<>'' AND refund_merchant_key(description)=? THEN 0 ELSE 1 END,"
-            " date DESC, id DESC LIMIT 20",
+            " date DESC, id DESC",
             (
                 refund_tx_id,
                 uid,
@@ -762,6 +762,7 @@ def bulk_transactions(
                 ).rowcount
         else:
             category = _resolve_category(c, body.category_id, uid)
+            selected = set(body.ids)
 
             for tx_id in body.ids:
                 row = c.execute(
@@ -770,6 +771,11 @@ def bulk_transactions(
                     " WHERE s.transaction_id=t.id) AS is_split"
                     ", EXISTS(SELECT 1 FROM refund_links r"
                     " WHERE r.refund_tx_id=t.id) AS is_refund"
+                    ", (SELECT r.original_tx_id FROM refund_links r"
+                    " WHERE r.refund_tx_id=t.id) AS original_id"
+                    ", (SELECT original.category_id FROM refund_links r"
+                    " JOIN transactions original ON original.id=r.original_tx_id"
+                    " WHERE r.refund_tx_id=t.id) AS original_category"
                     " FROM transactions t JOIN accounts a ON a.id = t.account_id"
                     " WHERE t.id=? AND a.user_id=?",
                     (tx_id, uid),
@@ -784,12 +790,24 @@ def bulk_transactions(
                         row["amount"],
                         is_refund=bool(row["is_refund"]),
                     )
+                if (
+                    row is not None
+                    and row["original_id"] is not None
+                    and int(row["original_id"]) not in selected
+                    and category != row["original_category"]
+                ):
+                    raise HTTPException(400, "refund category must match the original purchase")
             for tx_id in body.ids:
                 affected += c.execute(
                     "UPDATE transactions SET category_id=? WHERE id=?"
                     " AND account_id IN (SELECT id FROM accounts WHERE user_id=?)",
                     (category, tx_id, uid),
                 ).rowcount
+                c.execute(
+                    "UPDATE transactions SET category_id=? WHERE id IN"
+                    " (SELECT refund_tx_id FROM refund_links WHERE original_tx_id=?)",
+                    (category, tx_id),
+                )
         c.commit()
         return BulkResponse(affected=affected)
     finally:

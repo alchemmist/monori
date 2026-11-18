@@ -132,6 +132,35 @@ describe("topMerchants", () => {
         expect(pyat!.count).toBe(2);
         expect(top[0]).toBe(pyat);
     });
+
+    it("attributes a linked refund to the original purchase merchant", () => {
+        const refunded = buildSnapshot({
+            groups: [{ id: 1, name: "Expenses", kind: "expense", sort: 1 }],
+            categories: [{ id: 1, groupId: 1, name: "Shopping", sort: 1 }],
+            transactions: [
+                {
+                    id: 1,
+                    date: "2024-01-10",
+                    amount: -1000,
+                    description: "Shop A",
+                    categoryId: 1,
+                    refundIds: [2],
+                },
+                {
+                    id: 2,
+                    date: "2024-01-12",
+                    amount: 400,
+                    description: "Card adjustment",
+                    categoryId: 1,
+                    refundOfId: 1,
+                },
+            ],
+        });
+
+        expect(topMerchants(refunded, "2024")).toEqual([
+            { name: "SHOP A", fullName: "Shop A", total: 600, count: 1 },
+        ]);
+    });
 });
 
 describe("categoryYearMatrix", () => {

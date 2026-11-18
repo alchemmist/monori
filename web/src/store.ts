@@ -784,8 +784,7 @@ export const useStore = create<StoreState>((set, get) => ({
                     ((merchant !== "" && refundMerchantKey(transaction.description) === merchant) ||
                         -transaction.amount === refund.amount),
             )
-            .reverse()
-            .slice(0, 20);
+            .reverse();
     },
 
     async linkRefund(txId, originalId) {

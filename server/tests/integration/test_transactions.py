@@ -237,6 +237,19 @@ def test_partial_refunds_link_to_purchase_and_inherit_category(
     assert api.tx_by(first).category_id == shopping
     assert api.tx_by(second).category_id == shopping
 
+    response = client.post(
+        "/api/transactions/bulk",
+        json={"action": "categorize", "ids": [first], "categoryId": food},
+    )
+    assert response.status_code == 400
+    response = client.post(
+        "/api/transactions/bulk",
+        json={"action": "categorize", "ids": [purchase], "categoryId": food},
+    )
+    assert response.status_code == 200
+    assert api.tx_by(first).category_id == food
+    assert api.tx_by(second).category_id == food
+
     too_much = api.tx("2026-02-06T10:00:00", 1, TransactionOptions(description="Lenta refund"))
     response = client.put(f"/api/transactions/{too_much}/refund", json={"originalId": purchase})
     assert response.status_code == 400
@@ -441,6 +454,22 @@ def test_refund_suggestions_filter_before_the_result_cap(api: Api, client: TestC
     rows = client.get(f"/api/transactions/{refund}/refund-suggestions").json()["rows"]
 
     assert [row["id"] for row in rows] == [old_purchase]
+
+
+def test_refund_suggestions_return_every_eligible_purchase(api: Api, client: TestClient) -> None:
+    purchases = [
+        api.tx(
+            f"2025-12-{index + 1:02d}",
+            -50_00,
+            TransactionOptions(description="Shop"),
+        )
+        for index in range(21)
+    ]
+    refund = api.tx("2026-01-01", 10_00, TransactionOptions(description="Shop refund"))
+
+    rows = client.get(f"/api/transactions/{refund}/refund-suggestions").json()["rows"]
+
+    assert {row["id"] for row in rows} == set(purchases)
 
 
 def test_transaction_patch_recomputes_hash_for_dedup(api: Api, client: TestClient) -> None:
