@@ -321,6 +321,23 @@ def test_refund_suggestions_validation_and_unlink(api: Api, client: TestClient) 
 
     suggestions = client.get(f"/api/transactions/{refund}/refund-suggestions").json()["rows"]
     assert [row["id"] for row in suggestions] == [purchase, other]
+    assert suggestions[0] == {
+        "id": purchase,
+        "date": "2026-01-01T10:00:00",
+        "amount": -100_00,
+        "description": "Shop 456",
+        "bankCategory": "",
+        "mcc": "",
+        "categoryId": food,
+        "accountId": api.default_account(),
+        "transferId": None,
+        "comment": "",
+        "source": "manual",
+        "hidden": False,
+        "splits": [],
+        "refundOfId": None,
+        "refundIds": [],
+    }
     assert small not in [row["id"] for row in suggestions]
     assert unrelated not in [row["id"] for row in suggestions]
     assert (
