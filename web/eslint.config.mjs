@@ -49,13 +49,19 @@ export default tseslint.config(
         },
     },
     {
-        files: ["src/**/*.test.{ts,tsx}", "src/test/setup.ts", "e2e/**/*.ts"],
+        files: ["src/**/*.test.{ts,tsx}", "e2e/**/*.ts"],
         rules: {
-            "@typescript-eslint/no-deprecated": "off",
             "@typescript-eslint/no-empty-function": "off",
             "@typescript-eslint/no-non-null-assertion": "off",
             "@typescript-eslint/no-unsafe-type-assertion": "off",
             "@typescript-eslint/require-await": "off",
+        },
+    },
+    {
+        files: ["src/test/setup.ts"],
+        rules: {
+            "@typescript-eslint/no-deprecated": "off",
+            "@typescript-eslint/no-empty-function": "off",
         },
     },
 );
