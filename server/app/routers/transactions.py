@@ -501,27 +501,33 @@ def refund_suggestions(
             (refund_tx_id,),
         ).fetchone()
         current_id = int(current["original_tx_id"]) if current is not None else None
+        c.create_function("refund_merchant_key", 1, _merchant_key, deterministic=True)
         rows = c.execute(
-            "SELECT t.*, COALESCE((SELECT SUM(rt.amount) FROM refund_links rl"
-            " JOIN transactions rt ON rt.id=rl.refund_tx_id"
+            "SELECT * FROM (SELECT t.*, COALESCE((SELECT SUM(rt.amount)"
+            " FROM refund_links rl JOIN transactions rt ON rt.id=rl.refund_tx_id"
             " WHERE rl.original_tx_id=t.id AND rl.refund_tx_id<>?), 0) AS used_refund"
             " FROM transactions t JOIN accounts a ON a.id=t.account_id"
             " WHERE a.user_id=? AND t.amount<0 AND t.date<=? AND t.transfer_id IS NULL"
-            " AND t.id<>? AND NOT EXISTS (SELECT 1 FROM splits s WHERE s.transaction_id=t.id)"
-            " ORDER BY t.date DESC, t.id DESC",
-            (refund_tx_id, uid, refund.date, refund_tx_id),
+            " AND t.id<>? AND NOT EXISTS (SELECT 1 FROM splits s WHERE s.transaction_id=t.id))"
+            " WHERE -amount-used_refund>=?"
+            " AND (id=? OR -amount=? OR (?<>'' AND refund_merchant_key(description)=?))"
+            " ORDER BY CASE WHEN ?<>'' AND refund_merchant_key(description)=? THEN 0 ELSE 1 END,"
+            " date DESC, id DESC LIMIT 20",
+            (
+                refund_tx_id,
+                uid,
+                refund.date,
+                refund_tx_id,
+                refund.amount,
+                current_id,
+                refund.amount,
+                key,
+                key,
+                key,
+                key,
+            ),
         ).fetchall()
-        candidates: list[tuple[bool, sqlite3.Row]] = []
-        for row in rows:
-            if -int(row["amount"]) - int(row["used_refund"]) < refund.amount:
-                continue
-            same_merchant = bool(key) and _merchant_key(str(row["description"])) == key
-            if row["id"] != current_id and not same_merchant and -row["amount"] != refund.amount:
-                continue
-            candidates.append((not same_merchant, row))
-        candidates.sort(key=lambda item: item[0])
-        selected = [row for _, row in candidates[:20]]
-        return RefundSuggestionsResponse(rows=serialize_transactions(c.cursor(), selected))
+        return RefundSuggestionsResponse(rows=serialize_transactions(c.cursor(), rows))
     finally:
         c.close()
 
