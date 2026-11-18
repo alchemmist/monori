@@ -246,15 +246,17 @@ jobs:
             - uses: ./.github/actions/setup-project
               with:
                   install-web: true
+            - name: Hash installed web dependencies
+              id: web-deps
+              run: echo "hash=$(sha256sum web/package-lock.json | awk '{print $1}')" >> "$GITHUB_OUTPUT"
             - name: Restore Stryker incremental state
               id: restore-stryker
               uses: actions/cache/restore@v6
               with:
                   path: web/reports/stryker-incremental.json
-                  key: mutation-stryker-${{ runner.os }}-${{ hashFiles('web/package.json') }}-main-${{ hashFiles('web/stryker.conf.ts') }}-${{ github.sha }}
+                  key: mutation-stryker-${{ runner.os }}-${{ steps.web-deps.outputs.hash }}-${{ hashFiles('web/stryker.conf.ts') }}-${{ github.sha }}
                   restore-keys: |
-                      mutation-stryker-${{ runner.os }}-${{ hashFiles('web/package.json') }}-main-${{ hashFiles('web/stryker.conf.ts') }}-
-                      mutation-stryker-${{ runner.os }}-${{ hashFiles('web/package.json') }}-main-
+                      mutation-stryker-${{ runner.os }}-${{ steps.web-deps.outputs.hash }}-${{ hashFiles('web/stryker.conf.ts') }}-
             - name: Run full frontend mutation tests
               run: make m-front
             - name: Save Stryker incremental state
@@ -262,7 +264,7 @@ jobs:
               uses: actions/cache/save@v6
               with:
                   path: web/reports/stryker-incremental.json
-                  key: mutation-stryker-${{ runner.os }}-${{ hashFiles('web/package.json') }}-main-${{ hashFiles('web/stryker.conf.ts') }}-${{ github.sha }}
+                  key: mutation-stryker-${{ runner.os }}-${{ steps.web-deps.outputs.hash }}-${{ hashFiles('web/stryker.conf.ts') }}-${{ github.sha }}
 
     mutation-full-backend:
         name: Full backend mutation sweep
@@ -279,15 +281,17 @@ jobs:
             - uses: ./.github/actions/setup-project
               with:
                   python-profile: mutation
+            - name: Hash installed Python dependencies
+              id: py-deps
+              run: echo "hash=$(sha256sum uv.lock | awk '{print $1}')" >> "$GITHUB_OUTPUT"
             - name: Restore mutmut state
               id: restore-mutmut
               uses: actions/cache/restore@v6
               with:
                   path: mutants
-                  key: mutation-mutmut-${{ runner.os }}-${{ hashFiles('pyproject.toml', 'common/pyproject.toml', 'ci/pyproject.toml', 'server/pyproject.toml') }}-main-${{ hashFiles('pyproject.toml') }}-${{ github.sha }}
+                  key: mutation-mutmut-${{ runner.os }}-${{ steps.py-deps.outputs.hash }}-${{ github.sha }}
                   restore-keys: |
-                      mutation-mutmut-${{ runner.os }}-${{ hashFiles('pyproject.toml', 'common/pyproject.toml', 'ci/pyproject.toml', 'server/pyproject.toml') }}-main-${{ hashFiles('pyproject.toml') }}-
-                      mutation-mutmut-${{ runner.os }}-${{ hashFiles('pyproject.toml', 'common/pyproject.toml', 'ci/pyproject.toml', 'server/pyproject.toml') }}-main-
+                      mutation-mutmut-${{ runner.os }}-${{ steps.py-deps.outputs.hash }}-
             - name: Run full backend mutation tests
               run: make m-back
             - name: Save mutmut state
@@ -295,7 +299,7 @@ jobs:
               uses: actions/cache/save@v6
               with:
                   path: mutants
-                  key: mutation-mutmut-${{ runner.os }}-${{ hashFiles('pyproject.toml', 'common/pyproject.toml', 'ci/pyproject.toml', 'server/pyproject.toml') }}-main-${{ hashFiles('pyproject.toml') }}-${{ github.sha }}
+                  key: mutation-mutmut-${{ runner.os }}-${{ steps.py-deps.outputs.hash }}-${{ github.sha }}
 
     mutation-full-report:
         name: Report nightly mutation failure
