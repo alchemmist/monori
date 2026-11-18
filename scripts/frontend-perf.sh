@@ -184,7 +184,6 @@ path.write_text(text.replace(old, new, 1))
 '
 fi
 
-
 collect_revision base "$base_worktree" 8178
 if [ -n "$PERF_PR_RESULTS_DIR" ]; then
   restore_revision pr "$PERF_PR_RESULTS_DIR"
