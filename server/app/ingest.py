@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 """
 Shared ingestion pipeline: turn parsed statement rows into transactions.
 

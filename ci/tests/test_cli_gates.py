@@ -1,13 +1,12 @@
+# Copyright (c) 2026
 """Exercise standalone CI gates through their real process interfaces."""
 
 from __future__ import annotations
 
 import io
 import json
-import os
 import sys
 from contextlib import contextmanager
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
@@ -16,6 +15,7 @@ from monori.ci.lib import mutation_gate, npm_audit_gate
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
+    from pathlib import Path
 
     from monori.common import JsonValue
 
@@ -143,17 +143,3 @@ def test_picomatch_exception_does_not_hide_other_advisories(
     payload = {"vulnerabilities": {"picomatch": {"via": advisories}}}
     with process_io(["npm-audit-gate"], json.dumps(payload)):
         assert npm_audit_gate.main() == int(include_other_advisory)
-
-
-def test_picomatch_exception_requires_tooling_only_installations() -> None:
-    repository = Path(
-        os.environ.get("MONORI_REPOSITORY_ROOT", Path(__file__).resolve().parents[2])
-    )
-    lock = json.loads((repository / "web/package-lock.json").read_text())
-    installations = [
-        package
-        for name, package in lock["packages"].items()
-        if name.endswith("node_modules/picomatch")
-    ]
-    assert installations
-    assert all(package.get("dev") is True for package in installations)

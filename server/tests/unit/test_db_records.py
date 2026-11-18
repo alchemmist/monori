@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 """Tests for checked SQLite row adapters."""
 
 import pathlib

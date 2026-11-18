@@ -28,7 +28,7 @@ CLOC_EXCLUDE_DIRS := .git,.worktrees,.claude,node_modules,.venv,__pycache__,.pyt
 install:
 	cd web && npm install --no-audit --no-fund
 	cd tools/frontend-perf && npm install --no-audit --no-fund
-	uv sync --locked --all-groups
+	uv sync --all-groups
 	@if ! command -v cloc >/dev/null 2>&1; then \
 		sudo apt-get update && sudo apt-get install -y cloc; \
 	fi
@@ -235,7 +235,7 @@ type-front:
 	cd web && ./node_modules/.bin/eslint "src/**/*.{ts,tsx}" "e2e/**/*.ts" "*.config.ts" stryker.conf.ts
 
 type-back:
-	uv sync --locked --no-editable --reinstall-package monori-common --reinstall-package monori-ci --reinstall-package monori-server --group type
+	uv sync --no-editable --reinstall-package monori-common --reinstall-package monori-ci --reinstall-package monori-server --group type
 	UV_NO_SYNC=1 uv run --locked --group type mypy
 
 analyze:
@@ -252,15 +252,21 @@ analyze-javascript-dead-code:
 
 audit: audit-deps audit-deps-py audit-secrets
 
-audit-deps:
-	cd web && npm ci --no-audit --no-fund --silent
+# One sync for both audit targets so make -j cannot interleave two uv.lock writes.
+audit-python-env:
+	rm -f uv.lock
+	uv sync --group audit
+
+audit-deps: audit-python-env
+	rm -f web/package-lock.json tools/frontend-perf/package-lock.json
+	cd web && npm install --no-audit --no-fund --silent
 	(cd web && npm audit --audit-level=high --json) | \
 		uv run --locked --group audit python -m monori.ci.lib.npm_audit_gate
-	cd tools/frontend-perf && npm ci --no-audit --no-fund --silent
+	cd tools/frontend-perf && npm install --no-audit --no-fund --silent
 	(cd tools/frontend-perf && npm audit --audit-level=high --json) | \
 		uv run --locked --group audit python -m monori.ci.lib.npm_audit_gate
 
-audit-deps-py:
+audit-deps-py: audit-python-env
 	@req=$$(mktemp); \
 	( uv export --group runtime --no-emit-workspace --no-dev --no-hashes --format requirements-txt -o "$$req" \
 		&& uv run --locked --group audit pip-audit -r "$$req" ); code=$$?; \

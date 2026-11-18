@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 import datetime as dt
 import re
 from dataclasses import dataclass
@@ -267,6 +268,14 @@ def test_parse_dt_variants() -> None:
     assert _parse_dt(ws.cell(1, 4, "05.01.2025 10:00:00")) == _workbook_datetime(2025, 1, 5, 10)
     assert _parse_dt(ws.cell(1, 5, "garbage")) is None
     assert _parse_dt(ws.cell(1, 6)) is None
+
+
+def test_parse_dt_returns_a_datetime_object_unchanged_and_rejects_a_missing_cell() -> None:
+    value = _workbook_datetime(2025, 1, 5, 10)
+    ws = Workbook().active
+    assert ws is not None
+    assert _parse_dt(ws.cell(1, 1, value)) is value
+    assert _parse_dt(None) is None
 
 
 def test_month_range_wraps_across_years() -> None:

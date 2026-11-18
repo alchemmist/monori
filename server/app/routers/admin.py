@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 """
 Admin panel API: instance-wide analytics and user management.
 

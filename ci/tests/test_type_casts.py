@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 import json
 from collections.abc import Iterator
 from pathlib import Path

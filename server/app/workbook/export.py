@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 """
 Builds the YNAB-style export workbook from a snapshot dict.
 

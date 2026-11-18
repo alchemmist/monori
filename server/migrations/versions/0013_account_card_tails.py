@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 """
 Card tails on accounts, for routing imported bank CSVs.
 

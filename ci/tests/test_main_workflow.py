@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 import json
 import os
 import re
@@ -136,24 +137,34 @@ class TestMainWorkflowGraph:
         )
         assert frontend is not None
         assert backend is not None
+        assert "sha256sum web/package-lock.json" in frontend.group("body")
         assert "path: web/reports/stryker-incremental.json" in frontend.group("body")
-        assert "hashFiles('web/package-lock.json')" in frontend.group("body")
+        assert "restore-keys:" in frontend.group("body")
+        assert "steps.web-deps.outputs.hash" in frontend.group("body")
         assert "hashFiles('web/stryker.conf.ts')" in frontend.group("body")
         assert "${{ github.sha }}" in frontend.group("body")
-        assert "restore-keys:" in frontend.group("body")
+        assert "hashFiles('web/package.json')" not in frontend.group("body")
         assert "uses: actions/cache/restore@v6" in frontend.group("body")
         assert "id: restore-stryker" in frontend.group("body")
         assert "uses: actions/cache/save@v6" in frontend.group("body")
+        restore, _, save = frontend.group("body").partition("uses: actions/cache/save@v6")
+        assert "steps.web-deps.outputs.hash" in restore
+        assert "steps.web-deps.outputs.hash" in save
         assert "steps.restore-stryker.outputs.cache-hit != 'true'" in frontend.group("body")
         assert "run: make m-front" in frontend.group("body")
         assert "path: mutants" in backend.group("body")
-        assert "hashFiles('uv.lock')" in backend.group("body")
-        assert "hashFiles('pyproject.toml')" in backend.group("body")
-        assert "${{ github.sha }}" in backend.group("body")
+        assert "sha256sum uv.lock" in backend.group("body")
         assert "restore-keys:" in backend.group("body")
+        assert "-main-" in backend.group("body")
+        assert "steps.py-deps.outputs.hash" in backend.group("body")
+        assert "hashFiles('pyproject.toml')" not in backend.group("body")
+        assert "${{ github.sha }}" in backend.group("body")
         assert "uses: actions/cache/restore@v6" in backend.group("body")
         assert "id: restore-mutmut" in backend.group("body")
         assert "uses: actions/cache/save@v6" in backend.group("body")
+        restore, _, save = backend.group("body").partition("uses: actions/cache/save@v6")
+        assert "steps.py-deps.outputs.hash" in restore
+        assert "steps.py-deps.outputs.hash" in save
         assert "steps.restore-mutmut.outputs.cache-hit != 'true'" in backend.group("body")
         assert "run: make m-back" in backend.group("body")
 

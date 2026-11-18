@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 """
 Enforce readable delimiter lines for changed Python strings.
 """

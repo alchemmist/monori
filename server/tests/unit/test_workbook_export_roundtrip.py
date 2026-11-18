@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 import datetime as dt
 from dataclasses import dataclass
 from io import BytesIO
@@ -6,7 +7,7 @@ import pytest
 from openpyxl import Workbook
 from openpyxl.worksheet.worksheet import Worksheet
 
-from monori.server.app.workbook.export import _parse_dt as parse_export_date
+from monori.server.app.workbook.export import _parse_dt as export_parse_dt
 from monori.server.app.workbook.parser import (
     WorkbookError,
     _amount,
@@ -131,6 +132,10 @@ def test_unquote_reverses_only_the_formula_escape() -> None:
     assert _unquote("plain") == "plain"
     assert _unquote("mid'dle") == "mid'dle"
     assert _unquote("'legit apostrophe") == "'legit apostrophe"
+
+
+def test_export_parse_dt_keeps_a_leading_date_when_the_rest_is_not_iso() -> None:
+    assert export_parse_dt("2026-01-05 trailing") == _workbook_datetime(2026, 1, 5)
 
 
 def test_parse_dt_variants() -> None:
@@ -394,4 +399,4 @@ def test_dashdata_sheet_is_known_and_silent() -> None:
 
 
 def test_export_preserves_legacy_dates_with_invalid_time_suffixes() -> None:
-    assert parse_export_date("2026-01-05 legacy-time") == _workbook_datetime(2026, 1, 5)
+    assert export_parse_dt("2026-01-05 legacy-time") == _workbook_datetime(2026, 1, 5)

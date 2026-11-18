@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 """
 Password hashing and JWT access tokens for in-app authentication.
 

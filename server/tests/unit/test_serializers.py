@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 import pathlib
 import sys
 from dataclasses import asdict

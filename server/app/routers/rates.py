@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 """
 Exchange rates as an endpoint: read them, pull fresh ones, correct a wrong one.
 

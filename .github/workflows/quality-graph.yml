@@ -26,15 +26,23 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: 'web/package-lock.json
+          cache-dependency-path: 'web/package.json
 
-            tools/frontend-perf/package-lock.json
+            tools/frontend-perf/package.json
 
             '
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: 'true'
-          cache-dependency-glob: uv.lock
+          cache-dependency-glob: 'pyproject.toml
+
+            common/pyproject.toml
+
+            ci/pyproject.toml
+
+            server/pyproject.toml
+
+            '
       - name: Install project dependencies
         run: scripts/setup-quality-graph.sh
       - run: uv run --locked --group quality-graph qg validate
@@ -44,7 +52,7 @@ jobs:
       - name: Collect Workflow graph validation result
         id: quality-result
         if: always()
-        uses: alchemmist/quality-graph@585b63cf6fd2c022160a10a1330be4799e9d5acc
+        uses: alchemmist/quality-graph@64ed072ce1bd019d5fa7dec22cb3df991b9ac691
         with:
           operation: collect
           node-id: workflow-graph
@@ -52,7 +60,7 @@ jobs:
           adapter: exit-code
           report-path: ''
           command-outcome: ${{ steps.quality-command.outcome }}
-          graph-digest: fadaac0fa75fbc4b395690883b710f655e401b9f698315edf8263c089dee656d
+          graph-digest: dbfc9a9ce8b384794c90caa6a87c857f799a765eca456ee9a44e56cf74228041
           approval-findings: 'true'
           approval-files: 'false'
           approval-node: 'false'
@@ -84,15 +92,23 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: 'web/package-lock.json
+          cache-dependency-path: 'web/package.json
 
-            tools/frontend-perf/package-lock.json
+            tools/frontend-perf/package.json
 
             '
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: 'true'
-          cache-dependency-glob: uv.lock
+          cache-dependency-glob: 'pyproject.toml
+
+            common/pyproject.toml
+
+            ci/pyproject.toml
+
+            server/pyproject.toml
+
+            '
       - name: Install project dependencies
         run: scripts/setup-quality-graph.sh
       - run: make fmt-check
@@ -102,7 +118,7 @@ jobs:
       - name: Collect Format check result
         id: quality-result
         if: always()
-        uses: alchemmist/quality-graph@585b63cf6fd2c022160a10a1330be4799e9d5acc
+        uses: alchemmist/quality-graph@64ed072ce1bd019d5fa7dec22cb3df991b9ac691
         with:
           operation: collect
           node-id: fmt-check
@@ -110,7 +126,7 @@ jobs:
           adapter: exit-code
           report-path: ''
           command-outcome: ${{ steps.quality-command.outcome }}
-          graph-digest: fadaac0fa75fbc4b395690883b710f655e401b9f698315edf8263c089dee656d
+          graph-digest: dbfc9a9ce8b384794c90caa6a87c857f799a765eca456ee9a44e56cf74228041
           approval-findings: 'true'
           approval-files: 'false'
           approval-node: 'false'
@@ -144,15 +160,23 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: 'web/package-lock.json
+          cache-dependency-path: 'web/package.json
 
-            tools/frontend-perf/package-lock.json
+            tools/frontend-perf/package.json
 
             '
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: 'true'
-          cache-dependency-glob: uv.lock
+          cache-dependency-glob: 'pyproject.toml
+
+            common/pyproject.toml
+
+            ci/pyproject.toml
+
+            server/pyproject.toml
+
+            '
       - name: Install project dependencies
         run: scripts/setup-quality-graph.sh
       - run: uv run --locked --group quality-graph qg-python-triple-quotes --base "$BASE"
@@ -164,7 +188,7 @@ jobs:
       - name: Collect Triple-quoted string style result
         id: quality-result
         if: always()
-        uses: alchemmist/quality-graph@585b63cf6fd2c022160a10a1330be4799e9d5acc
+        uses: alchemmist/quality-graph@64ed072ce1bd019d5fa7dec22cb3df991b9ac691
         with:
           operation: collect
           node-id: triple-quotes
@@ -172,7 +196,7 @@ jobs:
           adapter: exit-code
           report-path: ''
           command-outcome: ${{ steps.quality-command.outcome }}
-          graph-digest: fadaac0fa75fbc4b395690883b710f655e401b9f698315edf8263c089dee656d
+          graph-digest: dbfc9a9ce8b384794c90caa6a87c857f799a765eca456ee9a44e56cf74228041
           approval-findings: 'true'
           approval-files: 'false'
           approval-node: 'false'
@@ -208,15 +232,23 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: 'web/package-lock.json
+          cache-dependency-path: 'web/package.json
 
-            tools/frontend-perf/package-lock.json
+            tools/frontend-perf/package.json
 
             '
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: 'true'
-          cache-dependency-glob: uv.lock
+          cache-dependency-glob: 'pyproject.toml
+
+            common/pyproject.toml
+
+            ci/pyproject.toml
+
+            server/pyproject.toml
+
+            '
       - name: Install project dependencies
         run: scripts/setup-quality-graph.sh
       - run: uv run --locked --group quality-graph qg-python-suppressions --base "$BASE"
@@ -228,7 +260,7 @@ jobs:
       - name: Collect Lint suppression gate result
         id: quality-result
         if: always()
-        uses: alchemmist/quality-graph@585b63cf6fd2c022160a10a1330be4799e9d5acc
+        uses: alchemmist/quality-graph@64ed072ce1bd019d5fa7dec22cb3df991b9ac691
         with:
           operation: collect
           node-id: suppressions
@@ -236,7 +268,7 @@ jobs:
           adapter: exit-code
           report-path: ''
           command-outcome: ${{ steps.quality-command.outcome }}
-          graph-digest: fadaac0fa75fbc4b395690883b710f655e401b9f698315edf8263c089dee656d
+          graph-digest: dbfc9a9ce8b384794c90caa6a87c857f799a765eca456ee9a44e56cf74228041
           approval-findings: 'true'
           approval-files: 'true'
           approval-node: 'false'
@@ -272,15 +304,23 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: 'web/package-lock.json
+          cache-dependency-path: 'web/package.json
 
-            tools/frontend-perf/package-lock.json
+            tools/frontend-perf/package.json
 
             '
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: 'true'
-          cache-dependency-glob: uv.lock
+          cache-dependency-glob: 'pyproject.toml
+
+            common/pyproject.toml
+
+            ci/pyproject.toml
+
+            server/pyproject.toml
+
+            '
       - name: Install project dependencies
         run: scripts/setup-quality-graph.sh
       - run: uv run --locked --group quality-graph python -m monori.ci.quality_graph.checks.hardcoded_colors --base "$BASE"
@@ -294,7 +334,7 @@ jobs:
       - name: Collect Hardcoded color gate result
         id: quality-result
         if: always()
-        uses: alchemmist/quality-graph@585b63cf6fd2c022160a10a1330be4799e9d5acc
+        uses: alchemmist/quality-graph@64ed072ce1bd019d5fa7dec22cb3df991b9ac691
         with:
           operation: collect
           node-id: hardcoded-colors
@@ -302,7 +342,7 @@ jobs:
           adapter: native
           report-path: reports/hardcoded-colors.json
           command-outcome: ${{ steps.quality-command.outcome }}
-          graph-digest: fadaac0fa75fbc4b395690883b710f655e401b9f698315edf8263c089dee656d
+          graph-digest: dbfc9a9ce8b384794c90caa6a87c857f799a765eca456ee9a44e56cf74228041
           approval-findings: 'true'
           approval-files: 'true'
           approval-node: 'true'
@@ -340,15 +380,23 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: 'web/package-lock.json
+          cache-dependency-path: 'web/package.json
 
-            tools/frontend-perf/package-lock.json
+            tools/frontend-perf/package.json
 
             '
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: 'true'
-          cache-dependency-glob: uv.lock
+          cache-dependency-glob: 'pyproject.toml
+
+            common/pyproject.toml
+
+            ci/pyproject.toml
+
+            server/pyproject.toml
+
+            '
       - name: Install project dependencies
         run: scripts/setup-quality-graph.sh
       - name: Install Lychee
@@ -360,7 +408,7 @@ jobs:
       - name: Collect Documentation links result
         id: quality-result
         if: always()
-        uses: alchemmist/quality-graph@585b63cf6fd2c022160a10a1330be4799e9d5acc
+        uses: alchemmist/quality-graph@64ed072ce1bd019d5fa7dec22cb3df991b9ac691
         with:
           operation: collect
           node-id: docs-links
@@ -368,7 +416,7 @@ jobs:
           adapter: exit-code
           report-path: ''
           command-outcome: ${{ steps.quality-command.outcome }}
-          graph-digest: fadaac0fa75fbc4b395690883b710f655e401b9f698315edf8263c089dee656d
+          graph-digest: dbfc9a9ce8b384794c90caa6a87c857f799a765eca456ee9a44e56cf74228041
           approval-findings: 'true'
           approval-files: 'false'
           approval-node: 'false'
@@ -402,15 +450,23 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: 'web/package-lock.json
+          cache-dependency-path: 'web/package.json
 
-            tools/frontend-perf/package-lock.json
+            tools/frontend-perf/package.json
 
             '
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: 'true'
-          cache-dependency-glob: uv.lock
+          cache-dependency-glob: 'pyproject.toml
+
+            common/pyproject.toml
+
+            ci/pyproject.toml
+
+            server/pyproject.toml
+
+            '
       - name: Install project dependencies
         run: scripts/setup-quality-graph.sh
       - name: Install external linters
@@ -422,7 +478,7 @@ jobs:
       - name: Collect Lint result
         id: quality-result
         if: always()
-        uses: alchemmist/quality-graph@585b63cf6fd2c022160a10a1330be4799e9d5acc
+        uses: alchemmist/quality-graph@64ed072ce1bd019d5fa7dec22cb3df991b9ac691
         with:
           operation: collect
           node-id: lint
@@ -430,7 +486,7 @@ jobs:
           adapter: exit-code
           report-path: ''
           command-outcome: ${{ steps.quality-command.outcome }}
-          graph-digest: fadaac0fa75fbc4b395690883b710f655e401b9f698315edf8263c089dee656d
+          graph-digest: dbfc9a9ce8b384794c90caa6a87c857f799a765eca456ee9a44e56cf74228041
           approval-findings: 'true'
           approval-files: 'false'
           approval-node: 'false'
@@ -464,15 +520,23 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: 'web/package-lock.json
+          cache-dependency-path: 'web/package.json
 
-            tools/frontend-perf/package-lock.json
+            tools/frontend-perf/package.json
 
             '
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: 'true'
-          cache-dependency-glob: uv.lock
+          cache-dependency-glob: 'pyproject.toml
+
+            common/pyproject.toml
+
+            ci/pyproject.toml
+
+            server/pyproject.toml
+
+            '
       - name: Install project dependencies
         run: scripts/setup-quality-graph.sh
       - run: uv run --locked --group quality-graph qg-python-object-annotations --base "$BASE"
@@ -484,7 +548,7 @@ jobs:
       - name: Collect Python object annotation gate result
         id: quality-result
         if: always()
-        uses: alchemmist/quality-graph@585b63cf6fd2c022160a10a1330be4799e9d5acc
+        uses: alchemmist/quality-graph@64ed072ce1bd019d5fa7dec22cb3df991b9ac691
         with:
           operation: collect
           node-id: object-annotations
@@ -492,7 +556,7 @@ jobs:
           adapter: exit-code
           report-path: ''
           command-outcome: ${{ steps.quality-command.outcome }}
-          graph-digest: fadaac0fa75fbc4b395690883b710f655e401b9f698315edf8263c089dee656d
+          graph-digest: dbfc9a9ce8b384794c90caa6a87c857f799a765eca456ee9a44e56cf74228041
           approval-findings: 'true'
           approval-files: 'true'
           approval-node: 'false'
@@ -528,15 +592,23 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: 'web/package-lock.json
+          cache-dependency-path: 'web/package.json
 
-            tools/frontend-perf/package-lock.json
+            tools/frontend-perf/package.json
 
             '
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: 'true'
-          cache-dependency-glob: uv.lock
+          cache-dependency-glob: 'pyproject.toml
+
+            common/pyproject.toml
+
+            ci/pyproject.toml
+
+            server/pyproject.toml
+
+            '
       - name: Install project dependencies
         run: scripts/setup-quality-graph.sh
       - run: make type-casts
@@ -546,7 +618,7 @@ jobs:
       - name: Collect Unsafe type cast gate result
         id: quality-result
         if: always()
-        uses: alchemmist/quality-graph@585b63cf6fd2c022160a10a1330be4799e9d5acc
+        uses: alchemmist/quality-graph@64ed072ce1bd019d5fa7dec22cb3df991b9ac691
         with:
           operation: collect
           node-id: type-casts
@@ -554,7 +626,7 @@ jobs:
           adapter: exit-code
           report-path: ''
           command-outcome: ${{ steps.quality-command.outcome }}
-          graph-digest: fadaac0fa75fbc4b395690883b710f655e401b9f698315edf8263c089dee656d
+          graph-digest: dbfc9a9ce8b384794c90caa6a87c857f799a765eca456ee9a44e56cf74228041
           approval-findings: 'true'
           approval-files: 'true'
           approval-node: 'false'
@@ -588,15 +660,23 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: 'web/package-lock.json
+          cache-dependency-path: 'web/package.json
 
-            tools/frontend-perf/package-lock.json
+            tools/frontend-perf/package.json
 
             '
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: 'true'
-          cache-dependency-glob: uv.lock
+          cache-dependency-glob: 'pyproject.toml
+
+            common/pyproject.toml
+
+            ci/pyproject.toml
+
+            server/pyproject.toml
+
+            '
       - name: Install project dependencies
         run: scripts/setup-quality-graph.sh
       - run: make type
@@ -606,7 +686,7 @@ jobs:
       - name: Collect Type check result
         id: quality-result
         if: always()
-        uses: alchemmist/quality-graph@585b63cf6fd2c022160a10a1330be4799e9d5acc
+        uses: alchemmist/quality-graph@64ed072ce1bd019d5fa7dec22cb3df991b9ac691
         with:
           operation: collect
           node-id: type
@@ -614,7 +694,7 @@ jobs:
           adapter: exit-code
           report-path: ''
           command-outcome: ${{ steps.quality-command.outcome }}
-          graph-digest: fadaac0fa75fbc4b395690883b710f655e401b9f698315edf8263c089dee656d
+          graph-digest: dbfc9a9ce8b384794c90caa6a87c857f799a765eca456ee9a44e56cf74228041
           approval-findings: 'true'
           approval-files: 'false'
           approval-node: 'false'
@@ -649,15 +729,23 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: 'web/package-lock.json
+          cache-dependency-path: 'web/package.json
 
-            tools/frontend-perf/package-lock.json
+            tools/frontend-perf/package.json
 
             '
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: 'true'
-          cache-dependency-glob: uv.lock
+          cache-dependency-glob: 'pyproject.toml
+
+            common/pyproject.toml
+
+            ci/pyproject.toml
+
+            server/pyproject.toml
+
+            '
       - name: Install project dependencies
         run: scripts/setup-quality-graph.sh
       - run: python -m pip install semgrep
@@ -668,7 +756,7 @@ jobs:
       - name: Collect Static analysis result
         id: quality-result
         if: always()
-        uses: alchemmist/quality-graph@585b63cf6fd2c022160a10a1330be4799e9d5acc
+        uses: alchemmist/quality-graph@64ed072ce1bd019d5fa7dec22cb3df991b9ac691
         with:
           operation: collect
           node-id: analyze
@@ -676,7 +764,7 @@ jobs:
           adapter: exit-code
           report-path: ''
           command-outcome: ${{ steps.quality-command.outcome }}
-          graph-digest: fadaac0fa75fbc4b395690883b710f655e401b9f698315edf8263c089dee656d
+          graph-digest: dbfc9a9ce8b384794c90caa6a87c857f799a765eca456ee9a44e56cf74228041
           approval-findings: 'true'
           approval-files: 'false'
           approval-node: 'false'
@@ -710,15 +798,23 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: 'web/package-lock.json
+          cache-dependency-path: 'web/package.json
 
-            tools/frontend-perf/package-lock.json
+            tools/frontend-perf/package.json
 
             '
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: 'true'
-          cache-dependency-glob: uv.lock
+          cache-dependency-glob: 'pyproject.toml
+
+            common/pyproject.toml
+
+            ci/pyproject.toml
+
+            server/pyproject.toml
+
+            '
       - name: Install project dependencies
         run: scripts/setup-quality-graph.sh
       - run: uv run --locked --group quality-graph qg-python-time-bombs --base "$BASE"
@@ -730,7 +826,7 @@ jobs:
       - name: Collect Time bomb guardrail result
         id: quality-result
         if: always()
-        uses: alchemmist/quality-graph@585b63cf6fd2c022160a10a1330be4799e9d5acc
+        uses: alchemmist/quality-graph@64ed072ce1bd019d5fa7dec22cb3df991b9ac691
         with:
           operation: collect
           node-id: time-bombs
@@ -738,7 +834,7 @@ jobs:
           adapter: exit-code
           report-path: ''
           command-outcome: ${{ steps.quality-command.outcome }}
-          graph-digest: fadaac0fa75fbc4b395690883b710f655e401b9f698315edf8263c089dee656d
+          graph-digest: dbfc9a9ce8b384794c90caa6a87c857f799a765eca456ee9a44e56cf74228041
           approval-findings: 'true'
           approval-files: 'false'
           approval-node: 'false'
@@ -775,15 +871,23 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: 'web/package-lock.json
+          cache-dependency-path: 'web/package.json
 
-            tools/frontend-perf/package-lock.json
+            tools/frontend-perf/package.json
 
             '
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: 'true'
-          cache-dependency-glob: uv.lock
+          cache-dependency-glob: 'pyproject.toml
+
+            common/pyproject.toml
+
+            ci/pyproject.toml
+
+            server/pyproject.toml
+
+            '
       - name: Install project dependencies
         run: scripts/setup-quality-graph.sh
       - run: make t-fast
@@ -793,7 +897,7 @@ jobs:
       - name: Collect Fast tests result
         id: quality-result
         if: always()
-        uses: alchemmist/quality-graph@585b63cf6fd2c022160a10a1330be4799e9d5acc
+        uses: alchemmist/quality-graph@64ed072ce1bd019d5fa7dec22cb3df991b9ac691
         with:
           operation: collect
           node-id: test-fast
@@ -801,7 +905,7 @@ jobs:
           adapter: exit-code
           report-path: ''
           command-outcome: ${{ steps.quality-command.outcome }}
-          graph-digest: fadaac0fa75fbc4b395690883b710f655e401b9f698315edf8263c089dee656d
+          graph-digest: dbfc9a9ce8b384794c90caa6a87c857f799a765eca456ee9a44e56cf74228041
           approval-findings: 'true'
           approval-files: 'false'
           approval-node: 'false'
@@ -835,15 +939,23 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: 'web/package-lock.json
+          cache-dependency-path: 'web/package.json
 
-            tools/frontend-perf/package-lock.json
+            tools/frontend-perf/package.json
 
             '
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: 'true'
-          cache-dependency-glob: uv.lock
+          cache-dependency-glob: 'pyproject.toml
+
+            common/pyproject.toml
+
+            ci/pyproject.toml
+
+            server/pyproject.toml
+
+            '
       - name: Install project dependencies
         run: scripts/setup-quality-graph.sh
       - run: make t-medium
@@ -853,7 +965,7 @@ jobs:
       - name: Collect Medium tests result
         id: quality-result
         if: always()
-        uses: alchemmist/quality-graph@585b63cf6fd2c022160a10a1330be4799e9d5acc
+        uses: alchemmist/quality-graph@64ed072ce1bd019d5fa7dec22cb3df991b9ac691
         with:
           operation: collect
           node-id: test-medium
@@ -861,7 +973,7 @@ jobs:
           adapter: exit-code
           report-path: ''
           command-outcome: ${{ steps.quality-command.outcome }}
-          graph-digest: fadaac0fa75fbc4b395690883b710f655e401b9f698315edf8263c089dee656d
+          graph-digest: dbfc9a9ce8b384794c90caa6a87c857f799a765eca456ee9a44e56cf74228041
           approval-findings: 'true'
           approval-files: 'false'
           approval-node: 'false'
@@ -895,15 +1007,23 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: 'web/package-lock.json
+          cache-dependency-path: 'web/package.json
 
-            tools/frontend-perf/package-lock.json
+            tools/frontend-perf/package.json
 
             '
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: 'true'
-          cache-dependency-glob: uv.lock
+          cache-dependency-glob: 'pyproject.toml
+
+            common/pyproject.toml
+
+            ci/pyproject.toml
+
+            server/pyproject.toml
+
+            '
       - name: Install project dependencies
         run: scripts/setup-quality-graph.sh
       - run: npx playwright install --with-deps chromium
@@ -915,7 +1035,7 @@ jobs:
       - name: Collect Slow tests result
         id: quality-result
         if: always()
-        uses: alchemmist/quality-graph@585b63cf6fd2c022160a10a1330be4799e9d5acc
+        uses: alchemmist/quality-graph@64ed072ce1bd019d5fa7dec22cb3df991b9ac691
         with:
           operation: collect
           node-id: test-slow
@@ -923,7 +1043,7 @@ jobs:
           adapter: exit-code
           report-path: ''
           command-outcome: ${{ steps.quality-command.outcome }}
-          graph-digest: fadaac0fa75fbc4b395690883b710f655e401b9f698315edf8263c089dee656d
+          graph-digest: dbfc9a9ce8b384794c90caa6a87c857f799a765eca456ee9a44e56cf74228041
           approval-findings: 'true'
           approval-files: 'false'
           approval-node: 'false'
@@ -958,15 +1078,23 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: 'web/package-lock.json
+          cache-dependency-path: 'web/package.json
 
-            tools/frontend-perf/package-lock.json
+            tools/frontend-perf/package.json
 
             '
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: 'true'
-          cache-dependency-glob: uv.lock
+          cache-dependency-glob: 'pyproject.toml
+
+            common/pyproject.toml
+
+            ci/pyproject.toml
+
+            server/pyproject.toml
+
+            '
       - name: Install project dependencies
         run: scripts/setup-quality-graph.sh
       - run: scripts/flaky-quality-graph.sh
@@ -978,7 +1106,7 @@ jobs:
       - name: Collect Flaky test detection result
         id: quality-result
         if: always()
-        uses: alchemmist/quality-graph@585b63cf6fd2c022160a10a1330be4799e9d5acc
+        uses: alchemmist/quality-graph@64ed072ce1bd019d5fa7dec22cb3df991b9ac691
         with:
           operation: collect
           node-id: flaky-tests
@@ -986,7 +1114,7 @@ jobs:
           adapter: exit-code
           report-path: ''
           command-outcome: ${{ steps.quality-command.outcome }}
-          graph-digest: fadaac0fa75fbc4b395690883b710f655e401b9f698315edf8263c089dee656d
+          graph-digest: dbfc9a9ce8b384794c90caa6a87c857f799a765eca456ee9a44e56cf74228041
           approval-findings: 'true'
           approval-files: 'false'
           approval-node: 'false'
@@ -1023,15 +1151,23 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: 'web/package-lock.json
+          cache-dependency-path: 'web/package.json
 
-            tools/frontend-perf/package-lock.json
+            tools/frontend-perf/package.json
 
             '
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: 'true'
-          cache-dependency-glob: uv.lock
+          cache-dependency-glob: 'pyproject.toml
+
+            common/pyproject.toml
+
+            ci/pyproject.toml
+
+            server/pyproject.toml
+
+            '
       - name: Install project dependencies
         run: scripts/setup-quality-graph.sh
       - run: make build
@@ -1041,7 +1177,7 @@ jobs:
       - name: Collect Build frontend result
         id: quality-result
         if: always()
-        uses: alchemmist/quality-graph@585b63cf6fd2c022160a10a1330be4799e9d5acc
+        uses: alchemmist/quality-graph@64ed072ce1bd019d5fa7dec22cb3df991b9ac691
         with:
           operation: collect
           node-id: build
@@ -1049,7 +1185,7 @@ jobs:
           adapter: exit-code
           report-path: ''
           command-outcome: ${{ steps.quality-command.outcome }}
-          graph-digest: fadaac0fa75fbc4b395690883b710f655e401b9f698315edf8263c089dee656d
+          graph-digest: dbfc9a9ce8b384794c90caa6a87c857f799a765eca456ee9a44e56cf74228041
           approval-findings: 'true'
           approval-files: 'false'
           approval-node: 'false'
@@ -1083,15 +1219,23 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: 'web/package-lock.json
+          cache-dependency-path: 'web/package.json
 
-            tools/frontend-perf/package-lock.json
+            tools/frontend-perf/package.json
 
             '
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: 'true'
-          cache-dependency-glob: uv.lock
+          cache-dependency-glob: 'pyproject.toml
+
+            common/pyproject.toml
+
+            ci/pyproject.toml
+
+            server/pyproject.toml
+
+            '
       - name: Install project dependencies
         run: scripts/setup-quality-graph.sh
       - run: make BASE="$BASE" coverage-diff
@@ -1103,7 +1247,7 @@ jobs:
       - name: Collect Coverage result
         id: quality-result
         if: always()
-        uses: alchemmist/quality-graph@585b63cf6fd2c022160a10a1330be4799e9d5acc
+        uses: alchemmist/quality-graph@64ed072ce1bd019d5fa7dec22cb3df991b9ac691
         with:
           operation: collect
           node-id: coverage
@@ -1111,7 +1255,7 @@ jobs:
           adapter: exit-code
           report-path: ''
           command-outcome: ${{ steps.quality-command.outcome }}
-          graph-digest: fadaac0fa75fbc4b395690883b710f655e401b9f698315edf8263c089dee656d
+          graph-digest: dbfc9a9ce8b384794c90caa6a87c857f799a765eca456ee9a44e56cf74228041
           approval-findings: 'true'
           approval-files: 'false'
           approval-node: 'false'
@@ -1147,15 +1291,23 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: 'web/package-lock.json
+          cache-dependency-path: 'web/package.json
 
-            tools/frontend-perf/package-lock.json
+            tools/frontend-perf/package.json
 
             '
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: 'true'
-          cache-dependency-glob: uv.lock
+          cache-dependency-glob: 'pyproject.toml
+
+            common/pyproject.toml
+
+            ci/pyproject.toml
+
+            server/pyproject.toml
+
+            '
       - name: Install project dependencies
         run: scripts/setup-quality-graph.sh
       - run: make BASE="$BASE" mutation-diff
@@ -1167,7 +1319,7 @@ jobs:
       - name: Collect Mutation testing result
         id: quality-result
         if: always()
-        uses: alchemmist/quality-graph@585b63cf6fd2c022160a10a1330be4799e9d5acc
+        uses: alchemmist/quality-graph@64ed072ce1bd019d5fa7dec22cb3df991b9ac691
         with:
           operation: collect
           node-id: mutation
@@ -1175,7 +1327,7 @@ jobs:
           adapter: exit-code
           report-path: ''
           command-outcome: ${{ steps.quality-command.outcome }}
-          graph-digest: fadaac0fa75fbc4b395690883b710f655e401b9f698315edf8263c089dee656d
+          graph-digest: dbfc9a9ce8b384794c90caa6a87c857f799a765eca456ee9a44e56cf74228041
           approval-findings: 'true'
           approval-files: 'false'
           approval-node: 'false'
@@ -1212,15 +1364,23 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: 'web/package-lock.json
+          cache-dependency-path: 'web/package.json
 
-            tools/frontend-perf/package-lock.json
+            tools/frontend-perf/package.json
 
             '
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: 'true'
-          cache-dependency-glob: uv.lock
+          cache-dependency-glob: 'pyproject.toml
+
+            common/pyproject.toml
+
+            ci/pyproject.toml
+
+            server/pyproject.toml
+
+            '
       - name: Install project dependencies
         run: scripts/setup-quality-graph.sh
       - run: scripts/bundle-size-quality-graph.sh
@@ -1234,7 +1394,7 @@ jobs:
       - name: Collect Frontend bundle size result
         id: quality-result
         if: always()
-        uses: alchemmist/quality-graph@585b63cf6fd2c022160a10a1330be4799e9d5acc
+        uses: alchemmist/quality-graph@64ed072ce1bd019d5fa7dec22cb3df991b9ac691
         with:
           operation: collect
           node-id: bundle-size
@@ -1242,7 +1402,7 @@ jobs:
           adapter: exit-code
           report-path: ''
           command-outcome: ${{ steps.quality-command.outcome }}
-          graph-digest: fadaac0fa75fbc4b395690883b710f655e401b9f698315edf8263c089dee656d
+          graph-digest: dbfc9a9ce8b384794c90caa6a87c857f799a765eca456ee9a44e56cf74228041
           approval-findings: 'true'
           approval-files: 'false'
           approval-node: 'true'
@@ -1280,15 +1440,23 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: 'web/package-lock.json
+          cache-dependency-path: 'web/package.json
 
-            tools/frontend-perf/package-lock.json
+            tools/frontend-perf/package.json
 
             '
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: 'true'
-          cache-dependency-glob: uv.lock
+          cache-dependency-glob: 'pyproject.toml
+
+            common/pyproject.toml
+
+            ci/pyproject.toml
+
+            server/pyproject.toml
+
+            '
       - name: Install project dependencies
         run: scripts/setup-quality-graph.sh
       - run: npx playwright install --with-deps chromium
@@ -1302,7 +1470,7 @@ jobs:
       - name: Collect Frontend performance regression result
         id: quality-result
         if: always()
-        uses: alchemmist/quality-graph@585b63cf6fd2c022160a10a1330be4799e9d5acc
+        uses: alchemmist/quality-graph@64ed072ce1bd019d5fa7dec22cb3df991b9ac691
         with:
           operation: collect
           node-id: frontend-performance
@@ -1310,7 +1478,7 @@ jobs:
           adapter: exit-code
           report-path: ''
           command-outcome: ${{ steps.quality-command.outcome }}
-          graph-digest: fadaac0fa75fbc4b395690883b710f655e401b9f698315edf8263c089dee656d
+          graph-digest: dbfc9a9ce8b384794c90caa6a87c857f799a765eca456ee9a44e56cf74228041
           approval-findings: 'true'
           approval-files: 'false'
           approval-node: 'true'
@@ -1347,15 +1515,23 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: 'web/package-lock.json
+          cache-dependency-path: 'web/package.json
 
-            tools/frontend-perf/package-lock.json
+            tools/frontend-perf/package.json
 
             '
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: 'true'
-          cache-dependency-glob: uv.lock
+          cache-dependency-glob: 'pyproject.toml
+
+            common/pyproject.toml
+
+            ci/pyproject.toml
+
+            server/pyproject.toml
+
+            '
       - name: Install project dependencies
         run: scripts/setup-quality-graph.sh
       - run: make audit
@@ -1365,7 +1541,7 @@ jobs:
       - name: Collect Dependency and security audit result
         id: quality-result
         if: always()
-        uses: alchemmist/quality-graph@585b63cf6fd2c022160a10a1330be4799e9d5acc
+        uses: alchemmist/quality-graph@64ed072ce1bd019d5fa7dec22cb3df991b9ac691
         with:
           operation: collect
           node-id: audit
@@ -1373,7 +1549,7 @@ jobs:
           adapter: exit-code
           report-path: ''
           command-outcome: ${{ steps.quality-command.outcome }}
-          graph-digest: fadaac0fa75fbc4b395690883b710f655e401b9f698315edf8263c089dee656d
+          graph-digest: dbfc9a9ce8b384794c90caa6a87c857f799a765eca456ee9a44e56cf74228041
           approval-findings: 'true'
           approval-files: 'false'
           approval-node: 'false'

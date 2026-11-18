@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 """Provide backend functionality."""
 
 from monori.server.app.workbook.export import build_workbook, workbook_bytes

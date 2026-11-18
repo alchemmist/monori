@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 """
 Unit tests for the connections router's credential validation and the.
 

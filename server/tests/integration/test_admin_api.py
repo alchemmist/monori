@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 import pytest
 from fastapi.testclient import TestClient
 from pydantic import TypeAdapter

@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 """First-class savings goals built on category envelopes."""
 
 from alembic import op

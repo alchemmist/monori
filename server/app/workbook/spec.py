@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 """Provide backend functionality."""
 
 GLYPH_IN = "▲"

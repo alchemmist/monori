@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 """
 Exchange rates: what a unit of a currency was worth on a given day.
 

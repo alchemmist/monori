@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 """Compare frontend performance measurements and render the CI report."""
 
 import argparse
@@ -469,21 +470,18 @@ def render_standards(config: dict[str, JsonValue]) -> list[str]:
     ]
     for metric_id, metric in metrics.items():
         label = string_value(metric.get("label"), f"{metric_id} label")
+        unit = string_value(metric.get("unit"), "unit")
         noise = format_value(
             number_value(metric.get("noiseAbsolute"), "noiseAbsolute"),
-            string_value(metric.get("unit"), "unit"),
+            unit,
         )
-        policy = metric.get("policy")
-        if policy == "ttfb":
+        if metric.get("policy") == "ttfb":
             critical_percent = number_value(metric.get("criticalPercent"), "criticalPercent")
             critical_absolute = format_value(
                 number_value(metric.get("criticalAbsolute"), "criticalAbsolute"),
-                string_value(metric.get("unit"), "unit"),
+                unit,
             )
-            poor = format_value(
-                number_value(metric.get("poor"), "poor"),
-                string_value(metric.get("unit"), "unit"),
-            )
+            poor = format_value(number_value(metric.get("poor"), "poor"), unit)
             lines.append(
                 f"- **{label}:** more than {critical_percent:.0f}% slower and at least "
                 f"+{critical_absolute}, or enters the poor band (≥ {poor}) with at least +{noise}."
@@ -493,10 +491,7 @@ def render_standards(config: dict[str, JsonValue]) -> list[str]:
         critical_percent = number_value(metric.get("criticalPercent"), "criticalPercent")
         line = f"- **{label}:** more than {critical_percent:.0f}% slower and at least +{noise}"
         if metric.get("poor") is not None:
-            poor = format_value(
-                number_value(metric.get("poor"), "poor"),
-                string_value(metric.get("unit"), "unit"),
-            )
+            poor = format_value(number_value(metric.get("poor"), "poor"), unit)
             line += f", or crosses into the poor band (≥ {poor}) after clearing +{noise}"
         lines.append(line + ".")
 

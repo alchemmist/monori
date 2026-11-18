@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 """
 Multi-tenancy: accounts and category groups gain an owning user_id, and name.
 
@@ -87,14 +88,19 @@ def upgrade() -> None:
         conn.exec_driver_sql(
             "CREATE INDEX IF NOT EXISTS idx_categories_group ON categories(group_id)",
         )
-    conn.exec_driver_sql(
-        "UPDATE accounts SET user_id=(SELECT MIN(id) FROM users)"
-        " WHERE user_id IS NULL AND EXISTS (SELECT 1 FROM users)",
-    )
-    conn.exec_driver_sql(
-        "UPDATE category_groups SET user_id=(SELECT MIN(id) FROM users)"
-        " WHERE user_id IS NULL AND EXISTS (SELECT 1 FROM users)",
-    )
+    for statement in (
+        (
+            "UPDATE accounts SET user_id=(SELECT MIN(id) FROM users)"
+            " WHERE user_id IS NULL AND EXISTS (SELECT 1 FROM users)"
+        ),
+        (
+            "UPDATE category_groups SET user_id=(SELECT MIN(id) FROM users)"
+            " WHERE user_id IS NULL AND EXISTS (SELECT 1 FROM users)"
+        ),
+    ):
+        conn.exec_driver_sql(
+            statement,
+        )
 
 
 def downgrade() -> None:

@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 """
 Currency as a property of money, not of the app (issue #201).
 

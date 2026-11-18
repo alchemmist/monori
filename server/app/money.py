@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 """
 The glue between a stored amount and what it is worth.
 

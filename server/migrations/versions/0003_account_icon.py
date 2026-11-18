@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 """Accounts gain a display icon (a short glyph name mapped by the frontend)."""
 
 from alembic import op

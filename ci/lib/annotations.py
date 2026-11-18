@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 """Create and publish source annotations independently of a CI workflow."""
 
 from __future__ import annotations

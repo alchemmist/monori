@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 """
 Pairing rule for transfers: find the two rows that are the same money leaving.
 

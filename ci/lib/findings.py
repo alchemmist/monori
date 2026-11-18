@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 """Build stable identifiers for findings emitted by CI checks."""
 
 import hashlib

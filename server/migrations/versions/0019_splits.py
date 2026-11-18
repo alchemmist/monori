@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 """Categorized splits of a bank transaction."""
 
 from alembic import op

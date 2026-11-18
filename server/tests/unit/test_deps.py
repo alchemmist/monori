@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 import sqlite3
 
 from monori.server.app.deps import serialize_transactions

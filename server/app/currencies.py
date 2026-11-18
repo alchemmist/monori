@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 """
 The currencies monori knows about.
 

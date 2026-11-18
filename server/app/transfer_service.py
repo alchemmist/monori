@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 """
 The database side of transfers: merging two transactions into one entity,.
 
