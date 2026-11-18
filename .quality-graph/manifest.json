@@ -8,7 +8,7 @@
     ]
   },
   "defaultBranch": "main",
-  "graphDigest": "fadaac0fa75fbc4b395690883b710f655e401b9f698315edf8263c089dee656d",
+  "graphDigest": "f78c8fb3a2c4536697d39aa648b7674f20e334a5b9ccbeffe81e4c790d17491f",
   "graphVersion": 0,
   "labels": {
     "enabled": true,
@@ -677,14 +677,14 @@
           "uses": "actions/setup-node@v7",
           "with": {
             "cache": "npm",
-            "cache-dependency-path": "web/package-lock.json\ntools/frontend-perf/package-lock.json\n",
+            "cache-dependency-path": "web/package.json\ntools/frontend-perf/package.json\n",
             "node-version": "22"
           }
         },
         {
           "uses": "astral-sh/setup-uv@v7",
           "with": {
-            "cache-dependency-glob": "uv.lock",
+            "cache-dependency-glob": "pyproject.toml\ncommon/pyproject.toml\nci/pyproject.toml\nserver/pyproject.toml\n",
             "enable-cache": "true"
           }
         },
@@ -716,14 +716,14 @@
           "uses": "actions/setup-node@v7",
           "with": {
             "cache": "npm",
-            "cache-dependency-path": "web/package-lock.json\ntools/frontend-perf/package-lock.json\n",
+            "cache-dependency-path": "web/package.json\ntools/frontend-perf/package.json\n",
             "node-version": "22"
           }
         },
         {
           "uses": "astral-sh/setup-uv@v7",
           "with": {
-            "cache-dependency-glob": "uv.lock",
+            "cache-dependency-glob": "pyproject.toml\ncommon/pyproject.toml\nci/pyproject.toml\nserver/pyproject.toml\n",
             "enable-cache": "true"
           }
         },
@@ -752,14 +752,14 @@
           "uses": "actions/setup-node@v7",
           "with": {
             "cache": "npm",
-            "cache-dependency-path": "web/package-lock.json\ntools/frontend-perf/package-lock.json\n",
+            "cache-dependency-path": "web/package.json\ntools/frontend-perf/package.json\n",
             "node-version": "22"
           }
         },
         {
           "uses": "astral-sh/setup-uv@v7",
           "with": {
-            "cache-dependency-glob": "uv.lock",
+            "cache-dependency-glob": "pyproject.toml\ncommon/pyproject.toml\nci/pyproject.toml\nserver/pyproject.toml\n",
             "enable-cache": "true"
           }
         },
@@ -792,14 +792,14 @@
           "uses": "actions/setup-node@v7",
           "with": {
             "cache": "npm",
-            "cache-dependency-path": "web/package-lock.json\ntools/frontend-perf/package-lock.json\n",
+            "cache-dependency-path": "web/package.json\ntools/frontend-perf/package.json\n",
             "node-version": "22"
           }
         },
         {
           "uses": "astral-sh/setup-uv@v7",
           "with": {
-            "cache-dependency-glob": "uv.lock",
+            "cache-dependency-glob": "pyproject.toml\ncommon/pyproject.toml\nci/pyproject.toml\nserver/pyproject.toml\n",
             "enable-cache": "true"
           }
         },
@@ -832,14 +832,14 @@
           "uses": "actions/setup-node@v7",
           "with": {
             "cache": "npm",
-            "cache-dependency-path": "web/package-lock.json\ntools/frontend-perf/package-lock.json\n",
+            "cache-dependency-path": "web/package.json\ntools/frontend-perf/package.json\n",
             "node-version": "22"
           }
         },
         {
           "uses": "astral-sh/setup-uv@v7",
           "with": {
-            "cache-dependency-glob": "uv.lock",
+            "cache-dependency-glob": "pyproject.toml\ncommon/pyproject.toml\nci/pyproject.toml\nserver/pyproject.toml\n",
             "enable-cache": "true"
           }
         },
@@ -872,14 +872,14 @@
           "uses": "actions/setup-node@v7",
           "with": {
             "cache": "npm",
-            "cache-dependency-path": "web/package-lock.json\ntools/frontend-perf/package-lock.json\n",
+            "cache-dependency-path": "web/package.json\ntools/frontend-perf/package.json\n",
             "node-version": "22"
           }
         },
         {
           "uses": "astral-sh/setup-uv@v7",
           "with": {
-            "cache-dependency-glob": "uv.lock",
+            "cache-dependency-glob": "pyproject.toml\ncommon/pyproject.toml\nci/pyproject.toml\nserver/pyproject.toml\n",
             "enable-cache": "true"
           }
         },
