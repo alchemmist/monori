@@ -306,16 +306,26 @@ def serialize_transactions(
         ):
             record = SplitRecord.from_row(split)
             by_tx.setdefault(record.transaction_id, []).append(record)
-        for link in cur.execute(
-            "SELECT refund_tx_id, original_tx_id FROM refund_links"
-            " WHERE refund_tx_id IN (SELECT value FROM json_each(?))"
-            " OR original_tx_id IN (SELECT value FROM json_each(?))",
-            (json.dumps(chunk), json.dumps(chunk)),
-        ):
-            refund_id = int(link["refund_tx_id"])
-            original_id = int(link["original_tx_id"])
-            refund_of[refund_id] = original_id
-            refunds.setdefault(original_id, set()).add(refund_id)
+    for link in cur.execute(
+        "WITH requested(id) AS (SELECT value FROM json_each(?)),"
+        " matching AS ("
+        " SELECT r.refund_tx_id, r.original_tx_id FROM refund_links r"
+        " JOIN requested q ON q.id=r.refund_tx_id"
+        " UNION"
+        " SELECT r.refund_tx_id, r.original_tx_id FROM refund_links r"
+        " JOIN requested q ON q.id=r.original_tx_id)"
+        " SELECT m.refund_tx_id, m.original_tx_id FROM matching m"
+        " JOIN transactions refund ON refund.id=m.refund_tx_id"
+        " JOIN accounts refund_account ON refund_account.id=refund.account_id"
+        " JOIN transactions original ON original.id=m.original_tx_id"
+        " JOIN accounts original_account ON original_account.id=original.account_id"
+        " WHERE refund_account.user_id=original_account.user_id",
+        (json.dumps(ids),),
+    ):
+        refund_id = int(link["refund_tx_id"])
+        original_id = int(link["original_tx_id"])
+        refund_of[refund_id] = original_id
+        refunds.setdefault(original_id, set()).add(refund_id)
     return [
         serialize_tx(tx, by_tx.get(tx.id, ()), refund_of.get(tx.id), sorted(refunds.get(tx.id, ())))
         for tx in transactions
