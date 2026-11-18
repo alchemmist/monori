@@ -5,8 +5,20 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // makes every aggregation — buckets, totals, per-account filtering — assertable.
 vi.mock("@mantine/charts", () => {
     const serialize = (testid: string) =>
-        function Chart({ data }: { data: unknown }) {
-            return <div data-testid={testid} data-series={JSON.stringify(data)} />;
+        function Chart({
+            data,
+            valueFormatter,
+        }: {
+            data: unknown;
+            valueFormatter?: (value: number) => string;
+        }) {
+            return (
+                <div
+                    data-testid={testid}
+                    data-series={JSON.stringify(data)}
+                    data-formatted={valueFormatter?.(1234)}
+                />
+            );
         };
     return {
         AreaChart: serialize("area-chart"),
@@ -238,6 +250,19 @@ describe("DashboardPage", () => {
             { name: "Rent", value: 450 },
             { name: "Groceries", value: 100 },
         ]);
+    });
+
+    it("formats donut tooltip values in the reporting currency", () => {
+        seed({
+            baseCurrency: "USD",
+            accounts: [account(1, "Card", 0)],
+            transactions: [txn(1, { amount: -100_00, baseAmount: -100_00 })],
+        });
+        renderUI(<DashboardPage firstYear={prevYear} lastYear={year} />);
+        expect(screen.getAllByTestId("donut-chart")[0]).toHaveAttribute(
+            "data-formatted",
+            "1\u00a0234 $",
+        );
     });
 
     it("handles an empty dashboard and prompts to choose a category", () => {

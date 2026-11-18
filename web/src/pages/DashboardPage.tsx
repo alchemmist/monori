@@ -19,7 +19,7 @@ import { reported } from "../engine/reported.js";
 import { accountBalances, categoryTotals, categoryYearMatrix } from "../engine/analytics.js";
 import AccountBadge from "../components/AccountBadge.jsx";
 import { rub, money, MONTHS_SHORT } from "../format.js";
-import { PALETTE, SERIES, cartesian, chartMoney } from "./chartTheme.js";
+import { PALETTE, SERIES, cartesian } from "./chartTheme.js";
 import "./dashboard.css";
 import type { CategoryGroup, Id, Snapshot } from "../types.js";
 
@@ -632,6 +632,7 @@ function CategoryDonut({
     active: string | null;
     setActive: (value: string | null) => void;
 }) {
+    const baseCurrency = useBaseCurrency();
     if (!data.length) return <div className="chart-card__empty">No categorized entries yet</div>;
     return (
         <>
@@ -643,7 +644,7 @@ function CategoryDonut({
                     paddingAngle={0}
                     strokeWidth={0}
                     tooltipDataSource="segment"
-                    valueFormatter={chartMoney}
+                    valueFormatter={(value) => money(value * 100, baseCurrency)}
                     cellProps={(cell) => ({
                         opacity: active != null && active !== "" && cell.name !== active ? 0.3 : 1,
                         style: { transition: "opacity 120ms" },
