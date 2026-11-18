@@ -271,6 +271,41 @@ describe("ImportPanel", () => {
         expect(screen.getAllByText("looks like a refund of Shop")).toHaveLength(1);
     });
 
+    it("does not suggest a split purchase as an import refund", async () => {
+        seed({
+            accounts,
+            transactions: [
+                {
+                    id: 7,
+                    date: "2026-07-01",
+                    description: "Shop",
+                    amount: -100_00,
+                    splits: [{ id: 1, amount: -100_00, categoryId: 2, comment: "" }],
+                },
+            ],
+        });
+        vi.spyOn(api, "importPreview").mockResolvedValue({
+            rows: [
+                {
+                    date: "2026-07-03",
+                    card: "",
+                    description: "Shop refund",
+                    amount: 24_00,
+                    accountId: 1,
+                    categoryId: null,
+                    duplicate: false,
+                },
+            ],
+            errors: [],
+        });
+        const { container } = renderUI(<ImportPanel onClose={vi.fn()} />);
+
+        upload(container);
+        await screen.findByText("Shop refund");
+
+        expect(screen.queryByText(/looks like a refund of/i)).not.toBeInTheDocument();
+    });
+
     it("renders unparsed lines and their per-line detail", async () => {
         vi.spyOn(api, "importPreview").mockResolvedValue({
             rows: [

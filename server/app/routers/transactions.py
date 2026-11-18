@@ -265,6 +265,27 @@ def _validate_refund_amount(
     return link is not None
 
 
+def _validate_refund_date(
+    c: sqlite3.Connection,
+    transaction: TransactionRecord,
+    date: str,
+) -> None:
+    original = c.execute(
+        "SELECT t.date FROM refund_links r"
+        " JOIN transactions t ON t.id=r.original_tx_id WHERE r.refund_tx_id=?",
+        (transaction.id,),
+    ).fetchone()
+    if original is not None and date < original["date"]:
+        raise HTTPException(400, "a refund cannot predate its original purchase")
+    first_refund = c.execute(
+        "SELECT MIN(t.date) AS date FROM refund_links r"
+        " JOIN transactions t ON t.id=r.refund_tx_id WHERE r.original_tx_id=?",
+        (transaction.id,),
+    ).fetchone()["date"]
+    if first_refund is not None and date > first_refund:
+        raise HTTPException(400, "a purchase cannot postdate its refunds")
+
+
 def _edited_category(
     c: sqlite3.Connection,
     patch: TxPatch,
@@ -409,6 +430,7 @@ def patch_transaction(
             raise HTTPException(404, "transaction not found")
         transaction = TransactionRecord.from_row(row)
         date = patch.date if patch.date is not None else transaction.date
+        _validate_refund_date(c, transaction, date)
         amount = patch.amount if patch.amount is not None else transaction.amount
         is_refund = _validate_refund_amount(c, transaction, amount, uid)
         split_row = c.execute(
