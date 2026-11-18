@@ -1074,17 +1074,25 @@ describe("AnalyticsPage", () => {
     });
 });
 
+function elementFill(node: unknown): string | undefined {
+    if (typeof node !== "object" || node == null || !("props" in node)) return undefined;
+    const props: unknown = Reflect.get(node, "props");
+    if (typeof props !== "object" || props == null || !("fill" in props)) return undefined;
+    const fill: unknown = Reflect.get(props, "fill");
+    return typeof fill === "string" ? fill : undefined;
+}
+
 describe("perRowColor", () => {
     it("uses a string color from the row and drops a non-string one", () => {
         const colored = perRowColor("color")({
-            payload: { color: "#abc" },
-            fill: "#000",
+            payload: { color: "var(--row)" },
+            fill: "var(--bar)",
         } as never);
         const plain = perRowColor("color")({
             payload: { color: 1 },
-            fill: "#000",
+            fill: "var(--bar)",
         } as never);
-        expect(colored.props.fill).toBe("#abc");
-        expect(plain.props.fill).toBeUndefined();
+        expect(elementFill(colored)).toBe("var(--row)");
+        expect(elementFill(plain)).toBeUndefined();
     });
 });
