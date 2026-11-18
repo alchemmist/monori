@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 """
 Links between refunds and their original purchases.
 """
