@@ -138,6 +138,8 @@ class TestMainWorkflowGraph:
         assert frontend is not None
         assert backend is not None
         assert "sha256sum web/package-lock.json" in frontend.group("body")
+        assert "path: web/reports/stryker-incremental.json" in frontend.group("body")
+        assert "restore-keys:" in frontend.group("body")
         assert "steps.web-deps.outputs.hash" in frontend.group("body")
         assert "hashFiles('web/stryker.conf.ts')" in frontend.group("body")
         assert "${{ github.sha }}" in frontend.group("body")
@@ -152,6 +154,8 @@ class TestMainWorkflowGraph:
         assert "run: make m-front" in frontend.group("body")
         assert "path: mutants" in backend.group("body")
         assert "sha256sum uv.lock" in backend.group("body")
+        assert "restore-keys:" in backend.group("body")
+        assert "-main-" in backend.group("body")
         assert "steps.py-deps.outputs.hash" in backend.group("body")
         assert "hashFiles('pyproject.toml')" not in backend.group("body")
         assert "${{ github.sha }}" in backend.group("body")

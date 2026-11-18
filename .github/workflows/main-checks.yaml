@@ -254,9 +254,9 @@ jobs:
               uses: actions/cache/restore@v6
               with:
                   path: web/reports/stryker-incremental.json
-                  key: mutation-stryker-${{ runner.os }}-${{ steps.web-deps.outputs.hash }}-${{ hashFiles('web/stryker.conf.ts') }}-${{ github.sha }}
+                  key: mutation-stryker-${{ runner.os }}-${{ steps.web-deps.outputs.hash }}-main-${{ hashFiles('web/stryker.conf.ts') }}-${{ github.sha }}
                   restore-keys: |
-                      mutation-stryker-${{ runner.os }}-${{ steps.web-deps.outputs.hash }}-${{ hashFiles('web/stryker.conf.ts') }}-
+                      mutation-stryker-${{ runner.os }}-${{ steps.web-deps.outputs.hash }}-main-${{ hashFiles('web/stryker.conf.ts') }}-
             - name: Run full frontend mutation tests
               run: make m-front
             - name: Save Stryker incremental state
@@ -264,7 +264,7 @@ jobs:
               uses: actions/cache/save@v6
               with:
                   path: web/reports/stryker-incremental.json
-                  key: mutation-stryker-${{ runner.os }}-${{ steps.web-deps.outputs.hash }}-${{ hashFiles('web/stryker.conf.ts') }}-${{ github.sha }}
+                  key: mutation-stryker-${{ runner.os }}-${{ steps.web-deps.outputs.hash }}-main-${{ hashFiles('web/stryker.conf.ts') }}-${{ github.sha }}
 
     mutation-full-backend:
         name: Full backend mutation sweep
