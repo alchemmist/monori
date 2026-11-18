@@ -41,7 +41,7 @@ const MERCHANT_TICK_GAP = 6;
 // per-bar color from a data-row field, so each bar's color is keyed by its own
 // row (month/day) rather than its numeric value — Mantine's getBarColor only
 // sees the value, which collides when two rows share the same amount.
-const perRowColor = (field: string) => (props: BarShapeProps) => {
+export const perRowColor = (field: string) => (props: BarShapeProps) => {
     const payload: unknown = props.payload;
     const fill: unknown =
         typeof payload === "object" && payload != null && field in payload

@@ -26,6 +26,12 @@ class TestNoComments:
             )
             assert violations(path) == []
 
+    def test_allows_a_copyright_header(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "sample.py"
+            path.write_text("# Copyright (c) 2026\nvalue = 1\n", encoding="utf-8")
+            assert violations(path) == []
+
     def test_hash_in_string_is_not_a_comment(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "sample.py"

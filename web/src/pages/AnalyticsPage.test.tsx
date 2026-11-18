@@ -33,7 +33,7 @@ vi.mock("@mantine/charts", () => {
     return { BarChart: serialize("bar-chart"), LineChart: serialize("line-chart") };
 });
 
-import AnalyticsPage from "./AnalyticsPage.jsx";
+import AnalyticsPage, { perRowColor } from "./AnalyticsPage.jsx";
 import { renderUI, resetStore, screen, seed, within } from "../test/render.jsx";
 import { computeRange } from "../engine/budget.js";
 import { PALETTE, SERIES } from "./chartTheme.js";
@@ -1071,5 +1071,20 @@ describe("AnalyticsPage", () => {
             expect(rateCell(String(PREV))).toBe("—");
             expect(rateCell(String(YEAR))).toBe("67%");
         });
+    });
+});
+
+describe("perRowColor", () => {
+    it("uses a string color from the row and drops a non-string one", () => {
+        const colored = perRowColor("color")({
+            payload: { color: "#abc" },
+            fill: "#000",
+        } as never);
+        const plain = perRowColor("color")({
+            payload: { color: 1 },
+            fill: "#000",
+        } as never);
+        expect(colored.props.fill).toBe("#abc");
+        expect(plain.props.fill).toBeUndefined();
     });
 });
