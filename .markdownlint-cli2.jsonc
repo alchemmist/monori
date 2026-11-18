@@ -15,6 +15,7 @@
         "web/playwright-report",
         "server/static",
         "migration",
+        "ci/tests/fixtures",
         "**/CHANGELOG.md",
         ".claude/worktrees",
         ".worktrees",
