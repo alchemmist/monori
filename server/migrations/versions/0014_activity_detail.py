@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 """
 A free-form detail on activity events, for the admin SQL console (issue #168).
 

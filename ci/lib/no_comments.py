@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 """
 Command-line check that rejects inline comments outside allowed markers.
 

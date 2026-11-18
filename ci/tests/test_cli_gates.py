@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 """Exercise standalone CI gates through their real process interfaces."""
 
 from __future__ import annotations

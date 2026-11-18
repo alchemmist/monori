@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 """Make category names unique within a group."""
 
 from alembic import op

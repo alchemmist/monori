@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 import datetime as dt
 import re
 from dataclasses import dataclass

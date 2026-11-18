@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 """
 Bank statement parsing and auto-categorization.
 

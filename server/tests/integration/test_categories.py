@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 import sqlite3
 
 import pytest

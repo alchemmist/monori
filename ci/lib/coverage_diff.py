@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 """Build the pull-request coverage gate report."""
 
 from __future__ import annotations

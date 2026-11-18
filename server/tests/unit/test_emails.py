@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 import pytest
 
 from monori.server.app.emails import canonical_email, normalize_email

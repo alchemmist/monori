@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 """
 Characterization tests aimed at the parser's least-exercised helpers. The.
 

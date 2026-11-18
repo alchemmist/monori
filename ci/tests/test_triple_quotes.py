@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 from __future__ import annotations
 
 from monori.ci.lib.triple_quotes import (

@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 from typing import ClassVar, override
 
 import pytest

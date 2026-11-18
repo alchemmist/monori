@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 """
 Unit tests for the T-Bank Playwright connector's flow logic.
 

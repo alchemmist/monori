@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 """
 Writes a parsed workbook (see ``importer.parse_workbook``) into the.
 

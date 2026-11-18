@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 """
 Reads a budget workbook — ours or the live "Budget YNAB-Like" Google-Sheets.
 

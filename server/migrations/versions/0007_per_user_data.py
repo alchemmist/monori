@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 """
 Multi-tenancy: accounts and category groups gain an owning user_id, and name.
 

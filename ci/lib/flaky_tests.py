@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 """
 Discover and repeatedly execute newly added product tests.
 """

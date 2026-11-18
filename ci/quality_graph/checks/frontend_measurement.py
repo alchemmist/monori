@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 """Compare frontend performance measurements and render the CI report."""
 
 import argparse

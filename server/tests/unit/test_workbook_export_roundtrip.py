@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 import datetime as dt
 from dataclasses import dataclass
 from io import BytesIO

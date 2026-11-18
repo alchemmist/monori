@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 from collections.abc import Sequence
 
 import pytest

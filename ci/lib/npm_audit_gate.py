@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 """
 Fail on high/critical npm advisory with limited exceptions.
 
