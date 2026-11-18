@@ -289,9 +289,9 @@ jobs:
               uses: actions/cache/restore@v6
               with:
                   path: mutants
-                  key: mutation-mutmut-${{ runner.os }}-${{ steps.py-deps.outputs.hash }}-${{ github.sha }}
+                  key: mutation-mutmut-${{ runner.os }}-${{ steps.py-deps.outputs.hash }}-main-${{ github.sha }}
                   restore-keys: |
-                      mutation-mutmut-${{ runner.os }}-${{ steps.py-deps.outputs.hash }}-
+                      mutation-mutmut-${{ runner.os }}-${{ steps.py-deps.outputs.hash }}-main-
             - name: Run full backend mutation tests
               run: make m-back
             - name: Save mutmut state
@@ -299,7 +299,7 @@ jobs:
               uses: actions/cache/save@v6
               with:
                   path: mutants
-                  key: mutation-mutmut-${{ runner.os }}-${{ steps.py-deps.outputs.hash }}-${{ github.sha }}
+                  key: mutation-mutmut-${{ runner.os }}-${{ steps.py-deps.outputs.hash }}-main-${{ github.sha }}
 
     mutation-full-report:
         name: Report nightly mutation failure
