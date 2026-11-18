@@ -7,7 +7,7 @@ WORKDIR /build/web
 RUN npm install --global npm@11.6.2
 COPY web/package.json ./
 # Resolve from the manifest inside the image. The lockfile is not in git.
-RUN npm install --no-audit --no-fund
+RUN npm install --no-audit --no-fund --ignore-scripts
 COPY web/ ./
 # the docs pages bundle the markdown from ../docs at build time (import.meta.glob)
 COPY docs/ /build/docs/
