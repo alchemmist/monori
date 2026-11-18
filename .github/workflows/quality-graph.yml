@@ -26,11 +26,9 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: 'web/package.json
-
+          cache-dependency-path: |
+            web/package.json
             tools/frontend-perf/package.json
-
-            '
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: 'true'
@@ -88,11 +86,9 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: 'web/package.json
-
+          cache-dependency-path: |
+            web/package.json
             tools/frontend-perf/package.json
-
-            '
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: 'true'
@@ -152,11 +148,9 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: 'web/package.json
-
+          cache-dependency-path: |
+            web/package.json
             tools/frontend-perf/package.json
-
-            '
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: 'true'
@@ -220,11 +214,9 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: 'web/package.json
-
+          cache-dependency-path: |
+            web/package.json
             tools/frontend-perf/package.json
-
-            '
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: 'true'
@@ -288,11 +280,9 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: 'web/package.json
-
+          cache-dependency-path: |
+            web/package.json
             tools/frontend-perf/package.json
-
-            '
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: 'true'
@@ -360,11 +350,9 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: 'web/package.json
-
+          cache-dependency-path: |
+            web/package.json
             tools/frontend-perf/package.json
-
-            '
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: 'true'
@@ -426,11 +414,9 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: 'web/package.json
-
+          cache-dependency-path: |
+            web/package.json
             tools/frontend-perf/package.json
-
-            '
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: 'true'
@@ -492,11 +478,9 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: 'web/package.json
-
+          cache-dependency-path: |
+            web/package.json
             tools/frontend-perf/package.json
-
-            '
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: 'true'
@@ -560,11 +544,9 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: 'web/package.json
-
+          cache-dependency-path: |
+            web/package.json
             tools/frontend-perf/package.json
-
-            '
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: 'true'
@@ -624,11 +606,9 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: 'web/package.json
-
+          cache-dependency-path: |
+            web/package.json
             tools/frontend-perf/package.json
-
-            '
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: 'true'
@@ -689,11 +669,9 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: 'web/package.json
-
+          cache-dependency-path: |
+            web/package.json
             tools/frontend-perf/package.json
-
-            '
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: 'true'
@@ -754,11 +732,9 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: 'web/package.json
-
+          cache-dependency-path: |
+            web/package.json
             tools/frontend-perf/package.json
-
-            '
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: 'true'
@@ -823,11 +799,9 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: 'web/package.json
-
+          cache-dependency-path: |
+            web/package.json
             tools/frontend-perf/package.json
-
-            '
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: 'true'
@@ -887,11 +861,9 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: 'web/package.json
-
+          cache-dependency-path: |
+            web/package.json
             tools/frontend-perf/package.json
-
-            '
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: 'true'
@@ -951,11 +923,9 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: 'web/package.json
-
+          cache-dependency-path: |
+            web/package.json
             tools/frontend-perf/package.json
-
-            '
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: 'true'
@@ -1018,11 +988,9 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: 'web/package.json
-
+          cache-dependency-path: |
+            web/package.json
             tools/frontend-perf/package.json
-
-            '
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: 'true'
@@ -1087,11 +1055,9 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: 'web/package.json
-
+          cache-dependency-path: |
+            web/package.json
             tools/frontend-perf/package.json
-
-            '
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: 'true'
@@ -1151,11 +1117,9 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: 'web/package.json
-
+          cache-dependency-path: |
+            web/package.json
             tools/frontend-perf/package.json
-
-            '
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: 'true'
@@ -1219,11 +1183,9 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: 'web/package.json
-
+          cache-dependency-path: |
+            web/package.json
             tools/frontend-perf/package.json
-
-            '
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: 'true'
@@ -1288,11 +1250,9 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: 'web/package.json
-
+          cache-dependency-path: |
+            web/package.json
             tools/frontend-perf/package.json
-
-            '
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: 'true'
@@ -1360,11 +1320,9 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: 'web/package.json
-
+          cache-dependency-path: |
+            web/package.json
             tools/frontend-perf/package.json
-
-            '
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: 'true'
@@ -1431,11 +1389,9 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: 'web/package.json
-
+          cache-dependency-path: |
+            web/package.json
             tools/frontend-perf/package.json
-
-            '
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: 'true'
