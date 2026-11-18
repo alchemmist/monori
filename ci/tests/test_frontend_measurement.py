@@ -301,7 +301,6 @@ class TestReport:
         with pytest.raises(RuntimeError, match="differ from main"):
             compare_measurements({}, {("extra", "navigation"): extra}, {})
 
-
     def test_rendered_report_matches_the_contract(self) -> None:
         fixture = Path("ci/tests/fixtures/frontend_measurement")
         assert (
@@ -338,8 +337,6 @@ class TestReport:
         body = render_report(entries, "info", comment=False)
         assert body.count("- Budget") == 5
         assert "+0 ms (+0.0%)" not in body
-
-
 
     def test_report_includes_standards_and_formats_scores(self) -> None:
         config: dict[str, JsonValue] = {
@@ -416,6 +413,7 @@ class TestReport:
         ttfb_text = "\n".join(render_standards(config(ttfb_score)))
         assert "0.300" in ttfb_text
         assert "1.800" in ttfb_text
+
 
 class TestCommand:
     def test_error_command_writes_an_error_report(self) -> None:
