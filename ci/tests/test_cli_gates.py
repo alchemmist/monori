@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import json
+import os
 import sys
 from contextlib import contextmanager
 from pathlib import Path
@@ -145,12 +146,10 @@ def test_picomatch_exception_does_not_hide_other_advisories(
 
 
 def test_picomatch_exception_requires_tooling_only_installations() -> None:
-    lock_path = next(
-        parent / "web/package-lock.json"
-        for parent in Path(__file__).resolve().parents
-        if (parent / "web/package-lock.json").is_file()
+    repository = Path(
+        os.environ.get("MONORI_REPOSITORY_ROOT", Path(__file__).resolve().parents[2])
     )
-    lock = json.loads(lock_path.read_text())
+    lock = json.loads((repository / "web/package-lock.json").read_text())
     installations = [
         package
         for name, package in lock["packages"].items()

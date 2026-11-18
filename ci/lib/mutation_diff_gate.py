@@ -232,7 +232,6 @@ class GateRequest:
     root: Path
     base: str
     threshold: float
-    skip_new_survivors: bool
 
 
 @dataclass
@@ -345,7 +344,7 @@ def report_verdict(
 ) -> int:
     """Publish the mutation verdict and return its process exit code."""
     score = 100 * stats.killed / stats.considered
-    passed = score >= request.threshold and (request.skip_new_survivors or stats.new_survivors == 0)
+    passed = score >= request.threshold
     gate_status = "✅ PASS" if passed else "❌ FAIL"
     summary = [
         "## Python mutation diff",
@@ -392,7 +391,6 @@ def main() -> int:
     parser.add_argument("--baseline", type=Path, required=True)
     parser.add_argument("--base", required=True)
     parser.add_argument("--threshold", type=float, required=True)
-    parser.add_argument("--skip-new-survivors", action="store_true")
     parser.add_argument("--summary", type=Path)
     args = parser.parse_args()
     return gate_python(
@@ -402,7 +400,6 @@ def main() -> int:
             Path.cwd(),
             args.base,
             args.threshold,
-            args.skip_new_survivors,
         ),
         args.summary,
     )

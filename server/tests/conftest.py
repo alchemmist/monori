@@ -1,7 +1,7 @@
 import pathlib
 import sys
 import tempfile
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 
 import pytest
 from fastapi.testclient import TestClient
@@ -122,12 +122,8 @@ class Api:
         self,
         name: str,
         options: AccountOptions | None = None,
-        *,
-        currency: str | None = None,
     ) -> int:
         options = options or AccountOptions()
-        if currency is not None:
-            options = replace(options, currency=currency)
         body = {
             "name": name,
             "type": options.account_type,
