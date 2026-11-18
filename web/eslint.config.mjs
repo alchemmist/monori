@@ -57,11 +57,4 @@ export default tseslint.config(
             "@typescript-eslint/require-await": "off",
         },
     },
-    {
-        files: ["src/test/setup.ts"],
-        rules: {
-            "@typescript-eslint/no-deprecated": "off",
-            "@typescript-eslint/no-empty-function": "off",
-        },
-    },
 );

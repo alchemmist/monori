@@ -268,8 +268,7 @@ audit-deps: audit-python-env
 
 audit-deps-py: audit-python-env
 	@req=$$(mktemp); \
-	( uv export --group runtime --no-dev --no-hashes --no-emit-workspace \
-		--format requirements-txt -o "$$req" \
+	( uv export --group runtime --no-dev --no-hashes --format requirements-txt -o "$$req" \
 		&& uv run --locked --group audit pip-audit -r "$$req" ); code=$$?; \
 	rm -f "$$req"; exit $$code
 
