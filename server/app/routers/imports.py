@@ -374,20 +374,8 @@ def import_preview(
         )
         _detect_row_accounts(c, uid, rows, fallback_account_id)
 
-        kinds = {
-            r["id"]: r["kind"]
-            for r in c.execute(
-                "SELECT c.id, t.type AS kind FROM categories c"
-                " JOIN category_groups g ON g.id = c.group_id"
-                " JOIN category_group_types t ON t.id=g.type_id WHERE g.user_id=?",
-                (uid,),
-            )
-        }
         for row in rows:
-            category_id = categorize(row.description, row.amount, rules)
-            if category_id is not None and row.amount < 0 and kinds.get(category_id) != "expense":
-                category_id = None
-            row.category_id = category_id
+            row.category_id = categorize(row.description, row.amount, rules)
         _mark_duplicates(c, rows)
         return ImportPreviewResponse(
             rows=[_serialize_import_row(row) for row in rows],

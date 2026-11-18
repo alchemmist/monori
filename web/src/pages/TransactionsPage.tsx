@@ -430,9 +430,9 @@ export default function TransactionsPage() {
                             refund
                         </Tag>
                     )}
-                    {!leg && "refundIds" in t && (t.refundIds ?? []).length > 0 && (
+                    {!leg && Array.isArray(t.refundIds) && t.refundIds.length > 0 && (
                         <Tag theme="info" style={{ marginLeft: 8 }}>
-                            refunded · {(t.refundIds ?? []).length}
+                            refunded · {t.refundIds.length}
                         </Tag>
                     )}
                     {splits.length > 0 && !leg && (

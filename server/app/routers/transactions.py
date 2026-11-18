@@ -2,7 +2,7 @@
 
 import re
 import sqlite3
-from typing import Annotated
+from typing import Annotated, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import ConfigDict, Field
@@ -212,16 +212,14 @@ def _owned_transaction(c: sqlite3.Connection, tx_id: int, uid: int) -> Transacti
 
 
 def _refund_total(c: sqlite3.Connection, original_id: int, excluding: int | None = None) -> int:
-    total = c.execute(
-        "SELECT COALESCE(SUM(t.amount), 0) FROM refund_links r"
-        " JOIN transactions t ON t.id=r.refund_tx_id"
-        " WHERE r.original_tx_id=? AND (? IS NULL OR r.refund_tx_id<>?)",
-        (original_id, excluding, excluding),
-    ).fetchone()[0]
-    if not isinstance(total, int):
-        msg = "refund total must be an integer"
-        raise TypeError(msg)
-    return total
+    return int(
+        c.execute(
+            "SELECT COALESCE(SUM(t.amount), 0) FROM refund_links r"
+            " JOIN transactions t ON t.id=r.refund_tx_id"
+            " WHERE r.original_tx_id=? AND (? IS NULL OR r.refund_tx_id<>?)",
+            (original_id, excluding, excluding),
+        ).fetchone()[0]
+    )
 
 
 def _merchant_key(value: str) -> str:
@@ -247,9 +245,10 @@ def _validate_refund_amount(
     if link is not None:
         if amount <= 0:
             raise HTTPException(400, "a linked refund must remain positive")
-        original = _owned_transaction(c, int(link["original_tx_id"]), uid)
-        if original is None:
-            raise HTTPException(404, "original transaction not found")
+        original = cast(
+            "TransactionRecord",
+            _owned_transaction(c, int(link["original_tx_id"]), uid),
+        )
         if _refund_total(c, original.id, transaction.id) + amount > -original.amount:
             raise HTTPException(400, "refunds cannot exceed the original purchase")
     linked_total = _refund_total(c, transaction.id)
@@ -543,11 +542,6 @@ def link_refund(
             (refund_tx_id, body.original_id),
         ).fetchone():
             raise HTTPException(400, "split transactions cannot be refunds")
-        if c.execute(
-            "SELECT 1 FROM refund_links WHERE refund_tx_id=? OR original_tx_id=? LIMIT 1",
-            (body.original_id, refund_tx_id),
-        ).fetchone():
-            raise HTTPException(400, "refund links cannot be chained")
         if original.category_id is not None:
             _resolve_category(c, original.category_id, uid, original.amount)
         if _refund_total(c, body.original_id, refund_tx_id) + refund.amount > -original.amount:

@@ -139,6 +139,10 @@ def test_transaction_partial_patch_preserves_other_fields(api: Api, client: Test
     assert row.category_id is None
     assert client.patch(f"/api/transactions/{tx}", json={"categoryId": 999}).status_code == 400
     assert client.patch("/api/transactions/999", json={"amount": 1}).status_code == 404
+    other_account = api.account("Other")
+    response = client.patch(f"/api/transactions/{tx}", json={"accountId": other_account})
+    assert response.status_code == 200
+    assert api.tx_by(tx).account_id == other_account
 
 
 def test_transaction_category_must_match_amount_direction(api: Api, client: TestClient) -> None:
@@ -357,6 +361,18 @@ def test_refund_suggestions_validation_and_unlink(api: Api, client: TestClient) 
     )
 
     split_refund = api.tx("2026-01-06", 10_00)
+    assert (
+        client.put(
+            f"/api/transactions/{split_refund}/splits",
+            json={
+                "parts": [
+                    {"categoryId": salary, "amount": 0},
+                    {"categoryId": salary, "amount": 10_00},
+                ]
+            },
+        ).status_code
+        == 400
+    )
     assert (
         client.put(
             f"/api/transactions/{split_refund}/splits",

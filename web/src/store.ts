@@ -794,7 +794,7 @@ export const useStore = create<StoreState>((set, get) => ({
         )
             return;
         const result = isDemo()
-            ? { refundOfId: originalId, categoryId: original?.categoryId ?? null }
+            ? { refundOfId: originalId, categoryId: original!.categoryId }
             : await api.linkRefund(txId, originalId);
         set((state) => {
             const current = requireSnapshot(state.snapshot);
@@ -862,20 +862,19 @@ export const useStore = create<StoreState>((set, get) => ({
                 ...snapshot,
                 transactions: snapshot.transactions
                     .filter((t) => t.id !== txId)
-                    .map((transaction) => ({
-                        ...transaction,
-                        ...(transaction.refundOfId === undefined
-                            ? {}
-                            : {
-                                  refundOfId:
-                                      transaction.refundOfId === txId
-                                          ? null
-                                          : transaction.refundOfId,
-                              }),
-                        refundIds: (transaction.refundIds ?? []).filter(
-                            (refundId) => refundId !== txId,
-                        ),
-                    })),
+                    .map((transaction) => {
+                        let updated = transaction;
+                        if (transaction.refundOfId === txId)
+                            updated = { ...updated, refundOfId: null };
+                        if ((transaction.refundIds ?? []).includes(txId))
+                            updated = {
+                                ...updated,
+                                refundIds: transaction.refundIds!.filter(
+                                    (refundId) => refundId !== txId,
+                                ),
+                            };
+                        return updated;
+                    }),
                 transactionsTotal: Math.max(0, (snapshot.transactionsTotal ?? 1) - 1),
             },
         });
@@ -901,7 +900,7 @@ export const useStore = create<StoreState>((set, get) => ({
                         }),
                         [gone],
                     ),
-                    transactionsTotal: (cur.transactionsTotal ?? 0) + 1,
+                    transactionsTotal: cur.transactionsTotal! + 1,
                 },
                 toast: {
                     title: "Failed to delete transaction",
