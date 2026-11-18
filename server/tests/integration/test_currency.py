@@ -522,3 +522,52 @@ def test_cross_currency_transfer_rejects_a_received_amount_rounded_to_zero(
     assert response.status_code == 422
     assert "state the amount that arrived" in response.json()["detail"]
     assert api.snapshot().transactions == []
+
+
+def test_reporting_currency_uses_the_value_committed_before_its_write_lock(
+    admin: TestClient, api: Api, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(auth_router, "today_iso", lambda: RATE_DAY)
+    _set_rate(admin, "USD", 90.0)
+    _set_rate(admin, "GEL", 30.0)
+    uid = admin.get("/api/auth/me").json()["id"]
+    goal = admin.post(
+        "/api/categories",
+        json={
+            "name": "House",
+            "groupId": api.group("Concurrent plans", kind="goal"),
+            "goalTarget": 9000,
+            "goalTargetDate": "2027-01-01",
+        },
+    )
+    assert goal.status_code == 200, goal.text
+    category_id = goal.json()["id"]
+    response = admin.put(
+        "/api/budgets",
+        json={"categoryId": category_id, "year": 2026, "month": 7, "amount": 9000},
+    )
+    assert response.status_code == 200, response.text
+    reserve = auth_router.begin_write
+    interleaved: list[bool] = []
+
+    def prior_request_commits_then_lock(connection: sqlite3.Connection) -> None:
+        other = auth_router.conn()
+        try:
+            other.execute("UPDATE users SET base_currency='USD' WHERE id=?", (uid,))
+            other.execute("UPDATE budgets SET amount=100 WHERE category_id=?", (category_id,))
+            other.execute("UPDATE categories SET goal_target=100 WHERE id=?", (category_id,))
+            other.commit()
+        finally:
+            other.close()
+        interleaved.append(True)
+        reserve(connection)
+
+    monkeypatch.setattr(auth_router, "begin_write", prior_request_commits_then_lock)
+    changed = admin.patch("/api/auth/me", json={"baseCurrency": "GEL"})
+    assert changed.status_code == 200, changed.text
+    assert interleaved == [True]
+    snapshot = api.snapshot()
+    assert snapshot.base_currency == "GEL"
+    assert snapshot.budgets[0].amount == 300
+    category = next(row for row in snapshot.categories if row.id == category_id)
+    assert category.goal_target == 300
