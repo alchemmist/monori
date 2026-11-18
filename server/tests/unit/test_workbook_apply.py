@@ -1,10 +1,14 @@
+# Copyright (c) 2026
+import datetime as dt
 import pathlib
 import sqlite3
 import sys
 from dataclasses import replace
 from pathlib import Path
+from unittest.mock import patch
 
 import monori.server.app.db as dbmod
+from monori.server.app.workbook.apply import _now
 from monori.server.app.workbook.apply import apply_workbook as _apply_workbook
 from monori.server.app.workbook.apply import budget_conflicts as _budget_conflicts
 from monori.server.app.workbook.models import (
@@ -133,9 +137,11 @@ def test_apply_preserves_blank_categories_despite_keywords(tmp_path: Path) -> No
     c.commit()
 
     assert result.warnings == [
-        "1 rows carry no category in the sheet and were imported uncategorized"
-        " — typically transfers between your own accounts, which the spreadsheet"
-        " leaves out of the budget as well",
+        (
+            "1 rows carry no category in the sheet and were imported uncategorized"
+            " — typically transfers between your own accounts, which the spreadsheet"
+            " leaves out of the budget as well"
+        ),
     ]
     rows = list(
         c.execute(
@@ -423,9 +429,11 @@ def test_unmatched_category_names_are_listed_ten_at_a_time(tmp_path: Path) -> No
     result = apply_workbook(c, uid, parsed, {"RUB:": acct})
     c.commit()
     assert result.warnings == [
-        "11 category names in the sheet match nothing in monori"
-        " — those rows were left uncategorized rather than guessed:"
-        f" {', '.join(names[:10])}",
+        (
+            "11 category names in the sheet match nothing in monori"
+            " — those rows were left uncategorized rather than guessed:"
+            f" {', '.join(names[:10])}"
+        ),
     ]
 
 
@@ -528,3 +536,11 @@ def test_apply_keeps_a_manual_twin_out_of_the_dedup(tmp_path: Path) -> None:
     c.commit()
     assert result.inserted == 2
     assert result.skipped == 0
+
+
+def test_now_formats_utc_seconds() -> None:
+    with patch("monori.server.app.workbook.apply.dt.datetime") as clock:
+        clock.now.return_value.strftime.return_value = "2026-01-05T10:11:12"
+        assert _now() == "2026-01-05T10:11:12"
+    clock.now.assert_called_once_with(dt.UTC)
+    clock.now.return_value.strftime.assert_called_once_with("%Y-%m-%dT%H:%M:%S")

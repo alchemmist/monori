@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 """
 A hidden flag on transactions (issue #193).
 

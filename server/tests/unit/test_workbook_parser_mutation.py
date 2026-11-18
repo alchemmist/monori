@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 """
 Characterization tests aimed at the parser's least-exercised helpers. The.
 
@@ -6,7 +7,7 @@ functions those imports lean on, so a single flipped offset, dropped default or
 renamed key is caught here instead of slipping through as a survived mutant.
 """
 
-import datetime
+import datetime as dt
 from collections.abc import Sequence
 from dataclasses import dataclass
 from io import BytesIO
@@ -42,8 +43,8 @@ TX_HEADER: list[str | None] = [
 ]
 
 
-def _workbook_datetime(year: int, month: int, day: int) -> datetime.datetime:
-    return datetime.datetime(year, month, day, tzinfo=datetime.UTC).replace(tzinfo=None)
+def _workbook_datetime(year: int, month: int, day: int) -> dt.datetime:
+    return dt.datetime(year, month, day, tzinfo=dt.UTC).replace(tzinfo=None)
 
 
 def _active(wb: Workbook) -> Worksheet:
@@ -276,7 +277,7 @@ def test_parse_year_sheet_reads_russian_available_label() -> None:
 
 @dataclass(frozen=True)
 class PlainTransactionFixture:
-    date: datetime.datetime
+    date: dt.datetime
     amount: float
     category: str
     status: str = "OK"

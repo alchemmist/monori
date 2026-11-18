@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 from datetime import UTC, datetime, tzinfo
 
 import pytest

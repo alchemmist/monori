@@ -33,7 +33,7 @@ vi.mock("@mantine/charts", () => {
     return { BarChart: serialize("bar-chart"), LineChart: serialize("line-chart") };
 });
 
-import AnalyticsPage from "./AnalyticsPage.jsx";
+import AnalyticsPage, { perRowColor } from "./AnalyticsPage.jsx";
 import { renderUI, resetStore, screen, seed, within } from "../test/render.jsx";
 import { computeRange } from "../engine/budget.js";
 import { PALETTE, SERIES } from "./chartTheme.js";
@@ -1071,5 +1071,36 @@ describe("AnalyticsPage", () => {
             expect(rateCell(String(PREV))).toBe("—");
             expect(rateCell(String(YEAR))).toBe("67%");
         });
+    });
+});
+
+function fillState(node: unknown): { present: boolean; value: unknown } {
+    if (typeof node !== "object" || node == null || !("props" in node)) {
+        return { present: false, value: undefined };
+    }
+    const props: unknown = Reflect.get(node, "props");
+    if (typeof props !== "object" || props == null || !("fill" in props)) {
+        return { present: false, value: undefined };
+    }
+    return { present: true, value: Reflect.get(props, "fill") };
+}
+
+describe("perRowColor", () => {
+    it("prefers a string row color and otherwise keeps a string bar fill", () => {
+        const colored = perRowColor("color")({
+            payload: { color: "var(--row)" },
+            fill: "var(--bar)",
+        } as never);
+        const fallback = perRowColor("color")({
+            payload: { color: 1 },
+            fill: "var(--bar)",
+        } as never);
+        const omitted = perRowColor("color")({
+            payload: { color: 1 },
+            fill: 1,
+        } as never);
+        expect(fillState(colored)).toEqual({ present: true, value: "var(--row)" });
+        expect(fillState(fallback)).toEqual({ present: true, value: "var(--bar)" });
+        expect(fillState(omitted)).toEqual({ present: false, value: undefined });
     });
 });

@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 """
 Canonical email so one mailbox cannot own several accounts.
 

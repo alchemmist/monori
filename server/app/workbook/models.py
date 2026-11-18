@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 """Typed domain models shared by workbook parsing, preview and persistence."""
 
 from typing import Literal

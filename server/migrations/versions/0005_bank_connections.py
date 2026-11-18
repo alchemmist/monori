@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 """
 Automated import: bank connections, import batches, and a batch_id on.
 

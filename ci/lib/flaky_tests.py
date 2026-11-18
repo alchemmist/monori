@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 """
 Discover and repeatedly execute newly added product tests.
 """
@@ -7,8 +8,10 @@ from __future__ import annotations
 import argparse
 import ast
 import json
+import os
 import re
 import sys
+import tempfile
 import time
 from dataclasses import dataclass
 from enum import StrEnum
@@ -630,19 +633,29 @@ def discover_repository(base: str, executor: ProcessExecutor) -> tuple[Collected
         collected.extend(parse_pytest_collection(result.output, sources))
     vitest_paths = sorted(path for path in changed if path.startswith("web/src/"))
     if vitest_paths:
-        result = executor.run(
-            (
-                "./node_modules/.bin/vitest",
-                "list",
-                *(path.removeprefix("web/") for path in vitest_paths),
-                "--json",
-                "--includeTaskLocation",
-            ),
-            "web",
-            120,
+        descriptor, collection_path = tempfile.mkstemp(
+            prefix="vitest-collection-",
+            suffix=".json",
         )
-        _require_collection("Vitest", result)
-        collected.extend(parse_vitest_collection(result.output))
+        os.close(descriptor)
+        try:
+            result = executor.run(
+                (
+                    "./node_modules/.bin/vitest",
+                    "list",
+                    *(path.removeprefix("web/") for path in vitest_paths),
+                    "--json",
+                    collection_path,
+                    "--includeTaskLocation",
+                ),
+                "web",
+                120,
+            )
+            _require_collection("Vitest", result)
+            payload = Path(collection_path).read_text()
+        finally:
+            Path(collection_path).unlink()
+        collected.extend(parse_vitest_collection(payload))
     playwright_paths = sorted(path for path in changed if path.startswith("web/e2e/"))
     if playwright_paths:
         result = executor.run(

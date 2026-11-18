@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 """
 In-app authentication: register, obtain a token, and read the current user.
 

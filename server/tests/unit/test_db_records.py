@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 """Tests for checked SQLite row adapters."""
 
 import pathlib
@@ -55,7 +56,7 @@ def test_row_adapters_read_valid_values() -> None:
     ],
 )
 def test_row_adapters_reject_wrong_sql_shapes(
-    reader: Callable[[sqlite3.Row, str], int | str | None | bool],
+    reader: Callable[[sqlite3.Row, str], int | str | bool | None],
     key: str,
     error: type[Exception],
 ) -> None:

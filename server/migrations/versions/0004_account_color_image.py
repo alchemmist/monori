@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 """Accounts gain a display color and an optional custom icon image."""
 
 from alembic import op

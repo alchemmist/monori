@@ -9,6 +9,9 @@ docs/
 **/*.png
 **/*.svg
 
+# Golden reports: byte-for-byte renderer output, not hand-written docs.
+ci/tests/fixtures/
+
 # Quality Graph generated files (managed by qg)
 .github/workflows/quality-graph.yml
 .github/workflows/quality-graph-push.yml

@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 """
 T-Bank connector that drives the real web cabinet with Playwright.
 

@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 import json
 import sys
 import tempfile
@@ -299,6 +300,119 @@ class TestReport:
         extra = Measurement("extra", "Extra", "navigation", "Navigation", "ms", 100)
         with pytest.raises(RuntimeError, match="differ from main"):
             compare_measurements({}, {("extra", "navigation"): extra}, {})
+
+    def test_rendered_report_matches_the_contract(self) -> None:
+        fixture = Path("ci/tests/fixtures/frontend_measurement")
+        assert (
+            render_report([self.entry("critical", 10, 5)], "critical", comment=False)
+            == (fixture / "critical.md").read_text()
+        )
+        assert (
+            render_report([self.entry("significant", 10, 5)], "significant", comment=False)
+            == (fixture / "significant.md").read_text()
+        )
+        assert (
+            render_report([self.entry("info", 10, 5)], "info", comment=False)
+            == (fixture / "info.md").read_text()
+        )
+        assert (
+            render_report([self.entry("none", 0, 0)], "none", comment=False)
+            == (fixture / "none.md").read_text()
+        )
+        assert (
+            render_report([self.entry("critical", 10, 5)], "critical", comment=True)
+            == (fixture / "comment.md").read_text()
+        )
+        config: dict[str, JsonValue] = {
+            "runs": 1,
+            "lighthouseRoutes": [],
+            "metrics": {
+                "ttfb": {**metric(poor=1800), "policy": "ttfb", "criticalAbsolute": 300},
+                "lcp": metric(poor=4000),
+                "cls": metric(),
+            },
+        }
+        assert "\n".join(render_standards(config)) + "\n" == (fixture / "standards.md").read_text()
+        entries = [self.entry("info", float(index), float(index)) for index in range(6)]
+        body = render_report(entries, "info", comment=False)
+        assert body.count("- Budget") == 5
+        assert "+0 ms (+0.0%)" not in body
+
+    def test_report_includes_standards_and_formats_scores(self) -> None:
+        config: dict[str, JsonValue] = {
+            "runs": 1,
+            "lighthouseRoutes": [],
+            "metrics": {"lcp": metric()},
+        }
+        body = render_report(
+            [self.entry("none", 0, 0)],
+            "none",
+            comment=False,
+            config=config,
+        )
+        fixture = Path("ci/tests/fixtures/frontend_measurement/with_standards.md")
+        assert body == fixture.read_text()
+        score = Entry(
+            route_id="budget",
+            route_label="Budget",
+            metric_id="score",
+            metric_label="Score",
+            unit="score",
+            base=0.9,
+            current=0.95,
+            delta=0.05,
+            delta_percent=5,
+            tier="info",
+            reason="test reason",
+        )
+        scored = render_report([score], "info", comment=False)
+        assert "Budget · Score: 0.900 → 0.950" in scored
+
+    def test_standards_name_the_missing_field(self) -> None:
+        def config(metric_body: dict[str, JsonValue]) -> dict[str, JsonValue]:
+            return {"runs": 1, "lighthouseRoutes": [], "metrics": {"lcp": metric_body}}
+
+        base = metric()
+        cases = (
+            ("label", "lcp label"),
+            ("unit", "unit"),
+            ("noiseAbsolute", "noiseAbsolute"),
+            ("criticalPercent", "criticalPercent"),
+        )
+        for field, context in cases:
+            body = dict(base)
+            del body[field]
+            with pytest.raises(TypeError, match=f"for {context}"):
+                render_standards(config(body))
+        ttfb = {**metric(poor=1800), "policy": "ttfb", "criticalAbsolute": 300}
+        for field, context in (
+            ("criticalPercent", "criticalPercent"),
+            ("criticalAbsolute", "criticalAbsolute"),
+            ("poor", "poor"),
+        ):
+            body = dict(ttfb)
+            del body[field]
+            with pytest.raises(TypeError, match=f"for {context}"):
+                render_standards(config(body))
+        for body in (metric(poor=4000), ttfb):
+            invalid = dict(body)
+            invalid["poor"] = "nope"
+            with pytest.raises(TypeError, match="for poor"):
+                render_standards(config(invalid))
+        scored = metric(poor=1.8)
+        scored["unit"] = "score"
+        scored_text = "\n".join(render_standards(config(scored)))
+        assert "100.000" in scored_text
+        assert "1.800" in scored_text
+        ttfb_score = {
+            **metric(poor=1.8),
+            "policy": "ttfb",
+            "criticalAbsolute": 0.3,
+            "unit": "score",
+        }
+        ttfb_text = "\n".join(render_standards(config(ttfb_score)))
+        assert "0.300" in ttfb_text
+        assert "1.800" in ttfb_text
 
 
 class TestCommand:

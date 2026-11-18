@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 """Closed sets of values shared by API DTOs and database records."""
 
 from enum import StrEnum

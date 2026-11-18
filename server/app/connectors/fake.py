@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 """
 A deterministic in-memory connector for exercising the sync path in tests.
 

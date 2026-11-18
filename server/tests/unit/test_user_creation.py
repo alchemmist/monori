@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 import sqlite3
 from datetime import UTC, datetime, tzinfo
 from pathlib import Path

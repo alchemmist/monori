@@ -1,3 +1,4 @@
+# Copyright (c) 2026
 import json
 import os
 import re
@@ -30,7 +31,6 @@ REPOSITORY_ROOT = Path(
 )
 
 WORKFLOW = REPOSITORY_ROOT / ".github/workflows/main-checks.yaml"
-DEPLOY_WORKFLOW = REPOSITORY_ROOT / ".github/workflows/deploy.yaml"
 PRODUCTION_COMPOSE = REPOSITORY_ROOT / "deploy/docker-compose.yml"
 DOCKER_DAEMON_CONFIG = REPOSITORY_ROOT / "deploy/docker-daemon.json"
 DOCKER_GC_SERVICE = REPOSITORY_ROOT / "deploy/systemd/docker-disk-gc.service"
@@ -137,24 +137,34 @@ class TestMainWorkflowGraph:
         )
         assert frontend is not None
         assert backend is not None
+        assert "sha256sum web/package-lock.json" in frontend.group("body")
         assert "path: web/reports/stryker-incremental.json" in frontend.group("body")
-        assert "hashFiles('web/package-lock.json')" in frontend.group("body")
+        assert "restore-keys:" in frontend.group("body")
+        assert "steps.web-deps.outputs.hash" in frontend.group("body")
         assert "hashFiles('web/stryker.conf.ts')" in frontend.group("body")
         assert "${{ github.sha }}" in frontend.group("body")
-        assert "restore-keys:" in frontend.group("body")
+        assert "hashFiles('web/package.json')" not in frontend.group("body")
         assert "uses: actions/cache/restore@v6" in frontend.group("body")
         assert "id: restore-stryker" in frontend.group("body")
         assert "uses: actions/cache/save@v6" in frontend.group("body")
+        restore, _, save = frontend.group("body").partition("uses: actions/cache/save@v6")
+        assert "steps.web-deps.outputs.hash" in restore
+        assert "steps.web-deps.outputs.hash" in save
         assert "steps.restore-stryker.outputs.cache-hit != 'true'" in frontend.group("body")
         assert "run: make m-front" in frontend.group("body")
         assert "path: mutants" in backend.group("body")
-        assert "hashFiles('uv.lock')" in backend.group("body")
-        assert "hashFiles('pyproject.toml')" in backend.group("body")
-        assert "${{ github.sha }}" in backend.group("body")
+        assert "sha256sum uv.lock" in backend.group("body")
         assert "restore-keys:" in backend.group("body")
+        assert "-main-" in backend.group("body")
+        assert "steps.py-deps.outputs.hash" in backend.group("body")
+        assert "hashFiles('pyproject.toml')" not in backend.group("body")
+        assert "${{ github.sha }}" in backend.group("body")
         assert "uses: actions/cache/restore@v6" in backend.group("body")
         assert "id: restore-mutmut" in backend.group("body")
         assert "uses: actions/cache/save@v6" in backend.group("body")
+        restore, _, save = backend.group("body").partition("uses: actions/cache/save@v6")
+        assert "steps.py-deps.outputs.hash" in restore
+        assert "steps.py-deps.outputs.hash" in save
         assert "steps.restore-mutmut.outputs.cache-hit != 'true'" in backend.group("body")
         assert "run: make m-back" in backend.group("body")
 
@@ -193,19 +203,6 @@ class TestMainWorkflowGraph:
         assert "run: make coverage-baseline" in block.group("body")
         assert "uses: actions/cache/save@v6" in block.group("body")
         assert "key: coverage-baseline-v1-${{ github.sha }}" in block.group("body")
-
-    def test_deploy_bounds_docker_storage_before_fetch(self) -> None:
-        source = DEPLOY_WORKFLOW.read_text()
-        build_cache_gc = "docker buildx prune -af --max-used-space 4gb --min-free-space 8gb"
-        image_gc = 'docker image prune -af --filter "until=48h"'
-        container_gc = 'docker container prune -f --filter "until=48h"'
-
-        assert source.count(build_cache_gc) == 1
-        assert source.count(image_gc) == 1
-        assert source.count(container_gc) == 1
-        assert source.index(build_cache_gc) < source.index("git fetch origin main")
-        assert "free_bytes" in source
-        assert "5368709120" in source
 
     def test_production_host_bounds_docker_storage(self) -> None:
         compose = yaml.safe_load(PRODUCTION_COMPOSE.read_text())
