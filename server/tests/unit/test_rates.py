@@ -1,6 +1,7 @@
 import sqlite3
 from pathlib import Path
 from types import TracebackType
+from typing import Never
 
 import httpx
 import pytest
@@ -60,6 +61,12 @@ class _Feed:
             msg = "offline"
             raise httpx.ConnectError(msg)
         return httpx.Response(200, text=self.payload, request=httpx.Request("GET", url))
+
+
+def _unexpected_client(*, timeout: float) -> Never:
+    """Fail when code discards the client supplied by its caller."""
+    message = f"unexpected internal HTTP client (timeout={timeout})"
+    raise AssertionError(message)
 
 
 def test_parse_cbr_divides_by_the_nominal() -> None:
@@ -243,9 +250,12 @@ def test_rate_table_flags_a_stale_quote(tmp_path: Path) -> None:
         c.close()
 
 
-def test_refresh_stores_the_day_that_was_asked_for(tmp_path: Path) -> None:
+def test_refresh_stores_the_day_that_was_asked_for(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     c = _db(tmp_path)
     feed = _Feed()
+    monkeypatch.setattr(httpx, "Client", _unexpected_client)
     try:
         assert refresh(c, "2025-07-06", client=feed) == 3
 
@@ -273,9 +283,10 @@ def test_missing_days_lists_only_the_gaps(tmp_path: Path) -> None:
         c.close()
 
 
-def test_backfill_fetches_every_gap(tmp_path: Path) -> None:
+def test_backfill_fetches_every_gap(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     c = _db(tmp_path)
     feed = _Feed()
+    monkeypatch.setattr(httpx, "Client", _unexpected_client)
     try:
         assert backfill(c, days_back=2, today="2026-07-25", client=feed) == 3
         assert feed.asked == ["25/07/2026", "24/07/2026", "23/07/2026"]
