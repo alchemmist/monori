@@ -60,13 +60,15 @@ transactions**, which is the point: the bank sends them itself, and keeping them
 means a re-sync recognizes them instead of importing them again. Both legs are
 uncategorized while merged, so a transfer never counts as income or expense —
 your budget and analytics stay honest by construction, not by remembering to
-exclude it. Net worth is unchanged, since the two legs cancel out.
+exclude it. For different currencies, enter both the amount sent and the amount
+received. Bank spreads and rounding can change the combined reporting value;
+the legs are excluded from spending because they are linked transfers.
 
 ### Transfers monori finds for you
 
 Most transfers are never created by hand: the bank delivers both legs and monori
 pairs them up. After every import and every sync it looks for an outflow and an
-inflow of exactly the same amount on two different accounts. A pair a day or
+inflow of exactly the same amount in the same currency on two different accounts. A pair a day or
 less apart is merged straight away; a looser match is offered under **Find
 transfers** on the Transactions page, where it can be confirmed or dismissed —
 and a dismissed pair is never offered again.
@@ -88,6 +90,11 @@ which is deliberately a separate action.
 the Accounts page, enter the account's **actual bank balance**, and monori posts a single
 `adjustment` transaction for the difference so the computed balance matches your
 bank. If the two already agree, nothing is posted.
+
+A transaction may retain a different currency after an explicit override or an
+account move. Both the displayed balance and reconciliation convert that row
+into the account currency using its transaction date; they never sum the raw
+foreign amount as if it were local money.
 
 ## Budgets stay global
 

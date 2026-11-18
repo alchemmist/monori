@@ -103,6 +103,40 @@ describe("reporting currency in the demo", () => {
         expect(snap().transactions.map((transaction) => transaction.baseAmount)).toEqual([1, 0]);
         expect(snap().budgets.map((budget) => budget.amount)).toEqual([0, 0, 0, 1]);
     });
+
+    it("supports legacy rows whose optional currency caches and rates are absent", async () => {
+        const complete = buildSnapshot({
+            accounts: [
+                { id: 1, name: "Old", currency: "RUB" },
+                { id: 2, name: "Target", currency: "RUB" },
+            ],
+            categories: [{ id: 4, groupId: 2, name: "Goal", goalTarget: 900 }],
+            budgets: [{ categoryId: 4, year: 2026, month: 1, amount: 300 }],
+            transactions: [{ id: 1, date: "2026-01-01", amount: 50, accountId: 1, categoryId: 4 }],
+        });
+        delete complete.rates;
+        delete complete.baseCurrency;
+        for (const account of complete.accounts) {
+            delete account.openingBalance;
+            delete account.openingBaseAmount;
+        }
+        for (const transaction of complete.transactions) delete transaction.currency;
+        useStore.setState({ snapshot: complete });
+
+        await useStore.getState().setBaseCurrency("RUB");
+        expect(snap()).toMatchObject({
+            baseCurrency: "RUB",
+            accounts: [{ openingBaseAmount: 0 }, { openingBaseAmount: 0 }],
+            transactions: [{ baseAmount: 50 }],
+            budgets: [{ amount: 300 }],
+            categories: [{ goalTarget: 900 }],
+        });
+
+        await useStore.getState().patchAccount(1, { name: "Renamed" });
+        expect(snap().transactions[0]?.accountAmount).toBe(50);
+        await useStore.getState().deleteAccount(1, 2);
+        expect(snap().transactions[0]).toMatchObject({ accountId: 2, accountAmount: 50 });
+    });
 });
 
 describe("setTxCategory and setTxAccount in the demo", () => {

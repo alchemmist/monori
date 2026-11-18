@@ -5,7 +5,10 @@ Transactions are the ledger monori budgets against. Each one is a signed amount
 categorized — a link to a category. A transaction lands in a budget month by its
 date and in an envelope by its category.
 
-Every amount is an integer in kopecks/cents, so nothing rounds.
+Every stored amount is an integer in the transaction's currency. The ledger
+shows that original currency; budgets and reports use its `baseAmount`,
+converted at the transaction date and rounded to minor units. Moving a row to
+another account preserves its original currency. See [Currencies](currencies.md).
 
 ## The Transactions page
 

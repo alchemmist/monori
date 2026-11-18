@@ -69,6 +69,18 @@ describe("buildBudgetIndex", () => {
 });
 
 describe("buildOpeningIndex", () => {
+    it("uses the server-derived reporting amount when it is available", () => {
+        const index = buildOpeningIndex(
+            [{ id: 1, openingBalance: 100, openingBaseAmount: 777, openingDate: "2024-01-01" }],
+            2024,
+        );
+        expect(index.get(monthKey(2024, 1))).toBe(777);
+    });
+
+    it("treats a legacy account without either opening amount as zero", () => {
+        expect(buildOpeningIndex([{ id: 1 }], 2024)).toEqual(new Map());
+    });
+
     it("converts a foreign opening balance when no server-derived amount is present", () => {
         const index = buildOpeningIndex(
             [{ id: 1, openingBalance: 100, currency: "USD", openingDate: "2024-01-01" }],

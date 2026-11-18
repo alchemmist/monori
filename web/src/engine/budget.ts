@@ -21,7 +21,7 @@ import { convertAmount, roundHalfEven } from "../money.js";
 type BudgetTransaction = Pick<Transaction, "date" | "amount" | "baseAmount" | "categoryId"> &
     Partial<Pick<Transaction, "transferId" | "splits">>;
 type OpeningAccount = Pick<Account, "id" | "openingBalance"> &
-    Partial<Pick<Account, "openingDate" | "currency">>;
+    Partial<Pick<Account, "openingDate" | "currency" | "openingBaseAmount">>;
 type AccountTransaction = Pick<Transaction, "accountId" | "date">;
 type BudgetCategory = Pick<Category, "id" | "groupId">;
 

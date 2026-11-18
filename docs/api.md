@@ -113,7 +113,8 @@ canonical order.
 Where transactions live: cards, cash, savings. `type` is one of `card`, `cash`,
 `savings`, `other`. `currency` is what money on the account is held in: new
 transactions inherit it, and the balance is reported in it. An account's balance
-is `openingBalance` plus the sum of its transactions. An unknown currency code
+is `openingBalance` plus accepted transactions expressed in the account currency
+at their own dates (`accountAmount`). An unknown currency code
 gives `400`.
 
 | Method | Path | Body | Notes |
@@ -221,7 +222,7 @@ how many rows moved. See [Currencies](currencies.md).
 | GET | `/api/rates` | `?day=YYYY-MM-DD` (`400` if not an ISO date) | `{day, baseCurrency, currencies: [{code, name, symbol, minorUnits}], rates: [{code, rate, day, source, stale}]}`. `day` on a rate is when it was actually published; `stale` says it is older than the day asked for. `source` is `pivot`, `cbr`, `manual` or `bundled`. |
 | POST | `/api/rates/refresh` | `?days=0` | **Admin.** Fetches today from the Bank of Russia, plus the last `days` (0–90) of any days with nothing stored. Returns `{stored, days, repriced}`. `502` if the feed is unreachable. |
 | PUT | `/api/rates/{code}` | `{rubPerUnit, day?}` | **Admin.** Sets a rate by hand for `day` (today by default). `400` for an unknown code, a non-ISO `day`, or for `RUB`, which is the pivot and is always 1. Returns `{code, day, repriced}`. |
-| PATCH | `/api/auth/me` | `{baseCurrency?}` | Changes the reporting currency and reprices every transaction at the rate for its own date. Returns `{user, repriced}`. `400` for an unknown code. |
+| PATCH | `/api/auth/me` | `{baseCurrency?}` | Changes the reporting currency and reprices every transaction at the rate for its own date. Returns the updated user object. Existing budget allocations and savings targets are converted at the switch-day rate. `400` for an unknown code or an unavailable conversion rate. |
 
 ## Budgets
 
