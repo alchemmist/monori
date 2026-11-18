@@ -95,7 +95,7 @@ def _rehash(conn: Connection) -> None:
 
 
 def upgrade() -> None:
-    "Add dated transaction currencies and reporting amounts."
+    """Add dated transaction currencies and reporting amounts."""
     op.execute("ALTER TABLE users ADD COLUMN base_currency TEXT NOT NULL DEFAULT 'RUB'")
     op.execute("ALTER TABLE transactions ADD COLUMN currency TEXT NOT NULL DEFAULT ''")
     op.execute("ALTER TABLE transactions ADD COLUMN base_amount INTEGER NOT NULL DEFAULT 0")
@@ -112,6 +112,6 @@ def upgrade() -> None:
 
 
 def downgrade() -> NoReturn:
-    "Reject downgrade because application migrations are forward-only."
+    """Reject downgrade because application migrations are forward-only."""
     msg = "forward-only migrations"
     raise NotImplementedError(msg)

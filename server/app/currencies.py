@@ -48,7 +48,7 @@ def normalize(code: str | None, fallback: str = DEFAULT_CURRENCY) -> str:
 
 
 def is_known(code: str | None) -> bool:
-    "Return whether the normalized code belongs to the supported catalog."
+    """Return whether the normalized code belongs to the supported catalog."""
     return normalize(code, "") in CURRENCIES
 
 
@@ -63,7 +63,7 @@ def validate(code: str | None, fallback: str = DEFAULT_CURRENCY) -> str:
 
 
 def symbol(code: str | None) -> str:
-    "Return the display symbol for a supported code, or the normalized code."
+    """Return the display symbol for a supported code, or the normalized code."""
     entry = CURRENCIES.get(normalize(code, ""))
     return entry[1] if entry else normalize(code, "")
 

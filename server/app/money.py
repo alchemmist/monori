@@ -14,13 +14,13 @@ from .rates import convert
 
 
 def account_currency(c: sqlite3.Connection, account_id: int) -> str:
-    "Return the currency in which an account is held."
+    """Return the currency in which an account is held."""
     row = c.execute("SELECT currency FROM accounts WHERE id=?", (account_id,)).fetchone()
     return normalize(row["currency"] if row else None)
 
 
 def base_currency(c: sqlite3.Connection, user_id: int) -> str:
-    "Return a user's reporting currency."
+    """Return a user's reporting currency."""
     row = c.execute("SELECT base_currency FROM users WHERE id=?", (user_id,)).fetchone()
     return normalize(row["base_currency"] if row else None)
 
@@ -109,7 +109,7 @@ def reprice_plans(
     target_currency: str,
     day: str,
 ) -> int:
-    "Convert budget allocations and savings targets when reporting currency changes."
+    """Convert budget allocations and savings targets when reporting currency changes."""
     changed = 0
     budgets = c.execute(
         "SELECT b.rowid AS row_id, b.amount AS value FROM budgets b"

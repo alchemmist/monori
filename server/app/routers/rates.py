@@ -42,7 +42,7 @@ MAX_BACKFILL_DAYS = 90
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid", populate_by_name=True))
 class RateOverride:
-    "Represent a manually supplied exchange rate."
+    """Represent a manually supplied exchange rate."""
 
     rub_per_unit: float = Field(gt=0, alias="rubPerUnit")
     day: str | None = None
@@ -50,7 +50,7 @@ class RateOverride:
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid", populate_by_name=True))
 class CurrencyResponse:
-    "Represent one supported currency."
+    """Represent one supported currency."""
 
     code: str
     name: str
@@ -60,7 +60,7 @@ class CurrencyResponse:
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid"))
 class RateResponse:
-    "Represent one dated exchange rate."
+    """Represent one dated exchange rate."""
 
     code: str
     rate: float
@@ -71,7 +71,7 @@ class RateResponse:
 
 @pydantic_dataclass(config=ConfigDict(extra="forbid", populate_by_name=True))
 class RatesResponse:
-    "Represent the currency catalog and rates for a requested day."
+    """Represent the currency catalog and rates for a requested day."""
 
     day: str
     currencies: list[CurrencyResponse]

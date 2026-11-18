@@ -53,11 +53,11 @@ VALUE_RE = re.compile(r"<Value>\s*([\d]{1,15}[.,][\d]{1,6})\s*</Value>")
 
 
 class RateUnavailableError(Exception):
-    "Raised when no rate is known for a currency on the requested day."
+    """Raised when no rate is known for a currency on the requested day."""
 
 
 class RateTableEntry(TypedDict):
-    "Represent one dated exchange-rate response row."
+    """Represent one dated exchange-rate response row."""
 
     code: str
     rate: float
@@ -67,7 +67,7 @@ class RateTableEntry(TypedDict):
 
 
 def today_iso() -> str:
-    "Return today's UTC calendar date."
+    """Return today's UTC calendar date."""
     return datetime.now(UTC).date().isoformat()
 
 

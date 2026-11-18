@@ -1,4 +1,4 @@
-"Monori API. Money in/out of this API is integer kopecks everywhere."
+"""Monori API. Money in/out of this API is integer kopecks everywhere."""
 
 import contextlib
 import os
@@ -38,7 +38,7 @@ app = FastAPI(title="monori", docs_url="/api-docs", redoc_url="/api-redoc")
 
 @app.exception_handler(RateUnavailableError)
 def unavailable_rate(_request: Request, error: RateUnavailableError) -> JSONResponse:
-    "Return an actionable client error when dated conversion cannot be performed."
+    """Return an actionable client error when dated conversion cannot be performed."""
     return JSONResponse(status_code=400, content={"detail": str(error)})
 
 
@@ -54,7 +54,7 @@ async def count_feature_usage(
     request: Request,
     call_next: Callable[[Request], Awaitable[Response]],
 ) -> Response:
-    "Handle count feature usage."
+    """Handle count feature usage."""
     response = await call_next(request)
 
     with contextlib.suppress(Exception):
@@ -129,7 +129,7 @@ def get_snapshot(
     include_in_schema=False,
 )
 def api_not_found(path: str) -> None:
-    "Handle api not found."
+    """Handle api not found."""
     del path
     raise HTTPException(status_code=404, detail="Not Found")
 
@@ -139,5 +139,5 @@ if STATIC_DIR.is_dir():
 
     @app.get("/{path:path}")
     def spa(path: str) -> FileResponse:
-        "Handle spa."
+        """Handle spa."""
         return _serve_spa(STATIC_DIR, path)
