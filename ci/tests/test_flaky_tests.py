@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 
@@ -16,6 +17,7 @@ from monori.ci.lib.flaky_tests import (
     RunnerStack,
     VitestRunner,
     added_test_lines,
+    discover_repository,
     eligible_test_path,
     parse_playwright_collection,
     parse_pytest_collection,
@@ -464,3 +466,45 @@ def test_adapter_classifies_timeout_runner_error_and_test_failure() -> None:
         PytestRunner(FakeExecutor(ProcessResult(2, "usage error", 0.2))).run(test, 1).status
         is AttemptStatus.RUNNER_ERROR
     )
+
+
+def test_vitest_collection_is_read_from_the_json_file() -> None:
+    patch = """diff --git a/web/src/Added.test.tsx b/web/src/Added.test.tsx
++++ b/web/src/Added.test.tsx
+@@ -0,0 +11 @@
++    it("added", () => {})
+"""
+
+    class WritingExecutor:
+        def __init__(self) -> None:
+            self.commands: list[tuple[str, ...]] = []
+
+        def run(
+            self,
+            command: tuple[str, ...],
+            _cwd: str,
+            _timeout_seconds: float,
+        ) -> ProcessResult:
+            self.commands.append(command)
+            if command[0] == "git":
+                return ProcessResult(0, patch, 0.1)
+            path = Path(command[command.index("--json") + 1])
+            path.write_text(
+                json.dumps(
+                    [
+                        {
+                            "name": "added",
+                            "file": "/repo/web/src/Added.test.tsx",
+                            "location": {"line": 11, "column": 1},
+                        }
+                    ]
+                )
+            )
+            return ProcessResult(0, "truncated-tail", 0.1)
+
+    executor = WritingExecutor()
+    tests = discover_repository("main", executor)
+    assert [test.line for test in tests] == [11]
+    assert "--json" in executor.commands[1]
+    assert executor.commands[1][executor.commands[1].index("--json") + 1].endswith(".json")
+

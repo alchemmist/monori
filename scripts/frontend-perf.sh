@@ -168,6 +168,23 @@ mkdir -p "$PERF_OUTPUT_DIR"
 git worktree add --detach "$base_worktree" "$base_revision" >/dev/null
 worktree_added=1
 
+# node:22-alpine now ships npm 10.9, which rejects the committed lock as out of
+# sync. npm 11.6.2 installs that same lock with npm ci.
+base_dockerfile="$base_worktree/deploy/Dockerfile.front"
+if [ -f "$base_dockerfile" ] && grep -q 'npm ci --silent' "$base_dockerfile"; then
+  DOCKERFILE="$base_dockerfile" python3 -c 'from pathlib import Path
+import os
+path = Path(os.environ["DOCKERFILE"])
+text = path.read_text()
+old = "RUN npm ci --silent --no-audit --no-fund"
+new = "RUN npm install --global npm@11.6.2 && npm ci --no-audit --no-fund"
+if old not in text:
+    raise SystemExit("base Dockerfile has no silent npm ci line")
+path.write_text(text.replace(old, new, 1))
+'
+fi
+
+
 collect_revision base "$base_worktree" 8178
 if [ -n "$PERF_PR_RESULTS_DIR" ]; then
   restore_revision pr "$PERF_PR_RESULTS_DIR"

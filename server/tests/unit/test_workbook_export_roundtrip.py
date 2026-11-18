@@ -7,6 +7,7 @@ import pytest
 from openpyxl import Workbook
 from openpyxl.worksheet.worksheet import Worksheet
 
+from monori.server.app.workbook.export import _parse_dt as export_parse_dt
 from monori.server.app.workbook.parser import (
     WorkbookError,
     _amount,
@@ -131,6 +132,10 @@ def test_unquote_reverses_only_the_formula_escape() -> None:
     assert _unquote("plain") == "plain"
     assert _unquote("mid'dle") == "mid'dle"
     assert _unquote("'legit apostrophe") == "'legit apostrophe"
+
+
+def test_export_parse_dt_keeps_a_leading_date_when_the_rest_is_not_iso() -> None:
+    assert export_parse_dt("2026-01-05 trailing") == _workbook_datetime(2026, 1, 5)
 
 
 def test_parse_dt_variants() -> None:
