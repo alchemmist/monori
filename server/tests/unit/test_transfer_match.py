@@ -51,6 +51,12 @@ def test_day_number_is_days_since_the_unix_epoch() -> None:
     assert day_number("0000-01-01") == -719528
 
 
+def test_day_number_handles_the_1900_non_leap_century() -> None:
+    assert day_number("1900-03-01") == (date(1900, 3, 1) - date(1970, 1, 1)).days
+    assert day_number("1900-02-28") == (date(1900, 2, 28) - date(1970, 1, 1)).days
+    assert day_number("2000-03-01") == (date(2000, 3, 1) - date(1970, 1, 1)).days
+
+
 def test_pairs_opposite_amounts_on_different_accounts() -> None:
     pairs = find_pairs([row(1, 10, -5000, 1), row(2, 10, 5000, 2)])
     assert pairs == [TransferCandidate(1, 2, 5000, 0, hint=False)]
