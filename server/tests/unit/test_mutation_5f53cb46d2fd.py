@@ -14,6 +14,7 @@ def test_linked_accounts_returns_id() -> None:
         " connection_id INTEGER, user_id INTEGER, sort INTEGER)"
     )
     c.execute("INSERT INTO accounts VALUES (7, 'Checking', NULL, 1, 2, 0)")
+    c.execute("INSERT INTO accounts VALUES (9, 'Other', NULL, 3, 4, 0)")
     accounts = _linked_accounts(c, 1, 2)
     assert len(accounts) == 1
     assert accounts[0].id == 7
