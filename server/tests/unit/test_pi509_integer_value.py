@@ -2,13 +2,11 @@
 """
 Regression for `integer_value` guarding the JSON integer contract (#509).
 
-The base guard is `isinstance(value, bool) or not isinstance(value, int)`, so any
-non-int JSON value (and a bool) must raise a contextual `TypeError`. Mutant
-`x_integer_value__mutmut_1` swaps the `or` for an `and`, which makes the guard
-almost never fire: `bool` is a subclass of `int`, so both operands can never be
-false together only for... nothing. Only a bool AND a non-int would be rejected,
-and no value satisfies that. Hence every non-int leaks through the base function
-unconverted.
+The base guard is `isinstance(value, bool) or not isinstance(value, int)`, so
+any non-int JSON value (and a bool) must raise a contextual `TypeError`. The
+`or`->`and` swap makes the guard nearly never fire: since `bool` is a subclass
+of `int`, no value is both a bool and a non-int, so nothing is ever rejected.
+Every non-int therefore leaks through unconverted.
 """
 
 import pytest
@@ -18,23 +16,9 @@ from monori.common.json_values import JsonValue, integer_value
 
 @pytest.mark.parametrize(
     "value",
-    [
-        3.5,
-        3.0,
-        "3",
-        "",
-        None,
-        [1],
-        {"a": 1},
-    ],
+    [3.5, 3.0, "3", "", None, [1], {"a": 1}, True, False],
 )
 def test_integer_value_rejects_non_integers(value: JsonValue) -> None:
-    with pytest.raises(TypeError, match=r"^Expected JSON integer for ctx$"):
-        integer_value(value, "ctx")
-
-
-@pytest.mark.parametrize("value", [True, False])
-def test_integer_value_rejects_booleans(value: JsonValue) -> None:
     with pytest.raises(TypeError, match=r"^Expected JSON integer for ctx$"):
         integer_value(value, "ctx")
 
