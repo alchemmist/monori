@@ -10,4 +10,5 @@ trap cleanup EXIT
 initdb -D "$MONORI_TEST_CLUSTER/db" --no-locale -E UTF8 >/dev/null
 pg_ctl -D "$MONORI_TEST_CLUSTER/db" -l "$MONORI_TEST_CLUSTER/log" -o "-h '' -k $MONORI_TEST_CLUSTER -p 55442" start >/dev/null
 createdb -h "$MONORI_TEST_CLUSTER" -p 55442 monori_test
-PYTHONPATH="$PWD/scripts/pgtests${PYTHONPATH:+:$PYTHONPATH}" uv run --group test pytest -p monori_pg_testplugin -q server/tests/integration --ignore=server/tests/integration/test_admin_sql.py "$@"
+createuser -h "$MONORI_TEST_CLUSTER" -p 55442 monori_console
+PYTHONPATH="$PWD/scripts/pgtests${PYTHONPATH:+:$PYTHONPATH}" uv run --group test pytest -p monori_pg_testplugin -q server/tests/integration "$@"

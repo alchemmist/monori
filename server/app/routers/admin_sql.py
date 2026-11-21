@@ -131,7 +131,9 @@ def run_sql(
     count, and nothing is ever committed.
     """
     if os.environ.get("MONORI_DATABASE_URL"):
-        raise HTTPException(503, "SQL console unavailable on PostgreSQL pending a scoped SQL policy")
+        from monori.server.app.pg_console import run
+
+        return run(body, admin.id)
     uid = admin.id
     sql = body.sql.strip()
     if not sql:

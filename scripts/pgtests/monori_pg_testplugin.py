@@ -25,10 +25,21 @@ def pg_target(monkeypatch, tmp_path):
         actual = db.execute("SELECT current_setting('data_directory')").fetchone()[0]
         if Path(actual).resolve() != (root / "db").resolve():
             raise ValueError("Wrong test server")
+        db.execute("DROP SCHEMA IF EXISTS console_scratch CASCADE")
+        db.execute("CREATE SCHEMA console_scratch AUTHORIZATION monori_console")
         db.execute("DROP SCHEMA public CASCADE")
         db.execute("CREATE SCHEMA public")
         path = tmp_path / "src.sqlite"
         dbmod.connect(path).close()
         with closing(sqlite3.connect(path)) as src:
             transfer(src, db)
+        db.execute("GRANT USAGE ON SCHEMA public TO monori_console")
+        db.execute(
+            "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO monori_console"
+        )
+        db.execute("GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO monori_console")
+    monkeypatch.setenv(
+        "MONORI_CONSOLE_DATABASE_URL",
+        url.replace("postgresql:///", "postgresql://monori_console@/"),
+    )
     monkeypatch.setenv("MONORI_DATABASE_URL", url)
