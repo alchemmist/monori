@@ -25,7 +25,7 @@ from monori.server.app.routers.auth_router import (
     create_user,
     record_login,
 )
-from monori.server.app.security import auth_secret, create_access_token
+from monori.server.app.security import auth_secret, create_access_token, sso_only_users
 
 router = APIRouter(prefix="/api/auth/oidc", tags=["auth"])
 User = Annotated[AuthenticatedUser, Depends(current_user)]
@@ -76,11 +76,12 @@ def discover(issuer: str) -> dict[str, str]:
 @router.get("/status")
 def status() -> dict[str, bool]:
     """Advertise SSO only when the confidential client is configured."""
+    policy = {"ssoOnly": True} if sso_only_users() is not None else {}
     try:
         _config()
     except HTTPException:
-        return {"enabled": False}
-    return {"enabled": True}
+        return {"enabled": False, **policy}
+    return {"enabled": True, **policy}
 
 
 def _start(response: Response, uid: int | None) -> dict[str, str]:
@@ -129,6 +130,8 @@ def start(response: Response) -> dict[str, str]:
 @router.post("/link/start")
 def link_start(response: Response, user: User) -> dict[str, str]:
     """Bind an explicit linking request to the current local user."""
+    if sso_only_users() is not None:
+        raise HTTPException(403, "Identity linking is disabled")
     return _start(response, user.id)
 
 
@@ -183,6 +186,9 @@ def _finish(body: Finish, response: Response, uid: int | None) -> TokenResponse:
         row = c.execute(
             "SELECT user_id FROM oidc_identities WHERE issuer=? AND subject=?", identity
         ).fetchone()
+        allowed = sso_only_users()
+        if allowed is not None and (uid is not None or row is None or str(row[0]) not in allowed):
+            raise HTTPException(403, "This identity is not admitted to Monori")
         if row is not None:
             if uid is not None and uid != row[0]:
                 raise HTTPException(409, "SSO identity already linked")
@@ -206,7 +212,7 @@ def _finish(body: Finish, response: Response, uid: int | None) -> TokenResponse:
         record_login(c, user_id, email)
     response.headers["Cache-Control"] = "no-store"
     return TokenResponse(
-        access_token=create_access_token(user_id), token_type=OAuthTokenType.BEARER
+        access_token=create_access_token(user_id, oidc=True), token_type=OAuthTokenType.BEARER
     )
 
 

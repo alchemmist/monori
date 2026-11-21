@@ -1,4 +1,5 @@
-import SsoButton from "../components/SsoButton.jsx";
+import { useLoginPolicy } from "../useLoginPolicy.js";
+import { SsoAction } from "../components/SsoButton.jsx";
 import { useState, type SyntheticEvent } from "react";
 import { useLocation, useNavigate, type Location } from "react-router-dom";
 import { Eye, EyeSlash } from "@gravity-ui/icons";
@@ -29,6 +30,8 @@ function isInternalLocation(value: unknown): value is Location {
 }
 
 export default function LoginPage() {
+    const policy = useLoginPolicy();
+    const classic = policy != null && policy !== "error" && !policy.ssoOnly;
     const { login, register } = useStore();
     const location = useLocation();
     const navigate = useNavigate();
@@ -89,72 +92,89 @@ export default function LoginPage() {
                         </>
                     )}
                 </h1>
-                <form className="login__form" onSubmit={(event) => void submit(event)}>
-                    <input
-                        className={`login__input${blamed === "email" ? " login__input--bad" : ""}`}
-                        type="email"
-                        placeholder="Email"
-                        aria-invalid={blamed === "email" || undefined}
-                        autoComplete="email"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        required
-                    />
-                    <div className="login__password">
+                {classic && (
+                    <form className="login__form" onSubmit={(event) => void submit(event)}>
                         <input
-                            className={`login__input${
-                                blamed === "password" ? " login__input--bad" : ""
-                            }`}
-                            type={showPassword ? "text" : "password"}
-                            aria-invalid={blamed === "password" || undefined}
-                            placeholder={
-                                mode === "register" ? "Password (min 8 characters)" : "Password"
-                            }
-                            autoComplete={mode === "register" ? "new-password" : "current-password"}
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                            minLength={mode === "register" ? 8 : undefined}
+                            className={`login__input${blamed === "email" ? " login__input--bad" : ""}`}
+                            type="email"
+                            placeholder="Email"
+                            aria-invalid={blamed === "email" || undefined}
+                            autoComplete="email"
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
                             required
                         />
-                        <button
-                            type="button"
-                            className="login__eye"
-                            onClick={() => setShowPassword((v) => !v)}
-                            title={showPassword ? "Hide password" : "Show password"}
-                            aria-label={showPassword ? "Hide password" : "Show password"}
-                            aria-pressed={showPassword}
-                            tabIndex={-1}
-                        >
-                            {showPassword ? (
-                                <EyeSlash width={16} height={16} />
-                            ) : (
-                                <Eye width={16} height={16} />
-                            )}
+                        <div className="login__password">
+                            <input
+                                className={`login__input${
+                                    blamed === "password" ? " login__input--bad" : ""
+                                }`}
+                                type={showPassword ? "text" : "password"}
+                                aria-invalid={blamed === "password" || undefined}
+                                placeholder={
+                                    mode === "register" ? "Password (min 8 characters)" : "Password"
+                                }
+                                autoComplete={
+                                    mode === "register" ? "new-password" : "current-password"
+                                }
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                                minLength={mode === "register" ? 8 : undefined}
+                                required
+                            />
+                            <button
+                                type="button"
+                                className="login__eye"
+                                onClick={() => setShowPassword((v) => !v)}
+                                title={showPassword ? "Hide password" : "Show password"}
+                                aria-label={showPassword ? "Hide password" : "Show password"}
+                                aria-pressed={showPassword}
+                                tabIndex={-1}
+                            >
+                                {showPassword ? (
+                                    <EyeSlash width={16} height={16} />
+                                ) : (
+                                    <Eye width={16} height={16} />
+                                )}
+                            </button>
+                        </div>
+                        {error != null && error !== "" && (
+                            <div className="login__error">{error}</div>
+                        )}
+                        <button className="login__submit" type="submit" disabled={busy}>
+                            {busy ? "…" : mode === "login" ? "Sign in" : "Create account"}
                         </button>
+                    </form>
+                )}
+                {policy != null && policy !== "error" && policy.enabled && <SsoAction />}
+                {policy != null && policy !== "error" && policy.ssoOnly && policy.enabled && (
+                    <p className="login__provider">
+                        Continue with your organization’s identity provider.
+                    </p>
+                )}
+                {policy === null && <p role="status">Loading sign-in…</p>}
+                {(policy === "error" || (policy?.ssoOnly === true && !policy.enabled)) && (
+                    <p role="alert">Sign-in is unavailable. Please reload to try again.</p>
+                )}
+                {classic && (
+                    <div className="login__switch">
+                        {mode === "login" ? (
+                            <>
+                                No account?{" "}
+                                <button type="button" onClick={switchMode}>
+                                    Register
+                                </button>
+                            </>
+                        ) : (
+                            <>
+                                Already have an account?{" "}
+                                <button type="button" onClick={switchMode}>
+                                    Sign in
+                                </button>
+                            </>
+                        )}
                     </div>
-                    {error != null && error !== "" && <div className="login__error">{error}</div>}
-                    <button className="login__submit" type="submit" disabled={busy}>
-                        {busy ? "…" : mode === "login" ? "Sign in" : "Create account"}
-                    </button>
-                </form>
-                <SsoButton />
-                <div className="login__switch">
-                    {mode === "login" ? (
-                        <>
-                            No account?{" "}
-                            <button type="button" onClick={switchMode}>
-                                Register
-                            </button>
-                        </>
-                    ) : (
-                        <>
-                            Already have an account?{" "}
-                            <button type="button" onClick={switchMode}>
-                                Sign in
-                            </button>
-                        </>
-                    )}
-                </div>
+                )}
                 <div className="login__made">
                     handcrafted ·{" "}
                     <b>

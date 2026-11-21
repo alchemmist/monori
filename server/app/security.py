@@ -35,6 +35,7 @@ class TokenPayload:
     sub: str
     iat: int
     exp: int
+    oidc: bool = False
 
 
 TOKEN_PAYLOAD_ADAPTER: TypeAdapter[TokenPayload] = TypeAdapter(TokenPayload)
@@ -106,15 +107,26 @@ def load_or_create_secret_file(path: pathlib.Path, generate: Callable[[], str]) 
     return value
 
 
-def create_access_token(user_id: int) -> str:
+def sso_only_users() -> frozenset[str] | None:
+    """Return the configured SSO allowlist; an empty list denies everyone."""
+    value = os.getenv("MONORI_SSO_ONLY_USER_IDS")
+    return None if value is None else frozenset(item.strip() for item in value.split(","))
+
+
+def create_access_token(user_id: int, *, oidc: bool = False) -> str:
     """Handle create access token."""
     now = datetime.now(UTC)
-    payload = {"sub": str(user_id), "iat": now, "exp": now + TOKEN_TTL}
+    payload = {"sub": str(user_id), "iat": now, "exp": now + TOKEN_TTL, "oidc": oidc}
     return jwt.encode(payload, auth_secret(), algorithm=ALGORITHM)
 
 
 def decode_access_token(token: str) -> TokenPayload:
     """Return the token's payload, or raise jwt.InvalidTokenError."""
-    return TOKEN_PAYLOAD_ADAPTER.validate_python(
+    payload = TOKEN_PAYLOAD_ADAPTER.validate_python(
         jwt.decode(token, auth_secret(), algorithms=[ALGORITHM]),
     )
+    allowed = sso_only_users()
+    if allowed is not None and (not payload.oidc or payload.sub not in allowed):
+        msg = "SSO sign-in required"
+        raise jwt.InvalidTokenError(msg)
+    return payload

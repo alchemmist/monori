@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { ArrowRight, Lock } from "@gravity-ui/icons";
+import { useLoginPolicy } from "../useLoginPolicy.js";
 import { z } from "zod";
 
 const transactionKey = "monori_oidc_transaction";
@@ -28,28 +30,42 @@ async function start(link: boolean) {
 }
 
 export default function SsoButton({ link = false }: { link?: boolean }) {
-    const [enabled, setEnabled] = useState(false);
+    const policy = useLoginPolicy();
+    if (policy == null || policy === "error" || !policy.enabled || (link && policy.ssoOnly))
+        return null;
+    return <SsoAction link={link} />;
+}
+
+export function SsoAction({ link = false }: { link?: boolean }) {
+    const [busy, setBusy] = useState(false);
     const [error, setError] = useState(false);
-    useEffect(() => {
-        void fetch("/api/auth/oidc/status")
-            .then(async (r) => {
-                if (r.ok)
-                    setEnabled(z.object({ enabled: z.boolean() }).parse(await r.json()).enabled);
-            })
-            .catch(() => {});
-    }, []);
-    if (!enabled) return null;
     return (
-        <div>
+        <div className="login__form">
             <button
                 type="button"
+                className="login__sso"
+                disabled={busy}
+                aria-busy={busy}
                 onClick={() => {
-                    void start(link).catch(() => setError(true));
+                    setBusy(true);
+                    setError(false);
+                    void start(link).catch(() => {
+                        setError(true);
+                        setBusy(false);
+                    });
                 }}
             >
-                {link ? "Link SSO to this account" : "Sign in with SSO"}
+                <Lock aria-hidden="true" width={18} height={18} />
+                <span>
+                    {busy ? "Redirecting…" : link ? "Link SSO to this account" : "Sign in with SSO"}
+                </span>
+                <ArrowRight aria-hidden="true" width={18} height={18} />
             </button>
-            {error && <p role="alert">SSO is unavailable. Try again or sign in with a password.</p>}
+            {error && (
+                <p className="login__error" role="alert">
+                    Could not reach the identity provider. Please try again.
+                </p>
+            )}
         </div>
     );
 }
@@ -69,9 +85,11 @@ async function finish() {
     });
     if (!r.ok)
         throw new Error(
-            r.status === 409
-                ? "Account conflict. For an existing budget, sign in with your password and link SSO in Settings."
-                : "SSO verification failed. Please sign in again.",
+            r.status === 403
+                ? "This account does not have access to Monori."
+                : r.status === 409
+                  ? "Account conflict. For an existing budget, sign in with your password and link SSO in Settings."
+                  : "SSO verification failed. Please sign in again.",
         );
     const result = z.object({ access_token: z.string() }).parse(await r.json());
     localStorage.setItem("monori_token", result.access_token);

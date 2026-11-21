@@ -35,3 +35,10 @@ Link SSO to this account** and complete the provider prompt. Sign out and use
 **Sign in with SSO** to verify that the same budget opens. Matching email alone
 never links accounts. Automatic creation requires a verified, unused email;
 otherwise register or sign in with a password first and explicitly link SSO.
+
+For a closed installation, set `MONORI_SSO_ONLY_USER_IDS` on the backend to a
+comma-separated allowlist of existing, already-linked Monori user IDs. This
+turns off password login, registration, new account provisioning and self-service
+linking. Only OIDC-issued sessions for listed IDs are accepted. Existing sessions
+from before the switch must sign in again. An empty value denies everyone;
+unset the variable to restore the optional SSO policy. No user data is deleted.

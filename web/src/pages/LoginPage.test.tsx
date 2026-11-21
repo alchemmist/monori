@@ -1,9 +1,13 @@
 import { describe, expect, it, vi, afterEach } from "vitest";
 import { MemoryRouter, Route, Routes, useLocation, useNavigate } from "react-router-dom";
+import { useLoginPolicy } from "../useLoginPolicy.js";
 import LoginPage from "./LoginPage.jsx";
 import { fireEvent, renderUI, screen, waitFor, resetStore } from "../test/render.jsx";
 
 vi.mock("../api.js");
+vi.mock("../useLoginPolicy.js", () => ({
+    useLoginPolicy: vi.fn(() => ({ enabled: false, ssoOnly: false })),
+}));
 
 type LoginEntry = string | { pathname: string; state?: unknown };
 
@@ -42,6 +46,13 @@ describe("LoginPage", () => {
     afterEach(() => {
         vi.restoreAllMocks();
         resetStore();
+    });
+    it("offers only the SSO action for restricted installations", () => {
+        vi.mocked(useLoginPolicy).mockReturnValueOnce({ enabled: true, ssoOnly: true });
+        renderLogin();
+        expect(screen.getByRole("button", { name: "Sign in with SSO" })).toBeInTheDocument();
+        expect(screen.queryByPlaceholderText("Email")).not.toBeInTheDocument();
+        expect(screen.queryByRole("button", { name: "Register" })).not.toBeInTheDocument();
     });
     it("renders the login form with email and password fields", () => {
         renderLogin();

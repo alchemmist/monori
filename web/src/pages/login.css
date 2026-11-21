@@ -225,3 +225,47 @@
 .theme-dark .login__links a:hover {
     color: #f2f1f6;
 }
+
+.login__sso {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    min-height: 50px;
+    padding: 12px 18px;
+    border: 1px solid transparent;
+    border-radius: 14px;
+    background: var(--m-text);
+    color: var(--m-bg);
+    font: 600 15px var(--g-font-family-sans);
+    cursor: pointer;
+}
+
+.login__sso span {
+    flex: 1;
+    text-align: left;
+}
+
+.login__sso svg:first-child {
+    color: var(--m-accent);
+}
+
+.login__sso:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--m-text) 90%, var(--m-accent));
+}
+
+.login__sso:focus-visible {
+    outline: 2px solid var(--m-accent);
+    outline-offset: 4px;
+}
+
+.login__sso:disabled {
+    cursor: progress;
+    opacity: 0.75;
+}
+
+.login__provider {
+    margin: 14px auto 0;
+    font-size: 13px;
+    color: var(--m-text-dim);
+}

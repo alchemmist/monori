@@ -98,6 +98,32 @@ def test_oidc_round_trip(anon: TestClient, monkeypatch: pytest.MonkeyPatch) -> N
         == "changed@example.org"
     )
 
+    monkeypatch.setenv("MONORI_SSO_ONLY_USER_IDS", "1")
+    assert anon.get(ROOT + "status").json() == {"enabled": True, "ssoOnly": True}
+    assert anon.get("/api/auth/me", headers=password_user).status_code == 401
+    assert (
+        anon.post(
+            "/api/auth/token", data={"username": "user@example.org", "password": "hunter2pw"}
+        ).status_code
+        == 403
+    )
+    assert (
+        anon.post(
+            "/api/auth/register", json={"email": "new@example.org", "password": "hunter2pw"}
+        ).status_code
+        == 403
+    )
+    assert anon.post(ROOT + "finish", json=start()).status_code == 403
+    claims["sub"] = "new-unlinked"
+    assert anon.post(ROOT + "finish", json=start()).status_code == 403
+    claims["sub"] = "person"
+    signed = anon.post(ROOT + "finish", json=start()).json()["access_token"]
+    headers = {"Authorization": "Bearer " + signed}
+    assert anon.get("/api/auth/me", headers=headers).json()["id"] == 1
+    assert anon.post(ROOT + "link/start", headers=headers).status_code == 403
+    monkeypatch.setenv("MONORI_SSO_ONLY_USER_IDS", "")
+    assert anon.get("/api/auth/me", headers=headers).status_code == 401
+
 
 @pytest.mark.parametrize("field", ["issuer", "token_endpoint"])
 def test_discovery_rejects_untrusted_metadata(monkeypatch: pytest.MonkeyPatch, field: str) -> None:

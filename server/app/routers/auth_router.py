@@ -24,7 +24,12 @@ from monori.server.app.db import begin_write
 from monori.server.app.db_records import UserRecord
 from monori.server.app.deps import UserResponse, conn, serialize_user
 from monori.server.app.emails import canonical_email, normalize_email
-from monori.server.app.security import create_access_token, hash_password, verify_password
+from monori.server.app.security import (
+    create_access_token,
+    hash_password,
+    sso_only_users,
+    verify_password,
+)
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -101,6 +106,8 @@ def create_user(
     real mailbox cannot register several accounts through provider aliasing
     (Gmail dots, ``+tag`` sub-addressing).
     """
+    if sso_only_users() is not None:
+        raise HTTPException(403, "Account creation is disabled")
     email = normalize_email(raw_email)
     if not _valid_email(email):
         raise HTTPException(400, INVALID_EMAIL_DETAIL)
@@ -154,6 +161,8 @@ def record_login(c: sqlite3.Connection, user_id: int, email: str) -> None:
 @router.post("/token")
 def token(form: Annotated[OAuth2PasswordRequestForm, Depends()]) -> TokenResponse:
     """OAuth2 password grant: ``username`` is the email. Returns a bearer token."""
+    if sso_only_users() is not None:
+        raise HTTPException(403, "Password sign-in is disabled")
     email = normalize_email(form.username)
     c = conn()
     try:
