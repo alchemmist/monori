@@ -323,6 +323,7 @@ export interface AvailableConnector {
 export interface SyncResult {
     status: string;
     message?: string | null;
+    challenge?: SyncChallenge | null;
     inserted?: number;
     skipped?: number;
     accounts?: Array<{
@@ -336,6 +337,14 @@ export interface SyncResult {
     dateFrom?: string | null;
     dateTo?: string | null;
     unmappedTails?: Array<{ tail: string; rows: number }>;
+}
+
+export interface SyncChallenge {
+    kind: "code" | "captcha";
+    prompt: string;
+    codeLength: number | null;
+    imageUrl: string | null;
+    canResend: boolean;
 }
 
 interface WorkbookSlot {

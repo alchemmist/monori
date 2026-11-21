@@ -295,6 +295,15 @@ const syncCompleteSchema = z.strictObject({
 const syncStatusSchema = z.strictObject({
     status: connectionStatusSchema,
     message: z.string().nullable(),
+    challenge: z
+        .strictObject({
+            kind: z.enum(["code", "captcha"]),
+            prompt: z.string(),
+            codeLength: z.number().int().positive().nullable(),
+            imageUrl: z.url().nullable(),
+            canResend: z.boolean(),
+        })
+        .nullable(),
 });
 export const syncResultSchema = z.union([syncCompleteSchema, syncStatusSchema]);
 

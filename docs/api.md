@@ -293,9 +293,27 @@ accounts). Returns `{deleted: id}`.
 ### `POST /api/connections/{id}/sync`
 
 Runs a sync now over every linked account (`400` if none are linked). If login
-needs an OTP the response is `{"status": "awaiting_sms"}` and the connection
+needs user input the response includes a typed `challenge` and the connection
 moves to `awaiting_sms`; otherwise each account's rows are committed as their
 own batch (`source: "sync"`) and the response summarizes the run:
+
+```json
+{
+  "status": "awaiting_sms",
+  "message": "A confirmation code was sent to your phone.",
+  "challenge": {
+    "kind": "code",
+    "prompt": "Enter the 4-digit code sent by Yandex Pay.",
+    "codeLength": 4,
+    "imageUrl": null,
+    "canResend": false
+  }
+}
+```
+
+`challenge.kind` is `code` or `captcha`; CAPTCHA challenges carry `imageUrl`,
+while code challenges may declare `codeLength` and whether the UI may offer a
+resend action through `canResend`.
 
 ```json
 { "status": "connected", "inserted": 12, "skipped": 3,
