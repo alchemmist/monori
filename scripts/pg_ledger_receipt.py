@@ -14,7 +14,7 @@ from pathlib import Path
 
 QUERIES = {
     'account_totals': '''SELECT a.id, a.user_id, a.currency, a.opening_balance,
-        COUNT(t.id), COALESCE(SUM(t.amount),0) FROM accounts a
+        COUNT(t.id), CAST(COALESCE(SUM(t.amount),0) AS BIGINT) FROM accounts a
         LEFT JOIN transactions t ON t.account_id=a.id
         GROUP BY a.id,a.user_id,a.currency,a.opening_balance ORDER BY a.id''',
     'transaction_amounts': '''SELECT id, account_id, amount, transfer_id
