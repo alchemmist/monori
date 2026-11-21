@@ -19,6 +19,7 @@ def upgrade() -> None:
         "PRIMARY KEY (issuer, subject) "
         ")"
     )
+    op.execute("CREATE INDEX idx_oidc_identities_user_id ON oidc_identities (user_id)")
 
 
 def downgrade() -> None:

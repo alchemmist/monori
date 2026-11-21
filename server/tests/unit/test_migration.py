@@ -660,7 +660,9 @@ def test_connection_conversion_to_user_level(tmp_path: pathlib.Path) -> None:
 
 
 def test_oidc_subject_is_scoped_to_issuer(tmp_path: pathlib.Path) -> None:
-    c = connect(tmp_path / "oidc.db")
+    db_path = tmp_path / "oidc.db"
+    command.upgrade(_alembic_config(db_path), "head")
+    c = connect(db_path)
     try:
         for uid in (1, 2):
             email = f"user{uid}@example.org"

@@ -209,3 +209,4 @@ CREATE TABLE IF NOT EXISTS oidc_identities (
   user_id INTEGER NOT NULL REFERENCES users (id) ON DELETE CASCADE,
   PRIMARY KEY (issuer, subject)
 );
+CREATE INDEX IF NOT EXISTS idx_oidc_identities_user_id ON oidc_identities (user_id);
