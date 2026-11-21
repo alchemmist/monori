@@ -17,7 +17,7 @@ from monori.server.app.importer import tx_hash
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-HEAD = "0020"
+HEAD = "0021"
 assert LEGACY_REVISIONS[-1] == "0006"
 
 OLD_SCHEMA = """
@@ -657,3 +657,26 @@ def test_connection_conversion_to_user_level(tmp_path: pathlib.Path) -> None:
     assert acct["connection_id"] == conn_row["id"]
     assert acct["bank_ref"] == ""
     c.close()
+
+
+def test_oidc_subject_is_scoped_to_issuer(tmp_path: pathlib.Path) -> None:
+    db_path = tmp_path / "oidc.db"
+    command.upgrade(_alembic_config(db_path), "head")
+    c = connect(db_path)
+    try:
+        for uid in (1, 2):
+            email = f"user{uid}@example.org"
+            c.execute(
+                "INSERT INTO users (id, email, email_canonical, password_hash, created_at)"
+                " VALUES (?, ?, ?, 'unused', '2026-01-01')",
+                (uid, email, email),
+            )
+        insert = "INSERT INTO oidc_identities (issuer, subject, user_id) VALUES (?, '123', ?)"
+        c.execute(insert, ("https://first.example", 1))
+        c.execute(insert, ("https://second.example", 2))
+        with pytest.raises(sqlite3.IntegrityError):
+            c.execute(insert, ("https://first.example", 2))
+        c.execute("DELETE FROM users WHERE id=1")
+        assert c.execute("SELECT user_id FROM oidc_identities").fetchone()[0] == 2
+    finally:
+        c.close()

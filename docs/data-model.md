@@ -159,6 +159,11 @@ erDiagram
         TEXT day PK
         INTEGER count "required"
     }
+    oidc_identities {
+        TEXT issuer PK
+        TEXT subject PK
+        INTEGER user_id FK "-> users.id, required"
+    }
     category_group_types ||--o{ category_groups : "type_id"
     users |o--o{ category_groups : "user_id"
     category_groups ||--o{ categories : "group_id"
@@ -182,6 +187,7 @@ erDiagram
     accounts |o--o{ users : "default_account_id"
     users ||--o{ activity_events : "user_id"
     users ||--o{ feature_usage : "user_id"
+    users ||--o{ oidc_identities : "user_id"
 ```
 
 <!-- schema-diagram:end -->
