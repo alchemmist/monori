@@ -34,6 +34,26 @@ describe("buildTxIndex", () => {
         expect(index.size).toBe(2);
         expect(index.get(txKey(2024, 3, null))).toBeUndefined();
     });
+
+    it("allocates a converted split total once with the rounding remainder", () => {
+        const index = buildTxIndex([
+            {
+                date: "2024-03-15",
+                amount: -3,
+                baseAmount: -10,
+                categoryId: null,
+                splits: [
+                    { id: 1, categoryId: 5, amount: -1, comment: "" },
+                    { id: 2, categoryId: 6, amount: -1, comment: "" },
+                    { id: 3, categoryId: 7, amount: -1, comment: "" },
+                ],
+            },
+        ]);
+        expect([...index.values()].reduce((sum, amount) => sum + amount, 0)).toBe(-10);
+        expect(index.get(txKey(2024, 3, 5))).toBe(-3);
+        expect(index.get(txKey(2024, 3, 6))).toBe(-4);
+        expect(index.get(txKey(2024, 3, 7))).toBe(-3);
+    });
 });
 
 describe("buildBudgetIndex", () => {
@@ -49,6 +69,29 @@ describe("buildBudgetIndex", () => {
 });
 
 describe("buildOpeningIndex", () => {
+    it("uses the server-derived reporting amount when it is available", () => {
+        const index = buildOpeningIndex(
+            [{ id: 1, openingBalance: 100, openingBaseAmount: 777, openingDate: "2024-01-01" }],
+            2024,
+        );
+        expect(index.get(monthKey(2024, 1))).toBe(777);
+    });
+
+    it("treats a legacy account without either opening amount as zero", () => {
+        expect(buildOpeningIndex([{ id: 1 }], 2024)).toEqual(new Map());
+    });
+
+    it("converts a foreign opening balance when no server-derived amount is present", () => {
+        const index = buildOpeningIndex(
+            [{ id: 1, openingBalance: 100, currency: "USD", openingDate: "2024-01-01" }],
+            2024,
+            [],
+            "RUB",
+            [{ code: "USD", rate: 90 }],
+        );
+        expect(index.get(monthKey(2024, 1))).toBe(9000);
+    });
+
     it("sums opening balances into the month an account opened", () => {
         const index = buildOpeningIndex(
             [

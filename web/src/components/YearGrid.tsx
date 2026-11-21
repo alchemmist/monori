@@ -4,6 +4,8 @@ import RowMenu from "../ui/RowMenu.jsx";
 import { Plus, ChevronDown, EllipsisVertical } from "@gravity-ui/icons";
 import BudgetCell from "./BudgetCell.jsx";
 import { MONTHS_SHORT, normalizeKop, rub } from "../format.js";
+import { currencySymbol } from "../currencies.js";
+import { useBaseCurrency } from "../store.js";
 import GoalCategoryLabel from "./GoalCategoryLabel.jsx";
 import type { CSSProperties } from "react";
 import type { BudgetCell as BudgetCellModel, Category, CategoryGroup, Id } from "../types.js";
@@ -65,6 +67,7 @@ export default function YearGrid({
     onAddCategory,
     goalProgressFor,
 }: YearGridProps) {
+    const currency = currencySymbol(useBaseCurrency());
     const span = cols.length;
     const metricWidth = Math.max(82, Math.ceil(228 / span));
     const tableWidth = 210 + 12 * span * metricWidth + 164;
@@ -178,7 +181,9 @@ export default function YearGrid({
                                     <div className="yg-msum__mon">
                                         {m} {year}
                                     </div>
-                                    <div className={`yg-msum__av ${cls}`}>{rub(a)} ₽</div>
+                                    <div className={`yg-msum__av ${cls}`}>
+                                        {rub(a)} {currency}
+                                    </div>
                                     <div className="yg-msum__break">
                                         <BreakLine
                                             value={prevAvail}

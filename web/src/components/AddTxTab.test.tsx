@@ -179,4 +179,26 @@ describe("AddTxTab", () => {
         );
         expect(await screen.findByText("Demo spend")).toBeInTheDocument();
     });
+    it("records a currency override and labels the new row in that currency", async () => {
+        const add = vi
+            .spyOn(useStore.getState(), "addTransaction")
+            .mockImplementation(async (body) => created(99, body));
+        const { user } = renderUI(<AddTxTab onClose={vi.fn()} />);
+        await user.click(screen.getByRole("button", { name: /Transaction currency/ }));
+        await user.click(
+            await screen.findByRole("option", { name: "USD · US dollar", hidden: true }),
+        );
+        await fillAmount(user, "10");
+        await user.click(screen.getByRole("button", { name: "Add" }));
+        await waitFor(() =>
+            expect(add).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    amount: -1000,
+                    currency: "USD",
+                    accountId: 1,
+                }),
+            ),
+        );
+        expect(screen.getByText("-10 $")).toBeInTheDocument();
+    });
 });

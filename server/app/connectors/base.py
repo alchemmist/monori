@@ -61,6 +61,7 @@ class SyncRow:
     bank_category: str
     mcc: str
     card: str
+    currency: str | None = None
     account_id: int | None = None
     category_id: int | None = None
     duplicate: bool = False

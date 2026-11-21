@@ -119,3 +119,27 @@ def test_cli_modules_expose_callable_entrypoints() -> None:
     """Keep direct entrypoints available to Make and composite actions."""
     assert callable(mutation_gate.main)
     assert callable(npm_audit_gate.main)
+
+
+@pytest.mark.parametrize("include_other_advisory", [False, True])
+def test_picomatch_exception_does_not_hide_other_advisories(
+    *, include_other_advisory: bool
+) -> None:
+    advisories = [
+        {
+            "severity": "high",
+            "url": "https://github.com/advisories/GHSA-fc5q-39xc-vjpf",
+            "title": "Tooling-only repeated extglob denial of service",
+        }
+    ]
+    if include_other_advisory:
+        advisories.append(
+            {
+                "severity": "critical",
+                "url": "https://github.com/advisories/GHSA-other-picomatch",
+                "title": "Different picomatch vulnerability",
+            }
+        )
+    payload = {"vulnerabilities": {"picomatch": {"via": advisories}}}
+    with process_io(["npm-audit-gate"], json.dumps(payload)):
+        assert npm_audit_gate.main() == int(include_other_advisory)

@@ -48,6 +48,25 @@ def test_import_preview_categorizes_and_flags_errors(api: Api, client: TestClien
     assert len(prev.errors) == 1
 
 
+def test_header_currency_survives_preview_and_commit(api: Api, client: TestClient) -> None:
+    header = (
+        "Operation date;Payment date;Card number;Status;Operation amount;"
+        "Transaction currency;Payment amount;Payment currency;Cashback;Category;"
+        "MCC;Description;Bonuses;Rounding;Rounded operation amount\n"
+    )
+    row = "05.07.2026;05.07.2026;*1;OK;-10,00;EUR;-20,00;USD;;Transport;4111;Metro;0;0;-20,00\n"
+
+    preview = TypeAdapter(ImportPreviewResponse).validate_python(
+        client.post("/api/import/preview", json={"text": header + row}).json(),
+    )
+
+    assert preview.rows[0].currency == "USD"
+    assert preview.rows[0].amount == -2000
+    assert commit(client, api, preview.rows) == {"inserted": 1, "skipped": 0}
+    transaction = api.snapshot().transactions[0]
+    assert transaction.currency == "USD"
+
+
 def test_preview_routes_each_card_and_commit_accepts_mixed_accounts(
     api: Api,
     client: TestClient,

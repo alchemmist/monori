@@ -8,7 +8,7 @@ from collections.abc import Awaitable, Callable
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException, Query
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
@@ -17,6 +17,7 @@ from starlette.responses import Response
 from monori.server.app.admin import record_api_usage
 from monori.server.app.auth import AuthenticatedUser, current_user
 from monori.server.app.deps import LIGHT_SNAPSHOT_TX_LIMIT, SnapshotResponse, conn, snapshot
+from monori.server.app.rates import RateUnavailableError
 from monori.server.app.routers import (
     accounts,
     admin,
@@ -28,11 +29,18 @@ from monori.server.app.routers import (
     export,
     groups,
     imports,
+    rates,
     transactions,
     transfers,
 )
 
 app = FastAPI(title="monori", docs_url="/api-docs", redoc_url="/api-redoc")
+
+
+@app.exception_handler(RateUnavailableError)
+def unavailable_rate(_request: Request, error: RateUnavailableError) -> JSONResponse:
+    """Return an actionable client error when dated conversion cannot be performed."""
+    return JSONResponse(status_code=400, content={"detail": str(error)})
 
 
 app.include_router(auth_router.router)
@@ -87,6 +95,7 @@ for _router in (
     transfers.router,
     budgets.router,
     imports.router,
+    rates.router,
     connections.router,
     export.router,
 ):

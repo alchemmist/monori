@@ -12,10 +12,17 @@ from pydantic.dataclasses import dataclass as pydantic_dataclass
 
 from monori.common import JsonValue
 from monori.server.app.auth import AuthenticatedUser, current_user
+from monori.server.app.currencies import validate as validate_currency
 from monori.server.app.db_records import AccountRecord
-from monori.server.app.deps import AccountResponse, conn, serialize_account
+from monori.server.app.deps import AccountResponse, conn, serialize_accounts
 from monori.server.app.domain_types import AccountType
 from monori.server.app.importer import tx_hash
+from monori.server.app.money import (
+    account_currency,
+    base_currency,
+    to_base,
+    validate_account_valuations,
+)
 from monori.server.app.value_types import Money, TransactionDate
 
 router = APIRouter(prefix="/api/accounts", tags=["accounts"])
@@ -159,15 +166,19 @@ def list_accounts(
     uid = user.id
     c = conn()
     try:
-        return [
-            serialize_account(AccountRecord.from_row(r))
-            for r in c.execute(
-                "SELECT id, name, type, icon, color, icon_image, currency, sort, archived,"
-                " opening_balance, opening_date, connection_id, bank_ref, card_tails"
-                " FROM accounts WHERE user_id=? ORDER BY sort, id",
-                (uid,),
-            )
-        ]
+        return serialize_accounts(
+            c,
+            user.id,
+            (
+                AccountRecord.from_row(r)
+                for r in c.execute(
+                    "SELECT id, name, type, icon, color, icon_image, currency, sort, archived,"
+                    " opening_balance, opening_date, connection_id, bank_ref, card_tails"
+                    " FROM accounts WHERE user_id=? ORDER BY sort, id",
+                    (uid,),
+                )
+            ),
+        )
     finally:
         c.close()
 
@@ -182,7 +193,7 @@ def create_account(
     account_type = body.type or AccountType.OTHER
     icon = body.icon or "wallet"
     color = body.color or "#5b6472"
-    currency = body.currency or "RUB"
+    currency = validate_currency(body.currency or "RUB")
     opening_balance = body.opening_balance if body.opening_balance is not None else 0
     bank_ref = (body.bank_ref or "").strip()
     _validate_color(color)
@@ -202,10 +213,12 @@ def create_account(
             (uid,),
         ).fetchone()[0]
         cur = c.execute(
-            """INSERT INTO accounts
+            """
+            INSERT INTO accounts
                (user_id, name, type, icon, color, icon_image, currency, opening_balance,
                 opening_date, sort, connection_id, bank_ref, card_tails)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id
+            """,
             (
                 uid,
                 body.name,
@@ -222,8 +235,10 @@ def create_account(
                 _clean_tails(body.card_tails or []),
             ),
         )
+        created_id = int(cur.fetchone()["id"])
+        validate_account_valuations(c, [created_id])
         c.commit()
-        return AccountIdResponse(id=cur.lastrowid)
+        return AccountIdResponse(id=created_id)
     finally:
         c.close()
 
@@ -243,6 +258,7 @@ def patch_account(
         _update_account_fields(c, account_id, uid, patch)
         _update_account_connection(c, account_id, uid, patch.connection_id)
         _update_account_tails(c, account_id, patch.card_tails)
+        validate_account_valuations(c, [account_id])
         c.commit()
         return {"ok": True}
     finally:
@@ -276,7 +292,10 @@ def _update_account_fields(
         ("UPDATE accounts SET type=? WHERE id=?", patch.type),
         ("UPDATE accounts SET icon=? WHERE id=?", patch.icon),
         ("UPDATE accounts SET color=? WHERE id=?", patch.color),
-        ("UPDATE accounts SET currency=? WHERE id=?", patch.currency),
+        (
+            "UPDATE accounts SET currency=? WHERE id=?",
+            validate_currency(patch.currency) if patch.currency is not None else None,
+        ),
         ("UPDATE accounts SET opening_balance=? WHERE id=?", patch.opening_balance),
         ("UPDATE accounts SET opening_date=? WHERE id=?", patch.opening_date),
         (
@@ -381,7 +400,8 @@ def delete_account(
                 raise HTTPException(400, "unknown reassign target")
 
             moved = c.execute(
-                "SELECT id, date, amount, description FROM transactions WHERE account_id=?",
+                "SELECT id, date, amount, currency, description FROM transactions"
+                " WHERE account_id=?",
                 (account_id,),
             ).fetchall()
             c.executemany(
@@ -389,12 +409,19 @@ def delete_account(
                 [
                     (
                         reassign_to,
-                        tx_hash(reassign_to, r["date"], r["amount"], r["description"]),
+                        tx_hash(
+                            reassign_to,
+                            r["date"],
+                            r["amount"],
+                            r["description"],
+                            r["currency"],
+                        ),
                         r["id"],
                     )
                     for r in moved
                 ],
             )
+            validate_account_valuations(c, [reassign_to])
         c.execute(
             "UPDATE users SET default_account_id=NULL WHERE default_account_id=?",
             (account_id,),
@@ -421,30 +448,44 @@ def reconcile_account(
     c = conn()
     try:
         acc = c.execute(
-            "SELECT opening_balance FROM accounts WHERE id=? AND user_id=?",
+            "SELECT opening_balance, currency FROM accounts WHERE id=? AND user_id=?",
             (account_id, uid),
         ).fetchone()
         if not acc:
             raise HTTPException(404, "account not found")
 
-        total = c.execute(
-            "SELECT COALESCE(SUM(amount),0) FROM transactions"
+        rows = c.execute(
+            "SELECT date, amount, currency FROM transactions"
             " WHERE account_id=? AND hidden = 0"
             " AND (category_id IS NOT NULL OR transfer_id IS NOT NULL"
             "      OR source IN ('transfer', 'adjustment'))",
             (account_id,),
-        ).fetchone()[0]
+        ).fetchall()
+        total = sum(
+            to_base(c, row["amount"], row["currency"], acc["currency"], row["date"]) for row in rows
+        )
         current = acc["opening_balance"] + total
         delta = body.actual_balance - current
         if delta != 0:
             date = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S")
             desc = "Reconcile adjustment"
+            currency = account_currency(c, account_id)
             c.execute(
                 """INSERT INTO transactions
-                   (date, amount, description, account_id, hash, source)
-                   VALUES (?, ?, ?, ?, ?, 'adjustment')""",
-                (date, delta, desc, account_id, tx_hash(account_id, date, delta, desc)),
+                   (date, amount, currency, base_amount, description, account_id, hash, source)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, 'adjustment')
+                """,
+                (
+                    date,
+                    delta,
+                    currency,
+                    to_base(c, delta, currency, base_currency(c, uid), date),
+                    desc,
+                    account_id,
+                    tx_hash(account_id, date, delta, desc, currency),
+                ),
             )
+            validate_account_valuations(c, [account_id])
             c.commit()
         return {"delta": delta}
     finally:

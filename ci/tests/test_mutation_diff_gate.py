@@ -13,6 +13,13 @@ from monori.ci.lib import mutation_diff_gate as module
 
 
 class TestMutationDiffGate:
+    def test_makefile_uses_the_baseline_score_and_external_audit_dependencies(self) -> None:
+        makefile = Path("Makefile").read_text()
+
+        assert "MUTATION_DIFF_THRESHOLD ?= 60" in makefile
+        assert "uv export --group runtime --no-emit-workspace" in makefile
+        assert "--skip-new-survivors" not in makefile
+
     def test_parses_mutmut_function_names(self) -> None:
         assert module.mutant_function("app.foo.x_run__mutmut_1") == ("run", None)
         assert module.mutant_function("app.foo.ǁAccountǁx_save__mutmut_2") == (
@@ -143,7 +150,6 @@ diff --git a/server/app/example.py b/server/app/example.py
                 root=root,
                 base="main",
                 threshold=90,
-                skip_new_survivors=False,
             )
 
             stats = module.collect_mutation_stats(
@@ -172,7 +178,6 @@ diff --git a/server/app/example.py b/server/app/example.py
                 root=Path(),
                 base="main",
                 threshold=80,
-                skip_new_survivors=False,
             )
             passing = module.MutationStats(killed=9, survived=1)
             failing = module.MutationStats(
@@ -196,31 +201,21 @@ diff --git a/server/app/example.py b/server/app/example.py
             assert "::error file=server/a%3Ab%2Cc.py,line=2" in capsys.readouterr().err
 
     @pytest.mark.parametrize(
-        ("stats", "skip_new_survivors", "expected"),
+        ("stats", "expected"),
         [
-            (module.MutationStats(killed=9, survived=1), False, 0),
-            (
-                module.MutationStats(killed=9, survived=1, new_survivors=1),
-                False,
-                1,
-            ),
-            (
-                module.MutationStats(killed=9, survived=1, new_survivors=1),
-                True,
-                0,
-            ),
-            (module.MutationStats(killed=7, survived=3), False, 1),
+            (module.MutationStats(killed=466, survived=162), 0),
+            (module.MutationStats(killed=6, survived=4, new_survivors=4), 0),
+            (module.MutationStats(killed=59, survived=41), 1),
         ],
     )
-    def test_verdict_enforces_score_and_new_survivors_independently(
+    def test_verdict_is_based_only_on_the_configured_score(
         self,
         tmp_path: Path,
         stats: module.MutationStats,
         *,
-        skip_new_survivors: bool,
         expected: int,
     ) -> None:
-        """Keep the score threshold and survivor regression policy independent."""
+        """Allow survivors above the score threshold and reject scores below it."""
         summary = tmp_path / "summary.md"
         result = module.report_verdict(
             module.GateRequest(
@@ -228,8 +223,7 @@ diff --git a/server/app/example.py b/server/app/example.py
                 Path(),
                 Path(),
                 "main",
-                80,
-                skip_new_survivors,
+                60,
             ),
             stats,
             summary,
@@ -249,7 +243,7 @@ diff --git a/server/app/example.py b/server/app/example.py
             f"| New survivors | {stats.new_survivors} |\n"
             f"| Considered | {stats.considered} |\n"
             f"| Score | {score:.2f}% |\n"
-            "| Threshold | 80% |\n"
+            "| Threshold | 60% |\n"
         )
 
     def test_revision_resolution_rejects_unknown_reference(self, tmp_path: Path) -> None:
@@ -337,7 +331,6 @@ diff --git a/server/app/example.py b/server/app/example.py
                     root=tmp_path,
                     base=base.decode(),
                     threshold=90,
-                    skip_new_survivors=False,
                 ),
                 summary,
             )

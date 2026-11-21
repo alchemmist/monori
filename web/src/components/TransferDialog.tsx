@@ -1,4 +1,7 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { api } from "../api.js";
+import { normalizeCurrency } from "../currencies.js";
+import { convertAmount } from "../money.js";
 import { useStore } from "../store.js";
 import { parseRub } from "../format.js";
 import AppDialog from "../ui/AppDialog.jsx";
@@ -20,12 +23,58 @@ export default function TransferDialog({
     const [from, setFrom] = useState(active[0] ? String(active[0].id) : "");
     const [to, setTo] = useState(active[1] ? String(active[1].id) : "");
     const [amount, setAmount] = useState("");
+    const [toAmount, setToAmount] = useState("");
     const [date, setDate] = useState(today());
     const [comment, setComment] = useState("");
     const [busy, setBusy] = useState(false);
+    const storedRates = useStore((state) => state.snapshot?.rates);
+    const snapshotRates = useMemo(() => storedRates ?? [], [storedRates]);
+    const [conversionRates, setConversionRates] = useState(snapshotRates);
+    const byId = useMemo(
+        () => new Map(active.map((account) => [String(account.id), account])),
+        [active],
+    );
+    const fromCurrency = normalizeCurrency(byId.get(from)?.currency);
+    const toCurrency = normalizeCurrency(byId.get(to)?.currency);
+
+    useEffect(() => {
+        let current = true;
+        void api.rates(date).then(
+            ({ rates }) => {
+                if (current) setConversionRates(rates);
+            },
+            () => {
+                if (current) setConversionRates(snapshotRates);
+            },
+        );
+        return () => {
+            current = false;
+        };
+    }, [date, snapshotRates]);
 
     const amountKop = parseRub(amount);
-    const valid = from !== "" && to !== "" && from !== to && amountKop != null && amountKop > 0;
+    let converted: number | null = null;
+    if (amountKop != null) {
+        try {
+            converted = convertAmount(amountKop, fromCurrency, toCurrency, conversionRates);
+        } catch {
+            converted = null;
+        }
+    }
+    const toAmountKop =
+        fromCurrency === toCurrency
+            ? amountKop
+            : toAmount.trim() === ""
+              ? converted
+              : parseRub(toAmount);
+    const valid =
+        from !== "" &&
+        to !== "" &&
+        from !== to &&
+        amountKop != null &&
+        amountKop > 0 &&
+        toAmountKop != null &&
+        toAmountKop > 0;
 
     const apply = async () => {
         if (!valid) return;
@@ -35,6 +84,7 @@ export default function TransferDialog({
                 fromAccountId: +from,
                 toAccountId: +to,
                 amount: amountKop,
+                ...(fromCurrency === toCurrency ? {} : { toAmount: toAmountKop }),
                 date: `${date}T12:00:00`,
                 comment: comment.trim(),
             });
@@ -66,7 +116,30 @@ export default function TransferDialog({
                     data={options}
                 />
                 <FSelect label="To" value={to === "" ? null : to} onChange={setTo} data={options} />
-                <FAmountInput label="Amount" value={amount} onChange={setAmount} autoFocus />
+                <FAmountInput
+                    label={fromCurrency === toCurrency ? "Amount" : `Sent (${fromCurrency})`}
+                    value={amount}
+                    onChange={setAmount}
+                    autoFocus
+                />
+                {fromCurrency !== toCurrency && (
+                    <>
+                        <FAmountInput
+                            label={`Received (${toCurrency})`}
+                            value={toAmount}
+                            placeholder={
+                                converted == null ? "" : String(converted / 100).replace(".", ",")
+                            }
+                            onChange={setToAmount}
+                        />
+                        {converted == null && toAmount === "" && (
+                            <Txt tone="danger" caption>
+                                No exchange rate is available for this date. Enter the received
+                                amount.
+                            </Txt>
+                        )}
+                    </>
+                )}
                 <FTextInput
                     label="Date"
                     type="date"

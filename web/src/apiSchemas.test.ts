@@ -2,6 +2,16 @@ import { describe, expect, it } from "vitest";
 import { authTokenSchema, snapshotSchema, transactionCreateSchema } from "./apiSchemas.js";
 
 const snapshot = {
+    baseCurrency: "RUB",
+    rates: [
+        {
+            code: "USD",
+            rate: 90,
+            day: "2026-11-18",
+            source: "cbr",
+            stale: false,
+        },
+    ],
     accounts: [
         {
             id: 1,
@@ -14,6 +24,7 @@ const snapshot = {
             sort: 1,
             archived: false,
             openingBalance: 0,
+            openingBaseAmount: 0,
             openingDate: null,
             connectionId: null,
             bankRef: "",
@@ -39,6 +50,9 @@ const snapshot = {
             id: 1,
             date: "2026-06-10T12:00:00",
             amount: -100,
+            currency: "RUB",
+            baseAmount: -100,
+            accountAmount: -100,
             description: "Lunch",
             bankCategory: "",
             mcc: "",
@@ -82,6 +96,15 @@ describe("API runtime contracts", () => {
             ],
         });
     });
+
+    it.each(["currency", "baseAmount", "accountAmount"])(
+        "rejects a transaction without %s",
+        (field) => {
+            const malformed = structuredClone(snapshot);
+            Object.assign(malformed.transactions[0]!, { [field]: undefined });
+            expect(() => snapshotSchema.parse(malformed)).toThrow();
+        },
+    );
 
     it("rejects unknown fields at nested boundaries", () => {
         const malformed = structuredClone(snapshot);

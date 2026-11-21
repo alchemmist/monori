@@ -46,6 +46,32 @@ const body = {
 };
 
 describe("addTransaction", () => {
+    it("uses the explicit currency when the account is not loaded", async () => {
+        vi.spyOn(api, "createTx").mockResolvedValue({ id: 99 });
+        const load = useStore.getState().load;
+        useStore.setState({
+            snapshot: buildSnapshot({
+                accounts: [],
+                rates: [
+                    { code: "RUB", rate: 1 },
+                    { code: "USD", rate: 90 },
+                ],
+            }),
+            load: vi.fn().mockResolvedValue(undefined),
+        });
+        const row = await useStore.getState().addTransaction({
+            ...body,
+            accountId: 99,
+            currency: "USD",
+        });
+        useStore.setState({ load });
+        expect(row).toMatchObject({
+            currency: "USD",
+            baseAmount: -4_050_000,
+            accountAmount: -45_000,
+        });
+    });
+
     it("posts the row and merges it into the ledger in date order", async () => {
         vi.spyOn(api, "createTx").mockResolvedValue({ id: 42 });
 

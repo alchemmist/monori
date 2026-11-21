@@ -15,15 +15,20 @@ from typing import Annotated, cast
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import OAuth2PasswordRequestForm
-from pydantic import ConfigDict, Field
+from pydantic import ConfigDict, Field, model_validator
 from pydantic.dataclasses import dataclass as pydantic_dataclass
+from pydantic_core import ArgsKwargs
 
+from monori.common import JsonValue
 from monori.server.app.admin import admin_emails
 from monori.server.app.auth import AuthenticatedUser, current_user
+from monori.server.app.currencies import validate as validate_currency
 from monori.server.app.db import begin_write
 from monori.server.app.db_records import UserRecord
 from monori.server.app.deps import UserResponse, conn, serialize_user
 from monori.server.app.emails import canonical_email, normalize_email
+from monori.server.app.money import reprice_plans, reprice_user, validate_account_valuations
+from monori.server.app.rates import today_iso
 from monori.server.app.security import create_access_token, hash_password, verify_password
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -33,6 +38,12 @@ MAX_EMAIL_LEN = 254
 INVALID_EMAIL_DETAIL = "invalid email"
 DUPLICATE_EMAIL_DETAIL = "email already registered"
 CREATED_AT_FORMAT = "%Y-%m-%dT%H:%M:%S"
+
+
+class _PreferenceBodyError(ValueError):
+    """Indicate that preference input is not a JSON object."""
+
+
 MIN_LENGTH_DETAIL = "password must be at least {minimum} characters"
 INSERT_USER_SQL = (
     "INSERT INTO users (email, email_canonical, password_hash, created_at) VALUES (?, ?, ?, ?)"
@@ -47,7 +58,8 @@ INSERT_CASH_ACCOUNT_SQL = (
     " VALUES (?, 'Cash', 'cash', 'RUB', 1)"
 )
 SELECT_USER_SQL = (
-    "SELECT id, email, created_at, is_admin, last_login, default_account_id FROM users WHERE id=?"
+    "SELECT id, email, created_at, is_admin, last_login, base_currency, default_account_id"
+    " FROM users WHERE id=?"
 )
 
 
@@ -185,6 +197,29 @@ class MePatch:
     """Represent MePatch."""
 
     default_account_id: int | None = Field(default=None, alias="defaultAccountId")
+    base_currency: str | None = Field(default=None, alias="baseCurrency")
+    default_account_id_provided: bool = Field(default=False, exclude=True, repr=False)
+
+    @model_validator(mode="before")
+    @classmethod
+    def record_presence(cls, values: JsonValue | ArgsKwargs) -> JsonValue | ArgsKwargs:
+        """Record whether the caller explicitly supplied the nullable preference."""
+        positional_default = False
+        if isinstance(values, ArgsKwargs):
+            data = values.kwargs
+            if data is None:
+                data = {}
+            positional_default = bool(values.args)
+        elif isinstance(values, dict):
+            data = values
+        else:
+            raise _PreferenceBodyError
+        data["default_account_id_provided"] = (
+            positional_default or "defaultAccountId" in data or "default_account_id" in data
+        )
+        if isinstance(values, ArgsKwargs):
+            return ArgsKwargs(values.args, data)
+        return values
 
 
 @router.patch("/me")
@@ -201,6 +236,23 @@ def patch_me(
     uid = user.id
     c = conn()
     try:
+        begin_write(c)
+        if body.base_currency is not None:
+            old_currency = c.execute(
+                "SELECT base_currency FROM users WHERE id=?",
+                (uid,),
+            ).fetchone()["base_currency"]
+            new_currency = validate_currency(body.base_currency)
+            c.execute(
+                "UPDATE users SET base_currency=? WHERE id=?",
+                (new_currency, uid),
+            )
+            reprice_user(c, uid)
+            reprice_plans(c, uid, old_currency, new_currency, today_iso())
+            validate_account_valuations(
+                c,
+                (row["id"] for row in c.execute("SELECT id FROM accounts WHERE user_id=?", (uid,))),
+            )
         default_account_id = body.default_account_id
         if (
             default_account_id is not None
@@ -210,10 +262,11 @@ def patch_me(
             ).fetchone()
         ):
             raise HTTPException(400, "unknown account")
-        c.execute("UPDATE users SET default_account_id=? WHERE id=?", (default_account_id, uid))
+        if body.default_account_id_provided:
+            c.execute("UPDATE users SET default_account_id=? WHERE id=?", (default_account_id, uid))
         c.commit()
         row = c.execute(
-            "SELECT id, email, created_at, is_admin, last_login, default_account_id"
+            "SELECT id, email, created_at, is_admin, last_login, base_currency, default_account_id"
             " FROM users WHERE id=?",
             (uid,),
         ).fetchone()

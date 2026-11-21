@@ -38,6 +38,7 @@ from monori.server.app.connectors.base import (
     SyncResult,
     SyncRow,
 )
+from monori.server.app.currencies import normalize
 from monori.server.app.deps import conn
 from monori.server.app.domain_types import ConnectionStatus, TransactionSource
 from monori.server.app.importer import CategoryDefinition, CategoryRule, build_rules
@@ -339,7 +340,7 @@ def _route_rows(
     uid: int,
     default_account_id: int,
     rows: list[SyncRow],
-) -> tuple[dict[int, list[SyncRow]], dict[str, int]]:
+) -> tuple[dict[int, list[SyncRow]], dict[str, int], dict[int, str]]:
     """
     Split synced rows between the user's accounts by their bound card tails.
 
@@ -349,10 +350,15 @@ def _route_rows(
     reported back so the user can fix the bindings instead of silently merging.
     """
     bound: dict[str, set[int]] = {}
-    for r in c.execute("SELECT id, card_tails FROM accounts WHERE user_id=? ORDER BY id", (uid,)):
+    currencies: dict[int, str] = {}
+    for r in c.execute(
+        "SELECT id, card_tails, currency FROM accounts WHERE user_id=? ORDER BY id", (uid,)
+    ):
+        account_id = int(r["id"])
+        currencies[account_id] = normalize(r["currency"])
         for t in str(r["card_tails"] or "").split(","):
             if t:
-                bound.setdefault(t, set()).add(int(r["id"]))
+                bound.setdefault(t, set()).add(account_id)
     routed: dict[int, list[SyncRow]] = {}
     unmapped: dict[str, int] = {}
     seen_tails = set()
@@ -369,10 +375,11 @@ def _route_rows(
             target = default_account_id
             if tail:
                 unmapped[tail] = unmapped.get(tail, 0) + 1
+        row.account_id = target
         routed.setdefault(target, []).append(row)
     if len(seen_tails) <= 1:
         unmapped = {}
-    return routed, unmapped
+    return routed, unmapped, currencies
 
 
 def _finish_account(
@@ -391,8 +398,14 @@ def _finish_account(
     rules = _load_user_rules(c, uid)
     categorize_rows(result.rows, rules)
 
+    _, unmapped, currencies = _route_rows(c, uid, account_id, result.rows)
+    for synced in result.rows:
+        if not normalize(synced.currency, ""):
+            synced.currency = currencies[synced.account_id or account_id]
     rows, redelivered = drop_already_present(result.rows, historical_day_counts(c, uid))
-    routed, unmapped = _route_rows(c, uid, account_id, rows)
+    routed: dict[int, list[SyncRow]] = {}
+    for synced in rows:
+        routed.setdefault(synced.account_id or account_id, []).append(synced)
 
     routed.setdefault(account_id, [])
     summaries: list[AccountSyncSummary] = []

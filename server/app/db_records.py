@@ -268,6 +268,8 @@ class TransactionRecord:
     id: int
     date: str
     amount: int
+    currency: str
+    base_amount: int
     description: str
     bank_category: str
     mcc: str
@@ -285,6 +287,8 @@ class TransactionRecord:
             id=row_int(row, "id"),
             date=row_str(row, "date"),
             amount=row_int(row, "amount"),
+            currency=row_str(row, "currency"),
+            base_amount=row_int(row, "base_amount"),
             description=row_str(row, "description"),
             bank_category=row_str(row, "bank_category"),
             mcc=row_str(row, "mcc"),
@@ -306,6 +310,7 @@ class UserRecord:
     created_at: str
     is_admin: bool
     last_login: str | None
+    base_currency: str
     default_account_id: int | None
 
     @classmethod
@@ -317,6 +322,7 @@ class UserRecord:
             created_at=row_str(row, "created_at"),
             is_admin=row_bool(row, "is_admin"),
             last_login=row_optional_str(row, "last_login"),
+            base_currency=row_str(row, "base_currency"),
             default_account_id=row_optional_int(row, "default_account_id"),
         )
 

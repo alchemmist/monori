@@ -24,6 +24,7 @@ class AuthenticatedUser:
     created_at: str
     is_admin: bool
     last_login: str | None
+    base_currency: str
     default_account_id: int | None
 
     def to_api_dict(self) -> UserResponse:
@@ -34,6 +35,7 @@ class AuthenticatedUser:
             created_at=self.created_at,
             is_admin=self.is_admin,
             last_login=self.last_login,
+            base_currency=self.base_currency,
             default_account_id=self.default_account_id,
         )
 
@@ -47,6 +49,7 @@ def _user_from_row(row: sqlite3.Row) -> AuthenticatedUser:
         created_at=str(row["created_at"]),
         is_admin=bool(row["is_admin"]),
         last_login=last_login if isinstance(last_login, str) else None,
+        base_currency=str(row["base_currency"]),
         default_account_id=default_account_id if isinstance(default_account_id, int) else None,
     )
 
@@ -62,7 +65,7 @@ def current_user(token: Annotated[str, Depends(oauth2_scheme)]) -> Authenticated
     c = conn()
     try:
         row = c.execute(
-            "SELECT id, email, created_at, is_admin, last_login, default_account_id"
+            "SELECT id, email, created_at, is_admin, last_login, base_currency, default_account_id"
             " FROM users WHERE id=?",
             (user_id,),
         ).fetchone()

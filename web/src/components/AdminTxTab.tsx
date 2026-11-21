@@ -174,7 +174,7 @@ export default function AdminTxTab({ user, onClose }: { user: User; onClose: () 
                                             color: t.amount >= 0 ? "var(--m-income)" : undefined,
                                         }}
                                     >
-                                        {money(t.amount)}
+                                        {money(t.amount, t.currency)}
                                     </td>
                                 </tr>
                             ))}

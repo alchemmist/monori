@@ -9,6 +9,7 @@ import datetime as dt
 import sqlite3
 from collections.abc import Iterable, Mapping
 
+from monori.server.app.currencies import normalize
 from monori.server.app.domain_types import TransactionSource
 from monori.server.app.importer import ImportRow
 from monori.server.app.ingest import commit_rows, dedup_text, historical_day_counts
@@ -130,13 +131,18 @@ def _norm(name: str) -> str:
 
 def _drop_already_present(
     rows: Iterable[WorkbookTransaction],
-    counts: Mapping[tuple[str, int, str], int],
+    counts: Mapping[tuple[str, int, str, str], int],
 ) -> tuple[list[WorkbookTransaction], int]:
-    seen: dict[tuple[str, int, str], int] = {}
+    seen: dict[tuple[str, int, str, str], int] = {}
     kept: list[WorkbookTransaction] = []
     dropped = 0
     for row in rows:
-        key = (row.date[:10], row.amount, dedup_text(row.description))
+        key = (
+            row.date[:10],
+            row.amount,
+            normalize(row.currency),
+            dedup_text(row.description),
+        )
         n = seen.get(key, 0)
         seen[key] = n + 1
         if n < counts.get(key, 0):
@@ -186,6 +192,7 @@ def _import_transactions(
         row = ImportRow(
             date=tx.date,
             amount=tx.amount,
+            currency=tx.currency,
             description=tx.description,
             bank_category=tx.bank_category,
             mcc=tx.mcc,

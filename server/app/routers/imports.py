@@ -13,6 +13,9 @@ from pydantic.dataclasses import dataclass as pydantic_dataclass
 
 from monori.server.app.auth import AuthenticatedUser, current_user
 from monori.server.app.connectors.base import SyncRow
+from monori.server.app.currencies import normalize
+from monori.server.app.currencies import validate as validate_currency
+from monori.server.app.db import begin_write
 from monori.server.app.deps import conn
 from monori.server.app.domain_types import TransactionSource
 from monori.server.app.importer import (
@@ -26,6 +29,7 @@ from monori.server.app.importer import (
     tx_hash,
 )
 from monori.server.app.ingest import commit_rows, existing_hash_counts
+from monori.server.app.money import account_currency
 from monori.server.app.transfer_service import detect
 from monori.server.app.value_types import Money, TransactionDate
 from monori.server.app.workbook.apply import apply_workbook, budget_conflicts
@@ -64,6 +68,7 @@ class CommitRow:
 
     date: TransactionDate
     amount: Money
+    currency: str | None = None
     description: str = ""
     bank_category: str = ""
     mcc: str = ""
@@ -92,6 +97,7 @@ class ImportRowResponse:
 
     date: str
     amount: int
+    currency: str | None
     description: str
     bank_category: str
     mcc: str
@@ -222,6 +228,7 @@ def _serialize_import_row(row: ImportRow) -> ImportRowResponse:
     return ImportRowResponse(
         date=row.date,
         amount=row.amount,
+        currency=row.currency,
         description=row.description,
         bank_category=row.bank_category,
         mcc=row.mcc,
@@ -350,7 +357,10 @@ def _mark_duplicates(c: sqlite3.Connection, rows: list[ImportRow]) -> None:
         if existing is None:
             existing = existing_hash_counts(c, account_id)
             existing_by_account[account_id] = existing
-        row.hash = tx_hash(account_id, row.date, row.amount, row.description)
+        held = account_currency(c, account_id)
+        named = normalize(row.currency, "")
+        row.currency = validate_currency(named) if named else held
+        row.hash = tx_hash(account_id, row.date, row.amount, row.description, row.currency)
         key = (account_id, row.hash)
         n_batch = seen_in_batch.get(key, 0)
         row.duplicate = existing.get(row.hash, 0) > n_batch
@@ -393,6 +403,10 @@ def import_preview(
                 if kinds.get(category_id) != expected:
                     category_id = None
             row.category_id = category_id
+            if row.account_id is not None:
+                held = account_currency(c, row.account_id)
+                named = normalize(row.currency, "")
+                row.currency = validate_currency(named) if named else held
         _mark_duplicates(c, rows)
         return ImportPreviewResponse(
             rows=[_serialize_import_row(row) for row in rows],
@@ -420,6 +434,7 @@ def import_duplicates(
                 mcc=row.mcc,
                 card="",
                 account_id=row.account_id,
+                currency=row.currency,
             )
             for row in body.rows
         ]
@@ -445,6 +460,7 @@ def import_commit(
     uid = user.id
     c = conn()
     try:
+        begin_write(c)
         if body.account_id is not None and not _owned_account(c, body.account_id, uid):
             raise HTTPException(400, "unknown account")
         _validate_import_categories(c, uid, body.rows)
@@ -457,6 +473,7 @@ def import_commit(
                 SyncRow(
                     date=r.date,
                     amount=r.amount,
+                    currency=r.currency,
                     description=r.description,
                     bank_category=r.bank_category,
                     mcc=r.mcc,
@@ -642,6 +659,7 @@ def _commit_workbook(
         raise HTTPException(400, f"unmapped account slots: {missing}")
     c = conn()
     try:
+        begin_write(c)
         for account_id in set(marker_map.values()):
             if not _owned_account(c, account_id, uid):
                 raise HTTPException(400, f"unknown account: {account_id}")

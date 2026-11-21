@@ -1,5 +1,6 @@
 # Copyright (c) 2026
 import pathlib
+import sqlite3
 import sys
 from dataclasses import asdict
 
@@ -92,6 +93,7 @@ def test_serialize_account() -> None:
         "sort": 2,
         "archived": False,
         "opening_balance": 12345,
+        "opening_base_amount": 12345,
         "opening_date": "2024-01-01",
         "connection_id": 9,
         "bank_ref": "5858870594",
@@ -126,6 +128,8 @@ def test_serialize_tx() -> None:
         id=11,
         date="2026-01-05T00:00:00",
         amount=-150000,
+        currency="RUB",
+        base_amount=-150000,
         description="LANDLORD",
         bank_category="Housing",
         mcc="6513",
@@ -136,10 +140,15 @@ def test_serialize_tx() -> None:
         source=TransactionSource.IMPORT,
         hidden=False,
     )
-    assert asdict(serialize_tx(row)) == {
+    with sqlite3.connect(":memory:") as connection:
+        serialized = asdict(serialize_tx(connection, row, "RUB"))
+    assert serialized == {
         "id": 11,
         "date": "2026-01-05T00:00:00",
         "amount": -150000,
+        "currency": "RUB",
+        "base_amount": -150000,
+        "account_amount": -150000,
         "description": "LANDLORD",
         "bank_category": "Housing",
         "mcc": "6513",

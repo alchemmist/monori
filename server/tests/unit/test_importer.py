@@ -73,11 +73,29 @@ def test_parse_statement_skips_csv_header_row() -> None:
         "Bonuses (including cashback);"
         "Rounding to spare coins;Rounded operation amount\n"
     )
-    line = '05.07.2026;05.07.2026;*1;OK;-20,00;RUB;-20,00;RUB;;Transport;4111;"Metro";0;0;-20,00\n'
+    line = '05.07.2026;05.07.2026;*1;OK;-10,00;EUR;-20,00;USD;;Transport;4111;"Metro";0;0;-20,00\n'
     rows, errors = parse_statement(header + line)
     assert not errors
     assert len(rows) == 1
     assert rows[0]["description"] == "Metro"
+    assert rows[0].amount == -2000
+    assert rows[0].currency == "USD"
+    assert rows[0].to_sync_dict().currency == "USD"
+
+
+def test_parse_statement_pairs_settlement_amount_and_currency_when_headers_reorder() -> None:
+    header = (
+        "Operation date;Payment amount;Payment currency;Operation amount;"
+        "Transaction currency;Payment date;Card number;Status;Cashback;Category;"
+        "MCC;Description\n"
+    )
+    line = "05.07.2026;-20,00;USD;-10,00;EUR;05.07.2026;*1;OK;;Transport;4111;Metro\n"
+
+    rows, errors = parse_statement(header + line)
+
+    assert not errors
+    assert len(rows) == 1
+    assert (rows[0].amount, rows[0].currency) == (-2000, "USD")
 
 
 def test_parse_statement_maps_current_tbank_header() -> None:
@@ -98,6 +116,7 @@ def test_parse_statement_maps_current_tbank_header() -> None:
     assert len(rows) == 1
     assert rows[0]["date"] == "2026-07-03T19:48:24"
     assert rows[0]["amount"] == -45000
+    assert rows[0].currency == "RUB"
     assert rows[0]["description"] == "Sberbank"
 
 

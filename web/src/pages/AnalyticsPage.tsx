@@ -4,8 +4,9 @@ import { Rectangle, type BarShapeProps } from "recharts";
 import InlineSelect from "../ui/InlineSelect.jsx";
 import { ChartBoundary } from "../components/ChartCard.jsx";
 import { MoneyChartTooltip } from "../components/ChartTooltip.jsx";
-import { useStore } from "../store.js";
+import { useBaseCurrency, useStore } from "../store.js";
 import { rub, money, fmtDate, MONTHS_SHORT, normalizeKop } from "../format.js";
+import { currencySymbol } from "../currencies.js";
 import {
     monthlySeries,
     yearTotals,
@@ -138,6 +139,8 @@ export default function AnalyticsPage({
     firstYear: number;
     lastYear: number;
 }) {
+    const baseCurrency = useBaseCurrency();
+    const currency = currencySymbol(baseCurrency);
     const { snapshot } = useStore();
     if (!snapshot) throw new Error("Analytics requires a loaded snapshot");
     const now = useMemo(() => new Date(), []);
@@ -261,17 +264,25 @@ export default function AnalyticsPage({
             </h2>
 
             <div className="kpi-row">
-                <Kpi label="Income" value={`${rub(thisYear?.income ?? 0)} ₽`} sub={year} />
+                <Kpi
+                    label="Income"
+                    value={`${rub(thisYear?.income ?? 0)} ${currency}`}
+                    sub={year}
+                />
                 <Kpi
                     label="Avg income / month"
-                    value={`${rub(Math.round((thisYear?.income ?? 0) / incomeMonths))} ₽`}
+                    value={`${rub(Math.round((thisYear?.income ?? 0) / incomeMonths))} ${currency}`}
                     color="var(--m-income)"
                     sub={`${incomeMonths} month${incomeMonths === 1 ? "" : "s"}`}
                 />
-                <Kpi label="Expenses" value={`${rub(thisYear?.expense ?? 0)} ₽`} sub={year} />
+                <Kpi
+                    label="Expenses"
+                    value={`${rub(thisYear?.expense ?? 0)} ${currency}`}
+                    sub={year}
+                />
                 <Kpi
                     label="Net saved"
-                    value={`${rub(thisYear?.net ?? 0)} ₽`}
+                    value={`${rub(thisYear?.net ?? 0)} ${currency}`}
                     color={(thisYear?.net ?? 0) >= 0 ? "var(--m-income)" : "var(--m-expense)"}
                     sub={year}
                 />
@@ -299,7 +310,7 @@ export default function AnalyticsPage({
                 />
                 <Kpi
                     label="Over budget"
-                    value={`${rub(discipline.totalOverrun)} ₽`}
+                    value={`${rub(discipline.totalOverrun)} ${currency}`}
                     color={discipline.totalOverrun > 0 ? "var(--m-expense)" : "var(--m-text-faint)"}
                     sub={
                         discipline.worst
@@ -458,7 +469,7 @@ export default function AnalyticsPage({
                             </span>
                         </div>
                     </div>
-                    <DisciplineGrid rows={discipline.rows} year={year} />
+                    <DisciplineGrid rows={discipline.rows} year={year} currency={currency} />
                 </div>
 
                 <div className="card chart-card">
@@ -639,7 +650,7 @@ export default function AnalyticsPage({
                             </div>
                             <div className="stat-list__row">
                                 <span>Median expense</span>
-                                <span className="num">{money(stats.median)}</span>
+                                <span className="num">{money(stats.median, baseCurrency)}</span>
                             </div>
                             <div className="stat-list__row">
                                 <span>Per month</span>
@@ -655,7 +666,7 @@ export default function AnalyticsPage({
                                         </div>
                                     </span>
                                     <span className="num" style={{ color: "var(--m-expense)" }}>
-                                        {money(stats.largest.amount)}
+                                        {money(stats.largest.amount, baseCurrency)}
                                     </span>
                                 </div>
                             )}
@@ -675,7 +686,7 @@ export default function AnalyticsPage({
                             </div>
                             <div className="stat-list__row">
                                 <span>Median income</span>
-                                <span className="num">{money(income.median)}</span>
+                                <span className="num">{money(income.median, baseCurrency)}</span>
                             </div>
                             <div className="stat-list__row">
                                 <span>Per month</span>
@@ -691,7 +702,7 @@ export default function AnalyticsPage({
                                         </div>
                                     </span>
                                     <span className="num" style={{ color: "var(--m-income)" }}>
-                                        {money(income.largest.amount)}
+                                        {money(income.largest.amount, baseCurrency)}
                                     </span>
                                 </div>
                             )}
@@ -707,7 +718,15 @@ type DisciplineRows = ReturnType<typeof disciplineMatrix>["rows"];
 type DisciplineCell = DisciplineRows[number]["cells"][number];
 type DisciplineCategory = DisciplineRows[number]["category"];
 
-function DisciplineGrid({ rows, year }: { rows: DisciplineRows; year: string }) {
+function DisciplineGrid({
+    rows,
+    year,
+    currency,
+}: {
+    rows: DisciplineRows;
+    year: string;
+    currency: string;
+}) {
     if (!rows.length) {
         return <div className="chart-card__empty">No budgeted envelopes in {year}</div>;
     }
@@ -730,7 +749,7 @@ function DisciplineGrid({ rows, year }: { rows: DisciplineRows; year: string }) 
                                 <td key={m}>
                                     <div
                                         className={`disc-cell ${discClass(cell)}`}
-                                        title={discTitle(category, cell, m)}
+                                        title={discTitle(category, cell, m, currency)}
                                     />
                                 </td>
                             ))}
@@ -750,7 +769,12 @@ function discClass(cell: DisciplineCell) {
     return "disc-cell_over";
 }
 
-function discTitle(category: DisciplineCategory, cell: DisciplineCell, m: number) {
+function discTitle(
+    category: DisciplineCategory,
+    cell: DisciplineCell,
+    m: number,
+    currency: string,
+) {
     if (cell.ratio == null) return `${category.name} · ${MONTHS_SHORT[m]}: —`;
     const pct = cell.ratio === Infinity ? "no budget" : `${Math.round(cell.ratio * 100)}%`;
     // available is the envelope (this month's budget plus what carried over), so
@@ -759,7 +783,7 @@ function discTitle(category: DisciplineCategory, cell: DisciplineCell, m: number
         normalizeKop(cell.available) !== normalizeKop(cell.budgeted)
             ? ` · budgeted ${rub(cell.budgeted)} + carry-over`
             : "";
-    return `${category.name} · ${MONTHS_SHORT[m]}: ${rub(cell.spent)} / ${rub(cell.available)} ₽ (${pct})${carried}`;
+    return `${category.name} · ${MONTHS_SHORT[m]}: ${rub(cell.spent)} / ${rub(cell.available)} ${currency} (${pct})${carried}`;
 }
 
 function Kpi({

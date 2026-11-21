@@ -14,6 +14,8 @@ import sqlite3
 from collections.abc import Iterable, Mapping
 
 from monori.server.app.connectors.base import SyncRow
+from monori.server.app.currencies import normalize
+from monori.server.app.currencies import validate as validate_currency
 from monori.server.app.domain_types import TransactionSource
 from monori.server.app.importer import (
     CategoryDefinition,
@@ -22,11 +24,18 @@ from monori.server.app.importer import (
     categorize,
     tx_hash,
 )
+from monori.server.app.money import (
+    account_currency,
+    base_currency_of_account,
+    to_base,
+    validate_account_valuations,
+)
 
 INSERT_SQL = """INSERT INTO transactions
-   (date, amount, description, bank_category, mcc, category_id, account_id,
-    batch_id, hash, source)
-   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
+   (date, amount, currency, base_amount, description, bank_category, mcc, category_id,
+    account_id, batch_id, hash, source)
+   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+"""
 
 
 def load_rules(c: sqlite3.Connection) -> dict[str, list[CategoryRule]]:
@@ -87,7 +96,7 @@ def historical_day_counts(
         TransactionSource.SYNC,
         TransactionSource.SHEETS,
     ),
-) -> dict[tuple[str, int, str], int]:
+) -> dict[tuple[str, int, str, str], int]:
     """
     ``(day, amount, normalized description) -> count`` over every transaction.
 
@@ -101,22 +110,27 @@ def historical_day_counts(
     ``sheets`` is the retired template importer's label — those rows are still
     in the wild and are statement-shaped all the same.
     """
-    counts: dict[tuple[str, int, str], int] = {}
+    counts: dict[tuple[str, int, str, str], int] = {}
     for r in c.execute(
-        "SELECT substr(t.date, 1, 10) day, t.amount, t.description, COUNT(*) n"
+        "SELECT substr(t.date, 1, 10) day, t.amount, t.currency, t.description, COUNT(*) n"
         " FROM transactions t JOIN accounts a ON a.id = t.account_id"
         " WHERE a.user_id=? AND t.source IN (SELECT value FROM json_each(?))"
-        " GROUP BY day, t.amount, t.description",
+        " GROUP BY day, t.amount, t.currency, t.description",
         (uid, json.dumps(sources)),
     ):
-        key = (str(r["day"]), int(r["amount"]), dedup_text(str(r["description"])))
+        key = (
+            str(r["day"]),
+            int(r["amount"]),
+            normalize(r["currency"]),
+            dedup_text(str(r["description"])),
+        )
         counts[key] = counts.get(key, 0) + int(r["n"])
     return counts
 
 
 def drop_already_present(
     rows: Iterable[SyncRow],
-    counts: Mapping[tuple[str, int, str], int],
+    counts: Mapping[tuple[str, int, str, str], int],
 ) -> tuple[list[SyncRow], int]:
     """
     Drop rows the ledger already holds according to ``counts``, counting.
@@ -125,11 +139,16 @@ def drop_already_present(
     as the ledger holds fewer copies than the batch carries. Returns
     ``(kept, dropped)``.
     """
-    seen: dict[tuple[str, int, str], int] = {}
+    seen: dict[tuple[str, int, str, str], int] = {}
     kept: list[SyncRow] = []
     dropped = 0
     for row in rows:
-        key = (row.date[:10], row.amount, dedup_text(row.description))
+        key = (
+            row.date[:10],
+            row.amount,
+            normalize(row.currency),
+            dedup_text(row.description),
+        )
         n = seen.get(key, 0)
         seen[key] = n + 1
         if n < counts.get(key, 0):
@@ -154,10 +173,14 @@ def commit_rows(
     — the caller owns the transaction. Returns ``(inserted, skipped)``.
     """
     existing = existing_hash_counts(c, account_id)
+    held = account_currency(c, account_id)
+    reporting_currency = base_currency_of_account(c, account_id)
     seen: dict[str, int] = {}
     inserted = skipped = 0
     for r in rows:
-        h = tx_hash(account_id, r.date, r.amount, r.description)
+        named = normalize(r.currency, "")
+        currency = validate_currency(named) if named else held
+        h = tx_hash(account_id, r.date, r.amount, r.description, currency)
         n_batch = seen.get(h, 0)
         seen[h] = n_batch + 1
         if n_batch < existing.get(h, 0):
@@ -168,6 +191,8 @@ def commit_rows(
             (
                 r.date,
                 r.amount,
+                currency,
+                to_base(c, r.amount, currency, reporting_currency, r.date),
                 r.description,
                 r.bank_category,
                 r.mcc,
@@ -179,6 +204,7 @@ def commit_rows(
             ),
         )
         inserted += 1
+    validate_account_valuations(c, [account_id])
     return inserted, skipped
 
 

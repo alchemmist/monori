@@ -3,7 +3,8 @@ import { ActionIcon, Button, SegmentedControl } from "@mantine/core";
 import InlineSelect from "../ui/InlineSelect.jsx";
 import RowMenu from "../ui/RowMenu.jsx";
 import { Plus, ChevronDown, EllipsisVertical } from "@gravity-ui/icons";
-import { useStore } from "../store.js";
+import { useBaseCurrency, useStore } from "../store.js";
+import { currencySymbol } from "../currencies.js";
 import { orderedGroups, categoriesByGroup } from "../categoryOrder.js";
 import { MONTHS_SHORT, MONTHS, normalizeKop, rub } from "../format.js";
 import BudgetCell from "../components/BudgetCell.jsx";
@@ -43,6 +44,7 @@ export default function BudgetPage({
     firstYear: number;
     lastYear: number;
 }) {
+    const currency = currencySymbol(useBaseCurrency());
     const {
         snapshot,
         setBudget,
@@ -353,20 +355,24 @@ export default function BudgetPage({
                                     color: available < 0 ? "var(--m-expense)" : "var(--m-income)",
                                 }}
                             >
-                                {rub(available)} ₽
+                                {rub(available)} {currency}
                             </div>
                             <div className="hero-card__hint">end of {MONTHS[month]}</div>
                         </div>
                         <div className="card hero-card">
                             <div className="hero-card__label">Income</div>
-                            <div className="hero-card__value num">{rub(income)} ₽</div>
+                            <div className="hero-card__value num">
+                                {rub(income)} {currency}
+                            </div>
                             <div className="hero-card__hint">
                                 {MONTHS[month]} {year}
                             </div>
                         </div>
                         <div className="card hero-card">
                             <div className="hero-card__label">Budgeted</div>
-                            <div className="hero-card__value num">{rub(budgetedTotal)} ₽</div>
+                            <div className="hero-card__value num">
+                                {rub(budgetedTotal)} {currency}
+                            </div>
                             <div className="hero-card__hint">across all categories</div>
                         </div>
                         <div className="card hero-card">
@@ -378,7 +384,7 @@ export default function BudgetPage({
                                         overspent < 0 ? "var(--m-expense)" : "var(--m-text-faint)",
                                 }}
                             >
-                                {rub(overspent)} ₽
+                                {rub(overspent)} {currency}
                             </div>
                             <div className="hero-card__hint">uncovered this month</div>
                         </div>

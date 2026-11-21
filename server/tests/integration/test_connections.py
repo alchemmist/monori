@@ -487,7 +487,6 @@ def test_sync_routes_rows_by_bound_card_tail(
     by_account = {r["accountId"]: r for r in body["accounts"]}
     assert by_account[main]["inserted"] == 2
     assert by_account[other]["inserted"] == 1
-
     assert body["unmappedTails"] == [
         {"tail": "1111", "rows": 1},
         {"tail": "8181", "rows": 1},
@@ -498,6 +497,41 @@ def test_sync_routes_rows_by_bound_card_tail(
     assert routed["B"] == other
     assert routed["A"] == main
     assert routed["C"] == main
+
+
+def test_sync_dedup_inherits_routed_currency_and_counts_repeated_rows(
+    api: Api,
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setitem(base.REGISTRY, ("multicard", "multicard"), MultiCardConnector)
+    monkeypatch.setattr(
+        MultiCardConnector,
+        "rows",
+        [SyncRow("2026-03-01T09:00:00", -100, "Kafe.Lesnoj", "", "", "*8181")],
+    )
+    account = api.account("GEL card", AccountOptions(currency="GEL"))
+    connection_id = _connect_multicard(client, account)
+    first = client.post(f"/api/connections/{connection_id}/sync")
+    assert first.status_code == 200, first.text
+
+    monkeypatch.setattr(
+        MultiCardConnector,
+        "rows",
+        [
+            SyncRow("2026-03-01T10:00:00", -100, "Kafe Lesnoj", "", "", "*8181"),
+            SyncRow("2026-03-01T11:00:00", -100, "Kafe Lesnoj", "", "", "*8181"),
+        ],
+    )
+    second = client.post(f"/api/connections/{connection_id}/sync")
+    assert second.status_code == 200, second.text
+    body = second.json()
+
+    assert body["inserted"] == 1
+    assert body["skipped"] == 1
+    transactions = api.snapshot().transactions
+    assert len(transactions) == 2
+    assert {transaction.currency for transaction in transactions} == {"GEL"}
 
 
 def test_single_card_feed_reports_no_unmapped_tails(

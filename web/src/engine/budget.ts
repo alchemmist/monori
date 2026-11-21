@@ -15,11 +15,13 @@
  */
 
 import type { Account, BudgetCell, Category, Id, Snapshot, Transaction } from "../types.js";
+import { reported } from "./reported.js";
+import { convertAmount, roundRatio } from "../money.js";
 
-type BudgetTransaction = Pick<Transaction, "date" | "amount" | "categoryId"> &
+type BudgetTransaction = Pick<Transaction, "date" | "amount" | "baseAmount" | "categoryId"> &
     Partial<Pick<Transaction, "transferId" | "splits">>;
 type OpeningAccount = Pick<Account, "id" | "openingBalance"> &
-    Partial<Pick<Account, "openingDate">>;
+    Partial<Pick<Account, "openingDate" | "currency" | "openingBaseAmount">>;
 type AccountTransaction = Pick<Transaction, "accountId" | "date">;
 type BudgetCategory = Pick<Category, "id" | "groupId">;
 
@@ -55,15 +57,25 @@ export function txKey(year: number, month: number, categoryId: Id | null): strin
 /** Sum transaction amounts into a Map keyed by year-month-categoryId. */
 export function buildTxIndex(transactions: BudgetTransaction[]): Map<string, number> {
     const index = new Map<string, number>();
-    const effective = transactions.flatMap((transaction) =>
-        transaction.splits != null && transaction.splits.length > 0
-            ? transaction.splits.map((part) => ({
-                  ...transaction,
-                  categoryId: part.categoryId,
-                  amount: part.amount,
-              }))
-            : transaction,
-    );
+    const effective = transactions.flatMap((transaction) => {
+        if (transaction.splits == null || transaction.splits.length === 0) return transaction;
+        const splits = transaction.splits;
+        const parentBase = reported(transaction);
+        let allocated = 0;
+        let cumulative = 0;
+        return splits.map((part, index) => {
+            cumulative += part.amount;
+            const baseAmount =
+                index === splits.length - 1
+                    ? parentBase - allocated
+                    : roundRatio(
+                          BigInt(parentBase) * BigInt(cumulative),
+                          BigInt(transaction.amount),
+                      ) - allocated;
+            allocated += baseAmount;
+            return { ...transaction, categoryId: part.categoryId, amount: part.amount, baseAmount };
+        });
+    });
     for (const t of effective) {
         // a leg keeps whatever category it carried before the merge only in the
         // transfers table, never here — but guard anyway, so no future path can
@@ -72,7 +84,7 @@ export function buildTxIndex(transactions: BudgetTransaction[]): Map<string, num
         const year = +t.date.slice(0, 4);
         const month = +t.date.slice(5, 7);
         const key = txKey(year, month, t.categoryId);
-        index.set(key, (index.get(key) ?? 0) + t.amount);
+        index.set(key, (index.get(key) ?? 0) + reported(t));
     }
     return index;
 }
@@ -106,12 +118,22 @@ export function buildOpeningIndex(
     accounts: OpeningAccount[] | undefined,
     firstYear: number,
     transactions: AccountTransaction[] = [],
+    baseCurrency = "RUB",
+    rates: Snapshot["rates"] = [],
 ): Map<string, number> {
     const index = new Map<string, number>();
     if (accounts == null || accounts.length === 0) return index;
     const firstTx = firstTxDates(transactions);
     for (const a of accounts) {
-        const amount = a.openingBalance ?? 0;
+        const amount =
+            "openingBaseAmount" in a && typeof a.openingBaseAmount === "number"
+                ? a.openingBaseAmount
+                : convertAmount(
+                      a.openingBalance ?? 0,
+                      a.currency ?? baseCurrency,
+                      baseCurrency,
+                      rates,
+                  );
         if (amount === 0) continue;
         const parsed = OPENING_DATE.exec(a.openingDate ?? firstTx.get(a.id) ?? "");
         let year = firstYear;
@@ -227,7 +249,13 @@ export function computeRange(
     const groupKindById = new Map(snapshot.groups.map((g) => [g.id, g.kind]));
     const txIndex = buildTxIndex(snapshot.transactions);
     const budgetIndex = buildBudgetIndex(snapshot.budgets);
-    const openingIndex = buildOpeningIndex(snapshot.accounts, firstYear, snapshot.transactions);
+    const openingIndex = buildOpeningIndex(
+        snapshot.accounts,
+        firstYear,
+        snapshot.transactions,
+        snapshot.baseCurrency ?? "RUB",
+        snapshot.rates,
+    );
     const results = new Map<number, BudgetYearResult>();
     let prev: BudgetYearResult | null = null;
     for (let year = firstYear; year <= lastYear; year++) {

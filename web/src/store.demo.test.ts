@@ -42,6 +42,10 @@ const base = () =>
             },
         ],
         connections: [],
+        rates: [
+            { code: "RUB", rate: 1 },
+            { code: "USD", rate: 90 },
+        ],
     });
 
 const snap = () => useStore.getState().snapshot!;
@@ -91,6 +95,50 @@ describe("setBudget", () => {
     });
 });
 
+describe("reporting currency in the demo", () => {
+    it("reprices transactions and budget values without a backend", async () => {
+        await useStore.getState().setBaseCurrency("USD");
+        expect(snap().baseCurrency).toBe("USD");
+        expect(snap().accounts.map((account) => account.openingBaseAmount)).toEqual([1, 0]);
+        expect(snap().transactions.map((transaction) => transaction.baseAmount)).toEqual([1, 0]);
+        expect(snap().budgets.map((budget) => budget.amount)).toEqual([0, 0, 0, 1]);
+    });
+
+    it("supports legacy rows whose optional currency caches and rates are absent", async () => {
+        const complete = buildSnapshot({
+            accounts: [
+                { id: 1, name: "Old", currency: "RUB" },
+                { id: 2, name: "Target", currency: "RUB" },
+            ],
+            categories: [{ id: 4, groupId: 2, name: "Goal", goalTarget: 900 }],
+            budgets: [{ categoryId: 4, year: 2026, month: 1, amount: 300 }],
+            transactions: [{ id: 1, date: "2026-01-01", amount: 50, accountId: 1, categoryId: 4 }],
+        });
+        delete complete.rates;
+        delete complete.baseCurrency;
+        for (const account of complete.accounts) {
+            delete account.openingBalance;
+            delete account.openingBaseAmount;
+        }
+        for (const transaction of complete.transactions) delete transaction.currency;
+        useStore.setState({ snapshot: complete });
+
+        await useStore.getState().setBaseCurrency("RUB");
+        expect(snap()).toMatchObject({
+            baseCurrency: "RUB",
+            accounts: [{ openingBaseAmount: 0 }, { openingBaseAmount: 0 }],
+            transactions: [{ baseAmount: 50 }],
+            budgets: [{ amount: 300 }],
+            categories: [{ goalTarget: 900 }],
+        });
+
+        await useStore.getState().patchAccount(1, { name: "Renamed" });
+        expect(snap().transactions[0]?.accountAmount).toBe(50);
+        await useStore.getState().deleteAccount(1, 2);
+        expect(snap().transactions[0]).toMatchObject({ accountId: 2, accountAmount: 50 });
+    });
+});
+
 describe("setTxCategory and setTxAccount in the demo", () => {
     it("retags only the matching transaction", () => {
         useStore.getState().setTxCategory(7, 9);
@@ -136,6 +184,7 @@ describe("createAccount in the demo", () => {
             sort: 1e9,
             archived: false,
             openingBalance: 0,
+            openingBaseAmount: 0,
             openingDate: null,
         });
     });
@@ -162,6 +211,7 @@ describe("createAccount in the demo", () => {
             sort: 1e9,
             archived: false,
             openingBalance: 500,
+            openingBaseAmount: 45000,
             openingDate: "2026-02-01",
         });
     });
@@ -177,7 +227,7 @@ describe("patchAccount and deleteAccount in the demo", () => {
         await useStore.getState().patchAccount(5, { name: "Pocket", archived: true });
         expect(snap().accounts).toEqual([
             base().accounts[0],
-            { ...base().accounts[1], name: "Pocket", archived: true },
+            { ...base().accounts[1], name: "Pocket", archived: true, openingBaseAmount: 0 },
         ]);
     });
 
@@ -206,6 +256,9 @@ describe("reconcileAccount in the demo", () => {
             id: 8,
             date: added!.date,
             amount: 50,
+            currency: "RUB",
+            baseAmount: 50,
+            accountAmount: 50,
             description: "Reconcile adjustment",
             bankCategory: "",
             mcc: "",
@@ -242,9 +295,56 @@ describe("reconcileAccount in the demo", () => {
         const result = await useStore.getState().reconcileAccount(1, 25);
         expect(result).toEqual({ delta: 25 });
     });
+
+    it("reconciles against account-currency amounts for foreign transaction overrides", async () => {
+        useStore.setState({
+            snapshot: buildSnapshot({
+                accounts: [{ id: 1, currency: "RUB", openingBalance: 10000 }],
+                rates: [
+                    { code: "RUB", rate: 1 },
+                    { code: "USD", rate: 90 },
+                ],
+                transactions: [
+                    {
+                        id: 1,
+                        date: "2026-01-01",
+                        amount: -100,
+                        currency: "USD",
+                        baseAmount: -9000,
+                        accountAmount: -9000,
+                        accountId: 1,
+                        categoryId: 4,
+                    },
+                ],
+            }),
+        });
+        await expect(useStore.getState().reconcileAccount(1, 2000)).resolves.toEqual({
+            delta: 1000,
+        });
+    });
 });
 
 describe("createTransfer and deleteTransfer in the demo", () => {
+    it("rejects a received amount rounded to zero without changing the ledger", async () => {
+        const before = buildSnapshot({
+            accounts: [
+                { id: 1, name: "Ruble", currency: "RUB" },
+                { id: 5, name: "Dollar", currency: "USD" },
+            ],
+            rates: [{ code: "USD", rate: 80, day: "2026-07-01", source: "manual" }],
+        });
+        useStore.setState({ snapshot: before });
+        await expect(
+            useStore.getState().createTransfer({
+                fromAccountId: 1,
+                toAccountId: 5,
+                amount: 1,
+                date: "2026-07-01",
+            }),
+        ).rejects.toThrow("received amount must be positive");
+        expect(useStore.getState().snapshot).toBe(before);
+    });
+
     it("books two consecutive legs with mirrored amounts", async () => {
         const transferId = await useStore
             .getState()
@@ -255,6 +355,9 @@ describe("createTransfer and deleteTransfer in the demo", () => {
                 id: 8,
                 date: "2026-03-01",
                 amount: -25,
+                currency: "RUB",
+                baseAmount: -25,
+                accountAmount: -25,
                 description: "Transfer",
                 bankCategory: "",
                 mcc: "",
@@ -268,6 +371,9 @@ describe("createTransfer and deleteTransfer in the demo", () => {
                 id: 9,
                 date: "2026-03-01",
                 amount: 25,
+                currency: "RUB",
+                baseAmount: 25,
+                accountAmount: 25,
                 description: "Transfer",
                 bankCategory: "",
                 mcc: "",

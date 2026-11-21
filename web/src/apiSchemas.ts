@@ -38,6 +38,7 @@ export const transactionCreateSchema = z.strictObject({
     mcc: z.string().optional(),
     categoryId: nullableId.optional(),
     comment: z.string().optional(),
+    currency: z.string().optional(),
 });
 export const goalStatusSchema = z.enum(["active", "achieved", "archived"]);
 
@@ -52,6 +53,7 @@ export const accountSchema = z.strictObject({
     sort: z.number(),
     archived: z.boolean(),
     openingBalance: z.number(),
+    openingBaseAmount: z.number(),
     openingDate: z.string().nullable(),
     connectionId: nullableId,
     bankRef: z.string(),
@@ -88,6 +90,9 @@ export const transactionSchema = z.strictObject({
     id,
     date: z.string(),
     amount: z.number(),
+    currency: z.string(),
+    baseAmount: z.number(),
+    accountAmount: z.number(),
     description: z.string(),
     bankCategory: z.string(),
     mcc: z.string(),
@@ -144,6 +149,16 @@ export const snapshotSchema = z.strictObject({
     transfers: z.array(transferSchema),
     budgets: z.array(budgetCellSchema),
     connections: z.array(connectionSchema),
+    baseCurrency: z.string(),
+    rates: z.array(
+        z.strictObject({
+            code: z.string(),
+            rate: z.number(),
+            day: z.string(),
+            source: z.string(),
+            stale: z.boolean(),
+        }),
+    ),
 });
 
 export const transactionPageSchema = z.strictObject({
@@ -158,6 +173,7 @@ export const userSchema = z.strictObject({
     isAdmin: z.boolean(),
     lastLogin: z.string().nullable(),
     defaultAccountId: nullableId,
+    baseCurrency: z.string(),
 });
 
 export const authTokenSchema = z.strictObject({

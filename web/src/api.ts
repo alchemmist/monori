@@ -385,12 +385,67 @@ export const api = {
         apiFetch("/api/auth/me", { headers: { Authorization: `Bearer ${token}` } }).then(
             json(userSchema),
         ),
-    authPatchMe: (patch: Partial<Pick<User, "defaultAccountId">>): Promise<User> =>
+    authPatchMe: (patch: Partial<Pick<User, "defaultAccountId" | "baseCurrency">>): Promise<User> =>
         apiFetch("/api/auth/me", {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(patch),
         }).then(json(userSchema)),
+    rates: (day?: string): Promise<{ rates: import("./types.js").ExchangeRate[] }> =>
+        apiFetch(
+            `/api/rates${day == null || day === "" ? "" : `?day=${encodeURIComponent(day)}`}`,
+        ).then(
+            json(
+                z.strictObject({
+                    day: z.string(),
+                    baseCurrency: z.string(),
+                    currencies: z.array(
+                        z.strictObject({
+                            code: z.string(),
+                            name: z.string(),
+                            symbol: z.string(),
+                            minorUnits: z.number().int(),
+                        }),
+                    ),
+                    rates: z.array(
+                        z.strictObject({
+                            code: z.string(),
+                            rate: z.number(),
+                            day: z.string().optional(),
+                            source: z.string().optional(),
+                            stale: z.boolean().optional(),
+                        }),
+                    ),
+                }),
+            ),
+        ),
+    refreshRates: (days = 0): Promise<{ repriced: number }> =>
+        apiFetch(`/api/rates/refresh?days=${days}`, { method: "POST" }).then(
+            json(
+                z.strictObject({
+                    stored: z.number().int().nonnegative(),
+                    days: z.number().int().nonnegative(),
+                    repriced: z.number().int().nonnegative(),
+                }),
+            ),
+        ),
+    setRate: (
+        code: string,
+        body: { rubPerUnit: number; day?: string | null },
+    ): Promise<{ repriced: number }> =>
+        apiFetch(`/api/rates/${encodeURIComponent(code)}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+        }).then(
+            json(
+                z.strictObject({
+                    code: z.string(),
+                    day: z.string(),
+                    repriced: z.number().int().nonnegative(),
+                }),
+            ),
+        ),
     exportXlsx: async () => {
         const r = await apiFetch("/api/export/xlsx");
         if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);

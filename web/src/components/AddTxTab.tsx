@@ -4,6 +4,7 @@ import { useStore } from "../store.js";
 import { orderedGroups, categoriesByGroup } from "../categoryOrder.js";
 import { money, parseRub } from "../format.js";
 import { FSelect, FTextInput } from "../ui/fields.jsx";
+import { DEFAULT_CURRENCY, currencyOptions } from "../currencies.js";
 import Tab from "../ui/Tab.jsx";
 import Txt from "../ui/Txt.jsx";
 import type { Transaction } from "../types.js";
@@ -54,6 +55,7 @@ export default function AddTxTab({ onClose }: { onClose: () => void }) {
     const [description, setDescription] = useState("");
     const [date, setDate] = useState(today());
     const [account, setAccount] = useState(accounts[0] ? String(accounts[0].id) : "");
+    const [currency, setCurrency] = useState(accounts[0]?.currency ?? DEFAULT_CURRENCY);
     const [category, setCategory] = useState<string | null>(null);
     const [comment, setComment] = useState("");
     const [busy, setBusy] = useState(false);
@@ -76,7 +78,15 @@ export default function AddTxTab({ onClose }: { onClose: () => void }) {
             setAccount(String(accounts[0]!.id));
     }, [account, accounts]);
 
+    useEffect(() => {
+        const selected = accounts.find((candidate) => String(candidate.id) === account);
+        if (selected) setCurrency(selected.currency || DEFAULT_CURRENCY);
+    }, [account, accounts]);
+
     const amountKop = parseRub(amount);
+    const accountCurrency = accounts.find(
+        (candidate) => String(candidate.id) === account,
+    )?.currency;
     const valid = !!account && !!date && amountKop != null && amountKop > 0;
 
     const add = async () => {
@@ -90,6 +100,7 @@ export default function AddTxTab({ onClose }: { onClose: () => void }) {
                 description: description.trim(),
                 categoryId: category == null || category === "" ? null : +category,
                 comment: comment.trim(),
+                ...(currency === accountCurrency ? {} : { currency }),
             });
             setRecent((prev) => [tx, ...prev].slice(0, RECENT_SHOWN));
             setAmount("");
@@ -167,6 +178,12 @@ export default function AddTxTab({ onClose }: { onClose: () => void }) {
                     data={accounts.map((a) => ({ value: String(a.id), label: a.name }))}
                 />
                 <FSelect
+                    label="Transaction currency"
+                    value={currency}
+                    onChange={setCurrency}
+                    data={currencyOptions(currency)}
+                />
+                <FSelect
                     label="Category"
                     searchable
                     placeholder="Uncategorized"
@@ -196,7 +213,7 @@ export default function AddTxTab({ onClose }: { onClose: () => void }) {
                             <div key={t.id} className="addtx-recent__row">
                                 <span className="addtx-recent__desc">{t.description || "—"}</span>
                                 <span className={`money num ${t.amount > 0 ? "money_pos" : ""}`}>
-                                    {money(t.amount)}
+                                    {money(t.amount, t.currency)}
                                 </span>
                             </div>
                         ))}

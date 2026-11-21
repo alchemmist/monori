@@ -9,6 +9,7 @@ from pydantic import ConfigDict, Field
 from pydantic.dataclasses import dataclass as pydantic_dataclass
 
 from monori.server.app.auth import AuthenticatedUser, current_user
+from monori.server.app.currencies import validate as validate_currency
 from monori.server.app.db import begin_write
 from monori.server.app.db_records import CategorySignRecord, TransactionRecord
 from monori.server.app.deps import (
@@ -19,6 +20,12 @@ from monori.server.app.deps import (
     serialize_transactions,
 )
 from monori.server.app.importer import tx_hash
+from monori.server.app.money import (
+    base_currency,
+    resolve_currency,
+    to_base,
+    validate_account_valuations,
+)
 from monori.server.app.transfer_service import detach_leg
 from monori.server.app.value_types import Money, TransactionDate
 
@@ -36,6 +43,7 @@ class TxCreate:
     date: TransactionDate
     amount: Money
     account_id: int = Field(alias="accountId")
+    currency: str | None = None
     description: str = ""
     bank_category: str = Field(default="", alias="bankCategory")
     mcc: str = ""
@@ -50,6 +58,7 @@ class TxPatch:
     date: TransactionDate | None = None
     amount: Money | None = None
     account_id: int | None = Field(default=None, alias="accountId")
+    currency: str | None = None
     description: str | None = None
     bank_category: str | None = Field(default=None, alias="bankCategory")
     mcc: str | None = None
@@ -225,25 +234,32 @@ def create_transaction(
     uid = user.id
     c = conn()
     try:
+        begin_write(c)
         category = _resolve_category(c, body.category_id, uid, body.amount)
         account = _resolve_account(c, body.account_id, uid)
+        currency = validate_currency(resolve_currency(c, account, body.currency))
+        converted = to_base(c, body.amount, currency, base_currency(c, uid), body.date)
         cur = c.execute(
             """INSERT INTO transactions
-               (date, amount, description, bank_category, mcc, category_id, account_id,
-                comment, hash, source)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'manual')""",
+               (date, amount, currency, base_amount, description, bank_category, mcc,
+                category_id, account_id, comment, hash, source)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'manual')
+            """,
             (
                 body.date,
                 body.amount,
+                currency,
+                converted,
                 body.description,
                 body.bank_category,
                 body.mcc,
                 category,
                 account,
                 body.comment,
-                tx_hash(account, body.date, body.amount, body.description),
+                tx_hash(account, body.date, body.amount, body.description, currency),
             ),
         )
+        validate_account_valuations(c, [account])
         c.commit()
         return IdResponse(id=cur.lastrowid)
     finally:
@@ -299,14 +315,25 @@ def patch_transaction(
         if patch.account_id is not None:
             account = _resolve_account(c, patch.account_id, uid)
         hidden = int(patch.hidden) if patch.hidden is not None else int(transaction.hidden)
+        currency = (
+            validate_currency(patch.currency)
+            if patch.currency is not None
+            else transaction.currency
+        )
+        converted = to_base(c, amount, currency, base_currency(c, uid), date)
         c.execute(
-            """UPDATE transactions
-               SET date=?, amount=?, description=?, bank_category=?, mcc=?, category_id=?,
+            """
+            UPDATE transactions
+               SET date=?, amount=?, currency=?, base_amount=?, description=?,
+                   bank_category=?, mcc=?, category_id=?,
                    account_id=?, comment=?, hidden=?, hash=?
-               WHERE id=?""",
+               WHERE id=?
+            """,
             (
                 date,
                 amount,
+                currency,
+                converted,
                 description,
                 bank_category,
                 mcc,
@@ -314,10 +341,11 @@ def patch_transaction(
                 account,
                 comment,
                 hidden,
-                tx_hash(account, date, amount, description),
+                tx_hash(account, date, amount, description, currency),
                 tx_id,
             ),
         )
+        validate_account_valuations(c, [transaction.account_id, account])
         c.commit()
         return OkResponse(ok=True)
     finally:
@@ -416,12 +444,20 @@ def delete_transaction(
     uid = user.id
     c = conn()
     try:
+        begin_write(c)
+        row = c.execute(
+            "SELECT t.account_id FROM transactions t JOIN accounts a ON a.id=t.account_id"
+            " WHERE t.id=? AND a.user_id=?",
+            (tx_id, uid),
+        ).fetchone()
         detach_leg(c, uid, tx_id)
         cur = c.execute(
             "DELETE FROM transactions WHERE id=?"
             " AND account_id IN (SELECT id FROM accounts WHERE user_id=?)",
             (tx_id, uid),
         )
+        if row is not None:
+            validate_account_valuations(c, [row["account_id"]])
         c.commit()
         if cur.rowcount == 0:
             raise HTTPException(404, "transaction not found")
@@ -444,13 +480,22 @@ def bulk_transactions(
         begin_write(c)
         affected = 0
         if body.action == "delete":
+            affected_accounts: set[int] = set()
             for tx_id in body.ids:
+                row = c.execute(
+                    "SELECT t.account_id FROM transactions t JOIN accounts a ON a.id=t.account_id"
+                    " WHERE t.id=? AND a.user_id=?",
+                    (tx_id, uid),
+                ).fetchone()
+                if row is not None:
+                    affected_accounts.add(row["account_id"])
                 detach_leg(c, uid, tx_id)
                 affected += c.execute(
                     "DELETE FROM transactions WHERE id=?"
                     " AND account_id IN (SELECT id FROM accounts WHERE user_id=?)",
                     (tx_id, uid),
                 ).rowcount
+            validate_account_valuations(c, affected_accounts)
         else:
             category = _resolve_category(c, body.category_id, uid)
 

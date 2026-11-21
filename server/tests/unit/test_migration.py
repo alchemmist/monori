@@ -17,7 +17,7 @@ from monori.server.app.importer import tx_hash
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-HEAD = "0020"
+HEAD = "0021"
 assert LEGACY_REVISIONS[-1] == "0006"
 
 OLD_SCHEMA = """
@@ -264,9 +264,8 @@ def test_category_name_migration_resolves_existing_group_duplicates(
     tmp_path: pathlib.Path,
 ) -> None:
     db_path = tmp_path / "duplicate-categories.db"
-    connect(db_path).close()
     cfg = _alembic_config(db_path)
-    command.downgrade(cfg, "0019")
+    command.upgrade(cfg, "0019")
     raw = sqlite3.connect(db_path)
     group_id = raw.execute(
         "INSERT INTO category_groups (name, sort, type_id)"
@@ -657,3 +656,53 @@ def test_connection_conversion_to_user_level(tmp_path: pathlib.Path) -> None:
     assert acct["connection_id"] == conn_row["id"]
     assert acct["bank_ref"] == ""
     c.close()
+
+
+@pytest.mark.parametrize(
+    ("legacy_currency", "expected_currency"), [("RUB", "RUB"), (" usd ", "USD"), ("   ", "RUB")]
+)
+def test_currency_migration_backfills_history_and_dedup_hash(
+    tmp_path: pathlib.Path, legacy_currency: str, expected_currency: str
+) -> None:
+    db_path = tmp_path / "currency-upgrade.db"
+    cfg = _alembic_config(db_path)
+    command.upgrade(cfg, "0020")
+    with sqlite3.connect(db_path) as connection:
+        connection.execute(
+            "INSERT INTO users (id, email, email_canonical, password_hash, created_at)"
+            " VALUES (1, 'currency@example.com', 'currency@example.com', 'hash', '2026-01-01')"
+        )
+        connection.execute(
+            "INSERT INTO accounts (id, user_id, name, type, currency, sort)"
+            " VALUES (991, 1, 'Existing card', 'card', ?, 1)",
+            (legacy_currency,),
+        )
+        connection.execute(
+            "INSERT INTO transactions (id, date, amount, description, account_id, hash)"
+            " VALUES (1, '2026-01-05T12:00:00', -250, 'Purchase', 991, 'old-hash')"
+        )
+    connection = connect(db_path)
+    try:
+        transaction = _row(connection, "SELECT currency, base_amount, hash FROM transactions")
+        assert transaction["currency"] == expected_currency
+        assert (
+            _row(connection, "SELECT currency FROM accounts WHERE id=991")["currency"]
+            == expected_currency
+        )
+        assert transaction["base_amount"] == -250
+        assert transaction["hash"] == tx_hash(
+            991, "2026-01-05T12:00:00", -250, "Purchase", expected_currency
+        )
+        assert _row(connection, "SELECT base_currency FROM users")["base_currency"] == "RUB"
+        assert _revision(connection) == HEAD
+        for invalid in ("", "   "):
+            with pytest.raises(sqlite3.IntegrityError, match="currency must not be blank"):
+                connection.execute("UPDATE transactions SET currency=? WHERE id=1", (invalid,))
+            with pytest.raises(sqlite3.IntegrityError, match="currency must not be blank"):
+                connection.execute(
+                    "INSERT INTO transactions (date, amount, currency, account_id, hash)"
+                    " VALUES ('2026-01-06', -1, ?, 991, 'new-hash')",
+                    (invalid,),
+                )
+    finally:
+        connection.close()

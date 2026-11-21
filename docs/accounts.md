@@ -21,14 +21,18 @@ Accounts live on the **Accounts** page in the sidebar. Each one has:
   entirely. An image you've already added to one account can be reused on another
   straight from the picker. Uploaded images are downscaled and stored inline with
   the account,
-- a **currency** — a label only for now; monori is single-currency and does no
-  conversion (full multi-currency is tracked in issue #29),
+- a **currency** — what money on this account is held in. New transactions here
+  are recorded in it, and the account's balance is shown in it; totals across
+  accounts are converted into your reporting currency (see
+  [Currencies](currencies.md)),
 - an **opening balance** — what the account held before the first recorded
   transaction. It is real money, so it also counts as income to hand out on the
   [Budget](budgeting.md) page,
 - an **opening date** — when that balance was on the account, which decides the
   month it lands in on the Budget page. New accounts default to today; left
-  empty, the balance follows the account's earliest transaction.
+  empty, the balance follows the account's earliest transaction. Reporting
+  conversion uses that same date; if neither a date nor a transaction exists,
+  it uses today's rate until a historical date is available.
 
 From the list you can create, rename, reorder, **archive** (hide without
 deleting), and delete accounts. Deleting an account asks where its transactions
@@ -58,13 +62,15 @@ transactions**, which is the point: the bank sends them itself, and keeping them
 means a re-sync recognizes them instead of importing them again. Both legs are
 uncategorized while merged, so a transfer never counts as income or expense —
 your budget and analytics stay honest by construction, not by remembering to
-exclude it. Net worth is unchanged, since the two legs cancel out.
+exclude it. For different currencies, enter both the amount sent and the amount
+received. Bank spreads and rounding can change the combined reporting value;
+the legs are excluded from spending because they are linked transfers.
 
 ### Transfers monori finds for you
 
 Most transfers are never created by hand: the bank delivers both legs and monori
 pairs them up. After every import and every sync it looks for an outflow and an
-inflow of exactly the same amount on two different accounts. A pair a day or
+inflow of exactly the same amount in the same currency on two different accounts. A pair a day or
 less apart is merged straight away; a looser match is offered under **Find
 transfers** on the Transactions page, where it can be confirmed or dismissed —
 and a dismissed pair is never offered again.
@@ -86,6 +92,11 @@ which is deliberately a separate action.
 the Accounts page, enter the account's **actual bank balance**, and monori posts a single
 `adjustment` transaction for the difference so the computed balance matches your
 bank. If the two already agree, nothing is posted.
+
+A transaction may retain a different currency after an explicit override or an
+account move. Both the displayed balance and reconciliation convert that row
+into the account currency using its transaction date; they never sum the raw
+foreign amount as if it were local money.
 
 ## Budgets stay global
 

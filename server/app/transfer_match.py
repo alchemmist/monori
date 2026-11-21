@@ -29,6 +29,8 @@ from bisect import bisect_left, bisect_right
 from collections.abc import Iterable
 from dataclasses import dataclass
 
+from monori.server.app.currencies import DEFAULT_CURRENCY
+
 AUTO_DAYS = 1
 SUGGEST_DAYS = 5
 FEBRUARY = 2
@@ -58,6 +60,7 @@ class TransferMatchRow:
     date: str
     amount: int
     account_id: int
+    currency: str = DEFAULT_CURRENCY
     description: str = ""
     transfer_id: str | None = None
 
@@ -69,6 +72,7 @@ class TransferCandidate:
     out_tx_id: int
     in_tx_id: int
     amount: int
+    currency: str
     days: int
     hint: bool
     mismatch: bool = False
@@ -117,26 +121,29 @@ def find_pairs(
 
 def _transfer_buckets(
     rows: Iterable[TransferMatchRow],
-) -> tuple[dict[int, list[TransferMatchRow]], dict[int, list[TransferMatchRow]]]:
-    outs: dict[int, list[TransferMatchRow]] = {}
-    ins: dict[int, list[TransferMatchRow]] = {}
+) -> tuple[
+    dict[tuple[str, int], list[TransferMatchRow]],
+    dict[tuple[str, int], list[TransferMatchRow]],
+]:
+    outs: dict[tuple[str, int], list[TransferMatchRow]] = {}
+    ins: dict[tuple[str, int], list[TransferMatchRow]] = {}
     for row in rows:
         if row.transfer_id or row.amount == 0:
             continue
         bucket = outs if row.amount < 0 else ins
-        bucket.setdefault(abs(row.amount), []).append(row)
+        bucket.setdefault((row.currency, abs(row.amount)), []).append(row)
     return outs, ins
 
 
 def _transfer_candidates(
-    outs: dict[int, list[TransferMatchRow]],
-    ins: dict[int, list[TransferMatchRow]],
+    outs: dict[tuple[str, int], list[TransferMatchRow]],
+    ins: dict[tuple[str, int], list[TransferMatchRow]],
     max_days: int,
     rejected: set[tuple[int, int]],
 ) -> list[TransferCandidate]:
     candidates: list[TransferCandidate] = []
-    for amount, out_rows in outs.items():
-        in_rows = ins.get(amount, [])
+    for (currency, amount), out_rows in outs.items():
+        in_rows = ins.get((currency, amount), [])
         dated_ins = sorted(
             ((day_number(row.date), row) for row in in_rows),
             key=lambda item: (item[0], item[1].id),
@@ -149,7 +156,11 @@ def _transfer_candidates(
             candidates.extend(
                 candidate
                 for _, in_row in dated_ins[start:end]
-                if (candidate := _transfer_candidate(out_row, in_row, amount, max_days, rejected))
+                if (
+                    candidate := _transfer_candidate(
+                        out_row, in_row, (currency, amount), max_days, rejected
+                    )
+                )
                 is not None
             )
     return candidates
@@ -158,10 +169,11 @@ def _transfer_candidates(
 def _transfer_candidate(
     out_row: TransferMatchRow,
     in_row: TransferMatchRow,
-    amount: int,
+    money: tuple[str, int],
     max_days: int,
     rejected: set[tuple[int, int]],
 ) -> TransferCandidate | None:
+    currency, amount = money
     if out_row.account_id == in_row.account_id or (out_row.id, in_row.id) in rejected:
         return None
     days = abs(day_number(in_row.date) - day_number(out_row.date))
@@ -174,6 +186,7 @@ def _transfer_candidate(
         out_tx_id=out_row.id,
         in_tx_id=in_row.id,
         amount=amount,
+        currency=currency,
         days=days,
         hint=out_hint or in_hint,
         mismatch=out_hint != in_hint and bool(silent.description.strip()),

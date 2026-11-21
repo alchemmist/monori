@@ -555,7 +555,7 @@ diff --git a/server/tests/unit/test_emails.py b/server/tests/unit/test_emails.py
 +def test_canonical_email_is_idempotent() -> None:
 diff --git a/server/tests/unit/test_deps.py b/server/tests/unit/test_deps.py
 +++ b/server/tests/unit/test_deps.py
-@@ -6,0 +7 @@
+@@ -10,0 +11 @@
 +def test_serialize_transactions_chunks_split_lookup() -> None:
 diff --git a/web/src/b.test.tsx b/web/src/b.test.tsx
 +++ b/web/src/b.test.tsx

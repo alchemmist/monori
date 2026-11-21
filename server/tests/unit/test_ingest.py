@@ -209,8 +209,9 @@ def test_snapshot_full_shape(tmp_path: Path) -> None:
     )
     cid = _required_int(c.execute("SELECT id FROM categories").fetchone())
     c.execute(
-        "INSERT INTO transactions (date, amount, description, account_id, hash, source)"
-        " VALUES ('2026-01-01T00:00:00', -100, 'x', ?, 'h', 'import')",
+        "INSERT INTO transactions"
+        " (currency, base_amount, date, amount, description, account_id, hash, source)"
+        " VALUES ('RUB', -100, '2026-01-01T00:00:00', -100, 'x', ?, 'h', 'import')",
         (acct,),
     )
     c.execute(
@@ -226,6 +227,9 @@ def test_snapshot_full_shape(tmp_path: Path) -> None:
     assert len(snap.transactions) == 1
     assert snap.transactions[0].account_id == acct
     assert snap.transactions[0].amount == -100
+    assert snap.transactions[0].currency == "RUB"
+    assert snap.transactions[0].base_amount == -100
+    assert snap.transactions[0].account_amount == -100
     budget = snap.budgets[0]
     assert (budget.category_id, budget.year, budget.month, budget.amount) == (cid, 2026, 1, 5000)
 
@@ -257,8 +261,9 @@ def test_historical_day_counts_span_accounts_and_skip_manual(tmp_path: Path) -> 
     account_rows = c.execute("SELECT id FROM accounts ORDER BY id").fetchall()
     first, second = [_required_int(row) for row in account_rows]
     tx_sql = (
-        "INSERT INTO transactions (date, amount, description, account_id, hash, source)"
-        " VALUES (?, ?, ?, ?, ?, ?)"
+        "INSERT INTO transactions"
+        " (currency, base_amount, date, amount, description, account_id, hash, source)"
+        " VALUES ('RUB', 0, ?, ?, ?, ?, ?, ?)"
     )
     c.execute(tx_sql, ("2026-07-19T14:22:00", -368000, "Kafe Lesnoj", first, "h1", "sync"))
     c.execute(tx_sql, ("2026-07-19T09:05:00", -368000, "Kafe Lesnoj", second, "h2", "sync"))
@@ -269,8 +274,8 @@ def test_historical_day_counts_span_accounts_and_skip_manual(tmp_path: Path) -> 
     counts = historical_day_counts(c, uid)
 
     assert counts == {
-        ("2026-07-19", -368000, "kafe lesnoj"): 2,
-        ("2026-07-18", -50000, "pyaterochka"): 1,
+        ("2026-07-19", -368000, "RUB", "kafe lesnoj"): 2,
+        ("2026-07-18", -50000, "RUB", "pyaterochka"): 1,
     }
 
 
@@ -280,7 +285,7 @@ def test_drop_already_present_is_count_aware() -> None:
         _row("2026-07-19T18:00:00", -368000, "Kafe Lesnoj"),
         _row("2026-07-19T18:00:00", -100, "New"),
     ]
-    kept, dropped = drop_already_present(rows, {("2026-07-19", -368000, "kafe lesnoj"): 1})
+    kept, dropped = drop_already_present(rows, {("2026-07-19", -368000, "RUB", "kafe lesnoj"): 1})
 
     assert dropped == 1
     assert [row.description for row in kept] == ["Kafe Lesnoj", "New"]
@@ -300,8 +305,8 @@ def test_dedup_survives_the_bank_rewording_its_own_description(tmp_path: Path) -
     reworded = "Operation in another bank YandexBank_C2A g. Moskva RUS"
     c.execute(
         "INSERT INTO transactions"
-        " (date, amount, description, account_id, hash, source, transfer_id)"
-        " VALUES ('2026-07-24T12:38:48', -284300, ?, 1, 'h1', 'sync', 'tr1')",
+        " (currency, base_amount, date, amount, description, account_id, hash, source, transfer_id)"
+        " VALUES ('RUB', -284300, '2026-07-24T12:38:48', -284300, ?, 1, 'h1', 'sync', 'tr1')",
         (posted,),
     )
     c.commit()

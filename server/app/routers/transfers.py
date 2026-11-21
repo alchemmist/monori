@@ -14,6 +14,13 @@ from monori.server.app.db import begin_write
 from monori.server.app.db_records import TransactionRecord
 from monori.server.app.deps import TransactionResponse, conn, serialize_tx
 from monori.server.app.importer import tx_hash
+from monori.server.app.money import (
+    account_currency,
+    base_currency,
+    to_base,
+    validate_account_valuations,
+)
+from monori.server.app.rates import RateUnavailableError, convert
 from monori.server.app.transfer_match import AUTO_DAYS, SUGGEST_DAYS, split_confident
 from monori.server.app.transfer_service import (
     LinkError,
@@ -33,7 +40,8 @@ router = APIRouter(prefix="/api/transfers", tags=["transfers"])
 TRANSFER_LEGS = 2
 
 LEGS_BY_ID = (
-    "SELECT t.* FROM transactions t JOIN accounts a ON a.id = t.account_id"
+    "SELECT t.*, a.currency AS account_currency"
+    " FROM transactions t JOIN accounts a ON a.id = t.account_id"
     " WHERE a.user_id=? AND t.id IN (SELECT value FROM json_each(?))"
 )
 
@@ -46,6 +54,7 @@ class TransferBody:
     date: TransactionDate
     from_account_id: int = Field(alias="fromAccountId")
     to_account_id: int = Field(alias="toAccountId")
+    to_amount: Money | None = Field(default=None, gt=0, alias="toAmount")
     comment: str = ""
 
 
@@ -78,6 +87,7 @@ class SuggestionResponse:
     """Represent SuggestionResponse."""
 
     amount: int
+    currency: str
     days: int
     hint: bool
     mismatch: bool
@@ -151,7 +161,7 @@ def get_suggestions(
         ids = sorted({p.out_tx_id for p in pairs} | {p.in_tx_id for p in pairs})
         legs = (
             [
-                serialize_tx(TransactionRecord.from_row(row))
+                serialize_tx(c, TransactionRecord.from_row(row), str(row["account_currency"]))
                 for row in c.execute(LEGS_BY_ID, (uid, json.dumps(ids)))
             ]
             if ids
@@ -163,6 +173,7 @@ def get_suggestions(
                     out_tx_id=pair.out_tx_id,
                     in_tx_id=pair.in_tx_id,
                     amount=pair.amount,
+                    currency=pair.currency,
                     days=pair.days,
                     hint=pair.hint,
                     mismatch=pair.mismatch,
@@ -193,29 +204,46 @@ def create_transfer(
         raise HTTPException(400, "cannot transfer to the same account")
     c = conn()
     try:
+        begin_write(c)
         if not account_exists(c, body.from_account_id, uid) or not account_exists(
             c,
             body.to_account_id,
             uid,
         ):
             raise HTTPException(400, "unknown account")
+        out_currency = account_currency(c, body.from_account_id)
+        in_currency = account_currency(c, body.to_account_id)
+        if body.to_amount is not None and out_currency == in_currency:
+            raise HTTPException(400, "toAmount only applies between two currencies")
+        try:
+            landed = body.to_amount or convert(c, body.amount, out_currency, in_currency, body.date)
+        except RateUnavailableError as error:
+            raise HTTPException(400, f"{error}; state the amount that arrived") from error
+        if landed <= 0:
+            message = "received amount must be positive; state the amount that arrived"
+            raise HTTPException(422, message)
+        reporting_currency = base_currency(c, uid)
         description = "Transfer"
         legs: list[int] = []
-        for account_id, amount in (
-            (body.from_account_id, -body.amount),
-            (body.to_account_id, body.amount),
+        for account_id, amount, currency in (
+            (body.from_account_id, -body.amount, out_currency),
+            (body.to_account_id, landed, in_currency),
         ):
             cur = c.execute(
                 """INSERT INTO transactions
-                   (date, amount, description, account_id, comment, hash, source)
-                   VALUES (?, ?, ?, ?, ?, ?, 'transfer')""",
+                   (date, amount, currency, base_amount, description, account_id,
+                    comment, hash, source)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'transfer')
+                """,
                 (
                     body.date,
                     amount,
+                    currency,
+                    to_base(c, amount, currency, reporting_currency, body.date),
                     description,
                     account_id,
                     body.comment,
-                    tx_hash(account_id, body.date, amount, description),
+                    tx_hash(account_id, body.date, amount, description, currency),
                 ),
             )
             if cur.lastrowid is None:
@@ -223,6 +251,7 @@ def create_transfer(
                 raise RuntimeError(msg)
             legs.append(cur.lastrowid)
         transfer_id = link_pair(c, uid, LinkRequest(legs[0], legs[1], note=body.comment))
+        validate_account_valuations(c, [body.from_account_id, body.to_account_id])
         c.commit()
         return TransferIdResponse(transfer_id=transfer_id)
     except LinkError as e:
@@ -326,6 +355,13 @@ def delete_transfer_with_legs(
         if row is None:
             raise HTTPException(404, "transfer not found")
         leg_ids = (int(row[0]), int(row[1]))
+        account_ids = [
+            int(account["account_id"])
+            for account in c.execute(
+                "SELECT account_id FROM transactions WHERE id IN (?, ?)",
+                leg_ids,
+            )
+        ]
         owned_legs = c.execute(
             "SELECT COUNT(*) FROM transactions t JOIN accounts a ON a.id=t.account_id"
             " WHERE a.user_id=? AND t.transfer_id=? AND t.id IN (?, ?)",
@@ -335,6 +371,7 @@ def delete_transfer_with_legs(
             raise HTTPException(409, "transfer does not have two owned legs")
         c.execute("DELETE FROM transactions WHERE id=?", (leg_ids[0],))
         c.execute("DELETE FROM transactions WHERE id=?", (leg_ids[1],))
+        validate_account_valuations(c, account_ids)
         c.commit()
         return DeletedResponse(deleted=TRANSFER_LEGS)
     finally:

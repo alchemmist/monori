@@ -462,7 +462,7 @@ export default function TransactionsPage() {
                             draft={String(t.amount / 100)}
                             display={
                                 <span className={`money num ${t.amount > 0 ? "money_pos" : ""}`}>
-                                    {money(t.amount)}
+                                    {money(t.amount, t.currency)}
                                 </span>
                             }
                             onCommit={(v) => {
@@ -477,7 +477,7 @@ export default function TransactionsPage() {
                         />
                     ) : (
                         <span className={`money num ${t.amount > 0 ? "money_pos" : ""}`}>
-                            {money(t.amount)}
+                            {money(t.amount, t.currency)}
                         </span>
                     )}
                 </td>

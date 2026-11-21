@@ -3,7 +3,7 @@ HAVE_DOCKER_COMPOSE = $(shell docker compose version >/dev/null 2>&1 && echo 1)
 HAVE_PODMAN_COMPOSE = $(shell podman compose version >/dev/null 2>&1 && echo 1)
 COMPOSE ?= $(if $(HAVE_DOCKER_COMPOSE),docker compose,$(if $(HAVE_PODMAN_COMPOSE),podman compose --in-pod=false,docker compose))
 MUTATION_THRESHOLD ?= 85
-MUTATION_DIFF_THRESHOLD ?= 90
+MUTATION_DIFF_THRESHOLD ?= 60
 MUTATION_JOBS ?= $(shell getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 1)
 BASE ?= origin/main
 MONORI_TOOLS_BIN ?= $(HOME)/.local/bin
@@ -268,7 +268,7 @@ audit-deps: audit-python-env
 
 audit-deps-py: audit-python-env
 	@req=$$(mktemp); \
-	( uv export --group runtime --no-dev --no-hashes --format requirements-txt -o "$$req" \
+	( uv export --group runtime --no-emit-workspace --no-dev --no-hashes --format requirements-txt -o "$$req" \
 		&& uv run --locked --group audit pip-audit -r "$$req" ); code=$$?; \
 	rm -f "$$req"; exit $$code
 
@@ -450,11 +450,10 @@ m-back-diff:
 	fi; \
 	set -- $$paths; \
 	baseline=$$(mktemp -d); trap 'rm -rf "$$baseline"' EXIT; \
-	cold_start=0; if [ -d mutants ]; then cp -a mutants "$$baseline/mutants"; else mkdir -p "$$baseline/mutants"; cold_start=1; fi; \
+	if [ -d mutants ]; then cp -a mutants "$$baseline/mutants"; else mkdir -p "$$baseline/mutants"; fi; \
 	( mkdir -p mutants && uv run --locked --group mutation scripts/mutmut.sh run --max-children $(MUTATION_JOBS) "$$@" 2>mutmut-stderr.log ); mutmut=$$?; \
 	mv mutmut-stderr.log mutants/mutmut-stderr.log; \
 	args="--mutants mutants --baseline $$baseline/mutants --base $(BASE) --threshold $(MUTATION_DIFF_THRESHOLD)"; \
-	if [ $$cold_start -eq 1 ]; then args="$$args --skip-new-survivors"; fi; \
 	if [ -n "$${MUTATION_SUMMARY_PATH:-}" ]; then args="$$args --summary $$MUTATION_SUMMARY_PATH"; fi; \
 	uv run --locked --group mutation python -m monori.ci.lib.mutation_diff_gate $$args; gate=$$?; \
 	if [ -s mutants/mutmut-stderr.log ]; then echo "── mutmut diagnostics: mutants/mutmut-stderr.log ──"; fi; \

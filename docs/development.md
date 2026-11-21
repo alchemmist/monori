@@ -45,16 +45,16 @@ one-to-one — there is no separate CI script to drift out of sync.
 
 ### Format & lint
 
-| Target                | Does                                                                                                                                             |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `make fmt`            | Prettier + Ruff format/fix, and regenerates the schema diagram.                                                                                  |
-| `make fmt-check`      | The same, check-only.                                                                                                                            |
-| `make triple-quotes`  | Reject changed multiline Python strings whose opening or closing delimiter shares a line with content.                                           |
-| `make lint`           | Everything: web (Oxlint), CSS, HTML, server (Ruff), YAML, Markdown, generated docs, GitHub Actions, Dockerfile, shell, and spelling.             |
-| `make schema-diagram` | Regenerates the ER diagram in [data-model.md](data-model.md) from `server/schema.sql`. `make lint` fails if it is stale.                         |
-| `make type`           | Strict mypy for all tracked Python plus TypeScript compiler and type-aware Oxlint checks.                                                        |
-| `make analyze`        | bandit + semgrep security scans, plus Vulture for Python and Knip for JavaScript/TypeScript dead code.                                           |
-| `make audit`          | Dependency + secret scanning (`audit-deps`, `audit-deps-py`, `audit-secrets`).                                                                   |
+| Target                | Does                                                                                                                                 |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `make fmt`            | Prettier + Ruff format/fix, and regenerates the schema diagram.                                                                      |
+| `make fmt-check`      | The same, check-only.                                                                                                                |
+| `make triple-quotes`  | Reject changed multiline Python strings whose opening or closing delimiter shares a line with content.                               |
+| `make lint`           | Everything: web (Oxlint), CSS, HTML, server (Ruff), YAML, Markdown, generated docs, GitHub Actions, Dockerfile, shell, and spelling. |
+| `make schema-diagram` | Regenerates the ER diagram in [data-model.md](data-model.md) from `server/schema.sql`. `make lint` fails if it is stale.             |
+| `make type`           | Strict mypy for all tracked Python plus TypeScript compiler and type-aware Oxlint checks.                                            |
+| `make analyze`        | bandit + semgrep security scans, plus Vulture for Python and Knip for JavaScript/TypeScript dead code.                               |
+| `make audit`          | Dependency + secret scanning (`audit-deps`, `audit-deps-py`, `audit-secrets`).                                                       |
 
 Multiline Python strings keep both triple-quote delimiters on content-free lines:
 
@@ -119,22 +119,22 @@ exception only when the symbol is an intentional external entry point.
 The suite is a testing "trophy" — heavy on integration tests that use real
 dependencies (a real temp SQLite database, the real FastAPI app), not mocks.
 
-| Target | Does |
-| --- | --- |
-| `make test` | The whole suite (`t-front` + `t-back` + `t-e2e`). |
-| `make t-fast` | CI fast lane: frontend logic/store tests (`.test.ts`), backend unit tests, and CI unit tests without Docker. |
-| `make t-medium` | CI medium lane: frontend component tests and backend integration tests. |
-| `make t-ci` | CI package tests for the public Quality Graph integration. |
-| `make t-ci-unit` | CI package tests without Docker or external services; this replaces the removed legacy fake-GitHub testkit. |
-| `make t-slow` | CI slow lane: end-to-end Playwright tests against the real backend and production frontend stack. |
-| `make t-front` | Local frontend slice via Vitest. |
-| `make t-back` | Local backend slice with unit and integration tests. |
-| `make t-e2e` | Local end-to-end slice against the real backend and production frontend stack. |
-| `make docs-links` | Check repository Markdown links, including local anchors, with Lychee. Localhost URLs are the only allowlisted targets because the documented services are intentionally offline during this check. |
-| `make coverage` | Coverage as a tree (root → back/front → module → file), via `scripts/coverage-tree.sh`. Fails below **90% statements and lines** in `web/src`. |
-| `make coverage-diff BASE=origin/main` | Runs coverage plus a 100% changed-line gate for backend and frontend, comparing total coverage with `coverage-baseline/baseline.json` when available. |
-| `make mutation` | Full local mutation sweep: Stryker on `web/src`, then mutmut on `server/app`. CI runs the two cached halves in parallel nightly at 05:00 Moscow time and on manual dispatch. |
-| `make mutation-diff` | Diff-scoped gate for changed frontend lines and backend functions. Needs full git history. Example: `BASE=origin/main`, threshold 90%. |
+| Target                                | Does                                                                                                                                                                                                                           |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `make test`                           | The whole suite (`t-front` + `t-back` + `t-e2e`).                                                                                                                                                                              |
+| `make t-fast`                         | CI fast lane: frontend logic/store tests (`.test.ts`), backend unit tests, and CI unit tests without Docker.                                                                                                                   |
+| `make t-medium`                       | CI medium lane: frontend component tests and backend integration tests.                                                                                                                                                        |
+| `make t-ci`                           | CI package tests for the public Quality Graph integration.                                                                                                                                                                     |
+| `make t-ci-unit`                      | CI package tests without Docker or external services; this replaces the removed legacy fake-GitHub testkit.                                                                                                                    |
+| `make t-slow`                         | CI slow lane: end-to-end Playwright tests against the real backend and production frontend stack.                                                                                                                              |
+| `make t-front`                        | Local frontend slice via Vitest.                                                                                                                                                                                               |
+| `make t-back`                         | Local backend slice with unit and integration tests.                                                                                                                                                                           |
+| `make t-e2e`                          | Local end-to-end slice against the real backend and production frontend stack.                                                                                                                                                 |
+| `make docs-links`                     | Check repository Markdown links, including local anchors, with Lychee. Localhost URLs are the only allowlisted targets because the documented services are intentionally offline during this check.                            |
+| `make coverage`                       | Coverage as a tree (root → back/front → module → file), via `scripts/coverage-tree.sh`. Fails below **90% statements and lines** in `web/src`.                                                                                 |
+| `make coverage-diff BASE=origin/main` | Runs coverage plus a 100% changed-line gate for backend and frontend, comparing total coverage with `coverage-baseline/baseline.json` when available.                                                                          |
+| `make mutation`                       | Full local mutation sweep: Stryker on `web/src`, then mutmut on `server/app`. CI runs the two cached halves in parallel nightly at 05:00 Moscow time and on manual dispatch.                                                   |
+| `make mutation-diff`                  | Diff-scoped gate for changed frontend lines and backend functions. Needs full git history. Example: `BASE=origin/main`, threshold 60%. The score alone determines the result; surviving mutants remain visible in diagnostics. |
 
 Pull-request coverage uses the same portable `JobResult` protocol as every other Quality Graph
 check. Detailed metrics and uncovered source ranges are published in the Coverage job summary,

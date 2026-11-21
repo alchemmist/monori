@@ -28,7 +28,7 @@ from monori.server.app.transfer_match import (
 )
 
 LINKABLE_COLUMNS = (
-    "SELECT t.id, t.date, t.amount, t.description, t.account_id, t.transfer_id"
+    "SELECT t.id, t.date, t.amount, t.currency, t.description, t.account_id, t.transfer_id"
     " FROM transactions t JOIN accounts a ON a.id = t.account_id"
     " WHERE a.user_id=? AND t.transfer_id IS NULL"
     " AND t.source != 'adjustment'"
@@ -253,6 +253,7 @@ def candidates(
             id=row["id"],
             date=row["date"],
             amount=row["amount"],
+            currency=row["currency"],
             description=row["description"],
             account_id=row["account_id"],
             transfer_id=row["transfer_id"],

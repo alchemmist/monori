@@ -29,6 +29,7 @@ def test_admin_user_rejects_non_admin() -> None:
         "2026-01-01",
         is_admin=False,
         last_login=None,
+        base_currency="RUB",
         default_account_id=None,
     )
     with pytest.raises(HTTPException) as e:
@@ -43,6 +44,7 @@ def test_admin_user_passes_admin_through() -> None:
         "2026-01-01",
         is_admin=True,
         last_login=None,
+        base_currency="RUB",
         default_account_id=None,
     )
     assert admin_user(user) is user

@@ -12,12 +12,14 @@ import { MoneyChartTooltip, TrendChartTooltip } from "../components/ChartTooltip
 import TimeNavigator from "../components/TimeNavigator.jsx";
 import { Button } from "@mantine/core";
 import InlineSelect from "../ui/InlineSelect.jsx";
-import { useStore } from "../store.js";
+import { useBaseCurrency, useStore } from "../store.js";
+import { currencySymbol } from "../currencies.js";
 import { effectiveTransactions } from "../engine/splits.js";
+import { reported } from "../engine/reported.js";
 import { accountBalances, categoryTotals, categoryYearMatrix } from "../engine/analytics.js";
 import AccountBadge from "../components/AccountBadge.jsx";
 import { rub, money, MONTHS_SHORT } from "../format.js";
-import { PALETTE, SERIES, cartesian, chartMoney } from "./chartTheme.js";
+import { PALETTE, SERIES, cartesian } from "./chartTheme.js";
 import "./dashboard.css";
 import type { CategoryGroup, Id, Snapshot } from "../types.js";
 
@@ -89,6 +91,7 @@ export default function DashboardPage({
     lastYear: number;
 }) {
     const { snapshot } = useStore();
+    const currency = currencySymbol(useBaseCurrency());
     if (!snapshot) throw new Error("Dashboard requires a loaded snapshot");
     const now = useMemo(() => new Date(), []);
     const [donutYear, setDonutYear] = useState(String(now.getFullYear()));
@@ -132,8 +135,8 @@ export default function DashboardPage({
             const key = t.date.slice(0, 7);
             let e = map.get(key);
             if (!e) map.set(key, (e = { income: 0, expense: 0 }));
-            if (incomeGroupIds.has(cat.groupId)) e.income += t.amount;
-            else e.expense += -t.amount;
+            if (incomeGroupIds.has(cat.groupId)) e.income += reported(t);
+            else e.expense += -reported(t);
         }
         return [...map.entries()].sort(([a], [b]) => a.localeCompare(b));
     }, [txns, excludedIds, incomeGroupIds, catById]);
@@ -342,7 +345,7 @@ export default function DashboardPage({
                                                 : undefined,
                                     }}
                                 >
-                                    {money(balances.get(a.id) ?? 0)}
+                                    {money(balances.get(a.id)!, a.currency)}
                                 </div>
                             </div>
                         );
@@ -353,7 +356,7 @@ export default function DashboardPage({
             <div className="kpi-row">
                 <Kpi
                     label="Net year to date"
-                    value={`${rub(kpis.netYtd)} ₽`}
+                    value={`${rub(kpis.netYtd)} ${currency}`}
                     color={kpis.netYtd >= 0 ? "var(--m-income)" : "var(--m-expense)"}
                     sub={`${now.getFullYear()}`}
                 />
@@ -365,28 +368,28 @@ export default function DashboardPage({
                 />
                 <Kpi
                     label="Avg monthly spend"
-                    value={`${rub(kpis.exp12avg)} ₽`}
+                    value={`${rub(kpis.exp12avg)} ${currency}`}
                     sub="last 12 months"
                 />
                 <Kpi
                     label="Spent this month"
-                    value={`${rub(kpis.cur.expense)} ₽`}
-                    sub={`vs ${rub(kpis.prev.expense)} ₽ last month`}
+                    value={`${rub(kpis.cur.expense)} ${currency}`}
+                    sub={`vs ${rub(kpis.prev.expense)} ${currency} last month`}
                 />
                 <Kpi
                     label="Daily rate"
-                    value={`${rub(kpis.dailyRate)} ₽`}
+                    value={`${rub(kpis.dailyRate)} ${currency}`}
                     sub="this month, per day"
                 />
                 <Kpi
                     label="Month forecast"
-                    value={`${rub(kpis.forecast)} ₽`}
+                    value={`${rub(kpis.forecast)} ${currency}`}
                     color={kpis.forecast > kpis.exp12avg ? "var(--m-warning)" : "var(--m-income)"}
                     sub="at current pace"
                 />
                 <Kpi
                     label="Saved"
-                    value={`${rub(kpis.saved12)} ₽`}
+                    value={`${rub(kpis.saved12)} ${currency}`}
                     color={kpis.saved12 >= 0 ? "var(--m-income)" : "var(--m-expense)"}
                     sub="last 12 months"
                 />
@@ -629,6 +632,7 @@ function CategoryDonut({
     active: string | null;
     setActive: (value: string | null) => void;
 }) {
+    const baseCurrency = useBaseCurrency();
     if (!data.length) return <div className="chart-card__empty">No categorized entries yet</div>;
     return (
         <>
@@ -640,7 +644,7 @@ function CategoryDonut({
                     paddingAngle={0}
                     strokeWidth={0}
                     tooltipDataSource="segment"
-                    valueFormatter={chartMoney}
+                    valueFormatter={(value) => money(value * 100, baseCurrency)}
                     cellProps={(cell) => ({
                         opacity: active != null && active !== "" && cell.name !== active ? 0.3 : 1,
                         style: { transition: "opacity 120ms" },

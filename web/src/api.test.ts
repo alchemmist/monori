@@ -24,6 +24,7 @@ const requireFile = (value: FormDataEntryValue | null): File => {
 };
 
 const userResponse = {
+    baseCurrency: "RUB",
     id: 1,
     email: "user@example.com",
     createdAt: "2026-01-01T00:00:00",
@@ -45,6 +46,8 @@ const connectionResponse = {
 };
 
 const snapshotResponse = {
+    baseCurrency: "RUB",
+    rates: [],
     accounts: [],
     groups: [],
     categories: [],
@@ -57,6 +60,15 @@ const snapshotResponse = {
 
 const responseFor = (url: string, method?: string): unknown => {
     if (url.startsWith("/api/snapshot")) return snapshotResponse;
+    if (url.startsWith("/api/rates/refresh")) return { stored: 12, days: 1, repriced: 2 };
+    if (url.startsWith("/api/rates/")) return { code: "USD", day: "2026-02-28", repriced: 1 };
+    if (url.startsWith("/api/rates"))
+        return {
+            day: "2026-02-28",
+            baseCurrency: "RUB",
+            currencies: [{ code: "USD", name: "US dollar", symbol: "$", minorUnits: 2 }],
+            rates: [{ code: "USD", rate: 90, day: "2026-02-28", source: "manual", stale: false }],
+        };
     if (url.startsWith("/api/transactions?")) return { total: 0, rows: [] };
     if (url.endsWith("/splits")) return { splits: [] };
     if (url === "/api/budgets/bulk") return { set: 1 };
@@ -148,6 +160,30 @@ const responseFor = (url: string, method?: string): unknown => {
 type Endpoint = [string, () => Promise<unknown>, string, string | undefined, unknown];
 
 const ENDPOINTS: Endpoint[] = [
+    ["rates", () => api.rates(), "/api/rates", undefined, undefined],
+    [
+        "dated rates",
+        () => api.rates("2026-02-28"),
+        "/api/rates?day=2026-02-28",
+        undefined,
+        undefined,
+    ],
+    ["refresh rates", () => api.refreshRates(), "/api/rates/refresh?days=0", "POST", undefined],
+    ["backfill rates", () => api.refreshRates(30), "/api/rates/refresh?days=30", "POST", undefined],
+    [
+        "set historical rate",
+        () => api.setRate("USD", { rubPerUnit: 90, day: "2026-02-28" }),
+        "/api/rates/USD",
+        "PUT",
+        { rubPerUnit: 90, day: "2026-02-28" },
+    ],
+    [
+        "set reporting currency",
+        () => api.authPatchMe({ baseCurrency: "USD" }),
+        "/api/auth/me",
+        "PATCH",
+        { baseCurrency: "USD" },
+    ],
     [
         "snapshot",
         () => api.snapshot({ light: true, limit: 5 }),

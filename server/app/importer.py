@@ -22,6 +22,7 @@ from pydantic import ConfigDict
 from pydantic.dataclasses import dataclass as pydantic_dataclass
 
 from monori.server.app.connectors.base import SyncRow
+from monori.server.app.currencies import DEFAULT_CURRENCY, normalize
 
 type ImportValue = str | int | bool | None
 type RuleValue = str | list[str] | int
@@ -64,8 +65,19 @@ HEADER_ALIASES = {
     "дата операции": "op_date",
     "operation date": "op_date",
     "op_date": "op_date",
-    "сумма операции": "amount",
-    "operation amount": "amount",
+    "сумма операции": "op_amount",
+    "operation amount": "op_amount",
+    "payment amount": "amount",
+    "сумма платежа": "amount",
+    "сумма в валюте счёта": "amount",
+    "сумма в валюте счета": "amount",
+    "transaction currency": "op_currency",
+    "валюта операции": "op_currency",
+    "payment currency": "currency",
+    "валюта платежа": "currency",
+    "валюта счёта": "currency",
+    "валюта счета": "currency",
+    "currency": "currency",
     "номер карты": "card",
     "card number": "card",
     "статус": "status",
@@ -127,6 +139,7 @@ class ImportRow:
     bank_category: str
     mcc: str
     card: str
+    currency: str | None = None
     account_id: int | None = None
     category_id: int | None = None
     duplicate: bool = False
@@ -234,6 +247,7 @@ class ImportRow:
             bank_category=self.bank_category,
             mcc=self.mcc,
             card=self.card,
+            currency=self.currency,
             account_id=self.account_id,
             category_id=self.category_id,
             duplicate=self.duplicate,
@@ -289,7 +303,13 @@ def parse_amount_kop(raw: str) -> int | None:
         return None
 
 
-def tx_hash(account_id: int, date_iso: str, amount_kop: int, description: str) -> str:
+def tx_hash(
+    account_id: int,
+    date_iso: str,
+    amount_kop: int,
+    description: str,
+    currency: str = DEFAULT_CURRENCY,
+) -> str:
     """
     Dedup key of a transaction. Always scoped to the account: the same.
 
@@ -297,7 +317,7 @@ def tx_hash(account_id: int, date_iso: str, amount_kop: int, description: str) -
     (transfer legs, mirrored cards) and must not collide.
     """
     return hashlib.sha256(
-        f"{account_id}|{date_iso}|{amount_kop}|{description}".encode(),
+        f"{account_id}|{date_iso}|{amount_kop}|{normalize(currency)}|{description}".encode(),
     ).hexdigest()
 
 
@@ -340,7 +360,7 @@ def parse_statement(text: str) -> tuple[list[ImportRow], list[ParseError]]:
             rec = {field: parts[index] for field, index in header_map.items() if index < len(parts)}
             rec = {column: rec.get(column, "") for column in COLUMNS}
         date = parse_date(rec["op_date"])
-        amount = parse_amount_kop(rec["amount"])
+        amount = parse_amount_kop(rec["amount"] or rec["op_amount"])
         if date is None or amount is None:
             errors.append(ParseError(ln, "unparseable date or amount", line[:200]))
             continue
@@ -355,6 +375,7 @@ def parse_statement(text: str) -> tuple[list[ImportRow], list[ParseError]]:
                 bank_category=rec["bank_category"],
                 mcc=rec["mcc"],
                 card=rec["card"],
+                currency=normalize(rec["currency"] or rec["op_currency"], ""),
             ),
         )
     return rows, errors

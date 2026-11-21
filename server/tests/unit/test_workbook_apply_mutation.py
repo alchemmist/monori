@@ -122,8 +122,9 @@ def test_already_imported_warning_reads_in_full(tmp_path: pathlib.Path) -> None:
     )
     other = c.execute("SELECT id FROM accounts WHERE name='Credit'").fetchone()[0]
     c.execute(
-        "INSERT INTO transactions (date, amount, description, account_id, hash, source)"
-        " VALUES ('2026-01-05T14:22:00', -12550, 'Lenta', ?, 'h-sync', 'sync')",
+        "INSERT INTO transactions"
+        " (date, amount, currency, base_amount, description, account_id, hash, source)"
+        " VALUES ('2026-01-05T14:22:00', -12550, 'RUB', -12550, 'Lenta', ?, 'h-sync', 'sync')",
         (other,),
     )
     c.commit()

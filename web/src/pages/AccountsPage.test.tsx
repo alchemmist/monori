@@ -100,6 +100,40 @@ describe("AccountsPage", () => {
             expect(balance("Card")).toBe("850 ₽");
             expect(balance("Cash")).toBe("-400 ₽");
         });
+
+        it("shows a converted total only when active account currencies differ", () => {
+            seed({
+                baseCurrency: "RUB",
+                rates: [
+                    { code: "RUB", rate: 1 },
+                    { code: "GEL", rate: 30 },
+                    { code: "USD", rate: 90 },
+                ],
+                accounts: [
+                    account(1, { name: "Rubles", currency: "RUB", openingBalance: 1_000_00 }),
+                    account(2, { name: "Lari", currency: "GEL", openingBalance: 100_00 }),
+                    account(3, {
+                        name: "Archived dollars",
+                        currency: "USD",
+                        openingBalance: 10_000_00,
+                        archived: true,
+                    }),
+                ],
+            });
+            const { unmount } = renderUI(<AccountsPage />);
+            expect(document.querySelector(".accounts-total__value")).toHaveTextContent("4 000 ₽");
+
+            unmount();
+            seed({
+                baseCurrency: "RUB",
+                accounts: [
+                    account(1, { currency: "RUB", openingBalance: 1_000_00 }),
+                    account(2, { currency: "RUB", openingBalance: 100_00 }),
+                ],
+            });
+            renderUI(<AccountsPage />);
+            expect(document.querySelector(".accounts-total")).not.toBeInTheDocument();
+        });
     });
 
     describe("tags", () => {

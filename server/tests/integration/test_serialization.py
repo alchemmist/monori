@@ -1,10 +1,13 @@
 # Copyright (c) 2026
+import os
+import sqlite3
+
 import pytest
 from fastapi.testclient import TestClient
 from pydantic import TypeAdapter
 
 from monori.server.app.deps import SnapshotResponse
-from monori.server.tests.conftest import Api, TransactionOptions
+from monori.server.tests.conftest import AccountOptions, Api, TransactionOptions
 
 pytestmark = pytest.mark.integration
 
@@ -40,6 +43,7 @@ def test_snapshot_serialization_contract(api: Api, client: TestClient) -> None:
             "sort": 1,
             "archived": False,
             "opening_balance": 0,
+            "opening_base_amount": 0,
             "opening_date": None,
             "connection_id": None,
             "bank_ref": "",
@@ -65,6 +69,9 @@ def test_snapshot_serialization_contract(api: Api, client: TestClient) -> None:
             "id": tx,
             "date": "2026-01-05T10:00:00",
             "amount": -12345,
+            "currency": "RUB",
+            "base_amount": -12345,
+            "account_amount": -12345,
             "description": "Lenta",
             "bank_category": "Super",
             "mcc": "5411",
@@ -87,3 +94,63 @@ def test_snapshot_ordering_is_deterministic(api: Api) -> None:
     c = api.tx("2026-01-01T00:00:00", -3)
     ids = [transaction.id for transaction in api.snapshot().transactions]
     assert ids == [a, b, c]
+
+
+def test_serialized_account_amounts_use_historical_rates(api: Api, client: TestClient) -> None:
+    with sqlite3.connect(os.environ["MONORI_DB"]) as connection:
+        connection.executemany(
+            "INSERT INTO exchange_rates (day, code, rub_per_unit, source)"
+            " VALUES (?, 'USD', ?, 'manual')",
+            [("2026-01-01", 80), ("2026-07-01", 90)],
+        )
+    foreign = api.account("USD savings", AccountOptions(currency="USD", opening_balance=100))
+    response = client.patch(f"/api/accounts/{foreign}", json={"openingDate": "2026-01-01"})
+    assert response.status_code == 200, response.text
+    transaction = api.tx(
+        "2026-01-05T12:00:00",
+        -100,
+        TransactionOptions(currency="USD"),
+    )
+    snapshot = api.snapshot()
+    assert (
+        next(account for account in snapshot.accounts if account.id == foreign).opening_base_amount
+        == 8000
+    )
+    row = next(row for row in snapshot.transactions if row.id == transaction)
+    assert (row.currency, row.amount, row.base_amount, row.account_amount) == (
+        "USD",
+        -100,
+        -8000,
+        -8000,
+    )
+    response = client.get("/api/transactions")
+    assert response.status_code == 200, response.text
+    assert response.json()["rows"][0]["accountAmount"] == -8000
+    assert response.json()["rows"][0]["baseAmount"] == -8000
+
+
+def test_opening_amount_without_a_date_uses_the_earliest_transaction(
+    api: Api,
+) -> None:
+    with sqlite3.connect(os.environ["MONORI_DB"]) as connection:
+        connection.executemany(
+            "INSERT INTO exchange_rates (day, code, rub_per_unit, source)"
+            " VALUES (?, 'USD', ?, 'manual')",
+            [("2026-01-01", 80), ("2026-07-01", 90)],
+        )
+    foreign = api.account("USD savings", AccountOptions(currency="USD", opening_balance=100))
+    api.tx(
+        "2026-01-05T12:00:00",
+        -10,
+        TransactionOptions(account_id=foreign),
+    )
+    api.tx(
+        "2026-07-05T12:00:00",
+        -10,
+        TransactionOptions(account_id=foreign),
+    )
+
+    account = next(row for row in api.snapshot().accounts if row.id == foreign)
+
+    assert account.opening_date is None
+    assert account.opening_base_amount == 8000

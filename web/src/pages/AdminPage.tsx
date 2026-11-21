@@ -406,7 +406,7 @@ function UserDetail({ detail }: { detail: AdminUserDetail }) {
                                 {a.name}
                                 <span className="admin-muted"> · {a.transactions} tx</span>
                             </span>
-                            <span className="num">{money(a.balance)}</span>
+                            <span className="num">{money(a.balance, a.currency)}</span>
                         </li>
                     ))}
                     {detail.accounts.length === 0 && <li className="admin-empty">No accounts</li>}
@@ -481,7 +481,7 @@ function UserDetail({ detail }: { detail: AdminUserDetail }) {
                                                 : undefined,
                                     }}
                                 >
-                                    {money(t.amount)}
+                                    {money(t.amount, t.currency)}
                                 </td>
                             </tr>
                         ))}

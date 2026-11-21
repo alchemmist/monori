@@ -1,7 +1,9 @@
 import { ChartTooltip } from "@mantine/charts";
 import type { ReactNode } from "react";
 import type { TooltipPayloadEntry, TooltipValueType } from "recharts";
-import { chartMoneyUnit, fmtNum, trendUnit } from "../pages/chartTheme.js";
+import { fmtNum } from "../pages/chartTheme.js";
+import { currencySymbol } from "../currencies.js";
+import { useBaseCurrency } from "../store.js";
 
 type NullableTooltipItem = Omit<TooltipPayloadEntry, "value" | "graphicalItemId"> & {
     value?: TooltipValueType | null | undefined;
@@ -28,20 +30,22 @@ function withUnit(
 }
 
 export function MoneyChartTooltip({ label, payload }: RechartsTooltipProps) {
+    const unit = `\u00a0${currencySymbol(useBaseCurrency())}`;
     return (
         <ChartTooltip
             label={label}
-            payload={withUnit(payload, () => chartMoneyUnit)}
+            payload={withUnit(payload, () => unit)}
             valueFormatter={fmtNum}
         />
     );
 }
 
 export function TrendChartTooltip({ label, payload }: RechartsTooltipProps) {
+    const unit = `\u00a0${currencySymbol(useBaseCurrency())}`;
     return (
         <ChartTooltip
             label={label}
-            payload={withUnit(payload, trendUnit)}
+            payload={withUnit(payload, (name) => (name === "Savings rate %" ? "%" : unit))}
             valueFormatter={fmtNum}
         />
     );

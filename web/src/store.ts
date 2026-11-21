@@ -1,5 +1,8 @@
 import { create } from "zustand";
 import { api } from "./api.js";
+import { DEFAULT_CURRENCY } from "./currencies.js";
+import { convertAmount } from "./money.js";
+import { accountBalances } from "./engine/analytics.js";
 import { demoSnapshot } from "./demo/demoData.js";
 import { mergeCategories } from "./mergeCategories.js";
 import { compareTx, mergeTransactions } from "./mergeTransactions.js";
@@ -57,7 +60,7 @@ interface StoreState {
     checkAuth: () => Promise<void>;
     login: (email: string, password: string) => Promise<void>;
     register: (email: string, password: string) => Promise<void>;
-    patchMe: (patch: Partial<Pick<User, "defaultAccountId">>) => Promise<User>;
+    patchMe: (patch: Partial<Pick<User, "defaultAccountId" | "baseCurrency">>) => Promise<User>;
     logout: () => void;
     load: () => Promise<void>;
     fillTransactions: (generation?: object) => Promise<void>;
@@ -78,6 +81,15 @@ interface StoreState {
     hideTx: (txId: Id) => void;
     unhideTx: (txId: Id) => void;
     setTxAccount: (txId: Id, accountId: Id) => void;
+    baseCurrency: () => string;
+    rates: () => import("./types.js").ExchangeRate[];
+    setBaseCurrency: (code: string) => Promise<void>;
+    refreshRates: (days?: number) => Promise<{ repriced: number }>;
+    setRate: (
+        code: string,
+        rubPerUnit: number,
+        day?: string | null,
+    ) => Promise<{ repriced: number }>;
     createAccount: (body: AccountCreate) => Promise<Id>;
     patchAccount: (id: Id, patch: AccountPatch) => Promise<void>;
     deleteAccount: (id: Id, reassignTo?: Id | null) => Promise<void>;
@@ -227,6 +239,11 @@ export const isDemo = () => {
 };
 
 const restoredTabs = loadTabs();
+
+/** The currency every total is reported in — what a component needs to label a
+ * number that was summed across accounts. */
+export const useBaseCurrency = () =>
+    useStore((s) => s.snapshot?.baseCurrency ?? s.user?.baseCurrency ?? DEFAULT_CURRENCY);
 
 // carries on past the restored ids, so a reopened tab never collides with one
 // that came back from storage
@@ -573,9 +590,24 @@ export const useStore = create<StoreState>((set, get) => ({
      * snapshot anyway. Returns the created row. */
     async addTransaction(body) {
         const snapshot = requireSnapshot(get().snapshot);
+        const account = snapshot.accounts.find((candidate) => candidate.id === body.accountId);
+        const currency = body.currency ?? account?.currency ?? DEFAULT_CURRENCY;
         const row = {
             date: body.date,
             amount: body.amount,
+            currency,
+            baseAmount: convertAmount(
+                body.amount,
+                currency,
+                snapshot.baseCurrency ?? DEFAULT_CURRENCY,
+                snapshot.rates ?? [],
+            ),
+            accountAmount: convertAmount(
+                body.amount,
+                currency,
+                account?.currency ?? currency,
+                snapshot.rates ?? [],
+            ),
             description: body.description ?? "",
             bankCategory: "",
             mcc: "",
@@ -603,6 +635,7 @@ export const useStore = create<StoreState>((set, get) => ({
         // Creating a row shifts every older-page offset. Restart the fill so
         // its captured total and offsets cannot overwrite or skip this insert.
         if (get().txProgress) void get().fillTransactions((fillGeneration = {}));
+        if (!isDemo()) await get().load();
         return tx;
     },
 
@@ -612,6 +645,7 @@ export const useStore = create<StoreState>((set, get) => ({
      * budget on the page lying until the next reload. A changed date moves the
      * row, so the ledger is re-sorted into canonical order. */
     async updateTransaction(txId, patch) {
+        const fillWasActive = get().txProgress != null;
         const stamp = sessionStamp();
         const replacementEpoch = snapshotReplacementEpoch;
         const snapshot = requireSnapshot(get().snapshot);
@@ -622,7 +656,30 @@ export const useStore = create<StoreState>((set, get) => ({
         const patchKeys = TRANSACTION_PATCH_KEYS.filter((key) => patch[key] !== undefined);
         patchKeys.forEach((key) => revisions.set(key, revision));
         txFieldRevisions.set(txId, revisions);
-        const rows = snapshot.transactions.map((t) => (t.id === txId ? { ...t, ...patch } : t));
+        const rows = snapshot.transactions.map((transaction) => {
+            if (transaction.id !== txId) return transaction;
+            const updated = { ...transaction, ...patch };
+            if (!isDemo()) return updated;
+            const account = snapshot.accounts.find(
+                (candidate) => candidate.id === updated.accountId,
+            );
+            const currency = updated.currency ?? account?.currency ?? DEFAULT_CURRENCY;
+            return {
+                ...updated,
+                baseAmount: convertAmount(
+                    updated.amount,
+                    currency,
+                    snapshot.baseCurrency ?? DEFAULT_CURRENCY,
+                    snapshot.rates ?? [],
+                ),
+                accountAmount: convertAmount(
+                    updated.amount,
+                    currency,
+                    account?.currency ?? currency,
+                    snapshot.rates ?? [],
+                ),
+            };
+        });
         rows.sort(compareTx);
         set({ snapshot: { ...snapshot, transactions: rows } });
         if (isDemo()) return;
@@ -631,6 +688,7 @@ export const useStore = create<StoreState>((set, get) => ({
                 txId,
                 patch.categoryId === null ? { ...patch, categoryId: 0 } : patch,
             );
+            if (!fillWasActive) await get().load();
         } catch (e) {
             if (stamp.epoch !== sessionEpoch || replacementEpoch !== snapshotReplacementEpoch)
                 return;
@@ -888,6 +946,92 @@ export const useStore = create<StoreState>((set, get) => ({
         void get().updateTransaction(txId, { accountId });
     },
 
+    /** The currency every total on screen is expressed in. */
+    baseCurrency() {
+        return get().snapshot?.baseCurrency ?? get().user?.baseCurrency ?? DEFAULT_CURRENCY;
+    },
+
+    /** Rubles per unit, as of the snapshot — what the client needs to convert
+     * the money that has no transaction behind it (opening balances). */
+    rates() {
+        return get().snapshot?.rates ?? [];
+    },
+
+    /**
+     * Report in a different currency.
+     *
+     * Every stored `baseAmount` is a function of this setting, so the server
+     * reprices the whole ledger and the snapshot is reloaded rather than
+     * patched — there is no local shortcut that would be correct.
+     */
+    async setBaseCurrency(code) {
+        if (isDemo()) {
+            // the demo has no server to reprice for it, so it does the same
+            // work locally — relabelling without reconverting would show ruble
+            // totals wearing a lari sign
+            const snapshot = requireSnapshot(get().snapshot);
+            set({
+                snapshot: {
+                    ...snapshot,
+                    baseCurrency: code,
+                    transactions: snapshot.transactions.map((t) => ({
+                        ...t,
+                        baseAmount: convertAmount(t.amount, t.currency, code, snapshot.rates ?? []),
+                    })),
+                    accounts: snapshot.accounts.map((account) => ({
+                        ...account,
+                        openingBaseAmount: convertAmount(
+                            account.openingBaseAmount ?? account.openingBalance ?? 0,
+                            snapshot.baseCurrency ?? DEFAULT_CURRENCY,
+                            code,
+                            snapshot.rates ?? [],
+                        ),
+                    })),
+                    budgets: snapshot.budgets.map((budget) => ({
+                        ...budget,
+                        amount: convertAmount(
+                            budget.amount,
+                            snapshot.baseCurrency ?? DEFAULT_CURRENCY,
+                            code,
+                            snapshot.rates ?? [],
+                        ),
+                    })),
+                    categories: snapshot.categories.map((category) => ({
+                        ...category,
+                        goalTarget:
+                            category.goalTarget == null
+                                ? null
+                                : convertAmount(
+                                      category.goalTarget,
+                                      snapshot.baseCurrency ?? DEFAULT_CURRENCY,
+                                      code,
+                                      snapshot.rates ?? [],
+                                  ),
+                    })),
+                },
+            });
+            return;
+        }
+        const user = await api.authPatchMe({ baseCurrency: code });
+        set({ user });
+        await get().load();
+    },
+
+    /** Pull fresh rates from the central bank, optionally catching up on the
+     * last `days` of them, then reload what they repriced. */
+    async refreshRates(days = 0) {
+        const result = await api.refreshRates(days);
+        await get().load();
+        return result;
+    },
+
+    /** Correct one rate by hand — for the day a bank converted at its own. */
+    async setRate(code, rubPerUnit, day = null) {
+        const result = await api.setRate(code, { rubPerUnit, day });
+        await get().load();
+        return result;
+    },
+
     async createAccount(body) {
         const snapshot = requireSnapshot(get().snapshot);
         const id = isDemo()
@@ -906,22 +1050,63 @@ export const useStore = create<StoreState>((set, get) => ({
                 sort: 1e9,
                 archived: false,
                 openingBalance: body.openingBalance ?? 0,
+                openingBaseAmount: convertAmount(
+                    body.openingBalance ?? 0,
+                    body.currency ?? DEFAULT_CURRENCY,
+                    snapshot.baseCurrency ?? DEFAULT_CURRENCY,
+                    snapshot.rates ?? [],
+                ),
                 openingDate: body.openingDate ?? null,
             },
         ];
         set({ snapshot: { ...snapshot, accounts } });
+        if (!isDemo()) await get().load();
         return id;
     },
 
     async patchAccount(id, patch) {
-        if (!isDemo()) await api.patchAccount(id, patch);
+        if (!isDemo()) {
+            await api.patchAccount(id, patch);
+            await get().load();
+            return;
+        }
         const snapshot = requireSnapshot(get().snapshot);
-        const accounts = snapshot.accounts.map((a) => (a.id === id ? { ...a, ...patch } : a));
-        set({ snapshot: { ...snapshot, accounts } });
+        const accounts = snapshot.accounts.map((account) => {
+            if (account.id !== id) return account;
+            const updated = { ...account, ...patch };
+            return {
+                ...updated,
+                openingBaseAmount: convertAmount(
+                    updated.openingBalance ?? 0,
+                    updated.currency,
+                    snapshot.baseCurrency ?? DEFAULT_CURRENCY,
+                    snapshot.rates ?? [],
+                ),
+            };
+        });
+        const account = accounts.find((candidate) => candidate.id === id);
+        const transactions = snapshot.transactions.map((transaction) =>
+            transaction.accountId === id && account
+                ? {
+                      ...transaction,
+                      accountAmount: convertAmount(
+                          transaction.amount,
+                          transaction.currency ?? account.currency,
+                          account.currency,
+                          snapshot.rates ?? [],
+                      ),
+                  }
+                : transaction,
+        );
+        set({ snapshot: { ...snapshot, accounts, transactions } });
     },
 
     async deleteAccount(id, reassignTo) {
-        if (!isDemo()) await api.deleteAccount(id, reassignTo);
+        if (!isDemo()) {
+            await api.deleteAccount(id, reassignTo);
+            await get().load();
+            return;
+        }
         const snapshot = requireSnapshot(get().snapshot);
         set({
             snapshot: {
@@ -929,8 +1114,21 @@ export const useStore = create<StoreState>((set, get) => ({
                 accounts: snapshot.accounts.filter((a) => a.id !== id),
                 transactions:
                     reassignTo != null
-                        ? snapshot.transactions.map((t) =>
-                              t.accountId === id ? { ...t, accountId: reassignTo } : t,
+                        ? snapshot.transactions.map((transaction) =>
+                              transaction.accountId === id
+                                  ? {
+                                        ...transaction,
+                                        accountId: reassignTo,
+                                        accountAmount: convertAmount(
+                                            transaction.amount,
+                                            transaction.currency ?? DEFAULT_CURRENCY,
+                                            snapshot.accounts.find(
+                                                (account) => account.id === reassignTo,
+                                            )?.currency ?? DEFAULT_CURRENCY,
+                                            snapshot.rates ?? [],
+                                        ),
+                                    }
+                                  : transaction,
                           )
                         : snapshot.transactions,
             },
@@ -941,14 +1139,7 @@ export const useStore = create<StoreState>((set, get) => ({
         if (isDemo()) {
             const snapshot = requireSnapshot(get().snapshot);
             const account = snapshot.accounts.find((candidate) => candidate.id === id);
-            const balance = account
-                ? snapshot.transactions
-                      .filter((t) => t.accountId === id)
-                      .reduce(
-                          (sum, transaction) => sum + transaction.amount,
-                          account.openingBalance ?? 0,
-                      )
-                : 0;
+            const balance = account ? (accountBalances(snapshot).get(id) ?? 0) : 0;
             const delta = actualBalance - balance;
             if (delta !== 0) {
                 const nextId = Math.max(0, ...snapshot.transactions.map((t) => t.id)) + 1;
@@ -956,6 +1147,14 @@ export const useStore = create<StoreState>((set, get) => ({
                     id: nextId,
                     date: new Date().toISOString().slice(0, 19),
                     amount: delta,
+                    currency: account?.currency ?? DEFAULT_CURRENCY,
+                    baseAmount: convertAmount(
+                        delta,
+                        account?.currency ?? DEFAULT_CURRENCY,
+                        snapshot.baseCurrency ?? DEFAULT_CURRENCY,
+                        snapshot.rates ?? [],
+                    ),
+                    accountAmount: delta,
                     description: "Reconcile adjustment",
                     bankCategory: "",
                     mcc: "",
@@ -979,13 +1178,33 @@ export const useStore = create<StoreState>((set, get) => ({
             const snapshot = requireSnapshot(get().snapshot);
             const nextId = Math.max(0, ...snapshot.transactions.map((t) => t.id)) + 1;
             const transferId = `demo-${nextId}`;
+            const currencyOf = (id: Id) =>
+                snapshot.accounts.find((a) => a.id === id)?.currency ?? DEFAULT_CURRENCY;
+            const base = get().baseCurrency();
+            const received =
+                body.toAmount ??
+                convertAmount(
+                    body.amount,
+                    currencyOf(body.fromAccountId),
+                    currencyOf(body.toAccountId),
+                    get().rates(),
+                );
+            if (received <= 0) {
+                throw new Error("received amount must be positive; state the amount that arrived");
+            }
             const rows = [
                 { accountId: body.fromAccountId, amount: -body.amount },
-                { accountId: body.toAccountId, amount: body.amount },
+                {
+                    accountId: body.toAccountId,
+                    amount: received,
+                },
             ].map((r, i) => ({
                 id: nextId + i,
                 date: body.date,
                 amount: r.amount,
+                currency: currencyOf(r.accountId),
+                baseAmount: convertAmount(r.amount, currencyOf(r.accountId), base, get().rates()),
+                accountAmount: r.amount,
                 description: "Transfer",
                 bankCategory: "",
                 mcc: "",

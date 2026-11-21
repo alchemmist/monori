@@ -95,6 +95,8 @@ erDiagram
         INTEGER id PK
         TEXT date "required"
         INTEGER amount "required"
+        TEXT currency "required"
+        INTEGER base_amount "required"
         TEXT description "required"
         TEXT bank_category "required"
         TEXT mcc "required"
@@ -106,6 +108,12 @@ erDiagram
         TEXT source "required"
         INTEGER batch_id FK "-> import_batches.id"
         INTEGER hidden "required"
+    }
+    exchange_rates {
+        TEXT day PK
+        TEXT code PK
+        REAL rub_per_unit "required"
+        TEXT source "required"
     }
     splits {
         INTEGER id PK
@@ -144,6 +152,7 @@ erDiagram
         TEXT created_at "required"
         INTEGER is_admin "required"
         TEXT last_login
+        TEXT base_currency "required"
         INTEGER default_account_id FK "-> accounts.id"
     }
     activity_events {
@@ -190,9 +199,11 @@ erDiagram
 
 Every amount — transactions, budgets — is a **signed integer in kopecks/cents**.
 A ruble value like `1 500,00` is stored as `150000`. Expenses are negative,
-income positive. There is no floating-point money anywhere; rubles exist only at
-the display edge. This is what lets budget totals reconcile exactly with the
-ledger.
+income positive. Stored amounts remain integers. Each transaction keeps its
+original `currency` and a `base_amount` converted at its own date; shared totals
+sum the latter. Exchange-rate conversion rounds to minor units using ties-to-even.
+Split allocations assign the rounding remainder to the last part, preserving
+the parent total. `users.base_currency` selects the reporting currency (`RUB` by default).
 
 ## Tables
 
@@ -222,7 +233,7 @@ belongs to exactly one account.
 | `icon` | TEXT | display glyph name (e.g. `wallet`, `card`, `ruble`); default `wallet` |
 | `color` | TEXT | `#rrggbb` tint for the glyph and its tile; default `#5b6472` |
 | `icon_image` | TEXT | optional custom icon as an image data URL; when set it overrides `icon`/`color` |
-| `currency` | TEXT | ISO code, default `RUB`. A label only — monori is single-currency for now (see issue #29) |
+| `currency` | TEXT | Account denomination and default for new transactions; default `RUB` |
 | `sort` | INTEGER | display order; default `0` |
 | `archived` | INTEGER | `0`/`1`; default `0` |
 | `opening_balance` | INTEGER | kopecks; default `0` |
@@ -231,8 +242,10 @@ belongs to exactly one account.
 | `opening_date` | TEXT | ISO date, nullable |
 
 An account's **running balance** is `opening_balance` plus the sum of its
-transactions. Reconcile compares this to your real bank balance and posts an
-adjustment for any difference.
+accepted transactions. Foreign-currency rows are converted into the account
+currency at each transaction's date before contributing. The API exposes this
+as `accountAmount`; `openingBaseAmount` converts the opening balance for reports.
+Reconcile uses the same dated conversion and posts any adjustment in the account currency.
 
 ### `categories`
 
@@ -255,7 +268,9 @@ The ledger.
 | -------- | ------ | ------- |
 | `id` | INTEGER PK | |
 | `date` | TEXT | ISO-8601 datetime |
-| `amount` | INTEGER | signed kopecks; negative = expense |
+| `amount` | INTEGER | signed minor units in `currency`; negative = expense |
+| `currency` | TEXT NOT NULL | original denomination; blank and whitespace-only values rejected |
+| `base_amount` | INTEGER NOT NULL | dated value in the owner's reporting currency, used for shared totals |
 | `description` | TEXT | default `''` |
 | `bank_category` | TEXT | the bank's own label; default `''` |
 | `mcc` | TEXT | merchant category code; default `''` |
@@ -263,7 +278,7 @@ The ledger.
 | `account_id` | INTEGER | → `accounts(id)`, NOT NULL |
 | `transfer_id` | TEXT | links the two legs of a transfer; `NULL` for normal rows |
 | `comment` | TEXT | default `''` |
-| `hash` | TEXT | `sha1(date \| amount \| description)`, for dedup |
+| `hash` | TEXT | `sha256(account_id \| date \| amount \| currency \| description)`, for dedup |
 | `source` | TEXT | `import` / `manual` / `transfer` / `adjustment` / `sync` / `sheets`; default `import` |
 | `batch_id` | INTEGER | → `import_batches(id)`, `ON DELETE SET NULL`; the batch that inserted the row (paste or sync), nullable |
 
@@ -273,6 +288,17 @@ A **transfer** between your own accounts is two linked rows sharing a
 `transfer_id`: a negative leg on the source account and a positive leg on the
 destination. Both are uncategorized, so a transfer never counts as income or
 expense in analytics — this is enforced by construction, not by convention.
+For a cross-currency transfer each leg keeps its own amount and currency. Bank
+spreads and rounding may leave a reporting-currency residual; exclusion relies
+on the transfer link and uncategorized legs, not arithmetic cancellation.
+
+### `exchange_rates`
+
+Shared dated quotes, keyed by `(day, code)`. `rub_per_unit` is a positive rate
+against the RUB pivot; `source` records CBR, manual, or bundled provenance.
+Lookups use the latest quote no later than the requested day. A dated bundled
+quote may supply a missing rate only on or after its publication date; otherwise
+conversion fails explicitly. Manual overrides survive feed refreshes.
 
 ### `budgets`
 
@@ -368,9 +394,11 @@ the default T-Bank account.
 
 ## Dedup hashing
 
-The `hash` is `sha1(f"{date}|{amount}|{description}")`. Two transactions are
-"the same" only when date, amount, and description all match. Import uses this to
-avoid inserting a row that already exists; see [Importing](importing.md).
+The `hash` is SHA-256 over `account_id|date|amount|currency|description`, with
+the currency normalized. Equal numeric amounts in different currencies cannot
+collide. Migration `0021` backfills stored currencies from their accounts and
+rehashes existing rows, preserving deduplication after upgrade. Statement-level
+matching also includes currency; see [Importing](importing.md).
 
 ## Backups
 

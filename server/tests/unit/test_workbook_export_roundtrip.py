@@ -396,3 +396,7 @@ def test_dashdata_sheet_is_known_and_silent() -> None:
     dash.append(["Month", "Income"])
     parsed = parse_workbook(_bytes(wb))
     assert parsed.warnings == []
+
+
+def test_export_preserves_legacy_dates_with_invalid_time_suffixes() -> None:
+    assert export_parse_dt("2026-01-05 legacy-time") == _workbook_datetime(2026, 1, 5)

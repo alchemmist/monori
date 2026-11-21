@@ -47,6 +47,7 @@ export interface Account {
     sort: number;
     archived: boolean;
     openingBalance?: number;
+    openingBaseAmount?: number;
     openingDate?: string | null;
     connectionId?: Id | null;
     bankRef?: string | null;
@@ -84,6 +85,9 @@ export interface Transaction {
     id: Id;
     date: string;
     amount: number;
+    currency?: string;
+    baseAmount?: number | null;
+    accountAmount?: number;
     description: string;
     bankCategory: string;
     mcc?: string;
@@ -133,6 +137,16 @@ export interface Snapshot {
     transfers: Transfer[];
     budgets: BudgetCell[];
     connections?: Connection[];
+    baseCurrency?: string;
+    rates?: ExchangeRate[];
+}
+
+export interface ExchangeRate {
+    code: string;
+    rate: number;
+    day?: string | undefined;
+    source?: string | undefined;
+    stale?: boolean | undefined;
 }
 
 export interface User {
@@ -142,6 +156,7 @@ export interface User {
     isAdmin?: boolean;
     lastLogin?: string | null;
     defaultAccountId?: Id | null;
+    baseCurrency?: string;
 }
 
 export interface AdminOverview {
@@ -177,6 +192,7 @@ export interface AdminTransaction {
     mcc?: string | null;
     comment?: string | null;
     source?: string | null;
+    currency?: string;
 }
 
 export interface AdminUserDetail {
@@ -232,6 +248,7 @@ export interface TransactionCreate {
     mcc?: string;
     categoryId?: Id | null;
     comment?: string;
+    currency?: string;
 }
 
 export type TransactionPatch = Partial<
@@ -260,6 +277,7 @@ export interface TransferCreate {
     fromAccountId: Id;
     toAccountId: Id;
     amount: number;
+    toAmount?: number;
     date: string;
     comment?: string;
 }
@@ -275,11 +293,13 @@ export interface TransferSuggestion extends TransferPair {
     days: number;
     hint?: boolean;
     mismatch?: boolean;
+    currency?: string;
 }
 
 export interface ImportRow {
     date: string;
     amount: number;
+    currency?: string;
     description: string;
     bankCategory?: string;
     mcc?: string;

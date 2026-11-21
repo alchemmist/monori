@@ -59,7 +59,7 @@ def test_day_number_handles_the_1900_non_leap_century() -> None:
 
 def test_pairs_opposite_amounts_on_different_accounts() -> None:
     pairs = find_pairs([row(1, 10, -5000, 1), row(2, 10, 5000, 2)])
-    assert pairs == [TransferCandidate(1, 2, 5000, 0, hint=False)]
+    assert pairs == [TransferCandidate(1, 2, 5000, "RUB", 0, hint=False)]
 
 
 def test_same_account_is_not_a_transfer() -> None:
@@ -133,6 +133,8 @@ def _reference_find_pairs(
         for in_row in rows:
             if in_row.amount != -out_row.amount or in_row.transfer_id:
                 continue
+            if out_row.currency != in_row.currency:
+                continue
             if out_row.account_id == in_row.account_id:
                 continue
             days = abs(day_number(in_row.date) - day_number(out_row.date))
@@ -146,6 +148,7 @@ def _reference_find_pairs(
                     out_row.id,
                     in_row.id,
                     -out_row.amount,
+                    out_row.currency,
                     days,
                     out_hint or in_hint,
                     out_hint != in_hint and bool(silent.description.strip()),
@@ -209,9 +212,9 @@ def test_has_hint_is_case_insensitive() -> None:
 
 def test_split_confident_separates_by_distance() -> None:
     pairs = [
-        TransferCandidate(1, 2, 1, 0, hint=False),
-        TransferCandidate(3, 4, 1, 1, hint=False),
-        TransferCandidate(5, 6, 1, 4, hint=False),
+        TransferCandidate(1, 2, 1, "RUB", 0, hint=False),
+        TransferCandidate(3, 4, 1, "RUB", 1, hint=False),
+        TransferCandidate(5, 6, 1, "RUB", 4, hint=False),
     ]
     auto, suggested = split_confident(pairs, auto_days=1)
     assert auto == pairs[:2]
@@ -267,3 +270,9 @@ def test_two_silent_legs_still_merge_by_amount_and_day() -> None:
     auto, suggested = split_confident(find_pairs(rows))
     assert len(auto) == 1
     assert suggested == []
+
+
+def test_equal_amounts_in_different_currencies_do_not_match() -> None:
+    outgoing = replace(row(1, 10, -5000, 1), currency="USD")
+    incoming = replace(row(2, 10, 5000, 2), currency="GEL")
+    assert find_pairs([outgoing, incoming]) == []

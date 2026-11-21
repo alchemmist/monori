@@ -13,6 +13,7 @@ rather than a raw dump.
 import datetime as dt
 from collections import defaultdict
 from dataclasses import dataclass
+from fractions import Fraction
 from io import BytesIO
 
 from openpyxl import Workbook
@@ -38,6 +39,8 @@ class EffectiveTransaction:
     date: str
     account_id: int
     amount: int
+    currency: str
+    base_amount: int
     bank_category: str
     mcc: str
     description: str
@@ -134,6 +137,8 @@ def _effective_transaction(tx: TransactionResponse) -> EffectiveTransaction:
         date=tx.date,
         account_id=tx.account_id,
         amount=tx.amount,
+        currency=tx.currency,
+        base_amount=tx.base_amount,
         bank_category=tx.bank_category,
         mcc=tx.mcc,
         description=tx.description,
@@ -150,13 +155,24 @@ def _effective_transactions(snap: SnapshotResponse) -> list[EffectiveTransaction
         if not tx.splits:
             effective.append(_effective_transaction(tx))
             continue
-        effective.extend(
-            [
+        allocated = 0
+        cumulative = 0
+        for index, part in enumerate(tx.splits):
+            cumulative += part.amount
+            base_amount = (
+                tx.base_amount - allocated
+                if index == len(tx.splits) - 1
+                else round(Fraction(tx.base_amount * cumulative, tx.amount)) - allocated
+            )
+            allocated += base_amount
+            effective.append(
                 EffectiveTransaction(
                     id=f"{tx.id}:{part.id}",
                     date=tx.date,
                     account_id=tx.account_id,
                     amount=part.amount,
+                    currency=tx.currency,
+                    base_amount=base_amount,
                     bank_category=tx.bank_category,
                     mcc=tx.mcc,
                     description=tx.description,
@@ -164,9 +180,7 @@ def _effective_transactions(snap: SnapshotResponse) -> list[EffectiveTransaction
                     comment=part.comment,
                     transfer_id=tx.transfer_id,
                 )
-                for part in tx.splits
-            ],
-        )
+            )
     return effective
 
 
@@ -182,7 +196,7 @@ def _transactions_sheet(
     row = 2
     for tx in _effective_transactions(snap):
         dt = _parse_dt(tx.date)
-        currency = acct_currency.get(tx.account_id, "RUB")
+        currency = tx.currency or acct_currency.get(tx.account_id, "RUB")
         rub = spec.kop_to_rub(tx.amount)
         ws.cell(row=row, column=1, value=dt.strftime("%d.%m.%Y %H:%M:%S"))
         ws.cell(row=row, column=2, value=dt.strftime("%d.%m.%Y"))
@@ -215,7 +229,7 @@ def _month_activity(snap: SnapshotResponse) -> dict[tuple[int, int, int], int]:
         if tx.category_id is None:
             continue
         dt = _parse_dt(tx.date)
-        activity[(tx.category_id, dt.year, dt.month)] += tx.amount
+        activity[(tx.category_id, dt.year, dt.month)] += tx.base_amount
     return activity
 
 
@@ -392,9 +406,9 @@ def _write_monthly_dashdata(ws: Worksheet, snap: SnapshotResponse) -> None:
         dt = _parse_dt(tx.date)
         key = (dt.year, dt.month)
         if kind == "income":
-            monthly[key][0] += tx.amount
+            monthly[key][0] += tx.base_amount
         else:
-            monthly[key][1] -= tx.amount
+            monthly[key][1] -= tx.base_amount
     cum_net = 0
     row = 2
     for year, month in sorted(monthly):

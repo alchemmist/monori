@@ -13,6 +13,7 @@ export const MONTHS = [
     "December",
 ];
 export const MONTHS_SHORT = MONTHS.map((m) => m.slice(0, 3));
+import { currencySymbol } from "./currencies.js";
 
 const nf0 = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 });
 const nf2 = new Intl.NumberFormat("ru-RU", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -36,8 +37,8 @@ export function rubExact(kop: number): string {
 }
 
 /** kopecks -> "12 345 ₽" */
-export function money(kop: number): string {
-    return `${rub(kop)} ₽`;
+export function money(kop: number, currency = "RUB"): string {
+    return `${rub(kop)} ${currencySymbol(currency)}`;
 }
 
 /** compact: 1234500 kop -> "12.3k", for chart axes */

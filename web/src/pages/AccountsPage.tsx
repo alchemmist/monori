@@ -9,9 +9,10 @@ import {
 import RowMenu from "../ui/RowMenu.jsx";
 import Tag from "../ui/Tag.jsx";
 import { Plus, Grip } from "@gravity-ui/icons";
-import { useStore, isDemo } from "../store.js";
+import { useBaseCurrency, useStore, isDemo } from "../store.js";
 import { api } from "../api.js";
 import { accountBalances } from "../engine/analytics.js";
+import { isMixedCurrency, totalInBase } from "../money.js";
 import AccountBadge from "../components/AccountBadge.jsx";
 import { money } from "../format.js";
 import { AccountDeleteDialog, AccountReconcileDialog } from "../components/AccountDialogs.jsx";
@@ -37,6 +38,7 @@ interface AccountDrag {
 
 export default function AccountsPage() {
     const { snapshot, notify, openTab } = useStore();
+    const baseCurrency = useBaseCurrency();
     if (!snapshot) throw new Error("accounts page requires a loaded snapshot");
     const [dialog, setDialog] = useState<AccountDialog | null>(null);
 
@@ -52,6 +54,11 @@ export default function AccountsPage() {
         return m;
     }, [snapshot.connections, snapshot.accounts]);
     const balances = useMemo(() => accountBalances(snapshot), [snapshot]);
+    const mixedCurrency = isMixedCurrency(accounts, baseCurrency);
+    const total = useMemo(
+        () => totalInBase(accounts, balances, baseCurrency, snapshot.rates ?? []),
+        [accounts, balances, baseCurrency, snapshot.rates],
+    );
     const txCounts = useMemo(() => {
         const m = new Map<Id, number>();
         for (const t of snapshot.transactions) m.set(t.accountId, (m.get(t.accountId) ?? 0) + 1);
@@ -147,6 +154,14 @@ export default function AccountsPage() {
                 <h1 className="page-title" style={{ margin: 0 }}>
                     Accounts
                 </h1>
+                {mixedCurrency && (
+                    <div className="accounts-total">
+                        <span className="accounts-total__label">Total</span>
+                        <span className="accounts-total__value num">
+                            {money(total, baseCurrency)}
+                        </span>
+                    </div>
+                )}
             </div>
 
             <div className="card account-list">
@@ -189,7 +204,7 @@ export default function AccountsPage() {
                                 )}
                             </div>
                             <span className="account-row__balance num">
-                                {money(balances.get(a.id) ?? 0)}
+                                {money(balances.get(a.id)!, a.currency)}
                             </span>
                             <div className="account-row__actions">
                                 <RowMenu

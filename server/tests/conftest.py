@@ -42,6 +42,7 @@ class AccountOptions:
 
 @dataclass(frozen=True)
 class TransactionOptions:
+    currency: str | None = None
     account_id: int | None = None
     category_id: int | None = None
     description: str = ""
@@ -155,6 +156,7 @@ class Api:
                 "amount": amount,
                 "accountId": options.account_id or self.default_account(),
                 "categoryId": options.category_id,
+                "currency": options.currency,
                 "description": options.description,
                 "bankCategory": options.bank_category,
                 "mcc": options.mcc,

@@ -7,8 +7,24 @@
  */
 
 import type { BudgetCell, Snapshot, Transaction, Transfer } from "../types.js";
+import { CURRENCIES } from "../currencies.js";
 
 const R = (rub: number) => Math.round(rub * 100); // rubles -> kopecks
+const DEMO_RUB_RATES: Record<string, number> = {
+    RUB: 1,
+    USD: 90,
+    EUR: 98,
+    GBP: 116,
+    CHF: 102,
+    KZT: 0.18,
+    BYN: 28,
+    GEL: 33,
+    AMD: 0.23,
+    TRY: 2.5,
+    AED: 24.5,
+    CNY: 12.5,
+    RSD: 0.84,
+};
 
 function rng(seed: number) {
     return function () {
@@ -281,7 +297,24 @@ function build(): Snapshot {
 
     transactions.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : b.id - a.id));
 
-    return { accounts: ACCOUNTS, groups: GROUPS, categories, budgets, transactions, transfers };
+    return {
+        accounts: ACCOUNTS.map((account) => ({
+            ...account,
+            openingBaseAmount: account.openingBalance,
+        })),
+        groups: GROUPS,
+        categories,
+        budgets,
+        transactions: transactions.map((transaction) => ({
+            ...transaction,
+            currency: "RUB",
+            baseAmount: transaction.amount,
+            accountAmount: transaction.amount,
+        })),
+        transfers,
+        baseCurrency: "RUB",
+        rates: CURRENCIES.map(({ code }) => ({ code, rate: DEMO_RUB_RATES[code]! })),
+    };
 }
 
 export const demoSnapshot = build();
