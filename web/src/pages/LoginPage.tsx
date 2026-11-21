@@ -1,3 +1,4 @@
+import SsoButton from "../components/SsoButton.jsx";
 import { useState, type SyntheticEvent } from "react";
 import { useLocation, useNavigate, type Location } from "react-router-dom";
 import { Eye, EyeSlash } from "@gravity-ui/icons";
@@ -136,6 +137,7 @@ export default function LoginPage() {
                         {busy ? "…" : mode === "login" ? "Sign in" : "Create account"}
                     </button>
                 </form>
+                <SsoButton />
                 <div className="login__switch">
                     {mode === "login" ? (
                         <>

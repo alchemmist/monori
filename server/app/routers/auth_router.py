@@ -88,7 +88,9 @@ class OAuthTokenType(StrEnum):
     BEARER = "bearer"
 
 
-def create_user(c: sqlite3.Connection, raw_email: str, password: str) -> UserResponse:
+def create_user(
+    c: sqlite3.Connection, raw_email: str, password: str, *, commit: bool = True
+) -> UserResponse:
     """
     Validate and insert a user (with a default Cash account), returning the.
 
@@ -120,7 +122,8 @@ def create_user(c: sqlite3.Connection, raw_email: str, password: str) -> UserRes
     if not c.execute(USER_ACCOUNT_SQL, (uid,)).fetchone():
         c.execute(INSERT_CASH_ACCOUNT_SQL, (uid,))
     row = cast("sqlite3.Row", c.execute(SELECT_USER_SQL, (uid,)).fetchone())
-    c.commit()
+    if commit:
+        c.commit()
     return serialize_user(UserRecord.from_row(row))
 
 
@@ -132,6 +135,20 @@ def register(body: RegisterBody) -> UserResponse:
         return create_user(c, body.email, body.password)
     finally:
         c.close()
+
+
+def record_login(c: sqlite3.Connection, user_id: int, email: str) -> None:
+    """Refresh privileges and audit a successful login in the current transaction."""
+    now = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S")
+    admin_canon = {canonical_email(e) for e in admin_emails()}
+    c.execute(
+        "UPDATE users SET is_admin=?, last_login=? WHERE id=?",
+        (1 if canonical_email(email) in admin_canon else 0, now, user_id),
+    )
+    c.execute(
+        "INSERT INTO activity_events (user_id, kind, created_at) VALUES (?, 'login', ?)",
+        (user_id, now),
+    )
 
 
 @router.post("/token")
@@ -155,16 +172,7 @@ def token(form: Annotated[OAuth2PasswordRequestForm, Depends()]) -> TokenRespons
         if not verify_password(password_hash, form.password):
             raise HTTPException(401, "incorrect password")
 
-        now = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S")
-        admin_canon = {canonical_email(e) for e in admin_emails()}
-        c.execute(
-            "UPDATE users SET is_admin=?, last_login=? WHERE id=?",
-            (1 if canonical_email(email) in admin_canon else 0, now, user_id),
-        )
-        c.execute(
-            "INSERT INTO activity_events (user_id, kind, created_at) VALUES (?, 'login', ?)",
-            (user_id, now),
-        )
+        record_login(c, user_id, email)
         c.commit()
     finally:
         c.close()

@@ -1,3 +1,4 @@
+import { SsoCallback } from "./components/SsoButton.jsx";
 import { Suspense, lazy, useEffect, useLayoutEffect, useState } from "react";
 import { Loader, MantineProvider } from "@mantine/core";
 import { Notifications } from "@mantine/notifications";
@@ -94,6 +95,7 @@ export default function Root() {
                         {/* the diagram viewer owns the whole viewport, so it sits outside the Shell */}
                         <Route path="/docs/:slug/diagram/:index" element={<DiagramPage />} />
                         <Route path="/" element={app} />
+                        <Route path="/oidc/callback" element={<SsoCallback />} />
                         <Route path="/login" element={<LoginRoute />} />
                         <Route path="/logout" element={<LogoutPage />} />
                         <Route path="/demo" element={app} />

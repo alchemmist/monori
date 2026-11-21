@@ -1,3 +1,4 @@
+import SsoButton from "../components/SsoButton.jsx";
 import { Button, SegmentedControl } from "@mantine/core";
 import { useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
@@ -137,6 +138,7 @@ export default function SettingsPage({
                                 </div>
                             </div>
                         </div>
+                        <SsoButton link />
                         <Row label="Session" hint="End this session on this device">
                             <Button variant="outline" data-tone="danger" onClick={endSession}>
                                 Log out

@@ -28,6 +28,7 @@ from monori.server.app.routers import (
     export,
     groups,
     imports,
+    oidc,
     transactions,
     transfers,
 )
@@ -36,6 +37,7 @@ app = FastAPI(title="monori", docs_url="/api-docs", redoc_url="/api-redoc")
 
 
 app.include_router(auth_router.router)
+app.include_router(oidc.router)
 
 
 app.include_router(admin.router)
