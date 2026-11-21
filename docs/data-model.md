@@ -115,6 +115,10 @@ erDiagram
         TEXT comment "required"
         INTEGER sort "required"
     }
+    refund_links {
+        INTEGER refund_tx_id PK, FK "-> transactions.id"
+        INTEGER original_tx_id FK "-> transactions.id, required"
+    }
     transfers {
         TEXT id PK
         INTEGER user_id FK "-> users.id"
@@ -173,6 +177,8 @@ erDiagram
     categories |o--o{ transactions : "category_id"
     categories ||--o{ splits : "category_id"
     transactions ||--o{ splits : "transaction_id"
+    transactions ||--o{ refund_links : "original_tx_id"
+    transactions |o--o{ refund_links : "refund_tx_id"
     transactions ||--o{ transfers : "in_tx_id"
     transactions ||--o{ transfers : "out_tx_id"
     users |o--o{ transfers : "user_id"

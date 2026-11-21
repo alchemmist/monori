@@ -17,7 +17,7 @@ from monori.server.app.importer import tx_hash
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-HEAD = "0020"
+HEAD = "0021"
 assert LEGACY_REVISIONS[-1] == "0006"
 
 OLD_SCHEMA = """

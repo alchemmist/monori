@@ -3,6 +3,7 @@ import pytest
 from fastapi.testclient import TestClient
 from pydantic import TypeAdapter, ValidationError
 
+from monori.server.app.deps import conn
 from monori.server.app.value_types import Money
 from monori.server.tests.conftest import Api, TransactionOptions
 
@@ -139,6 +140,10 @@ def test_transaction_partial_patch_preserves_other_fields(api: Api, client: Test
     assert row.category_id is None
     assert client.patch(f"/api/transactions/{tx}", json={"categoryId": 999}).status_code == 400
     assert client.patch("/api/transactions/999", json={"amount": 1}).status_code == 404
+    other_account = api.account("Other")
+    response = client.patch(f"/api/transactions/{tx}", json={"accountId": other_account})
+    assert response.status_code == 200
+    assert api.tx_by(tx).account_id == other_account
 
 
 def test_transaction_category_must_match_amount_direction(api: Api, client: TestClient) -> None:
@@ -148,17 +153,16 @@ def test_transaction_category_must_match_amount_direction(api: Api, client: Test
     salary = api.category("Salary", income)
     account = api.default_account()
 
-    for amount, category in ((-100, salary), (100, food)):
-        response = client.post(
-            "/api/transactions",
-            json={
-                "date": "2026-02-03T10:00:00",
-                "amount": amount,
-                "accountId": account,
-                "categoryId": category,
-            },
-        )
-        assert response.status_code == 400
+    response = client.post(
+        "/api/transactions",
+        json={
+            "date": "2026-02-03T10:00:00",
+            "amount": -100,
+            "accountId": account,
+            "categoryId": salary,
+        },
+    )
+    assert response.status_code == 400
 
     expense = api.tx("2026-02-03T10:00:00", -100, TransactionOptions(category_id=food))
     income_tx = api.tx("2026-02-03T10:00:00", 100, TransactionOptions(category_id=salary))
@@ -166,17 +170,324 @@ def test_transaction_category_must_match_amount_direction(api: Api, client: Test
         client.patch(f"/api/transactions/{expense}", json={"categoryId": salary}).status_code == 400
     )
     assert (
-        client.patch(f"/api/transactions/{income_tx}", json={"categoryId": food}).status_code == 400
+        client.patch(f"/api/transactions/{income_tx}", json={"categoryId": food}).status_code == 200
     )
-    assert client.patch(f"/api/transactions/{expense}", json={"amount": 100}).status_code == 400
+    assert client.patch(f"/api/transactions/{expense}", json={"amount": 100}).status_code == 200
 
     bulk = client.post(
         "/api/transactions/bulk",
         json={"action": "categorize", "ids": [expense, income_tx], "categoryId": food},
     )
-    assert bulk.status_code == 400
+    assert bulk.status_code == 200
     assert api.tx_by(expense).category_id == food
-    assert api.tx_by(income_tx).category_id == salary
+    assert api.tx_by(income_tx).category_id == food
+
+
+def test_partial_refunds_link_to_purchase_and_inherit_category(
+    api: Api,
+    client: TestClient,
+) -> None:
+    expenses = api.group("Expenses")
+    food = api.category("Food", expenses)
+    shopping = api.category("Shopping", expenses)
+    purchase = api.tx(
+        "2026-02-03T10:00:00",
+        -100_00,
+        TransactionOptions(description="Lenta", category_id=food),
+    )
+    first = api.tx("2026-02-04T10:00:00", 24_00, TransactionOptions(description="Lenta refund"))
+    second = api.tx("2026-02-05T10:00:00", 76_00, TransactionOptions(description="Lenta refund"))
+
+    linked = client.put(f"/api/transactions/{first}/refund", json={"originalId": purchase})
+    assert linked.status_code == 200
+    assert linked.json()["categoryId"] == food
+    assert api.tx_by(first).refund_of_id == purchase
+    assert api.tx_by(first).category_id == food
+    assert api.tx_by(purchase).refund_ids == [first]
+
+    response = client.put(
+        f"/api/transactions/{second}/refund",
+        json={"originalId": purchase},
+    )
+    assert response.status_code == 200
+    assert api.tx_by(purchase).refund_ids == [first, second]
+
+    response = client.patch(
+        f"/api/transactions/{first}",
+        json={"date": "2026-02-02T10:00:00"},
+    )
+    assert response.status_code == 400
+    response = client.patch(
+        f"/api/transactions/{purchase}",
+        json={"date": "2026-02-05T10:00:00"},
+    )
+    assert response.status_code == 400
+    assert api.tx_by(first).date == "2026-02-04T10:00:00"
+    assert api.tx_by(purchase).date == "2026-02-03T10:00:00"
+
+    response = client.patch(
+        f"/api/transactions/{first}",
+        json={"categoryId": shopping},
+    )
+    assert response.status_code == 400
+    response = client.patch(
+        f"/api/transactions/{purchase}",
+        json={"categoryId": shopping},
+    )
+    assert response.status_code == 200
+    assert api.tx_by(first).category_id == shopping
+    assert api.tx_by(second).category_id == shopping
+
+    response = client.post(
+        "/api/transactions/bulk",
+        json={"action": "categorize", "ids": [first], "categoryId": food},
+    )
+    assert response.status_code == 400
+    response = client.post(
+        "/api/transactions/bulk",
+        json={"action": "categorize", "ids": [purchase], "categoryId": food},
+    )
+    assert response.status_code == 200
+    assert api.tx_by(first).category_id == food
+    assert api.tx_by(second).category_id == food
+
+    too_much = api.tx("2026-02-06T10:00:00", 1, TransactionOptions(description="Lenta refund"))
+    response = client.put(f"/api/transactions/{too_much}/refund", json={"originalId": purchase})
+    assert response.status_code == 400
+    assert "exceed" in response.json()["detail"]
+
+    earlier_refund = api.tx("2026-01-01", 1_00)
+    assert (
+        client.put(
+            f"/api/transactions/{earlier_refund}/refund",
+            json={"originalId": purchase},
+        ).status_code
+        == 400
+    )
+
+
+def test_link_refund_rejects_legacy_income_category(api: Api, client: TestClient) -> None:
+    income = api.group("Income", "income")
+    salary = api.category("Salary", income)
+    purchase = api.tx("2026-01-01", -30_00)
+    refund = api.tx("2026-01-02", 10_00)
+    c = conn()
+    try:
+        c.execute("UPDATE transactions SET category_id=? WHERE id=?", (salary, purchase))
+        c.commit()
+    finally:
+        c.close()
+
+    suggestions = client.get(f"/api/transactions/{refund}/refund-suggestions").json()["rows"]
+    assert all(row["id"] != purchase for row in suggestions)
+
+    response = client.put(f"/api/transactions/{refund}/refund", json={"originalId": purchase})
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "expense transaction requires an expense category"
+
+
+def test_refund_suggestions_validation_and_unlink(api: Api, client: TestClient) -> None:
+    expenses = api.group("Expenses")
+    income = api.group("Income", "income")
+    food = api.category("Food", expenses)
+    salary = api.category("Salary", income)
+    purchase = api.tx(
+        "2026-01-01T10:00:00",
+        -100_00,
+        TransactionOptions(description="Shop 456", category_id=food),
+    )
+    other = api.tx(
+        "2026-01-02T10:00:00",
+        -24_00,
+        TransactionOptions(description="Another merchant"),
+    )
+    refund = api.tx("2026-01-03T10:00:00", 24_00, TransactionOptions(description="Shop RETURN100"))
+
+    assert client.get("/api/transactions/999/refund-suggestions").status_code == 404
+    assert client.get(f"/api/transactions/{purchase}/refund-suggestions").status_code == 400
+    assert client.delete("/api/transactions/999/refund").status_code == 404
+    assert client.delete(f"/api/transactions/{refund}/refund").status_code == 404
+    assert (
+        client.put(
+            f"/api/transactions/{purchase}/refund",
+            json={"originalId": refund},
+        ).status_code
+        == 400
+    )
+
+    small = api.tx("2026-01-02T12:00:00", -10_00, TransactionOptions(description="Tiny"))
+    unrelated = api.tx("2026-01-02T13:00:00", -50_00, TransactionOptions(description="Elsewhere"))
+
+    suggestions = client.get(f"/api/transactions/{refund}/refund-suggestions").json()["rows"]
+    assert [row["id"] for row in suggestions] == [purchase, other]
+    assert suggestions[0] == {
+        "id": purchase,
+        "date": "2026-01-01T10:00:00",
+        "amount": -100_00,
+        "description": "Shop 456",
+        "bankCategory": "",
+        "mcc": "",
+        "categoryId": food,
+        "accountId": api.default_account(),
+        "transferId": None,
+        "comment": "",
+        "source": "manual",
+        "hidden": False,
+        "splits": [],
+        "refundOfId": None,
+        "refundIds": [],
+    }
+    assert small not in [row["id"] for row in suggestions]
+    assert unrelated not in [row["id"] for row in suggestions]
+    assert (
+        client.put(
+            f"/api/transactions/{refund}/refund",
+            json={"originalId": purchase},
+        ).status_code
+        == 200
+    )
+    assert client.patch(f"/api/transactions/{refund}", json={"amount": -1}).status_code == 400
+    assert client.patch(f"/api/transactions/{refund}", json={"amount": 10_001}).status_code == 400
+    assert client.patch(f"/api/transactions/{purchase}", json={"amount": -1_000}).status_code == 400
+    assert (
+        client.patch(
+            f"/api/transactions/{refund}",
+            json={"categoryId": salary},
+        ).status_code
+        == 400
+    )
+    assert (
+        client.put(
+            f"/api/transactions/{refund}/splits",
+            json={
+                "parts": [
+                    {"categoryId": food, "amount": 12_00},
+                    {"categoryId": food, "amount": 12_00},
+                ]
+            },
+        ).status_code
+        == 400
+    )
+
+    chained = api.tx("2026-01-04T10:00:00", 1_00)
+    assert (
+        client.put(
+            f"/api/transactions/{chained}/refund",
+            json={"originalId": refund},
+        ).status_code
+        == 400
+    )
+
+    second_account = api.account("Second card")
+    transfer = client.post(
+        "/api/transfers",
+        json={
+            "fromAccountId": api.default_account(),
+            "toAccountId": second_account,
+            "amount": 5_00,
+            "date": "2026-01-05",
+        },
+    )
+    assert transfer.status_code == 200
+    transfer_rows = [row for row in api.snapshot().transactions if row.transfer_id is not None]
+    transfer_in = next(row for row in transfer_rows if row.amount > 0)
+    assert client.get(f"/api/transactions/{transfer_in.id}/refund-suggestions").status_code == 400
+    assert (
+        client.put(
+            f"/api/transactions/{transfer_in.id}/refund",
+            json={"originalId": purchase},
+        ).status_code
+        == 400
+    )
+
+    split_refund = api.tx("2026-01-06", 10_00)
+    assert (
+        client.put(
+            f"/api/transactions/{split_refund}/splits",
+            json={
+                "parts": [
+                    {"categoryId": salary, "amount": 0},
+                    {"categoryId": salary, "amount": 10_00},
+                ]
+            },
+        ).status_code
+        == 400
+    )
+    assert (
+        client.put(
+            f"/api/transactions/{split_refund}/splits",
+            json={
+                "parts": [
+                    {"categoryId": salary, "amount": 4_00},
+                    {"categoryId": salary, "amount": 6_00},
+                ]
+            },
+        ).status_code
+        == 200
+    )
+    assert (
+        client.patch(f"/api/transactions/{split_refund}", json={"categoryId": salary}).status_code
+        == 400
+    )
+    assert client.get(f"/api/transactions/{split_refund}/refund-suggestions").status_code == 400
+    assert (
+        client.put(
+            f"/api/transactions/{split_refund}/refund",
+            json={"originalId": purchase},
+        ).status_code
+        == 400
+    )
+
+    assert client.delete(f"/api/transactions/{refund}/refund").status_code == 200
+    assert api.tx_by(refund).refund_of_id is None
+    assert api.tx_by(refund).category_id == food
+    assert api.tx_by(purchase).refund_ids == []
+
+    assert client.delete(f"/api/transactions/{refund}/refund").status_code == 404
+    assert (
+        client.put(f"/api/transactions/{refund}/refund", json={"originalId": 999}).status_code
+        == 404
+    )
+
+
+def test_refund_suggestions_filter_before_the_result_cap(api: Api, client: TestClient) -> None:
+    old_purchase = api.tx(
+        "2025-01-01",
+        -50_00,
+        TransactionOptions(description="Archived Shop"),
+    )
+    for index in range(251):
+        api.tx(
+            f"2025-12-{index % 28 + 1:02d}",
+            -50_00,
+            TransactionOptions(description=f"Noise {index}"),
+        )
+    refund = api.tx(
+        "2026-01-01",
+        10_00,
+        TransactionOptions(description="Archived Shop refund"),
+    )
+
+    rows = client.get(f"/api/transactions/{refund}/refund-suggestions").json()["rows"]
+
+    assert [row["id"] for row in rows] == [old_purchase]
+
+
+def test_refund_suggestions_return_every_eligible_purchase(api: Api, client: TestClient) -> None:
+    purchases = [
+        api.tx(
+            f"2025-12-{index + 1:02d}",
+            -50_00,
+            TransactionOptions(description="Shop"),
+        )
+        for index in range(21)
+    ]
+    refund = api.tx("2026-01-01", 10_00, TransactionOptions(description="Shop refund"))
+
+    rows = client.get(f"/api/transactions/{refund}/refund-suggestions").json()["rows"]
+
+    assert {row["id"] for row in rows} == set(purchases)
 
 
 def test_transaction_patch_recomputes_hash_for_dedup(api: Api, client: TestClient) -> None:

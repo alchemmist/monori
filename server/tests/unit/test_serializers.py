@@ -150,6 +150,8 @@ def test_serialize_tx() -> None:
         "source": "import",
         "hidden": False,
         "splits": [],
+        "refund_of_id": None,
+        "refund_ids": [],
     }
 
 

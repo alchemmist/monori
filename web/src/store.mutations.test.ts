@@ -29,6 +29,114 @@ afterEach(() => {
 });
 
 describe("store demo mutations", () => {
+    it("suggests, links and unlinks partial refunds locally", async () => {
+        useStore.setState({
+            snapshot: buildSnapshot({
+                transactions: [
+                    {
+                        id: 1,
+                        date: "2026-01-01",
+                        amount: -10000,
+                        description: "Shop",
+                        refundIds: [],
+                    },
+                    {
+                        id: 2,
+                        date: "2026-01-02",
+                        amount: 2400,
+                        description: "Shop refund",
+                        categoryId: null,
+                    },
+                    {
+                        id: 3,
+                        date: "2026-01-03",
+                        amount: 7600,
+                        description: "Shop refund",
+                        refundOfId: 1,
+                    },
+                    { id: 4, date: "2026-01-01", amount: -2400, description: "Other" },
+                ],
+            }),
+        });
+        const store = useStore.getState();
+        await expect(store.refundSuggestions(2)).resolves.toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({ id: 1 }),
+                expect.objectContaining({ id: 4 }),
+            ]),
+        );
+        await store.linkRefund(2, 1);
+        expect(
+            useStore.getState().snapshot!.transactions.find((row) => row.id === 2),
+        ).toMatchObject({
+            refundOfId: 1,
+        });
+        await store.unlinkRefund(2);
+        expect(
+            useStore.getState().snapshot!.transactions.find((row) => row.id === 2),
+        ).toMatchObject({
+            refundOfId: null,
+        });
+        await expect(store.refundSuggestions(1)).resolves.toEqual([]);
+    });
+
+    it("moves a demo refund between purchases and tolerates a missing row", async () => {
+        useStore.setState({
+            snapshot: buildSnapshot({
+                transactions: [
+                    { id: 1, date: "2026-01-01", amount: -100, refundIds: [3] },
+                    { id: 2, date: "2026-01-02", amount: -100, categoryId: 2, refundIds: [] },
+                    { id: 3, date: "2026-01-03", amount: 50, refundOfId: 1 },
+                ],
+            }),
+        });
+
+        await useStore.getState().linkRefund(3, 2);
+        expect(useStore.getState().snapshot!.transactions).toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({ id: 1, refundIds: [] }),
+                expect.objectContaining({ id: 2, refundIds: [3] }),
+                expect.objectContaining({ id: 3, refundOfId: 2, categoryId: 2 }),
+            ]),
+        );
+
+        await useStore.getState().unlinkRefund(999);
+    });
+
+    it("rejects invalid demo refund links", async () => {
+        useStore.setState({
+            snapshot: buildSnapshot({
+                transactions: [
+                    { id: 1, date: "2026-01-01", amount: -100 },
+                    { id: 2, date: "2026-01-02", amount: 80, refundOfId: 1 },
+                    { id: 3, date: "2026-01-03", amount: 50 },
+                ],
+            }),
+        });
+
+        await useStore.getState().linkRefund(3, 1);
+
+        expect(useStore.getState().snapshot!.transactions[2]).not.toHaveProperty("refundOfId");
+    });
+
+    it("normalizes an uncategorized demo purchase to a null refund category", async () => {
+        const current = buildSnapshot({
+            transactions: [
+                { id: 1, date: "2026-01-01", amount: -100 },
+                { id: 2, date: "2026-01-02", amount: 50 },
+            ],
+        });
+        Reflect.deleteProperty(current.transactions[0]!, "categoryId");
+        useStore.setState({ snapshot: current });
+
+        await useStore.getState().linkRefund(2, 1);
+
+        expect(useStore.getState().snapshot!.transactions[1]).toMatchObject({
+            refundOfId: 1,
+            categoryId: null,
+        });
+    });
+
     it("edits budgets and transaction category/account optimistically", () => {
         const store = useStore.getState();
         void store.setBudget(2, 2026, 1, 30);
@@ -114,6 +222,269 @@ describe("store remote mutations", () => {
 
     /** Actions that only edit the snapshot must not spend a round trip on `load`. */
     const refreshCount = () => vi.mocked(useStore.getState().load).mock.calls.length;
+
+    it("loads, links and unlinks refunds through the API", async () => {
+        const purchase = {
+            id: 10,
+            date: "2026-01-01",
+            amount: -100,
+            description: "Shop",
+            refundIds: [],
+        };
+        const refund = { id: 11, date: "2026-01-02", amount: 50, description: "Shop refund" };
+        useStore.setState({ snapshot: buildSnapshot({ transactions: [purchase, refund] }) });
+        vi.spyOn(api, "refundSuggestions").mockResolvedValue({
+            rows: [buildSnapshot({ transactions: [purchase] }).transactions[0]!],
+        });
+        vi.spyOn(api, "linkRefund").mockResolvedValue({ refundOfId: 10, categoryId: 2 });
+        vi.spyOn(api, "unlinkRefund").mockResolvedValue({ categoryId: 2 });
+
+        await expect(useStore.getState().refundSuggestions(11)).resolves.toHaveLength(1);
+        await useStore.getState().linkRefund(11, 10);
+        expect(
+            useStore.getState().snapshot!.transactions.find((row) => row.id === 11),
+        ).toMatchObject({
+            refundOfId: 10,
+            categoryId: 2,
+        });
+        await useStore.getState().unlinkRefund(11);
+        expect(
+            useStore.getState().snapshot!.transactions.find((row) => row.id === 11),
+        ).toMatchObject({
+            refundOfId: null,
+            categoryId: 2,
+        });
+    });
+
+    it("serializes link and unlink requests for the same refund", async () => {
+        const purchase = { id: 10, date: "2026-01-01", amount: -100, refundIds: [] };
+        const refund = { id: 11, date: "2026-01-02", amount: 50 };
+        useStore.setState({ snapshot: buildSnapshot({ transactions: [purchase, refund] }) });
+        let finishLink!: (value: { refundOfId: number; categoryId: number }) => void;
+        const link = vi.spyOn(api, "linkRefund").mockReturnValue(
+            new Promise((resolve) => {
+                finishLink = resolve;
+            }),
+        );
+        const unlink = vi.spyOn(api, "unlinkRefund").mockResolvedValue({ categoryId: 2 });
+
+        const linking = useStore.getState().linkRefund(11, 10);
+        await vi.waitFor(() => expect(link).toHaveBeenCalledOnce());
+        const unlinking = useStore.getState().unlinkRefund(11);
+        expect(unlink).not.toHaveBeenCalled();
+
+        finishLink({ refundOfId: 10, categoryId: 2 });
+        await Promise.all([linking, unlinking]);
+
+        expect(unlink).toHaveBeenCalledOnce();
+        expect(
+            useStore.getState().snapshot!.transactions.find((row) => row.id === 11),
+        ).toMatchObject({ refundOfId: null, categoryId: 2 });
+    });
+
+    it.each(["link", "unlink"])(
+        "discards an in-flight %s and queued refund changes after logout",
+        async (action) => {
+            useStore.setState({
+                snapshot: buildSnapshot({
+                    transactions: [
+                        {
+                            id: 10,
+                            date: "2026-01-01",
+                            amount: -100,
+                            categoryId: 2,
+                            refundIds: [11],
+                        },
+                        { id: 11, date: "2026-01-02", amount: 50, categoryId: 2, refundOfId: 10 },
+                    ],
+                }),
+            });
+            let finish!: (result: { refundOfId: number; categoryId: number }) => void;
+            const response = new Promise<{ refundOfId: number; categoryId: number }>((resolve) => {
+                finish = resolve;
+            });
+            const link = vi.spyOn(api, "linkRefund").mockReturnValue(response);
+            const unlink = vi.spyOn(api, "unlinkRefund").mockReturnValue(response);
+            const store = useStore.getState();
+            const pending = action === "link" ? store.linkRefund(11, 10) : store.unlinkRefund(11);
+            await vi.waitFor(() =>
+                expect(action === "link" ? link : unlink).toHaveBeenCalledOnce(),
+            );
+            const queuedLink = store.linkRefund(11, 10);
+            const queuedUnlink = store.unlinkRefund(11);
+            store.logout();
+            const snapshotAfterLogout = useStore.getState().snapshot;
+            finish({ refundOfId: 10, categoryId: 3 });
+            await Promise.all([pending, queuedLink, queuedUnlink]);
+            expect(link).toHaveBeenCalledTimes(action === "link" ? 1 : 0);
+            expect(unlink).toHaveBeenCalledTimes(action === "unlink" ? 1 : 0);
+            expect(useStore.getState().snapshot).toBe(snapshotAfterLogout);
+        },
+    );
+
+    it("propagates and rolls back a purchase category on linked refunds", async () => {
+        useStore.setState({
+            snapshot: buildSnapshot({
+                transactions: [
+                    { id: 10, date: "2026-01-01", amount: -100, categoryId: 2, refundIds: [11] },
+                    { id: 11, date: "2026-01-02", amount: 50, categoryId: 2, refundOfId: 10 },
+                ],
+            }),
+        });
+        vi.spyOn(api, "patchTx").mockResolvedValueOnce({}).mockRejectedValueOnce(new Error("save"));
+
+        await useStore.getState().updateTransaction(10, { categoryId: 3 });
+        expect(
+            useStore.getState().snapshot!.transactions.map((transaction) => transaction.categoryId),
+        ).toEqual([3, 3]);
+
+        await useStore.getState().updateTransaction(10, { categoryId: 2 });
+        expect(
+            useStore.getState().snapshot!.transactions.map((transaction) => transaction.categoryId),
+        ).toEqual([3, 3]);
+    });
+
+    it.each(["new category", "relink", "unlink"])(
+        "preserves a refund's %s when an older purchase edit rolls back",
+        async (action) => {
+            useStore.setState({
+                snapshot: buildSnapshot({
+                    transactions: [
+                        {
+                            id: 10,
+                            date: "2026-01-01",
+                            amount: -100,
+                            categoryId: 2,
+                            refundIds: [11],
+                        },
+                        { id: 11, date: "2026-01-02", amount: 50, categoryId: 2, refundOfId: 10 },
+                        { id: 12, date: "2026-01-01", amount: -100, categoryId: 3 },
+                    ],
+                }),
+            });
+            let rejectEdit!: (error: Error) => void;
+            vi.spyOn(api, "patchTx")
+                .mockImplementationOnce(() => new Promise((_, reject) => (rejectEdit = reject)))
+                .mockResolvedValue({});
+            const pending = useStore.getState().updateTransaction(10, { categoryId: 3 });
+            if (action === "new category") {
+                await useStore.getState().updateTransaction(10, { categoryId: 4 });
+            } else if (action === "relink") {
+                vi.spyOn(api, "linkRefund").mockResolvedValue({ refundOfId: 12, categoryId: 3 });
+                await useStore.getState().linkRefund(11, 12);
+            } else {
+                vi.spyOn(api, "unlinkRefund").mockResolvedValue({ categoryId: 3 });
+                await useStore.getState().unlinkRefund(11);
+            }
+            rejectEdit(new Error("older save failed"));
+            await pending;
+            const rows = useStore.getState().snapshot!.transactions;
+            expect(rows.find((row) => row.id === 10)?.categoryId).toBe(
+                action === "new category" ? 4 : 2,
+            );
+            expect(rows.find((row) => row.id === 11)).toMatchObject({
+                categoryId: action === "new category" ? 4 : 3,
+                refundOfId: action === "new category" ? 10 : action === "relink" ? 12 : null,
+            });
+        },
+    );
+
+    it("repairs refund links when deletion rolls back", async () => {
+        const purchase = { id: 10, date: "2026-01-01", amount: -100, refundIds: [11] };
+        const refund = { id: 11, date: "2026-01-02", amount: 50, refundOfId: 10 };
+        useStore.setState({ snapshot: buildSnapshot({ transactions: [purchase, refund] }) });
+        vi.spyOn(api, "deleteTx").mockRejectedValue(new Error("offline"));
+
+        await expect(useStore.getState().deleteTransaction(10)).resolves.toBe(false);
+        expect(
+            useStore.getState().snapshot!.transactions.find((row) => row.id === 11),
+        ).toMatchObject({
+            refundOfId: 10,
+        });
+        await expect(useStore.getState().deleteTransaction(11)).resolves.toBe(false);
+        expect(
+            useStore.getState().snapshot!.transactions.find((row) => row.id === 10)?.refundIds,
+        ).toContain(11);
+    });
+
+    it("keeps hidden refund relationships in sync", async () => {
+        const refund = { id: 11, date: "2026-01-02", amount: 50, refundOfId: 10 };
+        const hiddenPurchase = buildSnapshot({
+            transactions: [
+                {
+                    id: 10,
+                    date: "2026-01-01",
+                    amount: -100,
+                    refundIds: [11],
+                    hidden: true,
+                },
+            ],
+        }).transactions[0]!;
+        useStore.setState({
+            snapshot: buildSnapshot({ transactions: [refund] }),
+            hiddenTx: [hiddenPurchase],
+        });
+        vi.spyOn(api, "unlinkRefund").mockResolvedValue({ categoryId: null });
+
+        await useStore.getState().unlinkRefund(11);
+
+        expect(useStore.getState().hiddenTx![0]).toMatchObject({ id: 10, refundIds: [] });
+    });
+
+    it("preserves a newer refund link when deletion rolls back", async () => {
+        const purchase = { id: 10, date: "2026-01-01", amount: -100, refundIds: [11] };
+        const other = { id: 12, date: "2026-01-01", amount: -100, refundIds: [] };
+        const refund = { id: 11, date: "2026-01-02", amount: 50, refundOfId: 10 };
+        useStore.setState({ snapshot: buildSnapshot({ transactions: [purchase, other, refund] }) });
+        let failDelete!: (error: Error) => void;
+        vi.spyOn(api, "deleteTx").mockReturnValue(
+            new Promise((_, reject) => {
+                failDelete = reject;
+            }),
+        );
+        vi.spyOn(api, "linkRefund").mockResolvedValue({ refundOfId: 12, categoryId: null });
+
+        const deleting = useStore.getState().deleteTransaction(10);
+        await useStore.getState().linkRefund(11, 12);
+        failDelete(new Error("offline"));
+        await expect(deleting).resolves.toBe(false);
+
+        const rows = useStore.getState().snapshot!.transactions;
+        expect(rows.find((row) => row.id === 11)).toMatchObject({ refundOfId: 12 });
+        expect(rows.find((row) => row.id === 12)).toMatchObject({ refundIds: [11] });
+        expect(rows.find((row) => row.id === 10)).toMatchObject({ refundIds: [] });
+    });
+
+    it("clears both sides of refund links while deletion is pending", async () => {
+        const purchase = { id: 10, date: "2026-01-01", amount: -100, refundIds: [11] };
+        const refund = { id: 11, date: "2026-01-02", amount: 50, refundOfId: 10 };
+        const otherRefund = { id: 12, date: "2026-01-03", amount: 20, refundOfId: 99 };
+        useStore.setState({
+            snapshot: buildSnapshot({ transactions: [purchase, refund, otherRefund] }),
+        });
+        vi.spyOn(api, "deleteTx").mockResolvedValue({});
+
+        await expect(useStore.getState().deleteTransaction(10)).resolves.toBe(true);
+        expect(useStore.getState().snapshot!.transactions).toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({ id: 11, refundOfId: null }),
+                expect.objectContaining({ id: 12, refundOfId: 99 }),
+            ]),
+        );
+    });
+
+    it("restores a deleted refund when its purchase omitted refundIds", async () => {
+        const purchase = { id: 10, date: "2026-01-01", amount: -100 };
+        const refund = { id: 11, date: "2026-01-02", amount: 50, refundOfId: 10 };
+        useStore.setState({ snapshot: buildSnapshot({ transactions: [purchase, refund] }) });
+        vi.spyOn(api, "deleteTx").mockRejectedValue(new Error("offline"));
+
+        await expect(useStore.getState().deleteTransaction(11)).resolves.toBe(false);
+
+        expect(
+            useStore.getState().snapshot!.transactions.find((row) => row.id === 10)?.refundIds,
+        ).toEqual([11]);
+    });
 
     it("sends account edits to their own endpoints and adopts the server id", async () => {
         const createAccount = vi.spyOn(api, "createAccount").mockResolvedValue({ id: 4 });
