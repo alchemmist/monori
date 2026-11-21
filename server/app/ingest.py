@@ -103,7 +103,7 @@ def historical_day_counts(
     """
     counts: dict[tuple[str, int, str], int] = {}
     for r in c.execute(
-        "SELECT substr(t.date, 1, 10) day, t.amount, t.description, COUNT(*) n"
+        "SELECT substr(t.date, 1, 10) AS day, t.amount, t.description, COUNT(*) n"
         " FROM transactions t JOIN accounts a ON a.id = t.account_id"
         " WHERE a.user_id=? AND t.source IN (SELECT value FROM json_each(?))"
         " GROUP BY day, t.amount, t.description",

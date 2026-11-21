@@ -11,6 +11,7 @@ wall-clock ceiling on runaway queries, and an audit row per attempt.
 """
 
 import contextlib
+import os
 import sqlite3
 import time
 from datetime import UTC, datetime
@@ -129,6 +130,8 @@ def run_sql(
     back unconditionally — a read is answered with its rows, a write with the
     count, and nothing is ever committed.
     """
+    if os.environ.get("MONORI_DATABASE_URL"):
+        raise HTTPException(503, "SQL console unavailable on PostgreSQL pending a scoped SQL policy")
     uid = admin.id
     sql = body.sql.strip()
     if not sql:

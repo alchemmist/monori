@@ -76,7 +76,7 @@ def record_api_usage(path: str, auth_header: str | None) -> None:
     try:
         c.execute(
             "INSERT INTO feature_usage (user_id, feature, day, count) VALUES (?, ?, ?, 1)"
-            " ON CONFLICT (user_id, feature, day) DO UPDATE SET count = count + 1",
+            " ON CONFLICT (user_id, feature, day) DO UPDATE SET count = feature_usage.count + 1",
             (uid, feature, day),
         )
         c.commit()

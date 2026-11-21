@@ -413,7 +413,7 @@ def merge_category(
             "INSERT INTO budgets (category_id, year, month, amount)"
             " SELECT ?, year, month, amount FROM budgets WHERE category_id=?"
             " ON CONFLICT (category_id, year, month)"
-            " DO UPDATE SET amount = amount + excluded.amount",
+            " DO UPDATE SET amount = budgets.amount + excluded.amount",
             (body.into, cat_id),
         )
         c.execute("DELETE FROM categories WHERE id=?", (cat_id,))

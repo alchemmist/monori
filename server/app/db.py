@@ -147,6 +147,10 @@ def _bootstrap(path: pathlib.Path) -> None:
 
 def connect(db_path: str | os.PathLike[str] | None = None) -> sqlite3.Connection:
     """Handle connect."""
+    if db_path is None and (url := os.environ.get("MONORI_DATABASE_URL")):
+        from monori.server.app.pg_runtime import Connection
+
+        return Connection(url)
     path = pathlib.Path(db_path or DB_PATH)
     path.parent.mkdir(parents=True, exist_ok=True)
     key = str(path.resolve())
@@ -163,5 +167,9 @@ def connect(db_path: str | os.PathLike[str] | None = None) -> sqlite3.Connection
 
 def begin_write(conn: sqlite3.Connection) -> None:
     """Acquire SQLite's write reservation before correlated reads and writes."""
-    if not conn.in_transaction:
+    from monori.server.app.pg_runtime import Connection
+
+    if isinstance(conn, Connection):
+        conn.lock()
+    elif not conn.in_transaction:
         conn.execute("BEGIN IMMEDIATE")

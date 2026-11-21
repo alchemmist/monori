@@ -11,6 +11,7 @@ dependencies = [
   "httpx[socks]>=0.27",
   "monori-common",
   "openpyxl>=3.1",
+  "psycopg[binary]==3.3.4",
   "pyjwt>=2.9",
   "python-multipart>=0.0.9",
   "uvicorn[standard]>=0.30",

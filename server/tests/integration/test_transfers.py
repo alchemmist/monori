@@ -1,6 +1,8 @@
 # Copyright (c) 2026
 import re
 
+from monori.server.app.pg_runtime import Connection
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -165,10 +167,18 @@ def test_delete_transfer_with_legs_is_atomic(api: Api, client: TestClient) -> No
     leg_ids = [transaction.id for transaction in legs(api, transfer_id)]
     c = connect()
     try:
-        c.execute(
-            f"CREATE TRIGGER fail_second_leg BEFORE DELETE ON transactions"
-            f" WHEN OLD.id={leg_ids[1]} BEGIN SELECT RAISE(ABORT, 'injected'); END"
-        )
+        if isinstance(c, Connection):
+            c.execute(
+                "CREATE FUNCTION fail_write() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'injected'; END; $$"
+            )
+            c.execute(
+                f"CREATE TRIGGER fail_second_leg BEFORE DELETE ON transactions FOR EACH ROW WHEN (OLD.id={leg_ids[1]}) EXECUTE FUNCTION fail_write()"
+            )
+        else:
+            c.execute(
+                f"CREATE TRIGGER fail_second_leg BEFORE DELETE ON transactions"
+                f" WHEN OLD.id={leg_ids[1]} BEGIN SELECT RAISE(ABORT, 'injected'); END"
+            )
         c.commit()
     finally:
         c.close()
@@ -181,7 +191,11 @@ def test_delete_transfer_with_legs_is_atomic(api: Api, client: TestClient) -> No
 
     c = connect()
     try:
-        c.execute("DROP TRIGGER fail_second_leg")
+        c.execute(
+            "DROP TRIGGER fail_second_leg ON transactions"
+            if isinstance(c, Connection)
+            else "DROP TRIGGER fail_second_leg"
+        )
         c.commit()
     finally:
         c.close()

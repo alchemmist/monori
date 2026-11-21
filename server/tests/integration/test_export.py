@@ -1,12 +1,11 @@
 # Copyright (c) 2026
-import os
-import sqlite3
 from io import BytesIO
 
 import pytest
 from fastapi.testclient import TestClient
 from openpyxl import Workbook, load_workbook
 
+from monori.server.app.db import connect
 from monori.server.app.importer import tx_hash
 from monori.server.app.workbook.parser import parse_workbook
 from monori.server.tests.conftest import AccountOptions, Api, TransactionOptions
@@ -486,7 +485,7 @@ def test_export_dashdata_refund_reduces_expense(api: Api, client: TestClient) ->
     """
     cat, acct = _setup(api, client)
     date, amount, desc = "2026-01-20T10:00:00", 2550, "Refund"
-    db = sqlite3.connect(os.environ["MONORI_DB"])
+    db = connect()
     db.execute(
         "INSERT INTO transactions"
         " (date, amount, description, account_id, category_id, hash, source)"
