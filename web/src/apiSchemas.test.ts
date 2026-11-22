@@ -49,6 +49,8 @@ const snapshot = {
             source: "manual",
             hidden: false,
             splits: [],
+            refundOfId: null,
+            refundIds: [],
         },
     ],
     transactionsTotal: 1,

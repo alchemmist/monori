@@ -59,6 +59,10 @@ const responseFor = (url: string, method?: string): unknown => {
     if (url.startsWith("/api/snapshot")) return snapshotResponse;
     if (url.startsWith("/api/transactions?")) return { total: 0, rows: [] };
     if (url.endsWith("/splits")) return { splits: [] };
+    if (url.includes("/refund-suggestions")) return { rows: [] };
+    if (url.endsWith("/refund") && method === "PUT")
+        return { ok: true, refundOfId: 1, categoryId: 2 };
+    if (url.endsWith("/refund") && method === "DELETE") return { ok: true, categoryId: 2 };
     if (url === "/api/budgets/bulk") return { set: 1 };
     if (url === "/api/accounts/1/reconcile") return { delta: 0 };
     if (url === "/api/transfers/suggestions") return { rows: [], transactions: [] };
@@ -221,6 +225,28 @@ const ENDPOINTS: Endpoint[] = [
         },
     ],
     ["deleteTx", () => api.deleteTx(1), "/api/transactions/1", "DELETE", undefined],
+    [
+        "refundSuggestions",
+        () => api.refundSuggestions(2),
+        "/api/transactions/2/refund-suggestions",
+        undefined,
+        undefined,
+    ],
+    [
+        "all eligible refund purchases",
+        () => api.refundSuggestions(2, true),
+        "/api/transactions/2/refund-suggestions?include_all=true",
+        undefined,
+        undefined,
+    ],
+    [
+        "linkRefund",
+        () => api.linkRefund(2, 1),
+        "/api/transactions/2/refund",
+        "PUT",
+        { originalId: 1 },
+    ],
+    ["unlinkRefund", () => api.unlinkRefund(2), "/api/transactions/2/refund", "DELETE", undefined],
     [
         "createAccount",
         () => api.createAccount({ name: "Card" }),

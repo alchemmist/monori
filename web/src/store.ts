@@ -3,6 +3,7 @@ import { api } from "./api.js";
 import { demoSnapshot } from "./demo/demoData.js";
 import { mergeCategories } from "./mergeCategories.js";
 import { compareTx, mergeTransactions } from "./mergeTransactions.js";
+import { refundMerchantKey } from "./engine/refunds.js";
 import { loadTabs, saveTabs } from "./ui/tabPersist.js";
 import type {
     AccountCreate,
@@ -73,6 +74,9 @@ interface StoreState {
         txId: Id,
         parts: Array<Omit<TransactionSplit, "id">>,
     ) => Promise<TransactionSplit[] | undefined>;
+    refundSuggestions: (txId: Id, includeAll?: boolean) => Promise<Transaction[]>;
+    linkRefund: (txId: Id, originalId: Id) => Promise<void>;
+    unlinkRefund: (txId: Id) => Promise<void>;
     deleteTransaction: (txId: Id) => Promise<boolean>;
     loadHiddenTx: () => Promise<void>;
     hideTx: (txId: Id) => void;
@@ -143,6 +147,17 @@ function chainedPatchTx(id: Id, patch: TransactionPatch) {
     txPatchChain.set(id, next);
     next.catch(() => {}).finally(() => {
         if (txPatchChain.get(id) === next) txPatchChain.delete(id);
+    });
+    return next;
+}
+
+const refundMutationChain = new Map<Id, Promise<void>>();
+function chainedRefundMutation(id: Id, mutation: () => Promise<void>) {
+    const previous = refundMutationChain.get(id) ?? Promise.resolve();
+    const next = previous.catch(() => {}).then(mutation);
+    refundMutationChain.set(id, next);
+    next.catch(() => {}).finally(() => {
+        if (refundMutationChain.get(id) === next) refundMutationChain.delete(id);
     });
     return next;
 }
@@ -622,7 +637,20 @@ export const useStore = create<StoreState>((set, get) => ({
         const patchKeys = TRANSACTION_PATCH_KEYS.filter((key) => patch[key] !== undefined);
         patchKeys.forEach((key) => revisions.set(key, revision));
         txFieldRevisions.set(txId, revisions);
-        const rows = snapshot.transactions.map((t) => (t.id === txId ? { ...t, ...patch } : t));
+        const refundCategories =
+            patch.categoryId === undefined
+                ? new Map<number, Id | null>()
+                : new Map(
+                      snapshot.transactions
+                          .filter((transaction) => transaction.refundOfId === txId)
+                          .map((transaction) => [transaction.id, transaction.categoryId]),
+                  );
+        const rows = snapshot.transactions.map((transaction) => {
+            if (transaction.id === txId) return { ...transaction, ...patch };
+            if (refundCategories.has(transaction.id))
+                return { ...transaction, categoryId: patch.categoryId ?? null };
+            return transaction;
+        });
         rows.sort(compareTx);
         set({ snapshot: { ...snapshot, transactions: rows } });
         if (isDemo()) return;
@@ -641,7 +669,17 @@ export const useStore = create<StoreState>((set, get) => ({
                     .map((key) => [key, before[key]]),
             );
             const back = cur.transactions
-                .map((t) => (t.id === txId ? { ...t, ...undo } : t))
+                .map((transaction) => {
+                    if (transaction.id === txId) return { ...transaction, ...undo };
+                    const categoryId = refundCategories.get(transaction.id);
+                    if (
+                        categoryId === undefined ||
+                        revisions.get("categoryId") !== revision ||
+                        transaction.refundOfId !== txId
+                    )
+                        return transaction;
+                    return { ...transaction, categoryId };
+                })
                 .sort(compareTx);
             set({
                 snapshot: { ...cur, transactions: back },
@@ -721,6 +759,147 @@ export const useStore = create<StoreState>((set, get) => ({
         }
     },
 
+    async refundSuggestions(txId, includeAll = false) {
+        const snapshot = requireSnapshot(get().snapshot);
+        if (!isDemo()) return (await api.refundSuggestions(txId, includeAll)).rows;
+        const refund = snapshot.transactions.find((transaction) => transaction.id === txId);
+        if (
+            !refund ||
+            refund.amount <= 0 ||
+            refund.transferId != null ||
+            (refund.splits?.length ?? 0) > 0
+        )
+            return [];
+        const refunded = new Map<Id, number>();
+        for (const transaction of snapshot.transactions) {
+            if (transaction.refundOfId != null && transaction.id !== txId)
+                refunded.set(
+                    transaction.refundOfId,
+                    (refunded.get(transaction.refundOfId) ?? 0) + transaction.amount,
+                );
+        }
+        const merchant = refundMerchantKey(refund.description);
+        return snapshot.transactions
+            .filter(
+                (transaction) =>
+                    transaction.amount < 0 &&
+                    transaction.transferId == null &&
+                    (transaction.splits?.length ?? 0) === 0 &&
+                    transaction.date <= refund.date &&
+                    -transaction.amount - (refunded.get(transaction.id) ?? 0) >= refund.amount &&
+                    (includeAll ||
+                        transaction.id === refund.refundOfId ||
+                        (merchant !== "" &&
+                            refundMerchantKey(transaction.description) === merchant) ||
+                        -transaction.amount === refund.amount),
+            )
+            .reverse();
+    },
+
+    async linkRefund(txId, originalId) {
+        const stamp = sessionStamp();
+        const replacementEpoch = snapshotReplacementEpoch;
+        return chainedRefundMutation(txId, async () => {
+            if (stamp.epoch !== sessionEpoch || replacementEpoch !== snapshotReplacementEpoch)
+                return;
+            const before = requireSnapshot(get().snapshot);
+            const refund = before.transactions.find((transaction) => transaction.id === txId);
+            const original = before.transactions.find(
+                (transaction) => transaction.id === originalId,
+            );
+            if (!refund || (isDemo() && !original)) return;
+            const refunded = before.transactions
+                .filter(
+                    (transaction) =>
+                        transaction.refundOfId === originalId && transaction.id !== txId,
+                )
+                .reduce((total, transaction) => total + transaction.amount, 0);
+            if (
+                isDemo() &&
+                (refund.amount <= 0 ||
+                    original!.amount >= 0 ||
+                    refunded + refund.amount > -original!.amount ||
+                    original!.date > refund.date ||
+                    refund.transferId != null ||
+                    original!.transferId != null ||
+                    (refund.splits?.length ?? 0) > 0 ||
+                    (original!.splits?.length ?? 0) > 0)
+            )
+                return;
+            const result = isDemo()
+                ? { refundOfId: originalId, categoryId: original!.categoryId ?? null }
+                : await api.linkRefund(txId, originalId);
+            if (stamp.epoch !== sessionEpoch || replacementEpoch !== snapshotReplacementEpoch)
+                return;
+            set((state) => {
+                const current = requireSnapshot(state.snapshot);
+                const updateRows = (rows: Transaction[]) =>
+                    rows.map((transaction) => {
+                        if (transaction.id === txId)
+                            return {
+                                ...transaction,
+                                refundOfId: originalId,
+                                categoryId: result.categoryId,
+                            };
+                        const withoutRefund = (transaction.refundIds ?? []).filter(
+                            (refundId) => refundId !== txId,
+                        );
+                        if (transaction.id === originalId) withoutRefund.push(txId);
+                        return transaction.id === originalId ||
+                            withoutRefund.length !== (transaction.refundIds ?? []).length
+                            ? { ...transaction, refundIds: withoutRefund }
+                            : transaction;
+                    });
+                return {
+                    snapshot: {
+                        ...current,
+                        transactions: updateRows(current.transactions),
+                    },
+                    hiddenTx: state.hiddenTx == null ? null : updateRows(state.hiddenTx),
+                };
+            });
+        });
+    },
+
+    async unlinkRefund(txId) {
+        const stamp = sessionStamp();
+        const replacementEpoch = snapshotReplacementEpoch;
+        return chainedRefundMutation(txId, async () => {
+            if (stamp.epoch !== sessionEpoch || replacementEpoch !== snapshotReplacementEpoch)
+                return;
+            const before = requireSnapshot(get().snapshot);
+            const refund = before.transactions.find((transaction) => transaction.id === txId);
+            const result = isDemo()
+                ? { categoryId: refund?.categoryId ?? null }
+                : await api.unlinkRefund(txId);
+            if (stamp.epoch !== sessionEpoch || replacementEpoch !== snapshotReplacementEpoch)
+                return;
+            set((state) => {
+                const current = requireSnapshot(state.snapshot);
+                const updateRows = (rows: Transaction[]) =>
+                    rows.map((transaction) =>
+                        transaction.id === txId
+                            ? { ...transaction, refundOfId: null, categoryId: result.categoryId }
+                            : (transaction.refundIds ?? []).includes(txId)
+                              ? {
+                                    ...transaction,
+                                    refundIds: transaction.refundIds!.filter(
+                                        (refundId) => refundId !== txId,
+                                    ),
+                                }
+                              : transaction,
+                    );
+                return {
+                    snapshot: {
+                        ...current,
+                        transactions: updateRows(current.transactions),
+                    },
+                    hiddenTx: state.hiddenTx == null ? null : updateRows(state.hiddenTx),
+                };
+            });
+        });
+    },
+
     /** Delete a transaction for good. Also rolls back on failure, for the same
      * reason: a row that vanished from the ledger but not from the server would
      * quietly skew every total until a reload brought it back. */
@@ -728,30 +907,78 @@ export const useStore = create<StoreState>((set, get) => ({
         const snapshot = requireSnapshot(get().snapshot);
         const gone = snapshot.transactions.find((t) => t.id === txId);
         if (!gone) return false;
-        set({
+        const removeRelationships = (rows: Transaction[]) =>
+            rows
+                .filter((t) => t.id !== txId)
+                .map((transaction) => {
+                    let updated = transaction;
+                    if (transaction.refundOfId === txId) updated = { ...updated, refundOfId: null };
+                    if ((transaction.refundIds ?? []).includes(txId))
+                        updated = {
+                            ...updated,
+                            refundIds: transaction.refundIds!.filter(
+                                (refundId) => refundId !== txId,
+                            ),
+                        };
+                    return updated;
+                });
+        set((state) => ({
             snapshot: {
                 ...snapshot,
-                transactions: snapshot.transactions.filter((t) => t.id !== txId),
+                transactions: removeRelationships(snapshot.transactions),
                 transactionsTotal: Math.max(0, (snapshot.transactionsTotal ?? 1) - 1),
             },
-        });
+            hiddenTx: state.hiddenTx == null ? null : removeRelationships(state.hiddenTx),
+        }));
         if (isDemo()) return true;
         try {
             await api.deleteTx(txId);
             return true;
         } catch (e) {
-            const cur = requireSnapshot(get().snapshot);
-            set({
-                snapshot: {
-                    ...cur,
-                    transactions: mergeTransactions(cur.transactions, [gone]),
-                    transactionsTotal: (cur.transactionsTotal ?? 0) + 1,
-                },
-                toast: {
-                    title: "Failed to delete transaction",
-                    theme: "danger",
-                    content: String(e),
-                },
+            set((state) => {
+                const current = requireSnapshot(state.snapshot);
+                const hidden = state.hiddenTx ?? [];
+                const currentById = new Map(
+                    [...current.transactions, ...hidden].map((transaction) => [
+                        transaction.id,
+                        transaction,
+                    ]),
+                );
+                const restoredRefundIds = (gone.refundIds ?? []).filter(
+                    (refundId) => currentById.get(refundId)?.refundOfId == null,
+                );
+                const restoredGone = { ...gone, refundIds: restoredRefundIds };
+                const repairRows = (rows: Transaction[]) =>
+                    rows.map((transaction) => {
+                        if (transaction.id === gone.refundOfId)
+                            return {
+                                ...transaction,
+                                refundIds: [
+                                    ...new Set([...(transaction.refundIds ?? []), gone.id]),
+                                ],
+                            };
+                        if (
+                            restoredRefundIds.includes(transaction.id) &&
+                            transaction.refundOfId == null
+                        )
+                            return { ...transaction, refundOfId: gone.id };
+                        return transaction;
+                    });
+                return {
+                    snapshot: {
+                        ...current,
+                        transactions: mergeTransactions(repairRows(current.transactions), [
+                            restoredGone,
+                        ]),
+                        transactionsTotal: current.transactionsTotal! + 1,
+                    },
+                    hiddenTx: state.hiddenTx == null ? null : repairRows(state.hiddenTx),
+                    toast: {
+                        title: "Failed to delete transaction",
+                        theme: "danger",
+                        content: String(e),
+                    },
+                };
             });
             return false;
         }
