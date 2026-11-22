@@ -97,7 +97,7 @@ def test_record_login_grants_admin_and_stamps_the_moment(
 def test_record_login_strips_admin_from_everyone_else(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.delenv("MONORI_ADMIN_EMAILS", raising=False)
+    monkeypatch.setenv("MONORI_ADMIN_EMAILS", "admin@example.com")
     monkeypatch.setattr(auth_router, "datetime", FrozenDateTime)
     connection = connect(tmp_path / "users.db")
     record_login = vars(auth_router)["record_login"]
@@ -105,6 +105,7 @@ def test_record_login_strips_admin_from_everyone_else(
     try:
         user = create_user(connection, "user@example.com", "12345678")
         connection.execute("UPDATE users SET is_admin=1 WHERE id=?", (user.id,))
+        connection.commit()
         record_login(connection, user.id, "user@example.com")
         connection.commit()
 
