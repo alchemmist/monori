@@ -41,6 +41,7 @@ SQLITE_SEQUENCE = "sqlite_sequence"
 OBJECTS_KEY = "__objects__"
 INCOMPATIBLE_SCHEMA_MESSAGE = "database has current table names but incompatible schema metadata"
 DEFAULT_JOURNAL_MODE = "DELETE"
+type DatabaseConnection = sqlite3.Connection | Connection
 type SchemaCell = str | int | None
 type SchemaSignature = dict[str, tuple[tuple[SchemaCell, ...], ...]]
 
@@ -147,7 +148,7 @@ def _bootstrap(path: pathlib.Path) -> None:
         conn.close()
 
 
-def connect(db_path: str | os.PathLike[str] | None = None) -> sqlite3.Connection:
+def connect(db_path: str | os.PathLike[str] | None = None) -> DatabaseConnection:
     """Handle connect."""
     if db_path is None and (url := os.environ.get("MONORI_DATABASE_URL")):
         return Connection(url)
@@ -165,7 +166,7 @@ def connect(db_path: str | os.PathLike[str] | None = None) -> sqlite3.Connection
     return conn
 
 
-def begin_write(conn: sqlite3.Connection) -> None:
+def begin_write(conn: DatabaseConnection) -> None:
     """Acquire SQLite's write reservation before correlated reads and writes."""
     if isinstance(conn, Connection):
         conn.lock()

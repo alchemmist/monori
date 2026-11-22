@@ -199,7 +199,7 @@ class SnapshotResponse:
     )
 
 
-def conn() -> sqlite3.Connection:
+def conn() -> dbmod.DatabaseConnection:
     """Handle conn."""
     return dbmod.connect()
 
