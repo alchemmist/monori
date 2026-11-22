@@ -643,15 +643,21 @@ def test_stack_touched_requires_source_directory_boundary() -> None:
     )
 
 
-def test_touched_stack_regression_and_coverage_job_independently_fail() -> None:
+@pytest.mark.parametrize(
+    ("total", "coverage_ok", "expected"),
+    [(81.99, True, False), (82.0, True, True), (82.0, False, False)],
+)
+def test_touched_stack_regression_and_coverage_job_independently_fail(
+    total: float, *, coverage_ok: bool, expected: bool
+) -> None:
     artifact = report()
-    artifact.stacks[0].total = 81.99
-    assert not artifact.passed
-    artifact.stacks[0].total = 82.0
-    assert artifact.passed
-    artifact.coverage_ok = False
-    assert not artifact.passed
-    artifact.coverage_ok = True
+    artifact.stacks[0].total = total
+    artifact.coverage_ok = coverage_ok
+    assert artifact.passed is expected
+
+
+def test_untouched_stack_errors_do_not_fail_coverage() -> None:
+    artifact = report()
     artifact.stacks[1].total = 0
     artifact.stacks[1].baseline = 100
     artifact.stacks[1].error = "missing"
