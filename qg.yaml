@@ -4,8 +4,8 @@ provider:
     configuration:
         default-branch: main
         runtime:
-            action: alchemmist/quality-graph@64ed072ce1bd019d5fa7dec22cb3df991b9ac691
-            publisher-action: alchemmist/quality-graph@64ed072ce1bd019d5fa7dec22cb3df991b9ac691
+            action: alchemmist/quality-graph@53825bd63134543bac6f9fcd869001438dd8758d
+            publisher-action: alchemmist/quality-graph@53825bd63134543bac6f9fcd869001438dd8758d
 administration:
     roles: [admin, maintain, write]
 labels:
@@ -64,23 +64,22 @@ profiles:
         setup:
             - run: npx playwright install --with-deps chromium
               working-directory: tools/frontend-perf
-nodes:
+    release:
+        runner: ubuntu-latest
+operations:
     workflow-graph:
         title: Workflow graph validation
         run: uv run --locked --group quality-graph qg validate
     fmt-check:
         title: Format check
-        needs: [workflow-graph]
         run: make fmt-check
     triple-quotes:
         title: Triple-quoted string style
-        needs: [workflow-graph]
         run: uv run --locked --group quality-graph qg-python-triple-quotes --base "$BASE"
         env:
             BASE: ${{ github.event.pull_request.base.sha || 'origin/main' }}
     suppressions:
         title: Lint suppression gate
-        needs: [workflow-graph]
         run: uv run --locked --group quality-graph qg-python-suppressions --base "$BASE"
         env:
             BASE: ${{ github.event.pull_request.base.sha || 'origin/main' }}
@@ -90,7 +89,6 @@ nodes:
                 findings: true
     hardcoded-colors:
         title: Hardcoded color gate
-        needs: [workflow-graph]
         run: uv run --locked --group quality-graph python -m monori.ci.quality_graph.checks.hardcoded_colors --base "$BASE"
         env:
             BASE: ${{ github.event.pull_request.base.sha || 'origin/main' }}
@@ -106,16 +104,13 @@ nodes:
     docs-links:
         title: Documentation links
         profile: docs
-        needs: [workflow-graph]
         run: make docs-links
     lint:
         title: Lint
         profile: lint
-        needs: [suppressions]
         run: make lint
     object-annotations:
         title: Python object annotation gate
-        needs: [workflow-graph]
         run: uv run --locked --group quality-graph qg-python-object-annotations --base "$BASE"
         env:
             BASE: ${{ github.event.pull_request.base.sha || 'origin/main' }}
@@ -125,7 +120,6 @@ nodes:
                 findings: true
     type-casts:
         title: Unsafe type cast gate
-        needs: [workflow-graph]
         run: make type-casts
         policy:
             approvals:
@@ -133,59 +127,48 @@ nodes:
                 findings: true
     type:
         title: Type check
-        needs: [object-annotations, type-casts]
         run: make type
     analyze:
         title: Static analysis
         profile: analyze
-        needs: [lint]
         run: make analyze
     time-bombs:
         title: Time bomb guardrail
-        needs: [analyze, type]
         run: uv run --locked --group quality-graph qg-python-time-bombs --base "$BASE"
         env:
             BASE: ${{ github.event.pull_request.base.sha || 'origin/main' }}
     test-fast:
         title: Fast tests
-        needs: [analyze]
         run: make t-fast
     test-medium:
         title: Medium tests
-        needs: [analyze]
         run: make t-medium
     test-slow:
         title: Slow tests
         profile: slow
-        needs: [test-fast, test-medium]
         run: make t-slow
     flaky-tests:
         title: Flaky test detection
-        needs: [test-slow]
         run: scripts/flaky-quality-graph.sh
         env:
             BASE: ${{ github.event.pull_request.base.sha || 'origin/main' }}
         timeout-minutes: 180
     build:
         title: Build frontend
-        needs: [test-slow]
         run: make build
     coverage:
         title: Coverage
-        needs: [test-slow]
         run: make BASE="$BASE" coverage-diff
         env:
             BASE: ${{ github.event.pull_request.base.sha || 'origin/main' }}
     mutation:
         title: Mutation testing
-        needs: [coverage]
         run: make BASE="$BASE" mutation-diff
         env:
             BASE: ${{ github.event.pull_request.base.sha || 'origin/main' }}
         timeout-minutes: 360
     bundle-size:
         title: Frontend bundle size
-        needs: [build]
         run: scripts/bundle-size-quality-graph.sh
         env:
             BASE: ${{ github.event.pull_request.base.sha || 'origin/main' }}
@@ -197,7 +180,6 @@ nodes:
     frontend-performance:
         title: Frontend performance regression
         profile: performance
-        needs: [build]
         run: make BASE="$BASE" perf-front-diff
         env:
             BASE: ${{ github.event.pull_request.base.sha || 'origin/main' }}
@@ -207,5 +189,192 @@ nodes:
                 node: true
     audit:
         title: Dependency and security audit
-        needs: [build]
         run: make audit
+    release-accept:
+      profile: release
+      steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: 'false'
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78
+      - run: make release-acceptance
+    release-build:
+      profile: release
+      steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: 'false'
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069
+      - run: scripts/release/build-images.sh "$RUNNER_TEMP/images"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: images-${{ github.sha }}
+          path: ${{ runner.temp }}/images
+          if-no-files-found: error
+          overwrite: 'true'
+    release-publish:
+      profile: release
+      steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: 'false'
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: images-${{ github.sha }}
+          path: ${{ runner.temp }}/images
+      - run: sudo apt-get update -qq && sudo apt-get install -y skopeo
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550
+        with:
+          registry: harbor.socrat.alchemmist.xyz
+          username: ${{ secrets.HARBOR_USERNAME }}
+          password: ${{ secrets.HARBOR_PASSWORD }}
+      - run: scripts/release/publish-images.sh "$RUNNER_TEMP/images"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: release-manifest-${{ github.sha }}
+          path: ${{ runner.temp }}/images/images.json
+          if-no-files-found: error
+          overwrite: 'true'
+      permissions:
+        contents: read
+        packages: write
+    release-promote:
+      profile: release
+      steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: release-manifest-${{ github.sha }}
+          path: ${{ runner.temp }}/release-manifest
+      - run: echo "RELEASE_IMAGES=$(jq -ce . "$RUNNER_TEMP/release-manifest/images.json")" >> "$GITHUB_ENV"
+      - uses: alchemmist/deploy-to-socrat@881b4d9513ed3cd140926201118770c29ed68597
+        with:
+          images: ${{ env.RELEASE_IMAGES }}
+          token: ${{ secrets.HOMELAB_DEPLOY_KEY }}
+flows:
+  review:
+    trigger: pull-request
+    presentation: github-pr
+    nodes:
+      workflow-graph: {}
+      fmt-check:
+        needs:
+        - workflow-graph
+      triple-quotes:
+        needs:
+        - workflow-graph
+      suppressions:
+        needs:
+        - workflow-graph
+      hardcoded-colors:
+        needs:
+        - workflow-graph
+      docs-links:
+        needs:
+        - workflow-graph
+      lint:
+        needs:
+        - suppressions
+      object-annotations:
+        needs:
+        - workflow-graph
+      type-casts:
+        needs:
+        - workflow-graph
+      type:
+        needs:
+        - object-annotations
+        - type-casts
+      analyze:
+        needs:
+        - lint
+      time-bombs:
+        needs:
+        - analyze
+        - type
+      test-fast:
+        needs:
+        - analyze
+      test-medium:
+        needs:
+        - analyze
+      test-slow:
+        needs:
+        - test-fast
+        - test-medium
+      flaky-tests:
+        needs:
+        - test-slow
+      build:
+        needs:
+        - test-slow
+      coverage:
+        needs:
+        - test-slow
+      mutation:
+        needs:
+        - coverage
+      bundle-size:
+        needs:
+        - build
+      frontend-performance:
+        needs:
+        - build
+      audit:
+        needs:
+        - build
+  main:
+    trigger:
+      push:
+        branches:
+        - main
+    nodes:
+      workflow-graph: {}
+      fmt-check: {}
+      triple-quotes: {}
+      suppressions: {}
+      hardcoded-colors: {}
+      docs-links: {}
+      lint: {}
+      object-annotations: {}
+      type-casts: {}
+      type: {}
+      analyze: {}
+      time-bombs: {}
+      test-fast: {}
+      test-medium: {}
+      test-slow: {}
+      flaky-tests: {}
+      build: {}
+      coverage: {}
+      mutation: {}
+      bundle-size: {}
+      frontend-performance: {}
+      audit: {}
+  release:
+    trigger:
+      push:
+        branches:
+        - main
+    execution: github-actions
+    presentation: release
+    concurrency: monori-production
+    nodes:
+      accept:
+        operation: release-accept
+      build:
+        operation: release-build
+        needs:
+        - accept
+      publish:
+        operation: release-publish
+        needs:
+        - build
+      promote:
+        operation: release-promote
+        needs:
+        - publish

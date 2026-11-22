@@ -22,14 +22,14 @@ jobs:
     if: github.event_name == 'workflow_run' && github.event.workflow_run.event == 'pull_request'
     runs-on: ubuntu-latest
     permissions:
-      actions: read
-      checks: write
-      contents: read
-      issues: write
-      pull-requests: write
+      actions: read  # Inspect run attempts, jobs and result artifacts.
+      checks: write  # Create and update the aggregate check run.
+      contents: read  # Read trusted declarations at immutable revisions.
+      issues: write  # Manage the PR dashboard, labels and command ledger via the issues API.
+      pull-requests: write  # Create and update the dashboard and apply labels on PRs.
     steps:
       - name: Publish trusted Quality Graph state
-        uses: alchemmist/quality-graph@64ed072ce1bd019d5fa7dec22cb3df991b9ac691
+        uses: alchemmist/quality-graph@53825bd63134543bac6f9fcd869001438dd8758d
         with:
           operation: ${{ github.event.action == 'completed' && 'publish' || 'watch' }}
   command:
@@ -37,12 +37,12 @@ jobs:
     if: github.event_name == 'issue_comment' && github.event.issue.pull_request
     runs-on: ubuntu-latest
     permissions:
-      actions: write
-      contents: read
-      issues: write
-      pull-requests: write
+      actions: write  # Rerun failed jobs after command authorization.
+      contents: read  # Read trusted declarations at immutable revisions.
+      issues: write  # Manage the PR dashboard, labels and command ledger via the issues API.
+      pull-requests: write  # Write command feedback and the approval ledger on PRs.
     steps:
       - name: Handle trusted Quality Graph command
-        uses: alchemmist/quality-graph@64ed072ce1bd019d5fa7dec22cb3df991b9ac691
+        uses: alchemmist/quality-graph@53825bd63134543bac6f9fcd869001438dd8758d
         with:
           operation: command

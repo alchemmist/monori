@@ -15,3 +15,11 @@ for component in front back sync; do
   manifest=$(jq -c --arg key "$component" --arg value "$digest" '. + {($key): $value}' <<<"$manifest")
 done
 printf '%s\n' "$manifest" > "$out/images.json"
+# Legacy compose consumers still follow the rolling component tags. Create
+# these from immutable registry references, after all immutable pushes pass.
+for component in front back sync; do
+  for repo in ghcr.io/alchemmist/monori harbor.socrat.alchemmist.xyz/homelab/monori; do
+    digest=$(jq -er --arg key "$component" '.[$key]' "$out/images.json")
+    skopeo copy --all --preserve-digests "docker://$repo@$digest" "docker://$repo:$component"
+  done
+done
