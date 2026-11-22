@@ -1,7 +1,6 @@
 # Copyright (c) 2026
 """Provide backend functionality."""
 
-import sqlite3
 from typing import Annotated, cast
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -9,6 +8,8 @@ from pydantic import ConfigDict, Field
 from pydantic.dataclasses import dataclass as pydantic_dataclass
 
 from monori.server.app.auth import AuthenticatedUser, current_user
+from monori.server.app.db import DatabaseConnection
+from monori.server.app.db_records import row_int
 from monori.server.app.deps import conn
 from monori.server.app.value_types import Money
 
@@ -68,7 +69,7 @@ class CopyResponse:
     budgets: list[BudgetCell]
 
 
-def _set_cell(c: sqlite3.Connection, cell: BudgetCell, uid: int) -> None:
+def _set_cell(c: DatabaseConnection, cell: BudgetCell, uid: int) -> None:
     if not 1 <= cell.month <= MONTHS_IN_YEAR:
         raise HTTPException(422, "month must be between 1 and 12")
     if not c.execute(
@@ -167,10 +168,10 @@ def copy_budgets(
                 )
                 copied.append(
                     BudgetCell(
-                        categoryId=r["category_id"],
+                        categoryId=row_int(r, "category_id"),
                         year=body.to_year,
                         month=to_month,
-                        amount=r["amount"],
+                        amount=row_int(r, "amount"),
                     )
                 )
         else:
@@ -193,10 +194,10 @@ def copy_budgets(
                 )
                 copied.append(
                     BudgetCell(
-                        categoryId=r["category_id"],
+                        categoryId=row_int(r, "category_id"),
                         year=body.to_year,
-                        month=r["month"],
-                        amount=r["amount"],
+                        month=row_int(r, "month"),
+                        amount=row_int(r, "amount"),
                     )
                 )
         c.commit()

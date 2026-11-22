@@ -2,7 +2,6 @@
 """Provide backend functionality."""
 
 import re
-import sqlite3
 from datetime import UTC, datetime
 from typing import Annotated
 
@@ -12,7 +11,8 @@ from pydantic.dataclasses import dataclass as pydantic_dataclass
 
 from monori.common import JsonValue
 from monori.server.app.auth import AuthenticatedUser, current_user
-from monori.server.app.db_records import AccountRecord
+from monori.server.app.db import DatabaseConnection
+from monori.server.app.db_records import AccountRecord, row_int, row_str
 from monori.server.app.deps import AccountResponse, conn, serialize_account
 from monori.server.app.domain_types import AccountType
 from monori.server.app.importer import tx_hash
@@ -96,7 +96,7 @@ class AccountIdResponse:
     id: int | None
 
 
-def _owned_connection(c: sqlite3.Connection, connection_id: int, uid: int) -> None:
+def _owned_connection(c: DatabaseConnection, connection_id: int, uid: int) -> None:
     if not c.execute(
         "SELECT id FROM bank_connections WHERE id=? AND user_id=?",
         (connection_id, uid),
@@ -197,10 +197,11 @@ def create_account(
         connection_id = body.connection_id
         if connection_id:
             _owned_connection(c, connection_id, uid)
-        max_sort = c.execute(
-            "SELECT COALESCE(MAX(sort),0) FROM accounts WHERE user_id=?",
+        max_sort_row = c.execute(
+            "SELECT COALESCE(MAX(sort),0) AS max_sort FROM accounts WHERE user_id=?",
             (uid,),
-        ).fetchone()[0]
+        ).fetchone()
+        max_sort = row_int(max_sort_row, "max_sort") if max_sort_row is not None else 0
         cur = c.execute(
             """INSERT INTO accounts
                (user_id, name, type, icon, color, icon_image, currency, opening_balance,
@@ -249,7 +250,7 @@ def patch_account(
         c.close()
 
 
-def _require_account(c: sqlite3.Connection, account_id: int, uid: int) -> None:
+def _require_account(c: DatabaseConnection, account_id: int, uid: int) -> None:
     if not c.execute(
         "SELECT id FROM accounts WHERE id=? AND user_id=?",
         (account_id, uid),
@@ -265,7 +266,7 @@ def _validate_account_patch(patch: AccountPatch) -> None:
 
 
 def _update_account_fields(
-    c: sqlite3.Connection,
+    c: DatabaseConnection,
     account_id: int,
     uid: int,
     patch: AccountPatch,
@@ -294,13 +295,13 @@ def _update_account_fields(
     _update_icon_image(c, account_id, patch.icon_image)
 
 
-def _update_icon_image(c: sqlite3.Connection, account_id: int, image: str | None) -> None:
+def _update_icon_image(c: DatabaseConnection, account_id: int, image: str | None) -> None:
     if image is not None:
         c.execute("UPDATE accounts SET icon_image=? WHERE id=?", (image or None, account_id))
 
 
 def _ensure_account_name_available(
-    c: sqlite3.Connection,
+    c: DatabaseConnection,
     account_id: int,
     uid: int,
     name: str | None,
@@ -316,7 +317,7 @@ def _ensure_account_name_available(
 
 
 def _update_account_connection(
-    c: sqlite3.Connection,
+    c: DatabaseConnection,
     account_id: int,
     uid: int,
     connection_id: int | None,
@@ -331,7 +332,7 @@ def _update_account_connection(
 
 
 def _update_account_tails(
-    c: sqlite3.Connection,
+    c: DatabaseConnection,
     account_id: int,
     tails: list[str] | None,
 ) -> None:
@@ -362,7 +363,10 @@ def delete_account(
             (account_id, uid),
         ).fetchone():
             raise HTTPException(404, "account not found")
-        if c.execute("SELECT COUNT(*) FROM accounts WHERE user_id=?", (uid,)).fetchone()[0] == 1:
+        account_count_row = c.execute(
+            "SELECT COUNT(*) AS account_count FROM accounts WHERE user_id=?", (uid,)
+        ).fetchone()
+        if account_count_row is not None and row_int(account_count_row, "account_count") == 1:
             raise HTTPException(400, "cannot delete the last account")
         has_tx = c.execute(
             "SELECT 1 FROM transactions WHERE account_id=? LIMIT 1",
@@ -389,8 +393,13 @@ def delete_account(
                 [
                     (
                         reassign_to,
-                        tx_hash(reassign_to, r["date"], r["amount"], r["description"]),
-                        r["id"],
+                        tx_hash(
+                            reassign_to,
+                            row_str(r, "date"),
+                            row_int(r, "amount"),
+                            row_str(r, "description"),
+                        ),
+                        row_int(r, "id"),
                     )
                     for r in moved
                 ],
@@ -428,13 +437,15 @@ def reconcile_account(
             raise HTTPException(404, "account not found")
 
         total = c.execute(
-            "SELECT COALESCE(SUM(amount),0) FROM transactions"
+            "SELECT COALESCE(SUM(amount),0) AS total FROM transactions"
             " WHERE account_id=? AND hidden = 0"
             " AND (category_id IS NOT NULL OR transfer_id IS NOT NULL"
             "      OR source IN ('transfer', 'adjustment'))",
             (account_id,),
-        ).fetchone()[0]
-        current = acc["opening_balance"] + total
+        ).fetchone()
+        current = row_int(acc, "opening_balance") + (
+            row_int(total, "total") if total is not None else 0
+        )
         delta = body.actual_balance - current
         if delta != 0:
             date = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S")
@@ -460,7 +471,9 @@ def reorder_accounts(
     uid = user.id
     c = conn()
     try:
-        known = {r["id"] for r in c.execute("SELECT id FROM accounts WHERE user_id=?", (uid,))}
+        known = {
+            row_int(r, "id") for r in c.execute("SELECT id FROM accounts WHERE user_id=?", (uid,))
+        }
         if set(body.ids) != known:
             raise HTTPException(400, "ids must list every existing account exactly once")
         for sort, aid in enumerate(body.ids, 1):
