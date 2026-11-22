@@ -7,6 +7,7 @@ import os
 import secrets
 import time
 from contextlib import closing
+from time import monotonic
 from typing import Annotated
 from urllib.parse import urlencode, urlsplit
 
@@ -59,16 +60,39 @@ def _https(value: str) -> str:
     return value
 
 
-def discover(issuer: str) -> dict[str, str]:
-    """Load HTTPS endpoints only from metadata matching the configured issuer."""
+DISCOVERY_TTL_SECONDS = 300
+_discovery_cache: dict[str, tuple[float, dict[str, str]]] = {}
+
+
+def _discovery_document(url: str) -> httpx.Response:
     try:
-        response = httpx.get(issuer.rstrip("/") + "/.well-known/openid-configuration")
-        response.raise_for_status()
+        response = httpx.get(url)
+    except httpx.TimeoutException:
+        pass
+    else:
+        if response.status_code not in (502, 503, 504):
+            response.raise_for_status()
+            return response
+    time.sleep(0.25)
+    response = httpx.get(url)
+    response.raise_for_status()
+    return response
+
+
+def discover(issuer: str) -> dict[str, str]:
+    """Reuse validated metadata for the same issuer during short provider interruptions."""
+    cached = _discovery_cache.get(issuer)
+    if cached is not None and monotonic() < cached[0]:
+        return cached[1]
+    try:
+        response = _discovery_document(issuer.rstrip("/") + "/.well-known/openid-configuration")
         data = response.json()
         if data["issuer"] == issuer:
-            return {
+            endpoints = {
                 k: _https(data[k]) for k in ("authorization_endpoint", "token_endpoint", "jwks_uri")
             }
+            _discovery_cache[issuer] = (monotonic() + DISCOVERY_TTL_SECONDS, endpoints)
+            return endpoints
     except (httpx.HTTPError, KeyError, ValueError, TypeError) as exc:
         raise HTTPException(503, "OIDC discovery unavailable") from exc
     raise HTTPException(503, "Unexpected OIDC issuer")

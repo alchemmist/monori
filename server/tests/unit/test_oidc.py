@@ -143,3 +143,32 @@ def test_discovery_rejects_untrusted_metadata(monkeypatch: pytest.MonkeyPatch, f
     with pytest.raises(oidc.HTTPException) as error:
         oidc.discover(ISS)
     assert error.value.status_code == 503
+
+
+def test_discovery_retries_then_reuses_only_fresh_metadata(monkeypatch: pytest.MonkeyPatch) -> None:
+    issuer = "https://retry.example"
+    statuses = iter([503, 200, 503, 503])
+    clock = [0.0]
+    calls = []
+
+    def fetch(url: str) -> httpx.Response:
+        calls.append(url)
+        data = {
+            key: issuer + "/" + key
+            for key in ("authorization_endpoint", "token_endpoint", "jwks_uri")
+        }
+        return httpx.Response(
+            next(statuses), json={**data, "issuer": issuer}, request=httpx.Request("GET", url)
+        )
+
+    monkeypatch.setattr(oidc.httpx, "get", fetch)
+    monkeypatch.setattr(oidc, "monotonic", lambda: clock[0])
+    assert oidc.discover(issuer)["token_endpoint"] == issuer + "/token_endpoint"
+    clock[0] += 10
+    assert oidc.discover(issuer)["jwks_uri"] == issuer + "/jwks_uri"
+    assert len(calls) == 2
+    clock[0] += oidc.DISCOVERY_TTL_SECONDS
+    with pytest.raises(oidc.HTTPException) as failure:
+        oidc.discover(issuer)
+    assert failure.value.status_code == 503
+    assert len(calls) == 4
