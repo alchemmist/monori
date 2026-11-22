@@ -287,3 +287,36 @@ def test_categorize_files_a_refund_back_into_its_expense_envelope() -> None:
     assert categorize("Pyaterochka cashback", 100, rules) == 20
     assert categorize("Transfer from mom", 5000, rules) is None
     assert categorize("Pyaterochka", -100, rules) == 10
+
+
+def test_statement_data_containing_header_alias_is_not_a_header() -> None:
+    line = "05.07.2026\t05.07.2026\t*1\tOK\t10\tRUB\t10\tRUB\t\tCafe\t5812\tstatus"
+    rows, errors = parse_statement(line)
+    assert not errors
+    assert [row.description for row in rows] == ["status"]
+
+
+def test_statement_header_missing_optional_columns_and_short_row() -> None:
+    header = "operation date;operation amount;card number;a;b;c;d;e;f;g;h;i;description"
+    line = "05.07.2026;10;*1;a;b;c;d;e;f;g;h;i"
+    rows, errors = parse_statement(header + "\n" + line)
+    assert not errors
+    assert len(rows) == 1
+    assert (rows[0].date, rows[0].amount, rows[0].card) == ("2026-07-05T00:00:00", 1000, "*1")
+    assert (rows[0].description, rows[0].bank_category, rows[0].mcc) == ("", "", "")
+
+
+def test_statement_ignores_extra_positional_columns() -> None:
+    line = SAMPLE_TSV.splitlines()[0] + "\textra"
+    rows, errors = parse_statement(line)
+    assert not errors
+    assert len(rows) == 1
+    assert rows[0].description == "Sberbank"
+
+
+def test_statement_error_raw_is_limited_to_200_characters() -> None:
+    too_short = "x" * 220
+    invalid_date = "NODATE\t05.07.2026\t*1\tOK\t10\tRUB\t10\tRUB\t\tCafe\t5812\t" + "x" * 220
+    rows, errors = parse_statement(too_short + "\n" + invalid_date)
+    assert not rows
+    assert [error.raw for error in errors] == [too_short[:200], invalid_date[:200]]

@@ -21,6 +21,7 @@ from monori.ci.lib.coverage_diff import (
     normalize_lcov,
     python_function,
     render_summary,
+    stack_touched,
     typescript_function,
     write_baseline,
     write_report,
@@ -514,3 +515,150 @@ def test_build_and_write_report_use_touched_stack_evidence(
     assert [stack.touched for stack in built.stacks] == [True, False]
     write_report(built, output)
     assert COVERAGE_REPORT_ADAPTER.validate_json(output.read_bytes()) == built
+
+
+def test_diff_stats_reads_actual_report_and_groups_ranges(tmp_path: Path) -> None:
+    source = tmp_path / "example.py"
+    source.write_text("def first():\n    return 1\ndef second():\n    return 2\n")
+    diff = tmp_path / "diff.json"
+    diff.write_text(
+        json.dumps(
+            {
+                "total_num_lines": 10,
+                "total_num_violations": 3,
+                "total_percent_covered": 70,
+                "src_stats": {str(source): {"violation_lines": [4, 2, 3]}},
+            }
+        )
+    )
+
+    assert diff_stats(diff) == (
+        70.0,
+        7,
+        10,
+        [
+            Finding(path=str(source), function="first", start=2, end=2),
+            Finding(path=str(source), function="second", start=3, end=4),
+        ],
+        None,
+    )
+
+
+def test_build_report_preserves_touched_evidence_and_ignores_untouched_failures(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    frontend = tmp_path / "frontend.json"
+    backend = tmp_path / "backend.json"
+    frontend.write_text(json.dumps({"total": {"lines": {"pct": 90}}}))
+    backend.write_text(json.dumps({"totals": {"percent_covered": 80}}))
+    backend_diff = tmp_path / "backend-diff.json"
+    backend_diff.write_text(
+        json.dumps(
+            {
+                "total_num_lines": 4,
+                "total_num_violations": 1,
+                "total_percent_covered": 75,
+                "src_stats": {"server/app/missing.py": {"violation_lines": [2]}},
+            }
+        )
+    )
+    monkeypatch.setattr(
+        "monori.ci.lib.coverage_diff.changed_paths", lambda _base: {"common/example.py"}
+    )
+    built = build_report(
+        ReportInputs(
+            frontend, backend, tmp_path / "missing", backend_diff, tmp_path / "base", "x", 0
+        )
+    )
+    back, front = built.stacks
+    assert (back.touched, back.patch, back.covered_lines, back.changed_lines, back.error) == (
+        True,
+        75,
+        3,
+        4,
+        None,
+    )
+    assert back.findings == [
+        Finding(path="server/app/missing.py", function="(module)", start=2, end=2)
+    ]
+    assert (
+        front.touched,
+        front.patch,
+        front.covered_lines,
+        front.changed_lines,
+        front.findings,
+        front.error,
+    ) == (False, 100, 0, 0, [], None)
+    assert not built.passed
+
+
+def test_failure_summary_formats_ranges_and_escapes_html() -> None:
+    failed = report(passed=False)
+    failed.stacks[0].findings = [Finding(path="<script>|file.py", function="a&b", start=4, end=6)]
+    assert "| `&lt;script&gt;\\|file.py` | `a&amp;b` | 4-6 |" in render_summary(
+        failed, workflow_passed=True
+    )
+
+
+def test_cli_report_returns_failure_and_writes_artifact(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    output = tmp_path / "failed.json"
+    monkeypatch.setattr(
+        "monori.ci.lib.coverage_diff.build_report", lambda _inputs: report(passed=False)
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "coverage-diff",
+            "report",
+            "--frontend",
+            "f",
+            "--backend",
+            "b",
+            "--frontend-diff",
+            "fd",
+            "--backend-diff",
+            "bd",
+            "--baseline",
+            "base",
+            "--base",
+            "main",
+            "--coverage-exit",
+            "1",
+            "--output",
+            str(output),
+        ],
+    )
+    assert coverage_main() == 1
+    assert not COVERAGE_REPORT_ADAPTER.validate_json(output.read_bytes()).passed
+
+
+def test_stack_touched_requires_source_directory_boundary() -> None:
+    assert stack_touched(("server/app", "common"), {"common/example.py"})
+    assert stack_touched(("server/app", "common"), {"server/app/example.py"})
+    assert not stack_touched(
+        ("server/app", "common"), {"server/application/example.py", "commonality/x.py"}
+    )
+
+
+@pytest.mark.parametrize(
+    ("total", "coverage_ok", "expected"),
+    [(81.99, True, False), (82.0, True, True), (82.0, False, False)],
+)
+def test_touched_stack_regression_and_coverage_job_independently_fail(
+    total: float, *, coverage_ok: bool, expected: bool
+) -> None:
+    artifact = report()
+    artifact.stacks[0].total = total
+    artifact.coverage_ok = coverage_ok
+    assert artifact.passed is expected
+
+
+def test_untouched_stack_errors_do_not_fail_coverage() -> None:
+    artifact = report()
+    artifact.stacks[1].total = 0
+    artifact.stacks[1].baseline = 100
+    artifact.stacks[1].error = "missing"
+    assert artifact.passed
