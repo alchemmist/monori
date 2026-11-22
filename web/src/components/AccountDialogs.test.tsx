@@ -102,8 +102,11 @@ describe("account dialogs", () => {
             <AccountReconcileTab account={account} balance={10000} onClose={close} />,
         );
         expect(screen.getByText(/Computed balance/)).toBeInTheDocument();
+        expect(screen.getByText(/No adjustment needed/)).toBeVisible();
         await user.clear(screen.getByLabelText("Actual bank balance"));
+
         await user.type(screen.getByLabelText("Actual bank balance"), "102.50");
+        expect(screen.getByText(/will be posted/)).toBeVisible();
         await user.click(screen.getByRole("button", { name: "Reconcile" }));
         await waitFor(() => expect(reconcile).toHaveBeenCalledWith(1, 10250));
         expect(notify).toHaveBeenCalledWith(expect.objectContaining({ theme: "success" }));
@@ -113,7 +116,9 @@ describe("account dialogs", () => {
 
     it("tracks live balances except while editing, then resets the draft after saving", async () => {
         seed({ accounts: [account] });
-        vi.spyOn(useStore.getState(), "reconcileHistory").mockResolvedValue([]);
+        const fetchHistory = vi
+            .spyOn(useStore.getState(), "reconcileHistory")
+            .mockResolvedValue([]);
         const save = vi
             .spyOn(useStore.getState(), "reconcileAccount")
             .mockResolvedValue({ delta: 0 });
@@ -135,6 +140,7 @@ describe("account dialogs", () => {
         expect(Number(field.value)).toBe(140);
         await user.click(screen.getByRole("button", { name: "Reconcile" }));
         expect(save).toHaveBeenLastCalledWith(1, 14000);
+        await waitFor(() => expect(fetchHistory).toHaveBeenCalledTimes(3));
     });
 
     it.each(["success", "failure"])(
@@ -188,7 +194,7 @@ describe("account dialogs", () => {
         };
         vi.spyOn(useStore.getState(), "reconcileHistory").mockResolvedValue([
             event,
-            { ...event, id: 1, computedBalance: 7500, delta: 1500, adjustmentTxId: 42 },
+            { ...event, id: 1, computedBalance: 7490, delta: 1510, adjustmentTxId: 42 },
         ]);
         const { user } = renderUI(
             <MemoryRouter>
@@ -196,6 +202,23 @@ describe("account dialogs", () => {
             </MemoryRouter>,
         );
         await user.click(await screen.findByText(/Last reconciled:/));
+        const stamp = new Intl.DateTimeFormat(undefined, {
+            dateStyle: "medium",
+            timeStyle: "short",
+        }).format(new Date(event.createdAt));
+        expect(screen.getByText(/Last reconciled:/)).toHaveTextContent(stamp);
+        expect(screen.getByText("Matched")).toHaveAttribute("data-match", "true");
+        expect(screen.getByText("Adjusted")).toHaveAttribute("data-match", "false");
+        const differences = screen
+            .getAllByText("Difference")
+            .map((label) => label.nextElementSibling?.textContent);
+        const rub = (value: number, digits: number) =>
+            new Intl.NumberFormat(undefined, {
+                style: "currency",
+                currency: "RUB",
+                minimumFractionDigits: digits,
+            }).format(value);
+        expect(differences).toEqual([rub(0, 0), `+${rub(15.1, 2)}`]);
         expect(screen.getAllByRole("listitem")).toHaveLength(2);
         expect(screen.getAllByRole("link")).toHaveLength(1);
         expect(screen.getByRole("link", { name: "Adjustment #42" })).toHaveAttribute(
@@ -323,6 +346,7 @@ describe("account dialogs", () => {
         await user.clear(screen.getByLabelText("Actual bank balance"));
         await user.type(screen.getByLabelText("Actual bank balance"), "-");
         await user.click(screen.getByRole("button", { name: "Reconcile" }));
+        expect(screen.queryByText(/No adjustment needed|will be posted/)).not.toBeInTheDocument();
         expect(reconcile).not.toHaveBeenCalled();
         expect(screen.getByRole("button", { name: "Reconcile" })).toBeDisabled();
         reconcile.mockResolvedValue({ delta: 0 });

@@ -225,6 +225,8 @@ describe("reconcileAccount in the demo", () => {
         await store.reconcileAccount(1, 200);
         await store.reconcileAccount(1, 210);
         const [latest, earlier] = await store.reconcileHistory(1);
+        expect(earlier!.id).toBe(1);
+        expect(latest!.id).toBe(earlier!.id + 1);
         expect(latest!.adjustmentTxId).not.toBeNull();
         expect(earlier!.adjustmentTxId).not.toBeNull();
         await store.deleteTransaction(earlier!.adjustmentTxId!);
