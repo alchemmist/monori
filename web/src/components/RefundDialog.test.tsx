@@ -56,6 +56,46 @@ describe("RefundDialog", () => {
         expect(close).toHaveBeenCalledOnce();
     });
 
+    it("recovers after loading all eligible purchases fails", async () => {
+        const suggestions = vi
+            .spyOn(useStore.getState(), "refundSuggestions")
+            .mockResolvedValueOnce([])
+            .mockRejectedValueOnce(new Error("offline"))
+            .mockResolvedValueOnce([])
+            .mockResolvedValueOnce([purchase]);
+        const notify = vi.spyOn(useStore.getState(), "notify");
+        const link = vi.spyOn(useStore.getState(), "linkRefund").mockResolvedValue();
+        const close = vi.fn();
+        const { user } = renderUI(<RefundDialog transaction={refund} onClose={close} />);
+
+        const showAll = screen.getByRole("button", { name: "Show all eligible purchases" });
+        await waitFor(() => expect(showAll).toBeEnabled());
+        await user.click(showAll);
+        await waitFor(() =>
+            expect(notify).toHaveBeenCalledWith({
+                title: "Failed to load eligible purchases",
+                theme: "danger",
+                content: "Error: offline",
+            }),
+        );
+        expect(close).not.toHaveBeenCalled();
+        expect(screen.getByRole("button", { name: "Link refund" })).toBeDisabled();
+
+        const showSuggestions = screen.getByRole("button", { name: "Show suggestions" });
+        await waitFor(() => expect(showSuggestions).toBeEnabled());
+        await user.click(showSuggestions);
+        const retry = screen.getByRole("button", { name: "Show all eligible purchases" });
+        await waitFor(() => expect(retry).toBeEnabled());
+        await user.click(retry);
+        await user.click(screen.getByRole("button", { name: /original purchase/i }));
+        await user.click(await screen.findByRole("option", { name: /Shop/ }));
+        await user.click(screen.getByRole("button", { name: "Link refund" }));
+
+        await waitFor(() => expect(link).toHaveBeenCalledWith(2, 1));
+        expect(suggestions).toHaveBeenLastCalledWith(2, true);
+        expect(close).toHaveBeenCalledOnce();
+    });
+
     it("starts with the existing original selected", async () => {
         vi.spyOn(useStore.getState(), "refundSuggestions").mockResolvedValue([purchase]);
         renderUI(<RefundDialog transaction={{ ...refund, refundOfId: 1 }} onClose={vi.fn()} />);
