@@ -1,6 +1,8 @@
 # Copyright (c) 2026
 """PostgreSQL-backed implementation of the application's small DB-API subset."""
 
+from __future__ import annotations
+
 import re
 import sqlite3
 from collections.abc import Iterable, Iterator, Mapping, Sequence
@@ -88,7 +90,7 @@ def record_factory(cur: PsycopgCursor[object]) -> RowMaker[Record]:
 class Cursor:
     """Adapt a psycopg cursor to the application's DB-API subset."""
 
-    def __init__(self, conn: "Connection") -> None:
+    def __init__(self, conn: Connection) -> None:
         """Initialize the cursor adapter."""
         self.conn = conn
         self.inner: PsycopgCursor[Record] = conn.raw.cursor()
