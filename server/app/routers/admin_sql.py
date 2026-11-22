@@ -133,7 +133,6 @@ def run_sql(
     count, and nothing is ever committed.
     """
     if os.environ.get("MONORI_DATABASE_URL"):
-
         return run_pg_console(
             body,
             admin.id,

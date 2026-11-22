@@ -1,7 +1,6 @@
 # Copyright (c) 2026
 """Provide backend functionality."""
 
-
 from dataclasses import dataclass
 from typing import Annotated
 

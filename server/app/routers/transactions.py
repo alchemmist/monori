@@ -1,7 +1,7 @@
 # Copyright (c) 2026
 """Provide backend functionality."""
 
-from typing import TYPE_CHECKING, Annotated, cast
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import ConfigDict, Field
@@ -17,9 +17,6 @@ from monori.server.app.db_records import (
     row_int,
     row_str,
 )
-
-if TYPE_CHECKING:
-    from monori.server.app.db_types import DatabaseConnection, DatabaseCursor
 from monori.server.app.deps import (
     IdResponse,
     SplitResponse,
@@ -221,7 +218,7 @@ def list_transactions(
             "SELECT *" + where + " ORDER BY date DESC, id DESC LIMIT :limit OFFSET :offset",
             params,
         )
-        cursor = cast("DatabaseCursor", c.cursor())
+        cursor = c.cursor()
         return TransactionListResponse(total=total, rows=serialize_transactions(cursor, rows))
     finally:
         c.close()
@@ -429,7 +426,7 @@ def delete_transaction(
     uid = user.id
     c = conn()
     try:
-        detach_leg(cast("DatabaseConnection", c), uid, tx_id)
+        detach_leg(c, uid, tx_id)
         cur = c.execute(
             "DELETE FROM transactions WHERE id=?"
             " AND account_id IN (SELECT id FROM accounts WHERE user_id=?)",
@@ -458,7 +455,7 @@ def bulk_transactions(
         affected = 0
         if body.action == "delete":
             for tx_id in body.ids:
-                detach_leg(cast("DatabaseConnection", c), uid, tx_id)
+                detach_leg(c, uid, tx_id)
                 affected += c.execute(
                     "DELETE FROM transactions WHERE id=?"
                     " AND account_id IN (SELECT id FROM accounts WHERE user_id=?)",

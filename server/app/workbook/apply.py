@@ -65,9 +65,7 @@ def _upsert_categories(
     group_ids: Mapping[str, int],
 ) -> tuple[dict[tuple[str, str], int], int]:
     existing = {
-        (db_int(r["group_id"], "group_id"), db_str(r["name"], "name")): db_int(
-            r["id"], "id"
-        )
+        (db_int(r["group_id"], "group_id"), db_str(r["name"], "name")): db_int(r["id"], "id")
         for r in c.execute(
             "SELECT c.id, c.group_id, c.name FROM categories c"
             " JOIN category_groups g ON g.id = c.group_id WHERE g.user_id=?",

@@ -3,7 +3,7 @@
 
 import json
 from collections.abc import Iterable, Mapping
-from typing import Annotated, cast
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.concurrency import run_in_threadpool
@@ -49,7 +49,7 @@ router = APIRouter(prefix="/api/import", tags=["import"])
 
 def _connection() -> DatabaseConnection:
     """Return the shared database interface for either configured backend."""
-    return cast("DatabaseConnection", conn())
+    return conn()
 
 
 MAX_STATEMENT_TEXT = 5_000_000
