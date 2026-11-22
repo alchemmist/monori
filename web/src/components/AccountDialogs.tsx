@@ -337,16 +337,19 @@ export function AccountDeleteDialog({
     );
 }
 
-export function AccountReconcileTab({
-    account,
-    balance,
-    onClose,
-}: {
+interface ReconcileTabProps {
     account: Account;
     balance: number;
     onClose: () => void;
-}) {
-    const { reconcileAccount, reconcileHistory, notify } = useStore();
+}
+
+export function AccountReconcileTab(props: ReconcileTabProps) {
+    return <ReconcileForm key={props.account.id} {...props} />;
+}
+
+function ReconcileForm({ account, balance, onClose }: ReconcileTabProps) {
+    const { reconcileAccount, reconcileHistory, notify, snapshot } = useStore();
+    const demoReceipts = snapshot?.demoReconciles?.[account.id];
     const [history, setHistory] = useState<ReconcileEvent[] | "failed" | null>(null);
     const [historyVersion, refreshHistory] = useState<symbol>();
     useEffect(() => {
@@ -363,7 +366,7 @@ export function AccountReconcileTab({
         return () => {
             current = false;
         };
-    }, [account.id, reconcileHistory, historyVersion]);
+    }, [account.id, reconcileHistory, historyVersion, demoReceipts]);
     const [draft, setActual] = useState<string | null>(null);
     const actual = draft ?? amountInput(balance);
     const [busy, setBusy] = useState(false);

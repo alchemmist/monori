@@ -143,6 +143,51 @@ describe("account dialogs", () => {
         await waitFor(() => expect(fetchHistory).toHaveBeenCalledTimes(3));
     });
 
+    it("does not carry a typed balance to another account", async () => {
+        seed({ accounts: [account] });
+        const save = vi
+            .spyOn(useStore.getState(), "reconcileAccount")
+            .mockResolvedValue({ delta: 0 });
+        vi.spyOn(useStore.getState(), "reconcileHistory").mockResolvedValue([]);
+        const view = renderUI(
+            <AccountReconcileTab account={account} balance={5000} onClose={vi.fn()} />,
+        );
+        await view.user.clear(screen.getByLabelText("Actual bank balance"));
+        await view.user.type(screen.getByLabelText("Actual bank balance"), "123");
+        view.rerender(
+            <AccountReconcileTab
+                account={{ ...account, id: 2 }}
+                balance={2200}
+                onClose={vi.fn()}
+            />,
+        );
+        await view.user.click(screen.getByRole("button", { name: "Reconcile" }));
+        expect(save).toHaveBeenCalledWith(2, 2200);
+    });
+
+    it("keeps the open demo receipt but removes its deleted adjustment link", async () => {
+        setPath("/demo/accounts");
+        try {
+            seed({ accounts: [account] });
+            const store = useStore.getState();
+            await store.reconcileAccount(1, 12345);
+            const [receipt] = await store.reconcileHistory(1);
+            renderUI(
+                <MemoryRouter>
+                    <AccountReconcileTab account={account} balance={12345} onClose={vi.fn()} />
+                </MemoryRouter>,
+            );
+            expect(await screen.findByRole("link")).toBeVisible();
+            await act(async () => {
+                await store.deleteTransaction(receipt!.adjustmentTxId!);
+            });
+            await waitFor(() => expect(screen.queryByRole("link")).not.toBeInTheDocument());
+            expect(await screen.findByText("Adjusted")).toBeVisible();
+        } finally {
+            setPath("/");
+        }
+    });
+
     it.each(["success", "failure"])(
         "ignores a late %s after switching accounts",
         async (outcome) => {
