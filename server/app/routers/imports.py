@@ -2,9 +2,8 @@
 """Provide backend functionality."""
 
 import json
-import sqlite3
 from collections.abc import Iterable, Mapping
-from typing import Annotated
+from typing import Annotated, cast
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.concurrency import run_in_threadpool
@@ -13,6 +12,8 @@ from pydantic.dataclasses import dataclass as pydantic_dataclass
 
 from monori.server.app.auth import AuthenticatedUser, current_user
 from monori.server.app.connectors.base import SyncRow
+from monori.server.app.db_records import db_optional_str, row_int, row_str
+from monori.server.app.db_types import DatabaseConnection
 from monori.server.app.deps import conn
 from monori.server.app.domain_types import TransactionSource
 from monori.server.app.importer import (
@@ -44,6 +45,11 @@ from monori.server.app.workbook.parser import (
 )
 
 router = APIRouter(prefix="/api/import", tags=["import"])
+
+
+def _connection() -> DatabaseConnection:
+    """Return the shared database interface for either configured backend."""
+    return cast("DatabaseConnection", conn())
 
 
 MAX_STATEMENT_TEXT = 5_000_000
@@ -241,9 +247,9 @@ def _serialize_workbook_error(error: WorkbookParseError) -> WorkbookParseErrorRe
     return WorkbookParseErrorResponse(row=error.row, error=error.error)
 
 
-def _load_user_rules(c: sqlite3.Connection, uid: int) -> dict[str, list[CategoryRule]]:
+def _load_user_rules(c: DatabaseConnection, uid: int) -> dict[str, list[CategoryRule]]:
     groups = {
-        r["id"]: r["kind"]
+        row_int(r, "id"): row_str(r, "kind")
         for r in c.execute(
             "SELECT g.id, t.type AS kind FROM category_groups g"
             " JOIN category_group_types t ON t.id=g.type_id WHERE g.user_id=?",
@@ -252,10 +258,10 @@ def _load_user_rules(c: sqlite3.Connection, uid: int) -> dict[str, list[Category
     }
     cats: list[CategoryDefinition] = [
         CategoryDefinition(
-            id=int(r["id"]),
-            name=str(r["name"]),
-            keywords=str(r["keywords"]) if r["keywords"] is not None else None,
-            group_id=int(r["group_id"]),
+            id=row_int(r, "id"),
+            name=row_str(r, "name"),
+            keywords=db_optional_str(r["keywords"], "keywords"),
+            group_id=row_int(r, "group_id"),
         )
         for r in c.execute(
             "SELECT c.id, c.name, c.keywords, c.group_id FROM categories c"
@@ -266,7 +272,7 @@ def _load_user_rules(c: sqlite3.Connection, uid: int) -> dict[str, list[Category
     return build_rules(cats, groups)
 
 
-def _owned_account(c: sqlite3.Connection, account_id: int | None, uid: int) -> bool:
+def _owned_account(c: DatabaseConnection, account_id: int | None, uid: int) -> bool:
     return (
         account_id is not None
         and c.execute(
@@ -277,7 +283,7 @@ def _owned_account(c: sqlite3.Connection, account_id: int | None, uid: int) -> b
     )
 
 
-def _validate_import_categories(c: sqlite3.Connection, uid: int, rows: list[CommitRow]) -> None:
+def _validate_import_categories(c: DatabaseConnection, uid: int, rows: list[CommitRow]) -> None:
     """
     Every manually selected import category must belong to the account owner.
 
@@ -296,9 +302,10 @@ def _validate_import_categories(c: sqlite3.Connection, uid: int, rows: list[Comm
         ).fetchone()
         if category is None:
             raise HTTPException(400, "unknown category")
-        if row.amount < 0 and category["transaction_sign"] != -1:
+        sign = row_int(category, "transaction_sign")
+        if row.amount < 0 and sign != -1:
             raise HTTPException(400, "expense transaction requires an expense category")
-        if row.amount > 0 and category["transaction_sign"] != 1:
+        if row.amount > 0 and sign != 1:
             raise HTTPException(400, "income transaction requires an income category")
 
 
@@ -307,7 +314,7 @@ def _card_digits(card: str) -> str:
 
 
 def _detect_row_accounts(
-    c: sqlite3.Connection,
+    c: DatabaseConnection,
     uid: int,
     rows: list[ImportRow],
     fallback_account_id: int | None = None,
@@ -318,12 +325,10 @@ def _detect_row_accounts(
         "SELECT id, card_tails FROM accounts WHERE user_id=? AND archived=0",
         (uid,),
     ):
-        for tail in (account["card_tails"] or "").split(","):
+        tails = db_optional_str(account["card_tails"], "card_tails") or ""
+        for tail in tails.split(","):
             if tail:
-                account_id = account["id"]
-                if not isinstance(account_id, int):
-                    msg = "account query returned a non-integer id"
-                    raise RuntimeError(msg)
+                account_id = row_int(account, "id")
                 bound.setdefault(tail, set()).add(account_id)
 
     for row in rows:
@@ -337,7 +342,7 @@ def _detect_row_accounts(
         row.account_id = next(iter(owners)) if len(owners) == 1 else fallback_account_id
 
 
-def _mark_duplicates(c: sqlite3.Connection, rows: list[ImportRow]) -> None:
+def _mark_duplicates(c: DatabaseConnection, rows: list[ImportRow]) -> None:
     """Mark duplicate rows using each row's currently selected account."""
     existing_by_account: dict[int, dict[str, int]] = {}
     seen_in_batch: dict[tuple[int, str], int] = {}
@@ -366,7 +371,7 @@ def import_preview(
     uid = user.id
     if len(body.text) > MAX_STATEMENT_TEXT:
         raise HTTPException(413, "statement is too large")
-    c = conn()
+    c = _connection()
     try:
         rows, errors = parse_statement(body.text)
         rules = _load_user_rules(c, uid)
@@ -378,7 +383,7 @@ def import_preview(
         _detect_row_accounts(c, uid, rows, fallback_account_id)
 
         kinds = {
-            r["id"]: r["kind"]
+            row_int(r, "id"): row_str(r, "kind")
             for r in c.execute(
                 "SELECT c.id, t.type AS kind FROM categories c"
                 " JOIN category_groups g ON g.id = c.group_id"
@@ -409,7 +414,7 @@ def import_duplicates(
 ) -> DuplicatesResponse:
     """Re-check preview rows after the user manually changes their accounts."""
     uid = user.id
-    c = conn()
+    c = _connection()
     try:
         rows = [
             ImportRow(
@@ -443,7 +448,7 @@ def import_commit(
     batch — are skipped, so a double-submit can't create duplicates.
     """
     uid = user.id
-    c = conn()
+    c = _connection()
     try:
         if body.account_id is not None and not _owned_account(c, body.account_id, uid):
             raise HTTPException(400, "unknown account")
@@ -550,7 +555,7 @@ def _parse_or_400(data: bytes) -> ParsedWorkbook:
 
 def _preview_workbook(data: bytes, uid: int) -> WorkbookPreviewResponse:
     parsed = _parse_or_400(data)
-    c = conn()
+    c = _connection()
     try:
         conflicts = budget_conflicts(c, uid, parsed.budgets)
     finally:
@@ -559,7 +564,7 @@ def _preview_workbook(data: bytes, uid: int) -> WorkbookPreviewResponse:
 
 
 def _reject_currency_mismatch(
-    c: sqlite3.Connection,
+    c: DatabaseConnection,
     slots: Mapping[str, WorkbookAccountSlot],
     marker_map: Mapping[str, int],
 ) -> None:
@@ -572,7 +577,7 @@ def _reject_currency_mismatch(
     """
     ids = sorted(set(marker_map.values()))
     held = {
-        r["id"]: (r["currency"] or DEFAULT_CURRENCY).upper()
+        row_int(r, "id"): (db_optional_str(r["currency"], "currency") or DEFAULT_CURRENCY).upper()
         for r in c.execute(
             "SELECT id, currency FROM accounts WHERE id IN (SELECT value FROM json_each(?))",
             (json.dumps(ids),),
@@ -591,7 +596,7 @@ def _reject_currency_mismatch(
 
 
 def _remember_markers(
-    c: sqlite3.Connection,
+    c: DatabaseConnection,
     slots: Mapping[str, WorkbookAccountSlot],
     marker_map: Mapping[str, int],
 ) -> int:
@@ -609,11 +614,8 @@ def _remember_markers(
             continue
         account_id = marker_map[key]
         row = c.execute("SELECT card_tails FROM accounts WHERE id=?", (account_id,)).fetchone()
-        raw_value = row["card_tails"]
-        if raw_value is not None and not isinstance(raw_value, str):
-            msg = "account query returned non-text card tails"
-            raise RuntimeError(msg)
-        raw_tails = raw_value or ""
+        raw_tails = db_optional_str(row["card_tails"], "card_tails") if row is not None else None
+        raw_tails = raw_tails or ""
         tails = [tail for tail in raw_tails.split(",") if tail]
         if digits in tails:
             continue
@@ -640,7 +642,7 @@ def _commit_workbook(
     missing = sorted(k for k in slots if k not in marker_map)
     if missing:
         raise HTTPException(400, f"unmapped account slots: {missing}")
-    c = conn()
+    c = _connection()
     try:
         for account_id in set(marker_map.values()):
             if not _owned_account(c, account_id, uid):
